@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 )
 
 func programming(h *offersHarness) *Provider {
@@ -16,12 +17,12 @@ func programming(h *offersHarness) *Provider {
 
 func (h *offersHarness) keyAssets(t *testing.T, tier environment.Tier) {
 	t.Helper()
-	credentials, err := readEdgeCredentials(t.Context(), h.clients, tier, cloudflareKind)
+	credentials, err := cloudflareorigin.ReadEdgeCredentials(t.Context(), h.clients, tier, cloudflareKind)
 	if err != nil {
 		t.Fatal(err)
 	}
 	credentials.AssetStoreAccessKeyID, credentials.AssetStoreSecretAccessKey = "GOOG1EREADER", "reader-secret"
-	if err := writeEdgeCredentials(t.Context(), h.clients, tier, cloudflareKind, credentials); err != nil {
+	if err := cloudflareorigin.WriteEdgeCredentials(t.Context(), h.clients, tier, cloudflareKind, credentials); err != nil {
 		t.Fatal(err)
 	}
 }

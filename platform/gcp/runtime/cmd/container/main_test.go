@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
 const (

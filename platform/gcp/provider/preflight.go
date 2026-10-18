@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
@@ -19,7 +20,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 		parts = append(parts, tagDatabasePart)
 	}
 	if pre.Edge == alb.Kind {
-		parts = append(parts, albPart)
+		parts = append(parts, albpart.PartName)
 	} else if err := p.leaveALB(ctx, pre); err != nil {
 		return err
 	}
@@ -41,7 +42,7 @@ func (p *Provider) leaveALB(ctx context.Context, pre provider.DeployPreflight) e
 	if err != nil {
 		return err
 	}
-	return releaseALB(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, false, pre.Progress)
+	return albpart.Release(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, false, pre.Progress)
 }
 
 func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {

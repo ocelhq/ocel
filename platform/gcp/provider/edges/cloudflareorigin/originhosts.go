@@ -1,0 +1,104 @@
+package cloudflareorigin
+
+import (
+	"context"
+	"errors"
+	"slices"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+)
+
+const maxDNSLabel = 63
+
+type OriginHosts struct {
+	KeyValues records.Store
+	Routing   OriginRouting
+}
+
+type OriginRouting interface {
+	RouteOriginHost(ctx context.Context, host alb.OriginHost) error
+	UnrouteOriginHosts(ctx context.Context, tier environment.Tier, service, revision string) error
+}
+
+func OriginHostname(release, service, base string) string {
+	label := naming.Fit(maxDNSLabel, naming.WordSeparator, naming.Fixed(release), naming.Compressible(service))
+	return label + "." + base
+}
+
+func (p *OriginHosts) ReadBase(ctx context.Context, spec provider.StackSpec) (string, error) {
+	if !run.FactsOf(spec.Edge).RunsCode || spec.App == nil || len(spec.App.Functions) == 0 {
+		return "", nil
+	}
+	tier := spec.Ref.Tier
+	_, recorded, err := Wildcards{KeyValues: p.KeyValues}.Read(ctx, tier)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case recorded.BaseDomain == "":
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"app %s runs as serverless functions behind the Cloudflare worker, which reaches each deployment on its own DNS-only hostname under an origin domain, and tier %s has none set up. "+
+				"If your config names no originDomain, add \"provider\": {\"gcp\": {\"edge\": {\"cloudflare\": {\"originDomain\": \"<a domain in your Cloudflare zone>\"}}}} to it; "+
+				"if it does, the tier's origin wildcard was not set up by the last deploy that could, so deploy again and read the warnings it prints",
+			spec.App.App, tier)
+	case recorded.Address == "":
+		return "", refusal.Refuse(refusal.CodeNotReady,
+			"the origin wildcard *.%s of tier %s has no address yet, because its certificate is still being issued: deploy again once it is issued",
+			recorded.BaseDomain, tier)
+	}
+	return recorded.BaseDomain, nil
+}
+
+func (p *OriginHosts) Route(
+	ctx context.Context,
+	spec provider.StackSpec,
+	base, service, tag, revision string,
+	runProgress progress.Log,
+) (string, error) {
+	hostname := OriginHostname(spec.Ref.Name.Release.String(), service, base)
+	gcloud.EnsureProgress(runProgress).Say("Routing " + hostname + " to revision tag " + tag + " of Cloud Run service " + service)
+	err := p.Routing.RouteOriginHost(ctx, alb.OriginHost{
+		Tier: spec.Ref.Tier, Slug: spec.Ref.Project, Hostname: hostname, Service: service, Tag: tag, Revision: revision,
+	})
+	if err != nil {
+		return "", err
+	}
+	return "https://" + hostname, nil
+}
+
+func (p *OriginHosts) UnrouteServices(ctx context.Context, tier environment.Tier, functions []provider.Function) error {
+	var errs []error
+	for _, service := range slices.Compact(slices.Sorted(slices.Values(functionServices(functions)))) {
+		errs = append(errs, p.Routing.UnrouteOriginHosts(ctx, tier, service, ""))
+	}
+	return errors.Join(errs...)
+}
+
+func (p *OriginHosts) UnrouteRevisions(ctx context.Context, tier environment.Tier, functions []provider.Function) error {
+	var errs []error
+	for _, function := range functions {
+		if function.Physical == "" || function.Revision == "" {
+			continue
+		}
+		errs = append(errs, p.Routing.UnrouteOriginHosts(ctx, tier, function.Physical, function.Revision))
+	}
+	return errors.Join(errs...)
+}
+
+func functionServices(functions []provider.Function) []string {
+	services := make([]string, 0, len(functions))
+	for _, function := range functions {
+		if function.Physical != "" {
+			services = append(services, function.Physical)
+		}
+	}
+	return services
+}

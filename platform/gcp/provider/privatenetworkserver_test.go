@@ -104,7 +104,7 @@ func (s *networkServer) network(w http.ResponseWriter, r *http.Request, name str
 			googletest.WriteBody(w, found)
 			return
 		}
-		missing(w)
+		googletest.WriteNotFound(w)
 	case http.MethodPost:
 		said := googletest.ReadBody[map[string]any](w, r)
 		if said == nil {
@@ -125,7 +125,7 @@ func (s *networkServer) network(w http.ResponseWriter, r *http.Request, name str
 		googletest.WriteBody(w, &compute.Operation{Name: "op-network", Status: gcloud.OperationDone})
 	case http.MethodDelete:
 		if s.networks[name] == nil {
-			missing(w)
+			googletest.WriteNotFound(w)
 			return
 		}
 		delete(s.networks, name)
@@ -141,7 +141,7 @@ func (s *networkServer) subnet(w http.ResponseWriter, r *http.Request, name stri
 			googletest.WriteBody(w, found)
 			return
 		}
-		missing(w)
+		googletest.WriteNotFound(w)
 	case http.MethodPost:
 		created := googletest.ReadBody[compute.Subnetwork](w, r)
 		if created == nil {
@@ -152,7 +152,7 @@ func (s *networkServer) subnet(w http.ResponseWriter, r *http.Request, name stri
 		googletest.WriteBody(w, &compute.Operation{Name: "op-subnet", Status: gcloud.OperationDone})
 	case http.MethodDelete:
 		if s.subnets[name] == nil {
-			missing(w)
+			googletest.WriteNotFound(w)
 			return
 		}
 		delete(s.subnets, name)
@@ -168,7 +168,7 @@ func (s *networkServer) policy(w http.ResponseWriter, r *http.Request, name stri
 			googletest.WriteBody(w, found)
 			return
 		}
-		missing(w)
+		googletest.WriteNotFound(w)
 	case http.MethodPost:
 		created := googletest.ReadBody[networkconnectivity.ServiceConnectionPolicy](w, r)
 		if created == nil {
@@ -184,7 +184,7 @@ func (s *networkServer) policy(w http.ResponseWriter, r *http.Request, name stri
 		googletest.WriteBody(w, map[string]any{"name": "projects/acme-prod/locations/europe-west1/operations/op-policy", "done": true})
 	case http.MethodDelete:
 		if s.policies[name] == nil {
-			missing(w)
+			googletest.WriteNotFound(w)
 			return
 		}
 		delete(s.policies, name)

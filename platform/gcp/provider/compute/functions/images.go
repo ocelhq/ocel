@@ -1,0 +1,130 @@
+package functions
+
+import (
+	"context"
+	"maps"
+	"slices"
+	"strings"
+
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
+
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
+)
+
+const (
+	nodeImage = "gcr.io/distroless/nodejs24-debian12@sha256:61f4f4341db81820c24ce771b83d202eb6452076f58628cd536cc7d94a10978b"
+
+	pythonImage = "gcr.io/distroless/python3-debian13@sha256:f2b206661cee3edb44f132d7f054a9ced96f671d8a973de0db750895c9acb2fb"
+)
+
+const nodeBinDir = "/nodejs/bin"
+
+const pathVariable = "PATH"
+
+type Images struct {
+	based func(ctx context.Context, ref string) (v1.Image, error)
+	bases map[string]base
+}
+
+func NewImages(based func(ctx context.Context, ref string) (v1.Image, error)) Images {
+	return Images{based: based, bases: functionBases()}
+}
+
+type base struct {
+	ref  string
+	bins []string
+}
+
+func functionBases() map[string]base {
+	return map[string]base{
+		buildoutput.FrameworkNode:      {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkNext:      {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkSvelteKit: {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkGo:        {ref: run.StaticImage},
+		buildoutput.FrameworkPython:    {ref: pythonImage},
+		buildoutput.FrameworkRust:      {ref: run.StaticImage},
+	}
+}
+
+func (p Images) ResolveBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
+	if err := run.RefuseNotX8664(framework.Arch, "the "+framework.Name+" function"); err != nil {
+		return nil, err
+	}
+	on, shipped := p.bases[framework.Name]
+	if !shipped {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"a function on Cloud Run is a container, and this provider ships no base image a %s function could run in: it ships one for %s",
+			framework.Name, strings.Join(slices.Sorted(maps.Keys(p.bases)), ", "))
+	}
+	image, err := p.based(ctx, on.ref)
+	if err != nil {
+		return nil, err
+	}
+	return commandable(image, on.bins)
+}
+
+func commandable(image v1.Image, bins []string) (v1.Image, error) {
+	file, err := image.ConfigFile()
+	if err != nil {
+		return nil, err
+	}
+	config := file.Config
+	config.Entrypoint = nil
+	config.Env = onPath(config.Env, bins)
+	return mutate.Config(image, config)
+}
+
+func onPath(env []string, bins []string) []string {
+	if len(bins) == 0 {
+		return env
+	}
+	kept := make([]string, 0, len(env)+1)
+	searchPath := strings.Join(bins, ":")
+	for _, entry := range env {
+		named, value, _ := strings.Cut(entry, "=")
+		if named != pathVariable {
+			kept = append(kept, entry)
+			continue
+		}
+		searchPath = strings.Join(append(slices.Clone(bins), value), ":")
+	}
+	return append(kept, pathVariable+"="+searchPath)
+}
+
+func (p Images) ReadRuntime(_ context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
+	switch framework.Name {
+	case buildoutput.FrameworkNode, buildoutput.FrameworkSvelteKit:
+		return map[string][]byte{images.RuntimeEntrypointFile: payloads.NodeRuntime()}, nil
+	case buildoutput.FrameworkNext:
+		return maps.Clone(payloads.NextRuntime()), nil
+	default:
+		return nil, nil
+	}
+}
+
+func (p Images) WithImages(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, error) {
+	if spec.App == nil || spec.App.Compute != provider.ComputeServerless {
+		return spec, nil
+	}
+	pushes, err := functioncode.FunctionImages(ctx, spec, functioncode.ImageSource{
+		Base:    p.ResolveBase,
+		Runtime: p.ReadRuntime,
+		Binary:  containerBinary,
+	})
+	if err != nil {
+		return provider.StackSpec{}, err
+	}
+	spec.Images.Pushes = append(slices.Clone(spec.Images.Pushes), pushes...)
+	return spec, nil
+}
+
+func containerBinary(_ context.Context, architecture string) ([]byte, error) {
+	return payloads.ContainerRuntime(architecture)
+}

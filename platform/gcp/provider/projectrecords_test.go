@@ -26,7 +26,7 @@ func TestAnAppIsGrantedNoRecordsOrKeyOfTheNamespaceOrTheTier(t *testing.T) {
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
 
-	email, err := p.ensureAppAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
+	email, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 	}
 	spec := functionStackDeclaring(tier, "production", provider.AppValues{Secrets: []provider.SecretRef{{Key: "STRIPE_KEY"}}})
 
-	email, err := p.ensureAppAccount(ctx, c, spec, nil)
+	email, err := p.release().EnsureAccount(ctx, c, spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

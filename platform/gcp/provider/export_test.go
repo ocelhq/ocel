@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/functions"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -30,3 +31,5 @@ func PartsRolePermissions(namespace provider.Namespace, project string) []string
 }
 
 func (p *Provider) TopicHooks() *topic.Topic { return p.topicHooks() }
+
+func (p *Provider) FunctionImages() functions.Images { return p.functionImages() }

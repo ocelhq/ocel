@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -70,7 +71,7 @@ func TestEachTierHasAnAccountItsRealtimeGatewaysRunAs(t *testing.T) {
 	names := names.New("ocel", "acme-prod")
 	account := bootstrap.Resource{Kind: bootstrap.KindServiceAccount, Name: names.RealtimeAccount(tier)}
 	for _, emulated := range []bool{false, true} {
-		if ids := idsOf(bootstrap.Resources(names, tier, emulated)); !slices.Contains(ids, account.ID()) {
+		if ids := googletest.IdsOf(bootstrap.Resources(names, tier, emulated)); !slices.Contains(ids, account.ID()) {
 			t.Errorf("a bootstrap with emulated=%t provisions %v, want %s among them", emulated, ids, account.ID())
 		}
 	}
@@ -81,13 +82,13 @@ func TestTheBaseGrantsCloudRunTheNetworkEveryTierSubnetworkIsUsedThrough(t *test
 
 	names := names.New("ocel", "acme-prod")
 	grant := bootstrap.Resource{Kind: bootstrap.KindGrant, Name: bootstrap.NetworkUserRole}
-	for _, tier := range bothTiers {
+	for _, tier := range googletest.BothTiers {
 		items := bootstrap.Resources(names, tier, false)
 		at := slices.IndexFunc(items, func(each bootstrap.Resource) bool { return each.ID() == grant.ID() })
 		if at < 0 || !items[at].Shared {
-			t.Errorf("a %s bootstrap provisions %v, want %s shared by both tiers: a deploy adding the network may not grant the Cloud Run agent on it", tier, idsOf(items), grant.ID())
+			t.Errorf("a %s bootstrap provisions %v, want %s shared by both tiers: a deploy adding the network may not grant the Cloud Run agent on it", tier, googletest.IdsOf(items), grant.ID())
 		}
-		if slices.Contains(idsOf(bootstrap.Resources(names, tier, true)), grant.ID()) {
+		if slices.Contains(googletest.IdsOf(bootstrap.Resources(names, tier, true)), grant.ID()) {
 			t.Errorf("an emulated %s bootstrap grants %s, and no emulator serves project IAM", tier, grant.ID())
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -19,7 +20,7 @@ import (
 func TestAWorkerIsAServiceOnlyPubSubReachesThatScalesToNothing(t *testing.T) {
 	t.Parallel()
 
-	worker := workerServing(provider.WorkerSpec{Name: "media", Concurrency: 4}, run.Serving{
+	worker := release.WorkerServing(provider.WorkerSpec{Name: "media", Concurrency: 4}, run.Serving{
 		Service: "ocel-shop-prod-web-w-media-a1b2c3",
 		Image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 		Env:     map[string]string{"REGION": "eu"},
@@ -91,31 +92,5 @@ func TestATasksManifestPinsTheTiersQueueAndPublishesDelaysAsTheAppsOwnAccount(t 
 	if tasks.DelayQueue != "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays" ||
 		tasks.Account != c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") || tasks.PublishURL != "https://pubsub.googleapis.com" {
 		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, the app's own account and Pub/Sub's own url", tasks)
-	}
-}
-
-func TestAServerlessAppsWorkersRunFromTheImageOfTheFunctionThatCarriesTheWorkerEntry(t *testing.T) {
-	t.Parallel()
-
-	app := &provider.AppSpec{App: "web", Functions: []provider.FunctionSpec{
-		{Name: "fn--web--a"},
-		{Name: "fn--web--b", HasWorkerEntry: true},
-	}}
-	images := provider.ImagePushes{Pushes: []provider.ImagePush{
-		{App: "fn--web--a", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa", Function: true},
-		{App: "fn--web--b", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web-b@sha256:bbb", Function: true},
-	}}
-	if got, err := workerImageOf(app, images); err != nil || got != images.Pushes[1].ImageRef {
-		t.Errorf("workerImageOf = %s, %v, want %s, the image of the function that carries the worker entry", got, err, images.Pushes[1].ImageRef)
-	}
-}
-
-func TestAServerlessAppsWorkersAreRefusedWhenNoFunctionCarriesTheWorkerEntry(t *testing.T) {
-	t.Parallel()
-
-	app := &provider.AppSpec{App: "web", Functions: []provider.FunctionSpec{{Name: "fn--web--a"}}}
-	images := provider.ImagePushes{Store: alreadyPushed{}, Pushes: []provider.ImagePush{{App: "fn--web--a", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web-a@sha256:aaa", Function: true}}}
-	if got, err := workerImageOf(app, images); err == nil || !strings.Contains(err.Error(), "web") {
-		t.Errorf("workerImageOf = %s, %v, want a refusal naming the app", got, err)
 	}
 }

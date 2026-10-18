@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -27,7 +28,7 @@ func behindTheWorkerWithItsSeed(t *testing.T) *wallet {
 	w.p = providerServing(w.server, t)
 	adoptBehindTheWorker(t, w.p)
 	var err error
-	if w.seed, err = readPurgeSeed(context.Background(), w.p.resolved, environment.TierProduction, cloudflareKind); err != nil {
+	if w.seed, err = cloudflareorigin.ReadPurgeSeed(context.Background(), w.p.resolved, environment.TierProduction, cloudflareKind); err != nil {
 		t.Fatal(err)
 	}
 	w.spec = behindTheWorker(routedNextSpec())
@@ -42,7 +43,7 @@ func TestANextServiceBehindTheWorkerIsToldItsTagDatabaseAndThePurgeSecretItSigns
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(w.server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(w.server.Created[0].Template.Containers[0])
 	if _, told := env["OCEL_ISR_WRITER_URL"]; told {
 		t.Errorf("OCEL_ISR_WRITER_URL = %q, want none: no worker keeps this service's pages", env["OCEL_ISR_WRITER_URL"])
 	}
@@ -64,7 +65,7 @@ func TestANextServiceBehindTheWorkerIsToldWhereTheWorkerPurges(t *testing.T) {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := envOf(w.server.Created[0].Template.Containers[0])[edge.PurgeURLVar]; got != "https://shop.acct.workers.dev/purge" {
+	if got := googletest.EnvOf(w.server.Created[0].Template.Containers[0])[edge.PurgeURLVar]; got != "https://shop.acct.workers.dev/purge" {
 		t.Errorf("%s = %q, want the URL the worker takes purges at", edge.PurgeURLVar, got)
 	}
 }
@@ -76,7 +77,7 @@ func TestANextServiceBehindTheWorkerWhoseStackNamesNoPurgeURLIsToldNone(t *testi
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got, told := envOf(w.server.Created[0].Template.Containers[0])[edge.PurgeURLVar]; told {
+	if got, told := googletest.EnvOf(w.server.Created[0].Template.Containers[0])[edge.PurgeURLVar]; told {
 		t.Errorf("%s = %q, want none: nothing names where to purge", edge.PurgeURLVar, got)
 	}
 }
@@ -87,7 +88,7 @@ func TestANextServiceBehindTheWorkerIsToldNoCDNURLMap(t *testing.T) {
 	if _, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, told := envOf(w.server.Created[0].Template.Containers[0])["OCEL_CDN_URL_MAP"]; told {
+	if got, told := googletest.EnvOf(w.server.Created[0].Template.Containers[0])["OCEL_CDN_URL_MAP"]; told {
 		t.Errorf("OCEL_CDN_URL_MAP = %q, want none behind the worker", got)
 	}
 }
@@ -101,7 +102,7 @@ func TestANextServiceBehindTheLoadBalancerIsToldNoPurgeSecret(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 	for _, name := range []string{"OCEL_ISR_WRITER_URL", "OCEL_PURGE_SECRET"} {
 		if got, told := env[name]; told {
 			t.Errorf("%s = %q behind the load balancer, want none", name, got)
@@ -145,7 +146,7 @@ func TestPrerenderSeedsBehindTheWorkerAllGoToCloudStorage(t *testing.T) {
 func TestANextServiceBehindTheWorkerOnATierWithNoOriginWildcardSeedsNoPrerenders(t *testing.T) {
 	w := behindTheWorkerWithItsSeed(t)
 	root := plantPrerenders(t, map[string]string{"cache/blog/post.cache.json": "{}"})
-	if err := records.Forget(context.Background(), w.p.records, originWildcardKey(environment.TierProduction)); err != nil {
+	if err := records.Forget(context.Background(), w.p.records, cloudflareorigin.WildcardKey(environment.TierProduction)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,7 +165,7 @@ func TestOnlyANextServiceBehindTheWorkerIsToldToAnswerImageRequestsOnItsOriginPa
 	if _, err := behind.p.ProvisionFunctions(context.Background(), behind.spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := envOf(behind.server.Created[0].Template.Containers[0])["OCEL_IMAGE_ENDPOINT"]; got != "1" {
+	if got := googletest.EnvOf(behind.server.Created[0].Template.Containers[0])["OCEL_IMAGE_ENDPOINT"]; got != "1" {
 		t.Errorf("OCEL_IMAGE_ENDPOINT = %q behind the worker, want 1: the worker posts images to the origin", got)
 	}
 
@@ -174,7 +175,7 @@ func TestOnlyANextServiceBehindTheWorkerIsToldToAnswerImageRequestsOnItsOriginPa
 	if _, err := providerServing(server, t).ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, told := envOf(server.Created[0].Template.Containers[0])["OCEL_IMAGE_ENDPOINT"]; told {
+	if got, told := googletest.EnvOf(server.Created[0].Template.Containers[0])["OCEL_IMAGE_ENDPOINT"]; told {
 		t.Errorf("OCEL_IMAGE_ENDPOINT = %q behind the load balancer, want none: nothing posts images there, and the path would answer anyone", got)
 	}
 }

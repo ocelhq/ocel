@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 type cipher struct{ p *Provider }
@@ -33,7 +34,7 @@ func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 		return sealed, err
 	}
 	project, _ := ports.ProjectSealedFor(bound)
-	if err := ensureProjectKey(ctx, c, tier, project); err != nil {
+	if err := variables.EnsureProjectKey(ctx, c, tier, project); err != nil {
 		return nil, err
 	}
 	return opened.Seal(ctx, tier, bound, plaintext)

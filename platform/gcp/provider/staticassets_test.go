@@ -177,7 +177,7 @@ func TestANextServiceIsToldTheBucketItsStaticFilesLiveIn(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), staticSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
 	if got, want := env["OCEL_ASSET_BUCKET"], namesOf(t, p).Bucket(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_ASSET_BUCKET=%q, want its tier's bucket %q", got, want)

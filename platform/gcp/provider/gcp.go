@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
@@ -18,11 +16,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cloudrun"
+	"github.com/ocelhq/ocel/platform/gcp/provider/certs"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
+	"github.com/ocelhq/ocel/platform/gcp/provider/connector"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
@@ -40,16 +44,14 @@ type Provider struct {
 
 	records records.Store
 
-	originRoutes originRouting
+	originRoutes cloudflareorigin.OriginRouting
 
 	mu            sync.Mutex
 	resolved      *gcloud.Clients
 	regionChecked bool
 	surveyed      bootstrap.Surveys
 
-	bases  map[string]base
-	pull   func(ctx context.Context, ref string) (v1.Image, error)
-	pulled sync.Map
+	images *run.Images
 
 	liveness.Net
 }
@@ -97,8 +99,7 @@ func NewProvider(options Options) (*Provider, error) {
 		gateInEnv:   endpoint != "",
 		tagEndpoint: tagEndpoint,
 		namespace:   namespace,
-		bases:       functionBases(),
-		pull:        pullBase,
+		images:      &run.Images{Pull: run.PullBase},
 	}, nil
 }
 
@@ -107,7 +108,7 @@ func (p *Provider) Facts() provider.Facts {
 		Vendor:   gcloud.Vendor,
 		Bindings: resources.ServedBindingTypes(p.resourceHooks()),
 		Computes: []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
-		Edges:    slices.Clone(supportedEdges),
+		Edges:    slices.Clone(edges.Supported),
 		Pairings: []provider.Pairing{
 			{Edge: edge.None, Router: cloudrun.RouterKind, Computes: provider.Computes()},
 			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
@@ -116,7 +117,7 @@ func (p *Provider) Facts() provider.Facts {
 		},
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,
-		WorkerCeilings:  slices.Clone(workerCeilings),
+		WorkerCeilings:  slices.Clone(release.WorkerCeilings),
 
 		RunsGates:             true,
 		RunsFunctionsAsImages: true,
@@ -137,28 +138,6 @@ func (p *Provider) Hooks() provider.Hooks {
 	}
 }
 
-func (p *Provider) resourceHooks() resources.Hooks {
-	hooks := p.components().Hooks()
-
-	return p.computeHooks(hooks)
-}
-
-func (p *Provider) computeHooks(hooks resources.Hooks) resources.Hooks {
-	hooks.RecordsWorkers = true
-	hooks.Functions = &resources.FunctionHooks{
-		Provision: p.ProvisionFunctions,
-		Remove:    p.RemoveFunctions,
-		Shared:    &resources.SharedHooks[provider.Function]{Name: p.NameFunctions, RemoveRevisions: p.RemoveFunctionRevisions},
-	}
-	hooks.Containers = &resources.ContainerHooks{
-		Provision: p.ProvisionContainers,
-		Remove:    p.RemoveContainers,
-		Shared:    &resources.SharedHooks[provider.AppContainer]{Name: p.NameContainers, RemoveRevisions: p.RemoveContainerRevisions},
-	}
-	hooks.Retention = &resources.ImageRetentionHooks{Reconcile: p.services().ReconcileImages}
-	return hooks
-}
-
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if _, err := p.Edges().Open(kind, nil); err != nil {
 		return nil, err
@@ -170,7 +149,7 @@ func (p *Provider) Stacks() provider.Stacks {
 	return stacks{Stacks: resources.NewHookStacks(p.KeyValues(), p.Artifacts(), p.resourceHooks()), p: p}
 }
 
-func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }
+func (p *Provider) Artifacts() provider.ArtifactStore { return p.objects() }
 
 func (p *Provider) KeyValues() records.Store {
 	if p.records != nil {
@@ -194,13 +173,15 @@ func (p *Provider) Credentials() provider.Credentials {
 
 func (p *Provider) Edges() provider.Edges { return p.edges() }
 
-func (p *Provider) Routers() provider.Routers { return routers{edges: p.edges()} }
+func (p *Provider) Routers() provider.Routers { return edges.Routers{Registry: p.edges()} }
 
 func (p *Provider) DNS() provider.DNS { return dns{} }
 
-func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
+func (p *Provider) Certificates() provider.Certificates { return certs.New(p.openClients) }
 
-func (p *Provider) Connector() provider.Connector { return connector{p} }
+func (p *Provider) Connector() provider.Connector {
+	return connector.New(p.openClients, p.services(), p.options.Region, p.emulated(), p.images.Based, p.pushImage)
+}
 
 func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }
 

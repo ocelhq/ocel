@@ -13,8 +13,10 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -48,7 +50,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		shaped, _ := owned.Shape(region)
 		tree.Add(shared, string(gcloud.Vendor), shaped.Type, owned.Name, region, shaped.Properties)
 	}
-	tree.AddShaped(shared, string(gcloud.Vendor), region, syncShape(names.EnvSourceSync(req.Deploy.Tier), region))
+	tree.AddShaped(shared, string(gcloud.Vendor), region, envsource.Shape(names.EnvSourceSync(req.Deploy.Tier), region))
 	if slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
 		return app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext
 	}) {
@@ -77,14 +79,14 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
 		memory := run.RevisionMemory
 		if app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext {
-			memory = run.FormatMemoryLimit(nextMemoryMB)
+			memory = run.FormatMemoryLimit(next.MemoryMB)
 		}
 		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, serviceProperties(false, app.Instances.Min, memory, ingress))
+			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(false, app.Instances.Min, memory, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
@@ -95,7 +97,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, serviceProperties(app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
+				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
 			}
 		}
 		for _, shape := range shapes {
@@ -103,7 +105,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		for _, worker := range app.Workers {
 			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
-			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, serviceProperties(true, 0, run.RevisionMemory, run.IngressInternal))
+			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(true, 0, run.RevisionMemory, run.IngressInternal))
 		}
 	}
 
@@ -112,21 +114,6 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	}
 
 	return tree.Set(provider.CostSource)
-}
-
-func serviceProperties(billsPerRequest bool, minInstances int, memory, ingress string) map[string]any {
-	return map[string]any{
-		"ingress": ingress,
-		"template": map[string]any{
-			"scaling": map[string]any{"min_instance_count": minInstances},
-			"containers": []any{map[string]any{
-				"resources": map[string]any{
-					"cpu_idle": billsPerRequest,
-					"limits":   map[string]any{"cpu": run.RevisionCPU, "memory": memory},
-				},
-			}},
-		},
-	}
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {

@@ -18,7 +18,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )

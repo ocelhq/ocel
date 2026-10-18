@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 type keyValues struct{ p *Provider }
@@ -59,7 +60,7 @@ func (s keyValues) WritePair(ctx context.Context, first, second records.Entry) e
 
 func ensureProjectDatabaseOf(ctx context.Context, c *gcloud.Clients, in records.Partition) error {
 	project, _ := ports.ProjectOfRecords(in)
-	return ensureProjectDatabase(ctx, c, in.Tier, project)
+	return variables.EnsureProjectDatabase(ctx, c, in.Tier, project)
 }
 
 func (s keyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {

@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
@@ -53,20 +54,20 @@ func (h *offersHarness) adopt(offers []edge.Offer) error {
 }
 
 func (h *offersHarness) adoptIn(tier environment.Tier, offers []edge.Offer) error {
-	return adoptEdgeOffers(context.Background(), h.clients, h.records, tier, cloudflareKind,
+	return cloudflareorigin.AdoptOffers(context.Background(), h.clients, h.records, tier, cloudflareKind,
 		edge.BootstrapOutput{Offers: offers}, h.log)
 }
 
-func (h *offersHarness) record(t *testing.T) (adoptedEdge, bool) {
+func (h *offersHarness) record(t *testing.T) (cloudflareorigin.AdoptedEdge, bool) {
 	t.Helper()
-	entry, err := h.records.Read(context.Background(), adoptedEdgeKey(environment.TierProduction, cloudflareKind))
+	entry, err := h.records.Read(context.Background(), cloudflareorigin.AdoptedEdgeKey(environment.TierProduction, cloudflareKind))
 	if errors.Is(err, records.ErrNotFound) {
-		return adoptedEdge{}, false
+		return cloudflareorigin.AdoptedEdge{}, false
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	var adopted adoptedEdge
+	var adopted cloudflareorigin.AdoptedEdge
 	if err := json.Unmarshal(entry.Value, &adopted); err != nil {
 		t.Fatal(err)
 	}
@@ -123,10 +124,10 @@ func TestABootstrapAdoptsTheCloudflareEdgesWorkerAndCertificateAndKeepsItsCreden
 	if !found {
 		t.Fatal("no record of the adopted edge was written")
 	}
-	if want := (adoptedWorker{Endpoint: "https://s.example.workers.dev", ScriptName: "ocel-releases-store"}); adopted.ReleasesStore != want {
+	if want := (cloudflareorigin.AdoptedWorker{Endpoint: "https://s.example.workers.dev", ScriptName: "ocel-releases-store"}); adopted.ReleasesStore != want {
 		t.Errorf("releases store = %+v, want %+v", adopted.ReleasesStore, want)
 	}
-	if want := (adoptedClientCertificate{ID: "m1", Authorities: offeredCAs}); adopted.ClientCertificate != want {
+	if want := (cloudflareorigin.AdoptedClientCertificate{ID: "m1", Authorities: offeredCAs}); adopted.ClientCertificate != want {
 		t.Errorf("client certificate = %+v, want %+v", adopted.ClientCertificate, want)
 	}
 	if got, want := h.credentials(t), `{"releasesStore":"c1"}`; got != want {
@@ -240,29 +241,29 @@ func TestReadingTheAdoptedEdgeBeforeBootstrapIsNotReady(t *testing.T) {
 	h := newOffersHarness(t)
 	ctx := context.Background()
 
-	_, _, err := requireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
+	_, _, err := cloudflareorigin.RequireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
 	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel bootstrap production") {
 		t.Errorf("requireAdoptedEdge = %v, want a not-ready refusal naming ocel bootstrap production", err)
 	}
-	if _, err = readPurgeSeed(ctx, h.clients, environment.TierProduction, cloudflareKind); refusalCode(err) != refusal.CodeNotReady {
+	if _, err = cloudflareorigin.ReadPurgeSeed(ctx, h.clients, environment.TierProduction, cloudflareKind); refusalCode(err) != refusal.CodeNotReady {
 		t.Errorf("readPurgeSeed = %v, want a not-ready refusal", err)
 	}
 
 	if err := h.adopt(fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
-	adopted, creds, err := requireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
+	adopted, creds, err := cloudflareorigin.RequireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind)
 	if err != nil || adopted.ReleasesStore.ScriptName != "ocel-releases-store" || creds.ReleasesStore != "c1" {
 		t.Errorf("requireAdoptedEdge after bootstrap = %+v %+v %v", adopted, creds, err)
 	}
-	if seed, err := readPurgeSeed(ctx, h.clients, environment.TierProduction, cloudflareKind); err != nil || len(seed) != 64 {
+	if seed, err := cloudflareorigin.ReadPurgeSeed(ctx, h.clients, environment.TierProduction, cloudflareKind); err != nil || len(seed) != 64 {
 		t.Errorf("readPurgeSeed after bootstrap = %q %v", seed, err)
 	}
 }
 
 func TestAnAdoptedEdgeRecordSitsUnderTheEdgeStacksBeyondAnyProjectsSlug(t *testing.T) {
 	t.Parallel()
-	key := adoptedEdgeKey(environment.TierProduction, cloudflareKind)
+	key := cloudflareorigin.AdoptedEdgeKey(environment.TierProduction, cloudflareKind)
 	if key.Partition.Root != stackrecords.EdgeStacksPartition(environment.TierProduction).Root || len(key.Path) != 2 {
 		t.Errorf("key = %+v, want a two-segment key under the edge stacks", key)
 	}

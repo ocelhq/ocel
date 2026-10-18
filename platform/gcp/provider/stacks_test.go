@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -19,10 +21,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	manifest "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
 func previewSpec() provider.StackSpec {
@@ -109,41 +112,41 @@ func TestAProductionReleaseIsNamedForItsNamespaceProjectEnvironmentAndApp(t *tes
 }
 
 func TestAFunctionGetsWhatTheDeployDeliveredAndWhatItsSpecNames(t *testing.T) {
-	values, err := mergeValues("fn", specValues, map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"STAGE": "one"})
+	values, err := run.MergeValues("fn", release.SpecValues, map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"STAGE": "one"})
 	if err != nil {
-		t.Fatalf("mergeValues() = %v", err)
+		t.Fatalf("run.MergeValues() = %v", err)
 	}
 	if values["DATABASE_URL"] != "postgres://" || values["STAGE"] != "one" {
-		t.Errorf("mergeValues() = %v, want both what the deploy resolved and what the spec named", values)
+		t.Errorf("run.MergeValues() = %v, want both what the deploy resolved and what the spec named", values)
 	}
 }
 
 func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
-	_, err := mergeValues("fn", specValues, map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"DATABASE_URL": "sqlite://"})
+	_, err := run.MergeValues("fn", release.SpecValues, map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"DATABASE_URL": "sqlite://"})
 	if err == nil {
-		t.Fatal("mergeValues() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
+		t.Fatal("run.MergeValues() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
 	}
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Errorf("mergeValues() code = %v, want %v", code, refusal.CodeInvalid)
+		t.Errorf("run.MergeValues() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "DATABASE_URL") {
-		t.Errorf("mergeValues() = %v, want the name that would be displaced said", err)
+		t.Errorf("run.MergeValues() = %v, want the name that would be displaced said", err)
 	}
 	if !strings.Contains(err.Error(), "fn") {
-		t.Errorf("mergeValues() = %v, want what sets it said", err)
+		t.Errorf("run.MergeValues() = %v, want what sets it said", err)
 	}
 }
 
 func TestAVariableTheEdgeSetsOverAValueAlreadySetIsRefusedNamingTheEdge(t *testing.T) {
-	_, err := mergeValues("fn", cachingEdgeValues, map[string]string{"OCEL_RELEASE_TOKEN": "r0a1b2c3d"}, map[string]string{"OCEL_RELEASE_TOKEN": "r0a1b2c3d"})
+	_, err := run.MergeValues("fn", release.CachingEdgeValues, map[string]string{"OCEL_RELEASE_TOKEN": "r0a1b2c3d"}, map[string]string{"OCEL_RELEASE_TOKEN": "r0a1b2c3d"})
 	if err == nil {
-		t.Fatal("mergeValues() let the edge's value take the place of one already set")
+		t.Fatal("run.MergeValues() let the edge's value take the place of one already set")
 	}
-	if !strings.Contains(err.Error(), cachingEdgeValues) {
-		t.Errorf("mergeValues() = %v, want %q named as what sets it", err, cachingEdgeValues)
+	if !strings.Contains(err.Error(), release.CachingEdgeValues) {
+		t.Errorf("run.MergeValues() = %v, want %q named as what sets it", err, release.CachingEdgeValues)
 	}
-	if strings.Contains(err.Error(), specValues) {
-		t.Errorf("mergeValues() = %v, want the spec not blamed for a value the edge sets", err)
+	if strings.Contains(err.Error(), release.SpecValues) {
+		t.Errorf("run.MergeValues() = %v, want the spec not blamed for a value the edge sets", err)
 	}
 }
 
@@ -360,7 +363,7 @@ func TestAnAppBoundToARealtimeIsToldWhereItsGatewayTakesPublishes(t *testing.T) 
 	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	manifest, err := variables.Parse([]byte(envOf(server.Created[0].Template.Containers[0])[variables.EnvVar]))
+	manifest, err := manifest.Parse([]byte(googletest.EnvOf(server.Created[0].Template.Containers[0])[manifest.EnvVar]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +379,7 @@ func TestAnAppBoundToNoRealtimeIsToldOfNoGateway(t *testing.T) {
 	if _, err := p.ProvisionContainers(context.Background(), boundToAStore(previewSpec()), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	manifest, err := variables.Parse([]byte(envOf(server.Created[0].Template.Containers[0])[variables.EnvVar]))
+	manifest, err := manifest.Parse([]byte(googletest.EnvOf(server.Created[0].Template.Containers[0])[manifest.EnvVar]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -572,3 +575,17 @@ func TestPruningLeavesTaggedAnImageARemainingReleaseOfTheServiceRuns(t *testing.
 		t.Errorf("pruning d1 untagged %v, want nothing: d2's revision runs the same image, and its release labels the revision with it", got)
 	}
 }
+
+type alreadyPushed struct{}
+
+func (alreadyPushed) Destination() string { return "the registry the release pushed to" }
+
+func (alreadyPushed) Has(context.Context, provider.ImagePush) (bool, error) { return true, nil }
+
+func (alreadyPushed) Push(_ context.Context, push provider.ImagePush, _ progress.Log) error {
+	return fmt.Errorf("%s is already pushed, and nothing pushes it again", push.ImageRef)
+}
+
+func (alreadyPushed) ProbePush(context.Context, string) error { return nil }
+
+func (alreadyPushed) Remove(context.Context, string) error { return nil }

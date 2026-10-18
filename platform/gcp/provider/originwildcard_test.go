@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 )
 
 const (
@@ -101,7 +102,7 @@ func (b *shieldedBalancer) DestroyOriginWildcard(_ context.Context, tier environ
 }
 
 type wildcardHarness struct {
-	wildcards    originWildcards
+	wildcards    cloudflareorigin.Wildcards
 	certificates *issuingCertificates
 	dns          *recordingDNS
 	balancer     *shieldedBalancer
@@ -116,12 +117,12 @@ func newWildcardHarness() *wildcardHarness {
 		balancer:     &shieldedBalancer{},
 		records:      fake.NewKeyValues(),
 	}
-	h.wildcards = originWildcards{
-		keyValues:    h.records,
-		certificates: h.certificates,
-		openDNS:      func() edge.DNSRecords { return h.dns },
-		balancer:     h.balancer,
-		readWorkerCAs: func(context.Context, environment.Tier) ([]string, error) {
+	h.wildcards = cloudflareorigin.Wildcards{
+		KeyValues:    h.records,
+		Certificates: h.certificates,
+		OpenDNS:      func() edge.DNSRecords { return h.dns },
+		Balancer:     h.balancer,
+		ReadWorkerCAs: func(context.Context, environment.Tier) ([]string, error) {
 			if h.adopted != nil {
 				return nil, h.adopted
 			}
@@ -131,9 +132,9 @@ func newWildcardHarness() *wildcardHarness {
 	return h
 }
 
-func (h *wildcardHarness) recorded(t *testing.T) originWildcard {
+func (h *wildcardHarness) recorded(t *testing.T) cloudflareorigin.Wildcard {
 	t.Helper()
-	_, recorded, err := h.wildcards.read(context.Background(), environment.TierProduction)
+	_, recorded, err := h.wildcards.Read(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func TestTheOriginWildcardIsCertifiedOnceAndPointedAtTheShieldedAddressWithADNSO
 	t.Parallel()
 	h := newWildcardHarness()
 
-	if err := h.wildcards.ensure(context.Background(), environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(context.Background(), environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatalf("ensure = %v", err)
 	}
 
@@ -172,12 +173,12 @@ func TestEnsuringTheOriginWildcardTwiceChangesNothing(t *testing.T) {
 	t.Parallel()
 	h := newWildcardHarness()
 	ctx := context.Background()
-	if err := h.wildcards.ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatal(err)
 	}
 	written := len(h.dns.written)
 
-	if err := h.wildcards.ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatal(err)
 	}
 	if h.certificates.issued != 1 || len(h.dns.written) != written {
@@ -189,11 +190,11 @@ func TestASecondProjectNamingAnotherOriginDomainOnTheSameTierIsRefused(t *testin
 	t.Parallel()
 	h := newWildcardHarness()
 	ctx := context.Background()
-	if err := h.wildcards.ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	err := h.wildcards.ensure(ctx, environment.TierProduction, "x.example.com", nil)
+	err := h.wildcards.Ensure(ctx, environment.TierProduction, "x.example.com", nil)
 	if refusalCode(err) != refusal.CodeInvalid || !strings.Contains(err.Error(), wildcardBase) {
 		t.Errorf("ensure(another base) = %v, want an invalid refusal naming %s", err, wildcardBase)
 	}
@@ -208,7 +209,7 @@ func TestAnOriginWildcardStillBeingIssuedIsResumedOnTheNextDeploy(t *testing.T) 
 	ctx := context.Background()
 	h.certificates.failWith = provider.Resumable(errors.New("the certificate is still provisioning"))
 
-	err := h.wildcards.ensure(ctx, environment.TierProduction, wildcardBase, nil)
+	err := h.wildcards.Ensure(ctx, environment.TierProduction, wildcardBase, nil)
 	if _, resumable := provider.ResumableMessage(err); !resumable {
 		t.Fatalf("ensure = %v, want a resumable error", err)
 	}
@@ -218,7 +219,7 @@ func TestAnOriginWildcardStillBeingIssuedIsResumedOnTheNextDeploy(t *testing.T) 
 	}
 
 	h.certificates.failWith = nil
-	if err := h.wildcards.ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatalf("resumed ensure = %v", err)
 	}
 	if h.certificates.issued != 2 || !h.recorded(t).Certified {
@@ -231,7 +232,7 @@ func TestAnOriginWildcardWithoutAnAdoptedWorkerCertificateKeepsItsIssuedCertific
 	h := newWildcardHarness()
 	h.adopted = refusal.Refuse(refusal.CodeNotReady, "run `ocel bootstrap production` again")
 
-	err := h.wildcards.ensure(context.Background(), environment.TierProduction, wildcardBase, nil)
+	err := h.wildcards.Ensure(context.Background(), environment.TierProduction, wildcardBase, nil)
 	if refusalCode(err) != refusal.CodeNotReady {
 		t.Errorf("ensure = %v, want the not-ready refusal", err)
 	}
@@ -245,7 +246,7 @@ func TestAForeignRecordAtTheOriginWildcardIsRefused(t *testing.T) {
 	h := newWildcardHarness()
 	h.dns.foreign["*."+wildcardBase] = true
 
-	err := h.wildcards.ensure(context.Background(), environment.TierProduction, wildcardBase, nil)
+	err := h.wildcards.Ensure(context.Background(), environment.TierProduction, wildcardBase, nil)
 	if refusalCode(err) != refusal.CodeInvalid || !strings.Contains(err.Error(), "*."+wildcardBase) {
 		t.Errorf("ensure = %v, want an invalid refusal naming *.%s", err, wildcardBase)
 	}
@@ -255,7 +256,7 @@ func TestTheOriginWildcardIsNotTakenDownWhileAProjectIsServedBehindTheWorker(t *
 	t.Parallel()
 	h := newWildcardHarness()
 	ctx := context.Background()
-	if err := h.wildcards.ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatal(err)
 	}
 	state := stackrecords.EdgeState{Kind: cloudflare.Kind}
@@ -270,7 +271,7 @@ func TestTheOriginWildcardIsNotTakenDownWhileAProjectIsServedBehindTheWorker(t *
 		t.Fatal(err)
 	}
 
-	err = h.wildcards.destroy(ctx, environment.TierProduction)
+	err = h.wildcards.Destroy(ctx, environment.TierProduction)
 	if refusalCode(err) != refusal.CodeInvalid || !strings.Contains(err.Error(), "shop") {
 		t.Errorf("destroy = %v, want an invalid refusal naming shop", err)
 	}
@@ -283,11 +284,11 @@ func TestTakingTheOriginWildcardDownReleasesItsCertificateAndRecords(t *testing.
 	t.Parallel()
 	h := newWildcardHarness()
 	ctx := context.Background()
-	if err := h.wildcards.ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(ctx, environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := h.wildcards.destroy(ctx, environment.TierProduction); err != nil {
+	if err := h.wildcards.Destroy(ctx, environment.TierProduction); err != nil {
 		t.Fatalf("destroy = %v", err)
 	}
 	if !slices.Equal(h.balancer.destroyed, []environment.Tier{environment.TierProduction}) {
@@ -302,7 +303,7 @@ func TestTakingTheOriginWildcardDownReleasesItsCertificateAndRecords(t *testing.
 	if h.recorded(t).BaseDomain != "" {
 		t.Error("the record outlived the teardown")
 	}
-	if err := h.wildcards.destroy(ctx, environment.TierProduction); err != nil {
+	if err := h.wildcards.Destroy(ctx, environment.TierProduction); err != nil {
 		t.Errorf("destroying what is gone = %v", err)
 	}
 }
@@ -310,10 +311,10 @@ func TestTakingTheOriginWildcardDownReleasesItsCertificateAndRecords(t *testing.
 func TestTheCloudflareFrontThatRunsNoCodeKeepsNoOriginWildcard(t *testing.T) {
 	t.Parallel()
 	h := newWildcardHarness()
-	front := cloudflareFront{
+	front := cloudflareorigin.Front{
 		Edge:      cloudflare.NewProxy("ocel", cloudflare.Options{OriginDomain: wildcardBase}),
-		options:   cloudflare.Options{OriginDomain: wildcardBase},
-		wildcards: h.wildcards,
+		Options:   cloudflare.Options{OriginDomain: wildcardBase},
+		Wildcards: h.wildcards,
 	}
 
 	_, _ = front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
@@ -342,10 +343,10 @@ func TestTheCloudflareFrontReconcilesTheOriginWildcardBeforeTheWorker(t *testing
 		t.Fatal(err)
 	}
 	certified := -1
-	front := cloudflareFront{
+	front := cloudflareorigin.Front{
 		Edge:      workerReconcile{Edge: relay, certified: func() int { return h.certificates.issued }, seen: &certified},
-		options:   cloudflare.Options{OriginDomain: wildcardBase},
-		wildcards: h.wildcards,
+		Options:   cloudflare.Options{OriginDomain: wildcardBase},
+		Wildcards: h.wildcards,
 	}
 
 	if _, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{}); err != nil {
@@ -357,7 +358,7 @@ func TestTheCloudflareFrontReconcilesTheOriginWildcardBeforeTheWorker(t *testing
 	}
 	pruning := edge.StackSpec{Slug: "shop", Tier: environment.TierProduction, PruneOnly: true}
 	h2 := newWildcardHarness()
-	front.wildcards = h2.wildcards
+	front.Wildcards = h2.wildcards
 	if _, err := front.Reconcile(context.Background(), pruning, edge.StackState{}); err != nil || h2.certificates.issued != 0 {
 		t.Errorf("a production prune reconcile issued %d certificates (err %v), want none", h2.certificates.issued, err)
 	}
@@ -370,10 +371,10 @@ func TestAPreviewDeployThatOnlyPrunesStillSetsUpThePreviewOriginWildcard(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	front := cloudflareFront{
+	front := cloudflareorigin.Front{
 		Edge:      relay,
-		options:   cloudflare.Options{OriginDomain: wildcardBase},
-		wildcards: h.wildcards,
+		Options:   cloudflare.Options{OriginDomain: wildcardBase},
+		Wildcards: h.wildcards,
 	}
 	pruning := edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true}
 
@@ -389,7 +390,7 @@ func TestAPreviewDeployThatOnlyPrunesStillSetsUpThePreviewOriginWildcard(t *test
 func TestARenewedWorkerClientCertificateIsTrustedByTheRecordedOriginWildcard(t *testing.T) {
 	t.Parallel()
 	h := newWildcardHarness()
-	if err := h.wildcards.ensure(context.Background(), environment.TierProduction, wildcardBase, nil); err != nil {
+	if err := h.wildcards.Ensure(context.Background(), environment.TierProduction, wildcardBase, nil); err != nil {
 		t.Fatal(err)
 	}
 	renewed := "-----BEGIN CERTIFICATE-----\nBBBB\n-----END CERTIFICATE-----\n"
@@ -397,7 +398,7 @@ func TestARenewedWorkerClientCertificateIsTrustedByTheRecordedOriginWildcard(t *
 		edge.OfferKeyClientCertificateAuthorities: renewed + workerAuthority,
 	}}
 
-	if err := h.wildcards.trustWorkerClientCertificate(context.Background(), environment.TierProduction, offer); err != nil {
+	if err := h.wildcards.TrustWorkerClientCertificate(context.Background(), environment.TierProduction, offer); err != nil {
 		t.Fatalf("trustWorkerClientCertificate = %v", err)
 	}
 
@@ -412,7 +413,7 @@ func TestARenewedWorkerClientCertificateOnATierWithNoOriginWildcardTrustsNothing
 	t.Parallel()
 	h := newWildcardHarness()
 
-	if err := h.wildcards.trustWorkerClientCertificate(context.Background(), environment.TierProduction, edge.Offer{}); err != nil {
+	if err := h.wildcards.TrustWorkerClientCertificate(context.Background(), environment.TierProduction, edge.Offer{}); err != nil {
 		t.Fatalf("trustWorkerClientCertificate = %v", err)
 	}
 	if len(h.balancer.reconciled) != 0 {

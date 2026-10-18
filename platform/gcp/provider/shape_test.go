@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -19,7 +20,7 @@ func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		properties := serviceProperties(compute == provider.ComputeServerless, instances.Min, run.RevisionMemory, run.IngressLoadBalancer)
+		properties := run.PricedProperties(compute == provider.ComputeServerless, instances.Min, run.RevisionMemory, run.IngressLoadBalancer)
 		if properties["ingress"] != sent.Ingress {
 			t.Errorf("%s: shaped ingress %v, serviceOf sends %v", compute, properties["ingress"], sent.Ingress)
 		}
@@ -43,11 +44,11 @@ func TestTheEnvSourceSyncShapeMatchesWhatTheBootstrapDeploys(t *testing.T) {
 	t.Parallel()
 
 	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
-	sent, err := run.ServiceOf(syncServing(b, environment.TierProduction))
+	sent, err := run.ServiceOf(envsource.SyncServing(b, environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	properties := syncServiceProperties("europe-west1")
+	properties := envsource.ServiceProperties("europe-west1")
 	if properties["ingress"] != sent.Ingress {
 		t.Errorf("shaped ingress %v, the bootstrap sends %v", properties["ingress"], sent.Ingress)
 	}

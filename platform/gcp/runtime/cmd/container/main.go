@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/mountedgate"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/live"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 	source "github.com/ocelhq/ocel/platform/gcp/runtime/live"
 	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"

@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -361,16 +363,16 @@ func TestAFrontThatRefusedToComeDownKeepsWhatItsBootstrapAdopted(t *testing.T) {
 	}
 }
 
-func adoptedAs(t *testing.T, h *offersHarness, kind edge.Kind) (adoptedEdge, bool) {
+func adoptedAs(t *testing.T, h *offersHarness, kind edge.Kind) (cloudflareorigin.AdoptedEdge, bool) {
 	t.Helper()
-	entry, err := h.records.Read(context.Background(), adoptedEdgeKey(environment.TierProduction, kind))
+	entry, err := h.records.Read(context.Background(), cloudflareorigin.AdoptedEdgeKey(environment.TierProduction, kind))
 	if errors.Is(err, records.ErrNotFound) {
-		return adoptedEdge{}, false
+		return cloudflareorigin.AdoptedEdge{}, false
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	var adopted adoptedEdge
+	var adopted cloudflareorigin.AdoptedEdge
 	if err := json.Unmarshal(entry.Value, &adopted); err != nil {
 		t.Fatal(err)
 	}
@@ -413,13 +415,13 @@ func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T)
 		}
 	}
 	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
-	balancer := newALBPart(b, environment.TierProduction)
+	balancer := albpart.NewPart(b, environment.TierProduction)
 	if !strings.Contains(balancer.Summary, "$18") || !balancer.Retires {
-		t.Errorf("the %s part is %+v, want its summary to say the price and it retiring with its last project", albPart, balancer)
+		t.Errorf("the %s part is %+v, want its summary to say the price and it retiring with its last project", albpart.PartName, balancer)
 	}
 	for _, want := range []string{"gate", "plugin", "repository"} {
 		if !strings.Contains(balancer.Summary, want) {
-			t.Errorf("the %s part reads %q, want it to mention the %s it holds", albPart, balancer.Summary, want)
+			t.Errorf("the %s part reads %q, want it to mention the %s it holds", albpart.PartName, balancer.Summary, want)
 		}
 	}
 }
@@ -461,10 +463,10 @@ func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingAdded(t *tes
 	t.Parallel()
 
 	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
-	balancer := newALBPart(b, environment.TierPreview)
+	balancer := albpart.NewPart(b, environment.TierPreview)
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com", "networkservices.googleapis.com"} {
 		if !slices.Contains(balancer.APIs, api) {
-			t.Errorf("the %s part checks %v, want %s among them: the gate is a Service Extensions plugin, and the front needs the rest", albPart, balancer.APIs, api)
+			t.Errorf("the %s part checks %v, want %s among them: the gate is a Service Extensions plugin, and the front needs the rest", albpart.PartName, balancer.APIs, api)
 		}
 	}
 	plain := bootstrap.APIsFor(environment.TierProduction, nil)

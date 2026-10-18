@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
@@ -42,9 +43,9 @@ func withoutURLs(functions []provider.Function) []provider.Function {
 	return bare
 }
 
-func recordOriginWildcard(t *testing.T, store records.Store, recorded originWildcard) {
+func recordOriginWildcard(t *testing.T, store records.Store, recorded cloudflareorigin.Wildcard) {
 	t.Helper()
-	entry, err := records.ReadOrEmpty(context.Background(), store, originWildcardKey(environment.TierProduction))
+	entry, err := records.ReadOrEmpty(context.Background(), store, cloudflareorigin.WildcardKey(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func withOriginBase(t *testing.T, p *Provider) *routedHosts {
 	p.records = fake.NewKeyValues()
 	routing := &routedHosts{}
 	p.originRoutes = routing
-	recordOriginWildcard(t, p.records, originWildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
+	recordOriginWildcard(t, p.records, cloudflareorigin.Wildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
 	return routing
 }
 
@@ -77,7 +78,7 @@ func adoptBehindTheWorker(t *testing.T, p *Provider, kinds ...edge.Kind) {
 	t.Helper()
 	withOriginBase(t, p)
 	for _, kind := range append([]edge.Kind{cloudflareKind}, kinds...) {
-		err := adoptEdgeOffers(context.Background(), p.resolved, p.records, environment.TierProduction, kind,
+		err := cloudflareorigin.AdoptOffers(context.Background(), p.resolved, p.records, environment.TierProduction, kind,
 			edge.BootstrapOutput{Offers: []edge.Offer{storeOffer("c1"), certificateOffer()}}, &fake.Log{})
 		if err != nil {
 			t.Fatal(err)
@@ -92,7 +93,7 @@ func behindTheWorker(spec provider.StackSpec) provider.StackSpec {
 
 func TestAnOriginHostnameIsTheReleaseAndServiceUnderTheTiersOriginBase(t *testing.T) {
 	t.Parallel()
-	if got, want := originHostname("r0001abcd", "ocel-shop-prod-web-abc123", "o.example.com"), "r0001abcd-ocel-shop-prod-web-abc123.o.example.com"; got != want {
+	if got, want := cloudflareorigin.OriginHostname("r0001abcd", "ocel-shop-prod-web-abc123", "o.example.com"), "r0001abcd-ocel-shop-prod-web-abc123.o.example.com"; got != want {
 		t.Errorf("originHostname = %q, want %q", got, want)
 	}
 }
@@ -100,7 +101,7 @@ func TestAnOriginHostnameIsTheReleaseAndServiceUnderTheTiersOriginBase(t *testin
 func TestAnOriginHostnameFitsOneDNSLabel(t *testing.T) {
 	t.Parallel()
 	for _, service := range []string{strings.Repeat("s", 37), strings.Repeat("s", 200)} {
-		host := originHostname("r0001abcd", service, "o.example.com")
+		host := cloudflareorigin.OriginHostname("r0001abcd", service, "o.example.com")
 		label, _, _ := strings.Cut(host, ".")
 		if len(label) > 63 || !strings.HasPrefix(label, "r0001abcd-") {
 			t.Errorf("label %q (%d characters) for a %d-character service, want at most 63 and led by the release", label, len(label), len(service))
@@ -114,7 +115,7 @@ func TestAFunctionBehindTheWorkerAnswersOnItsReleasesOriginHostname(t *testing.T
 	p.records = newOffersHarness(t).records
 	routing := &routedHosts{}
 	p.originRoutes = routing
-	recordOriginWildcard(t, p.records, originWildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
+	recordOriginWildcard(t, p.records, cloudflareorigin.Wildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
 	spec := behindTheWorker(functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout:sha256-one"))
 
 	functions, err := p.ProvisionFunctions(context.Background(), spec, nil)
@@ -124,7 +125,7 @@ func TestAFunctionBehindTheWorkerAnswersOnItsReleasesOriginHostname(t *testing.T
 
 	release := spec.Ref.Name.Release.String()
 	if len(routing.routed) != 1 || routing.routed[0].Tag != release || routing.routed[0].Slug != "shop" || routing.routed[0].Revision != functions[0].Revision || routing.routed[0].Revision == "" ||
-		routing.routed[0].Hostname != originHostname(release, functions[0].Physical, "o.example.com") {
+		routing.routed[0].Hostname != cloudflareorigin.OriginHostname(release, functions[0].Physical, "o.example.com") {
 		t.Fatalf("routed %+v, want the release-tagged revision at the origin hostname", routing.routed)
 	}
 	if want := "https://" + routing.routed[0].Hostname; functions[0].URL != want {
@@ -141,7 +142,7 @@ func TestAFunctionBehindAnEdgeThatRunsNoCodeKeepsItsCloudRunURL(t *testing.T) {
 	p.records = newOffersHarness(t).records
 	routing := &routedHosts{}
 	p.originRoutes = routing
-	recordOriginWildcard(t, p.records, originWildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
+	recordOriginWildcard(t, p.records, cloudflareorigin.Wildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
 	spec := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout:sha256-one")
 	spec.Edge = codeRunningFront{kind: "alb", shields: true}
 
@@ -172,7 +173,7 @@ func TestAFunctionBehindTheWorkerWaitsForTheOriginWildcardsCertificate(t *testin
 	p := providerServing(server, t)
 	p.records = newOffersHarness(t).records
 	p.originRoutes = &routedHosts{}
-	recordOriginWildcard(t, p.records, originWildcard{BaseDomain: "o.example.com"})
+	recordOriginWildcard(t, p.records, cloudflareorigin.Wildcard{BaseDomain: "o.example.com"})
 
 	_, err := p.ProvisionFunctions(context.Background(), behindTheWorker(functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout:sha256-one")), nil)
 
@@ -188,7 +189,7 @@ func prunable(t *testing.T) (*Provider, *routedHosts, []provider.Function) {
 	released := newReleasedStacks(p)
 	routing := &routedHosts{}
 	p.originRoutes = routing
-	recordOriginWildcard(t, p.records, originWildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
+	recordOriginWildcard(t, p.records, cloudflareorigin.Wildcard{BaseDomain: "o.example.com", Address: "203.0.113.7"})
 	var deployed []provider.Function
 	for _, id := range []string{"d1", "d2", "d3"} {
 		image := "europe-west1-docker.pkg.dev/acme/ocel-preview/web-checkout:sha256-" + id
@@ -236,7 +237,7 @@ func TestRemovingAFunctionUnroutesEveryOriginHostnameOfItsService(t *testing.T) 
 		{Name: "c"},
 	}
 
-	if err := p.unrouteServiceOriginHosts(context.Background(), environment.TierProduction, functions); err != nil {
+	if err := p.originHosts().UnrouteServices(context.Background(), environment.TierProduction, functions); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(routing.unrouted, []string{"svc-a/", "svc-b/"}) {

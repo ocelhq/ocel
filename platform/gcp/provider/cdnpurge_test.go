@@ -49,7 +49,7 @@ func TestANextAppBehindTheALBIsToldTheURLMapItClearsCachedPagesOn(t *testing.T) 
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 	if got, want := env["OCEL_CDN_URL_MAP"], "projects/acme-prod/global/urlMaps/ocel-alb-production-routes"; got != want {
 		t.Errorf("the Next service reads OCEL_CDN_URL_MAP=%q, want %q", got, want)
 	}
@@ -90,7 +90,7 @@ func TestANextAppWithoutTheALBIsToldNoURLMap(t *testing.T) {
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			if got, told := envOf(server.Created[0].Template.Containers[0])["OCEL_CDN_URL_MAP"]; told {
+			if got, told := googletest.EnvOf(server.Created[0].Template.Containers[0])["OCEL_CDN_URL_MAP"]; told {
 				t.Errorf("the service reads OCEL_CDN_URL_MAP=%q, want none", got)
 			}
 			if bound := purgeBindingsOf(server.Identities()); len(bound) != 0 {

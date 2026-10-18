@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -98,8 +99,8 @@ func TestANextServiceKeepsTheMemoryItsSpecNamed(t *testing.T) {
 }
 
 func TestTheNextRuntimeIsToldTheMemoryItsServiceRunsWith(t *testing.T) {
-	if got := envOf(releasedNext(t, nextSpec()))[memoryEnvVar]; got != "2048" {
-		t.Errorf("the Next runtime reads %s=%q, want 2048: Cloud Run names no memory to a container, and the runtime sizes its in-memory caches by it", memoryEnvVar, got)
+	if got := googletest.EnvOf(releasedNext(t, nextSpec()))[next.MemoryEnvVar]; got != "2048" {
+		t.Errorf("the Next runtime reads %s=%q, want 2048: Cloud Run names no memory to a container, and the runtime sizes its in-memory caches by it", next.MemoryEnvVar, got)
 	}
 }
 
@@ -112,8 +113,8 @@ func TestANodeFunctionKeepsTheProfileItRunsOn(t *testing.T) {
 	if got := container.Resources.Limits["memory"]; got != run.RevisionMemory {
 		t.Errorf("a node function asks for %q of memory, want the profile's %q", got, run.RevisionMemory)
 	}
-	if _, told := envOf(container)[memoryEnvVar]; told {
-		t.Errorf("a node function is told %s, which only the Next runtime reads", memoryEnvVar)
+	if _, told := googletest.EnvOf(container)[next.MemoryEnvVar]; told {
+		t.Errorf("a node function is told %s, which only the Next runtime reads", next.MemoryEnvVar)
 	}
 }
 
@@ -126,7 +127,7 @@ func routedNextSpec() provider.StackSpec {
 }
 
 func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) {
-	env := envOf(releasedNext(t, routedNextSpec()))
+	env := googletest.EnvOf(releasedNext(t, routedNextSpec()))
 
 	for name, want := range map[string]string{
 		"OCEL_NEXT_ROUTE_TABLE": "/ocel/app/" + edge.NextRouteTableFile,
@@ -143,7 +144,7 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 }
 
 func TestANextServiceIsToldWhereItsIncrementalCacheLives(t *testing.T) {
-	env := envOf(releasedNext(t, routedNextSpec()))
+	env := googletest.EnvOf(releasedNext(t, routedNextSpec()))
 
 	if got := env["OCEL_ISR_PREFIX"]; got != "prod/shop/web/r1/isr" {
 		t.Errorf("the Next service reads OCEL_ISR_PREFIX=%q, want the prefix its spec names", got)
@@ -159,7 +160,7 @@ func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
 	if got, want := env["OCEL_ISR_BUCKET"], namesOf(t, p).Bucket(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_ISR_BUCKET=%q, want its tier's bucket %q", got, want)
@@ -174,7 +175,7 @@ func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t
 }
 
 func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T) {
-	env := envOf(releasedNext(t, nextSpec()))
+	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
 	for _, name := range []string{"OCEL_ISR_BUCKET", "OCEL_ISR_OBJECT_PREFIX", "OCEL_STORAGE_ENDPOINT"} {
 		if got, told := env[name]; told {
@@ -184,7 +185,7 @@ func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T
 }
 
 func TestANextServiceThatRoutesNothingIsToldNoRoutingManifest(t *testing.T) {
-	env := envOf(releasedNext(t, nextSpec()))
+	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
 	for _, name := range []string{"OCEL_NEXT_ROUTE_TABLE", "OCEL_ISR_PREFIX", "OCEL_ASSET_PREFIX"} {
 		if got, told := env[name]; told {
@@ -233,7 +234,7 @@ func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			env := envOf(server.Created[0].Template.Containers[0])
+			env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 			if env[edge.OriginDispatchVar] != "1" {
 				t.Errorf("the Next service reads %s=%q, want 1: nothing in front of it routes a request to a route", edge.OriginDispatchVar, env[edge.OriginDispatchVar])
 			}
@@ -259,7 +260,7 @@ func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	if got, told := envOf(server.Created[0].Template.Containers[0])[edge.OriginDispatchVar]; told {
+	if got, told := googletest.EnvOf(server.Created[0].Template.Containers[0])[edge.OriginDispatchVar]; told {
 		t.Errorf("a Next service behind an edge that routes reads %s=%q", edge.OriginDispatchVar, got)
 	}
 }
@@ -291,7 +292,7 @@ func TestANextAppIsToldTheTagsDatabaseItsRecordsLiveIn(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
 	if got, want := env["OCEL_TAG_DATABASE"], "projects/"+namesOf(t, p).Project()+"/databases/"+namesOf(t, p).TagDatabase(environment.TierProduction); got != want {
 		t.Errorf("the Next service reads OCEL_TAG_DATABASE=%q, want %q", got, want)
@@ -323,7 +324,7 @@ func TestANextServiceReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *t
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	tagEmulatorEnv(t, p, envOf(server.Created[0].Template.Containers[0]))
+	tagEmulatorEnv(t, p, googletest.EnvOf(server.Created[0].Template.Containers[0]))
 }
 
 func TestANextContainerReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *testing.T) {
@@ -334,11 +335,11 @@ func TestANextContainerReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t 
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	tagEmulatorEnv(t, p, envOf(server.Created[0].Template.Containers[0]))
+	tagEmulatorEnv(t, p, googletest.EnvOf(server.Created[0].Template.Containers[0]))
 }
 
 func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
-	env := envOf(releasedNext(t, nextSpec()))
+	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
 	for _, name := range []string{"OCEL_TAG_DATABASE", "OCEL_FIRESTORE_ENDPOINT"} {
 		if got, told := env[name]; told {
@@ -410,8 +411,8 @@ func TestANextContainerAsksForTwoGibibytesOfMemory(t *testing.T) {
 	if got := container.Resources.Limits["cpu"]; got != run.RevisionCPU {
 		t.Errorf("a Next container asks for %q CPU, want %q", got, run.RevisionCPU)
 	}
-	if got := envOf(container)[memoryEnvVar]; got != "2048" {
-		t.Errorf("the Next runtime reads %s=%q, want 2048", memoryEnvVar, got)
+	if got := googletest.EnvOf(container)[next.MemoryEnvVar]; got != "2048" {
+		t.Errorf("the Next runtime reads %s=%q, want 2048", next.MemoryEnvVar, got)
 	}
 }
 
@@ -421,7 +422,7 @@ func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntries
 	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
 	for name, want := range map[string]string{
 		"OCEL_ISR_BUCKET":        namesOf(t, p).Bucket(environment.TierProduction),
@@ -444,9 +445,9 @@ func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntries
 func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.T) {
 	service, _ := releasedNextContainer(t, nextContainerSpec())
 
-	env := envOf(service.Template.Containers[0])
+	env := googletest.EnvOf(service.Template.Containers[0])
 	for _, name := range []string{
-		routeTableEnvVar, routerKindEnvVar, assetBucketEnvVar,
+		next.RouteTableEnvVar, next.RouterKindEnvVar, next.AssetBucketEnvVar,
 		edge.OriginDispatchVar, edge.OriginSignedVar,
 	} {
 		if _, told := env[name]; told {
@@ -464,8 +465,8 @@ func TestAContainerThatServesNoNextKeepsItsProfileAndIsToldNoCacheLocation(t *te
 	if got := container.Resources.Limits["memory"]; got != run.RevisionMemory {
 		t.Errorf("a container that serves no Next asks for %q of memory, want the profile's %q", got, run.RevisionMemory)
 	}
-	for name := range envOf(container) {
-		if strings.HasPrefix(name, "OCEL_ISR_") || name == tagDatabaseEnvVar || name == memoryEnvVar {
+	for name := range googletest.EnvOf(container) {
+		if strings.HasPrefix(name, "OCEL_ISR_") || name == next.TagDatabaseEnvVar || name == next.MemoryEnvVar {
 			t.Errorf("a container that serves no Next is told %s", name)
 		}
 	}
@@ -484,8 +485,8 @@ func TestAWorkerOfANextContainerIsToldNoCacheLocation(t *testing.T) {
 		if worker.Template == nil {
 			continue
 		}
-		for name := range envOf(worker.Template.Containers[0]) {
-			if strings.HasPrefix(name, "OCEL_ISR_") || name == tagDatabaseEnvVar || name == memoryEnvVar {
+		for name := range googletest.EnvOf(worker.Template.Containers[0]) {
+			if strings.HasPrefix(name, "OCEL_ISR_") || name == next.TagDatabaseEnvVar || name == next.MemoryEnvVar {
 				t.Errorf("a worker of a Next container is told %s, which only the Next service reads", name)
 			}
 		}
@@ -495,7 +496,7 @@ func TestAWorkerOfANextContainerIsToldNoCacheLocation(t *testing.T) {
 func TestANextServiceThatRoutesItsOwnRequestsIsToldTheStaticRulesItsBuildStates(t *testing.T) {
 	spec := routedNextSpec()
 	spec.App.Static = &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}}
-	env := envOf(releasedNext(t, spec))
+	env := googletest.EnvOf(releasedNext(t, spec))
 
 	if got, want := env[edge.StaticRulesVar], `{"immutablePrefixes":["/docs/_next/static/"]}`; got != want {
 		t.Errorf("the Next service reads %s=%q, want %q", edge.StaticRulesVar, got, want)

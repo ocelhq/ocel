@@ -27,7 +27,7 @@ func TestANextServiceBehindAnEdgeThatPurgesByTagKeepsItsCacheTags(t *testing.T) 
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := envOf(server.Created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; got != "1" {
+	if got := googletest.EnvOf(server.Created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; got != "1" {
 		t.Errorf("the Next service reads %s=%q, want 1: the alb clears a replaced release by its tag", edge.CacheTagPurgeVar, got)
 	}
 }
@@ -50,7 +50,7 @@ func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsRelease(t *testing.
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	env := envOf(server.Created[0].Template.Containers[0])
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 	if env[edge.ReleaseTokenVar] != token.String() {
 		t.Errorf("the service reads %s=%q, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], token)
 	}
@@ -76,7 +76,7 @@ func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testi
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			if got, set := envOf(server.Created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; set {
+			if got, set := googletest.EnvOf(server.Created[0].Template.Containers[0])[edge.CacheTagPurgeVar]; set {
 				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it clears by tag", edge.CacheTagPurgeVar, got)
 			}
 		})
@@ -97,7 +97,7 @@ func TestANextServiceBehindAnEdgeThatCachesResponsesIsToldItsEdgeStoresWhateverI
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got := envOf(server.Created[0].Template.Containers[0])[edge.EdgeCacheVar]; got != string(edge.EdgeCacheAll) {
+	if got := googletest.EnvOf(server.Created[0].Template.Containers[0])[edge.EdgeCacheVar]; got != string(edge.EdgeCacheAll) {
 		t.Errorf("the Next service reads %s=%q, want all: Cloud CDN stores whatever the response headers allow", edge.EdgeCacheVar, got)
 	}
 }
@@ -119,7 +119,7 @@ func TestANextServiceBehindNoCachingEdgeIsToldNoEdgeStoresIt(t *testing.T) {
 				t.Fatalf("ProvisionFunctions() = %v", err)
 			}
 
-			if got, set := envOf(server.Created[0].Template.Containers[0])[edge.EdgeCacheVar]; set {
+			if got, set := googletest.EnvOf(server.Created[0].Template.Containers[0])[edge.EdgeCacheVar]; set {
 				t.Errorf("the Next service reads %s=%q, want it unset: nothing in front of it stores a response", edge.EdgeCacheVar, got)
 			}
 		})
@@ -138,7 +138,7 @@ func TestANodeServiceWithAnOcelRouteTableIsToldWhereItsImageHoldsIt(t *testing.T
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 
-	if got, want := envOf(server.Created[0].Template.Containers[0])[edge.OcelRouteTableVar], "/ocel/app/"+edge.OcelRouteTableFile; got != want {
+	if got, want := googletest.EnvOf(server.Created[0].Template.Containers[0])[edge.OcelRouteTableVar], "/ocel/app/"+edge.OcelRouteTableFile; got != want {
 		t.Errorf("the service reads %s=%q, want %q", edge.OcelRouteTableVar, got, want)
 	}
 }
