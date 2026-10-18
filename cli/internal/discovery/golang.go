@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
-const goEntryDir = statedir.Name + "/discovery"
+const goEntryDir = buildoutput.StateDir + "/discovery"
 
 func goCommand(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
 	moduleRoot, pkg, err := goPackage(configDir, root)

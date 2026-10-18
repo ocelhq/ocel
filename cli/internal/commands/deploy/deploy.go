@@ -21,14 +21,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variablescope"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
-const prebuiltFlagUsage = "Deploy the existing " + statedir.Name + "/output instead of building first (produce it with ocel build)"
+const prebuiltFlagUsage = "Deploy the existing " + buildoutput.StateDir + "/output instead of building first (produce it with ocel build)"
 
 type deployOptions struct {
 	yes      bool

@@ -45,7 +45,7 @@ type Spec struct {
 
 func Serve(spec Spec) error {
 	if spec.VariableStore.KeyValues == nil {
-		return errors.New("connectorserver: Spec.VariableStore.Records is required")
+		return errors.New("connectorserver: Spec.VariableStore.KeyValues is required")
 	}
 	if spec.VariableStore.Cipher == nil {
 		return errors.New("connectorserver: Spec.VariableStore.Cipher is required")
@@ -159,7 +159,7 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 	source := variablestoreserver.FixedBackend(spec.VariableStore)
 	path, handler := variablestorev1connect.NewVariableStoreServiceHandler(
 		&variablestoreserver.Service{Source: source},
-		connect.WithInterceptors(validate.NewInterceptor(), guard.interceptor()),
+		connect.WithInterceptors(validate.NewInterceptor(), guard.interceptor(), refuseUnregisteredSync()),
 	)
 	mux.Handle(path, handler)
 

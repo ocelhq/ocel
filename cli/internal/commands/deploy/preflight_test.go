@@ -28,7 +28,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestADeployRefusesEveryHostnameAnotherProjectClaims(t *testing.T) {
@@ -656,7 +655,7 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 
 func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", app, buildoutput.HostingFile),
+	clitest.WriteFile(t, filepath.Join(root, buildoutput.StateDir, "output", "apps", app, buildoutput.HostingFile),
 		`{"version":1,"framework":"`+framework+`","frameworkBuildId":"b1","needs":`+needs+`}`)
 }
 

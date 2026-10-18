@@ -20,11 +20,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func newDryRunDependencies(t *testing.T) Dependencies {
@@ -258,7 +258,7 @@ func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 func projectFiles(t *testing.T, root string) map[string]string {
 	t.Helper()
 	files := map[string]string{}
-	state := filepath.Join(root, statedir.Name)
+	state := filepath.Join(root, buildoutput.StateDir)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -362,7 +362,7 @@ func TestADeployLeavesEachAppsTSConfigAsItFoundIt(t *testing.T) {
 	if string(after) != string(before) {
 		t.Errorf("tsconfig.json = %s, want it as it was: ocel never writes a file the user owns", after)
 	}
-	if _, err := os.Stat(filepath.Join(root, statedir.Name, "apps", "api", "env-client.ts")); err == nil {
+	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "apps", "api", "env-client.ts")); err == nil {
 		t.Error("a deploy generated a client accessor, which ocel no longer does")
 	}
 }

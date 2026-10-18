@@ -150,6 +150,7 @@ func (t *trust) caller(ctx context.Context, authorization string) (claims, error
 		jwt.WithIssuer(t.issuer),
 		jwt.WithAudience(t.connectorID),
 		jwt.WithAcceptableSkew(skew),
+		jwt.WithRequiredClaim(jwt.ExpirationKey),
 	)
 	if err != nil {
 		return claims{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("verify the bearer token: %w", err))

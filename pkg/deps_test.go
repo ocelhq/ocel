@@ -25,6 +25,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/images",
 	"github.com/ocelhq/ocel/pkg/keyvalue",
 	"github.com/ocelhq/ocel/pkg/kvstore",
+	"github.com/ocelhq/ocel/pkg/lease",
 	"github.com/ocelhq/ocel/pkg/localrpc",
 	"github.com/ocelhq/ocel/pkg/naming",
 	"github.com/ocelhq/ocel/pkg/pricing",
@@ -37,7 +38,10 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/router",
 	"github.com/ocelhq/ocel/pkg/seal",
 	"github.com/ocelhq/ocel/pkg/stackrecords",
-	"github.com/ocelhq/ocel/pkg/statedir",
+}
+
+func buildsOnProvider(pkg string) []string {
+	return append(slices.Clone(providerBuildsOn), "github.com/ocelhq/ocel/pkg/"+pkg)
 }
 
 func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
@@ -53,6 +57,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "provider", pattern: "./provider/...", open: providerBuildsOn},
 		{name: "arch", pattern: "./arch/...", open: providerBuildsOn},
 		{name: "buildoutput", pattern: "./buildoutput/...", open: providerBuildsOn},
+		{name: "connectorserver", pattern: "./connectorserver/...", open: buildsOnProvider("connectorserver")},
 		{name: "containerimage", pattern: "./containerimage/...", open: providerBuildsOn},
 		{name: "cron", pattern: "./cron/...", open: []string{"github.com/ocelhq/ocel/pkg/cron"}},
 		{name: "dotenv", pattern: "./dotenv/...", open: providerBuildsOn},
@@ -62,6 +67,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "variablestoreserver", pattern: "./variablestoreserver/...", open: providerBuildsOn},
 		{name: "images", pattern: "./images/...", open: providerBuildsOn},
 		{name: "keyvalue", pattern: "./keyvalue/...", open: providerBuildsOn},
+		{name: "lease", pattern: "./lease/...", open: []string{"github.com/ocelhq/ocel/pkg/lease"}},
 		{name: "kvstore", pattern: "./kvstore/...", open: []string{"github.com/ocelhq/ocel/pkg/kvstore", "github.com/ocelhq/ocel/pkg/proto"}},
 		{name: "realtime", pattern: "./realtime/...", open: []string{"github.com/ocelhq/ocel/pkg/proto", "github.com/ocelhq/ocel/pkg/realtime"}},
 		{name: "refusal", pattern: "./refusal/...", open: providerBuildsOn},
@@ -72,6 +78,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 			"github.com/ocelhq/ocel/pkg/refusal",
 			"github.com/ocelhq/ocel/pkg/router",
 		}},
+		{name: "runs", pattern: "./runs/...", open: buildsOnProvider("runs")},
 		{name: "seal", pattern: "./seal/...", open: []string{"github.com/ocelhq/ocel/pkg/environment", "github.com/ocelhq/ocel/pkg/seal"}},
 		{name: "stackrecords", pattern: "./stackrecords/...", open: providerBuildsOn},
 	} {

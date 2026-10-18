@@ -403,7 +403,7 @@ func (u upstream) buildForwardRequest(ctx context.Context, ev *httpEvent) (*http
 		return nil, err
 	}
 	if u.guard != nil {
-		req.Header.Del(originguard.OriginSecretHeader)
+		req.Header.Del(edge.OriginSecretHeader)
 	}
 	if lc, ok := lambdacontext.FromContext(ctx); ok {
 		req.Header.Set("x-ocel-request-id", lc.AwsRequestID)

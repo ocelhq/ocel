@@ -116,7 +116,7 @@ func newMux(config Config) *http.ServeMux {
 	)
 
 	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	services := &handlers{session: s, questions: asked, leases: newEnvironmentLeases(), skipChecks: processenv.SkipChecks(), Service: &variablestoreserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
+	services := &handlers{session: s, questions: asked, leases: newEnvironmentLeases(), skipChecks: processenv.SkipChecks(), Service: &variablestoreserver.Service{Source: sessionBackend{session: s}}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(services, interceptors)
 	mux.Handle(path, handler)

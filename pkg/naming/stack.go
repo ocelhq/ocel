@@ -49,29 +49,30 @@ func (s StackName) String() string {
 
 func ParseStackName(value string) (StackName, error) {
 	fields := strings.Split(value, FieldSeparator)
-	switch {
-	case len(fields) == 2 && fields[1] == InfraApp:
-		if err := Validate("env", fields[0]); err != nil {
-			return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
-		}
-		return InfraStack(fields[0]), nil
-	case len(fields) == 3:
-		if err := Validate("env", fields[0]); err != nil {
-			return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
-		}
-		if err := Validate("app", fields[1]); err != nil {
-			return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
-		}
-		if fields[1] == InfraApp {
-			return StackName{}, fmt.Errorf("stack name %q uses the reserved app name %q", value, InfraApp)
-		}
-		release, err := ParseReleaseToken(fields[2])
-		if err != nil {
-			return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
-		}
-		return AppStack(fields[0], fields[1], release), nil
+	if len(fields) != 2 && len(fields) != 3 {
+		return StackName{}, fmt.Errorf("stack name %q is none of %q, %q, %q and %q", value,
+			"<env>--infra", "<env>--<app>", "<env>--<app>--<release>", "<env>--<app>--"+containerWorkersField)
 	}
-	return StackName{}, fmt.Errorf("stack name %q is neither %q nor %q", value, "<env>--infra", "<env>--<app>--<release>")
+	if err := Validate("env", fields[0]); err != nil {
+		return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
+	}
+	if err := Validate("app", fields[1]); err != nil {
+		return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
+	}
+	env, app := fields[0], fields[1]
+	switch {
+	case len(fields) == 2:
+		return StackName{Env: env, App: app}, nil
+	case app == InfraApp:
+		return StackName{}, fmt.Errorf("stack name %q uses the reserved app name %q", value, InfraApp)
+	case fields[2] == containerWorkersField:
+		return ContainerWorkersStack(env, app), nil
+	}
+	release, err := ParseReleaseToken(fields[2])
+	if err != nil {
+		return StackName{}, fmt.Errorf("stack name %q: %w", value, err)
+	}
+	return AppStack(env, app, release), nil
 }
 
 func PulumiProject(project string) string {

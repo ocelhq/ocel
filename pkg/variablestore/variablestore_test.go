@@ -499,6 +499,12 @@ func TestAnUnpublishedBindingIsNotFound(t *testing.T) {
 	}
 }
 
+func TestTheEveryProjectTokenIsNoProjectsSlug(t *testing.T) {
+	if err := variablestore.ValidateProject(variablestore.EveryProject); err == nil {
+		t.Fatalf("ValidateProject(%q) = nil, want it refused: a value sealed to every project of a tier names its project %q", variablestore.EveryProject, variablestore.EveryProject)
+	}
+}
+
 func TestTheTierWideEnvironmentIsReserved(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()

@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestWriteLeavesTheDeploymentAsProtoJSONInTheProjectStateDir(t *testing.T) {
@@ -26,7 +26,7 @@ func TestWriteLeavesTheDeploymentAsProtoJSONInTheProjectStateDir(t *testing.T) {
 		t.Fatalf("Write() error = %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, statedir.Name, "deploy-report.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, buildoutput.StateDir, "deploy-report.json"))
 	if err != nil {
 		t.Fatalf("read the report: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestWriteReplacesTheReportOfAnEarlierDeployment(t *testing.T) {
 	if read.GetPromotion().GetId() != "p_second" {
 		t.Errorf("promotion = %q, want the later deployment's p_second", read.GetPromotion().GetId())
 	}
-	leftovers, _ := filepath.Glob(filepath.Join(dir, statedir.Name, "deploy-report.json.*"))
+	leftovers, _ := filepath.Glob(filepath.Join(dir, buildoutput.StateDir, "deploy-report.json.*"))
 	if len(leftovers) != 0 {
 		t.Errorf("temporary files left behind: %v", leftovers)
 	}

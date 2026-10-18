@@ -48,7 +48,7 @@ type HostnameState struct {
 	Certificate    provider.Certificate   `json:"certificate,omitzero"`
 	Superseded     []provider.Certificate `json:"superseded,omitempty"`
 	Written        []edge.Record          `json:"written,omitempty"`
-	Manual         []edge.Record          `json:"owed,omitempty"`
+	Manual         []edge.Record          `json:"manual,omitempty"`
 	Probe          ServeProbe             `json:"probe,omitzero"`
 
 	ClientCADigests            []string  `json:"clientCADigests,omitempty"`

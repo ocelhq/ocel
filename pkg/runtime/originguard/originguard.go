@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"crypto/subtle"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -16,13 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/runtime/mountedgate"
-)
-
-const OriginSecretHeader = edge.OriginSecretHeader
-
-const (
-	OriginSecretVar         = edge.OriginSecretVar
-	OriginSecretPreviousVar = edge.OriginSecretPreviousVar
 )
 
 const HealthPathVar = "OCEL_HEALTH_PATH"
@@ -48,36 +42,39 @@ func NewGuard(secrets ...string) *Guard {
 	return guard
 }
 
-func GuardFromEnv(env []string) (*Guard, []string) {
+func GuardFromEnv(env []string, required bool) (*Guard, []string, error) {
 	kept := make([]string, 0, len(env))
 	var (
-		guard    *Guard
+		given    bool
 		current  string
 		previous string
 	)
 	for _, entry := range env {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
-		case OriginSecretVar:
-			current = value
-			guard = &Guard{}
-		case OriginSecretPreviousVar:
-			previous = value
+		case edge.OriginSecretVar:
+			current, given = value, true
+		case edge.OriginSecretPreviousVar:
+			previous, given = value, true
 		default:
 			kept = append(kept, entry)
 		}
 	}
-	if guard == nil {
-		return nil, kept
+	switch {
+	case given:
+		return NewGuard(current, previous), kept, nil
+	case required:
+		return nil, nil, fmt.Errorf("the deployment is reached only through its front, and %s is not set", edge.OriginSecretVar)
+	default:
+		return nil, kept, nil
 	}
-	return NewGuard(current, previous), kept
 }
 
 func (g *Guard) Admits(r *http.Request) bool {
 	if g == nil {
 		return true
 	}
-	presented := sha256.Sum256([]byte(r.Header.Get(OriginSecretHeader)))
+	presented := sha256.Sum256([]byte(r.Header.Get(edge.OriginSecretHeader)))
 	matched := 0
 	for _, expected := range g.expected {
 		matched |= subtle.ConstantTimeCompare(presented[:], expected[:])
@@ -107,7 +104,7 @@ func Handler(opts Options) http.Handler {
 			r.SetURL(opts.Upstream)
 			r.Out.URL.RawQuery = r.In.URL.RawQuery
 			r.Out.Host = r.In.Host
-			r.Out.Header.Del(OriginSecretHeader)
+			r.Out.Header.Del(edge.OriginSecretHeader)
 			r.Out.Header.Del(ProbeTokenHeader)
 			if strings.EqualFold(strings.TrimSpace(r.In.Header.Get("Upgrade")), "h2c") {
 				r.Out.Header.Del("Upgrade")
@@ -126,7 +123,11 @@ func Handler(opts Options) http.Handler {
 			http.Error(w, "the app is still starting", http.StatusServiceUnavailable)
 			return
 		}
-		if !probe(r, opts.HealthPath) && !opts.Guard.Admits(r) {
+		if !opts.Guard.Admits(r) {
+			if isProbe(r, opts) {
+				answerStatusAlone(w, r, proxy)
+				return
+			}
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
@@ -157,7 +158,7 @@ func admitGate(w http.ResponseWriter, r *http.Request, opts Options, proxy http.
 		r.Header = http.Header(verdict.Forward)
 		maps.Copy(w.Header(), http.Header(verdict.ResponseHeader))
 		return true
-	case isTokenedProbe(r, opts):
+	case isProbe(r, opts):
 		answerStatusAlone(w, r, proxy)
 	default:
 		maps.Copy(w.Header(), http.Header(verdict.Response.Header))
@@ -175,7 +176,7 @@ func now(opts Options) time.Time {
 }
 
 func answerUnavailable(w http.ResponseWriter, r *http.Request, opts Options, proxy http.Handler) {
-	if isTokenedProbe(r, opts) {
+	if isProbe(r, opts) {
 		answerStatusAlone(w, r, proxy)
 		return
 	}
@@ -202,18 +203,20 @@ func (s *statusAlone) WriteHeader(status int) {
 func answerStatusAlone(w http.ResponseWriter, r *http.Request, proxy http.Handler) {
 	answered := &statusAlone{header: http.Header{}}
 	proxy.ServeHTTP(answered, r)
+	if unanswered := answered.header.Get(AppUnansweredHeader); unanswered != "" {
+		w.Header().Set(AppUnansweredHeader, unanswered)
+	}
 	w.Header().Set("Cache-Control", gate.CacheControl)
 	w.Header().Set("X-Robots-Tag", gate.RobotsTag)
 	w.WriteHeader(cmp.Or(answered.status, http.StatusOK))
 }
 
-func probe(r *http.Request, healthPath string) bool {
-	return healthPath != "" && r.URL.Path == healthPath && slices.Contains([]string{http.MethodGet, http.MethodHead}, r.Method)
-}
-
-func isTokenedProbe(r *http.Request, opts Options) bool {
-	if opts.ProbeToken == "" || !probe(r, opts.HealthPath) {
+func isProbe(r *http.Request, opts Options) bool {
+	if opts.HealthPath == "" || r.URL.Path != opts.HealthPath || !slices.Contains([]string{http.MethodGet, http.MethodHead}, r.Method) {
 		return false
+	}
+	if opts.ProbeToken == "" {
+		return opts.Gate == nil
 	}
 	presented := sha256.Sum256([]byte(r.Header.Get(ProbeTokenHeader)))
 	expected := sha256.Sum256([]byte(opts.ProbeToken))

@@ -1,6 +1,8 @@
 package stackrecords_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -56,5 +58,17 @@ func TestAProbeIsAnsweredByARouterOnlyWhenItReadThatRouterOffTheHostname(t *test
 	}
 	if (stackrecords.ServeProbe{}).IsAnsweredBy("") {
 		t.Error("a probe that read no router is answered by no router: an unnamed answer is nobody's")
+	}
+}
+
+func TestTheRecordsAHumanMustWriteAreStoredUnderTheirLiteralName(t *testing.T) {
+	t.Parallel()
+
+	stored, err := json.Marshal(stackrecords.HostnameState{Manual: []edge.Record{{Name: "shop.example.com"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stored), `"manual":`) {
+		t.Errorf("a hostname record is stored as %s, want the manual records under %q", stored, "manual")
 	}
 }

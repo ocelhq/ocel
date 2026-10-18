@@ -20,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func writeGoApp(t *testing.T, root, path string) {
@@ -75,7 +74,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 		App:          "api",
 	}})
 
-	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "api")
+	binary := filepath.Join(root, buildoutput.StateDir, "output", "apps", "api", "functions", "index.func", "api")
 	if _, err := os.Stat(binary); err != nil {
 		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
 	}
@@ -114,7 +113,7 @@ func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testin
 		t.Fatalf("Build: %v", err)
 	}
 
-	functionDir := filepath.Join(root, statedir.Name, "output", "apps", "worker", "functions", "index.func")
+	functionDir := filepath.Join(root, buildoutput.StateDir, "output", "apps", "worker", "functions", "index.func")
 	for _, binary := range []string{"worker", buildoutput.GoWorkerBinary} {
 		if _, err := os.Stat(filepath.Join(functionDir, binary)); err != nil {
 			t.Errorf("the artifact has no %s binary: %v", binary, err)
@@ -140,10 +139,10 @@ func TestAGoAppWhoseDiscoveryFolderIsAModuleOfItsOwnCarriesNoWorkerAndGetsNothin
 		t.Fatalf("Build: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(root, discovery.DefaultRootDirName, statedir.Name)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, discovery.DefaultRootDirName, buildoutput.StateDir)); !os.IsNotExist(err) {
 		t.Errorf("the build wrote a worker main into %s, a module the app's binary does not compile: %v", discovery.DefaultRootDirName, err)
 	}
-	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", buildoutput.GoWorkerBinary)
+	binary := filepath.Join(root, buildoutput.StateDir, "output", "apps", "api", "functions", "index.func", buildoutput.GoWorkerBinary)
 	if _, err := os.Stat(binary); !os.IsNotExist(err) {
 		t.Errorf("the artifact carries %s, and nothing in the app's module declares through ocel: %v", buildoutput.GoWorkerBinary, err)
 	}
@@ -196,7 +195,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 		App:          "api",
 	}})
 
-	entry := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "main.py")
+	entry := filepath.Join(root, buildoutput.StateDir, "output", "apps", "api", "functions", "index.func", "main.py")
 	if _, err := os.Stat(entry); err != nil {
 		t.Fatalf("the build produced no module for the function to boot: %v", err)
 	}
@@ -237,7 +236,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		HasWorkerEntry: true,
 	}})
 
-	binary := filepath.Join(root, statedir.Name, "output", "apps", "api", "functions", "index.func", "api")
+	binary := filepath.Join(root, buildoutput.StateDir, "output", "apps", "api", "functions", "index.func", "api")
 	if _, err := os.Stat(binary); err != nil {
 		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
 	}
@@ -424,7 +423,7 @@ func TestAPythonAppsWorkerEntryImportsNeitherTheFoldersNorTheCodeOfAnotherPython
 		t.Fatalf("Build: %v", err)
 	}
 
-	artifact := filepath.Join(root, statedir.Name, "output", "apps", "a", "functions", "index.func")
+	artifact := filepath.Join(root, buildoutput.StateDir, "output", "apps", "a", "functions", "index.func")
 	entry, err := os.ReadFile(filepath.Join(artifact, containerimage.PythonWorkerEntry.ArtifactFile))
 	if err != nil {
 		t.Fatalf("app a's artifact carries no worker entry: %v", err)

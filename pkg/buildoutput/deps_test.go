@@ -18,7 +18,6 @@ var reachable = []string{
 	repo + "pkg/processenv",
 	repo + "pkg/progress",
 	repo + "pkg/router",
-	repo + "pkg/statedir",
 }
 
 var protocol = []string{

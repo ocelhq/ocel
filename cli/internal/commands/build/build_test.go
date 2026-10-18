@@ -21,11 +21,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func TestBuildBakesTheWorkersAnAppHostsIntoItsBuild(t *testing.T) {
@@ -89,11 +89,11 @@ export default {
 		if built == nil {
 			t.Fatal("runBuild did not build the project")
 		}
-		if want := "✓ Built 1 function into " + statedir.Name + "/output in "; !strings.Contains(stdout.String(), want) {
+		if want := "✓ Built 1 function into " + buildoutput.StateDir + "/output in "; !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want the summary %q", stdout.String(), want)
 		}
 
-		record, err := os.ReadFile(filepath.Join(root, statedir.Name, "output", "client-digests.json"))
+		record, err := os.ReadFile(filepath.Join(root, buildoutput.StateDir, "output", "client-digests.json"))
 		if err != nil {
 			t.Fatalf("the build recorded nothing about its client values: %v", err)
 		}

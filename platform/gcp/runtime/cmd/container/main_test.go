@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -107,7 +108,7 @@ func TestContainerHelper(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(served{
 			Port:     os.Getenv(containerimage.PortEnvVar),
-			Secret:   os.Getenv(originguard.OriginSecretVar),
+			Secret:   os.Getenv(edge.OriginSecretVar),
 			Health:   os.Getenv(originguard.HealthPathVar),
 			Runtime:  os.Getenv(processenv.RuntimeAddressEnvVar),
 			Token:    os.Getenv(localrpc.SessionTokenEnvVar),
@@ -168,7 +169,7 @@ func (r *running) ask(t *testing.T, path, secret string) *http.Response {
 		t.Fatal(err)
 	}
 	if secret != "" {
-		req.Header.Set(originguard.OriginSecretHeader, secret)
+		req.Header.Set(edge.OriginSecretHeader, secret)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -200,7 +201,7 @@ func (r *running) awaitFrontWith(t *testing.T, secret string, header http.Header
 			req.Header[name] = values
 		}
 		if secret != "" {
-			req.Header.Set(originguard.OriginSecretHeader, secret)
+			req.Header.Set(edge.OriginSecretHeader, secret)
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -228,7 +229,7 @@ func (r *running) quit(t *testing.T, secret string) int {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+r.port+"/quit", nil)
 	if secret != "" {
-		req.Header.Set(originguard.OriginSecretHeader, secret)
+		req.Header.Set(edge.OriginSecretHeader, secret)
 	}
 	if resp, err := http.DefaultClient.Do(req); err == nil {
 		resp.Body.Close()
@@ -339,11 +340,11 @@ func TestRun(t *testing.T) {
 
 	t.Run("the origin secret guards the front and never reaches the app", func(t *testing.T) {
 		const secret = "s3cr3t"
-		r := launch(t, "serve", originguard.OriginSecretVar+"="+secret)
+		r := launch(t, "serve", edge.OriginSecretVar+"="+secret)
 		body := r.awaitFront(t, secret)
 
 		if body.Secret != "" {
-			t.Errorf("the app was handed %s=%q; nothing the app runs or logs may contain the origin secret", originguard.OriginSecretVar, body.Secret)
+			t.Errorf("the app was handed %s=%q; nothing the app runs or logs may contain the origin secret", edge.OriginSecretVar, body.Secret)
 		}
 		if resp := r.ask(t, "/", ""); resp.StatusCode != http.StatusForbidden {
 			t.Errorf("status without the secret = %d, want %d: a caller who came round the edge is not the app's to answer", resp.StatusCode, http.StatusForbidden)
@@ -358,7 +359,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("the platform's probe is answered without the secret", func(t *testing.T) {
 		const secret = "s3cr3t"
-		r := launch(t, "serve", originguard.OriginSecretVar+"="+secret, originguard.HealthPathVar+"="+healthPath)
+		r := launch(t, "serve", edge.OriginSecretVar+"="+secret, originguard.HealthPathVar+"="+healthPath)
 		body := r.awaitFront(t, secret)
 
 		if body.Health != healthPath {

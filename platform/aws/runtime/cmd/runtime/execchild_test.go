@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
@@ -47,7 +47,7 @@ func TestHTTPChildHelper(t *testing.T) {
 	})
 	mux.HandleFunc("/origin-secret", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "env %q, previous %q, header %q",
-			os.Getenv(originguard.OriginSecretVar), os.Getenv(originguard.OriginSecretPreviousVar), r.Header.Get(originguard.OriginSecretHeader))
+			os.Getenv(edge.OriginSecretVar), os.Getenv(edge.OriginSecretPreviousVar), r.Header.Get(edge.OriginSecretHeader))
 	})
 	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv("PORT"), mux); err != nil {
 		os.Exit(1)
@@ -218,7 +218,7 @@ func TestAnExecutedAppIsReachedOnlyWithTheOriginSecret(t *testing.T) {
 	const secretEvent = `{"version":"2.0","rawPath":"/origin-secret","requestContext":{"http":{"method":"GET"}}`
 
 	t.Run("refuses a request that presents no origin secret before it reaches the app", func(t *testing.T) {
-		t.Setenv(originguard.OriginSecretVar, "the-secret")
+		t.Setenv(edge.OriginSecretVar, "the-secret")
 		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
 		if err != nil {
 			t.Fatalf("startExecutable: %v", err)
@@ -238,7 +238,7 @@ func TestAnExecutedAppIsReachedOnlyWithTheOriginSecret(t *testing.T) {
 	})
 
 	t.Run("refuses a request that presents the wrong origin secret", func(t *testing.T) {
-		t.Setenv(originguard.OriginSecretVar, "the-secret")
+		t.Setenv(edge.OriginSecretVar, "the-secret")
 		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
 		if err != nil {
 			t.Fatalf("startExecutable: %v", err)
@@ -254,8 +254,8 @@ func TestAnExecutedAppIsReachedOnlyWithTheOriginSecret(t *testing.T) {
 	})
 
 	t.Run("serves a request that presents the previous origin secret, with the secret in neither the app's environment nor its request", func(t *testing.T) {
-		t.Setenv(originguard.OriginSecretVar, "the-secret")
-		t.Setenv(originguard.OriginSecretPreviousVar, "the-old-secret")
+		t.Setenv(edge.OriginSecretVar, "the-secret")
+		t.Setenv(edge.OriginSecretPreviousVar, "the-old-secret")
 		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
 		if err != nil {
 			t.Fatalf("startExecutable: %v", err)

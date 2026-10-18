@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func write(t *testing.T, path, contents string) {
@@ -172,7 +172,7 @@ func TestFindProjectRootStopsAtAJSONConfig(t *testing.T) {
 func TestFindProjectRootIgnoresTheScratchDirectory(t *testing.T) {
 	root := t.TempDir()
 	nested := filepath.Join(root, "a")
-	if err := os.MkdirAll(filepath.Join(nested, statedir.Name), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(nested, buildoutput.StateDir), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	write(t, filepath.Join(root, DefaultFileName), `{"slug":"acme"}`)

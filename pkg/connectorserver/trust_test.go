@@ -81,9 +81,10 @@ func consoleServing(t *testing.T) *console {
 }
 
 type minted struct {
-	audience string
-	subject  string
-	scope    []string
+	audience     string
+	subject      string
+	scope        []string
+	neverExpires bool
 }
 
 func (c *console) token(t *testing.T, m minted) string {
@@ -98,16 +99,18 @@ func (c *console) token(t *testing.T, m minted) string {
 		subject = "org:" + organizationID
 	}
 
-	token, err := jwt.NewBuilder().
+	builder := jwt.NewBuilder().
 		Issuer(c.origin).
 		Audience([]string{audience}).
 		Subject(subject).
 		JwtID("one").
 		IssuedAt(time.Now()).
-		Expiration(time.Now().Add(60*time.Second)).
 		Claim("act", "user-1").
-		Claim("scope", m.scope).
-		Build()
+		Claim("scope", m.scope)
+	if !m.neverExpires {
+		builder = builder.Expiration(time.Now().Add(60 * time.Second))
+	}
+	token, err := builder.Build()
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
@@ -273,6 +276,52 @@ func TestAnotherAudienceIsUnauthenticated(t *testing.T) {
 	})
 	if connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("ListValues() code = %v, want %v (err = %v)", connect.CodeOf(err), connect.CodeUnauthenticated, err)
+	}
+}
+
+func TestATokenThatNeverExpiresIsUnauthenticated(t *testing.T) {
+	at := consoleServing(t)
+	variables := withBearer(t, at, everything(), at.token(t, minted{
+		neverExpires: true,
+		scope:        []string{connectorserver.CapabilityVariablesRead},
+	}))
+
+	_, err := variables.ListValues(context.Background(), &variablestorev1.ListValuesRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug: "shop",
+	})
+	if connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("ListValues() under a token with no exp = %v, want %v: a leaked token would speak for the account forever", err, connect.CodeUnauthenticated)
+	}
+}
+
+func TestAConsoleReachedOverPlainHTTPIsRefused(t *testing.T) {
+	for _, console := range []string{"http://console.example.com", "ftp://console.example.com", "http://10.0.0.7:8080"} {
+		_, err := connectorserver.Mux(connectorserver.Spec{
+			Config: connectorserver.Config{Console: console, ConnectorID: connectorID, OrganizationID: organizationID},
+			VariableStore: variablestoreserver.Backend{
+				KeyValues: fake.NewKeyValues(),
+				Cipher:    fake.NewCipher(),
+			},
+		})
+		if err == nil {
+			t.Errorf("Mux() trusting %s = nil, want it refused: the console's signing keys are fetched from it, and anyone on the path could swap them", console)
+		}
+	}
+}
+
+func TestAConsoleOnLoopbackMayBeReachedOverPlainHTTP(t *testing.T) {
+	for _, console := range []string{"http://127.0.0.1:8080", "http://[::1]:8080", "http://localhost:3000"} {
+		_, err := connectorserver.Mux(connectorserver.Spec{
+			Config: connectorserver.Config{Console: console, ConnectorID: connectorID, OrganizationID: organizationID},
+			VariableStore: variablestoreserver.Backend{
+				KeyValues: fake.NewKeyValues(),
+				Cipher:    fake.NewCipher(),
+			},
+		})
+		if err != nil {
+			t.Errorf("Mux() trusting %s = %v, want it served", console, err)
+		}
 	}
 }
 

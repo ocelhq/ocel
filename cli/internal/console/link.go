@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const linkFileName = "console.json"
@@ -21,7 +21,7 @@ type Link struct {
 }
 
 func linkPath(projectDir string) string {
-	return filepath.Join(projectDir, statedir.Name, linkFileName)
+	return filepath.Join(projectDir, buildoutput.StateDir, linkFileName)
 }
 
 var ErrNotLinked = errors.New("this directory isn't linked to a console project")

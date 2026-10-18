@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -24,7 +25,7 @@ func serveGateway(t *testing.T) (string, chan heard) {
 	t.Helper()
 	seen := make(chan heard, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen <- heard{path: r.URL.Path, origin: r.Header.Get("Origin"), secret: r.Header.Get(originguard.OriginSecretHeader)}
+		seen <- heard{path: r.URL.Path, origin: r.Header.Get("Origin"), secret: r.Header.Get(edge.OriginSecretHeader)}
 		if r.Header.Get("Upgrade") != "websocket" {
 			w.WriteHeader(http.StatusTeapot)
 			return

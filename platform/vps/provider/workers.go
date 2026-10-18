@@ -8,11 +8,11 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -28,8 +28,8 @@ func newWorkerEnv(app *provider.AppSpec, worker, deliverySecret string) map[stri
 	if env == nil {
 		env = map[string]string{}
 	}
-	delete(env, originguard.OriginSecretPreviousVar)
-	env[originguard.OriginSecretVar] = deliverySecret
+	delete(env, edge.OriginSecretPreviousVar)
+	env[edge.OriginSecretVar] = deliverySecret
 	env[processenv.WorkerEnvVar] = worker
 	return env
 }

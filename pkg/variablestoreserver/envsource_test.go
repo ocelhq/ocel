@@ -180,7 +180,7 @@ var builtin = &variablestorev1.EnvSource{Kind: envsource.Builtin}
 func servedWithIdentity(t *testing.T) variablestorev1connect.VariableStoreServiceClient {
 	t.Helper()
 	provider := fake.NewProvider(fake.Options{})
-	return serve(t, &variablestoreserver.Service{CallerNamesEnvSource: true, Source: variablestoreserver.FixedBackend{
+	return serve(t, &variablestoreserver.Service{Source: variablestoreserver.FixedBackend{
 		KeyValues:     provider.KeyValues(),
 		Cipher:        provider.Cipher(),
 		ProveIdentity: provider.ProveIdentity,
@@ -191,7 +191,7 @@ func servedToDeployAndConnector(t *testing.T) (deploy, connector variablestorev1
 	t.Helper()
 	provider := fake.NewProvider(fake.Options{})
 	backend := variablestoreserver.FixedBackend{KeyValues: provider.KeyValues(), Cipher: provider.Cipher()}
-	return serve(t, &variablestoreserver.Service{Source: backend, CallerNamesEnvSource: true}), serve(t, &variablestoreserver.Service{Source: backend})
+	return serve(t, &variablestoreserver.Service{Source: backend}), serve(t, &variablestoreserver.Service{Source: backend})
 }
 
 func setValue(t *testing.T, variables variablestorev1connect.VariableStoreServiceClient, tier environmentv1.Tier, at *variablestorev1.Coordinate, value string) error {
@@ -756,42 +756,6 @@ func TestAnIdentityAuthLogsInAsTheTargetsOwnCloudIdentity(t *testing.T) {
 	}
 	if described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Slug: slug}); err != nil || len(described.GetStatus().GetCredentials()) != 0 {
 		t.Fatalf("DescribeEnvSource() = %+v, %v, want no stored credential for an identity login", described, err)
-	}
-}
-
-func TestAConnectorCallerNamingItsOwnEnvSourceIsRefused(t *testing.T) {
-	deploy, connector := servedToDeployAndConnector(t)
-	stored, server := newInfisical(t)
-	elsewhere, other := newInfisical(t)
-	production := environmentv1.Tier_TIER_PRODUCTION
-	setCredentials(t, deploy, production)
-	if err := setValue(t, deploy, production, cell("STRIPE_KEY"), "sk_live"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := syncEnvSource(deploy, production, infisicalSource(t, server.URL, never)); err != nil {
-		t.Fatalf("SyncEnvSource() on the deploy path = %v, want the descriptor a deploy names accepted", err)
-	}
-
-	otherCredential := infisicalSource(t, server.URL, never, func(options *envsource.InfisicalOptions) {
-		options.Auth.Universal.ClientSecret = envsource.Variable{Name: "STRIPE_KEY"}
-	})
-	exec := execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "DATABASE_URL"}, Value: "postgres://mine"})
-	for name, source := range map[string]*variablestorev1.EnvSource{
-		"another host":                infisicalSource(t, other.URL, never),
-		"another credential variable": otherCredential,
-		"exec values":                 exec,
-	} {
-		_, err := syncEnvSource(connector, production, source)
-		if connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "deploy") {
-			t.Errorf("SyncEnvSource() through a connector naming %s = %v, want it refused pointing at a deploy", name, err)
-		}
-	}
-	if len(elsewhere.loggedIn) != 0 || len(stored.loggedIn) != 1 {
-		t.Errorf("logins: named host %v, stored host %v, want no credential sent anywhere a connector caller named", elsewhere.loggedIn, stored.loggedIn)
-	}
-	described, err := connector.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
-	if err != nil || len(described.GetStatus().GetLinks()) == 0 || !strings.HasPrefix(described.GetStatus().GetLinks()[0].GetUrl(), server.URL) {
-		t.Errorf("DescribeEnvSource() = %+v, %v, want the registration the deploy stored left as it was", described, err)
 	}
 }
 

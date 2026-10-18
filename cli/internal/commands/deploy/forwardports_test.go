@@ -31,7 +31,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
@@ -359,7 +358,7 @@ func TestADeployLeavesNoForwardedBindingsPasswordInTheProjectsOcelDirectory(t *t
 		t.Fatalf("the build was handed %q, want main's binding with its password", built.Live[forwardedPostgresKey])
 	}
 	password := delivered.GetPostgres().GetPassword()
-	err := filepath.WalkDir(filepath.Join(fixture.Root, statedir.Name), func(path string, entry os.DirEntry, err error) error {
+	err := filepath.WalkDir(filepath.Join(fixture.Root, buildoutput.StateDir), func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}

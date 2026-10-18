@@ -10,16 +10,16 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/statedir"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 )
 
 const gitignoreName = ".gitignore"
 
-const stateDirPattern = statedir.Name + "/"
+const stateDirPattern = buildoutput.StateDir + "/"
 
 var stateDirPatterns = []string{
-	statedir.Name, statedir.Name + "/", statedir.Name + "/*", statedir.Name + "/**",
-	"/" + statedir.Name, "/" + statedir.Name + "/", "/" + statedir.Name + "/*", "/" + statedir.Name + "/**",
+	buildoutput.StateDir, buildoutput.StateDir + "/", buildoutput.StateDir + "/*", buildoutput.StateDir + "/**",
+	"/" + buildoutput.StateDir, "/" + buildoutput.StateDir + "/", "/" + buildoutput.StateDir + "/*", "/" + buildoutput.StateDir + "/**",
 }
 
 type ignoreStatus int

@@ -20,7 +20,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/statedir"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -870,8 +869,8 @@ func TestFunctionEnvKey(t *testing.T) {
 
 func TestArtifactArchivePath(t *testing.T) {
 	t.Run("resolves relative to the output root", func(t *testing.T) {
-		got := artifactArchivePath("/proj/"+statedir.Name+"/output", "apps/web/functions/api.func")
-		want := "/proj/" + statedir.Name + "/output/apps/web/functions/api.func"
+		got := artifactArchivePath("/proj/"+buildoutput.StateDir+"/output", "apps/web/functions/api.func")
+		want := "/proj/" + buildoutput.StateDir + "/output/apps/web/functions/api.func"
 		if got != want {
 			t.Errorf("artifactArchivePath() = %q, want %q", got, want)
 		}

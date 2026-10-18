@@ -14,12 +14,12 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/proto/app/task/v1/taskv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/pgmq"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -343,7 +343,7 @@ func TestEveryDeliveryToAWorkerCarriesTheEnvironmentsDeliverySecretAsItsOriginSe
 		t.Fatal(err)
 	}
 	applied := opened.opened[0].deployments()
-	if secret := applied[0].Workers["worker"].Header.Get(originguard.OriginSecretHeader); secret != "delivery:ds" {
+	if secret := applied[0].Workers["worker"].Header.Get(edge.OriginSecretHeader); secret != "delivery:ds" {
 		t.Errorf("deliveries to worker carry origin secret %q, want the delivery secret opened from the queue's record: a worker container admits nothing else", secret)
 	}
 }

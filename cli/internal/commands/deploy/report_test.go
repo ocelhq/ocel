@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const fixtureTarget = "fake/box"
@@ -188,7 +187,7 @@ func TestADeployWhoseReportCannotBeCompletedStillReportsItsLivePromotion(t *test
 	dependencies, fixture, console := reportingDeploy(t)
 	console.Link(t, fixture.Root)
 	corrupt := func() {
-		clitest.WriteFile(t, filepath.Join(fixture.Root, statedir.Name, "output", "apps", "api", buildoutput.HostingFile), "{")
+		clitest.WriteFile(t, filepath.Join(fixture.Root, buildoutput.StateDir, "output", "apps", "api", buildoutput.HostingFile), "{")
 	}
 	for _, kind := range []router.Kind{fake.RouterDirect, fake.RouterRelay} {
 		fixture.Provider.Routers().(*fake.Routers).DataPlane(kind).BeforeNextPointerMove(corrupt)

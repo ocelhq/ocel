@@ -2,8 +2,6 @@ package stackrecords
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,14 +57,6 @@ type LeaseTerms struct {
 	Watch time.Duration
 	Now   func() time.Time
 	Wait  func(ctx context.Context, d time.Duration) error
-}
-
-func NewEnvironmentLeaseToken() (string, error) {
-	token := make([]byte, 16)
-	if _, err := rand.Read(token); err != nil {
-		return "", fmt.Errorf("mint an environment lease token: %w", err)
-	}
-	return hex.EncodeToString(token), nil
 }
 
 func EnvironmentLeasesPartition(tier environment.Tier, slug string) keyvalue.Partition {

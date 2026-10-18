@@ -35,7 +35,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/statedir"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/spf13/cobra"
@@ -560,7 +559,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
-		clitest.WriteFile(t, filepath.Join(root, statedir.Name, "output", "apps", "api", "build-id"), recorded+"\n")
+		clitest.WriteFile(t, filepath.Join(root, buildoutput.StateDir, "output", "apps", "api", "build-id"), recorded+"\n")
 		dependencies := newTestDependencies()
 
 		s, _ := newBuildSpan(t)
@@ -615,10 +614,10 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		if want := []string{processenv.NextPublicURLEnvVar, "NEXT_PUBLIC_SITE_URL"}; !slices.Equal(handed, want) {
 			t.Errorf("public keys the build was handed = %v, want %v", handed, want)
 		}
-		if _, err := os.Stat(filepath.Join(root, statedir.Name, "output", "client-digests.json")); err != nil {
+		if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "output", "client-digests.json")); err != nil {
 			t.Errorf("the build recorded no public values: %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(root, statedir.Name, "env-client.ts")); err == nil {
+		if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "env-client.ts")); err == nil {
 			t.Error("the build wrote a client accessor, which ocel no longer generates")
 		}
 	})
@@ -725,7 +724,7 @@ func TestEveryDeployingCommandTakesPrebuilt(t *testing.T) {
 func TestAPrebuiltDeployWithNoBuildOutputStopsBeforeTheProvider(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	addAppToFixtureConfig(t, fixture.Root)
-	if err := os.RemoveAll(filepath.Join(fixture.Root, statedir.Name, "output")); err != nil {
+	if err := os.RemoveAll(filepath.Join(fixture.Root, buildoutput.StateDir, "output")); err != nil {
 		t.Fatalf("drop the fixture's build output: %v", err)
 	}
 	dependencies := newTestDependencies()

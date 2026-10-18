@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 func writeBuildScript(t *testing.T, projectDir string) string {
@@ -79,7 +78,7 @@ func expressFixture(t *testing.T) string {
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, statedir.Name)) })
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, buildoutput.StateDir)) })
 	if err := node.Ensure(fixtureRoot); err != nil {
 		t.Fatalf("node.Ensure: %v", err)
 	}

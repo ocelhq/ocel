@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	ConnectorPath   = "/" + statedir.Name + "/connector"
+	ConnectorPath   = "/" + buildoutput.StateDir + "/connector"
 	ConnectorSocket = "/run/ocel/connector.sock"
 	connectorDial   = "unix/" + ConnectorSocket
 )

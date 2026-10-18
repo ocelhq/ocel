@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/lease"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -144,7 +145,7 @@ func (l *environmentLeases) take(ctx context.Context, store keyvalue.Store, scop
 }
 
 func (l *environmentLeases) takeUnderNewToken(ctx context.Context, store keyvalue.Store, scope leaseSubject, holder stackrecords.LeaseHolder) (*environmentHold, error) {
-	token, err := stackrecords.NewEnvironmentLeaseToken()
+	token, err := lease.NewToken()
 	if err != nil {
 		return nil, err
 	}

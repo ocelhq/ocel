@@ -27,7 +27,10 @@ type execChild struct {
 func startExecutable(command []string, port int, extraEnv []string, budget time.Duration) (*execChild, error) {
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = taskRoot()
-	guard, env := originguard.GuardFromEnv(executableEnv(port, extraEnv))
+	guard, env, err := originguard.GuardFromEnv(executableEnv(port, extraEnv), false)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

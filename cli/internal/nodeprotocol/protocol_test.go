@@ -17,9 +17,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/statedir"
 )
 
 type tracedRun struct {
@@ -47,7 +47,7 @@ func (r *tracedRun) Close() error {
 }
 
 func (r *tracedRun) LogPath() string {
-	found, _ := filepath.Glob(filepath.Join(r.dir, statedir.Name, "runs", "*.ndjson"))
+	found, _ := filepath.Glob(filepath.Join(r.dir, buildoutput.StateDir, "runs", "*.ndjson"))
 	if len(found) != 1 {
 		return ""
 	}

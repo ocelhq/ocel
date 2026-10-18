@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	boxlive "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -25,7 +26,7 @@ func newFront(manifest boxlive.Manifest, opts originguard.Options) (http.Handler
 			r.SetURL(target)
 			r.Out.URL.Path, r.Out.URL.RawPath = gatewayenv.SocketPath, ""
 			r.Out.Header.Del("Origin")
-			r.Out.Header.Del(originguard.OriginSecretHeader)
+			r.Out.Header.Del(edge.OriginSecretHeader)
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			http.Error(w, "the realtime gateway did not answer", http.StatusBadGateway)
