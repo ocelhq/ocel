@@ -33,7 +33,7 @@ func parseCertificate(t *testing.T, certificatePEM string) *x509.Certificate {
 
 func (m *cfMock) holdWorkerClientCertificate(t *testing.T, name string, expires time.Time) string {
 	t.Helper()
-	leaf, _, err := mintClientCertificate(productionCertificateBase, expires.Add(-clientCertificateLifetime))
+	leaf, _, err := mintClientCertificate(productionCertificateBase, expires.Add(-workerClientCertificateLifetime), workerClientCertificateLifetime)
 	if err != nil {
 		t.Fatalf("mint a client certificate: %v", err)
 	}
@@ -113,7 +113,10 @@ func TestABootstrapUploadsOneClientCertificateForItsWorkersAndOffersItsCA(t *tes
 	if leaf.IsCA || !slices.Contains(leaf.ExtKeyUsage, x509.ExtKeyUsageClientAuth) {
 		t.Errorf("uploaded leaf: IsCA = %v, ExtKeyUsage = %v, want a clientAuth leaf", leaf.IsCA, leaf.ExtKeyUsage)
 	}
-	if want := certificateName(before.Add(clientCertificateLifetime)); upload["name"] != want {
+	if lifetime := leaf.NotAfter.Sub(leaf.NotBefore); lifetime > 366*24*time.Hour {
+		t.Errorf("the leaf is valid for %s, want about a year: the credential that reaches every origin as the edge rotates", lifetime)
+	}
+	if want := certificateName(before.Add(workerClientCertificateLifetime)); upload["name"] != want {
 		t.Errorf("name = %v, want %q", upload["name"], want)
 	}
 

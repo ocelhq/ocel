@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
@@ -13,99 +12,42 @@ const defaultNamespace = "ocel"
 
 var truncationMarker = regexp.MustCompile(`-x[0-9a-f]{8}$`)
 
-func TestConventionWorkerNames(t *testing.T) {
+func TestEntryWorkerName(t *testing.T) {
 	t.Parallel()
 
-	t.Run("production names every worker family the project deploys", func(t *testing.T) {
-		t.Parallel()
-
-		got, err := conventionWorkerNames(defaultNamespace, "shop", environment.TierProduction, []string{"web"})
+	for _, tc := range []struct {
+		tier environment.Tier
+		want string
+	}{
+		{environment.TierProduction, "ocel--shop--prod--root"},
+		{environment.TierPreview, "ocel--shop--preview--root"},
+	} {
+		got, err := entryWorkerName(defaultNamespace, "shop", tc.tier)
 		if err != nil {
-			t.Fatalf("conventionWorkerNames: %v", err)
+			t.Fatalf("entryWorkerName(%s): %v", tc.tier, err)
 		}
-		assertSet(t, "names", got, []string{
-			"ocel--shop--prod--root",
-			"ocel--shop--prod--web",
-		})
-	})
-
-	t.Run("preview names the worker the preview tier deploys", func(t *testing.T) {
-		t.Parallel()
-
-		got, err := conventionWorkerNames(defaultNamespace, "shop", environment.TierPreview, nil)
-		if err != nil {
-			t.Fatalf("conventionWorkerNames: %v", err)
+		if got != tc.want {
+			t.Errorf("entryWorkerName(%s) = %q, want %q", tc.tier, got, tc.want)
 		}
-		assertSet(t, "names", got, []string{"ocel--shop--preview--root"})
-	})
-
-	t.Run("another namespace deploying the same slug derives its own names", func(t *testing.T) {
-		t.Parallel()
-
-		mine, err := conventionWorkerNames(defaultNamespace, "shop", environment.TierProduction, nil)
-		if err != nil {
-			t.Fatalf("conventionWorkerNames: %v", err)
-		}
-		theirs, err := conventionWorkerNames("j-1874-deploy-next-cloudflare", "shop", environment.TierProduction, nil)
-		if err != nil {
-			t.Fatalf("conventionWorkerNames: %v", err)
-		}
-		for _, name := range theirs {
-			for _, ours := range mine {
-				if name == ours {
-					t.Errorf("a sweep of this namespace names %q, which is the worker another namespace deploys for the same slug", name)
-				}
-			}
-		}
-	})
-
-	t.Run("a state that names no namespace, tier or slug derives nothing", func(t *testing.T) {
-		t.Parallel()
-
-		for _, tc := range []struct {
-			namespace string
-			slug      string
-			tier      environment.Tier
-		}{
-			{namespace: defaultNamespace, slug: "", tier: environment.TierProduction},
-			{namespace: defaultNamespace, slug: "shop", tier: ""},
-			{namespace: "", slug: "shop", tier: environment.TierProduction},
-		} {
-			got, err := conventionWorkerNames(tc.namespace, tc.slug, tc.tier, []string{"web"})
-			if err != nil {
-				t.Fatalf("conventionWorkerNames(%q, %q, %q): %v", tc.namespace, tc.slug, tc.tier, err)
-			}
-			if len(got) != 0 {
-				t.Errorf("names = %v, want none: nothing identifies the project's workers", got)
-			}
-		}
-	})
-
-	t.Run("an unknown tier is an error", func(t *testing.T) {
-		t.Parallel()
-
-		if _, err := conventionWorkerNames(defaultNamespace, "shop", environment.Tier("nonsense"), nil); err == nil {
-			t.Error("conventionWorkerNames(unknown tier) err = nil, want an error")
-		}
-	})
+	}
+	if _, err := entryWorkerName(defaultNamespace, "shop", environment.Tier("nonsense")); err == nil {
+		t.Error("entryWorkerName(unknown tier) err = nil, want an error")
+	}
 }
 
 func TestProjectOwnsScriptReadsOnlyThisNamespacesWorkers(t *testing.T) {
 	t.Parallel()
 
 	const other = "j-1874-deploy-next-cloudflare"
-	theirs, err := conventionWorkerNames(other, "shop", environment.TierProduction, nil)
+	theirs, err := entryWorkerName(other, "shop", environment.TierProduction)
 	if err != nil {
-		t.Fatalf("conventionWorkerNames: %v", err)
+		t.Fatalf("entryWorkerName: %v", err)
 	}
-	owns := projectOwnsScript(defaultNamespace, "shop")
-	for _, name := range theirs {
-		if owns(name) {
-			t.Errorf("%q reads as this namespace's, so a prune here would take a route off the worker %s deploys", name, other)
-		}
+	if projectOwnsScript(defaultNamespace, "shop")(theirs) {
+		t.Errorf("%q reads as this namespace's, so a prune here would take a route off the worker %s deploys", theirs, other)
 	}
-	if !projectOwnsScript(other, "shop")(theirs[0]) {
-		t.Errorf("%q does not read as %s's own worker", theirs[0], other)
+	if !projectOwnsScript(other, "shop")(theirs) {
+		t.Errorf("%q does not read as %s's own worker", theirs, other)
 	}
 }
 
@@ -136,12 +78,6 @@ func TestWorkerScriptName(t *testing.T) {
 		t.Parallel()
 		if got, want := workerScriptName(defaultNamespace, "shop", "prod", "web"), "ocel--shop--prod--web"; got != want {
 			t.Errorf("workerScriptName = %q, want %q", got, want)
-		}
-		if got, want := rootWorkerName(defaultNamespace, "shop", "prod"), "ocel--shop--prod--root"; got != want {
-			t.Errorf("rootWorkerName = %q, want %q", got, want)
-		}
-		if got, want := previewWorkerName(defaultNamespace, "shop"), "ocel--shop--preview--root"; got != want {
-			t.Errorf("previewWorkerName = %q, want %q", got, want)
 		}
 		if got := workerScriptName(defaultNamespace, "shop", "prod", "web"); truncationMarker.MatchString(got) {
 			t.Errorf("%q is marked truncated but fits", got)
@@ -174,15 +110,4 @@ func TestWorkerScriptName(t *testing.T) {
 			t.Fatalf("two apps collided on one script name: %q", web)
 		}
 	})
-}
-
-func TestThePreviewWorkerFamilySitsUnderItsOwnStem(t *testing.T) {
-	t.Parallel()
-	stem := previewWorkerStem(defaultNamespace, "shop")
-	if !edge.NameUnderStem(stem, previewWorkerName(defaultNamespace, "shop")) {
-		t.Errorf("%q is not under the preview stem %q", previewWorkerName(defaultNamespace, "shop"), stem)
-	}
-	if edge.NameUnderStem(stem, rootWorkerName(defaultNamespace, "shop", "prod")) {
-		t.Errorf("the production root worker sits under the preview stem %q", stem)
-	}
 }

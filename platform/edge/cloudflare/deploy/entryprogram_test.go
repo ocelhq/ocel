@@ -37,7 +37,6 @@ func programmed() *edge.Program {
 			Endpoint:            "https://store.example",
 			BootstrapCredential: "store-cred",
 		},
-		Env: "prod",
 	}
 }
 
@@ -149,8 +148,8 @@ func TestEntryProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing
 func TestAPreviewProjectEntryProgramNamesItsWorkerAndReadsTheStoreOverItsEndpoint(t *testing.T) {
 	built := buildEntry(t, environment.TierPreview, "proj", previewProgrammed())
 
-	if built.name != previewWorkerName(defaultNamespace, "proj") || built.pruneWorkerStem != previewWorkerStem(defaultNamespace, "proj") {
-		t.Errorf("name = %q, stem = %q, want the project's preview worker named so the edge can sweep it", built.name, built.pruneWorkerStem)
+	if built.name != "ocel--proj--preview--root" {
+		t.Errorf("name = %q, want the project's preview worker", built.name)
 	}
 	if built.worker.Variables[envPreview] != "1" || built.worker.Variables[envPreviewBaseDomain] != "preview.acme.com" {
 		t.Errorf("Variables = %v, want the preview base domain", built.worker.Variables)
@@ -177,14 +176,11 @@ func TestEntryProgramForAPreviewProjectOnTheSharedWildcardCarriesNoBaseDomain(t 
 	}
 }
 
-func TestAProductionProjectEntryProgramSweepsItsOwnScriptAndCarriesNoPreviewConfig(t *testing.T) {
+func TestAProductionProjectEntryProgramCarriesNoPreviewConfig(t *testing.T) {
 	built := buildEntry(t, environment.TierProduction, "proj", programmed())
 
-	if built.name != rootWorkerName(defaultNamespace, "proj", "prod") {
-		t.Errorf("name = %q, want %q", built.name, rootWorkerName(defaultNamespace, "proj", "prod"))
-	}
-	if built.pruneWorkerStem != "" {
-		t.Errorf("pruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", built.pruneWorkerStem)
+	if built.name != "ocel--proj--prod--root" {
+		t.Errorf("name = %q, want ocel--proj--prod--root", built.name)
 	}
 	for _, unwanted := range []string{envPreview, envPreviewGlobal, envPreviewBaseDomain} {
 		if _, set := built.worker.Variables[unwanted]; set {

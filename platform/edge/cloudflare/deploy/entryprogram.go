@@ -24,10 +24,9 @@ const (
 const originClientCertificateBinding = "OCEL_ORIGIN_CLIENT_CERTIFICATE"
 
 type entryProgram struct {
-	name            string
-	worker          workerScript
-	pruneWorkerStem string
-	store           edge.ReleasesStore
+	name   string
+	worker workerScript
+	store  edge.ReleasesStore
 }
 
 func (p *cloudflare) buildEntryProgram(tier environment.Tier, slug string, program *edge.Program) (entryProgram, error) {
@@ -56,13 +55,13 @@ func (p *cloudflare) buildEntryProgram(tier environment.Tier, slug string, progr
 		built.worker, err = addPreviewKey(worker, slug, program)
 		return built, err
 	}
+	if built.name, err = entryWorkerName(p.namespace, slug, tier); err != nil {
+		return entryProgram{}, err
+	}
 	if tier == environment.TierPreview {
-		built.name = previewWorkerName(p.namespace, slug)
-		built.pruneWorkerStem = previewWorkerStem(p.namespace, slug)
 		built.worker, err = addPreviewKey(addPreviewVariables(worker, program.PreviewBaseDomain), slug, program)
 		return built, err
 	}
-	built.name = rootWorkerName(p.namespace, slug, program.Env)
 	built.worker = worker
 	return built, nil
 }

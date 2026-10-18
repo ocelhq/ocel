@@ -36,12 +36,11 @@ func (r *deployRun) hostingMode() hostingMode {
 
 func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) error {
 	spec := edge.StackSpec{
-		Version:     stackVersion,
-		Tier:        r.spec.Tier,
-		Slug:        r.spec.Slug,
-		PruneRoutes: true,
-		Say:         progress.Say,
-		Warn:        progress.Warn,
+		Version: stackVersion,
+		Tier:    r.spec.Tier,
+		Slug:    r.spec.Slug,
+		Say:     progress.Say,
+		Warn:    progress.Warn,
 	}
 	var base string
 	switch r.hostingMode() {
@@ -60,7 +59,6 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	}
 	program, err := edgeProgramFor(ctx, r.provider, r.front, edgeProgramScope{
 		tier:              r.spec.Tier,
-		env:               r.spec.Env,
 		previewBaseDomain: base,
 		previewKey:        r.previewKey,
 	})

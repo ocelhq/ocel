@@ -60,9 +60,6 @@ export function ensureSchema(store: SqlStore): void {
        data TEXT NOT NULL,
        PRIMARY KEY (pointer, app)
      );
-     CREATE TABLE IF NOT EXISTS apps (
-       app TEXT PRIMARY KEY
-     );
      CREATE TABLE IF NOT EXISTS labels (
        label TEXT PRIMARY KEY,
        pointer TEXT NOT NULL,
@@ -140,7 +137,6 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
         record.release,
         JSON.stringify(withBuildAssets(record, recordBuild(store, pointer, record))),
       );
-      store.sql.exec(`INSERT OR IGNORE INTO apps (app) VALUES (?)`, record.app);
     }
     store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
     for (const served of move.labels ?? []) {
@@ -231,13 +227,6 @@ export function removePointer(store: SqlStore, pointer: string): void {
     store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
     store.sql.exec(`DELETE FROM kept WHERE pointer = ?`, pointer);
   });
-}
-
-export function listApps(store: SqlStore): string[] {
-  return store.sql
-    .exec<{ app: string }>(`SELECT app FROM apps ORDER BY app`)
-    .toArray()
-    .map((r) => r.app);
 }
 
 export type PointerRecordResult<Record = StoredRecord> =

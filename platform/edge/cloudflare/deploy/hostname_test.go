@@ -32,38 +32,38 @@ import (
 type cfMock struct {
 	zoneID, zoneName string
 
-	existingRoutes        []map[string]any
-	existingRecords       []map[string]any
-	existingCustomDomains []map[string]any
-	certificatePacks      []map[string]any
-	orderedPacks          [][]string
-	refusesPackOrders     bool
-	existingScripts       []string
-	refuseScriptDeletes   map[string]bool
+	existingRoutes      []map[string]any
+	existingRecords     []map[string]any
+	certificatePacks    []map[string]any
+	orderedPacks        [][]string
+	refusesPackOrders   bool
+	existingScripts     []string
+	refuseScriptDeletes map[string]bool
 
-	requests   int
-	zoneLists  int
-	routeLists int
+	requests  int
+	zoneLists int
+
+	accountZoneLists int
+	routeLists       int
 
 	routesAddedAfterListing []map[string]any
 	lostRouteAttaches       int
 
-	createdRoutes        []map[string]any
-	repointedRoutes      []string
-	createdRecords       []map[string]any
-	deletedRecords       []string
-	deletedRoutes        []string
-	deletedCustomDomains []string
-	putScripts           []string
-	putBodies            map[string]putBody
-	scriptSettings       map[string]map[string]any
-	scriptSecrets        map[string][]string
-	subdomainOn          map[string]bool
-	deletedScripts       []string
-	refusedCalls         []string
-	subdomainCalls       []subdomainCall
-	putSecrets           []putSecret
-	updatedRecords       []string
+	createdRoutes   []map[string]any
+	repointedRoutes []string
+	createdRecords  []map[string]any
+	deletedRecords  []string
+	deletedRoutes   []string
+	putScripts      []string
+	putBodies       map[string]putBody
+	scriptSettings  map[string]map[string]any
+	scriptSecrets   map[string][]string
+	subdomainOn     map[string]bool
+	deletedScripts  []string
+	refusedCalls    []string
+	subdomainCalls  []subdomainCall
+	putSecrets      []putSecret
+	updatedRecords  []string
 
 	clientCertificates []map[string]any
 
@@ -137,6 +137,14 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 			return
 		}
 		m.zoneLists++
+		name := r.URL.Query().Get("name")
+		if name == "" {
+			m.accountZoneLists++
+		}
+		if name != "" && name != m.zoneName {
+			writeResult(w, []any{})
+			return
+		}
 		writeResult(w, []map[string]any{{"id": m.zoneID, "name": m.zoneName}})
 	})
 
@@ -311,18 +319,6 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 		m.subdomainOn[r.PathValue("name")] = enabled
 		writeResult(w, map[string]any{"enabled": enabled, "previews_enabled": false})
-	})
-
-	mux.HandleFunc("/accounts/acct/workers/domains", func(w http.ResponseWriter, r *http.Request) {
-		writeResult(w, m.existingCustomDomains)
-	})
-
-	mux.HandleFunc("/accounts/acct/workers/domains/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
-			id := strings.TrimPrefix(r.URL.Path, "/accounts/acct/workers/domains/")
-			m.deletedCustomDomains = append(m.deletedCustomDomains, id)
-			writeResult(w, map[string]any{"id": id})
-		}
 	})
 
 	mux.HandleFunc("/zones/"+m.zoneID+"/dns_records", func(w http.ResponseWriter, r *http.Request) {
@@ -649,11 +645,11 @@ func (m *cfMock) provider(t *testing.T) *cloudflare {
 }
 
 func prunedSpec(desired ...string) routeSpec {
-	return routeSpec{desired: desired, prune: true}
+	return routeSpec{desired: desired}
 }
 
-func stemSpec(stem string, desired ...string) routeSpec {
-	return routeSpec{desired: desired, prune: true, pruneStem: stem}
+func routedSpec(routed []string, desired ...string) routeSpec {
+	return routeSpec{desired: desired, routed: routed}
 }
 
 func ownedSpec(slug string, desired ...string) routeSpec {
@@ -699,7 +695,6 @@ type routeCase struct {
 	deletedRoutes   []string
 	createdRecords  int
 	deletedRecords  []string
-	detachedDomains []string
 	warnings        []string
 }
 
@@ -731,7 +726,6 @@ func (tc routeCase) run(t *testing.T) {
 	assertSet(t, "repointed routes", tc.mock.repointedRoutes, tc.repointedRoutes)
 	assertSet(t, "deleted routes", tc.mock.deletedRoutes, tc.deletedRoutes)
 	assertSet(t, "deleted records", tc.mock.deletedRecords, tc.deletedRecords)
-	assertSet(t, "detached custom domains", tc.mock.deletedCustomDomains, tc.detachedDomains)
 
 	if len(tc.mock.createdRecords) != tc.createdRecords {
 		t.Errorf("created records = %v, want %d", tc.mock.createdRecords, tc.createdRecords)
@@ -809,43 +803,21 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-prod",
-			spec:          prunedSpec("app.com"),
+			spec:          routedSpec([]string{"app.com", "www.app.com", "x.app.com"}, "app.com"),
 			deletedRoutes: []string{"stale"},
 		},
 		{
-			name: "a stem sweeps routes on the worker family below it",
+			name: "a route this stack never routed is left in place",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRoutes: []map[string]any{
-					{"id": "perapp", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shop-preview-web"},
-				},
-				existingRecords: []map[string]any{
-					{"id": "perapprec", "name": "pr-1.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
+					{"id": "unrecorded", "pattern": "www.app.com/*", "script": "ocel-prod"},
+					{"id": "kept", "pattern": "app.com/*", "script": "ocel-prod"},
 				},
 			},
-			script:        "ocel-shop-preview",
-			spec:          stemSpec("ocel-shop-preview", "*.preview.app.com"),
-			createdRoutes: []string{"*.preview.app.com/*"},
-			deletedRoutes: []string{"perapp"},
-			warnings:      []string{"Advanced Certificate"},
-		},
-		{
-			name: "a stem never reaches another worker family",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRoutes: []map[string]any{
-					{"id": "sibling", "pattern": "pr-1.preview.app.com/*", "script": "ocel-shopfoo-preview-web"},
-					{"id": "other", "pattern": "pr-2.preview.app.com/*", "script": "ocel-other-preview"},
-					{"id": "prod", "pattern": "app.com/*", "script": "ocel-shop-prod-web"},
-					{"id": "lookalike", "pattern": "pr-3.preview.app.com/*", "script": "ocel-shop-previewer"},
-				},
-			},
-			script:        "ocel-shop-preview",
-			spec:          stemSpec("ocel-shop-preview", "*.preview.app.com"),
-			createdRoutes: []string{"*.preview.app.com/*"},
-			warnings:      []string{"Advanced Certificate"},
+			script: "ocel-prod",
+			spec:   routedSpec([]string{"app.com"}, "app.com"),
 		},
 		{
 			name: "a route another project's worker owns is refused, not repointed",
@@ -887,21 +859,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			wantErr: []string{"ocel-shopfoo-prod"},
 		},
 		{
-			name: "a stem never prunes a hostname the plan still wants",
-			mock: &cfMock{
-				zoneID:   "zone1",
-				zoneName: "app.com",
-				existingRoutes: []map[string]any{
-					{"id": "wildcard", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview-web"},
-				},
-			},
-			script:          "ocel-shop-preview",
-			spec:            stemSpec("ocel-shop-preview", "*.preview.app.com"),
-			repointedRoutes: []string{"wildcard"},
-			warnings:        []string{"Advanced Certificate"},
-		},
-		{
-			name: "without a stem the sweep reaches this script only",
+			name: "the sweep reaches this script only",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
@@ -910,12 +868,12 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-shop-preview",
-			spec:          prunedSpec("*.preview.app.com"),
+			spec:          routedSpec([]string{"pr-1.preview.app.com"}, "*.preview.app.com"),
 			createdRoutes: []string{"*.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
 		},
 		{
-			name: "without pruning a route this reconcile did not name survives",
+			name: "a route of a hostname this stack never routed survives",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
@@ -930,18 +888,6 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			spec:          routeSpec{desired: []string{"pr-2-abc1234567.preview.app.com"}},
 			createdRoutes: []string{"pr-2-abc1234567.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
-		},
-		{
-			name: "a leftover custom domain is detached before the route is attached",
-			mock: &cfMock{
-				zoneID:                "zone1",
-				zoneName:              "app.com",
-				existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "app.com", "service": "ocel-prod"}},
-			},
-			script:          "ocel-prod",
-			spec:            prunedSpec("app.com"),
-			createdRoutes:   []string{"app.com/*"},
-			detachedDomains: []string{"cd1"},
 		},
 		{
 			name:          "a hostname Universal SSL does not cover is warned about",
@@ -971,7 +917,7 @@ func TestARouteOfAHostnameServedElsewhereIsNeitherAttachedNorPruned(t *testing.T
 		},
 	}
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	spec := routeSpec{desired: []string{"www.example.com"}, servedElsewhere: []string{"shop.example.com"}, prune: true}
+	spec := routeSpec{desired: []string{"www.example.com"}, servedElsewhere: []string{"shop.example.com"}, routed: []string{"shop.example.com", "old.example.com"}}
 
 	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, spec, nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
@@ -990,7 +936,7 @@ func TestNoRouteIsCreatedForAHostnameServedElsewhere(t *testing.T) {
 	m := &cfMock{zoneID: "zone1", zoneName: "example.com"}
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
 
-	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{servedElsewhere: []string{"shop.example.com"}, prune: true}, nil); err != nil {
+	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{servedElsewhere: []string{"shop.example.com"}}, nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 	if len(m.createdRoutes) != 0 {
@@ -1067,6 +1013,28 @@ func TestAttachingARouteHeldByAForeignWorkerSinceTheListingFails(t *testing.T) {
 	}
 }
 
+func TestReconcileWorkerRoutesListsNoZoneButTheOnesItsHostnamesName(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{
+		zoneID:   "zone1",
+		zoneName: "app.com",
+		existingRoutes: []map[string]any{
+			{"id": "dropped", "pattern": "old.app.com/*", "script": "ocel-prod"},
+		},
+	}
+	spec := routedSpec([]string{"app.com", "old.app.com"}, "app.com")
+
+	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: "ocel-prod"}, spec, nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v", err)
+	}
+	if m.accountZoneLists != 0 {
+		t.Errorf("listed every zone in the account %d times, want each zone read by the name its hostname gives", m.accountZoneLists)
+	}
+	if !slices.Equal(m.deletedRoutes, []string{"dropped"}) {
+		t.Errorf("deleted routes = %v, want the route of the hostname this stack routed and no longer wants", m.deletedRoutes)
+	}
+}
+
 func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 	t.Parallel()
 
@@ -1079,10 +1047,10 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 		reconcilePasses int
 	}{
 		{
-			name:       "many hostnames share one zone and route list",
+			name:       "many hostnames share one route list, and each zone name is read once",
 			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			spec:       prunedSpec("app.com", "www.app.com", "api.app.com"),
-			zoneLists:  1,
+			zoneLists:  3,
 			routeLists: 1,
 		},
 		{
@@ -1123,8 +1091,8 @@ func TestRouteOwnerRequestBudget(t *testing.T) {
 			t.Fatalf("DomainOwner: %v", err)
 		}
 	}
-	if m.zoneLists != 1 {
-		t.Errorf("zone lists = %d, want 1: preflight reads the account's zones once", m.zoneLists)
+	if m.zoneLists != 2 {
+		t.Errorf("zone lists = %d, want 2: preflight reads each zone name a hostname can sit in once", m.zoneLists)
 	}
 }
 

@@ -49,10 +49,6 @@ export class ReleasesStore extends DurableObject<Env> {
     store.removePointer(this.storage, pointer);
   }
 
-  async listApps(): Promise<string[]> {
-    return store.listApps(this.storage);
-  }
-
   async readPointerRecord(app?: string, knownRelease?: string): Promise<PointerRecordResult> {
     return store.readPointerRecord(this.storage, app, knownRelease);
   }

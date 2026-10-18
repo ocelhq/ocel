@@ -90,8 +90,8 @@ describe("initialize", () => {
     const body = await res.text();
     expect(body).not.toMatch(new RegExp(SECRET));
 
-    expect((await SELF.fetch(authedReq("/apps"))).status).toBe(200);
-    expect((await SELF.fetch(bearerReq(`/${SLUG}/apps`, "other"))).status).toBe(401);
+    expect((await SELF.fetch(authedReq("/version-stamp"))).status).toBe(200);
+    expect((await SELF.fetch(bearerReq(`/${SLUG}/version-stamp`, "other"))).status).toBe(401);
   });
 
   it("answers a retried initialize that offers the stored secret as a success", async () => {
@@ -195,14 +195,6 @@ describe("authenticated endpoints", () => {
       authedReq("/remove-pointer", { method: "POST", body: JSON.stringify({}) }),
     );
     expect(res.status).toBe(400);
-  });
-
-  it("names every app it has moved", async () => {
-    await initialize();
-    await movePointer({ records: [makeRecord(), makeRecord({ app: "admin" })] });
-
-    const res = await SELF.fetch(authedReq("/apps"));
-    expect(await res.json()).toEqual(["admin", "web"]);
   });
 
   it("reads and updates the edge stack's version stamp", async () => {

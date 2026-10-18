@@ -139,14 +139,6 @@ func (s *stack) removePointerRecords(ctx context.Context, pointer string) error 
 	return err
 }
 
-func (p *cloudflare) readServedApps(ctx context.Context, state edge.StackState) ([]string, error) {
-	var apps []string
-	if _, err := p.storeRequest(ctx, state, http.MethodGet, "/apps", nil, &apps); err != nil {
-		return nil, err
-	}
-	return apps, nil
-}
-
 var errStoreIdentityTaken = errors.New("the releases store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this tier's edge to reset the store")
 
 func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred, secret string) error {

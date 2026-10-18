@@ -129,7 +129,7 @@ func mintIssuedClientCertificate(t *testing.T) string {
 
 func mintHeldClientCertificate(t *testing.T, now time.Time) (certificate, authority string) {
 	t.Helper()
-	certificate, _, err := mintClientCertificate("app.com", now)
+	certificate, _, err := mintClientCertificate("app.com", now, clientCertificateLifetime)
 	if err != nil {
 		t.Fatal(err)
 	}

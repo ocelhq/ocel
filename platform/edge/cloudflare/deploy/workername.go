@@ -2,7 +2,6 @@ package cloudflare
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -29,21 +28,6 @@ func workerEnvFor(tier environment.Tier) (string, error) {
 	}
 }
 
-func conventionWorkerNames(namespace, slug string, tier environment.Tier, apps []string) ([]string, error) {
-	if namespace == "" || slug == "" || tier == "" {
-		return nil, nil
-	}
-	env, err := workerEnvFor(tier)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, app := range append([]string{rootWorkerApp}, apps...) {
-		names = append(names, strings.Join([]string{naming.NamespaceField(namespace), slug, env, app}, fieldSeparator))
-	}
-	return names, nil
-}
-
 func workerScriptName(namespace, slug, env, app string) string {
 	return naming.Fit(maxWorkerNameLength, naming.FieldSeparator,
 		naming.Fixed(naming.NamespaceField(namespace)),
@@ -53,16 +37,12 @@ func workerScriptName(namespace, slug, env, app string) string {
 	)
 }
 
-func rootWorkerName(namespace, slug, env string) string {
-	return workerScriptName(namespace, slug, env, rootWorkerApp)
-}
-
-func previewWorkerName(namespace, slug string) string {
-	return rootWorkerName(namespace, slug, previewWorkerEnv)
-}
-
-func previewWorkerStem(namespace, slug string) string {
-	return naming.Join(naming.FieldSeparator, naming.NamespaceField(namespace), slug, previewWorkerEnv)
+func entryWorkerName(namespace, slug string, tier environment.Tier) (string, error) {
+	env, err := workerEnvFor(tier)
+	if err != nil {
+		return "", err
+	}
+	return workerScriptName(namespace, slug, env, rootWorkerApp), nil
 }
 
 func ProjectOwnsWorker(namespace, slug, script string) bool {

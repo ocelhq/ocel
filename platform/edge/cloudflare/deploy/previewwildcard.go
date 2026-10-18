@@ -77,14 +77,10 @@ func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	if stillRouted {
 		return nil
 	}
-	var errs []error
-	if err := p.detachCustomDomains(ctx, accountID, previewEntryScript); err != nil {
-		errs = append(errs, err)
-	}
 	if err := p.deleteScript(ctx, accountID, previewEntryScript); err != nil {
-		errs = append(errs, fmt.Errorf("delete worker %q: %w", previewEntryScript, err))
+		return fmt.Errorf("delete worker %q: %w", previewEntryScript, err)
 	}
-	return errors.Join(errs...)
+	return nil
 }
 
 func (p *cloudflare) previewEntryStillRouted(ctx context.Context, accountID string, snap *routeSnapshot) (bool, error) {

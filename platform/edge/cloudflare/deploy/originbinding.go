@@ -32,7 +32,7 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 	}
 	var served []string
 	if s.state.Tier != environment.TierPreview {
-		served = s.own.EntryWorkers
+		served = []string{s.own.EntryWorker}
 	}
 	restoreRoute, err := s.p.ensureRouteWithoutWorker(ctx, zoneID, routePattern(binding.Hostname), served)
 	if err != nil {

@@ -136,17 +136,11 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if want := (edge.Reach{Kind: edge.ReachClientCertificate, Certificate: fake.ProgramCertificate + "-" + string(fake.KindRelay)}); spec.Program.Origin.Reach != want {
 		t.Errorf("Origin.Reach = %+v, want the reach the provider programs for the relay edge, %+v", spec.Program.Origin.Reach, want)
 	}
-	if spec.Program.Env != "prod" {
-		t.Errorf("Env = %q, want the deploy's environment the edge names its worker for", spec.Program.Env)
-	}
 	if spec.Program.PreviewKey != "" {
 		t.Errorf("PreviewKey = %q, want none: production serves no preview hostname to verify", spec.Program.PreviewKey)
 	}
 	if spec.PruneOnly {
 		t.Error("the production stack is prune-only, though its worker is the one serving every request")
-	}
-	if !spec.PruneRoutes {
-		t.Error("the stack keeps routes it no longer serves, want the edge sweeping them as it reconciles")
 	}
 	if !slices.Equal(spec.Domains, []string{"shop.example"}) {
 		t.Errorf("Domains = %v, want the hostnames the manifest declares for production", spec.Domains)
@@ -224,9 +218,6 @@ func onlyStack(t *testing.T, vendor *fake.Provider) edge.StackSpec {
 	stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
 	if len(stacks) != 1 {
 		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
-	}
-	if !stacks[0].PruneRoutes {
-		t.Error("the stack keeps routes it no longer serves, want the edge sweeping them as it reconciles")
 	}
 	return stacks[0]
 }

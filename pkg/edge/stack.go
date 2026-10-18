@@ -7,18 +7,10 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
 )
-
-func NameUnderStem(stem, name string) bool {
-	if stem == "" || name == "" {
-		return false
-	}
-	return name == stem || strings.HasPrefix(name, stem+"-")
-}
 
 var ErrStoreAbsent = errors.New("the releases store is not provisioned")
 
@@ -32,7 +24,6 @@ type StackSpec struct {
 	ServedElsewhere []string
 	GlobalPreview   string
 	PruneOnly       bool
-	PruneRoutes     bool
 	Gate            *gate.Gate
 	Say             func(string)
 	Warn            func(string)
