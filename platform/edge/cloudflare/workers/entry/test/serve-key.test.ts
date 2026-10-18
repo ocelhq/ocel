@@ -5,11 +5,10 @@ import {
   buildNextCanonicalUrl,
   buildObjectCall,
   buildOriginCall,
-  buildOriginUrl,
   buildServeRequest,
   buildVariantPath,
-  ORIGIN_PURGE_SCOPE,
-  readRenderCall,
+  parseRenderCall,
+  RENDER_PROPS,
 } from "../src/serve-key";
 import { hasDraftCookie } from "../src/serve-prerender";
 
@@ -79,15 +78,18 @@ describe("the cache key of a page read through Serve from the origin", () => {
     const call = buildOriginCall(origin, { ...coordinates, variant: ".rsc" });
     expect(call).toEqual({
       url: "https://serve.ocel.invalid/shop.example.com/web/r1a2b3c4d/https%3A%2F%2Fabc123.lambda-url.eu-west-2.on.aws/.rsc/blog/a?page=2",
-      props: { kind: "origin" },
+      props: { kind: "render" },
     });
   });
 
   it("reads back the origin URL and coordinates it was built from", () => {
     for (const variant of [undefined, ".rsc", ".prefetch.rsc", ".segments/%2F_tree.segment.rsc"]) {
       const call = buildOriginCall(origin, { ...coordinates, variant });
-      expect(buildOriginUrl(call.url)).toBe(origin);
-      expect(readRenderCall(call.url)).toEqual({ ...coordinates, variant: variant ?? "" });
+      expect(parseRenderCall(call.url)).toEqual({
+        ...coordinates,
+        variant: variant ?? "",
+        source: { kind: "origin", url: origin },
+      });
     }
   });
 
@@ -96,7 +98,7 @@ describe("the cache key of a page read through Serve from the origin", () => {
     for (const variant of [undefined, ".rsc", ".prefetch.rsc"]) {
       const call = buildOriginCall(origin, { ...coordinates, variant });
       urls.add(call.url);
-      expect(call.props).toEqual(ORIGIN_PURGE_SCOPE);
+      expect(call.props).toEqual(RENDER_PROPS);
     }
     expect(urls.size).toBe(3);
   });

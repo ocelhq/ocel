@@ -5,6 +5,13 @@ export function routeTableKey(slug = "p1", digest = "a".repeat(64)): string {
   return `prod/${slug}/web/deploy-1/route-table/${digest}.json`;
 }
 
+let tables = 0;
+
+export function freshRouteTableKey(slug = "p1"): string {
+  tables += 1;
+  return routeTableKey(slug, tables.toString(16).padStart(64, "0"));
+}
+
 export interface CountingObjectStore extends EdgeObjectStore {
   reads: string[];
   objects: Map<string, string>;

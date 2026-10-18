@@ -11,7 +11,7 @@ import {
   type TagTimesStore,
 } from "./purge-times";
 import type { ReleasesBinding } from "./releases";
-import { ORIGIN_PURGE_SCOPE, type ServeProps } from "./serve-key";
+import { RENDER_PROPS, type ServeProps } from "./serve-key";
 
 const flushRetryMs = 1_000;
 const flushRetryCeilingMs = 60_000;
@@ -38,7 +38,7 @@ async function settlePurgeCall(call: () => Promise<PurgeOutcome>): Promise<Purge
 export type ServePurgeFactory = (options: { props: ServeProps }) => ServePurgeRpc;
 
 export function newServePort(serve: ServePurgeFactory): PurgePort {
-  const stub = () => serve({ props: ORIGIN_PURGE_SCOPE });
+  const stub = () => serve({ props: RENDER_PROPS });
   return {
     purgeTags: (mode, tags) => settlePurgeCall(() => stub().purge(mode, tags)),
   };

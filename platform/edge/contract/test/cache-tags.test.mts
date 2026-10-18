@@ -1,5 +1,16 @@
 import { expect, test } from "vitest";
-import { boundCacheTags, buildPathCacheTag, storedCacheTags } from "../src/cache-tags.mjs";
+import {
+  boundCacheTags,
+  buildPathCacheTag,
+  readTagRelease,
+  stampTag,
+  storedCacheTags,
+} from "../src/cache-tags.mjs";
+
+test("reads back the release a stamped tag was stamped with, and a bare release as itself", () => {
+  expect(readTagRelease(stampTag("r0a1b2c3d", "path:/a|b"))).toBe("r0a1b2c3d");
+  expect(readTagRelease("r0a1b2c3d")).toBe("r0a1b2c3d");
+});
 
 test("names a path by its percent-encoded pathname, however the path was written", () => {
   expect(buildPathCacheTag("/café")).toBe("path:/caf%C3%A9");

@@ -1,11 +1,14 @@
 import type { PurgeGroup } from "@platform/edge-contract/purge";
-import {
-  buildOriginUrl,
-  type RenderCoordinates,
-  readRenderCall,
-  type ServeProps,
-} from "../src/serve-key";
+import { parseRenderCall, type RenderCoordinates, type ServeProps } from "../src/serve-key";
 import type { Serving } from "../src/serve-prerender";
+
+export function readRenderTarget(url: string): {
+  coordinates: Required<RenderCoordinates>;
+  originUrl: string;
+} {
+  const { source, ...coordinates } = parseRenderCall(url);
+  return { coordinates, originUrl: source.kind === "image" ? source.optimizerUrl : source.url };
+}
 
 export interface ServeCall {
   request: Request;
@@ -40,8 +43,7 @@ export function fakeServing(
         const call = {
           request,
           props,
-          coordinates: readRenderCall(request.url),
-          originUrl: buildOriginUrl(request.url),
+          ...readRenderTarget(request.url),
         };
         calls.push(call);
         const response = await answer(call);

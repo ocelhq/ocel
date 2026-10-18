@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ServeFetch } from "../src/index";
 import {
-  buildEdgeUrl,
+  parseRenderCall,
   RENDER_RELEASE_HEADER,
-  readEdgeEntry,
   SERVE_NO_SHELL_HEADER,
   SERVE_REFUSED_HEADER,
   SERVE_UNSHARED_HEADER,
@@ -97,7 +96,7 @@ describe("a prerender served through Serve", () => {
     await get("/blog", blogRelease(served));
 
     expect(served.calls).toHaveLength(1);
-    expect(served.calls[0].props).toEqual({ kind: "origin" });
+    expect(served.calls[0].props).toEqual({ kind: "render" });
     expect(served.calls[0].coordinates).toEqual({
       host: "shop.example.com",
       app: "web",
@@ -468,7 +467,7 @@ describe("the document of a PPR route", () => {
 
     expect(served.calls).toHaveLength(1);
     expect(served.calls[0].coordinates.variant).toBe(".ppr-shell");
-    expect(served.calls[0].props).toEqual({ kind: "origin" });
+    expect(served.calls[0].props).toEqual({ kind: "render" });
     expect(served.calls[0].request.headers.get("x-ocel-edge-cache")).toBe("1");
     expect(served.calls[0].request.headers.has("cookie")).toBe(false);
   });
@@ -708,15 +707,18 @@ describe("an edge-runtime prerender", () => {
     expect(origin.requests).toHaveLength(0);
     expect(served.calls).toHaveLength(1);
     const [call] = served.calls;
-    expect(call.props).toEqual({ kind: "origin" });
+    expect(call.props).toEqual({ kind: "render" });
     expect(call.coordinates).toEqual({
       host: "shop.example.com",
       app: "web",
       release: "r0a1b2c3d",
       variant: "",
     });
-    expect(readEdgeEntry(call.request.url)).toBe("middleware_app/edge-blog");
-    expect(buildEdgeUrl(call.request.url)).toBe("https://shop.example.com/blog?page=2");
+    expect(parseRenderCall(call.request.url).source).toEqual({
+      kind: "edge",
+      entryKey: "middleware_app/edge-blog",
+      url: "https://shop.example.com/blog?page=2",
+    });
   });
 
   it("tells Serve the release to render it from and the route's tags", async () => {

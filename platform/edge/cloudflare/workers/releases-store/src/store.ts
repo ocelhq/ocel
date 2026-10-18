@@ -1,5 +1,6 @@
 import { readReleaseToken } from "@platform/edge-contract/purge";
 import type { ReleaseRecord } from "@platform/edge-contract/release-record";
+import { matchesSecret } from "./auth";
 
 export interface SqlStore {
   sql: SqlStorage;
@@ -239,11 +240,11 @@ export function listApps(store: SqlStore): string[] {
     .map((r) => r.app);
 }
 
-export type PointerRecordResult =
+export type PointerRecordResult<Record = StoredRecord> =
   | { kind: "no-pointer" }
   | { kind: "ambiguous-app" }
   | { kind: "unchanged"; release: string }
-  | { kind: "record"; release: string; record: StoredRecord };
+  | { kind: "record"; release: string; record: Record };
 
 type ServedRow = { app: string; release: string; data: string };
 
@@ -295,8 +296,8 @@ export function readPointerRecord(
   return selectServedResult(rows, app, knownRelease);
 }
 
-export type ServedRecordResult =
-  | { kind: "record"; record: StoredRecord }
+export type ServedRecordResult<Record = StoredRecord> =
+  | { kind: "record"; record: Record }
   | { kind: "not-served" }
   | { kind: "forgotten" };
 
@@ -319,16 +320,22 @@ export function readServedRecord(store: SqlStore, isrPrefix: string): ServedReco
 
 export type Initialization = "adopted" | "refused";
 
-export function initialize(store: SqlStore, secret: string): Initialization {
-  return store.transactionSync(() => {
-    if (readSecret(store) !== undefined) return "refused";
-    setMeta(store, SECRET_KEY, secret);
-    return "adopted";
+export async function initialize(store: SqlStore, secret: string): Promise<Initialization> {
+  ensureSchema(store);
+  const held = store.transactionSync(() => {
+    const existing = getMeta(store, SECRET_KEY);
+    if (existing === undefined) setMeta(store, SECRET_KEY, secret);
+    return existing;
   });
+  if (held === undefined) return "adopted";
+  return (await matchesSecret(secret, held)) ? "adopted" : "refused";
 }
 
 export function readSecret(store: SqlStore): string | undefined {
-  return getMeta(store, SECRET_KEY);
+  const meta = store.sql
+    .exec(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'`)
+    .toArray();
+  return meta.length === 0 ? undefined : getMeta(store, SECRET_KEY);
 }
 
 export function readVersionStamp(store: SqlStore): string | undefined {

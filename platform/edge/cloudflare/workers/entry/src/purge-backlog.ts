@@ -1,3 +1,4 @@
+import { readTagRelease } from "@platform/edge-contract/cache-tags";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { PurgeBudget } from "./purge-budget";
 
@@ -45,11 +46,6 @@ export const RATE_LIMITED = 1134;
 
 const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_CEILING_MS = 30_000;
-
-export function readTagRelease(tag: string): string {
-  const separator = tag.indexOf("|");
-  return separator === -1 ? tag : tag.slice(0, separator);
-}
 
 export class PurgeBacklog {
   private flushing: Promise<number | undefined> | undefined;
@@ -119,13 +115,13 @@ export class PurgeBacklog {
   }
 
   private backOff(what: string, refusal: Extract<PurgeOutcome, { ok: false }>): void {
-    const { store, now, random, budget, warn = console.warn } = this.options;
+    const { store, now, random, warn = console.warn } = this.options;
     const failures = store.readFailures() + 1;
     const ceiling = Math.min(BACKOFF_BASE_MS * 2 ** failures, BACKOFF_CEILING_MS);
     const wait = ceiling * (0.5 + 0.5 * random());
     store.writeBackoff(failures, now() + wait);
     const limited = refusal.codes.includes(RATE_LIMITED)
-      ? `the account's purge limit of ${budget.purgesPerMinute} purges a minute`
+      ? "the account's purge rate limit"
       : "a refusal";
     warn(
       `ocel: Cloudflare answered ${limited} (${refusal.message}) to ${what}; retrying in ${Math.round(wait)}ms`,

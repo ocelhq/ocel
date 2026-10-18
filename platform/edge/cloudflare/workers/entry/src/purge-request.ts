@@ -1,3 +1,4 @@
+import type { ServedRecordResult } from "@platform/cf-releases-store/store";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import {
   type PurgeMode,
@@ -18,14 +19,9 @@ const PURGE_PROJECT_PARAM = "project";
 
 export const maxPurgeBodyBytes = 512 * 1024;
 
-export type ServedLookup =
-  | { kind: "record"; record: Pick<ServedRecord, "edge"> }
-  | { kind: "not-served" }
-  | { kind: "forgotten" };
-
 export interface PurgeGatewayPorts {
   slug: string;
-  readServed(isrPrefix: string): Promise<ServedLookup>;
+  readServed(isrPrefix: string): Promise<ServedRecordResult<Pick<ServedRecord, "edge">>>;
   queue: Pick<PurgeQueuePort, "raise">;
   now?(): number;
   warn?(message: string): void;
@@ -113,7 +109,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
   if (!body) return reply(400, "bad request");
   if (body.tags.length > tagsPerPurgeRequest) return reply(413, "too many tags");
 
-  let served: ServedLookup;
+  let served: ServedRecordResult<Pick<ServedRecord, "edge">>;
   try {
     served = await ports.readServed(body.isrPrefix);
   } catch (error) {

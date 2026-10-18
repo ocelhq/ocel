@@ -1,7 +1,7 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
 import type { ServeFetch } from "../src/index";
-import { buildEdgeUrl, readEdgeEntry } from "../src/serve-key";
+import { parseRenderCall } from "../src/serve-key";
 import { countingLoader, edgeBundle } from "./edge-bundle";
 import { servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
 import { type FakeServing, fakeServing } from "./serving-deps";
@@ -375,8 +375,11 @@ describe("a prerender whose parent renders on the edge", () => {
     await dispatchTo("/edge-blog", serve);
 
     expect(serving.calls).toHaveLength(1);
-    expect(readEdgeEntry(serving.calls[0].request.url)).toBe("middleware_app/edge-blog");
-    expect(buildEdgeUrl(serving.calls[0].request.url)).toBe("https://app.example/edge-blog");
+    expect(parseRenderCall(serving.calls[0].request.url).source).toEqual({
+      kind: "edge",
+      entryKey: "middleware_app/edge-blog",
+      url: "https://app.example/edge-blog",
+    });
     expect(invocations()).toEqual([]);
   });
 });

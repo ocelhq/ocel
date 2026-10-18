@@ -955,6 +955,9 @@ importers:
       '@next/routing':
         specifier: ^16.2.10
         version: 16.2.10
+      '@platform/cf-releases-store':
+        specifier: workspace:*
+        version: link:../releases-store
       '@platform/edge-contract':
         specifier: workspace:*
         version: link:../../../contract

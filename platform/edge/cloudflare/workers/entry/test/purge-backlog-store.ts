@@ -1,5 +1,6 @@
+import { readTagRelease } from "@platform/edge-contract/cache-tags";
 import type { PurgeMode } from "@platform/edge-contract/purge";
-import { type BacklogStore, readTagRelease } from "../src/purge-backlog";
+import type { BacklogStore } from "../src/purge-backlog";
 
 interface Pending {
   mode: PurgeMode;

@@ -6,7 +6,7 @@ import type { TagTimes } from "../src/purge-times";
 import { REGENERATION_HOLD_MS, Serve } from "../src/serve";
 import {
   buildOriginCall,
-  ORIGIN_PURGE_SCOPE,
+  RENDER_PROPS,
   RENDER_RELEASE_HEADER,
   SERVE_NO_SHELL_HEADER,
   SERVE_UNSHARED_HEADER,
@@ -101,7 +101,7 @@ function harness(
   const originCalls: Request[] = [];
   const { times = {}, originStatus = 200 } = options;
   const ctx = Object.assign(createExecutionContext(), {
-    props: ORIGIN_PURGE_SCOPE,
+    props: RENDER_PROPS,
     waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
     exports: {
       PurgeQueue: options.queues ?? {

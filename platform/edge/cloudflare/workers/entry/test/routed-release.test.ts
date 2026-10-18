@@ -1,13 +1,18 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import type { ImageConfig } from "@framework/next-router/image";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import type { ReleasesBinding, StoredRecord } from "../src/releases";
 import { servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
 import { answerEveryRecordWith, capturing } from "./origin-deps";
 import { resolveBase } from "./resolve-base";
-import { type CountingObjectStore, objectStoreHolding, routeTableKey } from "./route-table-store";
+import {
+  type CountingObjectStore,
+  freshRouteTableKey,
+  objectStoreHolding,
+  routeTableKey,
+} from "./route-table-store";
 import { fakeServing } from "./serving-deps";
 
 const TABLE: NextRouteTable = {
@@ -43,7 +48,7 @@ function bindingReturning(
 ): ReleasesBinding {
   return answerEveryRecordWith(async () => {
     if (!release) return { kind: "no-pointer" };
-    if (!record) return { kind: "dangling", release };
+    if (!record) return { kind: "no-pointer" };
     return { kind: "record", release, record };
   });
 }
@@ -204,21 +209,31 @@ describe("a routed release", () => {
 });
 
 describe("the route table of a routed deployment", () => {
+  let tableKey = "";
+
+  beforeEach(() => {
+    tableKey = freshRouteTableKey();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  function tabledRecord() {
+    return makeRecord({ routeTable: { format: "next", key: tableKey } });
+  }
 
   function silencedErrors() {
     return vi.spyOn(console, "error").mockImplementation(() => {});
   }
 
-  async function answered(store: CountingObjectStore | undefined, record = makeRecord()) {
+  async function answered(store: CountingObjectStore | undefined, record = tabledRecord()) {
     return resolveServe(lookup(record), baseWith({ routeTableStore: store }));
   }
 
   it("is read from the cache store at the record's key and routes the request", async () => {
     const store = objectStoreHolding({
-      [routeTableKey()]: {
+      [tableKey]: {
         ...TABLE,
         i18n: undefined,
         pathnames: ["/a"],
@@ -235,7 +250,7 @@ describe("the route table of a routed deployment", () => {
     });
 
     const serving = await resolveServe(
-      lookup(makeRecord()),
+      lookup(tabledRecord()),
       baseWith({
         routeTableStore: store,
         assetStore: {
@@ -255,11 +270,11 @@ describe("the route table of a routed deployment", () => {
     const response = await (serving as ServeFetch)(new Request("https://shop.example.com/a"));
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("<h1>a</h1>");
-    expect(store.reads).toEqual([routeTableKey()]);
+    expect(store.reads).toEqual([tableKey]);
   });
 
   it("serves a second resolution from the isolate's cache without reading the store again", async () => {
-    const store = objectStoreHolding({ [routeTableKey()]: TABLE });
+    const store = objectStoreHolding({ [tableKey]: TABLE });
 
     await answered(store);
     const served = await answered(store);
@@ -268,8 +283,18 @@ describe("the route table of a routed deployment", () => {
     expect(store.reads).toHaveLength(1);
   });
 
+  it("serves a resolution from the isolate's cache through the fresh store each request builds", async () => {
+    await answered(objectStoreHolding({ [tableKey]: TABLE }));
+    const fresh = objectStoreHolding({ [tableKey]: TABLE });
+
+    const served = await answered(fresh);
+
+    expect(typeof served).toBe("function");
+    expect(fresh.reads).toEqual([]);
+  });
+
   it("shares one store read between concurrent first resolutions", async () => {
-    const store = objectStoreHolding({ [routeTableKey()]: TABLE });
+    const store = objectStoreHolding({ [tableKey]: TABLE });
 
     const [first, second] = await Promise.all([answered(store), answered(store)]);
 
@@ -285,7 +310,7 @@ describe("the route table of a routed deployment", () => {
 
     expect((served as Response).status).toBe(503);
     expect(errors).toHaveBeenCalledWith(
-      expect.stringMatching(new RegExp(`deploy-1.*${routeTableKey()}`)),
+      expect.stringMatching(new RegExp(`deploy-1.*${tableKey}`)),
       expect.anything(),
     );
   });
@@ -327,7 +352,7 @@ describe("the route table of a routed deployment", () => {
 
     expect((served as Response).status).toBe(503);
     expect(errors).toHaveBeenCalledWith(
-      expect.stringMatching(new RegExp(`deploy-1.*${routeTableKey()}`)),
+      expect.stringMatching(new RegExp(`deploy-1.*${tableKey}`)),
       expect.anything(),
     );
   });
@@ -335,11 +360,11 @@ describe("the route table of a routed deployment", () => {
   it("answers 503 when the stored route table is not JSON", async () => {
     const errors = silencedErrors();
 
-    const served = await answered(objectStoreHolding({ [routeTableKey()]: "{not json" }));
+    const served = await answered(objectStoreHolding({ [tableKey]: "{not json" }));
 
     expect((served as Response).status).toBe(503);
     expect(errors).toHaveBeenCalledWith(
-      expect.stringMatching(new RegExp(`deploy-1.*${routeTableKey()}`)),
+      expect.stringMatching(new RegExp(`deploy-1.*${tableKey}`)),
       expect.anything(),
     );
   });
@@ -348,7 +373,7 @@ describe("the route table of a routed deployment", () => {
     silencedErrors();
     const store = objectStoreHolding({});
     await answered(store);
-    store.objects.set(routeTableKey(), JSON.stringify(TABLE));
+    store.objects.set(tableKey, JSON.stringify(TABLE));
 
     const served = await answered(store);
 

@@ -31,7 +31,7 @@ let backlog: PurgeBacklog;
 
 const raised = (tag: string, raisedAt = now): RaisedTag => ({ tag, raisedAt });
 
-const workersCacheBudget = { purgesPerMinute: 5, tagsPerPurge: 100 };
+const workersCacheBudget = { tagsPerPurge: 100 };
 
 function newBacklog(
   random: () => number,
@@ -70,7 +70,7 @@ describe("the purge backlog coalescing raises", () => {
   });
 
   it("sends at most the tags a purge the budget allows, and the rest on the next flushes", async () => {
-    backlog = newBacklog(() => 1, { purgesPerMinute: 5, tagsPerPurge: 2 });
+    backlog = newBacklog(() => 1, { tagsPerPurge: 2 });
     backlog.raise(
       "purge",
       ["r1|a", "r1|b", "r1|c", "r1|d", "r1|e"].map((tag) => raised(tag)),
@@ -306,7 +306,7 @@ describe("the purge backlog backing off error 1134", () => {
     await backlog.flush();
 
     expect(warned).toHaveLength(1);
-    expect(warned[0]).toContain("the account's purge limit of 5 purges a minute");
+    expect(warned[0]).toContain("the account's purge rate limit");
   });
 
   it("backs off on any refusal, not only 1134", async () => {

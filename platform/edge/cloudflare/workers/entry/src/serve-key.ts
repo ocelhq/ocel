@@ -5,13 +5,13 @@ export interface ObjectProps {
   release: string;
 }
 
-export interface OriginPurgeScope {
-  kind: "origin";
+export interface RenderProps {
+  kind: "render";
 }
 
-export type ServeProps = ObjectProps | OriginPurgeScope;
+export type ServeProps = ObjectProps | RenderProps;
 
-export const ORIGIN_PURGE_SCOPE: OriginPurgeScope = { kind: "origin" };
+export const RENDER_PROPS: RenderProps = { kind: "render" };
 
 export interface RenderCoordinates {
   host: string;
@@ -119,7 +119,7 @@ function buildRenderCall(source: string, url: string, coordinates: RenderCoordin
   const scope = [host, app, release, source, variant || NO_VARIANT].map(encodeURIComponent);
   return {
     url: `${SERVE_ORIGIN}/${scope.join("/")}${pathname}${search}`,
-    props: ORIGIN_PURGE_SCOPE,
+    props: RENDER_PROPS,
   };
 }
 
@@ -162,29 +162,39 @@ function splitRenderCall(requestUrl: string): { scope: string[]; rest: string } 
   };
 }
 
-export function readRenderCall(requestUrl: string): Required<RenderCoordinates> {
-  const [host, app, release, , variant] = splitRenderCall(requestUrl).scope;
-  return { host, app, release, variant: variant === NO_VARIANT ? "" : variant };
+export type RenderSource =
+  | { kind: "origin"; url: string }
+  | { kind: "edge"; entryKey: string; url: string }
+  | { kind: "image"; optimizerUrl: string };
+
+export interface RenderCall extends Required<RenderCoordinates> {
+  source: RenderSource;
 }
 
-export function buildOriginUrl(requestUrl: string): string {
+function readRenderSource(source: string, host: string, rest: string): RenderSource {
+  if (source.startsWith(IMAGE_SOURCE)) {
+    return { kind: "image", optimizerUrl: source.slice(IMAGE_SOURCE.length) };
+  }
+  if (source.startsWith(EDGE_SOURCE)) {
+    return {
+      kind: "edge",
+      entryKey: source.slice(EDGE_SOURCE.length),
+      url: `https://${host}${rest}`,
+    };
+  }
+  return { kind: "origin", url: `${source}${rest}` };
+}
+
+export function parseRenderCall(requestUrl: string): RenderCall {
   const { scope, rest } = splitRenderCall(requestUrl);
-  return `${scope[3]}${rest}`;
-}
-
-export function readEdgeEntry(requestUrl: string): string | undefined {
-  const source = splitRenderCall(requestUrl).scope[3];
-  return source.startsWith(EDGE_SOURCE) ? source.slice(EDGE_SOURCE.length) : undefined;
-}
-
-export function readImageOptimizer(requestUrl: string): string | undefined {
-  const source = splitRenderCall(requestUrl).scope[3];
-  return source.startsWith(IMAGE_SOURCE) ? source.slice(IMAGE_SOURCE.length) : undefined;
-}
-
-export function buildEdgeUrl(requestUrl: string): string {
-  const { scope, rest } = splitRenderCall(requestUrl);
-  return `https://${scope[0]}${rest}`;
+  const [host, app, release, source, variant] = scope;
+  return {
+    host,
+    app,
+    release,
+    variant: variant === NO_VARIANT ? "" : variant,
+    source: readRenderSource(source, host, rest),
+  };
 }
 
 export function buildServeRequest(url: string, visitor?: Request): Request {

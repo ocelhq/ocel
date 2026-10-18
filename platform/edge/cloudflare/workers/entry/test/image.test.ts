@@ -1,7 +1,7 @@
 import type { ImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
 import { describe, expect, it } from "vitest";
-import { IMAGE_CALL_HEADER, RENDER_RELEASE_HEADER, readImageOptimizer } from "../src/serve-key";
+import { IMAGE_CALL_HEADER, parseRenderCall, RENDER_RELEASE_HEADER } from "../src/serve-key";
 import { countingLoader, edgeBundle } from "./edge-bundle";
 import {
   ISR_PREFIX,
@@ -174,9 +174,9 @@ describe("the /_next/image route through Workers Cache", () => {
 
     expect(fake.calls).toHaveLength(1);
     const [{ request, props }] = fake.calls;
-    expect(props).toEqual({ kind: "origin" });
+    expect(props).toEqual({ kind: "render" });
     expect(request.method).toBe("GET");
-    expect(readImageOptimizer(request.url)).toBe(OPTIMIZER);
+    expect(parseRenderCall(request.url).source).toEqual({ kind: "image", optimizerUrl: OPTIMIZER });
     expect(new URL(request.url).pathname).toMatch(/\/[0-9a-f]{64}$/);
     expect(JSON.parse(request.headers.get(RENDER_RELEASE_HEADER)!)).toMatchObject({
       slug: "p1",

@@ -8,7 +8,7 @@ import {
   readSharedLifetime,
   refusesSharedStore,
 } from "@platform/edge-contract/cache-control";
-import { buildPathCacheTag } from "@platform/edge-contract/cache-tags";
+import { buildPathCacheTag, stampTag } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
 
@@ -83,17 +83,17 @@ function edgePolicy(headers: Headers): { source: string; directives: CacheDirect
 }
 
 export function buildPathTag(release: string, pathname: string): string {
-  return `${release}|${buildPathCacheTag(pathname)}`;
+  return stampTag(release, buildPathCacheTag(pathname));
 }
 
 function releaseTags(headers: Headers, { release, pathname }: CachedResponse): string {
-  const prefix = `${release}|`;
+  const prefix = stampTag(release, "");
   const own = [release, buildPathTag(release, pathname)];
   const origin = (headers.get(edgeCacheTagHeader) ?? "")
     .split(",")
     .map((tag) => tag.trim())
     .filter((tag) => tag !== "")
-    .map((tag) => (tag === release || tag.startsWith(prefix) ? tag : `${prefix}${tag}`))
+    .map((tag) => (tag === release || tag.startsWith(prefix) ? tag : stampTag(release, tag)))
     .filter((tag) => !own.includes(tag));
   return [...own, ...new Set(origin)].slice(0, MAX_TAGS).join(",");
 }
