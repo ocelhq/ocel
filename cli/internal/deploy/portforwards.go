@@ -33,7 +33,7 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 	}
 }
 
-func (d deployRun) forwardPorts(ctx context.Context, steps *buildSteps, c collected, runsPreBuild bool) (*portforward.Forwards, error) {
+func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, c collected, runsPreBuild bool) (*portforward.Forwards, error) {
 	if !d.forwardsPorts {
 		return nil, nil
 	}

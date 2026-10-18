@@ -91,7 +91,7 @@ func (c Compilation) installRequirements(ctx context.Context, platform string) e
 	case !declared.Mode().IsRegular():
 		return fmt.Errorf("app %q has %s as %s, and pip reads the dependencies it vendors from a file", c.App, requirements, declared.Mode().Type())
 	}
-	cmd := exec.CommandContext(ctx, discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, requirements, platform)...)
+	cmd := exec.Command(discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, requirements, platform)...)
 	cmd.Dir = c.Source
 	var said bytes.Buffer
 	cmd.Stdout = &said

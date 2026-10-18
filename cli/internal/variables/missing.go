@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -20,7 +20,7 @@ type MissingError struct {
 
 func (r *MissingError) Error() string {
 	missing := r.Variables()
-	lines := append(terminal.MissingVariablesLines(missing, terminal.Presentation{}), "", terminal.MissingVariablesRemedy(missing.GetRemedy()))
+	lines := append(wording.Lines(missing, wording.Plain{}), "", wording.Remedy(missing.GetRemedy()))
 	return strings.Join(lines, "\n")
 }
 

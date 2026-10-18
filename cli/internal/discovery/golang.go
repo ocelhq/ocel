@@ -41,7 +41,7 @@ func goCommands(ctx context.Context, configDir string, roots []Root, server Serv
 			return nil, err
 		}
 
-		cmd := exec.CommandContext(ctx, "go", "run", "-trimpath=false", pkg)
+		cmd := exec.Command("go", "run", "-trimpath=false", pkg)
 		cmd.Dir = moduleRoot
 		cmd.Env = append(os.Environ(), server.Env()...)
 		commands = append(commands, cmd)

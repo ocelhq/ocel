@@ -11,6 +11,7 @@ import (
 type Preflight struct {
 	Project  *project.Project
 	Response *contractv1.PreflightResponse
+	Registry *contractv1.ImageRegistry
 }
 
 func Read(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
@@ -22,7 +23,7 @@ func Read(ctx context.Context, provider *providerprocess.Provider, cfg *project.
 	if err != nil {
 		return Preflight{}, err
 	}
-	return Preflight{Project: resolved, Response: resp}, nil
+	return Preflight{Project: resolved, Response: resp, Registry: req.Registry}, nil
 }
 
 func ResolveComputes(provider *providerprocess.Provider, cfg *project.Project) (*project.Project, error) {

@@ -24,6 +24,7 @@ type infraProvisioning struct {
 	cfg             *project.Project
 	env             *environmentv1.Environment
 	aliasToken      string
+	mintedAlias     string
 	workerCeilings  []provider.WorkerCeiling
 	leaseToken      string
 	renewal         time.Duration
@@ -62,6 +63,7 @@ func newInfraProvisioning(providerProcess *providerprocess.Provider, env *enviro
 		cfg:             facts.project,
 		env:             env,
 		aliasToken:      facts.builtAlias,
+		mintedAlias:     facts.mintedAlias,
 		workerCeilings:  facts.workerCeilings,
 		renewal:         leaseRenewalInterval,
 		renewalTimeout:  leaseRenewalInterval,
@@ -183,15 +185,18 @@ func (i *infraProvisioning) markShipped() {
 	i.shipped = true
 }
 
-func (i *infraProvisioning) abandon(ctx context.Context, slug string) {
+func (i *infraProvisioning) release(ctx context.Context, slug string) error {
 	i.stopRenewing()
-	if !i.attempted || i.shipped {
-		return
+	if i.shipped {
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonTimeout)
 	defer cancel()
-	_ = i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
-		_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
-		return err
-	})
+	if i.attempted {
+		_ = i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+			_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
+			return err
+		})
+	}
+	return forgetUnclaimedPreviewAlias(ctx, i.providerProcess, slug, i.env, i.mintedAlias)
 }

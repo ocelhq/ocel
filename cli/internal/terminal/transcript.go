@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -197,7 +198,7 @@ func (s *Transcript) wait(waiting *streamv1.WaitingEvent) {
 		return
 	}
 	s.waitingOnPage = true
-	lines := MissingVariablesLines(waiting.GetMissing(), s.present)
+	lines := wording.Lines(waiting.GetMissing(), s.present.Palette())
 	s.printBlock(append(lines,
 		"",
 		blockIndent+"Fill them in at:",

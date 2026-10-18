@@ -236,7 +236,7 @@ func (p *crossInstall) installInto(ctx context.Context, app, source, functionDir
 			return err
 		}
 	}
-	cmd := exec.CommandContext(ctx, npmCommand, npmInstallArgs(cpu)...)
+	cmd := exec.Command(npmCommand, npmInstallArgs(cpu)...)
 	cmd.Dir = staging
 	var npmOutput bytes.Buffer
 	cmd.Stdout = &npmOutput

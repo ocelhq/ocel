@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -63,7 +64,7 @@ func (s summary) succeeded(took string) []string {
 func (s summary) failed(took string) []string {
 	result := s.result
 	if missing := result.GetMissing(); missing != nil {
-		out := append(MissingVariablesLines(missing, s.present), "", MissingVariablesRemedy(missing.GetRemedy()))
+		out := append(wording.Lines(missing, s.present.Palette()), "", wording.Remedy(missing.GetRemedy()))
 		return append(out, detailLines(result.GetDetail())...)
 	}
 	out := failureLines(s.present.Palette(), headlineOr(result, "Failed")+" in "+took, result.GetDetail())
@@ -169,8 +170,8 @@ func (s *Transcript) printSummary(ev *streamv1.RunEvent) {
 func (s summary) annotation() string {
 	result := s.result
 	if missing := result.GetMissing(); missing != nil {
-		text := headlineOr(result, "Failed") + ": " + MissingVariablesHeadline(len(missing.GetCells())) +
-			"\n" + strings.TrimLeft(MissingVariablesRemedy(missing.GetRemedy()), " ")
+		text := headlineOr(result, "Failed") + ": " + wording.Headline(len(missing.GetCells())) +
+			"\n" + strings.TrimLeft(wording.Remedy(missing.GetRemedy()), " ")
 		if detail := strings.TrimRight(result.GetDetail(), "\n"); detail != "" {
 			text += "\n" + detail
 		}

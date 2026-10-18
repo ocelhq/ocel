@@ -51,7 +51,7 @@ func TestARediscoveryRestartsOnlyTheWorkersWhoseRootsChanged(t *testing.T) {
 	opts.Project = &project.Project{Dir: dir, DiscoveryPaths: []string{"a", "b"}}
 	processes := newWorkerProcesses(opts, &fakeWorkerQueue{workers: workers})
 	processes.command = func(ctx context.Context, _ string, _ []discovery.Root, _ discovery.Root, _ *workdir.Run) (*exec.Cmd, error) {
-		return exec.CommandContext(ctx, "sleep", "60"), nil
+		return exec.Command("sleep", "60"), nil
 	}
 	ctx := context.Background()
 	t.Cleanup(func() { processes.close(ctx) })
@@ -93,7 +93,7 @@ func TestAWorkerListensOnLoopbackWhateverHostTheShellOrTheAppExports(t *testing.
 	var stdout, stderr syncBuffer
 	workers := newWorkerProcesses(workerOptions(t, &stdout, &stderr), nil)
 
-	cmd := exec.CommandContext(context.Background(), "sh", "-c", `printf %s "$HOST"`)
+	cmd := exec.Command("sh", "-c", `printf %s "$HOST"`)
 	cmd.Env = os.Environ()
 	process, err := workers.start(context.Background(), cmd, "worker", 4000, map[string]string{"HOST": "0.0.0.0"})
 	if err != nil {

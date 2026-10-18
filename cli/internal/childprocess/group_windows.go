@@ -1,8 +1,9 @@
-package lifecycle
+package childprocess
 
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -11,12 +12,12 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-type processTree struct {
+type processGroup struct {
 	job    windows.Handle
 	closed sync.Once
 }
 
-func newProcessTree(cmd *exec.Cmd) (*processTree, error) {
+func newProcessGroup(cmd *exec.Cmd, _ bool) (*processGroup, error) {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create a job object: %w", err)
@@ -32,16 +33,17 @@ func newProcessTree(cmd *exec.Cmd) (*processTree, error) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
-	return &processTree{job: job}, nil
+	return &processGroup{job: job}, nil
 }
 
-func (t *processTree) assign(pid int) error {
+func (g *processGroup) attach(cmd *exec.Cmd) error {
+	pid := cmd.Process.Pid
 	process, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(pid))
 	if err != nil {
 		return fmt.Errorf("open process %d: %w", pid, err)
 	}
 	defer func() { _ = windows.CloseHandle(process) }()
-	if err := windows.AssignProcessToJobObject(t.job, process); err != nil {
+	if err := windows.AssignProcessToJobObject(g.job, process); err != nil {
 		return fmt.Errorf("assign process %d to its job object: %w", pid, err)
 	}
 	return resumeThreads(uint32(pid))
@@ -78,6 +80,18 @@ func resumeThread(id uint32) error {
 	return err
 }
 
-func (t *processTree) kill() {
-	t.closed.Do(func() { _ = windows.CloseHandle(t.job) })
+func (g *processGroup) release() {
+	g.closed.Do(func() { _ = windows.CloseHandle(g.job) })
+}
+
+func (g *processGroup) terminate(cmd *exec.Cmd) error {
+	return g.kill(cmd)
+}
+
+func (g *processGroup) kill(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return os.ErrProcessDone
+	}
+	g.release()
+	return nil
 }

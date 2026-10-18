@@ -28,6 +28,7 @@ type preflightFacts struct {
 	urls           map[string]string
 	mintedAlias    string
 	builtAlias     string
+	registry       *contractv1.ImageRegistry
 }
 
 func runPreflight(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, process *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, env *environmentv1.Environment) (preflightFacts, error) {
@@ -59,6 +60,7 @@ func runPreflight(ctx context.Context, dependencies Dependencies, policy consent
 		project:        resolved,
 		containerArchs: archs,
 		workerCeilings: provider.WorkerCeilingsOf(process.Facts().GetWorkerCeilings()),
+		registry:       read.Registry,
 	}
 	if !preview {
 		facts.urls = appurl.FormatProductionURLs(resolved)
@@ -106,8 +108,8 @@ func forgetUnclaimedPreviewAlias(ctx context.Context, provider *providerprocess.
 	if token == "" {
 		return nil
 	}
-	return provider.Call(context.WithoutCancel(ctx), func(client contractv1connect.ProviderServiceClient) error {
-		_, err := client.ForgetPreviewAlias(context.WithoutCancel(ctx), &contractv1.ForgetPreviewAliasRequest{Slug: slug, Environment: env, Token: token})
+	return provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		_, err := client.ForgetPreviewAlias(ctx, &contractv1.ForgetPreviewAliasRequest{Slug: slug, Environment: env, Token: token})
 		return err
 	})
 }

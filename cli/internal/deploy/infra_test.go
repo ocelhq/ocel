@@ -141,7 +141,7 @@ func TestInfraProvisionedInARunIsNotProvisionedAgainForTheSameResources(t *testi
 	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
 	uploads := declaration.Resource{Name: "uploads", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Bucket: &resourcesv1.BucketConfig{}, Source: "src/files.ts:1"}
 
-	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.DeployProduction, Policy: policy}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.Deploy, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) error {
 		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project})
 		for _, resources := range [][]declaration.Resource{{orders}, {orders}, {orders, uploads}} {
@@ -175,11 +175,11 @@ func TestInfraProvisioningRenewsItsLeaseWhileItsDeployBuilds(t *testing.T) {
 		return clitest.RequestsTo[*contractv1.RenewDeployLeaseRequest](t, fixture.Requests, contractv1connect.ProviderServiceRenewDeployLeaseProcedure)
 	}
 
-	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.DeployProduction, Policy: policy}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.Deploy, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) error {
 		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project})
 		infra.renewal = time.Millisecond
-		defer infra.abandon(ctx, p.Project.Slug)
+		defer func() { _ = infra.release(ctx, p.Project.Slug) }()
 		if err := infra.provision(ctx, []declaration.Resource{orders}, nil); err != nil {
 			return err
 		}
@@ -218,7 +218,7 @@ func TestStoppingLeaseRenewalCancelsARenewalTheProviderNeverAnswers(t *testing.T
 	stopped := make(chan struct{})
 	var renewalStopped bool
 
-	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.DeployProduction, Policy: policy}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.Deploy, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) error {
 		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project})
 		infra.renewal, infra.renewalTimeout = time.Millisecond, time.Hour
@@ -270,11 +270,11 @@ func TestABuildWhoseLeaseRenewalIsRefusedStopsAndSaysTheLeaseWasLost(t *testing.
 	var stopped bool
 	var lost error
 
-	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.DeployProduction, Policy: policy}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel deploy", commands.OpenOptions{Intent: commands.Deploy, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) error {
 		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project})
 		infra.renewal = time.Millisecond
-		defer infra.abandon(ctx, p.Project.Slug)
+		defer func() { _ = infra.release(ctx, p.Project.Slug) }()
 		building, release := infra.holdLease(ctx)
 		defer release()
 		if err := infra.provision(building, []declaration.Resource{orders}, nil); err != nil {

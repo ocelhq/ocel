@@ -87,7 +87,7 @@ func TestRunEndsTheChildsWholeGroupWhenItsContextEnds(t *testing.T) {
 
 	pidFile := filepath.Join(t.TempDir(), "sleep.pid")
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile)
+	cmd := exec.Command("sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile)
 	ran := make(chan error, 1)
 	go func() { ran <- Run(ctx, cmd) }()
 	pid := readPID(t, pidFile)

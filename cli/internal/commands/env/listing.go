@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -102,7 +103,7 @@ func renderValues(stdout io.Writer, values []*variablestorev1.ValueMetadata, env
 		if len(members) == 0 {
 			continue
 		}
-		rows = append(rows, listingRow{}, listingRow{headline: terminal.VariableGroupHeadline(group.GetKey(), group.GetDescription())})
+		rows = append(rows, listingRow{}, listingRow{headline: wording.GroupHeadline(group.GetKey(), group.GetDescription())})
 		for _, v := range members {
 			row, orphaned := valueRow(v, listingIndent, described, environments)
 			rows = append(rows, row)

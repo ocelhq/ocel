@@ -49,7 +49,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 		return fmt.Errorf("app %q is built from the crate %s at %s, which builds %d binaries, and a function execs exactly one: keep one bin target in the crate", c.App, crate.Name, source, len(bins))
 	}
 
-	cmd := exec.CommandContext(ctx, "cargo", "build", "--release",
+	cmd := exec.Command("cargo", "build", "--release",
 		"--manifest-path", crate.ManifestPath, "--bin", bins[0].Name, "--target", target)
 	cmd.Dir = workspace.Root
 	cmd.Env = c.environ("CARGO_PROFILE_RELEASE_STRIP=symbols")

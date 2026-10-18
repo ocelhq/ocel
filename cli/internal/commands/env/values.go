@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -136,7 +137,7 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return err
 		}
 		if !resp.GetFound() {
-			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s=<VALUE>`%s", describeCell(key, opts), key, terminal.VariableDescriptionLine(descriptions(definitions)[key]))
+			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s=<VALUE>`%s", describeCell(key, opts), key, wording.DescriptionLine(descriptions(definitions)[key]))
 		}
 
 		if opts.reveal {

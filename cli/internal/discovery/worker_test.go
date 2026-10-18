@@ -56,26 +56,17 @@ func startWorker(t *testing.T, cmd *exec.Cmd, worker string) string {
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
-	childprocess.SetOwnGroup(cmd)
-	if err := cmd.Start(); err != nil {
+	child, err := childprocess.Start(context.Background(), cmd, childprocess.Options{})
+	if err != nil {
 		t.Fatalf("start the worker: %v", err)
 	}
-	exited := make(chan struct{})
-	var waited error
-	go func() {
-		waited = cmd.Wait()
-		close(exited)
-	}()
-	t.Cleanup(func() {
-		_ = childprocess.KillGroup(cmd)
-		<-exited
-	})
+	t.Cleanup(child.Stop)
 
 	address := "127.0.0.1:" + strconv.Itoa(port)
 	deadline := time.Now().Add(3 * time.Minute)
 	for time.Now().Before(deadline) {
 		select {
-		case <-exited:
+		case waited := <-child.Exited():
 			t.Fatalf("the worker exited before it listened: %v\n%s", waited, output.String())
 		default:
 		}
@@ -238,7 +229,7 @@ func TestTheNodeWorkerBundleServesFromADirectoryWithNoNodeModulesBesideIt(t *tes
 	if err := BundleNodeWorker(configDir, roots, entry); err != nil {
 		t.Fatalf("BundleNodeWorker: %v", err)
 	}
-	cmd := exec.CommandContext(context.Background(), "node", entry)
+	cmd := exec.Command("node", entry)
 	cmd.Dir = image
 	cmd.Env = os.Environ()
 	url := startWorker(t, cmd, "worker")
