@@ -222,22 +222,48 @@ func (m *machine) StopTunnel(_ context.Context, tunnel host.Tunnel) error {
 	return nil
 }
 
-func (m *machine) TunnelHost(_ context.Context, tunneled host.TunneledHost, tunnelName string) error {
+func (m *machine) ClaimThrough(_ context.Context, tunnelName string, claims []host.HostClaim) error {
 	if m.tunnel == nil || m.tunnel.Name != tunnelName {
 		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), host.ErrTunnelReleased)
 	}
-	m.calls = append(m.calls, "tunnel "+tunneled.Hostname)
-	m.tunneled = append(slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Hostname == tunneled.Hostname }), tunneled)
+	for _, claim := range claims {
+		claim.Tunneled = true
+		m.calls = append(m.calls, "claim through "+claim.Hostname)
+		taken, err := host.Claiming(m.claims, claim)
+		if err != nil {
+			return err
+		}
+		m.claims = taken
+	}
 	return nil
 }
 
-func (m *machine) RemoveTunneledHost(_ context.Context, tunneled host.TunneledHost) error {
-	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held == tunneled })
+func (m *machine) InstallPreviewEntryThrough(ctx context.Context, base, tunnelName string) error {
+	if m.tunnel == nil || m.tunnel.Name != tunnelName {
+		return errors.Join(refusal.Refuse(refusal.CodeBusy, "the tunnel %s no longer reaches the box", tunnelName), host.ErrTunnelReleased)
+	}
+	if err := m.InstallPreviewEntry(ctx, base); err != nil {
+		return err
+	}
+	m.previewTunneled = true
 	return nil
+}
+
+func (m *machine) tunneledNames() []string {
+	var named []string
+	for _, claim := range m.claims {
+		if claim.Tunneled {
+			named = append(named, claim.Hostname)
+		}
+	}
+	if m.previewTunneled {
+		named = append(named, edge.PreviewWildcard(m.previewBase))
+	}
+	return named
 }
 
 func (m *machine) ReleaseTunnel(context.Context) ([]host.Tunnel, error) {
-	if m.tunnel != nil && len(m.tunneled) == 0 {
+	if m.tunnel != nil && len(m.tunneledNames()) == 0 {
 		m.retired = append(m.retired, *m.tunnel)
 		m.calls = append(m.calls, "stop tunnel "+m.tunnel.ID)
 		m.tunnel, m.tunnelRunning = nil, ""
@@ -270,12 +296,11 @@ func TestAClaimThroughATunnelOpensTheBoxsTunnelAndNamesItAsTheOrigin(t *testing.
 		t.Errorf("the edge saw %v, want the tunnel opened under the name the box reserved, every hostname sent to the switchboard's tunnel listener, and its token read to run it", m.tunnelEvents.opened)
 	}
 	surface := switchboard.Surface(slug, environment.TierProduction)
-	if !slices.Contains(m.tunneled, host.TunneledHost{Hostname: "shop.example.com", Owner: surface}) {
-		t.Errorf("the box tunnels %+v, want shop.example.com for %s", m.tunneled, surface)
+	if !slices.Contains(m.tunneledNames(), "shop.example.com") {
+		t.Errorf("the box tunnels %+v, want shop.example.com for %s", m.tunneledNames(), surface)
 	}
-	tunneled, claimed := slices.Index(m.calls, "tunnel shop.example.com"), slices.Index(m.calls, "claim shop.example.com")
-	if tunneled < 0 || claimed < 0 || tunneled > claimed {
-		t.Errorf("calls = %v, want the hostname tunneled before it is claimed: a claimed hostname nothing tunnels is answered by the proxy on the box", m.calls)
+	if !slices.Contains(m.calls, "claim through shop.example.com") || slices.Contains(m.calls, "claim shop.example.com") {
+		t.Errorf("calls = %v, want the hostname claimed through the tunnel in one write: a claimed hostname nothing tunnels is answered by the proxy on the box", m.calls)
 	}
 	if len(m.shields) != 0 || slices.Contains(m.visited, "RefuseUnshielded") {
 		t.Errorf("the box shields %+v, want none: nothing but the tunnel reaches a tunneled hostname", m.shields)
@@ -358,8 +383,8 @@ func TestAHostnameClaimedAgainWithoutTheTunnelStopsGoingThroughIt(t *testing.T) 
 	if origin.Tunneled || origin.Address != address {
 		t.Errorf("Claim named %+v, want the box's own address", origin)
 	}
-	if len(m.tunneled) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
-		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the hostname off the tunnel and the tunnel deleted: nothing else goes through it", m.tunneled, m.tunnelEvents.opened)
+	if len(m.tunneledNames()) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the hostname off the tunnel and the tunnel deleted: nothing else goes through it", m.tunneledNames(), m.tunnelEvents.opened)
 	}
 }
 
@@ -375,15 +400,15 @@ func TestThePreviewEntryThroughATunnelIsTunneledOnTheBoxAndReleasedWithIt(t *tes
 	if !origin.Tunneled || origin.Address != "uuid-1.cfargotunnel.com" {
 		t.Errorf("ClaimPreviewEntry named %+v, want the tunnel", origin)
 	}
-	if m.previewBase != "preview.example.com" || !slices.Contains(m.tunneled, host.TunneledHost{Hostname: "*.preview.example.com", Owner: edge.PreviewEntryOwner}) {
-		t.Errorf("the box answers previews on %q and tunnels %+v, want every preview under the wildcard reached through the tunnel", m.previewBase, m.tunneled)
+	if m.previewBase != "preview.example.com" || !slices.Contains(m.tunneledNames(), "*.preview.example.com") {
+		t.Errorf("the box answers previews on %q and tunnels %+v, want every preview under the wildcard reached through the tunnel", m.previewBase, m.tunneledNames())
 	}
 
 	if err := previews.Hooks().Origin.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
 		t.Fatalf("DisclaimPreviewEntry: %v", err)
 	}
-	if len(m.tunneled) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
-		t.Errorf("the box tunnels %+v and the edge saw %v, want the wildcard off the tunnel and the tunnel deleted", m.tunneled, m.tunnelEvents.opened)
+	if len(m.tunneledNames()) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the box tunnels %+v and the edge saw %v, want the wildcard off the tunnel and the tunnel deleted", m.tunneledNames(), m.tunnelEvents.opened)
 	}
 }
 
@@ -397,19 +422,18 @@ func TestTheStoreOfATunneledHostnameIsTunneledWithItAndReleasedWithIt(t *testing
 	}
 
 	surface := switchboard.Surface(slug, environment.TierProduction)
-	if !slices.Contains(m.tunneled, host.TunneledHost{Hostname: "storage.shop.example.com", Owner: surface}) {
-		t.Errorf("the box tunnels %+v, want storage.shop.example.com for %s: a store nothing tunnels is answered by the proxy on the box, around the tunnel", m.tunneled, surface)
+	if !slices.Contains(m.tunneledNames(), "storage.shop.example.com") {
+		t.Errorf("the box tunnels %+v, want storage.shop.example.com for %s: a store nothing tunnels is answered by the proxy on the box, around the tunnel", m.tunneledNames(), surface)
 	}
-	tunneled, claimed := slices.Index(m.calls, "tunnel storage.shop.example.com"), slices.Index(m.calls, "claim storage.shop.example.com")
-	if tunneled < 0 || claimed < 0 || tunneled > claimed {
-		t.Errorf("calls = %v, want the store's hostname tunneled before it is claimed", m.calls)
+	if !slices.Contains(m.calls, "claim through storage.shop.example.com") {
+		t.Errorf("calls = %v, want the store's hostname claimed through the tunnel with its app's", m.calls)
 	}
 
 	if err := routed.Disclaim(ctx, "shop.example.com"); err != nil {
 		t.Fatalf("Disclaim: %v", err)
 	}
-	if len(m.tunneled) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
-		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the store off the tunnel with its hostname and the tunnel deleted", m.tunneled, m.tunnelEvents.opened)
+	if len(m.tunneledNames()) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the store off the tunnel with its hostname and the tunnel deleted", m.tunneledNames(), m.tunnelEvents.opened)
 	}
 }
 
@@ -425,7 +449,7 @@ func TestTheStoreOfAHostnameClaimedAgainWithoutTheTunnelStopsGoingThroughIt(t *t
 		t.Fatalf("Claim without the tunnel: %v", err)
 	}
 
-	if len(m.tunneled) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
-		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the store off the tunnel with its hostname and the tunnel deleted", m.tunneled, m.tunnelEvents.opened)
+	if len(m.tunneledNames()) != 0 || !slices.Contains(m.tunnelEvents.opened, "delete uuid-1") {
+		t.Errorf("the box still tunnels %+v, and the edge saw %v, want the store off the tunnel with its hostname and the tunnel deleted", m.tunneledNames(), m.tunnelEvents.opened)
 	}
 }

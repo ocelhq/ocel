@@ -53,7 +53,7 @@ func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossAResta
 func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *testing.T) {
 	t.Parallel()
 
-	items := LiveItems(ssh.AMD64)
+	items := Items(environment.TierProduction, nil, ssh.AMD64, Front{})
 	at := func(kind, name string) int {
 		return slices.IndexFunc(items, func(item Item) bool { return item.Kind == kind && item.Name == name })
 	}
@@ -71,10 +71,13 @@ func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *test
 	if items[service].Content == nil || !bytes.Equal(items[service].Content, unitWatchFacts(liveServiceUnit(), liveAgent(ssh.AMD64))) {
 		t.Error("the service's facts do not follow the unit file and the agent, so a changed agent would not restart it")
 	}
-	for _, item := range items {
+	for _, item := range LiveItems(ssh.AMD64) {
 		if item.Owner != rootOwner {
 			t.Errorf("%s is written to %s, and the agent is root's alone", item.ID(), item.Owner)
 		}
+	}
+	if agent := items[at(KindFile, LiveBinary)]; agent.Owner != rootOwner {
+		t.Errorf("%s is written to %s, and the agent is root's alone", agent.ID(), agent.Owner)
 	}
 }
 

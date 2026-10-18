@@ -7,14 +7,13 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
-	dockerShims   = boxstore.Dir + "/bin"
+	dockerShims   = boxapi.LibDir + "/bin"
 	DockerShim    = dockerShims + "/docker"
-	LoginShell    = boxstore.Dir + "/login"
+	LoginShell    = boxapi.LibDir + "/login"
 	sudoersDocker = sudoersRoot + "/ocel-docker"
 
 	deployPath = dockerShims + ":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

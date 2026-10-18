@@ -31,14 +31,6 @@ func isOneLabelUnder(wildcard, hostname string) bool {
 	return wild && under && label != "" && !strings.Contains(label, ".")
 }
 
-func (p CertificatePair) Bundle() []byte {
-	certificate := p.Certificate
-	if !strings.HasSuffix(certificate, "\n") {
-		certificate += "\n"
-	}
-	return []byte(certificate + p.Key)
-}
-
 func (s Shield) OriginFileName() string {
 	digest := sha256.Sum256(s.OriginCertificate.Bundle())
 	hostname := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s.Hostname)), "*", "_")

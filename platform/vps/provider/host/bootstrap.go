@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -51,7 +50,7 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 	if read, err = b.recorded(ctx, read); err != nil {
 		return provider.BootstrapDescription{}, err
 	}
-	if read.observed(KindRoutingTable, boxapi.RoutingTable) || read.observed(KindProxyConfig, ProxyConfig) {
+	if read.observed(KindRoutingTable, boxapi.RoutingTablePath) || read.observed(KindProxyConfig, ProxyConfig) {
 		if read.rerendering, err = b.host.proxyInspected(ctx, read.Tier); err != nil {
 			return provider.BootstrapDescription{}, err
 		}
@@ -137,7 +136,7 @@ func planned(read Reading) []provider.Change {
 		}
 		switch {
 		case read.rerendering && item.Kind == KindProxyConfig:
-			change.Action, change.Reason = provider.ActionUpdate, "rendered again from "+boxapi.RoutingTable
+			change.Action, change.Reason = provider.ActionUpdate, "rendered again from "+boxapi.RoutingTablePath
 		case item.Kind == KindEngine && read.current(item):
 			change.Action, change.Reason, change.Slow = provider.ActionAdopt, adoptedEngine(read.Engine.Version), false
 		case read.current(item):
@@ -231,7 +230,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err := b.host.Stamp(ctx, req.Tier, stamp); err != nil {
 		return err
 	}
-	if err := b.write(ctx, current, StorageItems(req.Tier, current.Keys), progress); err != nil {
+	if err := b.write(ctx, current, StorageItems(req.Tier, current.Keys, current.Arch), progress); err != nil {
 		return err
 	}
 
@@ -390,7 +389,6 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 }
 
 func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	defer b.host.forgetTiers()
 	defer b.host.forgetReading(tier)
 	forget, err := b.host.KnownHostRemoval(ctx)
 	if err != nil {
@@ -580,14 +578,12 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 			taking(KindFile, imagesLock, ""),
 			sharing(stateRoot, ""),
 			taking(KindUser, deployUser, ""),
-			taking(KindFile, boxstore.KeyValuesHelper, ""),
 			taking(KindFile, releasesHelper, ""),
-			taking(KindFile, boxstore.SealHelper, ""),
 			taking(KindFile, SwitchboardBinary, ""),
 			taking(KindDir, SwitchboardDir, ""),
 			taking(KindFile, RealtimeBinary, ""),
 			taking(KindDir, RealtimeDir, ""),
-			sharing(boxstore.Dir, ""),
+			sharing(boxapi.LibDir, ""),
 		)
 		above = []removal{sharing(tierRoot, "")}
 	}

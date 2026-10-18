@@ -30,9 +30,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -167,7 +167,7 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Re
 }
 
 func (b *box) proxying(command, input string) (ssh.Result, bool) {
-	if !strings.Contains(command, quote(boxapi.RoutingTable)) {
+	if !strings.Contains(command, quote(boxapi.RoutingTablePath)) {
 		return ssh.Result{}, false
 	}
 	if b.routingDoc == "" {
@@ -226,7 +226,7 @@ func (b *box) catting(command string) (ssh.Result, bool) {
 const fakeSeal = "sealed:"
 
 func (b *box) sealing(command, input string) (ssh.Result, bool) {
-	if !strings.Contains(command, boxstore.SealHelper) {
+	if !strings.Contains(command, shell.Words([]string{boxapi.LiveBinary, boxapi.SealCommand})) {
 		return ssh.Result{}, false
 	}
 	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(input))

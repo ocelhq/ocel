@@ -18,6 +18,8 @@ func liveRestoreItem() Item {
 	return Item{
 		Kind:    KindLiveRestore,
 		Name:    daemonConfig,
+		script:  func(Item) string { return liveRestoreCommand(daemonConfig) },
+		survey:  func(Item) string { return liveRestoreProbe(daemonConfig) },
 		Owner:   rootOwner,
 		Content: []byte(liveRestoreFact),
 		Note:    "keeps every container running while the daemon restarts or upgrades",

@@ -120,7 +120,7 @@ func TestAWorkerNeverReachesTheRoutingTable(t *testing.T) {
 	}
 	ledger, _ := recordedWorker(t, store, "ledger")
 	for _, command := range machine.commands() {
-		if strings.Contains(command, boxapi.RoutingTable) && strings.Contains(command, ledger.Container) {
+		if strings.Contains(command, boxapi.RoutingTablePath) && strings.Contains(command, ledger.Container) {
 			t.Errorf("the worker reached the routing table: %s", command)
 		}
 	}

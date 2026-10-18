@@ -14,7 +14,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -30,7 +29,7 @@ const (
 	stateRoot    = boxapi.StateRoot
 	releasesRoot = stateRoot + "/releases"
 
-	releasesHelper = boxstore.Dir + "/releases"
+	releasesHelper = boxapi.LibDir + "/releases"
 
 	stampFile   = "stamp.json"
 	sealKeyFile = "seal.key"
@@ -68,9 +67,10 @@ type Item struct {
 	Watch   []string
 	Slow    bool
 	Note    string
-	box     *boxContainer
 
-	rendered *Item
+	script    func(Item) string
+	survey    func(Item) string
+	rewritten bool
 }
 
 func TierItems(tier environment.Tier) []Item {
@@ -80,14 +80,13 @@ func TierItems(tier environment.Tier) []Item {
 	}
 }
 
-func StorageItems(tier environment.Tier, keys []byte) []Item {
+func StorageItems(tier environment.Tier, keys []byte, arch string) []Item {
 	return []Item{
-		dir(boxstore.Dir, 0o755, rootOwner, ""),
-		{Kind: KindFile, Name: boxstore.KeyValuesHelper, Mode: 0o755, Owner: rootOwner, Content: keyValuesScript, Note: "deploy records"},
+		dir(boxapi.LibDir, 0o755, rootOwner, ""),
 		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "release window"},
-		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals secret values"},
+		newAgentItem(liveAgent(arch)),
 		principal(),
-		{Kind: KindFile, Name: sudoersSeal(tier), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(tier), Note: "sudo for the seal helper"},
+		{Kind: KindFile, Name: sudoersSeal(tier), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(tier), Note: "sudo for sealing and opening this tier's values"},
 		dir(stateRoot, 0o711, rootOwner, ""),
 		dir(releasesRoot, 0o750, stateOwner, ""),
 		dir(sshDir, 0o700, stateOwner, ""),
@@ -99,7 +98,7 @@ func StorageItems(tier environment.Tier, keys []byte) []Item {
 }
 
 func Items(tier environment.Tier, keys []byte, arch string, front Front) []Item {
-	return slices.Concat(TierItems(tier), StorageItems(tier, keys), EngineItems(), LiveItems(arch), DockerAccessItems(front), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), RealtimeItems(arch), BackupItems())
+	return slices.Concat(TierItems(tier), StorageItems(tier, keys, arch), EngineItems(), LiveItems(arch), DockerAccessItems(front), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), RealtimeItems(arch), BackupItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {
@@ -157,33 +156,17 @@ func (i Item) Digest() string {
 }
 
 func (i Item) sum() string {
-	if rewrittenByDeploys(i) {
+	if i.rewritten {
 		return ""
 	}
 	return contentSum(i.Content)
 }
 
 func (i Item) command() string {
-	switch i.Kind {
-	case KindUser:
-		return deployLogin().command()
-	case KindSealKey:
-		return i.mint()
-	case KindEngine:
-		return engineCommand()
-	case KindLiveRestore:
-		return liveRestoreCommand(daemonConfig)
-	case KindUnit:
-		return unitCommand(i)
-	case KindNetwork:
-		return networkCommand()
-	case KindContainer:
-		return i.box.writing(containerRising)
-	case KindProxyConfig:
-		return seedingRouting(routingTableItem())
-	case KindRoutingTable:
-		return seedingRouting(i)
-	case KindDir:
+	switch {
+	case i.script != nil:
+		return i.script(i)
+	case i.Kind == KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, shell.Quote(i.Name))
 	default:
 		return fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", i.Mode, i.Owner, i.Owner, shell.Quote(i.Name))
@@ -191,26 +174,15 @@ func (i Item) command() string {
 }
 
 func (i Item) probe() string {
-	switch i.Kind {
-	case KindUser:
-		return deployLogin().survey()
-	case KindSealKey:
-		return sealSurvey(i)
-	case KindEngine:
-		return engineProbe()
-	case KindLiveRestore:
-		return liveRestoreProbe(daemonConfig)
-	case KindUnit:
-		return unitProbe(i)
-	case KindNetwork:
-		return networkProbe()
-	case KindContainer:
-		return i.box.probe()
-	case KindProxyConfig, KindRoutingTable:
-		return seededProbe(i)
-	default:
+	if i.survey == nil {
 		return ""
 	}
+	return i.survey(i)
+}
+
+func systemdUnit(item Item) Item {
+	item.Kind, item.script, item.survey = KindUnit, unitCommand, unitProbe
+	return item
 }
 
 func digest(kind, name string, mode fs.FileMode, owner, content string) string {

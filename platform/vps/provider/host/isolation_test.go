@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 )
 
@@ -52,8 +51,8 @@ func running() map[string]string {
 func entitledPaths() map[string][]string {
 	return map[string][]string{
 		appContainer:      {EnvFile(valued().Tier, valued().Name)},
-		proxyContainer:    {proxyRoot, caddy.PinsDir, ProxyData},
-		boardContainer:    {boxapi.RoutingDir, boxapi.RoutingTable},
+		proxyContainer:    {proxyRoot, boxapi.PinsDir, ProxyData},
+		boardContainer:    {boxapi.RoutingDir, boxapi.RoutingTablePath},
 		resourceContainer: {EnvFile(resourced().Tier, resourced().Name)},
 		tunnelContainer:   {TunnelDir},
 		tokenPlacer:       {TunnelDir},

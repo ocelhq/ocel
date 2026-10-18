@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
 type stack struct {
@@ -277,7 +276,7 @@ func (s *stack) claimHostname(ctx context.Context, claim router.Claim) (edge.Ori
 	if err := s.claim(ctx, served); err != nil {
 		return edge.Origin{}, err
 	}
-	if err := s.e.removeTunneledHosts(ctx, s.surface(), claim.Hostname, boxapi.StoreHostname(claim.Hostname)); err != nil {
+	if err := s.e.releaseTunnel(ctx); err != nil {
 		return edge.Origin{}, err
 	}
 	if shielded {
@@ -293,17 +292,13 @@ func (s *stack) claimTunneled(ctx context.Context, claim router.Claim) (edge.Ori
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	var storeHostnames []string
-	for _, claimed := range served {
-		if claimed.App == boxapi.StoreLabel {
-			storeHostnames = append(storeHostnames, claimed.Hostname)
-		}
-	}
-	origin, err := s.e.tunnelHost(ctx, claim.Hostname, storeHostnames, claim.Tunnel, s.surface())
+	origin, err := s.e.claimThrough(ctx, claim.Tunnel, s.surface(), claim.Hostname, func(tunnel host.Tunnel) error {
+		return s.e.machine.ClaimThrough(ctx, tunnel.Name, served)
+	})
 	if err != nil {
 		return edge.Origin{}, err
 	}
-	return origin, s.claim(ctx, served)
+	return origin, s.applyOrigins(ctx)
 }
 
 func (s *stack) listServed(ctx context.Context, claim router.Claim) ([]host.HostClaim, error) {
@@ -326,7 +321,7 @@ func (s *stack) listServed(ctx context.Context, claim router.Claim) ([]host.Host
 func (e *Edge) putShield(ctx context.Context, claim router.Claim, owner string) (certified bool, err error) {
 	held, err := e.machine.PutShield(ctx, host.Shield{
 		Hostname: claim.Hostname, Owner: owner, ClientCAs: claim.ClientCAs,
-		OriginCertificate: proxy.CertificatePair{Certificate: claim.OriginCertificate.Certificate, Key: claim.OriginCertificate.Key},
+		OriginCertificate: boxapi.CertificatePair{Certificate: claim.OriginCertificate.Certificate, Key: claim.OriginCertificate.Key},
 	})
 	if err != nil {
 		return false, err

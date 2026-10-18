@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 const envSourceRequestTimeout = 30 * time.Second
@@ -35,9 +34,8 @@ func envSourceSync(argv []string, errs io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	local := boxstore.LocalTransport{}
 	sync := &envsource.Sync{
-		Store: variablestore.Store{KeyValues: boxstore.NewKeyValues(local), Cipher: boxstore.NewCipher(local)},
+		Store: variablestore.Store{KeyValues: boxapi.KeyValues{Root: boxapi.StateRoot}, Cipher: boxapi.Cipher{Root: boxapi.TierRoot}},
 		Tier:  environment.Tier(*tier),
 		Login: envsource.Login{Client: &http.Client{Timeout: envSourceRequestTimeout}},
 	}

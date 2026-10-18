@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -22,12 +22,12 @@ func TestEachTierIsWhitelistedOnItsOwnSudoersLineNamingItsTierAlone(t *testing.T
 		if tier == environment.TierProduction {
 			other = string(environment.TierPreview)
 		}
-		for _, banned := range []string{" " + other + " ", " init", boxstore.SealHelper + ","} {
+		for _, banned := range []string{" " + other + " ", " init", LiveBinary + " " + boxapi.SealCommand + ","} {
 			if strings.Contains(line, banned) {
 				t.Errorf("%s's line reads %q and contains %q, which lets the deploy login past the tier or the verbs it needs", tier, line, banned)
 			}
 		}
-		for _, wanted := range []string{boxstore.SealHelper + " " + string(tier) + " seal *", boxstore.SealHelper + " " + string(tier) + " open *"} {
+		for _, wanted := range []string{LiveBinary + " " + boxapi.SealCommand + " " + string(tier) + " seal *", LiveBinary + " " + boxapi.SealCommand + " " + string(tier) + " open *"} {
 			if !strings.Contains(line, wanted) {
 				t.Errorf("%s's line reads %q and never grants %q", tier, line, wanted)
 			}

@@ -32,7 +32,7 @@ type engineState struct {
 func engineAsWritten() engineState {
 	return engineState{network: true, volume: true, facts: map[string]string{
 		caddy.Container:      engineSays(frontProxy(), migrateSet),
-		SwitchboardContainer: engineSays(*boardItem().box, migrateSet),
+		SwitchboardContainer: engineSays(switchboardBox(switchboardBinary(ssh.AMD64), Front{}), migrateSet),
 	}}
 }
 
@@ -78,7 +78,7 @@ func dockered(t *testing.T, engine engineState) map[string]string {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), frontProxy().probe(), boardItem().box.probe()}, "\n"))
+	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), frontProxy().probe(), switchboardBox(switchboardBinary(ssh.AMD64), Front{}).probe()}, "\n"))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -127,7 +127,7 @@ func TestTheProbeAndTheWriteAgreeOnWhatAServingProxyIs(t *testing.T) {
 
 	observed := dockered(t, engineAsWritten())
 	for _, item := range ProxyItems(ssh.AMD64, Front{}) {
-		if item.Kind == KindFile || item.Kind == KindDir || rewrittenByDeploys(item) {
+		if item.Kind == KindFile || item.Kind == KindDir || item.rewritten {
 			continue
 		}
 		if observed[item.ID()] != item.Digest() {
@@ -363,7 +363,7 @@ func TestTheSwitchboardBinaryIsRootsToWriteAndAnyonesToRunAndReachesItsContainer
 		t.Errorf("the switchboard is handed %v, want its binary's directory read-only: a bind of the file keeps the inode a rewrite replaced", board.binds)
 	}
 	for _, bind := range board.binds {
-		if source, _, _ := strings.Cut(bind, ":"); source == SwitchboardBinary || source == boxapi.RoutingTable {
+		if source, _, _ := strings.Cut(bind, ":"); source == SwitchboardBinary || source == boxapi.RoutingTablePath {
 			t.Errorf("the switchboard is handed %s as a file, and a file bind keeps reading the inode it started on after a rename replaces it", source)
 		}
 	}
@@ -460,7 +460,7 @@ func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCall
 			t.Errorf("the survey hashes what a deploy wrote:\n%s", seeded.probe())
 		}
 		seeding := seeded.command()
-		if !strings.Contains(seeding, "if [ ! -f "+shell.Quote(boxapi.RoutingTable)+" ]; then") || !strings.Contains(seeding, "elif [ ! -f "+shell.Quote(ProxyConfig)+" ]; then") {
+		if !strings.Contains(seeding, "if [ ! -f "+shell.Quote(boxapi.RoutingTablePath)+" ]; then") || !strings.Contains(seeding, "elif [ ! -f "+shell.Quote(ProxyConfig)+" ]; then") {
 			t.Errorf("the write of %s replaces what exists there rather than seeding what does not:\n%s", seeded.Name, seeding)
 		}
 		if !strings.Contains(seeding, "chown "+stateOwner+":"+stateOwner+" "+shell.Quote(seeded.Name)) || !strings.Contains(seeding, "chmod 0640 "+shell.Quote(seeded.Name)) {
@@ -483,8 +483,7 @@ func seedsIn(t *testing.T) (string, string, Item, Item) {
 }
 
 func seedScript(table, config Item) string {
-	table.rendered = &config
-	return strings.ReplaceAll(seedingRouting(table), shell.Quote(routingLock), shell.Quote(filepath.Dir(table.Name)))
+	return strings.ReplaceAll(seedingRouting(table, &config), shell.Quote(routingLock), shell.Quote(filepath.Dir(table.Name)))
 }
 
 func seeding(t *testing.T, bin string, table, config Item) {
@@ -563,10 +562,10 @@ func TestTheDeployLoginIsToldItOwnsTheRoutingTable(t *testing.T) {
 	t.Parallel()
 
 	owned := slices.ContainsFunc(grants(environment.TierProduction, ssh.AMD64, Front{}), func(grant Grant) bool {
-		return grant.Name == "owns "+boxapi.RoutingTable
+		return grant.Name == "owns "+boxapi.RoutingTablePath
 	})
 	if !owned {
-		t.Errorf("the deploy grants never name %s, and it is a file every deploy of every project on the box rewrites", boxapi.RoutingTable)
+		t.Errorf("the deploy grants never name %s, and it is a file every deploy of every project on the box rewrites", boxapi.RoutingTablePath)
 	}
 }
 
@@ -679,7 +678,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ssh.AMD64, Front{}))}
 	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ssh.AMD64, Front{}))}
-	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, boxapi.SwitchboardControlDir, boxapi.FrontDir, ProxyConfig, boxapi.RoutingTable, boxapi.RoutingDir}
+	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, boxapi.SwitchboardControlDir, boxapi.FrontDir, ProxyConfig, boxapi.RoutingTablePath, boxapi.RoutingDir}
 
 	for _, taken := range removing(installed, beside, appsPresent{}) {
 		if slices.Contains(proxied, taken.path) && taken.action == provider.ActionDelete {
@@ -757,7 +756,7 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 		tier := environment.TierProduction
 		rig := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 		rig.answer = func(command string) (ssh.Result, bool) {
-			if !strings.HasPrefix(command, "rmdir "+shell.Quote(caddy.PinsDir)+" ") {
+			if !strings.HasPrefix(command, "rmdir "+shell.Quote(boxapi.PinsDir)+" ") {
 				return ssh.Result{}, false
 			}
 			if pinned {
@@ -771,9 +770,9 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 			t.Fatalf("destroying over %s = %v", what, err)
 		}
 
-		want := "Removed directory " + caddy.PinsDir
+		want := "Removed directory " + boxapi.PinsDir
 		if pinned {
-			want = "Kept directory " + caddy.PinsDir
+			want = "Kept directory " + boxapi.PinsDir
 		}
 		if !slices.ContainsFunc(said, func(line string) bool { return strings.HasPrefix(line, want) }) {
 			t.Errorf("destroying over %s reported %v, want a line opening %q: the report names the private key an operator still has as one ocel deleted",
@@ -785,7 +784,7 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 func TestThePinRootIsPlannedAsReclaimedOnlyIfEmptyRatherThanAsABareDelete(t *testing.T) {
 	t.Parallel()
 
-	pins := removalOf(proxyRemovals(), caddy.PinsDir)
+	pins := removalOf(proxyRemovals(), boxapi.PinsDir)
 	if pins.action != provider.ActionDelete {
 		t.Fatalf("the pin root is planned as %q, and this test states nothing about the row a destroy prints for it", pins.action)
 	}
@@ -1223,16 +1222,16 @@ func TestThePinRootIsNoWiderThanTheRootThatReadsIt(t *testing.T) {
 
 	var pins Item
 	for _, item := range ProxyItems(ssh.AMD64, Front{}) {
-		if item.Kind == KindDir && item.Name == caddy.PinsDir {
+		if item.Kind == KindDir && item.Name == boxapi.PinsDir {
 			pins = item
 		}
 	}
-	if pins.Name != caddy.PinsDir {
-		t.Fatalf("the proxy writes no %s at all, and this test states nothing about what it opens", caddy.PinsDir)
+	if pins.Name != boxapi.PinsDir {
+		t.Fatalf("the proxy writes no %s at all, and this test states nothing about what it opens", boxapi.PinsDir)
 	}
 	if pins.Mode&0o077 != 0 {
 		t.Errorf("%s is written %o, and every apply reopens a root an operator closed around their private keys to every login on the box",
-			caddy.PinsDir, pins.Mode)
+			boxapi.PinsDir, pins.Mode)
 	}
 }
 
@@ -1255,8 +1254,8 @@ func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusing
 	if group := plan.Groups[0]; group.Action == provider.ActionKeep {
 		t.Errorf("the plan over a box an older ocel rendered keeps %s whole, and the apply it would skip is what renders the config again", group.Name)
 	}
-	if rendering := planFor(plan.Groups[0].Changes, proxyConfigItem().ID()); rendering.Action != provider.ActionUpdate || !strings.Contains(rendering.Reason, boxapi.RoutingTable) {
-		t.Errorf("the plan over a box an older ocel rendered shows %s as %q (%q), want the update the apply makes: rendering it again from %s", ProxyConfig, rendering.Action, rendering.Reason, boxapi.RoutingTable)
+	if rendering := planFor(plan.Groups[0].Changes, proxyConfigItem().ID()); rendering.Action != provider.ActionUpdate || !strings.Contains(rendering.Reason, boxapi.RoutingTablePath) {
+		t.Errorf("the plan over a box an older ocel rendered shows %s as %q (%q), want the update the apply makes: rendering it again from %s", ProxyConfig, rendering.Action, rendering.Reason, boxapi.RoutingTablePath)
 	}
 	if err := boot.Apply(context.Background(), request, progress.Discard()); err != nil {
 		t.Fatalf("Apply() over a box an older ocel rendered = %v", err)
@@ -1268,7 +1267,7 @@ func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusing
 		t.Errorf("the bootstrap rewrote the routing table as\n%s\nand it is the only record of what the box routes", stored)
 	}
 	if rendered != string(mustRender(t, routed())) {
-		t.Errorf("the bootstrap left %s as\n%s\nwant it rendered again from %s", ProxyConfig, rendered, boxapi.RoutingTable)
+		t.Errorf("the bootstrap left %s as\n%s\nwant it rendered again from %s", ProxyConfig, rendered, boxapi.RoutingTablePath)
 	}
 	written := slices.IndexFunc(rig.commands(), writesProxy)
 	if written < 0 || slices.IndexFunc(rig.commands()[written:], reloadsFront) < 0 {
@@ -1292,7 +1291,7 @@ func TestADeployOverAConfigAnOlderOcelRenderedRendersItAgainEvenWhenTheTableIsUn
 		t.Errorf("unrouting an app the box never routed rewrote the table as\n%s", stored)
 	}
 	if rendered != string(mustRender(t, routed())) {
-		t.Errorf("a write left %s as the older rendering\n%s\nwant it rendered from %s: a rendering is derived, so any write that finds it stale puts it back", ProxyConfig, rendered, boxapi.RoutingTable)
+		t.Errorf("a write left %s as the older rendering\n%s\nwant it rendered from %s: a rendering is derived, so any write that finds it stale puts it back", ProxyConfig, rendered, boxapi.RoutingTablePath)
 	}
 	if rig.count(reloadsFront) != 1 {
 		t.Errorf("the config was rendered again and the proxy never reloaded it: %v", rig.commands())

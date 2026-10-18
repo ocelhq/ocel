@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func TestTheTableAdmitsEveryNameTheBoxAnswersWithACertificateAndNoOther(t *testing.T) {
@@ -65,8 +65,8 @@ func TestTheTableRefusesEveryNameAPinnedCertificateCovers(t *testing.T) {
 			{"owner":"ocel--shop--production","hostname":"deep.api.shop.example.com","pointer":"@production"},
 			{"owner":"ocel--blog--production","hostname":"blog.example.com","pointer":"@production"}],
 		"pins":[
-			{"hostname":"Shop.Example.com","path":"/var/lib/ocel/certs/shop"},
-			{"hostname":"*.shop.example.com","path":"/var/lib/ocel/certs/wild"}],
+			{"hostname":"Shop.Example.com","path":"/etc/ocel/certs/shop"},
+			{"hostname":"*.shop.example.com","path":"/etc/ocel/certs/wild"}],
 		"connector":"box.shop.example.com"}`)
 
 	for what, hostname := range map[string]string{

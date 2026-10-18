@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -29,9 +28,6 @@ type Host struct {
 	vouched  bool
 	unusable error
 
-	mu    sync.Mutex
-	tiers map[environment.Tier]bool
-
 	described sync.Mutex
 	readings  map[environment.Tier]Reading
 
@@ -39,7 +35,7 @@ type Host struct {
 }
 
 func New(box *ssh.Box, deploy Keys, pins []Pin, front Front) *Host {
-	h := &Host{Box: box, engine: NewEngine(box), deploy: deploy, pins: pins, proxyOption: front, tiers: map[environment.Tier]bool{}}
+	h := &Host{Box: box, engine: NewEngine(box), deploy: deploy, pins: pins, proxyOption: front}
 	h.front = openFront(front, frontBox{h})
 	return h
 }
@@ -47,29 +43,6 @@ func New(box *ssh.Box, deploy Keys, pins []Pin, front Front) *Host {
 func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
 
 func (h *Host) PinFor(hostname string) string { return Covering(h.pins, hostname) }
-
-func (h *Host) hasStore(ctx context.Context, tier environment.Tier) (bool, error) {
-	h.mu.Lock()
-	known := h.tiers[tier]
-	h.mu.Unlock()
-	if known {
-		return true, nil
-	}
-	rendered, err := h.Run(ctx, ssh.RootWhenAble, "ask where "+string(tier)+" keeps its entries", "if [ -x "+shell.Quote(boxstore.KeyValuesHelper)+" ] && [ -d "+shell.Quote(KeyValuesDir(tier))+" ]; then echo present; fi", nil)
-	if err != nil || strings.TrimSpace(rendered) != "present" {
-		return false, err
-	}
-	h.mu.Lock()
-	h.tiers[tier] = true
-	h.mu.Unlock()
-	return true, nil
-}
-
-func (h *Host) forgetTiers() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	clear(h.tiers)
-}
 
 func (h *Host) Install(ctx context.Context, item Item) error {
 	_, err := h.Run(ctx, ssh.Root, "write "+item.ID(), item.command(), item.stdin())

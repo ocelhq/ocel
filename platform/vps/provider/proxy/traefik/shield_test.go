@@ -40,7 +40,7 @@ func clientCertificate(t *testing.T) string {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }
 
-var origin = proxy.CertificatePair{
+var origin = boxapi.CertificatePair{
 	Certificate: "-----BEGIN CERTIFICATE-----\nORIGIN\n-----END CERTIFICATE-----\n",
 	Key:         "-----BEGIN PRIVATE KEY-----\nKEY\n-----END PRIVATE KEY-----\n",
 }

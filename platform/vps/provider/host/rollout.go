@@ -211,7 +211,7 @@ func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation 
 	}
 	state, err := h.routingTable(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%s could not be read to tell whether the proxy routes to them: %w", boxapi.RoutingTable, err)
+		return nil, fmt.Errorf("%s could not be read to tell whether the proxy routes to them: %w", boxapi.RoutingTablePath, err)
 	}
 	idle := strings.Fields(said)
 	return slices.DeleteFunc(slices.Clone(upstreams), func(upstream string) bool {
@@ -350,20 +350,20 @@ func pairReading() string {
 	return strings.Join([]string{
 		"set -e",
 		strings.TrimSuffix(routingLocked("-s"), "\n"),
-		printed(boxapi.RoutingTable),
+		printed(boxapi.RoutingTablePath),
 		printed(ProxyConfig),
 	}, "\n")
 }
 
 func (h *Host) currentPair(ctx context.Context) (routingPair, error) {
-	said, err := h.Run(ctx, ssh.RootWhenAble, "read "+boxapi.RoutingTable+" and "+ProxyConfig, pairReading(), nil)
+	said, err := h.Run(ctx, ssh.RootWhenAble, "read "+boxapi.RoutingTablePath+" and "+ProxyConfig, pairReading(), nil)
 	if err != nil {
 		return routingPair{}, err
 	}
 	lines := strings.SplitN(said, "\n", 3)
 	if len(lines) < 3 {
 		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s and %s on %s read back as %d lines (%d bytes), not one line for each", boxapi.RoutingTable, ProxyConfig, h.Named(), strings.Count(said, "\n"), len(said))
+			"%s and %s on %s read back as %d lines (%d bytes), not one line for each", boxapi.RoutingTablePath, ProxyConfig, h.Named(), strings.Count(said, "\n"), len(said))
 	}
 	var read [2][]byte
 	for at, line := range lines[:2] {
@@ -374,7 +374,7 @@ func (h *Host) currentPair(ctx context.Context) (routingPair, error) {
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
 		if err != nil {
 			return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-				"%s and %s on %s read back undecodable: %v", boxapi.RoutingTable, ProxyConfig, h.Named(), err)
+				"%s and %s on %s read back undecodable: %v", boxapi.RoutingTablePath, ProxyConfig, h.Named(), err)
 		}
 		read[at] = decoded
 	}
@@ -388,7 +388,7 @@ func (h *Host) currentTable(ctx context.Context) (routingPair, error) {
 	}
 	if pair.table == nil {
 		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s is missing on %s\nRun `ocel bootstrap` for this box's tier", boxapi.RoutingTable, h.Named())
+			"%s is missing on %s\nRun `ocel bootstrap` for this box's tier", boxapi.RoutingTablePath, h.Named())
 	}
 	return pair, nil
 }
@@ -422,8 +422,8 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return shaped, err
 		}
-		if added := slices.DeleteFunc(next.hostnames(), func(hostname string) bool {
-			return slices.Contains(table.hostnames(), hostname)
+		if added := slices.DeleteFunc(next.Hostnames(), func(hostname string) bool {
+			return slices.Contains(table.Hostnames(), hostname)
 		}); len(added) > 0 {
 			if err := h.front.RefuseRouted(ctx, added); err != nil {
 				return shaped, err
@@ -553,7 +553,7 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 	case routingMoved:
 		return "", nil, h.movedUnder(expected, result)
 	case routingUnseeded:
-		seeded := boxapi.RoutingTable
+		seeded := boxapi.RoutingTablePath
 		if file == ProxyConfig {
 			seeded += " or " + ProxyConfig
 		}
@@ -567,21 +567,21 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 
 func routingFiles(file string) string {
 	if file == "" {
-		return boxapi.RoutingTable
+		return boxapi.RoutingTablePath
 	}
-	return boxapi.RoutingTable + " and " + file
+	return boxapi.RoutingTablePath + " and " + file
 }
 
 func (h *Host) movedUnder(expected tableDigest, result ssh.Result) error {
 	return refusal.Refuse(refusal.CodeBusy,
 		"%s on %s changed during this deploy (%s, expected %s); nothing was written\nRun the deploy again",
-		boxapi.RoutingTable, h.Named(), strings.TrimSpace(result.Stderr), expected)
+		boxapi.RoutingTablePath, h.Named(), strings.TrimSpace(result.Stderr), expected)
 }
 
 type stagedFile struct{ at, staged, fed string }
 
 func stagedWrite(expected tableDigest, file string, origins []string) string {
-	files := []stagedFile{{at: boxapi.RoutingTable, staged: "staged", fed: "written"}}
+	files := []stagedFile{{at: boxapi.RoutingTablePath, staged: "staged", fed: "written"}}
 	if file == ProxyConfig {
 		files = append(files, stagedFile{at: ProxyConfig, staged: "rendered", fed: "rendering"})
 	}
@@ -620,7 +620,7 @@ func stagedWrite(expected tableDigest, file string, origins []string) string {
 
 func comparedUnder(expected tableDigest) []string {
 	return []string{
-		`current=$(sha256sum ` + shell.Quote(boxapi.RoutingTable) + ` | cut -d' ' -f1)`,
+		`current=$(sha256sum ` + shell.Quote(boxapi.RoutingTablePath) + ` | cut -d' ' -f1)`,
 		`if [ "$current" != ` + shell.Quote(string(expected)) + ` ]; then printf '%s' "$current" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
 	}
 }
@@ -686,7 +686,7 @@ func cutoverCommand(window time.Duration, retiring []string) []string {
 			argv = append(argv, "--retire", retiree)
 		}
 	}
-	return switchboardCommand(append(argv, boxapi.RoutingTable)...)
+	return switchboardCommand(append(argv, boxapi.RoutingTablePath)...)
 }
 
 func seconds(window time.Duration) string {
@@ -805,7 +805,7 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation ssh.Acting) (
 	if err != nil || !back.changed {
 		return false, err
 	}
-	_, err = h.Run(ctx, elevation, "put the proxy back onto the previous release", shell.Words(switchboardCommand("cutover", boxapi.RoutingTable)), nil)
+	_, err = h.Run(ctx, elevation, "put the proxy back onto the previous release", shell.Words(switchboardCommand("cutover", boxapi.RoutingTablePath)), nil)
 	return true, errors.Join(back.failedPlace, err)
 }
 

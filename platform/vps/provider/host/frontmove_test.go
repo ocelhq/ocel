@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddyfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
@@ -98,8 +97,8 @@ func TestMovingABoxFromOcelsOwnProxyToYourProxyPlansTakingOcelsProxyAwayAndTheOu
 	}
 	wantChange(t, move, caddy.Container, provider.ActionDelete)
 	wantChange(t, move, ProxyData, provider.ActionDelete)
-	if pins := wantChange(t, move, caddy.PinsDir, provider.ActionDelete); !strings.Contains(pins.Reason, "only if empty") {
-		t.Errorf("the move takes %s as %q, want it kept while it holds your pinned certificates", caddy.PinsDir, pins.Reason)
+	if pins := wantChange(t, move, boxapi.PinsDir, provider.ActionDelete); !strings.Contains(pins.Reason, "only if empty") {
+		t.Errorf("the move takes %s as %q, want it kept while it holds your pinned certificates", boxapi.PinsDir, pins.Reason)
 	}
 	wantChange(t, move, "/etc/traefik/dynamic/ocel.yml", provider.ActionCreate)
 	wantChange(t, move, FrontRecordPath, provider.ActionUpdate)
@@ -235,10 +234,10 @@ func boxRecordedWithCertificatesFor(t *testing.T, tier environment.Tier, recorde
 	}
 	state.Connector = "box.example.com"
 	state.PreviewBase = "preview.example.com"
-	state.Pins = []Pin{{Hostname: "pinned.example.com", Path: caddy.PinsDir + "/pinned"}}
+	state.Pins = []Pin{{Hostname: "pinned.example.com", Path: boxapi.PinsDir + "/pinned"}}
 	state.Shields = []Shield{{
 		Hostname: "origin.example.com", Owner: surface, ClientCAs: []string{certificate},
-		OriginCertificate: proxy.CertificatePair{Certificate: certificate, Key: "KEY"},
+		OriginCertificate: boxapi.CertificatePair{Certificate: certificate, Key: "KEY"},
 	}}
 	table := string(mustWrite(t, state))
 	box := bootstrappedBehind(t, tier, recorded, &table, nil)

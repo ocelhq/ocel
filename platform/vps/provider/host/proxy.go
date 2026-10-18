@@ -109,7 +109,7 @@ func ProxyItems(arch string, front Front) []Item {
 		{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
 			Note: "routes every hostname and switches releases"},
 		dir(proxyRoot, 0o750, stateOwner, ""),
-		dir(caddy.PinsDir, 0o700, rootOwner, "your pinned certificates"),
+		dir(boxapi.PinsDir, 0o700, rootOwner, "your pinned certificates"),
 		dir(boxapi.RoutingDir, 0o750, stateOwner, ""),
 		proxyConfigItem(),
 		routingTableItem(),
@@ -137,8 +137,11 @@ func seeded(table RoutingTable) ([]byte, []byte) {
 
 func proxyConfigItem() Item {
 	return Item{
-		Kind:    KindProxyConfig,
-		Name:    ProxyConfig,
+		Kind:      KindProxyConfig,
+		Name:      ProxyConfig,
+		script:    func(config Item) string { return seedingRouting(routingTable(&config), &config) },
+		survey:    seededProbe,
+		rewritten: true,
 		Mode:    0o640,
 		Owner:   stateOwner,
 		Content: seededRendering,
@@ -153,24 +156,22 @@ func routingTableItem() Item {
 
 func routingTable(config *Item) Item {
 	return Item{
-		Kind:     KindRoutingTable,
-		Name:     boxapi.RoutingTable,
-		Mode:     0o640,
-		Owner:    stateOwner,
-		Content:  seededRows,
-		Note:     "seeded here, rewritten by deploys",
-		rendered: config,
+		Kind:      KindRoutingTable,
+		Name:      boxapi.RoutingTablePath,
+		Mode:      0o640,
+		Owner:     stateOwner,
+		Content:   seededRows,
+		Note:      "seeded here, rewritten by deploys",
+		script:    func(table Item) string { return seedingRouting(table, config) },
+		survey:    seededProbe,
+		rewritten: true,
 	}
 }
 
-func rewrittenByDeploys(item Item) bool {
-	return item.Kind == KindProxyConfig || item.Kind == KindRoutingTable
-}
-
-func seedingRouting(table Item) string {
+func seedingRouting(table Item, config *Item) string {
 	seeded := []Item{table}
-	if table.rendered != nil {
-		seeded = append(seeded, *table.rendered)
+	if config != nil {
+		seeded = append(seeded, *config)
 	}
 	var script strings.Builder
 	script.WriteString("set -e\n")
@@ -186,10 +187,10 @@ func seedingRouting(table Item) string {
 			fmt.Sprintf("chown %s:%s \"$staged\"\nchmod %04o \"$staged\"\n", item.Owner, item.Owner, item.Mode) +
 			"mv \"$staged\" " + at + "\n"
 	}
-	if table.rendered == nil {
+	if config == nil {
 		script.WriteString("if [ ! -f " + shell.Quote(table.Name) + " ]; then\n" + seed(table) + "fi\n")
 	} else {
-		config := *table.rendered
+		config := *config
 		script.WriteString("if [ ! -f " + shell.Quote(table.Name) + " ]; then\n" + seed(table) + seed(config) +
 			"elif [ ! -f " + shell.Quote(config.Name) + " ]; then\n" + seed(config) + "fi\n")
 	}
@@ -223,6 +224,8 @@ func networkItem() Item {
 	return Item{
 		Kind:    KindNetwork,
 		Name:    ProxyNetwork,
+		script:  func(Item) string { return networkCommand() },
+		survey:  func(Item) string { return networkProbe() },
 		Owner:   rootOwner,
 		Content: []byte(networkFact + "\n"),
 	}
@@ -271,7 +274,7 @@ func frontProxy() boxContainer {
 		command: caddy.Command(),
 		binds: []string{
 			proxyRoot + ":" + caddy.ConfigDir + ":ro",
-			caddy.PinsDir + ":" + caddy.PinsMount + ":ro",
+			boxapi.PinsDir + ":" + caddy.PinsMount + ":ro",
 			ProxyData + ":" + caddy.DataMount,
 			boxapi.FrontDir + ":" + boxapi.FrontDir + ":ro",
 			SwitchboardDir + ":" + switchboardMount + ":ro",
@@ -296,7 +299,8 @@ func (s boxContainer) item(note string) Item {
 		Content: s.facts(),
 		Slow:    true,
 		Note:    note,
-		box:     &s,
+		script:  func(Item) string { return s.writing(containerRising) },
+		survey:  func(Item) string { return s.probe() },
 	}
 }
 
@@ -574,10 +578,10 @@ func proxyRemovals() []removal {
 		taking(KindDir, ProxyData, "certificates and acme key"),
 		taking(KindNetwork, ProxyNetwork, "kept while anything is attached"),
 		taking(KindProxyConfig, ProxyConfig, ""),
-		taking(KindRoutingTable, boxapi.RoutingTable, "every app's routes"),
+		taking(KindRoutingTable, boxapi.RoutingTablePath, "every app's routes"),
 		taking(KindDir, boxapi.RoutingDir, ""),
 		taking(KindDir, proxyRoot, ""),
-		sharing(caddy.PinsDir, "only if empty"),
+		sharing(boxapi.PinsDir, "only if empty"),
 		taking(KindFile, FrontRecordPath, "which proxy fronts this box"),
 	}
 }

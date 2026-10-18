@@ -16,8 +16,8 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/seal"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/queues"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }

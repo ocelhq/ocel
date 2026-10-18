@@ -17,4 +17,26 @@ type Space struct {
 	Total uint64 `json:"total"`
 }
 
-const EnvSourceSyncCommand = "envsourcesync"
+const (
+	EnvSourceSyncCommand = "envsourcesync"
+	SealCommand          = "seal"
+	RecordsCommand       = "kv"
+)
+
+const (
+	SealVerbInit = "init"
+	SealVerbSeal = "seal"
+	SealVerbOpen = "open"
+)
+
+const (
+	RecordsVerbGet           = "get"
+	RecordsVerbList          = "list"
+	RecordsVerbCompareAndSet = "cas"
+)
+
+const (
+	ExitRefused  = 2
+	ExitNotFound = 3
+	ExitStale    = 4
+)

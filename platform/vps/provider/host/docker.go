@@ -51,6 +51,8 @@ func engineItem() Item {
 	return Item{
 		Kind:    KindEngine,
 		Name:    dockerEngine,
+		script:  func(Item) string { return engineCommand() },
+		survey:  func(Item) string { return engineProbe() },
 		Owner:   rootOwner,
 		Content: []byte(engineFact),
 		Slow:    true,
@@ -63,13 +65,12 @@ func adoptedEngine(version string) string {
 }
 
 func unitItem() Item {
-	return Item{
-		Kind:    KindUnit,
+	return systemdUnit(Item{
 		Name:    dockerUnit,
 		Owner:   rootOwner,
 		Content: []byte(unitFacts),
 		Slow:    true,
-	}
+	})
 }
 
 func keptEngine() removal {

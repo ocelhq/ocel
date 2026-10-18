@@ -339,11 +339,7 @@ func TestAPreviewWithAStoreServesItOnOneLabelUnderTheSameWildcard(t *testing.T) 
 	if strings.Contains(claimed[0], "pr-7") {
 		t.Errorf("the store is claimed on %s, which names the preview", claimed[0])
 	}
-	var recorded []boxapi.Claimed
-	for _, claim := range claimedOn(t, m) {
-		recorded = append(recorded, boxapi.Claimed(claim))
-	}
-	if base := boxapi.StoreBase(recorded, surface, "pr-7"); base != "https://"+claimed[0] {
+	if base := boxapi.StoreBase(claimedOn(t, m), surface, "pr-7"); base != "https://"+claimed[0] {
 		t.Errorf("StoreBase = %q, want https://%s: the agent reads the store's hostname from what the preview claimed", base, claimed[0])
 	}
 

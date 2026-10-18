@@ -111,7 +111,7 @@ func (f Front) listCertifiedHostnames(table RoutingTable) []string {
 		wildcard.Domains = []string{edge.PreviewWildcard(table.PreviewBase)}
 	}
 	var certified []string
-	for _, hostname := range table.hostnames() {
+	for _, hostname := range table.Hostnames() {
 		shield, shielded := spec.ShieldOf(hostname)
 		switch {
 		case shielded && shield.OriginCertificate.Certificate != "":
@@ -150,7 +150,7 @@ func (m frontMove) listRemovals() []removal {
 			taking(KindProxyConfig, ProxyConfig, ""),
 			taking(KindDir, ProxyData, "certificates and acme key"),
 			taking(KindDir, proxyRoot, ""),
-			sharing(caddy.PinsDir, "only if empty: it holds your pinned certificates"),
+			sharing(boxapi.PinsDir, "only if empty: it holds your pinned certificates"),
 		}
 	}
 	var removed []removal
@@ -166,7 +166,7 @@ func (m frontMove) listRemovals() []removal {
 	return removed
 }
 
-var movedNames = []string{caddy.Container, SwitchboardContainer, proxyRoot, caddy.PinsDir, ProxyData, ProxyConfig, sudoersCaddyReload, FrontRecordPath}
+var movedNames = []string{caddy.Container, SwitchboardContainer, proxyRoot, boxapi.PinsDir, ProxyData, ProxyConfig, sudoersCaddyReload, FrontRecordPath}
 
 func (m frontMove) splitOffGroup(core []provider.Change) (provider.ChangeGroup, []provider.Change) {
 	group := provider.ChangeGroup{
@@ -257,7 +257,7 @@ func (m *frontMove) awaitFront(ctx context.Context, tier environment.Tier, progr
 			return err
 		}
 	}
-	waiting, failures, err := m.host.awaitSwitchboardAnswers(ctx, m.table.hostnames(), m.host.ProbeRouter)
+	waiting, failures, err := m.host.awaitSwitchboardAnswers(ctx, m.table.Hostnames(), m.host.ProbeRouter)
 	if err != nil || len(waiting) == 0 {
 		return err
 	}

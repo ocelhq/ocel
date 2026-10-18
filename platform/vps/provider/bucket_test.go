@@ -19,8 +19,8 @@ import (
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -195,7 +195,7 @@ func sealingStore(t *testing.T, declared ...string) string {
 		}
 	}
 	for _, command := range machine.commands() {
-		if strings.Contains(command, boxstore.SealHelper) {
+		if strings.Contains(command, shell.Words([]string{boxapi.LiveBinary, boxapi.SealCommand})) {
 			return command
 		}
 	}

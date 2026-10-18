@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -48,13 +49,13 @@ func placedOnTheBox(t *testing.T, vm machine, at string, names []string, until t
 	}
 	vm.ssh(t, "sudo mkdir -p "+quote(at[:strings.LastIndex(at, "/")]))
 	for path, block := range map[string][]byte{
-		caddy.PinCertificate(at): pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw}),
-		caddy.PinKey(at):         pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: sealed}),
+		boxapi.PinCertificate(at): pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw}),
+		boxapi.PinKey(at):         pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: sealed}),
 	} {
 		vm.ssh(t, "printf %s "+quote(base64.StdEncoding.EncodeToString(block))+
 			" | base64 -d | sudo tee "+quote(path)+" >/dev/null")
 	}
-	vm.ssh(t, "sudo chmod 0600 "+quote(caddy.PinKey(at)))
+	vm.ssh(t, "sudo chmod 0600 "+quote(boxapi.PinKey(at)))
 }
 
 func (vm machine) proxyLogBytes(t *testing.T) int {
@@ -82,7 +83,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	one := provisioned(t, p, "one")
 	promotes(t, p, site.stack, "p-one", "one", one, 1)
 
-	at := caddy.PinsDir + "/live"
+	at := boxapi.PinsDir + "/live"
 	placedOnTheBox(t, vm, at, []string{caddy.Container, liveHostname}, 90*24*time.Hour)
 	pinned := vm.provider(t, withPins(map[string]string{caddy.Container: at}))
 	defer closing(t, pinned)
@@ -131,7 +132,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	at := caddy.PinsDir + "/live-pin"
+	at := boxapi.PinsDir + "/live-pin"
 	placedOnTheBox(t, vm, at, []string{"*.preview.example.invalid"}, 11*24*time.Hour)
 	pinned := vm.provider(t, withPins(map[string]string{"*.preview.example.invalid": at}))
 	defer closing(t, pinned)
@@ -157,7 +158,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	if err := pinned.Certificates().Discard(ctx, cert, progress.Discard()); err != nil {
 		t.Errorf("Discard() = %v, want nil", err)
 	}
-	if !vm.exists(t, caddy.PinKey(at)) {
-		t.Errorf("%s is gone from the box, and ocel never places or removes key material here", caddy.PinKey(at))
+	if !vm.exists(t, boxapi.PinKey(at)) {
+		t.Errorf("%s is gone from the box, and ocel never places or removes key material here", boxapi.PinKey(at))
 	}
 }

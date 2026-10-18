@@ -51,16 +51,8 @@ func (h *Host) RouteResource(ctx context.Context, route AppRoute) error {
 func (h *Host) UnrouteApp(ctx context.Context, key RouteKey) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		state.Routes = Unrouting(state.Routes, func(route AppRoute) bool { return route.RouteKey == key })
-		var dropped []string
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
-			drops := claim.Owner == key.Owner && claim.Pointer == key.Pointer && claim.App == key.App
-			if drops {
-				dropped = append(dropped, claim.Hostname)
-			}
-			return drops
-		})
-		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool {
-			return held.Owner == key.Owner && slices.Contains(dropped, held.Hostname)
+			return claim.Owner == key.Owner && claim.Pointer == key.Pointer && claim.App == key.App
 		})
 		return state, nil
 	})
@@ -106,7 +98,6 @@ func (h *Host) DisclaimHost(ctx context.Context, hostname, owner string) error {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
 			return claim.Hostname == hostname && claim.Owner == owner
 		})
-		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held.Hostname == hostname && held.Owner == owner })
 		return state, nil
 	})
 }
@@ -124,7 +115,6 @@ func (h *Host) DisclaimSurface(ctx context.Context, owner string) error {
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool { return claim.Owner == owner })
 		state.Shields = DropShields(state.Shields, func(shield Shield) bool { return shield.Owner == owner })
-		state.Tunneled = dropTunneledHosts(state.Tunneled, func(held TunneledHost) bool { return held.Owner == owner })
 		state.Gates = dropGates(state.Gates, owner)
 		return state, nil
 	})
@@ -185,16 +175,25 @@ func (h *Host) PreviewEntry(ctx context.Context) (string, error) {
 }
 
 func (h *Host) InstallPreviewEntry(ctx context.Context, base string) error {
+	return h.installPreviewEntry(ctx, base, nil)
+}
+
+func (h *Host) installPreviewEntry(ctx context.Context, base string, through func(RoutingTable) error) error {
 	if err := RefuseInvalidPreviewBase(base); err != nil {
 		return err
 	}
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
+		if through != nil {
+			if err := through(state); err != nil {
+				return RoutingTable{}, err
+			}
+		}
 		if state.PreviewBase != "" && state.PreviewBase != base {
 			return RoutingTable{}, refusal.Refuse(refusal.CodeBusy,
 				"this box already answers previews on %s, not %s\nRun `ocel preview rm` and `ocel domain release --preview` first",
 				edge.PreviewWildcard(state.PreviewBase), edge.PreviewWildcard(base))
 		}
-		state.PreviewBase = base
+		state.PreviewBase, state.PreviewTunneled = base, through != nil
 		return state, nil
 	})
 }
@@ -209,7 +208,7 @@ func (h *Host) RemovePreviewEntry(ctx context.Context, base string) error {
 				"this box still claims %s under %s\nRun `ocel preview rm` first",
 				strings.Join(claimed, ", "), edge.PreviewWildcard(base))
 		}
-		state.PreviewBase = ""
+		state.PreviewBase, state.PreviewTunneled = "", false
 		return state, nil
 	})
 }
@@ -258,7 +257,7 @@ func (h *Host) proxyInspected(ctx context.Context, tier environment.Tier) (bool,
 	return false, refusal.Refuse(refusal.CodeInvalid,
 		"%s on %s declares %s, which ocel never renders\n"+
 			"Remove %s and run `%s` to render it again from %s",
-		ProxyConfig, h.Named(), declared, ProxyConfig, provider.BootstrapCommand(tier), boxapi.RoutingTable)
+		ProxyConfig, h.Named(), declared, ProxyConfig, provider.BootstrapCommand(tier), boxapi.RoutingTablePath)
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {
@@ -303,7 +302,7 @@ func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, eleva
 
 func (h *Host) serving(ctx context.Context, loading, reloading bool, served proxy.Spec, elevation ssh.Acting) error {
 	if loading {
-		if _, err := h.Run(ctx, elevation, "load the switchboard onto "+boxapi.RoutingTable, shell.Words(switchboardCommand("load", boxapi.RoutingTable)), nil); err != nil {
+		if _, err := h.Run(ctx, elevation, "load the switchboard onto "+boxapi.RoutingTablePath, shell.Words(switchboardCommand("load", boxapi.RoutingTablePath)), nil); err != nil {
 			return err
 		}
 	}

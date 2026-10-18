@@ -12,8 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 type certificates struct{ *Provider }
@@ -83,7 +83,7 @@ func (p *Provider) pinnedLeaf(ctx context.Context, path string) (certs.Leaf, err
 	if err != nil {
 		return certs.Leaf{}, err
 	}
-	return certs.Parse(caddy.PinCertificate(path), block)
+	return certs.Parse(boxapi.PinCertificate(path), block)
 }
 
 func (p *Provider) pinnedHealth(ctx context.Context, path, hostname string, health provider.CertificateHealth) (provider.CertificateHealth, error) {

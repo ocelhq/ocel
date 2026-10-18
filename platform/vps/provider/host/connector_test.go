@@ -154,13 +154,13 @@ esac`)
 		}
 	}
 
-	stated := Item{
+	stated := systemdUnit(Item{
 		Kind:    KindUnit,
 		Name:    ConnectorUnit,
 		Owner:   rootOwner,
 		Content: unitWatchFacts(connectorUnit(), []byte("#!/bin/sh\n"), connectorConfig()),
 		Watch:   []string{unit, binary, config},
-	}
+	})
 	cmd := exec.Command("/bin/sh", "-c", stated.probe())
 	cmd.Env = []string{"PATH=" + path}
 	var stderr strings.Builder

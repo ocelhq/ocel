@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 type Proxy interface {
@@ -50,12 +51,7 @@ type Permission struct {
 type Shield struct {
 	Hostname          string
 	ClientCAs         []string
-	OriginCertificate CertificatePair
-}
-
-type CertificatePair struct {
-	Certificate string `json:"certificate"`
-	Key         string `json:"key"`
+	OriginCertificate boxapi.CertificatePair
 }
 
 type OriginFile struct {

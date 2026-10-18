@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -78,7 +79,7 @@ func refuseWrites(t *testing.T, commands []string) {
 				t.Errorf("planning ran %q, and a plan changes nothing on the box:\n%s", write, command)
 			}
 		}
-		if strings.Contains(command, boxstore.SealHelper) && !strings.Contains(command, "'open'") {
+		if strings.Contains(command, shell.Words([]string{boxapi.LiveBinary, boxapi.SealCommand})) && !strings.Contains(command, "'open'") {
 			t.Errorf("planning sealed a value, and a plan keeps nothing on the box:\n%s", command)
 		}
 	}

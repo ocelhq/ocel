@@ -15,9 +15,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/officialimages"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -145,7 +145,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", host.KeptPath(environment.TierProduction, "shop-prod-web-r0a1b2c3d-main-pg"))
 		}
 	}
-	sealing := machine.at(boxstore.SealHelper)
+	sealing := machine.at(shell.Words([]string{boxapi.LiveBinary, boxapi.SealCommand}))
 	if sealing < 0 {
 		t.Fatal("no value was sealed")
 	}

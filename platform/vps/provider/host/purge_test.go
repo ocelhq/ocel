@@ -11,15 +11,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 func TestPurgingAProjectsValuesLeavesNothingOfItOnTheBox(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	here := newHelperHere(t)
-	store := variablestore.Store{KeyValues: boxstore.NewKeyValues(here), Cipher: fake.NewCipher()}
+	root := t.TempDir()
+	if err := os.MkdirAll(boxapi.KeyValuesDir(root, environment.TierProduction), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	store := variablestore.Store{KeyValues: boxapi.KeyValues{Root: root}, Cipher: fake.NewCipher()}
 	purged := variablestore.Scope{Project: "j-manual-express", Tier: environment.TierProduction}
 	shared := variablestore.Scope{Project: "shared", Tier: environment.TierProduction}
 	consumer := variablestore.Scope{Project: "consumer", Tier: environment.TierProduction}
@@ -55,7 +57,7 @@ func TestPurgingAProjectsValuesLeavesNothingOfItOnTheBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	root := keyValuesDir(t, here.root)
+	root = boxapi.KeyValuesDir(root, environment.TierProduction)
 	partitions := map[string]records.Partition{
 		"the project's values":                     variablestore.ValuesPartition(purged),
 		"what references the project":              variablestore.ReferencesPartition(purged),

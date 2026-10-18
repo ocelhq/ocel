@@ -20,10 +20,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
 
@@ -58,7 +58,7 @@ type machine struct {
 
 	tunnel          *host.Tunnel
 	retired         []host.Tunnel
-	tunneled        []host.TunneledHost
+	previewTunneled bool
 	tunnelRunning   string
 	tunnelsReserved int
 	tunnelEvents    tunnelEvents
@@ -256,7 +256,6 @@ func (m *machine) DisclaimHost(_ context.Context, hostname, owner string) error 
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool {
 		return claim.Hostname == hostname && claim.Owner == owner
 	})
-	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Hostname == hostname && held.Owner == owner })
 	return nil
 }
 
@@ -268,7 +267,6 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	m.claims = host.Disclaiming(m.claims, func(claim host.HostClaim) bool { return claim.Owner == owner })
 	m.shields = host.DropShields(m.shields, func(shield host.Shield) bool { return shield.Owner == owner })
 	delete(m.gates, owner)
-	m.tunneled = slices.DeleteFunc(m.tunneled, func(held host.TunneledHost) bool { return held.Owner == owner })
 	return nil
 }
 
@@ -378,7 +376,7 @@ func (m *machine) InstallPreviewEntry(_ context.Context, base string) error {
 		return refusal.Refuse(refusal.CodeBusy,
 			"this box already answers previews on %s", edge.PreviewWildcard(m.previewBase))
 	}
-	m.previewBase = base
+	m.previewBase, m.previewTunneled = base, false
 	return nil
 }
 
@@ -388,7 +386,7 @@ func (m *machine) RemovePreviewEntry(_ context.Context, base string) error {
 		return err
 	}
 	if m.previewBase == base {
-		m.previewBase = ""
+		m.previewBase, m.previewTunneled = "", false
 	}
 	return nil
 }
@@ -1197,7 +1195,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *t
 	t.Parallel()
 
 	const pinned = "pr-7.preview.example.com"
-	at := caddy.PinsDir + "/wildcard"
+	at := boxapi.PinsDir + "/wildcard"
 	m := aMachine()
 	m.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
 	front := edgeOver(m, fake.NewKeyValues())

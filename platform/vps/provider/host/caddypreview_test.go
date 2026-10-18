@@ -291,10 +291,10 @@ func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingEls
 		rig.answer = servesPair(rig.bench, &rig.recorded, &config)
 		_, err := NewBootstrap(rig.host(), testVendor, "shop").described(context.Background(), currentHost())
 		if refused := err != nil; refused != box.refused {
-			t.Errorf("describing %s = %v: a config that may order a certificate without the switchboard's word spends the box's CA allowance on any name pointed at it, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, boxapi.RoutingTable)
+			t.Errorf("describing %s = %v: a config that may order a certificate without the switchboard's word spends the box's CA allowance on any name pointed at it, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, boxapi.RoutingTablePath)
 		}
-		if err != nil && strings.Contains(err.Error(), "remove "+boxapi.RoutingTable) {
-			t.Errorf("describing %s tells the operator to remove %s, the only record of what every project on the box routes: %v", what, boxapi.RoutingTable, err)
+		if err != nil && strings.Contains(err.Error(), "remove "+boxapi.RoutingTablePath) {
+			t.Errorf("describing %s tells the operator to remove %s, the only record of what every project on the box routes: %v", what, boxapi.RoutingTablePath, err)
 		}
 	}
 }

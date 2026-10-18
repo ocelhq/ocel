@@ -22,8 +22,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	source "github.com/ocelhq/ocel/platform/vps/box/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const containerID = "021294b7a2a44cb5a12500a19d9fa7842f10fae35f15cfe25105844c754253d8"

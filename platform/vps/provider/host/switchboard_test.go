@@ -16,7 +16,7 @@ import (
 )
 
 func loadsSwitchboard(command string) bool {
-	return strings.Contains(command, shell.Words(switchboardCommand("load", boxapi.RoutingTable)))
+	return strings.Contains(command, shell.Words(switchboardCommand("load", boxapi.RoutingTablePath)))
 }
 
 func reloadsFront(command string) bool {
@@ -71,7 +71,7 @@ func TestAPinnedPairLoadsTheSwitchboardBeforeTheFrontProxyReloadsOntoIt(t *testi
 	if err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
-	loaded, reloaded := box.at(shell.Words(switchboardCommand("load", boxapi.RoutingTable))), -1
+	loaded, reloaded := box.at(shell.Words(switchboardCommand("load", boxapi.RoutingTablePath))), -1
 	for at, command := range box.commands() {
 		if reloadsFront(command) {
 			reloaded = at
@@ -258,7 +258,7 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 		"no new privileges":                "--security-opt " + noNewPrivileges,
 		"the front proxy's socket":         "--front " + boxapi.FrontSocket,
 		"the front socket's directory":     "--volume " + boxapi.FrontDir + ":" + boxapi.FrontDir,
-		"the table it serves":              "--table " + boxapi.RoutingTable,
+		"the table it serves":              "--table " + boxapi.RoutingTablePath,
 	} {
 		if !strings.Contains(joined, wanted) {
 			t.Errorf("the switchboard runs as %q, which contains no %s (%s)", joined, what, wanted)
@@ -405,12 +405,7 @@ func TestASwitchboardRestoredIsTheOneBootstrapRunsWithTheBinaryTheBoxHas(t *test
 		if err := b.fronted(front).CheckProxy(context.Background()); err != nil {
 			t.Fatalf("%s: CheckProxy() = %v, want the switchboard restored", what, err)
 		}
-		var bootstrapped boxContainer
-		for _, item := range ProxyItems(ssh.AMD64, front) {
-			if item.Kind == KindContainer && item.Name == SwitchboardContainer {
-				bootstrapped = *item.box
-			}
-		}
+		bootstrapped := switchboardBox(switchboardBinary(ssh.AMD64), front)
 		want := slices.Clone(bootstrapped.create())
 		labelled := slices.Index(want, configLabel+"="+bootstrapped.config)
 		want[labelled] = configLabel + "=" + sum

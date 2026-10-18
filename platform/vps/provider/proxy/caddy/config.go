@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
@@ -286,7 +287,7 @@ func loaded(pins []proxy.Pin) (*certificates, []connectionPolicy, error) {
 			return nil, nil, fmt.Errorf("the certificate pinned at %q names no hostname it serves", pin.Path)
 		}
 		if !slices.ContainsFunc(files, func(file loadFile) bool { return file.Tags[0] == mounted }) {
-			files = append(files, loadFile{Certificate: PinCertificate(mounted), Key: PinKey(mounted), Tags: []string{mounted}})
+			files = append(files, loadFile{Certificate: boxapi.PinCertificate(mounted), Key: boxapi.PinKey(mounted), Tags: []string{mounted}})
 		}
 		selecting = append(selecting, connectionPolicy{
 			Match:     &handshakeMatch{SNI: []string{strings.ToLower(pin.Hostname)}},
@@ -407,9 +408,9 @@ func wildcarded(hostname string) int {
 }
 
 func pinMount(path string) (string, error) {
-	leaf, pinned := Pinned(path)
+	leaf, pinned := boxapi.Pinned(path)
 	if !pinned {
-		return "", fmt.Errorf("the certificate pinned at %q is not directly under %s", path, PinsDir)
+		return "", fmt.Errorf("the certificate pinned at %q is not directly under %s", path, boxapi.PinsDir)
 	}
 	return PinsMount + "/" + leaf, nil
 }

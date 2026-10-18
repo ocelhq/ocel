@@ -36,9 +36,8 @@ func readBack(t *testing.T, box *claimBench) RoutingTable {
 func tunneledBox(t *testing.T) (*claimBench, Tunnel) {
 	t.Helper()
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, Tunneled: true}}
 	state.Tunnel = &Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
-	state.Tunneled = []TunneledHost{{Hostname: claimed, Owner: surface}}
 	return claimingBox(t, state), *state.Tunnel
 }
 
@@ -204,13 +203,13 @@ func TestATunneledHostnameIsLeftOutOfTheProxyAndRefusedByTheSwitchboardAroundThe
 		return state
 	}())
 
-	if err := box.host().TunnelHost(context.Background(), TunneledHost{Hostname: claimed, Owner: surface}, "ocel-203-0-113-10-0a1b2c3d"); err != nil {
-		t.Fatalf("TunnelHost() = %v", err)
+	if err := box.host().ClaimThrough(context.Background(), "ocel-203-0-113-10-0a1b2c3d", []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+		t.Fatalf("ClaimThrough() = %v", err)
 	}
 
 	table := readBack(t, box)
-	if !slices.Equal(table.Tunneled, []TunneledHost{{Hostname: claimed, Owner: surface}}) {
-		t.Errorf("the routing table tunnels %v, want %s for %s", table.Tunneled, claimed, surface)
+	if !slices.Equal(table.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, Tunneled: true}}) {
+		t.Errorf("the routing table claims %v, want %s claimed through the tunnel for %s", table.Claims, claimed, surface)
 	}
 	if rendered := string(mustRender(t, table)); strings.Contains(rendered, claimed) {
 		t.Errorf("the proxy config names %s, want it left out: the proxy on the box never answers a tunneled hostname, or asks for its certificate", claimed)
@@ -231,10 +230,10 @@ func TestAHostnameIsTunneledOnlyThroughTheTunnelTheBoxReserves(t *testing.T) {
 	t.Parallel()
 	box, _ := tunneledBox(t)
 
-	err := box.host().TunnelHost(context.Background(), TunneledHost{Hostname: "blog.example.com", Owner: surface}, "ocel-203-0-113-10-ffffffff")
+	err := box.host().ClaimThrough(context.Background(), "ocel-203-0-113-10-ffffffff", []HostClaim{{Hostname: "blog.example.com", Owner: surface, Pointer: pointed}})
 
 	if !isBusy(err) {
-		t.Errorf("TunnelHost() through a tunnel the box no longer reserves = %v, want it refused busy", err)
+		t.Errorf("ClaimThrough() a tunnel the box no longer reserves = %v, want it refused busy", err)
 	}
 }
 
@@ -245,8 +244,8 @@ func TestTheTunnelIsReleasedOnlyOnceNoHostnameIsTunneled(t *testing.T) {
 	if retired, err := box.host().ReleaseTunnel(context.Background()); err != nil || len(retired) != 0 {
 		t.Fatalf("ReleaseTunnel() with %s tunneled = %v, %v; want nothing released", claimed, retired, err)
 	}
-	if err := box.host().RemoveTunneledHost(context.Background(), TunneledHost{Hostname: claimed, Owner: surface}); err != nil {
-		t.Fatalf("RemoveTunneledHost() = %v", err)
+	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	retired, err := box.host().ReleaseTunnel(context.Background())
 	if err != nil || !slices.Equal(retired, []Tunnel{reserved}) {
@@ -277,16 +276,16 @@ func TestDisclaimingAHostnameOrASurfaceStopsTunnelingIt(t *testing.T) {
 	if err := box.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatal(err)
 	}
-	if tunneled := readBack(t, box).Tunneled; len(tunneled) != 0 {
-		t.Errorf("DisclaimHost() left %v tunneled", tunneled)
+	if table := readBack(t, box); table.HasTunneled() {
+		t.Errorf("DisclaimHost() left %v tunneled", table.Claims)
 	}
 
 	box, _ = tunneledBox(t)
 	if err := box.host().DisclaimSurface(context.Background(), surface); err != nil {
 		t.Fatal(err)
 	}
-	if tunneled := readBack(t, box).Tunneled; len(tunneled) != 0 {
-		t.Errorf("DisclaimSurface() left %v tunneled", tunneled)
+	if table := readBack(t, box); table.HasTunneled() {
+		t.Errorf("DisclaimSurface() left %v tunneled", table.Claims)
 	}
 }
 
@@ -296,18 +295,17 @@ func TestADroppedStoreStopsTunnelingItsHostnameSoAnotherSurfaceCanClaimIt(t *tes
 	state := routed()
 	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-store:9000"})
 	state.Claims = []HostClaim{
-		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"},
-		{Hostname: storeHostname, Owner: surface, Pointer: pointed, App: boxapi.StoreLabel},
+		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web", Tunneled: true},
+		{Hostname: storeHostname, Owner: surface, Pointer: pointed, App: boxapi.StoreLabel, Tunneled: true},
 	}
 	state.Tunnel = &Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1", Address: "5a6b7c8d-1.cfargotunnel.com"}
-	state.Tunneled = []TunneledHost{{Hostname: claimed, Owner: surface}, {Hostname: storeHostname, Owner: surface}}
 	box := claimingBox(t, state)
 
 	if err := box.host().UnrouteApp(context.Background(), keyed(boxapi.StoreLabel)); err != nil {
 		t.Fatalf("UnrouteApp() = %v", err)
 	}
-	if tunneled := readBack(t, box).Tunneled; !slices.Equal(tunneled, []TunneledHost{{Hostname: claimed, Owner: surface}}) {
-		t.Errorf("dropping the store left %v tunneled, want only %s: nothing of %s answers %s any more", tunneled, claimed, surface, storeHostname)
+	if table := readBack(t, box); table.IsTunneled(storeHostname) || !table.IsTunneled(claimed) {
+		t.Errorf("dropping the store left %v, want only %s tunneled: nothing of %s answers %s any more", table.Claims, claimed, surface, storeHostname)
 	}
 
 	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: storeHostname, Owner: otherSurface, Pointer: pointed, App: boxapi.StoreLabel}}); err != nil {
@@ -419,7 +417,7 @@ func tokenPathOf(t *testing.T, tunnel Tunnel) string {
 func TestReleasingATunnelLeavesTheReplacementAnotherClaimStartedAfterIt(t *testing.T) {
 	t.Parallel()
 	box, retired := tunneledBox(t)
-	if err := box.host().RemoveTunneledHost(context.Background(), TunneledHost{Hostname: claimed, Owner: surface}); err != nil {
+	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := box.host().ReleaseTunnel(context.Background()); err != nil {
@@ -493,7 +491,7 @@ func TestATunnelStartsOnlyWhileTheTableItCheckedIsTheOneOnTheBox(t *testing.T) {
 	if err := os.WriteFile(moved, []byte("a table another run wrote since\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(routingLock, stand.dir, boxapi.RoutingTable, moved).Replace(box.commands()[start]))
+	command := exec.Command("/bin/sh", "-c", strings.NewReplacer(routingLock, stand.dir, boxapi.RoutingTablePath, moved).Replace(box.commands()[start]))
 	command.Env = append(os.Environ(), "PATH="+stand.bin+":"+os.Getenv("PATH"))
 	out, _ := command.CombinedOutput()
 
@@ -513,7 +511,7 @@ func TestATunnelIsStartedAndRemovedOnlyUnderTheLockEveryRoutingWriterTakes(t *te
 	if err := box.host().RunTunnel(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
 		t.Fatalf("RunTunnel() = %v", err)
 	}
-	if err := box.host().RemoveTunneledHost(context.Background(), TunneledHost{Hostname: claimed, Owner: surface}); err != nil {
+	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := box.host().ReleaseTunnel(context.Background()); err != nil {

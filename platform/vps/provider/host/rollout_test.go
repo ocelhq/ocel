@@ -128,7 +128,7 @@ func (f *rolloutBench) state(t *testing.T) RoutingTable {
 	f.mu.Unlock()
 	state, err := ReadRoutingTable([]byte(recorded))
 	if err != nil {
-		t.Fatalf("%s was left as %q, which the next deploy cannot read: %v", boxapi.RoutingTable, recorded, err)
+		t.Fatalf("%s was left as %q, which the next deploy cannot read: %v", boxapi.RoutingTablePath, recorded, err)
 	}
 	return state
 }
@@ -666,7 +666,7 @@ func TestTheCutoverConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUps
 	for _, wanted := range []string{
 		shell.Quote("--retire") + " " + shell.Quote(retired),
 		shell.Quote("--drain-timeout") + " " + shell.Quote("30"),
-		shell.Quote(boxapi.RoutingTable),
+		shell.Quote(boxapi.RoutingTablePath),
 	} {
 		if !strings.Contains(cut, wanted) {
 			t.Errorf("the cutover is made as %q, which includes no %s", cut, wanted)
@@ -769,7 +769,7 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 	executable(t, filepath.Join(bin, "mv"), "#!/bin/sh\nif [ \"$2\" = "+shell.Quote(config)+" ]; then exit 1; fi\nexec "+shell.Quote(moving)+" \"$@\"\n")
 
 	after := string(mustWrite(t, routed()))
-	here := strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+	here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace
 	write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum([]byte(before))), ProxyConfig, nil)))
 	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 	write.Stdin = strings.NewReader(pairFed(routingPair{table: []byte(after), config: mustRender(t, routed())}))
@@ -853,7 +853,7 @@ func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		here := strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+		here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace
 		write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum(written)), ProxyConfig, nil)))
 		write.Stdin = strings.NewReader(pairFed(routingPair{table: mustWrite(t, routed()), config: mustRender(t, routed())}))
 		err := write.Run()
@@ -892,7 +892,7 @@ func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMo
 			t.Fatal(err)
 		}
 	}
-	here := strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+	here := strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace
 	if !strings.Contains(stagedWrite("a-digest", ProxyConfig, nil), strings.TrimSuffix(routingLocked("-x"), "\n")) {
 		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", stagedWrite("a-digest", ProxyConfig, nil), routingLock)
 	}
@@ -940,7 +940,7 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	racing := make(chan error, 2)
 	for _, writer := range []string{"one", "the other"} {
 		go func() {
-			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(boxapi.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read, ProxyConfig, nil)))
+			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(boxapi.RoutingTablePath, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read, ProxyConfig, nil)))
 			run.Stdin = strings.NewReader(pairFed(routingPair{table: []byte("table by " + writer), config: []byte("config by " + writer)}))
 			racing <- run.Run()
 		}()

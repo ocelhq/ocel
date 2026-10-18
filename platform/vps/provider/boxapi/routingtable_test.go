@@ -156,7 +156,7 @@ func TestATableWithEveryKindOfRowOcelWritesIsRead(t *testing.T) {
 	mustRead(t, `{"grace":"12s",
 		"claims":[{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"}],
 		"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"shop-web-1:3000"}],
-		"pins":[{"hostname":"shop.example.com","path":"/var/lib/ocel/certs/shop"}],
+		"pins":[{"hostname":"shop.example.com","path":"/etc/ocel/certs/shop"}],
 		"preview":"preview.example.com",
 		"connector":"box.example.com"}`)
 }
@@ -212,10 +212,11 @@ const claimedTable = `{"grace":"30s","claims":[
 func TestTheStoresBaseIsTheHostTheSurfaceClaimsForIt(t *testing.T) {
 	t.Parallel()
 
-	claims, err := boxapi.ClaimedIn([]byte(claimedTable))
+	read, err := boxapi.ReadRoutingTable([]byte(claimedTable))
 	if err != nil {
-		t.Fatalf("ClaimedIn() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
+	claims := read.Claims
 	if base := boxapi.StoreBase(claims, "ocel.shop.production", "@production"); base != "https://storage.shop.example.com" {
 		t.Errorf("StoreBase() = %q, want the hostname this surface claims for its store", base)
 	}

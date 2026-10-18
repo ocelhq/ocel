@@ -41,7 +41,7 @@ func clientCertificate(t *testing.T) (string, string) {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), base64.StdEncoding.EncodeToString(der)
 }
 
-var origin = proxy.CertificatePair{
+var origin = boxapi.CertificatePair{
 	Certificate: "-----BEGIN CERTIFICATE-----\nORIGIN\n-----END CERTIFICATE-----\n",
 	Key:         "-----BEGIN PRIVATE KEY-----\nKEY\n-----END PRIVATE KEY-----\n",
 }
@@ -151,7 +151,7 @@ func TestTheOriginCertificateIsPlacedBesideOcelCaddyAsOneBundleNamedForItsHostna
 
 	renewed := spec
 	renewed.Shields = []proxy.Shield{{Hostname: "*.preview.example.com", ClientCAs: []string{client},
-		OriginCertificate: proxy.CertificatePair{Certificate: "-----BEGIN CERTIFICATE-----\nRENEWED\n-----END CERTIFICATE-----", Key: origin.Key}}}
+		OriginCertificate: boxapi.CertificatePair{Certificate: "-----BEGIN CERTIFICATE-----\nRENEWED\n-----END CERTIFICATE-----", Key: origin.Key}}}
 	next := originFile(t, front, renewed)
 	if next.Path == placed.Path {
 		t.Errorf("a renewed origin certificate is placed at %s again, want a new name: ocel.caddy then changes and your Caddy reloads onto it", next.Path)

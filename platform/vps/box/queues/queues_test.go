@@ -23,8 +23,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/pgmq"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/box/queues"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const tier = environment.TierProduction

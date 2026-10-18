@@ -31,8 +31,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	source "github.com/ocelhq/ocel/platform/vps/box/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 const (

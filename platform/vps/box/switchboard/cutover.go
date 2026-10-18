@@ -3,10 +3,11 @@ package switchboard
 import (
 	"context"
 	"fmt"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"maps"
 	"slices"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 type Drain struct {
@@ -95,12 +96,12 @@ func (b *Board) Idle(targets []string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	routed := b.table.Load().Routed
+	table := b.table.Load()
 	b.retiring.Lock()
 	defer b.retiring.Unlock()
 	var idle []string
 	for at, address := range addresses {
-		if !routed[address] && b.draining[address] == 0 {
+		if !table.IsRouted(address) && b.draining[address] == 0 {
 			idle = append(idle, targets[at])
 		}
 	}
@@ -109,7 +110,7 @@ func (b *Board) Idle(targets []string) ([]string, error) {
 
 func (b *Board) Upstreams() []Upstream {
 	counted := b.ledger.counts()
-	for address := range b.table.Load().Routed {
+	for _, address := range b.table.Load().Routed() {
 		if _, listed := counted[address]; !listed {
 			counted[address] = 0
 		}

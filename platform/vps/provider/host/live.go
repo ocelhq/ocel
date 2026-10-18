@@ -7,13 +7,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 const (
-	LiveBinary     = boxstore.Dir + "/live"
+	LiveBinary     = boxapi.LiveBinary
 	LiveSocketUnit = "ocel-live.socket"
 	LiveService    = "ocel-live.service"
 	liveSocketFile = "/etc/systemd/system/" + LiveSocketUnit
@@ -122,15 +121,14 @@ func newAgentItem(agent []byte) Item {
 func LiveItems(architecture string) []Item {
 	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(architecture)
 	return []Item{
-		newAgentItem(agent),
 		{Kind: KindFile, Name: liveSocketFile, Mode: 0o644, Owner: rootOwner, Content: socket},
 		{Kind: KindFile, Name: liveUnitFile, Mode: 0o644, Owner: rootOwner, Content: service},
-		{Kind: KindUnit, Name: LiveSocketUnit, Owner: rootOwner, Content: unitWatchFacts(socket),
+		systemdUnit(Item{Name: LiveSocketUnit, Owner: rootOwner, Content: unitWatchFacts(socket),
 			Watch: []string{liveSocketFile},
-			Slow:  true},
-		{Kind: KindUnit, Name: LiveService, Owner: rootOwner, Content: unitWatchFacts(service, agent),
+			Slow:  true}),
+		systemdUnit(Item{Name: LiveService, Owner: rootOwner, Content: unitWatchFacts(service, agent),
 			Watch: []string{liveUnitFile, LiveBinary},
-			Slow:  true},
+			Slow:  true}),
 	}
 }
 
