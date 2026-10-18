@@ -63,14 +63,7 @@ func (p *cloudflare) adoption(_ context.Context, tier environment.Tier) (edge.Ad
 	if err != nil {
 		return edge.Adoption{}, err
 	}
-	var adoption edge.Adoption
-	for _, worker := range workers {
-		adoption.Offers = append(adoption.Offers, worker.offer)
-	}
-	if p.workerClientCertificate {
-		adoption.Offers = append(adoption.Offers, edge.OfferWorkerClientCertificate)
-	}
-	return adoption, nil
+	return edge.Adoption{ReleasesStore: len(workers) > 0, ClientCertificate: p.workerClientCertificate}, nil
 }
 
 func (s bootstrapState) removals() []edge.PlanChange {

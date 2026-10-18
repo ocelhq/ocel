@@ -281,15 +281,15 @@ type ReleasesStore struct {
 	BootstrapCredential string `json:"bootstrapCred"`
 }
 
-func adoptReleasesStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
+func adoptReleasesStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, offered edge.ReleasesStore) error {
 	paramName, err := ReleasesStoreParamFor(ns, tier, kind)
 	if err != nil {
 		return err
 	}
 	store := ReleasesStore{
-		Endpoint:            values[edge.OfferKeyStoreEndpoint],
-		ScriptName:          values[edge.OfferKeyStoreScriptName],
-		BootstrapCredential: values[edge.OfferKeyStoreBootstrapCredential],
+		Endpoint:            offered.Endpoint,
+		ScriptName:          offered.Name,
+		BootstrapCredential: offered.BootstrapCredential,
 	}
 	stored, err := ReadReleasesStoreFor(ctx, ssmClient, ns, tier, kind)
 	if err != nil {

@@ -172,44 +172,6 @@ func TestStorageKeysShareOnePrefix(t *testing.T) {
 	}
 }
 
-func TestDynamoKeysLeadWithTheProject(t *testing.T) {
-	stack := AppStack("prod", "web", NewReleaseToken("b", ""))
-	for _, key := range []string{
-		ProjectKey("shop"),
-		StackKey("shop", stack),
-		VariablesKey("shop", "production"),
-		BindingVariablesKey("shop", "production", "main"),
-		ISRTagKey("shop", stack, "products"),
-	} {
-		project, err := ProjectOf(key)
-		if err != nil {
-			t.Fatalf("ProjectOf(%q): %v", key, err)
-		}
-		if project != "shop" {
-			t.Errorf("ProjectOf(%q) = %q, want %q", key, project, "shop")
-		}
-	}
-}
-
-func TestBindingVariablesKeysArePerBindingPartitions(t *testing.T) {
-	shared := VariablesKey("shop", "production")
-	main := BindingVariablesKey("shop", "production", "main")
-	uploads := BindingVariablesKey("shop", "production", "uploads")
-
-	if main == uploads {
-		t.Fatalf("both bindings partition to %q; an IAM LeadingKeys condition could never separate them", main)
-	}
-	if main == shared {
-		t.Fatalf("binding values partition to %q, the same partition a user's own values live in", shared)
-	}
-	if !strings.HasPrefix(main, shared+KeySeparator) {
-		t.Errorf("BindingVariablesKey = %q, want it under %q so one tier's bindings stay one tier's", main, shared)
-	}
-	if BindingVariablesKey("shop", "preview", "main") == main {
-		t.Errorf("preview and production share the binding partition %q", main)
-	}
-}
-
 func TestSessionKeysPartitionByProjectAndEnvironment(t *testing.T) {
 	prod := SessionKeyPrefix("shop", "prod")
 
@@ -221,7 +183,7 @@ func TestSessionKeysPartitionByProjectAndEnvironment(t *testing.T) {
 	if !strings.HasSuffix(prod, KeySeparator) {
 		t.Errorf("SessionKeyPrefix = %q, want it to end on %q so %q* cannot match a longer scope", prod, KeySeparator, prod)
 	}
-	if strings.HasPrefix(ProjectKey("shop")+KeySeparator, prod) {
+	if strings.HasPrefix(token(tokenProject, "shop")+KeySeparator, prod) {
 		t.Errorf("SessionKeyPrefix = %q reaches the project's own keys", prod)
 	}
 }
@@ -236,23 +198,6 @@ func TestTaskKeysPartitionByProjectAndEnvironmentApartFromSessions(t *testing.T)
 	}
 	if !strings.HasSuffix(prod, KeySeparator) {
 		t.Errorf("TaskKeyPrefix = %q, want it to end on %q so %q* cannot match a longer scope", prod, KeySeparator, prod)
-	}
-}
-
-func TestStackKeysRoundTrip(t *testing.T) {
-	want := AppStack("pr-7", "web", NewReleaseToken("build-1", "fp"))
-	project, got, err := ParseStackKey(StackKey("shop", want))
-	if err != nil {
-		t.Fatalf("ParseStackKey: %v", err)
-	}
-	if project != "shop" || got != want {
-		t.Errorf("ParseStackKey = (%q, %+v), want (%q, %+v)", project, got, "shop", want)
-	}
-	if _, _, err := ParseStackKey(ProjectKey("shop")); err == nil {
-		t.Error("a project key names no stack and must be rejected")
-	}
-	if _, _, err := ParseStackKey(VariablesKey("shop", "production")); err == nil {
-		t.Error("a variables key names no stack and must be rejected")
 	}
 }
 

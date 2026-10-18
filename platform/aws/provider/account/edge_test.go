@@ -445,11 +445,11 @@ func TestEdgeCredentials(t *testing.T) {
 	})
 }
 
-func offeredReleasesStore() map[string]string {
-	return map[string]string{
-		edge.OfferKeyStoreEndpoint:            "https://ocel-releases-store.acct.workers.dev",
-		edge.OfferKeyStoreScriptName:          "ocel-releases-store",
-		edge.OfferKeyStoreBootstrapCredential: "cred-prod",
+func offeredReleasesStore() edge.ReleasesStore {
+	return edge.ReleasesStore{
+		Name:                "ocel-releases-store",
+		Endpoint:            "https://ocel-releases-store.acct.workers.dev",
+		BootstrapCredential: "cred-prod",
 	}
 }
 
@@ -480,10 +480,11 @@ func TestReleasesStoreParamFor(t *testing.T) {
 func TestAdoptReleasesStore(t *testing.T) {
 	t.Run("preview stores separately", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		preview := offeredReleasesStore()
-		preview[edge.OfferKeyStoreEndpoint] = "https://ocel-releases-store-preview.acct.workers.dev"
-		preview[edge.OfferKeyStoreScriptName] = "ocel-releases-store-preview"
-		preview[edge.OfferKeyStoreBootstrapCredential] = "cred-preview"
+		preview := edge.ReleasesStore{
+			Name:                "ocel-releases-store-preview",
+			Endpoint:            "https://ocel-releases-store-preview.acct.workers.dev",
+			BootstrapCredential: "cred-preview",
+		}
 
 		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredReleasesStore()); err != nil {
 			t.Fatalf("production adopt: %v", err)
@@ -519,8 +520,8 @@ func TestAdoptReleasesStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		}
 
 		reoffer := offeredReleasesStore()
-		delete(reoffer, edge.OfferKeyStoreBootstrapCredential)
-		reoffer[edge.OfferKeyStoreEndpoint] = "https://ocel-releases-store.acct.workers.dev/v2"
+		reoffer.BootstrapCredential = ""
+		reoffer.Endpoint = "https://ocel-releases-store.acct.workers.dev/v2"
 		if err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", reoffer); err != nil {
 			t.Fatalf("second adopt: %v", err)
 		}
@@ -540,7 +541,7 @@ func TestAdoptReleasesStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 	t.Run("nothing on either side is a refusal, not an empty credential", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		offer := offeredReleasesStore()
-		delete(offer, edge.OfferKeyStoreBootstrapCredential)
+		offer.BootstrapCredential = ""
 
 		err := adoptReleasesStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		if err == nil {
@@ -649,18 +650,18 @@ type adoption struct {
 }
 
 func adoptions() []adoption {
-	releasesStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
+	releasesStore := func(offer edge.ReleasesStore) func(context.Context, SSMAPI) error {
 		return func(ctx context.Context, ssmc SSMAPI) error {
 			return adoptReleasesStore(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		}
 	}
 	return []adoption{
-		{"the releases store", releasesStore(offeredReleasesStore()), releasesStore(without(offeredReleasesStore(), edge.OfferKeyStoreBootstrapCredential))},
+		{"the releases store", releasesStore(offeredReleasesStore()), releasesStore(withoutCredential(offeredReleasesStore()))},
 	}
 }
 
-func without(offer map[string]string, key string) map[string]string {
-	delete(offer, key)
+func withoutCredential(offer edge.ReleasesStore) edge.ReleasesStore {
+	offer.BootstrapCredential = ""
 	return offer
 }
 

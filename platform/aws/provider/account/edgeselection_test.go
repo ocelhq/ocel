@@ -177,12 +177,10 @@ func TestEachEdgeKeepsItsOwnParameters(t *testing.T) {
 
 	for _, kind := range []edge.Kind{KindCloudflare, kindCloudFront} {
 		front := &fakeEdge{kind: kind, out: edge.BootstrapOutput{
-			Offers: []edge.Offer{
-				{Kind: edge.OfferReleasesStore, Values: map[string]string{
-					edge.OfferKeyStoreEndpoint:            "https://ocel-releases-store-" + string(kind) + ".acct.workers.dev",
-					edge.OfferKeyStoreScriptName:          "ocel-releases-store-" + string(kind),
-					edge.OfferKeyStoreBootstrapCredential: "cred-" + string(kind),
-				}},
+			ReleasesStore: &edge.ReleasesStore{
+				Name:                "ocel-releases-store-" + string(kind),
+				Endpoint:            "https://ocel-releases-store-" + string(kind) + ".acct.workers.dev",
+				BootstrapCredential: "cred-" + string(kind),
 			},
 		}}
 		apis := apisFronting(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore(), front)

@@ -525,22 +525,15 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	if err != nil {
 		return fmt.Errorf("bootstrap %s edge: %w", front.Kind(), err)
 	}
-	for _, offer := range out.Offers {
-		switch offer.Kind {
-		case edge.OfferReleasesStore:
-			d.progress.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (SSM SecureString)", front.Kind()))
-			if err := adoptReleasesStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
-				return err
-			}
-			if _, err := ensurePurgeSeed(ctx, d.ssm, d.ns, d.tier, front.Kind()); err != nil {
-				return err
-			}
-		case edge.OfferWorkerClientCertificate:
-		default:
-			d.progress.Warn(fmt.Sprintf("Ignoring the %s edge's %q offer: nothing in this bootstrap adopts it", front.Kind(), offer.Kind))
-		}
+	if out.ReleasesStore == nil {
+		return nil
 	}
-	return nil
+	d.progress.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (SSM SecureString)", front.Kind()))
+	if err := adoptReleasesStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), *out.ReleasesStore); err != nil {
+		return err
+	}
+	_, err = ensurePurgeSeed(ctx, d.ssm, d.ns, d.tier, front.Kind())
+	return err
 }
 
 func absorbRefs(refs *stackRefs, out map[string]string) error {

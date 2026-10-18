@@ -57,23 +57,17 @@ func mutualTLSEdge(t *testing.T, m *cfMock) *cloudflare {
 	return p
 }
 
-func workerCertificateOffer(t *testing.T, out edge.BootstrapOutput) edge.Offer {
+func offeredClientCertificate(t *testing.T, out edge.BootstrapOutput) edge.ClientCertificate {
 	t.Helper()
-	var found []edge.Offer
-	for _, offer := range out.Offers {
-		if offer.Kind == edge.OfferWorkerClientCertificate {
-			found = append(found, offer)
-		}
+	if out.ClientCertificate == nil {
+		t.Fatalf("Bootstrap offered %+v, want a worker client certificate", out)
 	}
-	if len(found) != 1 {
-		t.Fatalf("offers = %+v, want exactly one %q", out.Offers, edge.OfferWorkerClientCertificate)
-	}
-	return found[0]
+	return *out.ClientCertificate
 }
 
-func authoritiesOf(t *testing.T, offer edge.Offer) []*x509.Certificate {
+func authoritiesOf(t *testing.T, offer edge.ClientCertificate) []*x509.Certificate {
 	t.Helper()
-	rest := []byte(offer.Values[edge.OfferKeyClientCertificateAuthorities])
+	rest := []byte(offer.Authorities)
 	var authorities []*x509.Certificate
 	for {
 		var block *pem.Block
@@ -120,9 +114,9 @@ func TestABootstrapUploadsOneClientCertificateForItsWorkersAndOffersItsCA(t *tes
 		t.Errorf("name = %v, want %q", upload["name"], want)
 	}
 
-	offer := workerCertificateOffer(t, out)
-	if offer.Values[edge.OfferKeyClientCertificateID] != "mtls-1" {
-		t.Errorf("certificateId = %q, want the uploaded certificate's id", offer.Values[edge.OfferKeyClientCertificateID])
+	offer := offeredClientCertificate(t, out)
+	if offer.ID != "mtls-1" {
+		t.Errorf("certificateId = %q, want the uploaded certificate's id", offer.ID)
 	}
 	authorities := authoritiesOf(t, offer)
 	if len(authorities) != 1 {
@@ -151,12 +145,12 @@ func TestABootstrapKeepsAClientCertificateFarFromExpiry(t *testing.T) {
 	if len(m.uploadedMTLSCertificates) != 0 || len(m.deletedMTLSCertificates) != 0 {
 		t.Errorf("uploads = %v, deletes = %v, want none for a certificate far from expiry", m.uploadedMTLSCertificates, m.deletedMTLSCertificates)
 	}
-	a, b := workerCertificateOffer(t, first), workerCertificateOffer(t, second)
+	a, b := offeredClientCertificate(t, first), offeredClientCertificate(t, second)
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("offers differ between bootstraps: %+v vs %+v", a, b)
 	}
-	if a.Values[edge.OfferKeyClientCertificateID] != id {
-		t.Errorf("certificateId = %q, want the held %q", a.Values[edge.OfferKeyClientCertificateID], id)
+	if a.ID != id {
+		t.Errorf("certificateId = %q, want the held %q", a.ID, id)
 	}
 }
 
@@ -174,8 +168,8 @@ func TestABootstrapUploadsANewClientCertificateBesideOneNearExpiryAndTrustsBoth(
 	if len(m.uploadedMTLSCertificates) != 1 || len(m.deletedMTLSCertificates) != 0 {
 		t.Fatalf("uploads = %d, deletes = %v, want one upload and the old certificate kept", len(m.uploadedMTLSCertificates), m.deletedMTLSCertificates)
 	}
-	offer := workerCertificateOffer(t, out)
-	if got := offer.Values[edge.OfferKeyClientCertificateID]; got != "mtls-1" || got == old {
+	offer := offeredClientCertificate(t, out)
+	if got := offer.ID; got != "mtls-1" || got == old {
 		t.Errorf("certificateId = %q, want the new certificate's id", got)
 	}
 	authorities := authoritiesOf(t, offer)
@@ -211,9 +205,9 @@ func TestABootstrapDeletesAnExpiredClientCertificateAndStopsOfferingItsCA(t *tes
 	if len(m.uploadedMTLSCertificates) != 0 {
 		t.Errorf("uploads = %v, want none", m.uploadedMTLSCertificates)
 	}
-	offer := workerCertificateOffer(t, out)
-	if offer.Values[edge.OfferKeyClientCertificateID] != keptID {
-		t.Errorf("certificateId = %q, want %q", offer.Values[edge.OfferKeyClientCertificateID], keptID)
+	offer := offeredClientCertificate(t, out)
+	if offer.ID != keptID {
+		t.Errorf("certificateId = %q, want %q", offer.ID, keptID)
 	}
 	if got := len(authoritiesOf(t, offer)); got != 1 {
 		t.Errorf("offered %d CAs, want only the current one", got)
@@ -233,7 +227,7 @@ func TestABootstrapThatCannotDeleteAnExpiredClientCertificateStillSucceeds(t *te
 	if err != nil {
 		t.Fatalf("Bootstrap: %v, want it to succeed though Cloudflare refuses the delete", err)
 	}
-	if got := len(authoritiesOf(t, workerCertificateOffer(t, out))); got != 1 {
+	if got := len(authoritiesOf(t, offeredClientCertificate(t, out))); got != 1 {
 		t.Errorf("offered %d CAs, want only the current one", got)
 	}
 
@@ -297,7 +291,7 @@ func TestTheProductionClientCertificateIgnoresThePreviewTiersCertificates(t *tes
 	if len(m.uploadedMTLSCertificates) != 1 {
 		t.Errorf("uploads = %d, want production to upload its own despite preview's", len(m.uploadedMTLSCertificates))
 	}
-	if got := workerCertificateOffer(t, out).Values[edge.OfferKeyClientCertificateID]; got != "mtls-1" {
+	if got := offeredClientCertificate(t, out).ID; got != "mtls-1" {
 		t.Errorf("certificateId = %q, want production's own, not preview's", got)
 	}
 }
@@ -408,8 +402,8 @@ func TestPlanningABootstrapNamesTheWorkerClientCertificate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("adoption: %v", err)
 		}
-		if !slices.Contains(adoption.Offers, edge.OfferWorkerClientCertificate) {
-			t.Errorf("adoption offers = %v, want %q", adoption.Offers, edge.OfferWorkerClientCertificate)
+		if !adoption.ClientCertificate {
+			t.Errorf("adoption = %+v, want the worker client certificate", adoption)
 		}
 	})
 }
@@ -425,10 +419,8 @@ func TestAnEdgeNotOpenedForAMutualTLSOriginKeepsNoClientCertificate(t *testing.T
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	for _, offer := range out.Offers {
-		if offer.Kind == edge.OfferWorkerClientCertificate {
-			t.Errorf("offers include %q, want none", offer.Kind)
-		}
+	if out.ClientCertificate != nil {
+		t.Errorf("Bootstrap offered the worker client certificate %+v, want none", *out.ClientCertificate)
 	}
 	if len(m.uploadedMTLSCertificates) != 0 || len(m.deletedMTLSCertificates) != 0 {
 		t.Errorf("uploads = %v, deletes = %v, want no mtls_certificates call", m.uploadedMTLSCertificates, m.deletedMTLSCertificates)
@@ -446,8 +438,8 @@ func TestAnEdgeNotOpenedForAMutualTLSOriginKeepsNoClientCertificate(t *testing.T
 	if err != nil {
 		t.Fatalf("adoption: %v", err)
 	}
-	if slices.Contains(adoption.Offers, edge.OfferWorkerClientCertificate) {
-		t.Errorf("adoption offers = %v, want no %q", adoption.Offers, edge.OfferWorkerClientCertificate)
+	if adoption.ClientCertificate {
+		t.Errorf("adoption = %+v, want no worker client certificate", adoption)
 	}
 	if err := p.Teardown(t.Context(), environment.TierProduction); err != nil {
 		t.Fatalf("Teardown: %v", err)

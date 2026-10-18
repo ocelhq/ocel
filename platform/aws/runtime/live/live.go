@@ -39,18 +39,13 @@ func (f *storeSource) RenewWithin() (time.Duration, bool) {
 }
 
 func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
-	resolved, err := f.reader.Values(ctx, f.cells)
-	if err != nil {
-		return nil, err
-	}
-	records, err := f.reader.Bindings(ctx, bindingNames(f.bindings))
+	values, records, err := live.Fetch(ctx, f.reader, f.cells, f.bindings)
 	if err != nil {
 		return nil, err
 	}
 	for _, lag := range f.unreportedGrantLag(records) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
-	values := live.MergeBindings(resolved, f.bindings, records)
 	minted, err := currentPasswords(ctx, f.passwords, f.bindings, records, values)
 	if err != nil {
 		return nil, err
@@ -104,14 +99,6 @@ func republished(n int64) string {
 		return "once more"
 	}
 	return fmt.Sprintf("%d more times", n)
-}
-
-func bindingNames(bindings []live.Binding) []string {
-	names := make([]string, 0, len(bindings))
-	for _, l := range bindings {
-		names = append(names, l.Name)
-	}
-	return names
 }
 
 func Resolve(ctx context.Context, taskRoot string) (*live.Values, error) {

@@ -65,7 +65,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	}
 
 	reader := variablestore.EnvironmentReader{KeyValues: p.KeyValues(), Cipher: p.Cipher(), Scope: liveScope()}
-	records, err := reader.Bindings(ctx, []string{"main"})
+	delivered, _, err := live.Fetch(ctx, reader, nil, []live.Binding{{Name: "main", Key: "main"}})
 	if err != nil {
 		t.Fatalf("resolving a binding back through the helper = %v", err)
 	}
@@ -79,7 +79,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 			"REGION":       livePlainValue,
 			"API_TOKEN":    liveSensitiveValue,
 			"DATABASE_URL": liveSecretValue,
-			provider.ResourceEnvName(provider.BindingPostgres, "main"): live.MergeBindings(nil, []live.Binding{{Name: "main", Key: "main"}}, records)["main"],
+			provider.ResourceEnvName(provider.BindingPostgres, "main"): delivered["main"],
 		},
 	}
 }

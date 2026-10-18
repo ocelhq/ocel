@@ -58,7 +58,7 @@ type cloudflare struct {
 
 func New(namespace string, options Options) edge.Edge { return newCloudflare(namespace, options) }
 
-type ClientCertificateTrust func(ctx context.Context, tier environment.Tier, offer edge.Offer) error
+type ClientCertificateTrust func(ctx context.Context, tier environment.Tier, certificate edge.ClientCertificate) error
 
 func NewWithWorkerClientCertificate(namespace string, options Options, trust ClientCertificateTrust) edge.Edge {
 	front := newCloudflare(namespace, options)

@@ -321,7 +321,7 @@ func TestDroppingTheEdgePartForgetsWhatItsBootstrapAdopted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			b, registry, h := frontingWithSecrets(t)
-			registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1")}
+			registry.front.out = fullOffers("c1")
 			raising := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}}
 			if err := b.RaiseFronts(context.Background(), raising, nil); err != nil {
 				t.Fatalf("raiseFronts = %v", err)
@@ -350,7 +350,7 @@ func TestAFrontThatRefusedToComeDownKeepsWhatItsBootstrapAdopted(t *testing.T) {
 	t.Parallel()
 
 	b, registry, h := frontingWithSecrets(t)
-	registry.front.out = edge.BootstrapOutput{Offers: fullOffers("c1")}
+	registry.front.out = fullOffers("c1")
 	if err := b.RaiseFronts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}}, nil); err != nil {
 		t.Fatal(err)
 	}

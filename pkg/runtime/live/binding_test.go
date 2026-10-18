@@ -1,6 +1,7 @@
 package live
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -120,7 +121,11 @@ func TestAPublishedRecordReachesTheAppAsItsBindingAlone(t *testing.T) {
 	binding := postgresBinding()
 	published := `{"binding":` + postgresRecord + `,"grants":[{"label":"password secret","actions":["secretsmanager:GetSecretValue"],"resources":["arn:aws:secretsmanager:us-east-1:1:secret:db"]}]}`
 	resolved := map[string]string{"KEY": "value", binding.Key: "postgres://mine"}
-	values := MergeBindings(resolved, []Binding{binding}, []variablestore.StoredBinding{{Name: binding.Name, Value: []byte(published)}})
+	reader := &fakeReader{values: resolved, records: []variablestore.StoredBinding{{Name: binding.Name, Value: []byte(published)}}}
+	values, _, err := Fetch(context.Background(), reader, nil, []Binding{binding})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
 
 	if values["KEY"] != "value" || len(values) != 2 {
 		t.Errorf("values = %v, want the resolved value kept beside the binding and nothing else", values)
@@ -145,7 +150,11 @@ func TestARecordThatIsNotPublishedIsHandedOnForConformToRefuse(t *testing.T) {
 
 	binding := postgresBinding()
 	for _, stored := range []string{"not json", postgresRecord} {
-		values := MergeBindings(nil, []Binding{binding}, []variablestore.StoredBinding{{Name: binding.Name, Value: []byte(stored)}})
+		reader := &fakeReader{records: []variablestore.StoredBinding{{Name: binding.Name, Value: []byte(stored)}}}
+		values, _, err := Fetch(context.Background(), reader, nil, []Binding{binding})
+		if err != nil {
+			t.Fatalf("Fetch: %v", err)
+		}
 		if err := Conform([]Binding{binding}, values); !errors.Is(err, ErrDrift) {
 			t.Errorf("Conform(%s) = %v, want a value that is no published record refused as drift", stored, err)
 		}

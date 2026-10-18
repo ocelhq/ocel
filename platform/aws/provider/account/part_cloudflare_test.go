@@ -181,14 +181,11 @@ func (e *mintingEdge) Bootstrap(_ context.Context, tier environment.Tier) (edge.
 	if !e.hasCred {
 		cred, e.hasCred = "bootstrap-secret", true
 	}
-	return edge.BootstrapOutput{Offers: []edge.Offer{{
-		Kind: edge.OfferReleasesStore,
-		Values: map[string]string{
-			edge.OfferKeyStoreEndpoint:            "https://releases.example",
-			edge.OfferKeyStoreScriptName:          "ocel-releases-store",
-			edge.OfferKeyStoreBootstrapCredential: cred,
-		},
-	}}}, nil
+	return edge.BootstrapOutput{ReleasesStore: &edge.ReleasesStore{
+		Name:                "ocel-releases-store",
+		Endpoint:            "https://releases.example",
+		BootstrapCredential: cred,
+	}}, nil
 }
 
 func (e *mintingEdge) Teardown(context.Context, environment.Tier) error {

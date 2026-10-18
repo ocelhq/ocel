@@ -537,8 +537,8 @@ func TestEdgeTagKeys(t *testing.T) {
 	t.Run("admits no other partition in the table", func(t *testing.T) {
 		for _, key := range []string{
 			"PROJECTS",
-			naming.ProjectKey("shop"),
-			naming.VariablesKey("shop", "production"),
+			"PROJECT#shop",
+			"PROJECT#shop#CLASS#production",
 			naming.StackKey("shop", stack),
 			naming.SessionKeyPrefix("shop", "prod") + "01hxyz",
 		} {

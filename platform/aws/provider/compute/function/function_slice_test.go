@@ -445,8 +445,8 @@ func TestISRPolicy(t *testing.T) {
 				}
 			}
 			for _, key := range []string{
-				naming.ProjectKey("proj"),
-				naming.VariablesKey("proj", "production"),
+				"PROJECT#proj",
+				"PROJECT#proj#CLASS#production",
 				naming.StackKey("proj", web.Coord.Stack()),
 			} {
 				if admits(t, keys[0], key) {

@@ -1,6 +1,7 @@
 package live
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -82,11 +83,23 @@ func (l Binding) conform(raw string) error {
 	return nil
 }
 
-func MergeBindings(resolved map[string]string, bindings []Binding, records []variablestore.StoredBinding) map[string]string {
-	out := make(map[string]string, len(resolved)+len(records))
+func merge(resolved map[string]string, bindings []Binding, records []variablestore.StoredBinding) map[string]string {
+	out := make(map[string]string, len(resolved)+len(bindings))
 	maps.Copy(out, resolved)
 	for i, record := range records {
 		out[bindings[i].Key] = delivered(record.Value)
+	}
+	return out
+}
+
+func recordsOf(bindings []Binding, records []variablestore.StoredBinding) []variablestore.StoredBinding {
+	published := make(map[string]variablestore.StoredBinding, len(records))
+	for _, record := range records {
+		published[record.Name] = record
+	}
+	out := make([]variablestore.StoredBinding, len(bindings))
+	for i, l := range bindings {
+		out[i] = published[l.Name]
 	}
 	return out
 }
@@ -143,4 +156,26 @@ func (l Binding) shown(raw string) string {
 		return raw
 	}
 	return string(out)
+}
+
+type Reader interface {
+	Values(ctx context.Context, cells []variablestore.Cell) (map[string]string, error)
+	Bindings(ctx context.Context, names []string) ([]variablestore.StoredBinding, error)
+}
+
+func Fetch(ctx context.Context, reader Reader, cells []variablestore.Cell, bindings []Binding) (map[string]string, []variablestore.StoredBinding, error) {
+	resolved, err := reader.Values(ctx, cells)
+	if err != nil {
+		return nil, nil, err
+	}
+	names := make([]string, 0, len(bindings))
+	for _, l := range bindings {
+		names = append(names, l.Name)
+	}
+	records, err := reader.Bindings(ctx, names)
+	if err != nil {
+		return nil, nil, err
+	}
+	records = recordsOf(bindings, records)
+	return merge(resolved, bindings, records), records, nil
 }

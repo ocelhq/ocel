@@ -91,16 +91,4 @@ func TestBoundDomains(t *testing.T) {
 		}
 	})
 
-	t.Run("a host is reported bound only once it is", func(t *testing.T) {
-		t.Parallel()
-
-		var state StackState
-		if state.BoundTo("shop.com") {
-			t.Error("BoundTo = true on a state nothing bound")
-		}
-		state.Bind("shop.com")
-		if !state.BoundTo("shop.com") {
-			t.Error("BoundTo = false on the host just bound")
-		}
-	})
 }

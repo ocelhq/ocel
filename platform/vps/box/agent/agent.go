@@ -466,19 +466,10 @@ func (s Store) Resolve(ctx context.Context, manifest boxapi.Manifest) (map[strin
 	for _, key := range manifest.Keys {
 		cells = append(cells, variablestore.Cell{Folder: key.Folder, Key: key.Key})
 	}
-	resolved, err := reader.Values(ctx, cells)
+	answer, _, err := live.Fetch(ctx, reader, cells, manifest.Bindings)
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(manifest.Bindings))
-	for _, binding := range manifest.Bindings {
-		names = append(names, binding.Name)
-	}
-	records, err := reader.Bindings(ctx, names)
-	if err != nil {
-		return nil, err
-	}
-	answer := live.MergeBindings(resolved, manifest.Bindings, records)
 	if manifest.Store == nil {
 		return answer, nil
 	}

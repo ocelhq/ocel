@@ -79,7 +79,7 @@ func adoptBehindTheWorker(t *testing.T, p *Provider, kinds ...edge.Kind) {
 	withOriginBase(t, p)
 	for _, kind := range append([]edge.Kind{cloudflareKind}, kinds...) {
 		err := cloudflareorigin.AdoptOffers(context.Background(), p.resolved, p.records, environment.TierProduction, kind,
-			edge.BootstrapOutput{Offers: []edge.Offer{storeOffer("c1"), certificateOffer()}}, &fake.Log{})
+			fullOffers("c1"), &fake.Log{})
 		if err != nil {
 			t.Fatal(err)
 		}

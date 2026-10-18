@@ -13,9 +13,7 @@ import (
 )
 
 func cloudflareAdoption() edge.Adoption {
-	return edge.Adoption{
-		Offers: []edge.OfferKind{edge.OfferReleasesStore},
-	}
+	return edge.Adoption{ReleasesStore: true}
 }
 
 func fronting() Request { return Request{Parts: []string{CloudflareEdgePart}} }
