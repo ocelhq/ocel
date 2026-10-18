@@ -627,6 +627,40 @@ func Engine(t *testing.T, open func(t *testing.T, topics map[string]*provider.To
 		}
 	})
 
+	t.Run("a batching consumer of an ordered topic runs a key's message only after the one before it, though that one waited out a lease", func(t *testing.T) {
+		h := newHarness(t, open, aTopic("ledger", true, provider.ConsumerSpec{Name: "apply", Retry: retrying(3), Batch: &provider.BatchPolicy{Size: 10, Timeout: 500 * time.Millisecond}}), answerAlways(answeredOK))
+		engine := h.engine(time.Second)
+		var ids []string
+		for n := range 2 {
+			ids = append(ids, h.send(engine, "ledger", "account-1", fmt.Sprintf(`{"n":%d}`, n)))
+		}
+		now := time.Now()
+		head := runs.Run{
+			Execution: runs.ExecutionOf(ids[0], "apply"), Topic: "ledger", Consumer: "apply", Key: "account-1", Message: ids[0],
+			Status: provider.RunExecuting, Attempts: 1, MaxAttempts: 3, CreatedAt: now, DueAt: now, StartedAt: now, LeaseUntil: now.Add(time.Second),
+		}
+		if _, err := h.wiring.Store.CreateRun(context.Background(), head); err != nil {
+			t.Fatal(err)
+		}
+		h.serve(engine, "ledger")
+		for _, id := range ids {
+			h.settlesAs("ledger", runs.ExecutionOf(id, "apply"), provider.RunCompleted)
+		}
+		var order []int
+		for _, delivered := range h.worker.delivered() {
+			for _, message := range delivered.GetMessages() {
+				var body struct{ N int }
+				if err := json.Unmarshal(message.GetPayload(), &body); err != nil {
+					t.Fatal(err)
+				}
+				order = append(order, body.N)
+			}
+		}
+		if !slices.Equal(order, []int{0, 1}) {
+			t.Errorf("the worker was handed %v, want [0 1]", order)
+		}
+	})
+
 	t.Run("a consumer with a concurrency of one never runs two attempts at once", func(t *testing.T) {
 		h := newHarness(t, open, aTopic("emails", false, provider.ConsumerSpec{Name: "send", Retry: retrying(3), Concurrency: 1}), func(*http.Request, *topicv1.Envelope, int) answer {
 			time.Sleep(30 * time.Millisecond)

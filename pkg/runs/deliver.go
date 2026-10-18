@@ -34,26 +34,37 @@ func (e *Engine) Deliver(ctx context.Context, topic, consumer string, received [
 	for i := range received {
 		received[i].Message.Topic, received[i].Message.Consumer = topic, consumer
 	}
-	switch {
-	case deployed.batches():
-		e.deliverBatch(ctx, deployed, received, dispositions)
-	case deployed.topic.Ordered:
-		blocked := map[string]bool{}
-		for i, rcv := range received {
-			group := rcv.Message.group()
-			if blocked[group] {
-				dispositions[i] = redeliverAfter(0)
-				continue
-			}
-			dispositions[i] = e.deliverOne(ctx, deployed, rcv)
-			blocked[group] = !dispositions[i].Done
+	blocked := blockedGroupsOf(deployed)
+	if deployed.batches() {
+		e.deliverBatch(ctx, deployed, received, dispositions, blocked)
+		return dispositions
+	}
+	for i, rcv := range received {
+		if blocked.waits(rcv) {
+			dispositions[i] = redeliverAfter(0)
+			continue
 		}
-	default:
-		for i, rcv := range received {
-			dispositions[i] = e.deliverOne(ctx, deployed, rcv)
-		}
+		dispositions[i] = e.deliverOne(ctx, deployed, rcv)
+		blocked.settled(rcv, dispositions[i])
 	}
 	return dispositions
+}
+
+type blockedGroups map[string]bool
+
+func blockedGroupsOf(deployed deployedConsumer) blockedGroups {
+	if !deployed.topic.Ordered {
+		return nil
+	}
+	return blockedGroups{}
+}
+
+func (b blockedGroups) waits(rcv Received) bool { return b[rcv.Message.group()] }
+
+func (b blockedGroups) settled(rcv Received, disposition Disposition) {
+	if b != nil && !disposition.Done {
+		b[rcv.Message.group()] = true
+	}
 }
 
 func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, rcv Received) Disposition {
@@ -85,13 +96,17 @@ func (e *Engine) deliverOne(ctx context.Context, deployed deployedConsumer, rcv 
 	return e.attemptAndFinish(ctx, deployed, []claim{{run: claimed, rcv: rcv}}, slots)[0]
 }
 
-func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, received []Received, dispositions []Disposition) {
+func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, received []Received, dispositions []Disposition, blocked blockedGroups) {
 	type candidate struct {
 		index int
 		run   Run
 	}
 	var admitted []candidate
 	for i, rcv := range received {
+		if blocked.waits(rcv) {
+			dispositions[i] = redeliverAfter(0)
+			continue
+		}
 		run, err := e.arrive(ctx, deployed, rcv.Message)
 		switch {
 		case errors.Is(err, errRunGone):
@@ -103,8 +118,10 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 			var ok bool
 			if run, dispositions[i], ok = e.admit(ctx, deployed, rcv, run); ok {
 				admitted = append(admitted, candidate{index: i, run: run})
+				continue
 			}
 		}
+		blocked.settled(rcv, dispositions[i])
 	}
 	if len(admitted) == 0 {
 		return
@@ -123,9 +140,14 @@ func (e *Engine) deliverBatch(ctx context.Context, deployed deployedConsumer, re
 	var claims []claim
 	var indexes []int
 	for _, c := range admitted {
+		if blocked.waits(received[c.index]) {
+			dispositions[c.index] = redeliverAfter(0)
+			continue
+		}
 		claimed, disposition, ok := e.claim(ctx, deployed, received[c.index], c.run)
 		if !ok {
 			dispositions[c.index] = disposition
+			blocked.settled(received[c.index], disposition)
 			continue
 		}
 		claims = append(claims, claim{run: claimed, rcv: received[c.index]})
@@ -194,20 +216,26 @@ func runOfMessage(deployed deployedConsumer, msg Message, now time.Time) Run {
 }
 
 func (e *Engine) admit(ctx context.Context, deployed deployedConsumer, rcv Received, run Run) (Run, Disposition, bool) {
-	for range maxRaces {
+	var disposition Disposition
+	var admitted bool
+	err := records.RetryWhileStale(ctx, func() (bool, error) {
 		now := time.Now()
 		ready, wait := readinessOf(run, rcv.Message, now)
 		changed := run
 		switch ready {
 		case stale:
-			return run, done, false
+			disposition = done
+			return false, nil
 		case runnable:
-			return run, Disposition{}, true
+			admitted = true
+			return false, nil
 		case held:
-			return run, e.redeliverUnlessUndeliverable(ctx, run, rcv, wait), false
+			disposition = e.redeliverUnlessUndeliverable(ctx, run, rcv, wait)
+			return false, nil
 		case early:
 			if !deployed.topic.Ordered || rcv.Handle == "" || run.Held == rcv.Handle {
-				return run, e.redeliverUnlessUndeliverable(ctx, run, rcv, wait), false
+				disposition = e.redeliverUnlessUndeliverable(ctx, run, rcv, wait)
+				return false, nil
 			}
 			changed.Held = rcv.Handle
 		case expired:
@@ -218,42 +246,53 @@ func (e *Engine) admit(ctx context.Context, deployed deployedConsumer, rcv Recei
 		written, err := e.write(ctx, changed)
 		if errors.Is(err, records.ErrStale) {
 			if run, err = e.reread(ctx, run); err != nil {
-				return run, e.retainOn(err), false
+				return false, err
 			}
-			continue
+			return true, nil
 		}
 		if err != nil {
-			return run, e.retainOn(err), false
+			return false, err
 		}
+		run, disposition = written, done
 		if ready == early {
-			return written, e.redeliverUnlessUndeliverable(ctx, written, rcv, wait), false
+			disposition = e.redeliverUnlessUndeliverable(ctx, written, rcv, wait)
 		}
-		return written, done, false
+		return false, nil
+	})
+	if err != nil {
+		return run, e.retainOn(err), false
 	}
-	return run, redeliverAfter(retainedFor), false
+	return run, disposition, admitted
 }
 
 func (e *Engine) claim(ctx context.Context, deployed deployedConsumer, rcv Received, run Run) (Run, Disposition, bool) {
-	for range maxRaces {
-		claimed := run
-		claimed.claim(time.Now(), e.cfg.Lease)
-		written, err := e.write(ctx, claimed)
+	var disposition Disposition
+	claimed := false
+	err := records.RetryWhileStale(ctx, func() (bool, error) {
+		next := run
+		next.claim(time.Now(), e.cfg.Lease)
+		written, err := e.write(ctx, next)
 		if err == nil {
-			return written, Disposition{}, true
+			run, claimed = written, true
+			return false, nil
 		}
 		if !errors.Is(err, records.ErrStale) {
-			return run, e.retainOn(err), false
+			return false, err
 		}
 		if run, err = e.reread(ctx, run); err != nil {
-			return run, e.retainOn(err), false
+			return false, err
 		}
-		var disposition Disposition
-		var ok bool
-		if run, disposition, ok = e.admit(ctx, deployed, rcv, run); !ok {
-			return run, disposition, false
-		}
+		var admitted bool
+		run, disposition, admitted = e.admit(ctx, deployed, rcv, run)
+		return admitted, nil
+	})
+	if err != nil {
+		return run, e.retainOn(err), false
 	}
-	return run, redeliverAfter(retainedFor), false
+	if !claimed {
+		return run, disposition, false
+	}
+	return run, Disposition{}, true
 }
 
 func (e *Engine) redeliverUnlessUndeliverable(ctx context.Context, run Run, rcv Received, wait time.Duration) Disposition {
@@ -272,7 +311,9 @@ func (e *Engine) redeliverUnlessUndeliverable(ctx context.Context, run Run, rcv 
 }
 
 func (e *Engine) retainOn(err error) Disposition {
-	slog.Warn("record a run's state", "error", err)
+	if !errors.Is(err, records.ErrContended) {
+		slog.Warn("record a run's state", "error", err)
+	}
 	return redeliverAfter(retainedFor)
 }
 
@@ -357,30 +398,36 @@ func (e *Engine) keepLeases(ctx context.Context, claims []claim, slots []Slot, s
 }
 
 func (e *Engine) renewLease(ctx context.Context, c *claim) bool {
-	for range maxRaces {
+	owned := true
+	if err := records.RetryWhileStale(ctx, func() (bool, error) {
 		renewed := c.run
 		renewed.LeaseUntil = time.Now().Add(e.cfg.Lease)
 		written, err := e.write(ctx, renewed)
 		if err == nil {
 			c.run = written
-			return true
+			return false, nil
 		}
 		if !errors.Is(err, records.ErrStale) {
 			if ctx.Err() == nil {
 				slog.Warn("renew the lease of a run being worked", "execution", c.run.Execution, "error", err)
 			}
-			return true
+			return false, nil
 		}
 		fresh, err := e.reread(ctx, c.run)
 		if err != nil {
-			return !errors.Is(err, errRunGone)
+			owned = !errors.Is(err, errRunGone)
+			return false, nil
 		}
 		if !fresh.owns(c.run) {
-			return false
+			owned = false
+			return false, nil
 		}
 		c.run = fresh
+		return true, nil
+	}); err != nil {
+		return true
 	}
-	return true
+	return owned
 }
 
 func (e *Engine) watchForCancel(ctx context.Context, claimed Run, cancel context.CancelCauseFunc) {
@@ -407,21 +454,29 @@ func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, c claim,
 		return done
 	}
 	current := c.run
-	for range maxRaces {
+	var disposition Disposition
+	if err := records.RetryWhileStale(ctx, func() (bool, error) {
 		changed := current
 		changed.apply(v, c.rcv.Message.Payload, time.Now())
 		_, err := e.write(ctx, changed)
 		if errors.Is(err, records.ErrStale) {
 			fresh, err := e.reread(ctx, current)
-			if err != nil || !fresh.owns(c.run) {
-				return done
+			if errors.Is(err, errRunGone) || (err == nil && !fresh.owns(c.run)) {
+				disposition = done
+				return false, nil
+			}
+			if err != nil {
+				slog.Warn("reread a run to record an attempt's outcome", "execution", c.run.Execution, "error", err)
+				disposition = redeliverAfter(retainedFor)
+				return false, nil
 			}
 			current = fresh
-			continue
+			return true, nil
 		}
 		if err != nil {
 			slog.Warn("record an attempt's outcome", "execution", c.run.Execution, "error", err)
-			return redeliverAfter(retainedFor)
+			disposition = redeliverAfter(retainedFor)
+			return false, nil
 		}
 		if answer.Outcome != Interrupted || !v.retries() {
 			e.cfg.ReportAttempt(Attempt{
@@ -436,12 +491,15 @@ func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, c claim,
 				Reason:      v.reason,
 			})
 		}
+		disposition = done
 		if v.retries() {
-			return redeliverAfter(v.retryAfter)
+			disposition = redeliverAfter(v.retryAfter)
 		}
-		return done
+		return false, nil
+	}); err != nil {
+		return redeliverAfter(retainedFor)
 	}
-	return redeliverAfter(retainedFor)
+	return disposition
 }
 
 func envelopeOf(deployed deployedConsumer, claims []claim) *topicv1.Envelope {

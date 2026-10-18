@@ -2,6 +2,8 @@ package runs_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -14,6 +16,7 @@ import (
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/runs/fake"
 )
@@ -43,6 +46,72 @@ func aPushedEngine(t *testing.T, topics map[string]*provider.TopicSpec, status i
 		configure(&cfg)
 	}
 	return pushed{engine: runs.New(cfg), store: store, queue: queue, calls: calls}
+}
+
+const staleWritesRunning = 9
+
+type racing struct {
+	*fake.Store
+	mu           sync.Mutex
+	passing      int
+	staleRuns    int
+	staleRecords int
+	answered     int
+	onStale      func()
+}
+
+func aRacedEngine(t *testing.T, topics map[string]*provider.TopicSpec, status int) (pushed, *racing) {
+	t.Helper()
+	raced := &racing{}
+	p := aPushedEngine(t, topics, status, func(cfg *runs.Config) {
+		raced.Store = cfg.Store.(*fake.Store)
+		cfg.Store = raced
+	})
+	return p, raced
+}
+
+func (r *racing) goStale(passing, staleRuns, staleRecords int, onStale func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.passing, r.staleRuns, r.staleRecords, r.onStale = passing, staleRuns, staleRecords, onStale
+}
+
+func (r *racing) staleAnswers() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.answered
+}
+
+func (r *racing) goesStale(left *int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if *left == 0 {
+		return false
+	}
+	if r.passing > 0 {
+		r.passing--
+		return false
+	}
+	*left--
+	r.answered++
+	if r.onStale != nil {
+		r.onStale()
+	}
+	return true
+}
+
+func (r *racing) WriteRun(ctx context.Context, run runs.Run) (records.Revision, error) {
+	if r.goesStale(&r.staleRuns) {
+		return "", records.ErrStale
+	}
+	return r.Store.WriteRun(ctx, run)
+}
+
+func (r *racing) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord, held json.RawMessage) error {
+	if r.goesStale(&r.staleRecords) {
+		return records.ErrStale
+	}
+	return r.Store.ReplaceRecord(ctx, record, held)
 }
 
 func aTaskNamed(name string, maxAttempts int, ordered bool) map[string]*provider.TopicSpec {
@@ -270,5 +339,122 @@ func TestAKeysLaterMessagesWaitBehindOneRedeliveredWhileAnotherKeyRuns(t *testin
 	dispositions := p.engine.Deliver(ctx, "ledger", "apply", p.received(t, "ledger", "apply"))
 	if len(dispositions) != 3 || dispositions[0].Done || dispositions[1].Done || dispositions[1].After != 0 || p.calls.Load() != 2 {
 		t.Errorf("Deliver = %+v after %d calls, want key a's first redelivered, its second waiting behind it untried, and key b tried", dispositions, p.calls.Load())
+	}
+}
+
+func TestABatchingConsumerOfAnOrderedTopicLeavesAKeysLaterMessageBehindAHeadLeasedElsewhere(t *testing.T) {
+	t.Parallel()
+
+	topics := map[string]*provider.TopicSpec{"ledger": {Ordered: true, Consumers: []provider.ConsumerSpec{{
+		Name: "apply", Worker: "w", Batch: &provider.BatchPolicy{Size: 10, Timeout: time.Second},
+		Retry: provider.RetryPolicy{MaxAttempts: 3, MinDelay: time.Second, MaxDelay: time.Second},
+	}}}}
+	p := aPushedEngine(t, topics, http.StatusOK, nil)
+	ctx := context.Background()
+	var ids []string
+	for range 2 {
+		sent, err := p.engine.Topics().Send(ctx, &topicv1.SendRequest{Topic: "ledger", Key: "a", Payload: []byte(`{}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, sent.GetMessageId())
+	}
+	head := runs.Run{
+		Execution: runs.ExecutionOf(ids[0], "apply"), Topic: "ledger", Consumer: "apply", Key: "a", Message: ids[0],
+		Status: provider.RunExecuting, Attempts: 1, MaxAttempts: 3, CreatedAt: time.Now(), DueAt: time.Now(), LeaseUntil: time.Now().Add(time.Minute),
+	}
+	if _, err := p.store.CreateRun(ctx, head); err != nil {
+		t.Fatal(err)
+	}
+	dispositions := p.engine.Deliver(ctx, "ledger", "apply", p.received(t, "ledger", "apply"))
+	if len(dispositions) != 2 || dispositions[0].Done || dispositions[1].Done || dispositions[1].After != 0 || p.calls.Load() != 0 {
+		t.Errorf("Deliver = %+v after %d calls, want the leased head redelivered and the key's later message waiting behind it untried", dispositions, p.calls.Load())
+	}
+}
+
+type unreadableAfterAnOutcome struct {
+	*fake.Store
+	mu      sync.Mutex
+	settled bool
+}
+
+func (u *unreadableAfterAnOutcome) WriteRun(ctx context.Context, run runs.Run) (records.Revision, error) {
+	if run.Status == provider.RunExecuting {
+		return u.Store.WriteRun(ctx, run)
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.settled = true
+	return "", records.ErrStale
+}
+
+func (u *unreadableAfterAnOutcome) ReadRun(ctx context.Context, topic, execution string) (runs.Run, error) {
+	u.mu.Lock()
+	settled := u.settled
+	u.mu.Unlock()
+	if settled {
+		return runs.Run{}, errors.New("the store is unreachable")
+	}
+	return u.Store.ReadRun(ctx, topic, execution)
+}
+
+func TestAnOutcomeWhoseRunCannotBeRereadAfterGoingStaleIsRedeliveredNotDoneWith(t *testing.T) {
+	t.Parallel()
+
+	p := aPushedEngine(t, aTaskNamed("resize", 3, false), http.StatusOK, func(cfg *runs.Config) {
+		cfg.Store = &unreadableAfterAnOutcome{Store: cfg.Store.(*fake.Store)}
+	})
+	p.trigger(t, "resize", nil)
+	dispositions := p.engine.Deliver(context.Background(), "resize", "resize", p.received(t, "resize", "resize"))
+	if dispositions[0].Done || p.calls.Load() != 1 {
+		t.Errorf("Deliver = %+v after %d calls, want the message kept for redelivery while its run is still owed an outcome", dispositions[0], p.calls.Load())
+	}
+}
+
+func TestAClaimOutlastsItsRunGoingStaleNineWritesRunning(t *testing.T) {
+	t.Parallel()
+
+	p, raced := aRacedEngine(t, aTaskNamed("resize", 3, false), http.StatusOK)
+	id := p.trigger(t, "resize", nil)
+	received := p.received(t, "resize", "resize")
+	raced.goStale(0, staleWritesRunning, 0, nil)
+	dispositions := p.engine.Deliver(context.Background(), "resize", "resize", received)
+	run, _ := p.store.ReadRun(context.Background(), "resize", id)
+	if !dispositions[0].Done || run.Status != provider.RunCompleted || p.calls.Load() != 1 {
+		t.Errorf("Deliver = %+v, run %s after %d calls, want the run claimed, attempted once and completed", dispositions[0], run.Status, p.calls.Load())
+	}
+}
+
+func TestAnAttemptsOutcomeIsRecordedThoughItsRunGoesStaleNineWritesRunning(t *testing.T) {
+	t.Parallel()
+
+	p, raced := aRacedEngine(t, aTaskNamed("resize", 3, false), http.StatusOK)
+	id := p.trigger(t, "resize", nil)
+	received := p.received(t, "resize", "resize")
+	raced.goStale(1, staleWritesRunning, 0, nil)
+	dispositions := p.engine.Deliver(context.Background(), "resize", "resize", received)
+	run, _ := p.store.ReadRun(context.Background(), "resize", id)
+	if !dispositions[0].Done || run.Status != provider.RunCompleted || run.Attempts != 1 {
+		t.Errorf("Deliver = %+v, run %s after %d attempts, want the attempt's success recorded on the run", dispositions[0], run.Status, run.Attempts)
+	}
+}
+
+func TestARunOutOfAttemptsFailsThoughItGoesStaleNineWritesRunning(t *testing.T) {
+	t.Parallel()
+
+	p, raced := aRacedEngine(t, aTaskNamed("resize", 3, false), http.StatusOK)
+	ctx := context.Background()
+	id := p.trigger(t, "resize", nil)
+	run, _ := p.store.ReadRun(ctx, "resize", id)
+	run.Attempts = 3
+	if _, err := p.store.WriteRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	received := p.received(t, "resize", "resize")
+	raced.goStale(0, staleWritesRunning, 0, nil)
+	dispositions := p.engine.Deliver(ctx, "resize", "resize", received)
+	run, _ = p.store.ReadRun(ctx, "resize", id)
+	if !dispositions[0].Done || run.Status != provider.RunFailed || p.calls.Load() != 0 {
+		t.Errorf("Deliver = %+v, run %s after %d calls, want the run failed without a call and its message done with", dispositions[0], run.Status, p.calls.Load())
 	}
 }
