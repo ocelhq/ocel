@@ -22,7 +22,6 @@ import (
 
 const (
 	HealthKey    = "compute.container.health.path"
-	LogTail      = "200"
 	NoLogOutput  = "(no output)"
 	drainCeiling = "open requests get 502 or a truncated response; websockets and server-sent-events reconnect"
 )
@@ -376,7 +375,7 @@ func (c *Containers) refuseFailedGate(ctx context.Context, rollout Rollout, outc
 			logs = NoLogOutput
 		}
 		fmt.Fprintf(&evidence, "\ngate: http://%s, %s to answer 2xx (%s)\nstate: %s\nlogs (last %s lines): %s",
-			app.gate(), rollout.DeployTimeout, app.pathSource(), state, LogTail, logs)
+			app.gate(), rollout.DeployTimeout, app.pathSource(), state, docker.LogTail, logs)
 	}
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",

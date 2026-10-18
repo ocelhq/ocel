@@ -1,17 +1,19 @@
 package boxapi
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func TestAStoreSecretIsBoundToItsProjectTierStackAndTheStoreKeyUnderResources(t *testing.T) {
 	t.Parallel()
-	key, err := base64.StdEncoding.DecodeString(keySealedWith)
+	key, err := base64.StdEncoding.DecodeString("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +27,7 @@ func TestAStoreSecretIsBoundToItsProjectTierStackAndTheStoreKeyUnderResources(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	opened, err := Open(key, bound, sealed)
+	opened, err := fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}).Open(context.Background(), environment.TierProduction, bound, sealed)
 	if err != nil || string(opened) != "s3cr3t-store" {
 		t.Fatalf("Open() = %q, %v, want the store secret sealed as a resource secret of shop at production/shop-prod/resources/store/storekey to open: every box's store secret is bound to those bytes", opened, err)
 	}

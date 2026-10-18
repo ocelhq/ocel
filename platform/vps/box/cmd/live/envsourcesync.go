@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/vps/box/recordstore"
+	"github.com/ocelhq/ocel/platform/vps/box/sealkey"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -35,7 +37,7 @@ func envSourceSync(argv []string, errs io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	sync := &envsource.Sync{
-		Store: variablestore.Store{KeyValues: boxapi.KeyValues{Root: boxapi.StateRoot}, Cipher: boxapi.Cipher{Root: boxapi.TierRoot}},
+		Store: variablestore.Store{KeyValues: recordstore.KeyValues{Root: boxapi.StateRoot}, Cipher: sealkey.Cipher{Root: boxapi.TierRoot}},
 		Tier:  environment.Tier(*tier),
 		Login: envsource.Login{Client: &http.Client{Timeout: envSourceRequestTimeout}},
 	}

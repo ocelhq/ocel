@@ -170,7 +170,7 @@ func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 	t.Parallel()
 
 	command := release.LogCommand(physical)
-	if !strings.Contains(command, "--tail "+release.LogTail) {
+	if !strings.Contains(command, "--tail "+docker.LogTail) {
 		t.Errorf("a refusal quotes %q, and an unbounded log is a deploy's whole output", command)
 	}
 }

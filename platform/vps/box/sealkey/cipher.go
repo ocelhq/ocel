@@ -1,4 +1,4 @@
-package boxapi
+package sealkey
 
 import (
 	"context"
@@ -24,7 +24,7 @@ const (
 	sealTag        = 16
 )
 
-func KeyPath(root string, tier environment.Tier) string {
+func Path(root string, tier environment.Tier) string {
 	return filepath.Join(root, string(tier), sealKeyFile)
 }
 
@@ -50,11 +50,11 @@ func (s Cipher) keyFor(tier environment.Tier, bound seal.AssociatedData) ([]byte
 	if tier == "" {
 		return nil, fmt.Errorf("a value bound to %s names no tier", bound.Bytes())
 	}
-	return ReadKey(s.Root, tier)
+	return Read(s.Root, tier)
 }
 
-func ReadKey(root string, tier environment.Tier) ([]byte, error) {
-	key, err := os.ReadFile(KeyPath(root, tier))
+func Read(root string, tier environment.Tier) ([]byte, error) {
+	key, err := os.ReadFile(Path(root, tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the %s seal key: %w", tier, err)
 	}
@@ -107,8 +107,8 @@ func gcmOf(key []byte) (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
-func CreateKey(root string, tier environment.Tier) error {
-	path := KeyPath(root, tier)
+func Create(root string, tier environment.Tier) error {
+	path := Path(root, tier)
 	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
 		if err != nil {
 			return err

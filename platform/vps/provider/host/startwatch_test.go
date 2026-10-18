@@ -52,7 +52,7 @@ func TestAnAppWhoseContainerExitsBeforeItAnswersIsRefusedAsFailingToStartAndNeve
 			t.Fatalf("%s: FindHealthPath() = %v, want a not-ready refusal", what, err)
 		}
 		said := err.Error()
-		for _, want := range []string{"start node on", "failing to start, not failing a health check", "RestartCount=10", "logs (its last run, last " + release.LogTail + " lines):\nError: Cannot find module '/app/index.js'", physical + " removed"} {
+		for _, want := range []string{"start node on", "failing to start, not failing a health check", "RestartCount=10", "logs (its last run, last " + docker.LogTail + " lines):\nError: Cannot find module '/app/index.js'", physical + " removed"} {
 			if !strings.Contains(said, want) {
 				t.Errorf("%s: the refusal reads\n%s\nand never says %q", what, said, want)
 			}
@@ -111,7 +111,7 @@ func TestTheLastRunsLogsAreReadFromWhenItStartedAndNoMoreThanTheTail(t *testing.
 	t.Parallel()
 
 	command := release.RenderLastRunLogs(physical)
-	for _, want := range []string{`--since "$started"`, "--tail " + release.LogTail} {
+	for _, want := range []string{`--since "$started"`, "--tail " + docker.LogTail} {
 		if !strings.Contains(command, want) {
 			t.Errorf("the last run's logs are read with\n%s\nwhich has no %s: an app that logs fast before it dies would hand back every line it wrote", command, want)
 		}

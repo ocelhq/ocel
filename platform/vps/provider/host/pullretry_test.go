@@ -30,7 +30,7 @@ func TestEveryContainerThisHostStartsPullsItsImageAheadOfRunningIt(t *testing.T)
 		}
 		for _, want := range []string{
 			"docker image inspect " + shell.Quote(container.image),
-			fmt.Sprintf("-ge %d", release.ContainerPullAttempts),
+			fmt.Sprintf("-ge %d", docker.PullAttempts),
 		} {
 			if !strings.Contains(container.command, want) {
 				t.Errorf("%s contains no %q, so its pull is either unbounded or repeated on a box that already has the image:\n%s", what, want, container.command)

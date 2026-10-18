@@ -1,4 +1,4 @@
-package host
+package recordstore
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func TestPurgingAProjectsValuesLeavesNothingOfItOnTheBox(t *testing.T) {
 	if err := os.MkdirAll(boxapi.KeyValuesDir(root, environment.TierProduction), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	store := variablestore.Store{KeyValues: boxapi.KeyValues{Root: root}, Cipher: fake.NewCipher()}
+	store := variablestore.Store{KeyValues: KeyValues{Root: root}, Cipher: fake.NewCipher()}
 	purged := variablestore.Scope{Project: "j-manual-express", Tier: environment.TierProduction}
 	shared := variablestore.Scope{Project: "shared", Tier: environment.TierProduction}
 	consumer := variablestore.Scope{Project: "consumer", Tier: environment.TierProduction}

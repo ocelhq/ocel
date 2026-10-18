@@ -1,4 +1,4 @@
-package boxapi
+package sealkey
 
 import (
 	"context"
@@ -99,10 +99,10 @@ func TestTheBoxCipherReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	key := aKey(t)
-	if err := os.MkdirAll(filepath.Dir(KeyPath(root, environment.TierProduction)), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(Path(root, environment.TierProduction)), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(KeyPath(root, environment.TierProduction), key, 0o400); err != nil {
+	if err := os.WriteFile(Path(root, environment.TierProduction), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
 	vault := Cipher{Root: root}
@@ -118,10 +118,10 @@ func TestTheBoxCipherReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 func TestAValueTheBoxSealsOpensUnderItsOwnAssociatedDataAndNoOther(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Dir(KeyPath(root, environment.TierProduction)), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(Path(root, environment.TierProduction)), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(KeyPath(root, environment.TierProduction), aKey(t), 0o400); err != nil {
+	if err := os.WriteFile(Path(root, environment.TierProduction), aKey(t), 0o400); err != nil {
 		t.Fatal(err)
 	}
 	vault := Cipher{Root: root}
@@ -177,7 +177,7 @@ func TestASealIsTheNonceThenTheCiphertextThenTheTag(t *testing.T) {
 func TestCreatingATierKeyRefusesOneThatExistsAndLeavesItReadableByItsOwnerAlone(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	path := KeyPath(root, environment.TierProduction)
+	path := Path(root, environment.TierProduction)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -185,8 +185,8 @@ func TestCreatingATierKeyRefusesOneThatExistsAndLeavesItReadableByItsOwnerAlone(
 		t.Fatal(err)
 	}
 
-	if err := CreateKey(root, environment.TierProduction); err != nil {
-		t.Fatalf("CreateKey() = %v", err)
+	if err := Create(root, environment.TierProduction); err != nil {
+		t.Fatalf("Create() = %v", err)
 	}
 	created, err := os.ReadFile(path)
 	if err != nil || len(created) != sealKeyBytes {
@@ -200,11 +200,11 @@ func TestCreatingATierKeyRefusesOneThatExistsAndLeavesItReadableByItsOwnerAlone(
 		t.Errorf("the staging file is still beside the key: %v", err)
 	}
 
-	if err := CreateKey(root, environment.TierProduction); err == nil || !strings.Contains(err.Error(), "already exists") {
-		t.Errorf("CreateKey() over a key = %v, want it refused", err)
+	if err := Create(root, environment.TierProduction); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Create() over a key = %v, want it refused", err)
 	}
 	kept, err := os.ReadFile(path)
 	if err != nil || string(kept) != string(created) {
-		t.Error("a refused CreateKey() replaced the key every sealed value opens under")
+		t.Error("a refused Create() replaced the key every sealed value opens under")
 	}
 }

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"crypto/rand"
 	"errors"
 	"os"
 	"os/exec"
@@ -29,6 +30,17 @@ func sealDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return root
+}
+
+func createKey(t *testing.T, root string) {
+	t.Helper()
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, string(sealTier), machine.SealKeyFile), key, 0o400); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.T) {
@@ -125,9 +137,7 @@ func TestTheSurveyTheHostRunsAnswersForAKeyThatExistsAndSaysNothingForOneThatDoe
 		t.Fatalf("the survey answered %q where no key exists", rendered)
 	}
 
-	if err := boxapi.CreateKey(root, sealTier); err != nil {
-		t.Fatal(err)
-	}
+	createKey(t, root)
 	observed, seal, err := machine.ReadSurvey(sh(t, t.TempDir(), sealSurvey(item)))
 	if err != nil {
 		t.Fatalf("readSurvey() over what the survey script answers = %v", err)
@@ -151,9 +161,7 @@ func TestWritingAKeyThatExistsReassertsItsPostureAndMintsNothing(t *testing.T) {
 
 	root := sealDir(t)
 	key := filepath.Join(root, string(sealTier), "seal.key")
-	if err := boxapi.CreateKey(root, sealTier); err != nil {
-		t.Fatal(err)
-	}
+	createKey(t, root)
 	minted, err := os.ReadFile(key)
 	if err != nil {
 		t.Fatal(err)

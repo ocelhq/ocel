@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/seal"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/box/sealkey"
 )
 
 type ran struct {
@@ -43,7 +43,7 @@ func TestTheSealCommandCreatesATierKeyAndOpensWhatItSeals(t *testing.T) {
 	if got := sealed(t, root, "", "production", "init"); got.code != 0 || got.stdout != "" {
 		t.Fatalf("seal production init = %+v, want the key created", got)
 	}
-	info, err := os.Lstat(boxapi.KeyPath(root, environment.TierProduction))
+	info, err := os.Lstat(sealkey.Path(root, environment.TierProduction))
 	if err != nil || info.Mode().Perm() != 0o400 {
 		t.Fatalf("the key is %v, %v, want mode 0400", info, err)
 	}
@@ -76,7 +76,7 @@ func TestTheSealCommandOpensAValueTheHelperSealed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(boxapi.KeyPath(root, environment.TierProduction), key, 0o400); err != nil {
+	if err := os.WriteFile(sealkey.Path(root, environment.TierProduction), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
 	at := string(seal.BindToProject("shop", "variable", "production", "staging", "/web", "STRIPE_API_KEY").Bytes())

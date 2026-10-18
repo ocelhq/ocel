@@ -92,7 +92,7 @@ func (c *Containers) refuseMissingHealthPath(ctx context.Context, search HealthP
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"find %s's health path on %s: %s\nstate: %s\nlogs (last %s lines): %s\nSet %q on %s to skip probing, e.g. %s%s",
-		search.App, c.box.Named(), verdict, state, LogTail, logs, HealthKey, search.App, HealthPathExample, c.discardSearched(ctx, search, elevation))
+		search.App, c.box.Named(), verdict, state, docker.LogTail, logs, HealthKey, search.App, HealthPathExample, c.discardSearched(ctx, search, elevation))
 }
 
 func (c *Containers) discardSearched(ctx context.Context, search HealthPathSearch, elevation ssh.Acting) string {

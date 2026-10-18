@@ -228,6 +228,8 @@ func (s Service) NetworksPresent() string {
 	return checks
 }
 
+const PullAttempts = 5
+
 func Pulled(imageRef string, attempts, attemptSeconds, budgetSeconds int) string {
 	image := shell.Quote(imageRef)
 	spent := "{ printf '%s\\n' " + shell.Quote(fmt.Sprintf("%s was not pulled within %s", imageRef, shell.Seconds(budgetSeconds))) + " >&2; exit 1; }"

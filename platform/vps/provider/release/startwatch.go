@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -64,15 +65,15 @@ func isUnstarted(state string) bool {
 
 func RenderLastRunLogs(name string) string {
 	return "started=$(docker inspect --type container --format '{{.State.StartedAt}}' " + shell.Quote(name) + ") && " +
-		"docker logs --since \"$started\" --tail " + LogTail + " " + shell.Quote(name) + " 2>&1 || true"
+		"docker logs --since \"$started\" --tail " + docker.LogTail + " " + shell.Quote(name) + " 2>&1 || true"
 }
 
 func (c *Containers) describeUnstarted(ctx context.Context, app, name, state string, elevation ssh.Acting) string {
 	logs := c.box.Evidence(ctx, elevation, RenderLastRunLogs(name))
-	ran := "its last run, last " + LogTail + " lines"
+	ran := "its last run, last " + docker.LogTail + " lines"
 	if logs == "" {
 		logs = c.box.Evidence(ctx, elevation, LogCommand(name))
-		ran = "the last " + LogTail + " lines"
+		ran = "the last " + docker.LogTail + " lines"
 	}
 	if logs == "" {
 		logs = NoLogOutput
