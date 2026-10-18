@@ -1,14 +1,142 @@
 import io
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from types import TracebackType
 from typing import TYPE_CHECKING
 
+from pyqwest import Response, SyncResponse
+
+from ocel._error import OcelError
+from ocel._object import ObjectInfo
 from ocel._runtime import run_to_completion
 
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer, WriteableBuffer
 
-    from ocel.bucket import AsyncObjectBody, Bucket, ObjectBody, ObjectInfo, Writer
+    from ocel._object_upload import Upload
+    from ocel.bucket import Bucket
+
+
+class ObjectBody:
+    """An object's bytes, with what the bucket knows about it beside them."""
+
+    #: What the bucket knows about the object.
+    info: ObjectInfo
+
+    def __init__(
+        self,
+        info: ObjectInfo,
+        stream: AbstractContextManager[SyncResponse],
+        response: SyncResponse,
+    ):
+        """Wrap a streaming read of the object ``info`` describes. :meth:`Bucket.get`
+        hands one back."""
+        self.info = info
+        self._stream = stream
+        self._response = response
+        self._walked = False
+        self._whole: bytes | None = None
+
+    def __iter__(self) -> Iterator[bytes]:
+        """The bytes, a chunk at a time, as they arrive. A body is walked once; one read
+        whole with :meth:`bytes` walks as that one chunk."""
+        if self._whole is not None:
+            yield self._whole
+            return
+        _refuse_second_walk(self.info.key, self._walked)
+        self._walked = True
+        try:
+            for chunk in self._response.content:
+                yield bytes(chunk)
+        finally:
+            self.close()
+
+    def bytes(self) -> bytes:
+        """Every byte of the object, read to the end, and the same bytes on every call
+        after."""
+        if self._whole is None:
+            self._whole = b"".join(self)
+        return self._whole
+
+    def text(self, encoding: str = "utf-8") -> str:
+        """Every byte of the object, decoded."""
+        return self.bytes().decode(encoding)
+
+    def close(self) -> None:
+        """Release the connection the object is streaming over."""
+        self._stream.__exit__(None, None, None)
+
+    def __enter__(self) -> "ObjectBody":
+        """Hand back the body, which closes when the block ends."""
+        return self
+
+    def __exit__(self, *_exception: object) -> None:
+        """Release the connection the object is streaming over."""
+        self.close()
+
+
+class AsyncObjectBody:
+    """An object's bytes, with what the bucket knows about it beside them, read with
+    ``await`` and ``async for``."""
+
+    #: What the bucket knows about the object.
+    info: ObjectInfo
+
+    def __init__(
+        self,
+        info: ObjectInfo,
+        stream: AbstractAsyncContextManager[Response],
+        response: Response,
+    ):
+        """Wrap a streaming read of the object ``info`` describes. :meth:`Bucket.get_async`
+        hands one back."""
+        self.info = info
+        self._stream = stream
+        self._response = response
+        self._walked = False
+        self._whole: bytes | None = None
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        """The bytes, a chunk at a time, as they arrive. A body is walked once; one read
+        whole with :meth:`bytes` walks as that one chunk."""
+        if self._whole is not None:
+            yield self._whole
+            return
+        _refuse_second_walk(self.info.key, self._walked)
+        self._walked = True
+        try:
+            async for chunk in self._response.content:
+                yield bytes(chunk)
+        finally:
+            await self.aclose()
+
+    async def bytes(self) -> bytes:
+        """Every byte of the object, read to the end, and the same bytes on every call
+        after."""
+        if self._whole is None:
+            self._whole = b"".join([chunk async for chunk in self])
+        return self._whole
+
+    async def text(self, encoding: str = "utf-8") -> str:
+        """Every byte of the object, decoded."""
+        return (await self.bytes()).decode(encoding)
+
+    async def aclose(self) -> None:
+        """Release the connection the object is streaming over."""
+        await self._stream.__aexit__(None, None, None)
+
+    async def __aenter__(self) -> "AsyncObjectBody":
+        """Hand back the body, which closes when the block ends."""
+        return self
+
+    async def __aexit__(self, *_exception: object) -> None:
+        """Release the connection the object is streaming over."""
+        await self.aclose()
+
+
+def _refuse_second_walk(key: str, walked: bool) -> None:
+    if walked:
+        raise OcelError(f'the body of "{key}" was read already, and a body is read once')
 
 
 class ReadStream(io.RawIOBase):
@@ -42,12 +170,12 @@ class WriteStream(io.RawIOBase):
     object lands when the handle closes, and not at all when the block it is used in
     raises."""
 
-    def __init__(self, writer: "Writer"):
-        """Write through ``writer``. :meth:`Bucket.open` hands one back."""
+    def __init__(self, writer: "Upload"):
+        """Not built directly: :meth:`Bucket.open` hands one back."""
         self._writer = writer
 
     @property
-    def info(self) -> "ObjectInfo | None":
+    def info(self) -> ObjectInfo | None:
         """What the bucket knows about the object this handle wrote, once it has closed and
         the object has landed: its etag is this write's own. ``None`` while the handle is
         open, and after a write that raised."""
@@ -129,12 +257,12 @@ class AsyncWriteStream:
     used as an async context manager. The object lands when the block ends, and not at all
     when it raises."""
 
-    def __init__(self, writer: "Writer"):
-        """Write through ``writer``. :meth:`Bucket.open_async` hands one back."""
+    def __init__(self, writer: "Upload"):
+        """Not built directly: :meth:`Bucket.open_async` hands one back."""
         self._writer = writer
 
     @property
-    def info(self) -> "ObjectInfo | None":
+    def info(self) -> ObjectInfo | None:
         """What the bucket knows about the object this handle wrote, once it has closed and
         the object has landed: its etag is this write's own. ``None`` while the handle is
         open, and after a write that raised."""

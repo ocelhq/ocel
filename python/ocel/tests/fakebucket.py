@@ -2,6 +2,7 @@ import hashlib
 import io
 import socketserver
 import threading
+import time
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
@@ -55,6 +56,8 @@ class Store:
         self.aborted: list[str] = []
         self.page_size = 2
         self.refuse_part: int | None = None
+        self.slow_part: int | None = None
+        self.events: list[str] = []
         self.signed: list[tuple] = []
         self.listed: list[tuple] = []
         self.authorizations: list[str | None] = []
@@ -206,6 +209,7 @@ class Service:
         self._seen(ctx)
         self.store.uploads.pop(request.upload_id, None)
         self.store.aborted.append(request.upload_id)
+        self.store.events.append("abort")
         return AbortMultipartResponse()
 
     def presign_upload(self, request, ctx):
@@ -269,7 +273,10 @@ class Bucket:
             start_response("500 Internal Server Error", [("content-length", "0")])
             return [b""]
         body = _body(environ)
-        self.store.uploads[upload_id]["parts"][number] = body
+        if self.store.slow_part == number:
+            time.sleep(0.3)
+        self.store.events.append(f"part{number}-done")
+        self.store.uploads.get(upload_id, {"parts": {}})["parts"][number] = body
         etag = f'"{hashlib.md5(body).hexdigest()}"'
         start_response("200 OK", [("etag", etag), ("content-length", "0")])
         return [b""]

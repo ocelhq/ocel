@@ -10,6 +10,8 @@ from ocel._declare import is_discovering
 from ocel._error import refuse_runtime_call
 
 C = TypeVar("C")
+H = TypeVar("H")
+H_co = TypeVar("H_co", covariant=True)
 T = TypeVar("T")
 
 Operation = Coroutine[Any, Any, T]
@@ -22,19 +24,6 @@ def run_to_completion(operation: Operation[T]) -> T:
         return cast(T, finished.value)
     operation.close()
     raise RuntimeError("a blocking operation awaited something that suspends")
-
-
-class AwaitedCalls:
-    def __init__(self, target: object):
-        self._target = target
-
-    def __getattr__(self, name: str) -> Callable[..., Operation[Any]]:
-        method = getattr(self._target, name)
-
-        async def call(*arguments: Any, **keywords: Any) -> Any:
-            return method(*arguments, **keywords)
-
-        return call
 
 
 class _RuntimeCalls:
@@ -57,10 +46,15 @@ class _RuntimeCalls:
         return call
 
 
-class Session(Generic[C]):
-    def __init__(self, client: C, blocking: bool):
+class Session(Generic[C, H_co]):
+    def __init__(self, client: C, blocking: bool, http: H_co):
         self.client = client
         self.blocking = blocking
+        self._http = http
+
+    @property
+    def http(self) -> H_co:
+        return self._http
 
     async def offload(self, function: Callable[..., T], *arguments: Any) -> T:
         if self.blocking:
@@ -69,7 +63,11 @@ class Session(Generic[C]):
 
     async def gather(self, operations: list[Operation[T]]) -> list[T]:
         if not self.blocking:
-            return list(await asyncio.gather(*operations))
+            settled = await asyncio.gather(*operations, return_exceptions=True)
+            for outcome in settled:
+                if isinstance(outcome, BaseException):
+                    raise outcome
+            return cast(list[T], settled)
         with ThreadPoolExecutor(max_workers=max(len(operations), 1)) as sending:
             running = [sending.submit(run_to_completion, operation) for operation in operations]
             return [future.result() for future in running]
@@ -103,8 +101,8 @@ class RuntimeConnection(Generic[C]):
             target = self._targets[(address, blocking)] = build(address)
         return cast(C, _RuntimeCalls(target, blocking, headers, self.what))
 
-    def session(self, access: str, blocking: bool) -> Session[C]:
-        return Session(self.open(access, blocking), blocking)
+    def session(self, access: str, blocking: bool, http: H) -> Session[C, H]:
+        return Session(self.open(access, blocking), blocking, http)
 
     def call(self, access: str, send: Callable[[C], Operation[T]]) -> T:
         return run_to_completion(send(self.open(access, True)))
@@ -112,8 +110,10 @@ class RuntimeConnection(Generic[C]):
     async def call_async(self, access: str, send: Callable[[C], Operation[T]]) -> T:
         return await send(self.open(access, False))
 
-    def run(self, access: str, operation: Callable[[Session[C]], Operation[T]]) -> T:
-        return run_to_completion(operation(self.session(access, True)))
+    def run(self, access: str, http: H, operation: Callable[[Session[C, H]], Operation[T]]) -> T:
+        return run_to_completion(operation(self.session(access, True, http)))
 
-    async def run_async(self, access: str, operation: Callable[[Session[C]], Operation[T]]) -> T:
-        return await operation(self.session(access, False))
+    async def run_async(
+        self, access: str, http: H, operation: Callable[[Session[C, H]], Operation[T]]
+    ) -> T:
+        return await operation(self.session(access, False, http))
