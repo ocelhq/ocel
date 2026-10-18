@@ -42,7 +42,7 @@ func TestLiveACronTaskIsACloudSchedulerJobPublishingToItsTopic(t *testing.T) {
 	declared := map[string]*provider.TopicSpec{
 		"digest": {Cron: "*/5 * * * *", Consumers: []provider.ConsumerSpec{{Name: "digest", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
 	}
-	topology := topics.Topology{Names: names, Topics: declared, Publisher: appsMember, Agent: agent}
+	topology := topics.Topology{Names: names, Topics: declared}
 
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() = %v", err)
@@ -77,7 +77,7 @@ func TestLiveATaskThatStopsRunningOnAScheduleLosesItsJob(t *testing.T) {
 	scheduled := map[string]*provider.TopicSpec{
 		"digest": {Cron: "*/5 * * * *", Consumers: []provider.ConsumerSpec{{Name: "digest", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
 	}
-	topology := topics.Topology{Names: names, Topics: scheduled, Publisher: appsMember, Agent: agent}
+	topology := topics.Topology{Names: names, Topics: scheduled}
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestLiveATaskThatStopsRunningOnAScheduleLosesItsJob(t *testing.T) {
 
 	unscheduled := topics.Topology{Names: names, Topics: map[string]*provider.TopicSpec{
 		"digest": {Consumers: []provider.ConsumerSpec{{Name: "digest", Worker: "worker", Exclusive: true, Retry: defaultRetry}}},
-	}, Publisher: appsMember, Agent: agent}
+	}}
 	if err := unscheduled.RemoveDropped(context.Background(), clients, scheduled); err != nil {
 		t.Fatalf("RemoveDropped() after digest dropped its cron = %v", err)
 	}

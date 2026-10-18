@@ -209,34 +209,7 @@ func TestADeployThatStopsBindingABucketAlreadyDeletedIsNotRefused(t *testing.T) 
 	}
 }
 
-func TestRemovingTheLastEnvironmentRunningAnAppRevokesItsBucketsAndSigning(t *testing.T) {
-	t.Parallel()
-	p, c, accounts, buckets := servingAccountsAndBuckets(t)
-	uploads := c.AppBucket("shop", "prod", "uploads")
-	existingBuckets(buckets, uploads)
-	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
-	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	spec.App.Values.Bindings = []provider.Binding{bindingBucket(c, "uploads")}
-	account, err := p.ensureAppAccount(context.Background(), c, spec, nil)
-	if err != nil {
-		t.Fatalf("ensureAppAccount() = %v", err)
-	}
-	member := "serviceAccount:" + account
-	records := recordingBucketStacks(t, spec, bindingBucket(c, "uploads"))
-
-	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("revokeUnusedAppAccount() = %v", err)
-	}
-
-	if got := rolesOf(buckets.granted(uploads), member); got != nil {
-		t.Errorf("the account still holds %v on %s after no environment runs its app", got, uploads)
-	}
-	if got := holdings(accounts, c, member); len(got) != 0 {
-		t.Errorf("the account still holds %q, want nothing", got)
-	}
-}
-
-func TestAnEnvironmentRecordedWhileAnAppsBucketsAreRevokedKeepsThem(t *testing.T) {
+func TestRemovingTheLastReleaseOfAnEnvironmentRevokesItsBuckets(t *testing.T) {
 	t.Parallel()
 	p, c, _, buckets := servingAccountsAndBuckets(t)
 	uploads := c.AppBucket("shop", "prod", "uploads")
@@ -248,27 +221,33 @@ func TestAnEnvironmentRecordedWhileAnAppsBucketsAreRevokedKeepsThem(t *testing.T
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
-	lists := 0
-	backing := recordingBucketStacks(t, spec, bindingBucket(c, "uploads"))
-	records := racingStacks{Store: backing, between: func() { recordApp(t, backing, spec, stackOf("pr-8", "web", "r2")) }, lists: &lists}
 
-	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Fatalf("revokeUnusedAppAccount() = %v", err)
+	if err := p.revokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
-	if got := rolesOf(buckets.granted(uploads), "serviceAccount:"+account); len(got) != 1 {
-		t.Errorf("the account holds %v on %s, want its grant kept: pr-8 started running the app while it was revoked", got, uploads)
+	if got := rolesOf(buckets.granted(uploads), "serviceAccount:"+account); got != nil {
+		t.Errorf("the account still holds %v on %s after its environment's last release was removed", got, uploads)
 	}
 }
 
 func TestRevokingAnAppsBucketsToleratesABucketAlreadyDeleted(t *testing.T) {
 	t.Parallel()
-	_, c, _, _ := servingAccountsAndBuckets(t)
-	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
+	p, c, _, buckets := servingAccountsAndBuckets(t)
+	uploads := c.AppBucket("shop", "prod", "uploads")
+	existingBuckets(buckets, uploads)
+	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	records := recordingBucketStacks(t, spec, bindingBucket(c, "uploads"))
+	spec.App.Values.Bindings = []provider.Binding{bindingBucket(c, "uploads")}
+	if _, err := p.ensureAppAccount(context.Background(), c, spec, nil); err != nil {
+		t.Fatalf("ensureAppAccount() = %v", err)
+	}
+	buckets.mu.Lock()
+	delete(buckets.buckets, uploads)
+	delete(buckets.policies, uploads)
+	buckets.mu.Unlock()
 
-	if err := revokeUnusedAppAccount(context.Background(), c, records, spec.Ref, nil); err != nil {
-		t.Errorf("revokeUnusedAppAccount() with its bucket already deleted = %v, want nothing to revoke", err)
+	if err := p.revokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+		t.Errorf("revokeAfterRemoval() with its bucket already deleted = %v, want nothing to revoke", err)
 	}
 }

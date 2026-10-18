@@ -1,7 +1,6 @@
 package gcp
 
 import (
-	"context"
 	"errors"
 	"strings"
 
@@ -16,7 +15,7 @@ import (
 const cdnURLMapEnvVar = "OCEL_CDN_URL_MAP"
 
 func purgesCloudCDN(spec provider.StackSpec) bool {
-	return spec.App != nil && spec.App.ISR != nil && spec.Edge != nil && spec.Edge.Kind() == alb.Kind
+	return spec.App != nil && spec.App.ISR != nil && spec.App.Compute != provider.ComputeContainer && spec.Edge != nil && spec.Edge.Kind() == alb.Kind
 }
 
 func newCDNPurgeEnv(names Names, spec provider.StackSpec) map[string]string {
@@ -26,19 +25,11 @@ func newCDNPurgeEnv(names Names, spec provider.StackSpec) map[string]string {
 	return map[string]string{cdnURLMapEnvVar: alb.URLMapPath(names.project, spec.Ref.Tier)}
 }
 
-func grantCDNPurge(ctx context.Context, c *clients, spec provider.StackSpec, account string) error {
+func (c *clients) cdnPurgeGrants(spec provider.StackSpec, member string) []appGrant {
 	if !purgesCloudCDN(spec) {
 		return nil
 	}
-	role := c.CDNPurgeRolePath()
-	err := untilVisible(ctx, func() error {
-		err := c.bindProjectRole(ctx, "serviceAccount:"+account, role, nil, true)
-		if isMissingRole(err, role) {
-			return refuseMissingCDNPurgeRole(c, role, spec.Ref.Tier)
-		}
-		return err
-	})
-	return explainMissingGrant(err, appGrantsGrant(c.Names))
+	return []appGrant{onProject(c.CDNPurgeRolePath(), member, nil)}
 }
 
 func isMissingRole(err error, role string) bool {
@@ -46,8 +37,8 @@ func isMissingRole(err error, role string) bool {
 	return errors.As(err, &answered) && answered.Code == 400 && strings.Contains(answered.Message, role)
 }
 
-func refuseMissingCDNPurgeRole(c *clients, role string, tier environment.Tier) error {
+func refuseMissingCDNPurgeRole(c *clients, tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"the custom role %s that lets an app that revalidates behind the alb clear Cloud CDN is not in project %s: the %s bootstrap predates it.\n"+
-			"Run `%s`, then deploy again", role, c.project, tier, provider.BootstrapCommand(tier))
+			"Run `%s`, then deploy again", c.CDNPurgeRolePath(), c.project, tier, provider.BootstrapCommand(tier))
 }

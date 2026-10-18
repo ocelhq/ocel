@@ -2,13 +2,9 @@ package gcp
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"slices"
 	"time"
-
-	"google.golang.org/api/googleapi"
-	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -16,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -57,7 +53,7 @@ func tasksManifest(c *clients, ref provider.StackRef, app string, declared map[s
 		Environment: ref.Name.Env,
 		Topics:      pinned,
 		DelayQueue:  c.DelayQueuePath(c.region, ref.Tier),
-		Account:     c.AppAccountEmail(ref.Tier, ref.Project, app),
+		Account:     c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app),
 		PublishURL:  publishURL(c),
 	}
 }
@@ -120,7 +116,7 @@ func nameWorkers(names Names, spec provider.StackSpec) []deployedWorker {
 }
 
 func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provider.StackSpec, image, account string, env map[string]string,
-	declared map[string]*provider.TopicSpec, progress progress.Log,
+	declared map[string]*provider.TopicSpec, instances provider.Instances, progress progress.Log,
 ) ([]deployedWorker, error) {
 	named := nameWorkers(c.Names, spec)
 	if len(named) == 0 {
@@ -131,12 +127,13 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 	deployed := make([]deployedWorker, 0, len(named))
 	for at, worker := range named {
 		ran, err := p.deployService(ctx, workerServing(spec.App.Workers[at], serving{
-			service: worker.service,
-			image:   image,
-			env:     env,
-			account: account,
-			egress:  p.egressFor(c.Names, spec),
-			labels:  stackLabels(c.Names, spec.Ref),
+			service:   worker.service,
+			image:     image,
+			env:       env,
+			account:   account,
+			egress:    p.egressFor(c.Names, spec),
+			labels:    stackLabels(c.Names, spec.Ref),
+			instances: instances,
 		}), progress)
 		if err != nil {
 			return nil, err
@@ -151,11 +148,7 @@ func (p *Provider) provisionWorkers(ctx context.Context, c *clients, spec provid
 		worker.url, worker.revision = ran.url, ran.revision
 		deployed = append(deployed, worker)
 	}
-	agent, err := c.ReadServiceAgent(ctx, pubSubAgentDomain)
-	if err != nil {
-		return nil, err
-	}
-	subscriptions := topics.Subscriptions{Names: taskNames(c.Names, spec.Ref), Topics: declared, Pushes: pushes, Agent: agent}
+	subscriptions := topics.Subscriptions{Names: taskNames(c.Names, spec.Ref), Topics: declared, Pushes: pushes}
 	if err := subscriptions.Ensure(ctx, c.Workload()); err != nil {
 		return nil, err
 	}
@@ -179,27 +172,6 @@ func workerContainers(workers []deployedWorker, image string) []provider.AppCont
 }
 
 func (p *Provider) grantInvoker(ctx context.Context, c *clients, service, member string) error {
-	services, err := c.Run()
-	if err != nil {
-		return err
-	}
-	path := c.servicePath(service)
-	return p.retryWrite(ctx, "let "+member+" invoke "+service, func() error {
-		policy, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-			return services.Projects.Locations.Services.GetIamPolicy(path).Context(ctx).Do(call...)
-		})
-		if err != nil {
-			return fmt.Errorf("read who may invoke %s: %w", service, err)
-		}
-		if slices.ContainsFunc(policy.Bindings, func(binding *run.GoogleIamV1Binding) bool {
-			return binding.Role == invokerRole && binding.Condition == nil && slices.Contains(binding.Members, member)
-		}) {
-			return nil
-		}
-		policy.Bindings = append(policy.Bindings, &run.GoogleIamV1Binding{Role: invokerRole, Members: []string{member}})
-		_, err = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-			return services.Projects.Locations.Services.SetIamPolicy(path, &run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
-		})
-		return err
-	})
+	_, err := iampolicy.Edit(ctx, c.runServicePolicy(service), iampolicy.Grant(invokerRole, member, nil))
+	return err
 }

@@ -2,6 +2,8 @@ package topics
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -18,7 +20,10 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-const PublishURL = "https://pubsub.googleapis.com"
+const (
+	PublishURL      = "https://pubsub.googleapis.com"
+	taskPrefixBytes = 4
+)
 
 type Delays struct {
 	Queue      string
@@ -46,7 +51,13 @@ func (d Deployment) delayTaskOf(p publication) string {
 	if !p.dueAt.After(time.Now()) {
 		return ""
 	}
-	return d.Delays.Queue + "/tasks/" + p.messageID + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	scheduling := p.messageID + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	return d.Delays.Queue + "/tasks/" + hashedTaskPrefix(scheduling) + "-" + scheduling
+}
+
+func hashedTaskPrefix(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:taskPrefixBytes])
 }
 
 func (d Deployment) schedule(ctx context.Context, p publication, name string) error {

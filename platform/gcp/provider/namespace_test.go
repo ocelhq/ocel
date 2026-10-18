@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -272,21 +273,22 @@ func TestEachTierRunsItsGatewaysAsAnAccountOfItsOwn(t *testing.T) {
 	}
 }
 
-func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectAndApp(t *testing.T) {
+func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectEnvironmentAndApp(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
 	names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
-	account := names.AppAccount(environment.TierProduction, "shop", "web")
+	account := names.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 	if !regexp.MustCompile(`^a{19}-[0-9a-f]{10}$`).MatchString(account) || !accountID.MatchString(account) {
 		t.Errorf("AppAccount() = %q, want the namespace and ten hex characters in the 30 IAM takes", account)
 	}
-	if email := names.AppAccountEmail(environment.TierProduction, "shop", "web"); email != account+"@acme-prod.iam.gserviceaccount.com" {
+	if email := names.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web"); email != account+"@acme-prod.iam.gserviceaccount.com" {
 		t.Errorf("AppAccountEmail() = %q, want the account in the project's own domain", email)
 	}
 	others := map[string]string{
-		"another tier":        names.AppAccount(environment.TierPreview, "shop", "web"),
-		"another project":     names.AppAccount(environment.TierProduction, "blog", "web"),
-		"another app":         names.AppAccount(environment.TierProduction, "shop", "api"),
+		"another tier":        names.AppAccount(environment.TierPreview, "shop", stackrecords.ProductionEnv, "web"),
+		"another project":     names.AppAccount(environment.TierProduction, "blog", stackrecords.ProductionEnv, "web"),
+		"another environment": names.AppAccount(environment.TierProduction, "shop", "pr-7", "web"),
+		"another app":         names.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "api"),
 		"the realtime":        names.RealtimeAccount(environment.TierProduction),
 		"the push":            names.PushAccount(environment.TierProduction),
 		"the env source sync": names.EnvSourceSyncAccount(environment.TierProduction),

@@ -10,10 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -530,28 +527,6 @@ func TestAServiceNoPromotionPinsServesEachRevisionItsReleaseMakes(t *testing.T) 
 
 	if served := servedRevision(server.serving()); served != ran.revision || served == "" {
 		t.Errorf("the service serves %q, want %q, the revision the second release made", served, ran.revision)
-	}
-}
-
-func TestAPolicyWriteRefusedAsConflictingPreconditionFailedOrAbortedIsStale(t *testing.T) {
-	for name, err := range map[string]error{
-		"http 409":          &googleapi.Error{Code: http.StatusConflict},
-		"http 412":          &googleapi.Error{Code: http.StatusPreconditionFailed},
-		"grpc aborted":      status.Error(codes.Aborted, "etag"),
-		"grpc precondition": status.Error(codes.FailedPrecondition, "etag"),
-	} {
-		if !stale(err) {
-			t.Errorf("stale(%s) = false, want true", name)
-		}
-	}
-	for name, err := range map[string]error{
-		"http 403":       &googleapi.Error{Code: http.StatusForbidden},
-		"grpc not found": status.Error(codes.NotFound, "gone"),
-		"nil":            nil,
-	} {
-		if stale(err) {
-			t.Errorf("stale(%s) = true, want false", name)
-		}
 	}
 }
 

@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -9,16 +10,16 @@ import (
 
 type keyValues struct{ p *Provider }
 
-func (s keyValues) open(ctx context.Context) (ports.KeyValues, error) {
+func (s keyValues) open(ctx context.Context) (*clients, ports.KeyValues, error) {
 	resolved, err := s.p.openClients(ctx)
 	if err != nil {
-		return ports.KeyValues{}, err
+		return nil, ports.KeyValues{}, err
 	}
-	return ports.KeyValues{Clients: resolved.Workload()}, nil
+	return resolved, ports.KeyValues{Clients: resolved.Workload()}, nil
 }
 
 func (s keyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
-	store, err := s.open(ctx)
+	_, store, err := s.open(ctx)
 	if err != nil {
 		return keyvalue.Entry{}, err
 	}
@@ -26,23 +27,42 @@ func (s keyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 }
 
 func (s keyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	store, err := s.open(ctx)
+	c, store, err := s.open(ctx)
 	if err != nil {
+		return "", err
+	}
+	revision, err := store.Write(ctx, entry)
+	if !errors.Is(err, ports.ErrNoProjectRecords) {
+		return revision, err
+	}
+	if err := ensureProjectDatabaseOf(ctx, c, entry.Key.Partition); err != nil {
 		return "", err
 	}
 	return store.Write(ctx, entry)
 }
 
 func (s keyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
-	store, err := s.open(ctx)
+	c, store, err := s.open(ctx)
 	if err != nil {
+		return err
+	}
+	err = store.WritePair(ctx, first, second)
+	if !errors.Is(err, ports.ErrNoProjectRecords) {
+		return err
+	}
+	if err := ensureProjectDatabaseOf(ctx, c, first.Key.Partition); err != nil {
 		return err
 	}
 	return store.WritePair(ctx, first, second)
 }
 
+func ensureProjectDatabaseOf(ctx context.Context, c *clients, in keyvalue.Partition) error {
+	project, _ := ports.ProjectOfRecords(in)
+	return c.ensureProjectDatabase(ctx, in.Tier, project)
+}
+
 func (s keyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
-	store, err := s.open(ctx)
+	_, store, err := s.open(ctx)
 	if err != nil {
 		return err
 	}
@@ -50,7 +70,7 @@ func (s keyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 }
 
 func (s keyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
-	store, err := s.open(ctx)
+	_, store, err := s.open(ctx)
 	if err != nil {
 		return nil, err
 	}

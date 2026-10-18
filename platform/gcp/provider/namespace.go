@@ -87,12 +87,12 @@ func (n Names) CDNPurgeRolePath() string {
 	return "projects/" + n.project + "/roles/" + n.CDNPurgeRole()
 }
 
-func (n Names) AppAccount(tier environment.Tier, project, app string) string {
-	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), project, app, appAccountInfix)
+func (n Names) AppAccount(tier environment.Tier, project, env, app string) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(tier), project, env, app, appAccountInfix)
 }
 
-func (n Names) AppAccountEmail(tier environment.Tier, project, app string) string {
-	return n.AppAccount(tier, project, app) + "@" + n.project + accountDomain
+func (n Names) AppAccountEmail(tier environment.Tier, project, env, app string) string {
+	return n.AppAccount(tier, project, env, app) + "@" + n.project + accountDomain
 }
 
 func (n Names) Service(project, env, app, function string) (string, error) {

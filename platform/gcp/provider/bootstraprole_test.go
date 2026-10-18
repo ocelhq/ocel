@@ -290,8 +290,8 @@ func TestAnEmulatedBootstrapMakesNoCustomRole(t *testing.T) {
 	if got := count(true); got != 0 {
 		t.Errorf("an emulated bootstrap names %d custom roles, want none: floci answers 404 to every roles call", got)
 	}
-	if got := count(false); got != 4 {
-		t.Errorf("a bootstrap against Google names %d custom roles, want the app accounts, CDN purge, parts and part databases roles", got)
+	if got := count(false); got != 5 {
+		t.Errorf("a bootstrap against Google names %d custom roles, want the app accounts, CDN purge, parts, part databases and project records roles", got)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func assetBindingsOf(server *iamServer) []string {
@@ -27,7 +28,7 @@ func TestAnAppsAccountMayReadItsOwnStaticFilesAndNoOtherApps(t *testing.T) {
 	}
 
 	granted := assetBindingsOf(server.identities())
-	want := appAssetsRole + " serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", "web") +
+	want := appAssetsRole + " serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") +
 		` resource.name.startsWith("projects/_/buckets/` + names(t, p).Bucket(environment.TierProduction) + `/objects/assets/prod/shop/web/")`
 	if !slices.Equal(granted, []string{want}) {
 		t.Errorf("the app's asset bindings = %q, want exactly %q", granted, want)
@@ -38,10 +39,9 @@ func TestAnAppsAssetsGrantIsTitledForTheApp(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.open(t)
-	account := c.AppAccountEmail(environment.TierProduction, "shop", "web")
 
-	if err := grantAssets(context.Background(), c, staticSpec(), account); err != nil {
-		t.Fatalf("grantAssets() = %v", err)
+	if err := applyAppGrants(t, c, staticSpec()); err != nil {
+		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
 	for _, binding := range server.project.Bindings {
@@ -55,14 +55,13 @@ func TestARedeployOfAnAppWritesNoAssetsPolicy(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.open(t)
-	account := c.AppAccountEmail(environment.TierProduction, "shop", "web")
-	if err := grantAssets(context.Background(), c, staticSpec(), account); err != nil {
+	if err := applyAppGrants(t, c, staticSpec()); err != nil {
 		t.Fatal(err)
 	}
 	before := server.projectWrites
 
-	if err := grantAssets(context.Background(), c, staticSpec(), account); err != nil {
-		t.Fatalf("second grantAssets() = %v", err)
+	if err := applyAppGrants(t, c, staticSpec()); err != nil {
+		t.Fatalf("second applyAppGrants() = %v", err)
 	}
 	if got := server.projectWrites - before; got != 0 {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
@@ -74,8 +73,8 @@ func TestAnAppThatRoutesNothingIsGrantedNoAssets(t *testing.T) {
 	server := appAccountsOnly()
 	c := server.open(t)
 
-	if err := grantAssets(context.Background(), c, nextSpec(), c.AppAccountEmail(environment.TierProduction, "shop", "web")); err != nil {
-		t.Fatalf("grantAssets() = %v", err)
+	if err := applyAppGrants(t, c, nextSpec()); err != nil {
+		t.Fatalf("applyAppGrants() = %v", err)
 	}
 	if got := assetBindingsOf(server); len(got) != 0 {
 		t.Errorf("an app that routes nothing holds the asset bindings %q, want none", got)

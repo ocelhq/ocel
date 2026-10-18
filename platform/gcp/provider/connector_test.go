@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"google.golang.org/api/cloudresourcemanager/v1"
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
@@ -57,79 +56,6 @@ func TestAnAppServiceStillScalesAsItDid(t *testing.T) {
 	}
 	if service.Template.Scaling.MaxInstanceCount != 0 {
 		t.Errorf("an app that named no ceiling got one of %d", service.Template.Scaling.MaxInstanceCount)
-	}
-}
-
-func TestAProjectGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
-	t.Parallel()
-
-	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	only := databaseCondition("example-project", "ocel")
-	bindings, changed := boundMember(nil, connectorRecordsRole, member, only, true)
-	if !changed || len(bindings) != 1 || !slices.Contains(bindings[0].Members, member) {
-		t.Fatalf("granting on an empty policy = %+v, %v", bindings, changed)
-	}
-	if bindings[0].Condition == nil ||
-		bindings[0].Condition.Expression != `resource.name == "projects/example-project/databases/ocel"` {
-		t.Fatalf("the grant's condition is %+v, and an unconditional roles/datastore.user reaches every database in the project",
-			bindings[0].Condition)
-	}
-	if _, again := boundMember(bindings, connectorRecordsRole, member, only, true); again {
-		t.Error("granting twice rewrote the policy, so every install would churn the project's IAM")
-	}
-
-	bindings, changed = boundMember(bindings, connectorRecordsRole, member, only, false)
-	if !changed || slices.Contains(bindings[0].Members, member) {
-		t.Errorf("revoking left %+v, want the connector off the binding", bindings)
-	}
-	if _, again := boundMember(bindings, connectorRecordsRole, member, only, false); again {
-		t.Error("revoking twice rewrote the policy, so rm on a target with no connector would still write IAM")
-	}
-}
-
-func TestAnotherNamespacesConditionalGrantIsADifferentBinding(t *testing.T) {
-	t.Parallel()
-
-	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	shop := databaseCondition("example-project", "shop")
-	existing := []*cloudresourcemanager.Binding{
-		{Role: connectorRecordsRole, Members: []string{member}, Condition: shop},
-		{Role: connectorRecordsRole, Members: []string{member}},
-	}
-
-	bindings, changed := boundMember(existing, connectorRecordsRole, member,
-		databaseCondition("example-project", "ocel"), true)
-	if !changed || len(bindings) != 3 {
-		t.Fatalf("granting for another namespace = %+v, %v, want a third binding of its own", bindings, changed)
-	}
-
-	bindings, changed = boundMember(bindings, connectorRecordsRole, member,
-		databaseCondition("example-project", "ocel"), false)
-	if !changed {
-		t.Fatal("revoking changed nothing")
-	}
-	if !slices.Contains(bindings[0].Members, member) || !slices.Contains(bindings[1].Members, member) {
-		t.Errorf("revoking left %+v, and removing one namespace's grant may not touch another's or the unconditional one", bindings)
-	}
-	if slices.Contains(bindings[2].Members, member) {
-		t.Errorf("revoking left %+v, want the connector off its own binding", bindings[2])
-	}
-}
-
-func TestAnotherMembersGrantSurvivesTheConnectorsRemoval(t *testing.T) {
-	t.Parallel()
-
-	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	only := databaseCondition("example-project", "ocel")
-	existing := []*cloudresourcemanager.Binding{
-		{Role: connectorRecordsRole, Members: []string{"user:someone@example.com", member}, Condition: only},
-	}
-	bindings, changed := boundMember(existing, connectorRecordsRole, member, only, false)
-	if !changed {
-		t.Fatal("revoking changed nothing")
-	}
-	if !slices.Equal(bindings[0].Members, []string{"user:someone@example.com"}) {
-		t.Errorf("revoking left %v, and taking a connector off an account may not take anybody else's access with it", bindings[0].Members)
 	}
 }
 
@@ -308,58 +234,6 @@ func TestTheConnectorHasOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
 					tc.grants, got, tc.roles)
 			}
 		})
-	}
-}
-
-func TestAReinstallWithFewerGrantsTakesTheKeyRoleItNoLongerCallsForAway(t *testing.T) {
-	t.Parallel()
-
-	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	bindings, changed := boundKeyRoles(nil, member, connectorKeyRoles, []string{connectorSealingRole, connectorOpeningRole})
-	if !changed || len(bindings) != 2 {
-		t.Fatalf("granting both on an empty policy = %+v, %v", bindings, changed)
-	}
-	bindings, changed = boundKeyRoles(bindings, member, connectorKeyRoles, []string{connectorSealingRole})
-	if !changed {
-		t.Fatal("dropping the reveal grant changed nothing on the key")
-	}
-	for _, binding := range bindings {
-		granted := slices.Contains(binding.GetMembers(), member)
-		if binding.GetRole() == connectorOpeningRole && granted {
-			t.Errorf("the connector still has %s after the reveal grant went, and a role nothing calls for is one more than the minimum", connectorOpeningRole)
-		}
-		if binding.GetRole() == connectorSealingRole && !granted {
-			t.Errorf("the connector lost %s while its write grant remains", connectorSealingRole)
-		}
-	}
-	if _, again := boundKeyRoles(bindings, member, connectorKeyRoles, []string{connectorSealingRole}); again {
-		t.Error("granting the same roles again rewrote the policy, so every install would churn the key's IAM")
-	}
-	bindings, _ = boundKeyRoles(bindings, member, connectorKeyRoles, nil)
-	for _, binding := range bindings {
-		if slices.Contains(binding.GetMembers(), member) {
-			t.Errorf("removal left the connector with %s", binding.GetRole())
-		}
-	}
-}
-
-func TestASecretGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
-	t.Parallel()
-
-	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	bindings, changed := boundSecretMember(nil, connectorKeyRole, member, true)
-	if !changed || len(bindings) != 1 || !slices.Contains(bindings[0].Members, member) {
-		t.Fatalf("granting on an empty policy = %+v, %v", bindings, changed)
-	}
-	if _, again := boundSecretMember(bindings, connectorKeyRole, member, true); again {
-		t.Error("granting twice rewrote the policy")
-	}
-	bindings, changed = boundSecretMember(bindings, connectorKeyRole, member, false)
-	if !changed || slices.Contains(bindings[0].Members, member) {
-		t.Errorf("revoking left %+v", bindings)
-	}
-	if _, again := boundSecretMember(bindings, connectorKeyRole, member, false); again {
-		t.Error("revoking twice rewrote the policy")
 	}
 }
 

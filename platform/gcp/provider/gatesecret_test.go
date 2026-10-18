@@ -214,8 +214,8 @@ func TestEachTiersServiceMayReadOnlyItsOwnTiersGateSecret(t *testing.T) {
 		t.Fatalf("ProvisionContainers(production) = %v", err)
 	}
 
-	previewAccount := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "web")
-	productionAccount := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", "web")
+	previewAccount := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
+	productionAccount := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 	productionReaders := server.secrets.members(names(t, p).GateSecret(environment.TierProduction, "shop"), gateReaderRole)
 	previewReaders := server.secrets.members(names(t, p).GateSecret(environment.TierPreview, "shop"), gateReaderRole)
 	if !slices.Contains(productionReaders, productionAccount) || slices.Contains(productionReaders, previewAccount) {
@@ -239,11 +239,11 @@ func TestRevokingAGatedProductionAppTakesItsReadOfTheProductionGateSecretAway(t 
 		t.Fatal(err)
 	}
 
-	if err := revokeUnusedAppAccount(context.Background(), c, recordedStacks{}, spec.Ref, nil); err != nil {
-		t.Fatalf("revokeUnusedAppAccount() = %v", err)
+	if err := p.revokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
-	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", "web")
+	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 	if readers := server.secrets.members(names(t, p).GateSecret(environment.TierProduction, "shop"), gateReaderRole); slices.Contains(readers, member) {
 		t.Errorf("the production gate secret still lets %s read it after no environment runs the app", member)
 	}
@@ -330,7 +330,7 @@ func TestAnOpenPreviewOnCloudRunMountsTheGateSecretSoTurningProtectionOnReachesI
 	if volumes := server.service.Template.Volumes; len(volumes) != 1 || volumes[0].Secret.Secret != secret || volumes[0].Secret.Items[0].Version != "latest" {
 		t.Fatalf("volumes = %+v, want the project's gate secret %s mounted at latest while protection is off", volumes, secret)
 	}
-	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "web")
+	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
 	if readers := server.secrets.members(secret, gateReaderRole); !slices.Contains(readers, member) {
 		t.Errorf("the gate secret lets %v read it, want the app's account %s before the service mounts it", readers, member)
 	}
@@ -439,7 +439,7 @@ func TestAGatedPreviewServiceMayReadOnlyItsProjectsGateSecret(t *testing.T) {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "web")
+	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
 	secret := names(t, p).GateSecret(environment.TierPreview, "shop")
 	if readers := server.secrets.members(secret, gateReaderRole); !slices.Contains(readers, member) {
 		t.Errorf("the gate secret %s lets %v read it, want the app's account %s", secret, readers, member)
@@ -464,11 +464,11 @@ func TestRevokingAGatedPreviewAppTakesItsReadOfTheGateSecretAway(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := revokeUnusedAppAccount(context.Background(), c, recordedStacks{}, spec.Ref, nil); err != nil {
-		t.Fatalf("revokeUnusedAppAccount() = %v", err)
+	if err := p.revokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
-	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "web")
+	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
 	if readers := server.secrets.members(names(t, p).GateSecret(environment.TierPreview, "shop"), gateReaderRole); slices.Contains(readers, member) {
 		t.Errorf("the gate secret still lets %s read it after no environment runs the app", member)
 	}
@@ -797,7 +797,7 @@ func TestAnOpenPreviewOfOnlyFunctionsThatIgnoreTheGateNeedsNoGateSecretAndGrants
 	if len(functions) != 1 || !functions[0].IgnoresGate {
 		t.Errorf("ProvisionFunctions() = %+v, want the function recorded as ignoring the gate", functions)
 	}
-	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "web")
+	member := "serviceAccount:" + names(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
 	if server.secrets != nil && slices.Contains(server.secrets.members(names(t, p).GateSecret(environment.TierPreview, "shop"), gateReaderRole), member) {
 		t.Errorf("the app's account %s may read the gate secret, and none of its services mounts it", member)
 	}

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -50,15 +51,18 @@ type survey struct {
 	Generation int64
 	Emulated   bool
 
-	present map[string]bool
-	mending map[string]string
-	sibling bool
-	stateOf string
+	present   map[string]bool
+	mending   map[string]string
+	replacing map[string]string
+	sibling   bool
+	stateOf   string
 }
 
 func (s survey) has(target item) bool { return s.present[target.ID()] }
 
 func (s survey) mends(target item) string { return s.mending[target.ID()] }
+
+func (s survey) replaces(target item) string { return s.replacing[target.ID()] }
 
 func (s survey) current(items []item) bool {
 	for _, item := range items {
@@ -71,13 +75,14 @@ func (s survey) current(items []item) bool {
 
 func (b bootstrap) survey(ctx context.Context, tier environment.Tier) (survey, error) {
 	read := survey{
-		Tier:     tier,
-		Names:    b.clients.Names,
-		Project:  b.clients.project,
-		Region:   b.clients.region,
-		Emulated: b.clients.emulated(),
-		present:  map[string]bool{},
-		mending:  map[string]string{},
+		Tier:      tier,
+		Names:     b.clients.Names,
+		Project:   b.clients.project,
+		Region:    b.clients.region,
+		Emulated:  b.clients.emulated(),
+		present:   map[string]bool{},
+		mending:   map[string]string{},
+		replacing: map[string]string{},
 	}
 	for _, item := range bootstrapItems(read.Names, tier, read.Emulated) {
 		found, err := b.presenceOf(ctx, tier, item)
@@ -87,6 +92,9 @@ func (b bootstrap) survey(ctx context.Context, tier environment.Tier) (survey, e
 		read.present[item.ID()] = found.present
 		if found.mends != "" {
 			read.mending[item.ID()] = found.mends
+		}
+		if found.replaces != "" {
+			read.replacing[item.ID()] = found.replaces
 		}
 	}
 
@@ -165,8 +173,9 @@ func stackNamed(object string) string {
 }
 
 type presence struct {
-	present bool
-	mends   string
+	present  bool
+	mends    string
+	replaces string
 }
 
 func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target item) (presence, error) {
@@ -178,9 +187,10 @@ func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target
 	case KindKeyRing:
 		return presenceFrom(b.keyRingExists(ctx))
 	case KindKey:
-		return presenceFrom(b.keyUsable(ctx, target.Name))
+		key, err := b.readKey(ctx, target.Name)
+		return keyPresenceOf(key), err
 	case KindSecret:
-		return presenceFrom(b.secretExists(ctx, target.Name))
+		return b.secretPresence(ctx, target.Name)
 	case KindRepository:
 		return b.repositoryPresence(ctx, target.Name)
 	case KindRole:
@@ -265,12 +275,15 @@ func (b bootstrap) keyRingExists(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (b bootstrap) keyUsable(ctx context.Context, name string) (bool, error) {
-	key, err := b.readKey(ctx, name)
-	if err != nil {
-		return false, err
+func keyPresenceOf(key *kmspb.CryptoKey) presence {
+	switch {
+	case key == nil:
+		return presence{}
+	case usable(key.GetPrimary()):
+		return presence{present: true}
+	default:
+		return presence{replaces: reasonKeyReplaced}
 	}
-	return usable(key.GetPrimary()), nil
 }
 
 func (b bootstrap) readKey(ctx context.Context, name string) (*kmspb.CryptoKey, error) {
@@ -299,35 +312,50 @@ func usable(version *kmspb.CryptoKeyVersion) bool {
 	}
 }
 
-func (b bootstrap) secretExists(ctx context.Context, name string) (bool, error) {
+func (b bootstrap) secretPresence(ctx context.Context, name string) (presence, error) {
 	service, err := b.clients.Secrets()
 	if err != nil {
-		return false, err
+		return presence{}, err
 	}
 	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Get(secretPath(b.clients.project, name)).Context(ctx).Do)
 	if absent(err) {
-		return false, nil
+		return presence{}, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("read the %s secret: %w", name, err)
+		return presence{}, fmt.Errorf("read the %s secret: %w", name, err)
 	}
-	return b.passphraseExists(ctx, name)
+	latest, err := b.readPassphrase(ctx, name)
+	if err != nil {
+		return presence{}, err
+	}
+	return passphrasePresenceOf(latest), nil
 }
 
-func (b bootstrap) passphraseExists(ctx context.Context, name string) (bool, error) {
+func passphrasePresenceOf(latest *secretmanager.SecretVersion) presence {
+	switch {
+	case latest == nil:
+		return presence{}
+	case latest.State == enabledVersion:
+		return presence{present: true}
+	default:
+		return presence{replaces: reasonPassphraseReplaced}
+	}
+}
+
+func (b bootstrap) readPassphrase(ctx context.Context, name string) (*secretmanager.SecretVersion, error) {
 	service, err := b.clients.Secrets()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	version, err := googleretry.Attempted(ctx, service.Projects.Secrets.Versions.Get(
 		secretPath(b.clients.project, name)+"/versions/latest").Context(ctx).Do)
 	if absent(err) {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("read whether the %s secret has a passphrase: %w", name, err)
+		return nil, fmt.Errorf("read whether the %s secret has a passphrase: %w", name, err)
 	}
-	return version.State == enabledVersion, nil
+	return version, nil
 }
 
 func (b bootstrap) repositoryPresence(ctx context.Context, name string) (presence, error) {

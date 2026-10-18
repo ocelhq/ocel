@@ -9,7 +9,9 @@ import (
 
 	sqladmin "google.golang.org/api/sqladmin/v1"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -23,6 +25,15 @@ type postgresHarness struct {
 }
 
 func servingPostgres(t *testing.T) *postgresHarness {
+	t.Helper()
+	return servingPostgresIn(t, productionRef(t))
+}
+
+func previewRef() provider.StackRef {
+	return provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.InfraStack("pr-7")}
+}
+
+func servingPostgresIn(t *testing.T, ref provider.StackRef) *postgresHarness {
 	t.Helper()
 	p, server := servingCloudSQL(t)
 	records := fake.NewKeyValues()
@@ -38,7 +49,7 @@ func servingPostgres(t *testing.T) *postgresHarness {
 			sql:     sql,
 			records: records,
 			cipher:  fake.NewCipher(),
-			ref:     productionRef(t),
+			ref:     ref,
 		},
 	}
 }
@@ -63,7 +74,7 @@ func (h *postgresHarness) provision(t *testing.T, version string) provider.Bindi
 	return binding
 }
 
-func TestADatabaseIsOneSmallCloudSQLInstanceReachedPrivatelyOverTheTiersNetwork(t *testing.T) {
+func TestADatabaseIsOneCloudSQLInstanceReachedPrivatelyOverTheTiersNetwork(t *testing.T) {
 	h := servingPostgres(t)
 
 	binding := h.provision(t, "16")
@@ -76,8 +87,8 @@ func TestADatabaseIsOneSmallCloudSQLInstanceReachedPrivatelyOverTheTiersNetwork(
 	if sent.DatabaseVersion != "POSTGRES_16" || sent.Region != "europe-west1" {
 		t.Errorf("created %s in %s, want POSTGRES_16 in the deploy's region", sent.DatabaseVersion, sent.Region)
 	}
-	if settings.Edition != "ENTERPRISE" || settings.Tier != "db-f1-micro" || settings.AvailabilityType != "ZONAL" {
-		t.Errorf("created a %s %s %s instance, want the shared-core db-f1-micro of the Enterprise edition, in one zone", settings.Edition, settings.Tier, settings.AvailabilityType)
+	if settings.Edition != "ENTERPRISE" {
+		t.Errorf("created a %s instance, want the Enterprise edition", settings.Edition)
 	}
 	if settings.DataDiskType != "PD_SSD" || settings.DataDiskSizeGb != 10 || settings.StorageAutoResize == nil || !*settings.StorageAutoResize {
 		t.Errorf("created disk %s of %d GB (auto-resize %v), want 10 GB of SSD that grows as it fills", settings.DataDiskType, settings.DataDiskSizeGb, settings.StorageAutoResize)
@@ -86,9 +97,6 @@ func TestADatabaseIsOneSmallCloudSQLInstanceReachedPrivatelyOverTheTiersNetwork(
 		t.Errorf("created backups %+v, want daily backups on", settings.BackupConfiguration)
 	}
 	asked := h.server.sent[0]["settings"].(map[string]any)
-	if protected, sent := asked["deletionProtectionEnabled"]; !sent || protected != false {
-		t.Error("created the instance without turning deletion protection off, and a destroy could not take it down")
-	}
 	if public, sent := asked["ipConfiguration"].(map[string]any)["ipv4Enabled"]; !sent || public != false {
 		t.Error("created the instance without turning its public address off, and Cloud SQL gives one by default")
 	}
@@ -128,6 +136,66 @@ func TestADatabaseIsOneSmallCloudSQLInstanceReachedPrivatelyOverTheTiersNetwork(
 	}
 	if err := provider.VerifyProperties(binding); err != nil {
 		t.Errorf("VerifyProperties() = %v, want a binding every SDK can connect with", err)
+	}
+}
+
+func TestAProductionDatabaseRunsOnADedicatedCoreRegionalInstanceWithPointInTimeRecovery(t *testing.T) {
+	h := servingPostgres(t)
+
+	h.provision(t, "17")
+
+	settings := h.server.created[0].Settings
+	if settings.Tier != "db-custom-1-3840" || settings.AvailabilityType != "REGIONAL" {
+		t.Errorf("created a %s %s instance, want the dedicated-core db-custom-1-3840 with a standby in a second zone: a shared-core one has no SLA", settings.Tier, settings.AvailabilityType)
+	}
+	if backups := settings.BackupConfiguration; backups == nil || !backups.Enabled || !backups.PointInTimeRecoveryEnabled {
+		t.Errorf("created backups %+v, want daily backups with point-in-time recovery", backups)
+	}
+	if !settings.DeletionProtectionEnabled {
+		t.Error("created the instance with deletion protection off, and one call outside ocel would take its data with it")
+	}
+}
+
+func TestAProductionDatabaseMadeSmallerThanItsTierIsPatchedToTheTiersSize(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "17")
+	instance := h.server.created[0].Name
+	settings := h.server.instances[instance].Settings
+	settings.Tier, settings.AvailabilityType, settings.DeletionProtectionEnabled = "db-f1-micro", "ZONAL", false
+	settings.BackupConfiguration = &sqladmin.BackupConfiguration{Enabled: true}
+
+	h.provision(t, "17")
+
+	if len(h.server.patched) != 1 {
+		t.Fatalf("Cloud SQL was patched %d times, want once to bring the instance to its tier's size", len(h.server.patched))
+	}
+	converged := h.server.instances[instance].Settings
+	if converged.Tier != "db-custom-1-3840" || converged.AvailabilityType != "REGIONAL" || !converged.DeletionProtectionEnabled ||
+		converged.BackupConfiguration == nil || !converged.BackupConfiguration.Enabled || !converged.BackupConfiguration.PointInTimeRecoveryEnabled {
+		t.Errorf("the instance runs as %s, want the production size", asJSON(t, converged))
+	}
+	written := len(h.server.wrote())
+	h.provision(t, "17")
+	if got := h.server.wrote()[written:]; len(got) != 0 {
+		t.Errorf("a deploy over an instance already at its tier's size wrote %v, want nothing", got)
+	}
+}
+
+func TestAPreviewDatabaseRunsOnASharedCoreZonalInstanceADestroyTakesDown(t *testing.T) {
+	h := servingPostgresIn(t, previewRef())
+
+	h.provision(t, "17")
+
+	settings := h.server.created[0].Settings
+	if settings.Tier != "db-f1-micro" || settings.AvailabilityType != "ZONAL" {
+		t.Errorf("created a %s %s instance, want the shared-core db-f1-micro in one zone", settings.Tier, settings.AvailabilityType)
+	}
+	asked := h.server.sent[0]["settings"].(map[string]any)
+	if recovers, sent := asked["backupConfiguration"].(map[string]any)["pointInTimeRecoveryEnabled"]; !sent || recovers != false {
+		t.Error("created the instance without turning point-in-time recovery off, and a preview would pay for its logs")
+	}
+	if protected, sent := asked["deletionProtectionEnabled"]; !sent || protected != false {
+		t.Error("created the instance without turning deletion protection off")
 	}
 }
 
@@ -278,6 +346,22 @@ func TestRemovingADatabaseDeletesItsInstanceAndForgetsItsPassword(t *testing.T) 
 	h.provision(t, "17")
 	if again := h.server.created[1].Name; again == instance {
 		t.Errorf("the database was created again as %q, a name Cloud SQL holds for a week after the instance is deleted", again)
+	}
+}
+
+func TestRemovingAProductionDatabaseTurnsOffItsDeletionProtectionBeforeDeletingIt(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "17")
+	instance := h.server.created[0].Name
+
+	if err := h.instances.remove(context.Background(), provider.Binding{Type: provider.BindingPostgres, Name: "orders"}, nil); err != nil {
+		t.Fatalf("remove() = %v, want ocel to take down the instance it made", err)
+	}
+	if !slices.Equal(h.server.deleted, []string{instance}) {
+		t.Errorf("Cloud SQL deleted %v, want %s", h.server.deleted, instance)
+	}
+	if want := []string{"patch instance " + instance, "delete instance " + instance}; !slices.Equal(h.server.wrote()[len(h.server.wrote())-2:], want) {
+		t.Errorf("the removal wrote %v, want deletion protection turned off and then the delete", h.server.wrote())
 	}
 }
 

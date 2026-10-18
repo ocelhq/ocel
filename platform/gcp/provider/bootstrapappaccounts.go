@@ -21,6 +21,7 @@ type appAccount struct {
 	id      string
 	tier    environment.Tier
 	project string
+	env     string
 	app     string
 }
 
@@ -44,13 +45,18 @@ func (n Names) readAppAccount(account *iam.ServiceAccount) (appAccount, bool) {
 	if rest, found = strings.CutSuffix(rest, appDescriptionSuffix); !found {
 		return appAccount{}, false
 	}
-	at := strings.LastIndex(rest, appDescriptionRuns)
+	at := strings.LastIndex(rest, appDescriptionTier)
 	if at < 0 {
 		return appAccount{}, false
 	}
-	named, tier := rest[:at], environment.Tier(rest[at+len(appDescriptionRuns):])
-	app, project, found := strings.Cut(named, " of project ")
-	if !found || n.AppAccount(tier, project, app) != id {
+	running, tier := rest[:at], environment.Tier(rest[at+len(appDescriptionTier):])
+	at = strings.LastIndex(running, appDescriptionEnvironment)
+	if at < 0 {
+		return appAccount{}, false
+	}
+	named, env := running[:at], running[at+len(appDescriptionEnvironment):]
+	app, project, found := strings.Cut(named, appDescriptionProject)
+	if !found || n.AppAccount(tier, project, env, app) != id {
 		return appAccount{}, false
 	}
 	for _, each := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
@@ -61,7 +67,7 @@ func (n Names) readAppAccount(account *iam.ServiceAccount) (appAccount, bool) {
 	if id == n.Connector() {
 		return appAccount{}, false
 	}
-	return appAccount{id: id, tier: tier, project: project, app: app}, true
+	return appAccount{id: id, tier: tier, project: project, env: env, app: app}, true
 }
 
 func (n Names) isRetiredWorkloadAccount(account *iam.ServiceAccount, tier environment.Tier) bool {
@@ -69,9 +75,9 @@ func (n Names) isRetiredWorkloadAccount(account *iam.ServiceAccount, tier enviro
 	return here && id == string(n.namespace)+"-"+string(tier) && account.Description == retiredWorkloadDescription(tier)
 }
 
-func isAppRecorded(stacks []stackrecords.NamedStack, app string) bool {
+func isAppRecorded(stacks []stackrecords.NamedStack, env, app string) bool {
 	for _, stack := range stacks {
-		if !stack.Name.IsInfra() && stack.Name.App == app {
+		if !stack.Name.IsInfra() && stack.Name.Env == env && stack.Name.App == app {
 			return true
 		}
 	}
@@ -126,13 +132,17 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 			}
 			readProjects[candidate.project] = stacks
 		}
-		if isAppRecorded(stacks, candidate.app) {
+		if isAppRecorded(stacks, candidate.env, candidate.app) {
 			continue
 		}
 		if stacks, err := stackrecords.List(ctx, b.records, candidate.tier, candidate.project); err != nil {
 			failures = append(failures, fmt.Errorf("check whether app %s of %s still runs: %w", candidate.app, candidate.project, err))
 			continue
-		} else if isAppRecorded(stacks, candidate.app) {
+		} else if isAppRecorded(stacks, candidate.env, candidate.app) {
+			continue
+		}
+		if _, err := revokeAppGrants(ctx, b.clients, b.records, candidate.tier, candidate.id); err != nil {
+			failures = append(failures, err)
 			continue
 		}
 		removed, err := b.clients.deleteAccount(ctx, candidate.id)
@@ -142,7 +152,7 @@ func (b bootstrap) deleteUnusedAccounts(ctx context.Context, req provider.Bootst
 		}
 		if removed {
 			deleted++
-			progress.Debug("Deleted the " + candidate.id + " service account app " + candidate.app + " of " + candidate.project + " ran as in the " + string(candidate.tier) + " tier")
+			progress.Debug("Deleted the " + candidate.id + " service account app " + candidate.app + " of " + candidate.project + " ran as in environment " + candidate.env + " of the " + string(candidate.tier) + " tier")
 		}
 	}
 	if deleted > 0 {
@@ -165,7 +175,7 @@ func (b bootstrap) retireWorkloadAccount(ctx context.Context, tier environment.T
 	if _, err := b.clients.bindKeyRoles(ctx, tier, member, []string{appOpeningRole}, nil); err != nil {
 		return false, fmt.Errorf("take back what the %s service account may do with the %s key: %w", id, tier, err)
 	}
-	if err := ignoreAbsent(b.clients.bindQueueRoles(ctx, tier, member, retiredTierQueueRoles, nil)); err != nil {
+	if err := ignoreAbsentPolicy(b.clients.bindQueueRoles(ctx, tier, member, retiredTierQueueRoles, nil)); err != nil {
 		return false, fmt.Errorf("take back what the %s service account may do on the %s delay queue: %w", id, tier, err)
 	}
 	return b.clients.deleteAccount(ctx, id)

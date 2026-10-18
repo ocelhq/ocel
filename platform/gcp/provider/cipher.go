@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -10,27 +11,35 @@ import (
 
 type cipher struct{ p *Provider }
 
-func (s cipher) openKMS(ctx context.Context, tier environment.Tier) (ports.Cipher, error) {
+func (s cipher) openKMS(ctx context.Context, tier environment.Tier) (*clients, ports.Cipher, error) {
 	if tier == "" {
-		return ports.Cipher{}, ports.Tierless("a value")
+		return nil, ports.Cipher{}, ports.Tierless("a value")
 	}
 	opened, err := s.p.openClients(ctx)
 	if err != nil {
-		return ports.Cipher{}, err
+		return nil, ports.Cipher{}, err
 	}
-	return ports.Cipher{Clients: opened.Workload()}, nil
+	return opened, ports.Cipher{Clients: opened.Workload()}, nil
 }
 
 func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	opened, err := s.openKMS(ctx, tier)
+	c, opened, err := s.openKMS(ctx, tier)
 	if err != nil {
+		return nil, err
+	}
+	sealed, err := opened.Seal(ctx, tier, bound, plaintext)
+	if !errors.Is(err, ports.ErrNoProjectKey) {
+		return sealed, err
+	}
+	project, _ := ports.ProjectSealedFor(bound)
+	if err := c.ensureProjectKey(ctx, tier, project); err != nil {
 		return nil, err
 	}
 	return opened.Seal(ctx, tier, bound, plaintext)
 }
 
 func (s cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	opened, err := s.openKMS(ctx, tier)
+	_, opened, err := s.openKMS(ctx, tier)
 	if err != nil {
 		return nil, err
 	}

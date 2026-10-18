@@ -76,10 +76,8 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 	if err := provider.VerifyProperties(binding); err != nil {
 		t.Errorf("VerifyProperties(%+v) = %v", binding, err)
 	}
-	for _, topic := range []string{names.Topic("orders"), names.DeadLetterTopic("orders", "ship"), names.DeadLetterTopic("orders", "bill")} {
-		if !topicExists(t, topic) {
-			t.Errorf("the Pub/Sub topic %s is missing after ProvisionTopic()", topic)
-		}
+	if !topicExists(t, names.Topic("orders")) {
+		t.Errorf("the Pub/Sub topic %s is missing after ProvisionTopic()", names.Topic("orders"))
 	}
 
 	pubsubService, err := workloadClients(t).PubSub()
@@ -107,29 +105,23 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 	if err != nil {
 		t.Fatalf("ProvisionTopic() without bill = %v", err)
 	}
-	if topicExists(t, names.DeadLetterTopic("orders", "bill")) {
-		t.Error("the dead-letter topic of orders/bill outlived the deploy that dropped bill")
-	}
-	if !topicExists(t, names.DeadLetterTopic("orders", "ship")) {
-		t.Error("the dead-letter topic of orders/ship went with bill's")
+	if !topicExists(t, names.Topic("orders")) {
+		t.Errorf("the Pub/Sub topic %s went with its dropped consumer bill", names.Topic("orders"))
 	}
 
 	if err := p.RemoveResource(ctx, ref, binding, nil); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
-	for _, topic := range []string{names.Topic("orders"), names.DeadLetterTopic("orders", "ship")} {
-		if topicExists(t, topic) {
-			t.Errorf("the Pub/Sub topic %s outlived its binding", topic)
-		}
+	if topicExists(t, names.Topic("orders")) {
+		t.Errorf("the Pub/Sub topic %s outlived its binding", names.Topic("orders"))
 	}
 }
 
-func TestLiveATopicWhoseOrderingChangedIsRefusedBeforeAnythingChanges(t *testing.T) {
+func TestLiveATopicWhoseOrderingChangedIsRefusedNamingTheConsumerItKeeps(t *testing.T) {
 	p := live(t)
 	bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
 	ctx := context.Background()
 	ref := infraRef(t)
-	names := taskNamesOf(t, ref)
 	ordered := ordersSpec("ship", "bill")
 	ordered.Ordered = true
 	orders := provider.Resource{Name: "topic-orders", Declared: "orders", Type: provider.BindingTopic, Topic: ordered}
@@ -149,9 +141,6 @@ func TestLiveATopicWhoseOrderingChangedIsRefusedBeforeAnythingChanges(t *testing
 	_, err = p.ProvisionTopic(ctx, resources.ProvisionRequest{Ref: ref, Resource: orders}, nil)
 	if err == nil || !strings.Contains(err.Error(), "ship") {
 		t.Fatalf("ProvisionTopic() after orders stopped being ordered = %v, want it refused naming the consumer it keeps", err)
-	}
-	if !topicExists(t, names.DeadLetterTopic("orders", "bill")) {
-		t.Error("the refused deploy removed bill's dead-letter topic, want nothing changed before the refusal")
 	}
 }
 

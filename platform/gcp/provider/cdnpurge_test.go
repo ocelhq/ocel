@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -108,7 +109,7 @@ func TestANextAppBehindTheALBMayClearCloudCDNAndNothingElseOnTheLoadBalancer(t *
 		t.Fatal(err)
 	}
 
-	want := cdnPurgeRolePath + " serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", "web") + " "
+	want := cdnPurgeRolePath + " serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") + " "
 	if got := purgeBindingsOf(server.identities()); len(got) != 1 || got[0] != want {
 		t.Fatalf("the project's purge bindings = %q, want exactly %q: one, unconditioned, for the app's own account", got, want)
 	}
@@ -166,11 +167,32 @@ func TestAnAppNoEnvironmentRunsLosesItsCachePurgeGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", "web")
+	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 	if _, err := c.unbindProjectMember(context.Background(), member); err != nil {
 		t.Fatal(err)
 	}
 	if got := purgeBindingsOf(server.identities()); len(got) != 0 {
 		t.Errorf("the project's purge bindings after the app's account lost its grants = %q, want none", got)
+	}
+}
+
+func TestANextContainerBehindTheALBIsGrantedNeitherTheCachePurgeNorItsStaticFiles(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	spec := behindTheALB(t, p)
+	spec.App.Compute = provider.ComputeContainer
+	spec.App.Image = "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc"
+	spec.App.Functions = nil
+	spec.App.Guard = nil
+
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	if got := purgeBindingsOf(server.identities()); len(got) != 0 {
+		t.Errorf("the container's account holds %q, and a Next container keeps its pages out of Cloud CDN and is told no url map to purge", got)
+	}
+	if got := assetBindingsOf(server.identities()); len(got) != 0 {
+		t.Errorf("the container's account holds %q, and a container serves its static files from its own image", got)
 	}
 }

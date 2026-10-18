@@ -131,8 +131,12 @@ func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 			Note: "the role a deploy credential is granted, on the condition it names the tier databases a part holds, to make those databases and their indexes, and no more",
 		},
 		{
+			Kind: KindRole, Name: names.ProjectRecordsRole(), Shared: true,
+			Note: "the role a deploy credential is granted, on the condition it names them, to make the Firestore database and the key each project's values are kept and sealed in, and no more",
+		},
+		{
 			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),
-			Note: "the identity the env source sync runs as and Cloud Scheduler calls it as: it reads and writes this project's records, seals and opens under the tier key, and calls the sync service alone",
+			Note: "the identity the env source sync runs as and Cloud Scheduler calls it as: it reads and writes this tier's records, seals and opens under the tier key and its projects' keys, and calls the sync service alone",
 		},
 	}
 	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each.Kind, emulated) })

@@ -15,6 +15,7 @@ import (
 	pubsub "google.golang.org/api/pubsub/v1"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -57,28 +58,57 @@ type subscriptionShape struct {
 		MinimumBackoff string `json:"minimumBackoff"`
 		MaximumBackoff string `json:"maximumBackoff"`
 	} `json:"retryPolicy"`
-	DeadLetterPolicy struct {
-		DeadLetterTopic     string `json:"deadLetterTopic"`
-		MaxDeliveryAttempts int    `json:"maxDeliveryAttempts"`
+	DeadLetterPolicy *struct {
+		DeadLetterTopic string `json:"deadLetterTopic"`
 	} `json:"deadLetterPolicy"`
 }
 
 type capturedPubSub struct {
 	mu            sync.Mutex
 	subscriptions map[string]subscriptionShape
+	topics        []string
 }
 
 func (c *capturedPubSub) serve(w http.ResponseWriter, r *http.Request) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	body, _ := io.ReadAll(r.Body)
-	if r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/subscriptions/") {
+	name := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+	switch {
+	case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/subscriptions/"):
 		var shape subscriptionShape
 		_ = json.Unmarshal(body, &shape)
-		c.subscriptions[r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]] = shape
+		c.subscriptions[name] = shape
+	case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/topics/"):
+		c.topics = append(c.topics, name)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte("{}"))
+}
+
+func TestAConsumersMessagesAreRetriedUntilItsRunSettlesAndNeverDeadLetteredByPubSub(t *testing.T) {
+	captured := &capturedPubSub{subscriptions: map[string]subscriptionShape{}}
+	server := httptest.NewServer(http.HandlerFunc(captured.serve))
+	t.Cleanup(server.Close)
+	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+
+	if err := (topics.Topology{Names: names, Topics: ordersAndResize()}).Ensure(context.Background(), clients); err != nil {
+		t.Fatalf("Ensure() of the topology = %v", err)
+	}
+	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app")}).Ensure(context.Background(), clients); err != nil {
+		t.Fatalf("Ensure() of the subscriptions = %v", err)
+	}
+
+	made := slices.Sorted(slices.Values(captured.topics))
+	if want := []string{names.Topic("orders"), names.Topic("resize")}; !slices.Equal(made, want) {
+		t.Errorf("Ensure() made topics %q, want the declared topics alone: Pub/Sub drops what it forwards to a topic no one subscribes to", made)
+	}
+	for name, shape := range captured.subscriptions {
+		if shape.DeadLetterPolicy != nil {
+			t.Errorf("subscription %s dead-letters to %s, want its messages redelivered until the run's attempts settle it", name, shape.DeadLetterPolicy.DeadLetterTopic)
+		}
+	}
 }
 
 func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
@@ -102,46 +132,6 @@ func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
 		if token == nil || token.ServiceAccountEmail != invoker || token.Audience != "https://worker.run.app/"+consumer.worker {
 			t.Errorf("%s/%s pushes with token %+v, want one minted for %s with the worker's url as audience: an internal Cloud Run service admits no unsigned push",
 				consumer.topic, consumer.consumer, token, invoker)
-		}
-	}
-}
-
-func TestGrantingAPublisherTouchesOnlyTheTopicsNotTheirDeadLetters(t *testing.T) {
-	var mu sync.Mutex
-	var calls []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"etag":"BwXhoLA="}`))
-	}))
-	t.Cleanup(server.Close)
-	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
-	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
-
-	err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: "serviceAccount:app@acme-prod.iam.gserviceaccount.com"}).GrantPublisher(context.Background(), clients)
-	if err != nil {
-		t.Fatalf("GrantPublisher() = %v", err)
-	}
-
-	var written []string
-	for _, call := range calls {
-		if strings.HasPrefix(call, "POST ") && strings.HasSuffix(call, ":setIamPolicy") {
-			written = append(written, call)
-		}
-	}
-	want := []string{
-		"POST /v1/projects/acme-prod/topics/" + names.Topic("orders") + ":setIamPolicy",
-		"POST /v1/projects/acme-prod/topics/" + names.Topic("resize") + ":setIamPolicy",
-	}
-	slices.Sort(written)
-	if !slices.Equal(written, want) {
-		t.Errorf("GrantPublisher() wrote %q, want the policies of the two topics alone", written)
-	}
-	for _, call := range calls {
-		if strings.HasPrefix(call, "PUT ") || strings.Contains(call, "/subscriptions/") || strings.Contains(call, "dead") {
-			t.Errorf("GrantPublisher() called %q, and granting a publisher creates and reads nothing else", call)
 		}
 	}
 }
@@ -224,7 +214,16 @@ func membersOf(policy *pubsub.Policy, role string) []string {
 	return nil
 }
 
-func TestRevokingAPublisherTakesOnlyThatMemberOffEachTopic(t *testing.T) {
+func editTopic(t *testing.T, clients *ports.Clients, names topics.Names, topic string, change iampolicy.Change) (bool, error) {
+	t.Helper()
+	service, err := clients.PubSub()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return iampolicy.Edit(context.Background(), topics.TopicPolicy(service, topics.TopicPath("acme-prod", names.Topic(topic))), change)
+}
+
+func TestRevokingAPublisherTakesOnlyThatMemberOffTheTopic(t *testing.T) {
 	state, names, clients := revoking(t, map[string]*pubsub.Policy{
 		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{
 			{Role: "roles/pubsub.publisher", Members: []string{revoked, bystander}},
@@ -233,9 +232,10 @@ func TestRevokingAPublisherTakesOnlyThatMemberOffEachTopic(t *testing.T) {
 		"resize": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{bystander}}}},
 	})
 
-	taken, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients)
-	if err != nil {
-		t.Fatalf("RevokePublisher() = %v", err)
+	for _, topic := range []string{"orders", "resize"} {
+		if _, err := editTopic(t, clients, names, topic, iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+			t.Fatalf("revoking the publisher of %s = %v", topic, err)
+		}
 	}
 
 	orders := state.policies[state.path(names, "orders")]
@@ -248,16 +248,6 @@ func TestRevokingAPublisherTakesOnlyThatMemberOffEachTopic(t *testing.T) {
 	if n := state.writes[state.path(names, "resize")]; n != 0 {
 		t.Errorf("resize was written %d times, want none: the member did not hold it", n)
 	}
-	keys := make([]string, 0, len(taken.Topics))
-	for name := range taken.Topics {
-		keys = append(keys, name)
-	}
-	if !slices.Equal(keys, []string{"orders"}) {
-		t.Errorf("RevokePublisher() returned topics %q, want only the one the member was taken off", keys)
-	}
-	if taken.Publisher != revoked || taken.Names != names {
-		t.Errorf("RevokePublisher() returned %+v, want the same names and publisher", taken)
-	}
 }
 
 func TestRevokingTheLastPublisherOfATopicDropsItsBinding(t *testing.T) {
@@ -265,8 +255,8 @@ func TestRevokingTheLastPublisherOfATopicDropsItsBinding(t *testing.T) {
 		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked}}}},
 	})
 
-	if _, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients); err != nil {
-		t.Fatalf("RevokePublisher() = %v", err)
+	if _, err := editTopic(t, clients, names, "orders", iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+		t.Fatalf("revoking the publisher = %v", err)
 	}
 
 	if bindings := state.policies[state.path(names, "orders")].Bindings; len(bindings) != 0 {
@@ -274,18 +264,15 @@ func TestRevokingTheLastPublisherOfATopicDropsItsBinding(t *testing.T) {
 	}
 }
 
-func TestRevokingAPublisherFromATopicThatIsGoneSucceeds(t *testing.T) {
+func TestRevokingAPublisherFromATopicThatIsGoneIsToldApartAsAbsent(t *testing.T) {
 	state, names, clients := revoking(t, map[string]*pubsub.Policy{
 		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked}}}},
 	})
 	state.gone[state.path(names, "resize")] = true
 
-	taken, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients)
-	if err != nil {
-		t.Fatalf("RevokePublisher() = %v, want a deleted topic to have nothing to revoke", err)
-	}
-	if _, listed := taken.Topics["resize"]; listed {
-		t.Errorf("RevokePublisher() returned the deleted topic resize in %v", taken.Topics)
+	_, err := editTopic(t, clients, names, "resize", iampolicy.Revoke(topics.PublisherRole, revoked, nil))
+	if !iampolicy.IsAbsent(err) {
+		t.Errorf("revoking the publisher of a deleted topic = %v, want it told apart as absent", err)
 	}
 }
 
@@ -295,8 +282,8 @@ func TestRevokingAPublisherRetriesAPolicyChangedUnderIt(t *testing.T) {
 	})
 	state.conflict = 1
 
-	if _, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients); err != nil {
-		t.Fatalf("RevokePublisher() = %v", err)
+	if _, err := editTopic(t, clients, names, "orders", iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+		t.Fatalf("revoking the publisher = %v", err)
 	}
 
 	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
@@ -310,8 +297,8 @@ func TestRevokingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T
 	})
 	state.changed = 1
 
-	if _, err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).RevokePublisher(context.Background(), clients); err != nil {
-		t.Fatalf("RevokePublisher() = %v", err)
+	if _, err := editTopic(t, clients, names, "orders", iampolicy.Revoke(topics.PublisherRole, revoked, nil)); err != nil {
+		t.Fatalf("revoking the publisher = %v", err)
 	}
 
 	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
@@ -325,8 +312,8 @@ func TestGrantingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T
 	})
 	state.changed = 1
 
-	if err := (topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: revoked}).GrantPublisher(context.Background(), clients); err != nil {
-		t.Fatalf("GrantPublisher() = %v", err)
+	if _, err := editTopic(t, clients, names, "orders", iampolicy.Grant(topics.PublisherRole, revoked, nil)); err != nil {
+		t.Fatalf("granting the publisher = %v", err)
 	}
 
 	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Contains(got, revoked) {

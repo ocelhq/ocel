@@ -74,7 +74,7 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := p.provisionWorkers(context.Background(), p.resolved, spec, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, nil); err != nil {
+	if _, err := p.provisionWorkers(context.Background(), p.resolved, spec, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, provider.Instances{}, nil); err != nil {
 		t.Fatalf("provisionWorkers() = %v", err)
 	}
 

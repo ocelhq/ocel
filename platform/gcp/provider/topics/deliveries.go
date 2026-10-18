@@ -203,27 +203,34 @@ func (d Deliveries) watchForCancel(ctx context.Context, execution string, cancel
 
 func (d Deliveries) claim(ctx context.Context, delivered pushedRun) (storedRun, error) {
 	return d.Store.changeRun(ctx, delivered.execution(), func(run *storedRun, found bool) error {
-		now := time.Now()
-		if !found {
-			startStoredRun(run, delivered)
-		}
-		if run.delivery.MaxAttempts == 0 {
-			run.delivery.MaxAttempts = delivered.maxAttempts
-		}
-		if !runs.IsUnfinished(run.Status) || isSuperseded(*run, delivered) {
-			return errRunUnchanged
-		}
-		if run.Attempts == 0 && !run.ExpiresAt.IsZero() && !run.ExpiresAt.After(now) {
-			run.Status, run.FinishedAt = provider.RunExpired, now
-			return nil
-		}
-		run.Status, run.Error = provider.RunExecuting, ""
-		run.Attempts++
-		if run.StartedAt.IsZero() {
-			run.StartedAt = now
-		}
-		return nil
+		return claimRun(run, found, delivered, time.Now())
 	})
+}
+
+func claimRun(run *storedRun, found bool, delivered pushedRun, now time.Time) error {
+	if !found {
+		startStoredRun(run, delivered)
+	}
+	if run.delivery.MaxAttempts == 0 {
+		run.delivery.MaxAttempts = delivered.maxAttempts
+	}
+	if !runs.IsUnfinished(run.Status) || isSuperseded(*run, delivered) {
+		return errRunUnchanged
+	}
+	if run.Attempts == 0 && !run.ExpiresAt.IsZero() && !run.ExpiresAt.After(now) {
+		run.Status, run.FinishedAt = provider.RunExpired, now
+		return nil
+	}
+	if run.Attempts >= run.delivery.MaxAttempts {
+		settleRun(run, delivered, provider.RunFailed, nil, fmt.Sprintf("its %d attempts ran out before one settled the run", run.Attempts), now)
+		return nil
+	}
+	run.Status, run.Error = provider.RunExecuting, ""
+	run.Attempts++
+	if run.StartedAt.IsZero() {
+		run.StartedAt = now
+	}
+	return nil
 }
 
 func isSuperseded(run storedRun, delivered pushedRun) bool {
@@ -279,10 +286,7 @@ func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res envelop
 		}
 		now := time.Now()
 		settle := func(status provider.RunStatus, output json.RawMessage, reason string) {
-			run.Status, run.Output, run.Error, run.FinishedAt = status, output, reason, now
-			if status != provider.RunCompleted && len(run.Payload) == 0 {
-				run.Payload = delivered.payload
-			}
+			settleRun(run, delivered, status, output, reason, now)
 		}
 		switch res.Outcome {
 		case envelope.Canceled, envelope.Interrupted:
@@ -309,4 +313,11 @@ func (d Deliveries) finish(ctx context.Context, delivered pushedRun, res envelop
 		return nil
 	})
 	return retry, err
+}
+
+func settleRun(run *storedRun, delivered pushedRun, status provider.RunStatus, output json.RawMessage, reason string, now time.Time) {
+	run.Status, run.Output, run.Error, run.FinishedAt = status, output, reason, now
+	if status != provider.RunCompleted && len(run.Payload) == 0 {
+		run.Payload = delivered.payload
+	}
 }

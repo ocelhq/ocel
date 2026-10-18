@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	nameSeparator  = "."
-	jobSeparator   = "_"
-	deadLetterWord = "dead"
+	nameSeparator = "."
+	jobSeparator  = "_"
 )
 
 type Names struct {
@@ -30,10 +29,6 @@ func (n Names) Topic(topic string) string {
 
 func (n Names) Subscription(topic, consumer string) string {
 	return n.Topic(topic) + nameSeparator + consumer
-}
-
-func (n Names) DeadLetterTopic(topic, consumer string) string {
-	return n.Subscription(topic, consumer) + nameSeparator + deadLetterWord
 }
 
 func (n Names) ScheduleJob(task string) string {

@@ -51,16 +51,8 @@ func taskNames(names Names, ref provider.StackRef) topics.Names {
 	}
 }
 
-func topologyOf(ctx context.Context, c *clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) (topics.Topology, error) {
-	agent, err := c.ReadServiceAgent(ctx, pubSubAgentDomain)
-	if err != nil {
-		return topics.Topology{}, err
-	}
-	return topics.Topology{
-		Names:  taskNames(c.Names, ref),
-		Topics: declared,
-		Agent:  agent,
-	}, nil
+func topologyOf(c *clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) topics.Topology {
+	return topics.Topology{Names: taskNames(c.Names, ref), Topics: declared}
 }
 
 func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -69,10 +61,7 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 		return provider.Binding{}, err
 	}
 	topic := declaredTopicOf(in.Resource)
-	topology, err := topologyOf(ctx, c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
-	if err != nil {
-		return provider.Binding{}, err
-	}
+	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
 	path := topics.TopicPath(c.project, topology.Names.Topic(topic.declared))
 	ensureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
@@ -144,10 +133,6 @@ func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, bindi
 	if err != nil {
 		return err
 	}
-	topology, err := topologyOf(ctx, c, ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
-	if err != nil {
-		return err
-	}
-	ensureProgress(progress).Say(fmt.Sprintf("Removing %s %s, its consumers' subscriptions and dead-letter topics", binding.Type, topic.declared))
-	return topology.Remove(ctx, c.Workload())
+	ensureProgress(progress).Say(fmt.Sprintf("Removing %s %s and its consumers' subscriptions", binding.Type, topic.declared))
+	return topologyOf(c, ref, map[string]*provider.TopicSpec{topic.declared: topic.spec}).Remove(ctx, c.Workload())
 }

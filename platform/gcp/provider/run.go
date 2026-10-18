@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"net/http"
 	"slices"
 	"strconv"
 	"time"
@@ -15,8 +14,6 @@ import (
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -492,7 +489,7 @@ func (p *Provider) route(
 		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.Patch(path, routed).UpdateMask(mask).Context(ctx).Do(call...)
 		})
-		if stale(err) {
+		if googleretry.IsStale(err) {
 			opened = false
 		}
 		return err
@@ -516,19 +513,11 @@ func (p *Provider) retryWrite(ctx context.Context, doing string, write func() er
 		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
 			return ctx.Err()
 		}
-		if refused = write(); refused == nil || !stale(refused) {
+		if refused = write(); refused == nil || !googleretry.IsStale(refused) {
 			return refused
 		}
 	}
 	return fmt.Errorf("%s, and it kept changing under this release: %w", doing, refused)
-}
-
-func stale(err error) bool {
-	switch googleretry.AnsweredCode(err) {
-	case http.StatusConflict, http.StatusPreconditionFailed:
-		return true
-	}
-	return status.Code(err) == codes.Aborted || status.Code(err) == codes.FailedPrecondition
 }
 
 func servedBy(traffic []*run.GoogleCloudRunV2TrafficTarget, revision string) bool {

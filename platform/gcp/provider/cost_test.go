@@ -284,6 +284,11 @@ func TestPriceOfAStoreBillsItsNodeAndItsAppendOnlyFileEveryHourAndTrafficFromOth
 
 func shapeOfADatabase(t *testing.T) (*costv1.ResourceSet, *costv1.Estimate) {
 	t.Helper()
+	return shapeOfADatabaseIn(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION})
+}
+
+func shapeOfADatabaseIn(t *testing.T, environment *environmentv1.Environment) (*costv1.ResourceSet, *costv1.Estimate) {
+	t.Helper()
 	client, costs := costServedIn(t, "us-central1")
 	manifest := shopManifest()
 	manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
@@ -293,7 +298,7 @@ func shapeOfADatabase(t *testing.T) (*costv1.ResourceSet, *costv1.Estimate) {
 	})
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    manifest,
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Environment: environment,
 	})
 	if err != nil {
 		t.Fatalf("Shape() = %v", err)
@@ -314,8 +319,8 @@ func TestShapeOfADeclaredDatabaseIsOneCloudSQLInstanceOnTheTiersNetwork(t *testi
 	}
 	properties := instance.GetProperties().AsMap()
 	settings, _ := properties["settings"].(map[string]any)
-	if properties["database_version"] != "POSTGRES_17" || settings["tier"] != "db-f1-micro" || settings["disk_size"] != float64(10) {
-		t.Errorf("the database is shaped as %v, want POSTGRES_17 on a db-f1-micro with 10 GB of disk", properties)
+	if properties["database_version"] != "POSTGRES_17" || settings["tier"] != "db-custom-1-3840" || settings["availability_type"] != "REGIONAL" || settings["disk_size"] != float64(10) {
+		t.Errorf("the database is shaped as %v, want POSTGRES_17 on a regional db-custom-1-3840 with 10 GB of disk", properties)
 	}
 	for _, typ := range []string{"google_compute_network", "google_compute_subnetwork", "google_network_connectivity_service_connection_policy"} {
 		if scope := resourceOfType(t, set, typ).GetScope(); scope != "project:shop/shared:production" {
@@ -327,10 +332,25 @@ func TestShapeOfADeclaredDatabaseIsOneCloudSQLInstanceOnTheTiersNetwork(t *testi
 	}
 }
 
-func TestPriceOfADatabaseBillsItsInstanceEveryHourAndItsDiskByTheGiB(t *testing.T) {
+func TestPriceOfAProductionDatabaseBillsItsCoreAndMemoryEveryHourAtTheHighAvailabilityRate(t *testing.T) {
 	set, est := shapeOfADatabase(t)
 
 	database := estimateOfType(t, est, set, "google_sql_database_instance", "project:shop/environment:prod")
+	if got := componentNamed(t, est, database.GetResource(), "vCPU").GetMonthlyCost(); got != "60.30" {
+		t.Errorf("the instance's core costs %s, want 60.30 (730 h of 1 vCPU at the high-availability 0.0826)", got)
+	}
+	if got := componentNamed(t, est, database.GetResource(), "Memory").GetMonthlyCost(); got != "38.33" {
+		t.Errorf("the instance's memory costs %s, want 38.33 (730 h of 3.75 GiB at the high-availability 0.014)", got)
+	}
+	if got := componentNamed(t, est, database.GetResource(), "SSD storage").GetMonthlyCost(); got != "3.40" {
+		t.Errorf("the disk costs %s, want 3.40 (10 GiB at the high-availability 0.34)", got)
+	}
+}
+
+func TestPriceOfADatabaseBillsItsInstanceEveryHourAndItsDiskByTheGiB(t *testing.T) {
+	set, est := shapeOfADatabaseIn(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"})
+
+	database := estimateOfType(t, est, set, "google_sql_database_instance", "project:shop/environment:pr-42")
 	if got := componentNamed(t, est, database.GetResource(), "Instance").GetMonthlyCost(); got != "7.67" {
 		t.Errorf("the instance costs %s, want 7.67 (730 h of db-f1-micro at 0.0105)", got)
 	}
@@ -372,7 +392,7 @@ func topicsManifest() *contractv1.Manifest {
 	return manifest
 }
 
-func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEachWorker(t *testing.T) {
+func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEachWorkerBesideTheProjectsRecords(t *testing.T) {
 	client, costs := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -384,10 +404,10 @@ func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEa
 	}
 	counts := typeCounts(set)
 	for typ, want := range map[string]int{
-		"google_pubsub_topic":         5,
+		"google_pubsub_topic":         2,
 		"google_pubsub_subscription":  3,
 		"google_cloud_tasks_queue":    1,
-		"google_firestore_database":   2,
+		"google_firestore_database":   3,
 		"google_cloud_run_v2_service": 4,
 		"google_cloud_scheduler_job":  2,
 	} {
@@ -433,8 +453,8 @@ func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEa
 			}
 		}
 	}
-	if want := map[costv1.ResourceEstimate_Status]int{costv1.ResourceEstimate_STATUS_PRICED: 2, costv1.ResourceEstimate_STATUS_FREE: 3}; !maps.Equal(statuses, want) {
-		t.Errorf("the topics are priced %v, want the two live topics priced by throughput and the three dead-letter topics free", statuses)
+	if want := map[costv1.ResourceEstimate_Status]int{costv1.ResourceEstimate_STATUS_PRICED: 2}; !maps.Equal(statuses, want) {
+		t.Errorf("the topics are priced %v, want the two topics priced by throughput", statuses)
 	}
 	if r := estimateOfType(t, est, set, "google_cloud_tasks_queue", "project:shop/shared:production"); r.GetStatus() != costv1.ResourceEstimate_STATUS_PRICED {
 		t.Errorf("the delay queue is priced %s, want priced by its operations", r.GetStatus())

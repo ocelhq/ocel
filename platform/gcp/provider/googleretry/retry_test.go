@@ -243,3 +243,25 @@ func TestEveryAttemptABackoffAllowsEndsWithoutPanickingWhenTheRunIsCancelled(t *
 		}
 	}
 }
+
+func TestAWriteRefusedAsConflictingPreconditionFailedOrAbortedIsStale(t *testing.T) {
+	for name, err := range map[string]error{
+		"http 409":          &googleapi.Error{Code: http.StatusConflict},
+		"http 412":          &googleapi.Error{Code: http.StatusPreconditionFailed},
+		"grpc aborted":      status.Error(codes.Aborted, "etag"),
+		"grpc precondition": status.Error(codes.FailedPrecondition, "etag"),
+	} {
+		if !googleretry.IsStale(err) {
+			t.Errorf("IsStale(%s) = false, want true", name)
+		}
+	}
+	for name, err := range map[string]error{
+		"http 403":       &googleapi.Error{Code: http.StatusForbidden},
+		"grpc not found": status.Error(codes.NotFound, "gone"),
+		"nil":            nil,
+	} {
+		if googleretry.IsStale(err) {
+			t.Errorf("IsStale(%s) = true, want false", name)
+		}
+	}
+}

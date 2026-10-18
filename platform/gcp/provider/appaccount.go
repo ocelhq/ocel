@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
 	"unicode/utf8"
 
-	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,9 +31,11 @@ const (
 	maxDisplayNameBytes       = 100
 	accountQuotaMessage       = "Maximum number of service accounts"
 
-	appDescriptionPrefix = "the identity app "
-	appDescriptionRuns   = " runs as in the "
-	appDescriptionSuffix = " tier"
+	appDescriptionPrefix      = "the identity app "
+	appDescriptionProject     = " of project "
+	appDescriptionEnvironment = " runs as in environment "
+	appDescriptionTier        = " of the "
+	appDescriptionSuffix      = " tier"
 )
 
 var appGrantedRoles = []string{appRecordsRole, taskRecordsRole, appOpeningRole, appObjectsRole, appAssetsRole}
@@ -42,70 +44,78 @@ func listGrantedRoles(names Names) []string {
 	return append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
 }
 
-func keyCondition(c *clients, tier environment.Tier) *cloudresourcemanager.Expr {
-	return &cloudresourcemanager.Expr{
-		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " key",
-		Expression: fmt.Sprintf("resource.name == %q", keyPath(c, string(tier))),
-	}
-}
-
 func (p *Provider) ensureAppAccount(ctx context.Context, c *clients, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (string, error) {
-	tier, project, app := spec.Ref.Tier, spec.Ref.Project, spec.App.App
-	email := c.AppAccountEmail(tier, project, app)
-	if err := c.createAppAccount(ctx, tier, project, app); err != nil {
+	ref, app := spec.Ref, spec.App.App
+	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, app)
+	if err := c.createAppAccount(ctx, ref, app); err != nil {
 		return "", err
 	}
-	member := "serviceAccount:" + email
-	grants := []func() error{
-		func() error {
-			return c.bindProjectRole(ctx, member, appRecordsRole, databaseCondition(c.project, c.Namespace()), true)
-		},
-		func() error { return c.bindProjectRole(ctx, member, appOpeningRole, keyCondition(c, tier), true) },
+	email := c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app)
+	referenced, err := p.referencedOwners(ctx, spec)
+	if err != nil {
+		return "", err
 	}
-	if reachesTopics(spec.App) {
-		grants = append(grants, c.taskGrants(ctx, spec, member, declared)...)
+	want, err := c.appGrants(ctx, spec, account, "serviceAccount:"+email, declared, referenced)
+	if err != nil {
+		return "", err
 	}
-	grants = append(grants, c.bucketGrants(ctx, spec, member)...)
-	for _, grant := range grants {
-		if err := untilVisible(ctx, grant); err != nil {
-			return "", err
-		}
-	}
-	if err := p.revokeDroppedBuckets(ctx, c, spec, member); err != nil {
+	if err := p.reconcileAppGrants(ctx, c, ref.Tier, account, want); err != nil {
 		return "", err
 	}
 	return email, nil
 }
 
-func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, member string, declared map[string]*provider.TopicSpec) []func() error {
-	tier := spec.Ref.Tier
-	return []func() error{
-		func() error {
-			return c.bindProjectRole(ctx, member, taskRecordsRole, taskDatabaseCondition(c, tier), true)
-		},
-		func() error {
-			return explainMissingGrant(c.bindQueueRoles(ctx, tier, member, queueRoles, queueRoles), queueAdminGrant(c.DelayQueuePath(c.region, tier)))
-		},
-		func() error {
-			own := c.AppAccount(tier, spec.Ref.Project, spec.App.App)
-			if err := c.bindAccountRole(ctx, own, runAsRole, member, true); err != nil {
-				return wrapAccountGrantError(err, c.AppAccountsRolePath())
-			}
-			agent, err := c.ReadServiceAgent(ctx, cloudTasksAgentDomain)
-			if err != nil {
-				return err
-			}
-			return wrapAccountGrantError(c.bindAccountRole(ctx, own, runAsRole, agent, true), c.AppAccountsRolePath())
-		},
-		func() error {
-			return topics.Topology{Names: taskNames(c.Names, spec.Ref), Topics: declared, Publisher: member}.GrantPublisher(ctx, c.Workload())
-		},
+func (c *clients) appGrants(ctx context.Context, spec provider.StackSpec, account, member string, declared map[string]*provider.TopicSpec, referenced []string) ([]appGrant, error) {
+	var grants []appGrant
+	for _, project := range append([]string{spec.Ref.Project}, referenced...) {
+		grants = append(grants,
+			onProject(appRecordsRole, member, projectDatabaseCondition(c, spec.Ref.Tier, project)),
+			onProject(appOpeningRole, member, projectKeyCondition(c, spec.Ref.Tier, project)))
 	}
+	if reachesTopics(spec.App) {
+		tasks, err := c.taskGrants(ctx, spec, account, member, declared)
+		if err != nil {
+			return nil, err
+		}
+		grants = append(grants, tasks...)
+	}
+	grants = append(grants, bucketGrants(spec, account, member)...)
+	cache, err := c.cacheGrants(spec, member)
+	if err != nil {
+		return nil, err
+	}
+	grants = append(grants, cache...)
+	assets, err := c.assetsGrants(spec, member)
+	if err != nil {
+		return nil, err
+	}
+	grants = append(grants, assets...)
+	grants = append(grants, c.cdnPurgeGrants(spec, member)...)
+	return append(grants, c.gateGrants(spec, member)...), nil
 }
 
-func (c *clients) createAppAccount(ctx context.Context, tier environment.Tier, project, app string) error {
-	return c.createAccount(ctx, c.AppAccount(tier, project, app),
-		clipped("ocel "+project+"/"+app+" ("+string(tier)+")", maxDisplayNameBytes), appAccountDescription(tier, project, app))
+func (c *clients) taskGrants(ctx context.Context, spec provider.StackSpec, account, member string, declared map[string]*provider.TopicSpec) ([]appGrant, error) {
+	agent, err := c.ReadServiceAgent(ctx, cloudTasksAgentDomain)
+	if err != nil {
+		return nil, err
+	}
+	grants := []appGrant{
+		onProject(taskRecordsRole, member, taskDatabaseCondition(c, spec.Ref.Tier)),
+		on(targetQueue, c.DelayQueuePath(c.region, spec.Ref.Tier), queueEnqueuerRole, member),
+		on(targetAccount, account, runAsRole, member),
+		on(targetAccount, account, runAsRole, agent),
+	}
+	names := taskNames(c.Names, spec.Ref)
+	for _, name := range slices.Sorted(maps.Keys(declared)) {
+		grants = append(grants, on(targetTopic, topics.TopicPath(c.project, names.Topic(name)), topics.PublisherRole, member))
+	}
+	return grants, nil
+}
+
+func (c *clients) createAppAccount(ctx context.Context, ref provider.StackRef, app string) error {
+	return c.createAccount(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, app),
+		clipped("ocel "+ref.Project+"/"+app+"@"+ref.Name.Env+" ("+string(ref.Tier)+")", maxDisplayNameBytes),
+		appAccountDescription(ref.Tier, ref.Project, ref.Name.Env, app))
 }
 
 func (c *clients) accountExists(ctx context.Context, account string) (bool, error) {
@@ -161,8 +171,8 @@ func (c *clients) deleteAccount(ctx context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-func appAccountDescription(tier environment.Tier, project, app string) string {
-	return appDescriptionPrefix + app + " of project " + project + appDescriptionRuns + string(tier) + appDescriptionSuffix
+func appAccountDescription(tier environment.Tier, project, env, app string) string {
+	return appDescriptionPrefix + app + appDescriptionProject + project + appDescriptionEnvironment + env + appDescriptionTier + string(tier) + appDescriptionSuffix
 }
 
 func clipped(text string, maxBytes int) string {

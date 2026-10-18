@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -79,11 +80,14 @@ func (b bootstrap) syncPurpose(tier environment.Tier) accountPurpose {
 
 func (b bootstrap) grantSyncWrites(ctx context.Context, tier environment.Tier) error {
 	member := syncMember(b.clients, tier)
-	if err := b.clients.bindProjectRole(ctx, member, syncRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()), true); err != nil {
-		return fmt.Errorf("let %s read and write the %s database's records: %w", member, ports.Database(b.clients.Namespace()), err)
+	if err := b.clients.bindProjectRole(ctx, member, syncRecordsRole, tierRecordsCondition(b.clients, tier), true); err != nil {
+		return fmt.Errorf("let %s read and write the %s tier's records: %w", member, tier, err)
 	}
 	if _, err := b.clients.bindKeyRoles(ctx, tier, member, syncKeyRoles, syncKeyRoles); err != nil {
 		return fmt.Errorf("let %s seal and open values under the %s key: %w", member, tier, err)
+	}
+	if _, err := b.clients.bindProjectKeyRoles(ctx, tier, member, syncKeyRoles, syncKeyRoles); err != nil {
+		return fmt.Errorf("let %s seal and open values under the %s tier's project keys: %w", member, tier, err)
 	}
 	return nil
 }
@@ -92,10 +96,14 @@ func (b bootstrap) forgetSyncWrites(ctx context.Context, tier environment.Tier) 
 	member := syncMember(b.clients, tier)
 	return everyStep(
 		func() error {
-			return b.clients.bindProjectRole(ctx, member, syncRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()), false)
+			return b.clients.bindProjectRole(ctx, member, syncRecordsRole, tierRecordsCondition(b.clients, tier), false)
 		},
 		func() error {
 			_, err := b.clients.bindKeyRoles(ctx, tier, member, syncKeyRoles, nil)
+			return err
+		},
+		func() error {
+			_, err := b.clients.bindProjectKeyRoles(ctx, tier, member, syncKeyRoles, nil)
 			return err
 		},
 	)
@@ -103,11 +111,15 @@ func (b bootstrap) forgetSyncWrites(ctx context.Context, tier environment.Tier) 
 
 func (b bootstrap) syncWritesGranted(ctx context.Context, tier environment.Tier) (bool, error) {
 	member := syncMember(b.clients, tier)
-	records, err := b.clients.projectRoleGranted(ctx, member, syncRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()))
+	records, err := b.clients.projectRoleGranted(ctx, member, syncRecordsRole, tierRecordsCondition(b.clients, tier))
 	if err != nil || !records {
 		return false, err
 	}
-	return b.clients.keyRolesGranted(ctx, tier, member, syncKeyRoles)
+	keyed, err := b.clients.keyRolesGranted(ctx, tier, member, syncKeyRoles)
+	if err != nil || !keyed {
+		return false, err
+	}
+	return b.clients.projectKeyRolesGranted(ctx, tier, member, syncKeyRoles)
 }
 
 func (b bootstrap) syncServing(tier environment.Tier) serving {
@@ -227,78 +239,18 @@ func (b bootstrap) takeService(ctx context.Context, name string) error {
 	return b.tearDown(ctx, name, nil)
 }
 
-func (b bootstrap) servicePolicy(ctx context.Context, name string) (*run.GoogleIamV1Policy, error) {
-	services, err := b.clients.Run()
-	if err != nil {
-		return nil, err
-	}
-	policy, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-		return services.Projects.Locations.Services.GetIamPolicy(b.clients.servicePath(name)).
-			OptionsRequestedPolicyVersion(conditionalPolicyVersion).Context(ctx).Do(call...)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("read who may call the Cloud Run service %s: %w", name, err)
-	}
-	return policy, nil
-}
-
 func (b bootstrap) onlySyncCalls(ctx context.Context, tier environment.Tier, name string) (bool, error) {
-	policy, err := b.servicePolicy(ctx, name)
+	bindings, err := iampolicy.Read(ctx, b.clients.runServicePolicy(name))
 	if err != nil {
 		return false, err
 	}
-	_, changed := onlyInvoker(policy.Bindings, syncMember(b.clients, tier))
+	_, changed := iampolicy.OnlyMember(syncInvokerRole, syncMember(b.clients, tier))(bindings)
 	return !changed, nil
 }
 
 func (b bootstrap) letSyncCall(ctx context.Context, tier environment.Tier, name string) error {
-	services, err := b.clients.Run()
-	if err != nil {
-		return err
-	}
-	member := syncMember(b.clients, tier)
-	var refused error
-	for attempt := range bindAttempts {
-		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
-			return ctx.Err()
-		}
-		policy, err := b.servicePolicy(ctx, name)
-		if err != nil {
-			return err
-		}
-		bindings, changed := onlyInvoker(policy.Bindings, member)
-		if !changed {
-			return nil
-		}
-		policy.Bindings = bindings
-		policy.Version = conditionalPolicyVersion
-		_, refused = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-			return services.Projects.Locations.Services.SetIamPolicy(b.clients.servicePath(name),
-				&run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
-		})
-		if refused == nil {
-			return nil
-		}
-		if !stale(refused) {
-			break
-		}
-	}
-	return fmt.Errorf("let %s call the Cloud Run service %s: %w", member, name, refused)
-}
-
-func onlyInvoker(bindings []*run.GoogleIamV1Binding, member string) ([]*run.GoogleIamV1Binding, bool) {
-	kept := make([]*run.GoogleIamV1Binding, 0, len(bindings))
-	var invokers []*run.GoogleIamV1Binding
-	for _, binding := range bindings {
-		if binding.Role == syncInvokerRole {
-			invokers = append(invokers, binding)
-			continue
-		}
-		kept = append(kept, binding)
-	}
-	only := []string{member}
-	changed := len(invokers) != 1 || invokers[0].Condition != nil || !slices.Equal(invokers[0].Members, only)
-	return append(kept, &run.GoogleIamV1Binding{Role: syncInvokerRole, Members: only}), changed
+	_, err := iampolicy.Edit(ctx, b.clients.runServicePolicy(name), iampolicy.OnlyMember(syncInvokerRole, syncMember(b.clients, tier)))
+	return err
 }
 
 func schedulePath(c *clients, name string) string { return c.location() + "/jobs/" + name }

@@ -3,7 +3,9 @@ package gcp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -265,4 +267,63 @@ func TestRemovingATierKeepsTheDatabaseItsSiblingShares(t *testing.T) {
 	if got := actions[names.Database()]; got != provider.ActionKeep {
 		t.Errorf("removing a tier whose sibling is installed does %s to the shared database, want keep", got)
 	}
+}
+
+func replacingTheTierKey(t *testing.T) (bootstrap, survey, *int) {
+	t.Helper()
+	asked := 0
+	b := bootstrap{clients: (&iamServer{}).serve(t, func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		w.WriteHeader(http.StatusNotImplemented)
+	})}
+	key := item{Kind: KindKey, Name: string(environment.TierProduction)}
+	read := survey{
+		Tier:      environment.TierProduction,
+		Names:     b.clients.Names,
+		Project:   "acme-prod",
+		Region:    "europe-west1",
+		present:   map[string]bool{},
+		mending:   map[string]string{},
+		replacing: map[string]string{key.ID(): reasonKeyReplaced},
+	}
+	return b, read, &asked
+}
+
+func TestABootstrapRefusingReplacementsRefusesBeforeWritingAnythingWhenItWouldReplaceTheTierKey(t *testing.T) {
+	b, read, asked := replacingTheTierKey(t)
+
+	err := b.Apply(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, RefuseReplacements: true, VendorState: read}, nil)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "KMS key production") || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("Apply() = %v, want a %s refusal naming the KMS key it would replace and the flag that consents to it", err, refusal.CodeNotReady)
+	}
+	if *asked != 0 {
+		t.Errorf("the bootstrap sent %d requests before refusing, want none", *asked)
+	}
+}
+
+func TestABootstrapRefusingReplacementsGoesAheadWhenNothingWouldBeReplaced(t *testing.T) {
+	t.Parallel()
+
+	read := survey{Tier: environment.TierProduction, Names: Names{namespace: "ocel", project: "acme-prod"}, present: map[string]bool{}}
+
+	if err := refuseReplacements(read, bootstrapItems(read.Names, read.Tier, false)); err != nil {
+		t.Errorf("refuseReplacements() over a tier that replaces nothing = %v, want nil: making what is missing and mending what drifted replace nothing", err)
+	}
+}
+
+func TestABootstrapThatWouldReplaceTheTierKeyPlansItAsAReplacement(t *testing.T) {
+	_, read, _ := replacingTheTierKey(t)
+
+	for _, change := range planned(read, bootstrapItems(read.Names, read.Tier, false)) {
+		if change.Kind != string(KindKey) {
+			continue
+		}
+		if change.Action != provider.ActionReplace || change.Reason != reasonKeyReplaced {
+			t.Errorf("the tier key is planned as %s (%s), want %s (%s)", change.Action, change.Reason, provider.ActionReplace, reasonKeyReplaced)
+		}
+		return
+	}
+	t.Fatal("the plan names no KMS key")
 }

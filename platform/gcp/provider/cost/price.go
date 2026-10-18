@@ -2,6 +2,7 @@ package cost
 
 import (
 	_ "embed"
+	"strings"
 	"sync"
 
 	"github.com/shopspring/decimal"
@@ -38,9 +39,12 @@ const (
 	scheduledRequests = "requests_per_hour"
 	billedSecondsEach = "billed_seconds_per_request"
 	holdsSockets      = "holds_sockets"
-	deadLetter        = "dead_letter"
 	mebibytesPerGiB   = 1024
-	secondsPerHour    = 3600
+
+	sqlCustomMachine    = "db-custom-"
+	sqlRegional         = "REGIONAL"
+	sqlHighAvailability = "-ha"
+	secondsPerHour      = 3600
 )
 
 var (
@@ -170,10 +174,6 @@ func cloudRunService(r *pricing.Subject) {
 
 func pubSubThroughput(name string) func(*pricing.Subject) {
 	return func(r *pricing.Subject) {
-		if r.Bool(deadLetter) {
-			r.Free()
-			return
-		}
 		r.Add(pricing.Component{Name: name, Unit: "GiB", Rate: "gcp/pubsub/throughput", UsageBased: true,
 			Quantity: r.Usage(usageMessages, messagesBand).Div(kibPerGiB)})
 	}
@@ -247,11 +247,35 @@ func memorystoreInstance(r *pricing.Subject) {
 }
 
 func sqlInstance(r *pricing.Subject) {
-	r.Add(pricing.Component{Name: "Instance", Unit: "hours", Rate: "gcp/sql/" + r.String("settings.tier"), Quantity: pricing.MonthlyHours})
-	r.Add(pricing.Component{Name: "SSD storage", Unit: "GiB-month", Rate: "gcp/sql/ssd", Quantity: r.Number("settings.disk_size")})
+	availability := ""
+	if r.String("settings.availability_type") == sqlRegional {
+		availability = sqlHighAvailability
+	}
+	machine := r.String("settings.tier")
+	if vcpus, memory, custom := customMachine(machine); custom {
+		r.Add(pricing.Component{Name: "vCPU", Unit: "vCPU-hours", Rate: "gcp/sql/vcpu" + availability, Quantity: pricing.MonthlyHours.Mul(vcpus)})
+		r.Add(pricing.Component{Name: "Memory", Unit: "GiB-hours", Rate: "gcp/sql/memory" + availability, Quantity: pricing.MonthlyHours.Mul(memory)})
+	} else {
+		r.Add(pricing.Component{Name: "Instance", Unit: "hours", Rate: "gcp/sql/" + machine + availability, Quantity: pricing.MonthlyHours})
+	}
+	r.Add(pricing.Component{Name: "SSD storage", Unit: "GiB-month", Rate: "gcp/sql/ssd" + availability, Quantity: r.Number("settings.disk_size")})
 	r.Add(pricing.Component{Name: "Backups", Unit: "GiB-month", Rate: "gcp/sql/backup", Quantity: r.Usage(usageStorage, storageBand), UsageBased: true})
 	r.Add(pricing.Component{Name: "Private Service Connect endpoint", Unit: "hours", Rate: "gcp/psc/endpoint", Quantity: pricing.MonthlyHours})
 	r.Add(pricing.Component{Name: "Data processed", Unit: "GiB", Rate: "gcp/psc/consumer-data-processing", Quantity: r.Usage(usageDataProcessed, egressBand), UsageBased: true})
+}
+
+func customMachine(machine string) (vcpus, memoryGiB decimal.Decimal, custom bool) {
+	shape, custom := strings.CutPrefix(machine, sqlCustomMachine)
+	if !custom {
+		return decimal.Zero, decimal.Zero, false
+	}
+	cores, mebibytes, split := strings.Cut(shape, "-")
+	vcpus, coresErr := decimal.NewFromString(cores)
+	memory, memoryErr := decimal.NewFromString(mebibytes)
+	if !split || coresErr != nil || memoryErr != nil {
+		return decimal.Zero, decimal.Zero, false
+	}
+	return vcpus, memory.Div(decimal.NewFromInt(mebibytesPerGiB)), true
 }
 
 func forwardingRule(r *pricing.Subject) {

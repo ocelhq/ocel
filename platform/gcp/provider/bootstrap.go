@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path"
 	"slices"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
@@ -48,6 +49,9 @@ const (
 	reasonUnprotected = "it exists with delete protection off, and one call would take every record it stores with it"
 
 	reasonUnlocked = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
+
+	reasonKeyReplaced        = "its primary version is destroyed or scheduled for destruction, and a new primary version replaces it: what the tier sealed under the old one opens again only if that version is restored"
+	reasonPassphraseReplaced = "its latest version is disabled or destroyed, and a new passphrase replaces it: what was written under the old one opens again only if that version is enabled"
 )
 
 const passphraseBytes = 32
@@ -244,6 +248,8 @@ func planned(read survey, items []item) []provider.Change {
 			Slow:   item.Slow,
 		}
 		switch {
+		case read.replaces(item) != "":
+			change.Action, change.Reason = provider.ActionReplace, read.replaces(item)
 		case read.mends(item) != "":
 			change.Action, change.Reason = provider.ActionUpdate, read.mends(item)
 		case item.Shared && read.sibling && read.has(item):
@@ -268,11 +274,16 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err != nil {
 		return err
 	}
+	items := bootstrapItems(read.Names, req.Tier, read.Emulated)
+	if req.RefuseReplacements {
+		if err := refuseReplacements(read, items); err != nil {
+			return err
+		}
+	}
 	if err := b.preflight(ctx, read, req.Parts); err != nil {
 		return err
 	}
 
-	items := bootstrapItems(read.Names, req.Tier, read.Emulated)
 	stampBucket := item{Kind: KindBucket, Name: read.Names.Bucket(req.Tier)}
 	if err := b.provision(ctx, read, stampItem(items, stampBucket), progress); err != nil {
 		return err
@@ -317,6 +328,21 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		ensureProgress(progress).Say("Checked the " + part + " part against this build, mending any drift")
 	}
 	return err
+}
+
+func refuseReplacements(read survey, items []item) error {
+	var replaced []string
+	for _, item := range items {
+		if reason := read.replaces(item); reason != "" {
+			replaced = append(replaced, item.phrase()+": "+reason)
+		}
+	}
+	if len(replaced) == 0 {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"bootstrapping the %s tier would replace %s\nRestore what it would replace, or re-run with --yes to replace it",
+		read.Tier, strings.Join(replaced, "; "))
 }
 
 func stampItem(items []item, stampBucket item) item {
@@ -563,11 +589,11 @@ func (b bootstrap) makeSecret(ctx context.Context, name string) error {
 		return fmt.Errorf("create the %s secret: %w", name, err)
 	}
 
-	exists, err := b.passphraseExists(ctx, name)
+	latest, err := b.readPassphrase(ctx, name)
 	if err != nil {
 		return err
 	}
-	if exists {
+	if passphrasePresenceOf(latest).present {
 		return nil
 	}
 
@@ -975,6 +1001,11 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 	for _, taking := range removals(read) {
 		if taking.action == provider.ActionKeep && taking.item.Kind == KindDatabase && taking.item.Shared {
 			if err := b.takeKeyValues(ctx, tier); err != nil {
+				return err
+			}
+		}
+		if taking.item.Kind == KindDatabase && taking.item.Shared {
+			if err := b.takeProjectRecords(ctx, tier); err != nil {
 				return err
 			}
 		}

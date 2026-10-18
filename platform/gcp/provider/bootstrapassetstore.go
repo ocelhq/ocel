@@ -6,12 +6,12 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/iampolicy"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	assetReaderDescription = "the identity an edge that runs code reads a tier's static files as, through an HMAC key, and nothing else"
 )
 
-func (c *clients) assetReaderCondition(tier environment.Tier) *cloudresourcemanager.Expr {
+func (c *clients) assetReaderCondition(tier environment.Tier) *iampolicy.Condition {
 	return c.objectPrefixCondition("ocel "+string(c.Namespace())+" "+string(tier)+" assets", tier, provider.StoreAssets+"/")
 }
 

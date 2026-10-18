@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 
@@ -47,15 +46,10 @@ func emulatedEndpoint(t *testing.T) string {
 	return endpoint
 }
 
-const (
-	appsMember = "serviceAccount:" + invoker
-	agent      = "serviceAccount:service-1@gcp-sa-pubsub.iam.gserviceaccount.com"
-)
-
 func deployedTopology(t *testing.T, clients *ports.Clients, names topics.Names, declared map[string]*provider.TopicSpec) (topics.Topology, topics.Subscriptions) {
 	t.Helper()
-	topology := topics.Topology{Names: names, Topics: declared, Publisher: appsMember, Agent: agent}
-	subscriptions := topics.Subscriptions{Names: names, Topics: declared, Pushes: pushesTo("https://worker.run.app"), Agent: agent}
+	topology := topics.Topology{Names: names, Topics: declared}
+	subscriptions := topics.Subscriptions{Names: names, Topics: declared, Pushes: pushesTo("https://worker.run.app")}
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Topology.Ensure() = %v", err)
 	}
@@ -65,35 +59,7 @@ func deployedTopology(t *testing.T, clients *ports.Clients, names topics.Names, 
 	return topology, subscriptions
 }
 
-type policyShape struct {
-	Bindings []struct {
-		Role    string   `json:"role"`
-		Members []string `json:"members"`
-	} `json:"bindings"`
-}
-
-func readPolicy(t *testing.T, endpoint, project, kind, name string) policyShape {
-	t.Helper()
-	resp, err := http.Get(endpoint + "/v1/projects/" + project + "/" + kind + "/" + name + ":getIamPolicy")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	var policy policyShape
-	_ = json.NewDecoder(resp.Body).Decode(&policy)
-	return policy
-}
-
-func (p policyShape) grants(role, member string) bool {
-	for _, binding := range p.Bindings {
-		if binding.Role == role && slices.Contains(binding.Members, member) {
-			return true
-		}
-	}
-	return false
-}
-
-func TestLiveTopologyGivesEachConsumerASubscriptionAndDeadLetterTopicOfItsOwn(t *testing.T) {
+func TestLiveTopologyGivesEachConsumerASubscriptionOfItsOwn(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
@@ -105,7 +71,7 @@ func TestLiveTopologyGivesEachConsumerASubscriptionAndDeadLetterTopicOfItsOwn(t 
 		t.Fatalf("Subscriptions.Ensure() over the subscriptions it made = %v, want them kept", err)
 	}
 
-	for _, topic := range []string{names.Topic("orders"), names.Topic("resize"), names.DeadLetterTopic("orders", "ship"), names.DeadLetterTopic("orders", "bill"), names.DeadLetterTopic("resize", "resize")} {
+	for _, topic := range []string{names.Topic("orders"), names.Topic("resize")} {
 		if status := readTopicStatus(t, endpoint, clients.Project, topic); status != http.StatusOK {
 			t.Errorf("topic %s answered %d, want it made", topic, status)
 		}
@@ -130,8 +96,8 @@ func TestLiveTopologyGivesEachConsumerASubscriptionAndDeadLetterTopicOfItsOwn(t 
 	if ship.RetryPolicy.MinimumBackoff != "2s" || ship.RetryPolicy.MaximumBackoff != "90s" {
 		t.Errorf("orders/ship backs off %s to %s, want the topic's 2s to 90s", ship.RetryPolicy.MinimumBackoff, ship.RetryPolicy.MaximumBackoff)
 	}
-	if ship.DeadLetterPolicy.DeadLetterTopic != "projects/"+clients.Project+"/topics/"+names.DeadLetterTopic("orders", "ship") {
-		t.Errorf("orders/ship dead-letters to %s, want its own dead-letter topic", ship.DeadLetterPolicy.DeadLetterTopic)
+	if ship.DeadLetterPolicy != nil {
+		t.Errorf("orders/ship dead-letters to %s, want its messages redelivered until the run's attempts settle it", ship.DeadLetterPolicy.DeadLetterTopic)
 	}
 	if !strings.Contains(ship.Filter, `"ship"`) {
 		t.Errorf("orders/ship filters on %q, want a message redriven to one consumer to reach that consumer alone", ship.Filter)
@@ -151,35 +117,11 @@ func TestLiveTopologyGivesEachConsumerASubscriptionAndDeadLetterTopicOfItsOwn(t 
 	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusNotFound {
 		t.Errorf("the subscription of orders/ship answered %d after Remove(), want it gone", status)
 	}
-	for _, topic := range []string{names.Topic("orders"), names.DeadLetterTopic("orders", "ship")} {
-		if status := readTopicStatus(t, endpoint, clients.Project, topic); status != http.StatusNotFound {
-			t.Errorf("topic %s answered %d after Remove(), want it gone", topic, status)
-		}
+	if status := readTopicStatus(t, endpoint, clients.Project, names.Topic("orders")); status != http.StatusNotFound {
+		t.Errorf("topic %s answered %d after Remove(), want it gone", names.Topic("orders"), status)
 	}
 	if err := topology.Remove(context.Background(), clients); err != nil {
 		t.Errorf("Remove() of a topology already gone = %v, want nothing to do", err)
-	}
-}
-
-func TestLiveTheAppsMayPublishToEachTopicAndPubSubMayDeadLetterEachConsumer(t *testing.T) {
-	endpoint := emulatedEndpoint(t)
-	clients := liveClients(t)
-	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
-	topology, _ := deployedTopology(t, clients, names, ordersAndResize())
-	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
-
-	for _, topic := range []string{"orders", "resize"} {
-		if !readPolicy(t, endpoint, clients.Project, "topics", names.Topic(topic)).grants("roles/pubsub.publisher", appsMember) {
-			t.Errorf("%s may not publish to %s, and every app and worker in the tier sends and triggers as it", appsMember, topic)
-		}
-	}
-	for _, consumer := range []struct{ topic, consumer string }{{"orders", "ship"}, {"orders", "bill"}, {"resize", "resize"}} {
-		if !readPolicy(t, endpoint, clients.Project, "topics", names.DeadLetterTopic(consumer.topic, consumer.consumer)).grants("roles/pubsub.publisher", agent) {
-			t.Errorf("Pub/Sub may not publish to the dead-letter topic of %s/%s, so it could never dead-letter a message", consumer.topic, consumer.consumer)
-		}
-		if !readPolicy(t, endpoint, clients.Project, "subscriptions", names.Subscription(consumer.topic, consumer.consumer)).grants("roles/pubsub.subscriber", agent) {
-			t.Errorf("Pub/Sub may not acknowledge on %s/%s, so a dead-lettered message would stay on the subscription", consumer.topic, consumer.consumer)
-		}
 	}
 }
 
@@ -187,13 +129,13 @@ func TestLiveSubscriptionsAreMadeOnlyForTheWorkersAnAppHosts(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
-	topology := topics.Topology{Names: names, Topics: ordersAndResize(), Publisher: appsMember, Agent: agent}
+	topology := topics.Topology{Names: names, Topics: ordersAndResize()}
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 
-	billing := topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: map[string]topics.Push{"billing": pushesTo("https://worker.run.app")["billing"]}, Agent: agent}
+	billing := topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: map[string]topics.Push{"billing": pushesTo("https://worker.run.app")["billing"]}}
 	if err := billing.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() for the app hosting billing alone = %v, want the consumers on other workers left to their apps", err)
 	}
@@ -205,7 +147,7 @@ func TestLiveSubscriptionsAreMadeOnlyForTheWorkersAnAppHosts(t *testing.T) {
 	}
 }
 
-func TestLiveRemovingAConsumerTakesItsSubscriptionAndDeadLetterTopicAndNoOther(t *testing.T) {
+func TestLiveRemovingAConsumerTakesItsSubscriptionAndNoOther(t *testing.T) {
 	endpoint := emulatedEndpoint(t)
 	clients := liveClients(t)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
@@ -221,9 +163,6 @@ func TestLiveRemovingAConsumerTakesItsSubscriptionAndDeadLetterTopicAndNoOther(t
 	}
 	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "bill")); status != http.StatusNotFound {
 		t.Errorf("orders/bill answered %d, want it gone", status)
-	}
-	if status := readTopicStatus(t, endpoint, clients.Project, names.DeadLetterTopic("orders", "bill")); status != http.StatusNotFound {
-		t.Errorf("the dead-letter topic of orders/bill answered %d, want it gone", status)
 	}
 	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusOK {
 		t.Errorf("orders/ship answered %d, want it kept", status)
