@@ -488,18 +488,6 @@ describe("the builds a pointer served before", () => {
   });
 });
 
-describe("apps", () => {
-  it("names every app ever moved, even one no pointer serves any more", async () => {
-    const store = storeStub();
-    await store.movePointer(
-      makePointerMove({ records: [makeRecord(), makeRecord({ app: "admin" })] }),
-    );
-    await store.movePointer(makePointerMove({ promotionId: "promo-2", replaces: "promo-1" }));
-
-    expect(await store.listApps()).toEqual(["admin", "web"]);
-  });
-});
-
 describe("version stamp", () => {
   it("is readable and updatable", async () => {
     const store = storeStub();
@@ -569,7 +557,6 @@ describe("destroy", () => {
 
     expect(await store.readServedPromotion()).toBeUndefined();
     expect(await store.readPointerRecord("web")).toEqual({ kind: "no-pointer" });
-    expect(await store.listApps()).toEqual([]);
     expect(await store.authorized("s3cret")).toBe(false);
 
     await store.initialize("fresh");

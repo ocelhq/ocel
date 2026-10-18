@@ -1,15 +1,12 @@
 package cloudflare
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
-	"mime/multipart"
 	"slices"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -89,12 +86,13 @@ const genericServesWorkersDevBinding = "OCEL_SERVES_WORKERS_DEV"
 const purgePath = "/" + buildoutput.StateDir + "/purge"
 
 type private struct {
-	EntryWorkers []string `json:"entryWorkers,omitempty"`
-	EnvelopeKey  string   `json:"envelopeKey,omitempty"`
+	EntryWorker string   `json:"entryWorker,omitempty"`
+	EnvelopeKey string   `json:"envelopeKey,omitempty"`
+	Routed      []string `json:"routed,omitempty"`
 }
 
 func (own private) wrapsEnvelopes() bool {
-	return own.EnvelopeKey != "" && len(own.EntryWorkers) > 0
+	return own.EnvelopeKey != "" && own.EntryWorker != ""
 }
 
 type stack struct {
@@ -140,6 +138,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 	envelopeKey := recorded.EnvelopeKey
+	routed := recorded.Routed
 	if !spec.PruneOnly && envelopeKey == "" {
 		minted, err := mintEnvelopeKey()
 		if err != nil {
@@ -157,7 +156,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 
-	secret, stamps, err := p.ensureInstance(ctx, spec, program.store, prior)
+	secret, deployedStamp, err := p.ensureInstance(ctx, spec, program.store, prior)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +165,9 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, fmt.Errorf("publish the %s gate of %s: %w", spec.Tier, slug, err)
 	}
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
-		own := private{EnvelopeKey: envelopeKey}
+		own := private{EnvelopeKey: envelopeKey, Routed: routed}
 		if !spec.PruneOnly {
-			own.EntryWorkers = p.recordEntryWorker(slug, program.name)
+			own.EntryWorker = program.name
 		}
 		return &stack{p: p, state: state, own: own}, nil
 	}
@@ -191,7 +190,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 		return opened(state)
 	}
-	upToDate := stamps[program.name] == stamp
+	upToDate := deployedStamp == stamp
 	if upToDate && p.skipChecks {
 		return openedAsDeployed(prior)
 	}
@@ -213,12 +212,12 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		desired:         spec.Domains,
 		bound:           prior.Bound,
 		servedElsewhere: spec.ServedElsewhere,
-		prune:           spec.PruneRoutes,
-		pruneStem:       program.pruneWorkerStem,
+		routed:          recorded.Routed,
 		owns:            projectOwnsScript(p.namespace, slug),
 	}, spec.Warn); err != nil {
 		return nil, err
 	}
+	routed = slices.Clone(spec.Domains)
 	if upToDate {
 		return openedAsDeployed(prior)
 	}
@@ -239,12 +238,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 		purgeURL = workersDev + purgePath
 	}
-	stamps[program.name] = stamp
-	encoded, err := stamps.encode()
-	if err != nil {
-		return nil, err
-	}
-	if err := p.putVersionStamp(ctx, endpoint, slug, secret, encoded); err != nil {
+	if err := p.putVersionStamp(ctx, endpoint, slug, secret, stamp); err != nil {
 		return nil, fmt.Errorf("set stack version stamp: %w", err)
 	}
 
@@ -255,19 +249,6 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	next.Secret = secret
 	next.Tier = spec.Tier
 	return opened(next)
-}
-
-func (p *cloudflare) recordEntryWorker(slug, name string) []string {
-	p.entryMu.Lock()
-	defer p.entryMu.Unlock()
-	if p.entryWorkers == nil {
-		p.entryWorkers = map[string][]string{}
-	}
-	if !slices.Contains(p.entryWorkers[slug], name) {
-		p.entryWorkers[slug] = append(p.entryWorkers[slug], name)
-		slices.Sort(p.entryWorkers[slug])
-	}
-	return slices.Clone(p.entryWorkers[slug])
 }
 
 func (p *cloudflare) putWorkerScript(ctx context.Context, up upload, what string) error {
@@ -281,25 +262,25 @@ func (p *cloudflare) putWorkerScript(ctx context.Context, up upload, what string
 	return nil
 }
 
-func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, store edge.ReleasesStore, prior edge.StackState) (string, stampSet, error) {
+func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, store edge.ReleasesStore, prior edge.StackState) (secret, stamp string, err error) {
 	if secret := prior.Secret; secret != "" && prior.Slug == spec.Slug {
 		current, res, err := p.getVersionStamp(ctx, store.Endpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
-			return secret, decodeStampSet(current), nil
+			return secret, current, nil
 		case !isUnauthorized(res):
-			return "", nil, fmt.Errorf("read stack version stamp: %w", err)
+			return "", "", fmt.Errorf("read stack version stamp: %w", err)
 		}
 	}
 
-	secret, err := mintSecret()
+	secret, err = mintSecret()
 	if err != nil {
-		return "", nil, fmt.Errorf("mint project store secret: %w", err)
+		return "", "", fmt.Errorf("mint project store secret: %w", err)
 	}
 	if err := p.initializeInstance(ctx, store.Endpoint, spec.Slug, store.BootstrapCredential, secret); err != nil {
-		return "", nil, fmt.Errorf("initialize project store instance: %w", err)
+		return "", "", fmt.Errorf("initialize project store instance: %w", err)
 	}
-	return secret, stampSet{}, nil
+	return secret, "", nil
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
@@ -309,7 +290,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
 	}
-	names, err := s.p.stackWorkers(ctx, s.state)
+	names, err := s.stackWorkers(ctx)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
@@ -322,35 +303,30 @@ func (s *stack) Destroy(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([]string, error) {
-	named := map[string]bool{}
-	var apps []string
-	if secret := state.Secret; secret != "" {
-		stamped, res, err := p.getVersionStamp(ctx, state.Endpoint, state.Slug, secret)
-		if err != nil {
+func (s *stack) stackWorkers(ctx context.Context) ([]string, error) {
+	if secret := s.state.Secret; secret != "" {
+		if _, res, err := s.p.getVersionStamp(ctx, s.state.Endpoint, s.state.Slug, secret); err != nil {
 			if isUnauthorized(res) {
-				return nil, fmt.Errorf("read stack version stamp: the releases store rejected project %q's secret, so the workers it deployed cannot be named: %w", state.Slug, err)
+				return nil, fmt.Errorf("read stack version stamp: the releases store rejected project %q's secret, so this state is not the one that deployed its workers: %w", s.state.Slug, err)
 			}
 			return nil, fmt.Errorf("read stack version stamp: %w", err)
 		}
-		for name := range decodeStampSet(stamped) {
-			named[name] = true
-		}
-		deployed, err := p.readServedApps(ctx, state)
-		if err != nil {
-			return nil, fmt.Errorf("read the apps the releases store served, which names the workers they ran on: %w", err)
-		}
-		apps = deployed
 	}
-
-	conventional, err := conventionWorkerNames(p.namespace, state.Slug, state.Tier, apps)
+	named := []string{}
+	if s.own.EntryWorker != "" {
+		named = append(named, s.own.EntryWorker)
+	}
+	if s.p.namespace == "" || s.state.Slug == "" || s.state.Tier == "" {
+		return named, nil
+	}
+	conventional, err := entryWorkerName(s.p.namespace, s.state.Slug, s.state.Tier)
 	if err != nil {
 		return nil, err
 	}
-	for _, name := range conventional {
-		named[name] = true
+	if !slices.Contains(named, conventional) {
+		named = append(named, conventional)
 	}
-	return slices.Sorted(maps.Keys(named)), nil
+	return named, nil
 }
 
 func (p *cloudflare) destroyWorkers(ctx context.Context, names []string) error {
@@ -366,9 +342,6 @@ func (p *cloudflare) destroyWorkers(ctx context.Context, names []string) error {
 	for _, name := range names {
 		if name == "" {
 			continue
-		}
-		if err := p.detachCustomDomains(ctx, accountID, name); err != nil {
-			errs = append(errs, err)
 		}
 		if err := p.deleteScript(ctx, accountID, name); err != nil {
 			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
@@ -398,84 +371,6 @@ func (p *cloudflare) putBootstrapSecret(ctx context.Context, accountID, scriptNa
 		},
 	})
 	return err
-}
-
-func buildDurableObjectScriptMultipart(worker workerScript, do durableObjectWorker, deployedClasses, inherited []string) ([]byte, string, error) {
-	bindings := scriptBindings(worker, false)
-	for _, class := range do.classes {
-		bindings = append(bindings, map[string]any{
-			"type":       durableObjectBindingType,
-			"name":       class.binding,
-			"class_name": class.className,
-		})
-	}
-	for _, name := range inherited {
-		bindings = append(bindings, map[string]any{
-			"type": inheritedBindingType,
-			"name": name,
-		})
-	}
-	metadata := map[string]any{
-		"main_module":         worker.Main.Name,
-		"compatibility_date":  compatDate,
-		"compatibility_flags": compatFlags,
-		"observability":       observability(),
-		"bindings":            bindings,
-	}
-	migrations, err := pendingMigrations(do.migrations, deployedClasses)
-	if err != nil {
-		return nil, "", err
-	}
-	if migrations != nil {
-		metadata["migrations"] = migrations
-	}
-	metadataJSON, err := json.Marshal(metadata)
-	if err != nil {
-		return nil, "", fmt.Errorf("marshal %s worker metadata: %w", worker.Main.Name, err)
-	}
-
-	buf := &bytes.Buffer{}
-	w := multipart.NewWriter(buf)
-	if err := writePart(w, "metadata", "", "application/json", metadataJSON); err != nil {
-		return nil, "", err
-	}
-	for _, mod := range append([]workerModule{worker.Main}, worker.Modules...) {
-		if err := writePart(w, mod.Name, mod.Name, mod.ContentType, mod.Content); err != nil {
-			return nil, "", err
-		}
-	}
-	if err := w.Close(); err != nil {
-		return nil, "", err
-	}
-	return buf.Bytes(), w.FormDataContentType(), nil
-}
-
-func pendingMigrations(log []migrationStep, deployedClasses []string) (map[string]any, error) {
-	for _, class := range deployedClasses {
-		if !slices.ContainsFunc(log, func(step migrationStep) bool { return slices.Contains(step.sqliteClasses, class) }) {
-			return nil, fmt.Errorf("deployed script declares Durable Object class %q, which this build's migration log does not create", class)
-		}
-	}
-
-	steps := make([]map[string]any, 0, len(log))
-	for _, step := range log {
-		missing := make([]string, 0, len(step.sqliteClasses))
-		for _, class := range step.sqliteClasses {
-			if !slices.Contains(deployedClasses, class) {
-				missing = append(missing, class)
-			}
-		}
-		if len(missing) > 0 {
-			steps = append(steps, map[string]any{"new_sqlite_classes": missing})
-		}
-	}
-	if len(steps) == 0 {
-		return nil, nil
-	}
-	return map[string]any{
-		"new_tag": log[len(log)-1].tag,
-		"steps":   steps,
-	}, nil
 }
 
 func mintSecret() (string, error) {

@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	workerClientCertificateRenewal = 182 * 24 * time.Hour
-	workerClientCertificateStem    = "origin-client"
-	workerClientCertificateDate    = "20060102"
-	workerClientCertificateDay     = "2006-01-02"
+	workerClientCertificateLifetime = 365 * 24 * time.Hour
+	workerClientCertificateRenewal  = 182 * 24 * time.Hour
+	workerClientCertificateStem     = "origin-client"
+	workerClientCertificateDate     = "20060102"
+	workerClientCertificateDay      = "2006-01-02"
 )
 
 var workerClientCertificatePermissions = []string{"Account · SSL and Certificates · Edit"}
@@ -176,7 +177,7 @@ func (c workerClientCertificates) ensure(ctx context.Context, accountID string, 
 }
 
 func (c workerClientCertificates) upload(ctx context.Context, accountID string, state workerClientCertificateState) (id, authority string, err error) {
-	leaf, key, err := mintClientCertificate(state.base, state.now)
+	leaf, key, err := mintClientCertificate(state.base, state.now, workerClientCertificateLifetime)
 	if err != nil {
 		return "", "", err
 	}

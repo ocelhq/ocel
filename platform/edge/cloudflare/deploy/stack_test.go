@@ -206,7 +206,6 @@ func testSpec(endpoint, version string) edge.StackSpec {
 		Program: &edge.Program{
 			Origin:        signedReach(),
 			ReleasesStore: edge.ReleasesStore{Endpoint: endpoint, BootstrapCredential: storeBootstrapCredential},
-			Env:           "prod",
 		},
 	}
 }
@@ -215,7 +214,6 @@ func previewSpec(endpoint, version string) edge.StackSpec {
 	spec := testSpec(endpoint, version)
 	spec.Tier = environment.TierPreview
 	spec.Domains = []string{"*.preview.app.com"}
-	spec.PruneRoutes = true
 	return spec
 }
 
@@ -251,30 +249,32 @@ func ownOf(t *testing.T, state edge.StackState) private {
 
 const testEnvelopeKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 
+func routedState(endpoint, secret string, routed ...string) edge.StackState {
+	state := testState(endpoint, secret)
+	state.Private = edge.Own(private{Routed: routed})
+	return state
+}
+
 func keyedState(endpoint, secret string) edge.StackState {
 	state := testState(endpoint, secret)
 	state.Private = edge.Own(private{EnvelopeKey: testEnvelopeKey})
 	return state
 }
 
-func putStampSet(t *testing.T, p *cloudflare, endpoint, secret string, set stampSet) {
+func putStamp(t *testing.T, p *cloudflare, endpoint, secret, stamp string) {
 	t.Helper()
-	encoded, err := set.encode()
-	if err != nil {
-		t.Fatalf("encode stamp set: %v", err)
-	}
-	if err := p.putVersionStamp(t.Context(), endpoint, "acme-web", secret, encoded); err != nil {
+	if err := p.putVersionStamp(t.Context(), endpoint, "acme-web", secret, stamp); err != nil {
 		t.Fatalf("putVersionStamp: %v", err)
 	}
 }
 
-func readStampSet(t *testing.T, p *cloudflare, endpoint, secret string) stampSet {
+func readStamp(t *testing.T, p *cloudflare, endpoint, secret string) string {
 	t.Helper()
 	raw, _, err := p.getVersionStamp(t.Context(), endpoint, "acme-web", secret)
 	if err != nil {
 		t.Fatalf("getVersionStamp: %v", err)
 	}
-	return decodeStampSet(raw)
+	return raw
 }
 
 func previewZoneMock() *cfMock {
@@ -297,7 +297,7 @@ func TestReconcile(t *testing.T) {
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
 		prior := keyedState(store.URL, "s3cr3t")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{entryOf(t, spec).name: specStampFor(t, spec, prior)})
+		putStamp(t, p, store.URL, "s3cr3t", specStampFor(t, spec, prior))
 
 		state, err := reconcileState(t, p, spec, prior)
 		if err != nil {
@@ -308,7 +308,7 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("prior = %+v, want the caller's own state left untouched", prior)
 		}
 		want := testState(store.URL, "s3cr3t")
-		want.Private = edge.Own(private{EntryWorkers: []string{entryOf(t, spec).name}, EnvelopeKey: testEnvelopeKey})
+		want.Private = edge.Own(private{EntryWorker: entryOf(t, spec).name, EnvelopeKey: testEnvelopeKey, Routed: []string{"*.preview.app.com"}})
 		want.PurgeURL = "https://ocel--acme-web--preview--root.acct-sub.workers.dev" + purgePath
 		if !state.Equal(want) {
 			t.Errorf("state = %+v, want prior plus the worker a domain binds to and the purge URL it answers at (%+v)", state, want)
@@ -321,7 +321,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a preview prunes every route but its own wildcard", func(t *testing.T) {
+	t.Run("a preview prunes the routes it recorded but its own wildcard", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
@@ -329,7 +329,8 @@ func TestReconcile(t *testing.T) {
 			{"id": "other", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "someone-else"},
 		}
 
-		if _, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t")); err != nil {
+		prior := routedState(store.URL, "s3cr3t", "pr-1-abc1234567.preview.app.com", "pr-2-abc1234567.preview.app.com", "*.preview.app.com")
+		if _, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v2"), prior); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
@@ -369,9 +370,8 @@ func TestReconcile(t *testing.T) {
 		if len(m.createdRoutes) != 1 {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
-		stamps := readStampSet(t, p, store.URL, state.Secret)
-		if want := specStampFor(t, spec, state); stamps[entryOf(t, spec).name] != want {
-			t.Errorf("version stamps = %v, want %q under %q", stamps, want, entryOf(t, spec).name)
+		if stamp, want := readStamp(t, p, store.URL, state.Secret), specStampFor(t, spec, state); stamp != want {
+			t.Errorf("version stamp = %q, want %q", stamp, want)
 		}
 	})
 
@@ -580,42 +580,6 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("two apps on one slug each read back their own stamp", func(t *testing.T) {
-		store := fakeStoreServer(t, "s3cr3t")
-		m := previewZoneMock()
-		p := m.provider(t)
-		p.skipChecks = true
-
-		appSpec := func(name string) edge.StackSpec {
-			spec := testSpec(store.URL, "v2")
-			spec.Program.Env = name
-			spec.Domains = []string{name + ".app.com"}
-			return spec
-		}
-		specs := []edge.StackSpec{appSpec("web"), appSpec("api")}
-
-		state := testState(store.URL, "s3cr3t")
-		for pass := range 2 {
-			for _, spec := range specs {
-				next, err := reconcileState(t, p, spec, state)
-				if err != nil {
-					t.Fatalf("pass %d, %s: %v", pass, entryOf(t, spec).name, err)
-				}
-				state = next
-			}
-		}
-
-		if len(m.putScripts) != 2 {
-			t.Errorf("uploaded scripts = %v, want each app's worker uploaded once: on the second pass every app must find its own stamp, not the app reconciled after it", m.putScripts)
-		}
-		stamps := readStampSet(t, p, store.URL, state.Secret)
-		for _, spec := range specs {
-			if want := specStampFor(t, spec, state); stamps[entryOf(t, spec).name] != want {
-				t.Errorf("version stamps = %v, want %q under %q", stamps, want, entryOf(t, spec).name)
-			}
-		}
-	})
-
 	t.Run("the identity a first reconcile mints is the one persisted", func(t *testing.T) {
 		store := fakeStoreServer(t, "")
 		m := previewZoneMock()
@@ -646,7 +610,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a prune-only spec exposes no worker yet still records the instance and prunes", func(t *testing.T) {
+	t.Run("a prune-only spec exposes no worker yet still records the instance and prunes the routes it recorded", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
@@ -658,7 +622,7 @@ func TestReconcile(t *testing.T) {
 		p := m.provider(t)
 		spec := pruneOnlySpec(store.URL, "v2")
 
-		state, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
+		state, err := reconcileState(t, p, spec, routedState(store.URL, "s3cr3t", "pr-1-abc1234567.preview.app.com", "pr-2-abc1234567.preview.app.com", "pr-3-abc1234567.preview.app.com"))
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
@@ -675,13 +639,12 @@ func TestReconcile(t *testing.T) {
 		if len(m.createdRoutes) != 0 {
 			t.Errorf("created routes = %v, want none", m.createdRoutes)
 		}
-		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale", "sibling"})
+		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale"})
 		if state.Secret != "s3cr3t" || state.Endpoint != store.URL {
 			t.Errorf("state = %v, want the store instance's identity", state)
 		}
-		stamps := readStampSet(t, p, store.URL, state.Secret)
-		if want := specStampFor(t, spec, state); stamps[entryOf(t, spec).name] != want {
-			t.Errorf("version stamps = %v, want %q under %q", stamps, want, entryOf(t, spec).name)
+		if stamp, want := readStamp(t, p, store.URL, state.Secret), specStampFor(t, spec, state); stamp != want {
+			t.Errorf("version stamp = %q, want %q", stamp, want)
 		}
 		if own := ownOf(t, state); own.EnvelopeKey != "" {
 			t.Errorf("envelope key = %q, want none: a stack the shared entry serves has no worker of its own to bind one to", own.EnvelopeKey)
@@ -700,7 +663,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("a prune-only spec with the checks skipped still prunes the stale routes of its worker and its stem's siblings", func(t *testing.T) {
+	t.Run("a prune-only spec with the checks skipped still prunes the routes it recorded", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
@@ -712,11 +675,11 @@ func TestReconcile(t *testing.T) {
 		p.skipChecks = true
 		spec := pruneOnlySpec(store.URL, "v2")
 
-		if _, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t")); err != nil {
+		if _, err := reconcileState(t, p, spec, routedState(store.URL, "s3cr3t", "pr-1-abc1234567.preview.app.com", "pr-2-abc1234567.preview.app.com")); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale", "sibling"})
+		assertSet(t, "deleted routes", m.deletedRoutes, []string{"stale"})
 		if !slices.Equal(m.deletedScripts, []string{entryOf(t, spec).name}) {
 			t.Errorf("deleted scripts = %v, want the retired per-project preview worker alone", m.deletedScripts)
 		}
@@ -809,7 +772,7 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 	t.Run("a stack with a worker of its own serves a wrapped envelope only its worker can open", func(t *testing.T) {
 		t.Parallel()
 
-		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
+		got := moved(t, private{EntryWorker: "ocel-acme-web-prod", EnvelopeKey: testEnvelopeKey},
 			router.ReleaseRecord{App: "web", Release: "b1", Secrets: router.ReleaseSecrets{Envelope: dataKey}})
 
 		if got.Edge.Envelope == dataKey || got.Edge.Envelope == "" {
@@ -839,7 +802,7 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 	t.Run("a record with nothing sealed serves no envelope", func(t *testing.T) {
 		t.Parallel()
 
-		got := moved(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
+		got := moved(t, private{EntryWorker: "ocel-acme-web-prod", EnvelopeKey: testEnvelopeKey},
 			router.ReleaseRecord{App: "web", Release: "b1"})
 		if got.Edge.Envelope != "" {
 			t.Errorf("served envelope = %q, want none", got.Edge.Envelope)
@@ -848,48 +811,39 @@ func TestAPointerMoveWrapsTheEnvelope(t *testing.T) {
 }
 
 func TestDestroy(t *testing.T) {
-	t.Run("the workers this project's names cover go with the stamped ones", func(t *testing.T) {
+	t.Run("the entry worker the stack recorded goes with its instance", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
 		state := testState(store.URL, "s3cr3t")
-		movePointer(t, p, state, pointerMoveOf("api-1", "", router.ReleaseRecord{App: "api", Release: "b1"}))
-		movePointer(t, p, state, pointerMoveOf("web-1", "", router.ReleaseRecord{App: "web", Release: "b2"}))
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel--acme-web--prod--web": "v1"})
+		state.Private = edge.Own(private{EntryWorker: "ocel--acme-web--prod--root"})
 
 		if err := stackOn(p, state).Destroy(t.Context()); err != nil {
 			t.Fatalf("Destroy: %v", err)
 		}
-		assertSet(t, "deleted scripts", m.deletedScripts, []string{
-			"ocel--acme-web--prod--web",
-			"ocel--acme-web--prod--api",
-			"ocel--acme-web--prod--root",
-		})
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{"ocel--acme-web--prod--root"})
 		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
 
-	t.Run("every worker the stack stamped is destroyed with its instance", func(t *testing.T) {
+	t.Run("a long slug's entry worker is destroyed under the name its deploy gave it, though the state records none", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		p := m.provider(t)
+		spec := testSpec(store.URL, "v2")
+		spec.Slug = strings.Repeat("verylongproject", 3) + "-shop"
 		state := testState(store.URL, "s3cr3t")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel-preview": "v1", "ocel-preview--web": "v1"})
+		state.Slug = spec.Slug
 
 		if err := stackOn(p, state).Destroy(t.Context()); err != nil {
 			t.Fatalf("Destroy: %v", err)
 		}
-		if !slices.Contains(m.deletedScripts, "ocel-preview") || !slices.Contains(m.deletedScripts, "ocel-preview--web") {
-			t.Errorf("deleted scripts = %v, want both stamped workers", m.deletedScripts)
-		}
-		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
-			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
-		}
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{entryOf(t, spec).name})
 	})
 
 	t.Run("a store that rejects the secret stops the teardown", func(t *testing.T) {
@@ -903,9 +857,6 @@ func TestDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("Destroy err = nil, want a store that cannot be read to fail the teardown loudly")
 		}
-		if len(m.deletedScripts) != 0 {
-			t.Errorf("deleted scripts = %v, want none: the workers to destroy were never established", m.deletedScripts)
-		}
 		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).readServedPromotion(t.Context(), ""); err != nil {
 			t.Errorf("reading the pointer after a refused Destroy: %v, want the instance still keeping the record of what was deployed", err)
 		}
@@ -916,10 +867,9 @@ func TestDestroy(t *testing.T) {
 
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
-		m.refuseScriptDeletes = map[string]bool{"ocel--acme-web--prod--web": true}
+		m.refuseScriptDeletes = map[string]bool{"ocel--acme-web--prod--root": true}
 		p := m.provider(t)
 		state := testState(store.URL, "s3cr3t")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel--acme-web--prod--web": "v1"})
 
 		if err := stackOn(p, state).Destroy(t.Context()); err == nil {
 			t.Fatal("Destroy err = nil, want the worker that survived reported")
@@ -996,13 +946,13 @@ func TestEnsureInstance(t *testing.T) {
 
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
-		putStampSet(t, p, srv.URL, "s3cr3t", stampSet{"": "stamp-v2"})
-		secret, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testSpec(srv.URL, "v2").Program.ReleasesStore, testState(srv.URL, "s3cr3t"))
+		putStamp(t, p, srv.URL, "s3cr3t", "stamp-v2")
+		secret, stamp, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testSpec(srv.URL, "v2").Program.ReleasesStore, testState(srv.URL, "s3cr3t"))
 		if err != nil {
 			t.Fatalf("ensureInstance: %v", err)
 		}
-		if stamps[""] != "stamp-v2" {
-			t.Errorf("stamps = %v, want the stamp the edge stack already has", stamps)
+		if stamp != "stamp-v2" {
+			t.Errorf("stamp = %q, want the stamp the edge stack already has", stamp)
 		}
 		if secret != "s3cr3t" {
 			t.Errorf("secret = %q, want the one already in state", secret)
@@ -1168,6 +1118,7 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		spec := edge.StackSpec{
 			Version:    "v2",
 			Slug:       "acme-web",
+			Tier:       environment.TierProduction,
 			Program:    programmed(),
 			DomainApps: map[string]string{"shop.example": "web"},
 		}

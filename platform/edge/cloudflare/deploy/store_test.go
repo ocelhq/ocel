@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -32,7 +31,6 @@ type fakeStore struct {
 	mu       sync.Mutex
 	pointers map[string]string
 	served   map[string]map[string]router.ReleaseRecord
-	apps     map[string]bool
 	labels   map[string]labelTarget
 	moves    []pointerMoveBody
 	version  *string
@@ -103,7 +101,6 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 	f := &fakeStore{
 		pointers: map[string]string{},
 		served:   map[string]map[string]router.ReleaseRecord{},
-		apps:     map[string]bool{},
 		labels:   map[string]labelTarget{},
 		live:     secret,
 	}
@@ -172,7 +169,6 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		f.served[pointer] = map[string]router.ReleaseRecord{}
 		for _, record := range body.Records {
 			f.served[pointer][record.App] = record.ReleaseRecord
-			f.apps[record.App] = true
 		}
 		f.dropLabels(pointer)
 		for _, served := range body.Labels {
@@ -193,9 +189,6 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 		delete(f.served, body.Pointer)
 		f.dropLabels(body.Pointer)
 		w.WriteHeader(http.StatusNoContent)
-	}))
-	mux.HandleFunc("GET /{slug}/apps", authed(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(slices.Sorted(maps.Keys(f.apps)))
 	}))
 	mux.HandleFunc("GET /{slug}/version-stamp", authed(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]*string{"version": f.version})
@@ -242,7 +235,6 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 	mux.HandleFunc("POST /{slug}/destroy", authed(func(w http.ResponseWriter, _ *http.Request) {
 		f.pointers = map[string]string{}
 		f.served = map[string]map[string]router.ReleaseRecord{}
-		f.apps = map[string]bool{}
 		f.labels = map[string]labelTarget{}
 		f.version = nil
 		f.gate = nil

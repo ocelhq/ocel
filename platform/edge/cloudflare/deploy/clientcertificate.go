@@ -125,7 +125,7 @@ func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname stri
 	if len(held) > 0 {
 		return readClientCAs(zoneName, held)
 	}
-	certificate, key, err := mintClientCertificate(zoneName, time.Now())
+	certificate, key, err := mintClientCertificate(zoneName, time.Now(), clientCertificateLifetime)
 	if err != nil {
 		return nil, err
 	}
@@ -247,8 +247,8 @@ func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID string) 
 	return held, nil
 }
 
-func mintClientCertificate(subject string, now time.Time) (certificate, key string, err error) {
-	authorityKey, authority, err := mintClientCA(subject, now)
+func mintClientCertificate(subject string, now time.Time, lifetime time.Duration) (certificate, key string, err error) {
+	authorityKey, authority, err := mintClientCA(subject, now, lifetime)
 	if err != nil {
 		return "", "", err
 	}
@@ -265,7 +265,7 @@ func mintClientCertificate(subject string, now time.Time) (certificate, key stri
 		Subject:               pkix.Name{CommonName: clientCertificateName + " " + subject},
 		DNSNames:              []string{subject},
 		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(clientCertificateLifetime),
+		NotAfter:              now.Add(lifetime),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
@@ -284,7 +284,7 @@ func mintClientCertificate(subject string, now time.Time) (certificate, key stri
 	return certificate, key, nil
 }
 
-func mintClientCA(subject string, now time.Time) (*rsa.PrivateKey, *x509.Certificate, error) {
+func mintClientCA(subject string, now time.Time, lifetime time.Duration) (*rsa.PrivateKey, *x509.Certificate, error) {
 	private, err := rsa.GenerateKey(rand.Reader, clientCertificateBits)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate the client certificate CA's key: %w", err)
@@ -297,7 +297,7 @@ func mintClientCA(subject string, now time.Time) (*rsa.PrivateKey, *x509.Certifi
 		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: clientCAName + " " + subject},
 		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(clientCertificateLifetime),
+		NotAfter:              now.Add(lifetime),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		IsCA:                  true,

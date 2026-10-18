@@ -10,7 +10,6 @@ const OriginReachVar = "OCEL_ORIGIN"
 type Program struct {
 	Origin            OriginReach
 	ReleasesStore     ReleasesStore
-	Env               string
 	PreviewBaseDomain string
 	PreviewKey        PreviewKey
 }

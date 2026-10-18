@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -17,7 +16,7 @@ func domainStack(t *testing.T, m *cfMock) *stack {
 	t.Setenv(envAccountID, "acct")
 	return stackOn(m.provider(t), edge.StackState{
 		Slug:    "acme-web",
-		Private: edge.Own(private{EntryWorkers: []string{domainEntryScript}}),
+		Private: edge.Own(private{EntryWorker: domainEntryScript}),
 	})
 }
 
@@ -168,7 +167,7 @@ func TestBindDomain(t *testing.T) {
 		m := zoneMock()
 		s := stackOn(m.provider(t), edge.StackState{
 			Slug:    "acme-web",
-			Private: edge.Own(private{EntryWorkers: []string{previewEntryScript}}),
+			Private: edge.Own(private{EntryWorker: previewEntryScript}),
 		})
 
 		err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"})
@@ -180,35 +179,6 @@ func TestBindDomain(t *testing.T) {
 		}
 		if len(m.createdRoutes) != 0 || len(m.createdRecords) != 0 {
 			t.Errorf("created routes = %v and records = %v, want a refusal to leave nothing behind", m.createdRoutes, m.createdRecords)
-		}
-	})
-
-	t.Run("a stack serving several apps refuses to pick one for the host", func(t *testing.T) {
-		t.Setenv(envAccountID, "acct")
-		store := fakeStoreServer(t, "s3cr3t")
-		m := previewZoneMock()
-		p := m.provider(t)
-
-		state := testState(store.URL, "s3cr3t")
-		for _, env := range []string{"web", "api"} {
-			spec := previewSpec(store.URL, "v2")
-			spec.Tier = environment.TierProduction
-			spec.Program.Env = env
-			opened, err := p.Reconcile(t.Context(), spec, state)
-			if err != nil {
-				t.Fatalf("Reconcile(%s): %v", env, err)
-			}
-			state = opened.State()
-		}
-
-		err := stackOn(p, state).BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"})
-		if err == nil {
-			t.Fatal("BindDomain err = nil, want a refusal: nothing says which app's worker should answer")
-		}
-		for _, name := range []string{rootWorkerName(defaultNamespace, "acme-web", "web"), rootWorkerName(defaultNamespace, "acme-web", "api")} {
-			if !strings.Contains(err.Error(), name) {
-				t.Errorf("BindDomain err = %q, want it to name %q", err, name)
-			}
 		}
 	})
 
@@ -227,7 +197,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	store := fakeStoreServer(t, "s3cr3t")
 	t.Setenv(envAccountID, "acct")
 	state := testState(store.URL, "s3cr3t")
-	state.Private = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
+	state.Private = edge.Own(private{EntryWorker: domainEntryScript})
 	s := stackOn(m.provider(t), state)
 
 	movePointer(t, s.p, state, pointerMoveOf("promo-1", router.DefaultPointer, router.ReleaseRecord{App: "web", Release: "b1"}))
@@ -301,8 +271,8 @@ func TestReconcileRecordsItsEntryWorker(t *testing.T) {
 	if err := state.Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
-	if name := entryOf(t, spec).name; !slices.Equal(own.EntryWorkers, []string{name}) {
-		t.Errorf("recorded entry workers = %v, want the worker a bound domain routes to (%q)", own.EntryWorkers, name)
+	if name := entryOf(t, spec).name; own.EntryWorker != name {
+		t.Errorf("recorded entry worker = %q, want the worker a bound domain routes to (%q)", own.EntryWorker, name)
 	}
 }
 
@@ -346,10 +316,9 @@ func TestDestroyOutlivesAnUnbindThatCannotRun(t *testing.T) {
 	store := fakeStoreServer(t, "s3cr3t")
 	m := previewZoneMock()
 	p := m.provider(t)
-	putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel-preview": "v1"})
 
 	state := testState(store.URL, "s3cr3t")
-	state.Private = edge.Own(private{EntryWorkers: []string{"ocel-preview"}})
+	state.Private = edge.Own(private{EntryWorker: "ocel-preview"})
 	state.Bind("shop.elsewhere.com")
 
 	err := stackOn(p, state).Destroy(t.Context())
@@ -370,7 +339,7 @@ func TestPruneOnlyRecordsNoEntryWorker(t *testing.T) {
 	spec := pruneOnlySpec(store.URL, "v2")
 
 	prior := testState(store.URL, "s3cr3t")
-	prior.Private = edge.Own(private{EntryWorkers: []string{entryOf(t, spec).name}})
+	prior.Private = edge.Own(private{EntryWorker: entryOf(t, spec).name})
 
 	state, err := reconcileState(t, previewZoneMock().provider(t), spec, prior)
 	if err != nil {
@@ -380,8 +349,8 @@ func TestPruneOnlyRecordsNoEntryWorker(t *testing.T) {
 	if err := state.Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
-	if len(own.EntryWorkers) != 0 {
-		t.Errorf("recorded entry workers = %v, want none: the script they name was just deleted", own.EntryWorkers)
+	if own.EntryWorker != "" {
+		t.Errorf("recorded entry worker = %q, want none: the script it names was just deleted", own.EntryWorker)
 	}
 }
 

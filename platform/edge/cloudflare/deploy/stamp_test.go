@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func fieldNames(typ reflect.Type) []string {
@@ -29,22 +30,22 @@ func TestSpecStampShape(t *testing.T) {
 		{
 			typ: reflect.TypeFor[edge.StackSpec](),
 			want: []string{
-				"DomainApps", "Domains", "Gate", "GlobalPreview", "Program", "PruneOnly", "PruneRoutes", "Say", "ServedElsewhere", "Slug", "Tier", "Version", "Warn",
+				"DomainApps", "Domains", "Gate", "GlobalPreview", "Program", "PruneOnly", "Say", "ServedElsewhere", "Slug", "Tier", "Version", "Warn",
 			},
 		},
 		{
 			typ:  reflect.TypeFor[edge.Program](),
-			want: []string{"Env", "Origin", "PreviewBaseDomain", "PreviewKey", "ReleasesStore"},
+			want: []string{"Origin", "PreviewBaseDomain", "PreviewKey", "ReleasesStore"},
 		},
 		{
 			typ:  reflect.TypeFor[entryProgram](),
-			want: []string{"name", "pruneWorkerStem", "store", "worker"},
+			want: []string{"name", "store", "worker"},
 		},
 		{
 			typ: reflect.TypeFor[stampedSpec](),
 			want: []string{
 				"CompatDate", "CompatFlags", "Domains", "Generic", "GenericName",
-				"Observability", "PruneOnly", "PruneRoutes", "PruneWorkerStem", "Slug",
+				"Observability", "PruneOnly", "Slug",
 				"StoreEndpoint", "StoreScriptName",
 			},
 		},
@@ -87,7 +88,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("turning observability off restamps the spec", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
+		spec := edge.StackSpec{Slug: "acme-web", Tier: environment.TierProduction, Version: "v2", Program: programmed()}
 		generic, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
@@ -111,7 +112,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("a worker with no domain of its own serves the app on workers.dev, and says so", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
+		spec := edge.StackSpec{Slug: "acme-web", Tier: environment.TierProduction, Version: "v2", Program: programmed()}
 
 		worker, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
@@ -125,8 +126,8 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 
 	t.Run("a worker bound to a domain keeps the app off workers.dev", func(t *testing.T) {
 		for name, spec := range map[string]edge.StackSpec{
-			"a domain":            {Slug: "acme-web", Domains: []string{"shop.example.com"}, Program: programmed()},
-			"a domain served via": {Slug: "acme-web", ServedElsewhere: []string{"shop.example.com"}, Program: programmed()},
+			"a domain":            {Slug: "acme-web", Tier: environment.TierProduction, Domains: []string{"shop.example.com"}, Program: programmed()},
+			"a domain served via": {Slug: "acme-web", Tier: environment.TierProduction, ServedElsewhere: []string{"shop.example.com"}, Program: programmed()},
 		} {
 			worker, err := genericWorker(spec, entryOf(t, spec), "")
 			if err != nil {
@@ -139,7 +140,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("a gate does not restamp the spec: it is published to the releases store, not deployed in the script", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
+		spec := edge.StackSpec{Slug: "acme-web", Tier: environment.TierProduction, Version: "v2", Program: programmed()}
 		generic, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
@@ -159,7 +160,7 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 	})
 
 	t.Run("binding a client certificate restamps the spec", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: programmed()}
+		spec := edge.StackSpec{Slug: "acme-web", Tier: environment.TierProduction, Version: "v2", Program: programmed()}
 		plain, err := genericWorker(spec, entryOf(t, spec), "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)

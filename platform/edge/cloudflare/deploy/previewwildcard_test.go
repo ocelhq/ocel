@@ -177,7 +177,6 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
 			},
-			existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "preview.app.com", "service": previewEntryScript}},
 		}
 
 		if err := m.provider(t).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err != nil {
@@ -187,7 +186,6 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
 		assertSet(t, "deleted records", m.deletedRecords, nil)
 		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScript})
-		assertSet(t, "detached custom domains", m.deletedCustomDomains, []string{"cd1"})
 	})
 
 	t.Run("the script stays while another wildcard still routes to it", func(t *testing.T) {
@@ -207,7 +205,6 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
 		assertSet(t, "deleted scripts", m.deletedScripts, nil)
-		assertSet(t, "detached custom domains", m.deletedCustomDomains, nil)
 	})
 
 	t.Run("a wildcard another script owns is left in place", func(t *testing.T) {
@@ -250,14 +247,14 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 		spec   routeSpec
 	}{
 		{
-			name:   "a stem that reaches the shared script never sweeps it",
+			name:   "a project's script never sweeps it",
 			script: "ocel-preview",
-			spec:   stemSpec("ocel-preview", "pr-1-abc1234567.preview.app.com"),
+			spec:   routedSpec([]string{"*.preview.app.com"}, "pr-1-abc1234567.preview.app.com"),
 		},
 		{
 			name:   "the shared script does not sweep its own route",
 			script: previewEntryScript,
-			spec:   prunedSpec("pr-1-abc1234567.preview.app.com"),
+			spec:   routedSpec([]string{"*.preview.app.com"}, "pr-1-abc1234567.preview.app.com"),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -84,10 +84,6 @@ export default class extends WorkerEntrypoint<Env> {
       return new Response(null, { status: 204 });
     }
 
-    if (request.method === "GET" && sub === "/apps") {
-      return Response.json(await store.listApps());
-    }
-
     if (request.method === "GET" && sub === "/version-stamp") {
       return Response.json({ version: (await store.readVersionStamp()) ?? null });
     }

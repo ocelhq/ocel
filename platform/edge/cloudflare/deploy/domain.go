@@ -23,7 +23,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if binding.Origin != nil {
 		return s.bindForwarded(ctx, binding)
 	}
-	accountID, script, err := s.soleEntryWorker("bind")
+	accountID, script, err := s.entryWorker("bind")
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if s.isForwarded(hostname) {
 		return s.unbindForwarded(ctx, hostname)
 	}
-	accountID, scripts, err := s.entryWorkers("unbind")
+	accountID, script, err := s.entryWorker("unbind")
 	if err != nil {
 		return err
 	}
@@ -70,37 +70,26 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), scripts); err != nil {
+	if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), []string{script}); err != nil {
 		return err
 	}
 	s.state.Release(hostname)
 	return nil
 }
 
-func (s *stack) entryWorkers(verb string) (accountID string, scriptNames []string, err error) {
+func (s *stack) entryWorker(verb string) (accountID, scriptName string, err error) {
 	accountID, err = requireAccountID(fmt.Sprintf("%s a domain on the Cloudflare edge", verb))
-	if err != nil {
-		return "", nil, err
-	}
-	scriptNames = s.own.EntryWorkers
-	if len(scriptNames) == 0 {
-		return "", nil, fmt.Errorf("stack %q records no entry worker to %s a domain on — deploy it first", s.state.Slug, verb)
-	}
-	return accountID, scriptNames, nil
-}
-
-func (s *stack) soleEntryWorker(verb string) (accountID, scriptName string, err error) {
-	accountID, scriptNames, err := s.entryWorkers(verb)
 	if err != nil {
 		return "", "", err
 	}
-	if len(scriptNames) > 1 {
-		return "", "", fmt.Errorf("stack %q serves %d apps (%s), and a domain binding names no app, so nothing tells which worker should answer for it — %s a domain on a single-app stack", s.state.Slug, len(scriptNames), strings.Join(scriptNames, ", "), verb)
+	scriptName = s.own.EntryWorker
+	if scriptName == "" {
+		return "", "", fmt.Errorf("stack %q records no entry worker to %s a domain on — deploy it first", s.state.Slug, verb)
 	}
-	if scriptNames[0] == previewEntryScript {
+	if scriptName == previewEntryScript {
 		return "", "", fmt.Errorf("stack %q is served by the shared preview entry worker %q, which answers for every project, so no single project's domain may be bound to it", s.state.Slug, previewEntryScript)
 	}
-	return accountID, scriptNames[0], nil
+	return accountID, scriptName, nil
 }
 
 func (p *cloudflare) detachRoute(ctx context.Context, zoneID, pattern string, scriptNames []string) error {

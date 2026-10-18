@@ -11,7 +11,6 @@ import (
 
 type edgeProgramScope struct {
 	tier              environment.Tier
-	env               string
 	previewBaseDomain string
 	previewKey        edge.PreviewKey
 }
@@ -34,7 +33,6 @@ func edgeProgramFor(ctx context.Context, p provider.Provider, front edge.Edge, s
 	if err := built.Origin.RefuseIncomplete(); err != nil {
 		return nil, refusal.Refuse(refusal.CodeNotReady, "the %s edge cannot reach this origin: %v", front.Kind(), err)
 	}
-	built.Env = scope.env
 	built.PreviewBaseDomain = scope.previewBaseDomain
 	built.PreviewKey = scope.previewKey
 	return &built, nil

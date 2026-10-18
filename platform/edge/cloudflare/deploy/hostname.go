@@ -22,16 +22,12 @@ type routeSpec struct {
 	desired         []string
 	bound           []string
 	servedElsewhere []string
-	prune           bool
-	pruneStem       string
+	routed          []string
 	owns            func(script string) bool
 }
 
 func (spec routeSpec) ownsRoute(scriptName, owner string) bool {
-	if owner == scriptName || edge.NameUnderStem(spec.pruneStem, owner) {
-		return true
-	}
-	return spec.owns != nil && spec.owns(owner)
+	return owner == scriptName || spec.owns != nil && spec.owns(owner)
 }
 
 func projectOwnsScript(namespace, slug string) func(script string) bool {
@@ -47,10 +43,6 @@ func projectOwnsScript(namespace, slug string) func(script string) bool {
 func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec routeSpec, warn func(string)) error {
 	warn = nilSafeWarn(warn)
 	routes := p.routeSnapshot()
-
-	if err := p.detachCustomDomains(ctx, up.accountID, up.scriptName); err != nil {
-		return err
-	}
 
 	wanted := make(map[string]bool, len(spec.desired)+len(spec.bound))
 	for _, host := range spec.bound {
@@ -73,40 +65,38 @@ func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec 
 		}
 	}
 
-	if !spec.prune {
-		return nil
-	}
-	return p.pruneStaleRoutes(ctx, routes, up, spec.pruneStem, wanted)
+	return p.pruneStaleRoutes(ctx, routes, up, spec.routed, wanted)
 }
 
-func (p *cloudflare) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up upload, stem string, wanted map[string]bool) error {
-	owned, err := p.accountZones(ctx, up.accountID)
-	if err != nil {
-		return err
-	}
+func (p *cloudflare) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up upload, routed []string, wanted map[string]bool) error {
 	var errs []error
-	for _, zone := range owned {
-		inZone, err := snap.inZone(ctx, zone.id)
+	for _, host := range routed {
+		if wanted[host] {
+			continue
+		}
+		zoneID, _, err := p.resolveZone(ctx, up.accountID, routeBaseDomain(host))
+		if errors.Is(err, errNoZone) {
+			continue
+		}
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
+		inZone, err := snap.inZone(ctx, zoneID)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		pattern := routePattern(host)
 		for _, route := range slices.Clone(inZone) {
-			if route.Script == previewEntryScript {
+			if route.Pattern != pattern || route.Script != up.scriptName || route.Script == previewEntryScript {
 				continue
 			}
-			if route.Script != up.scriptName && !edge.NameUnderStem(stem, route.Script) {
-				continue
-			}
-			host := strings.TrimSuffix(route.Pattern, "/*")
-			if wanted[host] {
-				continue
-			}
-			if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zone.id)}); err != nil {
+			if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
 				errs = append(errs, fmt.Errorf("delete stale worker route %q: %w", route.Pattern, err))
 				continue
 			}
-			snap.detached(zone.id, route.ID)
+			snap.detached(zoneID, route.ID)
 		}
 	}
 	return errors.Join(errs...)
@@ -248,37 +238,12 @@ func isAddressRecord(t dns.RecordResponseType) bool {
 	}
 }
 
-func (p *cloudflare) detachCustomDomains(ctx context.Context, accountID, scriptName string) error {
-	attached := p.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
-		AccountID: cf.F(accountID),
-		Service:   cf.F(scriptName),
-	})
-	for attached.Next() {
-		dom := attached.Current()
-		if err := p.client.Workers.Domains.Delete(ctx, dom.ID, workers.DomainDeleteParams{
-			AccountID: cf.F(accountID),
-		}); err != nil {
-			return fmt.Errorf("detach custom domain %q: %w", dom.Hostname, err)
-		}
-	}
-	if err := attached.Err(); err != nil {
-		return fmt.Errorf("list custom domains for %q: %w", scriptName, err)
-	}
-	return nil
-}
-
 type zoneRef struct {
 	id   string
 	name string
 }
 
 func (p *cloudflare) accountZones(ctx context.Context, accountID string) ([]zoneRef, error) {
-	p.zoneMu.Lock()
-	defer p.zoneMu.Unlock()
-	if cached, ok := p.zonesSeen[accountID]; ok {
-		return cached, nil
-	}
-
 	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
 	})
@@ -290,10 +255,6 @@ func (p *cloudflare) accountZones(ctx context.Context, accountID string) ([]zone
 	if err := owned.Err(); err != nil {
 		return nil, fmt.Errorf("list zones: %w", err)
 	}
-	if p.zonesSeen == nil {
-		p.zonesSeen = map[string][]zoneRef{}
-	}
-	p.zonesSeen[accountID] = refs
 	return refs, nil
 }
 
@@ -344,18 +305,44 @@ func (s *routeSnapshot) detached(zoneID, routeID string) {
 	})
 }
 
+var errNoZone = errors.New("no Cloudflare zone in this account owns the hostname")
+
 func (p *cloudflare) resolveZone(ctx context.Context, accountID, hostname string) (id, name string, err error) {
-	owned, err := p.accountZones(ctx, accountID)
-	if err != nil {
-		return "", "", err
-	}
-	for _, z := range owned {
-		if edge.ZoneOwns(hostname, z.name) && len(z.name) > len(name) {
-			id, name = z.id, z.name
+	for candidate := hostname; strings.Contains(candidate, "."); candidate = candidate[strings.Index(candidate, ".")+1:] {
+		zone, found, err := p.zoneNamed(ctx, accountID, candidate)
+		if err != nil {
+			return "", "", err
+		}
+		if found {
+			return zone.id, zone.name, nil
 		}
 	}
-	if id == "" {
-		return "", "", fmt.Errorf("no Cloudflare zone in this account owns %q — add its zone to the account whose CLOUDFLARE_API_TOKEN you provided", hostname)
+	return "", "", fmt.Errorf("%w %q — add its zone to the account whose CLOUDFLARE_API_TOKEN you provided", errNoZone, hostname)
+}
+
+func (p *cloudflare) zoneNamed(ctx context.Context, accountID, name string) (zoneRef, bool, error) {
+	key := accountID + "/" + name
+	p.zoneMu.Lock()
+	defer p.zoneMu.Unlock()
+	if cached, ok := p.zonesSeen[key]; ok {
+		return cached, cached.id != "", nil
 	}
-	return id, name, nil
+	named := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
+		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
+		Name:    cf.F(name),
+	})
+	var found zoneRef
+	for named.Next() {
+		if z := named.Current(); z.Name == name {
+			found = zoneRef{id: z.ID, name: z.Name}
+		}
+	}
+	if err := named.Err(); err != nil {
+		return zoneRef{}, false, fmt.Errorf("list the zone named %q: %w", name, err)
+	}
+	if p.zonesSeen == nil {
+		p.zonesSeen = map[string]zoneRef{}
+	}
+	p.zonesSeen[key] = found
+	return found, found.id != "", nil
 }
