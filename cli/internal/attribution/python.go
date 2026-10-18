@@ -73,9 +73,9 @@ func pythonSearchDirs(roots []discovery.Root) []string {
 func walkPythonImports(ctx context.Context, app, dir string, search []string) (pythonWalk, error) {
 	program := discovery.PythonInterpreter(dir)
 
-	cmd := exec.CommandContext(ctx, program, append([]string{"-", dir}, search...)...)
+	cmd := exec.Command(program, append([]string{"-", dir}, search...)...)
 	cmd.Stdin = strings.NewReader(pythonReachScript)
-	decoder, _, err := runJSON(cmd)
+	decoder, _, err := runJSON(ctx, cmd)
 	if err != nil {
 		return pythonWalk{}, fmt.Errorf("attribution: app %q: read its imports with %s: %w", app, program, err)
 	}

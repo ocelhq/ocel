@@ -15,8 +15,8 @@ description: What ocel dev runs for the resources you declare.
 
 ## Lifecycle
 
-- **Changes.** Editing a discovery folder re-runs discovery. When the bindings change, the app restarts; otherwise it keeps running. A worker restarts when a folder its code runs from changed, or the values it reads did; the others keep serving.
+- **Changes.** Editing a discovery folder re-runs discovery. When the bindings change, the app restarts; otherwise it keeps running. A worker restarts when a discovery folder its program runs from changed, or the values it reads did; the others keep serving. `ocel dev` watches only the discovery folders, so an edit to code a worker imports from outside them takes effect once you restart `ocel dev`.
 - **Data.** Containers keep their data in docker volumes between runs. They stop when the last `ocel` command using them exits.
 - **Reset.** `ocel dev --reset` wipes this project's dev data and starts from empty resources. It refuses while another `ocel` command is using them.
-- **Several terminals.** A second `ocel dev` in the same project joins the running one: it shares its resources and receives its binding updates.
-- **State.** Kept under `.ocel/devresources/` in the project.
+- **Several terminals.** A second `ocel dev` on the same config joins the running one: it shares its resources and receives its binding updates. An `ocel dev` on another config in the same folder, such as `ocel dev -c ocel.vps.json`, starts its own resources.
+- **State.** Kept under `.ocel/devresources/<config file>/` in the project.

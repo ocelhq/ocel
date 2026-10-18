@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/workdir"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -269,4 +271,25 @@ func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneO
 		t.Errorf("result = %v, want the scan's run to succeed", result)
 	}
 	decodeScan(t, stdout.String())
+}
+
+func TestAScanReadsTheBuildOutputUnderTheBuildOutputLock(t *testing.T) {
+	root, _, dependencies := scanFixture(t)
+	read := dependencies.ReadFunctions
+	locked := false
+	dependencies.ReadFunctions = func(projectDir string) ([]build.Function, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		release, err := workdir.LockBuildOutput(ctx, projectDir, func() { locked = true })
+		if err == nil {
+			release()
+		}
+		return read(projectDir)
+	}
+
+	scan(t, dependencies, root, Options{})
+
+	if !locked {
+		t.Error("the build output was read without the build-output lock held, so a concurrent build can remove it mid-scan")
+	}
 }

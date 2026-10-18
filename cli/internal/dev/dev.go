@@ -117,7 +117,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	reportValues(startup, cfg.Dir, values, true)
 
 	if reset {
-		if err := devresources.Reset(ctx, opts.OpenDocker, stateDir(cfg), devresources.ProjectName(cfg.Dir)); err != nil {
+		if err := devresources.Reset(ctx, opts.OpenDocker, stateDir(cfg), resourcesName(cfg)); err != nil {
 			return err
 		}
 	}

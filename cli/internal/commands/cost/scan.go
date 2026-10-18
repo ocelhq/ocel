@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/cli/internal/workdir"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -112,24 +113,7 @@ func price(ctx context.Context, dependencies Dependencies, provider *providerpro
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	manifest, assumptions, err := scanManifest(ctx, dependencies, resolved, env, out)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	outputRoot, err := buildoutput.Root(cfg.Dir)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var set *costv1.ResourceSet
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
-			Manifest:    manifest,
-			Environment: env,
-			Edge:        cfg.EdgeSelection(),
-			OutputRoot:  outputRoot,
-		})
-		return err
-	})
+	set, assumptions, err := shape(ctx, dependencies, provider, resolved, env, out)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -149,6 +133,38 @@ func price(ctx context.Context, dependencies Dependencies, provider *providerpro
 		estimates[profile] = estimate
 	}
 	return set, estimates, assumptions, nil
+}
+
+func shape(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*costv1.ResourceSet, []string, error) {
+	release, err := workdir.LockBuildOutput(ctx, cfg.Dir, func() {
+		_, _ = fmt.Fprintln(out, "Waiting for another ocel run in "+cfg.Dir+" to finish with "+buildoutput.Dir)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer release()
+	manifest, assumptions, err := scanManifest(ctx, dependencies, cfg, env, out)
+	if err != nil {
+		return nil, nil, err
+	}
+	outputRoot, err := buildoutput.Root(cfg.Dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	var set *costv1.ResourceSet
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
+			Manifest:    manifest,
+			Environment: env,
+			Edge:        cfg.EdgeSelection(),
+			OutputRoot:  outputRoot,
+		})
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return set, assumptions, nil
 }
 
 func environmentOf(name string) (*environmentv1.Environment, error) {

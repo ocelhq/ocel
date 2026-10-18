@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/english"
@@ -490,9 +491,9 @@ func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir
 }
 
 func RunPackageManager(ctx context.Context, dir string, argv []string, output io.Writer) error {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout = output
 	cmd.Stderr = output
-	return cmd.Run()
+	return childprocess.Run(ctx, cmd)
 }

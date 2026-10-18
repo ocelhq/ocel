@@ -126,9 +126,9 @@ func New(projectName string, opts Options) *Resources {
 	return r
 }
 
-func ProjectName(dir string) string {
-	sum := sha256.Sum256([]byte(filepath.Clean(dir)))
-	return strings.Trim(project.DeriveSlug(filepath.Base(dir)), "-") + "-" + hex.EncodeToString(sum[:4])
+func ProjectName(configPath string) string {
+	sum := sha256.Sum256([]byte(filepath.Clean(configPath)))
+	return strings.Trim(project.DeriveSlug(filepath.Base(filepath.Dir(configPath))), "-") + "-" + hex.EncodeToString(sum[:4])
 }
 
 func (r *Resources) Services() bindingproxy.Services {
