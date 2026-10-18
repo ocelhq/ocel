@@ -97,7 +97,7 @@ func TestProvisionReportsTheResourceWhoseProvisioningFailed(t *testing.T) {
 		recordBuckets(t, store, ref, test.recorded...)
 
 		reported := newChangeLog()
-		hooks := resources.Hooks{ProvisionBucket: failingBuckets{failing: "logs"}.ProvisionBucket}
+		hooks := resources.Hooks{Bucket: provisioning(failingBuckets{failing: "logs"}.ProvisionBucket)}
 		if _, err := resources.NewHookStacks(store, fake.NewArtifacts(), hooks).
 			Provision(context.Background(), bucketSpec(ref, "uploads", "logs"), reported); err == nil {
 			t.Fatalf("%s: Provision() = nil, want the hook's failure", name)
@@ -242,5 +242,35 @@ func TestProvisionReportsAnUpdateForAHeldAppContainerItStartedFromAnotherBuildAn
 		if !slices.Equal(reported.changes, test.want) {
 			t.Errorf("%s: Provision() reported changes %q, want %q", name, reported.changes, test.want)
 		}
+	}
+}
+
+func TestAnExistingResourceTheVendorPlansAsAnUpdateIsShownAndReportedAsTheUpdateItIs(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	ref := infraRef()
+	recordBuckets(t, store, ref, "uploads")
+	opening := func(context.Context, resources.ProvisionRequest, *provider.Binding) (provider.ChangeAction, string, error) {
+		return provider.ActionUpdate, "it becomes readable by anyone", nil
+	}
+	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), resources.Hooks{
+		Bucket: &resources.ResourceHooks{Plan: opening, Provision: (&buckets{}).ProvisionBucket, Remove: (&buckets{}).RemoveResource},
+	})
+
+	planned, err := stacks.Plan(context.Background(), bucketSpec(ref, "uploads"), nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if len(planned.Groups) != 1 || len(planned.Groups[0].Changes) != 1 ||
+		planned.Groups[0].Changes[0].Action != provider.ActionUpdate || planned.Groups[0].Changes[0].Reason != "it becomes readable by anyone" {
+		t.Fatalf("Plan() = %+v, want the bucket shown as the update its vendor plans, with its reason: a plan that says keep while the apply opens the bucket is consent to nothing", planned.Groups)
+	}
+	reported := newChangeLog()
+	if _, err := stacks.Provision(context.Background(), bucketSpec(ref, "uploads"), reported); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if want := []string{"update bucket uploads"}; !slices.Equal(reported.changes, want) {
+		t.Errorf("Provision() reported %q, want %q: the apply reports the action the plan showed", reported.changes, want)
 	}
 }

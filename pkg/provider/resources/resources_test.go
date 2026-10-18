@@ -36,14 +36,25 @@ func (b *buckets) RemoveResource(_ context.Context, _ provider.StackRef, binding
 }
 
 func (b *buckets) hooks() resources.Hooks {
-	return resources.Hooks{ProvisionBucket: b.ProvisionBucket, RemoveResource: b.RemoveResource}
+	return resources.Hooks{Bucket: &resources.ResourceHooks{Plan: planFromRecord, Provision: b.ProvisionBucket, Remove: b.RemoveResource}}
+}
+
+func planFromRecord(_ context.Context, _ resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	if recorded == nil {
+		return provider.ActionCreate, "", nil
+	}
+	return provider.ActionKeep, provider.ReasonCurrent, nil
+}
+
+func provisioning(provision func(context.Context, resources.ProvisionRequest, progress.Log) (provider.Binding, error)) *resources.ResourceHooks {
+	return &resources.ResourceHooks{Plan: planFromRecord, Provision: provision, Remove: (&buckets{}).RemoveResource}
 }
 
 type neon struct{ *buckets }
 
 func (n neon) hooks() resources.Hooks {
 	hooks := n.buckets.hooks()
-	hooks.ProvisionPostgres = n.ProvisionPostgres
+	hooks.Postgres = &resources.ResourceHooks{Plan: planFromRecord, Provision: n.ProvisionPostgres, Remove: n.RemoveResource}
 	return hooks
 }
 
@@ -64,7 +75,7 @@ func (neon) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, 
 type halfBinding struct{}
 
 func (h halfBinding) hooks() resources.Hooks {
-	return resources.Hooks{ProvisionPostgres: h.ProvisionPostgres}
+	return resources.Hooks{Postgres: provisioning(h.ProvisionPostgres)}
 }
 
 func (halfBinding) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ progress.Log) (provider.Binding, error) {
@@ -96,21 +107,17 @@ func TestServesNamesEveryResourceTheHooksProvision(t *testing.T) {
 	if !slices.Equal(served, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}) {
 		t.Fatalf("ServedBindingTypes() = %v, want the Postgres and the bucket the hooks provision", served)
 	}
-	stores := resources.Hooks{ProvisionKV: (&buckets{}).ProvisionBucket}
+	stores := resources.Hooks{KV: provisioning((&buckets{}).ProvisionBucket)}
 	if served := resources.ServedBindingTypes(stores); !slices.Equal(served, []provider.BindingType{provider.BindingKV}) {
 		t.Fatalf("ServedBindingTypes() = %v, want the kv stores the hooks provision", served)
 	}
-	queues := resources.Hooks{ProvisionTopic: (&buckets{}).ProvisionBucket}
+	queues := resources.Hooks{Topic: provisioning((&buckets{}).ProvisionBucket)}
 	if served := resources.ServedBindingTypes(queues); !slices.Equal(served, []provider.BindingType{provider.BindingTopic, provider.BindingTask}) {
 		t.Fatalf("ServedBindingTypes() = %v, want the topics and the tasks one hook provisions: a task is a topic with one consumer", served)
 	}
-	channels := resources.Hooks{ProvisionRealtime: (&buckets{}).ProvisionBucket}
+	channels := resources.Hooks{Realtime: provisioning((&buckets{}).ProvisionBucket)}
 	if served := resources.ServedBindingTypes(channels); !slices.Equal(served, []provider.BindingType{provider.BindingRealtime}) {
 		t.Fatalf("ServedBindingTypes() = %v, want the realtime stores the hooks provision", served)
-	}
-	removing := resources.Hooks{RemoveResource: (&buckets{}).RemoveResource}
-	if served := resources.ServedBindingTypes(removing); len(served) != 0 {
-		t.Fatalf("ServedBindingTypes() = %v for hooks that only remove, want nothing: a resource nothing can provision is not served", served)
 	}
 }
 
@@ -1189,7 +1196,7 @@ func (r *retaining) promote(app, imageRef string) {
 
 func (r *retaining) hooks() resources.Hooks {
 	hooks := r.buckets.hooks()
-	hooks.ProvisionBucket = r.ProvisionBucket
+	hooks.Bucket.Provision = r.ProvisionBucket
 	hooks.Containers = &resources.ContainerHooks{Provision: r.ProvisionContainers, Remove: r.RemoveContainers}
 	hooks.Retention = &resources.ImageRetentionHooks{Reconcile: r.ReconcileImages, Forget: r.ForgetReleases}
 	return hooks

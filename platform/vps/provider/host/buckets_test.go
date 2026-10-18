@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"os/exec"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func TestABucketThatIsNoLongerPublicHasItsAnonymousReadPolicyDeleted(t *testing.T) {
@@ -176,6 +179,177 @@ func TestAStoreThatNeverAnsweredANamedCallIsNamedAsSilent(t *testing.T) {
 	for _, want := range []string{spec.Store, "no answer", listing[0].what} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("droveStore = %v, want it to name %q", err, want)
+		}
+	}
+}
+
+func heldAs(t *testing.T, spec BucketSpec) map[string]storeAnswer {
+	t.Helper()
+	answers := map[string]storeAnswer{
+		"location": {code: "200"},
+		"cors":     {code: "404"},
+		"policy":   {code: "404"},
+	}
+	if cors, err := corsBody(spec.AllowedOrigins); err != nil {
+		t.Fatal(err)
+	} else if cors != nil {
+		answers["cors"] = storeAnswer{code: "200", body: []byte(strings.Replace(string(cors),
+			"<CORSConfiguration>", `<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">`, 1))}
+	}
+	if spec.Public {
+		policy, err := anonymousReadPolicy(spec.Bucket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		answers["policy"] = storeAnswer{code: "200", body: policy}
+	}
+	lifecycle, err := lifecycleBody()
+	if err != nil {
+		t.Fatal(err)
+	}
+	answers[lifecycleCall] = storeAnswer{code: "200", body: lifecycle}
+	return answers
+}
+
+func plannedBucket(t *testing.T, spec BucketSpec, answers map[string]storeAnswer) (provider.ChangeAction, string) {
+	t.Helper()
+	action, reason, err := spec.planChange(answers)
+	if err != nil {
+		t.Fatalf("planChange() = %v", err)
+	}
+	return action, reason
+}
+
+func TestABucketTheStoreHoldsAsItsCallsLeaveItPlansKeep(t *testing.T) {
+	t.Parallel()
+
+	for _, public := range []bool{false, true} {
+		spec := aStore()
+		spec.Public = public
+		spec.AllowedOrigins = []string{"https://app.example.com", "https://shop.example.com"}
+		if action, reason := plannedBucket(t, spec, heldAs(t, spec)); action != provider.ActionKeep {
+			t.Errorf("a bucket (public %t) the store holds exactly as its calls leave it plans %s %q, want keep", public, action, reason)
+		}
+	}
+}
+
+func TestABucketTheStoreDoesNotHavePlansACreate(t *testing.T) {
+	t.Parallel()
+
+	if action, reason := plannedBucket(t, aStore(), map[string]storeAnswer{"location": {code: "404"}}); action != provider.ActionCreate {
+		t.Errorf("a bucket the store answers 404 for plans %s %q, want create", action, reason)
+	}
+}
+
+func TestAPrivateBucketDeclaredPublicPlansBecomingReadableByAnyone(t *testing.T) {
+	t.Parallel()
+
+	held := heldAs(t, aStore())
+	spec := aStore()
+	spec.Public = true
+	action, reason := plannedBucket(t, spec, held)
+	if action != provider.ActionUpdate || !strings.Contains(reason, "becomes readable by anyone") {
+		t.Errorf("a private bucket declared public plans %s %q, want an update saying it becomes readable by anyone", action, reason)
+	}
+}
+
+func TestAPublicBucketDeclaredPrivatePlansNoLongerBeingReadableByAnyone(t *testing.T) {
+	t.Parallel()
+
+	public := aStore()
+	public.Public = true
+	action, reason := plannedBucket(t, aStore(), heldAs(t, public))
+	if action != provider.ActionUpdate || !strings.Contains(reason, "stops being readable by anyone") {
+		t.Errorf("a public bucket declared private plans %s %q, want an update saying it stops being readable by anyone", action, reason)
+	}
+}
+
+func TestABucketWhoseOriginsChangePlansAnUpdateNamingBothSets(t *testing.T) {
+	t.Parallel()
+
+	was := aStore()
+	was.AllowedOrigins = []string{"https://a.example.com"}
+	spec := aStore()
+	spec.AllowedOrigins = []string{"https://a.example.com", "https://b.example.com"}
+	action, reason := plannedBucket(t, spec, heldAs(t, was))
+	if action != provider.ActionUpdate || !strings.Contains(reason, "[https://a.example.com] to [https://a.example.com https://b.example.com]") {
+		t.Errorf("a bucket gaining an origin plans %s %q, want an update naming both sets of origins", action, reason)
+	}
+}
+
+func TestABucketLosingEveryOriginPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	was := aStore()
+	was.AllowedOrigins = []string{"https://a.example.com"}
+	action, reason := plannedBucket(t, aStore(), heldAs(t, was))
+	if action != provider.ActionUpdate || !strings.Contains(reason, "https://a.example.com") {
+		t.Errorf("a bucket losing its only origin plans %s %q, want an update naming the origin it stops answering", action, reason)
+	}
+}
+
+func TestAPolicyTheStoreRendersInItsOwnShapeStillReadsAsAnonymousRead(t *testing.T) {
+	t.Parallel()
+
+	spec := aStore()
+	spec.Public = true
+	held := heldAs(t, spec)
+	held["policy"] = storeAnswer{code: "200", body: []byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::` + spec.Bucket + `/*"}]}`)}
+	if action, reason := plannedBucket(t, spec, held); action != provider.ActionKeep {
+		t.Errorf("an anonymous-read policy the store renders with bare strings plans %s %q, want keep", action, reason)
+	}
+}
+
+func TestAPublicBucketWhosePolicyGrantsMoreThanReadsPlansReplacingIt(t *testing.T) {
+	t.Parallel()
+
+	spec := aStore()
+	spec.Public = true
+	held := heldAs(t, spec)
+	held["policy"] = storeAnswer{code: "200", body: []byte(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject","s3:PutObject"],"Resource":"arn:aws:s3:::` + spec.Bucket + `/*"}]}`)}
+	if action, reason := plannedBucket(t, spec, held); action != provider.ActionUpdate || !strings.Contains(reason, "policy") {
+		t.Errorf("a public bucket whose policy also lets anyone write plans %s %q, want an update replacing that policy", action, reason)
+	}
+}
+
+func TestABucketMissingItsLifecyclePlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	held := heldAs(t, aStore())
+	held[lifecycleCall] = storeAnswer{code: "404"}
+	if action, reason := plannedBucket(t, aStore(), held); action != provider.ActionUpdate || !strings.Contains(reason, "unfinished uploads") {
+		t.Errorf("a bucket with no lifecycle plans %s %q, want an update saying unfinished uploads start expiring", action, reason)
+	}
+	held[lifecycleCall] = storeAnswer{code: "501"}
+	if action, reason := plannedBucket(t, aStore(), held); action != provider.ActionKeep {
+		t.Errorf("a bucket on a store that keeps no lifecycle plans %s %q, want keep: setting one is refused the same way", action, reason)
+	}
+}
+
+func TestABucketOnAStoreThatIsNotRunningPlansSettingItsRulesAgain(t *testing.T) {
+	t.Parallel()
+
+	if action, reason := plannedBucket(t, aStore(), map[string]storeAnswer{}); action != provider.ActionUpdate || reason == "" {
+		t.Errorf("a bucket whose store answered nothing plans %s %q, want an update with a reason", action, reason)
+	}
+}
+
+func TestPlanningABucketOnlyReadsFromTheStore(t *testing.T) {
+	t.Parallel()
+
+	box := machine(nil)
+	spec := aStore()
+	spec.Public = true
+	if _, _, err := box.host().PlanBucket(context.Background(), spec); err != nil {
+		t.Fatalf("PlanBucket() = %v", err)
+	}
+	asked := strings.Join(box.commands(), "\n")
+	if !strings.Contains(asked, quoted(http.MethodGet)) {
+		t.Fatalf("planning a bucket asked the store nothing:\n%s", asked)
+	}
+	for _, method := range []string{http.MethodPut, http.MethodDelete, http.MethodPost} {
+		if strings.Contains(asked, quoted(method)) {
+			t.Errorf("planning a bucket sent the store a %s:\n%s", method, asked)
 		}
 	}
 }

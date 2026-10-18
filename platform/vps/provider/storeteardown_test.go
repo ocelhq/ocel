@@ -131,8 +131,8 @@ func TestTheStoreGoesDownWithTheLastBucketTheProjectKeepsInIt(t *testing.T) {
 	withBuckets(t, p, stack, "uploads")
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
-	if err := p.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource(bucket) = %v", err)
+	if err := p.RemoveBucket(context.Background(), ref, binding, progress.Discard()); err != nil {
+		t.Fatalf("RemoveBucket() = %v", err)
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
@@ -161,8 +161,8 @@ func TestAStoreStillContainingABucketIsLeftRunning(t *testing.T) {
 	withBuckets(t, p, stack, "uploads", "assets")
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
-	if err := p.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource(bucket) = %v", err)
+	if err := p.RemoveBucket(context.Background(), ref, binding, progress.Discard()); err != nil {
+		t.Fatalf("RemoveBucket() = %v", err)
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
@@ -182,8 +182,8 @@ func TestATeardownThatStoppedHalfwayIsRunAgainWithoutComplaint(t *testing.T) {
 
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack}
 	for again := range 2 {
-		if err := p.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
-			t.Fatalf("RemoveResource(bucket) run %d = %v", again+1, err)
+		if err := p.RemoveBucket(context.Background(), ref, binding, progress.Discard()); err != nil {
+			t.Fatalf("RemoveBucket() run %d = %v", again+1, err)
 		}
 	}
 }
@@ -205,8 +205,8 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 		}
 		return session.Result{Code: 1, Stderr: "the box went away"}, true
 	}
-	if err := stopped.RemoveResource(context.Background(), ref, binding, progress.Discard()); err == nil {
-		t.Fatal("RemoveResource(bucket) = nil, want the failure that stops the teardown halfway")
+	if err := stopped.RemoveBucket(context.Background(), ref, binding, progress.Discard()); err == nil {
+		t.Fatal("RemoveBucket() = nil, want the failure that stops the teardown halfway")
 	}
 
 	machine.refuses = nil
@@ -214,8 +214,8 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 	machine.forget()
 	again := over(machine)
 	withBuckets(t, again, stack, "uploads")
-	if err := again.RemoveResource(context.Background(), ref, binding, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource(bucket) run 2 = %v", err)
+	if err := again.RemoveBucket(context.Background(), ref, binding, progress.Discard()); err != nil {
+		t.Fatalf("RemoveBucket() run 2 = %v", err)
 	}
 
 	joined := strings.Join(machine.commands(), "\n")

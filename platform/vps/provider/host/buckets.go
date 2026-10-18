@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -73,25 +74,33 @@ type lifecycleConfiguration struct {
 	Rules   []lifecycleRule `xml:"Rule"`
 }
 
-func corsBody(origins []string) ([]byte, error) {
-	if len(origins) == 0 {
-		return nil, nil
-	}
-	return xml.Marshal(corsConfiguration{Rules: []corsRule{{
+func newCORSRule(origins []string) corsRule {
+	return corsRule{
 		AllowedOrigin: origins,
 		AllowedMethod: []string{"GET", "HEAD", "PUT", "POST", "DELETE"},
 		AllowedHeader: []string{"*"},
 		ExposeHeader:  []string{"ETag", "Content-Length", "Content-Type"},
 		MaxAgeSeconds: corsMaxAgeSeconds,
-	}}})
+	}
 }
 
-func lifecycleBody() ([]byte, error) {
-	return xml.Marshal(lifecycleConfiguration{Rules: []lifecycleRule{{
+func corsBody(origins []string) ([]byte, error) {
+	if len(origins) == 0 {
+		return nil, nil
+	}
+	return xml.Marshal(corsConfiguration{Rules: []corsRule{newCORSRule(origins)}})
+}
+
+func newLifecycleRule() lifecycleRule {
+	return lifecycleRule{
 		ID:     "ocel-abort-incomplete-multipart",
 		Status: "Enabled",
 		Abort:  lifecycleAbort{DaysAfterInitiation: multipartExpiry},
-	}}})
+	}
+}
+
+func lifecycleBody() ([]byte, error) {
+	return xml.Marshal(lifecycleConfiguration{Rules: []lifecycleRule{newLifecycleRule()}})
 }
 
 func anonymousReadPolicy(bucket string) ([]byte, error) {
@@ -306,6 +315,250 @@ func (h *Host) ApplyOrigins(ctx context.Context, spec BucketSpec) error {
 		return fmt.Errorf("sign %s: %w", call.what, err)
 	}
 	return h.calledStore(ctx, call.what, curlCommand(spec.Store, req, call), call.body, elevation)
+}
+
+const locationCall = "location"
+
+func (s BucketSpec) readingCalls() []storeCall {
+	calls := []storeCall{{
+		name: locationCall, what: "read whether bucket " + s.Bucket + " exists",
+		method: http.MethodGet, query: "location", allow: []string{"200", "404"},
+	}}
+	if !s.Internal {
+		calls = append(calls,
+			storeCall{
+				name: "cors", what: "read the CORS of bucket " + s.Bucket,
+				method: http.MethodGet, query: "cors", capture: true, allow: []string{"200", "404"},
+			},
+			storeCall{
+				name: "policy", what: "read the policy of bucket " + s.Bucket,
+				method: http.MethodGet, query: "policy", capture: true, allow: []string{"200", "404"},
+			})
+	}
+	return append(calls, storeCall{
+		name: lifecycleCall, what: "read the lifecycle of bucket " + s.Bucket,
+		method: http.MethodGet, query: "lifecycle", capture: true, allow: []string{"200", "400", "404", "501"},
+	})
+}
+
+func (h *Host) PlanBucket(ctx context.Context, spec BucketSpec) (provider.ChangeAction, string, error) {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	answers, err := droveStore(spec, spec.readingCalls(), time.Now().UTC(), func(what, script string) (string, error) {
+		return h.ran(ctx, what, script, nil, elevation)
+	})
+	if err != nil {
+		return "", "", refusal.Refuse(refusal.CodeNotReady,
+			"could not read bucket %s on %s: %v", spec.Bucket, h.named(), err)
+	}
+	return spec.planChange(answers)
+}
+
+func (s BucketSpec) planChange(answers map[string]storeAnswer) (provider.ChangeAction, string, error) {
+	location, spoke := answers[locationCall]
+	switch {
+	case !spoke:
+		return provider.ActionUpdate, "its store " + s.Store + " is not running to read it from, so its CORS, policy and lifecycle are set again", nil
+	case location.code == "404":
+		return provider.ActionCreate, "", nil
+	}
+	var reasons []string
+	if !s.Internal {
+		cors, err := s.planCORS(answers["cors"])
+		if err != nil {
+			return "", "", err
+		}
+		reasons = append(reasons, cors, s.planPolicy(answers["policy"]))
+	}
+	lifecycle, err := planLifecycle(answers[lifecycleCall])
+	if err != nil {
+		return "", "", err
+	}
+	reasons = slices.DeleteFunc(append(reasons, lifecycle), func(reason string) bool { return reason == "" })
+	if len(reasons) == 0 {
+		return provider.ActionKeep, provider.ReasonCurrent, nil
+	}
+	return provider.ActionUpdate, strings.Join(reasons, "; "), nil
+}
+
+func (s BucketSpec) planCORS(answer storeAnswer) (string, error) {
+	if answer.code == "" {
+		return "its CORS could not be read, so it is set again", nil
+	}
+	var held corsConfiguration
+	if answer.code == "200" && len(strings.TrimSpace(string(answer.body))) > 0 {
+		if err := xml.Unmarshal(answer.body, &held); err != nil {
+			return "", refusal.Refuse(refusal.CodeNotReady,
+				"the store answered the CORS of bucket %s with what is no CORS configuration: %v", s.Bucket, err)
+		}
+	}
+	var heldOrigins []string
+	for _, rule := range held.Rules {
+		heldOrigins = append(heldOrigins, rule.AllowedOrigin...)
+	}
+	want := newCORSRule(s.AllowedOrigins)
+	switch {
+	case len(held.Rules) == 0 && len(s.AllowedOrigins) == 0:
+		return "", nil
+	case len(s.AllowedOrigins) == 0:
+		return "it stops answering cross-origin requests from " + fmt.Sprint(heldOrigins), nil
+	case len(held.Rules) == 0:
+		return "it starts answering cross-origin requests from " + fmt.Sprint(s.AllowedOrigins), nil
+	case len(held.Rules) > 1 || !isSameCORSSettings(held.Rules[0], want):
+		return "its CORS rules are replaced by one answering " + fmt.Sprint(s.AllowedOrigins), nil
+	case !isSameSet(held.Rules[0].AllowedOrigin, want.AllowedOrigin):
+		return "its allowed origins change from " + fmt.Sprint(heldOrigins) + " to " + fmt.Sprint(s.AllowedOrigins), nil
+	default:
+		return "", nil
+	}
+}
+
+func isSameSet(a, b []string) bool {
+	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
+}
+
+func isSameCORSSettings(held, want corsRule) bool {
+	return held.MaxAgeSeconds == want.MaxAgeSeconds &&
+		isSameSet(held.AllowedMethod, want.AllowedMethod) &&
+		isSameSet(held.AllowedHeader, want.AllowedHeader) &&
+		isSameSet(held.ExposeHeader, want.ExposeHeader)
+}
+
+func (s BucketSpec) planPolicy(answer storeAnswer) string {
+	if answer.code == "" {
+		return "its policy could not be read, so it is set again"
+	}
+	held := answer.code == "200" && len(strings.TrimSpace(string(answer.body))) > 0
+	statements := readPolicyStatements(answer.body)
+	anonymous := held && slices.ContainsFunc(statements, grantsAnyone)
+	switch {
+	case s.Public && held && isAnonymousRead(statements, s.Bucket):
+		return ""
+	case s.Public && !held:
+		return "it becomes readable by anyone"
+	case s.Public:
+		return "its policy is replaced by one that lets anyone read it"
+	case anonymous:
+		return "it stops being readable by anyone"
+	case held:
+		return "its policy is removed"
+	default:
+		return ""
+	}
+}
+
+func readPolicyStatements(body []byte) []map[string]any {
+	var policy struct {
+		Statement json.RawMessage `json:"Statement"`
+	}
+	if err := json.Unmarshal(body, &policy); err != nil {
+		return nil
+	}
+	var statements []map[string]any
+	if err := json.Unmarshal(policy.Statement, &statements); err == nil {
+		return statements
+	}
+	var statement map[string]any
+	if err := json.Unmarshal(policy.Statement, &statement); err != nil {
+		return nil
+	}
+	return []map[string]any{statement}
+}
+
+func grantsAnyone(statement map[string]any) bool {
+	if statement["Effect"] != "Allow" {
+		return false
+	}
+	switch principal := statement["Principal"].(type) {
+	case string:
+		return principal == "*"
+	case map[string]any:
+		return slices.Equal(readPolicyValues(principal["AWS"]), []string{"*"})
+	default:
+		return false
+	}
+}
+
+func isAnonymousRead(statements []map[string]any, bucket string) bool {
+	if len(statements) != 1 {
+		return false
+	}
+	statement := statements[0]
+	for key := range statement {
+		if !slices.Contains([]string{"Sid", "Effect", "Principal", "Action", "Resource"}, key) {
+			return false
+		}
+	}
+	return grantsAnyone(statement) &&
+		slices.Equal(readPolicyValues(statement["Action"]), []string{"s3:GetObject"}) &&
+		slices.Equal(readPolicyValues(statement["Resource"]), []string{"arn:aws:s3:::" + bucket + "/*"})
+}
+
+func readPolicyValues(value any) []string {
+	switch value := value.(type) {
+	case string:
+		return []string{value}
+	case []any:
+		values := make([]string, 0, len(value))
+		for _, each := range value {
+			text, isText := each.(string)
+			if !isText {
+				return nil
+			}
+			values = append(values, text)
+		}
+		return values
+	default:
+		return nil
+	}
+}
+
+type heldLifecycleRule struct {
+	Status string `xml:"Status"`
+	Prefix string `xml:"Prefix"`
+	Filter struct {
+		Prefix string    `xml:"Prefix"`
+		Tag    *struct{} `xml:"Tag"`
+		And    *struct{} `xml:"And"`
+	} `xml:"Filter"`
+	Abort      *lifecycleAbort `xml:"AbortIncompleteMultipartUpload"`
+	Expiration *struct{}       `xml:"Expiration"`
+	Transition *struct{}       `xml:"Transition"`
+}
+
+type heldLifecycle struct {
+	Rules []heldLifecycleRule `xml:"Rule"`
+}
+
+func planLifecycle(answer storeAnswer) (string, error) {
+	const expiring = "unfinished uploads to it start expiring after a day"
+	switch answer.code {
+	case "400", "501":
+		return "", nil
+	case "200":
+	default:
+		return expiring, nil
+	}
+	var held heldLifecycle
+	if err := xml.Unmarshal(answer.body, &held); err != nil {
+		return "", refusal.Refuse(refusal.CodeNotReady,
+			"the store answered a bucket's lifecycle with what is no lifecycle configuration: %v", err)
+	}
+	want := newLifecycleRule()
+	if len(held.Rules) == 1 {
+		rule := held.Rules[0]
+		if rule.Status == want.Status && rule.Prefix == "" && rule.Filter.Prefix == "" &&
+			rule.Filter.Tag == nil && rule.Filter.And == nil && rule.Expiration == nil && rule.Transition == nil &&
+			rule.Abort != nil && *rule.Abort == want.Abort {
+			return "", nil
+		}
+	}
+	if len(held.Rules) == 0 {
+		return expiring, nil
+	}
+	return "its lifecycle rules are replaced by one expiring unfinished uploads after a day", nil
 }
 
 type BucketRef struct {

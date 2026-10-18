@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/realtime"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -256,8 +258,8 @@ func TestARemovedRealtimeIsDroppedFromTheGatewayAndTheLastTakesTheGatewayWithIt(
 	}
 	ref := aRealtime(t, "app").Ref
 
-	if err := p.RemoveResource(context.Background(), ref, bindings["chat"], progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource(chat) = %v", err)
+	if err := p.RemoveRealtime(context.Background(), ref, bindings["chat"], progress.Discard()); err != nil {
+		t.Fatalf("RemoveRealtime(chat) = %v", err)
 	}
 	if keys := gatewayKeys(t, machine); len(keys) != 1 || keys["app"] == "" {
 		t.Errorf("after chat is removed the gateway verifies %v, want app alone", keys)
@@ -269,8 +271,8 @@ func TestARemovedRealtimeIsDroppedFromTheGatewayAndTheLastTakesTheGatewayWithIt(
 		t.Fatalf("the gateway was taken down while app still declares realtime")
 	}
 
-	if err := p.RemoveResource(context.Background(), ref, bindings["app"], progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource(app) = %v", err)
+	if err := p.RemoveRealtime(context.Background(), ref, bindings["app"], progress.Discard()); err != nil {
+		t.Fatalf("RemoveRealtime(app) = %v", err)
 	}
 	if machine.at("docker rm --force '"+realtimeGateway+"'") < 0 {
 		t.Errorf("the gateway outlived the last realtime of its environment:\n%s", strings.Join(machine.commands(), "\n"))
@@ -379,5 +381,74 @@ func TestARealtimeAnotherDeployRecordsWhileTheGatewayRestartsIsVerifiedByTheGate
 	}
 	if keys := gatewayKeys(t, machine); len(keys) != 2 || keys["app"] == "" || keys["chat"] == "" {
 		t.Errorf("the gateway left running verifies %v, want app and the chat another deploy recorded meanwhile", keys)
+	}
+}
+
+func plannedRealtime(t *testing.T, machine *box, store *fake.KeyValues, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string) {
+	t.Helper()
+	mark, records := len(machine.commands()), store.Snapshot()
+	p := over(machine)
+	p.Recording(store)
+	action, reason, err := p.PlanRealtime(context.Background(), in, recorded)
+	if err != nil {
+		t.Fatalf("PlanRealtime() = %v", err)
+	}
+	refuseWrites(t, machine.since(mark))
+	if !maps.Equal(store.Snapshot(), records) {
+		t.Errorf("planning a realtime wrote a record, and a plan records nothing")
+	}
+	return action, reason
+}
+
+func realtimeProvisioned(t *testing.T, machine *box, store *fake.KeyValues, in resources.ProvisionRequest) provider.Binding {
+	t.Helper()
+	p := over(machine)
+	p.Recording(store)
+	binding, err := p.ProvisionRealtime(context.Background(), in, progress.Discard())
+	if err != nil {
+		t.Fatalf("ProvisionRealtime() = %v", err)
+	}
+	return binding
+}
+
+func TestAnUnchangedRealtimePlansKeep(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	recorded := realtimeProvisioned(t, machine, store, aRealtime(t, "app"))
+	if action, reason := plannedRealtime(t, machine, store, aRealtime(t, "app"), &recorded); action != provider.ActionKeep {
+		t.Errorf("a realtime declared as it was provisioned plans %s %q, want keep", action, reason)
+	}
+}
+
+func TestARealtimeNeverRecordedPlansACreate(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	if action, reason := plannedRealtime(t, machine, store, aRealtime(t, "app"), nil); action != provider.ActionCreate {
+		t.Errorf("a realtime on a box that never ran one plans %s %q, want create", action, reason)
+	}
+}
+
+func TestASecondRealtimePlansACreateThatRestartsTheGateway(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	realtimeProvisioned(t, machine, store, aRealtime(t, "app"))
+	action, reason := plannedRealtime(t, machine, store, aRealtime(t, "chat"), nil)
+	if action != provider.ActionCreate || !strings.Contains(reason, realtimeGateway) {
+		t.Errorf("a second realtime plans %s %q, want a create saying the gateway is replaced to verify it", action, reason)
+	}
+}
+
+func TestARealtimeWhoseGatewayStoppedPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	machine, store := &box{remembers: true}, fake.NewKeyValues()
+	recorded := realtimeProvisioned(t, machine, store, aRealtime(t, "app"))
+	machine.containers[realtimeGateway] = strings.Replace(machine.containers[realtimeGateway], "running", "exited", 1)
+	action, reason := plannedRealtime(t, machine, store, aRealtime(t, "app"), &recorded)
+	if action != provider.ActionUpdate || !strings.Contains(reason, realtimeGateway) {
+		t.Errorf("a realtime whose gateway exited plans %s %q, and the apply starts a new gateway", action, reason)
 	}
 }

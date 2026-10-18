@@ -49,14 +49,28 @@ func (p *Provider) keptSealed(ctx context.Context, tier environment.Tier, name, 
 			return nil, "", err
 		}
 	}
-	opened, err := p.cipher.Open(ctx, tier, bound, sealed)
-	if err != nil {
+	opened, err := p.openKept(ctx, tier, name, resource, bound, sealed)
+	return sealed, opened, err
+}
+
+func (p *Provider) readKeptSealed(ctx context.Context, tier environment.Tier, name, resource string, bound seal.AssociatedData) ([]byte, string, error) {
+	sealed, err := p.host.Kept(ctx, tier, name)
+	if err != nil || len(sealed) == 0 {
 		return nil, "", err
 	}
+	opened, err := p.openKept(ctx, tier, name, resource, bound, sealed)
+	return sealed, opened, err
+}
+
+func (p *Provider) openKept(ctx context.Context, tier environment.Tier, name, resource string, bound seal.AssociatedData, sealed []byte) (string, error) {
+	opened, err := p.cipher.Open(ctx, tier, bound, sealed)
+	if err != nil {
+		return "", err
+	}
 	if len(opened) == 0 {
-		return nil, "", refusal.Refuse(refusal.CodeNotReady,
+		return "", refusal.Refuse(refusal.CodeNotReady,
 			"the credential kept for %s is empty\nRemove %s on the box",
 			resource, host.KeptPath(tier, name))
 	}
-	return sealed, string(opened), nil
+	return string(opened), nil
 }

@@ -77,19 +77,80 @@ func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionReq
 	if err := topology.Ensure(ctx, c.Workload()); err != nil {
 		return provider.Binding{}, err
 	}
-	spec, err := json.Marshal(topic.spec)
+	properties, err := encodeTopicProperties(topic)
 	if err != nil {
 		return provider.Binding{}, err
 	}
 	return provider.Binding{
-		Type:     in.Resource.Type,
-		Name:     in.Resource.Name,
-		Resource: topic.declared,
-		Properties: map[string]string{
-			stackrecords.PropertyDeclared:  topic.declared,
-			stackrecords.PropertyTopicSpec: string(spec),
-		},
+		Type:       in.Resource.Type,
+		Name:       in.Resource.Name,
+		Resource:   topic.declared,
+		Properties: properties,
 	}, nil
+}
+
+func (p *Provider) PlanTopic(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	c, err := p.openClients(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	topic := declaredTopicOf(in.Resource)
+	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
+	var previous map[string]*provider.TopicSpec
+	if recorded != nil {
+		was, found, err := readDeclaredTopic(*recorded)
+		if err != nil {
+			return "", "", err
+		}
+		if found {
+			if err := refuseOrderingChange(was, topic); err != nil {
+				return "", "", err
+			}
+			previous = map[string]*provider.TopicSpec{was.declared: was.spec}
+		}
+	}
+	missing, err := topology.FindMissing(ctx, c.Workload())
+	if err != nil {
+		return "", "", err
+	}
+	if len(missing) > 0 {
+		return provider.ActionCreate, "", nil
+	}
+	differences, err := topology.ReadDifferences(ctx, c.Workload(), previous)
+	if err != nil {
+		return "", "", err
+	}
+	properties, err := encodeTopicProperties(topic)
+	if err != nil {
+		return "", "", err
+	}
+	if len(differences) == 0 && (recorded == nil || !isSameTopicRecord(recorded.Properties, properties)) {
+		differences = append(differences, fmt.Sprintf("the config recorded for %s %s changes", in.Resource.Type, topic.declared))
+	}
+	if len(differences) > 0 {
+		return provider.ActionUpdate, strings.Join(differences, "; "), nil
+	}
+	return provider.ActionKeep, provider.ReasonCurrent, nil
+}
+
+func encodeTopicProperties(topic declaredTopic) (map[string]string, error) {
+	spec, err := json.Marshal(topic.spec)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		stackrecords.PropertyDeclared:  topic.declared,
+		stackrecords.PropertyTopicSpec: string(spec),
+	}, nil
+}
+
+func isSameTopicRecord(recorded, properties map[string]string) bool {
+	for name, value := range properties {
+		if recorded[name] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func refuseOrderingChange(previous, topic declaredTopic) error {
@@ -124,7 +185,7 @@ func (p *Provider) recordedTopic(ctx context.Context, ref provider.StackRef, res
 	return declaredTopic{}, false, nil
 }
 
-func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	topic, recorded, err := readDeclaredTopic(binding)
 	if err != nil || !recorded {
 		return err

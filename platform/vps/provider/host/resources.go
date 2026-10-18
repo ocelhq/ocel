@@ -2,6 +2,7 @@ package host
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -460,42 +462,98 @@ func readyCommand(spec ResourceContainer, seconds int) string {
 		"done"
 }
 
-func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret string) (err error) {
-	elevation, err := h.reachDocker(ctx)
+type resourceReading struct {
+	spec    ResourceContainer
+	digest  string
+	serving string
+	from    string
+}
+
+func (h *Host) readResource(ctx context.Context, spec ResourceContainer, elevation acting) (resourceReading, error) {
+	spec, err := h.limited(ctx, spec)
 	if err != nil {
-		return err
-	}
-	if spec, err = h.limited(ctx, spec); err != nil {
-		return err
+		return resourceReading{}, err
 	}
 	digest, err := spec.digest()
+	if err != nil {
+		return resourceReading{}, err
+	}
+	said, err := h.readServing(ctx, spec.Name, elevation)
+	if err != nil {
+		return resourceReading{}, err
+	}
+	read := resourceReading{spec: spec, digest: digest, serving: said}
+	if read.isCurrent() {
+		return read, nil
+	}
+	if read.from, err = h.initialisedUnder(ctx, spec, elevation); err != nil {
+		return resourceReading{}, err
+	}
+	return read, read.refuseUpgradeOverStoppedServer()
+}
+
+func (r resourceReading) isCurrent() bool { return stillServing(r.serving, r.spec.Image, r.digest) }
+
+func (r resourceReading) refuseUpgradeOverStoppedServer() error {
+	if r.from == "" || r.spec.Volume.CopyOnUpgrade || strings.HasPrefix(r.serving, "running ") {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"%s has version %s data, this deploy declares %s, and %s is not running to dump it\n"+
+			"Run `docker start %s` or set the version back to %s",
+		r.spec.Resource, r.from, r.spec.Volume.Generation, r.spec.Name, r.spec.Name, r.from)
+}
+
+func (r resourceReading) planChange() (provider.ChangeAction, string) {
+	fields := append(strings.Fields(r.serving), "", "")
+	switch status, image := fields[0], fields[1]; {
+	case r.isCurrent():
+		return provider.ActionKeep, provider.ReasonCurrent
+	case r.from != "":
+		return provider.ActionReplace, "its data moves from version " + r.from + " to " + r.spec.Volume.Generation
+	case status == "":
+		return provider.ActionCreate, ""
+	case image != r.spec.Image:
+		return provider.ActionReplace, "its image changes from " + cmp.Or(image, "an unlabelled one") + " to " + r.spec.Image
+	case status != "running":
+		return provider.ActionReplace, "its container " + r.spec.Name + " is " + status + ", so a new one is started"
+	default:
+		return provider.ActionReplace, "the settings of its container " + r.spec.Name + " change"
+	}
+}
+
+func (h *Host) PlanResource(ctx context.Context, spec ResourceContainer) (provider.ChangeAction, string, error) {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	read, err := h.readResource(ctx, spec, elevation)
+	if err != nil {
+		return "", "", err
+	}
+	action, reason := read.planChange()
+	return action, reason, nil
+}
+
+func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret string) (err error) {
+	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
 	}
 	if err := h.joining(ctx, spec.Resource, spec.Tier, spec.Project, joinNetworkScript(spec.Tier, spec.Project), elevation); err != nil {
 		return err
 	}
-	said, err := h.readServing(ctx, spec.Name, elevation)
+	read, err := h.readResource(ctx, spec, elevation)
 	if err != nil {
 		return err
 	}
-	if stillServing(said, spec.Image, digest) {
+	spec, digest := read.spec, read.digest
+	switch {
+	case read.isCurrent():
 		return nil
-	}
-	from, err := h.initialisedUnder(ctx, spec, elevation)
-	if err != nil {
-		return err
-	}
-	if from != "" {
-		if !spec.Volume.CopyOnUpgrade && !strings.HasPrefix(said, "running ") {
-			return refusal.Refuse(refusal.CodeNotReady,
-				"%s has version %s data, this deploy declares %s, and %s is not running to dump it\n"+
-					"Run `docker start %s` or set the version back to %s",
-				spec.Resource, from, spec.Volume.Generation, spec.Name, spec.Name, from)
-		}
-		return h.upgrade(ctx, spec, from, digest, secret, elevation)
-	}
-	if said != "" {
+	case read.from != "":
+		return h.upgrade(ctx, spec, read.from, digest, secret, elevation)
+	case read.serving != "":
 		return h.replaceResource(ctx, spec, digest, secret, elevation)
 	}
 	if err := h.sweep(ctx, elevation); err != nil {

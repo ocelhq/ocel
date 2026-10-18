@@ -61,9 +61,13 @@ func readKVStore(in resources.ProvisionRequest) (kvStore, error) {
 	return kvStore{version: version, image: image, valkey: kvstore.Valkey{MemoryBytes: spec.MemoryBytes, Eviction: spec.Eviction}}, nil
 }
 
+func nameKV(ref provider.StackRef, resource string) string {
+	return host.ResourceName(ref.Project, ref.Name.String(), resource, kvKind)
+}
+
 func kvContainer(in resources.ProvisionRequest, store kvStore) host.ResourceContainer {
 	return host.ResourceContainer{
-		Name:     host.ResourceName(in.Ref.Project, in.Ref.Name.String(), in.Resource.Name, kvKind),
+		Name:     nameKV(in.Ref, in.Resource.Name),
 		Project:  in.Ref.Project,
 		Resource: in.Resource.Name,
 		Tier:     in.Ref.Tier,
@@ -83,13 +87,58 @@ func kvContainer(in resources.ProvisionRequest, store kvStore) host.ResourceCont
 	}
 }
 
+func newKVBinding(in resources.ProvisionRequest, spec host.ResourceContainer, password string) provider.Binding {
+	return provider.Binding{
+		Type:     provider.BindingKV,
+		Name:     in.Resource.Name,
+		Resource: in.Resource.Declared,
+		Properties: map[string]string{
+			provider.PropertyHost:     spec.Name,
+			provider.PropertyPort:     strconv.Itoa(kvstore.ValkeyPort),
+			provider.PropertyUsername: kvstore.ValkeyUsername,
+			provider.PropertyPassword: password,
+			provider.PropertyTLS:      "false",
+		},
+	}
+}
+
+func (p *Provider) PlanKV(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	store, err := readKVStore(in)
+	if err != nil {
+		return "", "", err
+	}
+	bound, err := newKVSecretAssociatedData(in.Ref, in.Resource.Name)
+	if err != nil {
+		return "", "", err
+	}
+	sealed, password, err := p.readKeptSealed(ctx, in.Ref.Tier, nameKV(in.Ref, in.Resource.Name), in.Resource.Name, bound)
+	if err != nil {
+		return "", "", err
+	}
+	store.valkey.Password = password
+	spec, err := p.reshaped(ctx, in, transformTypeKV, kvContainer(in, store))
+	if err != nil {
+		return "", "", err
+	}
+	action, reason, err := p.host.PlanResource(ctx, spec)
+	if err != nil || action == provider.ActionCreate {
+		return action, reason, err
+	}
+	if len(sealed) == 0 {
+		return provider.ActionReplace, "the box keeps no password for it, so a new one is minted and its container " + spec.Name + " replaced to take it", nil
+	}
+	var change resourceChange
+	change.add(action, reason)
+	change.addRecorded(recorded, newKVBinding(in, spec, ""))
+	return change.report()
+}
+
 func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
 	store, err := readKVStore(in)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	name := host.ResourceName(in.Ref.Project, in.Ref.Name.String(), in.Resource.Name, kvKind)
-	if store.valkey.Password, err = p.kvSecret(ctx, in, name); err != nil {
+	if store.valkey.Password, err = p.kvSecret(ctx, in, nameKV(in.Ref, in.Resource.Name)); err != nil {
 		return provider.Binding{}, err
 	}
 	spec, err := p.reshaped(ctx, in, transformTypeKV, kvContainer(in, store))
@@ -100,18 +149,13 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	if err := p.host.RunResource(ctx, spec, store.valkey.Password); err != nil {
 		return provider.Binding{}, err
 	}
-	return provider.Binding{
-		Type:     provider.BindingKV,
-		Name:     in.Resource.Name,
-		Resource: in.Resource.Declared,
-		Properties: map[string]string{
-			provider.PropertyHost:     spec.Name,
-			provider.PropertyPort:     strconv.Itoa(kvstore.ValkeyPort),
-			provider.PropertyUsername: kvstore.ValkeyUsername,
-			provider.PropertyPassword: store.valkey.Password,
-			provider.PropertyTLS:      "false",
-		},
-	}, nil
+	return newKVBinding(in, spec, store.valkey.Password), nil
+}
+
+func (p *Provider) RemoveKV(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+	name := nameKV(ref, binding.Name)
+	progress.Say("Removing kv " + binding.Name + ", its container " + name + " and its data")
+	return p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
 }
 
 func newKVSecretAssociatedData(ref provider.StackRef, resource string) (seal.AssociatedData, error) {

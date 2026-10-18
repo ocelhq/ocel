@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -79,30 +80,58 @@ func bucketLifecycle() storage.Lifecycle {
 	}}
 }
 
-func (b appBucket) drift(current *storage.BucketAttrs) (storage.BucketAttrsToUpdate, bool) {
+func (b appBucket) drift(current *storage.BucketAttrs) (storage.BucketAttrsToUpdate, []string) {
 	var update storage.BucketAttrsToUpdate
-	drifted := false
+	var differences []string
 	if !current.UniformBucketLevelAccess.Enabled {
 		update.UniformBucketLevelAccess = &b.attrs.UniformBucketLevelAccess
-		drifted = true
+		differences = append(differences, "uniform bucket-level access turns on")
 	}
 	if current.PublicAccessPrevention != b.attrs.PublicAccessPrevention {
 		update.PublicAccessPrevention = b.attrs.PublicAccessPrevention
-		drifted = true
+		differences = append(differences, fmt.Sprintf("public access prevention changes from %s to %s", current.PublicAccessPrevention, b.attrs.PublicAccessPrevention))
 	}
 	if !sameCORS(current.CORS, b.attrs.CORS) {
 		update.CORS = b.attrs.CORS
 		if update.CORS == nil {
 			update.CORS = []storage.CORS{}
 		}
-		drifted = true
+		differences = append(differences, describeCORSChange(current.CORS, b.attrs.CORS))
 	}
 	if !sameLifecycle(current.Lifecycle, b.attrs.Lifecycle) {
 		lifecycle := b.attrs.Lifecycle
 		update.Lifecycle = &lifecycle
-		drifted = true
+		differences = append(differences, fmt.Sprintf("lifecycle rules change from %s to %s", describeRules(current.Lifecycle), describeRules(b.attrs.Lifecycle)))
 	}
-	return update, drifted
+	return update, differences
+}
+
+func listOrigins(cors []storage.CORS) []string {
+	origins := []string{}
+	for _, rule := range cors {
+		origins = append(origins, rule.Origins...)
+	}
+	return origins
+}
+
+func describeCORSChange(current, desired []storage.CORS) string {
+	from, to := listOrigins(current), listOrigins(desired)
+	if !slices.Equal(from, to) {
+		return fmt.Sprintf("allowed origins change from %v to %v", from, to)
+	}
+	return fmt.Sprintf("the CORS methods, response headers or max age for origins %v change", to)
+}
+
+func describeRules(lifecycle storage.Lifecycle) string {
+	rules := make([]string, 0, len(lifecycle.Rules))
+	for _, rule := range lifecycle.Rules {
+		described := fmt.Sprintf("%s after %d day(s)", rule.Action.Type, rule.Condition.AgeInDays)
+		if len(rule.Condition.MatchesPrefix) > 0 {
+			described += fmt.Sprintf(" under %v", rule.Condition.MatchesPrefix)
+		}
+		rules = append(rules, described)
+	}
+	return fmt.Sprintf("%v", rules)
 }
 
 func sameCORS(current, desired []storage.CORS) bool {
@@ -135,21 +164,57 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 	return declared.binding(in.Resource), nil
 }
 
-func (b appBucket) ensure(ctx context.Context, client *storage.Client, project, declared string, progress progress.Log) error {
-	handle := client.Bucket(b.name)
-	current, err := handle.Attrs(ctx)
+func (p *Provider) PlanBucket(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
+	clients, err := p.openClients(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	client, err := clients.Storage()
+	if err != nil {
+		return "", "", err
+	}
+	return p.declaredBucket(clients, in).plan(ctx, client, in.Resource.Name)
+}
+
+func (b appBucket) plan(ctx context.Context, client *storage.Client, declared string) (provider.ChangeAction, string, error) {
+	current, err := b.read(ctx, client, declared)
+	if err != nil {
+		return "", "", err
+	}
+	if current == nil {
+		return provider.ActionCreate, "", nil
+	}
+	if _, differences := b.drift(current); len(differences) > 0 {
+		return provider.ActionUpdate, strings.Join(differences, "; "), nil
+	}
+	return provider.ActionKeep, provider.ReasonCurrent, nil
+}
+
+func (b appBucket) read(ctx context.Context, client *storage.Client, declared string) (*storage.BucketAttrs, error) {
+	current, err := client.Bucket(b.name).Attrs(ctx)
 	if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
-		return b.create(ctx, client, project, declared, progress)
+		return nil, nil
 	}
 	if err != nil {
-		return fmt.Errorf("read the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
+		return nil, fmt.Errorf("read the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
 	}
-	update, drifted := b.drift(current)
-	if !drifted {
+	return current, nil
+}
+
+func (b appBucket) ensure(ctx context.Context, client *storage.Client, project, declared string, progress progress.Log) error {
+	current, err := b.read(ctx, client, declared)
+	if err != nil {
+		return err
+	}
+	if current == nil {
+		return b.create(ctx, client, project, declared, progress)
+	}
+	update, differences := b.drift(current)
+	if len(differences) == 0 {
 		return nil
 	}
-	ensureProgress(progress).Say("Updating bucket " + declared + "'s access, CORS and lifecycle on Cloud Storage bucket " + b.name)
-	if _, err := handle.Update(ctx, update); err != nil {
+	ensureProgress(progress).Say("Updating bucket " + declared + " on Cloud Storage bucket " + b.name + ": " + strings.Join(differences, "; "))
+	if _, err := client.Bucket(b.name).Update(ctx, update); err != nil {
 		return fmt.Errorf("update the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
 	}
 	return nil
@@ -182,7 +247,7 @@ func (b appBucket) binding(resource provider.Resource) provider.Binding {
 	}
 }
 
-func (p *Provider) removeBucket(ctx context.Context, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) RemoveBucket(ctx context.Context, _ provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err

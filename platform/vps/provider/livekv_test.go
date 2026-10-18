@@ -91,8 +91,8 @@ func TestLiveADeclaredKVStoreAnswersOnlyItsUserOnItsProjectAndLeavesNothingBehin
 		t.Errorf("version 8's volume %q outlives the move", left)
 	}
 
-	if err := p.RemoveResource(ctx, in.Ref, upgraded, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := p.RemoveKV(ctx, in.Ref, upgraded, progress.Discard()); err != nil {
+		t.Fatalf("RemoveKV() = %v", err)
 	}
 	if vm.running(t, name) {
 		t.Errorf("%s still runs after its stack was removed", name)

@@ -88,14 +88,65 @@ func (r realtimeEnvironment) readGateway(ctx context.Context) (*run.GoogleCloudR
 	return found, nil
 }
 
-func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]string, progress progress.Log) (string, error) {
-	inlineKeys := ""
-	if r.keysInEnv {
-		encoded, err := json.Marshal(keys)
-		if err != nil {
+func (r realtimeEnvironment) encodeInlineKeys(keys map[string]string) (string, error) {
+	if !r.keysInEnv {
+		return "", nil
+	}
+	encoded, err := json.Marshal(keys)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func (r realtimeEnvironment) findGatewayHost(current *run.GoogleCloudRunV2Service) string {
+	if current != nil && hostOf(current.Uri) != "" {
+		return hostOf(current.Uri)
+	}
+	return r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
+}
+
+func (r realtimeEnvironment) compareGateway(current *run.GoogleCloudRunV2Service, host, image, inlineKeys string) (serving, string, error) {
+	desired := realtimeGatewayServing(r.clients.Names, r.ref, host, image, inlineKeys)
+	wanted, err := serviceOf(desired)
+	if err != nil {
+		return serving{}, "", err
+	}
+	switch {
+	case current == nil:
+		return desired, "the realtime gateway " + desired.service + " is created", nil
+	case imageOf(current) != image:
+		return desired, "the realtime gateway " + desired.service + " changes from image " + imageOf(current) + " to " + image, nil
+	case !sameServing(current, wanted):
+		return desired, "the realtime gateway " + desired.service + "'s Cloud Run settings differ from what ocel declares, so it is released again", nil
+	case !servesLatest(current):
+		return desired, "the realtime gateway " + desired.service + " does not serve its latest ready revision, so it is released again", nil
+	}
+	return desired, "", nil
+}
+
+func (r realtimeEnvironment) readGatewayDifference(ctx context.Context, keys map[string]string) (string, error) {
+	inlineKeys, err := r.encodeInlineKeys(keys)
+	if err != nil {
+		return "", err
+	}
+	current, err := r.readGateway(ctx)
+	if err != nil {
+		return "", err
+	}
+	if current == nil {
+		if err := r.refuseUnbootstrappedTier(ctx); err != nil {
 			return "", err
 		}
-		inlineKeys = string(encoded)
+	}
+	_, difference, err := r.compareGateway(current, r.findGatewayHost(current), r.gatewayImage(), inlineKeys)
+	return difference, err
+}
+
+func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]string, progress progress.Log) (string, error) {
+	inlineKeys, err := r.encodeInlineKeys(keys)
+	if err != nil {
+		return "", err
 	}
 	current, err := r.readGateway(ctx)
 	if err != nil {
@@ -113,17 +164,13 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 		}
 	}
 	name := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
-	host := name
-	if current != nil && hostOf(current.Uri) != "" {
-		host = hostOf(current.Uri)
-	}
+	host := r.findGatewayHost(current)
 	for range 2 {
-		desired := realtimeGatewayServing(r.clients.Names, r.ref, host, image, inlineKeys)
-		wanted, err := serviceOf(desired)
+		desired, difference, err := r.compareGateway(current, host, image, inlineKeys)
 		if err != nil {
 			return "", err
 		}
-		if current != nil && sameServing(current, wanted) && servesLatest(current) {
+		if difference == "" {
 			return host, nil
 		}
 		ran, err := r.deployAndRoute(ctx, desired, progress)

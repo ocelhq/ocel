@@ -181,8 +181,8 @@ func TestARemovedKVStoreTakesItsContainerDataPasswordAndBackups(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := len(machine.commands())
-	if err := p.RemoveResource(context.Background(), in.Ref, binding, progress.Discard()); err != nil {
-		t.Fatalf("RemoveResource() = %v", err)
+	if err := p.RemoveKV(context.Background(), in.Ref, binding, progress.Discard()); err != nil {
+		t.Fatalf("RemoveKV() = %v", err)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
 	for _, want := range []string{
@@ -297,5 +297,66 @@ func TestATransformSettingWhatOcelRendersForAKVStoreIsRefused(t *testing.T) {
 				t.Error("the store started with the refused patch")
 			}
 		})
+	}
+}
+
+func kvProvisioned(t *testing.T, machine *box, in resources.ProvisionRequest) provider.Binding {
+	t.Helper()
+	binding, err := over(machine).ProvisionKV(context.Background(), in, progress.Discard())
+	if err != nil {
+		t.Fatalf("ProvisionKV() = %v", err)
+	}
+	return binding
+}
+
+func plannedKV(t *testing.T, machine *box, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string) {
+	t.Helper()
+	mark := len(machine.commands())
+	action, reason, err := over(machine).PlanKV(context.Background(), in, recorded)
+	if err != nil {
+		t.Fatalf("PlanKV() = %v", err)
+	}
+	refuseWrites(t, machine.since(mark))
+	return action, reason
+}
+
+func TestAnUnchangedKVStorePlansKeep(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true}
+	recorded := kvProvisioned(t, machine, aKVStore(t, "8"))
+	if action, reason := plannedKV(t, machine, aKVStore(t, "8"), &recorded); action != provider.ActionKeep {
+		t.Errorf("a kv store declared as it was provisioned plans %s %q, want keep", action, reason)
+	}
+}
+
+func TestAKVStoreNoContainerServesPlansACreate(t *testing.T) {
+	t.Parallel()
+
+	if action, reason := plannedKV(t, &box{remembers: true}, aKVStore(t, "8"), nil); action != provider.ActionCreate {
+		t.Errorf("a kv store no container serves plans %s %q, want create", action, reason)
+	}
+}
+
+func TestAKVStoreGivenMoreMemoryPlansAReplace(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true}
+	recorded := kvProvisioned(t, machine, aKVStore(t, "8"))
+	grown := aKVStore(t, "8")
+	grown.Resource.KV.MemoryBytes *= 2
+	if action, reason := plannedKV(t, machine, grown, &recorded); action != provider.ActionReplace || reason == "" {
+		t.Errorf("a kv store given more memory plans %s %q, and the apply swaps its container for one with the new limit", action, reason)
+	}
+}
+
+func TestAKVStoreWhosePasswordTheBoxNoLongerKeepsPlansAReplace(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{remembers: true}
+	recorded := kvProvisioned(t, machine, aKVStore(t, "8"))
+	machine.kept = ""
+	if action, reason := plannedKV(t, machine, aKVStore(t, "8"), &recorded); action != provider.ActionReplace || !strings.Contains(reason, "password") {
+		t.Errorf("a kv store whose kept password is gone plans %s %q, and the apply mints a new one into a new container", action, reason)
 	}
 }

@@ -118,19 +118,28 @@ func (s kvStore) shapeProperties(region string) map[string]any {
 	}
 }
 
-func (s kvStore) changes(current *memorystoreInstance) []string {
-	var mask []string
+func (s kvStore) changes(current *memorystoreInstance) ([]string, []string) {
+	var mask, differences []string
 	if current.NodeType != s.node.nodeType {
 		mask = append(mask, "node_type")
+		differences = append(differences, fmt.Sprintf("node type changes from %s to %s", current.NodeType, s.node.nodeType))
 	}
 	if current.EngineVersion != s.version {
 		mask = append(mask, "engine_version")
+		differences = append(differences, fmt.Sprintf("engine version changes from %s to %s", current.EngineVersion, s.version))
 	}
 	want := s.engineConfigs()
-	if current.EngineConfigs[maxMemoryConfig] != want[maxMemoryConfig] || current.EngineConfigs[maxMemoryPolicyConfig] != want[maxMemoryPolicyConfig] {
+	configs := false
+	for _, config := range []string{maxMemoryConfig, maxMemoryPolicyConfig} {
+		if current.EngineConfigs[config] != want[config] {
+			configs = true
+			differences = append(differences, fmt.Sprintf("%s changes from %s to %s", config, cmp.Or(current.EngineConfigs[config], "unset"), want[config]))
+		}
+	}
+	if configs {
 		mask = append(mask, "engine_configs")
 	}
-	return mask
+	return mask, differences
 }
 
 type kvInstance struct {
@@ -185,6 +194,35 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	return instance.readBinding(ctx, current, in.Resource)
 }
 
+func (p *Provider) PlanKV(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
+	store, err := readKVStore(in.Resource)
+	if err != nil {
+		return "", "", err
+	}
+	clients, instance, err := p.openKVInstance(ctx, in.Ref, in.Resource.Name)
+	if err != nil {
+		return "", "", err
+	}
+	current, err := instance.service.readInstance(ctx, instance.path)
+	switch {
+	case absent(err):
+		return provider.ActionCreate, "", nil
+	case err != nil:
+		return "", "", fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
+	case isSettling(current.State):
+		_, differences := store.changes(current)
+		settling := "Memorystore instance " + instance.id + " is " + current.State +
+			", so the deploy waits for it to settle and then applies any change to its node type, engine version or engine configs"
+		return provider.ActionUpdate, strings.Join(append([]string{settling}, differences...), "; "), nil
+	case current.State != instanceActive:
+		return "", "", instance.refuseInactive(current, clients.region)
+	}
+	if _, differences := store.changes(current); len(differences) > 0 {
+		return provider.ActionUpdate, strings.Join(differences, "; "), nil
+	}
+	return provider.ActionKeep, provider.ReasonCurrent, nil
+}
+
 func (i kvInstance) create(ctx context.Context, clients *clients, desired *memorystoreInstance, progress progress.Log) (*memorystoreInstance, error) {
 	ensureProgress(progress).Say("Creating kv " + i.storeName + " as Memorystore instance " + i.id + " in " + clients.region +
 		": a new instance takes several minutes")
@@ -204,11 +242,11 @@ func (i kvInstance) create(ctx context.Context, clients *clients, desired *memor
 }
 
 func (i kvInstance) update(ctx context.Context, store kvStore, current *memorystoreInstance, progress progress.Log) (*memorystoreInstance, error) {
-	mask := store.changes(current)
+	mask, differences := store.changes(current)
 	if len(mask) == 0 {
 		return current, nil
 	}
-	ensureProgress(progress).Say("Updating kv " + i.storeName + "'s " + strings.Join(mask, ", ") + " on Memorystore instance " + i.id)
+	ensureProgress(progress).Say("Updating kv " + i.storeName + " on Memorystore instance " + i.id + ": " + strings.Join(differences, "; "))
 	started, err := i.service.updateInstance(ctx, i.path, mask, &memorystoreInstance{
 		NodeType:      store.node.nodeType,
 		EngineVersion: store.version,
@@ -318,7 +356,7 @@ func authorityPEMOf(authority *certificateAuthority, store string) (string, erro
 	return pem.String(), nil
 }
 
-func (p *Provider) removeKV(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) RemoveKV(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	_, instance, err := p.openKVInstance(ctx, ref, binding.Name)
 	if err != nil {
 		return err

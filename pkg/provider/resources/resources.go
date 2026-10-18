@@ -22,17 +22,22 @@ type ProvisionRequest struct {
 	Resource provider.Resource
 }
 
+type ResourceHooks struct {
+	Plan      func(ctx context.Context, in ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error)
+	Provision func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
+	Remove    func(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error
+}
+
 type Hooks struct {
-	ProvisionPostgres func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
-	ProvisionBucket   func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
-	ProvisionKV       func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
-	ProvisionTopic    func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
-	ProvisionRealtime func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
-	RemoveResource    func(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error
-	Functions         *FunctionHooks
-	Containers        *ContainerHooks
-	Retention         *ImageRetentionHooks
-	RecordsWorkers    bool
+	Postgres       *ResourceHooks
+	Bucket         *ResourceHooks
+	KV             *ResourceHooks
+	Topic          *ResourceHooks
+	Realtime       *ResourceHooks
+	Functions      *FunctionHooks
+	Containers     *ContainerHooks
+	Retention      *ImageRetentionHooks
+	RecordsWorkers bool
 }
 
 type FunctionHooks struct {
@@ -71,20 +76,18 @@ func NewHookStacks(store keyvalue.Store, artifacts provider.ArtifactStore, hooks
 	return &hookStacks{keyValues: store, artifacts: artifacts, hooks: hooks}
 }
 
-type provisionFunc func(ctx context.Context, in ProvisionRequest, progress progress.Log) (provider.Binding, error)
-
 type primitive struct {
 	kind provider.BindingType
-	of   func(Hooks) provisionFunc
+	of   func(Hooks) *ResourceHooks
 }
 
 var primitives = []primitive{
-	{kind: provider.BindingPostgres, of: func(h Hooks) provisionFunc { return h.ProvisionPostgres }},
-	{kind: provider.BindingBucket, of: func(h Hooks) provisionFunc { return h.ProvisionBucket }},
-	{kind: provider.BindingKV, of: func(h Hooks) provisionFunc { return h.ProvisionKV }},
-	{kind: provider.BindingTopic, of: func(h Hooks) provisionFunc { return h.ProvisionTopic }},
-	{kind: provider.BindingTask, of: func(h Hooks) provisionFunc { return h.ProvisionTopic }},
-	{kind: provider.BindingRealtime, of: func(h Hooks) provisionFunc { return h.ProvisionRealtime }},
+	{kind: provider.BindingPostgres, of: func(h Hooks) *ResourceHooks { return h.Postgres }},
+	{kind: provider.BindingBucket, of: func(h Hooks) *ResourceHooks { return h.Bucket }},
+	{kind: provider.BindingKV, of: func(h Hooks) *ResourceHooks { return h.KV }},
+	{kind: provider.BindingTopic, of: func(h Hooks) *ResourceHooks { return h.Topic }},
+	{kind: provider.BindingTask, of: func(h Hooks) *ResourceHooks { return h.Topic }},
+	{kind: provider.BindingRealtime, of: func(h Hooks) *ResourceHooks { return h.Realtime }},
 }
 
 type hookStacks struct {
@@ -101,7 +104,16 @@ func (f *hookStacks) Plan(ctx context.Context, spec provider.StackSpec, _ progre
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return synthesizedPlan(ctx, f.artifacts, spec, recordedResult(recorded), f.hooks.RecordsWorkers)
+	return synthesizedPlan(ctx, f.artifacts, spec, recordedResult(recorded), f.hooks.RecordsWorkers, f.planResource)
+}
+
+func (f *hookStacks) planResource(ctx context.Context, spec provider.StackSpec, resource provider.Resource, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+	hooks, err := f.hooksFor(resource.Type, resource.Name)
+	if err != nil {
+		return "", "", err
+	}
+	in := ProvisionRequest{Ref: spec.Ref, Tags: spec.Tags, Bindings: spec.Bindings, Resource: resource}
+	return hooks.Plan(ctx, in, recorded)
 }
 
 func (f *hookStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, _ progress.Log) (provider.Plan, error) {
@@ -148,9 +160,12 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 		if resource.Binding != "" {
 			continue
 		}
-		action := provider.KeepOrCreate(slices.ContainsFunc(recorded.Bindings, BindingFor(resource)))
 		start := time.Now()
-		binding, err := f.provision(ctx, spec, resource, progress)
+		action, _, err := f.planResource(ctx, spec, resource, findRecorded(recorded.Bindings, resource))
+		var binding provider.Binding
+		if err == nil {
+			binding, err = f.provision(ctx, spec, resource, progress)
+		}
 		if err == nil {
 			err = provider.VerifyProperties(binding)
 		}
@@ -209,37 +224,45 @@ func refuseMissingComputeHooks(app *provider.AppSpec, hook string) error {
 		app.App, app.Compute, hook)
 }
 
+func findRecorded(bindings []provider.Binding, resource provider.Resource) *provider.Binding {
+	at := slices.IndexFunc(bindings, BindingFor(resource))
+	if at < 0 {
+		return nil
+	}
+	return &bindings[at]
+}
+
 func (f *hookStacks) provision(ctx context.Context, spec provider.StackSpec, resource provider.Resource, progress progress.Log) (provider.Binding, error) {
-	provision, err := f.provisionerFor(resource)
+	hooks, err := f.hooksFor(resource.Type, resource.Name)
 	if err != nil {
 		return provider.Binding{}, err
 	}
 	in := ProvisionRequest{Ref: spec.Ref, Tags: spec.Tags, Bindings: spec.Bindings, Resource: resource}
-	return provision(ctx, in, progress)
+	return hooks.Provision(ctx, in, progress)
 }
 
 func (f *hookStacks) refuseUnservedResources(spec provider.StackSpec) error {
 	for _, resource := range spec.Resources {
-		if _, err := f.provisionerFor(resource); err != nil {
+		if _, err := f.hooksFor(resource.Type, resource.Name); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (f *hookStacks) provisionerFor(resource provider.Resource) (provisionFunc, error) {
+func (f *hookStacks) hooksFor(kind provider.BindingType, name string) (*ResourceHooks, error) {
 	for _, serving := range primitives {
-		if serving.kind != resource.Type {
+		if serving.kind != kind {
 			continue
 		}
-		if provision := serving.of(f.hooks); provision != nil {
-			return provision, nil
+		if hooks := serving.of(f.hooks); hooks != nil {
+			return hooks, nil
 		}
 		break
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"resource %s is a %s, and this provider serves %s",
-		resource.Name, resource.Type, served(ServedBindingTypes(f.hooks)))
+		name, kind, served(ServedBindingTypes(f.hooks)))
 }
 
 func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, images provider.ImageStore, progress progress.Log) error {
@@ -448,13 +471,14 @@ func reportRemoving(progress progress.Log, kind, name, reason string) {
 }
 
 func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
-	if f.hooks.RemoveResource == nil {
+	hooks, err := f.hooksFor(binding.Type, binding.Name)
+	if err != nil {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"binding %s is no longer declared and this provider removes no resource, so it would be left in place and unowned",
-			binding.Name)
+			"binding %s is no longer declared and this provider removes no %s, so it would be left in place and unowned",
+			binding.Name, binding.Type)
 	}
 	start := time.Now()
-	err := f.hooks.RemoveResource(ctx, ref, binding, progress)
+	err = hooks.Remove(ctx, ref, binding, progress)
 	reportChange(progress, string(binding.Type), binding.Name, provider.ActionDelete, start, err)
 	return err
 }

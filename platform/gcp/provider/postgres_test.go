@@ -365,6 +365,98 @@ func TestRemovingAProductionDatabaseTurnsOffItsDeletionProtectionBeforeDeletingI
 	}
 }
 
+func (h *postgresHarness) plan(t *testing.T, version string) (provider.ChangeAction, string, error) {
+	t.Helper()
+	request := aDatabase(version)
+	spec, err := readPostgres(request.Resource)
+	if err != nil {
+		t.Fatalf("readPostgres() = %v", err)
+	}
+	written := len(h.server.wrote())
+	recorded, readErr := h.records.Read(context.Background(), h.instances.passwordKey("orders"))
+	action, reason, err := h.instances.plan(context.Background(), request.Resource.Name, spec)
+	if got := h.server.wrote()[written:]; len(got) != 0 {
+		t.Errorf("plan() wrote %v to Cloud SQL, want a plan that only reads", got)
+	}
+	after, afterErr := h.records.Read(context.Background(), h.instances.passwordKey("orders"))
+	if !errors.Is(afterErr, readErr) || string(after.Value) != string(recorded.Value) {
+		t.Error("plan() changed the password recorded for the database, want a plan that only reads")
+	}
+	return action, reason, err
+}
+
+func TestAMissingDatabasePlansACreate(t *testing.T) {
+	h := servingPostgres(t)
+
+	action, _, err := h.plan(t, "17")
+	if err != nil || action != provider.ActionCreate {
+		t.Errorf("plan() = %s, %v, want %s", action, err, provider.ActionCreate)
+	}
+}
+
+func TestADatabaseAsDeclaredPlansKeep(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "17")
+
+	action, reason, err := h.plan(t, "17")
+	if err != nil || action != provider.ActionKeep || reason != provider.ReasonCurrent {
+		t.Errorf("plan() = %s %q, %v, want %s %q", action, reason, err, provider.ActionKeep, provider.ReasonCurrent)
+	}
+}
+
+func TestADatabaseMadeSmallerThanItsTierPlansAnUpdateNamingWhatResizes(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "17")
+	settings := h.server.instances[h.server.created[0].Name].Settings
+	settings.Tier, settings.DeletionProtectionEnabled = "db-f1-micro", false
+	settings.BackupConfiguration = &sqladmin.BackupConfiguration{Enabled: true}
+
+	action, reason, err := h.plan(t, "17")
+	if err != nil || action != provider.ActionUpdate {
+		t.Fatalf("plan() = %s, %v, want %s: the provision that follows resizes and restarts the instance", action, err, provider.ActionUpdate)
+	}
+	for _, want := range []string{"machine type changes from db-f1-micro to db-custom-1-3840", "deletion protection changes from false to true", "point-in-time recovery changes from false to true"} {
+		if !strings.Contains(reason, want) {
+			t.Errorf("plan() reason = %q, want it to say %q", reason, want)
+		}
+	}
+}
+
+func TestADatabaseWhosePasswordWasLostPlansAnUpdate(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "17")
+	if err := keyvalue.Forget(context.Background(), h.records, h.instances.passwordKey("orders")); err != nil {
+		t.Fatal(err)
+	}
+
+	action, reason, err := h.plan(t, "17")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "password") {
+		t.Errorf("plan() = %s %q, %v, want an update saying the ocel user is given a new password", action, reason, err)
+	}
+}
+
+func TestADatabaseMissingItsOcelDatabasePlansAnUpdate(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "17")
+	delete(h.server.databases, h.server.created[0].Name)
+
+	action, reason, err := h.plan(t, "17")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "ocel database is created") {
+		t.Errorf("plan() = %s %q, %v, want an update saying the ocel database is created", action, reason, err)
+	}
+}
+
+func TestADatabaseAskingForAnotherMajorVersionThanItRunsIsRefusedAtPlan(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "16")
+
+	_, _, err := h.plan(t, "17")
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("plan() of version 17 over an instance running 16 = %v, want the %s refusal the provision would give", err, refusal.CodeInvalid)
+	}
+}
+
 func TestNoDatabaseOfAnotherNamespaceIsNamedUnderThisNamespacesPrefix(t *testing.T) {
 	t.Parallel()
 

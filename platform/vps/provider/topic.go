@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/ocelhq/ocel/pkg/images"
@@ -50,19 +53,76 @@ func newQueueContainer(ref provider.StackRef) host.ResourceContainer {
 	return spec
 }
 
-func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+func newTopicRecord(in resources.ProvisionRequest) (keyvalue.Key, []byte, error) {
 	if in.Resource.Topic == nil {
-		return provider.Binding{}, refusal.Refuse(refusal.CodeInvalid,
+		return keyvalue.Key{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s %s reached the box with no topic config, so nothing knows how to deliver it", in.Resource.Type, in.Resource.Declared)
+	}
+	config, err := protojson.Marshal(encodeManifestTopic(in.Resource.Topic))
+	if err != nil {
+		return keyvalue.Key{}, nil, err
+	}
+	return live.QueueTopicKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, chooseDeclaredName(in.Resource.Declared, in.Resource.Name)), config, nil
+}
+
+func (p *Provider) PlanTopic(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
+	key, config, err := newTopicRecord(in)
+	if err != nil {
+		return "", "", err
+	}
+	var change resourceChange
+	if err := p.planQueue(ctx, in.Ref, &change); err != nil {
+		return "", "", err
+	}
+	recorded, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, key)
+	if err != nil {
+		return "", "", err
+	}
+	switch {
+	case len(recorded.Value) == 0:
+		change.add(provider.ActionCreate, "")
+	case string(recorded.Value) != string(config):
+		change.add(provider.ActionUpdate, describeTopicChange(recorded.Value, in.Resource.Topic))
+	}
+	return change.report()
+}
+
+func describeTopicChange(recorded []byte, spec *provider.TopicSpec) string {
+	held := &contractv1.ManifestTopic{}
+	if err := protojson.Unmarshal(recorded, held); err != nil {
+		return "its delivery settings are recorded again"
+	}
+	want := encodeManifestTopic(spec)
+	var changes []string
+	if held.GetSchema() != want.GetSchema() {
+		changes = append(changes, "its schema changes")
+	}
+	if held.GetOrdered() != want.GetOrdered() {
+		changes = append(changes, fmt.Sprintf("its ordering changes from %t to %t", held.GetOrdered(), want.GetOrdered()))
+	}
+	if !proto.Equal(held.GetTtl(), want.GetTtl()) {
+		changes = append(changes, "its retention changes from "+held.GetTtl().AsDuration().String()+" to "+want.GetTtl().AsDuration().String())
+	}
+	if held.GetCron() != want.GetCron() {
+		changes = append(changes, fmt.Sprintf("its schedule changes from %q to %q", held.GetCron(), want.GetCron()))
+	}
+	if !slices.EqualFunc(held.GetConsumers(), want.GetConsumers(), func(a, b *contractv1.ManifestConsumer) bool { return proto.Equal(a, b) }) {
+		changes = append(changes, "its consumers change")
+	}
+	if len(changes) == 0 {
+		return "its delivery settings are recorded again"
+	}
+	return strings.Join(changes, ", ")
+}
+
+func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
+	key, config, err := newTopicRecord(in)
+	if err != nil {
+		return provider.Binding{}, err
 	}
 	if err := p.ensureQueue(ctx, in.Ref, progress); err != nil {
 		return provider.Binding{}, err
 	}
-	config, err := protojson.Marshal(encodeManifestTopic(in.Resource.Topic))
-	if err != nil {
-		return provider.Binding{}, err
-	}
-	key := live.QueueTopicKey(in.Ref.Tier, in.Ref.Project, in.Ref.Name.Env, chooseDeclaredName(in.Resource.Declared, in.Resource.Name))
 	if err := keyvalue.Change(ctx, p.keyValues, key, func(recorded keyvalue.Entry) ([]byte, bool, error) {
 		return config, string(recorded.Value) != string(config), nil
 	}); err != nil {
@@ -117,6 +177,55 @@ func chooseDeclaredName(declared, name string) string {
 	return name
 }
 
+func newQueueDatabaseRecord(ref provider.StackRef, spec host.ResourceContainer, deliverySealed []byte) ([]byte, error) {
+	return json.Marshal(live.QueueDatabase{
+		Container: spec.Name, Stack: ref.Name.String(),
+		DeliverySealed: base64.StdEncoding.EncodeToString(deliverySealed),
+	})
+}
+
+func (p *Provider) planQueue(ctx context.Context, ref provider.StackRef, change *resourceChange) error {
+	spec := newQueueContainer(ref)
+	action, reason, err := p.host.PlanResource(ctx, spec)
+	if err != nil {
+		return err
+	}
+	switch action {
+	case provider.ActionKeep:
+	case provider.ActionCreate:
+		change.add(provider.ActionUpdate, "the queue database for "+ref.Name.Env+"'s topics and tasks is started in container "+spec.Name)
+	default:
+		change.add(provider.ActionUpdate, "the queue database container "+spec.Name+" is replaced: "+reason)
+	}
+	secret, err := p.host.Kept(ctx, ref.Tier, spec.Name)
+	if err != nil {
+		return err
+	}
+	if len(secret) == 0 && action != provider.ActionCreate {
+		change.add(provider.ActionUpdate, "the box keeps no password for the queue database "+spec.Name+", so a new one is minted that its running server was never handed")
+	}
+	deliverySealed, err := p.host.Kept(ctx, ref.Tier, nameDeliverySecret(spec))
+	if err != nil {
+		return err
+	}
+	if len(deliverySealed) == 0 {
+		change.add(provider.ActionUpdate, "a new delivery secret is minted for the queue database "+spec.Name)
+		return nil
+	}
+	record, err := newQueueDatabaseRecord(ref, spec, deliverySealed)
+	if err != nil {
+		return err
+	}
+	recorded, err := keyvalue.ReadOrEmpty(ctx, p.keyValues, live.QueueDatabaseKey(ref.Tier, ref.Project, ref.Name.Env))
+	if err != nil {
+		return err
+	}
+	if string(recorded.Value) != string(record) {
+		change.add(provider.ActionUpdate, "the queue database "+spec.Name+" is recorded for the agent to deliver from")
+	}
+	return nil
+}
+
 func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
 	spec := newQueueContainer(ref)
 	p.queues.Lock()
@@ -144,10 +253,7 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	if err := p.host.RunResource(ctx, spec, secret); err != nil {
 		return err
 	}
-	record, err := json.Marshal(live.QueueDatabase{
-		Container: spec.Name, Stack: ref.Name.String(),
-		DeliverySealed: base64.StdEncoding.EncodeToString(deliverySealed),
-	})
+	record, err := newQueueDatabaseRecord(ref, spec, deliverySealed)
 	if err != nil {
 		return err
 	}
@@ -168,7 +274,7 @@ func nameDeliverySecret(queue host.ResourceContainer) string {
 	return queue.Name + "-" + live.QueueDeliverySecretName
 }
 
-func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
+func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	name := chooseDeclaredName(binding.Resource, binding.Name)
 	if err := keyvalue.Forget(ctx, p.keyValues, live.QueueTopicKey(ref.Tier, ref.Project, ref.Name.Env, name)); err != nil {
 		return err
