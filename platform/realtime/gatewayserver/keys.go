@@ -1,4 +1,4 @@
-package main
+package gatewayserver
 
 import (
 	"crypto/ed25519"

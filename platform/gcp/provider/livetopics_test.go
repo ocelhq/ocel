@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -59,7 +58,8 @@ func ordersSpec(consumers ...string) *provider.TopicSpec {
 
 func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *testing.T) {
 	p := live(t)
-	bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
+	bootstrappedWith(t, p, environment.TierPreview)
+	writableDatabaseMade(t, p, environment.TierPreview, liveSlug)
 	ctx := context.Background()
 	ref := infraRef(t)
 	names := taskNamesOf(t, ref)
@@ -119,7 +119,8 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 
 func TestLiveATopicWhoseOrderingChangedIsRefusedNamingTheConsumerItKeeps(t *testing.T) {
 	p := live(t)
-	bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
+	bootstrappedWith(t, p, environment.TierPreview)
+	writableDatabaseMade(t, p, environment.TierPreview, liveSlug)
 	ctx := context.Background()
 	ref := infraRef(t)
 	ordered := ordersSpec("ship", "bill")
@@ -146,7 +147,8 @@ func TestLiveATopicWhoseOrderingChangedIsRefusedNamingTheConsumerItKeeps(t *test
 
 func TestLiveATopicDeclaredWithNoConfigIsAPubSubTopicAlone(t *testing.T) {
 	p := live(t)
-	bootstrappedWith(t, p, environment.TierPreview, gcp.TasksPart)
+	bootstrappedWith(t, p, environment.TierPreview)
+	writableDatabaseMade(t, p, environment.TierPreview, liveSlug)
 	ctx := context.Background()
 	ref := infraRef(t)
 

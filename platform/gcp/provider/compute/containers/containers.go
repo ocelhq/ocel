@@ -86,7 +86,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	}
 	if next.Serves(app) {
 		served = next.FillContainerDefaults(served)
-		if served.Env, err = run.MergeValues(app.App, release.NextValues, values, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, spec.Ref.Tier, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
+		if served.Env, err = run.MergeValues(app.App, release.NextValues, values, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
 			return nil, err
 		}
 	}

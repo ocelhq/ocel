@@ -213,8 +213,8 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesEveryGrantItsAccountHeld(t 
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c, spec, member := grantedAppAccount(t, server)
-	if got := holdings(server, c, member); len(got) != 8 {
-		t.Fatalf("the account holds %q before removal, want the records, key, task database, tag database, cache, assets, queue and own account grants", got)
+	if got := holdings(server, c, member); len(got) != 7 {
+		t.Fatalf("the account holds %q before removal, want the records, key, runs and tag records, cache, assets, queue and own account grants", got)
 	}
 	if !slices.Contains(publishersOf(server, resizePath(c, spec)), member) {
 		t.Fatalf("resize has publishers %q before removal, want the account in them", publishersOf(server, resizePath(c, spec)))

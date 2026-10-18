@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"google.golang.org/api/iam/v1"
 )
 
 const cacheGrantPrefix = "prod/shop/web/r1a2b3c4d/isr"
@@ -126,14 +128,14 @@ func TestAnAppWithoutISRIsGrantedNoCache(t *testing.T) {
 func tagRecordBindingsOf(server *googletest.IAM) []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(server) {
-		if strings.HasPrefix(binding, tagRecordsRole+" ") && strings.Contains(binding, "-tags") {
+		if strings.HasPrefix(binding, tagRecordsRole+" ") && strings.Contains(binding, ports.ProjectWritableDatabasePrefix("ocel", environment.TierProduction)) {
 			bound = append(bound, binding)
 		}
 	}
 	return bound
 }
 
-func TestANextAppsAccountMayUseItsTiersTagRecordsAndNoOtherDatabase(t *testing.T) {
+func TestANextAppsAccountMayUseItsProjectsTagRecordsAndNoOtherDatabase(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.Open(t)
@@ -143,14 +145,14 @@ func TestANextAppsAccountMayUseItsTiersTagRecordsAndNoOtherDatabase(t *testing.T
 		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
-	want := tagRecordsRole + " serviceAccount:" + account + ` resource.name == "projects/acme-prod/databases/ocel-production-tags"`
+	want := tagRecordsRole + " serviceAccount:" + account + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop") + `"`
 	if got := tagRecordBindingsOf(server); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's tag record bindings = %q, want exactly %q", got, want)
 	}
 	for _, binding := range server.Project.Bindings {
-		if binding.Role == tagRecordsRole && strings.Contains(binding.Condition.Expression, "-tags") &&
-			binding.Condition.Title != "ocel ocel production tag records" {
-			t.Errorf("the tag records binding's condition = %+v, want the title %q", binding.Condition, "ocel ocel production tag records")
+		if binding.Role == tagRecordsRole && strings.Contains(binding.Condition.Expression, ports.ProjectWritableDatabasePrefix("ocel", environment.TierProduction)) &&
+			binding.Condition.Title != "ocel shop production runs and tag records" {
+			t.Errorf("the tag records binding's condition = %+v, want the title %q", binding.Condition, "ocel shop production runs and tag records")
 		}
 	}
 }
@@ -214,5 +216,49 @@ func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T
 	}
 	if got := tagRecordBindingsOf(server.Identities()); len(got) != 1 || !strings.Contains(got[0], account) {
 		t.Errorf("the project's tag record bindings = %q, want the one of %s", got, account)
+	}
+}
+
+func writableDatabasesOf(server *googletest.IAM, member string) []string {
+	server.Mu.Lock()
+	defer server.Mu.Unlock()
+	var databases []string
+	for _, binding := range server.Project.Bindings {
+		if binding.Role == "roles/datastore.user" && slices.Contains(binding.Members, member) && binding.Condition != nil {
+			databases = append(databases, binding.Condition.Expression)
+		}
+	}
+	slices.Sort(databases)
+	return slices.Compact(databases)
+}
+
+func TestAnAppOfOneProjectMayWriteNoRunOrTagRecordOfAnotherProjectNorItsOwnValues(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.AccountPolicies = map[string]*iam.Policy{}
+	p, c := ensuringAccounts(t, server)
+	tier := environment.TierProduction
+
+	written := map[string][]string{}
+	for _, project := range []string{"shop", "blog"} {
+		spec := reachingTopics(routedNextSpec())
+		spec.Ref.Project = project
+		email, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+		if err != nil {
+			t.Fatalf("ensureAppAccount(%s) = %v", project, err)
+		}
+		written[project] = writableDatabasesOf(server, "serviceAccount:"+email)
+	}
+
+	if len(written["shop"]) == 0 {
+		t.Fatalf("shop's app may write no database, want the one its runs and tag records are kept in")
+	}
+	for _, database := range written["shop"] {
+		if slices.Contains(written["blog"], database) {
+			t.Errorf("the apps of shop and blog may both write %s, so either reads and rewrites the other's runs, payloads and tag records", database)
+		}
+		if strings.Contains(database, `/databases/`+ports.ProjectDatabase("ocel", tier, "shop")+`"`) {
+			t.Errorf("shop's app may write %s, the database its values are kept in", database)
+		}
 	}
 }

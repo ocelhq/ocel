@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -44,18 +45,20 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		tree.Add(shared, string(gcloud.Vendor), shaped.Type, item.Name, region, shaped.Properties)
 	}
-	projectKey := bootstrap.Resource{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)}
-	projectDatabase := bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}
-	for _, owned := range []bootstrap.Resource{projectKey, projectDatabase} {
+	owned := []bootstrap.Resource{
+		{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)},
+		{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)},
+	}
+	if topic.DeclaresTopics(req.Resources) || slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
+		return app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext
+	}) {
+		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.ProjectWritableDatabase(req.Deploy.Tier, req.Deploy.Slug)})
+	}
+	for _, owned := range owned {
 		shaped, _ := owned.Shape(region)
 		tree.Add(shared, string(gcloud.Vendor), shaped.Type, owned.Name, region, shaped.Properties)
 	}
 	tree.AddShaped(shared, string(gcloud.Vendor), region, envsource.Shape(names.EnvSourceSync(req.Deploy.Tier), region))
-	if slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
-		return app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext
-	}) {
-		tree.AddShaped(shared, string(gcloud.Vendor), region, tagDatabaseShape(names, req.Deploy.Tier, region))
-	}
 
 	front, err := p.Edges().Open(req.Edge, nil)
 	if err != nil {

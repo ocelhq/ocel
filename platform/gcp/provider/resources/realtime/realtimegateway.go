@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime/pubsubbus"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
@@ -25,7 +26,7 @@ const (
 	realtimeGatewayMemoryMiB   = 1024
 	realtimeGatewayConcurrency = 1000
 	realtimeGatewayMaxSockets  = 950
-	realtimeGatewayInstances   = 1
+	realtimeGatewayInstances   = 10
 	realtimeGatewayTimeout     = run.MaxRequestTimeout
 
 	realtimeKeysVolume = "realtime-keys"
@@ -38,7 +39,7 @@ const (
 
 var realtimeImageTag = run.BinaryImageTag(payloads.RealtimeGateway)
 
-func realtimeGatewayServing(named names.Names, ref provider.StackRef, host, image, inlineKeys string) run.Serving {
+func realtimeGatewayServing(named names.Names, ref provider.StackRef, host, image, inlineKeys, pubsubEndpoint string) run.Serving {
 	gateway := run.Serving{
 		Service:     named.RealtimeGateway(ref.Project, ref.Name.Env),
 		Labels:      names.StackLabels(named, ref),
@@ -56,7 +57,11 @@ func realtimeGatewayServing(named names.Names, ref provider.StackRef, host, imag
 			gatewayenv.HostVar:       host,
 			gatewayenv.AnyOriginVar:  strconv.FormatBool(true),
 			gatewayenv.MaxSocketsVar: strconv.Itoa(realtimeGatewayMaxSockets),
+			pubsubbus.TopicVar:       realtimeTopic(named, ref),
 		},
+	}
+	if pubsubEndpoint != "" {
+		gateway.Env[pubsubbus.EndpointVar] = pubsubEndpoint
 	}
 	if inlineKeys != "" {
 		gateway.Env[gatewayenv.KeysVar] = inlineKeys
@@ -109,7 +114,7 @@ func (r realtimeEnvironment) findGatewayHost(current *runv2.GoogleCloudRunV2Serv
 }
 
 func (r realtimeEnvironment) compareGateway(current *runv2.GoogleCloudRunV2Service, host, image, inlineKeys string) (run.Serving, string, error) {
-	desired := realtimeGatewayServing(r.clients.Names, r.ref, host, image, inlineKeys)
+	desired := realtimeGatewayServing(r.clients.Names, r.ref, host, image, inlineKeys, r.pubsubEndpoint)
 	wanted, err := run.ServiceOf(desired)
 	if err != nil {
 		return run.Serving{}, "", err

@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type taggedFirestore struct {
@@ -41,7 +42,7 @@ func (f *taggedFirestore) RunQuery(request *firestorepb.RunQueryRequest, stream 
 	f.noteAuthorization(stream.Context())
 	f.queries = append(f.queries, request.GetStructuredQuery())
 	if f.absent {
-		return status.Error(codes.NotFound, "The database (projects/acme-prod/databases/ocel-production-tags) does not exist for project acme-prod")
+		return status.Error(codes.NotFound, "The database (projects/acme-prod/databases/"+ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")+") does not exist for project acme-prod")
 	}
 	for _, name := range f.listed {
 		if err := stream.Send(&firestorepb.RunQueryResponse{
@@ -86,7 +87,7 @@ func tagRecordsServedBy(t *testing.T, fake *taggedFirestore) *Provider {
 }
 
 func tagDocument(id string) string {
-	return "projects/acme-prod/databases/ocel-production-tags/documents/tags/" + id
+	return "projects/acme-prod/databases/" + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop") + "/documents/tags/" + id
 }
 
 type sayings struct {
@@ -158,7 +159,7 @@ func TestPruningAReleaseDeletesTheTagRecordsOfItsISRPrefixAndNoOther(t *testing.
 	if len(fake.authorizations) != 0 {
 		t.Errorf("the prune sent authorization %q to floci, want none: admin credentials go only to the tag emulator", fake.authorizations)
 	}
-	if want := []string{"Removed 2 tag records under prod/shop/web/r1a2b3c4d/isr/ from Firestore database ocel-production-tags"}; !slices.Equal(log.said, want) {
+	if want := []string{"Removed 2 tag records under prod/shop/web/r1a2b3c4d/isr/ from Firestore database " + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")}; !slices.Equal(log.said, want) {
 		t.Errorf("the prune said %q, want %q", log.said, want)
 	}
 }

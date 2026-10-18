@@ -85,9 +85,10 @@ func TestLivePruningADeploymentRemovesItsTagRecordsAndKeepsAnothers(t *testing.T
 	ctx := context.Background()
 	tier := environment.TierProduction
 	slug := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
-	store, err := workloadClients(t).TagFirestore(tier)
+	writableDatabaseMade(t, p, tier, slug)
+	store, err := workloadClients(t).TagRecordsFirestore(tier, slug)
 	if err != nil {
-		t.Fatalf("TagFirestore() = %v", err)
+		t.Fatalf("TagRecordsFirestore() = %v", err)
 	}
 
 	pruned := "prod/" + slug + "/web/r1/isr/"

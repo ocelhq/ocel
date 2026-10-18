@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	projectDatabaseInfix = "-v-"
-	projectKeyInfix      = "-p-"
-	projectHashLength    = 10
-	projectField         = "project"
+	projectDatabaseInfix         = "-v-"
+	projectWritableDatabaseInfix = "-w-"
+	projectKeyInfix              = "-p-"
+	projectHashLength            = 10
+	projectField                 = "project"
 )
 
 var (
@@ -40,6 +41,14 @@ func ProjectDatabasePrefix(namespace provider.Namespace, tier environment.Tier) 
 
 func ProjectDatabase(namespace provider.Namespace, tier environment.Tier, project string) string {
 	return ProjectDatabasePrefix(namespace, tier) + projectHash(tier, project)
+}
+
+func ProjectWritableDatabasePrefix(namespace provider.Namespace, tier environment.Tier) string {
+	return string(namespace) + "-" + string(tier) + projectWritableDatabaseInfix
+}
+
+func ProjectWritableDatabase(namespace provider.Namespace, tier environment.Tier, project string) string {
+	return ProjectWritableDatabasePrefix(namespace, tier) + projectHash(tier, project)
 }
 
 func ProjectKeyPrefix(tier environment.Tier) string { return string(tier) + projectKeyInfix }
@@ -61,6 +70,26 @@ func (c *Clients) ProjectFirestore(tier environment.Tier, project string) (*fire
 	held, _ := c.projectStores.LoadOrStore(database, &memo[*firestore.Client]{})
 	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
 		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, EmulatorGRPC(c.Endpoint)...)
+	})
+}
+
+func (c *Clients) ProjectWritableDatabase(tier environment.Tier, project string) string {
+	return ProjectWritableDatabase(c.Namespace, tier, project)
+}
+
+func (c *Clients) RunsFirestore(tier environment.Tier, project string) (*firestore.Client, error) {
+	database := c.ProjectWritableDatabase(tier, project)
+	held, _ := c.runStores.LoadOrStore(database, &memo[*firestore.Client]{})
+	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
+		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, EmulatorGRPC(c.Endpoint)...)
+	})
+}
+
+func (c *Clients) TagRecordsFirestore(tier environment.Tier, project string) (*firestore.Client, error) {
+	database := c.ProjectWritableDatabase(tier, project)
+	held, _ := c.tagStores.LoadOrStore(database, &memo[*firestore.Client]{})
+	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
+		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, append(EmulatorGRPC(c.tagEndpoint()), EmulatorAdmin(c.TagEndpoint)...)...)
 	})
 }
 

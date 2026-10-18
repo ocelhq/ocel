@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 func cacheGrants(c *gcloud.Clients, spec provider.StackSpec, member string) ([]grants.Grant, error) {
@@ -19,6 +20,6 @@ func cacheGrants(c *gcloud.Clients, spec provider.StackSpec, member string) ([]g
 	app := strings.TrimSuffix(strings.TrimPrefix(prefix, provider.StoreCache+"/"), "/")
 	return []grants.Grant{
 		grants.OnProject(grants.ObjectsRole, member, gcloud.ObjectPrefixCondition(c, "ocel cache of "+app, spec.Ref.Tier, prefix)),
-		grants.OnProject(tagRecordsRole, member, tagDatabaseCondition(c, spec.Ref.Tier)),
+		grants.OnProject(tagRecordsRole, member, variables.ProjectWritableDatabaseCondition(c, spec.Ref.Tier, spec.Ref.Project)),
 	}, nil
 }

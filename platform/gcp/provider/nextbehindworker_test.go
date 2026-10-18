@@ -113,7 +113,7 @@ func TestANextServiceBehindTheLoadBalancerIsToldNoPurgeSecret(t *testing.T) {
 	}
 }
 
-func TestANextAppBehindTheWorkerIsGrantedItsCachePrefixAndItsTagDatabase(t *testing.T) {
+func TestANextAppBehindTheWorkerIsGrantedItsCachePrefixAndItsProjectsTagRecords(t *testing.T) {
 	w := behindTheWorkerWithItsSeed(t)
 
 	if _, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil); err != nil {
@@ -123,7 +123,7 @@ func TestANextAppBehindTheWorkerIsGrantedItsCachePrefixAndItsTagDatabase(t *test
 		t.Errorf("storage bindings = %q, want the one over the app's cache prefix", got)
 	}
 	if got := tagRecordBindingsOf(w.server.Identities()); len(got) != 1 {
-		t.Errorf("tag record bindings = %q, want the one over the tier's tag database: the app's tags live in Firestore", got)
+		t.Errorf("tag record bindings = %q, want the one over its project's database of runs and tag records: the app's tags live in Firestore", got)
 	}
 }
 

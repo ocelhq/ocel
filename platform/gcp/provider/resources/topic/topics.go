@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -24,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -223,7 +225,6 @@ func (p *Topic) Component() component.Component {
 	return component.Component{
 		Types: []provider.BindingType{provider.BindingTopic, provider.BindingTask},
 		Hooks: resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
-		Parts: []component.Part{task.Part},
 		Shape: shapeTopics,
 	}
 }
@@ -231,6 +232,7 @@ func (p *Topic) Component() component.Component {
 func shapeTopics(shape component.Shape, declared []provider.Resource) error {
 	req := shape.Request
 	scope := Names(shape.Names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
+	shape.Tree.AddShaped(shape.Shared, shape.Vendor, shape.Region, []pricing.Shaped{task.DelayQueueShape(shape.Names, req.Deploy.Tier, shape.Region)})
 	for _, resource := range declared {
 		topic := declaredTopicOf(resource)
 		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, scope.Topic(topic.declared), shape.Region, map[string]any{})
@@ -309,7 +311,7 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, acc
 		return nil, err
 	}
 	granted := []grants.Grant{
-		grants.OnProject(grants.TaskRecordsRole, member, task.DatabaseCondition(c, spec.Ref.Tier)),
+		grants.OnProject(grants.TaskRecordsRole, member, variables.ProjectWritableDatabaseCondition(c, spec.Ref.Tier, spec.Ref.Project)),
 		grants.On(grants.Queue, c.DelayQueuePath(c.Region, spec.Ref.Tier), task.QueueEnqueuerRole, member),
 		grants.On(grants.Account, account, bootstrap.RunAsRole, member),
 		grants.On(grants.Account, account, bootstrap.RunAsRole, agent),
@@ -319,6 +321,12 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, acc
 		granted = append(granted, grants.On(grants.Topic, topics.TopicPath(c.Project(), names.Topic(name)), topics.PublisherRole, member))
 	}
 	return granted, nil
+}
+
+func DeclaresTopics(declared []provider.Resource) bool {
+	return slices.ContainsFunc(declared, func(resource provider.Resource) bool {
+		return resource.Type == provider.BindingTopic || resource.Type == provider.BindingTask
+	})
 }
 
 func HostsWorkers(app *provider.AppSpec) bool {

@@ -1,6 +1,6 @@
 //go:build unix
 
-package main
+package gatewayserver
 
 import (
 	"crypto/ed25519"

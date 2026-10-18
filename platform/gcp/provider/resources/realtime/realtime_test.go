@@ -14,18 +14,25 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/pricing"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/realtime"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/gcp/provider/component"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime/pubsubbus"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
 type realtimeHarness struct {
 	run     *googletest.Run
 	secrets *googletest.Secrets
+	pubsub  *googletest.PubSub
 	env     realtimeEnvironment
 
 	mu          sync.Mutex
@@ -36,13 +43,18 @@ type realtimeHarness struct {
 
 func newRealtimeHarness(t *testing.T) *realtimeHarness {
 	t.Helper()
-	h := &realtimeHarness{run: &googletest.Run{}, secrets: googletest.NewSecrets()}
+	h := &realtimeHarness{run: &googletest.Run{}, secrets: googletest.NewSecrets(), pubsub: googletest.NewPubSub()}
 	serveRun := h.run.Serve(t)
+	servePubSub := h.pubsub.Serve(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			h.mu.Lock()
 			h.writes = append(h.writes, r.Method+" "+r.URL.Path)
 			h.mu.Unlock()
+		}
+		if googletest.IsPubSubPath(r.URL.Path) {
+			servePubSub(w, r)
+			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/v1/projects/") && strings.Contains(r.URL.Path, "/secrets") {
 			h.secrets.Serve(t, w, r)
@@ -172,12 +184,39 @@ func TestARealtimeIsBoundToItsEnvironmentsGatewayByTheHostCloudRunGaveIt(t *test
 	}
 }
 
+func (h *realtimeHarness) topic() string {
+	return "projects/acme-prod/topics/" + h.env.clients.RealtimeGateway("shop", "prod")
+}
+
+func TestARealtimeGatewaysEnvironmentHasATopicItsAccountMayPublishOnAndSubscribeTo(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+
+	if !h.pubsub.HasTopic(h.topic()) {
+		t.Fatalf("no topic %s was created, and the gateway's instances hear each other's publishes through it alone", h.topic())
+	}
+	member := "serviceAccount:" + h.env.clients.RealtimeAccountEmail(environment.TierProduction)
+	for _, role := range []string{"roles/pubsub.publisher", "roles/pubsub.subscriber"} {
+		if members := h.pubsub.TopicMembers(h.topic(), role); !slices.Equal(members, []string{member}) {
+			t.Errorf("the topic binds %v to %s, want the tier's realtime account alone", members, role)
+		}
+	}
+	if got := googletest.EnvOf(h.run.Serving().Template.Containers[0])[pubsubbus.TopicVar]; got != h.topic() {
+		t.Errorf("the gateway hears %q, want the topic %s", got, h.topic())
+	}
+}
+
 func TestADeployThatChangesNoRealtimeWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
 	versions, releases := h.secrets.VersionsAdded(), len(h.run.Releases())
+	h.mu.Lock()
+	written := len(h.writes)
+	h.mu.Unlock()
 	h.provision(t, "app")
 
 	if got := h.secrets.VersionsAdded(); got != versions {
@@ -188,6 +227,11 @@ func TestADeployThatChangesNoRealtimeWritesNothing(t *testing.T) {
 	}
 	if got := h.pushes(); len(got) != 1 {
 		t.Errorf("the gateway image was pushed %d times, want once: the service already runs it", len(got))
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if got := h.writes[written:]; len(got) != 0 {
+		t.Errorf("a deploy changing nothing wrote %q", got)
 	}
 }
 
@@ -218,6 +262,9 @@ func TestRemovingTheLastRealtimeTakesTheGatewayAndItsKeysAway(t *testing.T) {
 
 	if h.run.Serving() != nil {
 		t.Error("the gateway outlived the last realtime it served")
+	}
+	if h.pubsub.HasTopic(h.topic()) {
+		t.Errorf("the topic %s outlived the gateway it carried publishes between", h.topic())
 	}
 	for _, secret := range []string{h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"), h.env.clients.RealtimeSigningSecret("shop", "prod", "app")} {
 		if h.secrets.Has(secret) {
@@ -322,6 +369,38 @@ func TestARealtimeWhoseGatewayIsGonePlansAnUpdate(t *testing.T) {
 	}
 }
 
+func TestARealtimeWhoseTopicIsGonePlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	h.pubsub.Mu.Lock()
+	delete(h.pubsub.Topics, h.topic())
+	h.pubsub.Mu.Unlock()
+
+	action, reason, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, h.topic()) {
+		t.Errorf("plan() = %s %q, %v, want an update naming the topic %s that is created", action, reason, err, h.topic())
+	}
+	h.provision(t, "app")
+	if !h.pubsub.HasTopic(h.topic()) {
+		t.Errorf("a deploy left the topic %s missing", h.topic())
+	}
+}
+
+func TestARealtimeWhoseTopicLostItsGrantsPlansAnUpdate(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+	h.pubsub.AddTopic(h.topic())
+
+	action, reason, err := h.plan(t, "app")
+	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "publish") {
+		t.Errorf("plan() = %s %q, %v, want an update saying the realtime account may publish and subscribe again", action, reason, err)
+	}
+}
+
 func TestARealtimeWhoseRecordWasLostPlansAnUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -355,5 +434,42 @@ func TestARealtimeWhoseKeysChangedPlansAnUpdate(t *testing.T) {
 	action, reason, err := h.plan(t, "app")
 	if err != nil || action != provider.ActionUpdate || !strings.Contains(reason, "chat") {
 		t.Errorf("plan() = %s %q, %v, want an update naming the realtimes the gateway's keys secret comes to hold", action, reason, err)
+	}
+}
+
+func TestARealtimeIsPricedAsAGatewayOfUpToTenInstancesItsTopicAndTheirSubscriptions(t *testing.T) {
+	t.Parallel()
+
+	tree := &pricing.Tree{}
+	scope := tree.Scope("", pricing.ScopeProject, "shop")
+	named := names.New(provider.Namespace("ocel"), "acme-prod")
+	shape := component.Shape{
+		Tree: tree, Vendor: "gcp", Names: named, Region: "europe-west1", Environment: scope,
+		Request: provider.ShapeRequest{Deploy: provider.DeploySpec{Slug: "shop", Env: "prod", Tier: environment.TierProduction}},
+	}
+	if err := shapeRealtime(shape, []provider.Resource{aRealtime("app")}); err != nil {
+		t.Fatalf("shapeRealtime() = %v", err)
+	}
+	set, err := tree.Set("ocel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := named.RealtimeGateway("shop", "prod")
+	found := map[string]*costv1.Resource{}
+	for _, resource := range set.Resources {
+		found[resource.Type+":"+resource.Name] = resource
+	}
+	for _, want := range []string{cost.PubSubTopicType + ":" + gateway, cost.PubSubSubscriptionType + ":" + gateway} {
+		if found[want] == nil {
+			t.Errorf("the shape prices no %s, and every publish the gateway carries crosses it", want)
+		}
+	}
+	service := found[cost.CloudRunServiceType+":"+gateway]
+	if service == nil {
+		t.Fatalf("the shape prices no gateway service %s", gateway)
+	}
+	scaling := service.Properties.AsMap()["template"].(map[string]any)["scaling"].(map[string]any)
+	if scaling["max_instance_count"] != float64(10) {
+		t.Errorf("the gateway is priced at up to %v instances, want 10", scaling["max_instance_count"])
 	}
 }

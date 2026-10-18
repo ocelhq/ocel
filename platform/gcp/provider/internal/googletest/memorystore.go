@@ -127,9 +127,23 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 			if changed == nil {
 				return
 			}
-			s.patched = append(s.patched, r.URL.Query().Get("updateMask"))
+			mask := r.URL.Query().Get("updateMask")
+			s.patched = append(s.patched, mask)
 			if stored := s.instances[name]; stored != nil {
-				stored.NodeType, stored.EngineVersion, stored.EngineConfigs = changed.NodeType, changed.EngineVersion, changed.EngineConfigs
+				for _, field := range strings.Split(mask, ",") {
+					switch field {
+					case "node_type":
+						stored.NodeType = changed.NodeType
+					case "engine_version":
+						stored.EngineVersion = changed.EngineVersion
+					case "engine_configs":
+						stored.EngineConfigs = changed.EngineConfigs
+					case "replica_count":
+						stored.ReplicaCount = changed.ReplicaCount
+					default:
+						t.Errorf("Memorystore was asked to update %q, which nothing here updates", field)
+					}
+				}
 			}
 			WriteBody(w, s.operation(false))
 		case r.Method == http.MethodDelete:
@@ -188,6 +202,12 @@ func (s *Memorystore) Filters() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.listed...)
+}
+
+func (s *Memorystore) HeldWithReplicas(name string, replicas int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.instances[name].ReplicaCount = &replicas
 }
 
 func (s *Memorystore) HeldIn(name, state string) {

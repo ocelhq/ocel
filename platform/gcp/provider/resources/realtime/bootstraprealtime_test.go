@@ -41,6 +41,44 @@ func TestATiersRealtimeAccountMayReadThatTiersRealtimeKeysAndNoOtherSecret(t *te
 	}
 }
 
+func TestATiersRealtimeAccountMayHoldSubscriptionsOfItsOwnThroughTheRealtimeSubscriptionsRole(t *testing.T) {
+	t.Parallel()
+	server := googletest.GrantedIAM()
+	b := bootstrap.Engine{Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
+	tier := environment.TierProduction
+	ctx := context.Background()
+
+	if err := b.MakeAccount(ctx, bootstrap.Survey{Tier: tier, Names: b.Clients.Names}, b.Clients.RealtimeAccount(tier)); err != nil {
+		t.Fatalf("makeAccount() = %v", err)
+	}
+	members, condition := server.ProjectMembers(b.Clients.RealtimeSubscriptionsRolePath())
+	if member := "serviceAccount:" + b.Clients.RealtimeAccountEmail(tier); !slices.Contains(members, member) {
+		t.Errorf("the project binds %v to %s, want %s: each gateway instance subscribes to its environment's topic itself", members, b.Clients.RealtimeSubscriptionsRolePath(), member)
+	}
+	if condition != nil {
+		t.Errorf("the role is conditioned on %+v, and Pub/Sub honours no IAM condition on a subscription's name, so a condition grants nothing", condition)
+	}
+}
+
+func TestTheRealtimeSubscriptionsRoleMayCreatePullAndDeleteSubscriptionsAndNothingElse(t *testing.T) {
+	t.Parallel()
+	named := names.New("ocel", "acme-prod")
+
+	role, found := bootstrap.FindCustomRole(named, named.RealtimeSubscriptionsRole())
+	if !found {
+		t.Fatalf("no custom role is named %s", named.RealtimeSubscriptionsRole())
+	}
+	want := []string{"pubsub.subscriptions.consume", "pubsub.subscriptions.create", "pubsub.subscriptions.delete"}
+	if got := slices.Sorted(slices.Values(role.Permissions)); !slices.Equal(got, want) {
+		t.Errorf("the role holds %v, want %v: attaching to a topic is granted on the realtime topic alone", got, want)
+	}
+	if !slices.ContainsFunc(bootstrap.StackResources(named, environment.TierProduction, false), func(r bootstrap.Resource) bool {
+		return r.Kind == bootstrap.KindRole && r.Name == named.RealtimeSubscriptionsRole()
+	}) {
+		t.Error("a bootstrap makes no realtime subscriptions role, and the binding its realtime account is granted grants nothing")
+	}
+}
+
 func TestARealtimeAccountThatMayNotReadItsKeysIsSurveyedAsMendable(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
@@ -74,8 +112,10 @@ func TestRemovingTheRealtimeAccountTakesItsReadOffTheProject(t *testing.T) {
 	if err := b.TakeAccount(ctx, tier, account); err != nil {
 		t.Fatalf("takeAccount() = %v", err)
 	}
-	if members, _ := server.ProjectMembers(realtimeKeysReaderRole); len(members) > 0 {
-		t.Errorf("the project still binds %v to %s once the account is gone", members, realtimeKeysReaderRole)
+	for _, role := range []string{realtimeKeysReaderRole, b.Clients.RealtimeSubscriptionsRolePath()} {
+		if members, _ := server.ProjectMembers(role); len(members) > 0 {
+			t.Errorf("the project still binds %v to %s once the account is gone", members, role)
+		}
 	}
 }
 

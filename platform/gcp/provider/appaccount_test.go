@@ -243,8 +243,8 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	}
 
 	member := "serviceAccount:" + email
-	if !slices.Contains(projectBindingsOf(server), "roles/datastore.user "+member+` resource.name == "projects/acme-prod/databases/ocel-production-tasks"`) {
-		t.Errorf("the project binds %q, want the app to write the production task database", projectBindingsOf(server))
+	if !slices.Contains(projectBindingsOf(server), "roles/datastore.user "+member+` resource.name == "projects/acme-prod/databases/`+ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")+`"`) {
+		t.Errorf("the project binds %q, want the app to write its project's production database of runs", projectBindingsOf(server))
 	}
 	queue := c.DelayQueuePath("europe-west1", environment.TierProduction)
 	var queueRoles []string

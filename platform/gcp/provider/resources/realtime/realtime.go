@@ -38,6 +38,7 @@ type realtimeEnvironment struct {
 	records        records.Store
 	ref            provider.StackRef
 	keysInEnv      bool
+	pubsubEndpoint string
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	deployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
 	tearDown       func(ctx context.Context, service string, progress progress.Log) error
@@ -48,7 +49,8 @@ type Realtime struct {
 	records     records.Store
 	services    *run.Services
 	pushBinary  func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
-	emulated    bool
+
+	emulatorEndpoint string
 }
 
 func New(
@@ -56,9 +58,9 @@ func New(
 	store records.Store,
 	services *run.Services,
 	pushBinary func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error,
-	emulated bool,
+	emulatorEndpoint string,
 ) *Realtime {
-	return &Realtime{openClients: openClients, records: store, services: services, pushBinary: pushBinary, emulated: emulated}
+	return &Realtime{openClients: openClients, records: store, services: services, pushBinary: pushBinary, emulatorEndpoint: emulatorEndpoint}
 }
 
 func (p *Realtime) Component() component.Component {
@@ -79,7 +81,8 @@ func (p *Realtime) openRealtime(ctx context.Context, ref provider.StackRef) (rea
 		records: p.records,
 		ref:     ref,
 		// HACK: floci-gcp runs no secret volume, so an emulated gateway takes its keys from its environment and a change of keys rolls a revision; drop keysInEnv once floci-gcp mounts secret volumes (#1605).
-		keysInEnv:      p.emulated,
+		keysInEnv:      p.emulatorEndpoint != "",
+		pubsubEndpoint: p.emulatorEndpoint,
 		pushBinary:     p.pushBinary,
 		deployAndRoute: p.services.DeployAndRoute,
 		tearDown:       p.services.TearDown,
@@ -143,8 +146,14 @@ func (r realtimeEnvironment) plan(ctx context.Context, resource provider.Resourc
 	if difference := secret.describeChange(keys); difference != "" {
 		differences = append(differences, difference)
 	}
-	difference, err := r.readGatewayDifference(ctx, keys)
+	difference, err := r.readTopicDifference(ctx)
 	if err != nil {
+		return "", "", err
+	}
+	if difference != "" {
+		differences = append(differences, difference)
+	}
+	if difference, err = r.readGatewayDifference(ctx, keys); err != nil {
 		return "", "", err
 	}
 	if difference != "" {
@@ -296,9 +305,15 @@ func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, 
 		if err := r.removeGateway(ctx, progress); err != nil {
 			return "", err
 		}
+		if err := r.removeTopic(ctx); err != nil {
+			return "", err
+		}
 		return "", r.removeKeys(ctx)
 	}
 	if err := r.writeKeys(ctx, keys); err != nil {
+		return "", err
+	}
+	if err := r.ensureTopic(ctx); err != nil {
 		return "", err
 	}
 	gcloud.EnsureProgress(progress).Debug("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway " + gateway)
@@ -313,7 +328,10 @@ func shapeRealtime(shape component.Shape, declared []provider.Resource) error {
 		tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret.Properties)
 	}
 	tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret.Properties)
-	tree.Add(environment, shape.Vendor, cost.CloudRunServiceType, names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env), region, map[string]any{
+	gateway := names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env)
+	tree.Add(environment, shape.Vendor, cost.PubSubTopicType, gateway, region, map[string]any{})
+	tree.Add(environment, shape.Vendor, cost.PubSubSubscriptionType, gateway, region, map[string]any{})
+	tree.Add(environment, shape.Vendor, cost.CloudRunServiceType, gateway, region, map[string]any{
 		"location":      region,
 		"ingress":       run.IngressEverywhere,
 		"holds_sockets": true,

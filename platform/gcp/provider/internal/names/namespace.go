@@ -332,14 +332,6 @@ const (
 	pushAccountName  = "push"
 )
 
-func (n Names) TaskDatabase(tier environment.Tier) string {
-	return ports.TaskDatabase(n.namespace, tier)
-}
-
-func (n Names) TagDatabase(tier environment.Tier) string {
-	return ports.TagDatabase(n.namespace, tier)
-}
-
 func (n Names) DelayQueue(tier environment.Tier) string {
 	return string(n.namespace) + "-" + string(tier) + delayQueueSuffix
 }
@@ -403,9 +395,9 @@ func (n Names) Fit() error {
 }
 
 const (
-	partsSuffix          = "parts"
-	partDatabasesSuffix  = "part_databases"
-	projectRecordsSuffix = "project_records"
+	partsSuffix                 = "parts"
+	projectRecordsSuffix        = "project_records"
+	realtimeSubscriptionsSuffix = "realtime_subscriptions"
 )
 
 func (n Names) PartsRole() string { return customRoleID(n.namespace, partsSuffix) }
@@ -414,18 +406,28 @@ func (n Names) PartsRolePath() string {
 	return "projects/" + n.project + "/roles/" + n.PartsRole()
 }
 
-func (n Names) PartDatabasesRole() string { return customRoleID(n.namespace, partDatabasesSuffix) }
-
-func (n Names) PartDatabasesRolePath() string {
-	return "projects/" + n.project + "/roles/" + n.PartDatabasesRole()
-}
-
 func (n Names) ProjectDatabase(tier environment.Tier, project string) string {
 	return ports.ProjectDatabase(n.namespace, tier, project)
 }
 
 func (n Names) ProjectDatabasePrefix(tier environment.Tier) string {
 	return ports.ProjectDatabasePrefix(n.namespace, tier)
+}
+
+func (n Names) RealtimeSubscriptionsRole() string {
+	return customRoleID(n.namespace, realtimeSubscriptionsSuffix)
+}
+
+func (n Names) RealtimeSubscriptionsRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.RealtimeSubscriptionsRole()
+}
+
+func (n Names) ProjectWritableDatabase(tier environment.Tier, project string) string {
+	return ports.ProjectWritableDatabase(n.namespace, tier, project)
+}
+
+func (n Names) ProjectWritableDatabasePrefix(tier environment.Tier) string {
+	return ports.ProjectWritableDatabasePrefix(n.namespace, tier)
 }
 
 func (n Names) ProjectRecordsRole() string { return customRoleID(n.namespace, projectRecordsSuffix) }

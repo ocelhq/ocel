@@ -16,8 +16,6 @@ import (
 func tierParts() []bootstrap.RemovablePart {
 	return []bootstrap.RemovablePart{
 		{Part: provider.Part{Name: network.PartName, Summary: network.Summary}, Deployed: network.NewPart},
-		{Part: provider.Part{Name: task.PartName, Summary: task.Summary}, Deployed: task.NewPart},
-		{Part: provider.Part{Name: tagDatabasePart, Summary: tagDatabaseSummary}, Deployed: newTagDatabasePart},
 		albpart.Part,
 		envsource.Part,
 		bastion.Part,

@@ -210,7 +210,7 @@ func realtimeManifest() *contractv1.Manifest {
 	return manifest
 }
 
-func TestARealtimeIsShapedAsItsEnvironmentsGatewayKeysAndSigningKey(t *testing.T) {
+func TestARealtimeIsShapedAsItsEnvironmentsGatewayTopicKeysAndSigningKey(t *testing.T) {
 	client, _ := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -221,17 +221,20 @@ func TestARealtimeIsShapedAsItsEnvironmentsGatewayKeysAndSigningKey(t *testing.T
 		t.Fatalf("Shape() = %v", err)
 	}
 	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
-	want := map[string]string{
-		names.RealtimeGateway("shop", "prod"):                                "google_cloud_run_v2_service",
-		names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"): "google_secret_manager_secret",
-		names.RealtimeSigningSecret("shop", "prod", "app"):                   "google_secret_manager_secret",
+	want := map[string]bool{
+		"google_cloud_run_v2_service:" + names.RealtimeGateway("shop", "prod"):                                 true,
+		"google_pubsub_topic:" + names.RealtimeGateway("shop", "prod"):                                         true,
+		"google_pubsub_subscription:" + names.RealtimeGateway("shop", "prod"):                                  true,
+		"google_secret_manager_secret:" + names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"): true,
+		"google_secret_manager_secret:" + names.RealtimeSigningSecret("shop", "prod", "app"):                   true,
 	}
 	for _, resource := range set.GetResources() {
-		if typ, named := want[resource.GetName()]; named {
-			if resource.GetType() != typ || resource.GetScope() != "project:shop/environment:prod" {
-				t.Errorf("%s is shaped as %s under %s, want %s under the environment", resource.GetName(), resource.GetType(), resource.GetScope(), typ)
+		shaped := resource.GetType() + ":" + resource.GetName()
+		if want[shaped] {
+			if resource.GetScope() != "project:shop/environment:prod" {
+				t.Errorf("%s is shaped under %s, want it under the environment", shaped, resource.GetScope())
 			}
-			delete(want, resource.GetName())
+			delete(want, shaped)
 		}
 	}
 	if len(want) > 0 {
