@@ -27,6 +27,8 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/vps/box/recordstore"
+	"github.com/ocelhq/ocel/platform/vps/box/sealkey"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -455,8 +457,8 @@ type Store struct {
 
 func (s Store) Resolve(ctx context.Context, manifest boxapi.Manifest) (map[string]string, error) {
 	reader := variablestore.EnvironmentReader{
-		KeyValues:   boxapi.KeyValues{Root: s.StateRoot},
-		Cipher:      boxapi.Cipher{Root: s.TierRoot},
+		KeyValues:   recordstore.KeyValues{Root: s.StateRoot},
+		Cipher:      sealkey.Cipher{Root: s.TierRoot},
 		Scope:       variablestore.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 		Environment: manifest.Environment,
 	}
@@ -530,7 +532,7 @@ func (s Store) storeSecret(ctx context.Context, manifest boxapi.Manifest) (strin
 	if err != nil {
 		return "", err
 	}
-	opened, err := (boxapi.Cipher{Root: s.TierRoot}).Open(ctx, environment.Tier(manifest.Tier), bound, sealed)
+	opened, err := (sealkey.Cipher{Root: s.TierRoot}).Open(ctx, environment.Tier(manifest.Tier), bound, sealed)
 	if err != nil {
 		return "", err
 	}

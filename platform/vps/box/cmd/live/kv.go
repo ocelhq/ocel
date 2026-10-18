@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/vps/box/recordstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -22,7 +23,7 @@ func recordsCommand(argv []string, stdin io.Reader, stdout, errs io.Writer) int 
 	if err := flags.Parse(argv); err != nil {
 		return boxapi.ExitRefused
 	}
-	printed, err := runRecords(boxapi.KeyValues{Root: *stateRoot}, flags.Args(), stdin)
+	printed, err := runRecords(recordstore.KeyValues{Root: *stateRoot}, flags.Args(), stdin)
 	switch {
 	case errors.Is(err, records.ErrNotFound):
 		return boxapi.ExitNotFound
@@ -43,7 +44,7 @@ func recordsCommand(argv []string, stdin io.Reader, stdout, errs io.Writer) int 
 	return 0
 }
 
-func runRecords(store boxapi.KeyValues, args []string, stdin io.Reader) ([]any, error) {
+func runRecords(store recordstore.KeyValues, args []string, stdin io.Reader) ([]any, error) {
 	if len(args) < 2 {
 		return nil, errors.New("usage: " + recordsNamed + " <tier> get <path> | list <partition dir> [<under>] | cas")
 	}

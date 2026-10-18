@@ -68,7 +68,7 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 	command := ranContainer(t, runningContainer(t, "false "))
 	for what, wanted := range map[string]string{
 		"the name the drain attributes its in-flight count to": shell.Quote("--name") + " " + shell.Quote(physical),
-		"a reboot that does not take the app down":             shell.Quote("--restart") + " " + shell.Quote(release.RestartPolicy),
+		"a reboot that does not take the app down":             shell.Quote("--restart") + " " + shell.Quote(docker.RestartPolicy),
 		"the network the proxy reaches it over":                shell.Quote("--network") + " " + shell.Quote(boxapi.AppNetwork(aContainer().Tier, "shop")),
 		"the app label retention reads":                        shell.Quote("--label") + " " + shell.Quote(docker.LabelApp+"=web"),
 		"the project label retention reads":                    shell.Quote("--label") + " " + shell.Quote(docker.LabelProject+"=shop"),

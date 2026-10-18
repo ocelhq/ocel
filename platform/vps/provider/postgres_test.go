@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
@@ -441,7 +442,7 @@ func TestAPostgresPasswordIsBoundToItsProjectTierStackAndResourceUnderResources(
 	if err != nil {
 		t.Fatal(err)
 	}
-	opened, err := boxapi.Open(key, bound, sealed)
+	opened, err := fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}).Open(context.Background(), environment.TierProduction, bound, sealed)
 	if err != nil || string(opened) != "s3cr3t-postgres" {
 		t.Fatalf("Open() = %q, %v, want the password sealed as a resource secret of shop at production/prod--infra/resources/main/password to open: every box's Postgres password is bound to those", opened, err)
 	}

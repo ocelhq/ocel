@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/box/agent"
 	"github.com/ocelhq/ocel/platform/vps/box/queues"
+	"github.com/ocelhq/ocel/platform/vps/box/recordstore"
+	"github.com/ocelhq/ocel/platform/vps/box/sealkey"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -67,9 +69,9 @@ func run(argv []string, errs *os.File) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	engines := &queues.Engines{
-		Records:   boxapi.KeyValues{Root: *stateRoot},
+		Records:   recordstore.KeyValues{Root: *stateRoot},
 		Tiers:     []environment.Tier{environment.TierProduction, environment.TierPreview},
-		Cipher:    boxapi.Cipher{Root: *tierRoot},
+		Cipher:    sealkey.Cipher{Root: *tierRoot},
 		Addresses: inspect,
 		Mounts:    inspect,
 		Open:      queues.OpenPgmq,

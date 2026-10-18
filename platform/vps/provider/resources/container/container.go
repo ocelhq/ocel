@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
-	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -210,7 +209,10 @@ func (r Spec) labels() []string {
 	return argv
 }
 
-const RetiredSuffix = "-retired"
+const (
+	RetiredSuffix = "-retired"
+	SwappedMark   = "swapped"
+)
 
 func volumeName(name, generation string) string {
 	if generation == "" {
@@ -245,7 +247,7 @@ func volumeCreating(spec Spec) string {
 }
 
 func RunScript(spec Spec, digest, envFile string) string {
-	return docker.Pulled(spec.Image, release.ContainerPullAttempts, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
+	return docker.Pulled(spec.Image, docker.PullAttempts, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
 		socketsCreating(spec) +
 		shell.Bounded(shell.DockerStepSeconds, "docker run of "+spec.Name, shell.Words(Run(spec, digest, envFile))+" >/dev/null")
 }
@@ -253,7 +255,7 @@ func RunScript(spec Spec, digest, envFile string) string {
 func Run(spec Spec, digest, envFile string) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
-		"--restart", release.RestartPolicy,
+		"--restart", docker.RestartPolicy,
 		"--network", boxapi.AppNetwork(spec.Tier, spec.Project),
 	}
 	argv = append(argv, spec.labels()...)
@@ -326,11 +328,14 @@ func SwapCommand(spec Spec, from, digest, envFile string, steps UpgradeSteps, se
 	}
 	return "set -eu\n" +
 		"swapped=0\n" +
+		"renamed=0\n" +
 		"back() {\n" +
 		"if [ \"$swapped\" -eq 0 ]; then\n" +
+		"if [ \"$renamed\" -eq 1 ]; then\n" +
 		"docker rm --force " + name + " >/dev/null 2>&1 || true\n" +
 		dropFresh +
 		"docker rename " + retired + " " + name + " >/dev/null 2>&1 || true\n" +
+		"fi\n" +
 		"docker start " + name + " >/dev/null 2>&1 || true\n" +
 		"fi\n" +
 		"}\n" +
@@ -339,6 +344,7 @@ func SwapCommand(spec Spec, from, digest, envFile string, steps UpgradeSteps, se
 		"trap 'exit 1' HUP INT TERM\n" +
 		shell.Bounded(shell.DockerStepSeconds, "docker stop of "+spec.Name, "docker stop --time "+strconv.Itoa(ResourceStopSeconds)+" "+name+" >/dev/null") + "\n" +
 		"docker rename " + name + " " + retired + "\n" +
+		"renamed=1\n" +
 		createFresh +
 		socketsCreating(spec) +
 		steps.Before +
@@ -347,6 +353,7 @@ func SwapCommand(spec Spec, from, digest, envFile string, steps UpgradeSteps, se
 		authenticated +
 		steps.After +
 		"swapped=1\n" +
+		"printf '%s\\n' " + SwappedMark + "\n" +
 		"docker rm --force " + retired + " >/dev/null" +
 		dropStale, stdin
 }
@@ -394,12 +401,29 @@ func (c *Containers) upgrade(ctx context.Context, spec Spec, from, digest, secre
 	}
 	defer func() { err = errors.Join(err, c.takeBack(ctx, delivery)) }()
 	swap, stdin := SwapCommand(spec, from, digest, delivery.Path, steps, secret)
-	if _, err := c.box.Run(ctx, elevation, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation, swap, strings.NewReader(stdin)); err != nil {
+	switch swapped, err := c.swap(ctx, elevation, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation, swap, stdin); {
+	case swapped && err != nil:
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s moved from version %s to %s, but removing %s and the volume %s afterwards failed: %v",
+			spec.Resource, from, spec.Volume.Generation, spec.Name+RetiredSuffix, volumeName(spec.Name, from), err)
+	case err != nil:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s could not move from version %s to %s and is back on %s, data intact: %v",
 			spec.Resource, from, spec.Volume.Generation, from, err)
 	}
 	return nil
+}
+
+func (c *Containers) swap(ctx context.Context, elevation ssh.Acting, what, command, stdin string) (swapped bool, err error) {
+	result, err := c.box.Stream(ctx, elevation, command, strings.NewReader(stdin))
+	if err != nil {
+		return false, err
+	}
+	if result.Code == 0 {
+		return true, nil
+	}
+	said := strings.Fields(result.Stdout)
+	return len(said) > 0 && said[len(said)-1] == SwappedMark, c.box.Refuse(what, result)
 }
 
 func (c *Containers) Limited(ctx context.Context, spec Spec) (Spec, error) {
@@ -426,7 +450,12 @@ func (c *Containers) replace(ctx context.Context, spec Spec, digest, secret stri
 	}
 	defer func() { err = errors.Join(err, c.takeBack(ctx, delivery)) }()
 	swap, stdin := SwapCommand(spec, spec.Volume.Generation, digest, delivery.Path, UpgradeSteps{}, secret)
-	if _, err := c.box.Run(ctx, elevation, "replace "+spec.Resource+"'s container "+spec.Name, swap, strings.NewReader(stdin)); err != nil {
+	switch swapped, err := c.swap(ctx, elevation, "replace "+spec.Resource+"'s container "+spec.Name, swap, stdin); {
+	case swapped && err != nil:
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s's new container took over, but removing its previous container %s afterwards failed: %v",
+			spec.Resource, spec.Name+RetiredSuffix, err)
+	case err != nil:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s's new container did not take over, so its previous container is back, data intact: %v", spec.Resource, err)
 	}
@@ -457,7 +486,7 @@ func ReadyCommand(spec Spec, seconds int) string {
 		"until " + probe + " >/dev/null 2>&1; do\n" +
 		"if [ \"$(date +%s)\" -ge \"$deadline\" ]; then\n" +
 		"printf '%s\\n' " + shell.Quote(spec.Name+" never answered "+strings.Join(spec.Ready, " ")+" within "+shell.Seconds(seconds)) + " >&2\n" +
-		shell.Within(shell.ProbeSeconds, "docker logs --tail "+release.LogTail+" "+shell.Quote(spec.Name)) + " >&2 || true\n" +
+		shell.Within(shell.ProbeSeconds, "docker logs --tail "+docker.LogTail+" "+shell.Quote(spec.Name)) + " >&2 || true\n" +
 		"exit 1\n" +
 		"fi\n" +
 		"sleep 1\n" +

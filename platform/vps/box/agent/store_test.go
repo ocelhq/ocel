@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
+	"github.com/ocelhq/ocel/platform/vps/box/sealkey"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -114,7 +115,7 @@ func (s goCipher) Seal(_ context.Context, _ environment.Tier, bound seal.Associa
 }
 
 func (s goCipher) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	return boxapi.Open(s.key, bound, sealed)
+	return sealkey.Open(s.key, bound, sealed)
 }
 
 type box struct {
@@ -133,10 +134,10 @@ func aBox(t *testing.T, root string) *box {
 	}
 	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), keyValues: &memKeyValues{}, cipher: goCipher{key: key}}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		if err := os.MkdirAll(filepath.Dir(boxapi.KeyPath(b.tierRoot, tier)), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(sealkey.Path(b.tierRoot, tier)), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(boxapi.KeyPath(b.tierRoot, tier), key, 0o400); err != nil {
+		if err := os.WriteFile(sealkey.Path(b.tierRoot, tier), key, 0o400); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -338,7 +339,7 @@ func TestTheStoreOpensNothingUnderATierWhoseKeyIsGone(t *testing.T) {
 	b := aBox(t, t.TempDir())
 	b.set(t, shop, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://tier-wide")
 	b.dump(t)
-	if err := os.Remove(boxapi.KeyPath(b.tierRoot, environment.TierProduction)); err != nil {
+	if err := os.Remove(sealkey.Path(b.tierRoot, environment.TierProduction)); err != nil {
 		t.Fatal(err)
 	}
 	_, err := b.resolver().Resolve(context.Background(), boxapi.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})

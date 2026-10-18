@@ -5,7 +5,10 @@ const (
 	LogMaxSize  = "20m"
 	LogMaxFiles = "5"
 	LogCeiling  = 20 * 5 << 20
+	LogTail     = "200"
 )
+
+const RestartPolicy = "unless-stopped"
 
 const (
 	PidsLimit       = "4096"

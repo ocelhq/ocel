@@ -26,9 +26,8 @@ import (
 )
 
 const (
-	RestartPolicy = "unless-stopped"
-	liveDirTmpfs  = "rw,noexec,nosuid,size=8m"
-	nameShort     = 12
+	liveDirTmpfs = "rw,noexec,nosuid,size=8m"
+	nameShort    = 12
 )
 
 var AppCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "NET_BIND_SERVICE", "SETGID", "SETUID", "SETPCAP"}
@@ -82,17 +81,15 @@ func ContainerName(stack, app, deployment, image string) string {
 	return naming.Sanitize(stack) + "-" + naming.Sanitize(app) + "-" + naming.Sanitize(identity[:min(len(identity), nameShort)])
 }
 
-const ContainerPullAttempts = 5
-
 func RunContainerScript(spec Container, env envfile.Delivery) string {
-	return docker.Pulled(spec.Image, ContainerPullAttempts, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
+	return docker.Pulled(spec.Image, docker.PullAttempts, shell.PullAttemptSeconds, shell.PullBudgetSeconds) +
 		shell.Bounded(shell.DockerStepSeconds, "docker run of "+spec.Name, shell.Words(ContainerRun(spec, env))+" >/dev/null")
 }
 
 func ContainerRun(spec Container, env envfile.Delivery) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
-		"--restart", RestartPolicy,
+		"--restart", docker.RestartPolicy,
 		"--init=false",
 		"--network", boxapi.AppNetwork(spec.Tier, spec.Project),
 		"--label", docker.LabelTier + "=" + string(spec.Tier),
@@ -255,7 +252,7 @@ func (c *Containers) Remove(ctx context.Context, name string) error {
 }
 
 func LogCommand(name string) string {
-	return "docker logs --timestamps --tail " + LogTail + " " + shell.Quote(name) + " 2>&1 || true"
+	return "docker logs --timestamps --tail " + docker.LogTail + " " + shell.Quote(name) + " 2>&1 || true"
 }
 
 var ErrContainerMissing = errors.New("the container does not exist")

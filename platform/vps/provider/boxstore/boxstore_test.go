@@ -15,11 +15,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -122,9 +124,17 @@ func TestAnEntryWrittenThroughTheAgentIsTheFileTheBoxReadsInProcess(t *testing.T
 	if err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
-	read, err := boxapi.KeyValues{Root: here.stateRoot}.Read(context.Background(), key)
+	path, err := boxapi.PathOf(key)
 	if err != nil {
-		t.Fatalf("the box's own reader = %v", err)
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(boxapi.KeyValuesDir(here.stateRoot, key.Partition.Tier), path+boxapi.EntrySuffix))
+	if err != nil {
+		t.Fatalf("the entry's file = %v", err)
+	}
+	var read boxapi.EntryFile
+	if err := json.Unmarshal(raw, &read); err != nil {
+		t.Fatalf("the entry's file %s = %v", raw, err)
 	}
 	if read.Revision != revision || string(read.Value) != `{"parts":["cache"]}` {
 		t.Errorf("the box reads %s at %s, want the compacted value at %s", read.Value, read.Revision, revision)
@@ -154,8 +164,8 @@ func TestAValueTheProviderSealsThroughTheAgentOpensOnTheBoxAndNowhereElse(t *tes
 	t.Parallel()
 
 	here := newAgentHere(t)
-	if err := boxapi.CreateKey(here.tierRoot, environment.TierProduction); err != nil {
-		t.Fatal(err)
+	if said, err := exec.Command(here.agent, boxapi.SealCommand, "--tier-root", here.tierRoot, string(environment.TierProduction), boxapi.SealVerbInit).CombinedOutput(); err != nil {
+		t.Fatalf("seal init = %v: %s", err, said)
 	}
 	cipher := boxstore.NewCipher(here.box())
 	bound := seal.BindToProject("shop", "variable", "production", "*", "/", "DATABASE_URL")
@@ -164,7 +174,11 @@ func TestAValueTheProviderSealsThroughTheAgentOpensOnTheBoxAndNowhereElse(t *tes
 	if err != nil {
 		t.Fatalf("Seal() = %v", err)
 	}
-	opened, err := boxapi.Cipher{Root: here.tierRoot}.Open(context.Background(), environment.TierProduction, bound, sealed)
+	key, err := os.ReadFile(filepath.Join(here.tierRoot, string(environment.TierProduction), machine.SealKeyFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}).Open(context.Background(), environment.TierProduction, bound, sealed)
 	if err != nil || string(opened) != "postgres://example" {
 		t.Fatalf("the box opens %q, %v, want the value sealed", opened, err)
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/vps/box/sealkey"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -45,7 +46,7 @@ func runSeal(tierRoot string, args []string, stdin io.Reader) ([]byte, error) {
 		if len(rest) != 0 {
 			return nil, errors.New("init takes no associated data")
 		}
-		return nil, boxapi.CreateKey(tierRoot, environment.Tier(tier))
+		return nil, sealkey.Create(tierRoot, environment.Tier(tier))
 	case boxapi.SealVerbSeal, boxapi.SealVerbOpen:
 	default:
 		return nil, fmt.Errorf("unknown verb %s", verb)
@@ -53,7 +54,7 @@ func runSeal(tierRoot string, args []string, stdin io.Reader) ([]byte, error) {
 	if len(rest) != 1 {
 		return nil, fmt.Errorf("%s takes the associated data as one argument", verb)
 	}
-	key, err := boxapi.ReadKey(tierRoot, environment.Tier(tier))
+	key, err := sealkey.Read(tierRoot, environment.Tier(tier))
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +67,7 @@ func runSeal(tierRoot string, args []string, stdin io.Reader) ([]byte, error) {
 		return nil, errors.New("stdin is not base64")
 	}
 	if verb == boxapi.SealVerbSeal {
-		return boxapi.SealBytes(key, []byte(rest[0]), body)
+		return sealkey.SealBytes(key, []byte(rest[0]), body)
 	}
-	return boxapi.OpenBytes(key, []byte(rest[0]), body)
+	return sealkey.OpenBytes(key, []byte(rest[0]), body)
 }

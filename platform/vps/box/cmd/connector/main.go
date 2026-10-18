@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
+	"github.com/ocelhq/ocel/platform/vps/box/recordstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -54,7 +55,7 @@ func run(listen, config string, printing, reporting bool) error {
 		Addr:       listen,
 		ConfigPath: config,
 		VariableStore: variablestoreserver.Backend{
-			KeyValues: boxapi.KeyValues{Root: boxapi.StateRoot},
+			KeyValues: recordstore.KeyValues{Root: boxapi.StateRoot},
 			Cipher:    newAgentCipher(),
 		},
 	})
