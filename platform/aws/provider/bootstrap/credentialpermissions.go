@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
@@ -22,16 +23,6 @@ const (
 
 	managedByTagKey   = "ocel:managed-by"
 	managedByTagValue = "ocel"
-
-	LambdaServicePrincipal = "lambda.amazonaws.com"
-
-	schedulerServicePrincipal = "scheduler.amazonaws.com"
-
-	ecsTasksPrincipal = "ecs-tasks.amazonaws.com"
-
-	LambdaBasicExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-	lambdaVPCAccessPolicyARN      = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-	ecsTaskExecutionPolicyARN     = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 )
 
 const (
@@ -116,8 +107,6 @@ const (
 	restAPIsARN           = "arn:aws:apigateway:*::/restapis"
 	restAPIResourcesARN   = "arn:aws:apigateway:*::/restapis/*"
 	apiGatewayTagsARN     = "arn:aws:apigateway:*::/tags/*"
-
-	UnscopedResource = "*"
 )
 
 type ScopedARNs struct {
@@ -213,12 +202,6 @@ func (n Namespace) ScopedARNs(tier environment.Tier) ScopedARNs {
 	return a
 }
 
-type GrantStatement struct {
-	Actions   []string
-	Resources []string
-	Condition map[string]any
-}
-
 func (r ScopedARNs) variablesKey() map[string]any {
 	return map[string]any{"ForAnyValue:StringEquals": map[string]any{"kms:ResourceAliases": r.variablesKeyAlias}}
 }
@@ -243,15 +226,15 @@ func (r ScopedARNs) taggedOnlyAsItsTier() map[string]any {
 }
 
 func (r ScopedARNs) taggedOnCreateForItsTier() map[string]any {
-	return mergeConditions(taggedOnCreate(), r.madeForItsTier())
+	return iam.MergeConditions(taggedOnCreate(), r.madeForItsTier())
 }
 
 func (r ScopedARNs) taggedByOcelForItsTier() map[string]any {
-	return mergeConditions(taggedByOcel(), r.madeByItsStacks())
+	return iam.MergeConditions(taggedByOcel(), r.madeByItsStacks())
 }
 
 func (r ScopedARNs) retaggedByOcelOnlyAsItsTier() map[string]any {
-	return mergeConditions(r.taggedByOcelForItsTier(), r.retaggedOnlyAsItsTier())
+	return iam.MergeConditions(r.taggedByOcelForItsTier(), r.retaggedOnlyAsItsTier())
 }
 
 func policyARN(name string) string { return "arn:aws:iam::*:policy/" + name }
@@ -309,39 +292,22 @@ func managedByAnAppCluster() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedSecretClusterTagKey: appClusterARN}}
 }
 
-func mergeConditions(conditions ...map[string]any) map[string]any {
-	merged := map[string]any{}
-	for _, condition := range conditions {
-		for operator, operands := range condition {
-			existing, ok := merged[operator].(map[string]any)
-			if !ok {
-				merged[operator] = operands
-				continue
-			}
-			for key, value := range operands.(map[string]any) {
-				existing[key] = value
-			}
-		}
-	}
-	return merged
-}
-
 func attachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 	condition := map[string]any{
-		"ArnEquals": map[string]any{"iam:PolicyARN": []string{LambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN, ecsTaskExecutionPolicyARN}},
+		"ArnEquals": map[string]any{"iam:PolicyARN": []string{iam.LambdaBasicExecutionPolicyARN, iam.LambdaVPCAccessPolicyARN, iam.ECSTaskExecutionPolicyARN}},
 	}
 	if resourceTagged {
-		return mergeConditions(condition, taggedByOcel())
+		return iam.MergeConditions(condition, taggedByOcel())
 	}
 	return condition
 }
 
 func passedToLambda() map[string]any {
-	return passedTo(LambdaServicePrincipal)
+	return passedTo(iam.LambdaPrincipal)
 }
 
 func scalesECSServices(tagged map[string]any) map[string]any {
-	return mergeConditions(tagged, map[string]any{"StringEquals": map[string]any{
+	return iam.MergeConditions(tagged, map[string]any{"StringEquals": map[string]any{
 		"application-autoscaling:service-namespace":  "ecs",
 		"application-autoscaling:scalable-dimension": "ecs:service:DesiredCount",
 	}})
@@ -383,8 +349,8 @@ func (r ScopedARNs) retaggedOnlyAsItsTier() map[string]any {
 	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(r.tier)}}
 }
 
-func bootstrapAccess(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func bootstrapAccess(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions: []string{
 				"s3:AbortMultipartUpload",
@@ -423,14 +389,14 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
 			Resources: []string{AnyKeyARN},
-			Condition: mergeConditions(r.variablesKey(), map[string]any{
+			Condition: iam.MergeConditions(r.variablesKey(), map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 			}),
 		},
 		{
 			Actions:   []string{"kms:CreateGrant"},
 			Resources: []string{AnyKeyARN},
-			Condition: mergeConditions(r.variablesKey(), map[string]any{
+			Condition: iam.MergeConditions(r.variablesKey(), map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 				"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
 			}),
@@ -441,13 +407,13 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"ec2:DescribeRegions", "sts:GetCallerIdentity"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 	}
 }
 
-func appProvisioning(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func appProvisioning(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions:   []string{"lambda:CreateFunction"},
 			Resources: []string{appFunctionARN},
@@ -487,7 +453,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"iam:CreateRole"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(r.taggedOnCreateForItsTier(), r.withinAppBoundary()),
+			Condition: iam.MergeConditions(r.taggedOnCreateForItsTier(), r.withinAppBoundary()),
 		},
 		{
 			Actions: []string{
@@ -516,12 +482,12 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"iam:PutRolePolicy",
 			},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(r.taggedByOcelForItsTier(), r.withinAppBoundary()),
+			Condition: iam.MergeConditions(r.taggedByOcelForItsTier(), r.withinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: []string{appRoleARN},
-			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), r.withinAppBoundary(), r.madeByItsStacks()),
+			Condition: iam.MergeConditions(attachedPolicyIsAServiceRole(true), r.withinAppBoundary(), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
@@ -531,12 +497,12 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{r.appRoles, r.bastionRole},
-			Condition: passedTo(ecsTasksPrincipal),
+			Condition: passedTo(iam.ECSTasksPrincipal),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{r.appRoles},
-			Condition: passedTo(schedulerServicePrincipal),
+			Condition: passedTo(iam.SchedulerPrincipal),
 		},
 		{
 			Actions: []string{
@@ -569,8 +535,8 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"lambda:CreateEventSourceMapping"},
-			Resources: []string{UnscopedResource},
-			Condition: mergeConditions(r.taggedOnCreateForItsTier(), ofAppWorker()),
+			Resources: []string{iam.AnyResource},
+			Condition: iam.MergeConditions(r.taggedOnCreateForItsTier(), ofAppWorker()),
 		},
 		{
 			Actions: []string{
@@ -579,7 +545,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"lambda:UpdateEventSourceMapping",
 			},
 			Resources: []string{bootstrapEventSourceARN},
-			Condition: mergeConditions(r.taggedByOcelForItsTier(), ofAppWorker()),
+			Condition: iam.MergeConditions(r.taggedByOcelForItsTier(), ofAppWorker()),
 		},
 		{
 			Actions:   []string{"lambda:ListTags", "lambda:UntagResource"},
@@ -633,7 +599,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"cloudfront:CreateVpcOrigin"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 			Condition: taggedOnCreate(),
 		},
 		{
@@ -655,13 +621,13 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"cloudfront:CreateDistribution"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 			Condition: r.taggedOnCreateForItsTier(),
 		},
 		{
 			Actions:   []string{"cloudfront:TagResource"},
 			Resources: []string{edgeDistributionARN},
-			Condition: mergeConditions(r.taggedOnCreateForItsTier(), r.taggedOnlyAsItsTier()),
+			Condition: iam.MergeConditions(r.taggedOnCreateForItsTier(), r.taggedOnlyAsItsTier()),
 		},
 		{
 			Actions: []string{
@@ -675,11 +641,11 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"cloudfront:ListDistributions"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"ecr:GetAuthorizationToken"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions: []string{
@@ -700,22 +666,22 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"ecr:CreateRepository", "ecr:TagResource"},
 			Resources: []string{principalProjectRepositoryARN},
-			Condition: mergeConditions(inCallerAccount(), taggedForPrincipalProject()),
+			Condition: iam.MergeConditions(inCallerAccount(), taggedForPrincipalProject()),
 		},
 		{
 			Actions:   []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"},
 			Resources: []string{principalProjectRepositoryARN},
-			Condition: mergeConditions(inCallerAccount(), ofPrincipalProject()),
+			Condition: iam.MergeConditions(inCallerAccount(), ofPrincipalProject()),
 		},
 		{
 			Actions:   []string{"ecr:CreateRepository", "ecr:TagResource"},
 			Resources: []string{appRepositoryARN},
-			Condition: mergeConditions(inCallerAccount(), principalUntagged(), taggedForAProject()),
+			Condition: iam.MergeConditions(inCallerAccount(), principalUntagged(), taggedForAProject()),
 		},
 		{
 			Actions:   []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"},
 			Resources: []string{appRepositoryARN},
-			Condition: mergeConditions(inCallerAccount(), principalUntagged(), ofAProject()),
+			Condition: iam.MergeConditions(inCallerAccount(), principalUntagged(), ofAProject()),
 		},
 		{
 			Actions:   []string{"ecs:CreateCluster"},
@@ -748,7 +714,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"ecs:ListTasks"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 			Condition: map[string]any{"ArnEquals": map[string]any{"ecs:cluster": bastionClusterARN}},
 		},
 		{
@@ -766,7 +732,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"ecs:CreateService"},
@@ -818,7 +784,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"application-autoscaling:ListTagsForResource",
 				"cloudwatch:DescribeAlarms",
 			},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"cloudwatch:DeleteAlarms", "cloudwatch:PutMetricAlarm"},
@@ -853,7 +819,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"elasticloadbalancing:DescribeListenerCertificates",
 				"elasticloadbalancing:DescribeTrustStores",
 			},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:CreateTrustStore"},
@@ -908,11 +874,11 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"acm:AddTagsToCertificate"},
 			Resources: []string{appCertificateARN},
-			Condition: mergeConditions(taggedOnCreate(), keyPairSuppliedByCaller()),
+			Condition: iam.MergeConditions(taggedOnCreate(), keyPairSuppliedByCaller()),
 		},
 		{
 			Actions:   []string{"acm:RequestCertificate"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 			Condition: taggedOnCreate(),
 		},
 		{
@@ -931,7 +897,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"acm:ListCertificates"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"s3:CreateBucket"},
@@ -1045,7 +1011,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"rds:DescribeDBEngineVersions",
 				"rds:DescribeOrderableDBInstanceOptions",
 			},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"ec2:CreateSecurityGroup"},
@@ -1080,7 +1046,7 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 				"ec2:DescribeRouteTables",
 				"ec2:DescribeVpcEndpoints",
 			},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"ec2:CreateSubnet"},
@@ -1171,11 +1137,11 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"secretsmanager:ListSecrets"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"appsync:CreateApi"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 			Condition: taggedOnCreate(),
 		},
 		{
@@ -1218,30 +1184,30 @@ func appProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"logs:DescribeLogGroups"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"tag:GetResources"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 	}
 }
 
-func runtimeProvisioning(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func runtimeProvisioning(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions:   []string{"lambda:GetLayerVersion", "lambda:PublishLayerVersion"},
 			Resources: slices.Concat(r.runtimeLayers, r.runtimeLayerVersions),
 		},
 		{
 			Actions:   []string{"lambda:ListLayerVersions"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 	}
 }
 
-func runtimeReclaiming(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func runtimeReclaiming(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions:   []string{"lambda:DeleteLayerVersion"},
 			Resources: slices.Concat(r.runtimeLayers, r.runtimeLayerVersions),
@@ -1249,8 +1215,8 @@ func runtimeReclaiming(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func bootstrapProvisioning(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions: []string{
 				"cloudformation:CreateChangeSet",
@@ -1314,7 +1280,7 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"kms:CreateKey"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 			Condition: map[string]any{"StringEquals": map[string]any{
 				"aws:RequestTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue,
 				"aws:RequestTag/" + naming.EnvTierTagKey:        string(r.tier),
@@ -1328,7 +1294,7 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"kms:TagResource"},
 			Resources: []string{AnyKeyARN},
-			Condition: mergeConditions(r.itsVariablesKey(), r.retaggedOnlyAsItsTier()),
+			Condition: iam.MergeConditions(r.itsVariablesKey(), r.retaggedOnlyAsItsTier()),
 		},
 		{
 			Actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
@@ -1370,7 +1336,7 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"iam:UpdateAssumeRolePolicy"},
 			Resources: r.partRoles,
-			Condition: mergeConditions(r.taggedByOcelForItsTier(), r.withinAppBoundary()),
+			Condition: iam.MergeConditions(r.taggedByOcelForItsTier(), r.withinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
@@ -1407,7 +1373,7 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: r.bootstrapRoles,
-			Condition: mergeConditions(attachedPolicyIsAServiceRole(false), r.madeByItsStacks()),
+			Condition: iam.MergeConditions(attachedPolicyIsAServiceRole(false), r.madeByItsStacks()),
 		},
 		{
 			Actions:   []string{"ssm:AddTagsToResource", "ssm:PutParameter"},
@@ -1424,8 +1390,8 @@ func bootstrapProvisioning(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func edgePrincipal(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func edgePrincipal(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions: []string{
 				"iam:CreateAccessKey",
@@ -1449,11 +1415,11 @@ func edgePrincipal(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func broughtVariablesKeyAccess(broughtKey string) []GrantStatement {
+func broughtVariablesKeyAccess(broughtKey string) []iam.Statement {
 	if broughtKey == "" {
 		return nil
 	}
-	return []GrantStatement{
+	return []iam.Statement{
 		{
 			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt"},
 			Resources: []string{broughtKey},
@@ -1472,8 +1438,8 @@ func (r ScopedARNs) invokesTheTagInvalidator() map[string]any {
 	return map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": []string{r.invalidatorFunction, r.invalidatorFunction + ":*"}}}
 }
 
-func partProvisioning(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func partProvisioning(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{r.invalidatorRole},
@@ -1481,7 +1447,7 @@ func partProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"lambda:CreateEventSourceMapping"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 			Condition: r.invokesTheTagInvalidator(),
 		},
 		{
@@ -1495,7 +1461,7 @@ func partProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"lambda:ListEventSourceMappings"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions: []string{
@@ -1524,7 +1490,7 @@ func partProvisioning(r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"cloudfront:ListCachePolicies", "cloudfront:ListOriginAccessControls", "cloudfront:ListResponseHeadersPolicies"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{iam.AnyResource},
 		},
 		{
 			Actions:   []string{"apigateway:POST"},
@@ -1534,7 +1500,7 @@ func partProvisioning(r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"apigateway:PUT"},
 			Resources: []string{apiGatewayTagsARN},
-			Condition: mergeConditions(r.taggedOnCreateForItsTier(), r.taggedOnlyAsItsTier()),
+			Condition: iam.MergeConditions(r.taggedOnCreateForItsTier(), r.taggedOnlyAsItsTier()),
 		},
 		{
 			Actions:   []string{"apigateway:GET", "apigateway:POST", "apigateway:PUT"},
@@ -1544,8 +1510,8 @@ func partProvisioning(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func partReclaiming(r ScopedARNs) []GrantStatement {
-	return []GrantStatement{
+func partReclaiming(r ScopedARNs) []iam.Statement {
+	return []iam.Statement{
 		{
 			Actions:   []string{"cloudfront:DeleteFunction"},
 			Resources: r.edgeFunctions,
@@ -1574,11 +1540,11 @@ func partReclaiming(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func deployGrants(r ScopedARNs, broughtKey string) []GrantStatement {
+func deployGrants(r ScopedARNs, broughtKey string) []iam.Statement {
 	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), partProvisioning(r))
 }
 
-func bootstrapGrants(r ScopedARNs, broughtKey string) []GrantStatement {
+func bootstrapGrants(r ScopedARNs, broughtKey string) []iam.Statement {
 	return slices.Concat(bootstrapAccess(r), broughtVariablesKeyAccess(broughtKey), appProvisioning(r), runtimeProvisioning(r), partProvisioning(r), runtimeReclaiming(r), partReclaiming(r), bootstrapProvisioning(r), edgePrincipal(r))
 }
 
@@ -1601,27 +1567,4 @@ func BootstrapCredentialPermissions(ns Namespace, tier environment.Tier, brought
 		return "", err
 	}
 	return credentialPolicies(ns, "bootstrap", tier, bootstrapGrants(ns.ScopedARNs(tier), broughtKey))
-}
-
-func PolicyStatements(grants []GrantStatement) []map[string]any {
-	statements := make([]map[string]any, 0, len(grants))
-	for _, grant := range grants {
-		statement := map[string]any{
-			"Effect":   "Allow",
-			"Action":   oneOrMany(grant.Actions),
-			"Resource": oneOrMany(grant.Resources),
-		}
-		if len(grant.Condition) > 0 {
-			statement["Condition"] = grant.Condition
-		}
-		statements = append(statements, statement)
-	}
-	return statements
-}
-
-func oneOrMany(values []string) any {
-	if len(values) == 1 {
-		return values[0]
-	}
-	return values
 }

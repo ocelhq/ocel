@@ -69,7 +69,7 @@ smoke_vps:
   - "scripts/ec2.sh"
 smoke_dev:
   - *smoke
-  - "platform/aws/provider/bucket/**"
+  - "platform/aws/provider/resources/bucket/dataplane/**"
   - "platform/realtime/**"
   - "python/**"
   - "crates/**"

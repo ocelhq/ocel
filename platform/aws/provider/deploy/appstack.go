@@ -3,11 +3,12 @@ package deploy
 import (
 	"fmt"
 
-	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 )
 
@@ -95,7 +96,7 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 	}
 
 	policy := pulumi.All(parts...).ApplyT(func(resolved []any) (string, error) {
-		account := accountOfARN(fmt.Sprint(resolved[0]))
+		account := component.AccountOfARN(fmt.Sprint(resolved[0]))
 		if optimizer && account == "" {
 			return "", fmt.Errorf("scope the root function's invoke grant: %q names no account", resolved[0])
 		}
@@ -106,7 +107,7 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 		return renderDispatchInvokePolicy(siblings, account, optimizer)
 	}).(pulumi.StringOutput)
 
-	_, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "dispatch", "invoke"), &iam.RolePolicyArgs{
+	_, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "dispatch", "invoke"), &awsiam.RolePolicyArgs{
 		Role:   a.RoleName,
 		Policy: policy,
 	})

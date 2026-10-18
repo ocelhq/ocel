@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func newWorkerOutputs(names map[string]string) auto.OutputMap {
@@ -44,7 +46,7 @@ func newReleaseHostingWorkers(t *testing.T, workers ...string) (*release, provid
 	spec.App.Functions[0].HasWorkerEntry = true
 	engine := &mockedEngine{}
 	release := releasingOn(t, cfg, engine)
-	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
+	work, err := release.appWork(spec, nil, nil, variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -131,7 +133,7 @@ func TestTheWorkersProgramExportsEachWorkersLambdaNameForTheStackToDecode(t *tes
 		stack:   workersStack("prod", "web"),
 		workers: []provider.WorkerSpec{{Name: "media"}, {Name: "ledger"}},
 		args:    functionArgs{Runtime: defaultFunctionRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024},
-		role:    executionRole{App: "web", Boundary: testBoundaryARN},
+		role:    executionRole{App: "web", Boundary: componenttest.BoundaryARN},
 		region:  "us-east-1",
 		account: mockAccount,
 		table:   testStateTableARN,
@@ -505,7 +507,7 @@ func TestAppWorkersRunFromTheFunctionWhoseArtifactCarriesTheWorkerEntry(t *testi
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
 	spec.App.Functions[1].HasWorkerEntry = true
 	release := releasingOn(t, cfg, &mockedEngine{})
-	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
+	work, err := release.appWork(spec, nil, nil, variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -526,7 +528,7 @@ func TestAppWorkersAreRefusedWhenNoFunctionCarriesTheWorkerEntry(t *testing.T) {
 	cfg.Region = "us-east-1"
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
 	release := releasingOn(t, cfg, &mockedEngine{})
-	work, err := release.appWork(spec, nil, nil, appBundle{}, stagedOf(spec))
+	work, err := release.appWork(spec, nil, nil, variables.Bundle{}, stagedOf(spec))
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}

@@ -16,7 +16,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 )
 
 type sink struct {

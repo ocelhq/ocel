@@ -21,6 +21,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -166,7 +168,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -215,7 +217,7 @@ func TestADryPlanBootsAFunctionThroughTheRuntimeLayerTheDeployWouldPublish(t *te
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -395,7 +397,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 			stack := testStack(t, "prod", "api")
 			coord := functionCoordinate("shop", stack, "fn--api--web")
 			program := func(pctx *pulumi.Context) error {
-				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: componenttest.BoundaryARN})
 				if err != nil {
 					return err
 				}
@@ -422,7 +424,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 				t.Fatalf("run program: %v", err)
 			}
 
-			inputs := rec.inputs("aws:lambda/function:Function", coord.PhysicalName(maxLambdaBaseNameLen))
+			inputs := rec.inputs("aws:lambda/function:Function", coord.PhysicalName(component.MaxLambdaBaseNameLen))
 			got, ok := inputs[resource.PropertyKey("handler")]
 			if !ok || !got.IsString() {
 				t.Fatalf("handler = %v, want a string", got)
@@ -484,7 +486,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -972,7 +974,7 @@ func TestFunctionLogGroup(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -993,7 +995,7 @@ func TestFunctionLogGroup(t *testing.T) {
 	if len(group) == 0 {
 		t.Fatal("the deploy owns no log group for the function, so Lambda mints one on first invoke that the teardown never reclaims")
 	}
-	want := lambdaLogGroupPrefixFor("shop-prod-api-users-r3f8a1c90")
+	want := component.LambdaLogGroupPrefixFor("shop-prod-api-users-r3f8a1c90")
 	if got := group["namePrefix"]; !got.IsString() || got.StringValue() != want {
 		t.Errorf("the log group's namePrefix = %v, want %q", got, want)
 	}
@@ -1027,7 +1029,7 @@ func TestAFunctionsEnvironmentIsSealedUnderTheTierVariablesKey(t *testing.T) {
 			rec := &inputRecorder{}
 			program := func(pctx *pulumi.Context) error {
 				stack := testStack(t, "prod", "api")
-				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: componenttest.BoundaryARN})
 				if err != nil {
 					return err
 				}

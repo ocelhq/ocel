@@ -17,8 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	variables "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
 )
 
 type storeSource struct {

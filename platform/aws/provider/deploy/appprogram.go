@@ -16,7 +16,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 type appWork struct {
@@ -25,7 +30,7 @@ type appWork struct {
 	role        executionRole
 	roleCoord   naming.Coordinate
 	logical     []string
-	bundle      appBundle
+	bundle      variables.Bundle
 	cache       *isrConfig
 	sets        []assetSet
 	delivery    edgeDelivery
@@ -54,10 +59,10 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	return stack.register(pctx)
 }
 
-func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionNetwork, bundle appBundle, uploads []functioncode.Upload) (*appWork, error) {
+func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionNetwork, bundle variables.Bundle, uploads []functioncode.Upload) (*appWork, error) {
 	app := spec.App
 	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
-	sessions := newSessionScope(project, stack.Env, r.cfg.StateTableARN)
+	sessions := bucket.NewSessions(project, stack.Env, r.cfg.StateTableARN)
 	staged := functioncode.Refs(uploads)
 
 	dispatch, err := r.newDispatchHost(spec)
@@ -74,7 +79,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	if err != nil {
 		return nil, err
 	}
-	if err := checkRuntimeOwnedNames(app.App, app.Values); err != nil {
+	if err := variables.CheckRuntimeOwnedNames(app.App, app.Values); err != nil {
 		return nil, err
 	}
 	if err := checkAppEdgeVariables(r.cfg, app.App, app.Values, bundle); err != nil {
@@ -91,7 +96,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		if err != nil {
 			return nil, err
 		}
-		declared.Tags = transformed.tagsFor(transformTypeFunction, spec.Name)
+		declared.Tags = transformed.TagsFor(transformTypeFunction, spec.Name)
 		if !transformed.placesInVPC(spec.Name) {
 			declared.Network = network
 		}
@@ -117,7 +122,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		if guard.hosts(fn) {
 			declared = guard.rootFunctionEnv(declared)
 		}
-		if err := checkFunctionEnvBudget(logical[i], functionEnv(declared, args[logical[i]], cache, bytecode)); err != nil {
+		if err := variables.CheckFunctionEnvBudget(logical[i], functionEnv(declared, args[logical[i]], cache, bytecode)); err != nil {
 			return nil, err
 		}
 	}
@@ -133,20 +138,20 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	}
 	role := executionRole{
 		App: app.App, Cache: cache, Bytecode: bytecode,
-		VariablesKeyARN: r.cfg.VariablesKeyARN, Boundary: r.cfg.AppBoundaryARN, Path: r.cfg.AppRolePath,
+		Variables: variables.Reader{KeyARN: r.cfg.VariablesKeyARN}, Boundary: r.cfg.AppBoundaryARN, Path: r.cfg.AppRolePath,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
 	if reachesTasks(app) {
 		wakes := containerServiceARNs(r.cfg, project, stack.Env, app.DeploymentWorkers)
-		if role.TasksPolicy, err = tasksPolicy(r.cfg, project, stack.Env, topicsOf(project, stack.Env, app.Topics), wakes); err != nil {
+		if role.TasksPolicy, err = topic.TasksPolicy(r.cfg.stateTable(), project, stack.Env, topic.Of(project, stack.Env, app.Topics), wakes); err != nil {
 			return nil, err
 		}
 	}
-	if bundle.hasLive() {
-		role.ValuesTableARN = r.cfg.VariablesTableARN
-		role.VariablesReferenced = bundle.Referenced
-		role.Slug = r.cfg.Slug
-		role.VariablesTier = string(r.cfg.Tier)
+	if bundle.HasLive() {
+		role.Variables.TableARN = r.cfg.VariablesTableARN
+		role.Variables.Referenced = bundle.Referenced
+		role.Variables.Slug = r.cfg.Slug
+		role.Variables.Tier = string(r.cfg.Tier)
 	}
 
 	r.served.plan(r, app.App, logical, bytecode)
@@ -320,7 +325,7 @@ func (r *release) bytecodeCache(spec provider.StackSpec) *bytecodeConfig {
 	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: bytecode.Prefix}
 }
 
-func (r *release) sealApp(project, app string, values provider.AppValues) (appBundle, error) {
+func (r *release) sealApp(project, app string, values provider.AppValues) (variables.Bundle, error) {
 	declared := make([]live.Binding, 0, len(values.Bindings))
 	for _, binding := range values.Bindings {
 		kind := provider.ProtoBindingType(binding.Type)
@@ -335,7 +340,7 @@ func (r *release) sealApp(project, app string, values provider.AppValues) (appBu
 	for _, secret := range values.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
-	return sealAppBundle(r.cfg, project, app, values.Sensitive, keys, declared)
+	return variables.Seal(r.cfg.variableStore(), project, app, values.Sensitive, keys, declared)
 }
 
 func bindingResource(binding provider.Binding) string {
@@ -345,7 +350,7 @@ func bindingResource(binding provider.Binding) string {
 	return binding.Name
 }
 
-func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions sessionScope) map[string]string {
+func (r *release) appEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Sessions) map[string]string {
 	app := spec.App
 	env := map[string]string{}
 	if app.Router != "" {
@@ -365,8 +370,8 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 		env[edge.OcelRouteTableVar] = ocelRouteTableInTask
 	}
 	if app.Proxied {
-		env[envStateTable] = r.cfg.StateTable
-		env[envSessionPrefix] = sessions.KeyPrefix
+		env[bucket.EnvStateTable] = r.cfg.StateTable
+		env[bucket.EnvSessionPrefix] = sessions.KeyPrefix
 	}
 	for key, value := range app.Values.Plain {
 		env[key] = value
@@ -375,7 +380,7 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 	if app.Values.Folder != "" {
 		env[processenv.AppFolderEnvVar] = app.Values.Folder
 	}
-	for key, value := range bundle.env() {
+	for key, value := range bundle.Env() {
 		env[key] = value
 	}
 	return env
@@ -392,7 +397,7 @@ func planBindingPolicies(grants []provider.Binding) ([]bindingPolicy, error) {
 		if slices.ContainsFunc(out, func(planned bindingPolicy) bool { return planned.Binding == binding.Name }) {
 			continue
 		}
-		policy, err := bindingPolicyDocument(binding.Name, provider.GrantMessages(binding.Grants))
+		policy, err := iam.GrantPolicy(binding.Name, provider.GrantMessages(binding.Grants))
 		if err != nil {
 			return nil, err
 		}
@@ -414,11 +419,11 @@ func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.Sta
 		result.PurgeSecret = work.cache.PurgeSecret
 	}
 	for _, logical := range work.logical {
-		fields, err := requireOutputFields(outputs, logical)
+		fields, err := component.RequireOutputFields(outputs, logical)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		url, err := requireStringField(fields, logical, outputKeyFunctionURL)
+		url, err := component.RequireStringField(fields, logical, outputKeyFunctionURL)
 		if err != nil {
 			return provider.StackResult{}, err
 		}

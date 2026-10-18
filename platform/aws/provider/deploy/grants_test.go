@@ -16,35 +16,13 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 const rolePolicyToken = "aws:iam/rolePolicy:RolePolicy"
-
-func TestBucketGrantsCoverEveryCallTheRuntimeMakes(t *testing.T) {
-	t.Parallel()
-
-	granted := map[string]bool{}
-	for _, grant := range bucketGrants("shop-prod-uploads-abc", testSessions) {
-		for _, action := range grant.GetActions() {
-			granted[action] = true
-		}
-	}
-
-	for _, action := range []string{
-		"s3:AbortMultipartUpload",
-		"s3:DeleteObject",
-		"s3:GetObject",
-		"s3:ListBucket",
-		"s3:ListBucketMultipartUploads",
-		"s3:ListMultipartUploadParts",
-		"s3:PutObject",
-		"s3:PutObjectTagging",
-	} {
-		if !granted[action] {
-			t.Errorf("an app's bucket role may not %s, and the runtime's data plane calls it", action)
-		}
-	}
-}
 
 type policyRecorder struct {
 	mu       sync.Mutex
@@ -87,7 +65,7 @@ func renderAppRole(t *testing.T, app string, policies []bindingPolicy) *policyRe
 	t.Helper()
 	rec := &policyRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role := appExecutionRole(Config{VariablesKeyARN: "arn:aws:kms:us-east-1:1:key/k", AppBoundaryARN: testBoundaryARN}, app, nil, nil, appBundle{}, nil, policies, false, nil)
+		role := appExecutionRole(Config{VariablesKeyARN: "arn:aws:kms:us-east-1:1:key/k", AppBoundaryARN: componenttest.BoundaryARN}, app, nil, nil, variables.Bundle{}, nil, policies, false, nil)
 		_, err := newFunctionRole(pctx, roleCoordinate("shop", testStack(t, "prod", app)), role)
 		return err
 	}
@@ -99,11 +77,11 @@ func renderAppRole(t *testing.T, app string, policies []bindingPolicy) *policyRe
 
 const stateTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
 
-var testSessions = newSessionScope("shop", "prod", stateTableARN)
+var testSessions = bucket.NewSessions("shop", "prod", stateTableARN)
 
 func grantsBindings() []*variablestorev1.PublishedBinding {
 	return []*variablestorev1.PublishedBinding{
-		{Binding: &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}}, Grants: bucketGrants("shop-prod-uploads-abc", testSessions)},
+		{Binding: &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}}, Grants: bucket.Grants("shop-prod-uploads-abc", testSessions)},
 		{Binding: &bindingsv1.Binding{Name: "database--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.host", Port: 5432}}}},
 	}
 }
@@ -226,15 +204,15 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 
 			bindings := []*variablestorev1.PublishedBinding{{Binding: &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "b"}}}, Grants: []*variablestorev1.Grant{tc.grant}}}
 
-			var unscoped *UnscopedGrantError
-			if err := VerifyGrants(plannedBindings(bindings)[0]); !errors.As(err, &unscoped) {
-				t.Fatalf("VerifyGrants = %v, want an *UnscopedGrantError", err)
+			var unscoped *iam.UnscopedGrantError
+			if err := iam.VerifyGrants(plannedBindings(bindings)[0]); !errors.As(err, &unscoped) {
+				t.Fatalf("iam.VerifyGrants = %v, want an *iam.UnscopedGrantError", err)
 			}
 			if unscoped.Binding != "bucket--uploads" {
 				t.Errorf("Binding = %q, want bucket--uploads", unscoped.Binding)
 			}
 			if _, err := planBindingPolicies(plannedBindings(bindings)); !errors.As(err, &unscoped) {
-				t.Fatalf("planBindingPolicies = %v, want an *UnscopedGrantError", err)
+				t.Fatalf("planBindingPolicies = %v, want an *iam.UnscopedGrantError", err)
 			}
 		})
 	}
@@ -243,44 +221,9 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 		t.Parallel()
 
 		for _, binding := range plannedBindings(grantsBindings()) {
-			if err := VerifyGrants(binding); err != nil {
-				t.Fatalf("VerifyGrants(%s) = %v, want nil", binding.Name, err)
+			if err := iam.VerifyGrants(binding); err != nil {
+				t.Fatalf("iam.VerifyGrants(%s) = %v, want nil", binding.Name, err)
 			}
 		}
 	})
-}
-
-func TestGrantConditionMergesConditionsOnOneKey(t *testing.T) {
-	t.Parallel()
-
-	grant := &variablestorev1.Grant{
-		Label:     "sessions",
-		Actions:   []string{"dynamodb:GetItem"},
-		Resources: []string{stateTableARN},
-		Conditions: []*variablestorev1.GrantCondition{
-			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#a*"}},
-			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#b*", "SESSION#a*"}},
-			{Operator: "StringEquals", Key: "dynamodb:Select", Values: []string{"SPECIFIC_ATTRIBUTES"}},
-		},
-	}
-
-	condition := grantCondition(grant)
-
-	leading := condition["ForAllValues:StringLike"].(map[string][]string)["dynamodb:LeadingKeys"]
-	if !slices.Equal(leading, []string{"SESSION#a*", "SESSION#b*"}) {
-		t.Errorf("dynamodb:LeadingKeys = %v, want both conditions on the key merged and deduplicated", leading)
-	}
-	if got := condition["StringEquals"].(map[string][]string)["dynamodb:Select"]; !slices.Equal(got, []string{"SPECIFIC_ATTRIBUTES"}) {
-		t.Errorf("dynamodb:Select = %v, want the condition under its own operator", got)
-	}
-
-	policy, err := bindingPolicyDocument("bucket--uploads", []*variablestorev1.Grant{grant})
-	if err != nil {
-		t.Fatalf("bindingPolicyDocument: %v", err)
-	}
-	for _, want := range []string{"SESSION#a*", "SESSION#b*", "SPECIFIC_ATTRIBUTES"} {
-		if !strings.Contains(policy, want) {
-			t.Errorf("policy = %s, missing %q", policy, want)
-		}
-	}
 }

@@ -12,38 +12,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 const (
 	lambdaVPCConfigField    = "vpcConfig"
 	lambdaVPCSubnetsField   = "subnetIds"
 	lambdaVPCSecurityGroups = "securityGroupIds"
-
-	tokenLambdaFunction    = "aws:lambda/function:Function"
-	tokenLambdaFunctionURL = "aws:lambda/functionUrl:FunctionUrl"
-	tokenLambdaPermission  = "aws:lambda/permission:Permission"
-	tokenLogGroup          = "aws:cloudwatch/logGroup:LogGroup"
-	tokenIAMRole           = "aws:iam/role:Role"
-	tokenIAMRolePolicy     = "aws:iam/rolePolicy:RolePolicy"
-	tokenIAMRoleAttachment = "aws:iam/rolePolicyAttachment:RolePolicyAttachment"
-	tokenS3Bucket          = "aws:s3/bucketV2:BucketV2"
-	tokenS3PublicAccess    = "aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock"
-	tokenS3CORS            = "aws:s3/bucketCorsConfigurationV2:BucketCorsConfigurationV2"
-	tokenS3Notification    = "aws:s3/bucketNotification:BucketNotification"
-	tokenEC2SecurityGroup  = "aws:ec2/securityGroup:SecurityGroup"
-	tokenRDSSubnetGroup    = "aws:rds/subnetGroup:SubnetGroup"
-	tokenRDSCluster        = "aws:rds/cluster:Cluster"
-	tokenRDSClusterMember  = "aws:rds/clusterInstance:ClusterInstance"
-
-	tokenElastiCacheSubnetGroup      = "aws:elasticache/subnetGroup:SubnetGroup"
-	tokenElastiCacheParameterGroup   = "aws:elasticache/parameterGroup:ParameterGroup"
-	tokenElastiCacheReplicationGroup = "aws:elasticache/replicationGroup:ReplicationGroup"
-	tokenECSTaskDefinition           = "aws:ecs/taskDefinition:TaskDefinition"
-	tokenECSService                  = "aws:ecs/service:Service"
-	tokenLBTargetGroup               = "aws:lb/targetGroup:TargetGroup"
-	tokenLBListenerRule              = "aws:lb/listenerRule:ListenerRule"
-	tokenAppSyncAPI                  = "aws:appsync/api:Api"
-	tokenAppSyncChannelNamespace     = "aws:appsync/channelNamespace:ChannelNamespace"
 )
 
 type resourceKey struct {
@@ -51,28 +26,24 @@ type resourceKey struct {
 	Name string
 }
 
-type resourceRef struct {
-	Token string
-	Name  string
-}
-
 type transformCandidate struct {
 	key   resourceKey
-	names map[string]resourceRef
+	names map[string]component.ResourceRef
+	check func(name string, patches map[string]map[string]any) error
 }
 
 type transformPatches struct {
-	patches  map[resourceRef]map[string]any
-	sites    map[resourceRef]string
+	patches  map[component.ResourceRef]map[string]any
+	sites    map[component.ResourceRef]string
 	tags     map[resourceKey]map[string]string
 	vpcBound map[string]bool
-	corsBind map[string]bool
+	surfaces map[resourceKey]map[string]bool
 
 	mu      sync.Mutex
-	claimed map[resourceRef]bool
+	claimed map[component.ResourceRef]bool
 }
 
-func (t *transformPatches) tagsFor(kind, name string) map[string]string {
+func (t *transformPatches) TagsFor(kind, name string) map[string]string {
 	if t == nil {
 		return nil
 	}
@@ -83,8 +54,8 @@ func (t *transformPatches) placesInVPC(name string) bool {
 	return t != nil && t.vpcBound[name]
 }
 
-func (t *transformPatches) opensCORS(name string) bool {
-	return t != nil && t.corsBind[name]
+func (t *transformPatches) Patches(kind, name, surface string) bool {
+	return t != nil && t.surfaces[resourceKey{Type: kind, Name: name}][surface]
 }
 
 func (t *transformPatches) install(pctx *sdk.Context) error {
@@ -92,10 +63,10 @@ func (t *transformPatches) install(pctx *sdk.Context) error {
 		return nil
 	}
 	t.mu.Lock()
-	t.claimed = make(map[resourceRef]bool, len(t.patches))
+	t.claimed = make(map[component.ResourceRef]bool, len(t.patches))
 	t.mu.Unlock()
 	return pctx.RegisterResourceTransform(func(_ context.Context, args *sdk.ResourceTransformArgs) *sdk.ResourceTransformResult {
-		merged, claimed := t.claim(resourceRef{Token: args.Type, Name: args.Name}, args.Props)
+		merged, claimed := t.claim(component.ResourceRef{Token: args.Type, Name: args.Name}, args.Props)
 		if !claimed {
 			return nil
 		}
@@ -103,7 +74,7 @@ func (t *transformPatches) install(pctx *sdk.Context) error {
 	})
 }
 
-func (t *transformPatches) claim(ref resourceRef, props sdk.Map) (sdk.Map, bool) {
+func (t *transformPatches) claim(ref component.ResourceRef, props sdk.Map) (sdk.Map, bool) {
 	t.mu.Lock()
 	patch, patched := t.patches[ref]
 	if patched {
@@ -160,11 +131,11 @@ func mergeInput(current sdk.Input, over any) sdk.Input {
 
 func indexPatches(candidates []transformCandidate, results []transform.Result) (*transformPatches, error) {
 	indexed := &transformPatches{
-		patches:  map[resourceRef]map[string]any{},
-		sites:    map[resourceRef]string{},
+		patches:  map[component.ResourceRef]map[string]any{},
+		sites:    map[component.ResourceRef]string{},
 		tags:     map[resourceKey]map[string]string{},
 		vpcBound: map[string]bool{},
-		corsBind: map[string]bool{},
+		surfaces: map[resourceKey]map[string]bool{},
 	}
 	for i, candidate := range candidates {
 		result := results[i]
@@ -182,6 +153,10 @@ func indexPatches(candidates []transformCandidate, results []transform.Result) (
 			if len(patch) == 0 {
 				continue
 			}
+			if indexed.surfaces[candidate.key] == nil {
+				indexed.surfaces[candidate.key] = map[string]bool{}
+			}
+			indexed.surfaces[candidate.key][key] = true
 			site := candidate.key.Type + " " + candidate.key.Name + "'s " + key
 			if earlier, taken := indexed.patches[ref]; taken {
 				merged, err := mergeClaims(earlier, patch, indexed.sites[ref], site)
@@ -193,21 +168,14 @@ func indexPatches(candidates []transformCandidate, results []transform.Result) (
 			indexed.patches[ref] = patch
 			indexed.sites[ref] = site
 		}
-		switch candidate.key.Type {
-		case transformTypeFunction:
-			if err := checkVPCConfig(candidate.key.Name, result.Patches["lambda"]); err != nil {
+		if candidate.check != nil {
+			if err := candidate.check(candidate.key.Name, result.Patches); err != nil {
 				return nil, err
 			}
+		}
+		if candidate.key.Type == transformTypeFunction {
 			if _, bound := result.Patches["lambda"][lambdaVPCConfigField]; bound {
 				indexed.vpcBound[candidate.key.Name] = true
-			}
-		case transformTypeKV:
-			if err := checkKVNodeCount(candidate.key.Name, result.Patches["replicationGroup"]); err != nil {
-				return nil, err
-			}
-		case transformTypeBucket:
-			if len(result.Patches["cors"]) > 0 {
-				indexed.corsBind[candidate.key.Name] = true
 			}
 		}
 	}
@@ -260,19 +228,6 @@ func checkVPCConfig(logicalName string, patch map[string]any) error {
 	return nil
 }
 
-func checkKVNodeCount(logicalName string, patch map[string]any) error {
-	nodes, counted := patch["numCacheClusters"].(float64)
-	if !counted || nodes >= kvNodeCount {
-		return nil
-	}
-	if patch["automaticFailoverEnabled"] == false && patch["multiAzEnabled"] == false {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeInvalid,
-		"a transform runs %s on %v node, and ElastiCache refuses automaticFailoverEnabled and multiAzEnabled without a replica; set both to false in the same patch",
-		logicalName, nodes)
-}
-
 func namedCount(value any) int {
 	switch typed := value.(type) {
 	case []any:
@@ -289,66 +244,25 @@ func namedCount(value any) int {
 const (
 	transformTypeFunction  = "function"
 	transformTypeContainer = "container"
-	transformTypeBucket    = "bucket"
-	transformTypePostgres  = "postgres"
-	transformTypeKV        = "kv"
 )
 
-func functionResourceNames(project string, stack naming.StackName, logicalName string) map[string]resourceRef {
+func functionResourceNames(project string, stack naming.StackName, logicalName string) map[string]component.ResourceRef {
 	coord := functionCoordinate(project, stack, logicalName)
-	return map[string]resourceRef{
-		"lambda":        {Token: tokenLambdaFunction, Name: coord.PhysicalName(maxLambdaBaseNameLen)},
-		"url":           {Token: tokenLambdaFunctionURL, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url")},
-		"urlPermission": {Token: tokenLambdaPermission, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url", "invoke")},
-		"logGroup":      {Token: tokenLogGroup, Name: naming.ResourceID(naming.KindFunction, coord.Name, "logs")},
-		"role":          {Token: tokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
+	return map[string]component.ResourceRef{
+		"lambda":        {Token: component.TokenLambdaFunction, Name: coord.PhysicalName(component.MaxLambdaBaseNameLen)},
+		"url":           {Token: component.TokenLambdaFunctionURL, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url")},
+		"urlPermission": {Token: component.TokenLambdaPermission, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url", "invoke")},
+		"logGroup":      {Token: component.TokenLogGroup, Name: naming.ResourceID(naming.KindFunction, coord.Name, "logs")},
+		"role":          {Token: component.TokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
 	}
 }
 
-func containerResourceNames() map[string]resourceRef {
-	return map[string]resourceRef{
-		"task":        {Token: tokenECSTaskDefinition, Name: naming.ResourceID(naming.KindService, containerLocalName, "task")},
-		"service":     {Token: tokenECSService, Name: naming.ResourceID(naming.KindService, containerLocalName)},
-		"targetGroup": {Token: tokenLBTargetGroup, Name: naming.ResourceID(naming.KindService, containerLocalName, "targets")},
-		"rule":        {Token: tokenLBListenerRule, Name: naming.ResourceID(naming.KindService, containerLocalName, "rule")},
-		"role":        {Token: tokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
-	}
-}
-
-func bucketResourceNames(project, env, logicalName string) map[string]resourceRef {
-	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
-	completerRole := naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-role")
-	return map[string]resourceRef{
-		"bucket":                        {Token: tokenS3Bucket, Name: naming.ResourceID(at.Kind, at.Name)},
-		"publicAccessBlock":             {Token: tokenS3PublicAccess, Name: naming.ResourceID(at.Kind, at.Name, "public-access-block")},
-		"cors":                          {Token: tokenS3CORS, Name: naming.ResourceID(at.Kind, at.Name, "cors")},
-		"uploadCompleterRole":           {Token: tokenIAMRole, Name: completerRole},
-		"uploadCompleterS3Policy":       {Token: tokenIAMRolePolicy, Name: completerRole + "-policy-s3"},
-		"uploadCompleterSessionsPolicy": {Token: tokenIAMRolePolicy, Name: completerRole + "-policy-sessions"},
-		"uploadCompleterLogsPolicy":     {Token: tokenIAMRoleAttachment, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs-policy")},
-		"uploadCompleterLogGroup":       {Token: tokenLogGroup, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs")},
-		"uploadCompleter":               {Token: tokenLambdaFunction, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName)},
-		"uploadCompleterPermission":     {Token: tokenLambdaPermission, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-permission")},
-		"notification":                  {Token: tokenS3Notification, Name: naming.ResourceID(at.Kind, at.Name, "notification")},
-	}
-}
-
-func kvResourceNames(project, env, logicalName string) map[string]resourceRef {
-	at := resourceCoordinate(project, env, logicalName, naming.KindKV)
-	return map[string]resourceRef{
-		"securityGroup":    {Token: tokenEC2SecurityGroup, Name: naming.ResourceID(at.Kind, at.Name, "security-group")},
-		"subnetGroup":      {Token: tokenElastiCacheSubnetGroup, Name: naming.ResourceID(at.Kind, at.Name, "subnet-group")},
-		"parameterGroup":   {Token: tokenElastiCacheParameterGroup, Name: naming.ResourceID(at.Kind, at.Name, "parameters")},
-		"replicationGroup": {Token: tokenElastiCacheReplicationGroup, Name: naming.ResourceID(at.Kind, at.Name)},
-	}
-}
-
-func postgresResourceNames(project, env, logicalName string) map[string]resourceRef {
-	at := resourceCoordinate(project, env, logicalName, naming.KindDatabase)
-	return map[string]resourceRef{
-		"securityGroup": {Token: tokenEC2SecurityGroup, Name: naming.ResourceID(at.Kind, at.Name, "security-group")},
-		"subnetGroup":   {Token: tokenRDSSubnetGroup, Name: naming.ResourceID(at.Kind, at.Name, "subnet-group")},
-		"cluster":       {Token: tokenRDSCluster, Name: naming.ResourceID(at.Kind, at.Name)},
-		"instance":      {Token: tokenRDSClusterMember, Name: naming.ResourceID(at.Kind, at.Name, "instance")},
+func containerResourceNames() map[string]component.ResourceRef {
+	return map[string]component.ResourceRef{
+		"task":        {Token: component.TokenECSTaskDefinition, Name: naming.ResourceID(naming.KindService, containerLocalName, "task")},
+		"service":     {Token: component.TokenECSService, Name: naming.ResourceID(naming.KindService, containerLocalName)},
+		"targetGroup": {Token: component.TokenLBTargetGroup, Name: naming.ResourceID(naming.KindService, containerLocalName, "targets")},
+		"rule":        {Token: component.TokenLBListenerRule, Name: naming.ResourceID(naming.KindService, containerLocalName, "rule")},
+		"role":        {Token: component.TokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
 	}
 }

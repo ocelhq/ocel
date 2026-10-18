@@ -13,7 +13,7 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/appautoscaling"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
-	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -24,13 +24,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func appScopedName(at naming.Coordinate) string {
 	scope := awsports.AppScope + naming.WordSeparator
-	return scope + at.PhysicalName(maxLambdaNameLen-len(scope))
+	return scope + at.PhysicalName(component.MaxLambdaNameLen-len(scope))
 }
 
 func containerWorkerService(project, env, app, worker string) string {
@@ -57,7 +62,7 @@ func containerWorkers(tier environment.Tier, project, env string, workers []prov
 func containerServiceARNs(cfg Config, project, env string, workers []provider.WorkerSpec) []string {
 	var arns []string
 	for _, worker := range containerWorkers(cfg.Tier, project, env, workers) {
-		arns = append(arns, fmt.Sprintf("arn:aws:ecs:%s:%s:service/%s/%s", cfg.Region, accountOfARN(cfg.StateTableARN), worker.Service.Cluster, worker.Service.Name))
+		arns = append(arns, fmt.Sprintf("arn:aws:ecs:%s:%s:service/%s/%s", cfg.Region, component.AccountOfARN(cfg.StateTableARN), worker.Service.Cluster, worker.Service.Name))
 	}
 	slices.Sort(arns)
 	return arns
@@ -86,7 +91,7 @@ type containerWorkersWork struct {
 	project     string
 	stack       naming.StackName
 	workers     []provider.WorkerSpec
-	topics      deployedTopics
+	topics      topic.Topics
 	topology    string
 	env         map[string]string
 	floor       int
@@ -100,8 +105,8 @@ type containerWorkersWork struct {
 func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWork) (*containerWorkersWork, error) {
 	app := spec.App
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
-	account := accountOfARN(r.cfg.StateTableARN)
-	topics := topicsOf(project, env, app.Topics)
+	account := component.AccountOfARN(r.cfg.StateTableARN)
+	topics := topic.Of(project, env, app.Topics)
 	served := containerWorkers(r.cfg.Tier, project, env, app.DeploymentWorkers)
 	floor := workerFloor(app.App, app.Instances, app.Workers)
 	for _, worker := range app.Workers {
@@ -109,7 +114,7 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 			hosted.Service.Floor = floor
 		}
 	}
-	topology, err := queueTopology(r.cfg, project, env, topics, served)
+	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topics, served)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +122,7 @@ func (r *release) containerWorkersWork(spec provider.StackSpec, web *containerWo
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := tasksPolicy(r.cfg, project, env, topics, containerServiceARNs(r.cfg, project, env, app.DeploymentWorkers))
+	tasks, err := topic.TasksPolicy(r.cfg.stateTable(), project, env, topics, containerServiceARNs(r.cfg, project, env, app.DeploymentWorkers))
 	if err != nil {
 		return nil, err
 	}
@@ -169,15 +174,15 @@ func (w *containerWorkersWork) run(ctx *pulumi.Context) error {
 }
 
 func (w *containerWorkersWork) declareCrons(ctx *pulumi.Context) error {
-	var crons []cronTarget
+	var crons []task.CronTarget
 	var queueARNs []string
 	for _, worker := range w.workers {
-		for _, task := range w.topics.cronTasks(worker.Name) {
-			queue := task.queues[0]
-			arn := sqsQueueARN(w.web.region, w.account, queue.name)
-			scheduled := cronTarget{task: task, arn: pulumi.String(arn)}
-			if queue.fifo {
-				scheduled.messageGroup = cronMessageGroup
+		for _, cronTask := range w.topics.CronTasks(worker.Name) {
+			queue := cronTask.Queues[0]
+			arn := topic.SQSQueueARN(w.web.region, w.account, queue.Name)
+			scheduled := task.CronTarget{Task: cronTask, ARN: pulumi.String(arn)}
+			if queue.FIFO {
+				scheduled.MessageGroup = task.CronMessageGroup
 			}
 			crons = append(crons, scheduled)
 			queueARNs = append(queueARNs, arn)
@@ -186,23 +191,23 @@ func (w *containerWorkersWork) declareCrons(ctx *pulumi.Context) error {
 	if len(crons) == 0 {
 		return nil
 	}
-	policy, err := allowing("sqs:SendMessage", queueARNs)
+	policy, err := task.Allowing("sqs:SendMessage", queueARNs)
 	if err != nil {
 		return err
 	}
-	assumed := schedulerRole{at: w.coordinate(naming.KindRole, "scheduler"), boundary: w.web.boundary, path: w.web.rolePath, tags: w.web.tags}
-	return declareCrons(ctx, assumed, w.group, pulumi.String(policy), crons)
+	assumed := task.SchedulerRole{At: w.coordinate(naming.KindRole, "scheduler"), Boundary: w.web.boundary, Path: w.web.rolePath, Tags: w.web.tags}
+	return task.DeclareCrons(ctx, assumed, w.group, pulumi.String(policy), crons)
 }
 
-func (w *containerWorkersWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resource, error) {
+func (w *containerWorkersWork) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.Resource, error) {
 	at := w.coordinate(naming.KindRole, "worker-role")
-	role, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &iam.RoleArgs{
-		NamePrefix:          pulumi.String(rolePrefix(at)),
-		Description:         capDescription(at.Description("task role for this app's workers"), maxDescriptionLen),
-		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
+	role, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &awsiam.RoleArgs{
+		NamePrefix:          pulumi.String(component.RolePrefix(at)),
+		Description:         component.CapDescription(at.Description("task role for this app's workers"), component.MaxDescriptionLen),
+		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.web.boundary),
 		Path:                pulumi.String(w.web.rolePath),
-		Tags:                resourceTags(naming.KindRole, "", w.web.tags),
+		Tags:                component.Tags(naming.KindRole, "", w.web.tags),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -215,14 +220,14 @@ func (w *containerWorkersWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulum
 	for _, binding := range w.web.policies {
 		documents["binding-"+binding.Binding] = binding.Policy
 	}
-	if w.web.values.ValuesTableARN != "" {
-		if documents["variables"], err = variablesReadPolicy(w.web.values); err != nil {
+	if w.web.values.Variables.TableARN != "" {
+		if documents["variables"], err = variables.ReadPolicy(w.web.values.Variables); err != nil {
 			return nil, nil, err
 		}
 	}
 	granted := make([]pulumi.Resource, 0, len(documents))
 	for _, name := range slices.Sorted(maps.Keys(documents)) {
-		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", name), &iam.RolePolicyArgs{
+		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", name), &awsiam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(documents[name]),
 		})
@@ -262,9 +267,9 @@ func (w *containerWorkersWork) definition(worker provider.WorkerSpec, service st
 	return string(encoded), nil
 }
 
-func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, role *iam.Role, granted []pulumi.Resource) error {
+func (w *containerWorkersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, role *awsiam.Role, granted []pulumi.Resource) error {
 	service := containerWorkerService(w.project, w.stack.Env, w.stack.App, worker.Name)
-	tags := resourceTags(naming.KindWorker, "", w.web.tags)
+	tags := component.Tags(naming.KindWorker, "", w.web.tags)
 	definition, err := w.definition(worker, service)
 	if err != nil {
 		return err
@@ -345,8 +350,8 @@ func (w *containerWorkersWork) scaleOnBacklog(ctx *pulumi.Context, worker provid
 		return err
 	}
 	var names []string
-	for _, queue := range w.topics.served(worker.Name) {
-		names = append(names, queue.name)
+	for _, queue := range w.topics.Served(worker.Name) {
+		names = append(names, queue.Name)
 	}
 	for at, group := range slices.Collect(slices.Chunk(names, backlogAlarmQueues)) {
 		if err := w.declareBacklogAlarm(ctx, worker, at, group, out, tags); err != nil {
@@ -382,7 +387,7 @@ func (w *containerWorkersWork) declareBacklogAlarm(ctx *pulumi.Context, worker p
 	})
 	_, err := cloudwatch.NewMetricAlarm(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "backlog", strconv.Itoa(at)), &cloudwatch.MetricAlarmArgs{
 		Name:               pulumi.String(name),
-		AlarmDescription:   capDescription(w.coordinate(naming.KindWorker, worker.Name).Description("starts the worker when a queue it serves holds a message"), maxDescriptionLen),
+		AlarmDescription:   component.CapDescription(w.coordinate(naming.KindWorker, worker.Name).Description("starts the worker when a queue it serves holds a message"), component.MaxDescriptionLen),
 		ComparisonOperator: pulumi.String("GreaterThanThreshold"),
 		Threshold:          pulumi.Float64(0),
 		EvaluationPeriods:  pulumi.Int(1),
@@ -399,11 +404,11 @@ func (w *containerWorkersWork) decode(outputs auto.OutputMap) (provider.StackRes
 	containers := make([]provider.AppContainer, 0, len(w.workers))
 	for _, worker := range w.workers {
 		logical := resources.WorkerName(worker.Name)
-		fields, err := requireOutputFields(outputs, logical)
+		fields, err := component.RequireOutputFields(outputs, logical)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		physical, err := requireStringField(fields, logical, outputKeyContainerPhysical)
+		physical, err := component.RequireStringField(fields, logical, outputKeyContainerPhysical)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
@@ -425,7 +430,7 @@ func (r *release) previewContainerWorkers(ctx context.Context, spec provider.Sta
 		return nil, err
 	}
 	ref := containerWorkersRef(spec.Ref)
-	planned, err := r.automation.Preview(ctx, ref, stackProgram{run: hosted.run, tags: spec.Tags}, spec.Lease, progress)
+	planned, err := r.automation.Preview(ctx, ref, component.Program{Run: hosted.run, Tags: spec.Tags}, spec.Lease, progress)
 	return planned.Groups, err
 }
 
@@ -446,7 +451,7 @@ func (r *release) provisionContainerWorkers(ctx context.Context, spec provider.S
 			return nil, err
 		}
 	}
-	outputs, err := r.automation.Run(ctx, ref, stackProgram{run: hosted.run, tags: spec.Tags}, spec.Lease, progress)
+	outputs, err := r.automation.Run(ctx, ref, component.Program{Run: hosted.run, Tags: spec.Tags}, spec.Lease, progress)
 	if err != nil {
 		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
 	}

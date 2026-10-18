@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/prerender"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func nextManifest() *contractv1.Manifest {
@@ -90,7 +91,7 @@ func deployedManifest(manifest *contractv1.Manifest) *contractv1.Manifest {
 type appBuilds struct {
 	coords map[string]naming.Coordinate
 	caches map[string]*isrConfig
-	baked  map[string]appBundle
+	baked  map[string]variables.Bundle
 }
 
 func appBuildsFor(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuilds {
@@ -98,7 +99,7 @@ func appBuildsFor(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBu
 	return bakedBuilds(t, cfg, manifest, nil)
 }
 
-func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked map[string]appBundle) appBuilds {
+func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked map[string]variables.Bundle) appBuilds {
 	t.Helper()
 	cfg, manifest = deployedConfig(cfg), deployedManifest(manifest)
 	builds := appBuilds{
@@ -107,7 +108,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		baked:  baked,
 	}
 	if builds.baked == nil {
-		builds.baked = map[string]appBundle{}
+		builds.baked = map[string]variables.Bundle{}
 	}
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()

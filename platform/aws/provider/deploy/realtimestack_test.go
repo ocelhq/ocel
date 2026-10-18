@@ -8,11 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -21,16 +24,16 @@ const conformanceSigningKeyRoot = "ocel/realtime"
 var conformanceSeed = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("s", ed25519.SeedSize)))
 
 func conformanceSigningKey(name string) string {
-	return signingKeySecret(conformanceSigningKeyRoot, "conformance", "conformance", name)
+	return realtime.SigningKeySecret(conformanceSigningKeyRoot, "conformance", "conformance", name)
 }
 
 func realtimeOutput(name string) auto.OutputValue {
 	return auto.OutputValue{Value: map[string]any{
-		outputKeyHost:         "abc.appsync-api.eu-west-1.amazonaws.com",
-		outputKeyRealtimeHost: "abc.appsync-realtime-api.eu-west-1.amazonaws.com",
-		outputKeyAPIARN:       "arn:aws:appsync:eu-west-1:111122223333:apis/abcdefghij",
-		outputKeyNamespace:    name,
-		outputKeySigningKey:   conformanceSigningKey(name),
+		component.OutputKeyHost:        "abc.appsync-api.eu-west-1.amazonaws.com",
+		realtime.OutputKeyRealtimeHost: "abc.appsync-realtime-api.eu-west-1.amazonaws.com",
+		realtime.OutputKeyAPIARN:       "arn:aws:appsync:eu-west-1:111122223333:apis/abcdefghij",
+		realtime.OutputKeyNamespace:    name,
+		realtime.OutputKeySigningKey:   conformanceSigningKey(name),
 	}}
 }
 
@@ -111,7 +114,7 @@ func TestDestroyingAStackDeletesEveryRealtimeKeyOfItsEnvironmentAndNoOther(t *te
 	keys := newFakeSigningKeys()
 	keys.values[conformanceSigningKey("c-realtime")] = conformanceSeed
 	keys.values[conformanceSigningKey("c-chat")] = conformanceSeed
-	otherEnv := signingKeySecret(conformanceSigningKeyRoot, "conformance", "staging", "c-realtime")
+	otherEnv := realtime.SigningKeySecret(conformanceSigningKeyRoot, "conformance", "staging", "c-realtime")
 	keys.values[otherEnv] = conformanceSeed
 	if err := realtimeStacks(&mockedEngine{outputs: auto.OutputMap{}}, keys).Destroy(context.Background(), provider.StackDestroy{Ref: conformanceInfra}, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
@@ -139,7 +142,7 @@ func TestProvisioningRealtimePlacesTheAuthorizerItDeclares(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	at := payloads.At("ocel-artifacts", realtimeAuthorizerKeyPrefix, payloads.RealtimeAuthorizer())
+	at := payloads.At("ocel-artifacts", realtime.AuthorizerKeyPrefix, payloads.RealtimeAuthorizer())
 	if !slices.Contains(uploader.puts, at.Key) {
 		t.Errorf("uploaded %v, want the realtime authorizer placed at %s", uploader.puts, at.Key)
 	}

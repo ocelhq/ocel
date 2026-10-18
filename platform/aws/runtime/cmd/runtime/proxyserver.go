@@ -17,8 +17,8 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	"github.com/ocelhq/ocel/platform/aws/provider/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket/dataplane"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/realtime"
 	"github.com/ocelhq/ocel/platform/aws/runtime/tasks"
@@ -118,7 +118,7 @@ func serveProxy(ctx context.Context, values s3store.Records, cfg proxyConfig) (p
 	var services bindingproxy.Services
 	if servesBuckets {
 		objects := s3.NewFromConfig(aws)
-		services.Buckets = s3store.NewDispatch(bucket.New(bucket.Config{
+		services.Buckets = s3store.NewDispatch(dataplane.New(dataplane.Config{
 			DDB:              dynamodb.NewFromConfig(aws),
 			Presigner:        s3.NewPresignClient(objects),
 			Objects:          objects,

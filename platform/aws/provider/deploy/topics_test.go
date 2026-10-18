@@ -13,7 +13,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 )
 
 const testStateTableARN = "arn:aws:dynamodb:us-east-1:" + mockAccount + ":table/ocel-state"
@@ -46,7 +48,9 @@ func TestATaskGetsAQueueAndDeadLetterQueueAndATopicFansOutThroughSNSToOneQueuePe
 	}
 	rec := &inputRecorder{}
 	release := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return release.declareTopics(pctx, "shop", "prod", resources) }, pulumi.WithMocks("shop", "prod--infra", rec)); err != nil {
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error {
+		return declareTopicsAndTasks(pctx, release, "shop", "prod", resources)
+	}, pulumi.WithMocks("shop", "prod--infra", rec)); err != nil {
 		t.Fatalf("declare the topics: %v", err)
 	}
 
@@ -109,100 +113,10 @@ func mapKeys[V any](m map[string]V) func(func(string) bool) {
 	}
 }
 
-func TestAnAppReachingTasksMayReleaseTheMessageAnOrderedRunHoldsOnItsQueue(t *testing.T) {
-	t.Parallel()
-
-	topics := topicsOf("shop", "prod", []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "worker"})})
-	policy, err := tasksPolicy(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topics, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var document struct {
-		Statement []struct {
-			Action   []string `json:"Action"`
-			Resource any      `json:"Resource"`
-		} `json:"Statement"`
-	}
-	if err := json.Unmarshal([]byte(policy), &document); err != nil {
-		t.Fatalf("the policy %s is not the shape this test reads: %v", policy, err)
-	}
-	queue := sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "resize", "resize", false))
-	for _, statement := range document.Statement {
-		resources, _ := json.Marshal(statement.Resource)
-		if slices.Contains(statement.Action, "sqs:ChangeMessageVisibility") && strings.Contains(string(resources), queue) {
-			return
-		}
-	}
-	t.Errorf("the tasks policy %s grants no sqs:ChangeMessageVisibility on %s, so canceling or rescheduling a delayed ordered run cannot release the message holding its key", policy, queue)
-}
-
-func TestAnAppReachingTasksMaySendToEveryQueuePublishToEveryTopicAndKeepRunsUnderTheDeploymentsKeys(t *testing.T) {
-	t.Parallel()
-
-	topics := topicsOf("shop", "prod", []provider.Resource{
-		taskResource("resize", provider.ConsumerSpec{Worker: "worker"}),
-		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
-	})
-	policy, err := tasksPolicy(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topics, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var document struct {
-		Statement []struct {
-			Action    any            `json:"Action"`
-			Resource  any            `json:"Resource"`
-			Condition map[string]any `json:"Condition"`
-		} `json:"Statement"`
-	}
-	if err := json.Unmarshal([]byte(policy), &document); err != nil {
-		t.Fatalf("the policy %s is not JSON: %v", policy, err)
-	}
-	for _, want := range []string{
-		sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "resize", "resize", false)),
-		sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "orders", "audit-log", false)),
-		snsTopicARN("us-east-1", mockAccount, queues.TopicName("shop", "prod", "orders", false)),
-		testStateTableARN,
-		naming.TaskKeyPrefix("shop", "prod") + "*",
-	} {
-		if !strings.Contains(policy, want) {
-			t.Errorf("the tasks policy %s names no %s", policy, want)
-		}
-	}
-	if strings.Contains(policy, `"*"`) {
-		t.Errorf("the tasks policy %s grants a wildcard resource", policy)
-	}
-	binding, err := collectTopicBinding(Config{Region: "us-east-1", StateTableARN: testStateTableARN}, "shop", "prod", topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}))
-	if err != nil || binding.GetTopic() == nil {
-		t.Fatalf("collectTopicBinding = %T, %v, want a topic binding", binding.GetProperties(), err)
-	}
-}
-
-func TestTheQueueTopologyNamesEachTopicsQueuesAndSNSTopic(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{Region: "us-east-1", StateTable: "ocel-state", StateTableARN: testStateTableARN}
-	topology, err := queueTopology(cfg, "shop", "prod", topicsOf("shop", "prod", []provider.Resource{
-		taskResource("resize", provider.ConsumerSpec{Worker: "worker"}),
-		topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}),
-	}), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if topology.Table != "ocel-state" || topology.KeyPrefix != naming.TaskKeyPrefix("shop", "prod") {
-		t.Errorf("topology table %q prefix %q, want the state table and the deployment's task keys", topology.Table, topology.KeyPrefix)
-	}
-	if got := topology.Topics["resize"]; got.SNS != "" || got.Queues["resize"] != queues.QueueName("shop", "prod", "resize", "resize", false) {
-		t.Errorf("resize = %+v, want its queue and no SNS topic", got)
-	}
-	if got := topology.Topics["orders"]; got.SNS != snsTopicARN("us-east-1", mockAccount, queues.TopicName("shop", "prod", "orders", false)) {
-		t.Errorf("orders = %+v, want its SNS topic's ARN", got)
-	}
-}
-
 func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFailures(t *testing.T) {
 	t.Parallel()
 
-	topics := topicsOf("shop", "prod", []provider.Resource{
+	topics := topic.Of("shop", "prod", []provider.Resource{
 		taskResource("limited", provider.ConsumerSpec{Worker: "worker", Concurrency: 2}),
 		taskResource("laned", provider.ConsumerSpec{Worker: "worker", Concurrency: 1}),
 		taskResource("tally", provider.ConsumerSpec{Worker: "worker", Batch: &provider.BatchPolicy{Size: 50}}),
@@ -217,7 +131,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		args:     functionArgs{Runtime: defaultFunctionRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		artifact: artifactRef{Bucket: "artifacts", Key: "web.zip"},
 		env:      map[string]string{"APP_VAR": "1"},
-		role:     executionRole{App: "web", Boundary: testBoundaryARN},
+		role:     executionRole{App: "web", Boundary: componenttest.BoundaryARN},
 		layer:    "arn:aws:lambda:us-east-1:123456789012:layer:ocel-runtime:1",
 		region:   "us-east-1",
 		account:  mockAccount,
@@ -266,7 +180,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		t.Fatalf("event source mappings = %d, want one per queue the workers serve", len(mappings))
 	}
 	mapping := func(task string) resource.PropertyMap {
-		return mappings[sqsQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", task, task, false))]
+		return mappings[topic.SQSQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", task, task, false))]
 	}
 	for task, want := range map[string]struct {
 		batch, concurrency, window float64
@@ -328,10 +242,10 @@ func TestTheSchedulerRoleCarriesTheManagedByTagTheCredentialCreatesAndPassesRole
 	work := &workersWork{
 		project: "shop",
 		stack:   workersStack("prod", "web"),
-		topics:  topicsOf("shop", "prod", []provider.Resource{taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute)}),
+		topics:  topic.Of("shop", "prod", []provider.Resource{taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute)}),
 		workers: []provider.WorkerSpec{{Name: "worker"}},
 		args:    functionArgs{Runtime: defaultFunctionRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
-		role:    executionRole{App: "web", Boundary: testBoundaryARN, Tags: map[string]string{"ocel:managed-by": "ocel"}},
+		role:    executionRole{App: "web", Boundary: componenttest.BoundaryARN, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		region:  "us-east-1",
 		account: mockAccount,
 		table:   testStateTableARN,
@@ -354,39 +268,16 @@ func TestTheSchedulerRoleCarriesTheManagedByTagTheCredentialCreatesAndPassesRole
 	}
 }
 
-func TestAWorkerOnContainerComputeRunsAtMostTwelveHoursTheLongestSQSHoldsAMessage(t *testing.T) {
-	t.Parallel()
-
-	ceiling := workerCeilingOn(t, provider.ComputeContainer)
-	if ceiling.Unbounded || ceiling.MaxDuration != 12*time.Hour {
-		t.Errorf("container worker ceiling = %+v, want 12h: SQS extends a message's visibility to 12 hours and no further", ceiling)
-	}
-	if serverless := workerCeilingOn(t, provider.ComputeServerless); serverless.MaxDuration != 15*time.Minute {
-		t.Errorf("serverless worker ceiling = %v, want 15m, Lambda's own", serverless.MaxDuration)
-	}
-}
-
-func workerCeilingOn(t *testing.T, compute provider.Compute) provider.WorkerCeiling {
-	t.Helper()
-	for _, ceiling := range WorkerCeilings {
-		if ceiling.Compute == compute {
-			return ceiling
-		}
-	}
-	t.Fatalf("WorkerCeilings names no ceiling for %s compute", compute)
-	return provider.WorkerCeiling{}
-}
-
 func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNoOtherService(t *testing.T) {
 	t.Parallel()
 
-	topics := topicsOf("shop", "prod", []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "media"})})
+	topics := topic.Of("shop", "prod", []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "media"})})
 	workers := []provider.WorkerSpec{
 		{Name: "media", App: "jobs", Compute: provider.ComputeContainer},
 		{Name: "worker", App: "web", Compute: provider.ComputeServerless},
 	}
 	cfg := Config{Region: "us-east-1", StateTableARN: testStateTableARN, Tier: environment.TierProduction}
-	policy, err := tasksPolicy(cfg, "shop", "prod", topics, containerServiceARNs(cfg, "shop", "prod", workers))
+	policy, err := topic.TasksPolicy(cfg.stateTable(), "shop", "prod", topics, containerServiceARNs(cfg, "shop", "prod", workers))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +309,7 @@ func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNo
 		t.Errorf("the tasks policy %s grants no ecs:UpdateService, so a send could never start a worker sitting at no tasks", policy)
 	}
 
-	policy, err = tasksPolicy(cfg, "shop", "prod", topics, nil)
+	policy, err = topic.TasksPolicy(cfg.stateTable(), "shop", "prod", topics, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
@@ -28,8 +30,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	variables "github.com/ocelhq/ocel/platform/aws/provider/variables/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 )
 
 const (
@@ -59,7 +64,7 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	cfg := Config{
 		Region:            "us-east-1",
 		AppBoundaryARN:    "arn:aws:iam::123456789012:policy/ocel-app-boundary",
-		AppRolePath:       testAppRolePath,
+		AppRolePath:       componenttest.AppRolePath,
 		OriginSecret:      fixtureSecret,
 		Slug:              "shop",
 		Tier:              environment.TierProduction,
@@ -143,8 +148,8 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if _, fronted := work.env[edge.OriginFrontedVar]; !fronted {
 		t.Errorf("env has no %s, so a container whose secret is lost on the way starts open to anyone who reaches its load balancer", edge.OriginFrontedVar)
 	}
-	if _, pinned := work.env[variables.EnvVar]; pinned {
-		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", variables.EnvVar)
+	if _, pinned := work.env[livefile.EnvVar]; pinned {
+		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", livefile.EnvVar)
 	}
 	if work.readsLive() {
 		t.Error("an app with nothing live is granted a read on the variable table")
@@ -313,8 +318,8 @@ func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing
 	}
 
 	for key, inputs := range rec.recorded {
-		if strings.HasPrefix(key, "aws:iam/role:Role::") && !strings.Contains(inputs["assumeRolePolicy"].StringValue(), ecsTasksPrincipal) {
-			t.Errorf("%s trusts %q, want %s, which is what the task runs as", key, inputs["assumeRolePolicy"].StringValue(), ecsTasksPrincipal)
+		if strings.HasPrefix(key, "aws:iam/role:Role::") && !strings.Contains(inputs["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal) {
+			t.Errorf("%s trusts %q, want %s, which is what the task runs as", key, inputs["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal)
 		}
 	}
 }
@@ -450,9 +455,9 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	manifest, err := variables.Parse([]byte(work.env[variables.EnvVar]))
+	manifest, err := livefile.Parse([]byte(work.env[livefile.EnvVar]))
 	if err != nil {
-		t.Fatalf("%s = %q, which the runtime cannot read: %v", variables.EnvVar, work.env[variables.EnvVar], err)
+		t.Fatalf("%s = %q, which the runtime cannot read: %v", livefile.EnvVar, work.env[livefile.EnvVar], err)
 	}
 	if len(manifest.Keys) != 1 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Table != cfg.VariablesTable || manifest.KeyARN != cfg.VariablesKeyARN || manifest.Slug != "shop" {
 		t.Errorf("manifest = %+v, want the secret pinned by name with the table and key the runtime reads it through", manifest)
@@ -482,7 +487,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	if len(policies) != 1 {
 		t.Fatalf("the task role has %d policies, want the one variables read policy Lambda's execution role gets", len(policies))
 	}
-	own := valuePartition("shop", string(environment.TierProduction))
+	own := variables.ValuePartition("shop", string(environment.TierProduction))
 	for _, want := range []string{"kms:Decrypt", cfg.VariablesKeyARN, "dynamodb:Query", cfg.VariablesTableARN, own} {
 		if !strings.Contains(policies[0], want) {
 			t.Errorf("policy = %s, want it to contain %q: the read is fenced to this project's partition and the tier key", policies[0], want)
@@ -501,7 +506,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, spec); err != nil {
+	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
 	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0].Type != transformTypeContainer || pass.seen.Resources[0].App != "web" {
@@ -521,7 +526,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 	}
 
 	pass.out = []transform.Patches{{"role": {"description": "patched"}}}
-	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, spec); err != nil {
+	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), &inputRecorder{})); err != nil {

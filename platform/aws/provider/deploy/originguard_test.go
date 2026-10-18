@@ -10,9 +10,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -87,7 +91,7 @@ func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, function
 
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: spec.App.App, Boundary: testBoundaryARN, Dispatch: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: spec.App.App, Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
@@ -98,7 +102,7 @@ func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, function
 			Args:      argsFor(functions),
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
-			Env:       release.appEnv(spec, appBundle{}, sessionScope{}),
+			Env:       release.appEnv(spec, variables.Bundle{}, bucket.Sessions{}),
 			Dispatch:  host,
 			Guard:     guard,
 			RoleArn:   role.Arn,
@@ -149,7 +153,7 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 		}
 	}
 
-	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
+	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(component.MaxLambdaBaseNameLen))
 	if entry[edge.OriginSecretVar] != testOriginSecret {
 		t.Errorf("%s = %q, want the secret the bootstrap stored", edge.OriginSecretVar, entry[edge.OriginSecretVar])
 	}
@@ -175,7 +179,7 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 			t.Errorf("a sibling has a public %s permission, want the front door opened once", permission.Action)
 		}
 	}
-	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
+	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(component.MaxLambdaBaseNameLen))
 	if _, wired := sibling[edge.OriginSecretVar]; wired {
 		t.Errorf("a sibling has %s, want the secret to reach the root function alone", edge.OriginSecretVar)
 	}
@@ -200,7 +204,7 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 		if hasPublicPermission(rec, stack, logical) {
 			t.Errorf("%s has a public invoke permission behind the Cloudflare worker", logical)
 		}
-		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(maxLambdaBaseNameLen))
+		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(component.MaxLambdaBaseNameLen))
 		if _, wired := env[edge.OriginSecretVar]; wired {
 			t.Errorf("%s has %s behind an edge that signs its requests", logical, edge.OriginSecretVar)
 		}
@@ -223,7 +227,7 @@ func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 		if hasPublicPermission(rec, stack, logical) {
 			t.Errorf("%s has a public invoke permission; none mode signs every integration", logical)
 		}
-		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(maxLambdaBaseNameLen))
+		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(component.MaxLambdaBaseNameLen))
 		if _, wired := env[edge.OriginSecretVar]; wired {
 			t.Errorf("%s has %s, which an AWS_PROXY integration never presents", logical, edge.OriginSecretVar)
 		}
@@ -254,7 +258,7 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	if !value.IsString() || value.StringValue() != functionurl.AuthNone {
 		t.Errorf("entry Function URL auth = %v, want %q for the sole function of an app whose origin dispatches no path", value, functionurl.AuthNone)
 	}
-	env := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--api--entry").PhysicalName(maxLambdaBaseNameLen))
+	env := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--api--entry").PhysicalName(component.MaxLambdaBaseNameLen))
 	if env[edge.OriginSecretVar] != testOriginSecret {
 		t.Errorf("%s = %q, want the secret on an entry nothing else guards", edge.OriginSecretVar, env[edge.OriginSecretVar])
 	}

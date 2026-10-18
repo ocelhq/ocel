@@ -8,6 +8,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func fixed(cfg Config) ReleaseConfig {
@@ -46,5 +48,5 @@ func plannedEnv(t *testing.T, cfg Config, app *contractv1.ManifestApp, front edg
 		Edge:     front,
 		App:      &provider.AppSpec{App: app.GetName(), Values: plannedValues(app)},
 	}
-	return releasing(t, cfg).appEnv(spec, appBundle{}, sessionScope{})
+	return releasing(t, cfg).appEnv(spec, variables.Bundle{}, bucket.Sessions{})
 }

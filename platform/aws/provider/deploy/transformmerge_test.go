@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
@@ -141,17 +142,17 @@ func TestTheMergeLayersAPatchOntoWhatOcelPlanned(t *testing.T) {
 	}
 }
 
-func patchedFor(ref resourceRef, patch map[string]any) *transformPatches {
+func patchedFor(ref component.ResourceRef, patch map[string]any) *transformPatches {
 	return &transformPatches{
-		patches: map[resourceRef]map[string]any{ref: patch},
-		sites:   map[resourceRef]string{ref: "function api's lambda"},
+		patches: map[component.ResourceRef]map[string]any{ref: patch},
+		sites:   map[component.ResourceRef]string{ref: "function api's lambda"},
 	}
 }
 
 func TestInstallRegistersATransformThatMergesTheClaimedResource(t *testing.T) {
 	t.Parallel()
 
-	ref := resourceRef{Token: tokenLambdaFunction, Name: "shop-prod-api"}
+	ref := component.ResourceRef{Token: component.TokenLambdaFunction, Name: "shop-prod-api"}
 	patches := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
 
 	registered := false
@@ -184,7 +185,7 @@ func TestInstallRegistersATransformThatMergesTheClaimedResource(t *testing.T) {
 func TestAPatchNothingInTheProgramMatchesIsRefusedRatherThanDroppped(t *testing.T) {
 	t.Parallel()
 
-	ref := resourceRef{Token: tokenLambdaFunction, Name: "shop-prod-api"}
+	ref := component.ResourceRef{Token: component.TokenLambdaFunction, Name: "shop-prod-api"}
 	patches := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
 
 	if err := sdk.RunErr(func(pctx *sdk.Context) error {
@@ -205,10 +206,10 @@ func TestAPatchNothingInTheProgramMatchesIsRefusedRatherThanDroppped(t *testing.
 func TestAResourceSharingANameWithAPatchedOneIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
-	patches := patchedFor(resourceRef{Token: tokenLambdaFunction, Name: "shared"}, map[string]any{"memorySize": float64(2048)})
-	patches.claimed = map[resourceRef]bool{}
+	patches := patchedFor(component.ResourceRef{Token: component.TokenLambdaFunction, Name: "shared"}, map[string]any{"memorySize": float64(2048)})
+	patches.claimed = map[component.ResourceRef]bool{}
 
-	if _, claimed := patches.claim(resourceRef{Token: tokenLogGroup, Name: "shared"}, sdk.Map{}); claimed {
+	if _, claimed := patches.claim(component.ResourceRef{Token: component.TokenLogGroup, Name: "shared"}, sdk.Map{}); claimed {
 		t.Fatal("a log group claimed the lambda's patch because they share a name")
 	}
 }
@@ -244,7 +245,7 @@ func TestAFunctionPlacedInAVPCWithHalfOfWhatALambdaNeedsIsRefused(t *testing.T) 
 
 	stack := specUnderTransform().Ref.Name
 	candidates := []transformCandidate{
-		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
+		functionCandidate("shop", stack, "fn--api--users"),
 	}
 
 	for _, tc := range []struct {

@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
 )
@@ -425,8 +426,8 @@ func TestEveryCredentialListsTheResourcesOfEveryBootstrapStackOfItsTier(t *testi
 
 func TestEveryCredentialMayListTheRegionsItsRegionIsCheckedAgainst(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
-		if !grantsOf(t, document)[grant{action: "ec2:DescribeRegions", resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
-			t.Errorf("the %s credential does not grant ec2:DescribeRegions on %q, so a mistyped region meets the cloud's own error rather than the region meant", purpose, UnscopedResource)
+		if !grantsOf(t, document)[grant{action: "ec2:DescribeRegions", resource: iam.AnyResource, condition: conditionJSON(t, nil)}] {
+			t.Errorf("the %s credential does not grant ec2:DescribeRegions on %q, so a mistyped region meets the cloud's own error rather than the region meant", purpose, iam.AnyResource)
 		}
 	}
 }
@@ -434,11 +435,11 @@ func TestEveryCredentialMayListTheRegionsItsRegionIsCheckedAgainst(t *testing.T)
 func TestEveryCredentialListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
-		if !grants[grant{action: "logs:DescribeLogGroups", resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
-			t.Errorf("the %s credential does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", purpose, UnscopedResource)
+		if !grants[grant{action: "logs:DescribeLogGroups", resource: iam.AnyResource, condition: conditionJSON(t, nil)}] {
+			t.Errorf("the %s credential does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", purpose, iam.AnyResource)
 		}
 		for g := range grants {
-			if g.action == "logs:DescribeLogGroups" && g.resource != UnscopedResource {
+			if g.action == "logs:DescribeLogGroups" && g.resource != iam.AnyResource {
 				t.Errorf("the %s credential grants logs:DescribeLogGroups on %s, an ARN IAM never matches for an action with no resource type", purpose, g.resource)
 			}
 		}
@@ -453,15 +454,15 @@ func TestEveryCredentialScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
 			t.Errorf("the %s credential does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", purpose, appTaskDefinitionARN)
 		}
 		for _, action := range unscopable {
-			if !grants[grant{action: action, resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
-				t.Errorf("the %s credential does not grant %s on %q, the only resource IAM evaluates it against, so a container release cannot read back or reclaim its task definition", purpose, action, UnscopedResource)
+			if !grants[grant{action: action, resource: iam.AnyResource, condition: conditionJSON(t, nil)}] {
+				t.Errorf("the %s credential does not grant %s on %q, the only resource IAM evaluates it against, so a container release cannot read back or reclaim its task definition", purpose, action, iam.AnyResource)
 			}
 		}
 		for g := range grants {
 			if g.action == "ecs:RegisterTaskDefinition" && g.resource != appTaskDefinitionARN {
 				t.Errorf("the %s credential grants ecs:RegisterTaskDefinition on %s, which reaches past the task definitions a deploy registers", purpose, g.resource)
 			}
-			if slices.Contains(unscopable, g.action) && g.resource != UnscopedResource {
+			if slices.Contains(unscopable, g.action) && g.resource != iam.AnyResource {
 				t.Errorf("the %s credential grants %s on %s, an ARN IAM never matches for an action with no resource type", purpose, g.action, g.resource)
 			}
 		}
@@ -614,7 +615,7 @@ func TestTheBootstrapCredentialReachesNoLogGroupBeyondWhatADeployMay(t *testing.
 		}
 		switch g.resource {
 		case appLogGroupARN, functionLogGroupARN:
-		case UnscopedResource:
+		case iam.AnyResource:
 			if g.action != "logs:DescribeLogGroups" {
 				t.Errorf("the bootstrap credential grants %s on %q, which reaches every log group in the account", g.action, g.resource)
 			}
@@ -840,7 +841,7 @@ func TestABootstrapCredentialWritesAndDeletesThePassphraseOfOnlyItsOwnTier(t *te
 
 func TestEveryCredentialMayGrantLambdaTheVariablesKeyOfItsTierAndNoOther(t *testing.T) {
 	for _, tier := range bothTiers {
-		want := conditionJSON(t, mergeConditions(defaultNamespace.ScopedARNs(tier).variablesKey(), map[string]any{
+		want := conditionJSON(t, iam.MergeConditions(defaultNamespace.ScopedARNs(tier).variablesKey(), map[string]any{
 			"StringEquals": map[string]any{"aws:ResourceTag/" + VariablesKeyComponentTagKey: VariablesKeyComponentTagValue},
 			"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
 		}))
@@ -902,8 +903,8 @@ func testRuntimeLayerGrants(t *testing.T, purpose, document string, r ScopedARNs
 			}
 		}
 	}
-	if !grants[grant{action: "lambda:ListLayerVersions", resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
-		t.Errorf("the %s credential does not grant lambda:ListLayerVersions on %q, the only resource IAM evaluates it against, so a deploy cannot find the runtime already published", purpose, UnscopedResource)
+	if !grants[grant{action: "lambda:ListLayerVersions", resource: iam.AnyResource, condition: conditionJSON(t, nil)}] {
+		t.Errorf("the %s credential does not grant lambda:ListLayerVersions on %q, the only resource IAM evaluates it against, so a deploy cannot find the runtime already published", purpose, iam.AnyResource)
 	}
 	for g := range grants {
 		if !strings.Contains(g.action, "LayerVersion") || g.action == "lambda:ListLayerVersions" {
@@ -1074,7 +1075,7 @@ func TestEveryCredentialRunsAndReachesOnlyTheTasksOfABastionCluster(t *testing.T
 		{action: "ecs:StopTask", resource: bastionTaskARN, condition: "null"},
 		{action: "ecs:ExecuteCommand", resource: bastionClusterARN, condition: "null"},
 		{action: "ecs:ExecuteCommand", resource: bastionTaskARN, condition: "null"},
-		{action: "ecs:ListTasks", resource: UnscopedResource, condition: onBastion},
+		{action: "ecs:ListTasks", resource: iam.AnyResource, condition: onBastion},
 		{action: "ecs:DescribeClusters", resource: bastionClusterARN, condition: "null"},
 		{action: "ecs:DeleteTaskDefinitions", resource: bastionTaskDefinitionARN, condition: "null"},
 		{action: "ssm:StartSession", resource: bastionTaskARN, condition: "null"},
@@ -1109,8 +1110,8 @@ func TestEveryCredentialListsTasksOnlyOfABastionClusterAndAgainstTheResourceAWSE
 			if g.action != "ecs:ListTasks" {
 				continue
 			}
-			if g.resource != UnscopedResource || g.condition != onBastion {
-				t.Errorf("the %s credential grants ecs:ListTasks on %s under %s, want it on %s under ecs:cluster of a bastion cluster: AWS evaluates ListTasks against a container instance, so a cluster ARN never matches", purpose, g.resource, g.condition, UnscopedResource)
+			if g.resource != iam.AnyResource || g.condition != onBastion {
+				t.Errorf("the %s credential grants ecs:ListTasks on %s under %s, want it on %s under ecs:cluster of a bastion cluster: AWS evaluates ListTasks against a container instance, so a cluster ARN never matches", purpose, g.resource, g.condition, iam.AnyResource)
 			}
 		}
 	}
@@ -1154,7 +1155,7 @@ func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
 func TestEveryCredentialChangesOnlyTheCertificatesItTagged(t *testing.T) {
 	want := map[grant]bool{
 		{action: "acm:ImportCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedOnCreate())}: true,
-		{action: "acm:RequestCertificate", resource: UnscopedResource, condition: conditionJSON(t, taggedOnCreate())}: true,
+		{action: "acm:RequestCertificate", resource: iam.AnyResource, condition: conditionJSON(t, taggedOnCreate())}:  true,
 		{action: "acm:AddTagsToCertificate", resource: appCertificateARN, condition: conditionJSON(t, map[string]any{
 			"StringEquals":         map[string]any{"aws:RequestTag/ocel:managed-by": "ocel"},
 			"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
@@ -1164,7 +1165,7 @@ func TestEveryCredentialChangesOnlyTheCertificatesItTagged(t *testing.T) {
 		{action: "acm:RemoveTagsFromCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}: true,
 		{action: "acm:DeleteCertificate", resource: appCertificateARN, condition: conditionJSON(t, taggedByOcel())}:         true,
 		{action: "acm:DescribeCertificate", resource: appCertificateARN, condition: conditionJSON(t, nil)}:                  true,
-		{action: "acm:ListCertificates", resource: UnscopedResource, condition: conditionJSON(t, nil)}:                      true,
+		{action: "acm:ListCertificates", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                       true,
 	}
 	for purpose, document := range bothCredentials(t) {
 		granted := map[grant]bool{}
@@ -1211,8 +1212,8 @@ func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesOcelTagged(t *testi
 		request  requestContext
 		allowed  bool
 	}{
-		{"requests a certificate tagged as Ocel's", "acm:RequestCertificate", UnscopedResource, requestedByOcel, true},
-		{"requests a certificate with no Ocel tag", "acm:RequestCertificate", UnscopedResource, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
+		{"requests a certificate tagged as Ocel's", "acm:RequestCertificate", iam.AnyResource, requestedByOcel, true},
+		{"requests a certificate with no Ocel tag", "acm:RequestCertificate", iam.AnyResource, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
 		{"tags the certificate it requests with Ocel's tag", "acm:AddTagsToCertificate", certificate, requestContext{
 			"aws:RequestTag/ocel:managed-by":  "ocel",
 			"aws:ResourceTag/ocel:managed-by": "ocel",
@@ -1220,7 +1221,7 @@ func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesOcelTagged(t *testi
 		}, true},
 		{"tags an ACM-issued certificate Ocel never requested", "acm:AddTagsToCertificate", certificate, requestedByOcel, false},
 		{"describes a certificate the account made itself", "acm:DescribeCertificate", certificate, requestContext{}, true},
-		{"lists the account's issued certificates", "acm:ListCertificates", UnscopedResource, requestContext{}, true},
+		{"lists the account's issued certificates", "acm:ListCertificates", iam.AnyResource, requestContext{}, true},
 		{"deletes an ACM-issued certificate Ocel requested", "acm:DeleteCertificate", certificate, requestContext{
 			"aws:ResourceTag/ocel:managed-by": "ocel",
 			"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
@@ -1240,7 +1241,7 @@ func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesOcelTagged(t *testi
 func TestEveryCredentialRunsEventAPIsOnlyOnWhatItTagged(t *testing.T) {
 	apis, namespaces := "arn:aws:appsync:*:*:apis/*", "arn:aws:appsync:*:*:apis/*/channelNamespace/*"
 	want := map[grant]bool{
-		{action: "appsync:CreateApi", resource: UnscopedResource, condition: conditionJSON(t, taggedOnCreate())}:        true,
+		{action: "appsync:CreateApi", resource: iam.AnyResource, condition: conditionJSON(t, taggedOnCreate())}:         true,
 		{action: "appsync:CreateChannelNamespace", resource: namespaces, condition: conditionJSON(t, taggedOnCreate())}: true,
 	}
 	for _, action := range []string{
@@ -1276,7 +1277,7 @@ func TestEveryCredentialKeepsRealtimeSigningKeysUnderTheirRootAlone(t *testing.T
 	want := map[grant]bool{
 		{action: "secretsmanager:CreateSecret", resource: keys, condition: conditionJSON(t, taggedOnCreate())}: true,
 		{action: "secretsmanager:TagResource", resource: keys, condition: conditionJSON(t, taggedOnCreate())}:  true,
-		{action: "secretsmanager:ListSecrets", resource: UnscopedResource, condition: conditionJSON(t, nil)}:   true,
+		{action: "secretsmanager:ListSecrets", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:    true,
 	}
 	for _, action := range []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"} {
 		want[grant{action: action, resource: keys, condition: conditionJSON(t, taggedByOcel())}] = true
@@ -1454,8 +1455,8 @@ func TestEveryBucketAndTableABootstrapStackMakesIsOneTheCredentialsName(t *testi
 
 func TestEveryRoleABootstrapStackGeneratesIsOneOnlyItsOwnTiersCredentialMayPass(t *testing.T) {
 	passing := []requestContext{
-		{"iam:PassedToService": LambdaServicePrincipal},
-		{"iam:PassedToService": schedulerServicePrincipal},
+		{"iam:PassedToService": iam.LambdaPrincipal},
+		{"iam:PassedToService": iam.SchedulerPrincipal},
 	}
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()
@@ -1658,7 +1659,7 @@ func TestABootstrapCredentialReachesTheBaseRolesOfOnlyItsOwnTier(t *testing.T) {
 	roleOf := func(tier environment.Tier) string {
 		return defaultNamespace.TagInvalidatorRoleARN("111122223333", tier)
 	}
-	toLambda := requestContext{"iam:PassedToService": LambdaServicePrincipal}
+	toLambda := requestContext{"iam:PassedToService": iam.LambdaPrincipal}
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()
 		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
@@ -1674,7 +1675,7 @@ func TestABootstrapCredentialReachesTheBaseRolesOfOnlyItsOwnTier(t *testing.T) {
 			{"iam:DeleteRole", role, siblingRole, nil},
 			{"iam:UntagRole", role, siblingRole, nil},
 			{"iam:TagRole", role, siblingRole, nil},
-			{"iam:AttachRolePolicy", role, siblingRole, requestContext{"iam:PolicyARN": LambdaBasicExecutionPolicyARN}},
+			{"iam:AttachRolePolicy", role, siblingRole, requestContext{"iam:PolicyARN": iam.LambdaBasicExecutionPolicyARN}},
 			{"iam:PassRole", role, siblingRole, toLambda},
 		} {
 			if !allows(t, bootstrapDoc, c.action, c.arn, taggedWithTier(tier, c.also)) {
@@ -1763,9 +1764,9 @@ func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T)
 				{"lambda:AddPermission", function, function, nil},
 				{"lambda:DeleteFunction", function, function, nil},
 				{"lambda:TagResource", function, function, nil},
-				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": LambdaServicePrincipal}},
-				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": ecsTasksPrincipal}},
-				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": schedulerServicePrincipal}},
+				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": iam.LambdaPrincipal}},
+				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": iam.ECSTasksPrincipal}},
+				{"iam:PassRole", role, siblingRole, requestContext{"iam:PassedToService": iam.SchedulerPrincipal}},
 				{"iam:DeleteRole", role, siblingRole, nil},
 				{"iam:UpdateRole", role, siblingRole, nil},
 				{"iam:TagRole", role, siblingRole, nil},
@@ -1797,7 +1798,7 @@ func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T)
 					"aws:PrincipalAccount":    "111122223333",
 					"iam:PermissionsBoundary": "arn:aws:iam::111122223333:policy/" + defaultNamespace.AppBoundaryNameFor(tier),
 				}},
-				{"lambda:CreateEventSourceMapping", UnscopedResource, worker},
+				{"lambda:CreateEventSourceMapping", iam.AnyResource, worker},
 			} {
 				if !allows(t, document, c.action, c.arn, creating(tier, c.also)) {
 					t.Errorf("the %s %s credential cannot %s tagged for its own tier", tier, purpose, c.action)
@@ -1824,7 +1825,7 @@ func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T)
 }
 
 func TestACredentialPassesTheBastionTaskRoleOfOnlyItsOwnTierToECS(t *testing.T) {
-	toTasks := requestContext{"iam:PassedToService": ecsTasksPrincipal}
+	toTasks := requestContext{"iam:PassedToService": iam.ECSTasksPrincipal}
 	roleOf := func(tier environment.Tier) string {
 		return "arn:aws:iam::111122223333:role/" + bastion.NameFor(tier)
 	}
@@ -1916,10 +1917,10 @@ func TestABootstrapCredentialMakesAndTagsVariablesKeysOnlyAsItsOwnTiers(t *testi
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()
 		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
-		if !allows(t, bootstrapDoc, "kms:CreateKey", UnscopedResource, creating(tier)) {
+		if !allows(t, bootstrapDoc, "kms:CreateKey", iam.AnyResource, creating(tier)) {
 			t.Errorf("the %s bootstrap credential cannot create its own tier's variables key", tier)
 		}
-		if allows(t, bootstrapDoc, "kms:CreateKey", UnscopedResource, creating(sibling)) {
+		if allows(t, bootstrapDoc, "kms:CreateKey", iam.AnyResource, creating(sibling)) {
 			t.Errorf("the %s bootstrap credential can create a variables key tagged for the %s tier", tier, sibling)
 		}
 		retag := variablesKeyOf(tier)
@@ -1967,7 +1968,7 @@ func tagInvalidatorFunctionOf(tier environment.Tier) string {
 }
 
 func TestBothCredentialsPassTheTagInvalidatorRoleOfOnlyTheirOwnTierToLambda(t *testing.T) {
-	toLambda := requestContext{"iam:PassedToService": LambdaServicePrincipal}
+	toLambda := requestContext{"iam:PassedToService": iam.LambdaPrincipal}
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()
 		for purpose, document := range credentialsOfTier(t, tier) {
@@ -2079,11 +2080,11 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *tes
 	for _, tier := range bothTiers {
 		_, deployDoc := renderedCredentialsOf(t, tier)
 		sibling := string(tier.Sibling())
-		if !allows(t, deployDoc, "cloudfront:ListDistributions", UnscopedResource, nil) {
+		if !allows(t, deployDoc, "cloudfront:ListDistributions", iam.AnyResource, nil) {
 			t.Errorf("the %s deploy credential cannot list the distributions it finds its own among", tier)
 		}
 		created := tags("aws:RequestTag/", managedByTagValue, string(tier))
-		if !allows(t, deployDoc, "cloudfront:CreateDistribution", UnscopedResource, created) {
+		if !allows(t, deployDoc, "cloudfront:CreateDistribution", iam.AnyResource, created) {
 			t.Errorf("the %s deploy credential cannot create a distribution tagged as Ocel's and its own tier's", tier)
 		}
 		if !allows(t, deployDoc, "cloudfront:TagResource", distribution, created) {
@@ -2095,7 +2096,7 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *tes
 			"without the tier tag":         tags("aws:RequestTag/", managedByTagValue, ""),
 			"tagged as the sibling tier's": tags("aws:RequestTag/", managedByTagValue, sibling),
 		} {
-			if allows(t, deployDoc, "cloudfront:CreateDistribution", UnscopedResource, request) {
+			if allows(t, deployDoc, "cloudfront:CreateDistribution", iam.AnyResource, request) {
 				t.Errorf("the %s deploy credential can create a distribution %s", tier, name)
 			}
 			if allows(t, deployDoc, "cloudfront:TagResource", distribution, request) {
@@ -2133,7 +2134,7 @@ func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedAsOcels(t *t
 		return requestContext{"aws:RequestTag/" + managedByTagKey: managedBy}
 	}
 	onCreate := map[string]string{
-		"cloudfront:CreateVpcOrigin": UnscopedResource,
+		"cloudfront:CreateVpcOrigin": iam.AnyResource,
 		"cloudfront:TagResource":     vpcOrigin,
 	}
 	for purpose, document := range bothCredentials(t) {
@@ -2163,7 +2164,7 @@ func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 	}
 	for _, tier := range bothTiers {
 		for purpose, document := range credentialsOfTier(t, tier) {
-			if !allows(t, document, "tag:GetResources", UnscopedResource, requestContext{}) {
+			if !allows(t, document, "tag:GetResources", iam.AnyResource, requestContext{}) {
 				t.Errorf("the %s %s credential cannot find REST APIs by their tags, so the API Gateway edge cannot reach a project's APIs", tier, purpose)
 			}
 			if !allows(t, document, "apigateway:PUT", restAPITags, creating(tier)) {

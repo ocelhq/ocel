@@ -18,10 +18,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -44,7 +48,7 @@ func routedConfig(t *testing.T, kind edge.Kind) Config {
 		RuntimeLayers:     testRuntimeLayers(),
 		Slug:              "shop",
 		Edge:              fakeEdgeOf(kind),
-		AppBoundaryARN:    testBoundaryARN,
+		AppBoundaryARN:    componenttest.BoundaryARN,
 	}
 }
 
@@ -168,7 +172,7 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Dispatch: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
@@ -192,7 +196,7 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
+	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(component.MaxLambdaBaseNameLen))
 	if entry[routerKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the router kind the deploy chose", routerKindEnv, entry[routerKindEnv])
 	}
@@ -234,7 +238,7 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
+	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(component.MaxLambdaBaseNameLen))
 	if sibling[routerKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want every function to learn the router kind", routerKindEnv, sibling[routerKindEnv])
 	}
@@ -302,7 +306,7 @@ func TestAnOriginBehindACachingEdgeIsToldItsRelease(t *testing.T) {
 			Ref:      provider.StackRef{Name: naming.AppStack("production", "web", token)},
 			Edge:     fakeEdgeOf(kind),
 			App:      &provider.AppSpec{App: "web"},
-		}, appBundle{}, sessionScope{})
+		}, variables.Bundle{}, bucket.Sessions{})
 
 		if env[edge.ReleaseTokenVar] != token.String() {
 			t.Errorf("%s = %q behind %s, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], kind, token)
@@ -319,7 +323,7 @@ func TestAContainerAppCloudflareForwardsToTheLoadBalancerIsToldNoEdgeCachesItsRe
 		Ref:      provider.StackRef{Name: naming.AppStack("production", "web", naming.NewReleaseToken("b1", "f1"))},
 		Edge:     fakeEdgeOf(cloudflare.Kind),
 		App:      &provider.AppSpec{App: "web", Compute: provider.ComputeContainer, Router: alb.Kind},
-	}, appBundle{}, sessionScope{})
+	}, variables.Bundle{}, bucket.Sessions{})
 
 	for _, name := range []string{edge.EdgeCacheVar, edge.ReleaseTokenVar, edge.CacheTagPurgeVar} {
 		if value, set := env[name]; set {
@@ -337,12 +341,12 @@ func TestAnAppWithAnOcelRouteTableIsToldWhereItsFunctionsFindIt(t *testing.T) {
 		Recorded: true,
 		Edge:     fakeEdgeOf(cloudfront.Kind),
 		App:      &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
-	}, appBundle{}, sessionScope{})
+	}, variables.Bundle{}, bucket.Sessions{})
 
 	if want := "/var/task/" + edge.OcelRouteTableFile; env[edge.OcelRouteTableVar] != want {
 		t.Errorf("%s = %q, want %q: the route table is bundled at the root of each function", edge.OcelRouteTableVar, env[edge.OcelRouteTableVar], want)
 	}
-	plain := release.appEnv(provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}, appBundle{}, sessionScope{})
+	plain := release.appEnv(provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}, variables.Bundle{}, bucket.Sessions{})
 	if _, told := plain[edge.OcelRouteTableVar]; told {
 		t.Errorf("%s is set for an app with no route table", edge.OcelRouteTableVar)
 	}
@@ -372,7 +376,7 @@ func TestAppEnvNamesTheRouterItsAppPromotesThroughAndNotItsEdge(t *testing.T) {
 			Recorded: true,
 			Edge:     fakeEdgeOf(cloudfront.Kind),
 			App:      &provider.AppSpec{App: "web", Router: kind},
-		}, appBundle{}, sessionScope{})
+		}, variables.Bundle{}, bucket.Sessions{})
 	}
 
 	if env := routed("relay"); env["OCEL_ROUTER_KIND"] != "relay" {
@@ -430,7 +434,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Dispatch: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
@@ -452,7 +456,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	}
 
 	statements := readDispatchInvokeGrant(t, rec)
-	sibling := mockAccountARN("lambda", "function:"+functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
+	sibling := mockAccountARN("lambda", "function:"+functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(component.MaxLambdaBaseNameLen))
 
 	var reachesSibling, reachesOptimizer bool
 	for _, statement := range statements {
@@ -465,7 +469,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 		if string(statement.Resource) == `["`+sibling+`"]` {
 			reachesSibling = true
 		}
-		if statement.Condition["StringEquals"]["aws:ResourceTag/"+tagComponent] == tagImageOptimizer {
+		if statement.Condition["StringEquals"]["aws:ResourceTag/"+component.TagComponent] == tagImageOptimizer {
 			if want := `"arn:aws:lambda:*:` + mockAccount + `:function:*"`; string(statement.Resource) != want {
 				t.Errorf("optimizer statement reaches %s, want %s", statement.Resource, want)
 			}

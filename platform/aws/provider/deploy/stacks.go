@@ -2,16 +2,18 @@ package deploy
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"sync"
 
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
-	scheduler "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -20,15 +22,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/progress"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 )
 
 type Scope struct {
@@ -77,16 +78,9 @@ type Stacks struct {
 type release struct {
 	*Stacks
 	cfg        Config
-	automation *pulumi.Automation[stackProgram]
+	registry   component.Registry
+	automation *pulumi.Automation[component.Program]
 }
-
-type stackProgram struct {
-	run     func(*sdk.Context) error
-	tags    map[string]string
-	secrets []string
-}
-
-func runStackProgram(pctx *sdk.Context, program stackProgram) error { return program.run(pctx) }
 
 func NewStacks(resolve ReleaseConfig, realized *Realized) *Stacks {
 	return newStacks(resolve, realized, nil)
@@ -135,15 +129,15 @@ func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 	if err != nil {
 		return nil, err
 	}
-	created := &release{Stacks: r, cfg: cfg}
-	created.automation = pulumi.New(pulumi.Config[stackProgram]{
+	created := &release{Stacks: r, cfg: cfg, registry: registryOf(cfg)}
+	created.automation = pulumi.New(pulumi.Config[component.Program]{
 		Backend: pulumi.Backend{
 			URL:        cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
 			Env:        map[string]string{"AWS_REGION": cfg.Region},
 		},
-		Program:   runStackProgram,
+		Program:   component.RunProgram,
 		Configure: configureDefaultTags,
 		Secrets:   created.secrets,
 		Refresh:   r.refreshPolicy(),
@@ -154,8 +148,13 @@ func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 	return created, nil
 }
 
-func Serves() []provider.BindingType {
-	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic, provider.BindingRealtime}
+func registryOf(cfg Config) component.Registry {
+	return awsresources.Registry(awsresources.Clients{
+		Artifacts:   component.Artifacts{Objects: cfg.Objects, Bucket: cfg.ArtifactBucket},
+		Clusters:    cfg.Clusters,
+		KVTokens:    kv.Tokens{Parameters: cfg.Parameters, Root: cfg.KVTokenRoot},
+		SigningKeys: realtime.Keys{SigningKeys: cfg.SigningKeys, Root: cfg.SigningKeyRoot},
+	})
 }
 
 func (r *Stacks) refreshPolicy() func(provider.StackRef, pulumi.Operation) bool {
@@ -169,26 +168,24 @@ func (r *Stacks) refreshPolicy() func(provider.StackRef, pulumi.Operation) bool 
 
 type infraWork struct {
 	transformed *transformPatches
-	completer   payloads.Placement
-	authorizer  payloads.Placement
 	previewing  bool
 }
 
-func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) stackProgram {
-	return stackProgram{
-		run: func(pctx *sdk.Context) error {
+func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) component.Program {
+	return component.Program{
+		Run: func(pctx *sdk.Context) error {
 			if err := work.transformed.install(pctx); err != nil {
 				return err
 			}
 			return r.infra(pctx, spec, work)
 		},
-		tags: spec.Tags,
+		Tags: spec.Tags,
 	}
 }
 
-func (r *release) appProgram(spec provider.StackSpec, work *appWork) stackProgram {
-	return stackProgram{
-		run: func(pctx *sdk.Context) error {
+func (r *release) appProgram(spec provider.StackSpec, work *appWork) component.Program {
+	return component.Program{
+		Run: func(pctx *sdk.Context) error {
 			shipped, err := r.shipArtifacts(pctx, work.uploads)
 			if err != nil {
 				return err
@@ -198,8 +195,8 @@ func (r *release) appProgram(spec provider.StackSpec, work *appWork) stackProgra
 			}
 			return work.run(pctx, shipped)
 		},
-		tags:    spec.Tags,
-		secrets: r.appSecrets(spec),
+		Tags:    spec.Tags,
+		Secrets: r.appSecrets(spec),
 	}
 }
 
@@ -208,87 +205,63 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
 	}
-	subnetIDs, err := lookupDefaultSubnets(pctx, vpc.Id)
+	subnetIDs, err := component.LookupDefaultSubnets(pctx, vpc.Id)
 	if err != nil {
 		return err
 	}
 
-	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
-	transformed := work.transformed
-	sessions := newSessionScope(project, env, r.cfg.StateTableARN)
-
-	for _, resource := range spec.Resources {
-		if resource.Binding != "" {
-			continue
-		}
-		var err error
-		switch resource.Type {
-		case provider.BindingPostgres:
-			args := translatePostgres(resource.Postgres)
-			args.Tags = transformed.tagsFor(transformTypePostgres, resource.Name)
-			args.Protected = spec.Ref.Tier == environment.TierProduction
-			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnetIDs)
-		case provider.BindingBucket:
-			args := translateBucket(resource.Bucket)
-			args.Tags = transformed.tagsFor(transformTypeBucket, resource.Name)
-			args.PatchedCORS = transformed.opensCORS(resource.Name)
-			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, r.cfg.AppRolePath, sessions, work.completer)
-		case provider.BindingKV:
-			err = r.declareKV(pctx, project, env, resource, work, vpc.Id, vpc.CidrBlock, subnetIDs)
-		case provider.BindingTask, provider.BindingTopic, provider.BindingRealtime:
-			continue
-		default:
-			return refusal.Refuse(refusal.CodeInvalid,
-				"this provider provisions no %s; it provisions %s, %s, %s, %s, %s and %s", resource.Type,
-				provider.BindingPostgres, provider.BindingBucket, provider.BindingKV, provider.BindingTask, provider.BindingTopic, provider.BindingRealtime)
-		}
-		if err != nil {
-			return fmt.Errorf("declare %s: %w", resource.Name, err)
-		}
-	}
-	if err := r.declareRealtime(pctx, project, env, spec.Resources, work); err != nil {
-		return err
-	}
-	return r.declareTopics(pctx, project, env, spec.Resources)
-}
-
-func (r *release) declareTopics(pctx *sdk.Context, project, env string, resources []provider.Resource) error {
-	topics := topicsOf(project, env, resources)
-	if scheduleGroupNeeded(topics) {
-		if _, err := scheduler.NewScheduleGroup(pctx, naming.ResourceID(naming.KindWorker, "cron"), &scheduler.ScheduleGroupArgs{
-			Name: sdk.String(queues.ScheduleGroupName(project, env)),
-		}); err != nil {
+	at := r.stackOf(spec.Ref, spec.Resources, work.transformed, work.previewing)
+	at.Network = component.Network{VPCID: vpc.Id, VPCCIDR: vpc.CidrBlock, SubnetIDs: subnetIDs}
+	for _, declaring := range r.registry.Components() {
+		if err := declaring.Declare(pctx, at, declaring.Declared(spec.Resources)); err != nil {
 			return err
-		}
-	}
-	visibility := func(queue consumerQueue) int { return queueVisibilitySeconds(topics, queue) }
-	for _, topic := range topics {
-		if err := registerTopic(pctx, topic, visibility, resourceTags(naming.KindTopic, "", map[string]string{tagResource: topic.resource.Declared})); err != nil {
-			return fmt.Errorf("declare %s: %w", topic.resource.Declared, err)
 		}
 	}
 	return nil
 }
 
-func provisionsBucket(spec provider.StackSpec) bool {
-	return slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool {
-		return resource.Type == provider.BindingBucket && resource.Binding == ""
-	})
+func (r *release) stackOf(ref provider.StackRef, declared []provider.Resource, transformed *transformPatches, previewing bool) component.Stack {
+	return component.Stack{
+		Ref:            ref,
+		Project:        naming.Sanitize(ref.Project),
+		Env:            ref.Name.Env,
+		Region:         r.cfg.Region,
+		Previewing:     previewing,
+		StateTable:     r.cfg.StateTable,
+		StateTableARN:  r.cfg.StateTableARN,
+		AppBoundaryARN: r.cfg.AppBoundaryARN,
+		AppRolePath:    r.cfg.AppRolePath,
+		Transforms:     transformed,
+		Resources:      declared,
+	}
 }
 
-func configureDefaultTags(_ context.Context, program stackProgram) (auto.ConfigMap, error) {
-	if len(program.tags) == 0 {
+func (r *release) sweep(ctx context.Context, ref provider.StackRef, kept []provider.Resource) error {
+	at := r.stackOf(ref, kept, nil, false)
+	for _, swept := range r.registry.Components() {
+		if swept.Sweep == nil {
+			continue
+		}
+		if err := swept.Sweep(ctx, at, swept.Declared(kept)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func configureDefaultTags(_ context.Context, program component.Program) (auto.ConfigMap, error) {
+	if len(program.Tags) == 0 {
 		return auto.ConfigMap{}, nil
 	}
-	encoded, err := json.Marshal(map[string]map[string]string{"tags": program.tags})
+	encoded, err := json.Marshal(map[string]map[string]string{"tags": program.Tags})
 	if err != nil {
 		return nil, fmt.Errorf("render default tags: %w", err)
 	}
 	return auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: string(encoded)}}, nil
 }
 
-func (r *release) secrets(program stackProgram) []string {
-	return append([]string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.PurgeSeed}, program.secrets...)
+func (r *release) secrets(program component.Program) []string {
+	return append([]string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.PurgeSeed}, program.Secrets...)
 }
 
 func (r *release) appSecrets(spec provider.StackSpec) []string {
@@ -300,83 +273,25 @@ func (r *release) appSecrets(spec provider.StackSpec) []string {
 }
 
 func (r *release) decodeInfra(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	sessions := newSessionScope(naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env, r.cfg.StateTableARN)
+	at := r.stackOf(spec.Ref, spec.Resources, nil, false)
 	result := provider.StackResult{}
 	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
 			continue
 		}
-		if resource.Type == provider.BindingTask || resource.Type == provider.BindingTopic {
-			binding, err := collectTopicBinding(r.cfg, naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env, resource)
-			if err != nil {
-				return provider.StackResult{}, err
-			}
-			collected := bindingOf(resource.Type, &variablestorev1.PublishedBinding{Binding: binding})
-			collected.Resource = resource.Declared
-			result.Bindings = append(result.Bindings, collected)
-			continue
+		collecting, served := r.registry.For(resource.Type)
+		if !served {
+			return provider.StackResult{}, r.registry.RefuseUnserved([]provider.Resource{resource})
 		}
-		fields, err := requireOutputFields(outputs, resource.Name)
+		published, err := collecting.Collect(ctx, at, resource, outputs)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		var published *variablestorev1.PublishedBinding
-		switch resource.Type {
-		case provider.BindingPostgres:
-			published, err = collectPostgresBinding(r.cfg.Region, resource.Name, fields)
-		case provider.BindingBucket:
-			published, err = collectBucketBinding(resource.Name, sessions, fields)
-		case provider.BindingKV:
-			var kv *bindingsv1.Binding
-			kv, err = collectKVBinding(ctx, r.cfg.Parameters, resource.Name, fields)
-			published = &variablestorev1.PublishedBinding{Binding: kv}
-		case provider.BindingRealtime:
-			published, err = collectRealtimeBinding(ctx, r.cfg.SigningKeys, resource.Name, fields)
-		}
-		if err != nil {
-			return provider.StackResult{}, err
-		}
-		collected := bindingOf(resource.Type, published)
+		collected := provider.PublishedBindingOf(published)
 		collected.Resource = resource.Declared
 		result.Bindings = append(result.Bindings, collected)
 	}
 	return result, nil
-}
-
-func bindingOf(kind provider.BindingType, published *variablestorev1.PublishedBinding) provider.Binding {
-	binding := published.GetBinding()
-	properties := map[string]string{}
-	switch kind {
-	case provider.BindingPostgres:
-		p := binding.GetPostgres()
-		properties[provider.PropertyHost] = p.GetHost()
-		properties[provider.PropertyPort] = strconv.Itoa(int(p.GetPort()))
-		properties[provider.PropertyDatabase] = p.GetDatabase()
-		properties[provider.PropertyUsername] = p.GetUsername()
-		properties[provider.PropertyTLSMode] = p.GetTlsMode().String()
-		properties[provider.PropertyTLSCA] = p.GetTlsCa()
-	case provider.BindingBucket:
-		properties[provider.PropertyBucket] = binding.GetBucket().GetBucket()
-	case provider.BindingKV:
-		kv := binding.GetKv()
-		properties[provider.PropertyHost] = kv.GetHost()
-		properties[provider.PropertyPort] = strconv.Itoa(int(kv.GetPort()))
-		properties[provider.PropertyUsername] = kv.GetUsername()
-		properties[provider.PropertyPassword] = kv.GetPassword()
-		properties[provider.PropertyTLS] = strconv.FormatBool(kv.GetTls())
-	case provider.BindingRealtime:
-		realtime := binding.GetRealtime()
-		properties[provider.PropertyURL] = realtime.GetUrl()
-		properties[provider.PropertyHost] = realtime.GetHost()
-		properties[provider.PropertySigningKey] = base64.StdEncoding.EncodeToString(realtime.GetSigningKey())
-		properties[provider.PropertyVerifyKey] = base64.StdEncoding.EncodeToString(realtime.GetVerifyKey())
-	}
-	return provider.Binding{
-		Type:       kind,
-		Name:       binding.GetName(),
-		Properties: properties,
-		Grants:     provider.GrantsOf(published.GetGrants()),
-	}
 }
 
 func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) error {
@@ -405,18 +320,18 @@ func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) e
 	return &HandoverError{Bindings: handed, Stack: spec.Ref.Name.String()}
 }
 
-func (r *release) packApp(spec provider.StackSpec) (appBundle, error) {
+func (r *release) packApp(spec provider.StackSpec) (variables.Bundle, error) {
 	bundle, err := r.sealApp(spec.Ref.Project, spec.App.App, spec.App.Values)
 	if err != nil {
-		return appBundle{}, err
+		return variables.Bundle{}, err
 	}
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
-	topology, err := queueTopology(r.cfg, project, env, topicsOf(project, env, spec.App.Topics), containerWorkers(r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
+	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topic.Of(project, env, spec.App.Topics), containerWorkers(r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
 	if err != nil {
-		return appBundle{}, err
+		return variables.Bundle{}, err
 	}
 	if bundle.Queues, err = queues.Render(topology); err != nil {
-		return appBundle{}, err
+		return variables.Bundle{}, err
 	}
 	return bundle, nil
 }
@@ -469,7 +384,12 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progres
 		return provider.Plan{}, err
 	}
 	removal.Groups = append(removal.Groups, workerGroups...)
-	return markProtectedClusters(removal, ref), nil
+	for _, tornDown := range opened.registry.Components() {
+		if tornDown.Teardown != nil && tornDown.Teardown.Plan != nil {
+			removal = tornDown.Teardown.Plan(removal, ref)
+		}
+	}
+	return removal, nil
 }
 
 func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
@@ -501,15 +421,6 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		r.pending.add(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
 	}
-	var listedTokens, listedKeys []string
-	if spec.App == nil {
-		if listedTokens, err = r.listKVTokens(ctx, spec.Ref); err != nil {
-			return provider.StackResult{}, err
-		}
-		if listedKeys, err = r.listSigningKeys(ctx, spec.Ref); err != nil {
-			return provider.StackResult{}, err
-		}
-	}
 	outputs, err := r.automation.Run(ctx, spec.Ref, prepared.program, spec.Lease, progress)
 	if err != nil {
 		return provider.StackResult{}, err
@@ -531,11 +442,10 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 			return provider.StackResult{}, err
 		}
 	}
-	if err := deleteKVTokens(ctx, r.cfg.Parameters, r.findUndeclaredKVTokens(listedTokens, spec)); err != nil {
-		return provider.StackResult{}, err
-	}
-	if err := deleteSigningKeys(ctx, r.cfg.SigningKeys, r.findUndeclaredSigningKeys(listedKeys, spec)); err != nil {
-		return provider.StackResult{}, err
+	if spec.App == nil {
+		if err := r.sweep(ctx, spec.Ref, spec.Resources); err != nil {
+			return provider.StackResult{}, err
+		}
 	}
 	if work != nil {
 		r.warmAndEmbed(ctx, work, result.Functions, progress)
@@ -588,7 +498,7 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 }
 
 type preparedStack struct {
-	program     stackProgram
+	program     component.Program
 	transformed *transformPatches
 	app         *appWork
 }
@@ -622,7 +532,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 		return preparedStack{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s provisions an app and this spec names none", spec.Ref.Name)
 	}
-	transformed, err := transformStackSpec(ctx, r.cfg.Transform, spec)
+	transformed, err := transformStackSpec(ctx, r.cfg.Transform, r.registry, spec)
 	if err != nil {
 		return preparedStack{}, err
 	}
@@ -630,17 +540,10 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 		if err := r.refuseHandover(ctx, spec); err != nil {
 			return preparedStack{}, err
 		}
+		if err := r.registry.RefuseUnserved(spec.Resources); err != nil {
+			return preparedStack{}, err
+		}
 		work := &infraWork{transformed: transformed, previewing: kind == runPreview}
-		if provisionsBucket(spec) {
-			if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
-				return preparedStack{}, err
-			}
-		}
-		if provisionsRealtime(spec) {
-			if work.authorizer, err = placeRealtimeAuthorizer(ctx, r.cfg); err != nil {
-				return preparedStack{}, err
-			}
-		}
 		return preparedStack{program: r.infraProgram(spec, work), transformed: transformed}, nil
 	}
 	var network *functionNetwork
@@ -657,7 +560,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 	if err != nil {
 		return preparedStack{}, fmt.Errorf("pack %s's function package: %w", spec.App.App, err)
 	}
-	uploads, err := functioncode.Stage(spec, bundle.overlay())
+	uploads, err := functioncode.Stage(spec, bundle.Overlay())
 	if err != nil {
 		return preparedStack{}, err
 	}
@@ -680,25 +583,14 @@ func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progres
 	if err := opened.destroyWorkersOfLastRelease(ctx, ref, req.Lease, progress); err != nil {
 		return err
 	}
-	if err := opened.disableDeletionProtection(ctx, ref, progress); err != nil {
+	if err := opened.prepareTeardown(ctx, ref, progress); err != nil {
 		return err
 	}
 	if err := opened.automation.Destroy(ctx, ref, req.Lease, progress); err != nil {
 		return err
 	}
 	if ref.Name.IsInfra() {
-		tokens, err := opened.listKVTokens(ctx, ref)
-		if err != nil {
-			return err
-		}
-		if err := deleteKVTokens(ctx, opened.cfg.Parameters, tokens); err != nil {
-			return err
-		}
-		keys, err := opened.listSigningKeys(ctx, ref)
-		if err != nil {
-			return err
-		}
-		if err := deleteSigningKeys(ctx, opened.cfg.SigningKeys, keys); err != nil {
+		if err := opened.sweep(ctx, ref, nil); err != nil {
 			return err
 		}
 	}
@@ -717,6 +609,19 @@ func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progres
 		return nil
 	}
 	return resources.ForgetReleases(ctx, opened.cfg.Retention, ref, ref.Name.App, req.Images, progress)
+}
+
+func (r *release) prepareTeardown(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+	outputs := func(ctx context.Context) (auto.OutputMap, error) { return r.automation.Outputs(ctx, ref, nil) }
+	for _, tornDown := range r.registry.Components() {
+		if tornDown.Teardown == nil || tornDown.Teardown.Before == nil {
+			continue
+		}
+		if err := tornDown.Teardown.Before(ctx, ref, outputs, progress); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress progress.Log) (auto.OutputMap, error) {

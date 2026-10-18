@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -61,8 +62,8 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 		t.Errorf("vpc origin = %v, want CloudFront to reach the listener on %d over its private path", endpoint, originListenerPort)
 	}
 	role := recordedOf(t, rec, "aws:iam/role:Role")
-	if !strings.Contains(role["assumeRolePolicy"].StringValue(), ecsTasksPrincipal) {
-		t.Errorf("the execution role trusts %q, want %s", role["assumeRolePolicy"].StringValue(), ecsTasksPrincipal)
+	if !strings.Contains(role["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal) {
+		t.Errorf("the execution role trusts %q, want %s", role["assumeRolePolicy"].StringValue(), iam.ECSTasksPrincipal)
 	}
 	if len(rec.attached) != 1 || rec.attached[0] != ecsTaskExecutionPolicyARN {
 		t.Errorf("attached %v, want only the ECS task execution policy", rec.attached)

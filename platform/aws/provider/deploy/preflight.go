@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 func (r *Stacks) Preflight(ctx context.Context, pre provider.DeployPreflight) error {
@@ -18,8 +19,8 @@ func (r *Stacks) Preflight(ctx context.Context, pre provider.DeployPreflight) er
 	if err := checkEdgeReaderBootstrapped(cfg, pre.Edge); err != nil {
 		return err
 	}
-	sessions := newSessionScope(naming.Sanitize(pre.Deploy.Slug), pre.Deploy.Env, cfg.StateTableARN)
-	return checkInlinePolicyBudget(pre.Apps, sessions)
+	at := component.Stack{Project: naming.Sanitize(pre.Deploy.Slug), Env: pre.Deploy.Env, Region: cfg.Region, StateTableARN: cfg.StateTableARN}
+	return checkInlinePolicyBudget(pre.Apps, registryOf(cfg), at)
 }
 
 func checkEdgeReaderBootstrapped(cfg Config, front edge.Kind) error {

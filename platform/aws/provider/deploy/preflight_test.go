@@ -9,6 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 func preflightConfig() Config {
@@ -67,9 +69,9 @@ func TestPreflightPolicyBudget(t *testing.T) {
 			pre.Apps[1].Resources = append(pre.Apps[1].Resources, bucket)
 		}
 
-		var over *PolicyBudgetError
+		var over *iam.PolicyBudgetError
 		if err := preflighting(preflightConfig(), pre); !errors.As(err, &over) {
-			t.Fatalf("Preflight() = %v, want a *PolicyBudgetError", err)
+			t.Fatalf("Preflight() = %v, want a *iam.PolicyBudgetError", err)
 		}
 		if len(over.Apps) != 2 || over.Apps[0].App != "web" || over.Apps[1].App != "docs" {
 			t.Errorf("billed %+v, want every app whose role would bear the bill", over.Apps)
@@ -101,9 +103,9 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		pre.Apps[0].Grants = pre.Grants
 		pre.Apps[1].Grants = pre.Grants
 
-		var over *PolicyBudgetError
+		var over *iam.PolicyBudgetError
 		if err := preflighting(preflightConfig(), pre); !errors.As(err, &over) {
-			t.Fatalf("Preflight() = %v, want a *PolicyBudgetError", err)
+			t.Fatalf("Preflight() = %v, want a *iam.PolicyBudgetError", err)
 		}
 	})
 
@@ -121,9 +123,9 @@ func TestPreflightPolicyBudget(t *testing.T) {
 			pre.Apps[0].Resources = append(pre.Apps[0].Resources, live)
 		}
 
-		var over *PolicyBudgetError
+		var over *iam.PolicyBudgetError
 		if err := preflighting(preflightConfig(), pre); !errors.As(err, &over) {
-			t.Fatalf("Preflight() = %v, want a *PolicyBudgetError", err)
+			t.Fatalf("Preflight() = %v, want a *iam.PolicyBudgetError", err)
 		}
 		if !strings.Contains(over.Error(), "realtime--00") {
 			t.Errorf("Error() = %q, want it to name the realtime resources it billed", over.Error())
@@ -145,9 +147,9 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 		pre.Apps[1].Resources = pre.Apps[0].Resources[:1]
 
-		var over *PolicyBudgetError
+		var over *iam.PolicyBudgetError
 		if err := preflighting(preflightConfig(), pre); !errors.As(err, &over) {
-			t.Fatalf("Preflight() = %v, want a *PolicyBudgetError", err)
+			t.Fatalf("Preflight() = %v, want a *iam.PolicyBudgetError", err)
 		}
 		if len(over.Apps) != 1 || over.Apps[0].App != "web" {
 			t.Fatalf("billed %+v, want only web: docs uses one bucket, and a resource an app never uses costs it nothing", over.Apps)
@@ -164,7 +166,8 @@ func TestPreflightPolicyBudget(t *testing.T) {
 				Type:   provider.BindingBucket,
 				Grants: []provider.Grant{{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"arn:aws:s3:::uploads/*"}}},
 			}},
-			newSessionScope("shop", "prod", preflightConfig().StateTableARN),
+			registryOf(preflightConfig()),
+			component.Stack{Project: "shop", Env: "prod", StateTableARN: preflightConfig().StateTableARN},
 		)
 		if err != nil {
 			t.Fatalf("billedPolicies() = %v", err)

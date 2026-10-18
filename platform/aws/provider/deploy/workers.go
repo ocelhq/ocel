@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -21,28 +21,26 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 )
 
 const (
 	workersKey          = "workers"
 	containerWorkersKey = "containers"
 
-	schedulerServicePrincipal = "scheduler.amazonaws.com"
-
 	reportBatchItemFailures = "ReportBatchItemFailures"
 	minEventConcurrency     = 2
 	maxEventConcurrency     = 1000
-	maxUnbatchedSize        = 10
-
-	cronInput = `{"ocelCron":%q,"scheduledTime":"<aws.scheduler.scheduled-time>"}`
 )
 
 type workersWork struct {
 	project  string
 	stack    naming.StackName
-	topics   deployedTopics
+	topics   topic.Topics
 	workers  []provider.WorkerSpec
 	args     functionArgs
 	artifact artifactRef
@@ -82,7 +80,7 @@ func (r *release) workersWork(spec provider.StackSpec, work *appWork) (*workersW
 	return &workersWork{
 		project:  project,
 		stack:    workersStack(spec.Ref.Name.Env, app.App),
-		topics:   topicsOf(project, spec.Ref.Name.Env, app.Topics),
+		topics:   topic.Of(project, spec.Ref.Name.Env, app.Topics),
 		workers:  app.Workers,
 		args:     args,
 		artifact: work.functions.Artifacts[entry.Logical],
@@ -92,7 +90,7 @@ func (r *release) workersWork(spec provider.StackSpec, work *appWork) (*workersW
 		layer:    work.functions.Layers[args.Arch],
 		kms:      work.functions.KmsKeyARN,
 		region:   r.cfg.Region,
-		account:  accountOfARN(r.cfg.StateTableARN),
+		account:  component.AccountOfARN(r.cfg.StateTableARN),
 		table:    r.cfg.StateTableARN,
 		prefix:   naming.TaskKeyPrefix(project, spec.Ref.Name.Env),
 		group:    queues.ScheduleGroupName(project, spec.Ref.Name.Env),
@@ -124,7 +122,7 @@ func (r *release) provisionWorkers(ctx context.Context, spec provider.StackSpec,
 	if err := r.recordWorkers(ctx, ref); err != nil {
 		return nil, fmt.Errorf("record the workers of %s: %w", spec.App.App, err)
 	}
-	outputs, err := r.automation.Run(ctx, ref, stackProgram{run: workers.run, tags: spec.Tags}, spec.Lease, progress)
+	outputs, err := r.automation.Run(ctx, ref, component.Program{Run: workers.run, Tags: spec.Tags}, spec.Lease, progress)
 	if err != nil {
 		return nil, fmt.Errorf("provision the workers of %s: %w", spec.App.App, err)
 	}
@@ -204,7 +202,7 @@ func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, w
 		return nil, err
 	}
 	ref := workersRef(spec.Ref)
-	planned, err := r.automation.Preview(ctx, ref, stackProgram{run: workers.run, tags: spec.Tags}, spec.Lease, progress)
+	planned, err := r.automation.Preview(ctx, ref, component.Program{Run: workers.run, Tags: spec.Tags}, spec.Lease, progress)
 	return planned.Groups, err
 }
 
@@ -212,11 +210,11 @@ func (w *workersWork) decode(outputs auto.OutputMap) (provider.StackResult, erro
 	functions := make([]provider.Function, 0, len(w.workers))
 	for _, worker := range w.workers {
 		logical := resources.WorkerName(worker.Name)
-		fields, err := requireOutputFields(outputs, logical)
+		fields, err := component.RequireOutputFields(outputs, logical)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		physical, err := requireStringField(fields, logical, outputKeyFunctionName)
+		physical, err := component.RequireStringField(fields, logical, outputKeyFunctionName)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
@@ -380,7 +378,7 @@ func (w *workersWork) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	consuming, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "queues"), &iam.RolePolicyArgs{
+	consuming, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "queues"), &awsiam.RolePolicyArgs{
 		Role:   role.Name,
 		Policy: pulumi.String(consumption),
 	})
@@ -388,7 +386,7 @@ func (w *workersWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	var functions []*lambda.Function
-	var crons []cronTarget
+	var crons []task.CronTarget
 	for _, worker := range w.workers {
 		fn, err := w.declareWorker(ctx, worker, role.Arn, consuming)
 		if err != nil {
@@ -396,15 +394,15 @@ func (w *workersWork) run(ctx *pulumi.Context) error {
 		}
 		functions = append(functions, fn)
 		ctx.Export(resources.WorkerName(worker.Name), pulumi.Map{outputKeyFunctionName: fn.Name})
-		for _, task := range w.topics.cronTasks(worker.Name) {
-			crons = append(crons, cronTarget{task: task, arn: fn.Arn})
+		for _, cronTask := range w.topics.CronTasks(worker.Name) {
+			crons = append(crons, task.CronTarget{Task: cronTask, ARN: fn.Arn})
 		}
 	}
 	if len(crons) == 0 {
 		return nil
 	}
-	assumed := schedulerRole{at: w.coordinate(naming.KindRole, "scheduler"), boundary: w.role.Boundary, path: w.role.Path, tags: w.role.Tags}
-	return declareCrons(ctx, assumed, w.group, invokingPolicy(functions), crons)
+	assumed := task.SchedulerRole{At: w.coordinate(naming.KindRole, "scheduler"), Boundary: w.role.Boundary, Path: w.role.Path, Tags: w.role.Tags}
+	return task.DeclareCrons(ctx, assumed, w.group, invokingPolicy(functions), crons)
 }
 
 func invokingPolicy(functions []*lambda.Function) pulumi.StringOutput {
@@ -417,7 +415,7 @@ func invokingPolicy(functions []*lambda.Function) pulumi.StringOutput {
 		for _, arn := range resolved {
 			targets = append(targets, fmt.Sprint(arn))
 		}
-		return allowing("lambda:InvokeFunction", targets)
+		return task.Allowing("lambda:InvokeFunction", targets)
 	}).(pulumi.StringOutput)
 }
 
@@ -425,11 +423,11 @@ func (w *workersWork) consumptionPolicy() (string, error) {
 	return consumptionPolicy(w.workers, w.topics, w.region, w.account, w.table, w.prefix)
 }
 
-func consumptionPolicy(workers []provider.WorkerSpec, topics deployedTopics, region, account, table, prefix string) (string, error) {
+func consumptionPolicy(workers []provider.WorkerSpec, topics topic.Topics, region, account, table, prefix string) (string, error) {
 	var queueARNs []string
 	for _, worker := range workers {
-		for _, queue := range topics.served(worker.Name) {
-			queueARNs = append(queueARNs, sqsQueueARN(region, account, queue.name))
+		for _, queue := range topics.Served(worker.Name) {
+			queueARNs = append(queueARNs, topic.SQSQueueARN(region, account, queue.Name))
 		}
 	}
 	statements := []any{map[string]any{
@@ -454,10 +452,10 @@ func consumptionPolicy(workers []provider.WorkerSpec, topics deployedTopics, reg
 func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, roleARN pulumi.StringInput, consuming pulumi.Resource) (*lambda.Function, error) {
 	at := w.coordinate(naming.KindWorker, worker.Name)
 	scope := awsports.AppScope + naming.WordSeparator
-	name := scope + at.PhysicalName(maxLambdaNameLen-len(scope))
+	name := scope + at.PhysicalName(component.MaxLambdaNameLen-len(scope))
 	env := pulumi.StringMap{}
 	args := w.args
-	args.TimeoutSeconds = int(workerTimeout(w.topics, worker.Name) / time.Second)
+	args.TimeoutSeconds = int(topic.WorkerTimeout(w.topics, worker.Name) / time.Second)
 	args.Network = w.network
 	for key, value := range functionEnv(w.env, args, nil, nil) {
 		env[key] = pulumi.String(value)
@@ -466,13 +464,13 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 	if worker.Concurrency > 0 {
 		env[queues.WorkerConcurrencyEnv] = pulumi.String(strconv.Itoa(worker.Concurrency))
 	}
-	logs, err := newLambdaLogGroup(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "logs"), name, at.Kind, "", args.Tags)
+	logs, err := component.NewLambdaLogGroup(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "logs"), name, at.Kind, "", args.Tags)
 	if err != nil {
 		return nil, err
 	}
 	fn, err := lambda.NewFunction(ctx, naming.ResourceID(naming.KindWorker, worker.Name), &lambda.FunctionArgs{
 		Name:          pulumi.String(name),
-		Description:   capDescription(at.Description("worker "+worker.Name+": serves its tasks and consumers from their queues"), maxDescriptionLen),
+		Description:   component.CapDescription(at.Description("worker "+worker.Name+": serves its tasks and consumers from their queues"), component.MaxDescriptionLen),
 		Runtime:       pulumi.String(args.Runtime),
 		Handler:       pulumi.String(lambdaHandler(args)),
 		Role:          roleARN,
@@ -481,9 +479,9 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 		MemorySize:    pulumi.Int(args.MemorySizeMB),
 		Timeout:       pulumi.Int(args.TimeoutSeconds),
 		Environment:   &lambda.FunctionEnvironmentArgs{Variables: env},
-		KmsKeyArn:     optionalARN(w.kms),
-		LoggingConfig: lambdaLogging(logs),
-		Tags:          resourceTags(at.Kind, "", args.Tags),
+		KmsKeyArn:     component.OptionalARN(w.kms),
+		LoggingConfig: component.LambdaLogging(logs),
+		Tags:          component.Tags(at.Kind, "", args.Tags),
 		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
 		Layers:        runtimeLayerInput(w.layer),
 		VpcConfig:     args.Network.vpcConfig(),
@@ -491,45 +489,33 @@ func (w *workersWork) declareWorker(ctx *pulumi.Context, worker provider.WorkerS
 	if err != nil {
 		return nil, err
 	}
-	for _, queue := range w.topics.served(worker.Name) {
-		if _, err := lambda.NewEventSourceMapping(ctx, naming.ResourceID(naming.KindWorker, worker.Name, queue.topic, queue.consumer.Name),
-			eventSourceMapping(queue, worker, fn, w.region, w.account, resourceTags(at.Kind, "", args.Tags)), pulumi.DependsOn([]pulumi.Resource{consuming})); err != nil {
+	for _, queue := range w.topics.Served(worker.Name) {
+		if _, err := lambda.NewEventSourceMapping(ctx, naming.ResourceID(naming.KindWorker, worker.Name, queue.Topic, queue.Consumer.Name),
+			eventSourceMapping(queue, worker, fn, w.region, w.account, component.Tags(at.Kind, "", args.Tags)), pulumi.DependsOn([]pulumi.Resource{consuming})); err != nil {
 			return nil, err
 		}
 	}
 	return fn, nil
 }
 
-func eventSourceMapping(queue consumerQueue, worker provider.WorkerSpec, fn *lambda.Function, region, account string, tags pulumi.StringMap) *lambda.EventSourceMappingArgs {
+func eventSourceMapping(queue topic.Queue, worker provider.WorkerSpec, fn *lambda.Function, region, account string, tags pulumi.StringMap) *lambda.EventSourceMappingArgs {
 	args := &lambda.EventSourceMappingArgs{
-		EventSourceArn:        pulumi.String(sqsQueueARN(region, account, queue.name)),
+		EventSourceArn:        pulumi.String(topic.SQSQueueARN(region, account, queue.Name)),
 		FunctionName:          fn.Arn,
 		BatchSize:             pulumi.Int(1),
 		FunctionResponseTypes: pulumi.StringArray{pulumi.String(reportBatchItemFailures)},
 		Tags:                  tags,
 	}
-	if batch := queue.consumer.Batch; batch != nil && batch.Size > 0 {
+	if batch := queue.Consumer.Batch; batch != nil && batch.Size > 0 {
 		args.BatchSize = pulumi.Int(batch.Size)
 	}
-	if window := batchingWindowSeconds(queue); window > 0 {
+	if window := topic.BatchingWindowSeconds(queue); window > 0 {
 		args.MaximumBatchingWindowInSeconds = pulumi.Int(window)
 	}
-	if concurrency := eventConcurrency(queue.consumer.Concurrency, worker.Concurrency); concurrency > 0 {
+	if concurrency := eventConcurrency(queue.Consumer.Concurrency, worker.Concurrency); concurrency > 0 {
 		args.ScalingConfig = &lambda.EventSourceMappingScalingConfigArgs{MaximumConcurrency: pulumi.Int(concurrency)}
 	}
 	return args
-}
-
-func batchingWindowSeconds(queue consumerQueue) int {
-	batch := queue.consumer.Batch
-	if batch == nil || batch.Size <= 0 || queue.fifo {
-		return 0
-	}
-	window := int(batch.Timeout / time.Second)
-	if batch.Size > maxUnbatchedSize {
-		window = max(window, 1)
-	}
-	return window
 }
 
 func eventConcurrency(consumer, worker int) int {
@@ -541,8 +527,4 @@ func eventConcurrency(consumer, worker int) int {
 		return 0
 	}
 	return min(max(limit, minEventConcurrency), maxEventConcurrency)
-}
-
-func scheduleGroupNeeded(topics []deployedTopic) bool {
-	return slices.ContainsFunc(topics, func(topic deployedTopic) bool { return topic.isTask() && topic.declared.Cron != "" })
 }

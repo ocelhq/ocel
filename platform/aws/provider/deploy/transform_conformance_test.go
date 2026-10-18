@@ -5,9 +5,14 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 const conformanceModule = `
@@ -25,11 +30,11 @@ const conformanceModule = `
 func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	t.Parallel()
 
-	rendered := map[string]map[string]resourceRef{
+	rendered := map[string]map[string]component.ResourceRef{
 		transformTypeFunction: functionResourceNames("proj", naming.StackName{Env: "prod", App: "api"}, "api"),
-		transformTypeBucket:   bucketResourceNames("proj", "prod", "uploads"),
-		transformTypePostgres: postgresResourceNames("proj", "prod", "main"),
-		transformTypeKV:       kvResourceNames("proj", "prod", "cache"),
+		"bucket":              bucket.New(component.Artifacts{}).Transform("proj", "prod", "uploads").Names,
+		"postgres":            postgres.New(nil).Transform("proj", "prod", "main").Names,
+		"kv":                  kv.New(kv.Tokens{}).Transform("proj", "prod", "cache").Names,
 	}
 
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
@@ -58,7 +63,7 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	}
 
 	filled := make([]transform.Result, len(results))
-	wanted := map[resourceRef]bool{}
+	wanted := map[component.ResourceRef]bool{}
 	for i, result := range results {
 		patches := transform.Patches{}
 		for key := range result.Patches {

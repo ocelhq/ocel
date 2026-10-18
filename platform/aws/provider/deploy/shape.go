@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode"
 
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -17,41 +19,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 )
 
 const (
 	vendor = "aws"
-
-	tfLambdaFunction     = "aws_lambda_function"
-	tfLambdaFunctionURL  = "aws_lambda_function_url"
-	tfLogGroup           = "aws_cloudwatch_log_group"
-	tfAppSyncAPI         = "aws_appsync_api"
-	tfS3Bucket           = "aws_s3_bucket"
-	tfRDSCluster         = "aws_rds_cluster"
-	tfRDSClusterInstance = "aws_rds_cluster_instance"
-	tfSecret             = "aws_secretsmanager_secret"
-	tfECSCluster         = "aws_ecs_cluster"
-	tfECSTaskDefinition  = "aws_ecs_task_definition"
-	tfECSService         = "aws_ecs_service"
-	tfLoadBalancer       = "aws_lb"
-	tfNATGateway         = "aws_nat_gateway"
-	tfElasticIP          = "aws_eip"
-	tfECRRepository      = "aws_ecr_repository"
-
-	tfElastiCacheReplicationGroup = "aws_elasticache_replication_group"
-	tfElastiCacheParameterGroup   = "aws_elasticache_parameter_group"
-	tfElastiCacheSubnetGroup      = "aws_elasticache_subnet_group"
-	tfSSMParameter                = "aws_ssm_parameter"
-
-	tfSQSQueue           = "aws_sqs_queue"
-	tfSNSTopic           = "aws_sns_topic"
-	tfEventSourceMapping = "aws_lambda_event_source_mapping"
-	tfSchedulerSchedule  = "aws_scheduler_schedule"
-	tfMetricAlarm        = "aws_cloudwatch_metric_alarm"
-
-	lambdaDefaultMemoryMB    = 128
-	lambdaDefaultEphemeralMB = 512
 )
 
 type ShapeScopes struct {
@@ -60,35 +35,28 @@ type ShapeScopes struct {
 }
 
 type shapedPatches struct {
-	patches map[resourceRef]map[string]any
-	unknown map[resourceRef][]string
+	patches map[component.ResourceRef]map[string]any
+	unknown map[component.ResourceRef][]string
 }
 
 func Shape(ctx context.Context, pass transform.Pass, region string, req provider.ShapeRequest, tree *pricing.Tree, scopes ShapeScopes) error {
 	project := naming.Sanitize(req.Deploy.Slug)
-	patched, err := shapeTransforms(ctx, pass, project, req)
+	registry := awsresources.Registry(awsresources.Clients{})
+	patched, err := shapeTransforms(ctx, pass, registry, project, req)
 	if err != nil {
 		return err
 	}
 	shape := costShape{tree: tree, region: region, patched: patched}
-	for _, resource := range req.Resources {
-		if resource.Binding != "" {
+	at := component.Stack{Ref: provider.StackRef{Tier: req.Deploy.Tier, Project: req.Deploy.Slug}, Project: project, Env: req.Deploy.Env, Region: region, Resources: req.Resources}
+	for _, shaped := range registry.Components() {
+		if shaped.Shape == nil {
 			continue
 		}
-		switch resource.Type {
-		case provider.BindingPostgres:
-			shape.postgres(scopes.Environment, project, req.Deploy.Env, resource)
-		case provider.BindingBucket:
-			shape.bucket(scopes.Environment, project, req.Deploy.Env, resource)
-		case provider.BindingKV:
-			if err := shape.kv(scopes.Environment, project, req.Deploy.Env, resource); err != nil {
-				return err
-			}
+		if err := shaped.Shape(shape, scopes.Environment, at, shaped.Declared(req.Resources)); err != nil {
+			return err
 		}
 	}
-	shape.realtime(scopes.Environment, req.Resources)
-	topics := topicsOf(project, req.Deploy.Env, req.Resources)
-	shape.topics(scopes.Environment, topics)
+	topics := topic.Of(project, req.Deploy.Env, req.Resources)
 	if err := shape.workers(scopes.Environment, req, topics); err != nil {
 		return err
 	}
@@ -119,7 +87,7 @@ type costShape struct {
 	patched shapedPatches
 }
 
-func (s costShape) add(scope, typ, name string, properties map[string]any, ref resourceRef) {
+func (s costShape) Add(scope, typ, name string, properties map[string]any, ref component.ResourceRef) {
 	unknown := s.patched.unknown[ref]
 	for key, value := range s.patched.patches[ref] {
 		field := snake(key)
@@ -132,7 +100,7 @@ func (s costShape) add(scope, typ, name string, properties map[string]any, ref r
 	s.tree.Add(scope, vendor, typ, name, s.region, properties, unknown...)
 }
 
-func (s costShape) plain(scope, typ, name string, properties map[string]any) {
+func (s costShape) AddPlain(scope, typ, name string, properties map[string]any) {
 	s.tree.Add(scope, vendor, typ, name, s.region, properties)
 }
 
@@ -153,32 +121,20 @@ func (s costShape) functions(scope, project string, app provider.AppEntry, specs
 			return err
 		}
 		names := functionResourceNames(project, app.Stack, spec.Name)
-		s.add(scope, tfLambdaFunction, spec.Name, map[string]any{
+		s.Add(scope, component.TerraformLambdaFunction, spec.Name, map[string]any{
 			"runtime":           args.Runtime,
 			"memory_size":       args.MemorySizeMB,
 			"timeout":           args.TimeoutSeconds,
 			"architectures":     []any{args.Arch},
-			"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
+			"ephemeral_storage": map[string]any{"size": component.LambdaDefaultEphemeralMB},
 		}, names["lambda"])
-		s.add(scope, tfLogGroup, spec.Name, map[string]any{"retention_in_days": lambdaLogRetentionDays}, names["logGroup"])
-		s.add(scope, tfLambdaFunctionURL, spec.Name, map[string]any{"invoke_mode": args.InvokeMode}, names["url"])
+		s.Add(scope, component.TerraformLogGroup, spec.Name, map[string]any{"retention_in_days": component.LambdaLogRetentionDays}, names["logGroup"])
+		s.Add(scope, component.TerraformLambdaFunctionURL, spec.Name, map[string]any{"invoke_mode": args.InvokeMode}, names["url"])
 	}
 	return nil
 }
 
-func (s costShape) topics(scope string, topics deployedTopics) {
-	for _, topic := range topics {
-		if topic.sns != "" {
-			s.plain(scope, tfSNSTopic, topic.resource.Declared, map[string]any{"fifo_topic": topic.declared.Ordered})
-		}
-		for _, queue := range topic.queues {
-			s.plain(scope, tfSQSQueue, queue.topic+"/"+queue.consumer.Name, map[string]any{"fifo_queue": queue.fifo})
-			s.plain(scope, tfSQSQueue, queue.topic+"/"+queue.consumer.Name+"/dead-letters", map[string]any{"fifo_queue": queue.fifo})
-		}
-	}
-}
-
-func (s costShape) workers(environment string, req provider.ShapeRequest, topics deployedTopics) error {
+func (s costShape) workers(environment string, req provider.ShapeRequest, topics topic.Topics) error {
 	for _, app := range req.Deploy.Apps {
 		if len(app.Workers) == 0 {
 			continue
@@ -196,23 +152,23 @@ func (s costShape) workers(environment string, req provider.ShapeRequest, topics
 	return nil
 }
 
-func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app provider.AppEntry, topics deployedTopics) error {
+func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app provider.AppEntry, topics topic.Topics) error {
 	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
 	args, err := workerFunctionArgs(app, req.Functions[app.App])
 	if err != nil {
 		return err
 	}
 	for _, worker := range app.Workers {
-		s.plain(scope, tfLambdaFunction, worker.Name, map[string]any{
+		s.AddPlain(scope, component.TerraformLambdaFunction, worker.Name, map[string]any{
 			"runtime":           args.Runtime,
 			"memory_size":       args.MemorySizeMB,
-			"timeout":           int(workerTimeout(topics, worker.Name).Seconds()),
+			"timeout":           int(topic.WorkerTimeout(topics, worker.Name).Seconds()),
 			"architectures":     []any{args.Arch},
-			"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
+			"ephemeral_storage": map[string]any{"size": component.LambdaDefaultEphemeralMB},
 		})
-		s.plain(scope, tfLogGroup, worker.Name, map[string]any{"retention_in_days": lambdaLogRetentionDays})
-		for _, queue := range topics.served(worker.Name) {
-			s.plain(scope, tfEventSourceMapping, queue.topic+"/"+queue.consumer.Name, map[string]any{"batch_size": batchSize(queue.consumer)})
+		s.AddPlain(scope, component.TerraformLogGroup, worker.Name, map[string]any{"retention_in_days": component.LambdaLogRetentionDays})
+		for _, queue := range topics.Served(worker.Name) {
+			s.AddPlain(scope, component.TerraformEventSourceMapping, queue.Topic+"/"+queue.Consumer.Name, map[string]any{"batch_size": batchSize(queue.Consumer)})
 		}
 		if err := s.cronSchedules(scope, topics, worker.Name); err != nil {
 			return err
@@ -221,36 +177,36 @@ func (s costShape) appWorkers(environment string, req provider.ShapeRequest, app
 	return nil
 }
 
-func (s costShape) cronSchedules(scope string, topics deployedTopics, worker string) error {
-	for _, task := range topics.cronTasks(worker) {
-		expressions, err := schedulerExpressions(task.declared.Cron)
+func (s costShape) cronSchedules(scope string, topics topic.Topics, worker string) error {
+	for _, cronTask := range topics.CronTasks(worker) {
+		expressions, err := task.SchedulerExpressions(cronTask.Spec.Cron)
 		if err != nil {
-			return fmt.Errorf("task %s: %w", task.resource.Declared, err)
+			return fmt.Errorf("task %s: %w", cronTask.Resource.Declared, err)
 		}
 		for _, expression := range expressions {
-			s.plain(scope, tfSchedulerSchedule, task.resource.Declared, map[string]any{"schedule_expression": expression})
+			s.AddPlain(scope, component.TerraformSchedulerSchedule, cronTask.Resource.Declared, map[string]any{"schedule_expression": expression})
 		}
 	}
 	return nil
 }
 
-func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics deployedTopics) error {
+func (s costShape) containerWorkers(environment string, app provider.AppEntry, topics topic.Topics) error {
 	scope := s.tree.Scope(environment, pricing.ScopeApp, app.App)
 	for _, worker := range app.Workers {
 		name := resources.WorkerName(worker.Name)
 		platform := map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"}
-		s.plain(scope, tfECSTaskDefinition, name, map[string]any{
+		s.AddPlain(scope, component.TerraformECSTaskDefinition, name, map[string]any{
 			"cpu": containerCPU, "memory": containerMemory, "requires_compatibilities": []any{"FARGATE"}, "runtime_platform": platform,
 		})
-		s.plain(scope, tfECSService, name, map[string]any{
+		s.AddPlain(scope, component.TerraformECSService, name, map[string]any{
 			"desired_count": workerFloor(app.App, app.Instances, app.Workers), "launch_type": "FARGATE", "cpu": containerCPU, "memory": containerMemory, "runtime_platform": platform,
 		})
 		var queueNames []string
-		for _, queue := range topics.served(worker.Name) {
-			queueNames = append(queueNames, queue.name)
+		for _, queue := range topics.Served(worker.Name) {
+			queueNames = append(queueNames, queue.Name)
 		}
 		for at, group := range slices.Collect(slices.Chunk(queueNames, backlogAlarmQueues)) {
-			s.plain(scope, tfMetricAlarm, name+"/"+strconv.Itoa(at), map[string]any{"metrics": len(group)})
+			s.AddPlain(scope, component.TerraformMetricAlarm, name+"/"+strconv.Itoa(at), map[string]any{"metrics": len(group)})
 		}
 		if err := s.cronSchedules(scope, topics, worker.Name); err != nil {
 			return err
@@ -283,13 +239,13 @@ func workerFunctionArgs(app provider.AppEntry, specs []provider.FunctionSpec) (f
 
 func (s costShape) container(scope string, app provider.AppEntry) {
 	if !provider.IsWorkerApp(app.App, app.Workers) {
-		s.plain(scope, tfECSTaskDefinition, app.App, map[string]any{
+		s.AddPlain(scope, component.TerraformECSTaskDefinition, app.App, map[string]any{
 			"cpu":                      containerCPU,
 			"memory":                   containerMemory,
 			"requires_compatibilities": []any{"FARGATE"},
 			"runtime_platform":         map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
 		})
-		s.plain(scope, tfECSService, app.App, map[string]any{
+		s.AddPlain(scope, component.TerraformECSService, app.App, map[string]any{
 			"desired_count":    app.Instances.Min,
 			"launch_type":      "FARGATE",
 			"cpu":              containerCPU,
@@ -297,7 +253,7 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 			"runtime_platform": map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
 		})
 	}
-	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
+	s.AddPlain(scope, component.TerraformECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
 func (s costShape) containerInfra(scope string, tier environment.Tier) {
@@ -306,9 +262,9 @@ func (s costShape) containerInfra(scope string, tier environment.Tier) {
 
 func ShapeContainerInfrastructure(tier environment.Tier) []pricing.Shaped {
 	return []pricing.Shaped{
-		{Name: ContainersSlug, Type: tfECSCluster, Properties: map[string]any{}},
-		{Name: ContainersSlug, Type: tfLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}},
-		{Name: ContainersSlug, Type: tfLogGroup, Properties: map[string]any{"retention_in_days": containerLogRetentionDays, "name": logevents.NameContainerGroup(tier)}},
+		{Name: ContainersSlug, Type: component.TerraformECSCluster, Properties: map[string]any{}},
+		{Name: ContainersSlug, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}},
+		{Name: ContainersSlug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": containerLogRetentionDays, "name": logevents.NameContainerGroup(tier)}},
 	}
 }
 
@@ -340,92 +296,14 @@ func ShapeFunctionNetwork(tier environment.Tier) []pricing.Shaped {
 	for n := range natGateways(tier) {
 		name := FunctionNetworkSlug + "-" + strconv.Itoa(n+1)
 		shaped = append(shaped,
-			pricing.Shaped{Name: name, Type: tfNATGateway, Properties: map[string]any{}},
-			pricing.Shaped{Name: name, Type: tfElasticIP, Properties: map[string]any{}})
+			pricing.Shaped{Name: name, Type: component.TerraformNATGateway, Properties: map[string]any{}},
+			pricing.Shaped{Name: name, Type: component.TerraformElasticIP, Properties: map[string]any{}})
 	}
 	return shaped
 }
 
-func (s costShape) postgres(scope, project, env string, resource provider.Resource) {
-	args := translatePostgres(resource.Postgres)
-	names := postgresResourceNames(project, env, resource.Name)
-	s.add(scope, tfRDSCluster, resource.Name, map[string]any{
-		"engine":         args.Engine,
-		"engine_mode":    args.EngineMode,
-		"engine_version": args.EngineVersion,
-		"serverlessv2_scaling_configuration": map[string]any{
-			"min_capacity": args.MinCapacity,
-			"max_capacity": args.MaxCapacity,
-		},
-		"manage_master_user_password": args.ManageMasterPassword,
-	}, names["cluster"])
-	s.add(scope, tfRDSClusterInstance, resource.Name, map[string]any{
-		"engine":         args.Engine,
-		"instance_class": args.InstanceClass,
-		"serverlessv2_scaling_configuration": map[string]any{
-			"min_capacity": args.MinCapacity,
-			"max_capacity": args.MaxCapacity,
-		},
-	}, names["instance"])
-	s.plain(scope, tfSecret, resource.Name, map[string]any{"managed_by": "rds"})
-}
-
-func (s costShape) kv(scope, project, env string, resource provider.Resource) error {
-	args, err := translateKV(resource.Name, resource.KV)
-	if err != nil {
-		return err
-	}
-	names := kvResourceNames(project, env, resource.Name)
-	s.add(scope, tfElastiCacheReplicationGroup, resource.Name, map[string]any{
-		"engine":                     args.Engine,
-		"engine_version":             args.EngineVersion,
-		"node_type":                  args.NodeType,
-		"num_cache_clusters":         args.NumCacheClusters,
-		"automatic_failover_enabled": args.AutomaticFailoverEnabled,
-		"multi_az_enabled":           args.MultiAZEnabled,
-		"snapshot_retention_limit":   args.SnapshotRetentionLimit,
-	}, names["replicationGroup"])
-	s.add(scope, tfElastiCacheParameterGroup, resource.Name, map[string]any{"family": args.Family}, names["parameterGroup"])
-	s.add(scope, tfElastiCacheSubnetGroup, resource.Name, map[string]any{}, names["subnetGroup"])
-	s.plain(scope, tfSSMParameter, resource.Name, map[string]any{"type": "SecureString"})
-	return nil
-}
-
-func (s costShape) realtime(scope string, resources []provider.Resource) {
-	realtimes := realtimeResourcesOf(resources)
-	if len(realtimes) == 0 {
-		return
-	}
-	authorizer := string(naming.KindRealtimeAuthorizer)
-	s.plain(scope, tfAppSyncAPI, string(naming.KindRealtime), map[string]any{})
-	s.plain(scope, tfLambdaFunction, authorizer, map[string]any{
-		"runtime":           realtimeAuthorizerRuntime,
-		"memory_size":       realtimeAuthorizerMemoryMB,
-		"timeout":           realtimeAuthorizerTimeoutSeconds,
-		"architectures":     []any{arch.ARM64},
-		"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
-	})
-	s.plain(scope, tfLogGroup, authorizer, map[string]any{"retention_in_days": lambdaLogRetentionDays})
-	for _, resource := range realtimes {
-		s.plain(scope, tfSecret, resource.Declared, map[string]any{"managed_by": "ocel"})
-	}
-}
-
-func (s costShape) bucket(scope, project, env string, resource provider.Resource) {
-	names := bucketResourceNames(project, env, resource.Name)
-	s.add(scope, tfS3Bucket, resource.Name, map[string]any{}, names["bucket"])
-	s.add(scope, tfLambdaFunction, resource.Name+"-"+uploadCompleterLocalName, map[string]any{
-		"runtime":           uploadCompleterRuntime,
-		"memory_size":       lambdaDefaultMemoryMB,
-		"timeout":           uploadCompleterTimeoutSeconds,
-		"architectures":     []any{arch.X8664},
-		"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
-	}, names["uploadCompleter"])
-	s.add(scope, tfLogGroup, resource.Name+"-"+uploadCompleterLocalName, map[string]any{"retention_in_days": lambdaLogRetentionDays}, names["uploadCompleterLogGroup"])
-}
-
-func shapeTransforms(ctx context.Context, pass transform.Pass, project string, req provider.ShapeRequest) (shapedPatches, error) {
-	collected := shapedPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
+func shapeTransforms(ctx context.Context, pass transform.Pass, registry component.Registry, project string, req provider.ShapeRequest) (shapedPatches, error) {
+	collected := shapedPatches{patches: map[component.ResourceRef]map[string]any{}, unknown: map[component.ResourceRef][]string{}}
 	if pass == nil {
 		return collected, nil
 	}
@@ -435,7 +313,7 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, project string, r
 		if resource.Binding != "" {
 			continue
 		}
-		if shown, candidate, patchable := newInfraTransformCandidate(project, req.Deploy.Env, resource); patchable {
+		if shown, candidate, patchable := newInfraTransformCandidate(registry, project, req.Deploy.Env, resource); patchable {
 			request.Resources = append(request.Resources, shown)
 			candidates = append(candidates, candidate)
 		}

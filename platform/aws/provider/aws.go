@@ -3,6 +3,9 @@ package aws
 import (
 	"context"
 
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -83,7 +86,7 @@ func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootst
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
 		Vendor:            Vendor,
-		Bindings:          deploy.Serves(),
+		Bindings:          awsresources.Types(),
 		Computes:          []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:             edges.SupportedEdges(),
 		DefaultEdge:       edges.DefaultKind,
@@ -91,7 +94,7 @@ func (p *Provider) Facts() provider.Facts {
 		DNSKinds:          dns.Kinds(),
 		RendersTransforms: true,
 		StoresArtifacts:   true,
-		WorkerCeilings:    deploy.WorkerCeilings,
+		WorkerCeilings:    topic.WorkerCeilings,
 		CachesBytecode:    p.options.Bytecode.Cache,
 
 		MaxFunctionBytes: deploy.MaxFunctionBytes,

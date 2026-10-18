@@ -159,13 +159,13 @@ func TestAPIHostsReadsEachAPIOnce(t *testing.T) {
 		}
 		return testHost, nil
 	})
-	if _, err := hosts.find(context.Background(), testAPIID); err == nil {
-		t.Fatal("find = nil error, want the failed read passed on")
+	if _, err := hosts.load(context.Background(), testAPIID); err == nil {
+		t.Fatal("load = nil error, want the failed read passed on")
 	}
 	for range 3 {
-		host, err := hosts.find(context.Background(), testAPIID)
+		host, err := hosts.load(context.Background(), testAPIID)
 		if err != nil || host != testHost {
-			t.Fatalf("find = %q, %v, want %q", host, err, testHost)
+			t.Fatalf("load = %q, %v, want %q", host, err, testHost)
 		}
 	}
 	if reads != 2 {

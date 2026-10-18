@@ -14,9 +14,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
-
-const edgeSealedFile = "sealed.bin"
 
 const edgeKind = "edge"
 
@@ -29,7 +28,7 @@ func appEdgeBundleKey(c naming.Coordinate) string {
 }
 
 func appEdgeSealedKey(c naming.Coordinate) string {
-	return path.Join(appEdgePrefix(c), edgeSealedFile)
+	return path.Join(appEdgePrefix(c), variables.EdgeSealedFile)
 }
 
 func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
@@ -43,7 +42,7 @@ func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
 	return raw, true, nil
 }
 
-func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
+func edgeSealedDelivered(cfg Config, bundle variables.Bundle) bool {
 	return edgeReadsAssetBucket(cfg) && len(bundle.Ciphertext) > 0
 }
 
@@ -53,7 +52,7 @@ type edgeDelivery struct {
 	Envelope      string
 }
 
-func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBundle) (*assetSet, edgeDelivery, error) {
+func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed variables.Bundle) (*assetSet, edgeDelivery, error) {
 	if !edgeReadsAssetBucket(cfg) {
 		return nil, edgeDelivery{}, nil
 	}
@@ -88,7 +87,7 @@ func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBu
 	}, delivery, nil
 }
 
-func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed appBundle, stats *uploadBatchStats, progress progress.Log) error {
+func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed variables.Bundle, stats *uploadBatchStats, progress progress.Log) error {
 	to := selectEdgeObjectTarget(cfg)
 	say(progress, "Uploading "+app+"'s edge bundle to bucket "+to.bucket)
 	if err := tracedPut(ctx, to.up, to.bucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}.taggedFor(to), bundle, stats); err != nil {
@@ -100,10 +99,10 @@ func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coo
 	return tracedPut(ctx, to.up, to.bucket, appEdgeSealedKey(coord), objectHeaders{contentType: "application/octet-stream"}.taggedFor(to), sealed.Ciphertext, stats)
 }
 
-func checkAppEdgeVariables(cfg Config, app string, values provider.AppValues, bundle appBundle) error {
+func checkAppEdgeVariables(cfg Config, app string, values provider.AppValues, bundle variables.Bundle) error {
 	_, ok, err := readEdgeBundle(cfg, app)
 	if err != nil || !ok {
 		return err
 	}
-	return checkEdgeVariables(app, values, bundle.Ciphertext)
+	return variables.CheckEdgeVariables(app, values, bundle.Ciphertext)
 }
