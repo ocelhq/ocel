@@ -7,7 +7,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func asNodeThatRevalidates(spec provider.StackSpec) provider.StackSpec {
@@ -56,7 +55,7 @@ func TestANodeServiceThatRevalidatesBehindTheWorkerIsToldWhereToPurgeAndTheSecre
 	if got := env[edge.PurgeURLVar]; got != "https://shop.acct.workers.dev/purge" {
 		t.Errorf("%s = %q, want the URL the worker takes purges at", edge.PurgeURLVar, got)
 	}
-	if want := cloudflare.DerivePurgeSecret(w.seed, w.spec.App.ISR.Prefix); env["OCEL_PURGE_SECRET"] != want {
+	if want := edge.DerivePurgeSecret(w.seed, w.spec.App.ISR.Prefix); env["OCEL_PURGE_SECRET"] != want {
 		t.Errorf("OCEL_PURGE_SECRET = %q, want the deployment's derived secret", env["OCEL_PURGE_SECRET"])
 	}
 	if env["OCEL_ISR_PREFIX"] != w.spec.App.ISR.Prefix {

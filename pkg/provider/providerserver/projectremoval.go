@@ -161,7 +161,7 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 		Hostnames: r.state.Hostnames(),
 		Address:   r.state.Edge.Address,
 	}
-	groups := r.front.ProjectRemovals(scope)
+	groups := r.front.PlanProjectRemoval(scope)
 	for _, kind := range r.listRouterKinds() {
 		origin, err := r.findRouterOrigin(kind)
 		if err != nil {

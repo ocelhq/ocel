@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -19,8 +18,6 @@ func ResolvePointer(pointer string) string {
 }
 
 func IsDefaultPointer(pointer string) bool { return ResolvePointer(pointer) == DefaultPointer }
-
-func Supports(r Router, need edge.Need) bool { return slices.Contains(r.Facts().Supported, need) }
 
 type Kind string
 

@@ -11,7 +11,7 @@ import (
 )
 
 func (r Router) planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
-	return r.e.ProjectRemovals(scope)
+	return r.e.PlanProjectRemoval(scope)
 }
 
 func (r Router) claimPreviewEntry(ctx context.Context, claim router.Claim) (edge.Origin, error) {
@@ -65,6 +65,6 @@ func (r Router) disclaimPreviewEntry(ctx context.Context, baseDomain string) err
 }
 
 func (r Router) planPreviewEntryRemoval(wildcard string) []edge.PlanGroup {
-	removed, _ := r.e.PreviewWildcardRemovals(wildcard)
+	removed, _ := r.e.PlanPreviewWildcardRemoval(wildcard)
 	return []edge.PlanGroup{removed}
 }

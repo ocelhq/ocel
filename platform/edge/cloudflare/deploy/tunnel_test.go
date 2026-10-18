@@ -242,3 +242,31 @@ func TestTheCloudflareProxysTokenNeedsTunnelWriteOnTheAccountOnlyForATunnel(t *t
 		t.Errorf("the proxy's permissions are %q, want Cloudflare Tunnel edit on the account, marked as needed only for a tunnel: a tunnel is opened, configured and deleted there, and a token without `tunnel` never touches one", doc.Document)
 	}
 }
+
+func TestATunnelIsReadyOnlyOnceItsConnectorReportsAConnectionToTheEdge(t *testing.T) {
+	connector := NewProxy("ocel", Options{Tunnel: true}).Hooks().Tunnels.Connector
+	if slices.Contains(connector.Ready, "--version") {
+		t.Fatalf("the tunnel is ready when `%s` answers, which it does whatever state the tunnel is in", strings.Join(connector.Ready, " "))
+	}
+	metrics := slices.Index(connector.Command, "--metrics")
+	if metrics < 0 || metrics+1 >= len(connector.Command) {
+		t.Fatalf("the connector runs `%s` with no metrics address, so nothing can ask it whether it connected", strings.Join(connector.Command, " "))
+	}
+	address := connector.Command[metrics+1]
+	if !strings.HasPrefix(address, "127.0.0.1:") {
+		t.Errorf("the connector serves its metrics on %s, beyond the container's own loopback", address)
+	}
+	if want := []string{"cloudflared", "tunnel", "--metrics", address, "ready"}; !slices.Equal(connector.Ready, want) {
+		t.Errorf("the tunnel's readiness is `%s`, want `%s`, which exits 0 only once the connector's /ready answers 200 for a connection to the edge",
+			strings.Join(connector.Ready, " "), strings.Join(want, " "))
+	}
+}
+
+func TestATunnelsConnectorIsCloudflaredNamingTheVisitorInTheHeadersCloudflareSends(t *testing.T) {
+	connector := NewProxy("ocel", Options{Tunnel: true}).Hooks().Tunnels.Connector
+
+	if !strings.HasPrefix(connector.Image, "cloudflare/cloudflared@sha256:") || connector.TokenFileEnv != "TUNNEL_TOKEN_FILE" || !slices.Contains(connector.Command, "--no-autoupdate") ||
+		connector.VisitorAddressHeader != "Cf-Connecting-Ip" || connector.VisitorSchemeHeader != "Cf-Visitor" {
+		t.Errorf("the connector is %+v, want cloudflared pinned by digest, reading its token from TUNNEL_TOKEN_FILE, never updating itself, and the visitor named in Cf-Connecting-Ip and Cf-Visitor, which the origin trusts only from the tunnel", connector)
+	}
+}

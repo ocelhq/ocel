@@ -582,7 +582,7 @@ func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStays(t *testing.T) {
 	t.Parallel()
 
 	balancer, _ := balancing(t)
-	removed, kept := balancer.PreviewWildcardRemovals(edge.PreviewWildcard(previewBase))
+	removed, kept := balancer.PlanPreviewWildcardRemoval(edge.PreviewWildcard(previewBase))
 	named := map[string]bool{}
 	for _, change := range removed.Changes {
 		named[change.Kind] = true
@@ -652,7 +652,7 @@ func TestARemovalPlanNamesTheRecurringCostItLeavesBehind(t *testing.T) {
 	t.Parallel()
 
 	balancer, _ := balancing(t)
-	groups := balancer.ProjectRemovals(edge.ProjectScope{
+	groups := balancer.PlanProjectRemoval(edge.ProjectScope{
 		Slug: "shop", Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"},
 	})
 	var kept edge.PlanGroup
@@ -662,7 +662,7 @@ func TestARemovalPlanNamesTheRecurringCostItLeavesBehind(t *testing.T) {
 		}
 	}
 	if kept.Reason == "" {
-		t.Fatalf("ProjectRemovals = %+v, want a kept group saying what stays provisioned and keeps costing", groups)
+		t.Fatalf("PlanProjectRemoval = %+v, want a kept group saying what stays provisioned and keeps costing", groups)
 	}
 	if !strings.Contains(kept.Reason, "$18") {
 		t.Errorf("the kept group reads %q, want the recurring cost named: the load balancer outlives the project it served", kept.Reason)

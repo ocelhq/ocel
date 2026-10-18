@@ -3,10 +3,13 @@ package vps_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -24,9 +27,23 @@ func TestABoxRunsTheTunnelTheCloudflareProxyReachesItThrough(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !p.Facts().RunsTunnels || front.Hooks().Tunnels == nil || !host.CanRunTunnelTo(cloudflare.Kind) {
-		t.Errorf("Facts().RunsTunnels = %v with the Cloudflare proxy's tunnels %v and a connector on the box %v, want a box reachable through the tunnel the proxy opens",
-			p.Facts().RunsTunnels, front.Hooks().Tunnels, host.CanRunTunnelTo(cloudflare.Kind))
+	if tunnels := front.Hooks().Tunnels; !p.Facts().RunsTunnels || tunnels == nil || tunnels.Connector.Image == "" {
+		t.Errorf("Facts().RunsTunnels = %v with the Cloudflare proxy's tunnels %+v, want a box reachable through the tunnel the proxy opens, running the connector it names",
+			p.Facts().RunsTunnels, tunnels)
+	}
+}
+
+func TestABoxRefusesATunnelToAnEdgeThatOpensNone(t *testing.T) {
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
+	)
+
+	_, err := p.FindTunnelHooks(edge.None)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), "Remove `tunnel`") {
+		t.Errorf("FindTunnelHooks(none) = %v, want it refused invalid, naming the option to remove: an edge that opens no tunnel names no connector for the box to run", err)
 	}
 }
 

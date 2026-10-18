@@ -42,24 +42,24 @@ func tunneledBox(t *testing.T) (*claimBench, Tunnel) {
 	return claimingBox(t, state), *state.Tunnel
 }
 
-func TestATunnelIsReadyOnlyOnceItsConnectorReportsAConnectionToTheEdge(t *testing.T) {
+func newConnector() edge.TunnelConnector {
+	return edge.TunnelConnector{
+		Image:                "example/connector@sha256:" + strings.Repeat("1", 64),
+		Command:              []string{"connect", "--quiet"},
+		TokenFileEnv:         "CONNECTOR_TOKEN_FILE",
+		Ready:                []string{"connector", "ready"},
+		VisitorAddressHeader: "X-Visitor-Address",
+		VisitorSchemeHeader:  "X-Visitor-Scheme",
+	}
+}
+
+func TestATunnelIsReadyOnlyOnceTheCommandItsEdgesConnectorNamesAnswersInIt(t *testing.T) {
 	t.Parallel()
 
-	box := tunnelBox(Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}, tunnelConnectors[tunnelEdge])
-	if slices.Contains(box.ready, "--version") {
-		t.Fatalf("the tunnel is ready when `%s` answers, which it does whatever state the tunnel is in", strings.Join(box.ready, " "))
-	}
-	metrics := slices.Index(box.command, "--metrics")
-	if metrics < 0 || metrics+1 >= len(box.command) {
-		t.Fatalf("the connector runs `%s` with no metrics address, so nothing can ask it whether it connected", strings.Join(box.command, " "))
-	}
-	address := box.command[metrics+1]
-	if !strings.HasPrefix(address, "127.0.0.1:") {
-		t.Errorf("the connector serves its metrics on %s, beyond the container's own loopback", address)
-	}
-	if want := []string{"cloudflared", "tunnel", "--metrics", address, "ready"}; !slices.Equal(box.ready, want) {
-		t.Errorf("the tunnel's readiness is `%s`, want `%s`, which exits 0 only once the connector's /ready answers 200 for a connection to the edge",
-			strings.Join(box.ready, " "), strings.Join(want, " "))
+	box := tunnelBox(Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}, newConnector())
+
+	if want := []string{"docker", "exec", TunnelContainer, "connector", "ready"}; !slices.Equal(box.readiness(), want) {
+		t.Errorf("the tunnel's readiness is `%s`, want `%s`: only the edge knows how its connector reports a connection", strings.Join(box.readiness(), " "), strings.Join(want, " "))
 	}
 }
 
@@ -67,11 +67,11 @@ func TestABoxReservesOneTunnelNameForItsEdgeAndHandsTheSameOneBack(t *testing.T)
 	t.Parallel()
 	box := claimingBox(t, routed())
 
-	first, err := box.host().ReserveTunnel(context.Background(), tunnelEdge)
+	first, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatalf("ReserveTunnel() = %v", err)
 	}
-	again, err := box.host().ReserveTunnel(context.Background(), tunnelEdge)
+	again, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatalf("ReserveTunnel() again = %v", err)
 	}
@@ -88,25 +88,10 @@ func TestABoxReachedThroughOneEdgesTunnelRefusesAnothers(t *testing.T) {
 	t.Parallel()
 	box, _ := tunneledBox(t)
 
-	_, err := box.host().ReserveTunnel(context.Background(), "another-edge")
+	_, err := box.host().ReserveTunnel(context.Background(), "another-edge", newConnector())
 
 	if !isBusy(err) {
 		t.Errorf("ReserveTunnel(another-edge) = %v, want it refused busy: one tunnel reaches one box", err)
-	}
-}
-
-func TestABoxRefusesATunnelToAnEdgeItRunsNoConnectorFor(t *testing.T) {
-	t.Parallel()
-	box := claimingBox(t, routed())
-
-	_, err := box.host().ReserveTunnel(context.Background(), "another-edge")
-
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Errorf("ReserveTunnel(another-edge) = %v, want it refused invalid: the box runs no connector for that edge", err)
-	}
-	if recorded := readBack(t, box).Tunnel; recorded != nil {
-		t.Errorf("the routing table records tunnel %+v, want none reserved", recorded)
 	}
 }
 
@@ -114,27 +99,27 @@ func TestATunnelIsReservedWithTheVisitorHeadersItsEdgeSends(t *testing.T) {
 	t.Parallel()
 	box := claimingBox(t, routed())
 
-	reserved, err := box.host().ReserveTunnel(context.Background(), tunnelEdge)
+	reserved, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if reserved.VisitorAddressHeader != "Cf-Connecting-Ip" || reserved.VisitorSchemeHeader != "Cf-Visitor" {
-		t.Errorf("ReserveTunnel() = %+v, want the headers Cloudflare names the visitor in, which the switchboard trusts only on the tunnel listener", reserved)
+	if reserved.VisitorAddressHeader != "X-Visitor-Address" || reserved.VisitorSchemeHeader != "X-Visitor-Scheme" {
+		t.Errorf("ReserveTunnel() = %+v, want the headers the edge's connector names the visitor in, which the switchboard trusts only on the tunnel listener", reserved)
 	}
 }
 
-func TestATunnelRunsAsOcelTunnelFromAPinnedImageReadingARootOnlyTokenFile(t *testing.T) {
+func TestATunnelRunsAsOcelTunnelTheImageAndCommandItsEdgesConnectorNamesReadingARootOnlyTokenFile(t *testing.T) {
 	t.Parallel()
 	box := claimingBox(t, routed())
-	reserved, err := box.host().ReserveTunnel(context.Background(), tunnelEdge)
+	reserved, err := box.host().ReserveTunnel(context.Background(), tunnelEdge, newConnector())
 	if err != nil {
 		t.Fatal(err)
 	}
 	opened := reserved
 	opened.ID, opened.Address = "5a6b7c8d-1", "5a6b7c8d-1.cfargotunnel.com"
 
-	if err := box.host().RunTunnel(context.Background(), opened, tokenOf("the-tunnel-token")); err != nil {
+	if err := box.host().RunTunnel(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
 		t.Fatalf("RunTunnel() = %v", err)
 	}
 
@@ -146,14 +131,9 @@ func TestATunnelRunsAsOcelTunnelFromAPinnedImageReadingARootOnlyTokenFile(t *tes
 		t.Fatalf("no container was run: %v", box.commands())
 	}
 	run := box.commands()[at]
-	for _, want := range []string{quoted(TunnelContainer), quoted(tunnelConnectors[tunnelEdge].image), quoted("--no-autoupdate"), quoted("TUNNEL_TOKEN_FILE=" + tunnelTokenMounted(opened.Name)), quoted("--network") + " " + quoted(TunnelNetwork)} {
+	for _, want := range []string{quoted(TunnelContainer), quoted(newConnector().Image) + " " + words(newConnector().Command), quoted("CONNECTOR_TOKEN_FILE=" + tunnelTokenMounted(opened.Name)), quoted("--network") + " " + quoted(TunnelNetwork)} {
 		if !strings.Contains(run, want) {
-			t.Errorf("the tunnel was run as %q, want %s in it", run, want)
-		}
-	}
-	for kind, connector := range tunnelConnectors {
-		if !strings.Contains(connector.image, "@sha256:") {
-			t.Errorf("the %s tunnel runs %q, want it pinned by digest", kind, connector.image)
+			t.Errorf("the tunnel was run as %q, want %s in it: the box runs the connector its edge names", run, want)
 		}
 	}
 	if strings.Contains(run, "--publish") {
@@ -189,7 +169,7 @@ func TestATunnelAlreadyRunningIsLeftRunningAndItsTokenNeverRead(t *testing.T) {
 	}
 
 	read := false
-	err := box.host().RunTunnel(context.Background(), reserved, func(context.Context) (string, error) {
+	err := box.host().RunTunnel(context.Background(), reserved, newConnector(), func(context.Context) (string, error) {
 		read = true
 		return "the-tunnel-token", nil
 	})
@@ -208,7 +188,7 @@ func TestATunnelIsRunOnlyUnderTheNameTheBoxReserved(t *testing.T) {
 	stale := reserved
 	stale.Name = "ocel-203-0-113-10-ffffffff"
 
-	err := box.host().RunTunnel(context.Background(), stale, tokenOf("the-tunnel-token"))
+	err := box.host().RunTunnel(context.Background(), stale, newConnector(), tokenOf("the-tunnel-token"))
 
 	if !isBusy(err) || !errors.Is(err, ErrTunnelReleased) || box.at(quoted("docker")+" "+quoted("run")) >= 0 {
 		t.Errorf("RunTunnel() under a name the box no longer reserves = %v, running %v, want it refused busy as a released tunnel with nothing run: that tunnel is being deleted", err, box.commands())
@@ -426,9 +406,9 @@ func (s *tunnelShell) read(path string) string {
 
 func tokenPathOf(t *testing.T, tunnel Tunnel) string {
 	t.Helper()
-	connector := tunnelConnectors[tunnel.Edge]
+	connector := newConnector()
 	for _, set := range tunnelBox(tunnel, connector).env {
-		if path, found := strings.CutPrefix(set, connector.tokenFileEnv+"="); found {
+		if path, found := strings.CutPrefix(set, connector.TokenFileEnv+"="); found {
 			return path
 		}
 	}
@@ -483,7 +463,7 @@ func TestATunnelReleasedAndReplacedWhileItsRunPausedNeverReplacesTheNewConnector
 		return serves(command)
 	}
 
-	err := box.host().RunTunnel(context.Background(), paused, tokenOf("the-paused-token"))
+	err := box.host().RunTunnel(context.Background(), paused, newConnector(), tokenOf("the-paused-token"))
 
 	if !isBusy(err) || !errors.Is(err, ErrTunnelReleased) {
 		t.Errorf("RunTunnel() once another run released and replaced its tunnel = %v, want it refused busy as released", err)
@@ -501,7 +481,7 @@ func TestATunnelStartsOnlyWhileTheTableItCheckedIsTheOneOnTheBox(t *testing.T) {
 	box, reserved := tunneledBox(t)
 	opened := reserved
 	opened.ID = "9e8d7c6b-2"
-	if err := box.host().RunTunnel(context.Background(), opened, tokenOf("the-tunnel-token")); err != nil {
+	if err := box.host().RunTunnel(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
 		t.Fatalf("RunTunnel() = %v", err)
 	}
 	start := box.at(quoted("--name") + " " + quoted(TunnelContainer))
@@ -530,7 +510,7 @@ func TestATunnelIsStartedAndRemovedOnlyUnderTheLockEveryRoutingWriterTakes(t *te
 	box, reserved := tunneledBox(t)
 	opened := reserved
 	opened.ID = "9e8d7c6b-2"
-	if err := box.host().RunTunnel(context.Background(), opened, tokenOf("the-tunnel-token")); err != nil {
+	if err := box.host().RunTunnel(context.Background(), opened, newConnector(), tokenOf("the-tunnel-token")); err != nil {
 		t.Fatalf("RunTunnel() = %v", err)
 	}
 	if err := box.host().RemoveTunneledHost(context.Background(), TunneledHost{Hostname: claimed, Owner: surface}); err != nil {

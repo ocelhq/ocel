@@ -269,6 +269,9 @@ func TestAContainerRoutedByTheLoadBalancerIsReachedThroughThePublicFrontAlone(t 
 	if _, guarded := env[edge.OriginSecretVar]; guarded {
 		t.Errorf("the container is handed %s, and a request the load balancer forwards by hostname carries no secret: it would refuse every one of them", edge.OriginSecretVar)
 	}
+	if _, fronted := env[edge.OriginFrontedVar]; fronted {
+		t.Errorf("the container is handed %s, and no front presents a secret to it: it would refuse to start", edge.OriginFrontedVar)
+	}
 }
 
 type rangedEdge struct{ edge.Edge }

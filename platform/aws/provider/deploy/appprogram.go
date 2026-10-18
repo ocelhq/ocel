@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 type appWork struct {
@@ -297,7 +296,7 @@ func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
 	if edgeReadsAssetBucket(r.cfg) {
 		cache.EdgeReadable = true
 		if r.cfg.PurgeSeed != "" {
-			cache.PurgeSecret = cloudflare.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Prefix)
+			cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Prefix)
 		}
 	}
 	return cache

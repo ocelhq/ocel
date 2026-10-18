@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -32,7 +33,7 @@ func RunFacts(t *testing.T, newEdge func(t *testing.T) edge.Edge) {
 			t.Errorf("Facts().RunsCode = %v, but Facts().Compatibility named = %v; the code an edge runs loads under the compatibility it names, so an edge cannot answer them differently", runsCode, names)
 		}
 		wants := slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool {
-			return edge.Supports(e, need)
+			return slices.Contains(e.Facts().Supported, need)
 		})
 		if runsCode != wants {
 			t.Errorf("Facts().RunsCode = %v, but Facts().Supported names a code need = %v; an edge that runs code must declare one and one that does not must declare neither", runsCode, wants)
@@ -86,6 +87,20 @@ func RunFacts(t *testing.T, newEdge func(t *testing.T) edge.Edge) {
 			}
 		}
 	})
+
+	t.Run("an edge that opens tunnels names the connector an origin runs for them", func(t *testing.T) {
+		tunnels := newEdge(t).Hooks().Tunnels
+		if tunnels == nil {
+			return
+		}
+		connector := tunnels.Connector
+		if !strings.Contains(connector.Image, "@sha256:") {
+			t.Errorf("Hooks().Tunnels.Connector.Image = %q, want an image pinned by digest: an origin runs it holding the tunnel's token", connector.Image)
+		}
+		if len(connector.Command) == 0 || connector.TokenFileEnv == "" || len(connector.Ready) == 0 {
+			t.Errorf("Hooks().Tunnels.Connector = %+v, want the command it runs, the variable it reads its token file from and the command that answers once it is connected all named: an origin runs nothing else to reach the edge", connector)
+		}
+	})
 }
 
 func Run(t *testing.T, suite Suite) {
@@ -103,36 +118,36 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("teardown plans are named, typed and honestly actioned", func(t *testing.T) {
 		e, spec := suite.New(t)
 
-		groups := e.ProjectRemovals(edge.ProjectScope{
+		groups := e.PlanProjectRemoval(edge.ProjectScope{
 			Slug:      spec.Slug,
 			Tier:      spec.Tier,
 			Hostnames: []string{suite.Hostname},
 			Address:   "front.example.net",
 		})
 		if len(groups) == 0 {
-			t.Fatal("ProjectRemovals = none, want what a project with a bound hostname depends on")
+			t.Fatal("PlanProjectRemoval = none, want what a project with a bound hostname depends on")
 		}
 		for _, group := range groups {
-			checkRemoval(t, "ProjectRemovals", group)
+			checkRemoval(t, "PlanProjectRemoval", group)
 		}
 
-		removed, kept := e.PreviewWildcardRemovals("*.preview.example.com")
-		checkRemoval(t, "PreviewWildcardRemovals removed", removed)
-		checkRemoval(t, "PreviewWildcardRemovals kept", kept)
+		removed, kept := e.PlanPreviewWildcardRemoval("*.preview.example.com")
+		checkRemoval(t, "PlanPreviewWildcardRemoval removed", removed)
+		checkRemoval(t, "PlanPreviewWildcardRemoval kept", kept)
 		if removed.Action == edge.PlanKeep {
-			t.Error("PreviewWildcardRemovals' removed group is kept; releasing the wildcard must take down what serves it")
+			t.Error("PlanPreviewWildcardRemoval' removed group is kept; releasing the wildcard must take down what serves it")
 		}
 		if len(removed.Changes) == 0 {
-			t.Error("PreviewWildcardRemovals' removed group has no rows; a removal plan names what goes")
+			t.Error("PlanPreviewWildcardRemoval' removed group has no rows; a removal plan names what goes")
 		}
 		if kept.Action != edge.PlanKeep {
-			t.Errorf("PreviewWildcardRemovals' kept group has action %q, want %q", kept.Action, edge.PlanKeep)
+			t.Errorf("PlanPreviewWildcardRemoval' kept group has action %q, want %q", kept.Action, edge.PlanKeep)
 		}
 
-		shared := e.SharedPreviewRemoval()
-		checkRemoval(t, "SharedPreviewRemoval", shared)
+		shared := e.PlanSharedPreviewRemoval()
+		checkRemoval(t, "PlanSharedPreviewRemoval", shared)
 		if shared.Action != edge.PlanKeep {
-			t.Errorf("SharedPreviewRemoval action = %q, want %q: it is bootstrap-scoped", shared.Action, edge.PlanKeep)
+			t.Errorf("PlanSharedPreviewRemoval action = %q, want %q: it is bootstrap-scoped", shared.Action, edge.PlanKeep)
 		}
 	})
 

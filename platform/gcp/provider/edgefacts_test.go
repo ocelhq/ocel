@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 type edgeFactsReadingStacks struct {
@@ -43,7 +43,7 @@ func TestTheFunctionsOfADeployReadTheEdgeFactsTheDeployReadAndNotTheStoreAgain(t
 	if err != nil {
 		t.Fatalf("Provision = %v, want the functions handed what the deploy already read", err)
 	}
-	if want := cloudflare.DerivePurgeSecret(seed, isrPrefix); seen.purgeSecret != want {
+	if want := edge.DerivePurgeSecret(seed, isrPrefix); seen.purgeSecret != want {
 		t.Errorf("purge secret the functions saw = %q, want %q", seen.purgeSecret, want)
 	}
 }

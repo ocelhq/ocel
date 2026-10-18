@@ -142,7 +142,7 @@ const (
 	typeKeyValueStore = "AWS::CloudFront::KeyValueStore"
 )
 
-func (p *cloudFront) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *cloudFront) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	var changes []edge.PlanChange
 	if scope.Address != "" {
 		changes = append(changes, edge.PlanChange{
@@ -171,7 +171,7 @@ func (p *cloudFront) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (p *cloudFront) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *cloudFront) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -184,10 +184,10 @@ func (p *cloudFront) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, e
 			Slow:   true,
 		}},
 	}
-	return removed, p.SharedPreviewRemoval()
+	return removed, p.PlanSharedPreviewRemoval()
 }
 
-func (p *cloudFront) SharedPreviewRemoval() edge.PlanGroup {
+func (p *cloudFront) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),

@@ -72,7 +72,7 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 		}
 		env = append(env, entry)
 	}
-	guard, env, err := originguard.GuardFromEnv(env, false)
+	guard, env, err := originguard.GuardFromEnv(env)
 	if err != nil {
 		return fatal(err.Error())
 	}

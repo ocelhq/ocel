@@ -158,3 +158,36 @@ func TestAGatewayAddressThatNamesNoGatewayKeepsTheFrontFromStarting(t *testing.T
 		}
 	}
 }
+
+func TestAContainerMarkedFrontedAndHandedNoOriginSecretRefusesToStart(t *testing.T) {
+	_, _, err := readFront([]string{edge.OriginFrontedVar + "=1", "GREETING=hello"})
+	if err == nil {
+		t.Fatal("a container reached only through its front started with no secret to demand of its callers")
+	}
+	if !strings.Contains(err.Error(), edge.OriginSecretVar) {
+		t.Errorf("error = %q, want it to name %s", err, edge.OriginSecretVar)
+	}
+}
+
+func TestAContainerMarkedFrontedAndHandedTheOriginSecretGuardsItsFront(t *testing.T) {
+	read, env, err := readFront([]string{edge.OriginFrontedVar + "=1", edge.OriginSecretVar + "=edge-secret", "GREETING=hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(env, " ") != "GREETING=hello" {
+		t.Errorf("the app is handed %q, want the marker and the secret kept by its front", env)
+	}
+	if read.guard.Admits(httptest.NewRequest(http.MethodGet, "/", nil)) {
+		t.Error("the front admits a request with no secret")
+	}
+}
+
+func TestAContainerNothingFrontsStartsUnguarded(t *testing.T) {
+	read, _, err := readFront([]string{"GREETING=hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.guard != nil {
+		t.Error("a container no front was marked for built a guard that turns away its callers")
+	}
+}

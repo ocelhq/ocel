@@ -54,7 +54,6 @@ type StackState struct {
 	Tier          environment.Tier  `json:"tier,omitempty"`
 	Endpoint      string            `json:"endpoint,omitempty"`
 	Secret        string            `json:"secret,omitempty"`
-	OwnerToken    string            `json:"ownerToken,omitempty"`
 	Address       string            `json:"address,omitempty"`
 	Addresses     map[string]string `json:"addresses,omitempty"`
 	Bound         []string          `json:"bound,omitempty"`
@@ -66,7 +65,7 @@ type StackState struct {
 }
 
 func (s StackState) Empty() bool {
-	return s.Slug == "" && s.Tier == "" && s.Endpoint == "" && s.Secret == "" && s.OwnerToken == "" &&
+	return s.Slug == "" && s.Tier == "" && s.Endpoint == "" && s.Secret == "" &&
 		s.Address == "" && len(s.Addresses) == 0 && len(s.Bound) == 0 && len(s.Records) == 0 &&
 		s.GlobalPreview == "" && s.PreviewBase == "" && s.PurgeURL == "" && s.Private.IsZero()
 }
@@ -76,7 +75,6 @@ func (s StackState) Equal(other StackState) bool {
 		s.Tier == other.Tier &&
 		s.Endpoint == other.Endpoint &&
 		s.Secret == other.Secret &&
-		s.OwnerToken == other.OwnerToken &&
 		s.Address == other.Address &&
 		s.GlobalPreview == other.GlobalPreview &&
 		s.PreviewBase == other.PreviewBase &&

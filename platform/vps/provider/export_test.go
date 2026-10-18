@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -17,6 +18,10 @@ const (
 	RealtimeGatewayMemoryBytes = realtimeGatewayMemoryBytes
 	RealtimeSocketBytes        = realtimeSocketBytes
 )
+
+func (p *Provider) FindTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
+	return p.findTunnelHooks(kind)
+}
 
 func (p *Provider) Timing(now func() time.Time) { p.now = now }
 

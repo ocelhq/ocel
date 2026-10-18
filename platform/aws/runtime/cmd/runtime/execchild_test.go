@@ -237,6 +237,31 @@ func TestAnExecutedAppIsReachedOnlyWithTheOriginSecret(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses to start an app marked fronted that is handed no origin secret", func(t *testing.T) {
+		t.Setenv(edge.OriginFrontedVar, "1")
+		_, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
+		if err == nil || !strings.Contains(err.Error(), edge.OriginSecretVar) {
+			t.Fatalf("startExecutable error = %v, want a refusal naming %s: the function URL is public and nothing else keeps callers off it", err, edge.OriginSecretVar)
+		}
+	})
+
+	t.Run("guards an app marked fronted with the origin secret it is handed", func(t *testing.T) {
+		t.Setenv(edge.OriginFrontedVar, "1")
+		t.Setenv(edge.OriginSecretVar, "the-secret")
+		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)
+		if err != nil {
+			t.Fatalf("startExecutable: %v", err)
+		}
+
+		rt, captured := fakeRuntime(t, []byte(secretEvent+`}`))
+		if err := handleInvocation(t.Context(), rt, child); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+		if p, _ := splitPrelude(t, captured.body); p.StatusCode != http.StatusForbidden {
+			t.Errorf("status = %d, want %d", p.StatusCode, http.StatusForbidden)
+		}
+	})
+
 	t.Run("refuses a request that presents the wrong origin secret", func(t *testing.T) {
 		t.Setenv(edge.OriginSecretVar, "the-secret")
 		child, err := startExecutable(httpChildCommand(t), freePort(t), helperEnv(), 20*time.Second)

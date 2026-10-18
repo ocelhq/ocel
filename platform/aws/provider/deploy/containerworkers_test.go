@@ -172,6 +172,9 @@ func TestAContainerWorkerRunsTheAppsImageAsAWorkerNamingTheQueuesItServes(t *tes
 	if _, leaked := env[edge.OriginSecretVar]; leaked {
 		t.Errorf("a worker was handed %s, which only a front that guards a public port needs", edge.OriginSecretVar)
 	}
+	if _, fronted := env[edge.OriginFrontedVar]; fronted {
+		t.Errorf("a worker was handed %s, and it is handed no secret: it would refuse to start", edge.OriginFrontedVar)
+	}
 	topology, err := queues.Parse([]byte(env[queues.EnvVar]))
 	if err != nil {
 		t.Fatalf("%s = %q: %v", queues.EnvVar, env[queues.EnvVar], err)

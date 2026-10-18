@@ -38,6 +38,7 @@ func (x *Proxy) Hooks() edge.Hooks {
 		},
 		PurgeHostnames: x.p.purgeHostnames,
 		Tunnels: &edge.TunnelHooks{
+			Connector: newCloudflaredConnector(),
 			Ensure:    x.p.ensureTunnel,
 			Configure: x.p.configureTunnel,
 			ReadToken: x.p.readTunnelToken,

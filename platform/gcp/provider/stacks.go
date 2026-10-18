@@ -3,9 +3,9 @@ package gcp
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func (p *Provider) readEdgePurgeSecret(ctx context.Context, spec provider.StackSpec) (string, error) {
@@ -23,7 +23,7 @@ func (p *Provider) readEdgePurgeSecret(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return "", err
 	}
-	return cloudflare.DerivePurgeSecret(seed, spec.App.ISR.Prefix), nil
+	return edge.DerivePurgeSecret(seed, spec.App.ISR.Prefix), nil
 }
 
 type stacks struct {

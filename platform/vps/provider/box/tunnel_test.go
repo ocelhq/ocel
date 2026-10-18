@@ -113,12 +113,35 @@ func TestATunnelIsKeptWhenRunningItIsRefusedForAnythingButItsRelease(t *testing.
 	}
 }
 
+func TestABoxRunsTheConnectorItsEdgesTunnelHooksName(t *testing.T) {
+	m, routed := routedOn(t)
+
+	if _, err := routed.Claim(context.Background(), tunneledClaim("shop.example.com")); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(m.calls, "run tunnel uuid-1 from "+edgeConnector().Image+" with token-uuid-1") || m.tunnel.VisitorAddressHeader != edgeConnector().VisitorAddressHeader {
+		t.Errorf("the box ran %v and reserved %+v, want the tunnel run from the connector the edge's tunnel hooks name and reserved with the visitor headers it names: only the edge knows what reaches it", m.calls, m.tunnel)
+	}
+}
+
+func edgeConnector() edge.TunnelConnector {
+	return edge.TunnelConnector{
+		Image:                "example/connector@sha256:" + strings.Repeat("1", 64),
+		Command:              []string{"connect"},
+		TokenFileEnv:         "CONNECTOR_TOKEN_FILE",
+		Ready:                []string{"connector", "ready"},
+		VisitorAddressHeader: "X-Visitor-Address",
+	}
+}
+
 func (m *machine) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	if kind != tunnelEdge {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the %s edge opens no tunnel", kind)
 	}
 	record := func(event string) { m.tunnelEvents.opened = append(m.tunnelEvents.opened, event) }
 	return &edge.TunnelHooks{
+		Connector: edgeConnector(),
 		Ensure: func(_ context.Context, name string) (edge.Tunnel, error) {
 			record("ensure " + name)
 			if m.tunnelEvents.held == nil {
@@ -154,12 +177,12 @@ func (m *machine) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	}, nil
 }
 
-func (m *machine) ReserveTunnel(_ context.Context, front edge.Kind) (host.Tunnel, error) {
+func (m *machine) ReserveTunnel(_ context.Context, front edge.Kind, connector edge.TunnelConnector) (host.Tunnel, error) {
 	if err := m.refuse("ReserveTunnel"); err != nil {
 		return host.Tunnel{}, err
 	}
 	if m.tunnel == nil {
-		m.tunnel = &host.Tunnel{Edge: front, Name: fmt.Sprintf("ocel-box-%d", m.tunnelsReserved)}
+		m.tunnel = &host.Tunnel{Edge: front, Name: fmt.Sprintf("ocel-box-%d", m.tunnelsReserved), VisitorAddressHeader: connector.VisitorAddressHeader, VisitorSchemeHeader: connector.VisitorSchemeHeader}
 		m.tunnelsReserved++
 	}
 	if m.tunnel.Edge != front {
@@ -168,7 +191,7 @@ func (m *machine) ReserveTunnel(_ context.Context, front edge.Kind) (host.Tunnel
 	return *m.tunnel, nil
 }
 
-func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(context.Context) (string, error)) error {
+func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error {
 	if err := m.refuse("RunTunnel"); err != nil {
 		return err
 	}
@@ -183,7 +206,7 @@ func (m *machine) RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(
 	if err != nil {
 		return err
 	}
-	m.calls = append(m.calls, "run tunnel "+tunnel.ID+" with "+read)
+	m.calls = append(m.calls, "run tunnel "+tunnel.ID+" from "+connector.Image+" with "+read)
 	m.tunnelRunning = tunnel.ID
 	if m.tunnelEvents.afterRun != nil {
 		m.tunnelEvents.afterRun()

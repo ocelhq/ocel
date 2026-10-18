@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 type wallet struct {
@@ -46,7 +45,7 @@ func TestANextServiceBehindTheWorkerIsToldItsTagDatabaseAndThePurgeSecretItSigns
 	if _, told := env["OCEL_ISR_WRITER_URL"]; told {
 		t.Errorf("OCEL_ISR_WRITER_URL = %q, want none: no worker keeps this service's pages", env["OCEL_ISR_WRITER_URL"])
 	}
-	if want := cloudflare.DerivePurgeSecret(w.seed, w.spec.App.ISR.Prefix); env["OCEL_PURGE_SECRET"] != want {
+	if want := edge.DerivePurgeSecret(w.seed, w.spec.App.ISR.Prefix); env["OCEL_PURGE_SECRET"] != want {
 		t.Errorf("OCEL_PURGE_SECRET = %q, want the deployment's derived secret", env["OCEL_PURGE_SECRET"])
 	}
 	for _, name := range []string{"OCEL_TAG_DATABASE", "OCEL_ISR_PREFIX", "OCEL_ISR_TAG_NAMESPACE", "OCEL_ISR_BUCKET", "OCEL_ISR_OBJECT_PREFIX"} {

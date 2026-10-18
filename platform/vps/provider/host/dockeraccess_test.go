@@ -20,7 +20,7 @@ func (everyContainerOcels) IsOcels(context.Context, string) (bool, error) { retu
 func (everyContainerOcels) IsHostBound(context.Context, string) (bool, error) { return false, nil }
 
 func composedArgvs(front Front) map[string][]string {
-	tunnel := tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, tunnelConnectors["cloudflare"])
+	tunnel := tunnelBox(Tunnel{Edge: "cloudflare", ID: "5a6b7c8d-1"}, newConnector())
 	board := switchboardBox(nil, front)
 	gateway := resourced()
 	gateway.Mounts = []Mount{{Source: RealtimeDir, Target: RealtimeMount}}

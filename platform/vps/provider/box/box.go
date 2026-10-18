@@ -45,8 +45,8 @@ type Machine interface {
 	PreviewEntry(ctx context.Context) (string, error)
 	InstallPreviewEntry(ctx context.Context, base string) error
 	RemovePreviewEntry(ctx context.Context, base string) error
-	ReserveTunnel(ctx context.Context, front edge.Kind) (host.Tunnel, error)
-	RunTunnel(ctx context.Context, tunnel host.Tunnel, token func(context.Context) (string, error)) error
+	ReserveTunnel(ctx context.Context, front edge.Kind, connector edge.TunnelConnector) (host.Tunnel, error)
+	RunTunnel(ctx context.Context, tunnel host.Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error
 	TunnelHost(ctx context.Context, tunneled host.TunneledHost, tunnelName string) error
 	RemoveTunneledHost(ctx context.Context, tunneled host.TunneledHost) error
 	ReleaseTunnel(ctx context.Context) ([]host.Tunnel, error)
@@ -171,7 +171,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	return e.machine.RemovePreviewEntry(ctx, baseDomain)
 }
 
-func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	group := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
@@ -205,7 +205,7 @@ func (e *Edge) certificateKept(hostname string) edge.PlanChange {
 	return edge.PlanChange{Kind: CertificateKind, Name: certs.ProxyHandle(hostname), Action: edge.PlanKeep, Reason: reason}
 }
 
-func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
+func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup) {
 	removed = edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
@@ -215,10 +215,10 @@ func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Plan
 			Reason: "proxy route",
 		}},
 	}
-	return removed, e.SharedPreviewRemoval()
+	return removed, e.PlanSharedPreviewRemoval()
 }
 
-func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
+func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),

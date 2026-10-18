@@ -463,7 +463,7 @@ func TestGuardFromEnv(t *testing.T) {
 			"PORT=8080",
 			edge.OriginSecretVar + "=s3cr3t",
 			"NODE_ENV=production",
-		}, false)
+		})
 
 		if slices.ContainsFunc(kept, func(e string) bool { return strings.HasPrefix(e, edge.OriginSecretVar+"=") }) {
 			t.Errorf("the app's environment = %q, which still contains the origin secret", kept)
@@ -490,7 +490,7 @@ func TestGuardFromEnv(t *testing.T) {
 			edge.OriginSecretPreviousVar + "=0ld",
 			edge.OriginSecretVar + "=s3cr3t",
 			"PORT=8080",
-		}, false)
+		})
 
 		if !slices.Equal(kept, []string{"PORT=8080"}) {
 			t.Errorf("the app's environment = %q, want both secrets taken out of it", kept)
@@ -505,7 +505,7 @@ func TestGuardFromEnv(t *testing.T) {
 	})
 
 	t.Run("a predecessor with no current secret still guards and reaches no app", func(t *testing.T) {
-		guard, kept, err := GuardFromEnv([]string{edge.OriginSecretPreviousVar + "=0ld", "PORT=8080"}, false)
+		guard, kept, err := GuardFromEnv([]string{edge.OriginSecretPreviousVar + "=0ld", "PORT=8080"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -523,14 +523,40 @@ func TestGuardFromEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("a deployment that must be fronted and was given no secret is refused", func(t *testing.T) {
-		if _, _, err := GuardFromEnv([]string{"PORT=8080"}, true); err == nil {
-			t.Error("GuardFromEnv built no guard and no error for a deployment that must be fronted")
+	t.Run("a deployment marked fronted and given no secret is refused, naming the secret it lacks", func(t *testing.T) {
+		_, _, err := GuardFromEnv([]string{edge.OriginFrontedVar + "=1", "PORT=8080"})
+		if err == nil {
+			t.Fatal("GuardFromEnv built no guard and no error for a deployment that is reached only through its front")
+		}
+		if !strings.Contains(err.Error(), edge.OriginSecretVar) {
+			t.Errorf("error = %q, want it to name %s", err, edge.OriginSecretVar)
+		}
+	})
+
+	t.Run("a deployment marked fronted and given a secret set to nothing is refused", func(t *testing.T) {
+		if _, _, err := GuardFromEnv([]string{edge.OriginFrontedVar + "=1", edge.OriginSecretVar + "=", edge.OriginSecretPreviousVar + "="}); err == nil {
+			t.Error("GuardFromEnv started a deployment reached only through its front with a secret that was lost on the way")
+		}
+	})
+
+	t.Run("a deployment marked fronted and given a secret is guarded, and neither reaches the app", func(t *testing.T) {
+		guard, kept, err := GuardFromEnv([]string{edge.OriginFrontedVar + "=1", edge.OriginSecretVar + "=s3cr3t", "PORT=8080"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if guard.Admits(httptest.NewRequest(http.MethodGet, "/", nil)) {
+			t.Error("the guard admits a request with no secret")
+		}
+		if !slices.Equal(kept, []string{"PORT=8080"}) {
+			t.Errorf("the app's environment = %q, want the marker and the secret taken out of it", kept)
 		}
 	})
 
 	t.Run("builds no guard for a deployment nothing fronts", func(t *testing.T) {
-		guard, kept, _ := GuardFromEnv([]string{"PORT=8080"}, false)
+		guard, kept, err := GuardFromEnv([]string{"PORT=8080"})
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		if guard != nil {
 			t.Error("GuardFromEnv built a guard for a deployment that was given no secret")
@@ -544,7 +570,7 @@ func TestGuardFromEnv(t *testing.T) {
 	})
 
 	t.Run("an origin secret set to nothing fails closed", func(t *testing.T) {
-		guard, _, _ := GuardFromEnv([]string{edge.OriginSecretVar + "="}, false)
+		guard, _, _ := GuardFromEnv([]string{edge.OriginSecretVar + "="})
 
 		if guard == nil {
 			t.Fatal("an origin secret that was set to nothing left the app open to anyone who finds it")

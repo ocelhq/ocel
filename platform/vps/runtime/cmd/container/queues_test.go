@@ -126,7 +126,7 @@ func TestAWorkerContainersFrontRefusesADeliveryTheEngineDidNotSign(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	read, env, err := readFront([]string{processenv.WorkerEnvVar + "=ledger", edge.OriginSecretVar + "=delivery-secret", "GREETING=hello"})
+	read, env, err := readFront([]string{processenv.WorkerEnvVar + "=ledger", edge.OriginFrontedVar + "=1", edge.OriginSecretVar + "=delivery-secret", "GREETING=hello"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestAWorkerContainersFrontRefusesADeliveryTheEngineDidNotSign(t *testing.T)
 }
 
 func TestAWorkerContainerHandedNoDeliverySecretRefusesToStart(t *testing.T) {
-	if _, _, err := readFront([]string{processenv.WorkerEnvVar + "=ledger", "GREETING=hello"}); err == nil {
+	if _, _, err := readFront([]string{processenv.WorkerEnvVar + "=ledger", edge.OriginFrontedVar + "=1", "GREETING=hello"}); err == nil {
 		t.Error("a worker container with no delivery secret started a front that admits any container on the project network")
 	}
 }

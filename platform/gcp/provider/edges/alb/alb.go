@@ -316,7 +316,7 @@ type claim struct {
 
 func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string { return Surface(slug, tier) }
 
-func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := make([]edge.PlanChange, 0, len(scope.Hostnames)*3+1)
 	for _, hostname := range scope.Hostnames {
 		changes = append(changes,
@@ -345,7 +345,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}
 }
 
-func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
+func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup) {
 	base := strings.TrimPrefix(wildcard, "*.")
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
@@ -354,10 +354,10 @@ func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Plan
 		Changes: []edge.PlanChange{
 			{Kind: "certificatemanager.CertificateMapEntry", Name: previewEntryName(base), Action: edge.PlanDelete},
 		},
-	}, e.SharedPreviewRemoval()
+	}, e.PlanSharedPreviewRemoval()
 }
 
-func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
+func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
