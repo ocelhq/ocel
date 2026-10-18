@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
@@ -103,7 +104,7 @@ func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string)
 	if _, err := envsource.EnsureDigestKey(ctx, store, req.Tier); err != nil {
 		t.Fatal(err)
 	}
-	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: func() {}, key: keyedAs(keys...), keyValues: store.KeyValues}).
+	if err := (tierBootstrap{Bootstrap: stubBootstrap{}, forget: func() {}, key: keyedAs(keys...), keyValues: store.KeyValues}).
 		Apply(ctx, req, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +139,7 @@ func forgetOf(t *testing.T, p *Provider) func() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapped, ok := boot.(forgetting)
+	wrapped, ok := boot.(tierBootstrap)
 	if !ok {
 		t.Fatalf("Bootstrap() = %T, want one that clears the provider's memo", boot)
 	}
@@ -180,7 +181,7 @@ func TestBootstrapApplyForgetsWhatItInstalled(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
+	if err := (tierBootstrap{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
 		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -203,9 +204,15 @@ type saying struct {
 
 func (s *saying) Say(message string) { s.said = append(s.said, message) }
 
-func (r *repairedParts) repair(_ context.Context, tier environment.Tier) ([]string, error) {
-	r.tiers = append(r.tiers, tier)
-	return r.names, nil
+func (r *repairedParts) parts() tier.Parts {
+	parts := make(tier.Parts, 0, len(r.names))
+	for _, name := range r.names {
+		parts = append(parts, tier.Part{Name: name, Repair: func(_ context.Context, tier environment.Tier) (bool, error) {
+			r.tiers = append(r.tiers, tier)
+			return true, nil
+		}})
+	}
+	return parts
 }
 
 func TestBootstrapApplyRemakesTheRecordedPartsOfItsTierOnceTheBaseIsApplied(t *testing.T) {
@@ -213,7 +220,7 @@ func TestBootstrapApplyRemakesTheRecordedPartsOfItsTierOnceTheBaseIsApplied(t *t
 	repaired := &repairedParts{names: []string{"env-source-sync"}}
 
 	log := &saying{Log: progress.Discard()}
-	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed, repairParts: repaired.repair}).
+	if err := (tierBootstrap{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed, parts: repaired.parts()}).
 		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview}, log); err != nil {
 		t.Fatal(err)
 	}
@@ -228,10 +235,10 @@ func TestBootstrapApplyRemakesTheRecordedPartsOfItsTierOnceTheBaseIsApplied(t *t
 
 func TestAFailedBootstrapApplyRemakesNoPart(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	repaired := &repairedParts{}
+	repaired := &repairedParts{names: []string{"env-source-sync"}}
 
 	refused := errors.New("refused")
-	if err := (forgetting{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p), key: unkeyed, repairParts: repaired.repair}).
+	if err := (tierBootstrap{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p), key: unkeyed, parts: repaired.parts()}).
 		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
@@ -245,7 +252,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
+	if err := (tierBootstrap{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
 		Remove(context.Background(), environment.TierProduction, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +268,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 	primed(t, p, "before")
 
 	refused := errors.New("refused")
-	if err := (forgetting{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p), key: unkeyed}).
+	if err := (tierBootstrap{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p), key: unkeyed}).
 		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
@@ -319,7 +326,7 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bootstrap(%q) error = %v", kind, err)
 		}
-		awsBoot, ok := boot.(forgetting).Bootstrap.(control.Bootstrap)
+		awsBoot, ok := boot.(tierBootstrap).Bootstrap.(control.Bootstrap)
 		if !ok {
 			t.Fatalf("Bootstrap(%q) = %T, want the AWS boot", kind, boot)
 		}

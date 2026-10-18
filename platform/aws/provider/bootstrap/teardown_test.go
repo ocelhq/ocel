@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -167,10 +169,6 @@ func (b *teardownS3) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput,
 
 var testAppBoundaryARN = "arn:aws:iam::123456789012:policy/" + defaultNamespace.AppBoundaryNameFor(environment.TierProduction)
 
-func removeNoBastion(context.Context, environment.Tier) error { return nil }
-
-func removeNoEnvSourceSync(context.Context, environment.Tier) error { return nil }
-
 func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardownS3) {
 	t.Helper()
 
@@ -198,14 +196,12 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 		t.Fatalf("EdgeUserNameFor: %v", err)
 	}
 	apis := TeardownAPIs{
-		RemoveBastion:       removeNoBastion,
-		RemoveEnvSourceSync: removeNoEnvSourceSync,
-		Layers:              newFakeLayers(),
-		Records:             newFakeRecords().in,
-		CFN:                 stacks,
-		SSM:                 ssmc,
-		IAM:                 &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
-		Buckets:             buckets,
+		Layers:  newFakeLayers(),
+		Records: newFakeRecords().in,
+		CFN:     stacks,
+		SSM:     ssmc,
+		IAM:     &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
+		Buckets: buckets,
 	}
 	return apis, stacks, ssmc, buckets
 }
@@ -238,7 +234,7 @@ func TestTeardownReleasesTheAppBoundaryBeforeTheCoreStackGoes(t *testing.T) {
 	}
 }
 
-func TestTeardownRemovesTheTiersBastionBeforeItReleasesTheAppBoundaryItsRoleIsUnder(t *testing.T) {
+func TestTeardownRemovesTheTiersPartsBeforeItReleasesTheAppBoundaryTheirRolesAreUnder(t *testing.T) {
 	t.Parallel()
 
 	apis, _, _, _ := teardownFakes(t)
@@ -246,7 +242,7 @@ func TestTeardownRemovesTheTiersBastionBeforeItReleasesTheAppBoundaryItsRoleIsUn
 	iamc.bounded = map[string][]string{testAppBoundaryARN: {"app-role-a"}}
 	var removed []environment.Tier
 	var boundaryListedFirst bool
-	apis.RemoveBastion = func(_ context.Context, tier environment.Tier) error {
+	apis.RemoveParts = func(_ context.Context, tier environment.Tier, _ progress.Log) error {
 		removed = append(removed, tier)
 		return nil
 	}
@@ -257,14 +253,14 @@ func TestTeardownRemovesTheTiersBastionBeforeItReleasesTheAppBoundaryItsRoleIsUn
 	}
 
 	if !slices.Equal(removed, []environment.Tier{environment.TierProduction}) {
-		t.Errorf("the bastion was removed for %v, want the production tier once", removed)
+		t.Errorf("the tier's parts were removed for %v, want the production tier once", removed)
 	}
 	if boundaryListedFirst {
 		t.Error("the app boundary was released before the bastion's role left it, so the role would outlive the tier under no boundary")
 	}
 }
 
-func TestTeardownRemovesTheTiersEnvSourceSyncBeforeItReleasesTheAppBoundaryItsRolesAreUnder(t *testing.T) {
+func TestTeardownRemovesTheTiersPartsBeforeTheCoreStackTheirTableIsIn(t *testing.T) {
 	t.Parallel()
 
 	apis, stacks, _, _ := teardownFakes(t)
@@ -272,7 +268,7 @@ func TestTeardownRemovesTheTiersEnvSourceSyncBeforeItReleasesTheAppBoundaryItsRo
 	iamc.bounded = map[string][]string{testAppBoundaryARN: {"ocel-env-sync"}}
 	var removed []environment.Tier
 	var boundaryListedFirst, coreGoneFirst bool
-	apis.RemoveEnvSourceSync = func(_ context.Context, tier environment.Tier) error {
+	apis.RemoveParts = func(_ context.Context, tier environment.Tier, _ progress.Log) error {
 		removed = append(removed, tier)
 		coreGoneFirst = slices.Contains(stacks.deleted, coreStackName)
 		return nil
@@ -284,18 +280,18 @@ func TestTeardownRemovesTheTiersEnvSourceSyncBeforeItReleasesTheAppBoundaryItsRo
 	}
 
 	if !slices.Equal(removed, []environment.Tier{environment.TierProduction}) {
-		t.Errorf("the env source sync was removed for %v, want the production tier once", removed)
+		t.Errorf("the tier's parts were removed for %v, want the production tier once", removed)
 	}
 	if boundaryListedFirst || coreGoneFirst {
 		t.Error("the app boundary or the core stack went before the env source sync, whose roles are under the one and whose table is in the other")
 	}
 }
 
-func TestTeardownStopsWhenTheBastionCannotBeRemovedSoNothingIsLeftBehindUnreachable(t *testing.T) {
+func TestTeardownStopsWhenAPartCannotBeRemovedSoNothingIsLeftBehindUnreachable(t *testing.T) {
 	t.Parallel()
 
 	apis, stacks, _, _ := teardownFakes(t)
-	apis.RemoveBastion = func(context.Context, environment.Tier) error {
+	apis.RemoveParts = func(context.Context, environment.Tier, progress.Log) error {
 		return errors.New("cluster ocel-bastion-production is not tagged")
 	}
 
@@ -453,14 +449,12 @@ func TestTeardownReclaimsTheTierOriginSecret(t *testing.T) {
 				t.Fatalf("EdgeUserNameFor: %v", err)
 			}
 			apis := TeardownAPIs{
-				RemoveBastion:       removeNoBastion,
-				RemoveEnvSourceSync: removeNoEnvSourceSync,
-				Layers:              newFakeLayers(),
-				Records:             newFakeRecords().in,
-				CFN:                 stacks,
-				SSM:                 ssmc,
-				IAM:                 &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
-				Buckets:             &teardownS3{pages: map[string][]objectPage{}},
+				Layers:  newFakeLayers(),
+				Records: newFakeRecords().in,
+				CFN:     stacks,
+				SSM:     ssmc,
+				IAM:     &teardownIAM{keys: map[string][]string{user: {"AKIAOLD"}}},
+				Buckets: &teardownS3{pages: map[string][]objectPage{}},
 			}
 
 			if err := Teardown(context.Background(), apis, defaultNamespace, tc.tier, nil); err != nil {
@@ -500,14 +494,12 @@ func TestTeardownRemovesEachPartStackBeforeCore(t *testing.T) {
 	}
 	cfnc := &teardownCFN{stacks: stacks}
 	apis := TeardownAPIs{
-		RemoveBastion:       removeNoBastion,
-		RemoveEnvSourceSync: removeNoEnvSourceSync,
-		Layers:              newFakeLayers(),
-		Records:             newFakeRecords().in,
-		CFN:                 cfnc,
-		SSM:                 newFakeSSM(),
-		IAM:                 &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
-		Buckets:             &teardownS3{pages: map[string][]objectPage{}},
+		Layers:  newFakeLayers(),
+		Records: newFakeRecords().in,
+		CFN:     cfnc,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -531,14 +523,12 @@ func TestTeardownLeavesAPartStackThatWasNeverThere(t *testing.T) {
 		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction): {},
 	}}
 	apis := TeardownAPIs{
-		RemoveBastion:       removeNoBastion,
-		RemoveEnvSourceSync: removeNoEnvSourceSync,
-		Layers:              newFakeLayers(),
-		Records:             newFakeRecords().in,
-		CFN:                 stacks,
-		SSM:                 newFakeSSM(),
-		IAM:                 &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
-		Buckets:             &teardownS3{pages: map[string][]objectPage{}},
+		Layers:  newFakeLayers(),
+		Records: newFakeRecords().in,
+		CFN:     stacks,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -558,14 +548,12 @@ func TestTeardownRemovesAWedgedPartStack(t *testing.T) {
 		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction): {status: cfntypes.StackStatusRollbackComplete},
 	}}
 	apis := TeardownAPIs{
-		RemoveBastion:       removeNoBastion,
-		RemoveEnvSourceSync: removeNoEnvSourceSync,
-		Layers:              newFakeLayers(),
-		Records:             newFakeRecords().in,
-		CFN:                 stacks,
-		SSM:                 newFakeSSM(),
-		IAM:                 &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
-		Buckets:             &teardownS3{pages: map[string][]objectPage{}},
+		Layers:  newFakeLayers(),
+		Records: newFakeRecords().in,
+		CFN:     stacks,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -587,14 +575,12 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 	}}
 	iamc := &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}}
 	apis := TeardownAPIs{
-		RemoveBastion:       removeNoBastion,
-		RemoveEnvSourceSync: removeNoEnvSourceSync,
-		Layers:              newFakeLayers(),
-		Records:             newFakeRecords().in,
-		CFN:                 stacks,
-		SSM:                 newFakeSSM(),
-		IAM:                 iamc,
-		Buckets:             &teardownS3{pages: map[string][]objectPage{}},
+		Layers:  newFakeLayers(),
+		Records: newFakeRecords().in,
+		CFN:     stacks,
+		SSM:     newFakeSSM(),
+		IAM:     iamc,
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
@@ -615,14 +601,12 @@ func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
 	part := defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction)
 	stacks := &teardownCFN{stacks: map[string]teardownStack{part: {}}}
 	apis := TeardownAPIs{
-		RemoveBastion:       removeNoBastion,
-		RemoveEnvSourceSync: removeNoEnvSourceSync,
-		Layers:              newFakeLayers(),
-		Records:             newFakeRecords().in,
-		CFN:                 stacks,
-		SSM:                 newFakeSSM(),
-		IAM:                 &teardownIAM{keys: map[string][]string{}},
-		Buckets:             &teardownS3{pages: map[string][]objectPage{}},
+		Layers:  newFakeLayers(),
+		Records: newFakeRecords().in,
+		CFN:     stacks,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {

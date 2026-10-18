@@ -2,22 +2,18 @@ package deploy
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
@@ -28,8 +24,8 @@ import (
 
 type appWork struct {
 	transformed *transformPatches
-	functions   appStackFunctions
-	role        executionRole
+	functions   function.AppStack
+	role        function.ExecutionRole
 	roleCoord   naming.Coordinate
 	logical     []string
 	bundle      variables.Bundle
@@ -49,7 +45,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	if err != nil {
 		return err
 	}
-	role, err := newFunctionRole(pctx, w.roleCoord, w.role)
+	role, err := function.NewRole(pctx, w.roleCoord, w.role)
 	if err != nil {
 		return err
 	}
@@ -58,7 +54,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	stack.RoleName = role.Name
 	stack.Shipped = shipped
 	stack.Pushed = pushed
-	return stack.register(pctx)
+	return stack.Declare(pctx)
 }
 
 func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches, network *functionnetwork.Network, bundle variables.Bundle, uploads []functioncode.Upload) (*appWork, error) {
@@ -67,17 +63,14 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	sessions := bucket.NewSessions(project, stack.Env, r.cfg.StateTableARN)
 	staged := functioncode.Refs(uploads)
 
-	dispatch, err := r.newDispatchHost(spec)
-	if err != nil {
-		return nil, err
-	}
-	guard, err := r.originGuard(spec)
+	dispatch := function.NewDispatchHost(spec.App, r.cfg.Slug, r.cfg.AssetBucket, r.cfg.ImageOptimizerURL)
+	guard, err := function.NewOriginGuard(spec.App, r.cfg.Tier, r.cfg.OriginSecret, r.cfg.PreviousOriginSecret)
 	if err != nil {
 		return nil, err
 	}
 	cache := r.isrCache(spec)
 	bytecode := r.bytecodeCache(spec)
-	policies, err := planBindingPolicies(app.Grants)
+	policies, err := iam.NewBindingPolicies(app.Grants)
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +81,13 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		return nil, err
 	}
 
-	functions := make([]appFunction, 0, len(app.Functions))
-	artifacts := make(map[string]artifactRef, len(app.Functions))
-	args := make(map[string]functionArgs, len(app.Functions))
+	functions := make([]function.AppFunction, 0, len(app.Functions))
+	artifacts := make(map[string]function.Artifact, len(app.Functions))
+	args := make(map[string]function.Args, len(app.Functions))
 	logical := make([]string, 0, len(app.Functions))
 	vpcAccess := false
 	for _, spec := range app.Functions {
-		declared, err := translateFunctionSpec(app.Framework, spec)
+		declared, err := function.NewArgs(app.Framework, spec)
 		if err != nil {
 			return nil, err
 		}
@@ -104,8 +97,8 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		}
 		args[spec.Name] = declared
 		vpcAccess = vpcAccess || transformed.placesInVPC(spec.Name) || declared.Network != nil
-		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route, HasWorkerEntry: spec.HasWorkerEntry})
-		artifact, err := r.artifactAt(staged[spec.Name])
+		functions = append(functions, function.AppFunction{Logical: spec.Name, RouteID: spec.Route, HasWorkerEntry: spec.HasWorkerEntry})
+		artifact, err := function.FindArtifact(r.cfg.buckets(), staged[spec.Name])
 		if err != nil {
 			return nil, fmt.Errorf("place %s's code: %w", spec.Name, err)
 		}
@@ -115,22 +108,24 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 
 	vpcAccess = vpcAccess || (network != nil && len(app.Workers) > 0)
 
-	env := r.appEnv(spec, bundle, sessions)
-	for i, fn := range functions {
-		declared := env
-		if dispatch.hosts(fn) {
-			declared = dispatch.plannedRootFunctionEnv(env, functions)
-		}
-		if guard.hosts(fn) {
-			declared = guard.rootFunctionEnv(declared)
-		}
-		if err := variables.CheckFunctionEnvBudget(logical[i], functionEnv(declared, args[logical[i]], cache, bytecode)); err != nil {
-			return nil, err
-		}
+	appFunctions := function.AppStack{
+		Project:   project,
+		Stack:     stack,
+		Functions: functions,
+		Args:      func(fn function.AppFunction) function.Args { return args[fn.Logical] },
+		Artifacts: artifacts,
+		Env:       function.AppEnv(spec, bundle, sessions, r.cfg.StateTable),
+		ISR:       cache,
+		Bytecode:  bytecode,
+		Dispatch:  dispatch,
+		Guard:     guard,
+		KmsKeyARN: r.cfg.VariablesKeyARN,
+	}
+	if err := appFunctions.CheckEnvBudget(); err != nil {
+		return nil, err
 	}
 
-	layers, err := r.runtimeLayers(args)
-	if err != nil {
+	if appFunctions.Layers, err = r.runtimeLayers(args); err != nil {
 		return nil, err
 	}
 
@@ -138,13 +133,13 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	if len(app.Functions) > 0 {
 		roleTags = args[app.Functions[0].Name].Tags
 	}
-	role := executionRole{
+	role := function.ExecutionRole{
 		App: app.App, Cache: cache, Bytecode: bytecode,
 		Variables: variables.Reader{KeyARN: r.cfg.VariablesKeyARN}, Boundary: r.cfg.AppBoundaryARN, Path: r.cfg.AppRolePath,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
-	if reachesTasks(app) {
-		wakes := containerServiceARNs(r.cfg, project, stack.Env, app.DeploymentWorkers)
+	if topic.ReachesTasks(app) {
+		wakes := container.WorkerServiceARNs(r.cfg.stateTable(), r.cfg.Tier, project, stack.Env, app.DeploymentWorkers)
 		if role.TasksPolicy, err = topic.TasksPolicy(r.cfg.stateTable(), project, stack.Env, topic.Of(project, stack.Env, app.Topics), wakes); err != nil {
 			return nil, err
 		}
@@ -156,7 +151,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		role.Variables.Tier = string(r.cfg.Tier)
 	}
 
-	r.served.plan(r, app.App, logical, bytecode)
+	r.served.Record(r.cfg.functionClients(), app.App, logical, bytecode)
 
 	sets, delivery, err := site.ReadAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, appCoordinate(spec), app, bundle, cache)
 	if err != nil {
@@ -173,49 +168,13 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		delivery:    delivery,
 		stack:       stack.String(),
 		network:     network,
-		roleCoord:   roleCoordinate(project, stack),
+		roleCoord:   component.AppRoleCoordinate(project, stack),
 		role:        role,
-		functions: appStackFunctions{
-			Project:   project,
-			Stack:     stack,
-			Functions: functions,
-			Args:      func(fn appFunction) functionArgs { return args[fn.Logical] },
-			Artifacts: artifacts,
-			Env:       env,
-			ISR:       cache,
-			Bytecode:  bytecode,
-			Dispatch:  dispatch,
-			Guard:     guard,
-			KmsKeyARN: r.cfg.VariablesKeyARN,
-			Layers:    layers,
-		},
+		functions:   appFunctions,
 	}, nil
 }
 
-func reachesTasks(app *provider.AppSpec) bool {
-	if len(app.Workers) > 0 {
-		return true
-	}
-	for _, binding := range app.Grants {
-		if binding.Type == provider.BindingTask || binding.Type == provider.BindingTopic {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *release) artifactAt(ref provider.ArtifactRef) (artifactRef, error) {
-	bucket, err := r.cfg.buckets().Find(ref.Bucket)
-	if err != nil {
-		return artifactRef{}, err
-	}
-	if ref.Key == "" {
-		return artifactRef{}, fmt.Errorf("no code was uploaded for it")
-	}
-	return artifactRef{Bucket: bucket, Key: ref.Key}, nil
-}
-
-func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string, error) {
+func (r *release) runtimeLayers(args map[string]function.Args) (map[string]string, error) {
 	layers := map[string]string{}
 	for _, declared := range args {
 		arch := declared.Arch
@@ -231,50 +190,6 @@ func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string
 		layers[arch] = arn
 	}
 	return layers, nil
-}
-
-func (r *release) newDispatchHost(spec provider.StackSpec) (*dispatchHost, error) {
-	routing := spec.App.Routing
-	if routing == nil {
-		return nil, nil
-	}
-	prefix := spec.App.AssetPrefix
-	host := &dispatchHost{
-		RootFunction:      routing.RootFunction,
-		AssetBucket:       r.cfg.AssetBucket,
-		AssetPrefix:       prefix,
-		ImageOptimizerURL: r.cfg.ImageOptimizerURL,
-		Env: map[string]string{
-			routeTableEnv:  routeTableInTask,
-			assetPrefixEnv: prefix,
-			slugEnv:        r.cfg.Slug,
-			appNameEnv:     spec.App.App,
-			buildIDEnv:     spec.App.BuildID,
-		},
-	}
-	if r.cfg.AssetBucket != "" {
-		host.Env[assetBucketEnv] = r.cfg.AssetBucket
-	}
-	if r.cfg.ImageOptimizerURL != "" {
-		host.Env[edge.ImageOptimizerURLVar] = r.cfg.ImageOptimizerURL
-	}
-	if rules := spec.App.Static.Variable(); rules != "" {
-		host.Env[edge.StaticRulesVar] = rules
-	}
-	return host, nil
-}
-
-func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
-	guard := spec.App.Guard
-	if guard == nil {
-		return nil, nil
-	}
-	if r.cfg.OriginSecret == "" {
-		return nil, fmt.Errorf(
-			"the edge reaches %s over a Function URL no signature guards, and this bootstrap has no secret for the root function to demand of it; re-run `%s`",
-			spec.App.App, provider.BootstrapCommand(r.cfg.Tier))
-	}
-	return &originGuard{RootFunction: guard.RootFunction, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
 func (r *release) isrCache(spec provider.StackSpec) *site.ISR {
@@ -309,96 +224,12 @@ func appCoordinate(spec provider.StackSpec) naming.Coordinate {
 	}
 }
 
-func (r *release) bytecodeCache(spec provider.StackSpec) *bytecodeConfig {
+func (r *release) bytecodeCache(spec provider.StackSpec) *function.Bytecode {
 	bytecode := spec.App.Bytecode
 	if bytecode == nil {
 		return nil
 	}
-	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: bytecode.Prefix}
-}
-
-func (r *release) sealApp(project, app string, values provider.AppValues) (variables.Bundle, error) {
-	declared := make([]live.Binding, 0, len(values.Bindings))
-	for _, binding := range values.Bindings {
-		kind := provider.ProtoBindingType(binding.Type)
-		declared = append(declared, live.Binding{
-			Name:    binding.Name,
-			Key:     bindings.ResourceEnvName(kind, bindingResource(binding)),
-			Type:    kind,
-			Granted: binding.Version,
-		})
-	}
-	keys := make([]live.Key, 0, len(values.Secrets))
-	for _, secret := range values.Secrets {
-		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
-	}
-	return variables.Seal(r.cfg.variableStore(), project, app, values.Sensitive, keys, declared)
-}
-
-func bindingResource(binding provider.Binding) string {
-	if binding.Resource != "" {
-		return binding.Resource
-	}
-	return binding.Name
-}
-
-func (r *release) appEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Sessions) map[string]string {
-	app := spec.App
-	env := map[string]string{}
-	if app.Router != "" {
-		env[routerKindEnv] = string(app.Router)
-	}
-	if spec.Edge != nil {
-		facts := spec.Edge.Facts()
-		if !facts.RunsCode {
-			env[edge.OriginDispatchVar] = "1"
-			env[edge.OriginSignedVar] = "1"
-		}
-		if !isForwardedPastEdge(spec) {
-			maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
-		}
-	}
-	if app.OcelRouteTable != nil {
-		env[edge.OcelRouteTableVar] = ocelRouteTableInTask
-	}
-	if app.Proxied {
-		env[bucket.EnvStateTable] = r.cfg.StateTable
-		env[bucket.EnvSessionPrefix] = sessions.KeyPrefix
-	}
-	for key, value := range app.Values.Plain {
-		env[key] = value
-	}
-	maps.Copy(env, app.Values.PhaseEnv())
-	if app.Values.Folder != "" {
-		env[processenv.AppFolderEnvVar] = app.Values.Folder
-	}
-	for key, value := range bundle.Env() {
-		env[key] = value
-	}
-	return env
-}
-
-func isForwardedPastEdge(spec provider.StackSpec) bool {
-	pairings := provider.Facts{Pairings: edges.Pairings()}
-	return pairings.IsForwarded(spec.Edge.Kind(), spec.App.Router)
-}
-
-func planBindingPolicies(grants []provider.Binding) ([]bindingPolicy, error) {
-	out := make([]bindingPolicy, 0, len(grants))
-	for _, binding := range grants {
-		if slices.ContainsFunc(out, func(planned bindingPolicy) bool { return planned.Binding == binding.Name }) {
-			continue
-		}
-		policy, err := iam.GrantPolicy(binding.Name, provider.GrantMessages(binding.Grants))
-		if err != nil {
-			return nil, err
-		}
-		if policy == "" {
-			continue
-		}
-		out = append(out, bindingPolicy{Binding: binding.Name, Policy: policy})
-	}
-	return out, nil
+	return &function.Bytecode{Bucket: r.cfg.AssetBucket, Prefix: bytecode.Prefix}
 }
 
 func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.StackResult, error) {
@@ -415,16 +246,27 @@ func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.Sta
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		url, err := component.RequireStringField(fields, logical, outputKeyFunctionURL)
+		url, err := component.RequireStringField(fields, logical, function.OutputKeyURL)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
 		fn := provider.Function{Name: logical, URL: url}
-		if physical, named := fields[outputKeyFunctionName].(string); named {
+		if physical, named := fields[function.OutputKeyName].(string); named {
 			fn.Physical = physical
-			r.served.realized(logical, physical)
+			r.served.Realize(logical, physical)
 		}
 		result.Functions = append(result.Functions, fn)
 	}
 	return result, nil
+}
+
+func appExecutionRole(cfg Config, app string, caches map[string]*site.ISR, bytecode map[string]*function.Bytecode, bundle variables.Bundle, tags map[string]string, policies []iam.BindingPolicy, vpcAccess bool, dispatch *function.DispatchHost) function.ExecutionRole {
+	role := function.ExecutionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], Variables: variables.Reader{KeyARN: cfg.VariablesKeyARN}, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
+	if bundle.HasLive() {
+		role.Variables.TableARN = cfg.VariablesTableARN
+		role.Variables.Referenced = bundle.Referenced
+		role.Variables.Slug = cfg.Slug
+		role.Variables.Tier = string(cfg.Tier)
+	}
+	return role
 }

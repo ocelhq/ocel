@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
 
 const KindCloudflare = "cloudflare"

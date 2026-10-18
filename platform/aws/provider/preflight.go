@@ -4,6 +4,9 @@ import (
 	"context"
 	"time"
 
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/vpcclients"
+
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -45,21 +48,23 @@ func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPre
 	if err != nil || !deployed.Present || pre.Dry {
 		return err
 	}
-	used := partsUsedBy(pre.Uses, pre.Edge)
+	records := p.partRecords()
+	used := p.tierParts(records).AddedFor(pre.Uses, pre.Edge)
 	var say func(string)
 	if pre.Progress != nil {
 		say = pre.Progress.Say
 	}
-	for _, name := range used {
-		work, err := p.partWorkFor(ctx, tier, name)
-		if err != nil {
-			return err
+	if len(awsresources.Registry(awsresources.Clients{}).PlacesInVPC(pre.Resources)) > 0 {
+		if clients, found := p.tierParts(records).Named(vpcclients.Part); found {
+			used = append(used, clients)
 		}
-		if _, err := p.ensurePart(ctx, tier, work, pre.Deploy.Slug, "", say); err != nil {
+	}
+	for _, part := range used {
+		if _, err := part.Added.Ensure(ctx, tier, pre.Deploy.Slug, "", say); err != nil {
 			return err
 		}
 	}
-	return stackrecords.RecordPartsUsed(ctx, p.KeyValues(), tier, pre.Deploy.Slug, used)
+	return stackrecords.RecordPartsUsed(ctx, records.KeyValues, tier, pre.Deploy.Slug, used.Names())
 }
 
 func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPreflight) error {

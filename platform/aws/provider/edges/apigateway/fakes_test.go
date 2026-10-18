@@ -30,7 +30,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 )
 
 const (

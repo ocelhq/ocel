@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 )
 
 const (

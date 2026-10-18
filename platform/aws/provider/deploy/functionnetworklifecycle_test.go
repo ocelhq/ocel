@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
@@ -48,7 +49,7 @@ func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine
 		outputs[key] = value
 	}
 	cloud := &functionNetworkCloud{inputRecorder: &inputRecorder{}, vpcCIDR: "172.31.0.0/16", subnets: defaultVPCSubnets()}
-	cfg.Subnets = cloud
+	cfg.Network = cloud
 	engine := &mockedEngine{outputs: outputs, mocks: cloud}
 	return stacksWith(cfg, engine), engine, store
 }
@@ -169,11 +170,11 @@ func TestWorkersThatNoLongerNeedTheFunctionNetworkLeaveItBeforeItGoes(t *testing
 	}
 
 	ran := engine.operations()
-	workers := slices.Index(ran, "up "+workersStack("prod", "web").String())
+	workers := slices.Index(ran, "up "+worker.StackName("prod", "web").String())
 	if workers < 0 {
 		t.Fatalf("operations = %v, want the workers run", ran)
 	}
-	last := slices.Index(ran[workers+1:], "up "+workersStack("prod", "web").String()) + workers + 1
+	last := slices.Index(ran[workers+1:], "up "+worker.StackName("prod", "web").String()) + workers + 1
 	gone := slices.Index(ran, "destroy "+networkStackName())
 	if gone < 0 || last <= workers || gone < last {
 		t.Errorf("operations = %v, want the network destroyed after the second workers run: the workers' functions hold its interfaces until then", ran)
@@ -257,7 +258,7 @@ func TestADeployWhoseWorkersFailLetsGoOfNothing(t *testing.T) {
 	web := usingPostgresWithWorkers(t)
 	web.App.Grants = nil
 	engine.upErr = func(stack string) error {
-		if stack == workersStack("prod", "web").String() {
+		if stack == worker.StackName("prod", "web").String() {
 			return errors.New("the workers stack failed")
 		}
 		return nil
@@ -310,7 +311,7 @@ func TestTheWorkersOfAnAppHoldTheFunctionNetworkUntilRetirementTakesTheirStackDo
 	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: live.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy(the superseded release) = %v", err)
 	}
-	if torn := engine.torn(); slices.Contains(torn, networkStackName()) || slices.Contains(torn, workersStack("prod", "web").String()) {
+	if torn := engine.torn(); slices.Contains(torn, networkStackName()) || slices.Contains(torn, worker.StackName("prod", "web").String()) {
 		t.Fatalf("torn down = %v before any promotion stopped needing the workers, want their stack and its function network kept", torn)
 	}
 
@@ -318,7 +319,7 @@ func TestTheWorkersOfAnAppHoldTheFunctionNetworkUntilRetirementTakesTheirStackDo
 		t.Fatalf("RetireWorkers() = %v", err)
 	}
 
-	requireDestroyedInOrder(t, engine, workersStack("prod", "web").String(), networkStackName())
+	requireDestroyedInOrder(t, engine, worker.StackName("prod", "web").String(), networkStackName())
 }
 
 func TestAnAppNoLongerDeployedLetsTheFunctionNetworkGoOnceItsWorkersAndLastReleaseAreGone(t *testing.T) {
@@ -342,7 +343,7 @@ func TestAnAppNoLongerDeployedLetsTheFunctionNetworkGoOnceItsWorkersAndLastRelea
 		t.Fatalf("Destroy(web) = %v", err)
 	}
 
-	requireDestroyedInOrder(t, engine, workersStack("prod", "web").String(), web.Ref.Name.String(), networkStackName())
+	requireDestroyedInOrder(t, engine, worker.StackName("prod", "web").String(), web.Ref.Name.String(), networkStackName())
 }
 
 func TestDestroyingTheOnlyReleaseOfAnAppTakesItsWorkersAndThenTheFunctionNetworkDown(t *testing.T) {
@@ -360,7 +361,7 @@ func TestDestroyingTheOnlyReleaseOfAnAppTakesItsWorkersAndThenTheFunctionNetwork
 		t.Fatalf("Destroy(web) = %v", err)
 	}
 
-	requireDestroyedInOrder(t, engine, workersStack("prod", "web").String(), web.Ref.Name.String(), networkStackName())
+	requireDestroyedInOrder(t, engine, worker.StackName("prod", "web").String(), web.Ref.Name.String(), networkStackName())
 }
 
 func TestAFailedTakedownOfTheFunctionNetworkLeavesItsPartForTheRemovalItNames(t *testing.T) {

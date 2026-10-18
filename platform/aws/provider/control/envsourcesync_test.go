@@ -16,14 +16,16 @@ import (
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrapfunction"
-	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/lambdapart"
 )
 
 type absentEnvSync struct {
-	bootstrapfunction.IAMAPI
+	lambdapart.IAMAPI
 	envsourcesync.LambdaAPI
-	bootstrapfunction.LogsAPI
+	lambdapart.LogsAPI
 	envsourcesync.SchedulerAPI
 
 	deleted []string
@@ -62,7 +64,7 @@ func TestRemoveTakesDownTheTiersEnvSourceSync(t *testing.T) {
 
 	b := installedBootstrapper(t, environment.TierPreview)
 	sync := &absentEnvSync{}
-	b.EnvSync = sync.clients()
+	b.TierParts = []tier.Part{envsourcesync.NewPart(tier.Records{KeyValues: fake.NewKeyValues(), Reads: &tier.Reads{}}, sync.clients(), string(defaultNamespace), nil)}
 
 	if err := b.Remove(context.Background(), environment.TierPreview, nil); err != nil {
 		t.Fatalf("Remove: %v", err)

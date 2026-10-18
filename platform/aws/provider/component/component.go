@@ -18,6 +18,7 @@ import (
 
 type Component struct {
 	Types []provider.BindingType
+	InVPC bool
 
 	Declare func(ctx *pulumi.Context, at Stack, declared []provider.Resource) error
 	Collect func(ctx context.Context, at Stack, declared provider.Resource, outputs auto.OutputMap) (*variablestorev1.PublishedBinding, error)
@@ -56,9 +57,11 @@ func (s Stack) Tier() environment.Tier { return s.Ref.Tier }
 
 type Network struct {
 	VPCID     string
-	VPCCIDR   string
 	SubnetIDs []string
+	Clients   string
 }
+
+const PendingClients = "sg-pending-vpc-clients"
 
 type Transforms interface {
 	TagsFor(kind, name string) map[string]string
@@ -101,6 +104,16 @@ func (r Registry) For(kind provider.BindingType) (Component, bool) {
 		}
 	}
 	return Component{}, false
+}
+
+func (r Registry) PlacesInVPC(resources []provider.Resource) []provider.Resource {
+	var placed []provider.Resource
+	for _, c := range r.components {
+		if c.InVPC {
+			placed = append(placed, c.Declared(resources)...)
+		}
+	}
+	return placed
 }
 
 func (r Registry) RefuseUnserved(resources []provider.Resource) error {

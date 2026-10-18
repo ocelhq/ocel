@@ -62,6 +62,9 @@ func (p pushingAssetSets) Call(args sdk.MockCallArgs) (resource.PropertyMap, err
 }
 
 func stacksWith(cfg Config, engine *mockedEngine) *Stacks {
+	if cfg.Network == nil {
+		cfg.Network = defaultVPCNetwork{}
+	}
 	if engine == nil {
 		return newStacks(fixed(cfg), &Realized{}, nil)
 	}
@@ -260,6 +263,8 @@ func conformingConfig(uploader *fakeArtifactStore) Config {
 		KVTokenRoot:    conformanceKVTokenRoot,
 		SigningKeys:    keys,
 		SigningKeyRoot: conformanceSigningKeyRoot,
+		Network:        defaultVPCNetwork{},
+		VPCClients:     "sg-vpc-clients",
 	}
 }
 

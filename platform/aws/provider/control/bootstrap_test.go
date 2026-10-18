@@ -31,6 +31,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
 func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
@@ -69,8 +70,6 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		Layers:  noLayers{},
 		Records: noRecords,
 		Buckets: &teardownBuckets{},
-		Bastion: bastion.Clients{ECS: &absentBastion{}, IAM: &absentBastion{}, EC2: &absentBastion{}},
-		EnvSync: (&absentEnvSync{}).clients(),
 		Edge:    front,
 		Edges:   registryOf(front),
 		Kinds:   kindsOf(front),
@@ -102,6 +101,10 @@ func (a *absentBastion) DescribeSecurityGroups(context.Context, *ec2.DescribeSec
 
 func (a *absentBastion) GetRole(context.Context, *iam.GetRoleInput, ...func(*iam.Options)) (*iam.GetRoleOutput, error) {
 	return nil, &iamtypes.NoSuchEntityException{}
+}
+
+func bastionPart(looking *absentBastion) tier.Part {
+	return bastion.NewPart(bastion.Clients{ECS: looking, IAM: looking, EC2: looking}, "eu-west-2")
 }
 
 func registryOf(fronts ...edge.Edge) edgeRegistry {
@@ -386,13 +389,15 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 	t.Parallel()
 
 	b := installedBootstrapper(t, environment.TierProduction)
+	looking := &absentBastion{}
+	b.TierParts = []tier.Part{bastionPart(looking)}
 	cfn, buckets, iamfake := b.CFN.(*teardownCFN), b.Buckets.(*teardownBuckets), b.IAM.(*teardownIAM)
 
 	if err := b.Remove(context.Background(), environment.TierProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 
-	if looked := b.Bastion.ECS.(*absentBastion).looked; !slices.Equal(looked, []string{"ocel-bastion-production"}) {
+	if looked := looking.looked; !slices.Equal(looked, []string{"ocel-bastion-production"}) {
 		t.Errorf("the bastion clusters looked up = %v, want the production tier's, so its bastion goes with it", looked)
 	}
 	if got := b.Edge.(*teardownEdge).torndown; !slices.Equal(got, []environment.Tier{environment.TierProduction}) {

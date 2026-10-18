@@ -136,6 +136,11 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, public []str
 		}
 		return infra, s.claim(ctx, ref)
 	}
+	if !present {
+		if _, err := component.ReadDefaultVPC(ctx, owner.Subnets, owner.Region, "the cluster and load balancer container apps run behind"); err != nil {
+			return Infrastructure{}, err
+		}
+	}
 	if progress != nil && present {
 		progress.Say("Raising the public load balancer of the " + string(tier) + " tier: the edge in front of a container app forwards its hostnames there")
 	} else if progress != nil {

@@ -10,12 +10,13 @@ import (
 
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 
-	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -65,7 +66,7 @@ type Stacks struct {
 	engine     pulumi.Engine
 	skipChecks bool
 
-	served *servedApps
+	served *function.ServedApps
 
 	pending    *site.PendingSets
 	pluginOnce sync.Once
@@ -100,7 +101,7 @@ func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) 
 		realized:   realized,
 		engine:     engine,
 		skipChecks: processenv.SkipChecks(),
-		served:     newServedApps(),
+		served:     function.NewServedApps(),
 		pending:    site.NewPendingSets(),
 		opened:     map[Scope]*release{},
 	}
@@ -127,7 +128,7 @@ func (r *Stacks) openShared(ctx context.Context, ref provider.StackRef) (shareds
 		KeyValues:      owner.cfg.KeyValues,
 		WrittenBy:      owner.cfg.WrittenBy,
 		Region:         owner.cfg.Region,
-		Subnets:        owner.cfg.Subnets,
+		Subnets:        owner.cfg.Network,
 		AppBoundaryARN: owner.cfg.AppBoundaryARN,
 		AppRolePath:    owner.cfg.AppRolePath,
 	}, nil
@@ -204,6 +205,8 @@ func (r *Stacks) refreshPolicy() func(provider.StackRef, pulumi.Operation) bool 
 type infraWork struct {
 	transformed *transformPatches
 	previewing  bool
+	vpc         *component.DefaultVPC
+	clients     string
 }
 
 func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) component.Program {
@@ -236,17 +239,14 @@ func (r *release) appProgram(spec provider.StackSpec, work *appWork) component.P
 }
 
 func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraWork) error {
-	vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: sdk.BoolRef(true)})
-	if err != nil {
-		return fmt.Errorf("look up default VPC: %w", err)
-	}
-	subnetIDs, err := component.LookupDefaultSubnets(pctx, vpc.Id)
-	if err != nil {
-		return err
-	}
-
 	at := r.stackOf(spec.Ref, spec.Resources, work.transformed, work.previewing)
-	at.Network = component.Network{VPCID: vpc.Id, VPCCIDR: vpc.CidrBlock, SubnetIDs: subnetIDs}
+	if work.vpc != nil {
+		subnetIDs, err := component.LookupDefaultSubnets(pctx, work.vpc.ID)
+		if err != nil {
+			return err
+		}
+		at.Network = component.Network{VPCID: work.vpc.ID, SubnetIDs: subnetIDs, Clients: work.clients}
+	}
 	for _, declaring := range r.registry.Components() {
 		if err := declaring.Declare(pctx, at, declaring.Declared(spec.Resources)); err != nil {
 			return err
@@ -356,12 +356,12 @@ func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) e
 }
 
 func (r *release) packApp(spec provider.StackSpec) (variables.Bundle, error) {
-	bundle, err := r.sealApp(spec.Ref.Project, spec.App.App, spec.App.Values)
+	bundle, err := variables.SealApp(r.cfg.variableStore(), spec.Ref.Project, spec.App.App, spec.App.Values)
 	if err != nil {
 		return variables.Bundle{}, err
 	}
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
-	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topic.Of(project, env, spec.App.Topics), containerWorkers(r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
+	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topic.Of(project, env, spec.App.Topics), container.WorkerServices(r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
 	if err != nil {
 		return variables.Bundle{}, err
 	}
@@ -394,7 +394,7 @@ func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress pro
 		return provider.Plan{}, err
 	}
 	planned, err := opened.plan(ctx, spec, progress)
-	if err != nil || r.PlanParts == nil || spec.App == nil {
+	if err != nil || r.PlanParts == nil {
 		return planned, err
 	}
 	parts, err := r.PlanParts(ctx, spec)
@@ -495,11 +495,11 @@ func (r *release) warmAndEmbed(ctx context.Context, work *appWork, functions []p
 			targets = append(targets, fn.Physical)
 		}
 	}
-	_ = r.Warm(ctx, targets, progress)
+	_ = r.served.Warm(ctx, targets, progress)
 	refs := functioncode.Refs(work.uploads)
 	for _, fn := range functions {
 		if ref, staged := refs[fn.Name]; staged && fn.Physical != "" {
-			_ = r.EmbedCode(ctx, fn.Physical, ref, progress)
+			_ = r.served.EmbedCode(ctx, fn.Physical, ref, progress)
 		}
 	}
 }
@@ -579,6 +579,9 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 			return preparedStack{}, err
 		}
 		work := &infraWork{transformed: transformed, previewing: kind == runPreview}
+		if err := r.placeInVPC(ctx, spec, work); err != nil {
+			return preparedStack{}, err
+		}
 		return preparedStack{program: r.infraProgram(spec, work), transformed: transformed}, nil
 	}
 	var network *functionnetwork.Network

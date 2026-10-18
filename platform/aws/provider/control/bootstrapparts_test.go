@@ -7,25 +7,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
-	"github.com/aws/aws-sdk-go-v2/service/ecs"
-	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
-
-type presentBastion struct{ absentBastion }
-
-func (p *presentBastion) DescribeClusters(_ context.Context, in *ecs.DescribeClustersInput, _ ...func(*ecs.Options)) (*ecs.DescribeClustersOutput, error) {
-	return &ecs.DescribeClustersOutput{Clusters: []ecstypes.Cluster{{
-		ClusterName: aws.String(in.Clusters[0]),
-		Status:      aws.String("ACTIVE"),
-		Tags:        []ecstypes.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")}},
-	}}}, nil
-}
 
 func describeParts(t *testing.T, b Bootstrap) map[string]provider.BootstrapPart {
 	t.Helper()
@@ -96,20 +83,5 @@ func TestAnAWSBootstrapsPartsStillReadWhenItsStacksResourcesCannotBeListed(t *te
 	}
 	if base.Shape == nil || len(base.Shape.Resources) == 0 {
 		t.Errorf("base shape = %+v, want the core stack still priced", base.Shape)
-	}
-}
-
-func TestAnAWSBootstrapReportsItsBastionOnlyOnceAPortForwardHasMadeIt(t *testing.T) {
-	t.Parallel()
-	b := installedBootstrapper(t, environment.TierProduction)
-	if _, found := describeParts(t, b)["bastion"]; found {
-		t.Fatal("DescribeParts() reports a bastion no port forward made")
-	}
-
-	b.Bastion.ECS = &presentBastion{}
-
-	got, found := describeParts(t, b)["bastion"]
-	if !found || len(got.Resources) == 0 || got.Resources[0].ID != bastion.NameFor(environment.TierProduction) {
-		t.Errorf("bastion = %+v, %v, want it reported with its cluster", got, found)
 	}
 }

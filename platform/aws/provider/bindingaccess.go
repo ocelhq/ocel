@@ -46,8 +46,13 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 		return nil, err
 	}
 	clients := bastion.NewClients(p.aws)
+	vpcClients, err := p.vpcClients(ctx, req.Tier)
+	if err != nil {
+		return nil, err
+	}
 	reconciled, err := bastion.Reconcile(ctx, clients, bastion.Spec{
 		Tier:     req.Tier,
+		Clients:  vpcClients,
 		Boundary: deployed.AppBoundaryARN,
 		Ports:    []int{postgres.Port, valkey.Port},
 	})

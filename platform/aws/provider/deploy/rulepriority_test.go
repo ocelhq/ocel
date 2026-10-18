@@ -8,35 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
 const containerPhysical = "shop-prod-web-container-r3f8a1c90"
-
-func TestARuleKeepsThePriorityItAlreadyOwnsOnTheFront(t *testing.T) {
-	t.Parallel()
-
-	hashed := rulePriority(containerPhysical, nil)
-	cfg, spec := containerStackSpec(t)
-	cfg.Rules = &fakeRules{existing: []elbv2types.Rule{ruleRouting(hashed, containerPhysical), ruleRouting(hashed+1, "blog-prod-web-container-r0000aaaa")}}
-	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureContainerInfra())
-	if err != nil {
-		t.Fatalf("containerWork() = %v", err)
-	}
-	if err := release.placeRule(context.Background(), work); err != nil {
-		t.Fatalf("placeRule() = %v", err)
-	}
-	if work.priority != hashed {
-		t.Errorf("priority = %d, want %d: the slot already belongs to this stack's own rule, and a redeploy must not walk away from it", work.priority, hashed)
-	}
-}
 
 func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFirst(t *testing.T) {
 	t.Parallel()
@@ -50,11 +31,12 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	cfg.Rules = rules
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: containerPhysical,
+		container.OutputKeyURL:      "http://" + fixtureOrigin,
+		container.OutputKeyPhysical: containerPhysical,
 	}}
 	engine := &mockedEngine{outputs: outputs}
 	attempts := 0
+	hashed := hashedPriority(t)
 	engine.upErr = func(stack string) error {
 		if stack != spec.Ref.Name.String() {
 			return nil
@@ -62,8 +44,8 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 		if attempts++; attempts > 1 {
 			return nil
 		}
-		rules.claim(rulePriority(containerPhysical, nil))
-		return errors.New("creating ELBv2 Listener Rule: PriorityInUse: Priority '" + strconv.Itoa(rulePriority(containerPhysical, nil)) + "' is currently in use")
+		rules.claim(hashed)
+		return errors.New("creating ELBv2 Listener Rule: PriorityInUse: Priority '" + strconv.Itoa(hashed) + "' is currently in use")
 	}
 	stacks := stacksWith(cfg, engine)
 	var progress fake.Log
@@ -71,7 +53,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if _, err := stacks.Provision(context.Background(), spec, &progress); err != nil {
 		t.Fatalf("Provision() = %v, want the rule placed again at the next free priority", err)
 	}
-	claimed := "INFO Placing web's listener rule again: another deploy claimed priority " + strconv.Itoa(rulePriority(containerPhysical, nil)) + " first (attempt 2 of "
+	claimed := "INFO Placing web's listener rule again: another deploy claimed priority " + strconv.Itoa(hashed) + " first (attempt 2 of "
 	if !slices.ContainsFunc(progress.Lines(), func(line string) bool { return strings.HasPrefix(line, claimed) }) {
 		t.Errorf("Provision() said %q, want the retry said as a sentence naming the app and the claimed priority", progress.Lines())
 	}

@@ -214,7 +214,7 @@ func TestAStoresParameterGroupCarriesItsEvictionAndReserveUnderAFamilyNamedGroup
 	}
 }
 
-func TestAStoreAdmitsItsPortFromTheVPCAlone(t *testing.T) {
+func TestAStoreAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
 	t.Parallel()
 
 	sg := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, "kv-cache-security-group")
@@ -227,9 +227,12 @@ func TestAStoreAdmitsItsPortFromTheVPCAlone(t *testing.T) {
 	if rule["fromPort"].NumberValue() != 6379 || rule["toPort"].NumberValue() != 6379 {
 		t.Errorf("ingress admits %v-%v, want 6379", rule["fromPort"], rule["toPort"])
 	}
-	cidrs := rule["cidrBlocks"].ArrayValue()
-	if len(cidrs) != 1 || cidrs[0].StringValue() != "10.0.0.0/16" {
-		t.Errorf("ingress admits %v, want the VPC's CIDR alone", cidrs)
+	if cidrs, open := rule["cidrBlocks"]; open && len(cidrs.ArrayValue()) > 0 {
+		t.Errorf("ingress admits %v, want no address range: anything in the VPC could reach the store", cidrs)
+	}
+	groups := rule["securityGroups"].ArrayValue()
+	if len(groups) != 1 || groups[0].StringValue() != "sg-vpc-clients" {
+		t.Errorf("ingress admits %v, want the tier's vpc-clients group alone", groups)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
 
 func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequest) (edge.Program, error) {
@@ -21,7 +22,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	if params.EdgeCredentialsErr != nil {
 		return edge.Program{}, fmt.Errorf("read the key the %s edge signs its requests to this account with: %w", req.Kind, params.EdgeCredentialsErr)
 	}
-	optimizer, err := p.imageOptimizerURL(ctx, req.Tier)
+	optimizer, err := imageoptimizer.ReadURL(ctx, p.partRecords(), req.Tier)
 	if err != nil {
 		return edge.Program{}, err
 	}

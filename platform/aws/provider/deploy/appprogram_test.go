@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
@@ -80,12 +81,12 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 		t.Fatalf("run the app program: %v", err)
 	}
 
-	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(component.MaxLambdaBaseNameLen))
-	if entry[routerKindEnv] != string(cloudfront.Kind) {
-		t.Errorf("%s = %q, want the router the spec named", routerKindEnv, entry[routerKindEnv])
+	entry := functionEnvOf(t, rec, function.Coordinate("shop", stack, "fn--web--entry").PhysicalName(component.MaxLambdaBaseNameLen))
+	if entry["OCEL_ROUTER_KIND"] != string(cloudfront.Kind) {
+		t.Errorf("OCEL_ROUTER_KIND = %q, want the router the spec named", entry["OCEL_ROUTER_KIND"])
 	}
-	if entry[routeTableEnv] != routeTableInTask {
-		t.Errorf("%s = %q, want the route table the spec passed", routeTableEnv, entry[routeTableEnv])
+	if want := "/var/task/" + edge.NextRouteTableFile; entry["OCEL_NEXT_ROUTE_TABLE"] != want {
+		t.Errorf("OCEL_NEXT_ROUTE_TABLE = %q, want the route table the spec passed", entry["OCEL_NEXT_ROUTE_TABLE"])
 	}
 	if entry["OCEL_BUILD_ID"] != "d1" {
 		t.Errorf("OCEL_BUILD_ID = %q, want the build the spec named", entry["OCEL_BUILD_ID"])
@@ -97,8 +98,8 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want the namespace the spec passed", entry["OCEL_ISR_TAG_NAMESPACE"])
 	}
 	var siblings map[string]string
-	if err := json.Unmarshal([]byte(entry[functionURLsEnv]), &siblings); err != nil {
-		t.Fatalf("%s = %q, want a routeId-to-URL object: %v", functionURLsEnv, entry[functionURLsEnv], err)
+	if err := json.Unmarshal([]byte(entry["OCEL_FUNCTION_URLS"]), &siblings); err != nil {
+		t.Fatalf("OCEL_FUNCTION_URLS = %q, want a routeId-to-URL object: %v", entry["OCEL_FUNCTION_URLS"], err)
 	}
 	if len(siblings) != 1 || siblings["/admin"] == "" {
 		t.Errorf("sibling urls = %v, want the sibling the spec's routes name", siblings)
@@ -221,9 +222,9 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 	if _, err := release.appWork(spec, nil, nil, variables.Bundle{}, stagedOf(spec)); err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	release.served.realized("fn--web--entry", "shop-prod-web-entry")
+	release.served.Realize("fn--web--entry", "shop-prod-web-entry")
 
-	fn, known := release.served.byPhysicalName("shop-prod-web-entry")
+	fn, known := release.served.Find("shop-prod-web-entry")
 	if !known {
 		t.Fatal("the warmer cannot reach a function the spec declared")
 	}
@@ -233,7 +234,7 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 	if fn.Bytecode == nil || fn.Bytecode.Prefix != spec.App.Bytecode.Prefix {
 		t.Errorf("bytecode = %+v, want the cache prefix the spec passed", fn.Bytecode)
 	}
-	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, progress.Discard()); err != nil {
+	if err := release.served.Warm(context.Background(), []string{"shop-prod-web-entry"}, progress.Discard()); err != nil {
 		t.Errorf("Warm() with no invoker configured = %v, want it to pass over", err)
 	}
 }
@@ -257,7 +258,7 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
 	spec := provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}
 
-	env := releasing(t, Config{}).appEnv(spec, variables.Bundle{}, bucket.Sessions{})
+	env := function.AppEnv(spec, variables.Bundle{}, bucket.Sessions{}, "")
 
 	if got, set := env[processenv.PhaseEnvVar]; set {
 		t.Errorf("%s = %q, want a release that provisions to name no phase at all", processenv.PhaseEnvVar, got)

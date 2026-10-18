@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
 
 func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Config, error) {
@@ -49,7 +50,11 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	optimizer, err := p.imageOptimizerURL(ctx, scope.Tier)
+	optimizer, err := imageoptimizer.ReadURL(ctx, p.partRecords(), scope.Tier)
+	if err != nil {
+		return deploy.Config{}, err
+	}
+	clients, err := p.vpcClients(ctx, scope.Tier)
 	if err != nil {
 		return deploy.Config{}, err
 	}
@@ -79,7 +84,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		KeyValues: p.KeyValues(),
 		WrittenBy: p.writtenBy,
 		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
-		Subnets:   ec2.NewFromConfig(p.aws),
+		Network:   ec2.NewFromConfig(p.aws),
 
 		Tier:                scope.Tier,
 		Slug:                scope.Slug,
@@ -92,6 +97,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		VariablesKeyARN:     deployed.VariablesKeyARN,
 		AppBoundaryARN:      deployed.AppBoundaryARN,
 		AppRolePath:         p.namespace.AppRolePathFor(scope.Tier),
+		VPCClients:          clients,
 		VariablesReferenced: referenced,
 
 		RuntimeLayers: layers,

@@ -11,8 +11,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
 const (
@@ -400,10 +402,12 @@ func TestRemoveTakesDownThePartsDeploysAddedBeforeTheCore(t *testing.T) {
 
 	b := installedBootstrapper(t, environment.TierPreview)
 	var removed []environment.Tier
-	b.RemoveParts = func(_ context.Context, tier environment.Tier) error {
-		removed = append(removed, tier)
-		return nil
-	}
+	b.TierParts = []tier.Part{{Name: "image-optimizer", Teardown: &tier.Removal{
+		Remove: func(_ context.Context, tier environment.Tier, _ progress.Log) error {
+			removed = append(removed, tier)
+			return nil
+		},
+	}}}
 
 	if err := b.Remove(context.Background(), environment.TierPreview, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -419,9 +423,9 @@ func TestPlanRemovalListsThePartsDeploysAddedAheadOfTheCore(t *testing.T) {
 
 	b := removingBootstrapper(t, environment.TierProduction)
 	part := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: "bootstrap part image-optimizer", Action: provider.ActionDelete}
-	b.PlanPartRemoval = func(context.Context, environment.Tier) ([]provider.ChangeGroup, error) {
-		return []provider.ChangeGroup{part}, nil
-	}
+	b.TierParts = []tier.Part{{Name: "image-optimizer", Teardown: &tier.Removal{
+		Plan: func(context.Context, environment.Tier) (*provider.ChangeGroup, error) { return &part, nil },
+	}}}
 
 	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {

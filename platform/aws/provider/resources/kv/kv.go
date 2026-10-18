@@ -23,6 +23,7 @@ type Tokens struct {
 func New(tokens Tokens) component.Component {
 	return component.Component{
 		Types: []provider.BindingType{provider.BindingKV},
+		InVPC: true,
 		Declare: func(ctx *pulumi.Context, at component.Stack, declared []provider.Resource) error {
 			for _, resource := range declared {
 				if err := declare(ctx, at, resource, tokens); err != nil {

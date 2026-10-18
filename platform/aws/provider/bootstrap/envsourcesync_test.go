@@ -7,8 +7,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 )
 
 func TestTheVariablesKeyStackMakesNoEnvSourceSync(t *testing.T) {

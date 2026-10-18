@@ -21,7 +21,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
-	"github.com/ocelhq/ocel/platform/aws/provider/queues"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
@@ -159,11 +160,11 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	run("app", func(pctx *pulumi.Context) error { return appWork.run(pctx, nil) })
 
 	containerCfg, containerSpec := containerStackSpec(t)
-	containerWork, err := releasing(t, containerCfg).containerWork(containerSpec, fixtureContainerInfra())
+	containerWork, err := containerDefinitionOf(containerCfg, containerSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run("container", containerWork.run)
+	run("container", containerWork.Declare)
 	run("function-network", functionnetwork.NewProgram(environment.TierProduction, "us-east-1", &functionNetworkCloud{subnets: defaultVPCSubnets()}).Run)
 	run("container-infra", containers.NewProgram(environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, nil).Run)
 	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
@@ -171,28 +172,34 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	run("topics", func(pctx *pulumi.Context) error {
 		return declareTopicsAndTasks(pctx, topicsRelease, "shop", "prod", req.Resources)
 	})
-	hosted := &workersWork{
-		project: "shop", stack: workersStack("prod", "web"), topics: topic.Of("shop", "prod", req.Resources), workers: req.Deploy.Apps[0].Workers,
-		args: functionArgs{Runtime: defaultFunctionRuntime, Arch: "arm64", MemorySizeMB: 1024}, role: executionRole{App: "web", Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath},
-		region: "us-east-1", account: mockAccount, table: testStateTableARN, prefix: naming.TaskKeyPrefix("shop", "prod"), group: queues.ScheduleGroupName("shop", "prod"),
+	workerArgs := function.Args{Runtime: component.LambdaNodeRuntime, Arch: "arm64", MemorySizeMB: 1024}
+	hosted, err := worker.NewStack(provider.StackSpec{
+		Ref: provider.StackRef{Project: "shop", Name: naming.StackName{Env: "prod", App: "web"}},
+		App: &provider.AppSpec{App: "web", Workers: req.Deploy.Apps[0].Workers, Topics: req.Resources},
+	}, function.AppStack{
+		Functions: []function.AppFunction{{Logical: "web", HasWorkerEntry: true}},
+		Args:      func(function.AppFunction) function.Args { return workerArgs },
+	}, function.ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath}, nil,
+		worker.Target{StateTable: topic.StateTable{Region: "us-east-1", ARN: testStateTableARN}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	run("workers", hosted.run)
+	run("workers", hosted.Declare)
 	jobsCfg, jobsSpec := containerStackSpec(t)
 	jobsCfg.StateTable, jobsCfg.StateTableARN = "ocel-state", testStateTableARN
 	jobsSpec.App.Instances = provider.Instances{Min: 1, Max: 4}
 	jobsSpec.App.Workers = req.Deploy.Apps[1].Workers
 	jobsSpec.App.DeploymentWorkers = jobsSpec.App.Workers
 	jobsSpec.App.Topics = req.Resources
-	jobsRelease := releasing(t, jobsCfg)
-	jobsWeb, err := jobsRelease.containerWork(jobsSpec, fixtureContainerInfra())
+	jobsWeb, err := containerDefinitionOf(jobsCfg, jobsSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	containerWorkers, err := jobsRelease.containerWorkersWork(jobsSpec, jobsWeb)
+	containerWorkers, err := worker.NewContainerStack(jobsSpec, jobsWeb, jobsCfg.workerTarget())
 	if err != nil {
 		t.Fatal(err)
 	}
-	run("container-workers", containerWorkers.run)
+	run("container-workers", containerWorkers.Declare)
 	run(naming.InfraApp, func(pctx *pulumi.Context) error {
 		registry := awsresources.Registry(awsresources.Clients{
 			Artifacts:   component.Artifacts{Objects: &fakeArtifactStore{exists: map[string]bool{}}, Bucket: "ocel-artifacts"},
@@ -203,7 +210,7 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 			Ref:     provider.StackRef{Tier: environment.TierProduction, Project: "shop"},
 			Project: "shop", Env: "prod", StateTable: "ocel-state", StateTableARN: testStateTableARN,
 			AppBoundaryARN: containerCfg.AppBoundaryARN, AppRolePath: containerCfg.AppRolePath,
-			Network:    component.Network{VPCID: "vpc-1", VPCCIDR: "10.0.0.0/16", SubnetIDs: []string{"subnet-a"}},
+			Network:    component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-a"}, Clients: "sg-vpc-clients"},
 			Transforms: (*transformPatches)(nil),
 			Resources:  req.Resources,
 		}
@@ -356,8 +363,8 @@ func TestAnAppWithNoBuildShapesOneFunction(t *testing.T) {
 	if got := countTypes(set)["aws_lambda_function"]; got != 3 {
 		t.Errorf("lambdas = %d, want one for web, the upload completer and the realtime authorizer", got)
 	}
-	if memory := shapedNamed(t, set, "aws_lambda_function", "web")["memory_size"]; memory != float64(nextBundleFunctionMemoryMB) {
-		t.Errorf("a next app's stand-in function has %v MB, want %d", memory, nextBundleFunctionMemoryMB)
+	if memory := shapedNamed(t, set, "aws_lambda_function", "web")["memory_size"]; memory != float64(1769) {
+		t.Errorf("a next app's stand-in function has %v MB, want %d", memory, 1769)
 	}
 }
 

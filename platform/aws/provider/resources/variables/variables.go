@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -304,3 +305,28 @@ func checkEdgeEnvBudget(app string, env map[string]string, ciphertext []byte) er
 }
 
 const EdgeSealedFile = "sealed.bin"
+
+func SealApp(store Store, project, app string, values provider.AppValues) (Bundle, error) {
+	declared := make([]live.Binding, 0, len(values.Bindings))
+	for _, binding := range values.Bindings {
+		kind := provider.ProtoBindingType(binding.Type)
+		declared = append(declared, live.Binding{
+			Name:    binding.Name,
+			Key:     bindings.ResourceEnvName(kind, bindingResource(binding)),
+			Type:    kind,
+			Granted: binding.Version,
+		})
+	}
+	keys := make([]live.Key, 0, len(values.Secrets))
+	for _, secret := range values.Secrets {
+		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
+	}
+	return Seal(store, project, app, values.Sensitive, keys, declared)
+}
+
+func bindingResource(binding provider.Binding) string {
+	if binding.Resource != "" {
+		return binding.Resource
+	}
+	return binding.Name
+}

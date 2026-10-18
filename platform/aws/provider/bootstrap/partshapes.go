@@ -21,7 +21,7 @@ func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...
 	}
 	shapes := map[string][]pricing.Shaped{
 		provider.BasePart: core,
-		RuntimeLayersPart: shapedRuntimeLayers(),
+		RuntimeLayersPart: ShapeRuntimeLayers(),
 	}
 	for _, name := range parts {
 		f, known := partNamed(name)

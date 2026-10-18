@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 )
 
@@ -113,8 +114,8 @@ func siblingAppOutputs(apps ...string) auto.OutputMap {
 	outputs := auto.OutputMap{}
 	for _, app := range apps {
 		outputs["fn--"+app+"--entry"] = auto.OutputValue{Value: map[string]any{
-			outputKeyFunctionURL:  "https://" + app + ".lambda-url.us-east-1.on.aws/",
-			outputKeyFunctionName: "shop-prod-" + app + "-entry",
+			function.OutputKeyURL:  "https://" + app + ".lambda-url.us-east-1.on.aws/",
+			function.OutputKeyName: "shop-prod-" + app + "-entry",
 		}}
 	}
 	return outputs

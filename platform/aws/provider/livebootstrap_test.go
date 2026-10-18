@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
 
 func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T) {

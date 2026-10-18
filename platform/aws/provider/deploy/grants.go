@@ -10,11 +10,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
-type bindingPolicy struct {
-	Binding string
-	Policy  string
-}
-
 func checkInlinePolicyBudget(apps []provider.AppUsage, registry component.Registry, at component.Stack) error {
 	var over []iam.PolicyBudgetApp
 	for _, app := range apps {

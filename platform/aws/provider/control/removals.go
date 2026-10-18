@@ -28,13 +28,11 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if len(params.Changes) > 0 {
 		stacks = append(stacks, params)
 	}
-	if b.PlanPartRemoval != nil {
-		parts, err := b.PlanPartRemoval(ctx, tier)
-		if err != nil {
-			return provider.Plan{}, err
-		}
-		stacks = append(parts, stacks...)
+	parts, err := b.planPartTeardown(ctx, tier)
+	if err != nil {
+		return provider.Plan{}, err
 	}
+	stacks = append(parts, stacks...)
 
 	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(groupVendor, stacks)}
 	fronts, err := b.installedEdges(ctx, tier, read.Deployed)
@@ -51,6 +49,23 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 		}
 	}
 	return plan, nil
+}
+
+func (b Bootstrap) planPartTeardown(ctx context.Context, tier environment.Tier) ([]provider.ChangeGroup, error) {
+	var groups []provider.ChangeGroup
+	for _, part := range b.TierParts {
+		if part.Teardown == nil || part.Teardown.Plan == nil {
+			continue
+		}
+		group, err := part.Teardown.Plan(ctx, tier)
+		if err != nil {
+			return nil, err
+		}
+		if group != nil {
+			groups = append(groups, *group)
+		}
+	}
+	return groups, nil
 }
 
 func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, deployed bootstrap.Deployed) ([]edge.Edge, error) {

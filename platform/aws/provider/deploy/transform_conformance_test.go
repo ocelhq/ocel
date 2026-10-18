@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
@@ -31,7 +32,7 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	t.Parallel()
 
 	rendered := map[string]map[string]component.ResourceRef{
-		transformTypeFunction: functionResourceNames("proj", naming.StackName{Env: "prod", App: "api"}, "api"),
+		transformTypeFunction: function.ResourceNames("proj", naming.StackName{Env: "prod", App: "api"}, "api"),
 		"bucket":              bucket.New(component.Artifacts{}).Transform("proj", "prod", "uploads").Names,
 		"postgres":            postgres.New(nil).Transform("proj", "prod", "main").Names,
 		"kv":                  kv.New(kv.Tokens{}).Transform("proj", "prod", "cache").Names,

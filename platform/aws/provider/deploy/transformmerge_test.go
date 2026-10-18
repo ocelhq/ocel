@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 )
 
 func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
@@ -21,7 +22,7 @@ func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
 
 	stack := specUnderTransform().Ref.Name
 	candidates := []transformCandidate{
-		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
+		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: function.ResourceNames("shop", stack, "fn--api--users")},
 	}
 	results := []transform.Result{{Patches: transform.Patches{
 		"lambda": map[string]any{"description": placeholderFor(customBindingType, "legacy", "subnetIds")},
@@ -219,8 +220,8 @@ func TestTwoCandidatesGivingOneSharedResourceDifferentValuesIsRefused(t *testing
 
 	stack := specUnderTransform().Ref.Name
 	candidates := []transformCandidate{
-		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
-		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--orders"}, names: functionResourceNames("shop", stack, "fn--api--orders")},
+		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: function.ResourceNames("shop", stack, "fn--api--users")},
+		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--orders"}, names: function.ResourceNames("shop", stack, "fn--api--orders")},
 	}
 	results := []transform.Result{
 		{Patches: transform.Patches{"role": map[string]any{"path": "/one/"}}},

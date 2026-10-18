@@ -36,7 +36,7 @@ const (
 	runtimeLayersRecord = "runtime-layers"
 
 	RuntimeLayersPart    = "runtime-layers"
-	runtimeLayersSummary = "the runtime every function boots through, one Lambda layer per architecture and Ocel version"
+	RuntimeLayersSummary = "the runtime every function boots through, one Lambda layer per architecture and Ocel version"
 )
 
 type LayerAPI interface {
@@ -325,7 +325,7 @@ func ReadRuntimeLayersPart(ctx context.Context, layers LayerVersionsAPI, store r
 	}
 	return provider.BootstrapPart{
 		Name:               RuntimeLayersPart,
-		Summary:            runtimeLayersSummary,
+		Summary:            RuntimeLayersSummary,
 		Current:            true,
 		Resources:          resources,
 		UsedByEveryProject: true,
@@ -363,7 +363,7 @@ func deleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store rec
 	return records.Forget(ctx, store, runtimeLayersKey(tier))
 }
 
-func shapedRuntimeLayers() []pricing.Shaped {
+func ShapeRuntimeLayers() []pricing.Shaped {
 	shaped := make([]pricing.Shaped, 0, len(runtimeArches()))
 	for _, architecture := range runtimeArches() {
 		shaped = append(shaped, pricing.Shaped{Name: "RuntimeLayer" + runtimeArchTokens[architecture], Type: shapedTypes[runtimeLayerType].token, Properties: map[string]any{}})

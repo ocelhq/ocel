@@ -48,6 +48,7 @@ func Reconcile(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
 		Tier:           spec.Tier,
 		Cluster:        NameFor(spec.Tier),
 		TaskDefinition: definition,
+		Clients:        spec.Clients,
 		SecurityGroup:  group,
 		Subnets:        net.subnets,
 		Ports:          spec.Ports,

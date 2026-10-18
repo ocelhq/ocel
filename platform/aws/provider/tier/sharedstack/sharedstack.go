@@ -8,8 +8,6 @@ import (
 	"slices"
 	"time"
 
-	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
-
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -35,7 +33,7 @@ type Owner struct {
 	WrittenBy  provider.WrittenBy
 
 	Region         string
-	Subnets        awsec2.DescribeSubnetsAPIClient
+	Subnets        component.NetworkAPI
 	AppBoundaryARN string
 	AppRolePath    string
 }

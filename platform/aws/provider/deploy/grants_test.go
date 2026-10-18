@@ -16,7 +16,9 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
@@ -61,12 +63,12 @@ func (r *policyRecorder) named(fragment string) map[string]string {
 	return out
 }
 
-func renderAppRole(t *testing.T, app string, policies []bindingPolicy) *policyRecorder {
+func renderAppRole(t *testing.T, app string, policies []iam.BindingPolicy) *policyRecorder {
 	t.Helper()
 	rec := &policyRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		role := appExecutionRole(Config{VariablesKeyARN: "arn:aws:kms:us-east-1:1:key/k", AppBoundaryARN: componenttest.BoundaryARN}, app, nil, nil, variables.Bundle{}, nil, policies, false, nil)
-		_, err := newFunctionRole(pctx, roleCoordinate("shop", testStack(t, "prod", app)), role)
+		_, err := function.NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", app)), role)
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--"+app, rec)); err != nil {
@@ -108,9 +110,9 @@ func TestBindingPoliciesRenderOnlyForAGrantingBinding(t *testing.T) {
 	t.Run("a granting binding gets one inline policy", func(t *testing.T) {
 		t.Parallel()
 
-		policies, err := planBindingPolicies(plannedBindings(grantsBindings()))
+		policies, err := iam.NewBindingPolicies(plannedBindings(grantsBindings()))
 		if err != nil {
-			t.Fatalf("planBindingPolicies: %v", err)
+			t.Fatalf("NewBindingPolicies: %v", err)
 		}
 		if len(policies) != 1 || policies[0].Binding != "bucket--uploads" {
 			t.Fatalf("policies = %+v, want one for bucket--uploads", policies)
@@ -156,9 +158,9 @@ func TestBindingPoliciesRenderOnlyForAGrantingBinding(t *testing.T) {
 	t.Run("a grant-free binding gets no policy", func(t *testing.T) {
 		t.Parallel()
 
-		policies, err := planBindingPolicies(plannedBindings(grantsBindings()[1:]))
+		policies, err := iam.NewBindingPolicies(plannedBindings(grantsBindings()[1:]))
 		if err != nil {
-			t.Fatalf("planBindingPolicies: %v", err)
+			t.Fatalf("NewBindingPolicies: %v", err)
 		}
 		if len(policies) != 0 {
 			t.Fatalf("policies = %+v, want none for a grant-free binding", policies)
@@ -176,9 +178,9 @@ func TestARecordGrantedUnderTwoDeclaredNamesGetsOneRolePolicy(t *testing.T) {
 	main, reports := granted[0], granted[0]
 	main.Resource, reports.Resource = "main", "reports"
 
-	policies, err := planBindingPolicies([]provider.Binding{main, reports})
+	policies, err := iam.NewBindingPolicies([]provider.Binding{main, reports})
 	if err != nil {
-		t.Fatalf("planBindingPolicies: %v", err)
+		t.Fatalf("NewBindingPolicies: %v", err)
 	}
 	if len(policies) != 1 || policies[0].Binding != "bucket--uploads" {
 		t.Fatalf("policies = %+v, want one for bucket--uploads: both grants carry the same record's grants", policies)
@@ -211,8 +213,8 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 			if unscoped.Binding != "bucket--uploads" {
 				t.Errorf("Binding = %q, want bucket--uploads", unscoped.Binding)
 			}
-			if _, err := planBindingPolicies(plannedBindings(bindings)); !errors.As(err, &unscoped) {
-				t.Fatalf("planBindingPolicies = %v, want an *iam.UnscopedGrantError", err)
+			if _, err := iam.NewBindingPolicies(plannedBindings(bindings)); !errors.As(err, &unscoped) {
+				t.Fatalf("NewBindingPolicies = %v, want an *iam.UnscopedGrantError", err)
 			}
 		})
 	}

@@ -19,6 +19,7 @@ const transformKind = "postgres"
 func New(clusters ClustersAPI) component.Component {
 	return component.Component{
 		Types:   []provider.BindingType{provider.BindingPostgres},
+		InVPC:   true,
 		Declare: declare,
 		Collect: func(_ context.Context, at component.Stack, declared provider.Resource, outputs auto.OutputMap) (*variablestorev1.PublishedBinding, error) {
 			fields, err := component.RequireOutputFields(outputs, declared.Name)

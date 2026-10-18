@@ -6,9 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -53,29 +51,6 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 			Digest:    stack.Digest,
 			Resources: b.stackResources(ctx, stack.Name),
 			Shape:     &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: shapes[name]},
-		})
-	}
-	layers, found, err := bootstrap.ReadRuntimeLayersPart(ctx, b.Layers, b.Records(read.Deployed.StateTable), described.Tier)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		layers.Shape = &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: shapes[layers.Name]}
-		parts = append(parts, layers)
-	}
-	resources, found, err := bastion.Describe(ctx, b.Bastion, described.Tier)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		parts = append(parts, provider.BootstrapPart{
-			Name:      bastion.Part,
-			Summary:   bastion.Summary,
-			Current:   true,
-			Resources: resources,
-			Shape: &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: []pricing.Shaped{
-				{Name: bastion.NameFor(described.Tier), Type: "aws_ecs_cluster", Properties: map[string]any{}},
-			}},
 		})
 	}
 	for _, stack := range described.Stacks {

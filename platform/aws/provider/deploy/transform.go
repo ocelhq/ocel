@@ -9,7 +9,6 @@ import (
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -245,24 +244,3 @@ const (
 	transformTypeFunction  = "function"
 	transformTypeContainer = "container"
 )
-
-func functionResourceNames(project string, stack naming.StackName, logicalName string) map[string]component.ResourceRef {
-	coord := functionCoordinate(project, stack, logicalName)
-	return map[string]component.ResourceRef{
-		"lambda":        {Token: component.TokenLambdaFunction, Name: coord.PhysicalName(component.MaxLambdaBaseNameLen)},
-		"url":           {Token: component.TokenLambdaFunctionURL, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url")},
-		"urlPermission": {Token: component.TokenLambdaPermission, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url", "invoke")},
-		"logGroup":      {Token: component.TokenLogGroup, Name: naming.ResourceID(naming.KindFunction, coord.Name, "logs")},
-		"role":          {Token: component.TokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
-	}
-}
-
-func containerResourceNames() map[string]component.ResourceRef {
-	return map[string]component.ResourceRef{
-		"task":        {Token: component.TokenECSTaskDefinition, Name: naming.ResourceID(naming.KindService, containerLocalName, "task")},
-		"service":     {Token: component.TokenECSService, Name: naming.ResourceID(naming.KindService, containerLocalName)},
-		"targetGroup": {Token: component.TokenLBTargetGroup, Name: naming.ResourceID(naming.KindService, containerLocalName, "targets")},
-		"rule":        {Token: component.TokenLBListenerRule, Name: naming.ResourceID(naming.KindService, containerLocalName, "rule")},
-		"role":        {Token: component.TokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
-	}
-}

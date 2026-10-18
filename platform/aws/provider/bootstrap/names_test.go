@@ -6,10 +6,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/imageoptimizer"
-	"github.com/ocelhq/ocel/platform/aws/provider/notfoundapi"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	"github.com/ocelhq/ocel/platform/aws/provider/taginvalidator"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
 func namesOf(t *testing.T, n Namespace) map[string]string {

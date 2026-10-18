@@ -15,7 +15,20 @@ const (
 	MaxLambdaNameLen        = 64
 	LambdaAutonameSuffixLen = 8
 	MaxLambdaBaseNameLen    = MaxLambdaNameLen - LambdaAutonameSuffixLen
+
+	AppRoleLocalName = "app"
 )
+
+func AppRoleCoordinate(project string, stack naming.StackName) naming.Coordinate {
+	return naming.Coordinate{
+		Project: project,
+		Env:     stack.Env,
+		App:     stack.App,
+		Kind:    naming.KindRole,
+		Name:    naming.Join(naming.WordSeparator, AppRoleLocalName, string(naming.KindRole)),
+		Release: stack.Release,
+	}
+}
 
 func AccountOfARN(arn string) string {
 	parts := strings.Split(arn, ":")
@@ -51,4 +64,9 @@ func OptionalARN(arn string) pulumi.StringPtrInput {
 
 func JoinARN(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 	return arn.ApplyT(func(a string) string { return a + suffix }).(pulumi.StringOutput)
+}
+
+func AppScopedName(at naming.Coordinate) string {
+	scope := awsports.AppScope + naming.WordSeparator
+	return scope + at.PhysicalName(MaxLambdaNameLen-len(scope))
 }

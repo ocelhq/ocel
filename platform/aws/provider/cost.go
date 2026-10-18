@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cost"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	"github.com/ocelhq/ocel/platform/aws/provider/envsourcesync"
 )
 
 const tfDataTransfer = "aws_data_transfer"
@@ -35,10 +34,10 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 		return nil, err
 	}
 	tree.AddShaped(shared, string(Vendor), p.aws.Region, bootstrapShape)
-	tree.AddShaped(shared, string(Vendor), p.aws.Region, envsourcesync.Shape(string(p.namespace), req.Deploy.Tier))
-	parts := partsUsedBy(req.Uses, req.Edge)
-	for _, name := range parts {
-		tree.AddShaped(shared, string(Vendor), p.aws.Region, p.partShape(name, req.Deploy.Tier))
+	for _, part := range p.tierParts(p.partRecords()) {
+		if part.Use != nil && part.Use.IsUsedBy(req.Uses, req.Edge) {
+			tree.AddShaped(shared, string(Vendor), p.aws.Region, part.Use.Shape(req.Deploy.Tier))
+		}
 	}
 
 	if err := deploy.Shape(ctx, p.transformPass(), p.aws.Region, req, tree, deploy.ShapeScopes{

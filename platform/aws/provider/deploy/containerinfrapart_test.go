@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
@@ -176,8 +177,8 @@ func containerPartSpec(t *testing.T, writer provider.WrittenBy) (Config, provide
 func containerPartOutputs() map[string]auto.OutputValue {
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL:      "http://" + fixtureOrigin,
-		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
+		container.OutputKeyURL:      "http://" + fixtureOrigin,
+		container.OutputKeyPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}
 	return outputs
 }
