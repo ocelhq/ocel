@@ -1,10 +1,11 @@
+import asyncio
 import json
 import os
 from importlib.metadata import version
 
 import pytest
 
-from ocel import UnprovisionedResourceError, postgres
+from ocel import OcelError, UnprovisionedResourceError, postgres
 from ocel.gen.app.resources.v1.resources_pb import ResourceType
 
 
@@ -58,7 +59,7 @@ def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
     monkeypatch.setenv("OCEL_PHASE", "discovery")
     monkeypatch.setenv("OCEL_DEV_SERVER", "http://127.0.0.1:1")
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         postgres("main")
     assert str(raised.value).startswith("ocel: declare postgres 'main': ")
 
@@ -67,7 +68,7 @@ def test_a_database_with_no_binding_delivered_names_the_commands_that_deliver_on
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.delenv("OCEL_RESOURCE_POSTGRES_main", raising=False)
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
         "OCEL_RESOURCE_POSTGRES_main is not delivered to this process: "
@@ -107,7 +108,7 @@ def test_a_binding_of_another_type_is_refused_for_the_type_it_contains(monkeypat
         json.dumps({"name": "main", "bucket": {"bucket": "uploads"}}),
     )
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
         "OCEL_RESOURCE_POSTGRES_main contains a BUCKET binding, and this app reads it as a POSTGRES"
@@ -118,7 +119,7 @@ def test_a_binding_of_no_type_at_all_is_refused_for_the_type_it_contains(monkeyp
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", json.dumps({"name": "main"}))
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
         "OCEL_RESOURCE_POSTGRES_main contains a UNSPECIFIED binding, "
@@ -130,7 +131,7 @@ def test_a_value_that_is_not_a_binding_record_is_reported_without_quoting_it(mon
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", "s3cret-not-json")
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(OcelError) as raised:
         _ = postgres("main").connection_string
     assert "s3cret" not in str(raised.value)
     assert str(raised.value) == (
@@ -252,3 +253,38 @@ def test_an_unprovisioned_database_reprs_like_any_other_object(collector):
 
     assert repr(db)
     assert db.__class__ is not None
+
+
+class _LoopBoundPool:
+    def __init__(self, closed):
+        self.loop = asyncio.get_running_loop()
+        self.closed = closed
+
+    async def fetch(self, query, *args):
+        if asyncio.get_running_loop() is not self.loop:
+            raise RuntimeError("the pool is attached to a different loop")
+        return [query]
+
+    async def close(self):
+        self.closed.append(self)
+
+
+def test_a_database_fetched_from_one_event_loop_after_another_opens_a_pool_in_each(monkeypatch):
+    monkeypatch.delenv("OCEL_PHASE", raising=False)
+    monkeypatch.setenv(
+        "OCEL_RESOURCE_POSTGRES_main",
+        json.dumps({"name": "main", "postgres": {"url": "postgres://u:p@db.internal/app"}}),
+    )
+    import asyncpg
+
+    closed = []
+
+    async def create_pool(dsn):
+        return _LoopBoundPool(closed)
+
+    monkeypatch.setattr(asyncpg, "create_pool", create_pool)
+    db = postgres("main")
+
+    assert asyncio.run(db.fetch("select 1")) == ["select 1"]
+    assert asyncio.run(db.fetch("select 2")) == ["select 2"]
+    assert len(closed) == 2

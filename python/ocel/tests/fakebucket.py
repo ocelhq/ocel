@@ -53,6 +53,7 @@ class Store:
         self.signed: list[tuple] = []
         self.listed: list[tuple] = []
         self.authorizations: list[str | None] = []
+        self.refusal: ConnectError | None = None
 
     def info(self, key: str) -> ObjectInfo:
         stored = self.objects[key]
@@ -203,6 +204,8 @@ class Service:
 
     def _seen(self, ctx):
         self.store.authorizations.append(ctx.request_headers.get("Authorization"))
+        if self.store.refusal is not None:
+            raise self.store.refusal
 
 
 class Bucket:

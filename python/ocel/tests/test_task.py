@@ -1,3 +1,4 @@
+import importlib
 import json
 import os
 from dataclasses import dataclass
@@ -5,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 import fakeruntime
 import pytest
+from connectrpc.code import Code
+from connectrpc.errors import ConnectError
 from pydantic import BaseModel
 
 import ocel
@@ -147,6 +150,20 @@ def test_a_task_whose_payload_is_plain_json_declares_no_schema(collector):
     assert collector.declares[0][2].config.value.schema == ""
 
 
+def test_a_payload_annotation_that_names_nothing_at_runtime_is_refused_naming_it():
+    def resize(payload, ctx):
+        return None
+
+    resize.__annotations__ = {"payload": "Missing"}
+
+    with pytest.raises(ocel.OcelError) as raised:
+        task("resize-image")(resize)
+    assert str(raised.value) == (
+        'task "resize-image": the payload annotation of resize names Missing, which is not '
+        "defined when the module runs: import it outside `if TYPE_CHECKING:`, or pass schema="
+    )
+
+
 def test_a_decorated_task_still_runs_as_the_function_it_decorated():
     @task("double")
     def double(payload: int, ctx=None):
@@ -161,7 +178,7 @@ def test_a_task_declaration_the_server_refuses_says_what_it_said(monkeypatch):
     monkeypatch.setenv("OCEL_PHASE", "discovery")
     monkeypatch.setenv("OCEL_DEV_SERVER", "http://127.0.0.1:1")
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(ocel.OcelError) as raised:
 
         @task("resize-image")
         def resize(payload, ctx):
@@ -280,6 +297,22 @@ async def test_an_async_app_triggers_without_blocking_its_loop(runtime):
     assert runtime.requests("Trigger")[0].options.key == "k"
 
 
+@pytest.mark.asyncio
+async def test_an_async_trigger_opens_no_blocking_client(runtime, monkeypatch):
+    def refuse_blocking_client(*_arguments, **_keywords):
+        raise AssertionError("an async trigger opened the blocking client")
+
+    monkeypatch.setattr(
+        importlib.import_module("ocel.task"), "TaskServiceClientSync", refuse_blocking_client
+    )
+    resize = _resize()
+
+    await resize.trigger_async(Image(url="a.png", width=1))
+    await resize.batch_trigger_async([Image(url="b.png", width=2)])
+
+    assert [method for method, _ in runtime.calls] == ["Trigger", "BatchTrigger"]
+
+
 def test_a_task_triggered_during_discovery_says_it_is_not_provisioned_yet(collector):
     resize = _resize()
 
@@ -289,3 +322,13 @@ def test_a_task_triggered_during_discovery_says_it_is_not_provisioned_yet(collec
         "'task(\"resize-image\")' cannot be used during discovery: "
         "tried to access 'trigger' before the resource was provisioned"
     )
+
+
+def test_a_trigger_the_runtime_refuses_raises_an_ocel_error_that_keeps_its_code(runtime):
+    runtime.refusal = ConnectError(Code.INVALID_ARGUMENT, "the payload fails the schema")
+
+    with pytest.raises(ocel.RuntimeRefusedError) as raised:
+        _resize().trigger(Image(url="a.png", width=1))
+
+    assert raised.value.code == "invalid_argument"
+    assert not isinstance(raised.value, ConnectError)

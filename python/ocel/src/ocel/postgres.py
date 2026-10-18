@@ -1,19 +1,24 @@
 import asyncio
 import inspect
 import ssl
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from protobuf import Oneof
 
 from ocel._binding import read_postgres_binding, refuse_unprovisioned
 from ocel._declare import declare, is_discovering
+from ocel._loop import LoopLocal
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     PostgresConfig,
     ResourceIdentifier,
     ResourceType,
 )
-from ocel.gen.common.bindings.v1.bindings_pb import PostgresTlsMode
+from ocel.gen.common.bindings.v1.bindings_pb import PostgresProperties, PostgresTlsMode
+
+if TYPE_CHECKING:
+    from asyncpg import Pool, Record
 
 _KIND = "postgres"
 _DEFAULT_VERSION = "17"
@@ -30,8 +35,7 @@ class Postgres:
         """Take the handle for the database named ``name``. Prefer :func:`postgres`,
         which declares the database as well as handing back its handle."""
         self.name = name
-        self._pool = None
-        self._opening = asyncio.Lock()
+        self._pools: LoopLocal[asyncio.Future[Pool[Record]]] = LoopLocal(_close_pool)
 
     @property
     def connection_string(self) -> str:
@@ -48,42 +52,60 @@ class Postgres:
         query = f"?sslmode={sslmode}" if sslmode else ""
         return f"postgres://{user}:{password}@{properties.host}:{properties.port}/{database}{query}"
 
-    async def pool(self):
-        """The asyncpg pool over the delivered binding, opened on the first call and returned
-        unchanged on every one after. A record under verify-full that names a CA trusts
-        that CA for the server's certificate, and one that names a TLS server name, as a
-        record pointing at a port forward does, verifies the certificate against that name
-        instead of the host."""
-        if self._pool is None:
-            async with self._opening:
-                if self._pool is None:
-                    import asyncpg
+    async def pool(self) -> "Pool[Record]":
+        """The asyncpg pool over the delivered binding, opened on the first call in each
+        event loop and returned unchanged on every one after in that loop, so an app that
+        runs each request under its own ``asyncio.run`` gets a pool per run, closed when the
+        run ends. A record under verify-full that names a CA trusts that CA for the server's
+        certificate, and one that names a TLS server name, as a record pointing at a port
+        forward does, verifies the certificate against that name instead of the host."""
+        opening = self._pools.get(lambda: asyncio.ensure_future(self._open_pool()))
+        try:
+            return await asyncio.shield(opening)
+        except BaseException:
+            if opening.done() and not opening.cancelled() and opening.exception() is not None:
+                self._pools.forget(opening)
+            raise
 
-                    options = {}
-                    properties = read_postgres_binding(self.name)
-                    if properties.tls_mode == PostgresTlsMode.VERIFY_FULL and (
-                        properties.tls_ca or properties.tls_server_name
-                    ):
-                        options["ssl"] = _verifying_context(properties)
-                    self._pool = await asyncpg.create_pool(self.connection_string, **options)
-        return self._pool
+    async def _open_pool(self) -> "Pool[Record]":
+        import asyncpg
 
-    async def fetch(self, query: str, *args):
+        properties = read_postgres_binding(self.name)
+        if properties.tls_mode == PostgresTlsMode.VERIFY_FULL and (
+            properties.tls_ca or properties.tls_server_name
+        ):
+            context = _verifying_context(properties)
+            return await asyncpg.create_pool(self.connection_string, ssl=context)
+        return await asyncpg.create_pool(self.connection_string)
+
+    async def fetch(self, query: str, *args: object) -> "list[Record]":
         """Run a query on the pool and return the rows it selected."""
         pool = await self.pool()
         return await pool.fetch(query, *args)
 
 
+async def _close_pool(opening: "asyncio.Future[Pool[Record]]") -> None:
+    if opening.done() and not opening.cancelled() and opening.exception() is None:
+        await opening.result().close()
+
+
 class _ServerNamedContext(ssl.SSLContext):
     server_name = ""
 
-    def wrap_bio(self, incoming, outgoing, server_side=False, server_hostname=None, session=None):
+    def wrap_bio(
+        self,
+        incoming: ssl.MemoryBIO,
+        outgoing: ssl.MemoryBIO,
+        server_side: bool = False,
+        server_hostname: str | bytes | None = None,
+        session: ssl.SSLSession | None = None,
+    ) -> ssl.SSLObject:
         return super().wrap_bio(
             incoming, outgoing, server_side, self.server_name or server_hostname, session
         )
 
 
-def _verifying_context(properties) -> ssl.SSLContext:
+def _verifying_context(properties: PostgresProperties) -> ssl.SSLContext:
     context = _ServerNamedContext(ssl.PROTOCOL_TLS_CLIENT)
     context.load_default_certs()
     if properties.tls_ca:
@@ -93,7 +115,7 @@ def _verifying_context(properties) -> ssl.SSLContext:
 
 
 class _Unprovisioned(Postgres):
-    def __getattribute__(self, access: str):
+    def __getattribute__(self, access: str) -> object:
         if access == "name" or (access.startswith("__") and access.endswith("__")):
             return object.__getattribute__(self, access)
         raise refuse_unprovisioned(f'postgres("{object.__getattribute__(self, "name")}")', access)

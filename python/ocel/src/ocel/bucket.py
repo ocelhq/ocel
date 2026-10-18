@@ -1,21 +1,21 @@
-import asyncio
 import inspect
-import io
 import os
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import AsyncIterator, Callable, Generator, Iterator, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import IO, BinaryIO, Protocol, runtime_checkable
+from functools import partial
+from typing import IO, TYPE_CHECKING, BinaryIO, cast
 from urllib.parse import quote
 
-from connectrpc.code import Code
-from connectrpc.errors import ConnectError
 from protobuf import Oneof
-from pyqwest import Client, SyncClient
+from pyqwest import Client, Response, SyncClient, SyncResponse
 
-from ocel._binding import read_bucket_binding, read_runtime, refuse_unprovisioned
+from ocel._binding import read_bucket_binding, refuse_unprovisioned
 from ocel._declare import declare, is_discovering
+from ocel._error import OcelError, RuntimeRefusedError
+from ocel._object_files import AsyncReadStream, AsyncWriteStream, ReadStream, WriteStream
+from ocel._runtime import AwaitedCalls, Operation, RuntimeConnection, Session
 from ocel._wire import encode_duration
 from ocel.gen.app.bucket.v1.bucket_connect import (
     BucketServiceClient,
@@ -47,14 +47,21 @@ from ocel.gen.app.resources.v1.resources_pb import (
     ResourceIdentifier,
     ResourceType,
 )
+from ocel.gen.common.bindings.v1.bindings_pb import BucketProperties
+
+if TYPE_CHECKING:
+    pass
 
 _KIND = "bucket"
 _SINGLE_REQUEST_LIMIT_BYTES = 16 << 20
 _PART_SIZE_BYTES = 8 << 20
 _PARTS_IN_FLIGHT = 4
 
+_Session = Session[BucketServiceClient]
+_Body = bytes | str | BinaryIO | os.PathLike[str]
 
-class ObjectNotFound(FileNotFoundError):
+
+class ObjectNotFound(OcelError, FileNotFoundError):
     """Raised when an operation that cannot answer with ``None`` names an object the bucket
     does not have."""
 
@@ -69,7 +76,7 @@ class ObjectNotFound(FileNotFoundError):
         return f'the bucket has no object under "{self.key}"'
 
 
-class PreconditionFailed(Exception):
+class PreconditionFailed(OcelError):
     """Raised when a write set ``if_not_exists`` or ``if_match`` and the object did not
     meet it."""
 
@@ -96,7 +103,7 @@ class ObjectInfo:
     #: When the object last took its current bytes, as the store reports it.
     uploaded_at: datetime | None = None
     #: The user metadata written alongside the object.
-    metadata: Mapping[str, str] = field(default_factory=dict)
+    metadata: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
 @dataclass(frozen=True)
@@ -109,184 +116,17 @@ class SignedUpload:
     #: The HTTP method to send it with.
     method: str
     #: The headers the signature covers, which the caller must send unchanged.
-    headers: Mapping[str, str] = field(default_factory=dict)
+    headers: Mapping[str, str] = field(default_factory=dict[str, str])
     #: The form fields a POST upload sends with the body, which are empty for a PUT target.
-    fields: Mapping[str, str] = field(default_factory=dict)
+    fields: Mapping[str, str] = field(default_factory=dict[str, str])
     #: When the target stops being valid, or ``None`` when its lifetime was left to the
     #: runtime.
     expires: datetime | None = None
 
 
-@runtime_checkable
-class SyncBucket(Protocol):
-    """The synchronous surface a bucket handle answers to, which a fake can implement."""
-
-    #: The name the bucket was declared under.
-    name: str
-
-    def put(
-        self,
-        key: str,
-        data: bytes | str | BinaryIO | os.PathLike,
-        *,
-        content_type: str | None = None,
-        cache_control: str | None = None,
-        metadata: Mapping[str, str] | None = None,
-        if_not_exists: bool = False,
-        if_match: str | None = None,
-    ) -> ObjectInfo:
-        """Write ``data`` as the whole object under ``key``."""
-        ...
-
-    def get(self, key: str, *, range: tuple[int, int | None] | None = None) -> "ObjectBody":
-        """Read the object under ``key``."""
-        ...
-
-    def open(self, key: str, mode: str = "rb", **write_options) -> IO[bytes]:
-        """Open the object under ``key`` as a binary file."""
-        ...
-
-    def head(self, key: str) -> ObjectInfo | None:
-        """What the bucket knows about ``key``."""
-        ...
-
-    def exists(self, key: str) -> bool:
-        """Whether the bucket has an object under ``key``."""
-        ...
-
-    def delete(self, *keys: str) -> None:
-        """Remove the objects under ``keys``."""
-        ...
-
-    def copy(self, src: str, dst: str) -> ObjectInfo:
-        """Copy ``src`` to ``dst`` within the bucket."""
-        ...
-
-    def list(self, *, prefix: str | None = None, limit: int | None = None) -> Iterator[ObjectInfo]:
-        """Walk the objects under a prefix."""
-        ...
-
-    def signed_url(
-        self,
-        key: str,
-        *,
-        expires_in: float | timedelta | None = None,
-        download: bool | str | None = None,
-    ) -> str:
-        """A url that reads ``key`` without a credential."""
-        ...
-
-    def signed_upload(
-        self,
-        key: str,
-        *,
-        expires_in: float | timedelta | None = None,
-        max_size: int | None = None,
-        content_type: str | None = None,
-    ) -> SignedUpload:
-        """A target that writes ``key`` without a credential."""
-        ...
-
-    def public_url(self, key: str) -> str:
-        """The address ``key`` is served at anonymously."""
-        ...
-
-
-@runtime_checkable
-class AsyncBucket(Protocol):
-    """The awaited surface a bucket handle answers to, which a fake can implement."""
-
-    #: The name the bucket was declared under.
-    name: str
-
-    async def put_async(
-        self,
-        key: str,
-        data: bytes | str | BinaryIO | os.PathLike,
-        *,
-        content_type: str | None = None,
-        cache_control: str | None = None,
-        metadata: Mapping[str, str] | None = None,
-        if_not_exists: bool = False,
-        if_match: str | None = None,
-    ) -> ObjectInfo:
-        """Write ``data`` as the whole object under ``key``."""
-        ...
-
-    async def get_async(
-        self, key: str, *, range: tuple[int, int | None] | None = None
-    ) -> "AsyncObjectBody":
-        """Read the object under ``key``."""
-        ...
-
-    def open_async(self, key: str, mode: str = "rb", **write_options):
-        """Open the object under ``key`` as an awaited binary file."""
-        ...
-
-    async def head_async(self, key: str) -> ObjectInfo | None:
-        """What the bucket knows about ``key``."""
-        ...
-
-    async def exists_async(self, key: str) -> bool:
-        """Whether the bucket has an object under ``key``."""
-        ...
-
-    async def delete_async(self, *keys: str) -> None:
-        """Remove the objects under ``keys``."""
-        ...
-
-    async def copy_async(self, src: str, dst: str) -> ObjectInfo:
-        """Copy ``src`` to ``dst`` within the bucket."""
-        ...
-
-    def list_async(
-        self, *, prefix: str | None = None, limit: int | None = None
-    ) -> AsyncIterator[ObjectInfo]:
-        """Walk the objects under a prefix."""
-        ...
-
-    async def signed_url_async(
-        self,
-        key: str,
-        *,
-        expires_in: float | timedelta | None = None,
-        download: bool | str | None = None,
-    ) -> str:
-        """A url that reads ``key`` without a credential."""
-        ...
-
-    async def signed_upload_async(
-        self,
-        key: str,
-        *,
-        expires_in: float | timedelta | None = None,
-        max_size: int | None = None,
-        content_type: str | None = None,
-    ) -> SignedUpload:
-        """A target that writes ``key`` without a credential."""
-        ...
-
-    def public_url(self, key: str) -> str:
-        """The address ``key`` is served at anonymously."""
-        ...
-
-
-class _Connection:
-    def __init__(
-        self,
-        client,
-        name: str,
-        public_base_url: str,
-        headers: Mapping[str, str],
-    ):
-        self.client = client
-        self.bucket = name
-        self.public_base_url = public_base_url
-        self.headers = headers
-
-
 class Bucket:
-    """A bucket an app declares and reads and writes its objects through."""
+    """A bucket an app declares and reads and writes its objects through. Every operation
+    that reaches the store has a blocking form and an awaited ``_async`` form."""
 
     #: The name the bucket was declared under, and the name its binding is delivered as.
     name: str
@@ -295,8 +135,13 @@ class Bucket:
         """Take the handle for the bucket named ``name``. Prefer :func:`bucket`, which
         declares the bucket as well as handing back its handle."""
         self.name = name
-        self._connection: _Connection | None = None
-        self._async_connection: _Connection | None = None
+        self._properties: BucketProperties | None = None
+        self._runtime = RuntimeConnection(
+            f'bucket("{name}")',
+            lambda address: BucketServiceClientSync(address, send_compression=None),
+            lambda address: BucketServiceClient(address, send_compression=None),
+            self._read_properties,
+        )
         self._http = SyncClient()
         self._http_async = Client()
         self._single_request_limit_bytes = _SINGLE_REQUEST_LIMIT_BYTES
@@ -305,7 +150,7 @@ class Bucket:
     def put(
         self,
         key: str,
-        data: bytes | str | BinaryIO | os.PathLike,
+        data: _Body,
         *,
         content_type: str | None = None,
         cache_control: str | None = None,
@@ -319,114 +164,137 @@ class Bucket:
         the key, and with ``if_match`` only while the object under it has that etag;
         either unmet raises :class:`PreconditionFailed`."""
         options = _WriteOptions(content_type, cache_control, metadata, if_not_exists, if_match)
-        writer = _Writer(self, key, options)
-        try:
-            for chunk in _read_chunks(data, self._part_size_bytes):
-                writer.write(chunk)
-        except BaseException:
-            writer.abort()
-            raise
-        writer.close()
-        landed = self.head(key)
-        if landed is None:
-            raise ObjectNotFound(key)
-        return landed
+        return self._runtime.run("put", partial(self._put, key=key, data=data, options=options))
+
+    async def put_async(
+        self,
+        key: str,
+        data: _Body,
+        *,
+        content_type: str | None = None,
+        cache_control: str | None = None,
+        metadata: Mapping[str, str] | None = None,
+        if_not_exists: bool = False,
+        if_match: str | None = None,
+    ) -> ObjectInfo:
+        """What :meth:`put` does, awaited, reading a file or path body off the event loop."""
+        options = _WriteOptions(content_type, cache_control, metadata, if_not_exists, if_match)
+        return await self._runtime.run_async(
+            "put_async", partial(self._put, key=key, data=data, options=options)
+        )
 
     def get(self, key: str, *, range: tuple[int, int | None] | None = None) -> "ObjectBody":
         """Read the object under ``key``, or the ``(offset, length)`` byte range of it that
         ``range`` names, with a ``length`` of ``None`` reading to the end. Raises
         :class:`ObjectNotFound` when the bucket has none."""
-        info = self.head(key)
-        if info is None:
-            raise ObjectNotFound(key)
-        target = self._sign_target("get", key, SignedOperation.GET, SignedAudience.INTERNAL)
-        headers = dict(target.headers)
-        if range is not None:
-            headers["range"] = _format_byte_range(*range)
-        stream = self._http.stream("GET", target.url, headers)
+        info, target = self._runtime.run("get", partial(self._prepare_read, key=key))
+        stream = self._http.stream("GET", target.url, _build_read_headers(target, range))
         response = stream.__enter__()
         if response.status >= 300:
             stream.__exit__(None, None, None)
-            raise _refuse_status(key, response.status) or RuntimeError(
-                f'reading "{key}" was refused ({response.status})'
-            )
+            raise _refuse_read(key, response.status)
         return ObjectBody(info, stream, response)
 
-    def open(self, key: str, mode: str = "rb", **write_options) -> IO[bytes]:
+    async def get_async(
+        self, key: str, *, range: tuple[int, int | None] | None = None
+    ) -> "AsyncObjectBody":
+        """What :meth:`get` does, awaited."""
+        info, target = await self._runtime.run_async(
+            "get_async", partial(self._prepare_read, key=key)
+        )
+        stream = self._http_async.stream("GET", target.url, _build_read_headers(target, range))
+        response = await stream.__aenter__()
+        if response.status >= 300:
+            await stream.__aexit__(None, None, None)
+            raise _refuse_read(key, response.status)
+        return AsyncObjectBody(info, stream, response)
+
+    def open(self, key: str, mode: str = "rb", **write_options: object) -> IO[bytes]:
         """Open the object under ``key`` as a binary file. ``"rb"`` reads it and ``"wb"``
         writes it, taking the keyword options :meth:`put` takes and landing the object when
         the handle closes."""
         if mode == "rb":
-            return _ReadStream(self.get(key))
+            return cast(IO[bytes], ReadStream(self.get(key)))
         if mode == "wb":
-            options = _WriteOptions(
-                write_options.pop("content_type", None),
-                write_options.pop("cache_control", None),
-                write_options.pop("metadata", None),
-                write_options.pop("if_not_exists", False),
-                write_options.pop("if_match", None),
-            )
-            if write_options:
-                unknown = [*write_options][0]
-                raise TypeError(f"open() got an unexpected keyword argument '{unknown}'")
-            return _WriteStream(_Writer(self, key, options))
+            options = _WriteOptions.take("open", write_options)
+            writer = Writer(self, self._runtime.session("put", True), key, options)
+            return cast(IO[bytes], WriteStream(writer))
+        raise ValueError(f"a bucket object opens as 'rb' or 'wb', not {mode!r}")
+
+    def open_async(
+        self, key: str, mode: str = "rb", **write_options: object
+    ) -> "AsyncReadStream | AsyncWriteStream":
+        """What :meth:`open` does, as an async context manager whose ``read`` and ``write``
+        are awaited."""
+        if mode == "rb":
+            return AsyncReadStream(self, key)
+        if mode == "wb":
+            options = _WriteOptions.take("open_async", write_options)
+            writer = Writer(self, self._runtime.session("put_async", False), key, options)
+            return AsyncWriteStream(writer)
         raise ValueError(f"a bucket object opens as 'rb' or 'wb', not {mode!r}")
 
     def head(self, key: str) -> ObjectInfo | None:
         """What the bucket knows about the object under ``key``, or ``None`` when it has
         none."""
-        connection = self._ensure_connection("head")
-        response = connection.client.head(
-            HeadRequest(bucket=connection.bucket, key=key), headers=connection.headers
-        )
-        return _build_object_info(response.object, key) if response.object else None
+        return self._runtime.run("head", partial(self._head, key=key))
+
+    async def head_async(self, key: str) -> ObjectInfo | None:
+        """What :meth:`head` does, awaited."""
+        return await self._runtime.run_async("head_async", partial(self._head, key=key))
 
     def exists(self, key: str) -> bool:
         """Whether the bucket has an object under ``key``."""
         return self.head(key) is not None
 
+    async def exists_async(self, key: str) -> bool:
+        """What :meth:`exists` does, awaited."""
+        return await self.head_async(key) is not None
+
     def delete(self, *keys: str) -> None:
         """Remove the objects under ``keys``. A key with no object under it is not
         an error."""
-        if not keys:
-            return
-        connection = self._ensure_connection("delete")
-        connection.client.delete(
-            DeleteRequest(bucket=connection.bucket, keys=list(keys)), headers=connection.headers
-        )
+        if keys:
+            self._runtime.run("delete", partial(self._delete, keys=keys))
+
+    async def delete_async(self, *keys: str) -> None:
+        """What :meth:`delete` does, awaited."""
+        if keys:
+            await self._runtime.run_async("delete_async", partial(self._delete, keys=keys))
 
     def copy(self, src: str, dst: str) -> ObjectInfo:
         """Copy the object under ``src`` to ``dst`` within the same bucket, and return the
         object that landed. Raises :class:`ObjectNotFound` when the bucket has nothing
         under ``src``."""
-        connection = self._ensure_connection("copy")
-        try:
-            response = connection.client.copy(
-                CopyRequest(bucket=connection.bucket, source_key=src, destination_key=dst),
-                headers=connection.headers,
-            )
-        except ConnectError as error:
-            raise _refuse_connect_error(src, error) from None
-        return _build_object_info(response.object, dst)
+        return self._runtime.run("copy", partial(self._copy, src=src, dst=dst))
+
+    async def copy_async(self, src: str, dst: str) -> ObjectInfo:
+        """What :meth:`copy` does, awaited."""
+        return await self._runtime.run_async("copy_async", partial(self._copy, src=src, dst=dst))
 
     def list(self, *, prefix: str | None = None, limit: int | None = None) -> Iterator[ObjectInfo]:
         """Walk the bucket's objects under ``prefix``, a page at a time, yielding at most
         ``limit`` objects per page."""
-        connection = self._ensure_connection("list")
         cursor = ""
         while True:
-            response = connection.client.list(
-                ListRequest(
-                    bucket=connection.bucket,
-                    prefix=prefix or "",
-                    limit=limit or 0,
-                    cursor=cursor,
-                ),
-                headers=connection.headers,
+            page, cursor = self._runtime.run(
+                "list", partial(self._list_page, prefix=prefix, limit=limit, cursor=cursor)
             )
-            for entry in response.objects:
-                yield _build_object_info(entry, entry.key)
-            cursor = response.next_cursor
+            yield from page
+            if not cursor:
+                return
+
+    async def list_async(
+        self, *, prefix: str | None = None, limit: int | None = None
+    ) -> AsyncIterator[ObjectInfo]:
+        """What :meth:`list` does, walked with ``async for``."""
+        cursor = ""
+        while True:
+            page, cursor = await self._runtime.run_async(
+                "list_async", partial(self._list_page, prefix=prefix, limit=limit, cursor=cursor)
+            )
+            for info in page:
+                yield info
             if not cursor:
                 return
 
@@ -440,15 +308,18 @@ class Bucket:
         """A url that reads the object under ``key`` without a credential, for as long as
         it stays valid. ``download`` serves the object as a download, under the filename it
         names when it is a string."""
-        target = self._sign_target(
-            "signed_url",
-            key,
-            SignedOperation.GET,
-            SignedAudience.EXTERNAL,
-            SignConstraints(download_filename=_choose_download_filename(key, download)),
-            expires_in,
-        )
-        return target.url
+        return self._runtime.run("signed_url", self._sign_read(key, expires_in, download)).url
+
+    async def signed_url_async(
+        self,
+        key: str,
+        *,
+        expires_in: float | timedelta | None = None,
+        download: bool | str | None = None,
+    ) -> str:
+        """What :meth:`signed_url` does, awaited."""
+        sign = self._sign_read(key, expires_in, download)
+        return (await self._runtime.run_async("signed_url_async", sign)).url
 
     def signed_upload(
         self,
@@ -460,171 +331,8 @@ class Bucket:
     ) -> SignedUpload:
         """A target that writes the object under ``key`` without a credential, for as long
         as it stays valid, accepting at most ``max_size`` bytes of ``content_type``."""
-        target = self._sign_target(
-            "signed_upload",
-            key,
-            SignedOperation.POST_UPLOAD,
-            SignedAudience.EXTERNAL,
-            SignConstraints(content_type=content_type or "", max_size=max_size or 0),
-            expires_in,
-        )
-        return SignedUpload(
-            url=target.url,
-            method=target.method or "POST",
-            headers=dict(target.headers),
-            fields=dict(target.fields),
-            expires=_compute_expires_at(expires_in),
-        )
-
-    def public_url(self, key: str) -> str:
-        """The address the object under ``key`` is served at anonymously. It fails on a
-        bucket that has no public address."""
-        connection = self._ensure_connection("public_url")
-        if not connection.public_base_url:
-            raise RuntimeError(
-                f'this bucket has no public address, so "{key}" has no public url: '
-                f"declare the bucket with public=True and give the project a domain to "
-                f"serve it from"
-            )
-        path = "/".join(quote(segment, safe="") for segment in key.split("/"))
-        return f"{connection.public_base_url.rstrip('/')}/{path}"
-
-    async def put_async(
-        self,
-        key: str,
-        data: bytes | str | BinaryIO | os.PathLike,
-        *,
-        content_type: str | None = None,
-        cache_control: str | None = None,
-        metadata: Mapping[str, str] | None = None,
-        if_not_exists: bool = False,
-        if_match: str | None = None,
-    ) -> ObjectInfo:
-        """What :meth:`put` does, awaited."""
-        options = _WriteOptions(content_type, cache_control, metadata, if_not_exists, if_match)
-        writer = _AsyncWriter(self, key, options)
-        try:
-            for chunk in _read_chunks(data, self._part_size_bytes):
-                await writer.write(chunk)
-        except BaseException:
-            await writer.abort()
-            raise
-        await writer.close()
-        landed = await self.head_async(key)
-        if landed is None:
-            raise ObjectNotFound(key)
-        return landed
-
-    async def get_async(
-        self, key: str, *, range: tuple[int, int | None] | None = None
-    ) -> "AsyncObjectBody":
-        """What :meth:`get` does, awaited."""
-        info = await self.head_async(key)
-        if info is None:
-            raise ObjectNotFound(key)
-        target = await self._sign_target_async(
-            "get_async", key, SignedOperation.GET, SignedAudience.INTERNAL
-        )
-        headers = dict(target.headers)
-        if range is not None:
-            headers["range"] = _format_byte_range(*range)
-        stream = self._http_async.stream("GET", target.url, headers)
-        response = await stream.__aenter__()
-        if response.status >= 300:
-            await stream.__aexit__(None, None, None)
-            raise _refuse_status(key, response.status) or RuntimeError(
-                f'reading "{key}" was refused ({response.status})'
-            )
-        return AsyncObjectBody(info, stream, response)
-
-    def open_async(self, key: str, mode: str = "rb", **write_options):
-        """What :meth:`open` does, as an async context manager whose ``read`` and ``write``
-        are awaited."""
-        if mode == "rb":
-            return _AsyncReadStream(self, key)
-        if mode == "wb":
-            options = _WriteOptions(
-                write_options.pop("content_type", None),
-                write_options.pop("cache_control", None),
-                write_options.pop("metadata", None),
-                write_options.pop("if_not_exists", False),
-                write_options.pop("if_match", None),
-            )
-            if write_options:
-                unknown = [*write_options][0]
-                raise TypeError(f"open_async() got an unexpected keyword argument '{unknown}'")
-            return _AsyncWriteStream(_AsyncWriter(self, key, options))
-        raise ValueError(f"a bucket object opens as 'rb' or 'wb', not {mode!r}")
-
-    async def head_async(self, key: str) -> ObjectInfo | None:
-        """What :meth:`head` does, awaited."""
-        connection = self._ensure_async_connection("head_async")
-        response = await connection.client.head(
-            HeadRequest(bucket=connection.bucket, key=key), headers=connection.headers
-        )
-        return _build_object_info(response.object, key) if response.object else None
-
-    async def exists_async(self, key: str) -> bool:
-        """What :meth:`exists` does, awaited."""
-        return await self.head_async(key) is not None
-
-    async def delete_async(self, *keys: str) -> None:
-        """What :meth:`delete` does, awaited."""
-        if not keys:
-            return
-        connection = self._ensure_async_connection("delete_async")
-        await connection.client.delete(
-            DeleteRequest(bucket=connection.bucket, keys=list(keys)), headers=connection.headers
-        )
-
-    async def copy_async(self, src: str, dst: str) -> ObjectInfo:
-        """What :meth:`copy` does, awaited."""
-        connection = self._ensure_async_connection("copy_async")
-        try:
-            response = await connection.client.copy(
-                CopyRequest(bucket=connection.bucket, source_key=src, destination_key=dst),
-                headers=connection.headers,
-            )
-        except ConnectError as error:
-            raise _refuse_connect_error(src, error) from None
-        return _build_object_info(response.object, dst)
-
-    async def list_async(
-        self, *, prefix: str | None = None, limit: int | None = None
-    ) -> AsyncIterator[ObjectInfo]:
-        """What :meth:`list` does, walked with ``async for``."""
-        connection = self._ensure_async_connection("list_async")
-        cursor = ""
-        while True:
-            response = await connection.client.list(
-                ListRequest(
-                    bucket=connection.bucket, prefix=prefix or "", limit=limit or 0, cursor=cursor
-                ),
-                headers=connection.headers,
-            )
-            for entry in response.objects:
-                yield _build_object_info(entry, entry.key)
-            cursor = response.next_cursor
-            if not cursor:
-                return
-
-    async def signed_url_async(
-        self,
-        key: str,
-        *,
-        expires_in: float | timedelta | None = None,
-        download: bool | str | None = None,
-    ) -> str:
-        """What :meth:`signed_url` does, awaited."""
-        target = await self._sign_target_async(
-            "signed_url_async",
-            key,
-            SignedOperation.GET,
-            SignedAudience.EXTERNAL,
-            SignConstraints(download_filename=_choose_download_filename(key, download)),
-            expires_in,
-        )
-        return target.url
+        sign = self._sign_upload(key, expires_in, max_size, content_type)
+        return _build_signed_upload(self._runtime.run("signed_upload", sign), expires_in)
 
     async def signed_upload_async(
         self,
@@ -635,83 +343,139 @@ class Bucket:
         content_type: str | None = None,
     ) -> SignedUpload:
         """What :meth:`signed_upload` does, awaited."""
-        target = await self._sign_target_async(
-            "signed_upload_async",
+        sign = self._sign_upload(key, expires_in, max_size, content_type)
+        target = await self._runtime.run_async("signed_upload_async", sign)
+        return _build_signed_upload(target, expires_in)
+
+    def public_url(self, key: str) -> str:
+        """The address the object under ``key`` is served at anonymously. It fails on a
+        bucket that has no public address."""
+        if is_discovering():
+            raise refuse_unprovisioned(self._runtime.what, "public_url")
+        base = self._read_properties().public_base_url
+        if not base:
+            raise OcelError(
+                f'this bucket has no public address, so "{key}" has no public url: '
+                f"declare the bucket with public=True and give the project a domain to "
+                f"serve it from"
+            )
+        path = "/".join(quote(segment, safe="") for segment in key.split("/"))
+        return f"{base.rstrip('/')}/{path}"
+
+    def _read_properties(self) -> BucketProperties:
+        if self._properties is None:
+            self._properties = read_bucket_binding(self.name)
+        return self._properties
+
+    def _http_for(self, session: _Session) -> Client:
+        return cast(Client, AwaitedCalls(self._http)) if session.blocking else self._http_async
+
+    async def _put(
+        self, session: _Session, *, key: str, data: _Body, options: "_WriteOptions"
+    ) -> ObjectInfo:
+        writer = Writer(self, session, key, options)
+        chunks = _read_chunks(data, self._part_size_bytes)
+        try:
+            while (chunk := await session.offload(_read_next_chunk, chunks)) is not None:
+                await writer.write(chunk)
+        except BaseException:
+            await session.offload(chunks.close)
+            await writer.abort()
+            raise
+        await writer.close()
+        landed = await self._head(session, key=key)
+        if landed is None:
+            raise ObjectNotFound(key)
+        return landed
+
+    async def _prepare_read(
+        self, session: _Session, *, key: str
+    ) -> tuple[ObjectInfo, PresignedTarget]:
+        info = await self._head(session, key=key)
+        if info is None:
+            raise ObjectNotFound(key)
+        target = await self._sign(session, key, SignedOperation.GET, SignedAudience.INTERNAL)
+        return info, target
+
+    async def _head(self, session: _Session, *, key: str) -> ObjectInfo | None:
+        request = HeadRequest(bucket=self._read_properties().bucket, key=key)
+        response = await session.client.head(request)
+        return _build_object_info(response.object, key) if response.object else None
+
+    async def _delete(self, session: _Session, *, keys: tuple[str, ...]) -> None:
+        await session.client.delete(
+            DeleteRequest(bucket=self._read_properties().bucket, keys=list(keys))
+        )
+
+    async def _copy(self, session: _Session, *, src: str, dst: str) -> ObjectInfo:
+        request = CopyRequest(
+            bucket=self._read_properties().bucket, source_key=src, destination_key=dst
+        )
+        try:
+            response = await session.client.copy(request)
+        except RuntimeRefusedError as refused:
+            raise _refine_refusal(src, refused) from None
+        return _build_object_info(response.object, dst)
+
+    async def _list_page(
+        self, session: _Session, *, prefix: str | None, limit: int | None, cursor: str
+    ) -> tuple[Sequence[ObjectInfo], str]:
+        bucket = self._read_properties().bucket
+        request = ListRequest(bucket=bucket, prefix=prefix or "", limit=limit or 0, cursor=cursor)
+        response = await session.client.list(request)
+        page = [_build_object_info(entry, entry.key) for entry in response.objects]
+        return page, response.next_cursor
+
+    def _sign_read(
+        self, key: str, expires_in: float | timedelta | None, download: bool | str | None
+    ) -> Callable[[_Session], Operation[PresignedTarget]]:
+        constraints = SignConstraints(download_filename=_choose_download_filename(key, download))
+        return lambda session: self._sign(
+            session, key, SignedOperation.GET, SignedAudience.EXTERNAL, constraints, expires_in
+        )
+
+    def _sign_upload(
+        self,
+        key: str,
+        expires_in: float | timedelta | None,
+        max_size: int | None,
+        content_type: str | None,
+    ) -> Callable[[_Session], Operation[PresignedTarget]]:
+        constraints = SignConstraints(content_type=content_type or "", max_size=max_size or 0)
+        return lambda session: self._sign(
+            session,
             key,
             SignedOperation.POST_UPLOAD,
             SignedAudience.EXTERNAL,
-            SignConstraints(content_type=content_type or "", max_size=max_size or 0),
+            constraints,
             expires_in,
         )
-        return SignedUpload(
-            url=target.url,
-            method=target.method or "POST",
-            headers=dict(target.headers),
-            fields=dict(target.fields),
-            expires=_compute_expires_at(expires_in),
-        )
 
-    async def _sign_target_async(
+    async def _sign(
         self,
-        access: str,
+        session: _Session,
         key: str,
         operation: SignedOperation,
         audience: SignedAudience,
         constraints: SignConstraints | None = None,
         expires_in: float | timedelta | None = None,
     ) -> PresignedTarget:
-        connection = self._ensure_async_connection(access)
-        request = _build_sign_request(connection, key, operation, audience, constraints, expires_in)
-        try:
-            response = await connection.client.sign(request, headers=connection.headers)
-        except ConnectError as error:
-            raise _refuse_connect_error(key, error) from None
-        if response.target is None:
-            raise RuntimeError(f'the runtime signed nothing for "{key}"')
-        return response.target
-
-    def _sign_target(
-        self,
-        access: str,
-        key: str,
-        operation: SignedOperation,
-        audience: SignedAudience,
-        constraints: SignConstraints | None = None,
-        expires_in: float | timedelta | None = None,
-    ) -> PresignedTarget:
-        connection = self._ensure_connection(access)
-        request = _build_sign_request(connection, key, operation, audience, constraints, expires_in)
-        try:
-            response = connection.client.sign(request, headers=connection.headers)
-        except ConnectError as error:
-            raise _refuse_connect_error(key, error) from None
-        if response.target is None:
-            raise RuntimeError(f'the runtime signed nothing for "{key}"')
-        return response.target
-
-    def _ensure_connection(self, access: str) -> _Connection:
-        if is_discovering():
-            raise refuse_unprovisioned(f'bucket("{self.name}")', access)
-        if self._connection is None:
-            self._connection = self._new_connection(BucketServiceClientSync)
-        return self._connection
-
-    def _ensure_async_connection(self, access: str) -> _Connection:
-        if is_discovering():
-            raise refuse_unprovisioned(f'bucket("{self.name}")', access)
-        if self._async_connection is None:
-            self._async_connection = self._new_connection(BucketServiceClient)
-        return self._async_connection
-
-    def _new_connection(self, client_type) -> _Connection:
-        properties = read_bucket_binding(self.name)
-        address, headers = read_runtime()
-        return _Connection(
-            client_type(address, send_compression=None),
-            properties.bucket,
-            properties.public_base_url,
-            headers,
+        request = SignRequest(
+            bucket=self._read_properties().bucket,
+            key=key,
+            operation=operation,
+            audience=audience,
+            constraints=constraints,
         )
+        if expires_in is not None:
+            request.expires_in = encode_duration(expires_in)
+        try:
+            response = await session.client.sign(request)
+        except RuntimeRefusedError as refused:
+            raise _refine_refusal(key, refused) from None
+        if response.target is None:
+            raise OcelError(f'the runtime signed nothing for "{key}"')
+        return response.target
 
 
 def bucket(name: str, *, public: bool = False, allowed_origins: Sequence[str] = ()) -> Bucket:
@@ -740,25 +504,40 @@ class ObjectBody:
     #: What the bucket knows about the object.
     info: ObjectInfo
 
-    def __init__(self, info: ObjectInfo, stream, response):
+    def __init__(
+        self,
+        info: ObjectInfo,
+        stream: AbstractContextManager[SyncResponse],
+        response: SyncResponse,
+    ):
+        """Wrap a streaming read of the object ``info`` describes. :meth:`Bucket.get`
+        hands one back."""
         self.info = info
         self._stream = stream
         self._response = response
-        self._chunks: Iterator[bytes] | None = None
+        self._walked = False
+        self._whole: bytes | None = None
 
     def __iter__(self) -> Iterator[bytes]:
-        """The bytes, a chunk at a time, as they arrive."""
-        if self._chunks is None:
-            self._chunks = iter(self._response.content)
+        """The bytes, a chunk at a time, as they arrive. A body is walked once; one read
+        whole with :meth:`bytes` walks as that one chunk."""
+        if self._whole is not None:
+            yield self._whole
+            return
+        _refuse_second_walk(self.info.key, self._walked)
+        self._walked = True
         try:
-            for chunk in self._chunks:
+            for chunk in self._response.content:
                 yield bytes(chunk)
         finally:
             self.close()
 
     def bytes(self) -> bytes:
-        """Every byte of the object, read to the end."""
-        return b"".join(self)
+        """Every byte of the object, read to the end, and the same bytes on every call
+        after."""
+        if self._whole is None:
+            self._whole = b"".join(self)
+        return self._whole
 
     def text(self, encoding: str = "utf-8") -> str:
         """Every byte of the object, decoded."""
@@ -772,7 +551,7 @@ class ObjectBody:
         """Hand back the body, which closes when the block ends."""
         return self
 
-    def __exit__(self, *_exception) -> None:
+    def __exit__(self, *_exception: object) -> None:
         """Release the connection the object is streaming over."""
         self.close()
 
@@ -784,25 +563,40 @@ class AsyncObjectBody:
     #: What the bucket knows about the object.
     info: ObjectInfo
 
-    def __init__(self, info: ObjectInfo, stream, response):
+    def __init__(
+        self,
+        info: ObjectInfo,
+        stream: AbstractAsyncContextManager[Response],
+        response: Response,
+    ):
+        """Wrap a streaming read of the object ``info`` describes. :meth:`Bucket.get_async`
+        hands one back."""
         self.info = info
         self._stream = stream
         self._response = response
-        self._chunks: AsyncIterator | None = None
+        self._walked = False
+        self._whole: bytes | None = None
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
-        """The bytes, a chunk at a time, as they arrive."""
-        if self._chunks is None:
-            self._chunks = self._response.content.__aiter__()
+        """The bytes, a chunk at a time, as they arrive. A body is walked once; one read
+        whole with :meth:`bytes` walks as that one chunk."""
+        if self._whole is not None:
+            yield self._whole
+            return
+        _refuse_second_walk(self.info.key, self._walked)
+        self._walked = True
         try:
-            async for chunk in self._chunks:
+            async for chunk in self._response.content:
                 yield bytes(chunk)
         finally:
             await self.aclose()
 
     async def bytes(self) -> bytes:
-        """Every byte of the object, read to the end."""
-        return b"".join([chunk async for chunk in self])
+        """Every byte of the object, read to the end, and the same bytes on every call
+        after."""
+        if self._whole is None:
+            self._whole = b"".join([chunk async for chunk in self])
+        return self._whole
 
     async def text(self, encoding: str = "utf-8") -> str:
         """Every byte of the object, decoded."""
@@ -816,7 +610,7 @@ class AsyncObjectBody:
         """Hand back the body, which closes when the block ends."""
         return self
 
-    async def __aexit__(self, *_exception) -> None:
+    async def __aexit__(self, *_exception: object) -> None:
         """Release the connection the object is streaming over."""
         await self.aclose()
 
@@ -833,209 +627,24 @@ class _WriteOptions:
     def if_none_match(self) -> str:
         return "*" if self.if_not_exists else ""
 
+    @classmethod
+    def take(cls, opener: str, given: dict[str, object]) -> "_WriteOptions":
+        options = cls()
+        for name, value in given.items():
+            if name not in cls.__dataclass_fields__:
+                raise TypeError(f"{opener}() got an unexpected keyword argument '{name}'")
+            setattr(options, name, value)
+        return options
 
-class _Writer:
-    def __init__(self, store: Bucket, key: str, options: _WriteOptions):
+
+class Writer:
+    def __init__(self, store: Bucket, session: _Session, key: str, options: _WriteOptions):
         self._store = store
+        self._session = session
+        self._http = store._http_for(session)
+        self._bucket = store._read_properties().bucket
         self._key = key
         self._options = options
-        self._connection = store._ensure_connection("put")
-        self._buffered = bytearray()
-        self._pending: list[tuple[int, bytes]] = []
-        self._completed: list[CompletedPart] = []
-        self._upload_id = ""
-        self._next = 1
-        self._closed = False
-
-    def write(self, data: bytes) -> None:
-        if self._closed:
-            raise ValueError(f'the writer for "{self._key}" is closed')
-        self._buffered += data
-        self._run_or_discard(lambda: self._drain_buffer(False))
-
-    def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        if not self._upload_id and len(self._buffered) <= self._store._single_request_limit_bytes:
-            self._run_or_discard(self._put_whole_object)
-            return
-        self._run_or_discard(lambda: self._drain_buffer(True))
-        self._run_or_discard(self._complete_upload)
-
-    def abort(self) -> None:
-        self._closed = True
-        self._discard_upload()
-
-    def _run_or_discard(self, work) -> None:
-        try:
-            work()
-        except BaseException:
-            self._discard_upload()
-            raise
-
-    def _discard_upload(self) -> None:
-        if not self._upload_id:
-            return
-        upload_id, self._upload_id = self._upload_id, ""
-        self._connection.client.abort_multipart(
-            AbortMultipartRequest(
-                bucket=self._connection.bucket, key=self._key, upload_id=upload_id
-            ),
-            headers=self._connection.headers,
-        )
-
-    def _drain_buffer(self, final: bool) -> None:
-        if not self._upload_id:
-            if final or len(self._buffered) <= self._store._single_request_limit_bytes:
-                return
-            self._begin_upload()
-        part_size = self._store._part_size_bytes
-        while len(self._buffered) >= part_size:
-            self._stage_part(bytes(self._buffered[:part_size]))
-            del self._buffered[:part_size]
-            if len(self._pending) == _PARTS_IN_FLIGHT:
-                self._flush_parts()
-        if not final:
-            return
-        if self._buffered:
-            self._stage_part(bytes(self._buffered))
-            self._buffered.clear()
-        self._flush_parts()
-
-    def _begin_upload(self) -> None:
-        try:
-            response = self._connection.client.create_multipart(
-                _build_create_multipart_request(self._connection, self._key, self._options),
-                headers=self._connection.headers,
-            )
-        except ConnectError as error:
-            raise _refuse_connect_error(self._key, error) from None
-        self._upload_id = response.upload_id
-
-    def _stage_part(self, data: bytes) -> None:
-        self._pending.append((self._next, data))
-        self._next += 1
-
-    def _flush_parts(self) -> None:
-        if not self._pending:
-            return
-        try:
-            response = self._connection.client.sign_parts(
-                _build_sign_parts_request(
-                    self._connection, self._key, self._upload_id, [n for n, _ in self._pending]
-                ),
-                headers=self._connection.headers,
-            )
-        except ConnectError as error:
-            raise _refuse_connect_error(self._key, error) from None
-        targets = {part.part_number: part for part in response.parts}
-        pending, self._pending = self._pending, []
-        _require_signed_parts(self._key, pending, targets)
-        with ThreadPoolExecutor(max_workers=_PARTS_IN_FLIGHT) as sending:
-            sent = [
-                sending.submit(self._send_part, targets[number], number, data)
-                for number, data in pending
-            ]
-            for part in sent:
-                self._completed.append(part.result())
-
-    def _send_part(self, target: SignedPart, number: int, data: bytes) -> CompletedPart:
-        response = self._store._http.put(target.url, dict(target.headers), data)
-        if response.status >= 300:
-            raise RuntimeError(f'part {number} of "{self._key}" was refused ({response.status})')
-        return CompletedPart(part_number=number, etag=response.headers.get("etag", ""))
-
-    def _complete_upload(self) -> None:
-        self._completed.sort(key=lambda part: part.part_number)
-        upload_id, self._upload_id = self._upload_id, ""
-        try:
-            self._connection.client.complete_multipart(
-                _build_complete_multipart_request(
-                    self._connection, self._key, upload_id, self._completed, self._options
-                ),
-                headers=self._connection.headers,
-            )
-        except ConnectError as error:
-            self._upload_id = upload_id
-            raise _refuse_connect_error(self._key, error) from None
-
-    def _put_whole_object(self) -> None:
-        options = self._options
-        target = self._store._sign_target(
-            "put",
-            self._key,
-            SignedOperation.PUT,
-            SignedAudience.INTERNAL,
-            _build_put_constraints(options),
-        )
-        response = self._store._http.execute(
-            target.method or "PUT",
-            target.url,
-            _build_put_headers(target, options),
-            bytes(self._buffered),
-        )
-        if response.status >= 300:
-            raise _refuse_status(self._key, response.status) or RuntimeError(
-                f'writing "{self._key}" was refused ({response.status})'
-            )
-
-
-class _ReadStream(io.RawIOBase):
-    def __init__(self, body: ObjectBody):
-        self._body = body
-        self._chunks = iter(body)
-        self._unread = b""
-
-    def readable(self) -> bool:
-        return True
-
-    def readinto(self, target) -> int:
-        while not self._unread:
-            chunk = next(self._chunks, b"")
-            if not chunk:
-                return 0
-            self._unread = chunk
-        taken = min(len(target), len(self._unread))
-        target[:taken] = self._unread[:taken]
-        self._unread = self._unread[taken:]
-        return taken
-
-    def close(self) -> None:
-        self._body.close()
-        super().close()
-
-
-class _WriteStream(io.RawIOBase):
-    def __init__(self, writer: _Writer):
-        self._writer = writer
-
-    def writable(self) -> bool:
-        return True
-
-    def write(self, data) -> int:
-        self._writer.write(bytes(data))
-        return len(data)
-
-    def close(self) -> None:
-        if not self.closed:
-            self._writer.close()
-        super().close()
-
-    def __exit__(self, kind, *_exception) -> None:
-        if kind is None:
-            self.close()
-            return
-        self._writer.abort()
-        super().close()
-
-
-class _AsyncWriter:
-    def __init__(self, store: Bucket, key: str, options: _WriteOptions):
-        self._store = store
-        self._key = key
-        self._options = options
-        self._connection = store._ensure_async_connection("put_async")
         self._buffered = bytearray()
         self._pending: list[tuple[int, bytes]] = []
         self._completed: list[CompletedPart] = []
@@ -1063,7 +672,7 @@ class _AsyncWriter:
         self._closed = True
         await self._discard_upload()
 
-    async def _run_or_discard(self, work) -> None:
+    async def _run_or_discard(self, work: Operation[None]) -> None:
         try:
             await work
         except BaseException:
@@ -1074,11 +683,8 @@ class _AsyncWriter:
         if not self._upload_id:
             return
         upload_id, self._upload_id = self._upload_id, ""
-        await self._connection.client.abort_multipart(
-            AbortMultipartRequest(
-                bucket=self._connection.bucket, key=self._key, upload_id=upload_id
-            ),
-            headers=self._connection.headers,
+        await self._session.client.abort_multipart(
+            AbortMultipartRequest(bucket=self._bucket, key=self._key, upload_id=upload_id)
         )
 
     async def _drain_buffer(self, final: bool) -> None:
@@ -1100,13 +706,19 @@ class _AsyncWriter:
         await self._flush_parts()
 
     async def _begin_upload(self) -> None:
+        options = self._options
         try:
-            response = await self._connection.client.create_multipart(
-                _build_create_multipart_request(self._connection, self._key, self._options),
-                headers=self._connection.headers,
+            response = await self._session.client.create_multipart(
+                CreateMultipartRequest(
+                    bucket=self._bucket,
+                    key=self._key,
+                    content_type=options.content_type or "",
+                    cache_control=options.cache_control or "",
+                    metadata=dict(options.metadata or {}),
+                )
             )
-        except ConnectError as error:
-            raise _refuse_connect_error(self._key, error) from None
+        except RuntimeRefusedError as refused:
+            raise _refine_refusal(self._key, refused) from None
         self._upload_id = response.upload_id
 
     def _stage_part(self, data: bytes) -> None:
@@ -1117,197 +729,77 @@ class _AsyncWriter:
         if not self._pending:
             return
         try:
-            response = await self._connection.client.sign_parts(
-                _build_sign_parts_request(
-                    self._connection, self._key, self._upload_id, [n for n, _ in self._pending]
-                ),
-                headers=self._connection.headers,
+            response = await self._session.client.sign_parts(
+                SignPartsRequest(
+                    bucket=self._bucket,
+                    key=self._key,
+                    upload_id=self._upload_id,
+                    part_numbers=[number for number, _ in self._pending],
+                    audience=SignedAudience.INTERNAL,
+                )
             )
-        except ConnectError as error:
-            raise _refuse_connect_error(self._key, error) from None
+        except RuntimeRefusedError as refused:
+            raise _refine_refusal(self._key, refused) from None
         targets = {part.part_number: part for part in response.parts}
         pending, self._pending = self._pending, []
-        _require_signed_parts(self._key, pending, targets)
+        missing = sorted({number for number, _ in pending} - set(targets))
+        if missing:
+            raise OcelError(f'the runtime signed no url for part {missing[0]} of "{self._key}"')
         self._completed.extend(
-            await asyncio.gather(
-                *(self._send_part(targets[number], number, data) for number, data in pending)
+            await self._session.gather(
+                [self._send_part(targets[number], number, data) for number, data in pending]
             )
         )
 
     async def _send_part(self, target: SignedPart, number: int, data: bytes) -> CompletedPart:
-        response = await self._store._http_async.put(target.url, dict(target.headers), data)
+        response = await self._http.put(target.url, dict(target.headers), data)
         if response.status >= 300:
-            raise RuntimeError(f'part {number} of "{self._key}" was refused ({response.status})')
+            raise OcelError(f'part {number} of "{self._key}" was refused ({response.status})')
         return CompletedPart(part_number=number, etag=response.headers.get("etag", ""))
 
     async def _complete_upload(self) -> None:
         self._completed.sort(key=lambda part: part.part_number)
         upload_id, self._upload_id = self._upload_id, ""
         try:
-            await self._connection.client.complete_multipart(
-                _build_complete_multipart_request(
-                    self._connection, self._key, upload_id, self._completed, self._options
-                ),
-                headers=self._connection.headers,
+            await self._session.client.complete_multipart(
+                CompleteMultipartRequest(
+                    bucket=self._bucket,
+                    key=self._key,
+                    upload_id=upload_id,
+                    parts=self._completed,
+                    if_none_match=self._options.if_none_match,
+                    if_match=self._options.if_match or "",
+                )
             )
-        except ConnectError as error:
+        except RuntimeRefusedError as refused:
             self._upload_id = upload_id
-            raise _refuse_connect_error(self._key, error) from None
+            raise _refine_refusal(self._key, refused) from None
 
     async def _put_whole_object(self) -> None:
         options = self._options
-        target = await self._store._sign_target_async(
-            "put_async",
+        target = await self._store._sign(
+            self._session,
             self._key,
             SignedOperation.PUT,
             SignedAudience.INTERNAL,
-            _build_put_constraints(options),
+            SignConstraints(
+                content_type=options.content_type or "",
+                if_none_match=options.if_none_match,
+                if_match=options.if_match or "",
+                cache_control=options.cache_control or "",
+                metadata=dict(options.metadata or {}),
+            ),
         )
-        response = await self._store._http_async.execute(
+        response = await self._http.execute(
             target.method or "PUT",
             target.url,
             _build_put_headers(target, options),
             bytes(self._buffered),
         )
         if response.status >= 300:
-            raise _refuse_status(self._key, response.status) or RuntimeError(
+            raise _refuse_status(self._key, response.status) or OcelError(
                 f'writing "{self._key}" was refused ({response.status})'
             )
-
-
-class _AsyncReadStream:
-    def __init__(self, store: Bucket, key: str):
-        self._store = store
-        self._key = key
-        self._body: AsyncObjectBody | None = None
-        self._chunks: AsyncIterator[bytes] | None = None
-        self._unread = b""
-
-    async def read(self, size: int = -1) -> bytes:
-        """The next ``size`` bytes of the object, or every byte left when ``size`` is
-        negative."""
-        read = bytearray()
-        while size < 0 or len(read) < size:
-            if not self._unread:
-                self._unread = await anext(await self._open_chunks(), b"")
-                if not self._unread:
-                    break
-            taken = len(self._unread) if size < 0 else min(size - len(read), len(self._unread))
-            read += self._unread[:taken]
-            self._unread = self._unread[taken:]
-        return bytes(read)
-
-    async def aclose(self) -> None:
-        """Release the connection the object is streaming over."""
-        if self._body is not None:
-            await self._body.aclose()
-
-    async def __aenter__(self) -> "_AsyncReadStream":
-        return self
-
-    async def __aexit__(self, *_exception) -> None:
-        await self.aclose()
-
-    async def _open_chunks(self):
-        if self._chunks is None:
-            self._body = await self._store.get_async(self._key)
-            self._chunks = self._body.__aiter__()
-        return self._chunks
-
-
-class _AsyncWriteStream:
-    def __init__(self, writer: _AsyncWriter):
-        self._writer = writer
-
-    async def write(self, data: bytes) -> int:
-        """Buffer ``data``, sending a part on its way whenever enough bytes have come in to
-        fill one."""
-        await self._writer.write(bytes(data))
-        return len(data)
-
-    async def aclose(self) -> None:
-        """Finish the write and land the object."""
-        await self._writer.close()
-
-    async def __aenter__(self) -> "_AsyncWriteStream":
-        return self
-
-    async def __aexit__(self, kind, *_exception) -> None:
-        if kind is None:
-            await self.aclose()
-        else:
-            await self._writer.abort()
-
-
-def _build_sign_request(
-    connection: _Connection,
-    key: str,
-    operation: SignedOperation,
-    audience: SignedAudience,
-    constraints: SignConstraints | None,
-    expires_in: float | timedelta | None,
-) -> SignRequest:
-    request = SignRequest(
-        bucket=connection.bucket,
-        key=key,
-        operation=operation,
-        audience=audience,
-        constraints=constraints,
-    )
-    if expires_in is not None:
-        request.expires_in = encode_duration(expires_in)
-    return request
-
-
-def _build_create_multipart_request(
-    connection: _Connection, key: str, options: _WriteOptions
-) -> CreateMultipartRequest:
-    return CreateMultipartRequest(
-        bucket=connection.bucket,
-        key=key,
-        content_type=options.content_type or "",
-        cache_control=options.cache_control or "",
-        metadata=dict(options.metadata or {}),
-    )
-
-
-def _build_sign_parts_request(
-    connection: _Connection, key: str, upload_id: str, numbers: list[int]
-) -> SignPartsRequest:
-    return SignPartsRequest(
-        bucket=connection.bucket,
-        key=key,
-        upload_id=upload_id,
-        part_numbers=numbers,
-        audience=SignedAudience.INTERNAL,
-    )
-
-
-def _build_complete_multipart_request(
-    connection: _Connection,
-    key: str,
-    upload_id: str,
-    parts: list[CompletedPart],
-    options: _WriteOptions,
-) -> CompleteMultipartRequest:
-    return CompleteMultipartRequest(
-        bucket=connection.bucket,
-        key=key,
-        upload_id=upload_id,
-        parts=parts,
-        if_none_match=options.if_none_match,
-        if_match=options.if_match or "",
-    )
-
-
-def _build_put_constraints(options: _WriteOptions) -> SignConstraints:
-    return SignConstraints(
-        content_type=options.content_type or "",
-        if_none_match=options.if_none_match,
-        if_match=options.if_match or "",
-        cache_control=options.cache_control or "",
-        metadata=dict(options.metadata or {}),
-    )
 
 
 def _build_put_headers(target: PresignedTarget, options: _WriteOptions) -> dict[str, str]:
@@ -1323,15 +815,22 @@ def _build_put_headers(target: PresignedTarget, options: _WriteOptions) -> dict[
     return headers
 
 
-def _require_signed_parts(
-    key: str, pending: list[tuple[int, bytes]], targets: Mapping[int, SignedPart]
-) -> None:
-    missing = sorted({number for number, _ in pending} - set(targets))
-    if missing:
-        raise RuntimeError(f'the runtime signed no url for part {missing[0]} of "{key}"')
+def _build_read_headers(
+    target: PresignedTarget, range: tuple[int, int | None] | None
+) -> dict[str, str]:
+    headers = dict(target.headers)
+    if range is not None:
+        offset, length = range
+        end = "" if length is None else str(offset + length - 1)
+        headers["range"] = f"bytes={offset}-{end}"
+    return headers
 
 
-def _read_chunks(data: bytes | str | BinaryIO | os.PathLike, size: int) -> Iterator[bytes]:
+def _read_next_chunk(chunks: Iterator[bytes]) -> bytes | None:
+    return next(chunks, None)
+
+
+def _read_chunks(data: _Body, size: int) -> Generator[bytes]:
     if isinstance(data, str):
         yield data.encode()
         return
@@ -1349,23 +848,28 @@ def _read_chunks(data: bytes | str | BinaryIO | os.PathLike, size: int) -> Itera
         yield chunk
 
 
-def _format_byte_range(offset: int, length: int | None) -> str:
-    if length is None:
-        return f"bytes={offset}-"
-    return f"bytes={offset}-{offset + length - 1}"
-
-
 def _choose_download_filename(key: str, download: bool | str | None) -> str:
     if isinstance(download, str):
         return download
     return key.rsplit("/", 1)[-1] if download else ""
 
 
-def _compute_expires_at(expires_in: float | timedelta | None) -> datetime | None:
-    if expires_in is None:
-        return None
-    lifetime = expires_in if isinstance(expires_in, timedelta) else timedelta(seconds=expires_in)
-    return datetime.now(timezone.utc) + lifetime
+def _build_signed_upload(
+    target: PresignedTarget, expires_in: float | timedelta | None
+) -> SignedUpload:
+    expires = None
+    if expires_in is not None:
+        lifetime = (
+            expires_in if isinstance(expires_in, timedelta) else timedelta(seconds=expires_in)
+        )
+        expires = datetime.now(timezone.utc) + lifetime
+    return SignedUpload(
+        url=target.url,
+        method=target.method or "POST",
+        headers=dict(target.headers),
+        fields=dict(target.fields),
+        expires=expires,
+    )
 
 
 def _build_object_info(wire: WireObjectInfo | None, key: str) -> ObjectInfo:
@@ -1381,15 +885,24 @@ def _build_object_info(wire: WireObjectInfo | None, key: str) -> ObjectInfo:
     )
 
 
-def _refuse_connect_error(key: str, error: ConnectError) -> Exception:
-    if error.code is Code.NOT_FOUND:
+def _refine_refusal(key: str, refused: RuntimeRefusedError) -> OcelError:
+    if refused.code == "not_found":
         return ObjectNotFound(key)
-    if error.code is Code.FAILED_PRECONDITION:
+    if refused.code == "failed_precondition":
         return PreconditionFailed(key)
-    return error
+    return refused
 
 
-def _refuse_status(key: str, status: int) -> Exception | None:
+def _refuse_second_walk(key: str, walked: bool) -> None:
+    if walked:
+        raise OcelError(f'the body of "{key}" was read already, and a body is read once')
+
+
+def _refuse_read(key: str, status: int) -> OcelError:
+    return _refuse_status(key, status) or OcelError(f'reading "{key}" was refused ({status})')
+
+
+def _refuse_status(key: str, status: int) -> OcelError | None:
     if status == 404:
         return ObjectNotFound(key)
     if status in (409, 412):

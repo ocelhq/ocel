@@ -794,7 +794,7 @@ def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
     monkeypatch.setenv("OCEL_PHASE", "discovery")
     monkeypatch.setenv("OCEL_DEV_SERVER", "http://127.0.0.1:1")
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(ocel.OcelError) as raised:
 
         class Env(ocel.Env):
             name: str

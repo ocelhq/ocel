@@ -7,9 +7,10 @@ from typing import Any, Generic, Literal, Protocol, TypeVar, cast, overload
 from protobuf import Oneof
 
 from ocel import _registry
-from ocel._binding import read_runtime, refuse_unbound, refuse_unprovisioned
+from ocel._binding import require_binding
 from ocel._declare import declare, find_caller_source, is_discovering
-from ocel._payload import Codec, encode_json, find_payload_type
+from ocel._payload import Codec, JsonValue, encode_json, find_payload_type
+from ocel._runtime import RuntimeConnection
 from ocel._wire import Seconds, encode_due_at, encode_duration, encode_lane, encode_retry_policy
 from ocel.gen.app.resources.v1.resources_pb import (
     BatchPolicy,
@@ -83,7 +84,7 @@ class Trigger(Generic[P]):
     #: Labels that :meth:`Runs.list` filters by.
     tags: Sequence[str] = field(default=(), kw_only=True)
     #: JSON the run record keeps beside the payload.
-    metadata: Mapping[str, Any] | None = field(default=None, kw_only=True)
+    metadata: Mapping[str, JsonValue] | None = field(default=None, kw_only=True)
 
 
 class Task(Generic[P, R]):
@@ -94,19 +95,24 @@ class Task(Generic[P, R]):
     #: The name the task was declared under, and the name its binding is delivered as.
     name: str
 
-    def __init__(self, name: str, run: Callable[..., Any], codec: Codec):
+    def __init__(self, name: str, run: Callable[..., object], codec: Codec):
         """Wrap ``run`` as the task named ``name``. Prefer :func:`task`, which declares the
         task and registers it with its worker as well."""
         self.name = name
         self._run = run
         self._codec = codec
-        self._connection: tuple[Any, dict[str, str]] | None = None
-        self._async_connection: tuple[Any, dict[str, str]] | None = None
+        self._runtime = RuntimeConnection(
+            f'task("{name}")',
+            lambda address: TaskServiceClientSync(address, send_compression=None),
+            lambda address: TaskServiceClient(address, send_compression=None),
+            lambda: require_binding(name, "task"),
+        )
         functools.update_wrapper(self, run)
 
-    def __call__(self, *arguments: Any, **keyword_arguments: Any) -> Any:
-        """Call the decorated function directly, as if it were not a task."""
-        return self._run(*arguments, **keyword_arguments)
+    def __call__(self, *arguments: object, **keyword_arguments: object) -> R | Awaitable[R]:
+        """Call the decorated function directly, as if it were not a task: an async
+        function answers the coroutine to await."""
+        return cast(R | Awaitable[R], self._run(*arguments, **keyword_arguments))
 
     def __repr__(self) -> str:
         return f"Task({self.name!r})"
@@ -124,13 +130,12 @@ class Task(Generic[P, R]):
         lane: Lane | Literal["high", "default", "low"] | None = None,
         max_attempts: int | None = None,
         tags: Sequence[str] = (),
-        metadata: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> RunHandle:
         """Start a run of the task with ``payload`` and return its handle. The options
         are those :class:`Trigger` documents. A payload whose JSON exceeds 256 KiB is
         refused before anything is sent."""
         request = self._build_trigger_request(
-            "trigger",
             payload,
             delay=delay,
             ttl=ttl,
@@ -143,8 +148,7 @@ class Task(Generic[P, R]):
             tags=tags,
             metadata=metadata,
         )
-        client, headers = self._ensure_connection("trigger")
-        return RunHandle(client.trigger(request, headers=headers).id)
+        return RunHandle(self._runtime.call("trigger", lambda client: client.trigger(request)).id)
 
     async def trigger_async(
         self,
@@ -159,11 +163,10 @@ class Task(Generic[P, R]):
         lane: Lane | Literal["high", "default", "low"] | None = None,
         max_attempts: int | None = None,
         tags: Sequence[str] = (),
-        metadata: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
     ) -> RunHandle:
         """Start a run of the task with ``payload``, as :meth:`trigger` does."""
         request = self._build_trigger_request(
-            "trigger_async",
             payload,
             delay=delay,
             ttl=ttl,
@@ -176,36 +179,37 @@ class Task(Generic[P, R]):
             tags=tags,
             metadata=metadata,
         )
-        client, headers = self._ensure_async_connection("trigger_async")
-        return RunHandle((await client.trigger(request, headers=headers)).id)
+        response = await self._runtime.call_async(
+            "trigger_async", lambda client: client.trigger(request)
+        )
+        return RunHandle(response.id)
 
     def batch_trigger(self, items: Iterable[Trigger[P] | P]) -> list[RunHandle]:
         """Start one run per item, up to 1,000, and return their handles in the same order.
         An item is a payload, or a :class:`Trigger` carrying a payload with its options."""
-        request = self._build_batch_trigger_request("batch_trigger", items)
-        client, headers = self._ensure_connection("batch_trigger")
-        return [RunHandle(id) for id in client.batch_trigger(request, headers=headers).ids]
+        request = self._build_batch_trigger_request(items)
+        response = self._runtime.call("batch_trigger", lambda client: client.batch_trigger(request))
+        return [RunHandle(id) for id in response.ids]
 
     async def batch_trigger_async(self, items: Iterable[Trigger[P] | P]) -> list[RunHandle]:
         """Start one run per item, as :meth:`batch_trigger` does."""
-        request = self._build_batch_trigger_request("batch_trigger_async", items)
-        client, headers = self._ensure_async_connection("batch_trigger_async")
-        response = await client.batch_trigger(request, headers=headers)
+        request = self._build_batch_trigger_request(items)
+        response = await self._runtime.call_async(
+            "batch_trigger_async", lambda client: client.batch_trigger(request)
+        )
         return [RunHandle(id) for id in response.ids]
 
-    def _build_trigger_request(self, access: str, payload: P, **options: Any) -> TriggerRequest:
-        self._ensure_connection(access)
+    def _build_trigger_request(self, payload: P, **options: Any) -> TriggerRequest:
         return TriggerRequest(
             task=self.name,
             payload=self._codec.encode(payload),
             options=_build_trigger_options(Trigger(payload, **options)),
         )
 
-    def _build_batch_trigger_request(
-        self, access: str, items: Iterable[Trigger[P] | P]
-    ) -> BatchTriggerRequest:
-        self._ensure_connection(access)
-        triggers = [item if isinstance(item, Trigger) else Trigger(item) for item in items]
+    def _build_batch_trigger_request(self, items: Iterable[Trigger[P] | P]) -> BatchTriggerRequest:
+        triggers = [
+            cast(Trigger[P], item) if isinstance(item, Trigger) else Trigger(item) for item in items
+        ]
         return BatchTriggerRequest(
             task=self.name,
             items=[
@@ -216,28 +220,6 @@ class Task(Generic[P, R]):
                 for trigger in triggers
             ],
         )
-
-    def _ensure_connection(self, access: str) -> tuple[Any, dict[str, str]]:
-        if is_discovering():
-            raise refuse_unprovisioned(f'task("{self.name}")', access)
-        if self._connection is None:
-            address, headers = read_runtime()
-            client = TaskServiceClientSync(address, send_compression=None)
-            if refusal := refuse_unbound(self.name, "task"):
-                raise refusal
-            self._connection = (client, headers)
-        return self._connection
-
-    def _ensure_async_connection(self, access: str) -> tuple[Any, dict[str, str]]:
-        if is_discovering():
-            raise refuse_unprovisioned(f'task("{self.name}")', access)
-        if self._async_connection is None:
-            address, headers = read_runtime()
-            client = TaskServiceClient(address, send_compression=None)
-            if refusal := refuse_unbound(self.name, "task"):
-                raise refusal
-            self._async_connection = (client, headers)
-        return self._async_connection
 
 
 def _build_trigger_options(trigger: Trigger[Any]) -> TriggerOptions | None:
@@ -263,7 +245,7 @@ def _build_trigger_options(trigger: Trigger[Any]) -> TriggerOptions | None:
 def task(
     name: str,
     *,
-    schema: Any = None,
+    schema: object = None,
     retry: Retry | None = None,
     concurrency: int | None = None,
     max_duration: Seconds | None = None,
@@ -272,13 +254,13 @@ def task(
     batch: Batch | None = None,
     worker: Worker | None = None,
     cron: str | None = None,
-    on_success: Callable[..., Any] | None = None,
-    on_failure: Callable[..., Any] | None = None,
-    on_complete: Callable[..., Any] | None = None,
-    on_cancel: Callable[..., Any] | None = None,
-    catch_error: Callable[..., Any] | None = None,
-    middleware: Callable[..., Any] | None = None,
-    on_start_attempt: Callable[..., Any] | None = None,
+    on_success: Callable[..., object] | None = None,
+    on_failure: Callable[..., object] | None = None,
+    on_complete: Callable[..., object] | None = None,
+    on_cancel: Callable[..., object] | None = None,
+    catch_error: Callable[..., object] | None = None,
+    middleware: Callable[..., object] | None = None,
+    on_start_attempt: Callable[..., object] | None = None,
 ) -> "_TaskDecorator":
     """Declare the decorated function as the task named ``name``. The function takes
     ``(payload, ctx)`` and may be sync, when it runs in a thread, or async; what it returns
@@ -301,10 +283,14 @@ def task(
     ``on_cancel(payload, ctx)`` when it is canceled while executing."""
     source = find_caller_source() if is_discovering() else ""
 
-    def decorate(run: Callable[..., Any]) -> Task[Any, Any]:
+    def decorate(run: Callable[..., object]) -> Task[object, object]:
         worker_name = get_worker_name(worker)
-        codec = Codec(schema if schema is not None else find_payload_type(run, batch is not None))
-        handle: Task[Any, Any] = Task(name, run, codec)
+        codec = Codec(
+            schema
+            if schema is not None
+            else find_payload_type(f'task "{name}"', run, batch is not None)
+        )
+        handle: Task[object, object] = Task(name, run, codec)
         _registry.register(
             _registry.Registration(
                 kind="task",

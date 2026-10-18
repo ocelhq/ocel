@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import ssl
@@ -403,3 +404,17 @@ def test_a_write_overrides_keeps_or_clears_the_ttl(valkey):
     server.set("forever/a", "x", ex=1)
     forever.set("y", id="a")
     assert server.ttl("forever/a") == -1
+
+
+def test_a_store_reached_from_one_event_loop_after_another_opens_a_client_in_each(valkey):
+    valkey("loops")
+    cache = kv("loops")
+
+    async def read_client():
+        return cache.client(), cache.client()
+
+    first, again = asyncio.run(read_client())
+    second, _ = asyncio.run(read_client())
+
+    assert first is again
+    assert first is not second

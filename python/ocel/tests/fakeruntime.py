@@ -2,6 +2,7 @@ import io
 import threading
 from wsgiref.simple_server import make_server
 
+from connectrpc.errors import ConnectError
 from fakebucket import _body, _Quiet, _Threading
 from protobuf.wkt import Timestamp
 
@@ -139,6 +140,7 @@ class Runtime:
         self.authorizations: list[str | None] = []
         self.stored_run_json: dict[str, bytes] = {}
         self.dead_letter_payload = b'{"order":7}'
+        self.refusal: ConnectError | None = None
         self._tasks = TaskServiceWSGIApplication(Tasks(self))
         self._topics = TopicServiceWSGIApplication(Topics(self))
         self.server = make_server(
@@ -151,6 +153,8 @@ class Runtime:
     def seen(self, method, request, ctx):
         self.calls.append((method, request))
         self.authorizations.append(ctx.request_headers.get("Authorization"))
+        if self.refusal is not None:
+            raise self.refusal
 
     def requests(self, method):
         return [request for seen, request in self.calls if seen == method]

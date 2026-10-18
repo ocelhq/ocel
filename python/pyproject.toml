@@ -2,7 +2,15 @@
 members = ["*"]
 
 [dependency-groups]
-dev = ["fakeredis>=2.26", "pydantic>=2.7,<3", "pytest>=8", "pytest-asyncio>=1", "ruff>=0.14"]
+dev = [
+    "asyncpg-stubs>=0.32.0",
+    "fakeredis>=2.26",
+    "pydantic>=2.7,<3",
+    "pyright[nodejs]>=1.1.407",
+    "pytest>=8",
+    "pytest-asyncio>=1",
+    "ruff>=0.14",
+]
 
 [tool.ruff]
 line-length = 100
@@ -11,3 +19,10 @@ extend-exclude = ["ocel/src/ocel/gen"]
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "UP", "W"]
+
+[tool.pyright]
+include = ["ocel/src/ocel"]
+exclude = ["ocel/src/ocel/gen"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+reportPrivateUsage = false

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import threading
 from datetime import datetime, timezone
 
@@ -256,7 +257,7 @@ async def test_an_aborted_run_is_over_whatever_attempts_remain():
     assert [event[0] for event in events] == ["failure", "complete"]
 
 
-async def test_a_lifecycle_hook_that_raises_is_reported_and_leaves_the_answer(capsys):
+async def test_a_lifecycle_hook_that_raises_is_logged_and_leaves_the_answer(caplog):
     def on_success(payload, output, ctx):
         raise RuntimeError("metrics down")
 
@@ -264,8 +265,14 @@ async def test_a_lifecycle_hook_that_raises_is_reported_and_leaves_the_answer(ca
     def double(payload, ctx):
         return payload * 2
 
-    assert await deliver("worker", envelope("double", "double", 2)) == (200, b"4")
-    assert "metrics down" in capsys.readouterr().err
+    with caplog.at_level(logging.ERROR, logger="ocel"):
+        assert await deliver("worker", envelope("double", "double", 2)) == (200, b"4")
+
+    [record] = caplog.records
+    assert record.name == "ocel"
+    assert record.getMessage() == 'task "double" on_success raised: metrics down'
+    assert record.exc_info is not None
+    assert str(record.exc_info[1]) == "metrics down"
 
 
 async def test_an_attempt_runs_worker_middleware_then_on_start_attempt_then_task_middleware():

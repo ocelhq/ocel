@@ -1,15 +1,16 @@
 import asyncio
 import inspect
 import json
-import sys
-from collections.abc import Awaitable, Callable, Coroutine
-from typing import Any
+import logging
+from collections.abc import Callable, Coroutine
+from typing import Any, cast
 
 from protobuf import Oneof
 
 from ocel import _registry
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._error import format_error
+from ocel._loop import LoopLocal
 from ocel._payload import encode_json
 from ocel._wire import decode_timestamp
 from ocel.gen.app.resources.v1.resources_pb import (
@@ -22,6 +23,7 @@ from ocel.gen.app.topic.v1.topic_pb import Attempt, Envelope, Message
 from ocel.run import AbortTaskRunError, RunAttempt, RunContext, RunMessage, RunResult
 
 _KIND = "worker"
+_logger = logging.getLogger("ocel")
 
 
 class Worker:
@@ -35,17 +37,17 @@ class Worker:
     #: consumers, or ``None`` for no cap.
     concurrency: int | None
     #: What runs once per process before the worker's first run.
-    on_start: Callable[[], Any] | None
+    on_start: Callable[[], object] | None
     #: What wraps every run of every task and consumer on this worker.
-    middleware: Callable[..., Any] | None
+    middleware: Callable[..., object] | None
 
     def __init__(
         self,
         name: str,
         *,
         concurrency: int | None = None,
-        on_start: Callable[[], Any] | None = None,
-        middleware: Callable[..., Any] | None = None,
+        on_start: Callable[[], object] | None = None,
+        middleware: Callable[..., object] | None = None,
     ):
         """Take the handle for the worker named ``name``. Prefer :func:`worker`, which
         declares the worker as well as handing back its handle."""
@@ -54,8 +56,8 @@ class Worker:
         self.on_start = on_start
         self.middleware = middleware
         self._started = on_start is None
-        self._starting: asyncio.Future[Any] | None = None
-        self._slots = asyncio.Semaphore(concurrency) if concurrency else None
+        self._starting: LoopLocal[asyncio.Future[Any]] = LoopLocal()
+        self._slots: LoopLocal[asyncio.Semaphore] = LoopLocal()
 
     def __repr__(self) -> str:
         return f"Worker({self.name!r})"
@@ -63,26 +65,29 @@ class Worker:
     async def _start(self) -> None:
         if self._started:
             return
-        if self._starting is None:
-            self._starting = asyncio.ensure_future(_call_function(self.on_start))
-        starting = self._starting
+        starting = self._starting.get(lambda: asyncio.ensure_future(_call_function(self.on_start)))
         try:
             await asyncio.shield(starting)
         except asyncio.CancelledError:
             raise
         except BaseException:
-            if self._starting is starting:
-                self._starting = None
+            self._starting.forget(starting)
             raise
         self._started = True
+
+    def _find_slots(self) -> asyncio.Semaphore | None:
+        concurrency = self.concurrency
+        if not concurrency:
+            return None
+        return self._slots.get(lambda: asyncio.Semaphore(concurrency))
 
 
 def worker(
     name: str,
     *,
     concurrency: int | None = None,
-    on_start: Callable[[], Any | Awaitable[Any]] | None = None,
-    middleware: Callable[..., Any] | None = None,
+    on_start: Callable[[], object] | None = None,
+    middleware: Callable[..., object] | None = None,
 ) -> Worker:
     """Declare a worker named ``name`` and return its handle. The worker joins the
     ``ocel.json`` app of the same name, or one Ocel adds with the declaring app's folder.
@@ -109,7 +114,7 @@ def worker(
 def get_worker_name(worker: Worker | None) -> str:
     if worker is None:
         return ""
-    if not isinstance(worker, Worker):
+    if not isinstance(cast(object, worker), Worker):
         raise TypeError(
             f"worker= takes the Worker that ocel.worker() returns, not {worker!r}: "
             f"declare it with ocel.worker({worker!r}) and pass that"
@@ -157,18 +162,20 @@ async def deliver(worker: str, body: bytes) -> tuple[int, bytes]:
         await handle._start()
     except Exception as error:
         return 500, f'worker "{worker}" failed to start: {format_error(error)}'.encode()
-    if handle._slots is None:
+    slots = handle._find_slots()
+    if slots is None:
         return await _run_attempt(handle, registration, envelope, payloads)
-    async with handle._slots:
+    async with slots:
         return await _run_attempt(handle, registration, envelope, payloads)
 
 
-def _read_envelope(body: bytes) -> tuple[Envelope, list[Any]]:
-    fields = json.loads(body)
-    if not isinstance(fields, dict):
-        raise TypeError(f"a delivery envelope is a JSON object, not {type(fields).__name__}")
-    payload = fields.pop("payload", None)
-    messages = fields.get("messages")
+def _read_envelope(body: bytes) -> tuple[Envelope, list[object]]:
+    parsed: object = json.loads(body)
+    if not isinstance(parsed, dict):
+        raise TypeError(f"a delivery envelope is a JSON object, not {type(parsed).__name__}")
+    fields = cast(dict[str, Any], parsed)
+    payload: object = fields.pop("payload", None)
+    messages: list[dict[str, Any]] | None = fields.get("messages")
     payloads = [each.pop("payload", None) for each in messages] if messages else [payload]
     envelope = Envelope.from_json(json.dumps(fields), ignore_unknown_fields=True)
     return envelope, payloads
@@ -199,6 +206,7 @@ async def _run_attempt(
         return await run_task_middleware()
 
     failure: Exception | None = None
+    output: object = None
     try:
         if handle.middleware is None:
             output = await run_attempt()
@@ -265,7 +273,7 @@ async def _call_catch_error(
     except AbortTaskRunError:
         return True
     except Exception as failure:
-        _print_failure(registration, "catch_error", failure)
+        _log_failure(registration, "catch_error", failure)
         return False
     return bool(getattr(answer, "skip_retrying", False))
 
@@ -297,13 +305,17 @@ async def _call_hook(
     try:
         await _call_function(function, *arguments)
     except Exception as error:
-        _print_failure(registration, hook, error)
+        _log_failure(registration, hook, error)
 
 
-def _print_failure(registration: _registry.Registration, hook: str, error: Exception) -> None:
-    print(
-        f'ocel: {registration.kind} "{registration.name}" {hook} raised: {format_error(error)}',
-        file=sys.stderr,
+def _log_failure(registration: _registry.Registration, hook: str, error: Exception) -> None:
+    _logger.error(
+        '%s "%s" %s raised: %s',
+        registration.kind,
+        registration.name,
+        hook,
+        format_error(error),
+        exc_info=error,
     )
 
 
