@@ -36,6 +36,7 @@ export interface DispatchHost {
   assetBucket?: AssetBucket;
   imageOptimizerUrl?: string;
   imageOrigin?: ImageOrigin;
+  maxImageRequestBytes?: number;
   originFetch: typeof fetch;
   isOriginThrottle?: OriginThrottle;
 }
@@ -58,6 +59,7 @@ function newRouteDeps(
     keepCacheTags: host.keepCacheTags,
     imageOrigin:
       host.imageOrigin ?? functionUrlImageOrigin(host.imageOptimizerUrl, host.originFetch),
+    maxImageRequestBytes: host.maxImageRequestBytes,
     assetStore: {
       store: host.assetBucket,
       assetPrefix: host.assetPrefix,
@@ -88,6 +90,7 @@ export function newDispatchInvoke(host: DispatchHost): Invoke {
 export interface DispatchAccess {
   assetBucket?: AssetBucket;
   imageOrigin?: ImageOrigin;
+  maxImageRequestBytes?: number;
   originFetch: typeof fetch;
   isOriginThrottle?: OriginThrottle;
 }
@@ -150,6 +153,7 @@ export function readDispatchHost(
     ...(access.assetBucket ? { assetBucket: access.assetBucket } : {}),
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),
     ...(access.imageOrigin ? { imageOrigin: access.imageOrigin } : {}),
+    maxImageRequestBytes: access.maxImageRequestBytes,
     originFetch: access.originFetch,
     ...(access.isOriginThrottle ? { isOriginThrottle: access.isOriginThrottle } : {}),
   };

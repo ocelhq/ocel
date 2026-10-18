@@ -125,6 +125,16 @@ test("a static asset is served from the bucket the service is told holds it", as
   expect(await response.text()).toBe("<svg/>");
 });
 
+test("a route image reaches the in-process optimizer under no transport's request limit", () => {
+  const host = readGcpDispatchHost(
+    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"), ...assetEnv },
+    localOrigin,
+  );
+
+  expect(host.imageOrigin).toBeDefined();
+  expect(host.maxImageRequestBytes).toBeUndefined();
+});
+
 test("a static flight response reaches Cloud CDN without the router state tree in its Vary", async () => {
   const invoke = newGcpDispatchInvoke(localOrigin, {
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),

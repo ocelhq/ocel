@@ -10,6 +10,10 @@ import { isLambdaThrottle } from "./lambda-throttle.mjs";
 
 const assetBucketVar = "OCEL_ASSET_BUCKET";
 
+const lambdaInvokePayloadBytes = 6 * 1024 * 1024;
+
+const functionUrlEventEnvelopeBytes = 64 * 1024;
+
 export function awsDispatchAccess(env: NodeJS.ProcessEnv): DispatchAccess {
   const region = env.AWS_REGION;
   const bucket = env[assetBucketVar];
@@ -24,6 +28,7 @@ export function awsDispatchAccess(env: NodeJS.ProcessEnv): DispatchAccess {
       : {}),
     originFetch: siblingOriginFetch(env, region),
     isOriginThrottle: isLambdaThrottle,
+    maxImageRequestBytes: lambdaInvokePayloadBytes - functionUrlEventEnvelopeBytes,
   };
 }
 

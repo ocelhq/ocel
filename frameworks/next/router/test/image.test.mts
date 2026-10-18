@@ -508,7 +508,7 @@ describe("a local route source", () => {
     expect(seen).toEqual([]);
   });
 
-  it("is refused once the route's body passes images.maximumResponseBody", async () => {
+  it("is refused as too large once the route's body passes images.maximumResponseBody", async () => {
     const { deps, seen } = routeDeps({
       config: configWith({ maximumResponseBody: PNG.byteLength - 1 }),
     });
@@ -516,7 +516,64 @@ describe("a local route source", () => {
 
     const response = await serveImage(new Request(url), url, deps);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(413);
+    expect(await response.text()).toBe('"url" parameter is valid but upstream response is invalid');
+    expect(seen).toEqual([]);
+  });
+
+  async function encodedRequestBytes(): Promise<number> {
+    const { deps, seen } = routeDeps();
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+    await serveImage(new Request(url), url, deps);
+    return new TextEncoder().encode(JSON.stringify(seen[0])).byteLength;
+  }
+
+  it("reaches the optimizer when its encoded request fills the host's image request limit", async () => {
+    const { deps, seen } = routeDeps({ maxRequestBytes: await encodedRequestBytes() });
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    const response = await serveImage(new Request(url), url, deps);
+
+    expect(await response.text()).toBe("optimized");
+    expect(seen).toHaveLength(1);
+  });
+
+  it("is refused before the optimizer once its encoded request passes the host's image request limit", async () => {
+    const limit = (await encodedRequestBytes()) - 1;
+    const { deps, seen } = routeDeps({ maxRequestBytes: limit });
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    const response = await serveImage(new Request(url), url, deps);
+
+    expect(response.status).toBe(413);
+    expect(await response.text()).toBe(
+      `"url" parameter is valid but upstream response is too large for the image optimizer, which accepts requests of at most ${limit} bytes`,
+    );
+    expect(seen).toEqual([]);
+  });
+
+  it("stops reading the route once its bytes cannot fit the host's image request limit", async () => {
+    let pulled = 0;
+    const { deps, seen } = routeDeps({
+      maxRequestBytes: 100,
+      route: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              pulled += 1;
+              if (pulled > 1000) controller.close();
+              else controller.enqueue(new Uint8Array(1));
+            },
+          }),
+          { headers: { "content-type": "image/png" } },
+        ),
+    });
+    const url = imageUrl("url=%2Fapi%2Fog&w=640&q=75");
+
+    const response = await serveImage(new Request(url), url, deps);
+
+    expect(response.status).toBe(413);
+    expect(pulled).toBeLessThanOrEqual(Math.floor((100 * 3) / 4) + 2);
     expect(seen).toEqual([]);
   });
 
@@ -559,6 +616,44 @@ describe("a local route source", () => {
     expect(await response.text()).toBe("optimized");
     expect(called).toEqual(["GET /api/og"]);
     expect(seen[0]!.routeImage?.base64).toBe(base64(PNG));
+  });
+
+  it("is refused under the image request limit the router's host states", async () => {
+    const seen: ImageOriginRequest[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/api/og"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: { "/api/og": { kind: "function", id: "/api/og" } },
+        images: BASE_CONFIG,
+        assetHashes: {},
+      },
+      functionUrls: { "/api/og": "https://og.fn.example" },
+      fetch: (async () =>
+        new Response(PNG, { headers: { "content-type": "image/png" } })) as unknown as typeof fetch,
+      imageOrigin: async (payload) => {
+        seen.push(payload);
+        return new Response("optimized", { headers: { "content-type": "image/webp" } });
+      },
+      maxImageRequestBytes: 100,
+    });
+
+    const response = await serve(
+      new Request("https://app.example/_next/image?url=%2Fapi%2Fog&w=640&q=75"),
+      deps,
+    );
+
+    expect(response.status).toBe(413);
+    expect(seen).toEqual([]);
   });
 
   it("is optimized past the host's image cache, which cannot carry its bytes", async () => {

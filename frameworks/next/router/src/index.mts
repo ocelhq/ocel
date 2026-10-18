@@ -180,6 +180,8 @@ export interface RouteDeps {
 
   imageCache?: ImageCache;
 
+  maxImageRequestBytes?: number;
+
   prerender?: Prerenderer;
 
   hostRequestInit?: (request: Request) => HostRequestExtras;
@@ -206,6 +208,7 @@ function imageResponse(request: Request, deps: RouteDeps): Promise<Response> | u
     assetHashes: manifest.assetHashes,
     imageCache: deps.imageCache,
     route: (routed) => serve(routed, deps),
+    maxRequestBytes: deps.maxImageRequestBytes,
   });
 }
 
