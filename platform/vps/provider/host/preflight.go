@@ -247,7 +247,10 @@ func (h *Host) answers(ctx context.Context, asked boxContainer, elevation string
 	if result.Code == 0 {
 		return nil
 	}
-	state := strings.TrimSpace(h.said(ctx, stateCommand(asked.name), elevation))
+	state, err := h.said(ctx, stateCommand(asked.name), elevation)
+	if err != nil {
+		return err
+	}
 	if status := stateField(state, "Status"); asked.name == SwitchboardContainer && (status == "" || status == proxyExited || status == "created") {
 		return h.restoreSwitchboard(ctx, elevation)
 	}

@@ -42,6 +42,27 @@ func tunneledBox(t *testing.T) (*claimBench, Tunnel) {
 	return claimingBox(t, state), *state.Tunnel
 }
 
+func TestATunnelIsReadyOnlyOnceItsConnectorReportsAConnectionToTheEdge(t *testing.T) {
+	t.Parallel()
+
+	box := tunnelBox(Tunnel{Edge: tunnelEdge, Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}, tunnelConnectors[tunnelEdge])
+	if slices.Contains(box.ready, "--version") {
+		t.Fatalf("the tunnel is ready when `%s` answers, which it does whatever state the tunnel is in", strings.Join(box.ready, " "))
+	}
+	metrics := slices.Index(box.command, "--metrics")
+	if metrics < 0 || metrics+1 >= len(box.command) {
+		t.Fatalf("the connector runs `%s` with no metrics address, so nothing can ask it whether it connected", strings.Join(box.command, " "))
+	}
+	address := box.command[metrics+1]
+	if !strings.HasPrefix(address, "127.0.0.1:") {
+		t.Errorf("the connector serves its metrics on %s, beyond the container's own loopback", address)
+	}
+	if want := []string{"cloudflared", "tunnel", "--metrics", address, "ready"}; !slices.Equal(box.ready, want) {
+		t.Errorf("the tunnel's readiness is `%s`, want `%s`, which exits 0 only once the connector's /ready answers 200 for a connection to the edge",
+			strings.Join(box.ready, " "), strings.Join(want, " "))
+	}
+}
+
 func TestABoxReservesOneTunnelNameForItsEdgeAndHandsTheSameOneBack(t *testing.T) {
 	t.Parallel()
 	box := claimingBox(t, routed())

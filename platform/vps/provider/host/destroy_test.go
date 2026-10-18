@@ -72,7 +72,7 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	stamp := box.took(quoted(TierDir(tier)))
@@ -126,7 +126,7 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 	if _, err := bootstrap.PlanRemove(context.Background(), tier); err != nil {
 		t.Fatalf("PlanRemove() = %v over a host an apply left half-written, and no verb can clear it if destroy cannot read it", err)
 	}
-	if err := bootstrap.Remove(context.Background(), tier, nil); err != nil {
+	if err := bootstrap.Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v over a host an apply left half-written", err)
 	}
 	if box.took(quoted(TierDir(tier))) < 0 {
@@ -167,7 +167,7 @@ func TestADeployLoginSomethingStillUsesDoesNotStrandTheDestroy(t *testing.T) {
 		return session.Result{Code: 8, Stderr: "userdel: user " + deployUser + " is currently used by process 4021"}, true
 	}
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v over a login a lingering session still uses, and every re-run would fail there again", err)
 	}
 	if box.took(quoted(TierDir(tier))) < 0 {
@@ -181,7 +181,7 @@ func TestARootOtherTiersShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) 
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()
@@ -205,12 +205,12 @@ func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 	tier := environment.TierProduction
 	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()
 	for _, item := range bootstrapped(t, tier) {
-		if item.Kind == KindEngine || item.Kind == KindUnit || gone(taken, item.Name) {
+		if item.Kind == KindEngine || item.Kind == KindUnit || item.Kind == KindLiveRestore || gone(taken, item.Name) {
 			continue
 		}
 		t.Errorf("%s remains after the last tier on the host was destroyed:\n%s", item.ID(), strings.Join(taken, "\n"))
@@ -224,7 +224,7 @@ func TestTheLastDestroyTakesTheLockDeploysLoadImagesUnderBeforeTheStateRoot(t *t
 	loaded := Item{Kind: KindFile, Name: imagesLock, Mode: 0o644, Owner: stateOwner}
 	box := machine(map[environment.Tier][]Item{tier: append(bootstrapped(t, tier), loaded)})
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()

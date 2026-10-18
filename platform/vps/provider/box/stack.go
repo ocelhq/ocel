@@ -147,9 +147,7 @@ func declaredBy(record router.ReleaseRecord) []string {
 
 func (s *stack) rerun(ctx context.Context, release promotable, progress progress.Log) (host.Run, error) {
 	record := release.record
-	if progress != nil {
-		progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
-	}
+	progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
 	return s.e.machine.RunContainer(ctx, host.Container{
 		Name: record.Physical, Project: s.state.Slug, App: release.app, Image: record.Image, Tier: s.state.Tier,
 		HealthPath: record.HealthPath, Declared: declaredBy(record),

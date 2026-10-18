@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -276,6 +277,7 @@ func TestAResourceAlreadyRunningStillPutsTheSwitchboardBackOnItsNetwork(t *testi
 	t.Parallel()
 
 	spec := resourced()
+	spec.Memory = strconv.Itoa(benchMemoryBytes / 2)
 	digest, err := spec.digest()
 	if err != nil {
 		t.Fatal(err)

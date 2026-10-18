@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -194,7 +195,7 @@ func TestLiveTheEnvFileIsSixHundredForTheDeployLoginForAsLongAsItExists(t *testi
 		watched <- strings.TrimSpace(vm.ssh(t, "sudo sh -c "+quote(watching)))
 	}()
 
-	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), spec, progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() with values = %v", err)
 	}
 
@@ -217,13 +218,13 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	vm, p := onABoxServingContainers(t)
 
 	resolved := resolving(t, p)
-	broken, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "crasher", resolved.declared), nil)
+	broken, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "crasher", resolved.declared), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() of a crash-looping app = %v, want it started and refused at its gate", err)
 	}
 	physical := broken[0].Physical
 
-	refusal := rollingOut(p, release{physical: physical, address: physical + ":" + containerimage.PortText}, 5*time.Second, nil)
+	refusal := rollingOut(p, release{physical: physical, address: physical + ":" + containerimage.PortText}, 5*time.Second, progress.Discard())
 	if refusal == nil {
 		t.Fatal("a release of the crash-looping fixture passed its gate")
 	}
@@ -258,7 +259,7 @@ func TestLiveAContainerThatCannotBeStartedTakesItsEnvFileWithIt(t *testing.T) {
 	spec.App.Image = fixtureRepo + ":no-such-tag"
 	physical := host.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.BuildID, spec.App.Image)
 
-	_, err := p.ProvisionContainers(context.Background(), spec, nil)
+	_, err := p.ProvisionContainers(context.Background(), spec, progress.Discard())
 	if err == nil {
 		t.Fatal("ProvisionContainers() over an image this box does not have succeeded")
 	}

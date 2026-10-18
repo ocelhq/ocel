@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -53,7 +54,7 @@ func TestADeclaredKVStoreRunsAsOneConfinedContainerOnlyItsProjectReaches(t *test
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), nil)
+	binding, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionKV() = %v", err)
 	}
@@ -91,7 +92,8 @@ func TestADeclaredKVStoreRunsAsOneConfinedContainerOnlyItsProjectReaches(t *test
 		"'--maxmemory' '268435456'",
 		"'--maxmemory-policy' 'allkeys-lru'",
 		"'--appendonly' 'yes'",
-		"'ocel.backup=vol'",
+		"'--memory' '603979776'",
+		"'ocel.backup=kv'",
 	} {
 		if !strings.Contains(runCommand, want) {
 			t.Errorf("the container was started without %q:\n%s", want, runCommand)
@@ -112,7 +114,7 @@ func TestAKVPasswordReachesTheBoxOnlyOnStdinAndIsKeptSealed(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), nil)
+	binding, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionKV() = %v", err)
 	}
@@ -146,7 +148,7 @@ func TestASecondDeployBindsToThePasswordTheRunningStoreWasHanded(t *testing.T) {
 
 	machine := &box{}
 	withRecordedKV(machine)
-	binding, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), nil)
+	binding, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionKV() = %v", err)
 	}
@@ -159,7 +161,7 @@ func TestAKVVersionNoImageIsPinnedForIsRefusedBeforeTheBoxIsReached(t *testing.T
 	t.Parallel()
 
 	machine := &box{}
-	_, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "7"), nil)
+	_, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "7"), progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "cache") || !strings.Contains(err.Error(), `"7"`) {
 		t.Fatalf("ProvisionKV() = %v, want version 7 refused naming the store", err)
 	}
@@ -174,12 +176,12 @@ func TestARemovedKVStoreTakesItsContainerDataPasswordAndBackups(t *testing.T) {
 	machine := &box{}
 	p := over(machine)
 	in := aKVStore(t, "9")
-	binding, err := p.ProvisionKV(context.Background(), in, nil)
+	binding, err := p.ProvisionKV(context.Background(), in, progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}
 	before := len(machine.commands())
-	if err := p.RemoveResource(context.Background(), in.Ref, binding, nil); err != nil {
+	if err := p.RemoveResource(context.Background(), in.Ref, binding, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
@@ -209,7 +211,7 @@ func TestAKVStoreDeclaredUnderANewerMajorCopiesItsDataIntoTheNewGenerationWithAW
 		}
 		return session.Result{}, false
 	}
-	if _, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), nil); err != nil {
+	if _, err := over(machine).ProvisionKV(context.Background(), aKVStore(t, "9"), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionKV() = %v, and a stopped store's files copy as well as a running one's", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
@@ -220,7 +222,7 @@ func TestAKVStoreDeclaredUnderANewerMajorCopiesItsDataIntoTheNewGenerationWithAW
 	copied := strings.Index(swap, "'--entrypoint' 'cp'")
 	for _, want := range []string{
 		"trap ",
-		"docker stop '" + storeContainer + "'",
+		"docker stop --time 60 '" + storeContainer + "'",
 		"src=" + storeContainer + "-g8,dst=/from,readonly",
 		"src=" + storeContainer + "-g9,dst=/data",
 		"'--network' 'none'",
@@ -247,7 +249,7 @@ func patchedKV(t *testing.T, pass *patching) (*box, error) {
 	machine := &box{}
 	p := over(machine)
 	p.Transforming(pass)
-	_, err := p.ProvisionKV(context.Background(), aKVStore(t, "9"), nil)
+	_, err := p.ProvisionKV(context.Background(), aKVStore(t, "9"), progress.Discard())
 	return machine, err
 }
 

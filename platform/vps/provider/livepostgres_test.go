@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -35,7 +36,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		vm.ssh(t, "sudo docker volume ls -q --filter label="+host.LabelResource+" | xargs -r sudo docker volume rm >/dev/null 2>&1 || true")
 	})
 
-	binding, err := p.ProvisionPostgres(ctx, in, nil)
+	binding, err := p.ProvisionPostgres(ctx, in, progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -52,7 +53,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	}
 
 	started := vm.ssh(t, "sudo docker inspect -f '{{.Id}} {{.State.StartedAt}}' "+quote(name))
-	again, err := p.ProvisionPostgres(ctx, in, nil)
+	again, err := p.ProvisionPostgres(ctx, in, progress.Discard())
 	if err != nil {
 		t.Fatalf("a second Postgres() = %v", err)
 	}
@@ -74,7 +75,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("the daily dump is %q on a bootstrapped box, and a database nothing dumps is one disk away from gone", armed)
 	}
 
-	upgraded, err := p.ProvisionPostgres(ctx, aPostgres(t, "17"), nil)
+	upgraded, err := p.ProvisionPostgres(ctx, aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("moving %s from 16 to 17 = %v", name, err)
 	}
@@ -88,7 +89,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("version 16's volume %q outlives the move, and nothing after this reclaims it", left)
 	}
 
-	if err := p.RemoveResource(ctx, in.Ref, again, nil); err != nil {
+	if err := p.RemoveResource(ctx, in.Ref, again, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	if vm.running(t, name) {

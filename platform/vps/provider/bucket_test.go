@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -57,7 +58,7 @@ func TestADeclaredBucketRunsAStoreOnlyItsProjectReaches(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
+	binding, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -106,7 +107,7 @@ func TestABindingIsKeyedByTheNameTheAppDeclaredTheResourceUnder(t *testing.T) {
 	postgres.Resource.Name, postgres.Resource.Declared = "db--main", "main"
 	machine := &box{}
 	withRecordedPostgres(machine)
-	binding, err := over(machine).ProvisionPostgres(context.Background(), postgres, nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), postgres, progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -117,7 +118,7 @@ func TestABindingIsKeyedByTheNameTheAppDeclaredTheResourceUnder(t *testing.T) {
 
 	bucket := aBucket(t, "bucket--uploads", false)
 	bucket.Resource.Declared = "uploads"
-	binding, err = over(&box{kept: sealedRootKey()}).ProvisionBucket(context.Background(), bucket, nil)
+	binding, err = over(&box{kept: sealedRootKey()}).ProvisionBucket(context.Background(), bucket, progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -132,11 +133,11 @@ func TestOneStoreServesEveryBucketAProjectDeclares(t *testing.T) {
 
 	machine := &box{}
 	p := over(machine)
-	first, err := p.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
+	first, err := p.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	second, err := p.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil)
+	second, err := p.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket(avatars) = %v", err)
 	}
@@ -160,7 +161,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
-	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard()); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 
@@ -186,7 +187,7 @@ func sealingStore(t *testing.T, declared ...string) string {
 	machine := &box{}
 	vendor := over(machine)
 	for _, name := range declared {
-		if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, name, false), nil); err != nil {
+		if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, name, false), progress.Discard()); err != nil {
 			t.Fatalf("Bucket(%s) = %v", name, err)
 		}
 	}
@@ -234,7 +235,7 @@ func storeManifest(t *testing.T, machine *box, options vps.Options) variables.Ma
 	app := anApp()
 	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
 	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	return manifestIn(t, machine)
@@ -297,7 +298,7 @@ func TestTheStoreKeepsItsSessionsInABucketNoAppDeclaresOrReaches(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", true), nil); err != nil {
+	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", true), progress.Discard()); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
@@ -317,7 +318,7 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
-		bindingBucket(), nil)
+		bindingBucket(), progress.Discard())
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
@@ -343,13 +344,13 @@ func TestTheAssociatedDataTheRuntimeOpensTheStoreSecretUnderIsTheOneTheDeploySea
 	)
 	provisioned := aBucket(t, "uploads", false)
 	provisioned.Ref = anInfraStack(t)
-	if _, err := p.ProvisionBucket(context.Background(), provisioned, nil); err != nil {
+	if _, err := p.ProvisionBucket(context.Background(), provisioned, progress.Discard()); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 
 	app := anApp()
 	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	manifest := manifestIn(t, machine)
@@ -380,7 +381,7 @@ func TestAnAppBindingNoBucketIsHandedNoStore(t *testing.T) {
 	machine := &box{}
 	app := anApp()
 	app.Values = provider.AppValues{Secrets: []provider.SecretRef{{Key: "DATABASE_URL"}}}
-	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	for _, command := range machine.commands() {
@@ -402,7 +403,7 @@ func TestAnAppWhoseBucketIsBoundToAStoreIsHandedNoStoreOfTheBoxs(t *testing.T) {
 			provider.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
 		},
 	}}}
-	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	for _, command := range machine.commands() {
@@ -418,7 +419,7 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
 		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
-		bindingBucket(), nil)
+		bindingBucket(), progress.Discard())
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
@@ -437,7 +438,7 @@ func TestAProvisionedStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T
 	t.Parallel()
 
 	machine := &box{}
-	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard()); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 	state, err := host.ReadRoutingTable([]byte(machine.routingDoc))

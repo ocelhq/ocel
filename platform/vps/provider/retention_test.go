@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -28,7 +29,7 @@ func TestAStartedReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil); err != nil {
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	called := helperCalls(machine, "promote")
@@ -55,7 +56,7 @@ func TestAReleaseThatNeverStartedRecordsNothing(t *testing.T) {
 		}
 		return session.Result{Code: 1, Stderr: "refused"}, true
 	}}
-	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil); err == nil {
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard()); err == nil {
 		t.Fatal("ProvisionContainers() succeeded over a box that never ran the container")
 	}
 	if called := helperCalls(machine, "promote"); len(called) != 0 {
@@ -68,11 +69,11 @@ func TestTheWindowIsWrittenUnderNoElevationAtAll(t *testing.T) {
 
 	for name, run := range map[string]func(*vps.Provider, provider.StackRef) error{
 		"promote": func(p *vps.Provider, ref provider.StackRef) error {
-			_, err := p.ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
+			_, err := p.ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard())
 			return err
 		},
 		"forget": func(p *vps.Provider, ref provider.StackRef) error {
-			return p.ForgetReleases(context.Background(), ref, "web", nil, nil)
+			return p.ForgetReleases(context.Background(), ref, "web", nil, progress.Discard())
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -108,7 +109,7 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 	}}
 	p := over(machine)
 
-	if _, err := p.Stacks().Provision(context.Background(), aStack(t, anApp()), nil); err == nil {
+	if _, err := p.Stacks().Provision(context.Background(), aStack(t, anApp()), progress.Discard()); err == nil {
 		t.Fatal("Provision() succeeded over a box whose record tier refused, and this test needs the failure path")
 	}
 	called := helperCalls(machine, "reconcile")
@@ -126,7 +127,7 @@ func TestATeardownDropsTheWindowBeforeAnythingSweepsAgainstIt(t *testing.T) {
 
 	machine := &box{}
 	ref := aStack(t, anApp()).Ref
-	if err := over(machine).ForgetReleases(context.Background(), ref, "web", nil, nil); err != nil {
+	if err := over(machine).ForgetReleases(context.Background(), ref, "web", nil, progress.Discard()); err != nil {
 		t.Fatalf("ForgetReleases() = %v", err)
 	}
 	called := helperCalls(machine, "forget")
@@ -145,7 +146,7 @@ func TestASweepListsOneRepositoryAndNeverForces(t *testing.T) {
 
 	machine := &box{}
 	ref := aStack(t, anApp()).Ref
-	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 	called := helperCalls(machine, "reconcile")
@@ -170,7 +171,7 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 	for _, app := range []string{"web; rm -rf /", "$(id)", "'; docker rmi $(docker images -q); #"} {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
-		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedImageRef, nil, nil)
+		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedImageRef, nil, progress.Discard())
 		quotedCommands := 0
 		for _, command := range machine.commands() {
 			if !strings.Contains(command, app) {
@@ -199,7 +200,7 @@ func TestACoordinateNamingNoRepositoryIsRefusedRatherThanSwept(t *testing.T) {
 	} {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
-		err := over(machine).ReconcileImages(context.Background(), ref, "web", imageRef, nil, nil)
+		err := over(machine).ReconcileImages(context.Background(), ref, "web", imageRef, nil, progress.Discard())
 		if err == nil {
 			t.Errorf("%s swept anyway, and a filter that names anything but one repository removes the wrong thing", imageRef)
 		}
@@ -256,7 +257,7 @@ func TestASweepLeavesInTheRegistryARefADeployClaimedAfterTheBoxReportedIt(t *tes
 	machine := sweepingOffWhileADeployClaims(promoted, promoted, going)
 	store := fake.NewImages()
 
-	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, store, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, store, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -289,7 +290,7 @@ func TestASweepSettlesOnlyTheRefsTheRegistryRemoved(t *testing.T) {
 	store := fake.NewImages()
 	store.FailRemovals(errors.New("UNSUPPORTED: The operation is unsupported."))
 
-	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, store, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, store, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -303,7 +304,7 @@ func TestASweepSettlesARefOnceTheRegistryRemovedIt(t *testing.T) {
 
 	machine := sweepingOff("registry.example.com/acme/shop.web:sha256-old")
 
-	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, fake.NewImages(), nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", registryImageRef, fake.NewImages(), progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -317,7 +318,7 @@ func TestASweepWithNoRegistryToReachSettlesOnlyTheRefsNoRegistryHolds(t *testing
 
 	machine := sweepingOff("ocel/shop-web:1111", "registry.example.com/acme/shop.web:sha256-old")
 
-	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", loadedImageRef, nil, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), aStack(t, anApp()).Ref, "web", loadedImageRef, nil, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 
@@ -334,7 +335,7 @@ func TestASweepRemovesFromTheRegistryEveryImageItDroppedFromTheBox(t *testing.T)
 	store := fake.NewImages()
 	ref := aStack(t, anApp()).Ref
 
-	if err := over(machine).ReconcileImages(context.Background(), ref, "web", registryImageRef, store, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", registryImageRef, store, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 	if got := store.Removed(); !slices.Equal(got, dropped) {
@@ -366,7 +367,7 @@ func TestASweepRemovesNothingFromTheRegistryWhenTheBoxDroppedNothing(t *testing.
 	store := fake.NewImages()
 	ref := aStack(t, anApp()).Ref
 
-	if err := over(machine).ReconcileImages(context.Background(), ref, "web", registryImageRef, store, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", registryImageRef, store, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 	if got := store.Removed(); len(got) != 0 {
@@ -380,7 +381,7 @@ func TestASweepOverNoRegistryDropsTheBoxImagesAndRemovesNothingElsewhere(t *test
 	machine := sweepingOff(loadedImageRef)
 	ref := aStack(t, anApp()).Ref
 
-	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil, progress.Discard()); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 	if len(helperCalls(machine, "reconcile")) != 1 {

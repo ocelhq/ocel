@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -71,7 +72,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
@@ -160,7 +161,7 @@ func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing
 		t.Fatal(err)
 	}
 	for _, tier := range []environment.Tier{production, preview} {
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 			t.Fatalf("Apply(%s) = %v", tier, err)
 		}
 	}
@@ -185,7 +186,7 @@ func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing
 		t.Errorf("destroying %s plans %s as %q, and the grant that opens this tier's values is this tier's to revoke", production, sealGrant(production), planned.Action)
 	}
 
-	if err := bootstrap.Remove(ctx, production, nil); err != nil {
+	if err := bootstrap.Remove(ctx, production, progress.Discard()); err != nil {
 		t.Fatalf("Remove(%s) = %v", production, err)
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
@@ -231,7 +232,7 @@ func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing
 			t.Errorf("destroying the last tier plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, planned.Action)
 		}
 	}
-	if err := bootstrap.Remove(ctx, preview, nil); err != nil {
+	if err := bootstrap.Remove(ctx, preview, progress.Discard()); err != nil {
 		t.Fatalf("Remove(%s) = %v", preview, err)
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
@@ -249,7 +250,7 @@ func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after the last destroy, and removing ocel from a host removed the workloads on it", workload)
 	}
-	if err := bootstrap.Remove(ctx, preview, nil); err != nil {
+	if err := bootstrap.Remove(ctx, preview, progress.Discard()); err != nil {
 		t.Errorf("a second Remove(%s) = %v, want an already-forgotten target to succeed", preview, err)
 	}
 }

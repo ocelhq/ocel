@@ -76,7 +76,7 @@ func (h *Host) CheckSwitchboard(ctx context.Context, tier environment.Tier) prov
 		}
 		return check
 	}
-	state := strings.TrimSpace(h.said(ctx, stateCommand(board.name), elevation))
+	state := strings.TrimSpace(h.readEvidence(ctx, stateCommand(board.name), elevation))
 	switch status := stateField(state, "Status"); status {
 	case "":
 		check.Finding = fmt.Sprintf("no %s container on this box, so nothing routes what the front proxy forwards: %s", board.name, state)

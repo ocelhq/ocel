@@ -184,6 +184,6 @@ func restoredCommand() string {
 }
 
 func (h *Host) restoredAt(ctx context.Context, elevation string) (string, bool) {
-	by, at, _ := strings.Cut(strings.TrimSpace(h.said(ctx, restoredCommand(), elevation)), " ")
+	by, at, _ := strings.Cut(strings.TrimSpace(h.readEvidence(ctx, restoredCommand(), elevation)), " ")
 	return at, by == restoredBy
 }

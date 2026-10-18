@@ -108,7 +108,7 @@ func TestLiveABoxMovesFromOcelsOwnProxyToAnNginxAndBack(t *testing.T) {
 	ctx := context.Background()
 	production := provider.BootstrapRequest{Tier: environment.TierProduction, WrittenBy: "live-suite"}
 
-	if err := vm.bootstrapsBehind(t, nil).Apply(ctx, production, nil); err != nil {
+	if err := vm.bootstrapsBehind(t, nil).Apply(ctx, production, progress.Discard()); err != nil {
 		t.Fatalf("Apply() under ocel's own proxy = %v", err)
 	}
 	ours, _ := servingOne(t, vm, nil, frontedHostname)
@@ -159,7 +159,7 @@ func TestLiveABoxMovesFromOcelsOwnProxyToAnNginxAndBack(t *testing.T) {
 		t.Errorf("the move back while nginx holds 80 and 443 was refused with %q, want nginx named as what to stop", said.Message)
 	}
 	vm.ssh(t, "sudo systemctl stop nginx")
-	if err := back.Apply(ctx, production, nil); err != nil {
+	if err := back.Apply(ctx, production, progress.Discard()); err != nil {
 		t.Fatalf("Apply() moving back to ocel's own proxy = %v", err)
 	}
 	if !vm.running(t, caddy.Container) {
@@ -181,7 +181,7 @@ func TestLiveABoxMovesOcelsFileToAnotherDirectoryYourTraefikWatchesWithoutDroppi
 	production := provider.BootstrapRequest{Tier: environment.TierProduction, WrittenBy: "live-suite"}
 
 	proxy := frontProxy(t, "traefik")
-	if err := vm.bootstrapsBehind(t, proxy).Apply(ctx, production, nil); err != nil {
+	if err := vm.bootstrapsBehind(t, proxy).Apply(ctx, production, progress.Discard()); err != nil {
 		t.Fatalf("Apply() behind your Traefik = %v", err)
 	}
 	d, _ := servingOne(t, vm, proxy, bound)
@@ -200,7 +200,7 @@ func TestLiveABoxMovesOcelsFileToAnotherDirectoryYourTraefikWatchesWithoutDroppi
 	vm.loads(t, bound)
 	vm.awaitAnswers(t, "of one before the move", counting("one", 0))
 	started := vm.clock(t)
-	if err := vm.bootstrapsBehind(t, moved).Apply(ctx, production, nil); err != nil {
+	if err := vm.bootstrapsBehind(t, moved).Apply(ctx, production, progress.Discard()); err != nil {
 		t.Fatalf("Apply() moving ocel's file to %s = %v", to, err)
 	}
 	finished := vm.clock(t)

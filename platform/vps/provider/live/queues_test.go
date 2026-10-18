@@ -27,7 +27,7 @@ func TestTheQueuesOfATierAreReadBackOnePerEnvironmentWithEverythingRecordedUnder
 
 	store := fake.NewKeyValues()
 	tier := environment.TierProduction
-	database := live.QueueDatabase{Container: "shop-prod-infra-ocel-queue", Stack: "prod--infra", Sealed: "c2VhbGVk"}
+	database := live.QueueDatabase{Container: "shop-prod-infra-ocel-queue", Stack: "prod--infra"}
 	written(t, store, live.QueueDatabaseKey(tier, "shop", "prod"), database)
 	written(t, store, live.QueueTopicKey(tier, "shop", "prod", "send-email"), map[string]any{"ordered": true})
 	written(t, store, live.QueueTopicKey(tier, "shop", "prod", "orders"), map[string]any{})

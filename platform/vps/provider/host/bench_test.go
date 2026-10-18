@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -216,6 +217,8 @@ func (b *bench) rendered(command string) session.Result {
 		return session.Result{Stdout: "0\n"}
 	case command == "uname -m":
 		return session.Result{Stdout: b.facts.Arch + "\n"}
+	case strings.Contains(command, sizeFields):
+		return session.Result{Stdout: strconv.Itoa(benchMemoryBytes) + " " + strconv.Itoa(benchCPUs) + "\n"}
 	case readsProxy(command):
 		return session.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
 	case strings.Contains(command, "for p in"):

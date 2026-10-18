@@ -22,7 +22,9 @@ import (
 
 const (
 	nameTaken = "is already in use"
-	keptDir   = "kept"
+
+	resourceStopSeconds = 60
+	keptDir             = "kept"
 
 	resourceNameMax = 63
 )
@@ -159,10 +161,21 @@ type ResourceContainer struct {
 	Mounts       []Mount
 
 	Volume     Volume
+	Sockets    string
 	Credential Credential
 	Ready      []string
 	Backup     string
-	Database   string
+}
+
+const socketsSuffix = "-sockets"
+
+func (r ResourceContainer) socketsVolume() string { return r.Name + socketsSuffix }
+
+func socketsCreating(spec ResourceContainer) string {
+	if spec.Sockets == "" {
+		return ""
+	}
+	return words(append(append([]string{"docker", "volume", "create"}, spec.labels()...), spec.socketsVolume())) + " >/dev/null\n"
 }
 
 func ResourceName(project, stack, resource, kind string) string {
@@ -227,6 +240,7 @@ func volumeCreating(spec ResourceContainer) string {
 
 func runResourceScript(spec ResourceContainer, digest, envFile string) string {
 	return imagePulled(spec.Image, appPulls, pullAttemptSeconds, pullBudgetSeconds) +
+		socketsCreating(spec) +
 		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(resourceRun(spec, digest, envFile))+" >/dev/null")
 }
 
@@ -261,6 +275,9 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	if spec.Volume.Path != "" {
 		argv = append(argv, "--mount", "type=volume,src="+spec.volume()+",dst="+spec.Volume.Path)
 	}
+	if spec.Sockets != "" {
+		argv = append(argv, "--mount", "type=volume,src="+spec.socketsVolume()+",dst="+spec.Sockets)
+	}
 	argv = append(argv, spec.Image)
 	return append(argv, spec.Args...)
 }
@@ -288,35 +305,44 @@ func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, ele
 func swapCommand(spec ResourceContainer, from, digest, envFile string, steps upgradeSteps, secret string) (command, stdin string) {
 	name, retired := quoted(spec.Name), quoted(spec.Name+retiredSuffix)
 	fresh, stale := quoted(spec.volume()), quoted(volumeName(spec.Name, from))
+	moving := fresh != stale
 	authenticated := ""
 	if spec.Credential.Reassert != nil {
 		var argv []string
 		argv, stdin = spec.Credential.Reassert(secret)
 		authenticated = reassertCommand(spec.Name, argv) + "\n"
 	}
+	dropFresh, createFresh, dropStale := "", "", ""
+	if moving {
+		dropFresh = "docker volume rm " + fresh + " >/dev/null 2>&1 || true\n"
+		createFresh = volumeCreating(spec) + "\n"
+		dropStale = "\ndocker volume rm " + stale + " >/dev/null"
+	}
 	return "set -eu\n" +
 		"swapped=0\n" +
 		"back() {\n" +
 		"if [ \"$swapped\" -eq 0 ]; then\n" +
 		"docker rm --force " + name + " >/dev/null 2>&1 || true\n" +
-		"docker volume rm " + fresh + " >/dev/null 2>&1 || true\n" +
+		dropFresh +
 		"docker rename " + retired + " " + name + " >/dev/null 2>&1 || true\n" +
 		"docker start " + name + " >/dev/null 2>&1 || true\n" +
 		"fi\n" +
 		"}\n" +
+		"docker rm --force " + retired + " >/dev/null 2>&1 || true\n" +
 		"trap back EXIT\n" +
 		"trap 'exit 1' HUP INT TERM\n" +
-		boundedStep(dockerStepSeconds, "docker stop of "+spec.Name, "docker stop "+name+" >/dev/null") + "\n" +
+		boundedStep(dockerStepSeconds, "docker stop of "+spec.Name, "docker stop --time "+strconv.Itoa(resourceStopSeconds)+" "+name+" >/dev/null") + "\n" +
 		"docker rename " + name + " " + retired + "\n" +
-		volumeCreating(spec) + "\n" +
+		createFresh +
+		socketsCreating(spec) +
 		steps.before +
 		boundedStep(dockerStepSeconds, "docker run of "+spec.Name, words(resourceRun(spec, digest, envFile))+" >/dev/null") + "\n" +
 		readyCommand(spec, readySeconds) + "\n" +
-		steps.after +
 		authenticated +
+		steps.after +
 		"swapped=1\n" +
-		"docker rm --force " + retired + " >/dev/null\n" +
-		"docker volume rm " + stale + " >/dev/null", stdin
+		"docker rm --force " + retired + " >/dev/null" +
+		dropStale, stdin
 }
 
 func reassertCommand(name string, argv []string) string {
@@ -345,11 +371,11 @@ func (h *Host) prepareUpgrade(ctx context.Context, spec ResourceContainer, from,
 		return volumeCopy(spec, from), nil
 	}
 	dumped, err := h.ran(ctx, "dump "+spec.Resource+" while version "+from+" still serves it",
-		dumpCommand(spec.Tier, spec.Name, spec.Database), nil, elevation)
+		dumpCommand(spec.Tier, spec.Name), nil, elevation)
 	if err != nil {
 		return upgradeSteps{}, err
 	}
-	return upgradeSteps{after: restoreCommand(spec.Tier, spec.Name, spec.Database, strings.TrimSpace(dumped)) + "\n"}, nil
+	return upgradeSteps{after: restoreCommand(spec.Tier, spec.Name, strings.TrimSpace(dumped)) + "\n"}, nil
 }
 
 func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret, elevation string) (err error) {
@@ -368,6 +394,37 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s could not move from version %s to %s and is back on %s, data intact: %v",
 			spec.Resource, from, spec.Volume.Generation, from, err)
+	}
+	return nil
+}
+
+func (h *Host) limited(ctx context.Context, spec ResourceContainer) (ResourceContainer, error) {
+	limits, err := h.tierLimits(ctx, spec.Tier)
+	if err != nil {
+		return ResourceContainer{}, err
+	}
+	if spec.Memory == "" {
+		spec.Memory = strconv.FormatInt(limits.MemoryBytes, 10)
+	}
+	if spec.CPUs == "" {
+		spec.CPUs = limits.CPUs
+	}
+	return spec, nil
+}
+
+func (h *Host) replaceResource(ctx context.Context, spec ResourceContainer, digest, secret, elevation string) (err error) {
+	if err := h.sweep(ctx, elevation); err != nil {
+		return err
+	}
+	delivery, err := h.handResource(ctx, spec, secret)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, h.unhand(ctx, delivery)) }()
+	swap, stdin := swapCommand(spec, spec.Volume.Generation, digest, delivery.path, upgradeSteps{}, secret)
+	if _, err := h.ran(ctx, "replace "+spec.Resource+"'s container "+spec.Name, swap, strings.NewReader(stdin), elevation); err != nil {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s's new container did not take over, so its previous container is back, data intact: %v", spec.Resource, err)
 	}
 	return nil
 }
@@ -408,6 +465,9 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 	if err != nil {
 		return err
 	}
+	if spec, err = h.limited(ctx, spec); err != nil {
+		return err
+	}
 	digest, err := spec.digest()
 	if err != nil {
 		return err
@@ -415,7 +475,10 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 	if err := h.joining(ctx, spec.Resource, spec.Tier, spec.Project, joinNetworkScript(spec.Tier, spec.Project), elevation); err != nil {
 		return err
 	}
-	said := h.said(ctx, servingCommand(spec.Name), elevation)
+	said, err := h.readServing(ctx, spec.Name, elevation)
+	if err != nil {
+		return err
+	}
 	if stillServing(said, spec.Image, digest) {
 		return nil
 	}
@@ -433,10 +496,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 		return h.upgrade(ctx, spec, from, digest, secret, elevation)
 	}
 	if said != "" {
-		if _, err := h.ran(ctx, "clear the name "+spec.Name,
-			boundedTolerated(dockerStepSeconds, "docker rm of "+spec.Name, "docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1"), nil, elevation); err != nil {
-			return err
-		}
+		return h.replaceResource(ctx, spec, digest, secret, elevation)
 	}
 	if err := h.sweep(ctx, elevation); err != nil {
 		return err

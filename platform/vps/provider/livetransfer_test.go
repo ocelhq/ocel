@@ -20,6 +20,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -220,7 +221,7 @@ func TestLiveAnImageIsMovedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testi
 	}
 
 	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{push}}
-	if err := plan.PushMissing(ctx, nil); err != nil {
+	if err := plan.PushMissing(ctx, progress.Discard()); err != nil {
 		t.Fatalf("PushMissing() onto a machine with no registry account = %v", err)
 	}
 
@@ -251,7 +252,7 @@ func TestLiveARedeployOfAnUnchangedAppSendsTheImageNoSecondTime(t *testing.T) {
 		t.Fatalf("OpenDirectImages() = %v", err)
 	}
 	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{transferPush(daemon, client, runtime)}}
-	if err := plan.PushMissing(ctx, nil); err != nil {
+	if err := plan.PushMissing(ctx, progress.Discard()); err != nil {
 		t.Fatalf("PushMissing() = %v", err)
 	}
 
@@ -264,7 +265,7 @@ func TestLiveARedeployOfAnUnchangedAppSendsTheImageNoSecondTime(t *testing.T) {
 	if len(rows) != 1 || rows[0].Action != provider.ActionKeep {
 		t.Errorf("the plan shows %v for an image the machine already has, want one %q row", rows, provider.ActionKeep)
 	}
-	if err := plan.PushMissing(ctx, nil); err != nil {
+	if err := plan.PushMissing(ctx, progress.Discard()); err != nil {
 		t.Fatalf("a second Ship over a machine that already has the digest = %v: the image is gone from this machine's daemon, so the transfer was attempted rather than skipped", err)
 	}
 	if _, err := vm.attempt(deployLogin, "docker image inspect "+coordinate); err != nil {

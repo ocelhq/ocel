@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -51,7 +52,7 @@ func TestStartingAnAppEndsAtARunningLabelledContainerAndCutsOverNothing(t *testi
 	t.Parallel()
 
 	machine := &box{}
-	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -74,13 +75,13 @@ func TestStartingAnAppEndsAtARunningLabelledContainerAndCutsOverNothing(t *testi
 func TestTwoReleasesOfOneAppNeverShareAContainerName(t *testing.T) {
 	t.Parallel()
 
-	first, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
+	first, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}
 	next := anApp()
 	next.BuildID = "fedcba9876543210fedcba9876543210"
-	second, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, next), nil)
+	second, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, next), progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestAnAppWithNoHealthPathRecordsThePathTheBoxFoundForItBeforeItIsPromoted(t
 	pathless := anApp()
 	pathless.HealthCheckPath = ""
 	machine := findingHealthPath(session.Result{Stdout: switchboard.Answered + " /up 404\n" + switchboard.Answered + " /health 200\n"})
-	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pathless), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pathless), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -134,7 +135,7 @@ func TestAnAppWhoseEveryProbedPathIsAbsentIsRefusedWithHowToNameOne(t *testing.T
 	for _, path := range []string{"/up", "/health", "/healthz", "/"} {
 		said.WriteString(switchboard.Answered + " " + path + " 404\n")
 	}
-	_, err := over(findingHealthPath(session.Result{Code: 6, Stdout: said.String()})).ProvisionContainers(context.Background(), aStack(t, pathless), nil)
+	_, err := over(findingHealthPath(session.Result{Code: 6, Stdout: said.String()})).ProvisionContainers(context.Background(), aStack(t, pathless), progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "health.path") {
 		t.Fatalf("ProvisionContainers() = %v, want a refusal naming health.path", err)
 	}
@@ -147,7 +148,7 @@ func TestAnAppWithAPathAnEarlierReleaseDiscoveredIsGatedOnItWithNoProbing(t *tes
 	pinned.HealthCheckPath = ""
 	pinned.DiscoveredHealthCheckPath = "/healthz"
 	machine := findingHealthPath(session.Result{Code: 1})
-	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pinned), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, pinned), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -166,7 +167,7 @@ func TestAnAppNamingAHealthPathRecordsNoneDiscovered(t *testing.T) {
 
 	named := anApp()
 	named.DiscoveredHealthCheckPath = "/up"
-	started, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, named), nil)
+	started, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, named), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -180,7 +181,7 @@ func TestARemovedStackTakesItsContainersWithIt(t *testing.T) {
 
 	machine := &box{}
 	err := over(machine).RemoveContainers(context.Background(), provider.StackRef{},
-		[]provider.AppContainer{{Name: "web", Physical: "shop-prod-web-01234567"}}, nil, nil)
+		[]provider.AppContainer{{Name: "web", Physical: "shop-prod-web-01234567"}}, nil, progress.Discard())
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}

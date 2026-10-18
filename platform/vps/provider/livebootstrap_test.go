@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -111,7 +112,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		}
 	}
 
-	if err := bootstrap.Apply(ctx, req, nil); err != nil {
+	if err := bootstrap.Apply(ctx, req, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 
@@ -169,7 +170,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Errorf("PlanRemove() ends at %s, want the shared root taken after every tier tier beneath it", last.Name)
 	}
 
-	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	gone, err := bootstrap.Describe(ctx, tier)
@@ -187,7 +188,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
 		t.Errorf("%s still exists as %q after Remove(), and a login nothing deploys as is a login nobody revokes", deployLogin, left)
 	}
-	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 		t.Errorf("a second Remove() = %v, want an already-forgotten target to be a no-op", err)
 	}
 }
@@ -203,11 +204,11 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -244,11 +245,11 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverIncluded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -259,7 +260,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverIncluded(t *testing.T) {
 	}
 	vm.ssh(t, "sudo rm -rf /usr/local/lib/ocel")
 
-	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shown.VendorState}, nil)
+	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shown.VendorState}, progress.Discard())
 	if err == nil {
 		t.Fatal("Apply() did work the plan the user consented to never included")
 	}

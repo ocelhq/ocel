@@ -36,8 +36,18 @@ type queueDatabases struct {
 }
 
 func newQueueContainer(ref provider.StackRef) host.ResourceContainer {
-	return newPostgresContainer(ref, live.QueueDatabaseName, queueKind, images.QueueDatabase(),
+	spec := newPostgresContainer(ref, live.QueueDatabaseName, queueKind, images.QueueDatabase(),
 		host.Volume{Path: queueData, Generation: images.QueueDatabaseMajor()})
+	spec.Args = []string{"postgres", "-c", "listen_addresses="}
+	spec.Sockets = live.QueueSocketsPath
+	spec.Ready = []string{"pg_isready", "-U", postgresSuperuser}
+	spec.Labels = map[string]string{host.LabelOwner: live.QueueRole}
+	superuser := spec.Credential.Reassert
+	spec.Credential.Reassert = func(secret string) ([]string, string) {
+		argv, stdin := superuser(secret)
+		return argv, live.QueueRoleSQL() + stdin
+	}
+	return spec
 }
 
 func (p *Provider) ProvisionTopic(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -114,14 +124,12 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	if p.queues.ensured[spec.Name] {
 		return nil
 	}
-	if progress != nil {
-		progress.Say("Provisioning the queue database for " + ref.Name.Env + "'s topics and tasks in container " + spec.Name)
-	}
+	progress.Say("Provisioning the queue database for " + ref.Name.Env + "'s topics and tasks in container " + spec.Name)
 	bound, err := live.NewQueueSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String())
 	if err != nil {
 		return err
 	}
-	sealed, secret, err := p.keptSealed(ctx, ref.Tier, spec.Name, spec.Resource, bound, mintResourceSecret)
+	_, secret, err := p.keptSealed(ctx, ref.Tier, spec.Name, spec.Resource, bound, mintResourceSecret)
 	if err != nil {
 		return err
 	}
@@ -138,7 +146,6 @@ func (p *Provider) ensureQueue(ctx context.Context, ref provider.StackRef, progr
 	}
 	record, err := json.Marshal(live.QueueDatabase{
 		Container: spec.Name, Stack: ref.Name.String(),
-		Sealed:         base64.StdEncoding.EncodeToString(sealed),
 		DeliverySealed: base64.StdEncoding.EncodeToString(deliverySealed),
 	})
 	if err != nil {
@@ -175,9 +182,7 @@ func (p *Provider) removeTopic(ctx context.Context, ref provider.StackRef, bindi
 		return nil
 	}
 	spec := newQueueContainer(ref)
-	if progress != nil {
-		progress.Say("Removing the queue database " + spec.Name + " and its data: " + ref.Name.Env + " declares no topic or task any more")
-	}
+	progress.Say("Removing the queue database " + spec.Name + " and its data: " + ref.Name.Env + " declares no topic or task any more")
 	if err := p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: spec.Resource, Name: spec.Name}); err != nil {
 		return err
 	}

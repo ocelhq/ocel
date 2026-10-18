@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -163,7 +164,7 @@ func TestAProgramThatRanAndFailedNeverHasItsOutputReadAsTheReason(t *testing.T) 
 func TestAReleaseGatesCutsOverAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontProxy(t *testing.T) {
 	t.Parallel()
 
-	box, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, nil)
+	box, err := rolledOut(t, aRollout(), session.Result{}, session.Result{}, progress.Discard())
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -196,7 +197,7 @@ func TestAReleaseOverAConfigTheFrontProxyWasNeverReloadedOntoReloadsItOntoTheOne
 		}
 		return answer(command)
 	}
-	if err := box.host().RollOut(context.Background(), aRollout(), nil); err != nil {
+	if err := box.host().RollOut(context.Background(), aRollout(), progress.Discard()); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 	if reloads := box.count(reloadsFront); reloads != 1 {
@@ -225,7 +226,7 @@ func TestAReleaseWhoseFrontProxyRefusesTheReloadPutsBothFilesBackAndNeverCutsOve
 		}
 		return answer(command)
 	}
-	err := box.host().RollOut(context.Background(), aRollout(), nil)
+	err := box.host().RollOut(context.Background(), aRollout(), progress.Discard())
 	if err == nil || !strings.Contains(err.Error(), "boom") || !unserved(err) {
 		t.Fatalf("Release() under a front proxy that refused the reload = %v, want its refusal with the release left unserved", err)
 	}

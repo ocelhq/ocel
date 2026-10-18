@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -81,7 +82,7 @@ func TestAnInstallScriptThatFailedTwiceIsRunAgainRatherThanFailingTheApply(t *te
 
 	dir, attempts := installer(t, 2)
 	box, _ := installsOn(dir, &fake.Log{})
-	if err := box.host().installEngine(context.Background(), nil); err != nil {
+	if err := box.host().installEngine(context.Background(), progress.Discard()); err != nil {
 		t.Fatalf("installEngine() = %v on a host whose install script failed twice and then succeeded", err)
 	}
 	ran, err := os.ReadFile(attempts)
@@ -98,7 +99,7 @@ func TestAnInstallScriptThatNeverSucceedsIsRefusedWithABound(t *testing.T) {
 
 	dir, attempts := installer(t, 99)
 	box, _ := installsOn(dir, &fake.Log{})
-	refused := refusalOf(t, box.host().installEngine(context.Background(), nil), refusal.CodeNotReady)
+	refused := refusalOf(t, box.host().installEngine(context.Background(), progress.Discard()), refusal.CodeNotReady)
 	ran, err := os.ReadFile(attempts)
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +119,7 @@ func TestTheWaitBetweenInstallAttemptsGrowsAndIsNotTheSameOnEveryHost(t *testing
 	for range 6 {
 		dir, _ := installer(t, 99)
 		box, _ := installsOn(dir, &fake.Log{})
-		if err := box.host().installEngine(context.Background(), nil); err == nil {
+		if err := box.host().installEngine(context.Background(), progress.Discard()); err == nil {
 			t.Fatal("installEngine() succeeded on a host whose install script never succeeded")
 		}
 		waits := box.waits()
@@ -183,7 +184,7 @@ func TestAnInstallSudoRefusedIsNotTriedAgain(t *testing.T) {
 	box.answer = func(command string) (session.Result, bool) {
 		return session.Result{Code: 1, Stderr: "sudo: a password is required"}, strings.Contains(command, dockerSource)
 	}
-	refusalOf(t, box.host().installEngine(context.Background(), nil), refusal.CodeDenied)
+	refusalOf(t, box.host().installEngine(context.Background(), progress.Discard()), refusal.CodeDenied)
 	tries := 0
 	for _, command := range box.commands() {
 		if strings.Contains(command, dockerSource) {

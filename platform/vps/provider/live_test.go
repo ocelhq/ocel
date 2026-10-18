@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -169,11 +170,11 @@ func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 			t.Fatalf("Apply(%s) = %v, want the record tier every port beneath it writes into", tier, err)
 		}
 		defer func() {
-			if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+			if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 				t.Errorf("Remove(%s) = %v", tier, err)
 			}
 		}()

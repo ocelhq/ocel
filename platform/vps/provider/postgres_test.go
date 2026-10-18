@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -54,7 +55,7 @@ func TestADeclaredPostgresRunsAsOneContainerOnlyItsProjectReaches(t *testing.T) 
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -102,7 +103,7 @@ func TestAPostgresPasswordNeverRidesACommandLine(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -124,7 +125,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -159,7 +160,7 @@ func TestAPostgresVersionNoImageIsPinnedForIsRefusedBeforeAnythingStarts(t *test
 	t.Parallel()
 
 	machine := &box{}
-	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "9"), nil)
+	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "9"), progress.Discard())
 	if err == nil {
 		t.Fatal("a postgres 9 started, and nothing pins an image for it")
 	}
@@ -178,7 +179,7 @@ func TestASecondDeployBindsToThePasswordTheRunningPostgresWasHanded(t *testing.T
 
 	machine := &box{}
 	withRecordedPostgres(machine)
-	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -198,7 +199,7 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 		}
 		return session.Result{}, false
 	}
-	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v, and two deploys starting one postgres at once end up sharing it", err)
 	}
@@ -216,13 +217,13 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	machine := &box{}
 	p := over(machine)
 	in := aPostgres(t, "17")
-	binding, err := p.ProvisionPostgres(context.Background(), in, nil)
+	binding, err := p.ProvisionPostgres(context.Background(), in, progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}
 	name := binding.Properties[provider.PropertyHost]
 	before := len(machine.commands())
-	if err := p.RemoveResource(context.Background(), in.Ref, binding, nil); err != nil {
+	if err := p.RemoveResource(context.Background(), in.Ref, binding, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
@@ -252,7 +253,7 @@ func TestARemovalReachesOnlyTheServerItsOwnStackProvisioned(t *testing.T) {
 		Type: provider.BindingPostgres, Name: "main",
 		Properties: map[string]string{provider.PropertyHost: "someone-elses-container"},
 	}
-	if err := over(machine).RemoveResource(context.Background(), in.Ref, foreign, nil); err != nil {
+	if err := over(machine).RemoveResource(context.Background(), in.Ref, foreign, progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
@@ -286,7 +287,7 @@ func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *tes
 
 	machine := &box{}
 	volumeOfAnotherMajor(machine, "running")
-	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -301,10 +302,10 @@ func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *tes
 	}
 	swap := machine.commands()[swapped]
 	for _, want := range []string{
-		"trap ", "docker stop 'shop-prod-web-r0a1b2c3d-main-pg'",
+		"trap ", "docker stop --time 60 'shop-prod-web-r0a1b2c3d-main-pg'",
 		"'shop-prod-web-r0a1b2c3d-main-pg-retired'",
 		"src=shop-prod-web-r0a1b2c3d-main-pg-g17",
-		"'restore' 'shop-prod-web-r0a1b2c3d-main-pg' 'main' '" + takenDump + "'",
+		"'restore' 'shop-prod-web-r0a1b2c3d-main-pg' '" + takenDump + "'",
 		"docker volume rm 'shop-prod-web-r0a1b2c3d-main-pg-g16'",
 		"docker start 'shop-prod-web-r0a1b2c3d-main-pg'",
 	} {
@@ -327,7 +328,7 @@ func TestAStoppedPostgresUnderAnotherMajorIsRefusedBecauseNothingCanBeDumpedFrom
 
 	machine := &box{}
 	volumeOfAnotherMajor(machine, "exited")
-	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err == nil {
 		t.Fatal("a server that is not running was upgraded, and there was nothing to dump its data from")
 	}
@@ -346,7 +347,7 @@ func TestAVolumeIsLabelledWithTheMajorThatInitialisedIt(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	kept := machine.commands()[machine.at("'docker' 'volume' 'create'")]
@@ -359,7 +360,7 @@ func TestAPostgresIsPulledFromTheOfficialImagesMirrorByItsPinnedDigest(t *testin
 	t.Setenv(officialimages.MirrorEnv, "mirror.gcr.io/library")
 
 	machine := &box{}
-	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard()); err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
 	image, _ := images.Postgres("17")
@@ -375,7 +376,7 @@ func TestAPostgresDeclaringNoVersionRunsTheOneEverySdkDeclaresByDefault(t *testi
 	machine := &box{}
 	in := aPostgres(t, "")
 	in.Resource.Postgres = nil
-	if _, err := over(machine).ProvisionPostgres(context.Background(), in, nil); err != nil {
+	if _, err := over(machine).ProvisionPostgres(context.Background(), in, progress.Discard()); err != nil {
 		t.Fatalf("Postgres() of a resource naming no version = %v, and a version is a preference, not something a deploy is refused for leaving out", err)
 	}
 	runCommand := machine.commands()[machine.at("'docker' 'run'")]
@@ -396,7 +397,7 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 		}
 		return session.Result{}, false
 	}
-	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	if err != nil {
 		t.Fatalf("Postgres() as a login with sudo that does not own the state directory = %v, and a bootstrap login deploys as readily as the deploy login does", err)
 	}
@@ -449,11 +450,11 @@ func TestTwoProjectsDeclaringTheSamePostgresOnOneBoxEachRunAndKeepTheirOwn(t *te
 
 	shop, blog := aPostgres(t, "17"), aPostgres(t, "17")
 	blog.Ref.Project = "blog"
-	shopBinding, err := over(&box{}).ProvisionPostgres(context.Background(), shop, nil)
+	shopBinding, err := over(&box{}).ProvisionPostgres(context.Background(), shop, progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}
-	blogBinding, err := over(&box{}).ProvisionPostgres(context.Background(), blog, nil)
+	blogBinding, err := over(&box{}).ProvisionPostgres(context.Background(), blog, progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +469,7 @@ func TestAPostgresNameFitsTheDNSLabelAnAppResolvesItBy(t *testing.T) {
 
 	in := aPostgres(t, "17")
 	in.Ref.Project = strings.Repeat("a-very-long-project-slug-", 4)
-	binding, err := over(&box{}).ProvisionPostgres(context.Background(), in, nil)
+	binding, err := over(&box{}).ProvisionPostgres(context.Background(), in, progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}

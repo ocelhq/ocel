@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -157,7 +158,7 @@ func TestLiveTheEnvSourceSyncKeepsATiersValuesInStepWithItsEnvSourceAndGoesWithT
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	if said := strings.TrimSpace(vm.ssh(t, "systemctl cat "+service+" >/dev/null 2>&1 && echo present || echo gone")); said != "gone" {

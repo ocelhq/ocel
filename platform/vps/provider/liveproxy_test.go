@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	variables "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -93,11 +94,11 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -236,7 +237,7 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 			t.Errorf("removing the proxy re-planned %s as %q, and nothing but the container moved", change.Name, change.Action)
 		}
 	}
-	if err := bootstrap.Apply(ctx, repairing, nil); err != nil {
+	if err := bootstrap.Apply(ctx, repairing, progress.Discard()); err != nil {
 		t.Fatalf("Apply() over a box whose proxy was removed = %v", err)
 	}
 	if !vm.running(t, caddy.Container) {
@@ -260,11 +261,11 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -311,11 +312,11 @@ func TestLiveTheProxysConfigIsStatedAndItsLogContainsNoQueryString(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -357,7 +358,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
@@ -378,7 +379,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 		}
 	}
 
-	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, named := range []string{caddy.Container, host.SwitchboardContainer} {

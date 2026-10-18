@@ -24,6 +24,8 @@ const (
 	tunnelStartAttempts   = 30
 	tunnelNameSuffixBytes = 4
 	rootUser              = "0:0"
+
+	cloudflaredMetrics = "127.0.0.1:20241"
 )
 
 var ErrTunnelReleased = errors.New("the tunnel was released")
@@ -49,9 +51,9 @@ type tunnelConnector struct {
 var tunnelConnectors = map[edge.Kind]tunnelConnector{
 	"cloudflare": {
 		image:                "cloudflare/cloudflared@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c",
-		command:              []string{"tunnel", "--no-autoupdate", "run"},
+		command:              []string{"tunnel", "--no-autoupdate", "--metrics", cloudflaredMetrics, "run"},
 		tokenFileEnv:         "TUNNEL_TOKEN_FILE",
-		ready:                []string{"cloudflared", "--version"},
+		ready:                []string{"cloudflared", "tunnel", "--metrics", cloudflaredMetrics, "ready"},
 		visitorAddressHeader: "Cf-Connecting-Ip",
 		visitorSchemeHeader:  "Cf-Visitor",
 	},
@@ -86,7 +88,7 @@ func tunnelBox(tunnel Tunnel, connector tunnelConnector) boxContainer {
 		binds:   []string{TunnelDir + ":" + tunnelMount + ":ro"},
 		user:    rootUser,
 		ready:   connector.ready,
-		unready: "did not start",
+		unready: "did not report a connection to its edge",
 	}
 }
 

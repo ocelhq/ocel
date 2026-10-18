@@ -29,9 +29,6 @@ func kernelWarnings(output string) []string {
 }
 
 func (h *Host) warnOfKernelSettings(ctx context.Context, progress progress.Log) {
-	if progress == nil {
-		return
-	}
 	output, err := h.ran(ctx, "read the kernel settings Valkey checks", kernelSettingsCommand, nil, "")
 	if err != nil {
 		return

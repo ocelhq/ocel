@@ -21,6 +21,8 @@ const (
 	kvKind       = "kv"
 	kvSecretName = "kv-password"
 	kvReadyTries = 120
+
+	kvOverheadBytes = 64 << 20
 )
 
 func kvAuthenticateCommand() []string {
@@ -66,17 +68,18 @@ func kvContainer(in resources.ProvisionRequest, store kvStore) host.ResourceCont
 		Resource: in.Resource.Name,
 		Tier:     in.Ref.Tier,
 
-		Image: store.image,
-		Args:  store.valkey.Args(),
-		User:  kvstore.ValkeyRunsAs,
-		Env:   map[string]string{},
+		Image:  store.image,
+		Args:   store.valkey.Args(),
+		User:   kvstore.ValkeyRunsAs,
+		Env:    map[string]string{},
+		Memory: strconv.FormatInt(2*store.valkey.MemoryBytes+kvOverheadBytes, 10),
 
 		Volume: host.Volume{Path: kvstore.ValkeyData, Generation: store.version, CopyOnUpgrade: true},
 		Credential: host.Credential{
 			Reassert: func(secret string) ([]string, string) { return kvAuthenticateCommand(), secret + "\n" },
 		},
 		Ready:  []string{"valkey-cli", "ping"},
-		Backup: host.BackupVolume,
+		Backup: host.BackupKV,
 	}
 }
 
@@ -93,9 +96,7 @@ func (p *Provider) ProvisionKV(ctx context.Context, in resources.ProvisionReques
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if progress != nil {
-		progress.Say("Provisioning kv " + in.Resource.Name + " in container " + spec.Name)
-	}
+	progress.Say("Provisioning kv " + in.Resource.Name + " in container " + spec.Name)
 	if err := p.host.RunResource(ctx, spec, store.valkey.Password); err != nil {
 		return provider.Binding{}, err
 	}

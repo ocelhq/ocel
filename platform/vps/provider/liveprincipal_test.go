@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -76,11 +77,11 @@ func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -105,11 +106,11 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -160,7 +161,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	closing(t, installing)
@@ -195,7 +196,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 		if _, err := forgetting.PlanRemove(ctx, taken); err != nil {
 			t.Fatalf("PlanRemove(%s) with the deploy key gone = %v, want a destroy that needs no key to say what it will take", taken, err)
 		}
-		if err := forgetting.Remove(ctx, taken, nil); err != nil {
+		if err := forgetting.Remove(ctx, taken, progress.Discard()); err != nil {
 			t.Fatalf("Remove(%s) with the deploy key gone = %v, want a host nobody can bootstrap to still be one ocel can leave", taken, err)
 		}
 	}

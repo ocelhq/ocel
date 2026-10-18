@@ -62,6 +62,8 @@ type Host struct {
 	principal string
 	tiers     map[environment.Tier]bool
 
+	sizing sizing
+
 	pause func(context.Context, time.Duration) error
 }
 

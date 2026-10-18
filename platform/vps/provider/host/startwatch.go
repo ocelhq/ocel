@@ -65,10 +65,10 @@ func renderLastRunLogs(name string) string {
 }
 
 func (h *Host) describeUnstarted(ctx context.Context, app, name, state, elevation string) string {
-	logs := h.said(ctx, renderLastRunLogs(name), elevation)
+	logs := h.readEvidence(ctx, renderLastRunLogs(name), elevation)
 	ran := "its last run, last " + appLogTail + " lines"
 	if logs == "" {
-		logs = h.said(ctx, logCommand(name), elevation)
+		logs = h.readEvidence(ctx, logCommand(name), elevation)
 		ran = "the last " + appLogTail + " lines"
 	}
 	if logs == "" {

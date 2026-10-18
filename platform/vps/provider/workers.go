@@ -74,9 +74,7 @@ func (p *Provider) runWorkers(ctx context.Context, spec provider.StackSpec, mani
 	}
 	for _, worker := range app.Workers {
 		name := host.ContainerName(ref.Name.String(), app.App+"-"+worker.Name, app.BuildID, app.Image)
-		if progress != nil {
-			progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name)
-		}
+		progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name)
 		if _, err := p.host.RunContainer(ctx, host.Container{
 			Name: name, Project: ref.Project, App: app.App, Image: app.Image, Tier: ref.Tier,
 			Env: newWorkerEnv(app, worker.Name, deliverySecret), Manifest: manifest, Resolved: true,

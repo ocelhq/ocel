@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,10 +17,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/realtime"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -89,7 +92,7 @@ func TestADeclaredRealtimeIsBoundToItsEnvironmentsGatewayThroughTheAppsOwnOrigin
 	t.Parallel()
 
 	p, _ := recording(&box{})
-	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil)
+	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionRealtime() = %v", err)
 	}
@@ -120,7 +123,7 @@ func TestTheGatewayRunsAsOneConfinedContainerOnlyItsProjectReaches(t *testing.T)
 
 	machine := &box{}
 	p, _ := recording(machine)
-	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil)
+	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionRealtime() = %v", err)
 	}
@@ -160,12 +163,33 @@ func TestTheGatewayRunsAsOneConfinedContainerOnlyItsProjectReaches(t *testing.T)
 	}
 }
 
+func TestTheGatewayHoldsNoMoreSocketsThanItsMemoryLimitHasRoomFor(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p, _ := recording(machine)
+	if _, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard()); err != nil {
+		t.Fatalf("ProvisionRealtime() = %v", err)
+	}
+	runCommand := machine.commands()[machine.at("'docker' 'run'")]
+	if !strings.Contains(runCommand, "'--memory' '"+strconv.Itoa(vps.RealtimeGatewayMemoryBytes)+"'") {
+		t.Fatalf("the gateway was started with no memory limit, so a flood of sockets grows it until the box runs out:\n%s", runCommand)
+	}
+	sockets, err := strconv.Atoi(gatewayEnv(t, machine)[gatewayenv.MaxSocketsVar])
+	if err != nil || sockets <= 0 {
+		t.Fatalf("the gateway was handed %s=%q, so it accepts sockets without limit", gatewayenv.MaxSocketsVar, gatewayEnv(t, machine)[gatewayenv.MaxSocketsVar])
+	}
+	if sockets*vps.RealtimeSocketBytes > vps.RealtimeGatewayMemoryBytes {
+		t.Errorf("the gateway holds up to %d sockets of %d bytes each in a %d-byte limit, so it is killed for memory before it refuses one", sockets, vps.RealtimeSocketBytes, vps.RealtimeGatewayMemoryBytes)
+	}
+}
+
 func TestASigningKeyReachesTheBoxOnlySealedAndNeverOnACommandLine(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
 	p, _ := recording(machine)
-	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil)
+	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionRealtime() = %v", err)
 	}
@@ -193,7 +217,7 @@ func TestASecondDeployBindsTheSigningKeyTheBoxKept(t *testing.T) {
 	sealed := fakeSeal + base64.StdEncoding.EncodeToString([]byte(recordedRealtime))
 	machine.kept = base64.StdEncoding.EncodeToString([]byte(sealed)) + "\n"
 	p, _ := recording(machine)
-	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil)
+	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionRealtime() = %v", err)
 	}
@@ -208,7 +232,7 @@ func TestEveryRealtimeOfAnEnvironmentIsVerifiedByOneGateway(t *testing.T) {
 	machine := &box{}
 	p, _ := recording(machine)
 	for _, name := range []string{"app", "chat"} {
-		if _, err := p.ProvisionRealtime(context.Background(), aRealtime(t, name), nil); err != nil {
+		if _, err := p.ProvisionRealtime(context.Background(), aRealtime(t, name), progress.Discard()); err != nil {
 			t.Fatalf("ProvisionRealtime(%s) = %v", name, err)
 		}
 	}
@@ -224,7 +248,7 @@ func TestARemovedRealtimeIsDroppedFromTheGatewayAndTheLastTakesTheGatewayWithIt(
 	p, _ := recording(machine)
 	bindings := map[string]provider.Binding{}
 	for _, name := range []string{"app", "chat"} {
-		binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, name), nil)
+		binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, name), progress.Discard())
 		if err != nil {
 			t.Fatalf("ProvisionRealtime(%s) = %v", name, err)
 		}
@@ -232,7 +256,7 @@ func TestARemovedRealtimeIsDroppedFromTheGatewayAndTheLastTakesTheGatewayWithIt(
 	}
 	ref := aRealtime(t, "app").Ref
 
-	if err := p.RemoveResource(context.Background(), ref, bindings["chat"], nil); err != nil {
+	if err := p.RemoveResource(context.Background(), ref, bindings["chat"], progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource(chat) = %v", err)
 	}
 	if keys := gatewayKeys(t, machine); len(keys) != 1 || keys["app"] == "" {
@@ -245,7 +269,7 @@ func TestARemovedRealtimeIsDroppedFromTheGatewayAndTheLastTakesTheGatewayWithIt(
 		t.Fatalf("the gateway was taken down while app still declares realtime")
 	}
 
-	if err := p.RemoveResource(context.Background(), ref, bindings["app"], nil); err != nil {
+	if err := p.RemoveResource(context.Background(), ref, bindings["app"], progress.Discard()); err != nil {
 		t.Fatalf("RemoveResource(app) = %v", err)
 	}
 	if machine.at("docker rm --force '"+realtimeGateway+"'") < 0 {
@@ -259,7 +283,7 @@ func TestARealtimeWithNoConfigIsRefused(t *testing.T) {
 	in := aRealtime(t, "app")
 	in.Resource.Realtime = nil
 	p, _ := recording(&box{})
-	_, err := p.ProvisionRealtime(context.Background(), in, nil)
+	_, err := p.ProvisionRealtime(context.Background(), in, progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Errorf("ProvisionRealtime() = %v, want a realtime with no config refused as invalid", err)
@@ -270,7 +294,7 @@ func TestAnAppBindingRealtimeIsHandedItsEnvironmentsGatewayToPublishTo(t *testin
 	t.Parallel()
 
 	p, _ := recording(&box{})
-	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil)
+	binding, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard())
 	if err != nil {
 		t.Fatalf("ProvisionRealtime() = %v", err)
 	}
@@ -326,7 +350,7 @@ func TestAGatewayWhoseRealtimeKeepsChangingUnderItIsRefusedAsBusy(t *testing.T) 
 		}
 	}})
 
-	_, err = p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil)
+	_, err = p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Errorf("ProvisionRealtime() = %v, want it refused as busy rather than restarting the gateway without end", err)
@@ -350,7 +374,7 @@ func TestARealtimeAnotherDeployRecordsWhileTheGatewayRestartsIsVerifiedByTheGate
 		}
 	}})
 
-	if _, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), nil); err != nil {
+	if _, err := p.ProvisionRealtime(context.Background(), aRealtime(t, "app"), progress.Discard()); err != nil {
 		t.Fatalf("ProvisionRealtime() = %v", err)
 	}
 	if keys := gatewayKeys(t, machine); len(keys) != 2 || keys["app"] == "" || keys["chat"] == "" {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
@@ -28,7 +29,7 @@ func patched(t *testing.T, pass *patching) (*box, provider.Binding, error) {
 	machine := &box{}
 	p := over(machine)
 	p.Transforming(pass)
-	binding, err := p.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := p.ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard())
 	return machine, binding, err
 }
 
@@ -153,7 +154,7 @@ func TestEveryFieldTheVpsBranchTypesIsOneABoxRenders(t *testing.T) {
 	machine := &box{}
 	vendor := over(machine)
 	vendor.Transforming(transform.NodePass{Root: root, Modules: []string{"./stack.transform.ts"}})
-	if _, err := vendor.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+	if _, err := vendor.ProvisionPostgres(context.Background(), aPostgres(t, "17"), progress.Discard()); err != nil {
 		t.Fatalf("a module patching every field the vps branch types was refused: %v", err)
 	}
 	runCommand := machine.commands()[machine.at("'docker' 'run'")]
@@ -184,10 +185,10 @@ func TestTwoBucketsPatchingTheOneStoreDifferentlyAreRefused(t *testing.T) {
 		"avatars": {"container": {"memory": "4g"}},
 	}})
 
-	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard()); err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	_, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil)
+	_, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), progress.Discard())
 	if err == nil {
 		t.Fatal("the second bucket reshaped the one store the first is already running in, and nothing said so")
 	}
@@ -204,10 +205,10 @@ func TestTwoBucketsPatchingTheOneStoreTheSameWayProvisionTogether(t *testing.T) 
 	vendor := over(&box{kept: sealedRootKey()})
 	vendor.Transforming(&patching{patches: transform.Patches{"container": {"memory": "2g"}}})
 
-	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), progress.Discard()); err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil); err != nil {
+	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), progress.Discard()); err != nil {
 		t.Fatalf("Bucket(avatars) = %v, want two buckets shaping the store alike to be provisioned", err)
 	}
 }

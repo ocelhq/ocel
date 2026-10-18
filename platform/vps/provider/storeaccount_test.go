@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -73,7 +74,7 @@ func storeOfProject(t *testing.T, project string) *variables.Store {
 	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
 	spec := aStack(t, app)
 	spec.Ref.Project = project
-	if _, err := over(machine).ProvisionContainers(context.Background(), spec, nil); err != nil {
+	if _, err := over(machine).ProvisionContainers(context.Background(), spec, progress.Discard()); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	store := manifestIn(t, machine).Store
@@ -90,7 +91,7 @@ func TestRemovingOneProjectsAppNeverReachesAnotherProjectsStoreAccount(t *testin
 	machine := &box{kept: sealedRootKey()}
 	blog := provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: aStackName(t)}
 	err := over(machine).RemoveContainers(context.Background(), blog,
-		[]provider.AppContainer{{Name: "web", Physical: "blog-prod-web-r0a1b2c3d-web"}}, nil, nil)
+		[]provider.AppContainer{{Name: "web", Physical: "blog-prod-web-r0a1b2c3d-web"}}, nil, progress.Discard())
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}

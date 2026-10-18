@@ -30,12 +30,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-const (
-	DefaultInterval = 2 * time.Second
-
-	superuser    = "postgres"
-	databasePort = "5432"
-)
+const DefaultInterval = 2 * time.Second
 
 type Engine interface {
 	Apply(ctx context.Context, deployment pgmq.Deployment) error
@@ -52,11 +47,16 @@ type Addresses interface {
 	Address(ctx context.Context, network, container string) (string, error)
 }
 
+type Mounts interface {
+	MountSource(ctx context.Context, container, destination string) (string, error)
+}
+
 type Engines struct {
 	Records     keyvalue.Store
 	Tiers       []environment.Tier
 	Cipher      Cipher
 	Addresses   Addresses
+	Mounts      Mounts
 	Open        func(ctx context.Context, cfg pgmq.Config) (Engine, error)
 	IsAnswering func(ctx context.Context, url string) bool
 	Interval    time.Duration
@@ -206,28 +206,14 @@ func (e *Engines) serve(ctx context.Context, id queueID, queue live.Queue) error
 }
 
 func (e *Engines) openServerURL(ctx context.Context, queue live.Queue) (string, error) {
-	address, err := e.Addresses.Address(ctx, live.AppNetwork(queue.Tier, queue.Project), queue.Database.Container)
+	sockets, err := e.Mounts.MountSource(ctx, queue.Database.Container, live.QueueSocketsPath)
 	if err != nil {
-		return "", fmt.Errorf("find the queue database %s: %w", queue.Database.Container, err)
-	}
-	sealed, err := base64.StdEncoding.DecodeString(queue.Database.Sealed)
-	if err != nil {
-		return "", fmt.Errorf("the queue database's password is not base64: %w", err)
-	}
-	bound, err := live.NewQueueSecretAssociatedData(queue.Project, queue.Tier, queue.Database.Stack)
-	if err != nil {
-		return "", err
-	}
-	password, err := e.Cipher.Open(ctx, queue.Tier, bound, sealed)
-	if err != nil {
-		return "", fmt.Errorf("open the queue database's password: %w", err)
+		return "", fmt.Errorf("find the socket of the queue database %s: %w", queue.Database.Container, err)
 	}
 	return (&url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword(superuser, string(password)),
-		Host:     net.JoinHostPort(address, databasePort),
-		Path:     "/" + superuser,
-		RawQuery: "sslmode=disable",
+		Path:     "/" + live.QueueDatabaseName,
+		RawQuery: url.Values{"host": {sockets}, "user": {live.QueueRole}, "sslmode": {"disable"}}.Encode(),
 	}).String(), nil
 }
 

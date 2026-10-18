@@ -54,7 +54,7 @@ func provisionedWithABucketDeclared(t *testing.T, declared ...string) (*box, *vp
 
 	bucket := aBucket(t, "uploads", false)
 	bucket.Resource.Bucket.AllowedOrigins = declared
-	binding, err := p.ProvisionBucket(ctx, bucket, nil)
+	binding, err := p.ProvisionBucket(ctx, bucket, progress.Discard())
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -158,7 +158,7 @@ func TestTheNextDeployLimitsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCou
 	machine.mu.Lock()
 	machine.refuses = nil
 	machine.mu.Unlock()
-	if _, err := p.ProvisionBucket(ctx, bucket, nil); err != nil {
+	if _, err := p.ProvisionBucket(ctx, bucket, progress.Discard()); err != nil {
 		t.Fatalf("Bucket() on the next deploy = %v", err)
 	}
 	_, rules := lastFedTo(t, machine, "?cors")

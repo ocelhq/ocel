@@ -39,7 +39,7 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 	if err != nil {
 		return "", err
 	}
-	say(progress, fmt.Sprintf("Waiting up to %s for %s to answer HTTP, then probing %s in turn: %s sets no %s, so the first that answers anything but 404 or 405 is its health check",
+	progress.Say(fmt.Sprintf("Waiting up to %s for %s to answer HTTP, then probing %s in turn: %s sets no %s, so the first that answers anything but 404 or 405 is its health check",
 		search.Window, search.App, inWords(healthPathCandidates), search.App, healthKey))
 	found, err := h.stream(ctx, renderStartWatch([]string{containerOf(search.Target)}, findHealthPathCommand(search)), nil, elevation)
 	if err != nil {
@@ -55,7 +55,7 @@ func (h *Host) FindHealthPath(ctx context.Context, search HealthPathSearch, prog
 		for _, answer := range answers {
 			probed = append(probed, answer.path)
 		}
-		say(progress, fmt.Sprintf("%s answers its health check on %s (found by probing %s)", search.App, path, strings.Join(probed, ", ")))
+		progress.Say(fmt.Sprintf("%s answers its health check on %s (found by probing %s)", search.App, path, strings.Join(probed, ", ")))
 		return path, nil
 	}
 	if len(answers) == len(healthPathCandidates) && answers[len(answers)-1].absent() {
@@ -78,12 +78,12 @@ func (h *Host) unfound(ctx context.Context, search HealthPathSearch, verdict str
 	ctx, stop := sparing(ctx)
 	defer stop()
 	name := containerOf(search.Target)
-	state := h.said(ctx, stateCommand(name), elevation)
+	state := h.readEvidence(ctx, stateCommand(name), elevation)
 	if crashed || isUnstarted(state) {
 		return refusal.Refuse(refusal.CodeNotReady, "start %s on %s: %s%s",
 			search.App, h.named(), h.describeUnstarted(ctx, search.App, name, state, elevation), h.abandon(ctx, search, elevation))
 	}
-	logs := h.said(ctx, logCommand(name), elevation)
+	logs := h.readEvidence(ctx, logCommand(name), elevation)
 	if logs == "" {
 		logs = noLogOutput
 	}

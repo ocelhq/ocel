@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
@@ -81,7 +82,7 @@ func refusedBeforeWriting(t *testing.T, rig *bench, front Front, want string) {
 	tier := environment.TierProduction
 	boot := NewBootstrap(rig.fronted(front), testVendor, "shop")
 	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
-	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil)
+	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress.Discard())
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		if refused := refusalOf(t, err, refusal.CodeNotReady); refused.Message != want {
 			t.Errorf("%s refused with\n%s\nwant\n%s", step, refused.Message, want)

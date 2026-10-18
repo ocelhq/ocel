@@ -121,7 +121,7 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 		gates = append(gates, app.gate())
 		names = append(names, app.name())
 	}
-	say(progress, rollout.waiting())
+	progress.Say(rollout.waiting())
 	gated, err := h.stream(ctx, renderStartWatch(names, gateCommand(rollout.DeployTimeout, gates)), nil, elevation)
 	if err != nil {
 		return h.ungated(ctx, rollout, "never came back with an exit code", err.Error(), "", elevation)
@@ -155,7 +155,7 @@ func (h *Host) RollOut(ctx context.Context, rollout Rollout, progress progress.L
 	}
 
 	for _, retiree := range cut.retiring {
-		say(progress, fmt.Sprintf("Draining retired container %s for up to %s: past that, %s",
+		progress.Say(fmt.Sprintf("Draining retired container %s for up to %s: past that, %s",
 			containerOf(retiree), rollout.DrainTimeout, drainCeiling))
 	}
 	cutOver, err := h.stream(ctx, words(cutoverCommand(rollout.DrainTimeout, cut.retiring)), nil, elevation)
@@ -181,16 +181,16 @@ func (h *Host) stopRetired(ctx context.Context, rollout Rollout, cut cutover, pr
 	}
 	refused := map[string]error{}
 	for _, retiree := range idle {
-		say(progress, "Stopping retired container "+containerOf(retiree))
+		progress.Say("Stopping retired container " + containerOf(retiree))
 		if err := h.RetireContainer(ctx, containerOf(retiree)); err != nil {
 			unstopped = append(unstopped, retiree)
 			refused[retiree] = err
 		}
 	}
-	confirmed := h.stopped(ctx, unstopped, elevation)
+	confirmed, unread := h.stopped(ctx, unstopped, elevation)
 	for _, retiree := range unstopped {
 		if !slices.Contains(confirmed, retiree) {
-			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), refused[retiree]))
+			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), errors.Join(refused[retiree], unread)))
 		}
 	}
 	if len(failed) == 0 {
@@ -227,15 +227,18 @@ func runningCommand(names []string) string {
 		`elif printf '%s' "$said" | grep -qi 'no such'; then printf '%s gone\n' "$name"; fi; done`
 }
 
-func (h *Host) stopped(ctx context.Context, upstreams []string, elevation string) []string {
+func (h *Host) stopped(ctx context.Context, upstreams []string, elevation string) ([]string, error) {
 	if len(upstreams) == 0 {
-		return nil
+		return nil, nil
 	}
 	names := make([]string, 0, len(upstreams))
 	for _, upstream := range upstreams {
 		names = append(names, containerOf(upstream))
 	}
-	said := h.said(ctx, runningCommand(names), elevation)
+	said, err := h.ran(ctx, "read whether "+listed(upstreams, containerOf)+" stopped", runningCommand(names), nil, elevation)
+	if err != nil {
+		return nil, err
+	}
 	var gone []string
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
@@ -248,7 +251,7 @@ func (h *Host) stopped(ctx context.Context, upstreams []string, elevation string
 			}
 		}
 	}
-	return gone
+	return gone, nil
 }
 
 type cutover struct {
@@ -300,9 +303,6 @@ func (c cutover) back(table RoutingTable) (RoutingTable, error) {
 }
 
 func tellDrain(progress progress.Log, said string, window time.Duration) {
-	if progress == nil {
-		return
-	}
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
 		switch {
@@ -724,12 +724,12 @@ func (h *Host) ungated(ctx context.Context, rollout Rollout, outcome, verdict, s
 	}
 	var evidence strings.Builder
 	for _, app := range failed {
-		state := h.said(ctx, stateCommand(app.name()), elevation)
+		state := h.readEvidence(ctx, stateCommand(app.name()), elevation)
 		if isUnstarted(state) {
 			evidence.WriteString("\n" + h.describeUnstarted(ctx, app.App, app.name(), state, elevation))
 			continue
 		}
-		logs := h.said(ctx, logCommand(app.name()), elevation)
+		logs := h.readEvidence(ctx, logCommand(app.name()), elevation)
 		if logs == "" {
 			logs = noLogOutput
 		}
@@ -748,7 +748,7 @@ func (h *Host) refuseUnstartedRollout(ctx context.Context, rollout Rollout, name
 	if at := slices.IndexFunc(rollout.Apps, func(each AppRollout) bool { return each.name() == name }); at >= 0 {
 		app = rollout.Apps[at].App
 	}
-	state := h.said(ctx, stateCommand(name), elevation)
+	state := h.readEvidence(ctx, stateCommand(name), elevation)
 	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the previous release is still live\n%s%s",
 		rollout.apps(), h.named(), h.describeUnstarted(ctx, app, name, state, elevation), h.discard(ctx, rollout, elevation))}

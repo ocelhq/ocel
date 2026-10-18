@@ -60,10 +60,10 @@ func TestNothingWritesAsRootWithoutTheGrantToDoIt(t *testing.T) {
 	gated := vps.Elevating(inner, unelevated, nil)
 	req := provider.BootstrapRequest{Tier: environment.TierProduction}
 
-	if err := gated.Apply(ctx, req, nil); err == nil {
+	if err := gated.Apply(ctx, req, progress.Discard()); err == nil {
 		t.Error("Apply() = nil, want a bootstrap refused rather than failing partway through the first sudo it runs")
 	}
-	if err := gated.Remove(ctx, environment.TierProduction, nil); err == nil {
+	if err := gated.Remove(ctx, environment.TierProduction, progress.Discard()); err == nil {
 		t.Error("Remove() = nil, want a destroy refused: it takes the accounts and the directories a bootstrap wrote as root")
 	}
 	if inner.applied+inner.removed != 0 {

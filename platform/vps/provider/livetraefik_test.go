@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -155,7 +156,7 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 		t.Fatal(err)
 	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 			t.Fatalf("Apply(%s) behind %s = %v", tier, tf.front, err)
 		}
 	}
@@ -267,7 +268,7 @@ func servesBehindTraefik(t *testing.T, vm machine, tf traefikFront) {
 	}
 	vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
-		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 			t.Fatalf("Remove(%s) behind %s = %v", tier, tf.front, err)
 		}
 	}
