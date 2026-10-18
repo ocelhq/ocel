@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -99,4 +100,29 @@ func TestRunEndsTheChildsWholeGroupWhenItsContextEnds(t *testing.T) {
 		t.Fatal("Run still waits 10s after its context ended")
 	}
 	waitGone(t, pid)
+}
+
+func TestStoppingAChildWhosePipeOutlivesItReturnsOnceItsReapRunsOut(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("needs setsid to start a grandchild outside the child's group")
+	}
+
+	dir := t.TempDir()
+	ready, pidFile := filepath.Join(dir, "ready"), filepath.Join(dir, "grandchild.pid")
+	cmd := exec.Command("sh", "-c", `setsid sh -c 'echo $$ > "$1"; exec sleep 30' sh "$1" & trap '' TERM; touch "$0"; while :; do sleep 0.05; done`, ready, pidFile)
+	cmd.Stdout = &strings.Builder{}
+	child, err := Start(context.Background(), cmd, Options{Grace: 1500 * time.Millisecond, Reap: 100 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	childprocesstest.WaitForFile(t, ready)
+	grandchild := readPID(t, pidFile)
+	t.Cleanup(func() { _ = syscall.Kill(grandchild, syscall.SIGKILL) })
+
+	start := time.Now()
+	child.Stop()
+	if elapsed := time.Since(start); elapsed > 2500*time.Millisecond {
+		t.Errorf("Stop took %s on a child whose pipe a grandchild holds, want it to return once the reap runs out", elapsed)
+	}
 }

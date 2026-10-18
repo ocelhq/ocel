@@ -133,7 +133,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 		}
 	}()
 	server := host.server
-	invoked := invocation{name: "dev", source: source}
+	local := localCommand{name: "dev", source: source}
 
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
@@ -143,13 +143,13 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	}
 	claimed = true
 
-	resolved, err := resolveOnce(ctx, server, cfg, invoked, startup)
+	resolved, err := resolveOnce(ctx, server, cfg, local, startup)
 	if err != nil {
 		return err
 	}
 	tally.noteKinds(server.ResourceKinds())
 	updates := make(chan map[string]string, 1)
-	watching, err := startWatching(background, server, cfg, invoked, opts.session(), func(env map[string]string) {
+	watching, err := startWatching(background, server, cfg, local, opts.session(), func(env map[string]string) {
 		tally.noteKinds(server.ResourceKinds())
 		select {
 		case <-updates:
@@ -314,7 +314,7 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	defer host.close()
 	host.server.UseValues(values.merged(), variablescope.ForDev(cfg))
 
-	resolved, err := discoverAndSync(ctx, host.server, cfg, values, targetScope(cfg, cwd), invocation{name: "run", source: source}, startup)
+	resolved, err := discoverAndSync(ctx, host.server, cfg, values, targetScope(cfg, cwd), localCommand{name: "run", source: source}, startup)
 	if err != nil {
 		return err
 	}

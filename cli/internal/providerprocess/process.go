@@ -107,6 +107,7 @@ func (e *OperationFailedError) Error() string {
 
 type Process struct {
 	cmd             *exec.Cmd
+	child           *childprocess.Child
 	stdin           io.Closer
 	identity        *localrpc.Identity
 	providerConfig  *contractv1.ProviderConfig
@@ -114,7 +115,6 @@ type Process struct {
 	stdout          io.Writer
 	stderr          io.Writer
 	readyTimeout    time.Duration
-	gracePeriod     time.Duration
 	reapTimeout     time.Duration
 	maxMessageBytes int
 
@@ -158,27 +158,27 @@ func Spawn(spec LaunchSpec) (*Process, error) {
 
 	cmd := exec.Command(spec.BinaryPath, spec.Args...)
 	cmd.Env = env
-	childprocess.SetOwnGroup(cmd)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("provider: attach stdin pipe: %w", err)
 	}
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("provider: attach stdout pipe: %w", err)
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("provider: attach stderr pipe: %w", err)
-	}
+	stdoutPipe, stdoutWriter := io.Pipe()
+	stderrPipe, stderrWriter := io.Pipe()
+	cmd.Stdout, cmd.Stderr = stdoutWriter, stderrWriter
 
-	if err := cmd.Start(); err != nil {
+	gracePeriod := resolveDuration(spec.GracePeriod, DefaultGracePeriod)
+	reapTimeout := resolveDuration(spec.ReapTimeout, DefaultReapTimeout)
+	child, err := childprocess.Start(context.Background(), cmd, childprocess.Options{Grace: gracePeriod, Reap: reapTimeout})
+	if err != nil {
+		_ = stdoutWriter.Close()
+		_ = stderrWriter.Close()
 		return nil, &clierror.Error{Code: clierror.CodeProviderUnavailable, Cause: fmt.Errorf("provider: spawn provider %q: %w", spec.BinaryPath, err)}
 	}
 
 	r := &Process{
 		cmd:             cmd,
+		child:           child,
 		stdin:           stdin,
 		identity:        identity,
 		providerConfig:  spec.ProviderConfig,
@@ -186,25 +186,22 @@ func Spawn(spec LaunchSpec) (*Process, error) {
 		stdout:          spec.Stdout,
 		stderr:          spec.Stderr,
 		readyTimeout:    resolveReadyTimeout(spec.ReadyTimeout),
-		gracePeriod:     resolveDuration(spec.GracePeriod, DefaultGracePeriod),
-		reapTimeout:     resolveDuration(spec.ReapTimeout, DefaultReapTimeout),
+		reapTimeout:     reapTimeout,
 		maxMessageBytes: resolveBytes(spec.MaxMessageBytes, MaxMessageBytes),
 		readyCh:         make(chan localrpc.Readiness, 1),
 		scanErr:         make(chan error, 1),
 		done:            make(chan struct{}),
 	}
 
-	registerLive(r)
-
 	var drainWG sync.WaitGroup
 	drainWG.Add(2)
 	go func() { defer drainWG.Done(); r.drainStdout(stdoutPipe) }()
 	go func() { defer drainWG.Done(); r.drainStderr(stderrPipe) }()
 	go func() {
+		r.waitErr = child.Wait()
+		_ = stdoutWriter.Close()
+		_ = stderrWriter.Close()
 		drainWG.Wait()
-		r.waitErr = cmd.Wait()
-		_ = childprocess.KillGroup(cmd)
-		deregisterLive(r)
 		close(r.done)
 	}()
 
@@ -505,36 +502,6 @@ func IsCancelled(err error) bool {
 	return errors.Is(err, context.Canceled) || connect.CodeOf(err) == connect.CodeCanceled
 }
 
-var (
-	liveMu sync.Mutex
-	live   = map[*Process]struct{}{}
-)
-
-func registerLive(r *Process) {
-	liveMu.Lock()
-	live[r] = struct{}{}
-	liveMu.Unlock()
-}
-
-func deregisterLive(r *Process) {
-	liveMu.Lock()
-	delete(live, r)
-	liveMu.Unlock()
-}
-
-func KillAllLive() {
-	liveMu.Lock()
-	processes := make([]*Process, 0, len(live))
-	for r := range live {
-		processes = append(processes, r)
-	}
-	liveMu.Unlock()
-
-	for _, r := range processes {
-		_ = childprocess.KillGroup(r.cmd)
-	}
-}
-
 func (r *Process) Close() {
 	r.closeOnce.Do(func() {
 		r.teardown()
@@ -552,32 +519,7 @@ func (r *Process) Close() {
 
 func (r *Process) teardown() {
 	_ = r.stdin.Close()
-	if r.cmd.Process == nil {
-		return
-	}
-
-	select {
-	case <-r.done:
-		return
-	default:
-		_ = childprocess.TerminateGroup(r.cmd)
-		select {
-		case <-r.done:
-			return
-		case <-time.After(r.gracePeriod):
-		}
-	}
-
-	select {
-	case <-r.done:
-	default:
-		_ = childprocess.KillGroup(r.cmd)
-	}
-
-	// TODO: a pipe held open outside the group teardown owns (e.g. a
-	// grandchild reparented onto init) keeps cmd.Wait() and the drain
-	// goroutines blocked for the rest of the process lifetime; muting is all
-	// this side can do without reaching outside the group.
+	r.child.Stop()
 	select {
 	case <-r.done:
 	case <-time.After(r.reapTimeout):

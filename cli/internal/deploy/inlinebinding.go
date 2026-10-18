@@ -1,20 +1,23 @@
-package inlinebinding
+package deploy
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-const defaultPostgresPort = 5432
+const defaultInlinePostgresPort = 5432
 
-var tlsModes = map[string]bindingsv1.PostgresTlsMode{
+var inlineTLSModes = map[string]bindingsv1.PostgresTlsMode{
 	"require":     bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_REQUIRE,
 	"verify-full": bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
 }
 
-func Build(bound []project.Binding, values map[string]string, source string) ([]*bindingsv1.Binding, error) {
+func buildInlineBindings(bound []project.Binding, values map[string]string, source string) ([]*bindingsv1.Binding, error) {
 	var out []*bindingsv1.Binding
 	for _, b := range bound {
 		if b.Inline == nil {
@@ -53,7 +56,7 @@ func postgresProperties(p *project.PostgresInline, read func(string) (string, er
 		value, err := read(p.URL)
 		return &bindingsv1.PostgresProperties{Url: value}, err
 	}
-	props := &bindingsv1.PostgresProperties{Port: defaultPostgresPort}
+	props := &bindingsv1.PostgresProperties{Port: defaultInlinePostgresPort}
 	if p.Port != 0 {
 		props.Port = int32(p.Port)
 	}
@@ -71,7 +74,7 @@ func postgresProperties(p *project.PostgresInline, read func(string) (string, er
 		return nil, err
 	}
 	if p.TLS != nil {
-		props.TlsMode = tlsModes[p.TLS.Mode]
+		props.TlsMode = inlineTLSModes[p.TLS.Mode]
 		if p.TLS.CA != "" {
 			if props.TlsCa, err = read(p.TLS.CA); err != nil {
 				return nil, err
@@ -105,4 +108,12 @@ func bucketProperties(b *project.BucketInline, read func(string) (string, error)
 		return nil, err
 	}
 	return props, nil
+}
+
+func inlineBindings(ctx context.Context, cfg *project.Project, declarations *variables.Declarations) ([]*bindingsv1.Binding, error) {
+	values, err := declarations.ResolveBindingVariables(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return buildInlineBindings(cfg.BindingsFor(declarations.Scope().Tier), values, filepath.Base(cfg.Path))
 }

@@ -13,22 +13,67 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	providercontract "github.com/ocelhq/ocel/pkg/provider"
+)
+
+type Intent int
+
+const (
+	Launch Intent = iota
+	UseAccount
+	ManageBootstrap
+	UseInfrastructure
+	UseVariablesKey
+	UseParts
+	DeployProduction
+	DeployPreview
 )
 
 type OpenOptions struct {
-	Pinning         executables.Pinning
-	Tier            environmentv1.Tier
-	Require         readiness.Requirement
-	Slug            string
-	ClaimsDomains   bool
-	RequireHostname bool
-	Part            string
-	RecordWants     bool
-	ProjectRegistry bool
-	Policy          consent.Policy
+	Intent Intent
+	Tier   environmentv1.Tier
+	Policy consent.Policy
+}
 
-	CheckPreviewRoute bool
+func (o OpenOptions) tier() environmentv1.Tier {
+	switch o.Intent {
+	case DeployProduction:
+		return environmentv1.Tier_TIER_PRODUCTION
+	case DeployPreview:
+		return environmentv1.Tier_TIER_PREVIEW
+	}
+	return o.Tier
+}
+
+func (i Intent) requirement() readiness.Requirement {
+	switch i {
+	case UseAccount, ManageBootstrap:
+		return readiness.Credentials
+	case UseInfrastructure, UseVariablesKey:
+		return readiness.Infrastructure
+	case UseParts, DeployProduction, DeployPreview:
+		return readiness.Parts
+	}
+	return readiness.None
+}
+
+func (i Intent) deploys() bool {
+	return i == DeployProduction || i == DeployPreview
+}
+
+func (o OpenOptions) request(cfg *project.Project) readiness.Request {
+	req := readiness.Request{Tier: o.tier(), Require: o.Intent.requirement(), DryRun: o.Policy.DryRun}
+	switch o.Intent {
+	case ManageBootstrap:
+		req.Slug = cfg.Slug
+	case UseVariablesKey:
+		req.Slug, req.Part, req.RecordWants = cfg.Slug, providercontract.VariablesKeyPart, true
+	case DeployProduction, DeployPreview:
+		req.Slug, req.RecordWants, req.Domains = cfg.Slug, true, cfg.HostnameNames(req.Tier)
+		req.RequireHostname = o.Intent == DeployProduction
+		req.CheckPreviewRoute = o.Intent == DeployPreview
+	}
+	return req
 }
 
 func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
@@ -41,36 +86,21 @@ func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *proj
 }
 
 func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
-	var registry *contractv1.ImageRegistry
-	if opts.ProjectRegistry {
+	req := opts.request(cfg)
+	if opts.Intent.deploys() {
 		var err error
-		if registry, err = readiness.ProjectRegistry(cfg); err != nil {
+		if req.Registry, err = readiness.ProjectRegistry(cfg); err != nil {
 			return nil, readiness.Preflight{}, err
 		}
 	}
 	loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
-	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, opts.Pinning)
+	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, executables.ChoosePinning(opts.Policy.DryRun))
 	loading.End(err)
 	if err != nil {
 		return nil, readiness.Preflight{}, err
 	}
-	if opts.Require == readiness.None {
+	if req.Require == readiness.None {
 		return provider, readiness.Preflight{}, nil
-	}
-	req := readiness.Request{
-		Tier:            opts.Tier,
-		Require:         opts.Require,
-		Slug:            opts.Slug,
-		RequireHostname: opts.RequireHostname,
-		Part:            opts.Part,
-		RecordWants:     opts.RecordWants,
-		DryRun:          opts.Policy.DryRun,
-		Registry:        registry,
-
-		CheckPreviewRoute: opts.CheckPreviewRoute,
-	}
-	if opts.ClaimsDomains {
-		req.Domains = cfg.HostnameNames(opts.Tier)
 	}
 	read, err := readiness.Check(ctx, check, provider, cfg, req)
 	return provider, read, err

@@ -26,7 +26,7 @@ func TestDescribeRefusal(t *testing.T) {
 			Scope: variables.Scope{Apps: []variables.App{{Name: "web", Folder: "/web"}}},
 		}
 
-		got := describeRefusal(refusal, nil, invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
+		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
 
 		for _, want := range []string{
 			"DATABASE_URL",
@@ -52,7 +52,7 @@ func TestDescribeRefusal(t *testing.T) {
 	t.Run("under another dev source it names that source and "+project.LocalDotenvFileName, func(t *testing.T) {
 		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
 
-		got := describeRefusal(refusal, nil, invocation{name: "dev", source: valueSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
+		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
 
 		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + project.LocalDotenvFileName, "Set the values above in infisical:p-1/dev and " + project.LocalDotenvFileName} {
 			if !strings.Contains(got, want) {
@@ -70,7 +70,7 @@ func TestDescribeRefusal(t *testing.T) {
 			},
 		}
 
-		got := describeRefusal(refusal, nil, invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
+		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
 
 		if !strings.Contains(got, "shell") {
 			t.Errorf("refusal = %q, want it to say the key was seen in the environment", got)
@@ -79,7 +79,7 @@ func TestDescribeRefusal(t *testing.T) {
 			t.Errorf("refusal = %q, want it to disclose no value", got)
 		}
 
-		inFile := describeRefusal(refusal, dotfileValues(map[string]string{"DATABASE_URL": "postgres://from-the-file"}).keys(), invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
+		inFile := describeRefusal(refusal, dotfileValues(map[string]string{"DATABASE_URL": "postgres://from-the-file"}).keys(), localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
 		if strings.Contains(inFile, "set in this shell") {
 			t.Errorf("refusal = %q, want no shell hint for a key the file does contain", inFile)
 		}
@@ -88,7 +88,7 @@ func TestDescribeRefusal(t *testing.T) {
 	t.Run("an invalid value the declarations kept no detail for ends at its schema", func(t *testing.T) {
 		refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID}}}
 
-		got := describeRefusal(refusal, nil, invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
+		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
 
 		if !strings.Contains(got, "set, but it does not satisfy its schema\n") {
 			t.Errorf("refusal = %q, want the reason to end at the schema with nothing trailing", got)
@@ -96,7 +96,7 @@ func TestDescribeRefusal(t *testing.T) {
 	})
 
 	t.Run("it is never given a value it could print", func(t *testing.T) {
-		want := reflect.TypeOf(func(error, map[string]struct{}, invocation) error { return nil })
+		want := reflect.TypeOf(func(error, map[string]struct{}, localCommand) error { return nil })
 		if got := reflect.TypeOf(describeRefusal); got != want {
 			t.Fatalf("describeRefusal is %s, want %s: any wider parameter puts a dotfile value in reach of the message", got, want)
 		}
@@ -112,7 +112,7 @@ func TestDescribeRefusal(t *testing.T) {
 			"API_TOKEN":    "sk-live-must-not-appear",
 		}
 
-		got := describeRefusal(refusal, dotfileValues(fileValues).keys(), invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
+		got := describeRefusal(refusal, dotfileValues(fileValues).keys(), localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
 
 		for _, value := range fileValues {
 			if strings.Contains(got, value) {
@@ -133,7 +133,7 @@ func TestADevRunNeedingUnsetVariablesKeepsVariablesMissingHintingWhereToSetTheKe
 	raised := &clierror.Error{Code: "variables.missing", Hint: "ocel env set <KEY>=<VALUE>", Cause: refusal}
 	t.Setenv("STRIPE_KEY", "sk_live_from_the_shell")
 
-	described := describeRefusal(fmt.Errorf("checking variables: %w", raised), nil, invocation{name: "dev", source: valueSource{id: "dotenv", ownStore: true}})
+	described := describeRefusal(fmt.Errorf("checking variables: %w", raised), nil, localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}})
 
 	got := clierror.NewRunError(fmt.Errorf("dev: %w", described))
 	want := "set DATABASE_URL and STRIPE_KEY in " + project.DotenvFileName + ", then run `ocel dev` again"
@@ -158,7 +158,7 @@ func TestRefusalsNameTheCommandThatRan(t *testing.T) {
 	t.Run("a variable refusal names the command that was run", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
 
-		got := describeRefusal(refusal, nil, invocation{name: "run", source: valueSource{id: "dotenv", ownStore: true}}).Error()
+		got := describeRefusal(refusal, nil, localCommand{name: "run", source: valueSource{id: "dotenv", ownStore: true}}).Error()
 
 		if !strings.Contains(got, "`ocel run` again") {
 			t.Errorf("refusal = %q, want it to name the command that was run", got)

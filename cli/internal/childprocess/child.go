@@ -16,6 +16,7 @@ type Options struct {
 	Stdin    io.Reader
 	Terminal bool
 	Grace    time.Duration
+	Reap     time.Duration
 }
 
 type Child struct {
@@ -25,6 +26,7 @@ type Child struct {
 	isTerminal bool
 	terminal   terminalState
 	grace      time.Duration
+	reap       time.Duration
 }
 
 func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
@@ -34,6 +36,7 @@ func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
 		exited:     make(chan error, 1),
 		isTerminal: opts.Terminal,
 		grace:      cmp.Or(opts.Grace, GracePeriod),
+		reap:       cmp.Or(opts.Reap, opts.Grace, GracePeriod),
 	}
 	if opts.Terminal {
 		child.terminal = saveTerminal(opts.Stdin)
@@ -101,7 +104,7 @@ func (c *Child) Stop() {
 	_ = c.kill()
 	select {
 	case <-c.done:
-	case <-time.After(c.grace):
+	case <-time.After(c.reap):
 	}
 }
 

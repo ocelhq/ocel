@@ -14,7 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/invocation"
+	"github.com/ocelhq/ocel/cli/internal/agentenv"
 )
 
 const connectRoute = "/api/connect"
@@ -44,7 +44,7 @@ func (c *Client) withSessionHeaders(accessToken string) connect.ClientOption {
 }
 
 func composeUserAgent(getenv func(string) string) string {
-	agent, _ := invocation.Detect(getenv)
+	agent, _ := agentenv.Detect(getenv)
 	if agent == "" {
 		return "ocel-cli"
 	}

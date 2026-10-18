@@ -12,10 +12,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	providercontract "github.com/ocelhq/ocel/pkg/provider"
 )
 
 func withCommand(cmd *cobra.Command, dependencies Dependencies, run func(context.Context, string) error) error {
@@ -44,10 +42,9 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	if err != nil {
 		return err
 	}
-	open := commands.OpenOptions{Tier: opts.tier(), Require: readiness.Infrastructure}
+	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier()}
 	if keyOffer != nil {
-		open.Part = providercontract.VariablesKeyPart
-		open.Slug, open.RecordWants = cfg.Slug, true
+		open.Intent = commands.UseVariablesKey
 		open.Policy = consent.NewPolicy(command, false, dependencies.CanAsk(keyOffer.stdin), stderr, keyOffer.stdin)
 	}
 	return dependencies.WithProvider(ctx, cfg, command, open, func(ctx context.Context, p commands.ProviderRun) error {

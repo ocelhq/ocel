@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -63,12 +62,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if notice != "" {
 		check.Warn(notice)
 	}
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{
-		Pinning: executables.ChoosePinning(opts.Dry),
-		Tier:    tier,
-		Require: readiness.Credentials,
-		Slug:    cfg.Slug,
-	})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tier, Policy: policy})
 	check.End(err)
 	if err != nil {
 		return err

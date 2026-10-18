@@ -14,16 +14,16 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type invocation struct {
+type localCommand struct {
 	name   string
 	source valueSource
 }
 
-func (i invocation) command() string {
-	return "ocel " + i.name
+func (c localCommand) line() string {
+	return "ocel " + c.name
 }
 
-func describeRefusal(err error, dotfileKeys map[string]struct{}, run invocation) error {
+func describeRefusal(err error, dotfileKeys map[string]struct{}, run localCommand) error {
 	var refusal *variables.MissingError
 	if !errors.As(err, &refusal) {
 		return err
@@ -39,14 +39,14 @@ func describeRefusal(err error, dotfileKeys map[string]struct{}, run invocation)
 			b.WriteString("    " + hint + "\n")
 		}
 	}
-	fmt.Fprintf(&b, "\nSet the values above in %s, then run `%s` again.", run.source.where(), run.command())
+	fmt.Fprintf(&b, "\nSet the values above in %s, then run `%s` again.", run.source.where(), run.line())
 	described := errors.New(b.String())
 	var raised *clierror.Error
 	if !errors.As(err, &raised) {
 		return described
 	}
 	coded := *raised
-	coded.Hint = fmt.Sprintf("set %s in %s, then run `%s` again", english.And(missingKeys(refusal.Problems)), run.source.where(), run.command())
+	coded.Hint = fmt.Sprintf("set %s in %s, then run `%s` again", english.And(missingKeys(refusal.Problems)), run.source.where(), run.line())
 	coded.Cause = described
 	return &coded
 }
@@ -61,14 +61,14 @@ func missingKeys(problems []*resourcesv1.VariableProblem) []string {
 	return keys
 }
 
-func shellHint(key string, dotfileKeys map[string]struct{}, run invocation) string {
+func shellHint(key string, dotfileKeys map[string]struct{}, run localCommand) string {
 	if _, inFile := dotfileKeys[key]; inFile {
 		return ""
 	}
 	if _, inShell := os.LookupEnv(key); !inShell {
 		return ""
 	}
-	return fmt.Sprintf("%s is set in this shell, but `%s` resolves values from %s so every developer's run is the same.", key, run.command(), run.source.where())
+	return fmt.Sprintf("%s is set in this shell, but `%s` resolves values from %s so every developer's run is the same.", key, run.line(), run.source.where())
 }
 
 func variablesAre(n int) string {

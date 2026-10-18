@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -39,10 +38,10 @@ func TestAnOpenedProviderIsAskedOnlyWhatTheCommandRequires(t *testing.T) {
 			return err
 		}
 		defer provider.Close()
-		if opts.Require == readiness.None && read.Response != nil {
+		if opts.Intent == commands.Launch && read.Response != nil {
 			t.Errorf("OpenProvider asked the provider %v although nothing was required of it", read.Response)
 		}
-		if opts.Require != readiness.None && (read.Response == nil || read.Project == nil) {
+		if opts.Intent != commands.Launch && (read.Response == nil || read.Project == nil) {
 			t.Error("OpenProvider returned no readiness or no resolved project for a command that required some")
 		}
 		return nil
@@ -55,13 +54,13 @@ func TestAnOpenedProviderIsAskedOnlyWhatTheCommandRequires(t *testing.T) {
 	})
 
 	t.Run("a bootstrapped tier opens and says how ready it is", func(t *testing.T) {
-		if err := open(t, clitest.SetUpProject(t), commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Infrastructure}); err != nil {
+		if err := open(t, clitest.SetUpProject(t), commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PRODUCTION}); err != nil {
 			t.Fatalf("OpenProvider: %v", err)
 		}
 	})
 
 	t.Run("a tier with no infrastructure is refused naming the bootstrap that sets it up", func(t *testing.T) {
-		err := open(t, clitest.SetUpProject(t), commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Infrastructure})
+		err := open(t, clitest.SetUpProject(t), commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PREVIEW})
 		if err == nil {
 			t.Fatal("OpenProvider opened a provider for a command whose tier has no infrastructure")
 		}
@@ -73,7 +72,7 @@ func TestAnOpenedProviderIsAskedOnlyWhatTheCommandRequires(t *testing.T) {
 	t.Run("credentials the provider refuses stop even a command that needs no infrastructure", func(t *testing.T) {
 		project := clitest.SetUpProject(t)
 		project.Provider.Credentials().(*fake.Credentials).Deny("sign in again")
-		err := open(t, project, commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Credentials})
+		err := open(t, project, commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION})
 		if err == nil || !strings.Contains(err.Error(), "could not authenticate") {
 			t.Fatalf("OpenProvider err = %v, want the refused credentials named", err)
 		}
@@ -92,7 +91,7 @@ func TestWithProviderHandsTheWorkAnOpenProviderAndEndsTheRunWithItsError(t *test
 
 	refused := errors.New("the work refused")
 	var named string
-	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Infrastructure}, func(_ context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PRODUCTION}, func(_ context.Context, p commands.ProviderRun) error {
 		named = p.Provider.Name()
 		if p.Preflight.Project == nil {
 			t.Error("the work was handed no resolved project for a command that required infrastructure")
@@ -150,7 +149,7 @@ func TestWithProviderSetsUpWhatTheTierIsMissingAndChecksItAgain(t *testing.T) {
 	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &asked}
 
 	worked := false
-	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Infrastructure, Policy: policy}, func(_ context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PREVIEW, Policy: policy}, func(_ context.Context, p commands.ProviderRun) error {
 		worked = p.Project != nil && p.Project.Slug == cfg.Slug
 		return nil
 	})
@@ -180,7 +179,7 @@ func TestWithProviderEndsADeclinedSetupAsARunThatChangedNothing(t *testing.T) {
 	policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &asked}
 
 	worked := false
-	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Tier: environmentv1.Tier_TIER_PREVIEW, Require: readiness.Infrastructure, Policy: policy}, func(context.Context, commands.ProviderRun) error {
+	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PREVIEW, Policy: policy}, func(context.Context, commands.ProviderRun) error {
 		worked = true
 		return nil
 	})

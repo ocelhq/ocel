@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands/env"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -53,7 +54,7 @@ func newTestDependencies() Dependencies {
 		BuildID:                 build.BuildID,
 		CollectDeclarations:     declaration.Collect,
 		ServeVariableEditor:     env.ServeVariableEditor,
-		DiscoverPRNumber:        func() string { return os.Getenv(PRNumberEnvVar) },
+		DiscoverPRNumber:        func() string { return os.Getenv(previewid.PRNumberEnvVar) },
 	}
 }
 

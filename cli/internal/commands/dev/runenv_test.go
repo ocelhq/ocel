@@ -18,8 +18,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/commands/deploy"
+	deploycommand "github.com/ocelhq/ocel/cli/internal/commands/deploy"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/deploy"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -89,7 +90,7 @@ func dependenciesOf(invocation commands.Invocation) Dependencies {
 
 func deployProject(t *testing.T, fixture clitest.FakeProject, invocation commands.Invocation) {
 	t.Helper()
-	command := deploy.NewCommand(deploy.Dependencies{
+	command := deploycommand.NewCommand(deploy.Dependencies{
 		Invocation: invocation,
 		BuildApps: func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 			return build.Output{}, nil

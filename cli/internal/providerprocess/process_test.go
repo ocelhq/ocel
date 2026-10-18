@@ -661,16 +661,16 @@ func TestTeardownReapIsBounded(t *testing.T) {
 
 	cmd := exec.Command(os.Args[0])
 	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=never-ready")
-	childprocess.SetOwnGroup(cmd)
-	if err := cmd.Start(); err != nil {
+	child, err := childprocess.Start(context.Background(), cmd, childprocess.Options{Grace: 50 * time.Millisecond, Reap: 100 * time.Millisecond})
+	if err != nil {
 		t.Fatalf("start process: %v", err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 
 	r := &Process{
 		cmd:         cmd,
+		child:       child,
 		stdin:       io.NopCloser(nil),
-		gracePeriod: 50 * time.Millisecond,
 		reapTimeout: 100 * time.Millisecond,
 		done:        make(chan struct{}),
 	}

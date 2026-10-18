@@ -104,7 +104,7 @@ func describeTier(tier environmentv1.Tier, slug string) string {
 }
 
 func openOptions(tier environmentv1.Tier) commands.OpenOptions {
-	return commands.OpenOptions{Tier: tier, Require: readiness.Parts}
+	return commands.OpenOptions{Intent: commands.UseParts, Tier: tier}
 }
 
 func loadProject(ctx context.Context, invocation commands.Invocation) (*project.Project, error) {
@@ -163,7 +163,7 @@ func runStatus(ctx context.Context, invocation commands.Invocation, stdout io.Wr
 		return err
 	}
 	var readings []tierReading
-	opened := commands.OpenOptions{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: readiness.Credentials}
+	opened := commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION}
 	err = invocation.WithProvider(ctx, cfg, "ocel protection", opened, func(ctx context.Context, p commands.ProviderRun) error {
 		for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW} {
 			span := p.Check.Child(cfg.Slug, progress.Reading.Title("the "+readiness.TierName(tier)+" protection"))

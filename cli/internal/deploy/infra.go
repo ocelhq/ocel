@@ -25,7 +25,6 @@ type infraProvisioning struct {
 	env             *environmentv1.Environment
 	aliasToken      string
 	workerCeilings  []provider.WorkerCeiling
-	dry             bool
 	leaseToken      string
 	renewal         time.Duration
 	renewalTimeout  time.Duration
@@ -57,24 +56,20 @@ const (
 	abandonTimeout       = 30 * time.Second
 )
 
-func newInfraProvisioning(providerProcess *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, dry, prebuilt bool) *infraProvisioning {
-	if prebuilt {
-		return nil
-	}
+func newInfraProvisioning(providerProcess *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts) *infraProvisioning {
 	return &infraProvisioning{
 		providerProcess: providerProcess,
 		cfg:             facts.project,
 		env:             env,
 		aliasToken:      facts.builtAlias,
 		workerCeilings:  facts.workerCeilings,
-		dry:             dry,
 		renewal:         leaseRenewalInterval,
 		renewalTimeout:  leaseRenewalInterval,
 	}
 }
 
 func (i *infraProvisioning) provision(ctx context.Context, resources []declaration.Resource, inline []*bindingsv1.Binding) error {
-	if i == nil || i.dry || len(resources) == 0 {
+	if len(resources) == 0 {
 		return nil
 	}
 	assembled, err := i.assemble(resources)
@@ -142,9 +137,6 @@ func (i *infraProvisioning) renew(renewing context.Context, done chan<- struct{}
 }
 
 func (i *infraProvisioning) holdLease(ctx context.Context) (context.Context, context.CancelFunc) {
-	if i == nil {
-		return ctx, func() {}
-	}
 	held, cancel := context.WithCancelCause(ctx)
 	i.loseLease = cancel
 	return held, func() { cancel(nil) }
@@ -159,7 +151,7 @@ func (i *infraProvisioning) lostLease(held context.Context, err error) error {
 }
 
 func (i *infraProvisioning) stopRenewing() {
-	if i == nil || i.renewing == nil {
+	if i.renewing == nil {
 		return
 	}
 	i.renewing.cancel()
@@ -177,7 +169,7 @@ func (i *infraProvisioning) assemble(resources []declaration.Resource) (*contrac
 }
 
 func (i *infraProvisioning) isProvisioned() bool {
-	return i != nil && i.sent != nil
+	return i.sent != nil
 }
 
 func (i *infraProvisioning) readLeaseToken() string {
@@ -188,14 +180,12 @@ func (i *infraProvisioning) readLeaseToken() string {
 }
 
 func (i *infraProvisioning) markShipped() {
-	if i != nil {
-		i.shipped = true
-	}
+	i.shipped = true
 }
 
 func (i *infraProvisioning) abandon(ctx context.Context, slug string) {
 	i.stopRenewing()
-	if i == nil || !i.attempted || i.shipped {
+	if !i.attempted || i.shipped {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonTimeout)

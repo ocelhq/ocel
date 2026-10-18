@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -162,7 +161,7 @@ func destroyTier(ctx context.Context, invocation commands.Invocation, cfg *proje
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Pinning: executables.ChoosePinning(policy.DryRun), Tier: tier, Require: readiness.Parts})
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy})
 	check.End(err)
 	if err != nil {
 		return nil, err

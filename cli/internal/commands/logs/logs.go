@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/logview"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
-	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -120,7 +119,7 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 
 	present := dependencies.Presentation(stdout)
 	mode.json = present.Format == terminal.FormatJSON
-	open := commands.OpenOptions{Tier: query.request.GetEnvironment().GetTier(), Require: readiness.Infrastructure}
+	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: query.request.GetEnvironment().GetTier()}
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		out := newOutput(stdout, present, mode, newNotices(stderr, dependencies.Presentation(stderr).Palette(), p.Check.Warn))
@@ -252,5 +251,5 @@ func (o logsOptions) resolveEnvironment(dependencies Dependencies, cwd string) (
 			return nil, err
 		}
 	}
-	return commands.ResolvePreviewEnvironment(cwd, o.environment, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
+	return previewid.ResolveEnvironment(cwd, o.environment, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 }

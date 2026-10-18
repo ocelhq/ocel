@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -79,11 +78,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 
 	var attempt *deployreport.Attempt
 	var succeeded *consolev1.Deployment
-	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{
-		Pinning: executables.ChoosePinning(opts.dry),
-		Tier:    environmentv1.Tier_TIER_PRODUCTION,
-		Require: readiness.Parts,
-	}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: consent.Policy{DryRun: policy.DryRun}}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
 		history, err := promotionHistory(ctx, check, provider, cfg)
 		check.End(err)

@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -158,12 +157,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 		return err
 	}
 
-	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{
-		Pinning: executables.ChoosePinning(opts.Dry),
-		Tier:    tier,
-		Require: readiness.Credentials,
-		Slug:    cfg.Slug,
-	}, func(ctx context.Context, p commands.ProviderRun) error {
+	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tier, Policy: policy}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
 		planned, err := describeBootstrap(ctx, provider, cfg, tier)
 		check.End(err)
