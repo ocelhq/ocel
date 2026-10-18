@@ -95,7 +95,7 @@ type stubValues struct {
 
 	mu       sync.Mutex
 	sink     io.Writer
-	refreshs int
+	freshens int
 }
 
 func (s *stubValues) Value(key string) string { return s.pushed[key] }
@@ -139,10 +139,16 @@ func (s *stubValues) Attach(w io.Writer) {
 	}
 }
 
-func (s *stubValues) Refresh(context.Context) {
+func (s *stubValues) Freshen(context.Context) {
 	s.mu.Lock()
-	s.refreshs++
+	s.freshens++
 	s.mu.Unlock()
+}
+
+func (s *stubValues) freshened() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.freshens
 }
 
 func (s *stubValues) Env() []string { return s.env }

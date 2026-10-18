@@ -103,8 +103,22 @@ func KeyPairSuppliedByCaller() map[string]any {
 	return map[string]any{"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}}
 }
 
-func ManagedByAnAppCluster() map[string]any {
-	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + ManagedSecretClusterTagKey: AppClusterARN}}
+func TierScopePrefix(tier environment.Tier) string { return AppScopePrefix + string(tier) + "-" }
+
+func (s Scope) Buckets() string { return "arn:aws:s3:::" + TierScopePrefix(s.Tier) + "*" }
+
+func (s Scope) Clusters() string { return "arn:aws:rds:*:*:cluster:" + TierScopePrefix(s.Tier) + "*" }
+
+func (s Scope) ClusterSnapshots() string {
+	return "arn:aws:rds:*:*:cluster-snapshot:" + TierScopePrefix(s.Tier) + "*"
+}
+
+func (s Scope) ManagedByItsClusters() map[string]any {
+	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + ManagedSecretClusterTagKey: s.Clusters()}}
+}
+
+func (s Scope) TaggedOnCreateOnlyForItsTier() map[string]any {
+	return MergeConditions(s.TaggedOnCreateForItsTier(), s.TaggedOnlyAsItsTier())
 }
 
 func AttachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {

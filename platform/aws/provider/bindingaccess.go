@@ -2,19 +2,13 @@ package aws
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"net"
 	"slices"
 
-	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
-
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -36,12 +30,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err := p.requireBootstrapped(deployed, req.Tier); err != nil {
 		return nil, err
 	}
-	resolved, err := readForwardedPasswords(ctx, passwordSources{
-		secrets: secretsmanager.NewFromConfig(p.aws),
-		mintToken: func(ctx context.Context, endpoint, username string) (string, error) {
-			return auth.BuildAuthToken(ctx, endpoint, p.aws.Region, username, p.aws.Credentials)
-		},
-	}, req.Bindings)
+	resolved, err := readForwardedPasswords(ctx, signin.SourcesFor(p.aws), req.Bindings)
 	if err != nil {
 		return nil, err
 	}
@@ -69,56 +58,21 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	return forwards, nil
 }
 
-type secretValues interface {
-	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
-}
-
-type passwordSources struct {
-	secrets   secretValues
-	mintToken func(ctx context.Context, endpoint, username string) (string, error)
-}
-
-func readForwardedPasswords(ctx context.Context, sources passwordSources, bindings []provider.Binding) (map[string]map[string]string, error) {
+func readForwardedPasswords(ctx context.Context, sources signin.Sources, bindings []provider.Binding) (map[string]map[string]string, error) {
 	resolved := map[string]map[string]string{}
 	for _, binding := range bindings {
 		if binding.Properties[provider.PropertyPassword] != "" {
 			continue
 		}
-		var password string
-		var err error
-		switch secretARN := binding.PasswordSecret(); {
-		case binding.HasIAMAuthentication():
-			endpoint := net.JoinHostPort(binding.Properties[provider.PropertyHost], binding.Properties[provider.PropertyPort])
-			if password, err = sources.mintToken(ctx, endpoint, binding.Properties[provider.PropertyUsername]); err != nil {
-				return nil, fmt.Errorf("mint a token to sign in to %s with: %w", binding.Name, err)
-			}
-		case secretARN != "":
-			if password, err = readSecretPassword(ctx, sources.secrets, secretARN); err != nil {
-				return nil, fmt.Errorf("read the password of %s from %s: %w", binding.Name, secretARN, err)
-			}
-		default:
-			continue
+		password, signsIn, err := sources.Read(ctx, binding)
+		if err != nil {
+			return nil, err
 		}
-		resolved[binding.Name] = map[string]string{provider.PropertyPassword: password}
+		if signsIn {
+			resolved[binding.Name] = map[string]string{provider.PropertyPassword: password.Value}
+		}
 	}
 	return resolved, nil
-}
-
-func readSecretPassword(ctx context.Context, secrets secretValues, secretARN string) (string, error) {
-	out, err := secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: &secretARN})
-	if err != nil {
-		return "", err
-	}
-	if out.SecretString == nil {
-		return "", errors.New("the secret has no string value")
-	}
-	var parsed struct {
-		Password string `json:"password"`
-	}
-	if err := json.Unmarshal([]byte(*out.SecretString), &parsed); err != nil || parsed.Password == "" {
-		return "", errors.New("the secret holds no password")
-	}
-	return parsed.Password, nil
 }
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {

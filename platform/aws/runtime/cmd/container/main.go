@@ -33,6 +33,8 @@ const (
 
 var forwarded = []os.Signal{syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2}
 
+var keepLiveValues = func(ctx context.Context, values *live.Values) { values.Keep(ctx) }
+
 func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Environ()))
 }
@@ -75,6 +77,9 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if err != nil {
 		return fatal(err.Error())
 	}
+	keep, stopKeeping := context.WithCancel(ctx)
+	defer stopKeeping()
+	go keepLiveValues(keep, values)
 
 	var pinned queues.Topology
 	if worker != "" {
@@ -129,10 +134,6 @@ func run(ctx context.Context, command []string, environ []string) int {
 	})}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(ln) }()
-
-	keep, stopKeeping := context.WithCancel(ctx)
-	defer stopKeeping()
-	go values.Keep(keep)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, forwarded...)

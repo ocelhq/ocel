@@ -12,6 +12,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 )
@@ -634,6 +637,120 @@ func TestEveryCredentialTagsTheObjectsItPutsInTheAssetBucket(t *testing.T) {
 	for purpose, document := range credentialsOfTier(t, environment.TierProduction) {
 		if !reaches(t, document, "s3:PutObjectTagging", object) {
 			t.Errorf("the %s credential cannot tag %s, so a put that tags it edge-readable is refused", purpose, object)
+		}
+	}
+}
+
+type tierResource struct {
+	component, action string
+	arn               func(environment.Tier) string
+	request           func(environment.Tier) requestContext
+}
+
+const tierResourceAccount = "us-east-1:111122223333"
+
+func tierOf(purpose string) environment.Tier {
+	_, tier, _ := strings.Cut(purpose, " ")
+	return environment.Tier(tier)
+}
+
+func inCallerAccount(environment.Tier) requestContext {
+	return requestContext{"aws:ResourceAccount": "111122223333", "aws:PrincipalAccount": "111122223333"}
+}
+
+func tierCluster(tier environment.Tier) string {
+	return "arn:aws:rds:" + tierResourceAccount + ":cluster:" + iam.TierScopePrefix(tier) + "shop-prod-db-main-0123"
+}
+
+func tierResources() []tierResource {
+	const region = tierResourceAccount
+	fixed := func(arn string) func(environment.Tier) string { return func(environment.Tier) string { return arn } }
+	untagged := func(environment.Tier) requestContext { return nil }
+	signingKey := func(tier environment.Tier) string {
+		return "arn:aws:secretsmanager:" + region + ":secret:" + realtime.SigningKeySecret(defaultNamespace.SigningKeyRoot(), tier, "shop", "prod", "realtime--live") + "-AbCdEf"
+	}
+	bucket := func(tier environment.Tier) string {
+		return "arn:aws:s3:::" + iam.TierScopePrefix(tier) + "shop-prod-uploads-0123"
+	}
+	return []tierResource{
+		{"postgres", "rds:ModifyDBCluster", tierCluster, ocelRoleOf},
+		{"postgres", "rds:DeleteDBCluster", tierCluster, ocelRoleOf},
+		{"postgres", "rds-data:ExecuteStatement", tierCluster, ocelRoleOf},
+		{"postgres", "rds-db:connect", func(tier environment.Tier) string {
+			return "arn:aws:rds-db:" + region + ":dbuser:cluster-ABCDEFGHIJKL/" + postgres.AppRoleFor(tier)
+		}, untagged},
+		{"postgres", "secretsmanager:GetSecretValue", fixed("arn:aws:secretsmanager:" + region + ":secret:rds!cluster-0a1b2c3d-AbCdEf"), func(tier environment.Tier) requestContext {
+			return requestContext{"aws:ResourceTag/" + iam.ManagedSecretClusterTagKey: tierCluster(tier)}
+		}},
+		{"kv", "elasticache:DeleteReplicationGroup", fixed("arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"), ocelRoleOf},
+		{"kv", "elasticache:ModifyReplicationGroup", fixed("arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"), ocelRoleOf},
+		{"kv", "ssm:GetParameter", func(tier environment.Tier) string {
+			return "arn:aws:ssm:" + region + ":parameter" + kv.TokenParameter(defaultNamespace.KVTokenRoot(), tier, "shop", "prod", "kv--cache")
+		}, untagged},
+		{"realtime", "secretsmanager:GetSecretValue", signingKey, ocelRoleOf},
+		{"realtime", "secretsmanager:DeleteSecret", signingKey, ocelRoleOf},
+		{"realtime", "appsync:DeleteApi", fixed("arn:aws:appsync:" + region + ":apis/abcdefghijklmnopqrstuvwxyz"), ocelRoleOf},
+		{"bucket", "s3:DeleteBucket", bucket, inCallerAccount},
+		{"bucket", "s3:PutBucketNotification", bucket, inCallerAccount},
+		{"topic", "sqs:DeleteQueue", fixed("arn:aws:sqs:" + region + ":ocel-app-shop-prod-topic-orders"), ocelRoleOf},
+		{"topic", "sqs:SetQueueAttributes", fixed("arn:aws:sqs:" + region + ":ocel-app-shop-prod-topic-orders"), ocelRoleOf},
+		{"topic", "sns:DeleteTopic", fixed("arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"), ocelRoleOf},
+		{"topic", "sns:Subscribe", fixed("arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"), ocelRoleOf},
+		{"task", "scheduler:DeleteScheduleGroup", fixed("arn:aws:scheduler:" + region + ":schedule-group/ocel-app-shop-prod-heartbeat"), ocelRoleOf},
+	}
+}
+
+func TestADeployCredentialReachesTheResourcesOfOnlyItsOwnTier(t *testing.T) {
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		_, deployDoc := renderedCredentialsOf(t, tier)
+		for _, r := range tierResources() {
+			if !allows(t, deployDoc, r.action, r.arn(tier), r.request(tier)) {
+				t.Errorf("the %s deploy credential cannot %s on its own %s resource %s", tier, r.action, r.component, r.arn(tier))
+			}
+			if allows(t, deployDoc, r.action, r.arn(sibling), r.request(sibling)) {
+				t.Errorf("the %s deploy credential can %s on %s, a %s resource of the %s tier", tier, r.action, r.arn(sibling), r.component, sibling)
+			}
+		}
+	}
+}
+
+func TestADeployCredentialCreatesAndRetagsResourcesOnlyForItsOwnTier(t *testing.T) {
+	const region = tierResourceAccount
+	creating := func(tier environment.Tier) requestContext {
+		return requestContext{"aws:RequestTag/" + iam.ManagedByTagKey: iam.ManagedByTagValue, "aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
+	}
+	for _, tier := range bothTiers {
+		sibling := tier.Sibling()
+		_, deployDoc := renderedCredentialsOf(t, tier)
+		for _, c := range []struct{ action, arn string }{
+			{"rds:CreateDBCluster", tierCluster(tier)},
+			{"elasticache:CreateReplicationGroup", "arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"},
+			{"appsync:CreateApi", iam.AnyResource},
+			{"sqs:CreateQueue", "arn:aws:sqs:" + region + ":ocel-app-shop-prod-topic-orders"},
+			{"sns:CreateTopic", "arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"},
+			{"scheduler:CreateScheduleGroup", "arn:aws:scheduler:" + region + ":schedule-group/ocel-app-shop-prod-heartbeat"},
+		} {
+			if !allows(t, deployDoc, c.action, c.arn, creating(tier)) {
+				t.Errorf("the %s deploy credential cannot %s tagged for its own tier", tier, c.action)
+			}
+			if allows(t, deployDoc, c.action, c.arn, creating(sibling)) {
+				t.Errorf("the %s deploy credential can %s tagged for the %s tier", tier, c.action, sibling)
+			}
+		}
+		retag := ocelRoleOf(sibling)
+		maps.Copy(retag, creating(tier))
+		for _, c := range []struct{ action, arn string }{
+			{"rds:AddTagsToResource", tierCluster(sibling)},
+			{"elasticache:AddTagsToResource", "arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"},
+			{"sqs:TagQueue", "arn:aws:sqs:" + region + ":ocel-app-shop-prod-topic-orders"},
+			{"sns:TagResource", "arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"},
+			{"appsync:TagResource", "arn:aws:appsync:" + region + ":apis/abcdefghijklmnopqrstuvwxyz"},
+			{"scheduler:TagResource", "arn:aws:scheduler:" + region + ":schedule-group/ocel-app-shop-prod-heartbeat"},
+		} {
+			if allows(t, deployDoc, c.action, c.arn, retag) {
+				t.Errorf("the %s deploy credential can %s on %s, the %s tier's, retagging it as its own", tier, c.action, c.arn, sibling)
+			}
 		}
 	}
 }

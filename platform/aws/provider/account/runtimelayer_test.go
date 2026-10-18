@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -392,14 +393,12 @@ func seedTiersRuntimeLayers(t *testing.T, layers *fakeLayers, records *fakeRecor
 	return own, kept
 }
 
-func TestTeardownDeletesOnlyTheRuntimeLayersItsTierRecorded(t *testing.T) {
-	apis, _, _, _ := teardownFakes(t)
+func TestDeletingATiersRuntimeLayersDeletesOnlyTheOnesItRecorded(t *testing.T) {
 	layers, records := newFakeLayers(), newFakeRecords()
-	apis.Layers, apis.Records = layers, records.in
 	own, kept := seedTiersRuntimeLayers(t, layers, records)
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
-		t.Fatalf("Teardown: %v", err)
+	if err := DeleteRuntimeLayers(context.Background(), layers, records.in(fixtureStateTable), environment.TierProduction, progress.Discard()); err != nil {
+		t.Fatalf("DeleteRuntimeLayers: %v", err)
 	}
 	for _, name := range own {
 		for _, version := range []int64{1, 2} {
@@ -465,7 +464,7 @@ func TestADestroyPlanListsTheRuntimeLayerVersionsItsTierRecorded(t *testing.T) {
 	layers, records := newFakeLayers(), newFakeRecords()
 	own, _ := seedTiersRuntimeLayers(t, layers, records)
 
-	group, found := removeRuntimeLayers(context.Background(), layers, records.in(fixtureStateTable), defaultNamespace, environment.TierProduction)
+	group, found := PlanRuntimeLayersRemoval(context.Background(), layers, records.in(fixtureStateTable), defaultNamespace, environment.TierProduction)
 
 	if !found {
 		t.Fatal("the destroy plan shows no runtime layers, and the tier recorded two")

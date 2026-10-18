@@ -75,7 +75,7 @@ func TestTheDeployCredentialMakesMovesForwardAndRemovesItsTiersEnvSourceSync(t *
 			{"lambda:PutFunctionEventInvokeConfig", function + ":$LATEST", made},
 			{"lambda:DeleteFunction", function, made},
 			{"scheduler:CreateScheduleGroup", group, with(creating, nil)},
-			{"scheduler:DeleteScheduleGroup", group, nil},
+			{"scheduler:DeleteScheduleGroup", group, made},
 			{"scheduler:CreateSchedule", schedule, nil},
 			{"scheduler:UpdateSchedule", schedule, nil},
 			{"scheduler:DeleteSchedule", schedule, nil},

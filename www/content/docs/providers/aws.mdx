@@ -161,8 +161,8 @@ rest, in the default subnets.
   query after a quiet spell is not a resume; at 8 ACU it holds about 1,800 connections. Its floor
   costs about $44 a month in us-east-1. A preview runs 0 to 2 ACU and pauses when idle, costing
   nothing then.
-- **Apps sign in as `ocel_app`, by IAM.** The cluster enables IAM database authentication and
-  the Data API. A deploy creates the `ocel_app` login role once per cluster through the Data API,
+- **Apps sign in as `ocel_app_<tier>`, by IAM.** The role is `ocel_app_production` or `ocel_app_preview`, so a tier's deploy credential signs in to its own databases alone. The cluster enables IAM database authentication and
+  the Data API. A deploy creates that login role once per cluster through the Data API,
   under the cluster's RDS-managed master secret, and makes it the owner of the database and its
   `public` schema. An app's role is granted `rds-db:connect` on that user alone, and its runtime
   mints a 15-minute token with the app's own credentials at cold start and at each refresh of its
@@ -170,7 +170,7 @@ rest, in the default subnets.
   deploy credential, which creates the role, does.
 - **TLS** is `verify-full` against the RDS root certificates of the cluster's region.
 - **Port forwards.** A build that reaches its resources, or `ocel dev` and `ocel run` against a
-  deployed environment, forward the port through the tier's bastion and sign in as `ocel_app`
+  deployed environment, forward the port through the tier's bastion and sign in as `ocel_app_<tier>`
   with a token minted from your own credentials, which need `rds-db:connect` (the deploy
   credential has it).
 - **Production is protected.** A production cluster has deletion protection and keeps a final

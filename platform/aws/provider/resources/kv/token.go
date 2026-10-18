@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -29,12 +30,12 @@ type ParametersAPI interface {
 	GetParametersByPath(ctx context.Context, in *ssm.GetParametersByPathInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersByPathOutput, error)
 }
 
-func kvTokenPath(root, project, env string) string {
-	return strings.Join([]string{root, project, env}, "/")
+func kvTokenPath(root string, tier environment.Tier, project, env string) string {
+	return strings.Join([]string{root, string(tier), project, env}, "/")
 }
 
-func TokenParameter(root, project, env, logicalName string) string {
-	return kvTokenPath(root, project, env) + "/" + logicalName
+func TokenParameter(root string, tier environment.Tier, project, env, logicalName string) string {
+	return kvTokenPath(root, tier, project, env) + "/" + logicalName
 }
 
 func listKVTokens(ctx context.Context, params ParametersAPI, path string) ([]string, error) {

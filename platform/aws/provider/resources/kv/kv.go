@@ -61,7 +61,7 @@ func declare(ctx *pulumi.Context, at component.Stack, resource provider.Resource
 	if err != nil {
 		return err
 	}
-	args.AuthTokenParameter = TokenParameter(tokens.Root, at.Project, at.Env, resource.Name)
+	args.AuthTokenParameter = TokenParameter(tokens.Root, at.Tier(), at.Project, at.Env, resource.Name)
 	if at.Previewing {
 		args.AuthToken, err = previewKVToken(ctx.Context(), tokens.Parameters, args.AuthTokenParameter)
 	} else {
@@ -75,14 +75,14 @@ func declare(ctx *pulumi.Context, at component.Stack, resource provider.Resource
 }
 
 func sweep(ctx context.Context, at component.Stack, kept []provider.Resource, tokens Tokens) error {
-	listed, err := listKVTokens(ctx, tokens.Parameters, kvTokenPath(tokens.Root, at.Project, at.Env))
+	listed, err := listKVTokens(ctx, tokens.Parameters, kvTokenPath(tokens.Root, at.Tier(), at.Project, at.Env))
 	if err != nil {
 		return err
 	}
 	var undeclared []string
 	for _, name := range listed {
 		declared := slices.ContainsFunc(kept, func(resource provider.Resource) bool {
-			return TokenParameter(tokens.Root, at.Project, at.Env, resource.Name) == name
+			return TokenParameter(tokens.Root, at.Tier(), at.Project, at.Env, resource.Name) == name
 		})
 		if !declared {
 			undeclared = append(undeclared, name)

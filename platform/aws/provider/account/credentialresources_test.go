@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 )
@@ -33,7 +34,7 @@ func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppSc
 					}
 				}
 			case strings.HasPrefix(g.action, "secretsmanager:") && g.resource == iam.AppSecretARN:
-				if g.condition != conditionJSON(t, iam.ManagedByAnAppCluster()) {
+				if !slices.Contains([]string{conditionJSON(t, defaultNamespace.Scope(environment.TierProduction).ManagedByItsClusters()), conditionJSON(t, defaultNamespace.Scope(environment.TierPreview).ManagedByItsClusters())}, g.condition) {
 					t.Errorf("the %s credential grants %s on %s under %s, want the secret pinned to a cluster in the app scope through the tag RDS stamps on it, or the credential reads every Aurora master password in the account", purpose, g.action, g.resource, g.condition)
 				}
 			}
@@ -42,12 +43,12 @@ func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppSc
 }
 
 func TestEveryCredentialMayDeleteAClusterIntoAFinalSnapshotUnderTheAppScope(t *testing.T) {
-	want := grant{
-		action:    "rds:DeleteDBCluster",
-		resource:  "arn:aws:rds:*:*:cluster-snapshot:" + iam.AppScopePrefix + "*",
-		condition: conditionJSON(t, nil),
-	}
 	for purpose, document := range bothCredentials(t) {
+		want := grant{
+			action:    "rds:DeleteDBCluster",
+			resource:  "arn:aws:rds:*:*:cluster-snapshot:" + iam.TierScopePrefix(tierOf(purpose)) + "*",
+			condition: conditionJSON(t, nil),
+		}
 		if !grantsOf(t, document)[want] {
 			t.Errorf("the %s credential cannot delete a cluster into a final snapshot: RDS authorizes DeleteDBCluster on the snapshot it creates as well, and that snapshot carries no tag yet", purpose)
 		}
@@ -88,6 +89,7 @@ func TestEveryCredentialProvisionsKVStoresOnlyUnderTheAppScope(t *testing.T) {
 		granted := map[grant]bool{}
 		for g := range grantsOf(t, document) {
 			if strings.HasPrefix(g.action, "elasticache:") {
+				g.condition = conditionJSON(t, nil)
 				granted[g] = true
 			}
 		}
@@ -111,8 +113,8 @@ func TestEveryCredentialMayCreateElastiCachesLinkedRole(t *testing.T) {
 }
 
 func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatWay(t *testing.T) {
-	tokens := iam.ParameterARNPrefix + defaultNamespace.KVTokenRoot() + "/*"
 	for purpose, document := range bothCredentials(t) {
+		tokens := iam.ParameterARNPrefix + defaultNamespace.KVTokenRoot() + "/" + string(tierOf(purpose)) + "/*"
 		granted := grantsOf(t, document)
 		for _, action := range []string{"ssm:GetParameter", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter"} {
 			if !granted[grant{action: action, resource: tokens, condition: conditionJSON(t, nil)}] {
@@ -124,26 +126,29 @@ func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatW
 
 func TestEveryCredentialRunsEventAPIsOnlyOnWhatItTagged(t *testing.T) {
 	apis, namespaces := "arn:aws:appsync:*:*:apis/*", "arn:aws:appsync:*:*:apis/*/channelNamespace/*"
-	want := map[grant]bool{
-		{action: "appsync:CreateApi", resource: iam.AnyResource, condition: conditionJSON(t, iam.TaggedOnCreate())}:         true,
-		{action: "appsync:CreateChannelNamespace", resource: namespaces, condition: conditionJSON(t, iam.TaggedOnCreate())}: true,
-	}
-	for _, action := range []string{
-		"appsync:DeleteApi",
-		"appsync:DeleteChannelNamespace",
-		"appsync:GetApi",
-		"appsync:GetChannelNamespace",
-		"appsync:ListTagsForResource",
-		"appsync:TagResource",
-		"appsync:UntagResource",
-		"appsync:UpdateApi",
-		"appsync:UpdateChannelNamespace",
-	} {
-		for _, resource := range []string{apis, namespaces} {
-			want[grant{action: action, resource: resource, condition: conditionJSON(t, iam.TaggedByOcel())}] = true
-		}
-	}
 	for purpose, document := range bothCredentials(t) {
+		s := defaultNamespace.Scope(tierOf(purpose))
+		want := map[grant]bool{
+			{action: "appsync:CreateApi", resource: iam.AnyResource, condition: conditionJSON(t, s.TaggedOnCreateForItsTier())}:             true,
+			{action: "appsync:CreateChannelNamespace", resource: namespaces, condition: conditionJSON(t, s.TaggedOnCreateOnlyForItsTier())}: true,
+		}
+		for _, resource := range []string{apis, namespaces} {
+			want[grant{action: "appsync:TagResource", resource: resource, condition: conditionJSON(t, s.RetaggedByOcelOnlyAsItsTier())}] = true
+		}
+		for _, action := range []string{
+			"appsync:DeleteApi",
+			"appsync:DeleteChannelNamespace",
+			"appsync:GetApi",
+			"appsync:GetChannelNamespace",
+			"appsync:ListTagsForResource",
+			"appsync:UntagResource",
+			"appsync:UpdateApi",
+			"appsync:UpdateChannelNamespace",
+		} {
+			for _, resource := range []string{apis, namespaces} {
+				want[grant{action: action, resource: resource, condition: conditionJSON(t, s.TaggedByOcelForItsTier())}] = true
+			}
+		}
 		granted := map[grant]bool{}
 		for g := range grantsOf(t, document) {
 			if strings.HasPrefix(g.action, "appsync:") {
@@ -157,16 +162,18 @@ func TestEveryCredentialRunsEventAPIsOnlyOnWhatItTagged(t *testing.T) {
 }
 
 func TestEveryCredentialKeepsRealtimeSigningKeysUnderTheirRootAlone(t *testing.T) {
-	keys := "arn:aws:secretsmanager:*:*:secret:" + defaultNamespace.SigningKeyRoot() + "/*"
-	want := map[grant]bool{
-		{action: "secretsmanager:CreateSecret", resource: keys, condition: conditionJSON(t, iam.TaggedOnCreate())}: true,
-		{action: "secretsmanager:TagResource", resource: keys, condition: conditionJSON(t, iam.TaggedOnCreate())}:  true,
-		{action: "secretsmanager:ListSecrets", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:        true,
-	}
-	for _, action := range []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"} {
-		want[grant{action: action, resource: keys, condition: conditionJSON(t, iam.TaggedByOcel())}] = true
-	}
 	for purpose, document := range bothCredentials(t) {
+		tier := tierOf(purpose)
+		s := defaultNamespace.Scope(tier)
+		keys := "arn:aws:secretsmanager:*:*:secret:" + defaultNamespace.SigningKeyRoot() + "/" + string(tier) + "/*"
+		want := map[grant]bool{
+			{action: "secretsmanager:CreateSecret", resource: keys, condition: conditionJSON(t, s.TaggedOnCreateOnlyForItsTier())}: true,
+			{action: "secretsmanager:TagResource", resource: keys, condition: conditionJSON(t, s.TaggedOnCreateOnlyForItsTier())}:  true,
+			{action: "secretsmanager:ListSecrets", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                    true,
+		}
+		for _, action := range []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"} {
+			want[grant{action: action, resource: keys, condition: conditionJSON(t, s.TaggedByOcelForItsTier())}] = true
+		}
 		granted := map[grant]bool{}
 		for g := range grantsOf(t, document) {
 			if strings.HasPrefix(g.action, "secretsmanager:") && g.resource != iam.AppSecretARN {
@@ -196,7 +203,7 @@ func TestTheDeployCredentialCreatesTheAppRoleThroughTheDataAPIAndAnOperatorSigns
 		if !slices.Equal(execute, []string{iam.AppClusterARN}) {
 			t.Errorf("%s grants rds-data:ExecuteStatement on %v, want the clusters in the app scope alone: the deploy creates each cluster's app role through the Data API", name, execute)
 		}
-		if want := "arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRole; !slices.Equal(connect, []string{want}) {
+		if want := []string{"arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRoleFor(environment.TierProduction), "arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRoleFor(environment.TierPreview)}; len(connect) != 1 || !slices.Contains(want, connect[0]) {
 			t.Errorf("%s grants rds-db:connect on %v, want %s alone: a port forward signs in as the app role, never as the master user", name, connect, want)
 		}
 	}

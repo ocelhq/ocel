@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
@@ -121,4 +122,29 @@ func TestAWorkerContainerWithoutAQueueTopologyIsRefusedAtStart(t *testing.T) {
 	if code := r.await(t); code != 1 {
 		t.Errorf("run = %d, want 1: a worker with no queues to serve is a deploy that went wrong", code)
 	}
+}
+
+func TestAWorkerContainerKeepsItsLiveValuesFreshWhileItPolls(t *testing.T) {
+	kept := make(chan struct{}, 1)
+	was := keepLiveValues
+	keepLiveValues = func(ctx context.Context, _ *live.Values) {
+		kept <- struct{}{}
+		<-ctx.Done()
+	}
+	t.Cleanup(func() { keepLiveValues = was })
+	fakeConsumption(t, func(ctx context.Context, got consumed) error {
+		select {
+		case <-kept:
+		case <-time.After(10 * time.Second):
+			t.Error("the worker polled its queues and nothing keeps its live values fresh: a token minted at start expires after 15 minutes")
+		}
+		resp, err := http.Get(got.url + "/quit")
+		if err == nil {
+			resp.Body.Close()
+		}
+		<-ctx.Done()
+		return nil
+	})
+	r := launch(t, "serve", workerEnv(t)...)
+	r.await(t)
 }

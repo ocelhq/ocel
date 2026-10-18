@@ -58,11 +58,11 @@ func (m *nodeChild) cached() bool {
 	return m.cacheSource() != bytecode.SourceNone
 }
 
-func (m *nodeChild) refreshLiveValues(ctx context.Context) {
+func (m *nodeChild) freshenLiveValues(ctx context.Context) {
 	if m.live == nil {
 		return
 	}
-	m.live.Refresh(ctx)
+	m.live.Freshen(ctx)
 }
 
 func (m *nodeChild) endInvocation(ctx context.Context, requestID string, waiter <-chan struct{}, reached bool) {

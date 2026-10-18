@@ -9,6 +9,7 @@ import (
 	s3 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -50,6 +51,8 @@ type bucketArgs struct {
 	AllowedOrigins []string
 
 	ForceDestroy bool
+
+	Tier environment.Tier
 
 	Tags map[string]string
 
@@ -98,6 +101,11 @@ func translate(spec *provider.BucketSpec) bucketArgs {
 	}
 }
 
+func bucketPrefix(tier environment.Tier, at naming.Coordinate) string {
+	scope := iam.TierScopePrefix(tier)
+	return scope + at.PhysicalPrefix(maxS3BucketPrefixLen-len(scope))
+}
+
 func register(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, boundaryARN, rolePath string, sessions Sessions, completerCode payloads.Placement) error {
 	at := component.ResourceCoordinate(project, env, logicalName, naming.KindBucket)
 	if boundaryARN == "" {
@@ -105,7 +113,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args bucket
 	}
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
-		BucketPrefix: pulumi.String(component.AppPhysicalPrefix(at, maxS3BucketPrefixLen)),
+		BucketPrefix: pulumi.String(bucketPrefix(args.Tier, at)),
 		ForceDestroy: pulumi.Bool(args.ForceDestroy),
 		Tags:         component.Tags(at.Kind, "", args.Tags),
 	})

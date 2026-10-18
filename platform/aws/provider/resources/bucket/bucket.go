@@ -50,6 +50,7 @@ func declare(ctx *pulumi.Context, at component.Stack, declared []provider.Resour
 	sessions := NewSessions(at.Project, at.Env, at.StateTableARN)
 	for _, resource := range declared {
 		args := translate(resource.Bucket)
+		args.Tier = at.Tier()
 		args.Tags = at.Transforms.TagsFor(transformKind, resource.Name)
 		args.PatchedCORS = at.Transforms.Patches(transformKind, resource.Name, "cors")
 		if err := register(ctx, at.Project, at.Env, resource.Name, args, at.StateTable, at.AppBoundaryARN, at.AppRolePath, sessions, completer); err != nil {

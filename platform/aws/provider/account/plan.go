@@ -105,11 +105,6 @@ func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, re
 
 	groups := make([]provider.ChangeGroup, 0, len(order)+2)
 	for _, part := range append(order, "") {
-		if part == "" {
-			if group, found := removeRuntimeLayers(ctx, layers, records(read.Deployed.StateTable), read.ns, read.tier); found {
-				groups = append(groups, group)
-			}
-		}
 		name := coreStack
 		if part != "" {
 			name = read.ns.PartStackName(part, read.tier)
@@ -157,7 +152,7 @@ func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, layers LayerTeard
 	var groups []provider.ChangeGroup
 	for _, group := range left {
 		if group.Name == coreStack {
-			if runtime, found := removeRuntimeLayers(ctx, layers, records(read.Deployed.StateTable), read.ns, read.tier); found {
+			if runtime, found := PlanRuntimeLayersRemoval(ctx, layers, records(read.Deployed.StateTable), read.ns, read.tier); found {
 				groups = append(groups, runtime)
 			}
 		}

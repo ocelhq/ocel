@@ -95,11 +95,12 @@ func runWorker(ctx context.Context, worker string, served buildoutput.FunctionCo
 			fmt.Fprintf(os.Stderr, "ocel: runtime loop error: %v\n", err)
 			os.Exit(1)
 		}
-		answerWorkerInvocation(ctx, rt, inv, bound.engine)
+		answerWorkerInvocation(ctx, rt, inv, bound.engine, values)
 	}
 }
 
-func answerWorkerInvocation(ctx context.Context, rt *runtimeClient, inv *invocation, engine *tasks.Engine) {
+func answerWorkerInvocation(ctx context.Context, rt *runtimeClient, inv *invocation, engine *tasks.Engine, values liveValues) {
+	values.Freshen(ctx)
 	if inv.deadlineMs > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, time.UnixMilli(inv.deadlineMs))

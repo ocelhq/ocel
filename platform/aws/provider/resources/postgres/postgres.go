@@ -28,8 +28,8 @@ func New(clusters ClustersAPI) component.Component {
 			}
 			return collectBinding(at.Region, declared.Name, fields)
 		},
-		WidestGrants: func(component.Stack, provider.Resource) []*variablestorev1.Grant {
-			return grants(widestDBUserARN)
+		WidestGrants: func(at component.Stack, _ provider.Resource) []*variablestorev1.Grant {
+			return grants(widestDBUserARN(at.Tier()))
 		},
 		Credential: credential,
 		Teardown: &component.Teardown{

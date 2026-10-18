@@ -8,29 +8,34 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
+	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
 type storeSource struct {
 	reader    variablestore.EnvironmentReader
-	passwords passwordSources
+	passwords signin.Sources
 	cells     []variablestore.Cell
 	bindings  []live.Binding
+	minted    atomic.Bool
 
 	mu       sync.Mutex
 	reported map[string]int64
+}
+
+func (f *storeSource) RenewWithin() (time.Duration, bool) {
+	return signin.TokenRenewal, f.minted.Load()
 }
 
 func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
@@ -46,9 +51,11 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
 	values := live.MergeBindings(resolved, f.bindings, records)
-	if err := currentPasswords(ctx, f.passwords, f.bindings, records, values); err != nil {
+	minted, err := currentPasswords(ctx, f.passwords, f.bindings, records, values)
+	if err != nil {
 		return nil, err
 	}
+	f.minted.Store(minted)
 	return values, nil
 }
 
@@ -138,14 +145,9 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 			Scope:       variablestore.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},
-		passwords: passwordSources{
-			secrets: secretsmanager.NewFromConfig(cfg),
-			mintToken: func(ctx context.Context, endpoint, username string) (string, error) {
-				return auth.BuildAuthToken(ctx, endpoint, cfg.Region, username, cfg.Credentials)
-			},
-		},
-		cells:    manifestCells(manifest),
-		bindings: manifest.Bindings,
+		passwords: signin.SourcesFor(cfg),
+		cells:     manifestCells(manifest),
+		bindings:  manifest.Bindings,
 	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil), nil
 }
 

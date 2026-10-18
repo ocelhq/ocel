@@ -7,12 +7,12 @@ func credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"secretsmanager:CreateSecret", "secretsmanager:TagResource"},
 			Resources: []string{s.SigningKeys},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
 			Actions:   []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"},
 			Resources: []string{s.SigningKeys},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"secretsmanager:ListSecrets"},
@@ -21,12 +21,17 @@ func credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"appsync:CreateApi"},
 			Resources: []string{iam.AnyResource},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions:   []string{"appsync:CreateChannelNamespace"},
 			Resources: []string{iam.AppChannelNamespaceARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateOnlyForItsTier(),
+		},
+		{
+			Actions:   []string{"appsync:TagResource"},
+			Resources: []string{iam.AppEventAPIARN, iam.AppChannelNamespaceARN},
+			Condition: s.RetaggedByOcelOnlyAsItsTier(),
 		},
 		{
 			Actions: []string{
@@ -35,13 +40,12 @@ func credential(s iam.Scope) []iam.Statement {
 				"appsync:GetApi",
 				"appsync:GetChannelNamespace",
 				"appsync:ListTagsForResource",
-				"appsync:TagResource",
 				"appsync:UntagResource",
 				"appsync:UpdateApi",
 				"appsync:UpdateChannelNamespace",
 			},
 			Resources: []string{iam.AppEventAPIARN, iam.AppChannelNamespaceARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 	}
 }

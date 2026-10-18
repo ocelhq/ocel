@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 const (
@@ -44,6 +45,7 @@ type clusterArgs struct {
 	PubliclyAccessible   bool
 	Protected            bool
 
+	Tier environment.Tier
 	Tags map[string]string
 }
 
@@ -75,21 +77,23 @@ func translate(spec *provider.PostgresSpec, tier environment.Tier) clusterArgs {
 		DatabaseName:         postgresDatabaseName,
 		ManageMasterPassword: true,
 		PubliclyAccessible:   false,
+		Tier:                 tier,
 	}
 }
 
-func finalSnapshotIdentifier(at naming.Coordinate, protected bool, now time.Time) pulumi.StringPtrInput {
+func finalSnapshotIdentifier(tier environment.Tier, at naming.Coordinate, protected bool, now time.Time) pulumi.StringPtrInput {
 	if !protected {
 		return nil
 	}
-	return pulumi.String(rdsIdentifierPrefix(at, "final") + now.UTC().Format(finalSnapshotTimeLayout))
+	return pulumi.String(rdsIdentifierPrefix(tier, at, "final") + now.UTC().Format(finalSnapshotTimeLayout))
 }
 
-func rdsIdentifierPrefix(at naming.Coordinate, role string) string {
+func rdsIdentifierPrefix(tier environment.Tier, at naming.Coordinate, role string) string {
 	ident := at
 	ident.Project = naming.SanitizeAlpha(at.Project)
 	ident.Name = naming.Join(naming.WordSeparator, at.Name, role)
-	return component.AppPhysicalPrefix(ident, maxRDSIdentifierPrefixLen)
+	scope := iam.TierScopePrefix(tier)
+	return scope + ident.PhysicalPrefix(maxRDSIdentifierPrefixLen-len(scope))
 }
 
 func register(ctx *pulumi.Context, project, env, logicalName string, args clusterArgs, network component.Network) error {
@@ -117,7 +121,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 	}
 
 	subnetGroup, err := rds.NewSubnetGroup(ctx, naming.ResourceID(at.Kind, at.Name, "subnet-group"), &rds.SubnetGroupArgs{
-		NamePrefix:  pulumi.String(rdsIdentifierPrefix(at, "subnets")),
+		NamePrefix:  pulumi.String(rdsIdentifierPrefix(args.Tier, at, "subnets")),
 		Description: component.CapDescription(at.Description("subnet group placing the "+at.Name+" database in the VPC's subnets"), component.MaxSubnetGroupDescriptionLen),
 		SubnetIds:   pulumi.ToStringArray(network.SubnetIDs),
 		Tags:        component.Tags(at.Kind, "", args.Tags),
@@ -127,7 +131,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 	}
 
 	cluster, err := rds.NewCluster(ctx, naming.ResourceID(at.Kind, at.Name), &rds.ClusterArgs{
-		ClusterIdentifierPrefix:          pulumi.String(rdsIdentifierPrefix(at, "")),
+		ClusterIdentifierPrefix:          pulumi.String(rdsIdentifierPrefix(args.Tier, at, "")),
 		Engine:                           pulumi.String(args.Engine),
 		EngineMode:                       pulumi.String(args.EngineMode),
 		EngineVersion:                    pulumi.String(args.EngineVersion),
@@ -140,7 +144,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 		VpcSecurityGroupIds:              pulumi.StringArray{securityGroup.ID()},
 		DeletionProtection:               pulumi.Bool(args.Protected),
 		SkipFinalSnapshot:                pulumi.Bool(!args.Protected),
-		FinalSnapshotIdentifier:          finalSnapshotIdentifier(at, args.Protected, time.Now()),
+		FinalSnapshotIdentifier:          finalSnapshotIdentifier(args.Tier, at, args.Protected, time.Now()),
 		Serverlessv2ScalingConfiguration: &rds.ClusterServerlessv2ScalingConfigurationArgs{
 			MinCapacity: pulumi.Float64(args.MinCapacity),
 			MaxCapacity: pulumi.Float64(args.MaxCapacity),
@@ -152,7 +156,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 	}
 
 	instance, err := rds.NewClusterInstance(ctx, naming.ResourceID(at.Kind, at.Name, "instance"), &rds.ClusterInstanceArgs{
-		IdentifierPrefix:   pulumi.String(rdsIdentifierPrefix(at, "instance")),
+		IdentifierPrefix:   pulumi.String(rdsIdentifierPrefix(args.Tier, at, "instance")),
 		ClusterIdentifier:  cluster.ID(),
 		Engine:             rds.EngineType(args.Engine),
 		EngineVersion:      cluster.EngineVersion,
@@ -175,7 +179,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 		"secret":   secretARN,
 		"database": pulumi.String(args.DatabaseName),
 		"master":   cluster.MasterUsername,
-		"role":     pulumi.String(AppRole),
+		"role":     pulumi.String(AppRoleFor(args.Tier)),
 	}, &appRoleState{}, pulumi.DependsOn([]pulumi.Resource{instance})); err != nil {
 		return err
 	}
@@ -183,7 +187,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args cluste
 		component.OutputKeyHost: cluster.Endpoint,
 		component.OutputKeyPort: cluster.Port,
 		OutputKeyDatabase:       pulumi.String(args.DatabaseName),
-		OutputKeyUsername:       pulumi.String(AppRole),
+		OutputKeyUsername:       pulumi.String(AppRoleFor(args.Tier)),
 		OutputKeyClusterARN:     cluster.Arn,
 		OutputKeyResourceID:     cluster.ClusterResourceId,
 

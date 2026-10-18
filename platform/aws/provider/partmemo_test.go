@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
@@ -83,6 +84,8 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 	part := tier.Recorded(p.partRecords(), tier.RecordedSpec{
 		Name:    imageoptimizer.Part,
 		Summary: imageoptimizer.Summary,
+		Shape:   func(environment.Tier) []pricing.Shaped { return nil },
+		Remove:  func(context.Context, environment.Tier, []provider.PartResource) error { return nil },
 		Work: func(context.Context, environment.Tier) (tier.Work, error) {
 			return tier.Work{Digest: digest, Make: func(context.Context, []provider.PartResource, bool) ([]provider.PartResource, error) {
 				t.Error("the part was made again, though its record is current for this build")

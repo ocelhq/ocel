@@ -2,18 +2,22 @@ package task
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func credential(iam.Scope) []iam.Statement {
+func credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
+			Actions:   []string{"scheduler:CreateScheduleGroup", "scheduler:TagResource"},
+			Resources: []string{iam.AppScheduleGroupARN},
+			Condition: s.TaggedOnCreateOnlyForItsTier(),
+		},
+		{
 			Actions: []string{
-				"scheduler:CreateScheduleGroup",
 				"scheduler:DeleteScheduleGroup",
 				"scheduler:GetScheduleGroup",
 				"scheduler:ListTagsForResource",
-				"scheduler:TagResource",
 				"scheduler:UntagResource",
 			},
 			Resources: []string{iam.AppScheduleGroupARN},
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -23,6 +27,7 @@ func credential(iam.Scope) []iam.Statement {
 				"scheduler:UpdateSchedule",
 			},
 			Resources: []string{iam.AppScheduleARN},
+			Condition: s.TaggedOnlyAsItsTier(),
 		},
 	}
 }

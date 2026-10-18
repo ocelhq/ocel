@@ -88,7 +88,7 @@ type liveValues interface {
 	Failure() error
 	Abandoned() <-chan struct{}
 	Attach(sink io.Writer)
-	Refresh(ctx context.Context)
+	Freshen(ctx context.Context)
 	Env() []string
 	Value(key string) string
 	Bindings() []live.Binding
@@ -118,7 +118,12 @@ type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Wri
 func bringUp(ctx context.Context, served buildoutput.FunctionConfig, values liveValues, prefetch <-chan error, env []string, start time.Time, prime primer) (child, error) {
 	if executable(served) {
 		return bringUpChild(func() (*execChild, error) {
-			return startExecutable(served.Command, containerimage.Port, env, spawnBudget(start))
+			child, err := startExecutable(served.Command, containerimage.Port, env, spawnBudget(start))
+			if err != nil {
+				return nil, err
+			}
+			child.live = values
+			return child, nil
 		}, values, prefetch)
 	}
 	return bringUpNodeWithBytecode(ctx, startNode(entrypointPath(served)), values, prefetch, env, start, prime)
@@ -203,10 +208,8 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 		return err
 	}
 
+	c.freshenLiveValues(ctx)
 	controlled, _ := c.(controlledChild)
-	if controlled != nil {
-		controlled.refreshLiveValues(ctx)
-	}
 
 	ctx = lambdacontext.NewContext(ctx, inv.lc)
 	rw, err := rt.startResponse(ctx, inv.lc.AwsRequestID)
@@ -265,6 +268,7 @@ func answerBefore(ctx context.Context) (context.Context, context.CancelFunc) {
 type child interface {
 	endpoint() upstream
 	awaitReady(ctx context.Context) error
+	freshenLiveValues(ctx context.Context)
 }
 
 const maxInvocationBudget = 15 * time.Minute
@@ -291,7 +295,6 @@ func awaitChildReady(ctx context.Context, ready <-chan struct{}) error {
 }
 
 type controlledChild interface {
-	refreshLiveValues(ctx context.Context)
 	beginInvocation(requestID string) <-chan struct{}
 	endInvocation(ctx context.Context, requestID string, waiter <-chan struct{}, reached bool)
 	answerWarmInvocation(ctx context.Context, rw *responseWriter) error

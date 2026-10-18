@@ -22,6 +22,14 @@ type execChild struct {
 	upstream
 
 	ready chan struct{}
+	live  liveValues
+}
+
+func (c *execChild) freshenLiveValues(ctx context.Context) {
+	if c.live == nil {
+		return
+	}
+	c.live.Freshen(ctx)
 }
 
 func startExecutable(command []string, port int, extraEnv []string, budget time.Duration) (*execChild, error) {
