@@ -1,4 +1,4 @@
-package terminal
+package prompt
 
 import (
 	"bytes"
@@ -78,7 +78,7 @@ func TestAnAttendedSelectMovesWithTheArrowKeysAndTakesEnter(t *testing.T) {
 	ptmx, tty, screen := aPromptTerminal(t)
 	typeOnSight(t, ptmx, screen, "Where should shop deploy?", "\x1b[B\r")
 
-	chosen, answered, err := NewPrompt(tty, tty).Select(withinSeconds(t), "Where should shop deploy?", []Option{{Name: "aws"}, {Name: "gcp"}, {Name: "vps"}})
+	chosen, answered, err := New(tty, tty).Select(withinSeconds(t), "Where should shop deploy?", []Option{{Name: "aws"}, {Name: "gcp"}, {Name: "vps"}})
 	if err != nil || !answered || chosen != "gcp" {
 		t.Errorf("Select() = %q, %t, %v; want gcp, one down from the first", chosen, answered, err)
 	}
@@ -88,7 +88,7 @@ func TestAnAttendedInputTakesWhatIsTyped(t *testing.T) {
 	ptmx, tty, screen := aPromptTerminal(t)
 	typeOnSight(t, ptmx, screen, "ssh", "203.0.113.7\r")
 
-	typed, answered, err := NewPrompt(tty, tty).Input(withinSeconds(t), "ssh", "The machine to deploy onto")
+	typed, answered, err := New(tty, tty).Input(withinSeconds(t), "ssh", "The machine to deploy onto")
 	if err != nil || !answered || typed != "203.0.113.7" {
 		t.Errorf("Input() = %q, %t, %v; want the address typed", typed, answered, err)
 	}
@@ -98,7 +98,7 @@ func TestAnAttendedAwaitEnterGoesOnAtEnter(t *testing.T) {
 	ptmx, tty, screen := aPromptTerminal(t)
 	typeOnSight(t, ptmx, screen, "Press Enter", "\r")
 
-	saved, err := NewPrompt(tty, tty).AwaitEnter(withinSeconds(t), "Press Enter once it's saved (or n to stop)")
+	saved, err := New(tty, tty).AwaitEnter(withinSeconds(t), "Press Enter once it's saved (or n to stop)")
 	if err != nil || !saved {
 		t.Errorf("AwaitEnter() = %t, %v; want Enter to go on", saved, err)
 	}

@@ -10,9 +10,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
@@ -29,7 +29,7 @@ func runSetup(ctx context.Context, policy consent.Policy, span *run.Span, missin
 	err := span.Ask(func() (err error) {
 		snippet := hostnameSnippet(noHostname.ConfigPath, noHostname.Slug+".example.com")
 		fmt.Fprintf(policy.Out, "Add this to %s:\n\n    %s\n\n", filepath.Base(noHostname.ConfigPath), strings.ReplaceAll(snippet, "\n", "\n    "))
-		saved, err = terminal.NewPrompt(policy.Out, policy.In).AwaitEnter(ctx, "Press Enter once it's saved (or n to stop)")
+		saved, err = prompt.New(policy.Out, policy.In).AwaitEnter(ctx, "Press Enter once it's saved (or n to stop)")
 		return err
 	})
 	if err != nil {

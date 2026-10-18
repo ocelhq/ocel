@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/english"
-	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
@@ -72,9 +72,9 @@ func refuseMissingOptions(provider string, settings []providerSetting) error {
 	)
 }
 
-func askMissingOptions(ctx context.Context, prompt terminal.Prompt, provider string, settings []providerSetting) ([]providerSetting, bool, error) {
+func askMissingOptions(ctx context.Context, user prompt.Prompt, provider string, settings []providerSetting) ([]providerSetting, bool, error) {
 	for _, required := range findMissingOptions(provider, settings) {
-		value, answered, err := prompt.Input(ctx, required.Name, required.Doc)
+		value, answered, err := user.Input(ctx, required.Name, required.Doc)
 		if err != nil || !answered {
 			return settings, false, err
 		}

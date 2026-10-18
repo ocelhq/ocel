@@ -48,6 +48,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/skill"
@@ -276,7 +277,7 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 		Presentation:    set.presentation,
 		StdinIsTerminal: func(in io.Reader) bool { return terminal.IsTerminal(in) },
 		IsJSON:          isJSON,
-		Questions:       providerprocess.Questions{Prompt: terminal.NewPrompt(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
+		Questions:       providerprocess.Questions{Prompt: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
 		ConfigPath:      set.explicitConfigPath,
 
 		Console: deployreport.Console{LoadCredentials: console.LoadCredentials},
