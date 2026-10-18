@@ -134,10 +134,13 @@ func (t Tasks) debounce(ctx context.Context, tx pgx.Tx, record provider.Expiring
 		return "", err
 	}
 	if err == nil && run.status == provider.RunDelayed && run.message != nil {
-		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET due_at = $2, expires_at = expires_at + ($2 - due_at), revision = `+newRevisionSQL+` WHERE execution = $1`, pending, record.ExpiresAt); err != nil {
-			return "", err
-		}
-		if _, err := tx.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint, $3::timestamptz)", run.queue, *run.message, record.ExpiresAt); err != nil {
+		if _, err := moveRun(ctx, tx, pending, runMove{
+			from:    []provider.RunStatus{provider.RunDelayed},
+			to:      provider.RunDelayed,
+			set:     "due_at = @visible_at::timestamptz, expires_at = expires_at + (@visible_at::timestamptz - due_at)",
+			args:    pgx.NamedArgs{"visible_at": record.ExpiresAt},
+			message: delayMessage,
+		}); err != nil {
 			return "", err
 		}
 		_, err := tx.Exec(ctx, `UPDATE ocel.records SET expires_at = $4 WHERE purpose = $1 AND topic = $2 AND key = $3`,

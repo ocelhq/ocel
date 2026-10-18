@@ -16,10 +16,31 @@ import (
 	"github.com/ocelhq/ocel/pkg/runs"
 )
 
-const (
-	newRevisionSQL   = "md5(random()::text || clock_timestamp()::text)"
-	stagedPayloadSQL = "(SELECT value FROM ocel.records WHERE purpose = 'staged-payload' AND topic = ocel.runs.topic AND key = ocel.runs.message_id)"
+var (
+	claimMove = runMove{
+		from:  unfinishedStatuses,
+		to:    provider.RunExecuting,
+		where: "(expires_at IS NULL OR expires_at > clock_timestamp() OR attempts > 0) AND attempts < max_attempts AND (due_at IS NULL OR due_at <= clock_timestamp())",
+		set:   "attempts = attempts + 1, error = '', started_at = COALESCE(started_at, clock_timestamp())",
+	}
+	exhaustMove = guarded(settleMove(provider.RunFailed, nil, "its last attempt was cut off before the worker answered, and it has no attempts left"), "attempts >= max_attempts")
+	expireMove  = runMove{
+		from:    waitingStatuses,
+		to:      provider.RunExpired,
+		where:   "attempts = 0 AND expires_at <= clock_timestamp()",
+		set:     "finished_at = clock_timestamp()",
+		message: deleteMessage,
+	}
 )
+
+func guarded(m runMove, where string) runMove {
+	m.where = where
+	return m
+}
+
+func stagedPayloadOf(run string) string {
+	return "(SELECT value FROM ocel.records WHERE purpose = 'staged-payload' AND topic = " + run + ".topic AND key = " + run + ".message_id)"
+}
 
 type claim struct {
 	msg              message
@@ -35,7 +56,11 @@ type claim struct {
 func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployedConsumer, worker Worker, messages []message) {
 	var claims []claim
 	for _, msg := range messages {
-		claimed, ok, err := e.claim(ctx, loop, msg)
+		claimed, ok, err := e.claim(ctx, msg)
+		if err == nil && !ok {
+			loop.drop(msg.id)
+			err = e.settleUnclaimable(ctx, loop.name, msg)
+		}
 		if err != nil {
 			if ctx.Err() == nil {
 				slog.Warn("claim a run", "queue", loop.name, "execution", msg.body.Execution, "error", err)
@@ -68,7 +93,7 @@ func (e *Engine) deliver(ctx context.Context, loop *queueLoop, deployed deployed
 	took := time.Since(posted)
 	for _, claimed := range claims {
 		loop.drop(claimed.msg.id)
-		status, err := e.finish(ctx, loop, deployed, claimed, res)
+		status, err := e.finish(ctx, deployed, claimed, res)
 		if err != nil {
 			if ctx.Err() == nil {
 				slog.Warn("record an attempt's outcome", "queue", loop.name, "execution", claimed.execution, "error", err)
@@ -112,19 +137,15 @@ func (e *Engine) stopInFlight(execution string) {
 	}
 }
 
-func (e *Engine) claim(ctx context.Context, loop *queueLoop, msg message) (claim, bool, error) {
+func (e *Engine) claim(ctx context.Context, msg message) (claim, bool, error) {
 	claimed := claim{msg: msg, execution: msg.body.Execution}
 	var first *time.Time
-	err := e.pool.QueryRow(ctx, `
-		UPDATE ocel.runs SET status = 'executing', attempts = attempts + 1, error = '',
-			started_at = COALESCE(started_at, clock_timestamp()), revision = `+newRevisionSQL+`
-		WHERE execution = $1 AND status IN ('queued', 'delayed', 'executing')
-			AND (expires_at IS NULL OR expires_at > clock_timestamp() OR attempts > 0)
-		RETURNING message_id, published_at, attempts, max_attempts, started_at, COALESCE(payload, `+stagedPayloadSQL+`)`,
-		claimed.execution,
-	).Scan(&claimed.messageID, &claimed.publishedAt, &claimed.attempt, &claimed.maxAttempts, &first, &claimed.payload)
+	var kept any
+	query, args := claimMove.of(claimed.execution).statement("message_id, published_at, attempts, max_attempts, started_at, COALESCE(payload, " + stagedPayloadOf("moved") + ")")
+	err := e.pool.QueryRow(ctx, query, args).
+		Scan(&kept, &claimed.messageID, &claimed.publishedAt, &claimed.attempt, &claimed.maxAttempts, &first, &claimed.payload)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return claim{}, false, e.discard(ctx, loop.name, msg)
+		return claim{}, false, nil
 	}
 	if err != nil {
 		return claim{}, false, err
@@ -133,17 +154,22 @@ func (e *Engine) claim(ctx context.Context, loop *queueLoop, msg message) (claim
 	return claimed, true, nil
 }
 
-func (e *Engine) discard(ctx context.Context, queue string, msg message) error {
-	return e.inTx(ctx, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `
-			UPDATE ocel.runs SET status = 'expired', finished_at = clock_timestamp(), revision = `+newRevisionSQL+`
-			WHERE execution = $1 AND status IN ('queued', 'delayed') AND attempts = 0 AND expires_at <= clock_timestamp()`,
-			msg.body.Execution); err != nil {
+func (e *Engine) settleUnclaimable(ctx context.Context, queue string, msg message) error {
+	for _, settled := range []runMove{expireMove, exhaustMove} {
+		moved, err := moveRun(ctx, e.pool, msg.body.Execution, settled)
+		if err != nil || moved {
 			return err
 		}
-		_, err := tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, msg.id)
+	}
+	var hidden bool
+	err := e.pool.QueryRow(ctx, `SELECT count(*) > 0 FROM ocel.runs, pgmq.set_vt($1, $2::bigint, due_at)
+		WHERE execution = $3 AND status = ANY($4) AND due_at > clock_timestamp()`,
+		queue, msg.id, msg.body.Execution, statusNames(waitingStatuses)).Scan(&hidden)
+	if err != nil || hidden {
 		return err
-	})
+	}
+	_, err = e.pool.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, msg.id)
+	return err
 }
 
 func envelopeOf(deployed deployedConsumer, claims []claim, batch bool) *topicv1.Envelope {
@@ -180,48 +206,55 @@ func attemptOf(claimed claim) *topicv1.Attempt {
 	return &topicv1.Attempt{Number: int32(claimed.attempt), Of: int32(claimed.maxAttempts), FirstAttemptedAt: runs.TimestampOf(claimed.firstAttemptedAt)}
 }
 
-func (e *Engine) finish(ctx context.Context, loop *queueLoop, deployed deployedConsumer, claimed claim, res envelope.Result) (provider.RunStatus, error) {
+func (e *Engine) finish(ctx context.Context, deployed deployedConsumer, claimed claim, res envelope.Result) (provider.RunStatus, error) {
+	move := moveAfter(deployed, claimed, res)
+	if move.to == "" {
+		return "", nil
+	}
+	moved, err := moveRun(ctx, e.pool, claimed.execution, move)
+	if err != nil || !moved {
+		return "", err
+	}
+	return move.to, nil
+}
+
+func moveAfter(deployed deployedConsumer, claimed claim, res envelope.Result) runMove {
 	switch res.Outcome {
 	case envelope.Canceled, envelope.Interrupted:
-		return "", nil
+		return runMove{}
 	case envelope.Succeeded:
-		return provider.RunCompleted, e.settle(ctx, loop.name, claimed, provider.RunCompleted, res.Output, "")
+		return settleMove(provider.RunCompleted, res.Output, "")
 	case envelope.Aborted, envelope.Refused:
-		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.Reason)
+		return settleMove(provider.RunFailed, nil, res.Reason)
 	case envelope.TimedOut:
 		if isTask(deployed.topic) {
-			return provider.RunTimedOut, e.settle(ctx, loop.name, claimed, provider.RunTimedOut, nil, res.Reason)
+			return settleMove(provider.RunTimedOut, nil, res.Reason)
 		}
 	}
 	if claimed.attempt >= claimed.maxAttempts {
-		return provider.RunFailed, e.settle(ctx, loop.name, claimed, provider.RunFailed, nil, res.Reason)
+		return settleMove(provider.RunFailed, nil, res.Reason)
 	}
-	retryAt := time.Now().Add(runs.Backoff(retryPolicyOf(deployed), claimed.attempt, runs.Jitter()))
-	return provider.RunQueued, e.inTx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', error = $2, revision = `+newRevisionSQL+`
-			WHERE execution = $1 AND status = 'executing'`, claimed.execution, res.Reason)
-		if err != nil || tag.RowsAffected() == 0 {
-			return err
-		}
-		_, err = tx.Exec(ctx, "SELECT pgmq.set_vt($1, $2::bigint, $3::timestamptz)", loop.name, claimed.msg.id, retryAt)
-		return err
-	})
+	return runMove{
+		from:    []provider.RunStatus{provider.RunExecuting},
+		to:      provider.RunQueued,
+		set:     "error = @reason",
+		args:    pgx.NamedArgs{"reason": res.Reason, "visible_at": time.Now().Add(runs.Backoff(retryPolicyOf(deployed), claimed.attempt, runs.Jitter()))},
+		message: delayMessage,
+	}
 }
 
-func (e *Engine) settle(ctx context.Context, queue string, claimed claim, status provider.RunStatus, output json.RawMessage, reason string) error {
-	return e.inTx(ctx, func(tx pgx.Tx) error {
-		payload := "payload"
-		if status != provider.RunCompleted {
-			payload = "COALESCE(payload, " + stagedPayloadSQL + ")"
-		}
-		if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = $2, output = $3, error = $4, payload = `+payload+`,
-			finished_at = clock_timestamp(), revision = `+newRevisionSQL+`
-			WHERE execution = $1 AND status = 'executing'`, claimed.execution, status, jsonOrNull(output), reason); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, "SELECT pgmq.delete($1, $2::bigint)", queue, claimed.msg.id)
-		return err
-	})
+func settleMove(status provider.RunStatus, output json.RawMessage, reason string) runMove {
+	payload := "payload"
+	if status != provider.RunCompleted {
+		payload = "COALESCE(payload, " + stagedPayloadOf("ocel.runs") + ")"
+	}
+	return runMove{
+		from:    []provider.RunStatus{provider.RunExecuting},
+		to:      status,
+		set:     "output = @output, error = @reason, payload = " + payload + ", finished_at = clock_timestamp()",
+		args:    pgx.NamedArgs{"output": jsonOrNull(output), "reason": reason},
+		message: deleteMessage,
+	}
 }
 
 func clientFor(worker Worker) *http.Client {

@@ -168,9 +168,12 @@ func (t Topics) RedriveDeadLetters(ctx context.Context, req *topicv1.RedriveDead
 			if err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, `UPDATE ocel.runs SET status = 'queued', attempts = 0, error = '', due_at = $2,
-				started_at = NULL, finished_at = NULL, queue_message = $3, revision = `+newRevisionSQL+` WHERE execution = $1`,
-				letter.execution, now, msgID); err != nil {
+			if _, err := moveRun(ctx, tx, letter.execution, runMove{
+				from: []provider.RunStatus{provider.RunFailed},
+				to:   provider.RunQueued,
+				set:  "attempts = 0, error = '', due_at = @due, started_at = NULL, finished_at = NULL, queue_message = @message",
+				args: pgx.NamedArgs{"due": now, "message": msgID},
+			}); err != nil {
 				return err
 			}
 		}

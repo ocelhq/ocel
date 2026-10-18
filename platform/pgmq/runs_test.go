@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/pkg/envelope"
 	taskv1 "github.com/ocelhq/ocel/pkg/proto/app/task/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -259,4 +260,97 @@ func TestAReplayKeepsTheTTLItsTriggerSet(t *testing.T) {
 		t.Fatalf("ReplayRun: %v", err)
 	}
 	awaitRun(t, engine, resp.GetId(), taskv1.RunStatus_RUN_STATUS_EXPIRED)
+}
+
+func claimedRun(t *testing.T, engine *Engine, queue string) (deployedConsumer, claim) {
+	t.Helper()
+	ctx := context.Background()
+	deployed := engine.current().consumers()[queue]
+	loop := &queueLoop{name: deployed.queue, consumers: newSlots(maxInFlight), held: map[int64]bool{}}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		messages, err := engine.read(ctx, loop, deployed, 1)
+		if err != nil {
+			t.Fatalf("read %s: %v", deployed.queue, err)
+		}
+		if len(messages) == 1 {
+			claimed, ok, err := engine.claim(ctx, messages[0])
+			if err != nil || !ok {
+				t.Fatalf("claim = %v, %v, want the run claimed", ok, err)
+			}
+			return deployed, claimed
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no message on %s to claim", deployed.queue)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestAnAttemptThatAnswersAfterItsRunWasCanceledLeavesTheRunCanceledAndReportsNothing(t *testing.T) {
+	for name, answer := range map[string]envelope.Result{
+		"succeeded": {Outcome: envelope.Succeeded, Output: []byte(`"done"`)},
+		"failed":    {Outcome: envelope.Failed, Reason: "the disk is full"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			engine := applied(t, map[string]*contractv1.ManifestTopic{"resize": aTask(retrying(3, time.Millisecond, time.Millisecond))}, nil)
+			trigger(t, engine, "resize", `{}`, nil)
+			deployed, claimed := claimedRun(t, engine, queueName("resize", "resize"))
+			if _, err := engine.Tasks().CancelRun(context.Background(), &taskv1.CancelRunRequest{Id: claimed.execution}); err != nil {
+				t.Fatalf("CancelRun: %v", err)
+			}
+
+			status, err := engine.finish(context.Background(), deployed, claimed, answer)
+			if err != nil {
+				t.Fatalf("finish: %v", err)
+			}
+
+			if status != "" {
+				t.Errorf("finish reported the attempt %s, want nothing reported for a run canceled while it ran", status)
+			}
+			if run := retrieve(t, engine, claimed.execution); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_CANCELED {
+				t.Errorf("run = %v, want it still canceled", run.GetStatus())
+			}
+		})
+	}
+}
+
+func TestARunRescheduledAfterItsMessageWasReadIsNotClaimedBeforeItsNewTime(t *testing.T) {
+	ctx := context.Background()
+	worker := newWorker(t, succeeding)
+	engine := applied(t, map[string]*contractv1.ManifestTopic{"resize": aTask()}, nil)
+	deployed := engine.current().consumers()[queueName("resize", "resize")]
+	loop := &queueLoop{name: deployed.queue, consumers: newSlots(maxInFlight), held: map[int64]bool{}}
+	id := trigger(t, engine, "resize", `{}`, &taskv1.TriggerOptions{DueAt: timestamppb.New(time.Now().Add(200 * time.Millisecond))})
+	var read []message
+	for deadline := time.Now().Add(5 * time.Second); len(read) == 0 && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		var err error
+		if read, err = engine.read(ctx, loop, deployed, 1); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+	}
+	if len(read) != 1 {
+		t.Fatal("the run's message never became visible")
+	}
+	later := time.Now().Add(time.Hour)
+	if _, err := engine.Tasks().RescheduleRun(ctx, &taskv1.RescheduleRunRequest{Id: id, DueAt: timestamppb.New(later)}); err != nil {
+		t.Fatalf("RescheduleRun: %v", err)
+	}
+
+	loop.hold(read)
+	engine.deliver(ctx, loop, deployed, Worker{URL: worker.server.URL}, read)
+
+	if got := len(worker.received()); got != 0 {
+		t.Errorf("the worker received %d attempts of a run rescheduled an hour out after its old message was read", got)
+	}
+	if run := retrieve(t, engine, id); run.GetStatus() != taskv1.RunStatus_RUN_STATUS_DELAYED || run.GetAttempts() != 0 {
+		t.Errorf("run = %v after %d attempts, want it still delayed and unattempted", run.GetStatus(), run.GetAttempts())
+	}
+	var visible time.Time
+	if err := engine.pool.QueryRow(ctx, "SELECT vt FROM pgmq.q_"+deployed.queue+" WHERE msg_id = $1", read[0].id).Scan(&visible); err != nil {
+		t.Fatalf("the rescheduled run's message is gone: %v", err)
+	}
+	if visible.Before(later.Add(-time.Second)) {
+		t.Errorf("the message is visible at %v, want it hidden until the run's new time %v", visible, later)
+	}
 }

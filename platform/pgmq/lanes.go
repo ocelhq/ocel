@@ -1,8 +1,12 @@
 package pgmq
 
 import (
+	"encoding/json"
+
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runs"
 )
 
 var laneWeights = map[topicv1.Lane]int{
@@ -47,4 +51,9 @@ func (l *laneTurns) share(lanes []topicv1.Lane, n int) map[topicv1.Lane]int {
 		shares[l.next(lanes)]++
 	}
 	return shares
+}
+
+func laneCondition(lane topicv1.Lane) (string, error) {
+	condition, err := json.Marshal(map[string]provider.Lane{"lane": runs.LaneOf(lane)})
+	return string(condition), err
 }

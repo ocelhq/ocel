@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func TestADeploymentTakesTheManifestsTopicsAndTheWorkersThatHaveAnAddress(t *testing.T) {
@@ -88,4 +91,69 @@ func openedOn(t *testing.T, cfg Config) *Engine {
 	}
 	t.Cleanup(engine.Close)
 	return engine
+}
+
+func queuesOf(t *testing.T, engine *Engine) []string {
+	t.Helper()
+	rows, err := engine.pool.Query(context.Background(), "SELECT queue_name FROM pgmq.list_queues() ORDER BY queue_name")
+	if err != nil {
+		t.Fatalf("list queues: %v", err)
+	}
+	names, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatalf("list queues: %v", err)
+	}
+	return names
+}
+
+func statusOfConsumer(t *testing.T, engine *Engine, consumer string) (provider.RunStatus, bool) {
+	t.Helper()
+	var status string
+	var finished bool
+	if err := engine.pool.QueryRow(context.Background(), "SELECT status, finished_at IS NOT NULL FROM ocel.runs WHERE consumer = $1", consumer).Scan(&status, &finished); err != nil {
+		t.Fatalf("read %s's run: %v", consumer, err)
+	}
+	return provider.RunStatus(status), finished
+}
+
+func TestAConsumerDroppedFromTheDeploymentTakesItsQueueAndCancelsItsUnfinishedRuns(t *testing.T) {
+	ctx := context.Background()
+	email, audit := &contractv1.ManifestConsumer{Name: "email", Worker: "mail"}, &contractv1.ManifestConsumer{Name: "audit", Worker: "mail"}
+	engine := applied(t, map[string]*contractv1.ManifestTopic{"orders": aTopic(email, audit)}, nil)
+	send(t, engine, "orders", `{}`, nil)
+	claimedRun(t, engine, queueName("orders", "audit"))
+
+	if err := engine.Apply(ctx, Deployment{Slug: "app", Topics: map[string]*contractv1.ManifestTopic{"orders": aTopic(email)}}); err != nil {
+		t.Fatalf("Apply without audit: %v", err)
+	}
+
+	if got := queuesOf(t, engine); !slices.Equal(got, []string{"orders__email"}) {
+		t.Errorf("queues = %v, want only email's: a dropped consumer's queue is no one's to read", got)
+	}
+	if status, finished := statusOfConsumer(t, engine, "audit"); status != provider.RunCanceled || !finished {
+		t.Errorf("audit's executing run is %s (finished %v), want it canceled now nothing will settle it", status, finished)
+	}
+	if status, _ := statusOfConsumer(t, engine, "email"); status != provider.RunQueued {
+		t.Errorf("email's run is %s, want it still queued", status)
+	}
+}
+
+func TestADeploymentThatFailsToApplyLeavesNoQueueOrClaimBehind(t *testing.T) {
+	ctx := context.Background()
+	engine := anEngine(t)
+	topics := map[string]*contractv1.ManifestTopic{
+		"orders":  aTopic(&contractv1.ManifestConsumer{Name: "email", Worker: "mail"}),
+		"nightly": aTask(named("nightly"), func(topic *contractv1.ManifestTopic) { topic.Cron = "not a cron" }),
+	}
+
+	if err := engine.Apply(ctx, Deployment{Slug: "shop", Topics: topics}); err == nil {
+		t.Fatal("Apply took a task whose cron does not parse")
+	}
+
+	if got := queuesOf(t, engine); len(got) != 0 {
+		t.Errorf("queues = %v after a failed Apply, want none", got)
+	}
+	if err := engine.Apply(ctx, Deployment{Slug: "blog"}); err != nil {
+		t.Errorf("Apply(blog) after shop's Apply failed = %v, want the database still unclaimed", err)
+	}
 }
