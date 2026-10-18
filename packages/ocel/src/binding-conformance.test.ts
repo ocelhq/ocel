@@ -7,13 +7,13 @@ vi.mock("./runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-vi.mock("ioredis", async () => {
+vi.mock("node:module", async () => {
   const { ValkeyMock } = await import("./testing/valkey-mock.js");
-  return { Redis: ValkeyMock, default: ValkeyMock };
+  return { createRequire: () => () => ({ Redis: ValkeyMock }) };
 });
 
 const { postgres } = await import("./postgres/index.js");
-const { bucket } = await import("./bucket/bucket.js");
+const { bucket, bucketContextOf } = await import("./bucket/bucket.js");
 const { kv } = await import("./kv/index.js");
 
 function repoRoot() {
@@ -58,7 +58,7 @@ describe("the binding conformance fixtures", () => {
 
   it("reach postgres() through its live key", () => {
     const body = raw(BindingType.POSTGRES);
-    vi.stubEnv(bindingKey("main", BindingType.POSTGRES), body);
+    vi.stubEnv(bindingKey("main", "postgres"), body);
     const want = JSON.parse(body).postgres;
 
     const pool = postgres("main");
@@ -77,28 +77,34 @@ describe("the binding conformance fixtures", () => {
 
   it("reach bucket() through its live key", () => {
     const body = raw(BindingType.BUCKET);
-    vi.stubEnv(bindingKey("uploads", BindingType.BUCKET), body);
+    vi.stubEnv(bindingKey("uploads", "bucket"), body);
+    vi.stubEnv("OCEL_RUNTIME_ADDRESS", "http://127.0.0.1:1");
+    vi.stubEnv("OCEL_SESSION_TOKEN", "session-token");
+    const want = JSON.parse(body).bucket;
 
-    expect(bucket("uploads", { uploaders: {} }).__config()).toMatchObject(JSON.parse(body).bucket);
+    expect(bucketContextOf(bucket("uploads", { uploaders: {} }), "test")).toMatchObject({
+      bucket: want.bucket,
+      publicBaseUrl: want.publicBaseUrl ?? "",
+    });
   });
 
   it("resolve a task binding through its live key", () => {
     const body = raw(BindingType.TASK);
-    vi.stubEnv(bindingKey("resize-image", BindingType.TASK), body);
+    vi.stubEnv(bindingKey("resize-image", "task"), body);
 
     expect(getConfig("resize-image", "task")).toMatchObject(JSON.parse(body).task);
   });
 
   it("resolve a topic binding through its live key", () => {
     const body = raw(BindingType.TOPIC);
-    vi.stubEnv(bindingKey("orders", BindingType.TOPIC), body);
+    vi.stubEnv(bindingKey("orders", "topic"), body);
 
     expect(getConfig("orders", "topic")).toMatchObject(JSON.parse(body).topic);
   });
 
   it("reach kv() through its live key", () => {
     const body = raw(BindingType.KV);
-    vi.stubEnv(bindingKey("cache", BindingType.KV), body);
+    vi.stubEnv(bindingKey("cache", "kv"), body);
     const want = JSON.parse(body).kv;
 
     const cache = kv("cache");

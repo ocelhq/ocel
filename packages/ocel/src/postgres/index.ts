@@ -1,42 +1,47 @@
 import { Pool, type PoolConfig } from "pg";
-import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
+import { lazyBinding } from "../binding/binding.js";
+import { declare } from "../declaration/declare.js";
 import {
   type PostgresProperties,
   PostgresTlsMode,
 } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { Postgres, type PostgresConfig } from "./pg.js";
+import { PostgresSocket, tlsPolicyOf, withoutTlsParams } from "./tls.js";
 
+export { MissingBindingError } from "../binding/errors.js";
 export { UnprovisionedResourceError } from "../binding/unprovisioned.js";
 
 type PgReturn = Pool & { connectionString: string };
+
+/** How a postgres database is declared. */
+export interface PostgresOptions {
+  /** The major postgres version to provision; without it, `17`. */
+  version?: string;
+}
 
 /**
  * Declares a postgres database named `id` and returns a `pg` pool connected to it.
  *
  * At deploy the database is provisioned in your account, or bound to the record
  * `bindings` names; the pool connects through the record's url when it has
- * one, reading its `sslmode` as libpq does, and otherwise through its host, port,
- * database, username and password, encrypted as its tls mode asks and verified
- * against its tls server name when it names one, as a record pointing at a port
- * forward does.
+ * one, and otherwise through its host, port, database, username and password.
+ * TLS follows libpq: the url's `sslmode`, or else the record's tls mode, and
+ * `prefer` when neither names one, so the connection is encrypted whenever the
+ * server accepts TLS. A record's CA is trusted and its tls server name verified,
+ * url or not, as a record pointing at a port forward needs.
  * `connectionString` is the same connection as a URL, for tools that take one.
  */
-export function postgres(id: string, config?: PostgresConfig): PgReturn {
-  const pg = new Postgres(id, config);
+export function postgres(id: string, options: PostgresOptions = {}): PgReturn {
+  declare(id, { case: "postgres", value: { version: options.version ?? "17" } });
 
-  let pool: PgReturn | undefined;
-  const openPool = (access: string): PgReturn => {
-    if (unprovisionedPhase()) {
-      throw unprovisioned(`postgres("${id}")`, access);
-    }
-    if (!pool) {
-      const properties = pg.__config();
-      pool = Object.assign(new Pool(poolConfig(properties)), {
+  const openPool = lazyBinding(
+    `postgres("${id}")`,
+    id,
+    "postgres",
+    (properties): PgReturn =>
+      Object.assign(new Pool(poolConfig(properties)), {
         connectionString: connectionStringOf(properties),
-      });
-    }
-    return pool;
-  };
+      }),
+  );
 
   const bound = new Map<PropertyKey, { method: unknown; bound: unknown }>();
   const proxy: PgReturn = new Proxy(Object.create(Pool.prototype) as PgReturn, {
@@ -72,30 +77,13 @@ export function postgres(id: string, config?: PostgresConfig): PgReturn {
 }
 
 function poolConfig(properties: PostgresProperties): PoolConfig {
+  const policy = tlsPolicyOf(properties);
+  const negotiated = { ssl: false, stream: () => new PostgresSocket(policy) };
   if (properties.url) {
-    return { connectionString: withLibpqSslmodes(properties.url) };
+    return { connectionString: withoutTlsParams(properties.url), ...negotiated };
   }
   const { host, port, database, username, password } = properties;
-  const config: PoolConfig = { host, port, database, user: username, password };
-  const servername = properties.tlsServerName ? { servername: properties.tlsServerName } : {};
-  switch (properties.tlsMode) {
-    case PostgresTlsMode.REQUIRE:
-      config.ssl = { rejectUnauthorized: false, ...servername };
-      break;
-    case PostgresTlsMode.VERIFY_FULL:
-      config.ssl = properties.tlsCa
-        ? { rejectUnauthorized: true, ca: properties.tlsCa, ...servername }
-        : { rejectUnauthorized: true, ...servername };
-      break;
-  }
-  return config;
-}
-
-function withLibpqSslmodes(url: string): string {
-  if (/[?&]uselibpqcompat=/.test(url)) {
-    return url;
-  }
-  return `${url}${url.includes("?") ? "&" : "?"}uselibpqcompat=true`;
+  return { host, port, database, user: username, password, ...negotiated };
 }
 
 const sslmodes: Record<PostgresTlsMode, string | undefined> = {

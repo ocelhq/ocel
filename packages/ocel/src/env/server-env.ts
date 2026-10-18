@@ -1,5 +1,6 @@
+import { isDiscovering } from "../binding/unprovisioned.js";
 import { callSiteFile } from "../declaration/callsite.js";
-import { defer } from "../declaration/defer.js";
+import { holdRegistration } from "../declaration/declare.js";
 import { type Access, type Env, envAccessor, FIXED, UNCACHED } from "./access.js";
 import { declareEnv } from "./declare.js";
 import {
@@ -24,8 +25,8 @@ export function defineServerEnv<const TDefinitions extends EnvDefinitions>(
   const source = callSiteFile();
   const flat = validateDefinitions(definitions, source);
 
-  if (process.env.OCEL_PHASE === "discovery") {
-    defer(declareEnv(flat, source));
+  if (isDiscovering()) {
+    holdRegistration(declareEnv(flat, source));
   }
 
   const env = envAccessor(definitions, access);
@@ -46,7 +47,7 @@ function generationOf(definition: VariableDefinition): number {
 
 function validateLiveValues(definitions: FlatDefinitions, env: Env<EnvDefinitions>): void {
   if (liveGeneration() === NO_GENERATION) return;
-  if (process.env.OCEL_PHASE === "discovery") return;
+  if (isDiscovering()) return;
 
   for (const [key, definition] of Object.entries(definitions)) {
     if (!isLive(definition)) continue;
@@ -56,7 +57,7 @@ function validateLiveValues(definitions: FlatDefinitions, env: Env<EnvDefinition
 }
 
 function resolve(key: string, definition: VariableDefinition): unknown {
-  if (process.env.OCEL_PHASE === "discovery") {
+  if (isDiscovering()) {
     throw new EnvValueError(
       `'${key}' cannot be read during discovery: values are resolved after the requirements are declared.`,
     );

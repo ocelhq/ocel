@@ -1,8 +1,11 @@
 import { Client, Pool } from "pg";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
+
+const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
 vi.mock("../runtime/rpc", () => ({
-  rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
+  rpc: { resource: { declare: declareMock } },
 }));
 
 const { postgres, connectionStringFor, UnprovisionedResourceError } = await import("./index.js");
@@ -65,8 +68,9 @@ describe("postgres()", () => {
     expect(pool.connectionString).toBe(url);
   });
 
-  it("reads a url's sslmode as libpq does, so require encrypts without checking the certificate", () => {
-    const url = "postgres://app:s3cret@db.supabase.co/postgres?sslmode=require";
+  it("keeps a url's sslmode out of the connection string node-postgres reads, negotiating TLS itself", () => {
+    const url =
+      "postgres://app:s3cret@db.supabase.co/postgres?sslmode=require&application_name=shop";
     vi.stubEnv(
       "OCEL_RESOURCE_POSTGRES_orders",
       JSON.stringify({ name: "orders", postgres: { url } }),
@@ -74,49 +78,14 @@ describe("postgres()", () => {
 
     const pool = postgres("orders");
 
-    expect(new Client(pool.options).ssl).toMatchObject({ rejectUnauthorized: false });
+    expect(pool.options.connectionString).toBe(
+      "postgres://app:s3cret@db.supabase.co/postgres?application_name=shop",
+    );
+    expect(new Client(pool.options).ssl).toBe(false);
     expect(pool.connectionString).toBe(url);
   });
 
-  it("verifies the server under a url's sslmode=verify-full", () => {
-    vi.stubEnv(
-      "OCEL_RESOURCE_POSTGRES_orders",
-      JSON.stringify({
-        name: "orders",
-        postgres: { url: "postgres://app:s3cret@db/postgres?sslmode=verify-full" },
-      }),
-    );
-
-    const ssl = new Client(postgres("orders").options).ssl;
-
-    expect(ssl).not.toMatchObject({ rejectUnauthorized: false });
-    expect(ssl).toBeTruthy();
-  });
-
-  it("encrypts the connection without checking the certificate when the record requires tls", () => {
-    vi.stubEnv(
-      "OCEL_RESOURCE_POSTGRES_orders",
-      JSON.stringify({
-        name: "orders",
-        postgres: {
-          host: "db",
-          port: 5432,
-          database: "d",
-          username: "u",
-          password: "p",
-          tlsMode: "POSTGRES_TLS_MODE_REQUIRE",
-        },
-      }),
-    );
-
-    const pool = postgres("orders");
-
-    expect(pool.options).toMatchObject({ ssl: { rejectUnauthorized: false } });
-    expect(new URL(pool.connectionString).searchParams.get("sslmode")).toBe("require");
-  });
-
-  it("verifies the server against the record's CA under verify-full", () => {
-    const ca = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
+  it("names the record's tls mode as the sslmode of the connection string it exposes", () => {
     vi.stubEnv(
       "OCEL_RESOURCE_POSTGRES_orders",
       JSON.stringify({
@@ -128,53 +97,13 @@ describe("postgres()", () => {
           username: "u",
           password: "p",
           tlsMode: "POSTGRES_TLS_MODE_VERIFY_FULL",
-          tlsCa: ca,
         },
       }),
     );
 
-    const pool = postgres("orders");
-
-    expect(pool.options).toMatchObject({ ssl: { rejectUnauthorized: true, ca } });
-    expect(new URL(pool.connectionString).searchParams.get("sslmode")).toBe("verify-full");
-  });
-
-  it("verifies the host a forwarded record names as its tls server name, not the forward it connects to", () => {
-    vi.stubEnv(
-      "OCEL_RESOURCE_POSTGRES_orders",
-      JSON.stringify({
-        name: "orders",
-        postgres: {
-          host: "127.0.0.1",
-          port: 41234,
-          database: "d",
-          username: "u",
-          password: "p",
-          tlsMode: "POSTGRES_TLS_MODE_VERIFY_FULL",
-          tlsServerName: "orders.cluster.internal",
-        },
-      }),
+    expect(new URL(postgres("orders").connectionString).searchParams.get("sslmode")).toBe(
+      "verify-full",
     );
-
-    const pool = postgres("orders");
-
-    expect(pool.options).toMatchObject({
-      host: "127.0.0.1",
-      port: 41234,
-      ssl: { rejectUnauthorized: true, servername: "orders.cluster.internal" },
-    });
-  });
-
-  it("leaves tls to the driver when the record names no mode", () => {
-    vi.stubEnv(
-      "OCEL_RESOURCE_POSTGRES_orders",
-      JSON.stringify({
-        name: "orders",
-        postgres: { host: "db", port: 5432, database: "d", username: "u", password: "p" },
-      }),
-    );
-
-    expect(postgres("orders").options).not.toHaveProperty("ssl");
   });
 
   it("declares a database with no binding delivered, and refuses its first use naming why", () => {
@@ -242,5 +171,29 @@ describe("postgres()", () => {
     expect(decodeURIComponent(url.password)).toBe("p/w");
     expect(url.pathname).toBe("/d");
     expect(url.port).toBe("5432");
+  });
+});
+
+describe("postgres() during discovery", () => {
+  beforeEach(() => {
+    declareMock.mockClear();
+  });
+
+  it("declares a POSTGRES resource of version 17 unless told otherwise", () => {
+    postgres("main");
+    postgres("legacy", { version: "16" });
+
+    expect(declareMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resource: { name: "main", type: ResourceType.POSTGRES },
+        config: { case: "postgres", value: { version: "17" } },
+      }),
+    );
+    expect(declareMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resource: { name: "legacy", type: ResourceType.POSTGRES },
+        config: { case: "postgres", value: { version: "16" } },
+      }),
+    );
   });
 });

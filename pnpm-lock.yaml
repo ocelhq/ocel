@@ -640,9 +640,6 @@ importers:
       '@standard-schema/spec':
         specifier: ^1.1.0
         version: 1.1.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@sveltejs/kit':
         specifier: 3.0.1
@@ -698,6 +695,9 @@ importers:
       ws:
         specifier: ^8.21.0
         version: 8.21.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/ocel-pulumi:
     devDependencies:

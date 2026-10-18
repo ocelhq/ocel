@@ -80,7 +80,7 @@ for await (const object of uploads.list({ prefix: "reports/" })) {
 await uploads.delete(["reports/q3.pdf", "reports/q2.pdf"]);
 ```
 
-- `get` and `head` return `null` for a missing key.
+- `get` and `head` return `undefined` for a missing key.
 - Also: `copy`, `list().page({ cursor })`, and `cacheControl` / `metadata` on writes.
 
 </Tab>

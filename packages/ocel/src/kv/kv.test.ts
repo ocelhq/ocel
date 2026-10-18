@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
 import { KvShape, ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
 
@@ -12,9 +11,9 @@ vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
 }));
 
-vi.mock("ioredis", async () => {
+vi.mock("node:module", async () => {
   const { ValkeyMock } = await import("../testing/valkey-mock.js");
-  return { Redis: ValkeyMock, default: ValkeyMock };
+  return { createRequire: () => () => ({ Redis: ValkeyMock }) };
 });
 
 const { kv, UnprovisionedResourceError } = await import("./index.js");
@@ -31,7 +30,7 @@ function fixtureAuthority(): string {
 function deliver(name: string, properties: Record<string, unknown> = {}) {
   port += 1;
   vi.stubEnv(
-    bindingKey(name, BindingType.KV),
+    bindingKey(name, "kv"),
     JSON.stringify({
       name: `kv--${name}`,
       kv: { host: "127.0.0.1", port, username: "default", password: "pw", ...properties },

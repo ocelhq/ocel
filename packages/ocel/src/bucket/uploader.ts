@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
   ParsedInput,
   Uploader,
@@ -8,7 +8,7 @@ import type {
 } from "./types.js";
 
 export function uploader<
-  TInput extends z.ZodType | undefined = undefined,
+  TInput extends StandardSchemaV1 | undefined = undefined,
   TMetadata = unknown,
   TReq = UploadRequest,
 >(
@@ -16,7 +16,7 @@ export function uploader<
   upload: UploaderUpload<TMetadata> = {},
 ): Uploader<ParsedInput<TInput>, TMetadata, TReq> {
   return {
-    auth: auth as UploaderAuth<TReq, z.ZodType | undefined, TMetadata>,
+    auth: auth as UploaderAuth<TReq, StandardSchemaV1 | undefined, TMetadata>,
     upload,
   };
 }

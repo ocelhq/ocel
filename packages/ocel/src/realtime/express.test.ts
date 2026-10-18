@@ -4,7 +4,6 @@ import express from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { appsyncBinding, readClaims } from "../testing/realtime-gateway.js";
 
 vi.mock("../runtime/rpc", () => ({
@@ -43,7 +42,7 @@ describe("the realtime handler on express", () => {
   beforeEach(() => {
     seen.length = 0;
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsyncBinding);
+    vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
   });
 
   afterEach(() => {

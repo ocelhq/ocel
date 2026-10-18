@@ -2,6 +2,9 @@
   "name": "ocel",
   "version": "0.0.2",
   "type": "module",
+  "sideEffects": [
+    "./dist/bucket/server-only.js"
+  ],
   "description": "ocel runtime sdk — turns cloud infrastructure into function calls",
   "files": [
     "dist/",
@@ -12,54 +15,54 @@
   "exports": {
     "./cache": {
       "types": "./dist/cache/index.d.ts",
-      "import": "./dist/cache/index.js"
+      "default": "./dist/cache/index.js"
     },
     "./config": {
       "types": "./dist/config.d.ts",
-      "import": "./dist/config.js"
+      "default": "./dist/config.js"
     },
     "./edge": {
       "types": "./dist/edge.d.ts",
-      "import": "./dist/edge.js"
+      "default": "./dist/edge.js"
     },
     "./dns": {
       "types": "./dist/dns.d.ts",
-      "import": "./dist/dns.js"
+      "default": "./dist/dns.js"
     },
     "./env-source": {
       "types": "./dist/env-source.d.ts",
-      "import": "./dist/env-source.js"
+      "default": "./dist/env-source.js"
     },
     "./providers/aws": {
       "types": "./dist/providers/aws/index.d.ts",
-      "import": "./dist/providers/aws/index.js"
+      "default": "./dist/providers/aws/index.js"
     },
     "./providers/aws/edge": {
       "types": "./dist/providers/aws/edge.d.ts",
-      "import": "./dist/providers/aws/edge.js"
+      "default": "./dist/providers/aws/edge.js"
     },
     "./providers/aws/dns": {
       "types": "./dist/providers/aws/dns.d.ts",
-      "import": "./dist/providers/aws/dns.js"
+      "default": "./dist/providers/aws/dns.js"
     },
     "./providers/gcp": {
       "types": "./dist/providers/gcp/index.d.ts",
-      "import": "./dist/providers/gcp/index.js"
+      "default": "./dist/providers/gcp/index.js"
     },
     "./providers/gcp/edge": {
       "types": "./dist/providers/gcp/edge.d.ts",
-      "import": "./dist/providers/gcp/edge.js"
+      "default": "./dist/providers/gcp/edge.js"
     },
     "./providers/vps": {
       "types": "./dist/providers/vps/index.d.ts",
-      "import": "./dist/providers/vps/index.js"
+      "default": "./dist/providers/vps/index.js"
     },
     "./env": {
       "types": "./dist/env/index.d.ts",
       "edge-light": "./dist/env/edge.js",
       "workerd": "./dist/env/edge.js",
       "worker": "./dist/env/edge.js",
-      "import": "./dist/env/index.js"
+      "default": "./dist/env/index.js"
     },
     "./env/next": {
       "types": "./dist/env/next.d.ts",
@@ -67,71 +70,71 @@
       "workerd": "./dist/env/next-edge.js",
       "worker": "./dist/env/next-edge.js",
       "browser": "./dist/env/next-client.js",
-      "import": "./dist/env/next.js"
+      "default": "./dist/env/next.js"
     },
     "./env/sveltekit": {
       "types": "./dist/env/sveltekit.d.ts",
-      "import": "./dist/env/sveltekit.js"
+      "default": "./dist/env/sveltekit.js"
     },
     "./postgres": {
       "types": "./dist/postgres/index.d.ts",
-      "import": "./dist/postgres/index.js"
+      "default": "./dist/postgres/index.js"
     },
     "./bucket": {
       "types": "./dist/bucket/index.d.ts",
-      "import": "./dist/bucket/index.js"
+      "default": "./dist/bucket/index.js"
     },
     "./bucket/next": {
       "types": "./dist/bucket/next.d.ts",
-      "import": "./dist/bucket/next.js"
+      "default": "./dist/bucket/next.js"
     },
     "./bucket/hono": {
       "types": "./dist/bucket/hono.d.ts",
-      "import": "./dist/bucket/hono.js"
+      "default": "./dist/bucket/hono.js"
     },
     "./bucket/express": {
       "types": "./dist/bucket/express.d.ts",
-      "import": "./dist/bucket/express.js"
+      "default": "./dist/bucket/express.js"
     },
     "./bucket/client": {
       "types": "./dist/bucket/client.d.ts",
-      "import": "./dist/bucket/client.js"
+      "default": "./dist/bucket/client.js"
     },
     "./task": {
       "types": "./dist/task/index.d.ts",
-      "import": "./dist/task/index.js"
+      "default": "./dist/task/index.js"
     },
     "./topic": {
       "types": "./dist/topic/index.d.ts",
-      "import": "./dist/topic/index.js"
+      "default": "./dist/topic/index.js"
     },
     "./worker": {
       "types": "./dist/worker/index.d.ts",
-      "import": "./dist/worker/index.js"
+      "default": "./dist/worker/index.js"
     },
     "./kv": {
       "types": "./dist/kv/index.d.ts",
-      "import": "./dist/kv/index.js"
+      "default": "./dist/kv/index.js"
     },
     "./realtime": {
       "types": "./dist/realtime/index.d.ts",
-      "import": "./dist/realtime/index.js"
+      "default": "./dist/realtime/index.js"
     },
     "./realtime/next": {
       "types": "./dist/realtime/next.d.ts",
-      "import": "./dist/realtime/next.js"
+      "default": "./dist/realtime/next.js"
     },
     "./realtime/express": {
       "types": "./dist/realtime/express.d.ts",
-      "import": "./dist/realtime/express.js"
+      "default": "./dist/realtime/express.js"
     },
     "./realtime/hono": {
       "types": "./dist/realtime/hono.d.ts",
-      "import": "./dist/realtime/hono.js"
+      "default": "./dist/realtime/hono.js"
     },
     "./realtime/client": {
       "types": "./dist/realtime/client.d.ts",
-      "import": "./dist/realtime/client.js"
+      "default": "./dist/realtime/client.js"
     },
     "./package.json": "./package.json"
   },
@@ -141,7 +144,7 @@
       "edge-light": "./dist/runtime/connect-transport-edge.js",
       "workerd": "./dist/runtime/connect-transport-edge.js",
       "worker": "./dist/runtime/connect-transport-edge.js",
-      "import": "./dist/runtime/connect-transport.js"
+      "default": "./dist/runtime/connect-transport.js"
     }
   },
   "scripts": {
@@ -159,8 +162,7 @@
     "@bufbuild/protobuf": "^2.12.1",
     "@connectrpc/connect": "^2.1.2",
     "@connectrpc/connect-node": "^2.1.2",
-    "@standard-schema/spec": "^1.1.0",
-    "zod": "^4.4.3"
+    "@standard-schema/spec": "^1.1.0"
   },
   "devDependencies": {
     "@sveltejs/kit": "3.0.1",
@@ -180,7 +182,8 @@
     "typescript": "^5.9.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.9",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@sveltejs/kit": ">=3.0.0",

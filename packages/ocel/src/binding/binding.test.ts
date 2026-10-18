@@ -2,8 +2,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { bindingKey, bindingTypeOf, getConfig } from "./binding.js";
+import { BindingSchema, BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
+import { bindingKey, getConfig } from "./binding.js";
+import { MissingBindingError } from "./errors.js";
 
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
@@ -47,9 +48,24 @@ describe("getConfig", () => {
     });
   });
 
+  it("prefers a binding in the process environment over the live directory file of the same key, as Go does", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ocel-live-"));
+    writeFileSync(
+      join(dir, "OCEL_RESOURCE_POSTGRES_main"),
+      JSON.stringify({ name: "main", postgres: { host: "from-the-file" } }),
+    );
+    setEnv("OCEL_LIVE_DIR", dir);
+    setEnv(
+      "OCEL_RESOURCE_POSTGRES_main",
+      JSON.stringify({ name: "main", postgres: { host: "from-the-environment" } }),
+    );
+
+    expect(getConfig("main", "postgres").host).toBe("from-the-environment");
+  });
+
   it("keys a binding by its type's enum name", () => {
-    expect(bindingKey("main", BindingType.POSTGRES)).toBe("OCEL_RESOURCE_POSTGRES_main");
-    expect(bindingKey("storage", BindingType.BUCKET)).toBe("OCEL_RESOURCE_BUCKET_storage");
+    expect(bindingKey("main", "postgres")).toBe("OCEL_RESOURCE_POSTGRES_main");
+    expect(bindingKey("storage", "bucket")).toBe("OCEL_RESOURCE_BUCKET_storage");
   });
 
   it("reads a POSTGRES binding's typed properties from OCEL_RESOURCE_POSTGRES_<id>", () => {
@@ -114,23 +130,26 @@ describe("getConfig", () => {
     );
   });
 
-  it("throws when the resource env var is undefined", () => {
-    expect(() => getConfig("missing", "bucket")).toThrow("OCEL_RESOURCE_BUCKET_missing");
+  it("throws a MissingBindingError naming the key when nothing was delivered", () => {
+    let thrown: unknown;
+    try {
+      getConfig("missing", "bucket");
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(MissingBindingError);
+    expect((thrown as MissingBindingError).key).toBe("OCEL_RESOURCE_BUCKET_missing");
   });
 });
 
-describe("bindingTypeOf", () => {
-  it("is the type the properties case declares", () => {
-    expect(
-      bindingTypeOf({
-        properties: { case: "postgres", value: {} },
-      } as never),
-    ).toBe(BindingType.POSTGRES);
-    expect(bindingTypeOf({ properties: { case: "bucket", value: {} } } as never)).toBe(
-      BindingType.BUCKET,
-    );
-    expect(bindingTypeOf({ properties: { case: undefined } } as never)).toBe(
-      BindingType.UNSPECIFIED,
-    );
+describe("bindingKey", () => {
+  it("names every binding type the record's oneof carries as that type's enum name", () => {
+    const cases = BindingSchema.oneofs[0]?.fields.map((field) => field.localName) ?? [];
+
+    expect(cases.length).toBeGreaterThan(0);
+    for (const kind of cases) {
+      expect(BindingType[kind.toUpperCase() as keyof typeof BindingType]).toBeDefined();
+    }
   });
 });

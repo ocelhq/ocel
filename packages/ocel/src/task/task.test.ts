@@ -157,6 +157,16 @@ describe("a task at runtime", () => {
     await proxy.close();
   });
 
+  it("reads its binding once, on the first trigger", async () => {
+    const resize = task("resize-image", { run: async () => {} });
+    await resize.trigger(1);
+    vi.stubEnv("OCEL_RESOURCE_TASK_resize-image", "");
+
+    await resize.trigger(2);
+
+    expect(triggers).toHaveLength(2);
+  });
+
   it("triggers a run of the task by its declared name with the payload as JSON, and answers the run's id", async () => {
     const resize = task("resize-image", { run: async (_image: { url: string }) => {} });
 

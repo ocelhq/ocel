@@ -9,7 +9,7 @@ vi.mock("../src/runtime/rpc", () => ({
   rpc: { resource: { declare: declareMock } },
 }));
 
-const { Postgres } = await import("../src/postgres/pg.js");
+const { postgres } = await import("../src/postgres/index.js");
 const { task } = await import("../src/task/index.js");
 const { topic } = await import("../src/topic/index.js");
 const { worker } = await import("../src/worker/index.js");
@@ -24,7 +24,7 @@ describe("declarationSite", () => {
 
   it("names the caller rather than the SDK module that declared for it", () => {
     const line = new Error().stack?.split("\n")[1]?.match(/:(\d+):\d+\)?$/)?.[1];
-    new Postgres("main");
+    postgres("main");
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({

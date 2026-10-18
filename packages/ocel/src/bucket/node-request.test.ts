@@ -11,7 +11,7 @@ const { bucket } = await import("./bucket.js");
 
 import type { BucketServiceClient } from "./bucket-client.js";
 import type { BucketContext } from "./bucket-context.js";
-import { createRouteHandler } from "./route.js";
+import { routeHandlerOver } from "./route.js";
 import { uploader } from "./uploader.js";
 
 function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
@@ -68,7 +68,7 @@ beforeEach(() => {
 describe("core accepts a Node IncomingMessage", () => {
   it("reconstructs the absolute callbackBaseUrl from Host + path-only url", async () => {
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(
       nodeReq("/api/upload?op=presign", {
@@ -85,7 +85,7 @@ describe("core accepts a Node IncomingMessage", () => {
 
   it("reads the JSON body from the raw stream", async () => {
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(
       nodeReq("/api/upload?op=presign", {
@@ -101,7 +101,7 @@ describe("core accepts a Node IncomingMessage", () => {
 
   it("falls back to req.body when the stream was already drained (express.json)", async () => {
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(
       nodeReq(
@@ -121,7 +121,7 @@ describe("core accepts a Node IncomingMessage", () => {
 
   it("hands the native request (not a normalized wrapper) to middleware", async () => {
     const { ctx } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const native = nodeReq("/api/upload?op=presign", {
       uploader: "avatar",

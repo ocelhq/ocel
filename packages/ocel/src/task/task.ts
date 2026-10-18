@@ -1,20 +1,16 @@
-import type { JsonObject } from "@bufbuild/protobuf";
-import { type Client, createClient } from "@connectrpc/connect";
+import type { Client } from "@connectrpc/connect";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { refuseUnbound } from "../binding/binding.js";
-import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
-import { declarationSite } from "../declaration/callsite.js";
-import { defer } from "../declaration/defer.js";
+import { lazyBinding } from "../binding/binding.js";
+import { declare } from "../declaration/declare.js";
 import { type Duration, encodeDueAt, encodeDuration } from "../delivery/duration.js";
+import type { JsonObject } from "../delivery/json.js";
 import type { JsonText } from "../delivery/json-text.js";
 import { encodeLane, type Lane } from "../delivery/lane.js";
 import { encodePayload } from "../delivery/payload.js";
 import { encodeRetryPolicy, type RetryOptions } from "../delivery/retry.js";
 import { encodeJsonSchema } from "../delivery/schema.js";
-import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { TaskService } from "../gen/proto/app/task/v1/task_pb.js";
-import { rpc } from "../runtime/rpc.js";
-import { createRuntimeTransport } from "../runtime/transport.js";
+import { createRuntimeClient } from "../runtime/transport.js";
 import type { RunOptions } from "../worker/context.js";
 import { DEFAULT_WORKER, registerRun } from "../worker/registry.js";
 import type { Worker } from "../worker/worker.js";
@@ -120,10 +116,13 @@ export class Task<TInput = unknown, TOutput = unknown> {
   readonly name: string;
   /** Type-only: the payload `trigger` takes and the output `run` returns. */
   declare readonly types?: { input: TInput; output: TOutput };
-  private client: Client<typeof TaskService> | undefined;
+  private readonly openClient: (access: string) => Client<typeof TaskService>;
 
   constructor(name: string, options: TaskOptions<never, unknown>) {
     this.name = name;
+    this.openClient = lazyBinding(`task("${name}")`, name, "task", () =>
+      createRuntimeClient(TaskService),
+    );
     registerRun({
       kind: "task",
       topic: name,
@@ -134,47 +133,28 @@ export class Task<TInput = unknown, TOutput = unknown> {
       run: options.run as RunFunction<unknown, unknown>,
       hooks: options as TaskHooks<unknown, unknown>,
     });
-    if (process.env.OCEL_PHASE === "discovery") {
-      defer(
-        rpc.resource.declare({
-          resource: { name, type: ResourceType.TASK },
-          config: {
-            case: "task",
-            value: {
-              schema: encodeJsonSchema(options.schema),
-              ordered: options.ordered ?? false,
-              retry: encodeRetryPolicy(options.retry),
-              concurrency: options.concurrency ?? 0,
-              maxDuration: encodeDuration(options.maxDuration),
-              ttl: encodeDuration(options.ttl),
-              batch: options.batch && {
-                size: options.batch.size,
-                timeout: encodeDuration(options.batch.timeout),
-              },
-              worker: options.worker?.name ?? "",
-              cron: options.cron ?? "",
-            },
-          },
-          source: declarationSite(),
-        }),
-      );
-    }
-  }
-
-  private ensureClient(operation: string): Client<typeof TaskService> {
-    if (unprovisionedPhase()) {
-      throw unprovisioned(`task("${this.name}")`, operation);
-    }
-    const refusal = refuseUnbound(this.name, "task");
-    if (refusal) {
-      throw refusal;
-    }
-    return (this.client ??= createClient(TaskService, createRuntimeTransport()));
+    declare(name, {
+      case: "task",
+      value: {
+        schema: encodeJsonSchema(options.schema),
+        ordered: options.ordered ?? false,
+        retry: encodeRetryPolicy(options.retry),
+        concurrency: options.concurrency ?? 0,
+        maxDuration: encodeDuration(options.maxDuration),
+        ttl: encodeDuration(options.ttl),
+        batch: options.batch && {
+          size: options.batch.size,
+          timeout: encodeDuration(options.batch.timeout),
+        },
+        worker: options.worker?.name ?? "",
+        cron: options.cron ?? "",
+      },
+    });
   }
 
   /** Starts a run of this task with `payload`, or with a {@link JsonText} sent byte for byte. */
   async trigger(payload: TInput | JsonText, options?: TriggerOptions): Promise<RunHandle> {
-    const client = this.ensureClient("trigger");
+    const client = this.openClient("trigger");
     const { id } = await client.trigger({
       task: this.name,
       payload: encodePayload(payload),
@@ -185,7 +165,7 @@ export class Task<TInput = unknown, TOutput = unknown> {
 
   /** Starts one run per item, and answers their handles in the order of `items`. */
   async batchTrigger(items: BatchTriggerItem<TInput>[]): Promise<RunHandle[]> {
-    const client = this.ensureClient("batchTrigger");
+    const client = this.openClient("batchTrigger");
     const { ids } = await client.batchTrigger({
       task: this.name,
       items: items.map((item) => ({

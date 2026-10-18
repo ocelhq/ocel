@@ -13,7 +13,7 @@ export const uploads = bucket("uploads");
 
 // app code
 await uploads.put("reports/q3.pdf", bytes, { contentType: "application/pdf" });
-const object = await uploads.get("reports/q3.pdf"); // null when missing
+const object = await uploads.get("reports/q3.pdf"); // undefined when missing
 if (object) await object.bytes();
 for await (const o of uploads.list({ prefix: "reports/" })) console.log(o.key);
 const url = await uploads.signedUrl("reports/q3.pdf");

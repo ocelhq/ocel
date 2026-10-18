@@ -1,23 +1,20 @@
-import { type Client, createClient } from "@connectrpc/connect";
+import type { Client } from "@connectrpc/connect";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { refuseUnbound } from "../binding/binding.js";
-import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
-import { declarationSite } from "../declaration/callsite.js";
-import { defer } from "../declaration/defer.js";
+import { lazyBinding } from "../binding/binding.js";
+import { declare } from "../declaration/declare.js";
 import { type Duration, encodeDueAt, encodeDuration } from "../delivery/duration.js";
 import type { JsonText } from "../delivery/json-text.js";
 import { encodeLane, type Lane } from "../delivery/lane.js";
 import { encodePayload } from "../delivery/payload.js";
 import { encodeRetryPolicy, type RetryOptions } from "../delivery/retry.js";
 import { encodeJsonSchema } from "../delivery/schema.js";
-import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
 import { TopicService } from "../gen/proto/app/topic/v1/topic_pb.js";
-import { rpc } from "../runtime/rpc.js";
-import { createRuntimeTransport } from "../runtime/transport.js";
+import { createRuntimeClient } from "../runtime/transport.js";
 import type { RunOptions } from "../worker/context.js";
 import { DEFAULT_WORKER, registerRun } from "../worker/registry.js";
 import type { Worker } from "../worker/worker.js";
-import { DeadLetters } from "./dead-letters.js";
+import { ConsumerDeadLetters } from "./consumer-dead-letters.js";
+import type { DeadLetters } from "./dead-letters.js";
 
 /** How a topic is declared. */
 export interface TopicOptions<TSchema extends StandardSchemaV1 | undefined> {
@@ -81,43 +78,27 @@ export class Topic<TInput = unknown, TOutput = TInput> {
   /** Type-only: the payload `send` takes and the payload a consumer receives. */
   declare readonly types?: { input: TInput; output: TOutput };
   private readonly schema: StandardSchemaV1 | undefined;
-  private client: Client<typeof TopicService> | undefined;
+  private readonly openClient: (access: string) => Client<typeof TopicService>;
 
   constructor(name: string, options: TopicOptions<StandardSchemaV1 | undefined>) {
     this.name = name;
     this.schema = options.schema;
-    if (process.env.OCEL_PHASE === "discovery") {
-      defer(
-        rpc.resource.declare({
-          resource: { name, type: ResourceType.TOPIC },
-          config: {
-            case: "topic",
-            value: {
-              schema: encodeJsonSchema(options.schema),
-              ordered: options.ordered ?? false,
-              retry: encodeRetryPolicy(options.retry),
-            },
-          },
-          source: declarationSite(),
-        }),
-      );
-    }
-  }
-
-  private ensureClient(operation: string): Client<typeof TopicService> {
-    if (unprovisionedPhase()) {
-      throw unprovisioned(`topic("${this.name}")`, operation);
-    }
-    const refusal = refuseUnbound(this.name, "topic");
-    if (refusal) {
-      throw refusal;
-    }
-    return (this.client ??= createClient(TopicService, createRuntimeTransport()));
+    this.openClient = lazyBinding(`topic("${name}")`, name, "topic", () =>
+      createRuntimeClient(TopicService),
+    );
+    declare(name, {
+      case: "topic",
+      value: {
+        schema: encodeJsonSchema(options.schema),
+        ordered: options.ordered ?? false,
+        retry: encodeRetryPolicy(options.retry),
+      },
+    });
   }
 
   /** Sends `payload`, or a {@link JsonText} byte for byte, to every consumer of this topic, and answers the message's id. */
   async send(payload: TInput | JsonText, options: SendOptions = {}): Promise<string> {
-    const client = this.ensureClient("send");
+    const client = this.openClient("send");
     const { messageId } = await client.send({
       topic: this.name,
       payload: encodePayload(payload),
@@ -145,26 +126,18 @@ export class Topic<TInput = unknown, TOutput = TInput> {
       run,
       hooks: {},
     });
-    if (process.env.OCEL_PHASE === "discovery") {
-      defer(
-        rpc.resource.declare({
-          resource: { name, type: ResourceType.CONSUMER },
-          config: {
-            case: "consumer",
-            value: {
-              topic: this.name,
-              worker: options.worker?.name ?? "",
-              retry: encodeRetryPolicy(options.retry),
-              concurrency: options.concurrency ?? 0,
-              maxDuration: encodeDuration(options.maxDuration),
-              lanes: (options.lanes ?? []).map(encodeLane),
-              batch: batch && { size: batch.size, timeout: encodeDuration(batch.timeout) },
-            },
-          },
-          source: declarationSite(),
-        }),
-      );
-    }
+    declare(name, {
+      case: "consumer",
+      value: {
+        topic: this.name,
+        worker: options.worker?.name ?? "",
+        retry: encodeRetryPolicy(options.retry),
+        concurrency: options.concurrency ?? 0,
+        maxDuration: encodeDuration(options.maxDuration),
+        lanes: (options.lanes ?? []).map(encodeLane),
+        batch: batch && { size: batch.size, timeout: encodeDuration(batch.timeout) },
+      },
+    });
     return { name, topic: this.name };
   }
 
@@ -188,10 +161,10 @@ export class Topic<TInput = unknown, TOutput = TInput> {
 
   /** The messages a consumer of this topic gave up on. */
   deadLetter(consumer: string | Consumer): DeadLetters {
-    return new DeadLetters(
+    return new ConsumerDeadLetters(
       typeof consumer === "string" ? consumer : consumer.name,
       (operation) => ({
-        client: this.ensureClient(operation),
+        client: this.openClient(operation),
         topic: this.name,
       }),
     );

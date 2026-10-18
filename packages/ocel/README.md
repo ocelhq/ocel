@@ -30,8 +30,8 @@ Every entry point is a subpath — there is no root export.
 | Import | Contents |
 | --- | --- |
 | `ocel/config` | `defineConfig`, and the `OcelConfig` / `AppConfig` / `DomainConfig` / `ProviderDescriptor` types |
-| `ocel/postgres` | `postgres(id, config?)` — declares a Postgres database and returns a connected client |
-| `ocel/bucket` | `bucket(name, options?)` — declares a bucket and returns the handle its objects are read and written through, plus `uploader`, `createRouteHandler` and `resolveBucketContext`, framework-agnostic |
+| `ocel/postgres` | `postgres(id, options?)` — declares a Postgres database and returns a connected client |
+| `ocel/bucket` | `bucket(name, options?)` — declares a bucket and returns the handle its objects are read and written through, plus `uploader` and `createRouteHandler`, framework-agnostic |
 | `ocel/bucket/next` | `bucket`, `uploader`, `createRouteHandler` returning Next route handlers |
 | `ocel/bucket/hono` | `bucket`, `uploader`, `createRouteHandler` returning a Hono handler |
 | `ocel/bucket/express` | `bucket`, `uploader`, `createRouteHandler` returning Express middleware |
@@ -61,8 +61,11 @@ export default defineConfig({
 
 Point any command at a different config with `--config <path>` (or `OCEL_CONFIG`).
 
+Declarations live in the project's discovery folder, `infra/` unless the config's `discovery.paths`
+names others: `ocel` imports every file there to read what the app declares.
+
 ```ts
-// ocel/index.ts
+// infra/index.ts
 import { bucket, uploader } from "ocel/bucket/next";
 import { postgres } from "ocel/postgres";
 

@@ -2,13 +2,9 @@ import { X509Certificate } from "node:crypto";
 import { type ConnectionOptions, checkServerIdentity } from "node:tls";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { Redis } from "ioredis";
-import { bindingKey, getConfig } from "../binding/binding.js";
-import { unprovisioned, unprovisionedPhase } from "../binding/unprovisioned.js";
-import { declarationSite } from "../declaration/callsite.js";
-import { defer } from "../declaration/defer.js";
-import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
-import { BindingType, type KvProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
-import { rpc } from "../runtime/rpc.js";
+import { bindingKey, lazyBinding } from "../binding/binding.js";
+import { declare } from "../declaration/declare.js";
+import type { KvProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import {
   type DeclaredEntry,
   declareEntry,
@@ -92,37 +88,26 @@ function declareStore<TEntries extends KVEntries = Record<never, never>>(
   );
   refuseEntries(name, entries);
 
-  if (process.env.OCEL_PHASE === "discovery") {
-    defer(
-      rpc.resource.declare({
-        resource: { name, type: ResourceType.KV },
-        config: {
-          case: "kv",
-          value: {
-            version: options.version ?? "",
-            eviction: options.eviction ?? "",
-            memory: options.memory ?? "",
-            entries: entries.map(([entry, declaration]) => ({
-              name: entry,
-              pattern: declaration.pattern,
-              shape: shapes[declaration.shape],
-              source: declaration.source,
-            })),
-          },
-        },
-        source: declarationSite(),
-      }),
-    );
-  }
+  declare(name, {
+    case: "kv",
+    value: {
+      version: options.version ?? "",
+      eviction: options.eviction ?? "",
+      memory: options.memory ?? "",
+      entries: entries.map(([entry, declaration]) => ({
+        name: entry,
+        pattern: declaration.pattern,
+        shape: shapes[declaration.shape],
+        source: declaration.source,
+      })),
+    },
+  });
 
-  let client: Redis | undefined;
-  const openClient = (access: string): Redis => {
-    if (unprovisionedPhase()) {
-      throw unprovisioned(`kv("${name}")`, access);
-    }
-    client ??= newRedis(clientOptions(name, getConfig(name, "kv")));
-    return client;
-  };
+  const what = `kv("${name}")`;
+  const openClient = lazyBinding(what, name, "kv", (properties) =>
+    newRedis(clientOptions(name, properties)),
+  );
+  const readConnectionString = lazyBinding(what, name, "kv", connectionStringOf);
 
   const store: Record<string, unknown> = {};
   for (const [entry, declaration] of entries) {
@@ -130,12 +115,7 @@ function declareStore<TEntries extends KVEntries = Record<never, never>>(
   }
   Object.defineProperties(store, {
     client: { get: () => openClient("client") },
-    connectionString: {
-      get: () => {
-        if (unprovisionedPhase()) throw unprovisioned(`kv("${name}")`, "connectionString");
-        return connectionStringOf(getConfig(name, "kv"));
-      },
-    },
+    connectionString: { get: () => readConnectionString("connectionString") },
   });
   return store as KVStore<TEntries>;
 }
@@ -181,7 +161,7 @@ function tlsOptions(
 ): ConnectionOptions {
   if (caPem && !holdsCertificates(caPem)) {
     throw new Error(
-      `${bindingKey(store, BindingType.KV)} delivers a caPem for its kv store that holds no PEM certificate`,
+      `${bindingKey(store, "kv")} delivers a caPem for its kv store that holds no PEM certificate`,
     );
   }
   return {

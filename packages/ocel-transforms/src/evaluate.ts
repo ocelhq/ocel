@@ -1,4 +1,4 @@
-import { awsOwnedFields } from "./aws";
+import { awsOwnedFields } from "./aws/index.js";
 import {
   type EnvTier,
   type GateContext,
@@ -7,10 +7,10 @@ import {
   type TagMap,
   type TransformDefinition,
   type TransformRule,
-} from "./define";
-import type { TransformBindings } from "./index";
-import { bindings, isBindingOutput } from "./output";
-import { vpsOwnedFields } from "./vps";
+} from "./define.js";
+import type { TransformBindings } from "./index.js";
+import { bindings, isBindingOutput } from "./output.js";
+import { vpsOwnedFields } from "./vps/index.js";
 
 /**
  * What one ocel resource's rules came to: a patch per underlying resource the

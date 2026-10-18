@@ -6,7 +6,6 @@ import {
   RealtimeSubscribe,
   ResourceType,
 } from "../gen/proto/app/resources/v1/resources_pb.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { type FakeGateway, serveFakeGateway } from "../testing/realtime-gateway.js";
 
 const declareMock = vi.hoisted(() => vi.fn((_req: unknown) => Promise.resolve({})));
@@ -167,7 +166,7 @@ describe("publishing from the server", () => {
   beforeEach(async () => {
     gateway = await serveFakeGateway();
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
+    vi.stubEnv(bindingKey("app", "realtime"), gateway.binding);
   });
 
   afterEach(async () => {
@@ -231,7 +230,7 @@ describe("publishing from the server", () => {
   it("throws when the runtime refuses the publish", async () => {
     await gateway.close();
     gateway = await serveFakeGateway({ status: 401 });
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
+    vi.stubEnv(bindingKey("app", "realtime"), gateway.binding);
 
     await expect(
       rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
@@ -252,9 +251,17 @@ describe("publishing outside a provisioned run", () => {
 
   it("names the binding key when nothing was delivered", async () => {
     vi.stubEnv("OCEL_PHASE", "");
+    const undelivered = realtime("undelivered", {
+      channels: {
+        "orders/:orderId": { schema: z.object({ status: z.string() }), subscribe: "public" },
+      },
+    });
 
     await expect(
-      rt.publish("orders/:orderId", { params: { orderId: "o1" }, body: { status: "paid" } }),
-    ).rejects.toThrow("OCEL_RESOURCE_REALTIME_app");
+      undelivered.publish("orders/:orderId", {
+        params: { orderId: "o1" },
+        body: { status: "paid" },
+      }),
+    ).rejects.toThrow("OCEL_RESOURCE_REALTIME_undelivered");
   });
 });

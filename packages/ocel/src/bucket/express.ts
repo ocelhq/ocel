@@ -1,16 +1,15 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
   Request as ExpressRequest,
   Response as ExpressResponse,
   RequestHandler,
 } from "express";
-import type { z } from "zod";
 import type { Bucket } from "./bucket.js";
-import { createRouteHandler as coreCreateRouteHandler, type RouteOptions } from "./route.js";
+import { createRouteHandler as coreCreateRouteHandler } from "./route.js";
 import type { ParsedInput, Uploader, UploaderAuth, UploaderUpload } from "./types.js";
 import { uploader as coreUploader } from "./uploader.js";
 
 export { Bucket, type BucketOptions, bucket } from "./bucket.js";
-export type { RouteOptions } from "./route.js";
 export type {
   CompletedFile,
   FileInfo,
@@ -19,7 +18,10 @@ export type {
   Uploader,
 } from "./types.js";
 
-export function uploader<TInput extends z.ZodType | undefined = undefined, TMetadata = unknown>(
+export function uploader<
+  TInput extends StandardSchemaV1 | undefined = undefined,
+  TMetadata = unknown,
+>(
   auth: UploaderAuth<ExpressRequest, TInput, TMetadata>,
   upload?: UploaderUpload<TMetadata>,
 ): Uploader<ParsedInput<TInput>, TMetadata, ExpressRequest> {
@@ -34,8 +36,8 @@ async function sendResponse(res: ExpressResponse, webRes: Response): Promise<voi
   res.end(Buffer.from(await webRes.arrayBuffer()));
 }
 
-export function createRouteHandler(bucket: Bucket, options?: RouteOptions): RequestHandler {
-  const { GET, POST } = coreCreateRouteHandler(bucket, options);
+export function createRouteHandler(bucket: Bucket): RequestHandler {
+  const { GET, POST } = coreCreateRouteHandler(bucket);
   return (req, res, next) => {
     if (req.originalUrl) req.url = req.originalUrl;
     const handler = req.method === "GET" ? GET : POST;

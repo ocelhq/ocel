@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { appsyncBinding } from "../testing/realtime-gateway.js";
 
 vi.mock("../runtime/rpc", () => ({
@@ -17,7 +16,7 @@ const rt = realtime("app", {
 describe("the realtime handler on next", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsyncBinding);
+    vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
   });
 
   afterEach(() => {

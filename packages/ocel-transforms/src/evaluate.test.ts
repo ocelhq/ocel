@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { defineTransform } from "./define";
-import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate";
+import { defineTransform } from "./define.js";
+import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate.js";
 
 function request(overrides: Partial<EvaluateRequest> = {}): EvaluateRequest {
   return {

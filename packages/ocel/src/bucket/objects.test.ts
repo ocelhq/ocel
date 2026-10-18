@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { RuntimeCallError } from "../runtime/errors.js";
 import { ObjectNotFoundError, PreconditionFailedError } from "./errors.js";
 import { createObjects } from "./objects.js";
 
@@ -54,7 +55,9 @@ function fakeRuntime() {
     copy: vi.fn(
       async ({ sourceKey, destinationKey }: { sourceKey: string; destinationKey: string }) => {
         const stored = store.get(sourceKey);
-        if (!stored) throw Object.assign(new Error("not found"), { code: 5 });
+        if (!stored) {
+          throw new RuntimeCallError("app.bucket.v1.BucketService/Copy", "not_found", "gone", null);
+        }
         store.set(destinationKey, stored);
         return { object: info(destinationKey) };
       },
@@ -150,6 +153,39 @@ describe("put", () => {
     expect(client.createMultipart).not.toHaveBeenCalled();
   });
 
+  it("writes an empty stream as an empty object in one signed request", async () => {
+    const { objects, store, client } = objectsUnderTest();
+    client.completeMultipart.mockImplementation((async ({ parts }: { parts: unknown[] }) => {
+      if (parts.length === 0) throw Object.assign(new Error("parts: min_items 1"), { code: 3 });
+      return { object: undefined };
+    }) as never);
+
+    const info = await objects.put(
+      "empty.bin",
+      new ReadableStream<Uint8Array>({ start: (c) => c.close() }),
+    );
+
+    expect(store.get("empty.bin")?.body.byteLength).toBe(0);
+    expect(info.size).toBe(0);
+    expect(client.createMultipart).not.toHaveBeenCalled();
+  });
+
+  it("writes a stream shorter than one part in one signed request", async () => {
+    const { objects, store, client } = objectsUnderTest();
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("hel"));
+        controller.enqueue(new TextEncoder().encode("lo"));
+        controller.close();
+      },
+    });
+
+    await objects.put("small.txt", source);
+
+    expect(new TextDecoder().decode(store.get("small.txt")?.body)).toBe("hello");
+    expect(client.createMultipart).not.toHaveBeenCalled();
+  });
+
   it("splits a body past the single-request ceiling into parts", async () => {
     const { objects, store, client } = objectsUnderTest();
     const big = new Uint8Array(20 * 1024 * 1024).fill(7);
@@ -213,26 +249,26 @@ describe("get", () => {
 
     const read = await objects.get("a.json");
 
-    expect(read).not.toBeNull();
+    expect(read).toBeDefined();
     expect(await read?.text()).toBe('{"ok":true}');
     expect(await objects.get("a.json").then((o) => o?.json())).toEqual({ ok: true });
     expect(await objects.get("a.json").then((o) => o?.bytes())).toBeInstanceOf(Uint8Array);
   });
 
-  it("is null for an object that is not there", async () => {
+  it("is undefined for an object that is not there", async () => {
     const { objects } = objectsUnderTest();
 
-    expect(await objects.get("gone.txt")).toBeNull();
+    expect(await objects.get("gone.txt")).toBeUndefined();
   });
 });
 
 describe("head", () => {
-  it("is the object's info, or null", async () => {
+  it("is the object's info, or undefined", async () => {
     const { objects } = objectsUnderTest();
     await objects.put("a.txt", "hello");
 
     expect((await objects.head("a.txt"))?.size).toBe(5);
-    expect(await objects.head("gone.txt")).toBeNull();
+    expect(await objects.head("gone.txt")).toBeUndefined();
   });
 });
 
@@ -280,6 +316,9 @@ describe("copy", () => {
 
     expect(await objects.get("b.txt").then((o) => o?.text())).toBe("hello");
     await expect(objects.copy("gone.txt", "c.txt")).rejects.toBeInstanceOf(ObjectNotFoundError);
+    await expect(objects.copy("gone.txt", "c.txt")).rejects.toMatchObject({
+      cause: expect.any(RuntimeCallError),
+    });
   });
 });
 

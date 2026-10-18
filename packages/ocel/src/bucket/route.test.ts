@@ -1,3 +1,4 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { UploadState } from "../gen/proto/app/bucket/v1/bucket_pb.js";
@@ -11,7 +12,7 @@ const { bucket } = await import("./bucket.js");
 import type { BucketServiceClient } from "./bucket-client.js";
 import type { BucketContext } from "./bucket-context.js";
 import { decodeMetadata, encodeMetadata } from "./metadata.js";
-import { createRouteHandler } from "./route.js";
+import { routeHandlerOver } from "./route.js";
 import { uploader } from "./uploader.js";
 
 function makeReq(url: string, body?: unknown) {
@@ -79,7 +80,7 @@ beforeEach(() => {
 describe("op=presign", () => {
   it("builds the exact PresignUpload request the runtime expects", async () => {
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(
       makeReq(presignUrl, {
@@ -124,7 +125,7 @@ describe("op=presign", () => {
         ],
       })),
     });
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(
       makeReq(presignUrl, {
@@ -153,7 +154,7 @@ describe("op=presign", () => {
         ],
       })),
     });
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(
       makeReq(presignUrl, {
@@ -186,7 +187,7 @@ describe("op=presign", () => {
       },
     });
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(rejecting, { runtime: ctx });
+    const { POST } = routeHandlerOver(rejecting, () => ctx);
 
     const res = await POST(
       makeReq(presignUrl, {
@@ -199,9 +200,54 @@ describe("op=presign", () => {
     expect(presignUpload).not.toHaveBeenCalled();
   });
 
+  it("validates input with any Standard Schema, handing middleware the schema's output", async () => {
+    const userIdSchema: StandardSchemaV1<unknown, { userId: string }> = {
+      "~standard": {
+        version: 1,
+        vendor: "hand-written",
+        validate: (value) =>
+          typeof value === "object" &&
+          value !== null &&
+          typeof (value as { userId?: unknown }).userId === "string"
+            ? { value: { userId: (value as { userId: string }).userId.toUpperCase() } }
+            : { issues: [{ message: "userId is a string" }] },
+      },
+    };
+    const seen: unknown[] = [];
+    const handWritten = bucket("hand-written", {
+      uploaders: {
+        avatar: uploader(
+          {
+            input: userIdSchema,
+            middleware: ({ input }) => {
+              seen.push(input.userId);
+              return {};
+            },
+          },
+          { path: { prefix: "a/" } },
+        ),
+      },
+    });
+    const { ctx, presignUpload } = fakeContext();
+    const { POST } = routeHandlerOver(handWritten, () => ctx);
+    const files = [{ name: "p.jpg", size: 1, mimeType: "image/jpeg" }];
+
+    const accepted = await POST(
+      makeReq(presignUrl, { uploader: "avatar", input: { userId: "u1" }, files }),
+    );
+    const refused = await POST(
+      makeReq(presignUrl, { uploader: "avatar", input: { userId: 1 }, files }),
+    );
+
+    expect(accepted.status).toBe(200);
+    expect(seen).toEqual(["U1"]);
+    expect(refused.status).toBe(400);
+    expect(presignUpload).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects invalid input before minting anything", async () => {
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
     const res = await POST(
       makeReq(presignUrl, {
         uploader: "avatar",
@@ -215,7 +261,7 @@ describe("op=presign", () => {
 
   it("rejects a disallowed mime type", async () => {
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
     const res = await POST(
       makeReq(presignUrl, {
         uploader: "avatar",
@@ -229,7 +275,7 @@ describe("op=presign", () => {
 
   it("rejects oversized files and count violations", async () => {
     const { ctx } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const oversized = await POST(
       makeReq(presignUrl, {
@@ -265,7 +311,7 @@ describe("op=presign", () => {
 
   it("returns 404 for an unknown uploader", async () => {
     const { ctx } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
     const res = await POST(
       makeReq(presignUrl, {
         uploader: "nope",
@@ -293,7 +339,7 @@ describe("op=presign", () => {
       },
     });
     const { ctx, presignUpload } = fakeContext();
-    const { POST } = createRouteHandler(perUser, { runtime: ctx });
+    const { POST } = routeHandlerOver(perUser, () => ctx);
 
     const free = await POST(
       makeReq(presignUrl, {
@@ -323,7 +369,7 @@ describe("op=callback", () => {
 
   it("runs onUploadComplete only when the signature is valid", async () => {
     const { ctx, verifyUploadSignature } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(makeReq(callbackUrl, { sessionId: "sess-1", signature: "sig", file }));
 
@@ -346,7 +392,7 @@ describe("op=callback", () => {
         metadata: encodeMetadata({ uploader: "gone", metadata: {} }),
       })),
     });
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(makeReq(callbackUrl, { sessionId: "sess-1", signature: "sig", file }));
 
@@ -358,7 +404,7 @@ describe("op=callback", () => {
     const { ctx } = fakeContext({
       verifyUploadSignature: vi.fn(async () => ({ valid: false, metadata: new Uint8Array() })),
     });
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(makeReq(callbackUrl, { sessionId: "sess-1", signature: "bad", file }));
 
@@ -378,7 +424,7 @@ describe("op=poll", () => {
     const { ctx } = fakeContext({
       completeUpload: vi.fn(async () => ({ state, error: "" })),
     });
-    const { GET } = createRouteHandler(storage, { runtime: ctx });
+    const { GET } = routeHandlerOver(storage, () => ctx);
     const res = await GET(makeReq(pollUrl));
     expect(res.status).toBe(200);
     expect(((await res.json()) as any).state).toBe(expected);
@@ -388,7 +434,7 @@ describe("op=poll", () => {
     const { ctx } = fakeContext({
       completeUpload: vi.fn(async () => ({ state: UploadState.EXPIRED, error: "gone" })),
     });
-    const { GET } = createRouteHandler(storage, { runtime: ctx });
+    const { GET } = routeHandlerOver(storage, () => ctx);
     const res = await GET(makeReq(pollUrl));
     expect(((await res.json()) as any).error).toBe("gone");
   });
@@ -396,7 +442,7 @@ describe("op=poll", () => {
   it("asks the runtime to verify, not only to read, so a store that raises no event still completes", async () => {
     const completeUpload = vi.fn(async () => ({ state: UploadState.SUCCEEDED, error: "" }));
     const { ctx } = fakeContext({ completeUpload });
-    const { GET } = createRouteHandler(storage, { runtime: ctx });
+    const { GET } = routeHandlerOver(storage, () => ctx);
 
     await GET(makeReq(pollUrl));
 
@@ -410,7 +456,7 @@ describe("op=complete", () => {
   it("completes the session the client says it finished", async () => {
     const completeUpload = vi.fn(async () => ({ state: UploadState.SUCCEEDED, error: "" }));
     const { ctx } = fakeContext({ completeUpload });
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(makeReq(completeUrl, { sessionId: "sess-1" }));
 
@@ -421,7 +467,7 @@ describe("op=complete", () => {
 
   it("refuses a request naming no session", async () => {
     const { ctx } = fakeContext();
-    const { POST } = createRouteHandler(storage, { runtime: ctx });
+    const { POST } = routeHandlerOver(storage, () => ctx);
 
     const res = await POST(makeReq(completeUrl, {}));
 

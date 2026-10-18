@@ -3,7 +3,6 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
-import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import {
   type FakeAppSync,
   type FakeAppSyncOptions,
@@ -136,7 +135,7 @@ let app: App;
 async function replaceGateway(options: FakeGatewayOptions): Promise<void> {
   await gateway.close();
   gateway = await serveFakeGateway(options);
-  vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
+  vi.stubEnv(bindingKey("app", "realtime"), gateway.binding);
 }
 
 async function replaceApp(answer: AppAnswer): Promise<void> {
@@ -147,7 +146,7 @@ async function replaceApp(answer: AppAnswer): Promise<void> {
 beforeEach(async () => {
   gateway = await serveFakeGateway();
   vi.stubEnv("OCEL_PHASE", "");
-  vi.stubEnv(bindingKey("app", BindingType.REALTIME), gateway.binding);
+  vi.stubEnv(bindingKey("app", "realtime"), gateway.binding);
   app = await serveApp();
 });
 
@@ -585,7 +584,7 @@ describe("a realtime client on AppSync Events", () => {
   async function serveAppSync(options: FakeAppSyncOptions = {}): Promise<void> {
     await appsync?.close();
     appsync = await serveFakeAppSync(options);
-    vi.stubEnv(bindingKey("app", BindingType.REALTIME), appsync.binding);
+    vi.stubEnv(bindingKey("app", "realtime"), appsync.binding);
   }
 
   function envelopeOn(channel: string, data: unknown): string {
