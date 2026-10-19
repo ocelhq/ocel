@@ -32,6 +32,30 @@ export const publicOriginFormActionCheck: Check = {
   },
 };
 
+export const immutableChunkCheck: Check = {
+  title: "a content-hashed chunk the page loads is cached for a year",
+  assertsDeployment: true,
+  run: async (ctx) => {
+    const { html } = await page(ctx, "/");
+    const chunk = IMMUTABLE_CHUNK.exec(html)?.[0];
+    assert.ok(chunk, "the page links no /_app/immutable/ chunk");
+    const res = await ctx.fetch(`${ctx.baseUrl}${chunk}`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /javascript/);
+    assert.match(res.headers.get("cache-control") ?? "", /max-age=31536000.*immutable/);
+  },
+};
+
+export const missingImmutableChunkCheck: Check = {
+  title: "a chunk missing from /_app/immutable/ is a 404, not a rendered page",
+  assertsDeployment: true,
+  run: async (ctx) => {
+    const res = await ctx.fetch(`${ctx.baseUrl}/_app/immutable/chunks/missing.js`);
+    assert.equal(res.status, 404);
+    assert.doesNotMatch(await res.text(), /<html/i);
+  },
+};
+
 export const svelteKitChecks: Check[] = [
   {
     title: "GET / is rendered on the server",
@@ -52,19 +76,7 @@ export const svelteKitChecks: Check[] = [
       assert.doesNotMatch(res.headers.get("cache-control") ?? "", /immutable/);
     },
   },
-  {
-    title: "a content-hashed chunk the page loads is cached for a year",
-    assertsDeployment: true,
-    run: async (ctx) => {
-      const { html } = await page(ctx, "/");
-      const chunk = IMMUTABLE_CHUNK.exec(html)?.[0];
-      assert.ok(chunk, "the page links no /_app/immutable/ chunk");
-      const res = await ctx.fetch(`${ctx.baseUrl}${chunk}`);
-      assert.equal(res.status, 200);
-      assert.match(res.headers.get("content-type") ?? "", /javascript/);
-      assert.match(res.headers.get("cache-control") ?? "", /max-age=31536000.*immutable/);
-    },
-  },
+  immutableChunkCheck,
   {
     title: "GET /_app/version.json is revalidated, so a client learns of a new deployment",
     assertsDeployment: true,
@@ -74,15 +86,7 @@ export const svelteKitChecks: Check[] = [
       assert.doesNotMatch(res.headers.get("cache-control") ?? "", /immutable/);
     },
   },
-  {
-    title: "a chunk missing from /_app/immutable/ is a 404, not a rendered page",
-    assertsDeployment: true,
-    run: async (ctx) => {
-      const res = await ctx.fetch(`${ctx.baseUrl}/_app/immutable/chunks/missing.js`);
-      assert.equal(res.status, 404);
-      assert.doesNotMatch(await res.text(), /<html/i);
-    },
-  },
+  missingImmutableChunkCheck,
   publicOriginFormActionCheck,
   {
     title: "a form action posted from another origin is refused",
