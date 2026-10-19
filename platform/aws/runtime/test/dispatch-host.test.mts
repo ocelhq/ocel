@@ -202,6 +202,31 @@ test("a missing object reads as absent even when its error body will not cancel"
   expect(await within(stalling(404).get("assets/gone.html"))).toBeNull();
 });
 
+test("an error body that never ends is aborted, and the object reads as absent", async () => {
+  let aborted = false;
+  const bucket = s3AssetBucket(
+    "assets-bucket",
+    "us-east-1",
+    (async (_input: unknown, init?: RequestInit) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener("abort", () => {
+              aborted = true;
+              controller.error(init.signal?.reason);
+            });
+          },
+        }),
+        { status: 403 },
+      )) as unknown as typeof fetch,
+  );
+  const within = <T,>(read: Promise<T>) =>
+    Promise.race([read, new Promise((resolve) => setTimeout(() => resolve("hung"), 2000))]);
+
+  expect(await within(bucket.get("assets/gone.html"))).toBeNull();
+  expect(aborted).toBe(true);
+});
+
 test("an asset bucket the function cannot read refuses to boot", () => {
   const env = { OCEL_ASSET_BUCKET: "assets-bucket", AWS_REGION: "us-east-1" };
 
