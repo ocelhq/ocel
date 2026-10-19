@@ -17,6 +17,7 @@ import {
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
   nextPprChecks,
+  nextPublicValueInlinedCheck,
   nextStoreReadChecks,
   orderedKeysInParallelCheck,
   preBuildChecks,
@@ -664,6 +665,17 @@ describe("sdk/next and sdk/sveltekit", () => {
       expect(
         expectedFailures[cell]?.[clientEnvDeploymentUrlCheck.title]?.map((gap) => gap.id),
       ).toEqual(["cloud-run-hands-no-deployment-url"]);
+    }
+  });
+
+  it("expects the public value Next inlines red on a box, where the Next app builds as an image without ocel's Next adapter", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      const { expectedFailures } = planOn(lane);
+      for (const cell of ["sdk/next/web", "sdk/next-dockerfile/web"]) {
+        expect(
+          expectedFailures[cell]?.[nextPublicValueInlinedCheck.title]?.map((gap) => gap.id),
+        ).toEqual(["image-build-inlines-no-public-value"]);
+      }
     }
   });
 
