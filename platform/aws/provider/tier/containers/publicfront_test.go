@@ -19,7 +19,7 @@ func publicInfraWork() *work {
 		tier:     environment.TierProduction,
 		boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary",
 		tags:     stackTags(environment.TierProduction),
-		public:   fixtureRanges,
+		fronts:   Fronts{Private: true, Public: fixtureRanges},
 	}
 }
 
@@ -120,7 +120,7 @@ func TestTheContainerInfraRaisesNoPublicFrontForAnEdgeThatForwardsToNone(t *test
 	t.Parallel()
 
 	infra := publicInfraWork()
-	infra.public = nil
+	infra.fronts.Public = nil
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)

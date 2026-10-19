@@ -17,7 +17,7 @@ import (
 func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierProduction)}
+	infra := &work{tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierProduction), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
@@ -71,7 +71,7 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 func TestTheContainerSecurityGroupsKeepTheDescriptionsTheyWereCreatedWith(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierPreview)}
+	infra := &work{tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierPreview), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "preview--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
@@ -96,7 +96,7 @@ func TestTheContainerSecurityGroupsKeepTheDescriptionsTheyWereCreatedWith(t *tes
 func TestDecodeContainerInfraReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) {
 	t.Parallel()
 
-	decoded, err := decode(infrastructureOutputs())
+	decoded, err := decode(infrastructureOutputs(), true)
 	if err != nil {
 		t.Fatalf("decode() = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestDecodeContainerInfraReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) 
 	}
 	partial := infrastructureOutputs()
 	delete(partial, outputKeyListener)
-	if _, err := decode(partial); err == nil {
+	if _, err := decode(partial, true); err == nil {
 		t.Error("decode accepted outputs with no listener, so a container would have no rule to hang off")
 	}
 }
@@ -234,7 +234,7 @@ func TestTheContainerInfraLooksOnlyInZonesACloudFrontVPCOriginReaches(t *testing
 func TestTheContainerInfraLooksOnlyInTheDefaultSubnetsOfTheDefaultVPC(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierProduction, boundary: componenttest.BoundaryARN, tags: stackTags(environment.TierProduction)}
+	infra := &work{tier: environment.TierProduction, boundary: componenttest.BoundaryARN, tags: stackTags(environment.TierProduction), fronts: Fronts{Private: true}}
 	lookups := &subnetLookups{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", lookups)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)

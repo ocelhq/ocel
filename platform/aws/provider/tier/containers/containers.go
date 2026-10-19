@@ -68,6 +68,34 @@ func (s Infrastructure) Front() awsports.ContainerFront {
 	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
 }
 
+type Fronts struct {
+	Private bool
+	Public  []string
+}
+
+func (f Fronts) addInstalled(installed Fronts) Fronts {
+	kept := Fronts{Private: f.Private || installed.Private, Public: f.Public}
+	if len(kept.Public) == 0 {
+		kept.Public = installed.Public
+	}
+	return kept
+}
+
+func (s Infrastructure) installed() Fronts {
+	installed := Fronts{Private: s.Listener != ""}
+	if s.PublicListener != "" && s.PublicRanges != "" {
+		installed.Public = strings.Split(s.PublicRanges, ",")
+	}
+	return installed
+}
+
+func (s Infrastructure) hasFronts(f Fronts) bool {
+	if f.Private && s.Listener == "" {
+		return false
+	}
+	return len(f.Public) == 0 || (s.PublicListener != "" && s.PublicRanges == joinRanges(f.Public))
+}
+
 func StackRef(tier environment.Tier) provider.StackRef {
 	return provider.StackRef{Project: Slug, Tier: tier, Name: naming.InfraStack(string(tier))}
 }
@@ -114,11 +142,11 @@ func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Infrastructur
 	if len(outputs) == 0 {
 		return Infrastructure{}, false, nil
 	}
-	decoded, err := decode(outputs)
+	decoded, err := decode(outputs, false)
 	return decoded, err == nil, err
 }
 
-func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, public []string, progress progress.Log) (Infrastructure, error) {
+func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Fronts, progress progress.Log) (Infrastructure, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	tier := ref.Tier
@@ -130,27 +158,31 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, public []str
 	if err != nil {
 		return Infrastructure{}, err
 	}
-	if present && (len(public) == 0 || (infra.PublicListener != "" && infra.PublicRanges == joinRanges(public))) {
-		if err := awsports.WriteContainerFront(ctx, owner.KeyValues, tier, infra.Front()); err != nil {
+	if present && infra.hasFronts(fronts) {
+		if err := recordFront(ctx, owner.KeyValues, tier, infra); err != nil {
 			return Infrastructure{}, err
 		}
 		return infra, s.claim(ctx, ref)
 	}
-	if !present {
-		if _, err := component.ReadDefaultVPC(ctx, owner.Subnets, owner.Region, "the cluster and load balancer container apps run behind"); err != nil {
-			return Infrastructure{}, err
-		}
+	raised := fronts
+	if present {
+		raised = fronts.addInstalled(infra.installed())
+	} else if _, err := component.ReadDefaultVPC(ctx, owner.Subnets, owner.Region, "the cluster and load balancer container apps run behind"); err != nil {
+		return Infrastructure{}, err
 	}
-	if progress != nil && present {
-		progress.Say("Raising the public load balancer of the " + string(tier) + " tier: the edge in front of a container app forwards its hostnames there")
-	} else if progress != nil {
+	switch {
+	case progress == nil:
+	case !present:
 		progress.Say("Provisioning the shared container infrastructure for the " + string(tier) + " tier: one load balancer and one cluster every container app in it runs behind")
+	case fronts.Private && infra.Listener == "":
+		progress.Say("Raising the internal load balancer of the " + string(tier) + " tier: CloudFront reaches a container app routed through it there, by its VPC origin")
+	default:
+		progress.Say("Raising the public load balancer of the " + string(tier) + " tier: the edge in front of a container app forwards its hostnames there")
 	}
-	program := NewProgram(tier, owner.AppBoundaryARN, owner.AppRolePath, public)
 	var decoded Infrastructure
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PartResource, error) {
 		var err error
-		if decoded, err = provision(ctx, owner, StackRef(tier), program, progress); err != nil {
+		if decoded, err = provision(ctx, owner, StackRef(tier), raised, progress); err != nil {
 			return nil, err
 		}
 		return listResources(tier, decoded.Front()), nil
@@ -161,7 +193,7 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, public []str
 	return decoded, s.claim(ctx, ref)
 }
 
-func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, program component.Program, progress progress.Log) (Infrastructure, error) {
+func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, fronts Fronts, progress progress.Log) (Infrastructure, error) {
 	tier := ref.Tier
 	if err := stackrecords.Write(ctx, owner.KeyValues, tier, Slug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
@@ -174,18 +206,26 @@ func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackR
 			return Infrastructure{}, err
 		}
 	}
+	program := NewProgram(tier, owner.AppBoundaryARN, owner.AppRolePath, fronts)
 	outputs, err := owner.Automation.Run(ctx, ref, program, provider.Lease{}, progress)
 	if err != nil {
 		return Infrastructure{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
 	}
-	decoded, err := decode(outputs)
+	decoded, err := decode(outputs, fronts.Private)
 	if err != nil {
 		return Infrastructure{}, err
 	}
-	if err := awsports.WriteContainerFront(ctx, owner.KeyValues, tier, decoded.Front()); err != nil {
+	if err := recordFront(ctx, owner.KeyValues, tier, decoded); err != nil {
 		return Infrastructure{}, err
 	}
 	return decoded, nil
+}
+
+func recordFront(ctx context.Context, store records.Store, tier environment.Tier, infra Infrastructure) error {
+	if infra.VPCOrigin == "" {
+		return forgetFront(ctx, store, tier)
+	}
+	return awsports.WriteContainerFront(ctx, store, tier, infra.Front())
 }
 
 func (s *Stacks) RecordConsumer(ctx context.Context, ref provider.StackRef) error {
