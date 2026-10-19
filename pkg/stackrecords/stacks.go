@@ -37,8 +37,8 @@ type Stack struct {
 	Containers []provider.AppContainer `json:"containers,omitempty"`
 	Image      string                  `json:"image,omitempty"`
 
-	Resources      []byte `json:"resources,omitempty"`
-	ResourceDigest string `json:"resource_digest,omitempty"`
+	Resources  []byte `json:"resources,omitempty"`
+	SpecDigest string `json:"spec_digest,omitempty"`
 
 	WrittenBy provider.WrittenBy `json:"writer,omitempty"`
 	UpdatedAt int64              `json:"updated_at,omitempty"`

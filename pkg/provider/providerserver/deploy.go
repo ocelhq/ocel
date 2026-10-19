@@ -60,6 +60,7 @@ type deployRun struct {
 	parts        []string
 	uses         []buildoutput.Uses
 	transforms   []string
+	options      provider.Options
 	artifactRoot string
 	sender       *eventStream
 	spanEvents   *spanEvents
@@ -94,8 +95,8 @@ type deployRun struct {
 
 	replaces string
 
-	infraProvisioned     bool
-	infraHoldsUndeclared bool
+	infraProvisioned bool
+	infraCurrent     bool
 
 	hold *leaseHold
 
@@ -156,6 +157,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		parts:        parts,
 		uses:         uses,
 		transforms:   h.session.transforms(),
+		options:      h.session.options(),
 		artifactRoot: outputRoot,
 		sender:       sender,
 		spanEvents:   newSpanEvents(sender),

@@ -3,8 +3,6 @@ package providerserver
 import (
 	"cmp"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -98,11 +96,7 @@ func refuseInfraProvisionedDeploy(req *contractv1.DeployRequest) error {
 }
 
 func (r *deployRun) executeInfra(ctx context.Context) (*progressv1.OperationEvent, error) {
-	recorded, _, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
-	if err != nil {
-		return nil, err
-	}
-	undeclared, err := r.listUndeclaredResources(recorded)
+	undeclared, err := r.readCurrentInfra(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +107,7 @@ func (r *deployRun) executeInfra(ctx context.Context) (*progressv1.OperationEven
 	}); err != nil {
 		return nil, err
 	}
-	if err := r.provisionInfra(ctx, undeclared); err != nil {
+	if err := r.reconcileInfra(ctx, undeclared); err != nil {
 		return nil, err
 	}
 	return okResult(), nil
@@ -172,41 +166,6 @@ func (r *deployRun) ensurePreviewRecorded(ctx context.Context) error {
 	return r.ensureLifecycle(ctx)
 }
 
-func (r *deployRun) readProvisionedInfra(ctx context.Context) error {
-	if !r.infraProvisioned {
-		return nil
-	}
-	recorded, found, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return refusal.Refuse(refusal.CodeNotReady,
-			"%s was never provisioned, so this deploy has no infra to ship its apps over: deploy again, and the infra is provisioned before the build",
-			r.spec.Infra)
-	}
-	declared, err := encodeResources(r.manifest.GetResources())
-	if err != nil {
-		return err
-	}
-	if recorded.ResourceDigest != digestResources(declared) {
-		return refusal.Refuse(refusal.CodeBusy,
-			"%s holds other resources than this deploy declares, so another deploy provisioned it after this one did: deploy again once that deploy ends",
-			r.spec.Infra)
-	}
-	undeclared, err := r.listUndeclaredResources(recorded)
-	if err != nil {
-		return err
-	}
-	r.infraHoldsUndeclared = len(undeclared) > 0
-	published, err := r.publishedBindings().Published(ctx)
-	if err != nil {
-		return err
-	}
-	r.bindings, err = mergePublishedProperties(r.spec.Infra, recorded.Bindings, published)
-	return err
-}
-
 func mergePublishedProperties(infra naming.StackName, recorded, published []provider.Binding) ([]provider.Binding, error) {
 	bindings := slices.Clone(recorded)
 	for i, binding := range bindings {
@@ -232,7 +191,7 @@ func (r *deployRun) recordInfraStack(ctx context.Context, holds []byte) error {
 	if !found {
 		recorded = stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: r.readiness.WrittenBy}
 	}
-	recorded.Resources, recorded.ResourceDigest = holds, ""
+	recorded.Resources, recorded.SpecDigest = holds, ""
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, recorded)
 }
 
@@ -270,9 +229,4 @@ func resourceName(resource *contractv1.ManifestResource) string {
 
 func encodeResources(resources []*contractv1.ManifestResource) ([]byte, error) {
 	return proto.MarshalOptions{Deterministic: true}.Marshal(&contractv1.Manifest{Resources: resources})
-}
-
-func digestResources(encoded []byte) string {
-	sum := sha256.Sum256(encoded)
-	return hex.EncodeToString(sum[:])
 }

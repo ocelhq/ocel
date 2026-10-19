@@ -544,8 +544,8 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsItsBindings(t *test
 		t.Fatal(err)
 	}
 	for _, entry := range entries {
-		if len(entry.Bindings) != 0 || entry.ResourceDigest != "" {
-			t.Errorf("the refused deploy recorded %s with bindings %v and digest %q, want neither written for a binding providerserver would not accept", entry.Name, entry.Bindings, entry.ResourceDigest)
+		if len(entry.Bindings) != 0 || entry.SpecDigest != "" {
+			t.Errorf("the refused deploy recorded %s with bindings %v and digest %q, want neither written for a binding providerserver would not accept", entry.Name, entry.Bindings, entry.SpecDigest)
 		}
 	}
 }
@@ -660,7 +660,9 @@ func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	stacks.publishes("db-two.invalid")
-	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+	changed := deployRequest()
+	changed.Manifest.Resources = append(changed.Manifest.Resources, bucketResource("uploads"))
+	if result, _ := deploy(t, client, changed); !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
 

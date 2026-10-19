@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -19,8 +20,10 @@ func TestDeployTellsTheStacksPortWhetherItsRecordsAlreadyNameEachStack(t *testin
 	client := servedBy(t, vendor)
 	bootstrappedOverRPC(t, client)
 
-	for range 2 {
-		if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+	changed := deployRequest()
+	changed.Manifest.Resources = append(changed.Manifest.Resources, bucketResource("uploads"))
+	for _, req := range []*contractv1.DeployRequest{deployRequest(), changed} {
+		if result, _ := deploy(t, client, req); !result.GetSuccess() {
 			t.Fatalf("Deploy() = %q", result.GetError())
 		}
 	}

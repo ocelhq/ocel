@@ -186,6 +186,12 @@ func (s *session) transforms() []string {
 	return s.settings.Transforms
 }
 
+func (s *session) options() provider.Options {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.settings.Options
+}
+
 func (s *session) configure(ctx context.Context, settings provider.Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -54,7 +54,7 @@ func (r *deployRun) refuseUnconsentedDeploy(ctx context.Context) error {
 			return provider.Plan{}, err
 		}
 		fresh.Groups = append(fresh.Groups, preflight.Groups...)
-		if r.provisionsInfra() {
+		if !r.infraCurrent {
 			infra, err := r.planInfra(ctx, nil)
 			if err != nil {
 				return provider.Plan{}, err
@@ -72,6 +72,9 @@ func (r *deployRun) refuseUnconsentedDeploy(ctx context.Context) error {
 }
 
 func (r *deployRun) refuseUnconsentedInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
+	if r.infraCurrent {
+		return nil
+	}
 	return r.mode.refuseUnconsented(func() (provider.Plan, error) {
 		return r.planInfra(ctx, undeclared)
 	})
