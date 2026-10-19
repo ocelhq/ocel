@@ -265,6 +265,25 @@ func TestABucketWhosePublicAccessPreventionWasLiftedPlansAnUpdate(t *testing.T) 
 	}
 }
 
+func TestABucketOnAnEmulatorThatKeepsNoAccessConfigurationPlansKeepAndIsNotRewritten(t *testing.T) {
+	p, server := servingStorage(t)
+	if _, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil); err != nil {
+		t.Fatal(err)
+	}
+	server.drift(namesOf(t, p).AppBucket("shop", "prod", "uploads"), func(bucket *raw.Bucket) { bucket.IamConfiguration = nil })
+
+	if action, reason := planBucket(t, p, server, provider.BucketSpec{}); action != provider.ActionKeep {
+		t.Errorf("PlanBucket() = %s %q, want %s: the emulator keeps no access configuration, so a rerun would plan, and make, an update forever", action, reason, provider.ActionKeep)
+	}
+	before := len(server.wrote())
+	if _, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if wrote := server.wrote()[before:]; len(wrote) != 0 {
+		t.Errorf("a rerun of the provision wrote %q, want nothing: the bucket is as declared but for what the emulator cannot keep", wrote)
+	}
+}
+
 func TestABucketAlreadyAsDeclaredPlansKeep(t *testing.T) {
 	p, server := servingStorage(t)
 	spec := provider.BucketSpec{AllowedOrigins: []string{"https://shop.example"}}

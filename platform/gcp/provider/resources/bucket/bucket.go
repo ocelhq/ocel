@@ -38,8 +38,9 @@ var (
 )
 
 type appBucket struct {
-	name  string
-	attrs storage.BucketAttrs
+	name     string
+	attrs    storage.BucketAttrs
+	emulated bool
 }
 
 func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionRequest) appBucket {
@@ -48,7 +49,8 @@ func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionR
 		spec = *in.Resource.Bucket
 	}
 	return appBucket{
-		name: clients.AppBucket(in.Ref.Project, in.Ref.Name.Env, in.Resource.Name),
+		name:     clients.AppBucket(in.Ref.Project, in.Ref.Name.Env, in.Resource.Name),
+		emulated: clients.Emulated(),
 		attrs: storage.BucketAttrs{
 			Location:                 clients.Region,
 			Labels:                   names.LabelsFor(clients.Names, in.Ref, names.BucketLabel, in.Resource.Name),
@@ -88,11 +90,11 @@ func bucketLifecycle() storage.Lifecycle {
 func (b appBucket) drift(current *storage.BucketAttrs) (storage.BucketAttrsToUpdate, []string) {
 	var update storage.BucketAttrsToUpdate
 	var differences []string
-	if !current.UniformBucketLevelAccess.Enabled {
+	if !b.keepsNoAccess(current) && !current.UniformBucketLevelAccess.Enabled {
 		update.UniformBucketLevelAccess = &b.attrs.UniformBucketLevelAccess
 		differences = append(differences, "uniform bucket-level access turns on")
 	}
-	if current.PublicAccessPrevention != b.attrs.PublicAccessPrevention {
+	if !b.keepsNoAccess(current) && current.PublicAccessPrevention != b.attrs.PublicAccessPrevention {
 		update.PublicAccessPrevention = b.attrs.PublicAccessPrevention
 		differences = append(differences, fmt.Sprintf("public access prevention changes from %s to %s", current.PublicAccessPrevention, b.attrs.PublicAccessPrevention))
 	}
@@ -109,6 +111,10 @@ func (b appBucket) drift(current *storage.BucketAttrs) (storage.BucketAttrsToUpd
 		differences = append(differences, fmt.Sprintf("lifecycle rules change from %s to %s", describeRules(current.Lifecycle), describeRules(b.attrs.Lifecycle)))
 	}
 	return update, differences
+}
+
+func (b appBucket) keepsNoAccess(current *storage.BucketAttrs) bool {
+	return b.emulated && current.PublicAccessPrevention == storage.PublicAccessPreventionUnknown
 }
 
 func listOrigins(cors []storage.CORS) []string {
