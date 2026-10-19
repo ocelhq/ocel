@@ -324,6 +324,42 @@ func TestAFailedDeployReclaimsItsReleaseStacksAndKeepsEveryBootstrapPartTheyUsed
 	}
 }
 
+func TestAFailedDeployNamesTheSharedPartNoReleaseUsesAndTheCommandThatRemovesIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{Name: "containers", RetiresWithLastUser: true, UsedBy: []string{}})
+	vendor.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{Name: "bastion"})
+	releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
+	overtakenWhileItBuilds(t, vendor, releases)
+
+	result, _ := deploy(t, client, deployRequest())
+	if result.GetSuccess() {
+		t.Fatal("Deploy() overtaken while it built = success, want it refused")
+	}
+
+	want := []string{"the containers bootstrap part stays, though no release uses it: a retry reuses it, and `ocel bootstrap production --remove containers` takes it down"}
+	if got := result.GetUrlNotes(); !slices.Equal(got, want) {
+		t.Errorf("the failed deploy's notes = %q, want %q: idle shared infrastructure keeps billing until someone removes it", got, want)
+	}
+}
+
+func TestAFailedDeployNamesNoSharedPartAReleaseStillUses(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{Name: "containers", RetiresWithLastUser: true, UsedBy: []string{"orders"}})
+	releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
+	overtakenWhileItBuilds(t, vendor, releases)
+
+	result, _ := deploy(t, client, deployRequest())
+	if result.GetSuccess() {
+		t.Fatal("Deploy() overtaken while it built = success, want it refused")
+	}
+
+	if got := result.GetUrlNotes(); len(got) != 0 {
+		t.Errorf("the failed deploy's notes = %q, want none: orders still uses the containers part", got)
+	}
+}
+
 func TestADeployThatFailsAfterProvisioningRemovesTheFunctionsItsStackHolds(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)

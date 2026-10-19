@@ -57,6 +57,7 @@ func (r *Run) End(errp *error) {
 		result, code := r.result(err)
 		r.mu.Lock()
 		result.Apps, result.ChangeStarted, result.PromotionId = r.apps, r.changed, r.promotion
+		result.UrlNotes = r.urlNotes
 		result.Assumed = r.assumed
 		result.Tier, result.Origin = r.identity.GetTier(), r.identity.GetOrigin()
 		r.mu.Unlock()
@@ -100,7 +101,6 @@ func (r *Run) result(err error) (*streamv1.RunSummary, int) {
 		return &streamv1.RunSummary{
 			Success:     true,
 			Headline:    cmp.Or(r.headline, r.verdict("finished")),
-			UrlNotes:    r.urlNotes,
 			Propagation: r.propagation,
 		}, 0
 	case r.ctx.Err() != nil:

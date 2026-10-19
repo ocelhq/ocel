@@ -287,5 +287,32 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 		}
 		reclaimed = append(reclaimed, ledger.RecordKey(target.App, target.Release.String()))
 	}
+	if len(reclaimed) > 0 {
+		if err := r.noteUnusedParts(ctx); err != nil {
+			progress.Warn(fmt.Sprintf("Reading which bootstrap parts no release uses after the reclaim failed: %v", err))
+		}
+	}
 	return errors.Join(append(errs, r.ledger.ForgetUnnamedRecords(ctx, reclaimed))...)
+}
+
+func (r *deployRun) noteUnusedParts(ctx context.Context) error {
+	status, err := r.readiness.Status(ctx, r.spec.Tier)
+	if err != nil {
+		return err
+	}
+	described, err := r.readiness.Bootstrap.DescribeParts(ctx, status.Description())
+	if err != nil {
+		return err
+	}
+	for _, part := range described {
+		if part.RetiresWithLastUser && len(part.UsedBy) == 0 {
+			r.failureNotes = append(r.failureNotes, unusedPartNote(r.spec.Tier, part.Name))
+		}
+	}
+	return nil
+}
+
+func unusedPartNote(tier environment.Tier, part string) string {
+	return fmt.Sprintf("the %s bootstrap part stays, though no release uses it: a retry reuses it, and `%s --remove %s` takes it down",
+		part, provider.BootstrapCommand(tier), part)
 }
