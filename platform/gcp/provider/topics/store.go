@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"time"
 
@@ -162,27 +163,7 @@ func (s Store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord
 	if err != nil {
 		return err
 	}
-	client, err := s.client()
-	if err != nil {
-		return err
-	}
-	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snapshot, found, err := readInTransaction(tx, doc)
-		if err != nil {
-			return err
-		}
-		if !found {
-			return records.ErrStale
-		}
-		var current recordDocument
-		if err := snapshot.DataTo(&current); err != nil {
-			return err
-		}
-		if current.Value != string(held) {
-			return records.ErrStale
-		}
-		return tx.Set(doc, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt})
-	})
+	err = replaceRecordHeld(ctx, doc, record, held)
 	if errors.Is(err, records.ErrStale) {
 		return fmt.Errorf("the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, records.ErrStale)
 	}
@@ -192,28 +173,39 @@ func (s Store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord
 	return nil
 }
 
+func replaceRecordHeld(ctx context.Context, doc *firestore.DocumentRef, record provider.ExpiringRecord, held json.RawMessage) error {
+	snapshot, current, found, err := readRecord(ctx, doc)
+	if err != nil {
+		return err
+	}
+	if !found || current.Value != string(held) {
+		return records.ErrStale
+	}
+	_, err = doc.Update(ctx, []firestore.Update{
+		{Path: "value", Value: string(record.Value)},
+		{Path: "expiresAt", Value: record.ExpiresAt},
+	}, firestore.LastUpdateTime(snapshot.UpdateTime))
+	if changedSince(err) {
+		return records.ErrStale
+	}
+	return err
+}
+
 func (s Store) DeleteRecord(ctx context.Context, record provider.ExpiringRecord) error {
 	doc, err := s.recordDocument(record)
 	if err != nil {
 		return err
 	}
-	client, err := s.client()
-	if err != nil {
-		return err
-	}
-	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snapshot, found, err := readInTransaction(tx, doc)
-		if err != nil || !found {
-			return err
+	err = records.RetryWhileStale(ctx, func() (bool, error) {
+		snapshot, current, found, err := readRecord(ctx, doc)
+		if err != nil || !found || current.Value != string(record.Value) {
+			return false, err
 		}
-		var current recordDocument
-		if err := snapshot.DataTo(&current); err != nil {
-			return err
+		_, err = doc.Delete(ctx, firestore.LastUpdateTime(snapshot.UpdateTime))
+		if changedSince(err) {
+			return true, nil
 		}
-		if current.Value != string(record.Value) {
-			return nil
-		}
-		return tx.Delete(doc)
+		return false, err
 	})
 	if err != nil {
 		return fmt.Errorf("delete the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)
@@ -221,15 +213,23 @@ func (s Store) DeleteRecord(ctx context.Context, record provider.ExpiringRecord)
 	return nil
 }
 
-func readInTransaction(tx *firestore.Transaction, doc *firestore.DocumentRef) (*firestore.DocumentSnapshot, bool, error) {
-	snapshot, err := tx.Get(doc)
+func readRecord(ctx context.Context, doc *firestore.DocumentRef) (*firestore.DocumentSnapshot, recordDocument, bool, error) {
+	snapshot, err := doc.Get(ctx)
 	if isNotFound(err) {
-		return nil, false, nil
+		return nil, recordDocument{}, false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, recordDocument{}, false, err
 	}
-	return snapshot, snapshot.Exists(), nil
+	var current recordDocument
+	if err := snapshot.DataTo(&current); err != nil {
+		return nil, recordDocument{}, false, err
+	}
+	return snapshot, current, true, nil
+}
+
+func changedSince(err error) bool {
+	return status.Code(err) == codes.FailedPrecondition || isNotFound(err)
 }
 
 func isNotFound(err error) bool { return status.Code(err) == codes.NotFound }
@@ -283,8 +283,9 @@ func (s Store) WriteRun(ctx context.Context, run runs.Run) (records.Revision, er
 	if err != nil {
 		return "", err
 	}
-	err = s.atRevision(ctx, run, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
-		return tx.Set(doc, documentOf(run, next))
+	err = s.atRevision(ctx, run, func(doc *firestore.DocumentRef, unchanged firestore.Precondition) error {
+		_, err := doc.Update(ctx, fieldsOf(documentOf(run, next)), unchanged)
+		return err
 	})
 	if errors.Is(err, records.ErrStale) {
 		return "", records.ErrStale
@@ -299,8 +300,9 @@ func (s Store) DeleteRun(ctx context.Context, run runs.Run) error {
 	if run.Revision == "" {
 		return records.ErrStale
 	}
-	err := s.atRevision(ctx, run, func(tx *firestore.Transaction, doc *firestore.DocumentRef) error {
-		return tx.Delete(doc)
+	err := s.atRevision(ctx, run, func(doc *firestore.DocumentRef, unchanged firestore.Precondition) error {
+		_, err := doc.Delete(ctx, unchanged)
+		return err
 	})
 	if errors.Is(err, records.ErrStale) {
 		return records.ErrStale
@@ -311,32 +313,40 @@ func (s Store) DeleteRun(ctx context.Context, run runs.Run) error {
 	return nil
 }
 
-func (s Store) atRevision(ctx context.Context, run runs.Run, change func(*firestore.Transaction, *firestore.DocumentRef) error) error {
+func (s Store) atRevision(ctx context.Context, run runs.Run, change func(*firestore.DocumentRef, firestore.Precondition) error) error {
 	doc, err := s.runDocument(run.Execution)
 	if err != nil {
 		return err
 	}
-	client, err := s.client()
+	snapshot, err := doc.Get(ctx)
+	if isNotFound(err) {
+		return records.ErrStale
+	}
 	if err != nil {
 		return err
 	}
-	return client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snapshot, found, err := readInTransaction(tx, doc)
-		if err != nil {
-			return err
-		}
-		if !found {
-			return records.ErrStale
-		}
-		current, err := runOf(snapshot)
-		if err != nil {
-			return err
-		}
-		if current.Topic != run.Topic || current.Revision != run.Revision {
-			return records.ErrStale
-		}
-		return change(tx, doc)
-	})
+	current, err := runOf(snapshot)
+	if err != nil {
+		return err
+	}
+	if current.Topic != run.Topic || current.Revision != run.Revision {
+		return records.ErrStale
+	}
+	if err := change(doc, firestore.LastUpdateTime(snapshot.UpdateTime)); changedSince(err) {
+		return records.ErrStale
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+func fieldsOf(doc runDocument) []firestore.Update {
+	value := reflect.ValueOf(doc)
+	fields := make([]firestore.Update, 0, value.NumField())
+	for i := range value.NumField() {
+		fields = append(fields, firestore.Update{Path: value.Type().Field(i).Tag.Get("firestore"), Value: value.Field(i).Interface()})
+	}
+	return fields
 }
 
 func runOf(snapshot *firestore.DocumentSnapshot) (runs.Run, error) {
