@@ -76,8 +76,8 @@ function draftSuffix(cookies) {
   return '.draft-' + digest.slice(0, 16);
 }
 
-function cacheKey(release, pathname, headers, cookies) {
-  var key = release + variantPath(pathname, headers) + draftSuffix(cookies);
+function cacheKey(host, release, pathname, headers, cookies) {
+  var key = host + '/' + release + variantPath(pathname, headers) + draftSuffix(cookies);
   if (headerValue(headers, REVALIDATE_HEADER) !== null) {
     key += '.revalidate.' + Date.now().toString(36) + Math.random().toString(36).slice(2);
   }
@@ -153,7 +153,7 @@ async function handler(event) {
   if (refused) return refused;
   request.headers[FORWARDED_HOST_HEADER] = { value: host };
   request.headers[CACHE_KEY_HEADER] = {
-    value: cacheKey(route.release, request.uri, request.headers, request.cookies),
+    value: cacheKey(host, route.release, request.uri, request.headers, request.cookies),
   };
 
   if (route.assets && isUnderAnyPrefix(request.uri, route.immutable)) {

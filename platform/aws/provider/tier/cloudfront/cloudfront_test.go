@@ -253,8 +253,8 @@ func TestEnsureMakesEverythingADistributionSharesAndRecordsHowToFindIt(t *testin
 			t.Errorf("empty-body function %s is not published with the code this build embeds", names.EmptyBody)
 		}
 		cache := a.caches[set.CachePolicy]
-		if got := cache.ParametersInCacheKeyAndForwardedToOrigin.HeadersConfig.Headers.Items; !slices.Contains(got, "Host") {
-			t.Errorf("cache policy keys on %v, want the hostname among them", got)
+		if got := cache.ParametersInCacheKeyAndForwardedToOrigin.HeadersConfig.Headers.Items; slices.Contains(got, "Host") {
+			t.Errorf("cache policy keys on %v, which forwards the viewer's Host to a function URL that answers it 403", got)
 		}
 		headers := a.headers[set.HeadersPolicy]
 		var removed []string

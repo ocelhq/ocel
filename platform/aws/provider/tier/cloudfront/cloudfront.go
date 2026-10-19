@@ -174,7 +174,7 @@ func Ensure(ctx context.Context, c API, spec Spec, prior []provider.PartResource
 func cachePolicyConfig(names Names) *cftypes.CachePolicyConfig {
 	return &cftypes.CachePolicyConfig{
 		Name:       aws.String(names.CachePolicy),
-		Comment:    aws.String("Ocel: keys the cache on the hostname and the resolver's variant; the origin's Cache-Control sets how long anything is cached."),
+		Comment:    aws.String("Ocel: keys the cache on the resolver's hostname and variant; the origin's Cache-Control sets how long anything is cached."),
 		MinTTL:     aws.Int64(0),
 		DefaultTTL: aws.Int64(0),
 		MaxTTL:     aws.Int64(cacheMaxTTL),
@@ -183,7 +183,7 @@ func cachePolicyConfig(names Names) *cftypes.CachePolicyConfig {
 			EnableAcceptEncodingBrotli: aws.Bool(true),
 			HeadersConfig: &cftypes.CachePolicyHeadersConfig{
 				HeaderBehavior: cftypes.CachePolicyHeaderBehaviorWhitelist,
-				Headers:        &cftypes.Headers{Quantity: aws.Int32(2), Items: []string{"Host", cacheKeyHeader}},
+				Headers:        &cftypes.Headers{Quantity: aws.Int32(1), Items: []string{cacheKeyHeader}},
 			},
 			CookiesConfig: &cftypes.CachePolicyCookiesConfig{CookieBehavior: cftypes.CachePolicyCookieBehaviorNone},
 			QueryStringsConfig: &cftypes.CachePolicyQueryStringsConfig{
