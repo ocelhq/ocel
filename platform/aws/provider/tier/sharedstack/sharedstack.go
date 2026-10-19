@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -34,6 +35,7 @@ type Owner struct {
 
 	Region         string
 	Subnets        component.NetworkAPI
+	VPCOrigins     awsports.VPCOriginsAPI
 	AppBoundaryARN string
 	AppRolePath    string
 }

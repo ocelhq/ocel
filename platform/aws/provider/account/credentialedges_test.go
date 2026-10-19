@@ -318,6 +318,24 @@ func TestEveryCredentialReadsTheAvailabilityZonesTheContainerFrontsVPCOriginReac
 	}
 }
 
+func TestEveryCredentialFindsAndRemovesOnlyOcelsFailedVPCOrigins(t *testing.T) {
+	const vpcOrigin = "arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"
+	ocels := requestContext{"aws:ResourceTag/" + iam.ManagedByTagKey: iam.ManagedByTagValue}
+	for purpose, document := range bothCredentials(t) {
+		if !allows(t, document, "cloudfront:ListVpcOrigins", iam.AnyResource, requestContext{}) {
+			t.Errorf("the %s credential cannot call cloudfront:ListVpcOrigins, so a retried deploy cannot find the VPC origin a failed one left behind", purpose)
+		}
+		for _, action := range []string{"cloudfront:GetVpcOrigin", "cloudfront:DeleteVpcOrigin", "cloudfront:ListTagsForResource"} {
+			if !allows(t, document, action, vpcOrigin, ocels) {
+				t.Errorf("the %s credential cannot call %s on a VPC origin tagged as Ocel's", purpose, action)
+			}
+			if action != "cloudfront:ListTagsForResource" && allows(t, document, action, vpcOrigin, requestContext{}) {
+				t.Errorf("the %s credential can call %s on a VPC origin not tagged as Ocel's", purpose, action)
+			}
+		}
+	}
+}
+
 func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 	const restAPITags = "arn:aws:apigateway:eu-west-1::/tags/arn%3Aaws%3Aapigateway%3Aeu-west-1%3A%3A%2Frestapis%2Fabc123"
 	creating := func(tier environment.Tier) requestContext {
