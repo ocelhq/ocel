@@ -149,3 +149,14 @@ func (p *Provider) RefuseServingPortsClosedFromOutside(ctx context.Context, tier
 }
 
 var NewRecordedGate = newRecordedGate
+
+func NewReadingSSHConfig(config string) func(context.Context, provider.Settings) (provider.Provider, error) {
+	return func(ctx context.Context, settings provider.Settings) (provider.Provider, error) {
+		served, err := New(ctx, settings)
+		if err != nil {
+			return nil, err
+		}
+		served.(*Provider).options.SSH.Config = config
+		return served, nil
+	}
+}
