@@ -24,7 +24,7 @@ func TestLiveADryRunOfAContainerAppSendsTheDigestTheDaemonBuilt(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	root := fixture.Root
 	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "node", compute: "container" }`)
-	copyFixtureApp(t, "../../build/image/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
+	copyFixtureApp(t, "../build/image/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
