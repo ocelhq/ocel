@@ -86,6 +86,7 @@ export const svelteKitChecks: Check[] = [
   publicOriginFormActionCheck,
   {
     title: "a form action posted from another origin is refused",
+    assertsDeployment: true,
     run: async (ctx) => {
       const res = await postForm(ctx, "https://elsewhere.invalid");
       assert.equal(res.status, 403);
