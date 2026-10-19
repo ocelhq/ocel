@@ -315,6 +315,27 @@ own account, or raise the account's concurrency quota through Service Quotas, be
 traffic can starve another. A `reservedConcurrentExecutions` set in a
 [transform](/docs/transforms) applies to the function it names.
 
+## Container releases and rollback
+
+Each release of a container app runs as an ECS service of its own, so a rollback moves traffic
+back to a service that already exists. Only the release that serves and the one it replaced
+keep tasks running:
+
+- The release a promotion replaces keeps running at its `instances.min` for 15 minutes. At the
+  end of that window an Application Auto Scaling scheduled action on its service drops it to no
+  tasks. The action lives on the service in your account, so it runs whether or not you run
+  `ocel` again.
+- Every older release is set to no tasks at the next promotion, and costs nothing while it has
+  none.
+
+A rollback within the 15 minutes switches traffic at once. A rollback to a release with no
+tasks first scales it back to its `instances.min`, then waits until those tasks pass the load
+balancer's health check, about a minute, before it switches. If they have not passed within
+five minutes, the rollback stops and production keeps serving what it served. While a release
+has no tasks, the URL its deploy printed for that deployment answers with an error.
+
+The window is fixed at 15 minutes.
+
 ## Topics, tasks and workers
 
 | Declared | On AWS |
