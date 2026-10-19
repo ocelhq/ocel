@@ -87,7 +87,7 @@ func EnsuringNetwork(name string) string {
 func JoinedFact(joined Network) string { return "network:" + joined.Name + "=" }
 
 func rejoining(name string) string {
-	return "for net in $(docker network ls --quiet --filter " + shell.Quote("label="+LabelTier) + "); do\n" +
+	return "for net in $(docker network ls --format " + shell.Quote("{{.Name}}") + " --filter " + shell.Quote("label="+LabelTier) + "); do\n" +
 		"docker network connect \"$net\" " + shell.Quote(name) + " >/dev/null\n" +
 		"done\n"
 }
