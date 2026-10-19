@@ -1,18 +1,14 @@
 package containers
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -26,16 +22,9 @@ import (
 const (
 	ecsTaskExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 	originListenerPort        = 80
-	originTLSPort             = 443
-	vpcOriginProtocolPolicy   = "http-only"
-	vpcOriginTLSFloor         = "TLSv1.2"
-	vpcOriginDeployTimeout    = "20m"
-	vpcOriginNameSuffixBytes  = 4
 	listenerDeniedStatus      = "404"
 	listenerDeniedContentType = "text/plain"
 	listenerDeniedBody        = "no release answers on this origin"
-
-	cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
 
 	outputKeyVPC           = "vpcId"
 	outputKeySubnets       = "subnets"
@@ -59,11 +48,11 @@ type work struct {
 	boundary string
 	rolePath string
 	tags     map[string]string
-	public   []string
+	fronts   Fronts
 }
 
-func NewProgram(tier environment.Tier, boundary, rolePath string, public []string) component.Program {
-	w := &work{tier: tier, boundary: boundary, rolePath: rolePath, tags: stackTags(tier), public: public}
+func NewProgram(tier environment.Tier, boundary, rolePath string, fronts Fronts) component.Program {
+	w := &work{tier: tier, boundary: boundary, rolePath: rolePath, tags: stackTags(tier), fronts: fronts}
 	return component.Program{Run: w.run, Tags: w.tags}
 }
 
@@ -94,37 +83,20 @@ func (w *work) run(ctx *pulumi.Context) error {
 		return err
 	}
 
-	edgeRanges, err := ec2.LookupManagedPrefixList(ctx, &ec2.LookupManagedPrefixListArgs{Name: pulumi.StringRef(cloudFrontOriginFacingPrefixList)})
-	if err != nil {
-		return fmt.Errorf("look up the addresses CloudFront reaches an origin from: %w", err)
+	var sources pulumi.StringArray
+	var front *ec2.SecurityGroup
+	if w.fronts.Private {
+		if front, err = w.createFrontSecurityGroup(ctx, vpc.Id, tags); err != nil {
+			return err
+		}
+		sources = append(sources, front.ID())
 	}
-	front, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "front", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(nameFor(tier, "front")),
-		Description: pulumi.String("Ocel: the load balancer every container app in the " + string(tier) + " class answers behind"),
-		VpcId:       pulumi.String(vpc.Id),
-		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
-			Protocol:      pulumi.String("tcp"),
-			FromPort:      pulumi.Int(originListenerPort),
-			ToPort:        pulumi.Int(originListenerPort),
-			PrefixListIds: pulumi.StringArray{pulumi.String(edgeRanges.Id)},
-			Description:   pulumi.String("Ocel: only CloudFront reaches the front, through the VPC origin, and every rule behind it demands the origin secret"),
-		}},
-		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
-			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),
-			CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
-		}},
-		Tags: tags,
-	})
-	if err != nil {
-		return err
-	}
-	fronts := pulumi.StringArray{front.ID()}
 	var public *ec2.SecurityGroup
-	if len(w.public) > 0 {
+	if len(w.fronts.Public) > 0 {
 		if public, err = w.createPublicSecurityGroup(ctx, vpc.Id, tags); err != nil {
 			return err
 		}
-		fronts = append(fronts, public.ID())
+		sources = append(sources, public.ID())
 	}
 	tasks, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "tasks", "security-group"), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(nameFor(tier, "tasks")),
@@ -134,7 +106,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 			Protocol:       pulumi.String("tcp"),
 			FromPort:       pulumi.Int(TaskPort),
 			ToPort:         pulumi.Int(TaskPort),
-			SecurityGroups: fronts,
+			SecurityGroups: sources,
 			Description:    pulumi.String("Ocel: only the load balancer reaches a task"),
 		}},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
@@ -146,61 +118,10 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-
-	balancer, err := lb.NewLoadBalancer(ctx, naming.ResourceID(naming.KindService, "front"), &lb.LoadBalancerArgs{
-		Name:             pulumi.String(nameFor(tier)),
-		LoadBalancerType: pulumi.String("application"),
-		Internal:         pulumi.Bool(true),
-		SecurityGroups:   pulumi.StringArray{front.ID()},
-		Subnets:          pulumi.ToStringArray(subnetIDs),
-		Tags:             tags,
-	})
-	if err != nil {
-		return err
-	}
-	listener, err := lb.NewListener(ctx, naming.ResourceID(naming.KindService, "front", "listener"), &lb.ListenerArgs{
-		LoadBalancerArn: balancer.Arn,
-		Port:            pulumi.Int(originListenerPort),
-		Protocol:        pulumi.String("HTTP"),
-		DefaultActions: lb.ListenerDefaultActionArray{&lb.ListenerDefaultActionArgs{
-			Type: pulumi.String("fixed-response"),
-			FixedResponse: &lb.ListenerDefaultActionFixedResponseArgs{
-				ContentType: pulumi.String(listenerDeniedContentType),
-				StatusCode:  pulumi.String(listenerDeniedStatus),
-				MessageBody: pulumi.String(listenerDeniedBody),
-			},
-		}},
-		Tags: tags,
-	})
-	if err != nil {
-		return err
-	}
-
-	suffix := make([]byte, vpcOriginNameSuffixBytes)
-	if _, err := rand.Read(suffix); err != nil {
-		return fmt.Errorf("name the VPC origin: %w", err)
-	}
-	vpcOrigin, err := cloudfront.NewVpcOrigin(ctx, naming.ResourceID(naming.KindService, "front", "vpc-origin"), &cloudfront.VpcOriginArgs{
-		VpcOriginEndpointConfig: &cloudfront.VpcOriginVpcOriginEndpointConfigArgs{
-			Name:                 pulumi.String(nameFor(tier, hex.EncodeToString(suffix))),
-			Arn:                  balancer.Arn,
-			HttpPort:             pulumi.Int(originListenerPort),
-			HttpsPort:            pulumi.Int(originTLSPort),
-			OriginProtocolPolicy: pulumi.String(vpcOriginProtocolPolicy),
-			OriginSslProtocols: &cloudfront.VpcOriginVpcOriginEndpointConfigOriginSslProtocolsArgs{
-				Items:    pulumi.StringArray{pulumi.String(vpcOriginTLSFloor)},
-				Quantity: pulumi.Int(1),
-			},
-		},
-		Timeouts: &cloudfront.VpcOriginTimeoutsArgs{
-			Create: pulumi.String(vpcOriginDeployTimeout),
-			Update: pulumi.String(vpcOriginDeployTimeout),
-			Delete: pulumi.String(vpcOriginDeployTimeout),
-		},
-		Tags: tags,
-	}, pulumi.DependsOn([]pulumi.Resource{listener}), pulumi.IgnoreChanges([]string{"vpcOriginEndpointConfig.name"}))
-	if err != nil {
-		return err
+	if front != nil {
+		if err := w.runPrivateFront(ctx, front, subnetIDs, tags); err != nil {
+			return err
+		}
 	}
 
 	execution, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, "execution"), &awsiam.RoleArgs{
@@ -236,9 +157,6 @@ func (w *work) run(ctx *pulumi.Context) error {
 	}
 	ctx.Export(outputKeyVPC, pulumi.String(vpc.Id))
 	ctx.Export(outputKeySubnets, pulumi.String(encoded))
-	ctx.Export(outputKeyListener, listener.Arn)
-	ctx.Export(outputKeyOriginHost, balancer.DnsName)
-	ctx.Export(outputKeyVPCOrigin, vpcOrigin.ID().ToStringOutput())
 	ctx.Export(outputKeyTaskSecurity, tasks.ID().ToStringOutput())
 	ctx.Export(outputKeyCluster, cluster.Arn)
 	ctx.Export(outputKeyExecutionRole, execution.Arn)
@@ -246,11 +164,11 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if public == nil {
 		return nil
 	}
-	ctx.Export(outputKeyPublicRanges, pulumi.String(joinRanges(w.public)))
+	ctx.Export(outputKeyPublicRanges, pulumi.String(joinRanges(w.fronts.Public)))
 	return w.runPublicFront(ctx, public, subnetIDs, tags)
 }
 
-func decode(outputs auto.OutputMap) (Infrastructure, error) {
+func decode(outputs auto.OutputMap, private bool) (Infrastructure, error) {
 	fields := make(map[string]any, len(outputs))
 	for key, value := range outputs {
 		fields[key] = value.Value
@@ -259,16 +177,19 @@ func decode(outputs auto.OutputMap) (Infrastructure, error) {
 		infra Infrastructure
 		err   error
 	)
-	for key, into := range map[string]*string{
+	required := map[string]*string{
 		outputKeyVPC:           &infra.VPC,
-		outputKeyListener:      &infra.Listener,
-		outputKeyOriginHost:    &infra.OriginHost,
-		outputKeyVPCOrigin:     &infra.VPCOrigin,
 		outputKeyTaskSecurity:  &infra.TaskSecurity,
 		outputKeyCluster:       &infra.Cluster,
 		outputKeyExecutionRole: &infra.ExecutionRole,
 		outputKeyLogGroup:      &infra.LogGroup,
-	} {
+	}
+	if _, raised := fields[outputKeyListener]; private || raised {
+		required[outputKeyListener] = &infra.Listener
+		required[outputKeyOriginHost] = &infra.OriginHost
+		required[outputKeyVPCOrigin] = &infra.VPCOrigin
+	}
+	for key, into := range required {
 		if *into, err = component.RequireStringField(fields, Slug, key); err != nil {
 			return Infrastructure{}, err
 		}

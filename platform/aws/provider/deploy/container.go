@@ -34,11 +34,11 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	public, err := readPublicRanges(spec)
+	fronts, err := readFronts(spec)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	infra, err := r.containers.Ensure(ctx, spec.Ref, public, progress)
+	infra, err := r.containers.Ensure(ctx, spec.Ref, fronts, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -81,19 +81,19 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.App, container.RulePlacements, err)
 }
 
-func readPublicRanges(spec provider.StackSpec) ([]string, error) {
+func readFronts(spec provider.StackSpec) (containers.Fronts, error) {
 	if !container.IsRoutedPublicly(spec) {
-		return nil, nil
+		return containers.Fronts{Private: true}, nil
 	}
 	var ranges []string
 	if spec.Edge != nil {
 		ranges = spec.Edge.Facts().OriginFacingRanges
 	}
 	if len(ranges) == 0 {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
+		return containers.Fronts{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %s is forwarded to a public load balancer, and the edge in front of it names no addresses it forwards from, so the load balancer would answer the whole internet", spec.App.App)
 	}
-	return ranges, nil
+	return containers.Fronts{Public: ranges}, nil
 }
 
 func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, lease provider.Lease, progress progress.Log) error {
@@ -108,7 +108,8 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if !present || (container.IsRoutedPublicly(spec) && infra.PublicListener == "") {
+	public := container.IsRoutedPublicly(spec)
+	if !present || (public && infra.PublicListener == "") || (!public && infra.Listener == "") {
 		shared := provider.ChangeGroup{
 			Kind:   provider.StackGroupKind,
 			Name:   containers.StackRef(spec.Ref.Tier).Name.String(),
@@ -118,7 +119,11 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		}
 		if present {
 			shared.Action = provider.ActionUpdate
+		}
+		if present && public {
 			shared.Reason = "the first container app in the " + string(spec.Ref.Tier) + " tier an edge forwards to raises the public load balancer every such app shares"
+		} else if present {
+			shared.Reason = "the first container app in the " + string(spec.Ref.Tier) + " tier routed through CloudFront raises the internal load balancer and VPC origin every such app shares"
 		}
 		groups := []provider.ChangeGroup{shared, unpreviewedStack(spec.Ref)}
 		if hostsContainerWorkers(spec) {
