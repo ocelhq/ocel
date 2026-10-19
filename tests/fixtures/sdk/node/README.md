@@ -48,7 +48,7 @@ ocel deploy
 ```
 
 On a box, `web`'s image carries the bundled worker entry, and `worker`, `ledger` and `capped`
-each run as a container of their own from that image. `ocel destroy` takes it all down again.
+each run as a container of their own from that image. `ocel projects destroy` takes it all down again.
 
 `src/probes.ts` is the test surface — mounted at `/api/probes`, driven by the suites under
 [`tests/e2e`](../../../e2e), and of no use to the product.

@@ -28,4 +28,4 @@ ocel deploy
 ocel run --env production -- pnpm migrate
 ```
 
-`ocel destroy` takes it all down again.
+`ocel projects destroy` takes it all down again.

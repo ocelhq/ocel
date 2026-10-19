@@ -37,4 +37,4 @@ ocel deploy
 ```
 
 On a box, `web`'s image carries the compiled worker, and the default worker runs as a second
-container from that image. `ocel destroy` takes it all down again.
+container from that image. `ocel projects destroy` takes it all down again.

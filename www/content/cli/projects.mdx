@@ -1,0 +1,45 @@
+```bash
+ocel projects
+ocel projects show
+ocel projects show blog --links
+ocel projects destroy --tier preview --dry
+ocel projects destroy blog
+```
+
+Every `ocel projects` command reads the provider account, region and namespace that this
+directory's config selects, or the config `-c` names, with the credentials in your shell, as each
+[provider's page](/docs/providers/aws) describes. The list covers every project Ocel has deployed
+there, not only this directory's. `show` and `destroy` act on this directory's project unless you
+name another by its slug.
+
+## Listing
+
+`ocel projects`, or `ocel projects ls`, prints one row per project: whether a promotion is live in
+production, how many previews it has, the edge that serves it and the date it last deployed. A cell
+with nothing to show reads `—`.
+
+## Showing one project
+
+`ocel projects show` prints the project's environments, the promotion each serves with the release
+of each app, and its URLs. Below them come the resources Ocel created for each environment, by stack,
+and then the bootstrap parts the project shares with other projects in the account.
+
+A resource marked ↗ has a page in the provider's console. On a terminal that shows colour (not
+`TERM=dumb`, and no `NO_COLOR` or `FORCE_COLOR=0`), its id is a link to that page. Piped output and
+CI logs have no terminal, so they get the mark without the link, even where `FORCE_COLOR` turns
+colour on. `--links` prints each URL in a column of its own, for copying it or for a terminal that
+does not follow links. Under `--json` every resource carries its `consoleUrl`, empty when Ocel
+knows no console page for it.
+
+## Destroying a project
+
+`ocel projects destroy` takes the project down in production and in every preview, or in one tier
+with `--tier production` or `--tier preview`. It prints what it would destroy in each tier, then
+asks once for the project name. `--dry` prints the plan and stops. An unattended run passes
+`--yes`, or sets `OCEL_DESTROY_BYPASS_CONFIRMATION` to the project name, which covers both tiers.
+The shared infrastructure stays: [`ocel bootstrap destroy`](/docs/cli/bootstrap/destroy) removes
+it.
+
+Another project is destroyed through the edge it recorded when it last deployed. Images pushed to a
+registry configured in that project's config stay there, because Ocel never records the registry's
+password: destroy from the project's own directory to delete them too.
