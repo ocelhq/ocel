@@ -1,0 +1,128 @@
+---
+title: Rust
+description: Deploy a Rust app.
+---
+
+```rust title="src/main.rs"
+use axum::{routing::get, Router};
+
+#[tokio::main]
+async fn main() {
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".into());
+    let app = Router::new().route("/", get(|| async { "Hello" }));
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+```
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws"
+}
+```
+
+```bash
+ocel deploy
+```
+
+Your `main` listens on `PORT`, and ocel sends each request there. There is no Lambda handler or
+adapter to write. The same binary runs on serverless and in a container.
+
+## How ocel finds the app
+
+A directory is a Rust app when its `Cargo.toml` has a `[package]` that builds a binary, from a
+`src/main.rs`, a `[[bin]]` target or a file under `src/bin/`. A function and a container both
+run a binary, so a crate that builds none is not an app. A library crate, or a napi-rs addon built
+as a `cdylib` beside a `package.json`, matches nothing, and the node app next to it is the only
+match.
+
+A crate with several binaries is still one Rust app. Set `entrypoint` to the name of the binary to
+deploy, as `cargo run --bin` takes it. The build compiles it, discovery runs it to read the
+resources it declares, and the container starts it. Without `entrypoint`, the app runs the binary
+`default-run` names in `Cargo.toml`, as `cargo run` does, or the crate's only binary. A crate with
+several binaries, no `default-run` and no `entrypoint` is refused by the function build and by
+discovery, and the error lists the binaries to choose from; its container image is refused before
+it is built, as one with nothing to start. A name the crate builds no binary for is refused the
+same way, and a path such as `src/bin/server.rs` is refused when the config loads.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", entrypoint: "server" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "entrypoint": "server" }]
+}
+```
+
+Two apps built from one crate that declares resources run the same binary, since discovery runs
+one binary per crate: they name the same `entrypoint`, or the one that names none runs the binary
+the other names by default.
+
+With no `apps` in your config, the project root is the Rust app only when its crate builds a
+binary. If the root also holds another app, such as a Python one, ocel cannot tell which to deploy
+and asks you to list it under `apps` with `framework: "rust"`.
+
+## Building
+
+The crate may be a member of a workspace. The build runs `cargo build --release` for the app's
+binary and links it as a static musl binary for the app's `arch`, so install the target:
+
+```bash
+rustup target add x86_64-unknown-linux-musl   # or aarch64-unknown-linux-musl
+```
+
+A crate that compiles C (`ring`, `aws-lc-rs`, `openssl-sys`) also needs a musl C cross
+toolchain, most of all for `arm64` on an x86_64 machine. Set `CC_aarch64_unknown_linux_musl`
+and a linker, below or in `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`. With neither,
+ocel links with `rust-lld`.
+
+```toml title=".cargo/config.toml"
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
+```
+
+## With the SDK
+
+A binary that declares [resources](/docs/sdk) puts `#[ocel::main]` on `main`. During a deploy,
+ocel runs the binary to read what it declares, and the attribute returns before your code starts a
+server. It also lets the same binary serve tasks and topic consumers. It works with
+`#[tokio::main]` in either order.
+
+```rust
+#[ocel::main]
+#[tokio::main]
+async fn main() {
+    // ...
+}
+```
+
+## Containers
+
+On `compute: "container"`, and on a [VPS](/docs/providers/vps), which runs only containers, ocel
+builds the image from your `Dockerfile` when the app has one, and with
+[Railpack](https://railpack.com) otherwise. With `entrypoint` set, the image runs
+`cargo build --release --bin` for that binary and starts it. With none, Railpack decides: it builds
+every binary it finds at `src/main.rs` and under `src/bin/`, and starts the only one, or else the
+one `default-run` names. A `[[bin]]` target at another path is one Railpack does not see, so a
+crate with one sets `entrypoint`. The container sets `PORT` to a port of its own choosing, so read
+it rather than hard-coding one.

@@ -11,6 +11,24 @@ That is the whole setup. The CLI carries Ocel's Next.js adapter, so there is not
 and nothing to add to `next.config`. It needs Next.js 16.2.10 or later. `ocel deploy` recognises
 the app by a `next.config.*` or a `next` dependency and runs its `build` script with the adapter.
 
+## How ocel finds the app
+
+A directory is a Next.js app when its `package.json` lists `next` in `dependencies` or
+`devDependencies`, or when it has a `next.config.js`, `next.config.mjs` or `next.config.ts`. One
+of the two is enough.
+
+A Next.js app with a custom server, such as a `server.ts`, would also match the node detector.
+Within one `package.json`, Next.js wins over node, so the app is still deployed as Next.js. Next.js
+and SvelteKit have no such order. A `package.json` that depends on both matches two frameworks,
+and ocel deploys neither until the app sets `framework`.
+
+Across languages there is no order at all. With no `apps` in your config, the project root is
+deployed as the Next.js app while nothing else at the root is an app. A `pyproject.toml` of helper
+scripts, or a `go.mod` whose `main` package lives under `cmd/tools`, sits beside it fine. If the
+root also holds a [Python](/docs/frameworks/python#how-ocel-finds-the-app) or
+[Go](/docs/frameworks/go#how-ocel-finds-the-app) app, `ocel deploy` and `ocel doctor` name both.
+List the app under `apps` with `framework: "next"` then.
+
 ## Recommended: Cloudflare in front of AWS
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"

@@ -1,10 +1,17 @@
 ---
 title: init.ambiguous_language
-description: The directory holds the manifests of more than one language.
+description: The directory could be a project in more than one language, and nothing says which.
 ---
 
-`ocel init` picks the SDK to install from the manifests in the directory, such as `package.json` or `go.mod`. Finding the manifests of several languages, it cannot tell which one the project is.
+`ocel init` picks the SDK to install from the app in the directory. When exactly one framework
+matches it, as each [framework page](/docs/frameworks/nextjs) describes, its language decides.
+When several match, they decide only if they share a language. When none matches, the manifests
+decide only if they are all of one language, such as a `package.json` alone. A `pyproject.toml`
+that holds only helper scripts matches nothing, so a Next.js app beside it is a node project.
+
+This error means the frameworks that match, or the manifests when none does, span more than one
+language, so `ocel init` cannot tell which one the project is. The message names what it found.
 
 ## Fix
 
-Name the language with `ocel init --lang <language>`. The message lists the ones it found.
+Name the language with `ocel init --lang <language>`.
