@@ -38,7 +38,7 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 				FromPort:       pulumi.Int(group.Port),
 				ToPort:         pulumi.Int(group.Port),
 				SecurityGroups: pulumi.StringArray{pulumi.String(group.Clients)},
-				Description:    CapDescription(at.Description(group.Engine+" access to "+group.Subject+" from the tier's vpc clients"), MaxSecurityGroupDescriptionLen),
+				Description:    CapDescription(at.Description(group.Engine+" access to "+group.Subject+" from the vpc clients of the tier"), MaxSecurityGroupDescriptionLen),
 			},
 		},
 		Egress: group.Egress,
