@@ -20,6 +20,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -151,7 +152,7 @@ func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulu
 		return err
 	}
 	function, err := lambda.NewFunction(ctx, naming.ResourceID(naming.KindService, "public", "liveness"), &lambda.FunctionArgs{
-		Name:    pulumi.String(nameFor(w.tier, "liveness")),
+		Name:    pulumi.String(nameLivenessFunction(w.tier)),
 		Runtime: pulumi.String(component.LambdaNodeRuntime),
 		Handler: pulumi.String("index.handler"),
 		Role:    role.Arn,
@@ -186,6 +187,7 @@ func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulu
 	}, pulumi.DependsOn([]pulumi.Resource{invoke})); err != nil {
 		return err
 	}
+	ctx.Export(outputKeyLivenessRole, role.Arn)
 	_, err = lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, "public", "liveness", "rule"), &lb.ListenerRuleArgs{
 		ListenerArn: listener.Arn,
 		Priority:    pulumi.Int(livenessRulePriority),
@@ -201,6 +203,14 @@ func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulu
 	return err
 }
 
+func nameLivenessFunction(tier environment.Tier) string {
+	return nameFor(tier, "liveness")
+}
+
+func nameCertificateHost(balancer string) string {
+	return balancer + ".invalid"
+}
+
 func mintDefaultCertificate(name string) (certificate, key string, err error) {
 	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -210,7 +220,7 @@ func mintDefaultCertificate(name string) (certificate, key string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("draw the public front's default certificate serial: %w", err)
 	}
-	host := name + ".invalid"
+	host := nameCertificateHost(name)
 	now := time.Now()
 	template := &x509.Certificate{
 		SerialNumber: serial,

@@ -50,6 +50,7 @@ const (
 	outputKeyPublicListener = "publicListenerArn"
 	outputKeyPublicHost     = "publicHost"
 	outputKeyPublicRanges   = "publicRanges"
+	outputKeyLivenessRole   = "livenessRoleArn"
 )
 
 var vpcOriginUnsupportedZones = []string{"use1-az3", "usw1-az2", "apne1-az3", "cac1-az3"}
@@ -276,6 +277,7 @@ func decode(outputs auto.OutputMap) (Infrastructure, error) {
 	infra.PublicListener, _ = fields[outputKeyPublicListener].(string)
 	infra.PublicHost, _ = fields[outputKeyPublicHost].(string)
 	infra.PublicRanges, _ = fields[outputKeyPublicRanges].(string)
+	infra.LivenessRole, _ = fields[outputKeyLivenessRole].(string)
 	encoded, err := component.RequireStringField(fields, Slug, outputKeySubnets)
 	if err != nil {
 		return Infrastructure{}, err

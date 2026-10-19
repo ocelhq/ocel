@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
@@ -30,6 +31,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 var pulumiTokens = map[string]string{
@@ -338,6 +340,58 @@ func TestShapeScopesAppsUnderTheEnvironmentAndTheContainerInfraAsShared(t *testi
 	}
 	if set.GetResources()[0].GetRegion() != "us-east-1" {
 		t.Errorf("region = %q", set.GetResources()[0].GetRegion())
+	}
+}
+
+func shapedLoadBalancersInternal(set *costv1.ResourceSet) []bool {
+	var internal []bool
+	for _, r := range set.GetResources() {
+		if r.GetType() == component.TerraformLoadBalancer {
+			internal = append(internal, r.GetProperties().AsMap()["internal"].(bool))
+		}
+	}
+	return internal
+}
+
+func TestAContainerAppForwardedFromCloudflareIsPricedBehindOneInternetFacingLoadBalancerAndNoInternalOne(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Edge = cloudflare.Kind
+	set := shaped(t, nil, req)
+
+	if got := shapedLoadBalancersInternal(set); !slices.Equal(got, []bool{false}) {
+		t.Errorf("load balancers internal = %v, want the one internet-facing load balancer Cloudflare forwards to", got)
+	}
+	if liveness := shapedNamed(t, set, "aws_lambda_function", "ocel-containers-liveness"); liveness["runtime"] != component.LambdaNodeRuntime {
+		t.Errorf("shaped liveness answer = %v, want the function the public front answers its liveness probe with", liveness)
+	}
+}
+
+func TestAContainerAppBehindCloudFrontIsPricedBehindOneInternalLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Edge = cloudfront.Kind
+	set := shaped(t, nil, req)
+
+	if got := shapedLoadBalancersInternal(set); !slices.Equal(got, []bool{true}) {
+		t.Errorf("load balancers internal = %v, want the one internal load balancer CloudFront reaches through its VPC origin", got)
+	}
+}
+
+func TestContainerAppsOfOneDeployArePricedOneSharedInfrastructure(t *testing.T) {
+	t.Parallel()
+
+	req := shapeRequest(t)
+	req.Edge = cloudflare.Kind
+	second := req.Deploy.Apps[1]
+	second.App, second.Workers = "admin", nil
+	req.Deploy.Apps = append(req.Deploy.Apps, second)
+	set := shaped(t, nil, req)
+
+	if counts := countTypes(set); counts["aws_lb"] != 1 || counts["aws_ecs_cluster"] != 1 {
+		t.Errorf("counts = %v, want one load balancer and one cluster however many container apps share them", counts)
 	}
 }
 

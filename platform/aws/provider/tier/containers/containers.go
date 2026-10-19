@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -32,6 +33,15 @@ const (
 	TargetGroupNamePrefix = "ocel-"
 
 	logRetentionDays = 14
+
+	kindCluster       = "AWS::ECS::Cluster"
+	kindLoadBalancer  = "AWS::ElasticLoadBalancingV2::LoadBalancer"
+	kindSecurityGroup = "AWS::EC2::SecurityGroup"
+	kindLogGroup      = "AWS::Logs::LogGroup"
+	kindVPCOrigin     = "AWS::CloudFront::VpcOrigin"
+	kindRole          = "AWS::IAM::Role"
+	kindCertificate   = "AWS::CertificateManager::Certificate"
+	kindFunction      = "AWS::Lambda::Function"
 )
 
 var Shared = sharedstack.Stack{
@@ -62,10 +72,20 @@ type Infrastructure struct {
 	PublicListener string
 	PublicHost     string
 	PublicRanges   string
+	LivenessRole   string
+}
+
+type Fronts struct {
+	Private bool
+	Public  bool
 }
 
 func (s Infrastructure) Front() awsports.ContainerFront {
 	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
+}
+
+func (s Infrastructure) Fronts() Fronts {
+	return Fronts{Private: s.Listener != "", Public: s.PublicListener != ""}
 }
 
 func StackRef(tier environment.Tier) provider.StackRef {
@@ -153,7 +173,7 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, public []str
 		if decoded, err = provision(ctx, owner, StackRef(tier), program, progress); err != nil {
 			return nil, err
 		}
-		return listResources(tier, decoded.Front()), nil
+		return listResources(tier, decoded), nil
 	})
 	if err != nil {
 		return Infrastructure{}, err
@@ -237,7 +257,7 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 	if err != nil {
 		return provider.BootstrapPart{}, false, err
 	}
-	front, _, err := awsports.ReadContainerFront(ctx, store, tier)
+	recorded, _, err := stackrecords.ReadBootstrapPart(ctx, store, tier, Part)
 	if err != nil {
 		return provider.BootstrapPart{}, false, err
 	}
@@ -245,32 +265,72 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 		Name:      Part,
 		Summary:   Summary,
 		Current:   true,
-		Resources: listResources(tier, front),
+		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier)},
+		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier, findFronts(tier, recorded.Resources))},
 
 		RetiresWithLastUser: true,
 	}, true, nil
 }
 
-func listResources(tier environment.Tier, front awsports.ContainerFront) []provider.PartResource {
+func listResources(tier environment.Tier, infra Infrastructure) []provider.PartResource {
 	resources := []provider.PartResource{
-		{Kind: "AWS::ECS::Cluster", ID: nameFor(tier)},
-		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: nameFor(tier)},
-		{Kind: "AWS::EC2::SecurityGroup", ID: nameFor(tier, "front")},
-		{Kind: "AWS::EC2::SecurityGroup", ID: nameFor(tier, "tasks")},
-		{Kind: "AWS::Logs::LogGroup", ID: logevents.NameContainerGroup(tier)},
+		{Kind: kindCluster, ID: nameFor(tier)},
+		{Kind: kindSecurityGroup, ID: nameFor(tier, "tasks")},
+		{Kind: kindLogGroup, ID: logevents.NameContainerGroup(tier)},
+		{Kind: kindRole, ID: parseRoleName(infra.ExecutionRole)},
 	}
-	if front.VPCOrigin != "" {
-		resources = append(resources, provider.PartResource{Kind: "AWS::CloudFront::VpcOrigin", ID: front.VPCOrigin})
+	fronts := infra.Fronts()
+	if fronts.Private {
+		resources = append(resources,
+			provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(tier)},
+			provider.PartResource{Kind: kindSecurityGroup, ID: nameFor(tier, "front")})
+	}
+	if infra.VPCOrigin != "" {
+		resources = append(resources, provider.PartResource{Kind: kindVPCOrigin, ID: infra.VPCOrigin})
+	}
+	if fronts.Public {
+		resources = append(resources,
+			provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(tier)},
+			provider.PartResource{Kind: kindSecurityGroup, ID: nameFor(tier, "public")},
+			provider.PartResource{Kind: kindCertificate, ID: nameCertificateHost(awsports.PublicBalancerName(tier))},
+			provider.PartResource{Kind: kindFunction, ID: nameLivenessFunction(tier)})
+		if infra.LivenessRole != "" {
+			resources = append(resources, provider.PartResource{Kind: kindRole, ID: parseRoleName(infra.LivenessRole)})
+		}
 	}
 	return resources
 }
 
-func Shape(tier environment.Tier) []pricing.Shaped {
-	return []pricing.Shaped{
-		{Name: Slug, Type: component.TerraformECSCluster, Properties: map[string]any{}},
-		{Name: Slug, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}},
-		{Name: Slug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": logRetentionDays, "name": logevents.NameContainerGroup(tier)}},
+func parseRoleName(arn string) string {
+	return arn[strings.LastIndex(arn, "/")+1:]
+}
+
+func findFronts(tier environment.Tier, resources []provider.PartResource) Fronts {
+	return Fronts{
+		Private: slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(tier)}),
+		Public:  slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(tier)}),
 	}
+}
+
+func Shape(tier environment.Tier, fronts Fronts) []pricing.Shaped {
+	shaped := []pricing.Shaped{
+		{Name: Slug, Type: component.TerraformECSCluster, Properties: map[string]any{}},
+	}
+	if fronts.Private {
+		shaped = append(shaped, pricing.Shaped{Name: Slug, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}})
+	}
+	shaped = append(shaped, pricing.Shaped{Name: Slug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": logRetentionDays, "name": logevents.NameContainerGroup(tier)}})
+	if fronts.Public {
+		public := naming.Join(naming.WordSeparator, Slug, "public")
+		shaped = append(shaped,
+			pricing.Shaped{Name: public, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": false}},
+			pricing.Shaped{Name: naming.Join(naming.WordSeparator, Slug, "liveness"), Type: component.TerraformLambdaFunction, Properties: map[string]any{
+				"runtime":           component.LambdaNodeRuntime,
+				"memory_size":       component.LambdaDefaultMemoryMB,
+				"architectures":     []any{arch.X8664},
+				"ephemeral_storage": map[string]any{"size": component.LambdaDefaultEphemeralMB},
+			}})
+	}
+	return shaped
 }
