@@ -34,7 +34,7 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 	}
 	vpcOrigin := recordedOf(t, rec, "aws:cloudfront/vpcOrigin:VpcOrigin")
 	endpoint := vpcOrigin["vpcOriginEndpointConfig"].ObjectValue()
-	if endpoint["arn"].StringValue() == "" || endpoint["name"].StringValue() != "ocel-containers-production" {
+	if endpoint["arn"].StringValue() == "" || !strings.HasPrefix(endpoint["name"].StringValue(), "ocel-containers-production-") {
 		t.Errorf("vpc origin = %v, want it to name the tier front by its ARN: the edge reaches the front through it and nothing else", endpoint)
 	}
 	if endpoint["originProtocolPolicy"].StringValue() != vpcOriginProtocolPolicy || endpoint["httpPort"].NumberValue() != originListenerPort {
@@ -135,6 +135,50 @@ func (s *subnetLookups) filtered() [][]string {
 	s.lookupMu.Lock()
 	defer s.lookupMu.Unlock()
 	return slices.Clone(s.filters)
+}
+
+type vpcOriginRegistrations struct {
+	inputRecorder
+	registerMu sync.Mutex
+	names      []string
+	ignored    []string
+}
+
+func (v *vpcOriginRegistrations) NewResource(args pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
+	if args.TypeToken == "aws:cloudfront/vpcOrigin:VpcOrigin" {
+		v.registerMu.Lock()
+		v.names = append(v.names, args.Inputs["vpcOriginEndpointConfig"].ObjectValue()["name"].StringValue())
+		if args.RegisterRPC != nil {
+			v.ignored = append(v.ignored, args.RegisterRPC.GetIgnoreChanges()...)
+		}
+		v.registerMu.Unlock()
+	}
+	return v.inputRecorder.NewResource(args)
+}
+
+func TestTheFrontsVPCOriginTakesAFreshNameEachTimeItIsCreatedAndKeepsTheOneItWasCreatedWith(t *testing.T) {
+	t.Parallel()
+
+	registrations := &vpcOriginRegistrations{}
+	for range 2 {
+		if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", registrations)); err != nil {
+			t.Fatalf("run the container infrastructure program: %v", err)
+		}
+	}
+
+	registrations.registerMu.Lock()
+	defer registrations.registerMu.Unlock()
+	if len(registrations.names) != 2 || registrations.names[0] == registrations.names[1] {
+		t.Errorf("the VPC origin was named %v across two runs, want a fresh name each time: CloudFront holds a deleted origin's name for a while after it is gone, so a retry under the same name is refused", registrations.names)
+	}
+	for _, name := range registrations.names {
+		if !strings.HasPrefix(name, nameFor(environment.TierProduction)+"-") {
+			t.Errorf("the VPC origin is named %q, want it under the tier's name", name)
+		}
+	}
+	if !slices.Contains(registrations.ignored, "vpcOriginEndpointConfig.name") {
+		t.Errorf("the VPC origin ignores changes to %v, want its name among them: an origin keeps the name it was created with", registrations.ignored)
+	}
 }
 
 type zoneLookups struct {

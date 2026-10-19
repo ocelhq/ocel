@@ -85,21 +85,22 @@ func vpcOrigin(id, name, status string, tags map[string]string) fakeVPCOrigin {
 	}
 }
 
-func TestARetriedDeployReclaimsTheVPCOriginAFailedOneLeftBehindUnderTheTiersName(t *testing.T) {
+func TestADeployReclaimsEveryFailedVPCOriginTaggedAsItsStacks(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
 	ours := stackTags(tier)
 	api := &fakeVPCOrigins{origins: []fakeVPCOrigin{
 		vpcOrigin("vo_other", "someone-elses-origin", "Failed", nil),
-		vpcOrigin("vo_failed", nameFor(tier), "Failed", ours),
+		vpcOrigin("vo_failed", nameFor(tier, "0a1b2c3d"), "Failed", ours),
+		vpcOrigin("vo_older", nameFor(tier), "Failed", ours),
 	}}
 
 	if err := reclaimFailedVPCOrigins(context.Background(), api, tier, nil); err != nil {
 		t.Fatalf("reclaimFailedVPCOrigins() = %v", err)
 	}
-	if !slices.Equal(api.deleted, []string{"vo_failed"}) {
-		t.Errorf("deleted %v, want vo_failed alone: CloudFront refuses a second VPC origin under the name a failed one still holds", api.deleted)
+	if !slices.Equal(api.deleted, []string{"vo_failed", "vo_older"}) {
+		t.Errorf("deleted %v, want vo_failed and vo_older: a failed origin serves nothing and Pulumi does not record it, so nothing else takes it down", api.deleted)
 	}
 }
 
@@ -114,7 +115,6 @@ func TestARetriedDeployLeavesEveryVPCOriginItCannotProveIsItsOwnFailedOne(t *tes
 		vpcOrigin("vo_deployed", nameFor(tier), "Deployed", ours),
 		vpcOrigin("vo_untagged", nameFor(tier), "Failed", untagged),
 		vpcOrigin("vo_sibling", nameFor(tier), "Failed", sibling),
-		vpcOrigin("vo_renamed", nameFor(tier, "other"), "Failed", ours),
 	}}
 
 	if err := reclaimFailedVPCOrigins(context.Background(), api, tier, nil); err != nil {
