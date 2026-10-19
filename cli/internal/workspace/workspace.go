@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -159,12 +160,50 @@ func locatedAt(dir, root string, written language.Language) (Location, error) {
 }
 
 func (l Location) Members() []string {
+	members := slices.Collect(maps.Keys(l.memberManifests()))
+	slices.Sort(members)
+	return members
+}
+
+var bunCommand = regexp.MustCompile(`(^|\s|;|&|&&|\||\|\|)bunx?\s`)
+
+func (l Location) HasScriptCallingBun() (bool, error) {
+	app, err := readManifest(filepath.Join(l.Dir(), manifestName))
+	if err != nil {
+		return false, fmt.Errorf("read the %s of the app in %s: %w", manifestName, l.Dir(), err)
+	}
+	members := l.memberManifests()
+	reached := []manifest{app}
+	seen := map[string]bool{app.Name: true}
+	for len(reached) > 0 {
+		m := reached[0]
+		reached = reached[1:]
+		for _, script := range m.Scripts {
+			if bunCommand.MatchString(script) {
+				return true, nil
+			}
+		}
+		for _, deps := range []map[string]string{m.Dependencies, m.DevDeps} {
+			for name := range deps {
+				member, ok := members[name]
+				if !ok || seen[name] {
+					continue
+				}
+				seen[name] = true
+				reached = append(reached, member)
+			}
+		}
+	}
+	return false, nil
+}
+
+func (l Location) memberManifests() map[string]manifest {
 	globs, ok := declaredPackages(l.Root)
 	if !ok {
 		return nil
 	}
 	tree := os.DirFS(l.Root)
-	named := map[string]bool{}
+	named := map[string]manifest{}
 	for _, glob := range globs {
 		pattern := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(glob), "./"), "/")
 		if strings.HasPrefix(pattern, "!") {
@@ -186,12 +225,10 @@ func (l Location) Members() []string {
 			if err != nil || m.Name == "" {
 				continue
 			}
-			named[m.Name] = true
+			named[m.Name] = m
 		}
 	}
-	members := slices.Collect(maps.Keys(named))
-	slices.Sort(members)
-	return members
+	return named
 }
 
 func isRegularFile(path string) bool {

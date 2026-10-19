@@ -13,6 +13,7 @@ import (
 	"github.com/railwayapp/railpack/core"
 	"github.com/railwayapp/railpack/core/app"
 	railpackplan "github.com/railwayapp/railpack/core/plan"
+	"github.com/railwayapp/railpack/core/providers/node"
 	"github.com/tailscale/hujson"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
@@ -36,6 +37,7 @@ const (
 	providerKey    = "provider"
 	packagesKey    = "packages"
 	goPackage      = "go"
+	bunPackage     = "bun"
 )
 
 func Plan(loc workspace.Location) ([]byte, error) {
@@ -130,8 +132,19 @@ func providerConfigFile(loc workspace.Location, provider string) (string, func()
 	}
 	config[providerKey] = json.RawMessage(`"` + provider + `"`)
 	if loc.Language == language.Go && loc.ModuleDir != "." && loc.GoVersion != "" {
-		if err := pinGo(config, loc.GoVersion, root); err != nil {
+		if err := pinPackage(config, goPackage, loc.GoVersion, root); err != nil {
 			return "", nil, err
+		}
+	}
+	if loc.Language == language.JS && loc.PackageManager != workspace.Bun {
+		callsBun, err := loc.HasScriptCallingBun()
+		if err != nil {
+			return "", nil, err
+		}
+		if callsBun {
+			if err := pinPackage(config, bunPackage, node.DEFAULT_BUN_VERSION, root); err != nil {
+				return "", nil, err
+			}
 		}
 	}
 	written, err := json.Marshal(config)
@@ -156,17 +169,17 @@ func providerConfigFile(loc workspace.Location, provider string) (string, func()
 	return named, discard, nil
 }
 
-func pinGo(config map[string]json.RawMessage, version, root string) error {
+func pinPackage(config map[string]json.RawMessage, name, version, root string) error {
 	packages := map[string]string{}
 	if declared, ok := config[packagesKey]; ok {
 		if err := json.Unmarshal(declared, &packages); err != nil {
 			return fmt.Errorf("read the %s of the %s in %s: %w", packagesKey, ConfigFileName, root, err)
 		}
 	}
-	if _, pinned := packages[goPackage]; pinned {
+	if _, pinned := packages[name]; pinned {
 		return nil
 	}
-	packages[goPackage] = version
+	packages[name] = version
 	pinned, err := json.Marshal(packages)
 	if err != nil {
 		return err
