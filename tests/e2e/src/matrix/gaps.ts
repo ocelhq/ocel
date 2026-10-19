@@ -14,6 +14,7 @@ import {
   nextDataCacheChecks,
   nextOriginCacheChecks,
   nextOriginDataCacheChecks,
+  nextPublicValueInlinedCheck,
   nodeRuntimeChecks,
   orderedKeysInParallelCheck,
   publicOriginCheck,
@@ -429,6 +430,19 @@ export const gaps: Gap[] = [
         fixtures: [sdk.next, sdk.sveltekit],
         variants: [defaults],
         fails: [check(clientEnvDeploymentUrlCheck)],
+      },
+    ],
+  },
+  {
+    id: "image-build-inlines-no-public-value",
+    reason:
+      "a Next app built as an image is built without ocel's Next adapter and with none of its plaintext values, so next build defines no OCEL_PUBLIC_ENV and inlines no NEXT_PUBLIC_ value into the browser bundle",
+    where: [
+      {
+        on: ["vps", "vps.incus"],
+        fixtures: [sdk.next],
+        variants: [defaults, dockerfile],
+        fails: [check(nextPublicValueInlinedCheck)],
       },
     ],
   },
