@@ -13,19 +13,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func scaleUpPromoted(ctx context.Context, hooks *provider.ContainerReleaseHooks, l projectLedger, pointer string, promoted router.Promotion, progress progress.Log) error {
-	if hooks == nil {
+func scaleUpPromoted(ctx context.Context, hooks *provider.ContainerReleaseHooks, l projectLedger, req promoteRequest, progress progress.Log) error {
+	if hooks == nil || req.rollsBackTo == "" {
 		return nil
 	}
 	served := map[appRelease]bool{}
-	for app, release := range promoted.Releases {
+	for app, release := range req.promotion.Releases {
 		served[appRelease{app: app, release: release}] = true
 	}
 	releases, err := listAppReleases(served)
 	if err != nil || len(releases) == 0 {
 		return err
 	}
-	return hooks.ScaleUp(ctx, provider.PromotedReleases{Slug: l.slug, Tier: l.tier, Env: envFor(l.tier, pointer), Releases: releases}, progress)
+	return hooks.ScaleUp(ctx, provider.PromotedReleases{Slug: l.slug, Tier: l.tier, Env: envFor(l.tier, req.pointer), Releases: releases}, progress)
 }
 
 func scaleDownDemoted(ctx context.Context, hooks *provider.ContainerReleaseHooks, l projectLedger, pointer string, promoted router.Promotion, replaces string, kept []router.Promotion, progress progress.Log) {

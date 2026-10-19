@@ -147,7 +147,7 @@ func TestAPromotionWhoseScaleDownFailsStillServesAndWarnsOfTheReleasesLeftRunnin
 	}
 }
 
-func TestADeployScalesDownTheReleaseItReplacedOnceItsOwnServes(t *testing.T) {
+func TestADeployScalesUpNothingAndScalesDownTheReleaseItReplacedOnceItsOwnServes(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
 	scaling := (&containerScaling{}).installOn(vendor)
@@ -159,10 +159,8 @@ func TestADeployScalesDownTheReleaseItReplacedOnceItsOwnServes(t *testing.T) {
 	}
 
 	firstRelease := webRelease(t, first.GetApps()[0].GetRelease())
-	secondRelease := webRelease(t, second.GetApps()[0].GetRelease())
-	up := scaling.readScaledUp()
-	if len(up) != 2 || !slices.Equal(up[1].Releases, []provider.AppRelease{secondRelease}) {
-		t.Errorf("the deploys scaled up %+v, want the second scaling up its own release %v", up, secondRelease)
+	if up := scaling.readScaledUp(); len(up) != 0 {
+		t.Errorf("the deploys scaled up %+v, want nothing: every release a deploy promotes is new, so none was ever scaled down", up)
 	}
 	down := scaling.readScaledDown()
 	if len(down) != 1 || !slices.Equal(down[0].Previous, []provider.AppRelease{firstRelease}) || len(down[0].Older) != 0 {
