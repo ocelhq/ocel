@@ -4,15 +4,12 @@ package aws_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -142,23 +139,7 @@ func TestLiveTheFirstDeployOfAnAppThatOptimizesImagesAddsTheImageOptimizerAndRem
 	if err := boot.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	project := t.TempDir()
-	root, err := buildoutput.Root(project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	app := buildoutput.AppRoot(root, "web")
-	if err := os.MkdirAll(app, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(app, buildoutput.HostingFile), []byte(`{"version":1,"framework":"next","needs":{}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(app, naming.ImageConfigFile), []byte(`{}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	p, err := aws.New(ctx, provider.Settings{ProjectDir: project, WrittenBy: liveWriter, Options: provider.Options{"region": liveRegion}})
+	p, err := aws.New(ctx, provider.Settings{ProjectDir: t.TempDir(), WrittenBy: liveWriter, Options: provider.Options{"region": liveRegion}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -166,7 +147,7 @@ func TestLiveTheFirstDeployOfAnAppThatOptimizesImagesAddsTheImageOptimizerAndRem
 		Slug: "shop",
 		Tier: tier,
 		Apps: []provider.AppEntry{{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}}}},
-	}}); err != nil {
+	}, Uses: []buildoutput.Uses{{ImageOptimization: true}}}); err != nil {
 		t.Fatalf("Preflight.Apply() = %v", err)
 	}
 	function := imageoptimizer.NamesFor(string(defaultNamespace), tier).Function
