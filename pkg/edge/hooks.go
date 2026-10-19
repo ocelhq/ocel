@@ -25,8 +25,9 @@ type Hooks struct {
 }
 
 type ClientCertificateHooks struct {
-	Ensure  func(ctx context.Context, hostname string) ([]string, error)
-	Present func(ctx context.Context, hostname string) error
+	RefuseUnready func(ctx context.Context, hostname string) error
+	Ensure        func(ctx context.Context, hostname string) ([]string, error)
+	Present       func(ctx context.Context, hostname string) error
 }
 
 type OriginCertificateHooks struct {

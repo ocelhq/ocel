@@ -29,8 +29,9 @@ func (x *Proxy) Hooks() edge.Hooks {
 		VerifyCredentials:             x.p.verifyCredentials,
 		DescribeCredentialPermissions: proxyCredentialPermissions,
 		ClientCertificates: &edge.ClientCertificateHooks{
-			Ensure:  x.p.ensureClientCertificates,
-			Present: x.p.presentClientCertificates,
+			RefuseUnready: x.p.refuseUnreadyClientCertificates,
+			Ensure:        x.p.ensureClientCertificates,
+			Present:       x.p.presentClientCertificates,
 		},
 		OriginCertificates: &edge.OriginCertificateHooks{
 			Issue:  x.p.issueOriginCertificate,

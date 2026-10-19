@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const ownerSeparator = " for "
@@ -121,7 +122,9 @@ func (p *cloudflare) requireStrictOrigin(ctx context.Context, zoneID, zoneName s
 		return fmt.Errorf("read the SSL mode of zone %s: %w", zoneName, err)
 	}
 	if !slices.Contains(strictOriginModes, read.Value) {
-		return fmt.Errorf("zone %s reaches origins with SSL mode %q, which does not check the certificate the origin answers with, so Cloudflare would forward to anything answering its address: set the zone's SSL mode to Full (strict) and bind it again", zoneName, read.Value)
+		return refusal.Refuse(refusal.CodeInvalid,
+			"zone %s reaches origins with SSL mode %q, which does not check the certificate the origin answers with, so Cloudflare would forward to anything answering its address: set the zone's SSL mode to Full (strict) and try again",
+			zoneName, read.Value)
 	}
 	return nil
 }
