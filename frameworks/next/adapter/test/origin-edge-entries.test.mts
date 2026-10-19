@@ -10,6 +10,8 @@ import {
   serveDispatch,
 } from "./origin-edge-app.mjs";
 
+vi.mock("../src/runtime-requires.mts", () => ({ traceRuntimeRequires: async () => ({}) }));
+
 const running: RunningServer[] = [];
 
 afterEach(async () => {

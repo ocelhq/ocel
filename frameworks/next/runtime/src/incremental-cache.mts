@@ -2,9 +2,7 @@ import { randomBytes } from "node:crypto";
 import type http from "node:http";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import type { LauncherConfig } from "@framework/next-protocol/launcher";
-
-const incrementalCacheModule = "next/dist/server/lib/incremental-cache/index.js";
+import { type LauncherConfig, nextIncrementalCacheModule } from "@framework/next-protocol/launcher";
 
 interface IncrementalCacheOptions {
   dev: boolean;
@@ -29,7 +27,7 @@ export function newIncrementalCacheFactory(
 ): IncrementalCacheFactory {
   const { fetchCacheKeyPrefix, isrFlushToDisk, cacheMaxMemorySize, previewModeId } = config.cache;
   const { IncrementalCache } = createRequire(join(projectDir, "package.json"))(
-    incrementalCacheModule,
+    nextIncrementalCacheModule,
   ) as { IncrementalCache: IncrementalCache };
   const prerenderManifest = {
     version: 4,

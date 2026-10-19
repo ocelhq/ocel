@@ -1,3 +1,5 @@
+export const nextIncrementalCacheModule = "next/dist/server/lib/incremental-cache/index.js";
+
 export interface RevalidateWindow {
   revalidate: number;
   expire?: number;

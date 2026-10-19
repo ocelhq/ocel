@@ -7,6 +7,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import adapter from "../src/next-adapter.mts";
 import { defaultImages, writePrerenderManifest } from "./fixtures.mts";
 
+vi.mock("../src/runtime-requires.mts", () => ({ traceRuntimeRequires: async () => ({}) }));
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
