@@ -16,8 +16,8 @@ const (
 )
 
 type Options struct {
-	Tunnel       bool   `json:"tunnel,omitempty" doc:"Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one."`
-	OriginDomain string `json:"originDomain,omitempty" doc:"A domain in a Cloudflare zone of this account. When Cloudflare runs its worker in front of Google Cloud, the worker reaches each deployment of a serverless app on its own DNS-only hostname under it: production under the domain itself, previews under preview.<domain>. One wildcard certificate and one DNS-only record per tier are kept under it, so give it a domain nothing else uses. AWS refuses it."`
+	Tunnel       bool   `json:"tunnel,omitempty" doc:"Reach the origin through a tunnel it opens to Cloudflare, instead of at its address. A VPS always does."`
+	OriginDomain string `json:"originDomain,omitempty" doc:"A domain in your Cloudflare zone, used by nothing else, that the worker reaches Google Cloud apps under. AWS refuses it."`
 }
 
 func (Options) Doc() string {

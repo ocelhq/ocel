@@ -17,11 +17,11 @@
         "description": "What a deploy does with the V8 compile cache it warms for each node function.",
         "properties": {
           "cache": {
-            "description": "Warm a V8 compile cache for each node function at deploy and keep it in S3, so a cold start compiles less. Off, functions start with no cache and a deploy warms nothing.",
+            "description": "Warm a V8 compile cache for each node function at deploy, so cold starts compile less. Left off, false.",
             "type": "boolean"
           },
           "embed": {
-            "description": "Fold each function's warmed compile cache into its own code package, so a cold start loads it with the code rather than fetching it from S3. Off, a cold start fetches it. Needs cache.",
+            "description": "Bundle each function's compile cache into its code package instead of fetching it from S3. Needs cache.",
             "type": "boolean"
           }
         },
@@ -32,7 +32,7 @@
         "additionalProperties": {
           "type": "string"
         },
-        "description": "Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again.",
+        "description": "ARNs of issued ACM certificates, keyed by hostname. A hostname left off gets a certificate ocel manages.",
         "type": "object"
       },
       "logs": {
@@ -40,7 +40,7 @@
         "description": "How ocel logs --tail reads this account's logs.",
         "properties": {
           "liveTail": {
-            "description": "Tail through CloudWatch Live Tail: lower latency and no sampling gaps between polls, billed per session-minute past the free tier and capped at 15 sessions per account. Off, ocel logs --tail polls FilterLogEvents.",
+            "description": "Tail logs through CloudWatch Live Tail instead of polling. Billed per session-minute past the free tier.",
             "type": "boolean"
           }
         },
@@ -48,7 +48,7 @@
         "type": "object"
       },
       "region": {
-        "description": "The AWS region to deploy into, such as us-east-1: a region, never an availability zone such as us-east-1a. Omit it and ocel reads AWS_REGION, AWS_DEFAULT_REGION, then the profile.",
+        "description": "The AWS region to deploy into, such as us-east-1. Left off, read from AWS_REGION, AWS_DEFAULT_REGION or the profile.",
         "examples": [
           "af-south-1",
           "ap-east-1",
@@ -96,7 +96,7 @@
             "pattern": "\\$\\{[^}]+\\}"
           }
         ],
-        "description": "ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap makes a key ocel owns, once a project here first seals a value.",
+        "description": "ARN of a KMS key to encrypt this account's variables with. Left off, ocel creates one.",
         "type": "string"
       }
     },

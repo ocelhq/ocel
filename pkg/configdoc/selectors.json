@@ -6,32 +6,32 @@
       "aws": [
         {
           "name": "region",
-          "doc": "The AWS region to deploy into, such as us-east-1: a region, never an availability zone such as us-east-1a. Omit it and ocel reads AWS_REGION, AWS_DEFAULT_REGION, then the profile."
+          "doc": "The AWS region to deploy into, such as us-east-1. Left off, read from AWS_REGION, AWS_DEFAULT_REGION or the profile."
         },
         {
           "name": "variablesKey",
-          "doc": "ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap makes a key ocel owns, once a project here first seals a value."
+          "doc": "ARN of a KMS key to encrypt this account's variables with. Left off, ocel creates one."
         }
       ],
       "gcp": [
         {
           "name": "project",
-          "doc": "The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config. ocel cost scan reads no credentials and runs no gcloud, so it needs the project here or in one of those two variables."
+          "doc": "The Google Cloud project to deploy into. Left off, from GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT or gcloud config."
         },
         {
           "name": "region",
-          "doc": "The region to deploy into, such as us-central1: a region, never a zone such as us-central1-f. A project spans them all, so this names the one.",
+          "doc": "The region to deploy into, such as us-central1, never a zone such as us-central1-f.",
           "required": true
         }
       ],
       "vps": [
         {
           "name": "deployKey",
-          "doc": "Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys."
+          "doc": "Path to the public key the ocel-deploy login accepts. Left off, the bootstrapping login's keys."
         },
         {
           "name": "proxy",
-          "doc": "What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it."
+          "doc": "What fronts this machine on ports 80 and 443. Left off, ocel runs its own proxy."
         },
         {
           "name": "ssh",

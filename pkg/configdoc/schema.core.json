@@ -22,12 +22,12 @@
       "type": "array"
     },
     "apps": {
-      "description": "The apps this project deploys. Left off, ocel detects one at the project root.",
+      "description": "The apps this project deploys. Left off, ocel deploys the app it detects at the project root.",
       "items": {
         "additionalProperties": false,
         "properties": {
           "arch": {
-            "description": "The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on.",
+            "description": "The processor architecture the app is built for. Left off, what the provider runs the app on.",
             "enum": [
               "x86_64",
               "arm64"
@@ -35,13 +35,13 @@
             "type": "string"
           },
           "buildWithResources": {
-            "description": "Whether ocel deploy lets the app's build reach the resources it uses in the deployed environment, so a page prerendered at build time reads them. Only a Next app's build reaches them, on serverless or container compute: its postgres databases and kv stores over ports the provider forwards, and its buckets through the binding proxy the provider serves. Any other build goes without. Left off, true. Set false to build as if no resource were provisioned.",
+            "description": "Whether a Next app's build can reach its deployed resources, so prerendered pages can read them. Left off, true.",
             "type": "boolean"
           },
           "compute": {
             "allOf": [
               {
-                "description": "What the app runs on: serverless functions packed per route, or one container image serving everything. Named alone, or keyed by the compute with its options as the value.",
+                "description": "What the app runs on: serverless functions or one container image. Named alone, or keyed with its options.",
                 "oneOf": [
                   {
                     "enum": [
@@ -58,7 +58,7 @@
                         "description": "Serverless functions packed per route, which scale themselves.",
                         "properties": {
                           "entrypoint": {
-                            "description": "The file a node app is served from, or the directory of a go app's main package, when it is not the one ocel would detect.",
+                            "description": "The file a node app is served from, or a go app's main package directory, if not the detected one.",
                             "type": "string"
                           },
                           "framework": {
@@ -95,7 +95,7 @@
                             "description": "How the app is checked before it is served.",
                             "properties": {
                               "path": {
-                                "description": "The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /.",
+                                "description": "The path the health check requests. Any 2xx means up. Left off, / or, on a VPS, the first common path that answers.",
                                 "type": "string"
                               }
                             },
@@ -111,7 +111,7 @@
                                 "type": "string"
                               },
                               "context": {
-                                "description": "The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to.",
+                                "description": "The directory the image is built from, relative to the project. Left off, the workspace root the app belongs to.",
                                 "type": "string"
                               },
                               "dockerfile": {
@@ -127,12 +127,12 @@
                             "description": "How many instances of the app run.",
                             "properties": {
                               "max": {
-                                "description": "The most instances run at once, however busy the app is. Left off, as many as min, or 1.",
+                                "description": "The most instances run at once. Left off, as many as min, or 1.",
                                 "minimum": 1,
                                 "type": "integer"
                               },
                               "min": {
-                                "description": "The fewest instances kept running, however quiet the app is. Left off, 1, or 0 for an app a worker joins by name.",
+                                "description": "The fewest instances kept running. Left off, 1, or 0 for an app a worker joins by name.",
                                 "minimum": 0,
                                 "type": "integer"
                               }
@@ -154,7 +154,7 @@
                 "title": "ComputeDescriptor"
               }
             ],
-            "description": "What the app runs on, keyed by the compute with its options as the value, or named alone. Left off, the first compute the provider runs."
+            "description": "What the app runs on, named alone or keyed with its options. Left off, the provider's first compute."
           },
           "domains": {
             "additionalProperties": false,
@@ -183,7 +183,7 @@
             "type": "string"
           },
           "name": {
-            "description": "The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label.",
+            "description": "The app's name. It must be a valid DNS label.",
             "type": "string"
           },
           "path": {
@@ -202,7 +202,7 @@
     },
     "bindings": {
       "additionalProperties": false,
-      "description": "Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is \"@\" followed by the name a record your own infrastructure published, such as \"@warehouse\", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves.",
+      "description": "Resources ocel binds instead of provisioning, keyed by resource type, then by the name the app declares.",
       "properties": {
         "bucket": {
           "additionalProperties": {
@@ -219,10 +219,10 @@
                     "allOf": [
                       {
                         "additionalProperties": false,
-                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The name of the ocel variable holding this value.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -244,10 +244,10 @@
                       },
                       {
                         "additionalProperties": false,
-                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The name of the ocel variable holding this value.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -261,17 +261,17 @@
                     ]
                   },
                   "endpoint": {
-                    "description": "The address of the S3-compatible store the bucket lives in, such as https://\u003caccount\u003e.r2.cloudflarestorage.com.",
+                    "description": "The address of the S3-compatible store, such as https://\u003caccount\u003e.r2.cloudflarestorage.com.",
                     "oneOf": [
                       {
                         "type": "string"
                       },
                       {
                         "additionalProperties": false,
-                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The name of the ocel variable holding this value.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -285,21 +285,21 @@
                     ]
                   },
                   "pathStyle": {
-                    "description": "Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts.",
+                    "description": "Address the bucket as a path on the endpoint instead of a subdomain.",
                     "type": "boolean"
                   },
                   "prefix": {
-                    "description": "The prefix every key the app writes is kept under, so one bucket can store several resources or environments.",
+                    "description": "The key prefix the app's objects are stored under.",
                     "oneOf": [
                       {
                         "type": "string"
                       },
                       {
                         "additionalProperties": false,
-                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The name of the ocel variable holding this value.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -320,10 +320,10 @@
                       },
                       {
                         "additionalProperties": false,
-                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The name of the ocel variable holding this value.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -337,17 +337,17 @@
                     ]
                   },
                   "region": {
-                    "description": "The region requests to the store are signed for; auto for R2.",
+                    "description": "The region requests to the store are signed for, such as auto for R2.",
                     "oneOf": [
                       {
                         "type": "string"
                       },
                       {
                         "additionalProperties": false,
-                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The name of the ocel variable holding this value.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -364,10 +364,10 @@
                     "allOf": [
                       {
                         "additionalProperties": false,
-                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The name of the ocel variable holding this value.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -406,10 +406,10 @@
                             "allOf": [
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -431,10 +431,10 @@
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -448,17 +448,17 @@
                             ]
                           },
                           "endpoint": {
-                            "description": "The address of the S3-compatible store the bucket lives in, such as https://\u003caccount\u003e.r2.cloudflarestorage.com.",
+                            "description": "The address of the S3-compatible store, such as https://\u003caccount\u003e.r2.cloudflarestorage.com.",
                             "oneOf": [
                               {
                                 "type": "string"
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -472,21 +472,21 @@
                             ]
                           },
                           "pathStyle": {
-                            "description": "Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts.",
+                            "description": "Address the bucket as a path on the endpoint instead of a subdomain.",
                             "type": "boolean"
                           },
                           "prefix": {
-                            "description": "The prefix every key the app writes is kept under, so one bucket can store several resources or environments.",
+                            "description": "The key prefix the app's objects are stored under.",
                             "oneOf": [
                               {
                                 "type": "string"
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -507,10 +507,10 @@
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -524,17 +524,17 @@
                             ]
                           },
                           "region": {
-                            "description": "The region requests to the store are signed for; auto for R2.",
+                            "description": "The region requests to the store are signed for, such as auto for R2.",
                             "oneOf": [
                               {
                                 "type": "string"
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -551,10 +551,10 @@
                             "allOf": [
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -592,10 +592,10 @@
                             "allOf": [
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -617,10 +617,10 @@
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -634,17 +634,17 @@
                             ]
                           },
                           "endpoint": {
-                            "description": "The address of the S3-compatible store the bucket lives in, such as https://\u003caccount\u003e.r2.cloudflarestorage.com.",
+                            "description": "The address of the S3-compatible store, such as https://\u003caccount\u003e.r2.cloudflarestorage.com.",
                             "oneOf": [
                               {
                                 "type": "string"
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -658,21 +658,21 @@
                             ]
                           },
                           "pathStyle": {
-                            "description": "Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts.",
+                            "description": "Address the bucket as a path on the endpoint instead of a subdomain.",
                             "type": "boolean"
                           },
                           "prefix": {
-                            "description": "The prefix every key the app writes is kept under, so one bucket can store several resources or environments.",
+                            "description": "The key prefix the app's objects are stored under.",
                             "oneOf": [
                               {
                                 "type": "string"
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -693,10 +693,10 @@
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -710,17 +710,17 @@
                             ]
                           },
                           "region": {
-                            "description": "The region requests to the store are signed for; auto for R2.",
+                            "description": "The region requests to the store are signed for, such as auto for R2.",
                             "oneOf": [
                               {
                                 "type": "string"
                               },
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -737,10 +737,10 @@
                             "allOf": [
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -773,7 +773,7 @@
               }
             ]
           },
-          "description": "Each key is a bucket resource this project declares. Its value is \"@\" followed by the name a record is published under, such as \"@warehouse\"; or the record itself, whose secrets are ocel variables written { \"$env\": \"NAME\" }; or that record keyed by the tier it serves, leaving the other tier to provision its own.",
+          "description": "The bucket resources this project binds, keyed by name. Each value is \"@\" plus a record name, or the record itself.",
           "type": "object"
         },
         "kv": {
@@ -781,7 +781,7 @@
             "pattern": "^@\\S",
             "type": "string"
           },
-          "description": "Each key is a kv resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@shared-cache\".",
+          "description": "The kv resources this project binds, keyed by name. Each value is \"@\" plus a record name, such as \"@shared-cache\".",
           "type": "object"
         },
         "postgres": {
@@ -792,7 +792,7 @@
                 "type": "string"
               },
               {
-                "description": "An existing Postgres database a tier binds rather than provisioning its own, reached by a connection string or by host and role.",
+                "description": "An existing Postgres database a tier binds, by connection string or by host and role.",
                 "oneOf": [
                   {
                     "additionalProperties": false,
@@ -801,10 +801,10 @@
                         "allOf": [
                           {
                             "additionalProperties": false,
-                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The name of the ocel variable holding this value.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -816,7 +816,7 @@
                             "type": "object"
                           }
                         ],
-                        "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client."
+                        "description": "The full connection string, passed to the client unchanged."
                       }
                     },
                     "required": [
@@ -836,10 +836,10 @@
                           },
                           {
                             "additionalProperties": false,
-                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The name of the ocel variable holding this value.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -860,10 +860,10 @@
                           },
                           {
                             "additionalProperties": false,
-                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The name of the ocel variable holding this value.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -880,10 +880,10 @@
                         "allOf": [
                           {
                             "additionalProperties": false,
-                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The name of the ocel variable holding this value.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -909,10 +909,10 @@
                             "allOf": [
                               {
                                 "additionalProperties": false,
-                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The name of the ocel variable holding this value.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -924,10 +924,10 @@
                                 "type": "object"
                               }
                             ],
-                            "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts."
+                            "description": "The CA the server's certificate chains to, as PEM, when the system does not trust it."
                           },
                           "mode": {
-                            "description": "require encrypts the connection; verify-full also checks the server's certificate and hostname.",
+                            "description": "require encrypts the connection. verify-full also checks the server's certificate and hostname.",
                             "enum": [
                               "require",
                               "verify-full"
@@ -949,10 +949,10 @@
                           },
                           {
                             "additionalProperties": false,
-                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                            "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The name of the ocel variable holding this value.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -985,7 +985,7 @@
                   "preview": {
                     "allOf": [
                       {
-                        "description": "An existing Postgres database a tier binds rather than provisioning its own, reached by a connection string or by host and role.",
+                        "description": "An existing Postgres database a tier binds, by connection string or by host and role.",
                         "oneOf": [
                           {
                             "additionalProperties": false,
@@ -994,10 +994,10 @@
                                 "allOf": [
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1009,7 +1009,7 @@
                                     "type": "object"
                                   }
                                 ],
-                                "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client."
+                                "description": "The full connection string, passed to the client unchanged."
                               }
                             },
                             "required": [
@@ -1029,10 +1029,10 @@
                                   },
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1053,10 +1053,10 @@
                                   },
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1073,10 +1073,10 @@
                                 "allOf": [
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1102,10 +1102,10 @@
                                     "allOf": [
                                       {
                                         "additionalProperties": false,
-                                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                         "properties": {
                                           "$env": {
-                                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                            "description": "The name of the ocel variable holding this value.",
                                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                                             "type": "string"
                                           }
@@ -1117,10 +1117,10 @@
                                         "type": "object"
                                       }
                                     ],
-                                    "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts."
+                                    "description": "The CA the server's certificate chains to, as PEM, when the system does not trust it."
                                   },
                                   "mode": {
-                                    "description": "require encrypts the connection; verify-full also checks the server's certificate and hostname.",
+                                    "description": "require encrypts the connection. verify-full also checks the server's certificate and hostname.",
                                     "enum": [
                                       "require",
                                       "verify-full"
@@ -1142,10 +1142,10 @@
                                   },
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1177,7 +1177,7 @@
                   "production": {
                     "allOf": [
                       {
-                        "description": "An existing Postgres database a tier binds rather than provisioning its own, reached by a connection string or by host and role.",
+                        "description": "An existing Postgres database a tier binds, by connection string or by host and role.",
                         "oneOf": [
                           {
                             "additionalProperties": false,
@@ -1186,10 +1186,10 @@
                                 "allOf": [
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1201,7 +1201,7 @@
                                     "type": "object"
                                   }
                                 ],
-                                "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client."
+                                "description": "The full connection string, passed to the client unchanged."
                               }
                             },
                             "required": [
@@ -1221,10 +1221,10 @@
                                   },
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1245,10 +1245,10 @@
                                   },
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1265,10 +1265,10 @@
                                 "allOf": [
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1294,10 +1294,10 @@
                                     "allOf": [
                                       {
                                         "additionalProperties": false,
-                                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                        "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                         "properties": {
                                           "$env": {
-                                            "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                            "description": "The name of the ocel variable holding this value.",
                                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                                             "type": "string"
                                           }
@@ -1309,10 +1309,10 @@
                                         "type": "object"
                                       }
                                     ],
-                                    "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts."
+                                    "description": "The CA the server's certificate chains to, as PEM, when the system does not trust it."
                                   },
                                   "mode": {
-                                    "description": "require encrypts the connection; verify-full also checks the server's certificate and hostname.",
+                                    "description": "require encrypts the connection. verify-full also checks the server's certificate and hostname.",
                                     "enum": [
                                       "require",
                                       "verify-full"
@@ -1334,10 +1334,10 @@
                                   },
                                   {
                                     "additionalProperties": false,
-                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                    "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                     "properties": {
                                       "$env": {
-                                        "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                        "description": "The name of the ocel variable holding this value.",
                                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                                         "type": "string"
                                       }
@@ -1371,7 +1371,7 @@
               }
             ]
           },
-          "description": "Each key is a postgres resource this project declares. Its value is \"@\" followed by the name a record is published under, such as \"@warehouse\"; or the record itself, whose secrets are ocel variables written { \"$env\": \"NAME\" }; or that record keyed by the tier it serves, leaving the other tier to provision its own.",
+          "description": "The postgres resources this project binds, keyed by name. Each value is \"@\" plus a record name, or the record itself.",
           "type": "object"
         }
       },
@@ -1382,7 +1382,7 @@
       "description": "Where the resources an app declares are found.",
       "properties": {
         "paths": {
-          "description": "The directories containing infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory.",
+          "description": "Directories of infrastructure declarations, relative to the config. Left off, infra next to the config.",
           "items": {
             "type": "string"
           },
@@ -1420,12 +1420,12 @@
     },
     "envSource": {
       "additionalProperties": false,
-      "description": "Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev.",
+      "description": "Where each tier's values are read from.",
       "properties": {
         "dev": {
           "allOf": [
             {
-              "description": "Where ocel dev and ocel run read values from on your machine: the project's .env file (\"dotenv\"), or an env source keyed by its identifier with its options as the value.",
+              "description": "Where ocel dev reads values from: \"dotenv\" for the .env file, or an env source keyed with its options.",
               "oneOf": [
                 {
                   "enum": [
@@ -1440,10 +1440,10 @@
                       "allOf": [
                         {
                           "additionalProperties": false,
-                          "description": "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev.",
+                          "description": "A command whose output is a tier's values.",
                           "properties": {
                             "command": {
-                              "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                              "description": "The command and its arguments. {folder} in an argument becomes the variables folder being read.",
                               "items": {
                                 "type": "string"
                               },
@@ -1481,7 +1481,7 @@
                       "allOf": [
                         {
                           "additionalProperties": false,
-                          "description": "The Infisical project and environment a tier reads its values from. Production and preview read it as the machine identity auth names; dev reads it as you.",
+                          "description": "The Infisical project and environment a tier reads its values from.",
                           "properties": {
                             "auth": {
                               "allOf": [
@@ -1501,10 +1501,10 @@
                                                   "allOf": [
                                                     {
                                                       "additionalProperties": false,
-                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                                       "properties": {
                                                         "$env": {
-                                                          "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                                          "description": "The name of the ocel variable holding this value.",
                                                           "pattern": "^[A-Z_][A-Z0-9_]*$",
                                                           "type": "string"
                                                         }
@@ -1522,10 +1522,10 @@
                                                   "allOf": [
                                                     {
                                                       "additionalProperties": false,
-                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                                       "properties": {
                                                         "$env": {
-                                                          "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                                          "description": "The name of the ocel variable holding this value.",
                                                           "pattern": "^[A-Z_][A-Z0-9_]*$",
                                                           "type": "string"
                                                         }
@@ -1589,7 +1589,7 @@
                                   "title": "InfisicalAuth"
                                 }
                               ],
-                              "description": "The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you."
+                              "description": "The machine identity production or preview reads as, keyed by login method. Required there, refused for dev."
                             },
                             "environment": {
                               "description": "The slug of the Infisical environment this tier reads, such as prod.",
@@ -1600,7 +1600,7 @@
                               "type": "string"
                             },
                             "path": {
-                              "description": "The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /.",
+                              "description": "The Infisical folder the project's values sit under. Left off, the environment's root, /.",
                               "type": "string"
                             },
                             "project": {
@@ -1608,7 +1608,7 @@
                               "type": "string"
                             },
                             "write": {
-                              "description": "What ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites one. \"values\" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, \"never\". Refused for dev, which only reads.",
+                              "description": "What ocel may write into Infisical: \"missing\" adds absent keys, \"values\" also updates existing ones. Left off, \"never\".",
                               "enum": [
                                 "never",
                                 "missing",
@@ -1625,7 +1625,7 @@
                           "type": "object"
                         }
                       ],
-                      "description": "Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to."
+                      "description": "Infisical, read as you through INFISICAL_TOKEN or the logged-in infisical CLI."
                     }
                   },
                   "required": [
@@ -1637,12 +1637,12 @@
               "title": "DevEnvSourceDescriptor"
             }
           ],
-          "description": "Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file (\"dotenv\"). .env.local overrides whatever this reads."
+          "description": "Where ocel dev and ocel run read values from. Left off, the project's .env file (\"dotenv\")."
         },
         "preview": {
           "allOf": [
             {
-              "description": "Where production or preview reads its values from: ocel's own store in your account (\"builtin\"), or an env source keyed by its identifier with its options as the value.",
+              "description": "Where a tier reads its values from: \"builtin\" for ocel's own store, or an env source keyed with its options.",
               "oneOf": [
                 {
                   "enum": [
@@ -1657,10 +1657,10 @@
                       "allOf": [
                         {
                           "additionalProperties": false,
-                          "description": "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev.",
+                          "description": "A command whose output is a tier's values.",
                           "properties": {
                             "command": {
-                              "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                              "description": "The command and its arguments. {folder} in an argument becomes the variables folder being read.",
                               "items": {
                                 "type": "string"
                               },
@@ -1683,7 +1683,7 @@
                           "type": "object"
                         }
                       ],
-                      "description": "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule."
+                      "description": "A command run on the machine that deploys, whose output is the tier's values."
                     }
                   },
                   "required": [
@@ -1698,7 +1698,7 @@
                       "allOf": [
                         {
                           "additionalProperties": false,
-                          "description": "The Infisical project and environment a tier reads its values from. Production and preview read it as the machine identity auth names; dev reads it as you.",
+                          "description": "The Infisical project and environment a tier reads its values from.",
                           "properties": {
                             "auth": {
                               "allOf": [
@@ -1718,10 +1718,10 @@
                                                   "allOf": [
                                                     {
                                                       "additionalProperties": false,
-                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                                       "properties": {
                                                         "$env": {
-                                                          "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                                          "description": "The name of the ocel variable holding this value.",
                                                           "pattern": "^[A-Z_][A-Z0-9_]*$",
                                                           "type": "string"
                                                         }
@@ -1739,10 +1739,10 @@
                                                   "allOf": [
                                                     {
                                                       "additionalProperties": false,
-                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                                       "properties": {
                                                         "$env": {
-                                                          "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                                          "description": "The name of the ocel variable holding this value.",
                                                           "pattern": "^[A-Z_][A-Z0-9_]*$",
                                                           "type": "string"
                                                         }
@@ -1806,7 +1806,7 @@
                                   "title": "InfisicalAuth"
                                 }
                               ],
-                              "description": "The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you."
+                              "description": "The machine identity production or preview reads as, keyed by login method. Required there, refused for dev."
                             },
                             "environment": {
                               "description": "The slug of the Infisical environment this tier reads, such as prod.",
@@ -1817,7 +1817,7 @@
                               "type": "string"
                             },
                             "path": {
-                              "description": "The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /.",
+                              "description": "The Infisical folder the project's values sit under. Left off, the environment's root, /.",
                               "type": "string"
                             },
                             "project": {
@@ -1825,7 +1825,7 @@
                               "type": "string"
                             },
                             "write": {
-                              "description": "What ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites one. \"values\" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, \"never\". Refused for dev, which only reads.",
+                              "description": "What ocel may write into Infisical: \"missing\" adds absent keys, \"values\" also updates existing ones. Left off, \"never\".",
                               "enum": [
                                 "never",
                                 "missing",
@@ -1854,12 +1854,12 @@
               "title": "EnvSourceDescriptor"
             }
           ],
-          "description": "Where every preview's tier-wide values are read from. Left off, ocel's own store in your account (\"builtin\"). A value set for one named preview stays ocel's own."
+          "description": "Where every preview's values are read from. Left off, ocel's own store in your account (\"builtin\")."
         },
         "production": {
           "allOf": [
             {
-              "description": "Where production or preview reads its values from: ocel's own store in your account (\"builtin\"), or an env source keyed by its identifier with its options as the value.",
+              "description": "Where a tier reads its values from: \"builtin\" for ocel's own store, or an env source keyed with its options.",
               "oneOf": [
                 {
                   "enum": [
@@ -1874,10 +1874,10 @@
                       "allOf": [
                         {
                           "additionalProperties": false,
-                          "description": "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev.",
+                          "description": "A command whose output is a tier's values.",
                           "properties": {
                             "command": {
-                              "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                              "description": "The command and its arguments. {folder} in an argument becomes the variables folder being read.",
                               "items": {
                                 "type": "string"
                               },
@@ -1900,7 +1900,7 @@
                           "type": "object"
                         }
                       ],
-                      "description": "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule."
+                      "description": "A command run on the machine that deploys, whose output is the tier's values."
                     }
                   },
                   "required": [
@@ -1915,7 +1915,7 @@
                       "allOf": [
                         {
                           "additionalProperties": false,
-                          "description": "The Infisical project and environment a tier reads its values from. Production and preview read it as the machine identity auth names; dev reads it as you.",
+                          "description": "The Infisical project and environment a tier reads its values from.",
                           "properties": {
                             "auth": {
                               "allOf": [
@@ -1935,10 +1935,10 @@
                                                   "allOf": [
                                                     {
                                                       "additionalProperties": false,
-                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                                       "properties": {
                                                         "$env": {
-                                                          "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                                          "description": "The name of the ocel variable holding this value.",
                                                           "pattern": "^[A-Z_][A-Z0-9_]*$",
                                                           "type": "string"
                                                         }
@@ -1956,10 +1956,10 @@
                                                   "allOf": [
                                                     {
                                                       "additionalProperties": false,
-                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config.",
+                                                      "description": "An ocel variable holding this value, written { \"$env\": \"NAME\" }.",
                                                       "properties": {
                                                         "$env": {
-                                                          "description": "The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own.",
+                                                          "description": "The name of the ocel variable holding this value.",
                                                           "pattern": "^[A-Z_][A-Z0-9_]*$",
                                                           "type": "string"
                                                         }
@@ -2023,7 +2023,7 @@
                                   "title": "InfisicalAuth"
                                 }
                               ],
-                              "description": "The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you."
+                              "description": "The machine identity production or preview reads as, keyed by login method. Required there, refused for dev."
                             },
                             "environment": {
                               "description": "The slug of the Infisical environment this tier reads, such as prod.",
@@ -2034,7 +2034,7 @@
                               "type": "string"
                             },
                             "path": {
-                              "description": "The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /.",
+                              "description": "The Infisical folder the project's values sit under. Left off, the environment's root, /.",
                               "type": "string"
                             },
                             "project": {
@@ -2042,7 +2042,7 @@
                               "type": "string"
                             },
                             "write": {
-                              "description": "What ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites one. \"values\" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, \"never\". Refused for dev, which only reads.",
+                              "description": "What ocel may write into Infisical: \"missing\" adds absent keys, \"values\" also updates existing ones. Left off, \"never\".",
                               "enum": [
                                 "never",
                                 "missing",
@@ -2082,17 +2082,17 @@
       "description": "Commands ocel runs on this machine at points of a deploy.",
       "properties": {
         "preBuild": {
-          "description": "Runs once per deploy, after the project's infrastructure is provisioned and before any app is built, with the bindings of the deployed environment. A non-zero exit or a timeout stops the deploy before it builds anything, and nothing is promoted. Written as the command alone, or as an object.",
+          "description": "Runs once per deploy, after provisioning and before any app is built. A non-zero exit stops the deploy.",
           "oneOf": [
             {
               "type": "string"
             },
             {
               "additionalProperties": false,
-              "description": "A shell command ocel runs on this machine with the bindings of the deployed environment, and where, when and for how long it runs.",
+              "description": "A shell command ocel runs on this machine with the deployed environment's bindings.",
               "properties": {
                 "app": {
-                  "description": "The app whose variables the command also receives, and whose directory it runs from. Left off, the command gets the bindings alone and runs from the project directory.",
+                  "description": "The app whose variables the command also receives and whose directory it runs from.",
                   "type": "string"
                 },
                 "command": {
@@ -2100,7 +2100,7 @@
                   "type": "string"
                 },
                 "previews": {
-                  "description": "Which previews run the command: persistent previews only, all previews, or none. Production always runs it. Left off, all: every preview provisions its own database, which starts empty, so a preview that skips the migration serves an unmigrated one.",
+                  "description": "Which previews run the command. Production always runs it. Left off, all.",
                   "enum": [
                     "persistent",
                     "all",
@@ -2109,7 +2109,7 @@
                   "type": "string"
                 },
                 "timeout": {
-                  "description": "How long the command may run, as a duration such as 90s or 15m, before it is stopped and the deploy fails. Left off, 30m.",
+                  "description": "How long the command may run, as a duration such as 90s or 15m. Left off, 30m.",
                   "type": "string"
                 }
               },
@@ -2130,11 +2130,11 @@
       "description": "Which tiers ask for a password before they answer.",
       "properties": {
         "preview": {
-          "description": "Whether every preview of this project asks for a password before it answers. Every preview deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again while keeping the password. A preview password never opens production. The password is shown with ocel protection password --preview and rotated with ocel protection password rotate --preview. Left off, false.",
+          "description": "Whether every preview asks for a password before it answers. Left off, false.",
           "type": "boolean"
         },
         "production": {
-          "description": "Whether production asks for a password before it answers. Every production deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens production again while keeping the password, so turning it back on restores it. The password is shown with ocel protection password and rotated with ocel protection password rotate. Left off, false.",
+          "description": "Whether production asks for a password before it answers. Left off, false.",
           "type": "boolean"
         }
       },
@@ -2142,7 +2142,7 @@
       "type": "object"
     },
     "provider": {
-      "description": "The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone.",
+      "description": "The provider ocel deploys into, named alone or keyed by its identifier with its options as the value.",
       "oneOf": [
         {
           "type": "string"
@@ -2151,7 +2151,7 @@
           "additionalProperties": {
             "properties": {
               "dns": {
-                "description": "Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone.",
+                "description": "Where the project's hostname records are written, named alone or keyed with its options.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2161,7 +2161,7 @@
                       "additionalProperties": false,
                       "properties": {
                         "zone": {
-                          "description": "The zone the records are written into. Omit it and ocel picks the zone that covers the hostname.",
+                          "description": "The zone the records are written into. Left off, the zone covering the hostname.",
                           "type": "string"
                         }
                       },
@@ -2176,7 +2176,7 @@
                 "title": "DNSDescriptor"
               },
               "edge": {
-                "description": "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS.",
+                "description": "The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2207,12 +2207,12 @@
       "description": "Where this project's container images are pushed.",
       "properties": {
         "password": {
-          "description": "The environment variable containing the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself.",
+          "description": "The environment variable holding the password or token, written as \"${REGISTRY_TOKEN}\". Never the secret itself.",
           "pattern": "^\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}$",
           "type": "string"
         },
         "server": {
-          "description": "The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials.",
+          "description": "The registry host and namespace, such as ghcr.io/acme, with no scheme or credentials.",
           "type": "string"
         },
         "username": {
@@ -2228,11 +2228,11 @@
       "type": "object"
     },
     "slug": {
-      "description": "The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project.",
+      "description": "The project's deployment identity. Changing it forks a new project.",
       "type": "string"
     },
     "transforms": {
-      "description": "Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches.",
+      "description": "Paths to transform modules applied while provisioning, in order. Each default-exports a defineTransform(...) result.",
       "oneOf": [
         {
           "type": "string"

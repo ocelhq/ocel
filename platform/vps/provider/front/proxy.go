@@ -17,40 +17,40 @@ import (
 )
 
 type Proxy struct {
-	Traefik *Traefik `json:"traefik,omitempty" doc:"A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches."`
+	Traefik *Traefik `json:"traefik,omitempty" doc:"A Traefik the machine already runs, reading ocel's routes from a watched directory."`
 	Caddy   *Caddy   `json:"caddy,omitempty" doc:"A Caddy the machine already runs, importing ocel's site blocks from a directory."`
-	Manual  *Manual  `json:"manual,omitempty" doc:"A proxy you route to ocel yourself; ocel writes nothing to it."`
+	Manual  *Manual  `json:"manual,omitempty" doc:"A proxy you route to ocel yourself. ocel writes nothing to it."`
 }
 
 type Traefik struct {
-	Preset             string       `json:"preset,omitempty" enum:"coolify,dokploy" doc:"The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides."`
+	Preset             string       `json:"preset,omitempty" enum:"coolify,dokploy" doc:"The host tool whose Traefik this is, which fills in the other fields. Fields set beside it override."`
 	Directory          string       `json:"directory" unless:"preset" doc:"The directory Traefik's file provider watches, where ocel writes its routers."`
-	ContainerDirectory string       `json:"containerDirectory,omitempty" doc:"Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself."`
+	ContainerDirectory string       `json:"containerDirectory,omitempty" doc:"Where directory is mounted inside Traefik's container. Left off, directory itself."`
 	Resolver           string       `json:"resolver" unless:"preset" doc:"The certificate resolver every hostname router ocel writes names."`
-	PreviewResolver    string       `json:"previewResolver,omitempty" doc:"A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver."`
+	PreviewResolver    string       `json:"previewResolver,omitempty" doc:"A resolver that issues the preview wildcard certificate over DNS-01. Left off, each preview gets its own certificate."`
 	Entrypoints        *Entrypoints `json:"entrypoints,omitempty" doc:"The entry points ocel's routers attach to."`
 	Network            string       `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port."`
-	Port               int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
+	Port               int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard listens on for Traefik. Left off, 8480. Not with network."`
 }
 
 type Entrypoints struct {
-	HTTP  string `json:"http,omitempty" doc:"The entry point ocel's http-to-https redirect routers attach to; web when left out."`
-	HTTPS string `json:"https,omitempty" doc:"The entry point ocel's hostname routers attach to; websecure when left out."`
+	HTTP  string `json:"http,omitempty" doc:"The entry point ocel's http-to-https redirect routers attach to. Left off, web."`
+	HTTPS string `json:"https,omitempty" doc:"The entry point ocel's hostname routers attach to. Left off, websecure."`
 }
 
 type Caddy struct {
-	Preset             string `json:"preset,omitempty" enum:"coolify" doc:"The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides."`
+	Preset             string `json:"preset,omitempty" enum:"coolify" doc:"The host tool whose Caddy this is, which fills in the other fields. Fields set beside it override."`
 	Directory          string `json:"directory" unless:"preset" doc:"The directory the running Caddy imports site blocks from."`
-	ContainerDirectory string `json:"containerDirectory,omitempty" doc:"Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself."`
-	Container          string `json:"container,omitempty" doc:"The container Caddy runs in; left out, Caddy runs as the systemd caddy.service."`
-	Config             string `json:"config,omitempty" doc:"The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out."`
+	ContainerDirectory string `json:"containerDirectory,omitempty" doc:"Where directory is mounted inside Caddy's container. Left off, directory itself."`
+	Container          string `json:"container,omitempty" doc:"The container Caddy runs in. Left off, Caddy runs as the systemd caddy.service."`
+	Config             string `json:"config,omitempty" doc:"The config file caddy reload names inside the container. Left off, /etc/caddy/Caddyfile."`
 	Network            string `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port."`
-	Port               int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
+	Port               int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard listens on for Caddy. Left off, 8480. Not with network."`
 }
 
 type Manual struct {
-	Port    int    `json:"port,omitempty" doc:"The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out."`
-	Network string `json:"network,omitempty" doc:"A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated."`
+	Port    int    `json:"port,omitempty" doc:"The loopback port your proxy forwards to ocel's switchboard on. Left off, 8480."`
+	Network string `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so your proxy reaches it by name."`
 }
 
 const (

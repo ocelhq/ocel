@@ -11,11 +11,11 @@
     "additionalProperties": false,
     "properties": {
       "project": {
-        "description": "The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config. ocel cost scan reads no credentials and runs no gcloud, so it needs the project here or in one of those two variables.",
+        "description": "The Google Cloud project to deploy into. Left off, from GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT or gcloud config.",
         "type": "string"
       },
       "region": {
-        "description": "The region to deploy into, such as us-central1: a region, never a zone such as us-central1-f. A project spans them all, so this names the one.",
+        "description": "The region to deploy into, such as us-central1, never a zone such as us-central1-f.",
         "examples": [
           "africa-south1",
           "asia-east1",

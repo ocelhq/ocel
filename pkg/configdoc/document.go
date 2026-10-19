@@ -12,40 +12,40 @@ import (
 
 type Document struct {
 	Schema        string               `json:"$schema,omitempty" doc:"The JSON Schema editors complete and validate this config against. ocel init writes it."`
-	Slug          string               `json:"slug" doc:"The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project."`
-	Bindings      Bindings             `json:"bindings,omitempty" doc:"Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is \"@\" followed by the name a record your own infrastructure published, such as \"@warehouse\", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves."`
-	Transforms    StringList           `json:"transforms,omitempty" doc:"Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches."`
+	Slug          string               `json:"slug" doc:"The project's deployment identity. Changing it forks a new project."`
+	Bindings      Bindings             `json:"bindings,omitempty" doc:"Resources ocel binds instead of provisioning, keyed by resource type, then by the name the app declares."`
+	Transforms    StringList           `json:"transforms,omitempty" doc:"Paths to transform modules applied while provisioning, in order. Each default-exports a defineTransform(...) result."`
 	Discovery     *DiscoveryConfig     `json:"discovery,omitempty" doc:"Where the resources an app declares are found."`
-	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone."`
+	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploys into, named alone or keyed by its identifier with its options as the value."`
 	AllowDegraded []string             `json:"allowDegraded,omitempty" doc:"The needs this project waives rather than have a deploy refused over." enum:"edge-middleware,edge-runtime,ppr-resume,edge-cache,streaming,revalidation"`
-	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel detects one at the project root."`
+	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel deploys the app it detects at the project root."`
 	Domains       *ProjectDomainConfig `json:"domains,omitempty" doc:"The hostnames this project is served on."`
 	Registry      *RegistryConfig      `json:"registry,omitempty" doc:"Where this project's container images are pushed."`
 	Protection    *ProtectionConfig    `json:"protection,omitempty" doc:"Which tiers ask for a password before they answer."`
 	Lifecycle     *LifecycleConfig     `json:"lifecycle,omitempty" doc:"Commands ocel runs on this machine at points of a deploy."`
-	EnvSource     *EnvSourceConfig     `json:"envSource,omitempty" doc:"Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev."`
+	EnvSource     *EnvSourceConfig     `json:"envSource,omitempty" doc:"Where each tier's values are read from."`
 }
 
 type ProtectionConfig struct {
-	Production bool `json:"production,omitempty" doc:"Whether production asks for a password before it answers. Every production deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens production again while keeping the password, so turning it back on restores it. The password is shown with ocel protection password and rotated with ocel protection password rotate. Left off, false."`
-	Preview    bool `json:"preview,omitempty" doc:"Whether every preview of this project asks for a password before it answers. Every preview deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again while keeping the password. A preview password never opens production. The password is shown with ocel protection password --preview and rotated with ocel protection password rotate --preview. Left off, false."`
+	Production bool `json:"production,omitempty" doc:"Whether production asks for a password before it answers. Left off, false."`
+	Preview    bool `json:"preview,omitempty" doc:"Whether every preview asks for a password before it answers. Left off, false."`
 }
 
 type LifecycleConfig struct {
-	PreBuild *LifecycleCommand `json:"preBuild,omitempty" doc:"Runs once per deploy, after the project's infrastructure is provisioned and before any app is built, with the bindings of the deployed environment. A non-zero exit or a timeout stops the deploy before it builds anything, and nothing is promoted. Written as the command alone, or as an object."`
+	PreBuild *LifecycleCommand `json:"preBuild,omitempty" doc:"Runs once per deploy, after provisioning and before any app is built. A non-zero exit stops the deploy."`
 }
 
 type LifecycleCommand struct {
 	Command  string `json:"command" doc:"The shell command to run, from the project directory, or from the app's directory when app is set."`
-	App      string `json:"app,omitempty" doc:"The app whose variables the command also receives, and whose directory it runs from. Left off, the command gets the bindings alone and runs from the project directory."`
-	Previews string `json:"previews,omitempty" doc:"Which previews run the command: persistent previews only, all previews, or none. Production always runs it. Left off, all: every preview provisions its own database, which starts empty, so a preview that skips the migration serves an unmigrated one." enum:"persistent,all,none"`
-	Timeout  string `json:"timeout,omitempty" doc:"How long the command may run, as a duration such as 90s or 15m, before it is stopped and the deploy fails. Left off, 30m."`
+	App      string `json:"app,omitempty" doc:"The app whose variables the command also receives and whose directory it runs from."`
+	Previews string `json:"previews,omitempty" doc:"Which previews run the command. Production always runs it. Left off, all." enum:"persistent,all,none"`
+	Timeout  string `json:"timeout,omitempty" doc:"How long the command may run, as a duration such as 90s or 15m. Left off, 30m."`
 }
 
 func (LifecycleCommand) AlsoAString() {}
 
 func (LifecycleCommand) Doc() string {
-	return "A shell command ocel runs on this machine with the bindings of the deployed environment, and where, when and for how long it runs."
+	return "A shell command ocel runs on this machine with the deployed environment's bindings."
 }
 
 func (c *LifecycleCommand) UnmarshalJSON(data []byte) error {
@@ -68,17 +68,17 @@ func (c *LifecycleCommand) UnmarshalJSON(data []byte) error {
 }
 
 type DiscoveryConfig struct {
-	Paths []string `json:"paths,omitempty" doc:"The directories containing infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory."`
+	Paths []string `json:"paths,omitempty" doc:"Directories of infrastructure declarations, relative to the config. Left off, infra next to the config."`
 }
 
 type AppConfig struct {
-	Name               string             `json:"name" doc:"The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label."`
+	Name               string             `json:"name" doc:"The app's name. It must be a valid DNS label."`
 	Path               string             `json:"path" doc:"The app's directory, relative to the config."`
-	Compute            *ComputeDescriptor `json:"compute,omitempty" doc:"What the app runs on, keyed by the compute with its options as the value, or named alone. Left off, the first compute the provider runs."`
-	Arch               string             `json:"arch,omitempty" doc:"The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on." enum:"x86_64,arm64"`
+	Compute            *ComputeDescriptor `json:"compute,omitempty" doc:"What the app runs on, named alone or keyed with its options. Left off, the provider's first compute."`
+	Arch               string             `json:"arch,omitempty" doc:"The processor architecture the app is built for. Left off, what the provider runs the app on." enum:"x86_64,arm64"`
 	Folder             string             `json:"folder,omitempty" doc:"The variables folder this app reads, when it does not read the project's own."`
 	Domains            *AppDomainConfig   `json:"domains,omitempty" doc:"The hostnames this app is served on."`
-	BuildWithResources *bool              `json:"buildWithResources,omitempty" doc:"Whether ocel deploy lets the app's build reach the resources it uses in the deployed environment, so a page prerendered at build time reads them. Only a Next app's build reaches them, on serverless or container compute: its postgres databases and kv stores over ports the provider forwards, and its buckets through the binding proxy the provider serves. Any other build goes without. Left off, true. Set false to build as if no resource were provisioned."`
+	BuildWithResources *bool              `json:"buildWithResources,omitempty" doc:"Whether a Next app's build can reach its deployed resources, so prerendered pages can read them. Left off, true."`
 }
 
 type ComputeDescriptor struct {
@@ -94,7 +94,7 @@ const (
 func (ComputeDescriptor) Shorthands() []string { return []string{computeServerless, computeContainer} }
 
 func (ComputeDescriptor) Doc() string {
-	return "What the app runs on: serverless functions packed per route, or one container image serving everything. Named alone, or keyed by the compute with its options as the value."
+	return "What the app runs on: serverless functions or one container image. Named alone, or keyed with its options."
 }
 
 func (c *ComputeDescriptor) UnmarshalJSON(data []byte) error {
@@ -162,7 +162,7 @@ func (c ComputeDescriptor) checkShape(path string, value any) error {
 
 type ServerlessCompute struct {
 	Framework  string `json:"framework,omitempty" doc:"What the app is built with, when ocel is not to read it off the app's own manifest." enum:"node,next,sveltekit,go,python,rust"`
-	Entrypoint string `json:"entrypoint,omitempty" doc:"The file a node app is served from, or the directory of a go app's main package, when it is not the one ocel would detect."`
+	Entrypoint string `json:"entrypoint,omitempty" doc:"The file a node app is served from, or a go app's main package directory, if not the detected one."`
 }
 
 type ContainerCompute struct {
@@ -173,17 +173,17 @@ type ContainerCompute struct {
 
 type ImageConfig struct {
 	Dockerfile string `json:"dockerfile,omitempty" doc:"The Dockerfile to build from. A relative path resolves against the app's directory."`
-	Context    string `json:"context,omitempty" doc:"The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to."`
+	Context    string `json:"context,omitempty" doc:"The directory the image is built from, relative to the project. Left off, the workspace root the app belongs to."`
 	Command    string `json:"command,omitempty" doc:"The command that builds the app inside the image. Left off, the app's own build script runs."`
 }
 
 type InstancesConfig struct {
-	Min *int `json:"min,omitempty" minimum:"0" doc:"The fewest instances kept running, however quiet the app is. Left off, 1, or 0 for an app a worker joins by name."`
-	Max *int `json:"max,omitempty" minimum:"1" doc:"The most instances run at once, however busy the app is. Left off, as many as min, or 1."`
+	Min *int `json:"min,omitempty" minimum:"0" doc:"The fewest instances kept running. Left off, 1, or 0 for an app a worker joins by name."`
+	Max *int `json:"max,omitempty" minimum:"1" doc:"The most instances run at once. Left off, as many as min, or 1."`
 }
 
 type HealthConfig struct {
-	Path string `json:"path,omitempty" doc:"The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /."`
+	Path string `json:"path,omitempty" doc:"The path the health check requests. Any 2xx means up. Left off, / or, on a VPS, the first common path that answers."`
 }
 
 type AppDomainConfig struct {
@@ -196,9 +196,9 @@ type ProjectDomainConfig struct {
 }
 
 type RegistryConfig struct {
-	Server   string `json:"server" doc:"The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials."`
+	Server   string `json:"server" doc:"The registry host and namespace, such as ghcr.io/acme, with no scheme or credentials."`
 	Username string `json:"username,omitempty" doc:"The username the push authenticates as, where the registry wants one."`
-	Password string `json:"password" secret:"REGISTRY_TOKEN" doc:"The environment variable containing the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself."`
+	Password string `json:"password" secret:"REGISTRY_TOKEN" doc:"The environment variable holding the password or token, written as \"${REGISTRY_TOKEN}\". Never the secret itself."`
 }
 
 type StringList []string

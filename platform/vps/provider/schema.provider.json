@@ -13,19 +13,19 @@
         "additionalProperties": {
           "type": "string"
         },
-        "description": "Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine.",
+        "description": "Certificates keyed by hostname, each the path to the certificate on the machine.",
         "type": "object"
       },
       "deployKey": {
-        "description": "Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys.",
+        "description": "Path to the public key the ocel-deploy login accepts. Left off, the bootstrapping login's keys.",
         "type": "string"
       },
       "perHostnamePreviewCertificates": {
-        "description": "Deploy previews even though the proxy orders a publicly trusted certificate for each preview hostname, which Certificate Transparency logs publish within minutes. Left out, such a preview deploy is refused: set proxy.traefik.previewResolver, pin a wildcard certificate for the preview base, or front the box with an edge that shields it with an origin certificate instead.",
+        "description": "Deploy previews even when each gets its own publicly logged certificate. Left off, those deploys are refused.",
         "type": "boolean"
       },
       "proxy": {
-        "description": "What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it.",
+        "description": "What fronts this machine on ports 80 and 443. Left off, ocel runs its own proxy.",
         "oneOf": [
           {
             "enum": [
@@ -37,13 +37,13 @@
             "additionalProperties": false,
             "properties": {
               "traefik": {
-                "description": "A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches.",
+                "description": "A Traefik the machine already runs, reading ocel's routes from a watched directory.",
                 "oneOf": [
                   {
                     "additionalProperties": false,
                     "properties": {
                       "containerDirectory": {
-                        "description": "Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself.",
+                        "description": "Where directory is mounted inside Traefik's container. Left off, directory itself.",
                         "type": "string"
                       },
                       "directory": {
@@ -55,11 +55,11 @@
                         "description": "The entry points ocel's routers attach to.",
                         "properties": {
                           "http": {
-                            "description": "The entry point ocel's http-to-https redirect routers attach to; web when left out.",
+                            "description": "The entry point ocel's http-to-https redirect routers attach to. Left off, web.",
                             "type": "string"
                           },
                           "https": {
-                            "description": "The entry point ocel's hostname routers attach to; websecure when left out.",
+                            "description": "The entry point ocel's hostname routers attach to. Left off, websecure.",
                             "type": "string"
                           }
                         },
@@ -71,11 +71,11 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard listens on for Traefik. Left off, 8480. Not with network.",
                         "type": "integer"
                       },
                       "preset": {
-                        "description": "The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides.",
+                        "description": "The host tool whose Traefik this is, which fills in the other fields. Fields set beside it override.",
                         "enum": [
                           "coolify",
                           "dokploy"
@@ -83,7 +83,7 @@
                         "type": "string"
                       },
                       "previewResolver": {
-                        "description": "A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver.",
+                        "description": "A resolver that issues the preview wildcard certificate over DNS-01. Left off, each preview gets its own certificate.",
                         "type": "string"
                       },
                       "resolver": {
@@ -100,7 +100,7 @@
                     "additionalProperties": false,
                     "properties": {
                       "containerDirectory": {
-                        "description": "Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself.",
+                        "description": "Where directory is mounted inside Traefik's container. Left off, directory itself.",
                         "type": "string"
                       },
                       "directory": {
@@ -112,11 +112,11 @@
                         "description": "The entry points ocel's routers attach to.",
                         "properties": {
                           "http": {
-                            "description": "The entry point ocel's http-to-https redirect routers attach to; web when left out.",
+                            "description": "The entry point ocel's http-to-https redirect routers attach to. Left off, web.",
                             "type": "string"
                           },
                           "https": {
-                            "description": "The entry point ocel's hostname routers attach to; websecure when left out.",
+                            "description": "The entry point ocel's hostname routers attach to. Left off, websecure.",
                             "type": "string"
                           }
                         },
@@ -128,12 +128,12 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard listens on for Traefik. Left off, 8480. Not with network.",
                         "type": "integer"
                       },
                       "preset": false,
                       "previewResolver": {
-                        "description": "A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver.",
+                        "description": "A resolver that issues the preview wildcard certificate over DNS-01. Left off, each preview gets its own certificate.",
                         "type": "string"
                       },
                       "resolver": {
@@ -166,15 +166,15 @@
                     "additionalProperties": false,
                     "properties": {
                       "config": {
-                        "description": "The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out.",
+                        "description": "The config file caddy reload names inside the container. Left off, /etc/caddy/Caddyfile.",
                         "type": "string"
                       },
                       "container": {
-                        "description": "The container Caddy runs in; left out, Caddy runs as the systemd caddy.service.",
+                        "description": "The container Caddy runs in. Left off, Caddy runs as the systemd caddy.service.",
                         "type": "string"
                       },
                       "containerDirectory": {
-                        "description": "Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself.",
+                        "description": "Where directory is mounted inside Caddy's container. Left off, directory itself.",
                         "type": "string"
                       },
                       "directory": {
@@ -186,11 +186,11 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard listens on for Caddy. Left off, 8480. Not with network.",
                         "type": "integer"
                       },
                       "preset": {
-                        "description": "The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides.",
+                        "description": "The host tool whose Caddy this is, which fills in the other fields. Fields set beside it override.",
                         "enum": [
                           "coolify"
                         ],
@@ -206,15 +206,15 @@
                     "additionalProperties": false,
                     "properties": {
                       "config": {
-                        "description": "The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out.",
+                        "description": "The config file caddy reload names inside the container. Left off, /etc/caddy/Caddyfile.",
                         "type": "string"
                       },
                       "container": {
-                        "description": "The container Caddy runs in; left out, Caddy runs as the systemd caddy.service.",
+                        "description": "The container Caddy runs in. Left off, Caddy runs as the systemd caddy.service.",
                         "type": "string"
                       },
                       "containerDirectory": {
-                        "description": "Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself.",
+                        "description": "Where directory is mounted inside Caddy's container. Left off, directory itself.",
                         "type": "string"
                       },
                       "directory": {
@@ -226,7 +226,7 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard listens on for Caddy. Left off, 8480. Not with network.",
                         "type": "integer"
                       },
                       "preset": false
@@ -250,14 +250,14 @@
             "properties": {
               "manual": {
                 "additionalProperties": false,
-                "description": "A proxy you route to ocel yourself; ocel writes nothing to it.",
+                "description": "A proxy you route to ocel yourself. ocel writes nothing to it.",
                 "properties": {
                   "network": {
-                    "description": "A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated.",
+                    "description": "A docker network ocel's switchboard joins, so your proxy reaches it by name.",
                     "type": "string"
                   },
                   "port": {
-                    "description": "The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out.",
+                    "description": "The loopback port your proxy forwards to ocel's switchboard on. Left off, 8480.",
                     "type": "integer"
                   }
                 },
