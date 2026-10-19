@@ -40,7 +40,7 @@ function listed(names: string[]): string {
 export function refuseWhatDestroyLeft(
   slug: string,
   parts: string[],
-  clientCAObjects: string[],
+  trustStoreObjects: string[],
 ): Error | undefined {
   const left = [
     ...(parts.length === 0
@@ -48,9 +48,9 @@ export function refuseWhatDestroyLeft(
       : [
           `${listed(parts)}, which ${parts.length === 1 ? "retires with its" : "retire with their"} last user`,
         ]),
-    ...(clientCAObjects.length === 0
+    ...(trustStoreObjects.length === 0
       ? []
-      : [`${listed(clientCAObjects)}, the client CAs a load balancer's trust store is built from`]),
+      : [`${listed(trustStoreObjects)}, kept for the load balancer's trust store`]),
   ];
   if (left.length === 0) {
     return undefined;

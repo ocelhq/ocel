@@ -42,7 +42,7 @@ export type Store = {
   callerAccount(): Promise<string>;
   hasBootstrap(): Promise<boolean>;
   releaseLocks(slug: string): Promise<void>;
-  listClientCAObjects(): Promise<string[]>;
+  listTrustStoreObjects(): Promise<string[]>;
 };
 
 export function cliAt(endpoint: string | undefined): Cli {
@@ -109,7 +109,7 @@ const STATE_BUCKET_OUTPUT = "StateBucketName";
 
 const ARTIFACT_BUCKET_OUTPUT = "ArtifactBucketName";
 
-const PRODUCTION_CLIENT_CAS = "ocel/trust/production/";
+const PRODUCTION_TRUST_STORE_PREFIX = "ocel/trust/production/";
 
 async function bootstrapTable(
   cli: Cli,
@@ -191,12 +191,12 @@ export function awsStore(
       await cli(["s3", "rm", `s3://${bucket}/${slug}/.pulumi/locks/`, "--recursive"]);
     },
 
-    async listClientCAObjects() {
+    async listTrustStoreObjects() {
       const bucket = await bootstrapTable(
         cli,
         stack,
         ARTIFACT_BUCKET_OUTPUT,
-        "the client CAs a load balancer trusts cannot be listed",
+        "what is kept for the load balancer's trust store cannot be listed",
       );
       if (!bucket) {
         return [];
@@ -207,7 +207,7 @@ export function awsStore(
         "--bucket",
         bucket,
         "--prefix",
-        PRODUCTION_CLIENT_CAS,
+        PRODUCTION_TRUST_STORE_PREFIX,
         "--query",
         "Contents[].Key",
         "--output",

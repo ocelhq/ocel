@@ -222,7 +222,7 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
     const left = refuseWhatDestroyLeft(
       cell.slug,
       readRetiringParts(status.stdout),
-      await store.listClientCAObjects(),
+      await store.listTrustStoreObjects(),
     );
     if (left) {
       throw left;
