@@ -20,7 +20,7 @@ func TestBucketsOfTwoEnvironmentsEachShapeTheirOwnStore(t *testing.T) {
 		storeOf("shop", environment.TierPreview, "pr-1"),
 		storeOf("blog", environment.TierProduction, "production"),
 	} {
-		spec, err := storeContainer(in)
+		spec, err := NewStoreContainer(in.Ref)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -40,7 +40,7 @@ func TestBucketsOfTwoEnvironmentsEachShapeTheirOwnStore(t *testing.T) {
 func TestTwoBucketsShapingOneStoreDifferentlyAreRefused(t *testing.T) {
 	var stores Stores
 	in := storeOf("shop", environment.TierProduction, "production")
-	spec, err := storeContainer(in)
+	spec, err := NewStoreContainer(in.Ref)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -239,10 +239,11 @@ func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store r
 
 func (p *Topic) Component() component.Component {
 	return component.Component{
-		Types:    []provider.BindingType{provider.BindingTopic, provider.BindingTask},
-		Hooks:    resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
-		Shape:    shapeTopics,
-		Accounts: []bootstrap.Account{{Name: names.Names.PushAccount, Purpose: task.PushPurpose}},
+		Types:         []provider.BindingType{provider.BindingTopic, provider.BindingTask},
+		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
+		ListResources: p.ListResources,
+		Shape:         shapeTopics,
+		Accounts:      []bootstrap.Account{{Name: names.Names.PushAccount, Purpose: task.PushPurpose}},
 		Grants: func(ctx context.Context, app component.App) ([]grants.Grant, error) {
 			if !ReachesTopics(app.Spec.App) {
 				return nil, nil

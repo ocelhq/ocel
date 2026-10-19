@@ -98,7 +98,7 @@ type Clients struct {
 
 type apiGateway struct {
 	ns         account.Namespace
-	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
+	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error)
 	open       func(context.Context) (Clients, error)
 
 	mu        sync.Mutex
@@ -107,7 +107,7 @@ type apiGateway struct {
 	leaseWait func(context.Context, time.Duration) error
 }
 
-func New(ns account.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error)) edge.Edge {
+func New(ns account.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error), open func(context.Context) (Clients, error)) edge.Edge {
 	front := newAPIGateway(ns, open)
 	front.ensurePart = ensurePart
 	return front
@@ -283,7 +283,7 @@ func (p *apiGateway) Teardown(ctx context.Context, tier environment.Tier) error 
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge still fronts %d project(s) of tier %s with a REST API of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
-		Kind, len(projects), tier, strings.Join(projects, ", "), "ocel destroy "+string(tier))
+		Kind, len(projects), tier, strings.Join(projects, ", "), "ocel projects destroy --tier "+string(tier))
 }
 
 func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {

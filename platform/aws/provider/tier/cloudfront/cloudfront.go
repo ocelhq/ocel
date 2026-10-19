@@ -83,7 +83,7 @@ func (s Set) Complete() bool {
 	return s.RoutesStore != "" && s.Resolver != "" && s.EmptyBody != "" && s.CachePolicy != "" && s.HeadersPolicy != "" && s.AssetAccess != ""
 }
 
-func SetOf(names Names, resources []provider.PartResource) Set {
+func SetOf(names Names, resources []provider.PhysicalResource) Set {
 	var set Set
 	for _, resource := range resources {
 		switch resource.Kind {
@@ -107,8 +107,8 @@ func SetOf(names Names, resources []provider.PartResource) Set {
 	return set
 }
 
-func (s Set) resources() []provider.PartResource {
-	return []provider.PartResource{
+func (s Set) resources() []provider.PhysicalResource {
+	return []provider.PhysicalResource{
 		{Kind: KindRoutesStore, ID: s.RoutesStore},
 		{Kind: KindFunction, ID: s.Resolver},
 		{Kind: KindFunction, ID: s.EmptyBody},
@@ -137,7 +137,7 @@ func Shape(ns account.Namespace, tier environment.Tier) []pricing.Shaped {
 	}
 }
 
-func Ensure(ctx context.Context, c API, spec Spec, prior []provider.PartResource) ([]provider.PartResource, error) {
+func Ensure(ctx context.Context, c API, spec Spec, prior []provider.PhysicalResource) ([]provider.PhysicalResource, error) {
 	names := NamesFor(spec.Namespace, spec.Tier)
 	recorded := SetOf(names, prior)
 	var set Set

@@ -484,7 +484,7 @@ func TestTheFunctionNetworkIsDescribedAsAPartWithTheProjectsInItAndTheIdleCostOf
 	if part.Name != functionnetwork.Part || !slices.Equal(part.UsedBy, []string{web.Ref.Project}) || !part.RetiresWithLastUser {
 		t.Errorf("function network = %+v, want it named %s, used by %s once for its app and workers, and retiring with its last user", part, functionnetwork.Part, web.Ref.Project)
 	}
-	if !slices.ContainsFunc(part.Resources, func(resource provider.PartResource) bool { return resource.Kind == "AWS::EC2::NatGateway" }) {
+	if !slices.ContainsFunc(part.Resources, func(resource provider.PhysicalResource) bool { return resource.Kind == "AWS::EC2::NatGateway" }) {
 		t.Errorf("function network resources = %v, want its NAT gateway", part.Resources)
 	}
 	priced := []string{}

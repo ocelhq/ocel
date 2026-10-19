@@ -145,11 +145,15 @@ func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log, und
 }
 
 func (r *deployRun) ensureProject(ctx context.Context) error {
+	recorded, err := recordedEdge(r.front.Kind(), r.selection)
+	if err != nil {
+		return err
+	}
 	return records.Change(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug), func(entry records.Entry) ([]byte, bool, error) {
 		if len(entry.Value) > 0 {
 			return nil, false, nil
 		}
-		value, err := json.Marshal(stackrecords.Project{Parts: r.parts})
+		value, err := json.Marshal(stackrecords.Project{Parts: r.parts, Edge: recorded})
 		return value, true, err
 	})
 }

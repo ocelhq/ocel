@@ -106,7 +106,7 @@ func Digest(spec Spec) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource, error) {
+func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PhysicalResource, error) {
 	names := NamesFor(spec.Namespace, spec.Tier)
 	account, err := accountOf(spec.Boundary)
 	if err != nil {
@@ -160,7 +160,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	if err != nil {
 		return nil, err
 	}
-	return []provider.PartResource{
+	return []provider.PhysicalResource{
 		{Kind: kindRole, ID: names.Role},
 		{Kind: kindLogGroup, ID: names.LogGroup},
 		{Kind: kindFunction, ID: names.Function},
@@ -208,7 +208,7 @@ func ensureURL(ctx context.Context, c LambdaAPI, function string) (string, error
 	return url, nil
 }
 
-func URLOf(resources []provider.PartResource) string {
+func URLOf(resources []provider.PhysicalResource) string {
 	for _, resource := range resources {
 		if resource.Kind == kindURL {
 			return resource.ID

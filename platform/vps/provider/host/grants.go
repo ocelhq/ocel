@@ -67,7 +67,7 @@ func grants(tier environment.Tier, arch string, fronting front.Proxy) []Grant {
 		grants = append(grants, Grant{
 			Name: "reloads your Caddy as root, through one line in " + line.Name,
 			Detail: "the line is\n\n      " + strings.TrimSpace(string(line.Content)) +
-				"\n\n    which runs the unit's own `caddy reload`, in Caddy's environment. Bootstrap writes it only for a Caddy that runs as caddy.service, and `ocel destroy` removes it",
+				"\n\n    which runs the unit's own `caddy reload`, in Caddy's environment. Bootstrap writes it only for a Caddy that runs as caddy.service, and `ocel bootstrap destroy` removes it",
 		})
 	}
 	if agent := written(items, machine.KindFile, LiveBinary); agent.Name != "" {
@@ -113,8 +113,8 @@ func sealing(items []machine.Item, tier environment.Tier, deployer login) []Gran
 			" key only; it creates no key, reaches no other tier, and never prints the key",
 	}, {
 		Name: "no read of " + key.Name,
-		Detail: fmt.Sprintf("root-owned at %04o, created on this machine and never leaves it; %s uses it through ocel-live seal and cannot read the %s key. It is never rotated; `ocel destroy` removes it with the tier",
-			key.Mode, deployer.name, machine.SealAlgorithm),
+		Detail: fmt.Sprintf("root-owned at %04o, created on this machine and never leaves it; %s uses it through ocel-live seal and cannot read the %s key. It is never rotated; `ocel bootstrap destroy %s` removes it with the tier",
+			key.Mode, deployer.name, machine.SealAlgorithm, tier),
 	}}
 }
 

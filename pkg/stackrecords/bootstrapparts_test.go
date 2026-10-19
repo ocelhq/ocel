@@ -82,7 +82,7 @@ func TestMarkingAClaimedPartReadyKeepsWhoAddedItAndWhen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resources := []provider.PartResource{{Kind: "AWS::ECS::Cluster", ID: "ocel-containers-production"}}
+	resources := []provider.PhysicalResource{{Kind: "AWS::ECS::Cluster", ID: "ocel-containers-production"}}
 	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, "containers", stackrecords.BootstrapPart{
 		WrittenBy: "1.2.0", Digest: "d1", AddedBy: "api", AddedAt: addedAt.Add(time.Hour), Resources: resources,
 	}); err != nil {

@@ -85,16 +85,16 @@ func storeBucketSpec(ref provider.StackRef, store, secret string, spec Spec) Spe
 	return spec
 }
 
-func storeContainer(in resources.ProvisionRequest) (container.Spec, error) {
-	name, err := StoreName(in.Ref)
+func NewStoreContainer(ref provider.StackRef) (container.Spec, error) {
+	name, err := StoreName(ref)
 	if err != nil {
 		return container.Spec{}, err
 	}
 	return container.Spec{
 		Name:     name,
-		Project:  in.Ref.Project,
+		Project:  ref.Project,
 		Resource: storeResource,
-		Tier:     in.Ref.Tier,
+		Tier:     ref.Tier,
 
 		Image: images.ObjectStore(),
 		Env: map[string]string{
@@ -180,7 +180,7 @@ func (r Resource) storeCredential(ctx context.Context, ref provider.StackRef, na
 }
 
 func (r Resource) shapeStore(ctx context.Context, in resources.ProvisionRequest) (container.Spec, error) {
-	spec, err := storeContainer(in)
+	spec, err := NewStoreContainer(in.Ref)
 	if err != nil {
 		return container.Spec{}, err
 	}

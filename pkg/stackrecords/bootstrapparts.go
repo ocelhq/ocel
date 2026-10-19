@@ -21,14 +21,14 @@ const (
 )
 
 type BootstrapPart struct {
-	State     PartState               `json:"state"`
-	WrittenBy string                  `json:"written_by,omitempty"`
-	Digest    string                  `json:"digest,omitempty"`
-	AddedBy   string                  `json:"added_by,omitempty"`
-	AddedWith string                  `json:"added_with,omitempty"`
-	AddedAt   time.Time               `json:"added_at"`
-	ClaimedAt time.Time               `json:"claimed_at,omitzero"`
-	Resources []provider.PartResource `json:"resources,omitempty"`
+	State     PartState                   `json:"state"`
+	WrittenBy string                      `json:"written_by,omitempty"`
+	Digest    string                      `json:"digest,omitempty"`
+	AddedBy   string                      `json:"added_by,omitempty"`
+	AddedWith string                      `json:"added_with,omitempty"`
+	AddedAt   time.Time                   `json:"added_at"`
+	ClaimedAt time.Time                   `json:"claimed_at,omitzero"`
+	Resources []provider.PhysicalResource `json:"resources,omitempty"`
 }
 
 func ClaimBootstrapPart(ctx context.Context, store records.Store, tier environment.Tier, name string, claim BootstrapPart) (BootstrapPart, bool, error) {
@@ -151,7 +151,7 @@ type PartWork struct {
 	Digest    string
 	AddedBy   string
 	AddedWith string
-	Make      func(ctx context.Context) ([]provider.PartResource, error)
+	Make      func(ctx context.Context) ([]provider.PhysicalResource, error)
 }
 
 var ErrPartBehind = errors.New("the part is left behind this build")

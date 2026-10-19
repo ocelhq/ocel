@@ -24,7 +24,7 @@ func NewPart(records tier.Records, ns account.Namespace, front edge.Kind, open f
 		Work: func(_ context.Context, tier environment.Tier) (tier.Work, error) {
 			return Work(open, Spec{Namespace: ns, Tier: tier}), nil
 		},
-		Remove: func(ctx context.Context, tier environment.Tier, recorded []provider.PartResource) error {
+		Remove: func(ctx context.Context, tier environment.Tier, recorded []provider.PhysicalResource) error {
 			api, err := open(ctx)
 			if err != nil {
 				return err
@@ -39,7 +39,7 @@ func NewPart(records tier.Records, ns account.Namespace, front edge.Kind, open f
 func Work(open func(context.Context) (API, error), spec Spec) tier.Work {
 	return tier.Work{
 		Digest: Digest(spec),
-		Make: func(ctx context.Context, prior []provider.PartResource, _ bool) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context, prior []provider.PhysicalResource, _ bool) ([]provider.PhysicalResource, error) {
 			api, err := open(ctx)
 			if err != nil {
 				return nil, err

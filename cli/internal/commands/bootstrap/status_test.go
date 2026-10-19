@@ -38,7 +38,7 @@ func statusProject(t *testing.T) (clitest.FakeProject, commands.Invocation) {
 	project.Provider.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{
 		Name:      "containers",
 		UsedBy:    []string{"api"},
-		Resources: []provider.PartResource{{Kind: "Fake::Cluster", ID: "ocel-containers-production"}},
+		Resources: []provider.PhysicalResource{{Kind: "Fake::Cluster", ID: "ocel-containers-production", Location: "nowhere-1", ConsoleURL: "https://console.fake.invalid/clusters/ocel-containers-production"}},
 		Shape: &provider.PartShape{Vendor: string(fake.Vendor), Resources: []pricing.Shaped{
 			{Name: "containers", Type: fake.TypeContainer, Properties: map[string]any{}},
 		}},
@@ -100,7 +100,7 @@ func TestBootstrapStatusSaysACommandAddedAPartRatherThanADeploy(t *testing.T) {
 		Name:      "edge-kit",
 		WrittenBy: "1.2.3",
 		AddedWith: "ocel domain use --preview",
-		Make:      func(context.Context) ([]provider.PartResource, error) { return nil, nil },
+		Make:      func(context.Context) ([]provider.PhysicalResource, error) { return nil, nil },
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestBootstrapStatusAsJSONSaysWhichCommandAddedAPart(t *testing.T) {
 		WrittenBy: "1.2.3",
 		AddedBy:   "web",
 		AddedWith: "ocel domain use --preview",
-		Make:      func(context.Context) ([]provider.PartResource, error) { return nil, nil },
+		Make:      func(context.Context) ([]provider.PhysicalResource, error) { return nil, nil },
 	}); err != nil {
 		t.Fatal(err)
 	}

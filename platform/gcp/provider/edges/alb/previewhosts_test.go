@@ -122,6 +122,9 @@ func TestADeploymentHostnameTheUrlMapHasNoHostRuleLeftForIsRefusedBeforeAnything
 	if !errors.As(err, &refused) {
 		t.Fatalf("MovePointer onto a url map with %d host rules = %v, want a refusal", maxHostRules, err)
 	}
+	if remedy := "`ocel projects destroy --tier preview`"; !strings.Contains(err.Error(), remedy) {
+		t.Errorf("MovePointer onto a full url map = %v, want it to name %s as the way to free host rules", err, remedy)
+	}
 	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[must(negName("ocel", "shop", environment.TierPreview, deploymentHost))]; declared {
 		t.Errorf("the binding declares a neg for %s, want nothing raised: Compute refuses the host rule only after the neg and backend service exist", deploymentHost)
 	}

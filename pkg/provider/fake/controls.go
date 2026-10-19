@@ -56,6 +56,9 @@ func (p *Provider) ResourceHooks() resources.Hooks {
 		Bucket:     p.primitiveHooks(),
 		Functions:  &resources.FunctionHooks{Provision: p.ProvisionFunctions, Remove: p.RemoveFunctions},
 		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
+		ListResources: func(_ context.Context, _ provider.StackRef, recorded provider.StackResult) ([]provider.PhysicalResource, error) {
+			return listPhysicalResources(recorded.Bindings, recorded.Functions, recorded.Containers), nil
+		},
 	}
 }
 

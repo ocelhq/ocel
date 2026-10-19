@@ -44,7 +44,7 @@ func Digest(namespace string, tier environment.Tier) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func GroupOf(resources []provider.PartResource) string {
+func GroupOf(resources []provider.PhysicalResource) string {
 	for _, resource := range resources {
 		if resource.Kind == KindSecurityGroup {
 			return resource.ID
@@ -53,7 +53,7 @@ func GroupOf(resources []provider.PartResource) string {
 	return ""
 }
 
-func Ensure(ctx context.Context, api API, namespace string, tier environment.Tier, region string) ([]provider.PartResource, error) {
+func Ensure(ctx context.Context, api API, namespace string, tier environment.Tier, region string) ([]provider.PhysicalResource, error) {
 	vpc, err := component.ReadDefaultVPC(ctx, api, region, "the databases, caches and bastion this security group admits")
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func Ensure(ctx context.Context, api API, namespace string, tier environment.Tie
 		return nil, fmt.Errorf("look up the %s security group: %w", name, err)
 	}
 	if len(found.SecurityGroups) > 0 {
-		return []provider.PartResource{{Kind: KindSecurityGroup, ID: aws.ToString(found.SecurityGroups[0].GroupId)}}, nil
+		return []provider.PhysicalResource{{Kind: KindSecurityGroup, ID: aws.ToString(found.SecurityGroups[0].GroupId)}}, nil
 	}
 	groupTags := naming.OcelTags(namespace, tier)
 	groupTags["Name"] = name
@@ -85,10 +85,10 @@ func Ensure(ctx context.Context, api API, namespace string, tier environment.Tie
 	if err != nil {
 		return nil, fmt.Errorf("create the %s security group: %w", name, err)
 	}
-	return []provider.PartResource{{Kind: KindSecurityGroup, ID: aws.ToString(created.GroupId)}}, nil
+	return []provider.PhysicalResource{{Kind: KindSecurityGroup, ID: aws.ToString(created.GroupId)}}, nil
 }
 
-func Remove(ctx context.Context, api API, recorded []provider.PartResource) error {
+func Remove(ctx context.Context, api API, recorded []provider.PhysicalResource) error {
 	group := GroupOf(recorded)
 	if group == "" {
 		return nil

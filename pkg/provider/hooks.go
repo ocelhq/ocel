@@ -12,19 +12,20 @@ import (
 )
 
 type Hooks struct {
-	Preflight           *PreflightHooks
-	CheckBucket         func(ctx context.Context, record *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error)
-	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (edge.Program, error)
-	EnsureImageRegistry func(ctx context.Context, tier environment.Tier) (RegistryTarget, error)
-	OpenRegistryImages  func(ctx context.Context, target RegistryTarget) (ImageStore, error)
-	OpenDirectImages    func(ctx context.Context) (ImageStore, error)
-	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
-	NextServerRuntime   func(ctx context.Context) (map[string][]byte, error)
-	BindingAccess       *BindingAccessHooks
-	EnvSource           *EnvSourceHooks
-	Cost                *CostHooks
-	Retirement          *RetirementHooks
-	ProjectRemoval      *ProjectRemovalHooks
+	Preflight            *PreflightHooks
+	CheckBucket          func(ctx context.Context, record *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error)
+	ProgramEdge          func(ctx context.Context, req EdgeProgramRequest) (edge.Program, error)
+	EnsureImageRegistry  func(ctx context.Context, tier environment.Tier) (RegistryTarget, error)
+	OpenRegistryImages   func(ctx context.Context, target RegistryTarget) (ImageStore, error)
+	OpenDirectImages     func(ctx context.Context) (ImageStore, error)
+	CheckHost            func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
+	NextServerRuntime    func(ctx context.Context) (map[string][]byte, error)
+	BindingAccess        *BindingAccessHooks
+	EnvSource            *EnvSourceHooks
+	Cost                 *CostHooks
+	Retirement           *RetirementHooks
+	ProjectRemoval       *ProjectRemovalHooks
+	ListProjectResources func(ctx context.Context, req ProjectResourcesRequest) ([]PhysicalResource, error)
 }
 
 type PreflightHooks struct {

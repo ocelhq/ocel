@@ -331,7 +331,7 @@ func TestAProjectDeployedThroughARouterItsEdgeNowForwardsToIsRefusedBeforeItTouc
 	if result.GetSuccess() || message == "" {
 		t.Fatal("Deploy() succeeded, want it refused: the router held this project's routing inside the edge's own stack, and the edge now forwards to it")
 	}
-	for _, want := range []string{"admin", string(fake.RouterDirect), "ocel destroy"} {
+	for _, want := range []string{"admin", string(fake.RouterDirect), "ocel projects destroy"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("the refusal %q does not name %q", message, want)
 		}

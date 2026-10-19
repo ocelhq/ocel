@@ -30,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
@@ -599,6 +600,31 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 	work.networkPending = pending
 	work.functionsAttach = functionsAttach
 	return preparedStack{program: r.appProgram(spec, work), transformed: transformed, app: work}, nil
+}
+
+func (r *Stacks) Resources(ctx context.Context, req provider.StackResources) ([]provider.PhysicalResource, error) {
+	ref := req.Ref
+	opened, err := r.at(ctx, ref, "")
+	if err != nil {
+		return nil, err
+	}
+	var workers []provider.StackRef
+	if req.NewestRelease {
+		if workers, err = opened.listRecordedWorkers(ctx, ref); err != nil {
+			return nil, err
+		}
+	}
+	var listed []provider.PhysicalResource
+	for _, held := range append([]provider.StackRef{ref}, workers...) {
+		exported, err := opened.automation.Export(ctx, held)
+		if err != nil {
+			return nil, err
+		}
+		for _, resource := range exported {
+			listed = append(listed, cfn.NewPhysicalResource(cfn.ResourceTypeOf(resource.Type), resource.ID, opened.cfg.Region))
+		}
+	}
+	return listed, nil
 }
 
 func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {

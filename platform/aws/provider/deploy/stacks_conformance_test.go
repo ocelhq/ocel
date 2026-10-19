@@ -42,6 +42,7 @@ type mockedEngine struct {
 	upErr     func(stack string) error
 	downErr   func(stack string) error
 	state     *engineState
+	exported  map[string][]pulumi.ExportedResource
 }
 
 type pushingAssetSets struct {
@@ -202,6 +203,13 @@ func (e *mockedEngine) torn() []string {
 
 func (e *mockedEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.OutputMap, error) {
 	return e.outputs, nil
+}
+
+func (e *mockedEngine) Export(_ context.Context, setup pulumi.WorkspaceSpec) ([]pulumi.ExportedResource, error) {
+	if e.state != nil {
+		return e.state.export(setup.Stack), nil
+	}
+	return e.exported[setup.Ref.Name.String()], nil
 }
 
 func (*mockedEngine) Unlock(context.Context, pulumi.WorkspaceSpec) error { return nil }

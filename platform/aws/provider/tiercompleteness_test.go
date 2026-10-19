@@ -56,8 +56,8 @@ func TestARemovalOfARecordedPartThatADeployStillUsesIsRefusedNamingTheDeploy(t *
 	ctx := context.Background()
 	if err := stackrecords.EnsureBootstrapPart(ctx, store, environment.TierProduction, stackrecords.PartWork{
 		Name: vpcclients.Part, WrittenBy: "1.0.0", Digest: "d", AddedBy: "shop",
-		Make: func(context.Context) ([]provider.PartResource, error) {
-			return []provider.PartResource{{Kind: vpcclients.KindSecurityGroup, ID: "sg-1"}}, nil
+		Make: func(context.Context) ([]provider.PhysicalResource, error) {
+			return []provider.PhysicalResource{{Kind: vpcclients.KindSecurityGroup, ID: "sg-1"}}, nil
 		},
 	}); err != nil {
 		t.Fatal(err)

@@ -122,6 +122,8 @@ func (p *Provider) Hooks() provider.Hooks {
 		CheckHost:          p.CheckHost,
 		BindingAccess:      &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
+
+		ListProjectResources: p.ListProjectResources,
 	}
 }
 
@@ -134,6 +136,8 @@ func (p *Provider) resourceHooks() resources.Hooks {
 		Realtime:   component.Hooks(realtime.New(p.components())),
 		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 		Retention:  &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
+
+		ListResources: p.ListResources,
 	}
 }
 

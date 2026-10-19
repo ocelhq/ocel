@@ -559,7 +559,7 @@ func (r Removal) Report(progress progress.Log) {
 
 func destroyIn(tier environment.Tier) string {
 	if tier == environment.TierPreview {
-		return "ocel destroy preview"
+		return "ocel projects destroy --tier preview"
 	}
-	return "ocel destroy production"
+	return "ocel projects destroy --tier production"
 }

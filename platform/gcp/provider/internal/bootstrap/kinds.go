@@ -24,7 +24,18 @@ const (
 	KindSchedule       Kind = "cloudscheduler:job"
 	KindGrant          Kind = "resourcemanager:grant"
 	KindQueue          Kind = "cloudtasks:queue"
+
+	KindSQLInstance          Kind = "sqladmin:instance"
+	KindMemorystoreInstance  Kind = "memorystore:instance"
+	KindTopic                Kind = "pubsub:topic"
+	KindSubscription         Kind = "pubsub:subscription"
+	KindBackendService       Kind = "compute:backendservice"
+	KindNetworkEndpointGroup Kind = "compute:networkendpointgroup"
+	KindCertificate          Kind = "certificatemanager:certificate"
+	KindCertificateMapEntry  Kind = "certificatemanager:certificatemapentry"
 )
+
+const LocationGlobal = "global"
 
 type KindOps struct {
 	noun          string

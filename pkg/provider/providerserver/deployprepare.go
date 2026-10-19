@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -220,10 +221,15 @@ func (r *deployRun) readPreviewHosts(ctx context.Context, progress progress.Log,
 }
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
+	recorded, err := recordedEdge(r.front.Kind(), r.selection)
+	if err != nil {
+		return err
+	}
+	updatedAt := time.Now().Unix()
 	var base []string
 	read := false
 	return records.Change(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug), func(entry records.Entry) ([]byte, bool, error) {
-		current, err := decodeProject(entry)
+		current, err := stackrecords.DecodeProject(entry)
 		if err != nil {
 			return nil, false, err
 		}
@@ -236,20 +242,9 @@ func (r *deployRun) rememberProject(ctx context.Context) error {
 				parts = append(parts, part)
 			}
 		}
-		value, err := json.Marshal(stackrecords.Project{Parts: parts})
+		value, err := json.Marshal(stackrecords.Project{Parts: parts, Edge: recorded, Registry: recordedRegistry(r.projectRegistry), UpdatedAt: updatedAt})
 		return value, true, err
 	})
-}
-
-func decodeProject(entry records.Entry) (stackrecords.Project, error) {
-	var project stackrecords.Project
-	if len(entry.Value) == 0 {
-		return project, nil
-	}
-	if err := json.Unmarshal(entry.Value, &project); err != nil {
-		return project, fmt.Errorf("read %s: %w", entry.Key, err)
-	}
-	return project, nil
 }
 
 func (r *deployRun) checkNeeds(ctx context.Context) error {

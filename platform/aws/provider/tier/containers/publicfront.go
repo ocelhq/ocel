@@ -111,7 +111,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	if _, err := lb.NewListener(ctx, component.NameOf(name).Part(httpWord), &lb.ListenerArgs{
+	redirect, err := lb.NewListener(ctx, component.NameOf(name).Part(httpWord), &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
 		Port:            pulumi.Int(originListenerPort),
 		Protocol:        pulumi.String("HTTP"),
@@ -124,7 +124,8 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 			},
 		}},
 		Tags: tags,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	if err := w.runLiveness(ctx, name, listener, tags); err != nil {
@@ -132,6 +133,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	}
 	ctx.Export(outputKeyPublicListener, listener.Arn)
 	ctx.Export(outputKeyPublicHost, balancer.DnsName)
+	ctx.Export(outputKeyPublicRedirectListener, redirect.Arn)
 	return nil
 }
 
@@ -185,8 +187,7 @@ func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Li
 	}, pulumi.DependsOn([]pulumi.Resource{invoke})); err != nil {
 		return err
 	}
-	ctx.Export(outputKeyLivenessRole, role.Arn)
-	_, err = lb.NewListenerRule(ctx, component.NameOf(component.NameOf(balancer).Part(httpsWord)).Part(livenessWord), &lb.ListenerRuleArgs{
+	rule, err := lb.NewListenerRule(ctx, component.NameOf(component.NameOf(balancer).Part(httpsWord)).Part(livenessWord), &lb.ListenerRuleArgs{
 		ListenerArn: listener.Arn,
 		Priority:    pulumi.Int(livenessRulePriority),
 		Conditions: lb.ListenerRuleConditionArray{&lb.ListenerRuleConditionArgs{
@@ -198,7 +199,13 @@ func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Li
 		}},
 		Tags: tags,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	ctx.Export(outputKeyLivenessRole, role.Arn)
+	ctx.Export(outputKeyLivenessTargets, group.Arn)
+	ctx.Export(outputKeyLivenessRule, rule.Arn)
+	return nil
 }
 
 func nameCertificateHost(balancer string) string {

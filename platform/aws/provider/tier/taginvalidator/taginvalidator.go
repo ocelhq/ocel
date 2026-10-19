@@ -120,7 +120,7 @@ func QueueARN(region, account, namespace string, tier environment.Tier) string {
 	return "arn:aws:sqs:" + region + ":" + account + ":" + NamesFor(namespace, tier).Queue
 }
 
-func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource, error) {
+func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PhysicalResource, error) {
 	names := NamesFor(spec.Namespace, spec.Tier)
 	if err := ensureQueue(ctx, c.SQS, names.Queue, spec.Namespace, spec.Tier); err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	if err != nil {
 		return nil, err
 	}
-	return []provider.PartResource{
+	return []provider.PhysicalResource{
 		{Kind: kindQueue, ID: names.Queue},
 		{Kind: kindLogGroup, ID: names.LogGroup},
 		{Kind: kindFunction, ID: names.Function},

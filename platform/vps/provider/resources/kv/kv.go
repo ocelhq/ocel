@@ -95,6 +95,14 @@ func kvContainer(in resources.ProvisionRequest, store kvStore) container.Spec {
 	}
 }
 
+func ResolveContainer(in resources.ProvisionRequest) (container.Spec, error) {
+	store, err := readKVStore(in)
+	if err != nil {
+		return container.Spec{}, err
+	}
+	return kvContainer(in, store), nil
+}
+
 func newKVBinding(in resources.ProvisionRequest, spec container.Spec, password string) provider.Binding {
 	return provider.Binding{
 		Type:     provider.BindingKV,

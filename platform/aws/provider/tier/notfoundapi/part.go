@@ -18,7 +18,7 @@ func NewPart(records tier.Records, c API, namespace string, wildcard edge.Kind) 
 		Work: func(_ context.Context, tier environment.Tier) (tier.Work, error) {
 			return Work(c, namespace, tier), nil
 		},
-		Remove: func(ctx context.Context, _ environment.Tier, recorded []provider.PartResource) error {
+		Remove: func(ctx context.Context, _ environment.Tier, recorded []provider.PhysicalResource) error {
 			return Remove(ctx, c, recorded)
 		},
 		Wildcard: wildcard,
@@ -27,7 +27,7 @@ func NewPart(records tier.Records, c API, namespace string, wildcard edge.Kind) 
 
 func Work(c API, namespace string, tier environment.Tier) (work tier.Work) {
 	work.Digest = Digest(namespace, tier)
-	work.Make = func(ctx context.Context, prior []provider.PartResource, _ bool) ([]provider.PartResource, error) {
+	work.Make = func(ctx context.Context, prior []provider.PhysicalResource, _ bool) ([]provider.PhysicalResource, error) {
 		return Ensure(ctx, c, namespace, tier, prior)
 	}
 	return work

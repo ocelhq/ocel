@@ -36,7 +36,7 @@ type Use struct {
 
 type Added struct {
 	Plan   func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error)
-	Ensure func(ctx context.Context, tier environment.Tier, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
+	Ensure func(ctx context.Context, tier environment.Tier, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error)
 }
 
 func (p Part) IsOffered() bool { return p.Removal != nil }
@@ -87,7 +87,7 @@ func (parts Parts) Names() []string {
 	return names
 }
 
-func Deletion(name, reason string, resources []provider.PartResource) *provider.ChangeGroup {
+func Deletion(name, reason string, resources []provider.PhysicalResource) *provider.ChangeGroup {
 	group := provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
 		Name:   "bootstrap part " + name,

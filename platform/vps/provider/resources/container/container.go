@@ -229,6 +229,17 @@ func (r Spec) volume() string { return volumeName(r.Name, r.Volume.Generation) }
 
 func (r Spec) VolumeName() string { return r.volume() }
 
+func (r Spec) VolumeNames() []string {
+	var names []string
+	if r.Volume.Path != "" {
+		names = append(names, r.volume())
+	}
+	if r.Sockets != "" {
+		names = append(names, r.socketsVolume())
+	}
+	return names
+}
+
 func volumesOf(tier environment.Tier, project, resource, name string) string {
 	return "docker volume ls --filter " + shell.Quote("name=^"+name) +
 		" --filter " + shell.Quote("label="+docker.LabelTier+"="+string(tier)) +

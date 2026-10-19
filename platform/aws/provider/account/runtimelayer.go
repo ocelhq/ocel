@@ -319,9 +319,9 @@ func ReadRuntimeLayersPart(ctx context.Context, layers LayerVersionsAPI, store r
 	if err != nil || len(versions) == 0 {
 		return provider.BootstrapPart{}, false, err
 	}
-	resources := make([]provider.PartResource, 0, len(versions))
+	resources := make([]provider.PhysicalResource, 0, len(versions))
 	for _, version := range versions {
-		resources = append(resources, provider.PartResource{Kind: runtimeLayerType, ID: version.String()})
+		resources = append(resources, provider.PhysicalResource{Kind: runtimeLayerType, ID: version.String()})
 	}
 	return provider.BootstrapPart{
 		Name:               RuntimeLayersPart,

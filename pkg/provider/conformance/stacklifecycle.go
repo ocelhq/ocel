@@ -53,6 +53,11 @@ func runStackLifecycle(t *testing.T, facts provider.Facts, stacks provider.Stack
 				t.Error("Plan() of a stack nothing has provisioned shows nothing written, and an apply from here creates every resource it declares")
 			}
 		}},
+		{"a provisioned stack names every resource it holds", func(t *testing.T) {
+			for _, fault := range provisionedResourceFaults(ctx, stacks, life.ref) {
+				t.Error(fault)
+			}
+		}},
 		{"a second identical provision plans and does nothing", func(t *testing.T) {
 			if planned := life.plan(t, ctx, created); len(planned) != 0 {
 				t.Errorf("Plan() of the spec just provisioned shows %+v written, and a rerun of a deploy that changed nothing must plan all-keep", planned)
@@ -82,6 +87,11 @@ func runStackLifecycle(t *testing.T, facts provider.Facts, stacks provider.Stack
 			}
 			if rows := planRows(t, removal, "PlanDestroy"); rows != 0 {
 				t.Errorf("PlanDestroy() of a stack just destroyed shows %+v, and a teardown that reran would take down what is already gone", removal.Groups)
+			}
+		}},
+		{"a destroyed stack names no resource", func(t *testing.T) {
+			for _, fault := range destroyedResourceFaults(ctx, stacks, life.ref) {
+				t.Error(fault)
 			}
 		}},
 	}

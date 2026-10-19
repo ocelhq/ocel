@@ -59,7 +59,7 @@ func (w *world) edge() *apiGateway {
 	}
 }
 
-func (w *world) ensurePart(_ context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
+func (w *world) ensurePart(_ context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error) {
 	w.ensured = append(w.ensured, string(tier)+" "+part+" for "+addedBy+addedWith)
 	if w.cfn.absent {
 		return nil, fmt.Errorf("the %s tier is not bootstrapped: run `%s`", tier, provider.BootstrapCommand(tier))
@@ -67,7 +67,7 @@ func (w *world) ensurePart(_ context.Context, tier environment.Tier, part, added
 	if say != nil {
 		say("added the " + part + " part")
 	}
-	return []provider.PartResource{{Kind: notfoundapi.KindRestAPI, ID: fakeNotFoundAPI}}, nil
+	return []provider.PhysicalResource{{Kind: notfoundapi.KindRestAPI, ID: fakeNotFoundAPI}}, nil
 }
 
 func (w *world) deletion(attempts int) *Deletion {

@@ -96,7 +96,7 @@ func TestAnAccountWithNoDefaultVPCGetsNoClientsGroup(t *testing.T) {
 func TestRemovingTheClientsGroupForgetsOneAlreadyGoneAndNamesWhatStillHoldsIt(t *testing.T) {
 	t.Parallel()
 
-	recorded := []provider.PartResource{{Kind: KindSecurityGroup, ID: "sg-clients"}}
+	recorded := []provider.PhysicalResource{{Kind: KindSecurityGroup, ID: "sg-clients"}}
 	gone := withDefaultVPC()
 	gone.deleteErr = &smithy.GenericAPIError{Code: "InvalidGroup.NotFound"}
 	if err := Remove(context.Background(), gone, recorded); err != nil {

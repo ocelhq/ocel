@@ -213,10 +213,14 @@ func TestPlanRemovePreviewWildcardRefusesWhileAProjectStillHasLivePreviews(t *te
 	})
 	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", "")))
 
-	if _, err := client.PlanRemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
+	_, err := client.PlanRemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
-	}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("PlanRemovePreviewWildcard() = %v, want it refused while previews are still served", err)
+	}
+	if !strings.Contains(err.Error(), "`ocel projects destroy --tier preview`") {
+		t.Errorf("PlanRemovePreviewWildcard() = %v, want it to name the command that removes a project's previews", err)
 	}
 }
 

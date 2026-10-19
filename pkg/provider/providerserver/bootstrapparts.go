@@ -60,9 +60,7 @@ func bootstrapPartsOf(ctx context.Context, r bootstrapplan.Readiness, status boo
 
 			RetiresWithLastUser: part.RetiresWithLastUser,
 		}
-		for _, resource := range part.Resources {
-			out.Resources = append(out.Resources, &contractv1.BootstrapPartResource{Kind: resource.Kind, Id: resource.ID})
-		}
+		out.Resources = encodePhysicalResources(part.Resources)
 		if cost, known := idle[part.Name]; known {
 			out.IdleMonthlyFixed, out.Currency = &cost, currency
 		}
@@ -76,9 +74,7 @@ func bootstrapPartsOf(ctx context.Context, r bootstrapplan.Readiness, status boo
 	for _, name := range slices.Sorted(maps.Keys(records)) {
 		out := &contractv1.BootstrapPart{Name: name}
 		applyRecord(out, records[name])
-		for _, resource := range records[name].Resources {
-			out.Resources = append(out.Resources, &contractv1.BootstrapPartResource{Kind: resource.Kind, Id: resource.ID})
-		}
+		out.Resources = encodePhysicalResources(records[name].Resources)
 		delete(wants, name)
 		parts = append(parts, out)
 	}

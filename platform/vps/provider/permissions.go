@@ -29,7 +29,7 @@ func deployDocument(front front.Proxy) string {
 	for _, grant := range deployGrants(front) {
 		written.WriteString("\n  " + grant.Name + "\n    " + grant.Detail + "\n")
 	}
-	written.WriteString("\nIt accepts only the keys in its authorized_keys; `ocel destroy` removes it.\n")
+	written.WriteString("\nIt accepts only the keys in its authorized_keys; `ocel bootstrap destroy` removes it.\n")
 	return written.String()
 }
 

@@ -98,7 +98,7 @@ func Digest(namespace string, tier environment.Tier) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func IDOf(resources []provider.PartResource) string {
+func IDOf(resources []provider.PhysicalResource) string {
 	for _, resource := range resources {
 		if resource.Kind == KindRestAPI {
 			return resource.ID
@@ -107,7 +107,7 @@ func IDOf(resources []provider.PartResource) string {
 	return ""
 }
 
-func Ensure(ctx context.Context, c API, namespace string, tier environment.Tier, prior []provider.PartResource) ([]provider.PartResource, error) {
+func Ensure(ctx context.Context, c API, namespace string, tier environment.Tier, prior []provider.PhysicalResource) ([]provider.PhysicalResource, error) {
 	name := NameFor(namespace, tier)
 	body, err := definition(name)
 	if err != nil {
@@ -150,13 +150,13 @@ func Ensure(ctx context.Context, c API, namespace string, tier environment.Tier,
 	}); err != nil {
 		return nil, fmt.Errorf("publish REST API %s on stage %s: %w", name, StageName, err)
 	}
-	return []provider.PartResource{
+	return []provider.PhysicalResource{
 		{Kind: KindRestAPI, ID: id},
 		{Kind: kindStage, ID: id + "/" + StageName},
 	}, nil
 }
 
-func Remove(ctx context.Context, c API, recorded []provider.PartResource) error {
+func Remove(ctx context.Context, c API, recorded []provider.PhysicalResource) error {
 	id := IDOf(recorded)
 	if id == "" {
 		return nil

@@ -58,7 +58,7 @@ func (r *Reads) remember(key readKey, value read) {
 
 type Work struct {
 	Digest string
-	Make   func(ctx context.Context, prior []provider.PartResource, updatesTrust bool) ([]provider.PartResource, error)
+	Make   func(ctx context.Context, prior []provider.PhysicalResource, updatesTrust bool) ([]provider.PhysicalResource, error)
 }
 
 type RecordedSpec struct {
@@ -66,7 +66,7 @@ type RecordedSpec struct {
 	Summary  string
 	Shape    func(tier environment.Tier) []pricing.Shaped
 	Work     func(ctx context.Context, tier environment.Tier) (Work, error)
-	Remove   func(ctx context.Context, tier environment.Tier, recorded []provider.PartResource) error
+	Remove   func(ctx context.Context, tier environment.Tier, recorded []provider.PhysicalResource) error
 	IsUsedBy func(uses []buildoutput.Uses, front edge.Kind) bool
 	Wildcard edge.Kind
 }
@@ -123,7 +123,7 @@ func Recorded(r Records, spec RecordedSpec) Part {
 				}
 				return r.plan(ctx, tier, spec, work)
 			},
-			Ensure: func(ctx context.Context, tier environment.Tier, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
+			Ensure: func(ctx context.Context, tier environment.Tier, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error) {
 				work, err := spec.Work(ctx, tier)
 				if err != nil {
 					return nil, err
@@ -160,7 +160,7 @@ func (r Records) Shape(resources []pricing.Shaped) *provider.PartShape {
 	return &provider.PartShape{Vendor: awsports.Vendor, Region: r.Region, Resources: resources}
 }
 
-func (r Records) Removal(name string, remove func(ctx context.Context, tier environment.Tier, recorded []provider.PartResource) error) *Removal {
+func (r Records) Removal(name string, remove func(ctx context.Context, tier environment.Tier, recorded []provider.PhysicalResource) error) *Removal {
 	return &Removal{
 		Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
 			return r.planDeletion(ctx, tier, name, "this run removes it; the next deploy that uses it adds it again")
@@ -191,7 +191,7 @@ func (r Records) Repair(name string, work func(ctx context.Context, tier environ
 			WrittenBy: string(r.WrittenBy),
 			Digest:    made.Digest,
 			AddedBy:   recorded.AddedBy,
-			Make: func(ctx context.Context) ([]provider.PartResource, error) {
+			Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
 				return made.Make(ctx, prior, true)
 			},
 		}})
@@ -199,7 +199,7 @@ func (r Records) Repair(name string, work func(ctx context.Context, tier environ
 	}
 }
 
-func (r Records) ensure(ctx context.Context, tier environment.Tier, spec RecordedSpec, work Work, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
+func (r Records) ensure(ctx context.Context, tier environment.Tier, spec RecordedSpec, work Work, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error) {
 	recorded, present, err := r.Read(ctx, tier, spec.Name)
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func (r Records) ensure(ctx context.Context, tier environment.Tier, spec Recorde
 		Digest:    work.Digest,
 		AddedBy:   addedBy,
 		AddedWith: addedWith,
-		Make: func(ctx context.Context) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
 			if say != nil {
 				say(fmt.Sprintf("Adding the %s tier's %s bootstrap part: %s", tier, spec.Name, spec.Summary))
 			}

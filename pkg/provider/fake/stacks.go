@@ -1,6 +1,7 @@
 package fake
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
@@ -16,7 +17,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type Stacks struct {
@@ -24,6 +27,7 @@ type Stacks struct {
 	PasswordSecret string
 
 	artifacts provider.ArtifactStore
+	keyValues records.Store
 	journal   *Journal
 	refusal   error
 	running   resources.RunningStacks
@@ -66,6 +70,11 @@ func NewStacks(artifacts provider.ArtifactStore) *Stacks {
 
 func (r *Stacks) journalling(journal *Journal) *Stacks {
 	r.journal = journal
+	return r
+}
+
+func (r *Stacks) recordedIn(store records.Store) *Stacks {
+	r.keyValues = store
 	return r
 }
 
@@ -305,6 +314,38 @@ func (r *Stacks) Inspect(ref provider.StackRef) InspectedStack {
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
 	return InspectedStack{Present: present, Result: result}
+}
+
+func (r *Stacks) Resources(ctx context.Context, req provider.StackResources) ([]provider.PhysicalResource, error) {
+	ref := req.Ref
+	if inspected := r.Inspect(ref); inspected.Present {
+		return listPhysicalResources(inspected.Result.Bindings, inspected.Result.Functions, inspected.Result.Containers), nil
+	}
+	if r.keyValues == nil {
+		return nil, nil
+	}
+	recorded, found, err := stackrecords.Read(ctx, r.keyValues, ref.Tier, ref.Project, ref.Name)
+	if err != nil || !found {
+		return nil, err
+	}
+	return listPhysicalResources(recorded.Bindings, recorded.Functions, recorded.Containers), nil
+}
+
+const consoleURL = "https://console.fake.example/"
+
+func listPhysicalResources(bindings []provider.Binding, functions []provider.Function, containers []provider.AppContainer) []provider.PhysicalResource {
+	listed := []provider.PhysicalResource{}
+	for _, binding := range bindings {
+		listed = append(listed, provider.PhysicalResource{Kind: "fake:" + string(binding.Type), ID: cmp.Or(binding.Resource, binding.Name)})
+	}
+	for _, function := range functions {
+		id := cmp.Or(function.Physical, function.Name)
+		listed = append(listed, provider.PhysicalResource{Kind: "fake:function", ID: id, ConsoleURL: consoleURL + id})
+	}
+	for _, container := range containers {
+		listed = append(listed, provider.PhysicalResource{Kind: "fake:container", ID: cmp.Or(container.Physical, container.Name)})
+	}
+	return listed
 }
 
 func (r *Stacks) recordShipped(spec provider.StackSpec, staged []functioncode.Upload) {

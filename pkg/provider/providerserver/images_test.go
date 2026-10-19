@@ -97,6 +97,10 @@ func (muteStacks) Destroy(context.Context, provider.StackDestroy, progress.Log) 
 	return nil
 }
 
+func (muteStacks) Resources(context.Context, provider.StackResources) ([]provider.PhysicalResource, error) {
+	return nil, nil
+}
+
 func TestTheImageRowIsTheStacksOwnAndNothingElseInventsIt(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)

@@ -713,3 +713,75 @@ func TestAWorkersNameReadsBackAsTheWorker(t *testing.T) {
 		t.Errorf("WorkerOf(web-server) = %q, true, want a function's name to be no worker's", worker)
 	}
 }
+
+func TestResourcesOfAStackNothingRecordedAreNone(t *testing.T) {
+	t.Parallel()
+
+	hooks := (&buckets{}).hooks()
+	hooks.ListResources = func(context.Context, provider.StackRef, provider.StackResult) ([]provider.PhysicalResource, error) {
+		t.Error("ListResources ran for a stack nothing recorded")
+		return nil, nil
+	}
+
+	listed, err := resources.NewHookStacks(fake.NewKeyValues(), hooks).Resources(context.Background(), provider.StackResources{Ref: infraRef()})
+	if err != nil || listed != nil {
+		t.Fatalf("Resources() of a stack nothing recorded = %v, %v, want none", listed, err)
+	}
+}
+
+func TestResourcesOfARecordedStackAreWhatTheVendorListsFromItsRecord(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := infraRef()
+	uploads := provider.Binding{Type: provider.BindingBucket, Name: "uploads", Resource: "shop-uploads"}
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+		Kind:     provider.StackInfra,
+		Bindings: []provider.Binding{uploads},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hooks := (&buckets{}).hooks()
+	var listedFrom provider.StackResult
+	hooks.ListResources = func(_ context.Context, listedRef provider.StackRef, recorded provider.StackResult) ([]provider.PhysicalResource, error) {
+		if listedRef != ref {
+			t.Errorf("ListResources ref = %v, want %v", listedRef, ref)
+		}
+		listedFrom = recorded
+		return []provider.PhysicalResource{{Kind: "fake:bucket", ID: "shop-uploads"}}, nil
+	}
+
+	listed, err := resources.NewHookStacks(store, hooks).Resources(ctx, provider.StackResources{Ref: ref})
+	if err != nil {
+		t.Fatalf("Resources() = %v", err)
+	}
+
+	if want := []provider.PhysicalResource{{Kind: "fake:bucket", ID: "shop-uploads"}}; !slices.Equal(listed, want) {
+		t.Errorf("Resources() = %v, want %v", listed, want)
+	}
+	if len(listedFrom.Bindings) != 1 || listedFrom.Bindings[0].Resource != "shop-uploads" {
+		t.Errorf("ListResources read the record %+v, want the bucket the stack recorded", listedFrom)
+	}
+}
+
+func TestResourcesOfARecordedStackAreRefusedWhenTheVendorListsNone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	ref := infraRef()
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+		Kind:     provider.StackInfra,
+		Bindings: []provider.Binding{{Type: provider.BindingBucket, Name: "uploads"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := resources.NewHookStacks(store, (&buckets{}).hooks()).Resources(ctx, provider.StackResources{Ref: ref})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Resources() with no ListResources hook = %v, want a not-ready refusal", err)
+	}
+}

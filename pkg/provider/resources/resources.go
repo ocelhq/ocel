@@ -38,6 +38,7 @@ type Hooks struct {
 	Containers     *ContainerHooks
 	Retention      *ImageRetentionHooks
 	RecordsWorkers bool
+	ListResources  func(ctx context.Context, ref provider.StackRef, recorded provider.StackResult) ([]provider.PhysicalResource, error)
 }
 
 type FunctionHooks struct {
@@ -122,6 +123,19 @@ func (f *hookStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, _ p
 		return provider.Plan{}, err
 	}
 	return SynthesizedRemoval(ref, recordedResult(recorded)), nil
+}
+
+func (f *hookStacks) Resources(ctx context.Context, req provider.StackResources) ([]provider.PhysicalResource, error) {
+	ref := req.Ref
+	recorded, found, err := stackrecords.Read(ctx, f.keyValues, ref.Tier, ref.Project, ref.Name)
+	if err != nil || !found {
+		return nil, err
+	}
+	if f.hooks.ListResources == nil {
+		return nil, refusal.Refuse(refusal.CodeNotReady,
+			"%s is recorded, and this provider lists no resources for its stacks", ref.Name)
+	}
+	return f.hooks.ListResources(ctx, ref, recordedResult(recorded))
 }
 
 func recordedResult(recorded stackrecords.Stack) provider.StackResult {

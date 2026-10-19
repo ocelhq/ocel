@@ -96,7 +96,7 @@ func (r *deployRun) openImages(ctx context.Context, project *contractv1.ImageReg
 	if err != nil {
 		return err
 	}
-	r.registry = registry
+	r.projectRegistry, r.registry = project, registry
 	store, err := imageStoreFor(ctx, r.provider, r.registry)
 	if err != nil {
 		return err

@@ -93,8 +93,9 @@ type deployRun struct {
 	inline        []inlineBinding
 	inlineRecords inlineRecords
 
-	registry provider.RegistryTarget
-	images   provider.ImageStore
+	projectRegistry *contractv1.ImageRegistry
+	registry        provider.RegistryTarget
+	images          provider.ImageStore
 
 	replaces string
 

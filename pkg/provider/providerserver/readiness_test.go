@@ -415,7 +415,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	}
 	for _, want := range []string{
 		"2 project(s) are still deployed into it: blog, shop",
-		"`ocel destroy preview`",
+		"`ocel projects destroy --tier preview`",
 		"*.previews.example.com",
 		"`ocel bootstrap destroy preview`",
 	} {

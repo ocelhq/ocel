@@ -139,7 +139,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		}
 		if pointer == stackrecords.ProductionEnv {
 			return refusal.Refuse(refusal.CodeInvalid,
-				"production is not an environment to remove; `ocel destroy production` removes the project's production footprint")
+				"production is not an environment to remove; `ocel projects destroy --tier production` removes the project's production footprint")
 		}
 		if req.GetSlug() == "" {
 			return errUnnamedProject

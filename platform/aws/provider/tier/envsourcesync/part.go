@@ -25,7 +25,7 @@ func NewPart(records tier.Records, c Clients, namespace string, specFor func(con
 			return describe(ctx, records, specFor, tier)
 		},
 		Shape: func(tier environment.Tier) []pricing.Shaped { return Shape(namespace, tier) },
-		Removal: records.Removal(Part, func(ctx context.Context, tier environment.Tier, _ []provider.PartResource) error {
+		Removal: records.Removal(Part, func(ctx context.Context, tier environment.Tier, _ []provider.PhysicalResource) error {
 			return Remove(ctx, c, namespace, tier)
 		}),
 		Teardown: &tier.Removal{
@@ -59,7 +59,7 @@ func isUsedByEveryDeploy([]buildoutput.Uses, edge.Kind) bool { return true }
 func Work(c Clients, spec Spec) tier.Work {
 	return tier.Work{
 		Digest: Digest(spec),
-		Make: func(ctx context.Context, _ []provider.PartResource, updatesTrust bool) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context, _ []provider.PhysicalResource, updatesTrust bool) ([]provider.PhysicalResource, error) {
 			spec := spec
 			spec.UpdatesTrust = updatesTrust
 			return Ensure(ctx, c, spec)
@@ -77,7 +77,7 @@ func EnsurePart(ctx context.Context, records tier.Records, c Clients, spec Spec,
 		WrittenBy: string(records.WrittenBy),
 		Digest:    work.Digest,
 		AddedBy:   project,
-		Make: func(ctx context.Context) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
 			return work.Make(ctx, nil, false)
 		},
 	})

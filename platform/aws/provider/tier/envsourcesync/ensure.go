@@ -41,7 +41,7 @@ func (p placed) functionARN() string { return p.arn("lambda", "function:"+p.name
 
 func (p placed) groupARN() string { return p.arn("scheduler", "schedule-group/"+p.names.ScheduleGroup) }
 
-func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource, error) {
+func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PhysicalResource, error) {
 	if spec.Key == "" {
 		return nil, awsports.RefuseUnkeyed(spec.Tier)
 	}
@@ -65,9 +65,9 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	return Resources(spec.Namespace, spec.Tier), behind
 }
 
-func Resources(namespace string, tier environment.Tier) []provider.PartResource {
+func Resources(namespace string, tier environment.Tier) []provider.PhysicalResource {
 	names := NamesFor(namespace, tier)
-	return []provider.PartResource{
+	return []provider.PhysicalResource{
 		{Kind: "AWS::IAM::Role", ID: names.Role},
 		{Kind: "AWS::IAM::Role", ID: names.ScheduleRole},
 		{Kind: "AWS::Logs::LogGroup", ID: names.LogGroup},

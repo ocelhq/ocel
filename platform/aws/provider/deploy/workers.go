@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -130,7 +131,7 @@ func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, w
 	return planned.Groups, err
 }
 
-func (r *release) listWorkersOfLastRelease(ctx context.Context, app provider.StackRef) ([]provider.StackRef, error) {
+func (r *release) listRecordedWorkers(ctx context.Context, app provider.StackRef) ([]provider.StackRef, error) {
 	if app.Name.IsInfra() || app.Name.Release.IsZero() || app.Name.Env == "" {
 		return nil, nil
 	}
@@ -144,15 +145,30 @@ func (r *release) listWorkersOfLastRelease(ctx context.Context, app provider.Sta
 			recorded = append(recorded, ref)
 		}
 	}
-	if len(recorded) == 0 {
-		return nil, nil
+	return recorded, nil
+}
+
+func (r *release) listReleasesOfApp(ctx context.Context, app provider.StackRef) ([]stackrecords.NamedStack, error) {
+	recorded, err := stackrecords.List(ctx, r.cfg.KeyValues, app.Tier, app.Project)
+	if err != nil {
+		return nil, err
 	}
-	releases, err := stackrecords.List(ctx, r.cfg.KeyValues, app.Tier, app.Project)
+	return slices.DeleteFunc(recorded, func(other stackrecords.NamedStack) bool {
+		return other.Name.Env != app.Name.Env || other.Name.App != app.Name.App || other.Name.Release.IsZero()
+	}), nil
+}
+
+func (r *release) listWorkersOfLastRelease(ctx context.Context, app provider.StackRef) ([]provider.StackRef, error) {
+	recorded, err := r.listRecordedWorkers(ctx, app)
+	if err != nil || len(recorded) == 0 {
+		return nil, err
+	}
+	releases, err := r.listReleasesOfApp(ctx, app)
 	if err != nil {
 		return nil, err
 	}
 	for _, other := range releases {
-		if other.Name.Env == app.Name.Env && other.Name.App == app.Name.App && !other.Name.Release.IsZero() && other.Name != app.Name {
+		if other.Name != app.Name {
 			return nil, nil
 		}
 	}

@@ -213,3 +213,24 @@ func TestCredentialsThatAreNeitherPurposeAreRefused(t *testing.T) {
 		t.Error("Permissions() rendered a document for a purpose this provider has no credentials for")
 	}
 }
+
+func TestTheDeployDocumentNamesBootstrapDestroyAsWhatRemovesTheLoginItsLinesAndTheKey(t *testing.T) {
+	t.Parallel()
+
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: &front.Proxy{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d"}}})
+	document, err := p.Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	if strings.Contains(document.Document, "`ocel projects destroy`") {
+		t.Errorf("the document sends the reader to a project's destroy, which never removes the deploy login, a sudoers line or a seal key:\n%s", document.Document)
+	}
+	if got := strings.Count(document.Document, "`ocel bootstrap destroy`"); got != 2 {
+		t.Errorf("the document names `ocel bootstrap destroy` %d times, want it for the login and the Caddy reload line:\n%s", got, document.Document)
+	}
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if want := "`ocel bootstrap destroy " + string(tier) + "` removes it with the tier"; !strings.Contains(document.Document, want) {
+			t.Errorf("the document never says %s, the command that removes %s:\n%s", want, host.SealKeyPath(tier), document.Document)
+		}
+	}
+}

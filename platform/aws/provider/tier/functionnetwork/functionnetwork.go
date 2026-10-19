@@ -163,7 +163,7 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 		progress.Say("Provisioning the shared function network for the " + string(tier) + " tier: private subnets, a NAT gateway and gateway endpoints every serverless app that reaches a VPC-only resource attaches to; the first attach can take several minutes")
 	}
 	var decoded Network
-	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PartResource, error) {
+	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
 		if decoded, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, owner.Subnets), progress); err != nil {
 			return nil, err
@@ -244,22 +244,22 @@ func natName(namespace string, tier environment.Tier, n int) string {
 	return nameFor(namespace, tier, "nat", strconv.Itoa(n+1))
 }
 
-func listResources(namespace string, tier environment.Tier, network Network) []provider.PartResource {
-	var resources []provider.PartResource
+func listResources(namespace string, tier environment.Tier, network Network) []provider.PhysicalResource {
+	var resources []provider.PhysicalResource
 	for n := range natGateways(tier) {
 		resources = append(resources,
-			provider.PartResource{Kind: "AWS::EC2::NatGateway", ID: natName(namespace, tier, n)},
-			provider.PartResource{Kind: "AWS::EC2::EIP", ID: natName(namespace, tier, n)})
+			provider.PhysicalResource{Kind: "AWS::EC2::NatGateway", ID: natName(namespace, tier, n)},
+			provider.PhysicalResource{Kind: "AWS::EC2::EIP", ID: natName(namespace, tier, n)})
 	}
 	for i, subnet := range network.Subnets {
 		resources = append(resources,
-			provider.PartResource{Kind: "AWS::EC2::RouteTable", ID: nameFor(namespace, tier, privateWord, strconv.Itoa(i+1))},
-			provider.PartResource{Kind: "AWS::EC2::Subnet", ID: subnet})
+			provider.PhysicalResource{Kind: "AWS::EC2::RouteTable", ID: nameFor(namespace, tier, privateWord, strconv.Itoa(i+1))},
+			provider.PhysicalResource{Kind: "AWS::EC2::Subnet", ID: subnet})
 	}
 	for _, service := range endpointServices {
-		resources = append(resources, provider.PartResource{Kind: "AWS::EC2::VPCEndpoint", ID: nameFor(namespace, tier, service)})
+		resources = append(resources, provider.PhysicalResource{Kind: "AWS::EC2::VPCEndpoint", ID: nameFor(namespace, tier, service)})
 	}
-	return append(resources, provider.PartResource{Kind: "AWS::EC2::SecurityGroup", ID: network.SecurityGroup})
+	return append(resources, provider.PhysicalResource{Kind: "AWS::EC2::SecurityGroup", ID: network.SecurityGroup})
 }
 
 func ReadPart(ctx context.Context, store records.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {

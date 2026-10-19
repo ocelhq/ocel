@@ -126,17 +126,18 @@ func (p *Provider) Facts() provider.Facts {
 
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
-		Preflight:           &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight},
-		ProgramEdge:         p.ProgramEdge,
-		EnsureImageRegistry: p.EnsureImageRegistry,
-		OpenDirectImages:    p.OpenDirectImages,
-		CheckBucket:         s3store.Check,
-		NextServerRuntime:   nextServerRuntime,
-		EnvSource:           &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
-		BindingAccess:       &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
-		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
-		Retirement:          &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
-		ProjectRemoval:      &provider.ProjectRemovalHooks{Plan: p.PlanProjectRemoval, Remove: p.RemoveProject},
+		Preflight:            &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight},
+		ProgramEdge:          p.ProgramEdge,
+		EnsureImageRegistry:  p.EnsureImageRegistry,
+		OpenDirectImages:     p.OpenDirectImages,
+		CheckBucket:          s3store.Check,
+		NextServerRuntime:    nextServerRuntime,
+		EnvSource:            &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
+		BindingAccess:        &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
+		Cost:                 &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		Retirement:           &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
+		ProjectRemoval:       &provider.ProjectRemovalHooks{Plan: p.PlanProjectRemoval, Remove: p.RemoveProject},
+		ListProjectResources: p.ListProjectResources,
 	}
 }
 

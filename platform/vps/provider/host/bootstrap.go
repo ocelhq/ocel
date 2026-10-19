@@ -81,7 +81,7 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 		base.Current = stack.DigestCurrent
 	}
 	for _, item := range read.Items() {
-		base.Resources = append(base.Resources, provider.PartResource{Kind: item.Kind, ID: item.Name})
+		base.Resources = append(base.Resources, provider.PhysicalResource{Kind: item.Kind, ID: item.Name})
 	}
 	return []provider.BootstrapPart{base}, nil
 }
@@ -279,8 +279,8 @@ func (r Reading) adopting() error {
 		present = "no key at all"
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s records seal key %s, but %s contains %s\nRestore the recorded key, or `ocel destroy` the tier",
-		machine.StampPath(r.Tier), recorded, SealKeyPath(r.Tier), present)
+		"%s records seal key %s, but %s contains %s\nRestore the recorded key, or remove the tier with `ocel bootstrap destroy %s`",
+		machine.StampPath(r.Tier), recorded, SealKeyPath(r.Tier), present, r.Tier)
 }
 
 func (b Bootstrap) write(ctx context.Context, read Reading, items []machine.Item, progress progress.Log) error {

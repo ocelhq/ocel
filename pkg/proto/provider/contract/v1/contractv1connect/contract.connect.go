@@ -147,6 +147,15 @@ const (
 	// ProviderServiceForwardPortsProcedure is the fully-qualified name of the ProviderService's
 	// ForwardPorts RPC.
 	ProviderServiceForwardPortsProcedure = "/provider.contract.v1.ProviderService/ForwardPorts"
+	// ProviderServiceListProjectsProcedure is the fully-qualified name of the ProviderService's
+	// ListProjects RPC.
+	ProviderServiceListProjectsProcedure = "/provider.contract.v1.ProviderService/ListProjects"
+	// ProviderServiceGetProjectProcedure is the fully-qualified name of the ProviderService's
+	// GetProject RPC.
+	ProviderServiceGetProjectProcedure = "/provider.contract.v1.ProviderService/GetProject"
+	// ProviderServiceDescribeProjectProcedure is the fully-qualified name of the ProviderService's
+	// DescribeProject RPC.
+	ProviderServiceDescribeProjectProcedure = "/provider.contract.v1.ProviderService/DescribeProject"
 )
 
 // ProviderServiceClient is a client for the provider.contract.v1.ProviderService service.
@@ -189,6 +198,9 @@ type ProviderServiceClient interface {
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest) (*connect.ServerStreamForClient[v1.ReadLogsResponse], error)
 	ForwardPorts(context.Context, *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsEvent], error)
+	ListProjects(context.Context, *v1.ListProjectsRequest) (*v1.ListProjectsResponse, error)
+	GetProject(context.Context, *v1.GetProjectRequest) (*v1.GetProjectResponse, error)
+	DescribeProject(context.Context, *v1.DescribeProjectRequest) (*v1.DescribeProjectResponse, error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.contract.v1.ProviderService
@@ -430,6 +442,24 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("ForwardPorts")),
 			connect.WithClientOptions(opts...),
 		),
+		listProjects: connect.NewClient[v1.ListProjectsRequest, v1.ListProjectsResponse](
+			httpClient,
+			baseURL+ProviderServiceListProjectsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ListProjects")),
+			connect.WithClientOptions(opts...),
+		),
+		getProject: connect.NewClient[v1.GetProjectRequest, v1.GetProjectResponse](
+			httpClient,
+			baseURL+ProviderServiceGetProjectProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("GetProject")),
+			connect.WithClientOptions(opts...),
+		),
+		describeProject: connect.NewClient[v1.DescribeProjectRequest, v1.DescribeProjectResponse](
+			httpClient,
+			baseURL+ProviderServiceDescribeProjectProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("DescribeProject")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -473,6 +503,9 @@ type providerServiceClient struct {
 	confirm                   *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
 	readLogs                  *connect.Client[v1.ReadLogsRequest, v1.ReadLogsResponse]
 	forwardPorts              *connect.Client[v1.ForwardPortsRequest, v1.ForwardPortsEvent]
+	listProjects              *connect.Client[v1.ListProjectsRequest, v1.ListProjectsResponse]
+	getProject                *connect.Client[v1.GetProjectRequest, v1.GetProjectResponse]
+	describeProject           *connect.Client[v1.DescribeProjectRequest, v1.DescribeProjectResponse]
 }
 
 // Configure calls provider.contract.v1.ProviderService.Configure.
@@ -745,6 +778,33 @@ func (c *providerServiceClient) ForwardPorts(ctx context.Context, req *v1.Forwar
 	return c.forwardPorts.CallServerStream(ctx, connect.NewRequest(req))
 }
 
+// ListProjects calls provider.contract.v1.ProviderService.ListProjects.
+func (c *providerServiceClient) ListProjects(ctx context.Context, req *v1.ListProjectsRequest) (*v1.ListProjectsResponse, error) {
+	response, err := c.listProjects.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// GetProject calls provider.contract.v1.ProviderService.GetProject.
+func (c *providerServiceClient) GetProject(ctx context.Context, req *v1.GetProjectRequest) (*v1.GetProjectResponse, error) {
+	response, err := c.getProject.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// DescribeProject calls provider.contract.v1.ProviderService.DescribeProject.
+func (c *providerServiceClient) DescribeProject(ctx context.Context, req *v1.DescribeProjectRequest) (*v1.DescribeProjectResponse, error) {
+	response, err := c.describeProject.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ProviderServiceHandler is an implementation of the provider.contract.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
@@ -785,6 +845,9 @@ type ProviderServiceHandler interface {
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error
 	ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsEvent]) error
+	ListProjects(context.Context, *v1.ListProjectsRequest) (*v1.ListProjectsResponse, error)
+	GetProject(context.Context, *v1.GetProjectRequest) (*v1.GetProjectResponse, error)
+	DescribeProject(context.Context, *v1.DescribeProjectRequest) (*v1.DescribeProjectResponse, error)
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1022,6 +1085,24 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("ForwardPorts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceListProjectsHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceListProjectsProcedure,
+		svc.ListProjects,
+		connect.WithSchema(providerServiceMethods.ByName("ListProjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceGetProjectHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceGetProjectProcedure,
+		svc.GetProject,
+		connect.WithSchema(providerServiceMethods.ByName("GetProject")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceDescribeProjectHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceDescribeProjectProcedure,
+		svc.DescribeProject,
+		connect.WithSchema(providerServiceMethods.ByName("DescribeProject")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.contract.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceConfigureProcedure:
@@ -1100,6 +1181,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceReadLogsHandler.ServeHTTP(w, r)
 		case ProviderServiceForwardPortsProcedure:
 			providerServiceForwardPortsHandler.ServeHTTP(w, r)
+		case ProviderServiceListProjectsProcedure:
+			providerServiceListProjectsHandler.ServeHTTP(w, r)
+		case ProviderServiceGetProjectProcedure:
+			providerServiceGetProjectHandler.ServeHTTP(w, r)
+		case ProviderServiceDescribeProjectProcedure:
+			providerServiceDescribeProjectHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1259,4 +1346,16 @@ func (UnimplementedProviderServiceHandler) ReadLogs(context.Context, *v1.ReadLog
 
 func (UnimplementedProviderServiceHandler) ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ForwardPorts is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) ListProjects(context.Context, *v1.ListProjectsRequest) (*v1.ListProjectsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ListProjects is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) GetProject(context.Context, *v1.GetProjectRequest) (*v1.GetProjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetProject is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) DescribeProject(context.Context, *v1.DescribeProjectRequest) (*v1.DescribeProjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.DescribeProject is not implemented"))
 }

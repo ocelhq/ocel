@@ -48,7 +48,7 @@ func TestAnAWSBootstrapsBaseHoldsTheResourcesOfItsCoreStack(t *testing.T) {
 
 	base := describeParts(t, b)[provider.BasePart]
 
-	want := []provider.PartResource{{Kind: "AWS::S3::Bucket", ID: "ocel-state"}, {Kind: "AWS::DynamoDB::Table", ID: "ocel-state-table"}}
+	want := []provider.PhysicalResource{{Kind: "AWS::S3::Bucket", ID: "ocel-state"}, {Kind: "AWS::DynamoDB::Table", ID: "ocel-state-table"}}
 	if !reflect.DeepEqual(base.Resources, want) {
 		t.Errorf("base resources = %+v, want %+v", base.Resources, want)
 	}

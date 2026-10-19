@@ -23,7 +23,7 @@ func TestTheQueueDatabaseIsNotReadyWhileItsImageIsStillInitialisingIt(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec, err := newQueueContainer(provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack})
+	spec, err := NewQueueContainer(provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack})
 	if err != nil {
 		t.Fatal(err)
 	}
