@@ -178,6 +178,30 @@ test("a broken bucket is not a missing page", async () => {
   await expect(answering(500).get("assets/gone.html")).rejects.toThrow(/500/);
 });
 
+test("a missing object reads as absent even when its error body will not cancel", async () => {
+  const stalling = (status: number) =>
+    s3AssetBucket(
+      "assets-bucket",
+      "us-east-1",
+      (async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("<Error/>"));
+              controller.close();
+            },
+            cancel: () => new Promise(() => {}),
+          }),
+          { status },
+        )) as unknown as typeof fetch,
+    );
+  const within = <T,>(read: Promise<T>) =>
+    Promise.race([read, new Promise((resolve) => setTimeout(() => resolve("hung"), 500))]);
+
+  expect(await within(stalling(403).get("assets/gone.html"))).toBeNull();
+  expect(await within(stalling(404).get("assets/gone.html"))).toBeNull();
+});
+
 test("an asset bucket the function cannot read refuses to boot", () => {
   const env = { OCEL_ASSET_BUCKET: "assets-bucket", AWS_REGION: "us-east-1" };
 
