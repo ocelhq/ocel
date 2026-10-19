@@ -1,16 +1,24 @@
+import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { awsSweepOverlay, type Overlay, writeJourneyConfig } from "../../config";
-import { projectSlug, slugPart } from "../../identity";
+import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell, Fixture } from "../../matrix/types";
 import { ocel } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
+import { listProjects, projectsDestroyArgs } from "../../projects";
 import type { ExternalStack } from "../../stacks";
 import { copyTree } from "../../tree";
 import type { Sweeper } from "../types";
 import { BOOTSTRAP_DESTROY_ARGS, BOOTSTRAP_REFRESH_ARGS } from "./bootstrap";
-import { namespaceFor, namespaceOfSlug, ocelEnvIn, strayNamespaces } from "./namespace";
+import {
+  namespaceFor,
+  namespaceOf,
+  namespaceOfSlug,
+  ocelEnvIn,
+  strayNamespaces,
+} from "./namespace";
 import { deleteEdgePolicy, listEdgePolicies, orphanedPolicies } from "./policies";
 import { githubRuns, livelyRuns, ofRun, runIdOf } from "./runs";
 import { reclaimable, type Stranded, sweepable } from "./slugs";
@@ -60,15 +68,15 @@ export async function despite(
   }
 }
 
-async function inFixture(
+async function inFixture<T>(
   from: string,
   runId: string,
   name: string,
-  work: (dir: string) => Promise<void>,
-): Promise<void> {
+  work: (dir: string) => Promise<T>,
+): Promise<T> {
   const dir = await copyTree(fixtureDir(from), treeDir(runId, "aws", name));
   try {
-    await work(dir);
+    return await work(dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -185,12 +193,12 @@ export class AwsSweeper implements Sweeper {
   constructor(private readonly world: AwsWorld) {}
 
   async list(): Promise<string[]> {
-    return (await this.store()).deployedSlugs();
+    return this.listed();
   }
 
   async exists(slug: string): Promise<boolean> {
     const real = await this.world.real();
-    return (await this.store(real ? namespaceOfSlug(slug) : undefined)).exists(slug);
+    return (await this.listed(real ? namespaceOfSlug(slug) : undefined)).includes(slug);
   }
 
   async sweepStale(runId: string): Promise<void> {
@@ -258,6 +266,26 @@ export class AwsSweeper implements Sweeper {
     return namespace ? awsStore(endpoint, undefined, namespace) : awsStore(endpoint);
   }
 
+  private async listed(namespace?: string): Promise<string[]> {
+    if (!(await (await this.store(namespace)).hasBootstrap())) {
+      return [];
+    }
+    const [first] = fixturesOn(matrix, "aws");
+    if (!first) {
+      throw new Error("no fixture runs on aws, so nothing lists the projects ocel holds");
+    }
+    const named = namespace ?? namespaceOf(process.env);
+    return inFixture(
+      first.name,
+      currentRunIdentity(),
+      `projects-${named}-${randomUUID().slice(0, 8)}`,
+      async (dir) => {
+        await writeJourneyConfig(dir, { target: "aws", slug: named });
+        return listProjects(dir, ocelEnvIn(dir, namespace));
+      },
+    );
+  }
+
   private async sweepStrayNamespace(
     runId: string,
     namespace: string,
@@ -269,7 +297,7 @@ export class AwsSweeper implements Sweeper {
     const fixtures = fixturesOn(matrix, "aws");
     const stranded: Stranded[] = [];
     const remaining: string[] = [];
-    for (const slug of await namespaceStore.deployedSlugs()) {
+    for (const slug of await this.listed(namespace)) {
       const read = reclaimable(slug, [...byPart.keys()]);
       if (!read) {
         complaints.push(
@@ -290,7 +318,7 @@ export class AwsSweeper implements Sweeper {
         await writeJourneyConfig(dir, one.overlay);
         const env = ocelEnvIn(dir, namespace);
         await destroyOnCurrentBootstrap(
-          () => ocel(dir, ["destroy", "production", "--yes"], env),
+          () => ocel(dir, projectsDestroyArgs(), env),
           () => ocel(dir, BOOTSTRAP_REFRESH_ARGS, env),
         );
         process.stdout.write(`swept ${one.slug} from the ${namespace} bootstrap\n`);
@@ -377,7 +405,7 @@ export class AwsSweeper implements Sweeper {
           await store.releaseLocks(one.slug);
         }
         await writeJourneyConfig(dir, one.overlay);
-        await ocel(dir, ["destroy", "production", "--yes"], ocelEnvIn(dir));
+        await ocel(dir, projectsDestroyArgs(), ocelEnvIn(dir));
         process.stdout.write(`swept ${one.slug}\n`);
       }).catch((error) => complaints.push(`${one.slug}: ${String(error)}`));
     }

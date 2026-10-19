@@ -228,7 +228,7 @@ export const gaps: Gap[] = [
   {
     id: "destroy-keeps-a-full-bucket",
     reason:
-      "ocel destroy deletes an app bucket without emptying it, and S3 refuses to delete a bucket that holds an object",
+      "ocel projects destroy deletes an app bucket without emptying it, and S3 refuses to delete a bucket that holds an object",
     issue: 1712,
     where: [
       {

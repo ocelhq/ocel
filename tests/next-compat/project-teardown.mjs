@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
-import { listProjectSlugs, readAccessToken } from "./gcp.mjs";
 import {
   heldLeaseExpiry,
   heldLeaseWaitMs,
@@ -15,6 +14,7 @@ import {
   LEASE_TTL_MS,
   ocelBinary,
   projectSlugForRun,
+  projectSlugs,
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
@@ -24,6 +24,8 @@ import {
 import { linkSidecar } from "./sidecar.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 30 * 60 * 1000;
+
+const LIST_TIMEOUT_MS = 5 * 60 * 1000;
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   process.exit(await main(process.argv[2]));
@@ -39,14 +41,7 @@ async function main(named) {
     return (await destroyProject(projectSlugForRun(), target)) ? 0 : 1;
   }
   const run = projectSlugForRun();
-  const slugs = selectRunSlugs(
-    await listProjectSlugs({
-      ...target.gcp,
-      namespace: process.env.OCEL_NAMESPACE,
-      token: readAccessToken(),
-    }),
-    run,
-  );
+  const slugs = selectRunSlugs(listProjects(target), run);
   if (slugs.length === 0) {
     console.error(`[ocel-e2e] nothing of ${run} is left`);
     return 0;
@@ -60,17 +55,37 @@ async function main(named) {
   return failed.length === 0 ? 0 : 1;
 }
 
-export async function destroyProject(slug, target = readCompatTarget()) {
-  requireNamespace();
+function configuredFor(slug, target) {
   const adapterDir = process.env.ADAPTER_DIR;
   const sidecarDir = process.env.OCEL_E2E_SIDECAR_DIR;
   if (!adapterDir || !sidecarDir) {
     throw new Error("project-teardown needs ADAPTER_DIR and OCEL_E2E_SIDECAR_DIR");
   }
-
   const dir = mkdtempSync(join(tmpdir(), `ocel-e2e-teardown-${slug}-`));
   writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug, target }));
   linkSidecar(dir, sidecarDir);
+  return { adapterDir, dir };
+}
+
+export function listProjects(target = readCompatTarget()) {
+  requireNamespace();
+  const { adapterDir, dir } = configuredFor(projectSlugForRun(), target);
+  const res = spawnSync(process.execPath, [ocelBinary(adapterDir), "projects", "--json"], {
+    cwd: dir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+    timeout: LIST_TIMEOUT_MS,
+    env: withoutSkipChecks(process.env),
+  });
+  if (res.error) {
+    throw res.error;
+  }
+  return projectSlugs(res.stdout);
+}
+
+export async function destroyProject(slug, target = readCompatTarget()) {
+  requireNamespace();
+  const { adapterDir, dir } = configuredFor(slug, target);
 
   const tier = isProductionTarget(target) ? "production" : "preview";
   let deadline;
@@ -96,12 +111,16 @@ export async function destroyProject(slug, target = readCompatTarget()) {
 
 function runDestroy(adapterDir, tier, dir) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [ocelBinary(adapterDir), "destroy", tier, "--yes"], {
-      cwd: dir,
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: TEARDOWN_TIMEOUT_MS,
-      env: withoutSkipChecks(process.env),
-    });
+    const child = spawn(
+      process.execPath,
+      [ocelBinary(adapterDir), "projects", "destroy", "--tier", tier, "--yes"],
+      {
+        cwd: dir,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: TEARDOWN_TIMEOUT_MS,
+        env: withoutSkipChecks(process.env),
+      },
+    );
     let output = "";
     child.stdout.on("data", (chunk) => {
       output += chunk;

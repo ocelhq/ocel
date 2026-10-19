@@ -31,7 +31,9 @@ const target = readCompatTarget();
 const production = isProductionTarget(target);
 const { slug, name } = resolveIdentity();
 ensureConfig(slug);
-const command = production ? ["destroy", "production", "--yes"] : ["preview", "rm", name, "--yes"];
+const command = production
+  ? ["projects", "destroy", "--tier", "production", "--yes"]
+  : ["preview", "rm", name, "--yes"];
 console.error(
   production
     ? `[ocel-e2e] destroying production of project ${slug}`

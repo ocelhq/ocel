@@ -6,15 +6,12 @@ import {
   boxDiagnosis,
   boxDiagnosisScript,
   boxLane,
-  entryFile,
   heldProbe,
   hostnamesWithoutUrl,
   maskedAuthorization,
   projectExposure,
   projectLeftovers,
-  projectListing,
   resourceRestart,
-  slugsOf,
   ssh,
   stampRewritten,
 } from "./vps";
@@ -66,40 +63,6 @@ describe("hostnamesWithoutUrl", () => {
   it("does not read one hostname's url as another's that it prefixes", () => {
     const said = "    web  https://web.localhost.example\n";
     expect(hostnamesWithoutUrl(said, ["web.localhost"])).toEqual(["web.localhost"]);
-  });
-});
-
-describe("entryFile", () => {
-  it("names the entry a slug of plain characters is kept in", () => {
-    expect(entryFile("j-local-ada-node")).toBe("j-local-ada-node.json");
-  });
-
-  it("percent-encodes what the key-value tier cannot keep in a file name", () => {
-    expect(entryFile("j-local-ada/node")).toBe("j-local-ada%2Fnode.json");
-  });
-
-  it("encodes a leading dot so no entry hides itself", () => {
-    expect(entryFile(".hidden")).toBe("%2Ehidden.json");
-  });
-});
-
-describe("slugsOf", () => {
-  it("names one project per entry the box stores", () => {
-    expect(slugsOf("/keyvalues/projects/j-local-ada-node.json\n")).toEqual(["j-local-ada-node"]);
-  });
-
-  it("ignores anything that is not an entry", () => {
-    expect(slugsOf("\nno-entries-here\n")).toEqual([]);
-  });
-
-  it("reads back a slug the key-value tier percent-encoded", () => {
-    expect(slugsOf("j-local-ada%2Fnode.json")).toEqual(["j-local-ada/node"]);
-  });
-
-  it("refuses to read a box with no key-value tier as a box storing nothing", () => {
-    expect(() => slugsOf("no-keyvalues-tier\n")).toThrow(
-      /\/var\/lib\/ocel\/production\/keyvalues does not exist/,
-    );
   });
 });
 
@@ -199,18 +162,6 @@ describe("projectExposure", () => {
     expect(projectExposure("j-kv")).toBe(
       "sudo docker ps -aq --filter label=ocel.project=j-kv | xargs -r sudo docker inspect; " +
         "ps -eo args",
-    );
-  });
-});
-
-describe("projectListing", () => {
-  it("asks whether the key-value tier exists, since forgetting the last project prunes its directory", () => {
-    expect(projectListing("j-")).toStartWith("test -d '/var/lib/ocel/production/keyvalues' &&");
-  });
-
-  it("lists the harness projects' entries under the projects partition", () => {
-    expect(projectListing("j-")).toContain(
-      "ls -1d '/var/lib/ocel/production/keyvalues/projects'/j-*.json",
     );
   });
 });
