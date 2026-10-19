@@ -1,6 +1,8 @@
 package containers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -28,6 +30,7 @@ const (
 	vpcOriginProtocolPolicy   = "http-only"
 	vpcOriginTLSFloor         = "TLSv1.2"
 	vpcOriginDeployTimeout    = "20m"
+	vpcOriginNameSuffixBytes  = 4
 	listenerDeniedStatus      = "404"
 	listenerDeniedContentType = "text/plain"
 	listenerDeniedBody        = "no release answers on this origin"
@@ -173,9 +176,13 @@ func (w *work) run(ctx *pulumi.Context) error {
 		return err
 	}
 
+	suffix := make([]byte, vpcOriginNameSuffixBytes)
+	if _, err := rand.Read(suffix); err != nil {
+		return fmt.Errorf("name the VPC origin: %w", err)
+	}
 	vpcOrigin, err := cloudfront.NewVpcOrigin(ctx, naming.ResourceID(naming.KindService, "front", "vpc-origin"), &cloudfront.VpcOriginArgs{
 		VpcOriginEndpointConfig: &cloudfront.VpcOriginVpcOriginEndpointConfigArgs{
-			Name:                 pulumi.String(nameFor(tier)),
+			Name:                 pulumi.String(nameFor(tier, hex.EncodeToString(suffix))),
 			Arn:                  balancer.Arn,
 			HttpPort:             pulumi.Int(originListenerPort),
 			HttpsPort:            pulumi.Int(originTLSPort),
@@ -191,7 +198,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 			Delete: pulumi.String(vpcOriginDeployTimeout),
 		},
 		Tags: tags,
-	}, pulumi.DependsOn([]pulumi.Resource{listener}))
+	}, pulumi.DependsOn([]pulumi.Resource{listener}), pulumi.IgnoreChanges([]string{"vpcOriginEndpointConfig.name"}))
 	if err != nil {
 		return err
 	}

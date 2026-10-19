@@ -49,7 +49,7 @@ func failedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, tier envi
 			return failed, nil
 		}
 		for _, origin := range page.VpcOriginList.Items {
-			if aws.ToString(origin.Name) != nameFor(tier) || aws.ToString(origin.Status) != vpcOriginFailed {
+			if aws.ToString(origin.Status) != vpcOriginFailed {
 				continue
 			}
 			ours, err := taggedAsStack(ctx, api, aws.ToString(origin.Arn), tier)
