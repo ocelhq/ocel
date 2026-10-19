@@ -499,6 +499,23 @@ func TestADatabaseARoleOwnsIsRestoredAsThatRoleSoItStillOwnsWhatItRestores(t *te
 	}
 }
 
+func TestABootstrapAppliesAndRemovesForACallerThatPassesNoProgressLog(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	older := bootstrappedOn(t, tier)
+	older.installed[tier] = slices.DeleteFunc(older.installed[tier], func(item machine.Item) bool {
+		return slices.ContainsFunc(BackupItems(), func(backup machine.Item) bool { return backup.ID() == item.ID() })
+	})
+	bootstrap := NewBootstrap(older.host(), testVendor, "shop")
+	if err := bootstrap.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil); err != nil {
+		t.Fatalf("Apply() with no progress log = %v", err)
+	}
+	if err := bootstrap.Remove(context.Background(), tier, nil); err != nil {
+		t.Fatalf("Remove() with no progress log = %v", err)
+	}
+}
+
 func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 	t.Parallel()
 
