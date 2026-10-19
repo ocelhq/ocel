@@ -1,4 +1,4 @@
-package destroy
+package projects
 
 import (
 	"os"

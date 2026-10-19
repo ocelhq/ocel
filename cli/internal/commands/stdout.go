@@ -57,8 +57,11 @@ func PrintsRunEvents(cmd *cobra.Command) bool {
 
 func isStdoutReserved(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
-		if c.Annotations[stdoutAnnotation] != "" {
+		switch {
+		case c.Annotations[stdoutAnnotation] != "":
 			return true
+		case c.Annotations[runEventsAnnotation] != "":
+			return false
 		}
 	}
 	return false

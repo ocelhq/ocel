@@ -185,11 +185,13 @@ func TestHelpJSONSaysWhichCommandsMutate(t *testing.T) {
 	described := describedCommands(t, stdout)
 
 	for path, want := range map[string]bool{
-		"deploy":             true,
-		"destroy production": true,
-		"env set":            true,
-		"env ls":             false,
-		"doctor":             false,
+		"deploy":           true,
+		"projects destroy": true,
+		"env set":          true,
+		"env ls":           false,
+		"projects":         false,
+		"projects show":    false,
+		"doctor":           false,
 	} {
 		if got := described[path].GetMutates(); got != want {
 			t.Errorf("%s mutates = %v, want %v", path, got, want)
@@ -222,6 +224,10 @@ func TestHelpJSONSaysWhichCommandsPrintData(t *testing.T) {
 		"env set":     true,
 		"bindings ls": true,
 
+		"projects ls":      true,
+		"projects show":    true,
+		"projects destroy": false,
+
 		"protection password rotate": true,
 		"protection password set":    false,
 		"protection bypass revoke":   false,
@@ -238,14 +244,15 @@ func TestHelpJSONSaysWhichCommandsConfirm(t *testing.T) {
 	described := describedCommands(t, stdout)
 
 	for path, want := range map[string]bool{
-		"deploy":             true,
-		"destroy production": true,
-		"bootstrap preview":  true,
-		"env get":            true,
-		"preview rm":         true,
-		"env ls":             false,
-		"doctor":             false,
-		"destroy":            false,
+		"deploy":            true,
+		"projects destroy":  true,
+		"bootstrap preview": true,
+		"env get":           true,
+		"preview rm":        true,
+		"env ls":            false,
+		"doctor":            false,
+		"projects":          false,
+		"projects show":     false,
 	} {
 		if got := described[path].GetConfirms(); got != want {
 			t.Errorf("%s confirms = %v, want %v", path, got, want)
@@ -325,15 +332,16 @@ func TestHelpJSONDescribesAliasesUsageAndDescriptions(t *testing.T) {
 	stdout, _ := executeRoot(t, "help", "--json")
 	described := describedCommands(t, stdout)
 
-	production := described["destroy production"]
-	if !slices.Equal(production.GetAliases(), []string{"prod"}) {
-		t.Errorf("destroy production aliases = %v, want [prod]", production.GetAliases())
+	permissions := described["permissions"]
+	if !slices.Equal(permissions.GetAliases(), []string{"perms"}) {
+		t.Errorf("permissions aliases = %v, want [perms]", permissions.GetAliases())
 	}
-	if want := "ocel destroy production [flags]"; production.GetUsage() != want {
-		t.Errorf("destroy production usage = %q, want %q", production.GetUsage(), want)
+	destroy := described["projects destroy"]
+	if want := "ocel projects destroy [slug] [flags]"; destroy.GetUsage() != want {
+		t.Errorf("projects destroy usage = %q, want %q", destroy.GetUsage(), want)
 	}
-	if production.GetShort() == "" || production.GetLong() == "" {
-		t.Errorf("destroy production short = %q, long = %q, want both", production.GetShort(), production.GetLong())
+	if destroy.GetShort() == "" || destroy.GetLong() == "" {
+		t.Errorf("projects destroy short = %q, long = %q, want both", destroy.GetShort(), destroy.GetLong())
 	}
 }
 
@@ -383,5 +391,20 @@ func TestHelpWithoutJSONStaysTheHumanUsage(t *testing.T) {
 
 	if helped != flagged || !strings.Contains(helped, "USAGE") || strings.HasPrefix(strings.TrimSpace(helped), "{") {
 		t.Errorf("ocel help deploy = %q, want the same human usage as ocel deploy --help = %q", helped, flagged)
+	}
+}
+
+func TestDestroyIsNoLongerACommand(t *testing.T) {
+	for _, args := range [][]string{{"destroy"}, {"destroy", "production"}, {"destroy", "preview"}} {
+		code, stdout, stderr := executeAndReportRoot(t, args...)
+		if code == 0 || !strings.Contains(stdout+stderr, `unknown command "destroy"`) {
+			t.Errorf("ocel %s exited %d with stdout %q and stderr %q, want it refused as an unknown command", strings.Join(args, " "), code, stdout, stderr)
+		}
+	}
+	stdout, _ := executeRoot(t, "help", "--json")
+	for path := range describedCommands(t, stdout) {
+		if path == "destroy" || strings.HasPrefix(path, "destroy ") {
+			t.Errorf("help --json describes %q, want no destroy command", path)
+		}
 	}
 }

@@ -1,0 +1,4 @@
+{
+  "title": "ocel projects",
+  "pages": ["index", "destroy", "ls", "show"]
+}

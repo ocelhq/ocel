@@ -161,13 +161,13 @@ func TestThePlanRefusalReadsTrueForACommandThatCreates(t *testing.T) {
 
 func TestTheRefusalNamesTheCommandAndTheRemedyThatCommandOffers(t *testing.T) {
 	g := confirmingPlan()
-	g.Command = "ocel destroy production"
+	g.Command = "ocel projects destroy"
 	g.UnattendedRemedy = "set OCEL_DESTROY_BYPASS_CONFIRMATION to the project name"
 	err := g.Refuse()
 	if err == nil {
 		t.Fatal("Refuse() = nil, want a refusal with no terminal to consent on")
 	}
-	if !strings.Contains(err.Error(), "ocel destroy production") {
+	if !strings.Contains(err.Error(), "ocel projects destroy") {
 		t.Errorf("Refuse() = %q, want the refusal to name the command that was refused", err)
 	}
 	if !strings.Contains(err.Error(), "OCEL_DESTROY_BYPASS_CONFIRMATION") {

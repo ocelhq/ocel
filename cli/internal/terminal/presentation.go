@@ -35,6 +35,7 @@ type Presentation struct {
 	Format         Format
 	Verbose        bool
 	Color          bool
+	Hyperlinks     bool
 	TTY            bool
 	Dumb           bool
 	Width          int
@@ -56,6 +57,7 @@ func Resolve(o Conditions) Presentation {
 		WidthMeasured: o.WidthMeasured,
 		GitHubActions: o.GitHubActions,
 	}
+	p.Hyperlinks = p.Color && p.TTY && !p.Dumb
 	if p.Width <= 0 {
 		p.Width = defaultColumns
 	}

@@ -1,0 +1,37 @@
+{
+  "$defs": {
+    "cli.result.v1.PhysicalResource.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(console_url)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "consoleUrl": {
+          "default": "",
+          "type": "string"
+        },
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "kind": {
+          "default": "",
+          "type": "string"
+        },
+        "location": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Physical Resource",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/cli/cli.result.v1.PhysicalResource.schema.json",
+  "$ref": "#/$defs/cli.result.v1.PhysicalResource.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

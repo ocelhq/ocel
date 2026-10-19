@@ -1,0 +1,31 @@
+---
+title: "ocel projects show"
+description: "Show a project's environments and every resource Ocel created for it."
+---
+
+```bash
+ocel projects show [slug] [flags]
+```
+
+Show a project's environments, the promotion each serves and its URL, then every resource Ocel created for it, grouped by environment, and the bootstrap parts it shares with other projects.
+
+Shows this directory's project unless given another's slug. A resource marked ↗ has a page in the provider's console: on a terminal that supports it the id links there, and `--links` prints each URL.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[slug]` | Optional |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--links` | `bool` | `false` | Print each resource's console URL in a column of its own |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Read-only: it changes nothing.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema projects show` prints.

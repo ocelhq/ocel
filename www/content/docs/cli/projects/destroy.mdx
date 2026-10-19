@@ -1,0 +1,38 @@
+---
+title: "ocel projects destroy"
+description: "Permanently destroy a project in both tiers."
+---
+
+```bash
+ocel projects destroy [slug] [flags]
+```
+
+Permanently destroy a project: in production, what the edge serves it with and the hostnames bound to it, its resources (databases and buckets, including all their data) and every app; in preview, its whole preview footprint, leaving the account-level preview bootstrap intact. `--tier` limits it to one.
+
+Destroys this directory's project unless given another's slug, which it destroys through the edge that project recorded.
+
+It is irreversible: every run prints what it would destroy in each tier, then asks once for the project name; `--dry` prints it and stops.
+
+An automated caller that must tear a project down unattended passes `--yes`, or sets OCEL_DESTROY_BYPASS_CONFIRMATION to the project name — and only that name. Any other value is not a bypass.
+
+## Arguments
+
+| Argument | Takes |
+| --- | --- |
+| `[slug]` | Optional |
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--dry` | `bool` | `false` | Print what would be destroyed and stop, destroying nothing |
+| `--tier` | `string` |  | Destroy only the project's production or preview |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Asks before it changes anything: `--yes` consents in advance, and `--dry` prints what it would change and stops.
+- Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema projects destroy` prints the JSON Schema of one line.

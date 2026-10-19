@@ -232,3 +232,39 @@ func TestBootstrapStatusAsJSONIsOneDocumentWithEveryTiersParts(t *testing.T) {
 		}
 	}
 }
+
+func TestBootstrapStatusAsJSONSaysWhereEachPartResourceLivesAndWhereItsConsoleShowsIt(t *testing.T) {
+	project, invocation := statusProject(t)
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{Format: terminal.FormatJSON})
+	}
+
+	report := clitest.DecodeResult(t, runStatus(t, invocation, project.Root, production, StatusOptions{}))
+
+	tiers, _ := report["tiers"].([]any)
+	tier, _ := tiers[0].(map[string]any)
+	parts, _ := tier["parts"].([]any)
+	for _, entry := range parts {
+		part, _ := entry.(map[string]any)
+		if part["name"] != "containers" {
+			continue
+		}
+		resources, _ := part["resources"].([]any)
+		if len(resources) != 1 {
+			t.Fatalf("json containers resources = %v, want the cluster", part["resources"])
+		}
+		cluster, _ := resources[0].(map[string]any)
+		for field, want := range map[string]any{
+			"kind":       "Fake::Cluster",
+			"id":         "ocel-containers-production",
+			"location":   "nowhere-1",
+			"consoleUrl": "https://console.fake.invalid/clusters/ocel-containers-production",
+		} {
+			if cluster[field] != want {
+				t.Errorf("json cluster %s = %v, want %v", field, cluster[field], want)
+			}
+		}
+		return
+	}
+	t.Fatalf("json parts = %v, want a containers part", parts)
+}

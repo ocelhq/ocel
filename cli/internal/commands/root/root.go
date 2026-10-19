@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/connector"
 	"github.com/ocelhq/ocel/cli/internal/commands/cost"
 	deploycommand "github.com/ocelhq/ocel/cli/internal/commands/deploy"
-	"github.com/ocelhq/ocel/cli/internal/commands/destroy"
 	"github.com/ocelhq/ocel/cli/internal/commands/dev"
 	"github.com/ocelhq/ocel/cli/internal/commands/doctor"
 	"github.com/ocelhq/ocel/cli/internal/commands/domain"
@@ -34,6 +33,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands/logs"
 	"github.com/ocelhq/ocel/cli/internal/commands/permissions"
 	"github.com/ocelhq/ocel/cli/internal/commands/projectinit"
+	"github.com/ocelhq/ocel/cli/internal/commands/projects"
 	"github.com/ocelhq/ocel/cli/internal/commands/promotions"
 	"github.com/ocelhq/ocel/cli/internal/commands/protection"
 	"github.com/ocelhq/ocel/cli/internal/commands/schema"
@@ -218,7 +218,7 @@ func newCommand() *command {
 	rootCmd.AddCommand(logs.NewCommand(logs.Dependencies{Invocation: invocation, ReadGitBranch: previewid.ReadGitBranch, DiscoverPRNumber: previewid.DiscoverPRNumber, Now: time.Now}))
 	rootCmd.AddCommand(domain.NewCommand(invocation))
 	rootCmd.AddCommand(bindings.NewCommand(invocation))
-	rootCmd.AddCommand(destroy.NewCommand(invocation))
+	rootCmd.AddCommand(projects.NewCommand(invocation))
 
 	rootCmd.AddCommand(bootstrap.NewCommand(invocation))
 	rootCmd.AddCommand(permissions.NewCommand(invocation))

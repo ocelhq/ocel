@@ -43,6 +43,24 @@ func RecordEdgeStack(t *testing.T, project FakeProject, tier environment.Tier, k
 	}
 }
 
+func RecordProject(t *testing.T, project FakeProject, tier environment.Tier, slug string, recorded stackrecords.Project) {
+	t.Helper()
+
+	ctx := context.Background()
+	store := project.Provider.KeyValues()
+	name := stackrecords.ProjectKey(tier, slug)
+	entry, err := records.ReadOrEmpty(ctx, store, name)
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	if entry.Value, err = json.Marshal(recorded); err != nil {
+		t.Fatalf("encode %s: %v", name, err)
+	}
+	if _, err := store.Write(ctx, entry); err != nil {
+		t.Fatalf("record %s: %v", name, err)
+	}
+}
+
 func RecordStacks(t *testing.T, project FakeProject, tier environment.Tier, stacks ...naming.StackName) {
 	t.Helper()
 
