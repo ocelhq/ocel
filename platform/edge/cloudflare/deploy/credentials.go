@@ -25,11 +25,13 @@ var accountPermissions = []string{
 	"Account · Billing · Read",
 }
 
+const zoneCertificatesPermission = "Zone · SSL and Certificates · Edit"
+
 var zonePermissions = []string{
 	"Zone · Zone · Read",
 	"Zone · Zone Settings · Read",
 	"Zone · DNS · Edit",
-	"Zone · SSL and Certificates · Edit",
+	zoneCertificatesPermission,
 	"Zone · Workers Routes · Edit",
 }
 
@@ -43,7 +45,7 @@ var proxyPermissions = []string{
 	"Zone · Zone · Read",
 	"Zone · Zone Settings · Read",
 	"Zone · DNS · Edit",
-	"Zone · SSL and Certificates · Edit",
+	zoneCertificatesPermission,
 	"Zone · Cache Purge · Purge",
 }
 
@@ -118,6 +120,20 @@ func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIden
 }
 
 var invalidTokenCodes = []int64{1000, 6003, 6111, 9109}
+
+const authenticationErrorCode = 10000
+
+func refuseZoneCertificatesFailure(zoneName, doing string, err error) error {
+	var answered *cf.Error
+	denied := errors.As(err, &answered) && (answered.StatusCode == http.StatusForbidden ||
+		slices.ContainsFunc(answered.Errors, func(e shared.ErrorData) bool { return e.Code == authenticationErrorCode }))
+	if !denied {
+		return fmt.Errorf("%s: %w", doing, err)
+	}
+	return refusal.Refuse(refusal.CodeDenied,
+		"%s may not %s: give it the permission %s on zone %s at %s, as %s lists, and deploy again (Cloudflare answered: %v)",
+		envAPIToken, doing, zoneCertificatesPermission, zoneName, apiTokensPage, setupDocs, err)
+}
 
 func refuseUnverifiedToken(ctx context.Context, accountID string, err error) error {
 	if ctx.Err() != nil {

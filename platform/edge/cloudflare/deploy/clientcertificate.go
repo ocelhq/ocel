@@ -115,7 +115,7 @@ func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname stri
 	if err != nil {
 		return nil, err
 	}
-	held, err := p.listClientCertificates(ctx, zoneID)
+	held, err := p.listClientCertificates(ctx, zoneID, zoneName)
 	if err != nil {
 		return nil, err
 	}
@@ -135,13 +135,13 @@ func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname stri
 		PrivateKey:  cf.F(key),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("upload the client certificate zone %s presents to origins: %w", zoneName, err)
+		return nil, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("upload the client certificate zone %s presents to origins", zoneName), err)
 	}
 	return p.keepFirstUpload(ctx, zoneID, zoneName, uploaded.ID)
 }
 
 func (p *cloudflare) keepFirstUpload(ctx context.Context, zoneID, zoneName, uploadedID string) ([]string, error) {
-	held, err := p.listClientCertificates(ctx, zoneID)
+	held, err := p.listClientCertificates(ctx, zoneID, zoneName)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (p *cloudflare) keepFirstUpload(ctx context.Context, zoneID, zoneName, uplo
 		return readClientCAs(zoneName, held)
 	}
 	if _, err := p.client.OriginTLSClientAuth.Delete(ctx, uploadedID, origin_tls_client_auth.OriginTLSClientAuthDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
-		return nil, fmt.Errorf("delete the client certificate this run uploaded to zone %s after another run uploaded one first: %w", zoneName, err)
+		return nil, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("delete the client certificate this run uploaded to zone %s after another run uploaded one first", zoneName), err)
 	}
 	return readClientCAs(zoneName, slices.Delete(held, ours, ours+1))
 }
@@ -178,7 +178,7 @@ func (p *cloudflare) presentClientCertificates(ctx context.Context, hostname str
 		ZoneID:  cf.F(zoneID),
 		Enabled: cf.F(true),
 	}); err != nil {
-		return fmt.Errorf("turn on zone-level authenticated origin pulls for %s: %w", zoneName, err)
+		return refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("turn on zone-level authenticated origin pulls for %s", zoneName), err)
 	}
 	return nil
 }
@@ -191,7 +191,7 @@ type originPulls struct {
 func (p *cloudflare) readOriginPulls(ctx context.Context, zoneID, zoneName string) (originPulls, error) {
 	zoneLevel, err := p.client.OriginTLSClientAuth.Settings.Get(ctx, origin_tls_client_auth.SettingGetParams{ZoneID: cf.F(zoneID)})
 	if err != nil {
-		return originPulls{}, fmt.Errorf("read whether zone %s presents a client certificate to origins: %w", zoneName, err)
+		return originPulls{}, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("read whether zone %s presents a client certificate to origins", zoneName), err)
 	}
 	global, err := p.client.Zones.Settings.Get(ctx, globalOriginPullsSetting, zones.SettingGetParams{ZoneID: cf.F(zoneID)})
 	if err != nil {
@@ -229,20 +229,20 @@ func (p *cloudflare) resolveHostnameZone(ctx context.Context, hostname, doing st
 	return p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 }
 
-func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID string) ([]zoneClientCertificate, error) {
+func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID, zoneName string) ([]zoneClientCertificate, error) {
 	listed := p.client.OriginTLSClientAuth.ListAutoPaging(ctx, origin_tls_client_auth.OriginTLSClientAuthListParams{ZoneID: cf.F(zoneID)})
 	var held []zoneClientCertificate
 	for listed.Next() {
 		var read zoneClientCertificate
 		if err := json.Unmarshal([]byte(listed.Current().JSON.RawJSON()), &read); err != nil {
-			return nil, fmt.Errorf("read a client certificate of zone %s: %w", zoneID, err)
+			return nil, fmt.Errorf("read a client certificate of zone %s: %w", zoneName, err)
 		}
 		if slices.Contains(heldStatuses, read.Status) && read.Certificate != "" {
 			held = append(held, read)
 		}
 	}
 	if err := listed.Err(); err != nil {
-		return nil, fmt.Errorf("list the client certificates zone %s presents to origins: %w", zoneID, err)
+		return nil, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("list the client certificates zone %s presents to origins", zoneName), err)
 	}
 	return held, nil
 }

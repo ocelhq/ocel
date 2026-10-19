@@ -72,6 +72,45 @@ func TestTheCloudflareProxyRefusesAZoneHoldingACertificateWhoseCAItCannotRead(t 
 	}
 }
 
+func TestATokenThatCannotUploadTheZonesClientCertificateIsRefusedNamingThePermissionItLacks(t *testing.T) {
+	m := proxyZoneMock()
+	m.deniedClientCertificates.writes = true
+
+	_, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
+	assertRefusedForSSLAndCertificatesEdit(t, "Ensure on a zone holding no client certificate", err)
+}
+
+func TestATokenThatCannotTurnOnTheZonesAuthenticatedOriginPullsIsRefusedNamingThePermissionItLacks(t *testing.T) {
+	m := proxyZoneMock()
+	held, _ := mintHeldClientCertificate(t, time.Now())
+	m.clientCertificates = []map[string]any{{"id": "held", "certificate": held, "status": "active", "uploaded_on": "2026-01-01T00:00:00Z"}}
+	m.deniedClientCertificates.writes = true
+
+	err := m.proxy(t).Hooks().ClientCertificates.Present(context.Background(), "shop.app.com")
+	assertRefusedForSSLAndCertificatesEdit(t, "Present on a zone with authenticated origin pulls off", err)
+}
+
+func TestATokenThatCannotReadTheZonesClientCertificatesIsRefusedNamingThePermissionItLacks(t *testing.T) {
+	m := proxyZoneMock()
+	m.deniedClientCertificates.reads = true
+
+	_, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
+	assertRefusedForSSLAndCertificatesEdit(t, "Ensure with the zone's client certificates unreadable", err)
+}
+
+func assertRefusedForSSLAndCertificatesEdit(t *testing.T, call string, err error) {
+	t.Helper()
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		t.Fatalf("%s answered 403 = %v, want a denied refusal: the token lacks a permission ocel lists, which the user fixes, not an internal error", call, err)
+	}
+	for _, named := range []string{"Zone · SSL and Certificates · Edit", "app.com", apiTokensPage, setupDocs} {
+		if !strings.Contains(refused.Message, named) {
+			t.Errorf("%s refused with %q, want it to name %q", call, refused.Message, named)
+		}
+	}
+}
+
 func mintSelfSignedClientCertificate(t *testing.T) string {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
