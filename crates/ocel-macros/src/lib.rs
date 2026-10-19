@@ -228,6 +228,9 @@ pub fn group(item: TokenStream) -> TokenStream {
 /// `()` or a `Result` is a compile error. It composes with a runtime's own attribute in
 /// either order, so `#[tokio::main]` may sit above it or below it.
 ///
+/// Discovery refuses a binary that neither has this attribute nor calls `ocel::discover()`,
+/// since running it would start the app instead of declaring.
+///
 /// `crate = <PATH>` names the path ocel-sdk is reached by, `::ocel` unless the dependency
 /// is renamed: `crate = sdk` for `sdk = { package = "ocel-sdk" }`.
 #[proc_macro_attribute]

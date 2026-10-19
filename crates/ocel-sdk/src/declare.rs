@@ -97,6 +97,7 @@ inventory::collect!(Registered);
 /// runs on is this call's own thread, so `discover` blocks whether or not the app has
 /// a runtime of its own.
 pub fn discover() -> Result<bool, Error> {
+    let _ = std::hint::black_box(crate::MAIN_MARKER);
     if !is_discovering() {
         return Ok(false);
     }

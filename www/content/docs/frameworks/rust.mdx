@@ -108,6 +108,11 @@ ocel runs the binary to read what it declares, and the attribute returns before 
 server. It also lets the same binary serve tasks and topic consumers. It works with
 `#[tokio::main]` in either order.
 
+Discovery first compiles the binary with `cargo build`, then checks that it has `#[ocel::main]` or
+calls `ocel::discover()` itself, and only then runs it with `cargo run`. A binary with neither would
+start your server instead of declaring, so discovery refuses it at once and names the file whose
+`main` needs the attribute. `ocel dev` runs the same check before it starts the binary as a worker.
+
 ```rust
 #[ocel::main]
 #[tokio::main]
