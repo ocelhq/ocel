@@ -73,20 +73,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Go
+      - name: Setup Go, which fetches every module the cache lacks
         id: go
         uses: ./.github/actions/go
         with:
           caches: modules
 
-      - name: Every module's dependencies, in the workspace and out of it
-        run: |
-          set -euo pipefail
-          for dir in $(go list -m -f '{{.Dir}}'); do
-            (cd "$dir" && go mod download && GOWORK=off go mod download)
-          done
-
       - name: Save the modules
+        if: steps.go.outputs.modules-hit != 'true'
         uses: ./.github/actions/go-cache-save
         with:
           path: ${{ steps.go.outputs.modules-path }}

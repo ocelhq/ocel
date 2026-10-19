@@ -2,9 +2,11 @@ name: go
 description: >-
   Go at the version go.work pins, with the module, build and lint caches the
   job asks for put back from the ones the warm workflow seeds from main. Each
-  cache has a key of its own, so a job extracts only what it reads. Nothing
-  here saves: a cache a pull request saved only that pull request could read,
-  and it would evict the ones every ref shares.
+  cache has a key of its own, so a job extracts only what it reads. A module
+  cache restored from any key but its own is completed here, with retries, so
+  no later step fetches a module. Nothing here saves: a cache a pull request
+  saved only that pull request could read, and it would evict the ones every
+  ref shares.
 
 inputs:
   go-version-file:
@@ -26,6 +28,9 @@ outputs:
   modules-key:
     description: The key the warm workflow saves the module cache under.
     value: ${{ steps.names.outputs.modules-key }}
+  modules-hit:
+    description: Whether the module cache was restored from its own key, so nothing was fetched.
+    value: ${{ steps.modules.outputs.cache-hit }}
   modules-prefix:
     description: What every module cache key starts with, for this Go.
     value: ${{ steps.names.outputs.modules-prefix }}
@@ -88,7 +93,7 @@ runs:
           done
           echo "modules-prefix=go-modules-$base"
           echo "modules-key=go-modules-$base${sums%% *}"
-          echo "modules-path=$(go env GOMODCACHE)"
+          echo "modules-path=$(go env GOMODCACHE)/cache/download"
           echo "build-prefix=go-build-$SCOPE-$base"
           echo "build-key=go-build-$SCOPE-$base$GITHUB_SHA"
           echo "build-path=$(go env GOCACHE)"
@@ -98,12 +103,43 @@ runs:
         } >> "$GITHUB_OUTPUT"
 
     - name: The modules main last downloaded
+      id: modules
       if: steps.names.outputs.modules == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.names.outputs.modules-path }}
         key: ${{ steps.names.outputs.modules-key }}
         restore-keys: ${{ steps.names.outputs.modules-prefix }}
+
+    - name: Every module the workspace and each of its modules alone resolve, fetched with retries
+      if: steps.names.outputs.modules == 'true' && steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GO_VERSION_FILE: ${{ inputs.go-version-file }}
+      run: |
+        set -euo pipefail
+        cd "$(dirname "$GO_VERSION_FILE")"
+        fetch() {
+          local attempt=1 delay
+          until "$@"; do
+            if [ "$attempt" -ge 4 ]; then
+              echo "::error::$* failed $attempt times"
+              return 1
+            fi
+            delay=$((5 * 2 ** attempt + RANDOM % 5))
+            echo "::warning::$* failed on attempt $attempt; retrying in ${delay}s"
+            sleep "$delay"
+            attempt=$((attempt + 1))
+          done
+        }
+        fetch go mod download
+        scratch=$(mktemp -d -p "$RUNNER_TEMP")
+        for dir in $(go list -m -f '{{.Dir}}'); do
+          mkdir -p "$scratch$dir"
+          cp "$dir/go.mod" "$scratch$dir/"
+          if [ -f "$dir/go.sum" ]; then cp "$dir/go.sum" "$scratch$dir/"; fi
+          (cd "$dir" && fetch env GOWORK=off go mod download -modfile="$scratch$dir/go.mod" all)
+        done
 
     - name: The packages main last compiled for this scope
       if: steps.names.outputs.build == 'true'
