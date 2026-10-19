@@ -140,6 +140,10 @@ jobs:
         if: steps.gate.outputs.green != 'true'
         uses: ./.github/actions/binaries
 
+      - name: The go the emulator's task dispatcher builds with
+        if: steps.gate.outputs.green != 'true'
+        uses: ./.github/actions/go
+
       - name: Bootstrap, deploy deploy/node and check it on the emulator
         if: steps.gate.outputs.green != 'true'
         run: scripts/floci.sh --cloud gcp run "$EMULATOR" -- pnpm --filter @ocel-tests/e2e smoke --target gcp
