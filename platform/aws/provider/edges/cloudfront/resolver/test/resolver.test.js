@@ -276,7 +276,18 @@ describe("the resolver", () => {
     expect(origins[0].customHeaders["x-ocel-origin-secret"]).toBe(ROUTE.secret);
     expect(origins[0].originAccessControlConfig).toEqual({ enabled: false });
     expect(answered.headers["x-forwarded-host"].value).toBe("shop.example.com");
-    expect(answered.headers["x-ocel-cache-key"].value).toBe(`${RELEASE}/blog`);
+    expect(answered.headers["x-ocel-cache-key"].value).toBe(`shop.example.com/${RELEASE}/blog`);
+  });
+
+  it("keys each hostname apart, since the origin is never sent the Host", async () => {
+    const event = request("/blog");
+    event.request.headers.host = { value: "www.example.com" };
+    const entries = { "shop.example.com": ROUTE, "www.example.com": ROUTE };
+
+    const { answered: shop } = await resolve(request("/blog"), entries);
+    const { answered: www } = await resolve(event, entries);
+
+    expect(shop.headers["x-ocel-cache-key"].value).not.toBe(www.headers["x-ocel-cache-key"].value);
   });
 
   it("lowercases the host it looks up and forwards", async () => {
@@ -334,7 +345,7 @@ describe("the headers a viewer cannot forge past the resolver", () => {
       request("/blog", { "x-ocel-cache-key": "forged", "x-forwarded-host": "evil.example.com" }),
     );
 
-    expect(answered.headers["x-ocel-cache-key"].value).toBe(`${RELEASE}/blog`);
+    expect(answered.headers["x-ocel-cache-key"].value).toBe(`shop.example.com/${RELEASE}/blog`);
     expect(answered.headers["x-forwarded-host"].value).toBe("shop.example.com");
   });
 });
@@ -344,7 +355,9 @@ describe("the cache key the resolver computes", () => {
     it(testCase.name, async () => {
       const draft = testCase.draft ? DRAFT_KEY_OF_TOKEN_1 : "";
 
-      expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantPrerendered}${draft}`);
+      expect(await keyFor(testCase)).toBe(
+        `shop.example.com/${RELEASE}${testCase.variantPrerendered}${draft}`,
+      );
     });
   }
 });
@@ -382,7 +395,9 @@ describe("the resolver reads no route table, so it keys every route as if it wer
       const draft = testCase.draft ? DRAFT_KEY_OF_TOKEN_1 : "";
 
       expect(testCase.variantPartiallyStatic).toBeNull();
-      expect(await keyFor(testCase)).toBe(`${RELEASE}${testCase.variantPrerendered}${draft}`);
+      expect(await keyFor(testCase)).toBe(
+        `shop.example.com/${RELEASE}${testCase.variantPrerendered}${draft}`,
+      );
     });
   }
 });
