@@ -47,12 +47,18 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 }
 
 func LookupDefaultSubnets(ctx *pulumi.Context, vpcID string) ([]string, error) {
-	subnets, err := ec2.GetSubnets(ctx, &ec2.GetSubnetsArgs{
-		Filters: []ec2.GetSubnetsFilter{
-			{Name: "vpc-id", Values: []string{vpcID}},
-			{Name: "default-for-az", Values: []string{"true"}},
-		},
-	})
+	return LookupDefaultSubnetsIn(ctx, vpcID, nil)
+}
+
+func LookupDefaultSubnetsIn(ctx *pulumi.Context, vpcID string, zoneIDs []string) ([]string, error) {
+	filters := []ec2.GetSubnetsFilter{
+		{Name: "vpc-id", Values: []string{vpcID}},
+		{Name: "default-for-az", Values: []string{"true"}},
+	}
+	if zoneIDs != nil {
+		filters = append(filters, ec2.GetSubnetsFilter{Name: "availability-zone-id", Values: zoneIDs})
+	}
+	subnets, err := ec2.GetSubnets(ctx, &ec2.GetSubnetsArgs{Filters: filters})
 	if err != nil {
 		return nil, fmt.Errorf("look up default VPC subnets: %w", err)
 	}

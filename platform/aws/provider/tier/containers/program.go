@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
@@ -48,6 +49,8 @@ const (
 	outputKeyPublicRanges   = "publicRanges"
 )
 
+var vpcOriginUnsupportedZones = []string{"use1-az3", "usw1-az2", "apne1-az3", "cac1-az3"}
+
 type work struct {
 	tier     environment.Tier
 	boundary string
@@ -66,7 +69,11 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
 	}
-	subnetIDs, err := component.LookupDefaultSubnets(ctx, vpc.Id)
+	zones, err := aws.GetAvailabilityZones(ctx, &aws.GetAvailabilityZonesArgs{ExcludeZoneIds: vpcOriginUnsupportedZones})
+	if err != nil {
+		return fmt.Errorf("look up the availability zones a VPC origin reaches: %w", err)
+	}
+	subnetIDs, err := component.LookupDefaultSubnetsIn(ctx, vpc.Id, zones.ZoneIds)
 	if err != nil {
 		return err
 	}
