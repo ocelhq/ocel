@@ -27,12 +27,9 @@ func signalTree(cmd *exec.Cmd, sig syscall.Signal) error {
 	if cmd.Process == nil {
 		return os.ErrProcessDone
 	}
-	pid := cmd.Process.Pid
-	pids := append([]int{pid}, descendantPIDs(pid)...)
-
 	var firstErr error
 	delivered := false
-	for _, p := range pids {
+	for _, p := range listTreeRootLast(cmd.Process.Pid) {
 		err := syscall.Kill(p, sig)
 		switch {
 		case err == nil:
@@ -49,6 +46,10 @@ func signalTree(cmd *exec.Cmd, sig syscall.Signal) error {
 		return os.ErrProcessDone
 	}
 	return nil
+}
+
+func listTreeRootLast(pid int) []int {
+	return append(descendantPIDs(pid), pid)
 }
 
 func descendantsOf(parents map[int]int, pid int) []int {

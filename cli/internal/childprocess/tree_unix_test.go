@@ -100,6 +100,30 @@ func TestPSSnapshotParsesIntoATable(t *testing.T) {
 	}
 }
 
+func TestATreeIsSignaledDescendantsFirstSoItsRootExitsLast(t *testing.T) {
+	cmd := exec.Command("sh", "-c", "sleep 5 & wait")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	root := cmd.Process.Pid
+
+	var tree []int
+	for deadline := time.Now().Add(5 * time.Second); len(tree) < 2; time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("listTreeRootLast(%d) = %v, never saw the backgrounded sleep", root, tree)
+		}
+		tree = listTreeRootLast(root)
+	}
+
+	if tree[len(tree)-1] != root {
+		t.Fatalf("listTreeRootLast(%d) = %v, want the root signaled last: once it exits the CLI may exit too, before a descendant still waiting for its signal gets it", root, tree)
+	}
+}
+
 func TestDescendantPIDsFindsAGrandchild(t *testing.T) {
 	cmd := exec.Command("sh", "-c", "sh -c 'sleep 5' & wait")
 	if err := cmd.Start(); err != nil {
