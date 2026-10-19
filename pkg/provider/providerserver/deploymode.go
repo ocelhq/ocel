@@ -29,6 +29,7 @@ type deployMode interface {
 
 	edge(ctx context.Context, r *deployRun, progress progress.Log) error
 	infra(ctx context.Context, r *deployRun, stack provider.StackSpec, held infraHeld, progress progress.Log) error
+	currentInfra(ctx context.Context, r *deployRun) error
 	app(ctx context.Context, r *deployRun, slot int, release appStack, progress progress.Log) (appProvisioned, error)
 	hostnames(ctx context.Context, r *deployRun) error
 	promote(ctx context.Context, r *deployRun) (*progressv1.OperationEvent, error)
@@ -116,6 +117,12 @@ func (p *planned) infra(ctx context.Context, r *deployRun, stack provider.StackS
 	return err
 }
 
+func (p *planned) currentInfra(ctx context.Context, r *deployRun) error {
+	var err error
+	p.drawn.parameters, err = r.planValuesGroup(ctx)
+	return err
+}
+
 func (p *planned) app(ctx context.Context, r *deployRun, slot int, release appStack, progress progress.Log) (appProvisioned, error) {
 	drawn, err := r.provider.Stacks().Plan(ctx, release.spec, progress)
 	if err != nil {
@@ -195,6 +202,10 @@ func (a applied) infra(ctx context.Context, r *deployRun, stack provider.StackSp
 		return err
 	}
 	return r.provisionInfraStack(ctx, stack, held, progress)
+}
+
+func (applied) currentInfra(ctx context.Context, r *deployRun) error {
+	return r.ensureInfraRecorded(ctx)
 }
 
 func (a applied) app(ctx context.Context, r *deployRun, _ int, release appStack, progress progress.Log) (appProvisioned, error) {

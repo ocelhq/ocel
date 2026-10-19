@@ -251,7 +251,9 @@ func TestAFailedProvisionInfraKeepsTheLeaseAnEarlierProvisionInfraOfItsDeployToo
 		return nil
 	})
 
-	result, _ := provisionInfraStream(t, client, infraRequest(deployRequest()))
+	changed := deployRequest()
+	changed.Manifest.Resources = append(changed.Manifest.Resources, bucketResource("uploads"))
+	result, _ := provisionInfraStream(t, client, infraRequest(changed))
 
 	if result.GetSuccess() {
 		t.Fatal("ProvisionInfra() succeeded, want the failed provisioning reported")

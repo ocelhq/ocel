@@ -183,14 +183,12 @@ func TestTheRecordsADeployAsksYouToWriteAreAWarningOnTheSpanAttachingTheHostname
 	}
 }
 
-func TestTheSharedResourceSpanOfADeployDeclaringNoneNamesItsStackInstead(t *testing.T) {
+func TestTheSharedResourceSpanOfADeployRemovingEveryResourceNamesItsStackInstead(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
-	req := deployRequest()
-	req.Manifest.Resources = nil
-	req.Manifest.Usages = nil
+	deploySucceeded(t, client, deployRequest())
 
-	result, events := deploy(t, client, req)
+	result, events := deploy(t, client, declaringNoResources(deployRequest()))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}

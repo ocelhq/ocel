@@ -18,7 +18,7 @@ import (
 )
 
 func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
-	if err := r.readProvisionedInfra(ctx); err != nil {
+	if _, err := r.readCurrentInfra(ctx); err != nil {
 		return err
 	}
 	if err := r.refuseOtherLifecycle(ctx); err != nil {

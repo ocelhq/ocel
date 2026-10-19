@@ -23,16 +23,17 @@ import (
 )
 
 func (r *deployRun) provision(ctx context.Context) error {
-	if r.provisionsInfra() {
-		if err := r.provisionInfra(ctx, nil); err != nil {
-			return err
-		}
+	if err := r.reconcileInfra(ctx, nil); err != nil {
+		return err
 	}
 	return r.provisionApps(ctx)
 }
 
-func (r *deployRun) provisionsInfra() bool {
-	return !r.infraProvisioned || r.infraHoldsUndeclared
+func (r *deployRun) reconcileInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
+	if r.infraCurrent {
+		return r.mode.currentInfra(ctx, r)
+	}
+	return r.provisionInfra(ctx, undeclared)
 }
 
 const appConcurrency = 4
@@ -119,7 +120,7 @@ func (r *deployRun) infraStack(ctx context.Context, undeclared []*contractv1.Man
 		held = append(held, message)
 		resources = append(resources, resource)
 	}
-	declared, err := encodeResources(r.manifest.GetResources())
+	digest, err := r.digestInfraSpec()
 	if err != nil {
 		return provider.StackSpec{}, infraHeld{}, err
 	}
@@ -140,12 +141,12 @@ func (r *deployRun) infraStack(ctx context.Context, undeclared []*contractv1.Man
 		Tags:      infraTags(r.spec),
 		Resources: resources,
 		Bindings:  r.publishedBindings(),
-	}, infraHeld{holds: holds, declared: declared}, nil
+	}, infraHeld{holds: holds, digest: digest}, nil
 }
 
 type infraHeld struct {
-	holds    []byte
-	declared []byte
+	holds  []byte
+	digest string
 }
 
 func (r *deployRun) provisionInfraStack(ctx context.Context, stack provider.StackSpec, held infraHeld, progress progress.Log) error {
@@ -166,11 +167,11 @@ func (r *deployRun) provisionInfraStack(ctx context.Context, stack provider.Stac
 	}
 	r.bindings = result.Bindings
 	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
-		Kind:           provider.StackInfra,
-		Bindings:       result.Bindings,
-		Resources:      held.holds,
-		ResourceDigest: digestResources(held.declared),
-		WrittenBy:      r.readiness.WrittenBy,
+		Kind:       provider.StackInfra,
+		Bindings:   result.Bindings,
+		Resources:  held.holds,
+		SpecDigest: held.digest,
+		WrittenBy:  r.readiness.WrittenBy,
 	})
 }
 
