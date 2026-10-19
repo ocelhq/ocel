@@ -73,7 +73,7 @@ func (w *promoteWorld) promotes(t *testing.T, id string) error {
 
 func (w *promoteWorld) promotesReplacing(t *testing.T, ctx context.Context, replaces, id string) error {
 	t.Helper()
-	_, err := promote(ctx, w.ledger, promoteRequest{replaces: replaces, promotion: w.staged(t, id)}, w.appRouters(), progress.Discard())
+	_, err := promote(ctx, w.ledger, nil, promoteRequest{replaces: replaces, promotion: w.staged(t, id)}, w.appRouters(), progress.Discard())
 	return err
 }
 
@@ -81,7 +81,7 @@ func (w *promoteWorld) promotesServing(t *testing.T, id string, hosts, supersede
 	t.Helper()
 	routers := w.appRouters()
 	routers[0].hosts, routers[0].superseded, routers[0].previous = hosts, superseded, previous
-	_, err := promote(context.Background(), w.ledger, promoteRequest{replaces: w.active(t), promotion: w.staged(t, id), hosts: hosts, superseded: superseded, previous: previous}, routers, progress.Discard())
+	_, err := promote(context.Background(), w.ledger, nil, promoteRequest{replaces: w.active(t), promotion: w.staged(t, id), hosts: hosts, superseded: superseded, previous: previous}, routers, progress.Discard())
 	return err
 }
 
@@ -148,7 +148,7 @@ func TestAPromoteWhoseLeaseWasLostRecordsNothingAndMovesNoRouter(t *testing.T) {
 	}
 	lost := refusal.Refuse(refusal.CodeBusy, "another deploy took the lease over")
 
-	_, err := promote(context.Background(), w.ledger, promoteRequest{
+	_, err := promote(context.Background(), w.ledger, nil, promoteRequest{
 		replaces:  w.active(t),
 		promotion: w.staged(t, "p2"),
 		confirm:   func(context.Context) error { return lost },

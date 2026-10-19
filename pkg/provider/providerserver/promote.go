@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -47,7 +48,7 @@ func (r promoteRequest) record(ctx context.Context, l projectLedger) ([]ledger.R
 	return l.Promote(ctx, r.promotion, r.pointer, r.replaces)
 }
 
-func promote(ctx context.Context, l projectLedger, req promoteRequest, routers []appRouter, progress progress.Log) ([]ledger.RecordedPromotion, error) {
+func promote(ctx context.Context, l projectLedger, releases *provider.ContainerReleaseHooks, req promoteRequest, routers []appRouter, progress progress.Log) ([]ledger.RecordedPromotion, error) {
 	pointer, promoted := req.pointer, req.promotion
 	moves := make([]router.PointerMove, len(routers))
 	for i, routed := range routers {
@@ -56,6 +57,9 @@ func promote(ctx context.Context, l projectLedger, req promoteRequest, routers [
 			return nil, err
 		}
 		moves[i] = router.PointerMove{Pointer: pointer, Promotion: promoted, Records: records, Hosts: routed.hosts, Superseded: routed.superseded, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
+	}
+	if err := scaleUpPromoted(ctx, releases, l, pointer, promoted, progress); err != nil {
+		return nil, err
 	}
 	if req.confirm != nil {
 		if err := req.confirm(ctx); err != nil {
@@ -86,6 +90,7 @@ func promote(ctx context.Context, l projectLedger, req promoteRequest, routers [
 		}
 		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, moved))
 	}
+	scaleDownDemoted(ctx, releases, l, pointer, promoted, req.replaces, kept, progress)
 	return dropped, nil
 }
 

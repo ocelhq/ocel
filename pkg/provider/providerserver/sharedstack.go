@@ -61,6 +61,8 @@ func openSharedStack(p provider.Provider, front edge.Edge, tier environment.Tier
 		routers:  map[router.Kind]pairedRouter{},
 		states:   map[router.Kind]router.StackState{},
 		ledger:   openProjectLedger(p, tier, slug),
+
+		containerReleases: p.Hooks().ContainerReleases,
 	}
 	for _, kind := range p.Facts().ListPairedRouters(front.Kind()) {
 		opened, err := p.Routers().Open(kind)
@@ -123,6 +125,8 @@ type sharedStack struct {
 	mu       sync.Mutex
 	current  edge.EdgeStack
 	states   map[router.Kind]router.StackState
+
+	containerReleases *provider.ContainerReleaseHooks
 }
 
 func (s *sharedStack) edgeStack() edge.EdgeStack {
@@ -222,7 +226,7 @@ func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, route
 		}
 		routers = append(routers, appRouter{stack: routed, apps: byRouter[kind], hosts: listAppHosts(req.hosts, byRouter[kind]), previous: listAppHosts(req.previous, byRouter[kind]), superseded: superseded[kind]})
 	}
-	dropped, err := promote(ctx, s.ledger, req, routers, progress)
+	dropped, err := promote(ctx, s.ledger, s.containerReleases, req, routers, progress)
 	for i, kind := range kinds {
 		err = errors.Join(err, s.adopt(kind, routers[i].stack))
 	}

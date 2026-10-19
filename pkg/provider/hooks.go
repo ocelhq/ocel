@@ -24,6 +24,7 @@ type Hooks struct {
 	EnvSource            *EnvSourceHooks
 	Cost                 *CostHooks
 	Retirement           *RetirementHooks
+	ContainerReleases    *ContainerReleaseHooks
 	ProjectRemoval       *ProjectRemovalHooks
 	ListProjectResources func(ctx context.Context, req ProjectResourcesRequest) ([]PhysicalResource, error)
 }

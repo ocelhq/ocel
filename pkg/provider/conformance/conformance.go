@@ -121,6 +121,12 @@ func RunHooks(t *testing.T, p provider.Provider) {
 			t.Error(fault)
 		}
 	})
+	t.Run("ContainerReleases", func(t *testing.T) {
+		if hooks.ContainerReleases == nil {
+			t.Skip("this provider scales no demoted release down, so every release it keeps runs as it was deployed")
+		}
+		RunContainerReleases(t, hooks.ContainerReleases)
+	})
 	t.Run("NextServerRuntime", func(t *testing.T) {
 		if hooks.NextServerRuntime == nil {
 			t.Skip("this provider ships no Next server runtime, so its Next containers run Next with Next's defaults")
