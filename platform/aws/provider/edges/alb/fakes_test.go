@@ -53,17 +53,18 @@ type fakeAWS struct {
 	failModify   error
 	failDescribe error
 
-	trustStore       string
-	trustStatus      elbv2types.TrustStoreStatus
-	trustModified    int
-	trustBundle      string
-	trustTags        map[string]string
-	failTrustModify  error
-	failTrustCreate  error
-	certificateLimit int
-	ruleLimit        int
-	listenerMode     string
-	listenerTrust    string
+	trustStore        string
+	trustStatus       elbv2types.TrustStoreStatus
+	trustModified     int
+	trustBundle       string
+	trustTags         map[string]string
+	failTrustModify   error
+	failTrustCreate   error
+	certificateLimit  int
+	ruleLimit         int
+	listenerMode      string
+	listenerTrust     string
+	associatedDeletes int
 
 	objects map[string][]byte
 	etags   map[string]int
@@ -394,7 +395,11 @@ func (f *fakeAWS) DeleteTrustStore(_ context.Context, in *elbv2.DeleteTrustStore
 	if f.trustStore == "" || aws.ToString(in.TrustStoreArn) != f.trustStore {
 		return nil, &elbv2types.TrustStoreNotFoundException{Message: in.TrustStoreArn}
 	}
-	if f.listenerTrust == f.trustStore && f.listenerMode != "off" {
+	if f.associatedDeletes > 0 {
+		f.associatedDeletes--
+		return nil, &elbv2types.TrustStoreInUseException{Message: aws.String("Trust store with ARN '" + f.trustStore + "' is currently associated")}
+	}
+	if !f.absent && f.listenerTrust == f.trustStore && f.listenerMode != "off" {
 		return nil, &elbv2types.TrustStoreInUseException{Message: in.TrustStoreArn}
 	}
 	f.trustStore, f.trustBundle, f.trustTags = "", "", map[string]string{}

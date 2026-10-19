@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -149,5 +150,43 @@ func TestDisclaimingTheLastHostnameThatTrustsACALeavesNoTrustStoreOrObjectBehind
 	}
 	if keys := f.listKeys(); len(keys) != 0 {
 		t.Errorf("the bucket still holds %v, want nothing: a teardown reclaims what the deploy wrote", keys)
+	}
+}
+
+func TestDisclaimingTheLastHostnameDeletesTheTrustStoreOnceTheListenerLetsGoOfIt(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f, router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}})
+	f.associatedDeletes = 3
+
+	if err := stack.Disclaim(context.Background(), testHostname); err != nil {
+		t.Fatalf("Disclaim while the listener still holds the trust store = %v, want it deleted once the association clears: the listener lets go of it some seconds after it answers that mutual TLS is off", err)
+	}
+	if f.trustStore != "" {
+		t.Errorf("trust store %q remains, want it deleted", f.trustStore)
+	}
+}
+
+func TestRemovingAPointerWhileTheLoadBalancerIsDeletedDeletesTheTrustStoreOnceItsListenerLetsGo(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f, router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}})
+	f.absent, f.associatedDeletes = true, 5
+
+	if err := stack.RemovePointer(context.Background(), router.PointerRemoval{Pointer: router.DefaultPointer}, progress.Discard()); err != nil {
+		t.Fatalf("RemovePointer while the load balancer is being deleted = %v, want the trust store deleted once its listener is gone, so a rerun of a destroy that took the load balancer down finishes", err)
+	}
+	if f.trustStore != "" {
+		t.Errorf("trust store %q remains, want it deleted", f.trustStore)
+	}
+}
+
+func TestATrustStoreThatStaysAssociatedFailsTheDisclaimAfterABoundedWait(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f, router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}})
+	f.associatedDeletes = trustStoreReads
+
+	err := stack.Disclaim(context.Background(), testHostname)
+	var associated *elbv2types.TrustStoreInUseException
+	if !errors.As(err, &associated) {
+		t.Errorf("Disclaim while the trust store stays associated = %v, want the association reported once the wait runs out", err)
 	}
 }
