@@ -7,7 +7,7 @@
         "$TURBO_DEFAULT$",
         "!**/*.md",
         "$TURBO_ROOT$/cli/internal/commands/logs/output.go",
-        "$TURBO_ROOT$/platform/vps/provider/host/containers.go",
+        "$TURBO_ROOT$/platform/vps/provider/docker/hardening.go",
         "$TURBO_ROOT$/packages/ocel/package.json"
       ]
     }
