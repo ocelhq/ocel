@@ -310,6 +310,14 @@ func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedAsOcels(t *t
 	}
 }
 
+func TestEveryCredentialReadsTheAvailabilityZonesTheContainerFrontsVPCOriginReaches(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
+		if !allows(t, document, "ec2:DescribeAvailabilityZones", iam.AnyResource, requestContext{}) {
+			t.Errorf("the %s credential cannot call ec2:DescribeAvailabilityZones, so the container infra cannot keep its load balancers out of the zones a VPC origin refuses", purpose)
+		}
+	}
+}
+
 func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 	const restAPITags = "arn:aws:apigateway:eu-west-1::/tags/arn%3Aaws%3Aapigateway%3Aeu-west-1%3A%3A%2Frestapis%2Fabc123"
 	creating := func(tier environment.Tier) requestContext {

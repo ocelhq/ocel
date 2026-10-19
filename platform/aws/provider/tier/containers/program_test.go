@@ -137,6 +137,56 @@ func (s *subnetLookups) filtered() [][]string {
 	return slices.Clone(s.filters)
 }
 
+type zoneLookups struct {
+	inputRecorder
+	lookupMu sync.Mutex
+	excluded []string
+	zoneIDs  []string
+}
+
+func (z *zoneLookups) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
+	z.lookupMu.Lock()
+	defer z.lookupMu.Unlock()
+	switch args.Token {
+	case "aws:index/getAvailabilityZones:getAvailabilityZones":
+		for _, zone := range args.Args["excludeZoneIds"].ArrayValue() {
+			z.excluded = append(z.excluded, zone.StringValue())
+		}
+		return resource.PropertyMap{"zoneIds": resource.NewArrayProperty([]resource.PropertyValue{
+			resource.NewStringProperty("use1-az1"), resource.NewStringProperty("use1-az2"),
+		})}, nil
+	case "aws:ec2/getSubnets:getSubnets":
+		for _, filter := range args.Args["filters"].ArrayValue() {
+			fields := filter.ObjectValue()
+			if fields["name"].StringValue() != "availability-zone-id" {
+				continue
+			}
+			for _, value := range fields["values"].ArrayValue() {
+				z.zoneIDs = append(z.zoneIDs, value.StringValue())
+			}
+		}
+	}
+	return z.inputRecorder.Call(args)
+}
+
+func TestTheContainerInfraLooksOnlyInZonesACloudFrontVPCOriginReaches(t *testing.T) {
+	t.Parallel()
+
+	lookups := &zoneLookups{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", lookups)); err != nil {
+		t.Fatalf("run the container infrastructure program: %v", err)
+	}
+
+	lookups.lookupMu.Lock()
+	defer lookups.lookupMu.Unlock()
+	if !slices.Contains(lookups.excluded, "use1-az3") {
+		t.Errorf("the zone lookup excluded %v, want use1-az3 among them: CloudFront refuses a VPC origin whose load balancer has a subnet there", lookups.excluded)
+	}
+	if !slices.Equal(lookups.zoneIDs, []string{"use1-az1", "use1-az2"}) {
+		t.Errorf("the subnet lookup kept zones %v, want only those the zone lookup returned", lookups.zoneIDs)
+	}
+}
+
 func TestTheContainerInfraLooksOnlyInTheDefaultSubnetsOfTheDefaultVPC(t *testing.T) {
 	t.Parallel()
 
