@@ -29,3 +29,18 @@ func TestTheSuiteAppliesOnlyWhatTheEdgeItOpenedTheBootstrapperForRequires(t *tes
 		}
 	}
 }
+
+func TestAStackDescribedAsAbsentIsNoPartTheApplyInstalledUnasked(t *testing.T) {
+	t.Parallel()
+
+	described := provider.BootstrapDescription{Stacks: []provider.BootstrapStack{
+		{Name: "base", Present: true},
+		{Name: "base-state", Part: "state", Present: true},
+		{Name: "base-other-front", Part: "other-front"},
+		{Name: "base-cache", Part: "cache", Present: true},
+	}}
+
+	if got := unasked(described, []string{"state"}); !slices.Equal(got, []string{"cache"}) {
+		t.Errorf("unasked() = %v, want cache alone: other-front is described only to name the stack a later apply would make", got)
+	}
+}
