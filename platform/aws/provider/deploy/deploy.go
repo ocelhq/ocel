@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
@@ -41,6 +42,8 @@ type Config struct {
 	WrittenBy provider.WrittenBy
 	Rules     container.RulesAPI
 	Network   component.NetworkAPI
+
+	VPCOrigins awsports.VPCOriginsAPI
 
 	RequiredParts []string
 

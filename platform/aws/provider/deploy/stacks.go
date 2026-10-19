@@ -127,6 +127,7 @@ func (r *Stacks) openShared(ctx context.Context, ref provider.StackRef) (shareds
 		WrittenBy:      owner.cfg.WrittenBy,
 		Region:         owner.cfg.Region,
 		Subnets:        owner.cfg.Network,
+		VPCOrigins:     owner.cfg.VPCOrigins,
 		AppBoundaryARN: owner.cfg.AppBoundaryARN,
 		AppRolePath:    owner.cfg.AppRolePath,
 	}, nil

@@ -169,6 +169,11 @@ func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackR
 	}); err != nil {
 		return Infrastructure{}, err
 	}
+	if owner.VPCOrigins != nil {
+		if err := reclaimFailedVPCOrigins(ctx, owner.VPCOrigins, tier, progress); err != nil {
+			return Infrastructure{}, err
+		}
+	}
 	outputs, err := owner.Automation.Run(ctx, ref, program, provider.Lease{}, progress)
 	if err != nil {
 		return Infrastructure{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
