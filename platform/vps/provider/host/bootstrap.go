@@ -185,6 +185,7 @@ func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (Reading, er
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+	progress = orDiscard(progress)
 	shown, err := b.reading(ctx, req.Tier)
 	if err != nil {
 		return err
@@ -228,6 +229,13 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	b.host.warnOfKernelSettings(ctx, progress)
 	stamp.State, stamp.Seal = machine.StateComplete, step.Read.Seal
 	return b.host.Stamp(ctx, req.Tier, stamp)
+}
+
+func orDiscard(log progress.Log) progress.Log {
+	if log == nil {
+		return progress.Discard()
+	}
+	return log
 }
 
 func beneath(root, name string) bool {
@@ -317,6 +325,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 }
 
 func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	progress = orDiscard(progress)
 	defer b.host.forgetReading(tier)
 	forget, err := b.host.KnownHostRemoval(ctx)
 	if err != nil {
