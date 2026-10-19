@@ -320,6 +320,20 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("an edge that presents a client certificate finds a hostname ready that its zone forwards with one", func(t *testing.T) {
+		e, _ := suite.New(t)
+		certificates := e.Hooks().ClientCertificates
+		if certificates == nil {
+			t.Skip("this edge presents no client certificate to its origins")
+		}
+		if certificates.RefuseUnready == nil {
+			t.Fatal("the edge names no RefuseUnready, so a deploy learns a zone cannot forward its hostname only when it attaches it, after provisioning every stack")
+		}
+		if err := certificates.RefuseUnready(context.Background(), suite.Hostname); err != nil {
+			t.Fatalf("RefuseUnready(%q) = %v, want the hostname ready", suite.Hostname, err)
+		}
+	})
+
 	t.Run("an origin certificate an edge issues covers the hostname and pairs with its key", func(t *testing.T) {
 		e, _ := suite.New(t)
 		certificates := e.Hooks().OriginCertificates

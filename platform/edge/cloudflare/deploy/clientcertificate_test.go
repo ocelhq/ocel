@@ -9,12 +9,14 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -96,6 +98,57 @@ func TestATokenThatCannotReadTheZonesClientCertificatesIsRefusedNamingThePermiss
 
 	_, err := m.proxy(t).Hooks().ClientCertificates.Ensure(context.Background(), "shop.app.com")
 	assertRefusedForSSLAndCertificatesEdit(t, "Ensure with the zone's client certificates unreadable", err)
+}
+
+func clientCertificateFronts(t *testing.T, m *cfMock) map[string]*edge.ClientCertificateHooks {
+	t.Helper()
+	t.Setenv(envAccountID, "acct")
+	return map[string]*edge.ClientCertificateHooks{
+		"the Cloudflare edge":  m.provider(t).Hooks().ClientCertificates,
+		"the Cloudflare proxy": m.proxy(t).Hooks().ClientCertificates,
+	}
+}
+
+func TestAZoneThatDoesNotValidateTheOriginsCertificateIsRefusedBeforeAnythingIsForwardedThroughIt(t *testing.T) {
+	for _, mode := range []string{"off", "flexible", "full"} {
+		m := proxyZoneMock()
+		m.sslMode = mode
+		for front, certificates := range clientCertificateFronts(t, m) {
+			err := certificates.RefuseUnready(context.Background(), "shop.app.com")
+
+			if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%q", mode)) || !strings.Contains(err.Error(), "Full (strict)") {
+				t.Errorf("%s: RefuseUnready in a zone whose SSL mode is %s = %v, want it refused naming the mode and Full (strict), as binding the hostname would be", front, mode, err)
+			}
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+				t.Errorf("%s: RefuseUnready in a zone whose SSL mode is %s = %v, want an invalid refusal: the zone's setting is the user's to change", front, mode, err)
+			}
+		}
+	}
+}
+
+func TestATokenThatCannotReadTheZonesAuthenticatedOriginPullsIsRefusedBeforeAnythingIsForwarded(t *testing.T) {
+	m := proxyZoneMock()
+	m.deniedClientCertificates.reads = true
+
+	for front, certificates := range clientCertificateFronts(t, m) {
+		assertRefusedForSSLAndCertificatesEdit(t, front+": RefuseUnready with the zone's client certificate settings unreadable", certificates.RefuseUnready(context.Background(), "shop.app.com"))
+	}
+}
+
+func TestAStrictZoneWhoseClientCertificateSettingsTheTokenReadsIsReadyAndLeftUnchanged(t *testing.T) {
+	for _, mode := range []string{"strict", "origin_pull"} {
+		m := proxyZoneMock()
+		m.sslMode = mode
+		for front, certificates := range clientCertificateFronts(t, m) {
+			if err := certificates.RefuseUnready(context.Background(), "shop.app.com"); err != nil {
+				t.Errorf("%s: RefuseUnready in a zone whose SSL mode is %s = %v, want it ready", front, mode, err)
+			}
+		}
+		if len(m.uploadedKeys) != 0 || len(m.originPullWrites) != 0 {
+			t.Errorf("SSL mode %s: RefuseUnready uploaded %d certificates and wrote authenticated origin pulls %v, want nothing written: a check runs before the deploy is consented to", mode, len(m.uploadedKeys), m.originPullWrites)
+		}
+	}
 }
 
 func assertRefusedForSSLAndCertificatesEdit(t *testing.T, call string, err error) {

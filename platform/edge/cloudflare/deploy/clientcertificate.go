@@ -106,6 +106,20 @@ func refuseUnreadableCA(zoneName, id string) error {
 		zoneName, id)
 }
 
+func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, hostname string) error {
+	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "read whether Cloudflare can forward "+hostname+" to its origin with a client certificate")
+	if err != nil {
+		return err
+	}
+	if err := p.requireStrictOrigin(ctx, zoneID, zoneName); err != nil {
+		return err
+	}
+	if _, err := p.client.OriginTLSClientAuth.Settings.Get(ctx, origin_tls_client_auth.SettingGetParams{ZoneID: cf.F(zoneID)}); err != nil {
+		return refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("read whether zone %s presents a client certificate to origins", zoneName), err)
+	}
+	return nil
+}
+
 func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname string) ([]string, error) {
 	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "read the client certificates Cloudflare presents to origins")
 	if err != nil {

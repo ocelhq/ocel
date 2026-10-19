@@ -234,6 +234,8 @@ type edgeAccount struct {
 	refusesCertified error
 	refusesBinds     error
 	refusesDisclaims error
+	unready          error
+	askedReady       []string
 	storePaired      bool
 	onIssued         func()
 	onEntryClaimed   func()
@@ -380,6 +382,25 @@ func (e *Edge) ClientCertificateEvents() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return slices.Clone(e.events)
+}
+
+func (e *Edge) RefusesUnreadyHostnames(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.unready = err
+}
+
+func (e *Edge) HostnamesAskedReady() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.askedReady)
+}
+
+func (e *Edge) refuseUnreadyHostname(_ context.Context, hostname string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.askedReady = append(e.askedReady, hostname)
+	return e.unready
 }
 
 func (e *Edge) ensureClientCertificates(context.Context, string) ([]string, error) {
@@ -688,7 +709,7 @@ func (e *Edge) Hooks() edge.Hooks {
 		hooks.PublishGate = e.publishGate
 	}
 	if e.proxies {
-		hooks.ClientCertificates = &edge.ClientCertificateHooks{Ensure: e.ensureClientCertificates, Present: e.presentClientCertificate}
+		hooks.ClientCertificates = &edge.ClientCertificateHooks{RefuseUnready: e.refuseUnreadyHostname, Ensure: e.ensureClientCertificates, Present: e.presentClientCertificate}
 		hooks.PurgeHostnames = e.purge
 	}
 	if e.runsTunnels {
