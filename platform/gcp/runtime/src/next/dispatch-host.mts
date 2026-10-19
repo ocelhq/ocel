@@ -1,7 +1,12 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
-import { type DispatchHost, readDispatchHost } from "@framework/next-runtime/dispatch-host";
+import {
+  type DispatchHost,
+  newDispatchInvoke,
+  readDispatchHost,
+} from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
 import { fetchUndecoded } from "@framework/node-runtime/undecoded-fetch";
+import { readEdgeCacheMode } from "@platform/edge-contract/edge-cache";
 import { cloudCdnRelease } from "../cache/cloud-cdn-tags.mjs";
 import { readAssetStorage } from "./asset-storage.mjs";
 import { newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
@@ -37,5 +42,7 @@ export function readGcpDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string)
 }
 
 export function newGcpDispatchInvoke(localOrigin: string, env: NodeJS.ProcessEnv): Invoke {
-  return newCloudCdnDispatchInvoke(readGcpDispatchHost(env, localOrigin), cloudCdnRelease(env));
+  const host = readGcpDispatchHost(env, localOrigin);
+  if (readEdgeCacheMode(env) === undefined) return newDispatchInvoke(host);
+  return newCloudCdnDispatchInvoke(host, cloudCdnRelease(env));
 }

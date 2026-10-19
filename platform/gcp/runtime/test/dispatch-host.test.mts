@@ -135,30 +135,45 @@ test("a route image reaches the in-process optimizer under no transport's reques
   expect(host.maxImageRequestBytes).toBeUndefined();
 });
 
-test("a static flight response reaches Cloud CDN without the router state tree in its Vary", async () => {
+async function readFlightVary(env: NodeJS.ProcessEnv): Promise<string> {
   const invoke = newGcpDispatchInvoke(localOrigin, {
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
     ...assetEnv,
+    ...env,
   });
   const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));
   await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));
   try {
     const { port } = edge.address() as { port: number };
     const response = await fetch(`http://127.0.0.1:${port}/logo.svg`, { headers: { rsc: "1" } });
-    const vary = response.headers.get("vary") ?? "";
-
     expect(response.status).toBe(200);
-    expect(vary).toContain("rsc");
-    expect(vary).toContain("next-url");
-    expect(vary).not.toContain("next-router-state-tree");
+    return response.headers.get("vary") ?? "";
   } finally {
     await new Promise<void>((resolve) => edge.close(() => resolve()));
   }
+}
+
+test("a static flight response reaches Cloud CDN without the router state tree in its Vary", async () => {
+  const vary = await readFlightVary({ OCEL_EDGE_CACHE: "all" });
+
+  expect(vary).toContain("rsc");
+  expect(vary).toContain("next-url");
+  expect(vary).not.toContain("next-router-state-tree");
+});
+
+test("a flight response no caching edge fronts varies on every router header Next names", async () => {
+  const vary = await readFlightVary({});
+
+  expect(vary).toContain("rsc");
+  expect(vary).toContain("next-router-state-tree");
+  expect(vary).toContain("next-router-prefetch");
+  expect(vary).toContain("next-router-segment-prefetch");
 });
 
 test("a page the GCP dispatch serves carries its release tag when its edge purges by tag", async () => {
   const invoke = newGcpDispatchInvoke(localOrigin, {
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
+    OCEL_EDGE_CACHE: "all",
     OCEL_CACHE_TAG_PURGE: "1",
     OCEL_ISR_PREFIX: "production/shop/web/r1a2b3c4d/isr",
   });
