@@ -4,9 +4,10 @@ import { bindingChecks } from "../../../checks";
 import { journeyConfigIn } from "../../../config";
 import { ocel, spawnOcel, workTree } from "../../../ocel";
 import { progress } from "../../../progress";
+import { listProjects } from "../../../projects";
 import type { CellUnderTest } from "../../../run/cellRun";
 import type { ExternalStack, InUse, StackChecks } from "../../../stacks";
-import { awsBindingStore, awsStore, type Cli, cliAt, said } from "../store";
+import { awsBindingStore, type Cli, cliAt, said } from "../store";
 import type { AwsWorld } from "../world";
 
 const BINDING_NAME = "orders";
@@ -360,13 +361,13 @@ export abstract class AwsStack implements ExternalStack {
     ],
     afterOcelDestroy: [
       {
-        title: "the record survives ocel destroy",
+        title: "the record survives ocel projects destroy",
         run: async (cell) => {
           const records = await (await this.bindingStore()).records(cell.slug);
           for (const name of BINDING_NAMES) {
             assert.ok(
               records.some((row) => row.name === name),
-              `${name}'s record did not survive ocel destroy, and destroy never touches the publisher`,
+              `${name}'s record did not survive ocel projects destroy, and destroy never touches the publisher`,
             );
           }
         },
@@ -425,7 +426,7 @@ export abstract class AwsStack implements ExternalStack {
       "ocel deploy exited 0 with nothing published; a binding is resolved before anything is provisioned",
     );
     assert.equal(
-      await awsStore(await this.world.endpoint()).exists(cell.slug),
+      (await listProjects(dir, env)).includes(cell.slug),
       false,
       `${cell.slug} has a project before anything published a binding`,
     );

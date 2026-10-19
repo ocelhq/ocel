@@ -92,56 +92,25 @@ export function fetchFunctionLogs(functionName, startTime, filterPattern) {
   return response.events ?? [];
 }
 
-export function previewStateTable() {
-  const stack = previewBootstrapStack();
-  let name;
+export function previewBootstrapped(run = aws, env = process.env) {
   try {
-    name = aws([
+    run([
       "cloudformation",
       "describe-stacks",
       "--stack-name",
-      stack,
+      previewBootstrapStack(env),
       "--query",
-      "Stacks[0].Outputs[?OutputKey=='StateTableName']|[0].OutputValue",
+      "Stacks[0].StackStatus",
       "--output",
       "text",
     ]);
+    return true;
   } catch (err) {
     if (/does not exist/i.test(String(err.stderr ?? err.message))) {
-      return undefined;
+      return false;
     }
     throw err;
   }
-  if (!name || name === "None") {
-    throw new Error(`the ${stack} stack publishes no StateTableName output`);
-  }
-  return name;
-}
-
-export function queryStatePartition(table, pk) {
-  const items = [];
-  let start;
-  do {
-    const page = JSON.parse(
-      aws([
-        "dynamodb",
-        "query",
-        "--table-name",
-        table,
-        "--consistent-read",
-        "--key-condition-expression",
-        "pk = :pk",
-        "--expression-attribute-values",
-        JSON.stringify({ ":pk": { S: pk } }),
-        ...(start ? ["--starting-token", start] : []),
-        "--output",
-        "json",
-      ]),
-    );
-    items.push(...(page.Items ?? []));
-    start = page.NextToken;
-  } while (start);
-  return items;
 }
 
 export function getObject(bucket, key, maxBuffer = 128 * 1024 * 1024) {

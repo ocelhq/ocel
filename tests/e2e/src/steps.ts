@@ -28,7 +28,7 @@ const REFUSE = "ocel refuses before the stack publishes";
 const STACK_POINT_TITLES: Record<StackPoint, string> = {
   afterPublish: "after publish",
   whileServing: "while serving",
-  afterOcelDestroy: "after ocel destroy",
+  afterOcelDestroy: "after ocel projects destroy",
   afterStackDestroy: "after stack destroy",
 };
 

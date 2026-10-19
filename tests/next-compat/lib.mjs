@@ -22,10 +22,6 @@ export const SLUG_PREFIX = "e2e-";
 
 export const ENTRY_SLUG = "e2e-edge";
 
-export const DEPLOYED_PARTITIONS = ["projects", "edgestacks"];
-
-const KEY_SEPARATOR = "#";
-
 export const APP_NAME = "app";
 
 const PREVIEW_TOKEN_LEN = 16;
@@ -129,13 +125,32 @@ export function selectStrandedSlugs(slugs, keepSlug) {
   return [...new Set(stranded)].sort();
 }
 
-export function strandedProjectSlugs(stateItems, keepSlug) {
-  const slugs = (stateItems ?? []).flatMap((item) => {
-    const sk = String(item?.sk?.S ?? "");
-    const path = sk.endsWith(KEY_SEPARATOR) ? sk.slice(0, -1).split(KEY_SEPARATOR) : [];
-    return path.length === 1 && path[0] !== "" ? [decodeURIComponent(path[0])] : [];
-  });
+export function strandedProjectSlugs(slugs, keepSlug) {
   return selectStrandedSlugs(slugs, keepSlug).filter((slug) => slug !== ENTRY_SLUG);
+}
+
+export function projectSlugs(stdout) {
+  let envelope;
+  try {
+    envelope = JSON.parse(stdout);
+  } catch {
+    throw new Error(`ocel projects --json printed no JSON: ${stdout.trim() || "(nothing)"}`);
+  }
+  if (envelope?.ok !== true) {
+    throw new Error(
+      `ocel projects --json failed: ${envelope?.error?.message ?? JSON.stringify(envelope)}`,
+    );
+  }
+  const projects = envelope.data?.projects;
+  if (!Array.isArray(projects)) {
+    throw new Error(`ocel projects --json printed no project list: ${stdout.trim()}`);
+  }
+  return projects.map((project) => {
+    if (typeof project?.slug !== "string" || project.slug === "") {
+      throw new Error(`ocel projects --json listed a project with no slug: ${stdout.trim()}`);
+    }
+    return project.slug;
+  });
 }
 
 function cutRunSlug(runSlug) {

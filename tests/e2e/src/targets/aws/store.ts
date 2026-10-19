@@ -10,8 +10,6 @@ const RETRYING = { AWS_RETRY_MODE: "adaptive", AWS_MAX_ATTEMPTS: "6" };
 
 const SEGMENT_SEPARATOR = "#";
 
-const DEPLOYED_ROOTS = ["projects", "edgestacks"];
-
 function escapeSegment(segment: string): string {
   return segment.replace(
     /[%#]/g,
@@ -42,8 +40,7 @@ export type Cli = (args: string[]) => Promise<string>;
 
 export type Store = {
   callerAccount(): Promise<string>;
-  deployedSlugs(): Promise<string[]>;
-  exists(slug: string): Promise<boolean>;
+  hasBootstrap(): Promise<boolean>;
   releaseLocks(slug: string): Promise<void>;
 };
 
@@ -107,8 +104,6 @@ async function queryPartition(
   return found;
 }
 
-const STATE_TABLE_OUTPUT = "StateTableName";
-
 const STATE_BUCKET_OUTPUT = "StateBucketName";
 
 async function bootstrapTable(
@@ -143,15 +138,6 @@ async function bootstrapTable(
   return name;
 }
 
-async function stateTable(cli: Cli, stack: string): Promise<string | undefined> {
-  return bootstrapTable(
-    cli,
-    stack,
-    STATE_TABLE_OUTPUT,
-    "nothing can be said about which projects are deployed",
-  );
-}
-
 export function awsStore(
   endpoint?: string,
   cli: Cli = cliAt(endpoint),
@@ -159,48 +145,32 @@ export function awsStore(
 ): Store {
   const stack = bootstrapStackOf(namespace);
 
-  async function query(table: string, root: string, slug?: string): Promise<string[]> {
-    const found: string[] = [];
-    const within = slug === undefined ? undefined : sortKey([slug]);
-    for (const item of await queryPartition(cli, table, partitionKey(root), within)) {
-      const [one, ...deeper] = pathOf((item.sk as { S?: string } | undefined)?.S ?? "");
-      if (one !== undefined && deeper.length === 0) {
-        found.push(one);
-      }
-    }
-    return found;
-  }
-
   return {
     async callerAccount() {
       return cli(["sts", "get-caller-identity", "--query", "Account", "--output", "text"]);
     },
 
-    async deployedSlugs() {
-      const table = await stateTable(cli, stack);
-      if (!table) {
-        return [];
-      }
-      const found = new Set<string>();
-      for (const root of DEPLOYED_ROOTS) {
-        for (const slug of await query(table, root)) {
-          found.add(slug);
+    async hasBootstrap() {
+      try {
+        await cli([
+          "cloudformation",
+          "describe-stacks",
+          "--stack-name",
+          stack,
+          "--query",
+          "Stacks[0].StackStatus",
+          "--output",
+          "text",
+        ]);
+        return true;
+      } catch (error) {
+        if (noSuchStack(error)) {
+          return false;
         }
+        throw new Error(
+          `the ${stack} stack could not be read, so nothing can be said about whether the namespace is bootstrapped:${said(error)}`,
+        );
       }
-      return [...found];
-    },
-
-    async exists(slug) {
-      const table = await stateTable(cli, stack);
-      if (!table) {
-        return false;
-      }
-      for (const root of DEPLOYED_ROOTS) {
-        if ((await query(table, root, slug)).includes(slug)) {
-          return true;
-        }
-      }
-      return false;
     },
 
     async releaseLocks(slug) {

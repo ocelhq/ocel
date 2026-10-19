@@ -1,4 +1,5 @@
 import { type ChildProcess, execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { access, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -25,6 +26,7 @@ import { configTree, ocel, type Ran, recordOutput, runOcel, treeRoot, workTree }
 import { fixtureDir, laneDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn, type Plan } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
+import { listProjects, projectsDestroyArgs } from "../../projects";
 import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
 import { hostnameUrls } from "../hostnames";
@@ -61,9 +63,7 @@ import {
   listServices,
   reachable,
   readServices,
-  type Service,
   servicesIn,
-  servicesOf,
   strayServices,
   switchOn,
   type Where,
@@ -187,7 +187,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
   readonly sweeper: Sweeper = {
     list: () => this.deployedSlugs(),
     exists: async (slug) => {
-      return this.deploys(await this.services(), slug);
+      return (await this.listed()).includes(slug);
     },
     sweepStale: (runId) => this.sweepStale(runId),
     sweepRun: (runId) => this.sweepRun(runId),
@@ -382,14 +382,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
   async destroy(cell: CellUnderTest): Promise<void> {
     const dir = await cellTree(cell);
     try {
-      await this.run(
-        cell,
-        dir,
-        "destroy",
-        "destroy",
-        ["destroy", "production", "--yes"],
-        childEnv(dir),
-      );
+      await this.run(cell, dir, "destroy", "destroy", projectsDestroyArgs(), childEnv(dir));
     } finally {
       this.output.delete(cell.slug);
       await rm(treeRoot(cell, "gcp"), { recursive: true, force: true });
@@ -452,7 +445,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
       dir,
       "preview",
       "preview-destroy",
-      ["destroy", "preview", "--yes"],
+      projectsDestroyArgs("preview"),
       env,
     ).then(
       () => undefined,
@@ -462,7 +455,9 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
       throw new Error(
         [
           ...(removed ? [`ocel preview rm ${name}: ${String(removed.error)}`] : []),
-          ...(destroyed ? [`ocel destroy preview: ${String(destroyed.error)}`] : []),
+          ...(destroyed
+            ? [`ocel projects destroy --tier preview: ${String(destroyed.error)}`]
+            : []),
         ].join("; "),
       );
     }
@@ -532,16 +527,33 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
     };
   }
 
-  private deploys(services: Service[], project: string): boolean {
-    return servicesOf(services, namespaceOf(process.env), project).length > 0;
+  private async listed(): Promise<string[]> {
+    const [first] = fixturesOn(matrix, "gcp");
+    if (!first) {
+      throw new Error("no fixture runs on gcp, so nothing lists the projects ocel holds");
+    }
+    const runId = currentRunIdentity();
+    const dir = await copyTree(
+      fixtureDir(first.name),
+      treeDir(runId, "gcp", `projects-${randomUUID().slice(0, 8)}`),
+    );
+    try {
+      await writeJourneyConfig(dir, {
+        target: "gcp",
+        slug: projectSlug(path.posix.basename(first.name), runId),
+      });
+      return await listProjects(dir, childEnv(dir));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 
   private async deployedSlugs(): Promise<string[]> {
     const runId = currentRunIdentity();
-    const found = await this.services();
+    const listed = new Set(await this.listed());
     return gcpCells()
       .map((cell) => ({ cell, slug: projectSlug(cell.name, runId) }))
-      .filter(({ slug }) => this.deploys(found, slug))
+      .filter(({ slug }) => listed.has(slug))
       .map(({ slug }) => slug);
   }
 
@@ -555,10 +567,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
       );
       try {
         await writeJourneyConfig(dir, gcpSweepOverlay(cell, slug, process.env));
-        if (!endpoint() && (cell.fixture.previews?.gcp ?? []).length > 0) {
-          await ocel(dir, ["destroy", "preview", "--yes"], childEnv(dir));
-        }
-        await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
+        await ocel(dir, projectsDestroyArgs(), childEnv(dir));
         process.stdout.write(`swept ${slug}\n`);
       } catch (error) {
         complaints.push(`${slug}: ${String(error)}`);

@@ -18,6 +18,7 @@ import type { Lane, Phase } from "../../matrix/types";
 import { sanitize } from "../../naming";
 import { configTree, type Ran, recordOutput, runOcel, treeRoot, workTree } from "../../ocel";
 import type { PrepareFailures } from "../../prepare";
+import { listProjects, projectsDestroyArgs } from "../../projects";
 import type { CellUnderTest } from "../../run/cellRun";
 import type { Deployment, Exposure, ReleaseCycle, Restart, Target } from "../types";
 import { AwsBootstrap } from "./bootstrap";
@@ -187,8 +188,8 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
           unbound.push(error instanceof Error ? error.message : String(error));
         }
       }
-      await this.run(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
-      if (unbound.length > 0 && (await this.sweeper.exists(cell.slug))) {
+      await this.run(cell, dir, "destroy", "destroy", projectsDestroyArgs(), env);
+      if (unbound.length > 0 && (await listProjects(dir, env)).includes(cell.slug)) {
         throw new Error(unbound.join("\n"));
       }
     } finally {

@@ -25,6 +25,7 @@ import type { Lane, Phase } from "../matrix/types";
 import { NonzeroExitError, ocel, recordOutput, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
+import { listProjects, projectsDestroyArgs } from "../projects";
 import type { CellUnderTest } from "../run/cellRun";
 import { bootstrappedMissed, unbootstrappedMissed } from "./doctor";
 import { adoptionMissed, engineSeries } from "./engine";
@@ -55,10 +56,6 @@ const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
 const STATE_ROOT = "/var/lib/ocel";
 const RELEASES_ROOT = `${STATE_ROOT}/releases`;
-const KEYVALUES_TIER = `${STATE_ROOT}/production/keyvalues`;
-const PROJECT_ENTRIES = `${KEYVALUES_TIER}/projects`;
-const NO_KEYVALUES_TIER = "no-keyvalues-tier";
-const ENTRY_SUFFIX = ".json";
 const BOOTSTRAP_DIR = path.join(outputRoot, "vps", "box");
 const BOOTSTRAP_SLUG = `${HARNESS_PREFIX}journey-bootstrap`;
 const BOOTSTRAP_REMOVED = "Removed the production bootstrap";
@@ -150,10 +147,6 @@ function encodeSegment(segment: string): string {
   }).join("");
 }
 
-export function entryFile(slug: string): string {
-  return `${encodeSegment(slug)}${ENTRY_SUFFIX}`;
-}
-
 export function heldProbe(held: string): string {
   return `sudo test -e '${held}' && echo "${held}$(sudo find '${held}' -mindepth 1 -maxdepth 3 -printf ' %P' 2>/dev/null | head -c 400)"`;
 }
@@ -202,24 +195,6 @@ export function resourceRestart(slug: string): string {
 
 export function projectExposure(slug: string): string {
   return `sudo docker ps -aq --filter label=ocel.project=${slug} | xargs -r sudo docker inspect; ps -eo args`;
-}
-
-export function projectListing(prefix: string): string {
-  return `test -d '${KEYVALUES_TIER}' && { ls -1d '${PROJECT_ENTRIES}'/${prefix}*${ENTRY_SUFFIX} 2>/dev/null || true; } || echo ${NO_KEYVALUES_TIER}`;
-}
-
-export function slugsOf(listing: string): string[] {
-  if (listing.trim() === NO_KEYVALUES_TIER) {
-    throw new Error(
-      `${KEYVALUES_TIER} does not exist on the box, so nothing here can tell a box that has ` +
-        "no harness project from one this listing failed to read",
-    );
-  }
-  return listing
-    .split("\n")
-    .map((line) => line.trim().split("/").pop() ?? "")
-    .filter((name) => name.endsWith(ENTRY_SUFFIX))
-    .map((name) => decodeURIComponent(name.slice(0, -ENTRY_SUFFIX.length)));
 }
 
 export function sshRefusal(target: Box, login: string, command: string, error: unknown): Error {
@@ -629,7 +604,7 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
       return;
     }
     this.sessions.delete(cell.slug);
-    const args = ["--config", journeyConfigIn(session.dir), "destroy", "production", "--yes"];
+    const args = ["--config", journeyConfigIn(session.dir), ...projectsDestroyArgs()];
     try {
       await this.diagnosedOnFailure(cell, "destroy", () =>
         runOcel(cell, session.dir, "destroy", "destroy", args, session.env),
@@ -649,7 +624,7 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
       .filter(Boolean);
     if (left.length > 0) {
       throw new Error(
-        `the box still holds ${left.join(", ")} after \`ocel destroy production\` took ${cell.slug} down, and a destroy reclaims everything the project's deploys wrote`,
+        `the box still holds ${left.join(", ")} after \`ocel projects destroy\` took ${cell.slug} down, and a destroy reclaims everything the project's deploys wrote`,
       );
     }
   }
@@ -833,16 +808,18 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
   }
 
   private async stillRecorded(slug: string): Promise<boolean> {
-    const said = await ssh(
-      this.box(),
-      DEPLOY_LOGIN,
-      `test -e '${PROJECT_ENTRIES}/${entryFile(slug)}' && echo present || echo gone`,
-    );
-    return said.trim() === "present";
+    return (await this.recordedSlugs(slug)).includes(slug);
   }
 
-  private async recordedSlugs(): Promise<string[]> {
-    return slugsOf(await ssh(this.box(), DEPLOY_LOGIN, projectListing(HARNESS_PREFIX)));
+  private async recordedSlugs(asking = "all"): Promise<string[]> {
+    const dir = await this.boxConfig(
+      path.join(outputRoot, "vps", "projects", asking),
+      BOOTSTRAP_SLUG,
+      DEPLOY_LOGIN,
+      this.front()?.proxy,
+    );
+    const listed = await listProjects(dir, this.boxEnv(DEPLOY_LOGIN));
+    return listed.filter((slug) => slug.startsWith(HARNESS_PREFIX));
   }
 
   private async sweepStale(runId: string): Promise<void> {
@@ -861,7 +838,7 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
         DEPLOY_LOGIN,
         this.front()?.proxy,
       );
-      await ocel(dir, ["destroy", "production", "--yes"], this.boxEnv(DEPLOY_LOGIN));
+      await ocel(dir, projectsDestroyArgs(), this.boxEnv(DEPLOY_LOGIN));
     }
   }
 }

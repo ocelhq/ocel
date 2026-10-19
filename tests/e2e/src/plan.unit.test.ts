@@ -206,7 +206,7 @@ describe("the steps a cell walks through", () => {
       "rollback · ping",
       "rollback · while serving · routes",
       "destroy",
-      "after ocel destroy · survives",
+      "after ocel projects destroy · survives",
       "after stack destroy · empties",
     ]);
   });

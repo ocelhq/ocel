@@ -52,6 +52,7 @@ import {
   projectSlug,
   projectSlugForApp,
   projectSlugForRun,
+  projectSlugs,
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
@@ -267,32 +268,58 @@ describe("projectSlugForRun and previewNameForApp", () => {
 });
 
 describe("strandedProjectSlugs", () => {
-  const item = (sk) => ({ pk: { S: "projects" }, sk: { S: sk } });
-
-  it("reclaims every e2e project the state table holds but the running run's own", () => {
-    const items = [item("e2e-1#"), item("e2e-2#"), item("e2e-3#")];
-    expect(strandedProjectSlugs(items, "e2e-2")).toEqual(["e2e-1", "e2e-3"]);
+  it("reclaims every e2e project ocel holds but the running run's own", () => {
+    expect(strandedProjectSlugs(["e2e-1", "e2e-2", "e2e-3"], "e2e-2")).toEqual(["e2e-1", "e2e-3"]);
   });
 
   it("leaves projects that are not this suite's alone, and the shared entry worker's", () => {
-    const items = [item("acme-shop#"), item("e2e-1#"), item(`${ENTRY_SLUG}#`)];
-    expect(strandedProjectSlugs(items, "e2e-2")).toEqual(["e2e-1"]);
+    expect(strandedProjectSlugs(["acme-shop", "e2e-1", ENTRY_SLUG], "e2e-2")).toEqual(["e2e-1"]);
   });
 
-  it("names a project once however many partitions record it", () => {
-    const edge = { pk: { S: "edgestacks" }, sk: { S: "e2e-1#" } };
-    expect(strandedProjectSlugs([item("e2e-1#"), edge], "e2e-2")).toEqual(["e2e-1"]);
-  });
-
-  it("reads only entries directly under the partition, decoding escaped segments", () => {
-    const items = [item("e2e-1#nested#"), item("e2e-4%23x#"), item("#"), item("e2e-5")];
-    expect(strandedProjectSlugs(items, "e2e-2")).toEqual(["e2e-4#x"]);
+  it("names a project once however many times it is listed", () => {
+    expect(strandedProjectSlugs(["e2e-1", "e2e-1"], "e2e-2")).toEqual(["e2e-1"]);
   });
 
   it("has nothing to do when the run's own project is the only one", () => {
-    expect(strandedProjectSlugs([item("e2e-2#")], "e2e-2")).toEqual([]);
+    expect(strandedProjectSlugs(["e2e-2"], "e2e-2")).toEqual([]);
     expect(strandedProjectSlugs([], "e2e-2")).toEqual([]);
-    expect(strandedProjectSlugs(undefined, "e2e-2")).toEqual([]);
+  });
+});
+
+describe("projectSlugs", () => {
+  const listed = (projects) => `${JSON.stringify({ ok: true, data: { projects } })}\n`;
+
+  it("reads the slug of every project ocel projects lists", () => {
+    const stdout = listed([
+      { slug: "e2e-1", tiers: ["TIER_PREVIEW"], edge: "cloudflare", previews: 2 },
+      { slug: "e2e-2", tiers: ["TIER_PRODUCTION", "TIER_PREVIEW"], previews: 0 },
+    ]);
+    expect(projectSlugs(stdout)).toEqual(["e2e-1", "e2e-2"]);
+  });
+
+  it("reads an account with no project as no slugs", () => {
+    expect(projectSlugs(listed([]))).toEqual([]);
+  });
+
+  it("refuses a listing that failed, and says why", () => {
+    const stdout = JSON.stringify({
+      ok: false,
+      error: { code: "not_ready", message: "the preview tier is not bootstrapped" },
+    });
+    expect(() => projectSlugs(stdout)).toThrow(/the preview tier is not bootstrapped/);
+  });
+
+  it("refuses output that is not the ocel projects result", () => {
+    expect(() => projectSlugs(JSON.stringify({ ok: true, data: {} }))).toThrow(
+      /ocel projects --json printed no project list/,
+    );
+    expect(() => projectSlugs("")).toThrow(/ocel projects --json printed no JSON/);
+  });
+
+  it("refuses a listed project that carries no slug", () => {
+    expect(() => projectSlugs(listed([{ tiers: ["TIER_PREVIEW"] }]))).toThrow(
+      /ocel projects --json listed a project with no slug/,
+    );
   });
 });
 

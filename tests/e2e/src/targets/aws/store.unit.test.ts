@@ -10,21 +10,11 @@ import {
 } from "./store";
 
 const TABLES: Record<string, string> = {
-  StateTableName: "ocel-state",
   VariablesTableName: "ocel-variables",
   StateBucketName: "ocel-statebucket",
 };
 
-const STATE_TABLE = TABLES.StateTableName as string;
-
 const VARIABLES_TABLE = TABLES.VariablesTableName as string;
-
-function page(slugs: string[], next?: string): string {
-  return JSON.stringify({
-    Items: slugs.map((slug) => ({ sk: { S: sortKey([slug]) }, value: { S: "{}" } })),
-    ...(next ? { NextToken: next } : {}),
-  });
-}
 
 function cliOver(answers: (args: string[]) => string | Promise<string>): {
   cli: Cli;
@@ -72,101 +62,31 @@ describe("callerAccount", () => {
   });
 });
 
-describe("deployedSlugs", () => {
-  it("refuses to report an empty account when the bootstrap stack could not be read", async () => {
+describe("hasBootstrap", () => {
+  it("answers that the namespace is bootstrapped when its bootstrap stack exists", async () => {
+    const { cli } = cliOver(() => "CREATE_COMPLETE");
+    assert.equal(await awsStore(undefined, cli).hasBootstrap(), true);
+  });
+
+  it("answers that the namespace is not bootstrapped when no bootstrap stack exists", async () => {
+    const { cli } = cliOver(() => {
+      throw Object.assign(new Error("Command failed"), {
+        stderr: "ValidationError: Stack with id ocel-prod-bootstrap does not exist",
+      });
+    });
+    assert.equal(await awsStore(undefined, cli).hasBootstrap(), false);
+  });
+
+  it("refuses to answer when the bootstrap stack could not be read", async () => {
     const { cli } = cliOver(() => {
       throw Object.assign(new Error("Command failed"), {
         stderr: "Unable to locate credentials",
       });
     });
     await assert.rejects(
-      awsStore(undefined, cli).deployedSlugs(),
+      awsStore(undefined, cli).hasBootstrap(),
       /could not be read.*Unable to locate credentials/s,
     );
-  });
-
-  it("refuses when the stack exists but publishes no table name", async () => {
-    const { cli } = cliOver(() => "None");
-    await assert.rejects(awsStore(undefined, cli).deployedSlugs(), /publishes no StateTableName/);
-  });
-
-  it("reports nothing when no bootstrap stack exists", async () => {
-    const { cli } = cliOver(() => {
-      throw Object.assign(new Error("Command failed"), {
-        stderr: "ValidationError: Stack with id ocel-prod-bootstrap does not exist",
-      });
-    });
-    assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), []);
-  });
-
-  it("asks for the state table the projects and edge stacks are kept in", async () => {
-    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
-    await awsStore(undefined, cli).deployedSlugs();
-    assert.deepEqual(outputsAsked(calls), ["StateTableName"]);
-    for (const queried of calls.filter((args) => args[0] === "dynamodb")) {
-      assert.ok(queried.includes(STATE_TABLE));
-    }
-  });
-
-  it("pages both production partitions", async () => {
-    const { cli, calls } = cliOver((args) => {
-      if (describeStacks(args)) {
-        return tableAsked(args);
-      }
-      return args.includes("--starting-token") ? page(["j-1-hello"]) : page(["j-1-node"], "more");
-    });
-    assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), ["j-1-node", "j-1-hello"]);
-    assert.equal(calls.filter((args) => args[0] === "dynamodb").length, 4);
-  });
-
-  it("queries the projects and edge stacks partitions by their root alone, as the tier's own table keys them", async () => {
-    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
-    await awsStore(undefined, cli).deployedSlugs();
-    const keyed = calls
-      .filter((args) => args[0] === "dynamodb")
-      .map((args) => JSON.parse(args[args.indexOf("--expression-attribute-values") + 1] ?? "{}"));
-    assert.deepEqual(keyed, [{ ":pk": { S: "projects" } }, { ":pk": { S: "edgestacks" } }]);
-  });
-
-  it("reads a slug back from a sort key whose segment the store escaped", async () => {
-    const { cli } = cliOver((args) =>
-      describeStacks(args)
-        ? tableAsked(args)
-        : JSON.stringify({ Items: [{ sk: { S: "j-1%23odd%25#" } }] }),
-    );
-    assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), ["j-1#odd%"]);
-  });
-});
-
-describe("exists", () => {
-  it("reaches the slug with a key condition rather than paging the partition", async () => {
-    const { cli, calls } = cliOver((args) =>
-      describeStacks(args) ? tableAsked(args) : page(["j-1-node"]),
-    );
-    assert.equal(await awsStore(undefined, cli).exists("j-1-node"), true);
-    const queried = calls.filter((args) => args[0] === "dynamodb");
-    assert.equal(queried.length, 1);
-    assert.ok(queried[0]?.includes("pk = :pk AND begins_with(sk, :sk)"));
-    assert.ok(
-      queried[0]?.includes(JSON.stringify({ ":pk": { S: "projects" }, ":sk": { S: "j-1-node#" } })),
-    );
-  });
-
-  it("does not mistake a longer slug sharing the prefix for the one asked about", async () => {
-    const { cli } = cliOver((args) =>
-      describeStacks(args) ? tableAsked(args) : page(["j-1-node-two"]),
-    );
-    assert.equal(await awsStore(undefined, cli).exists("j-1-node"), false);
-  });
-
-  it("passes the failure on rather than answering that the slug is gone", async () => {
-    const { cli } = cliOver((args) => {
-      if (describeStacks(args)) {
-        throw Object.assign(new Error("Command failed"), { stderr: "ThrottlingException" });
-      }
-      return tableAsked(args);
-    });
-    await assert.rejects(awsStore(undefined, cli).exists("j-1-node"), /ThrottlingException/);
   });
 });
 
@@ -364,15 +284,15 @@ describe("the keys the store is read by", () => {
 
 describe("the namespace a store reads under", () => {
   it("reads the default bootstrap stack when no namespace is named", async () => {
-    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
-    await awsStore(undefined, cli).deployedSlugs();
+    const { cli, calls } = cliOver(() => "CREATE_COMPLETE");
+    await awsStore(undefined, cli).hasBootstrap();
     const named = calls.find(describeStacks)?.includes("ocel-prod-bootstrap");
     assert.ok(named, "the store read a stack other than ocel-prod-bootstrap");
   });
 
   it("reads the bootstrap of the namespace it was given", async () => {
-    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
-    await awsStore(undefined, cli, "j-1874-node").deployedSlugs();
+    const { cli, calls } = cliOver(() => "CREATE_COMPLETE");
+    await awsStore(undefined, cli, "j-1874-node").hasBootstrap();
     const named = calls.find(describeStacks)?.includes("j-1874-node-prod-bootstrap");
     assert.ok(named, "the store did not read the namespaced bootstrap stack");
   });
