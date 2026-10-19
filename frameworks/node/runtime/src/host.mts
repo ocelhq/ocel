@@ -234,7 +234,8 @@ interface Trust {
   gate?: GateSource;
 }
 
-function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trust): void {
+function normalizeLoopbackHeaders(req: http.IncomingMessage, trust: Trust): void {
+  const headers = req.headers;
   if (trust.forwarded) {
     const forwarded = String(headers["x-forwarded-host"] ?? "")
       .split(",")[0]
@@ -250,6 +251,19 @@ function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trus
   delete headers["x-ocel-request-id"];
   delete headers["x-ocel-trace-id"];
   delete headers[originSecretHeader];
+  matchRawHeaders(req);
+}
+
+function matchRawHeaders(req: http.IncomingMessage): void {
+  const raw = req.rawHeaders;
+  const kept: string[] = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    const name = raw[i]!;
+    const lower = name.toLowerCase();
+    if (!(lower in req.headers)) continue;
+    kept.push(name, lower === "host" ? String(req.headers.host) : raw[i + 1]!);
+  }
+  raw.splice(0, raw.length, ...kept);
 }
 
 const draining = new Set<Promise<void>>();
@@ -284,7 +298,7 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
     const requestId = req.headers["x-ocel-request-id"];
     const admitted = !trust.guard || trust.guard(req.headers);
     const reachedHost = req.headers.host ?? "";
-    normalizeLoopbackHeaders(req.headers, trust);
+    normalizeLoopbackHeaders(req, trust);
     const start = performance.now();
 
     const pending: Promise<unknown>[] = [];
@@ -383,7 +397,7 @@ function wrapUpgrade(server: http.Server, lifted: Listener[], trust: Trust): Upg
   return (req, socket, head) => {
     const admitted = !trust.guard || trust.guard(req.headers);
     const reachedHost = req.headers.host ?? "";
-    normalizeLoopbackHeaders(req.headers, trust);
+    normalizeLoopbackHeaders(req, trust);
     Promise.resolve()
       .then(async () => {
         if (!admitted) {
