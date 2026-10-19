@@ -55,7 +55,10 @@ describe("createTimesIn", () => {
   });
 
   it("reads the line the provider says", async () => {
-    const go = await readFile(path.join(repoRoot, "platform", "gcp", "provider", "kv.go"), "utf8");
+    const go = await readFile(
+      path.join(repoRoot, "platform", "gcp", "provider", "resources", "kv", "kv.go"),
+      "utf8",
+    );
     expect(go).toContain('": its create operation " + finished.Name');
     expect(go).toContain('" created " + timed.CreateTime + " and ended " + timed.EndTime');
   });
@@ -67,10 +70,10 @@ describe("storeFilter", () => {
       'labels.ocel-namespace="ocel" AND labels.ocel-project="j-1-kv-node"',
     );
     const go = await readFile(
-      path.join(repoRoot, "platform", "gcp", "provider", "labels.go"),
+      path.join(repoRoot, "platform", "gcp", "provider", "internal", "names", "labels.go"),
       "utf8",
     );
-    expect(go).toContain("labels := stackLabels(names, ref)");
+    expect(go).toContain("labels := StackLabels(names, ref)");
   });
 });
 

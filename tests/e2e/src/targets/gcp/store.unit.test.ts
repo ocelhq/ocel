@@ -25,7 +25,7 @@ import {
 describe("the apis a bootstrap wants on", () => {
   it("are the ones the provider refuses without", async () => {
     const go = await readFile(
-      path.join(repoRoot, "platform", "gcp", "provider", "bootstrapitems.go"),
+      path.join(repoRoot, "platform", "gcp", "provider", "internal", "bootstrap", "resources.go"),
       "utf8",
     );
     const listed = go.match(/var BootstrapAPIs = \[\]string\{([^}]*)\}/);
