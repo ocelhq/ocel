@@ -10,12 +10,16 @@ import (
 )
 
 type Stores struct {
-	mu       sync.Mutex
-	minted   map[string]storeCredential
-	dropped  map[string]bool
-	sweeps   bool
-	spec     *container.Spec
-	shapedBy string
+	mu      sync.Mutex
+	minted  map[string]storeCredential
+	dropped map[string]bool
+	sweeps  bool
+	shapes  map[string]shapedStore
+}
+
+type shapedStore struct {
+	spec container.Spec
+	by   string
 }
 
 func droppedBucket(stack naming.StackName, binding string) string {
@@ -52,23 +56,31 @@ func (s *Stores) sweeping() bool {
 func (s *Stores) shaped(resource string, spec container.Spec) (container.Spec, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.spec == nil {
-		s.spec, s.shapedBy = &spec, resource
+	shaped, ok := s.shapes[spec.Name]
+	if !ok {
+		if s.shapes == nil {
+			s.shapes = map[string]shapedStore{}
+		}
+		s.shapes[spec.Name] = shapedStore{spec: spec, by: resource}
 		return spec, nil
 	}
-	if !reflect.DeepEqual(*s.spec, spec) {
+	if !reflect.DeepEqual(shaped.spec, spec) {
 		return container.Spec{}, refusal.Refuse(refusal.CodeInvalid,
 			"buckets %s and %s shape the one store container differently\n"+
 				"Gate the `vps.bucket` rule on the environment, or patch both buckets the same way",
-			resource, s.shapedBy)
+			resource, shaped.by)
 	}
-	return *s.spec, nil
+	return shaped.spec, nil
 }
 
-func (s *Stores) shape() *container.Spec {
+func (s *Stores) shape(name string) *container.Spec {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.spec
+	shaped, ok := s.shapes[name]
+	if !ok {
+		return nil
+	}
+	return &shaped.spec
 }
 
 func (s *Stores) once(name string, mint func() (storeCredential, error)) (storeCredential, error) {
