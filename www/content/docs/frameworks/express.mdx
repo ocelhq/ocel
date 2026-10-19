@@ -37,15 +37,34 @@ export default defineConfig({
 ocel deploy
 ```
 
-A `package.json` with no `next` or `@sveltejs/kit` in it makes the app a `node` app. On
-serverless compute, `app.listen` does not open a port. Ocel takes the server it is called on and
-hands it each request. Exporting the app with `export default app` also works there.
+Ocel deploys the app as a `node` app. On serverless compute, `app.listen` does not open a port.
+Ocel takes the server it is called on and hands it each request. Exporting the app with
+`export default app` also works there.
 
-## Entrypoint
+## How ocel finds the app
 
-On serverless, ocel serves the first of these that exists: `src/server`, `src/index`, `src/app`,
-`index`, `server`, `app`, each as `.ts` or `.js`. Any other file, name it with
-[`entrypoint`](/docs/configuration#entrypoint).
+A directory is a node app when its `package.json` sits beside one of these files. Ocel serves
+the first it finds:
+
+`src/server`, `src/index`, `src/app`, `index`, `server`, `app`, `src/main`, each with `.ts`, `.mts`, `.cts`, `.js`, `.mjs` and `.cjs` in turn
+
+`src/main` is where `nest new` writes a NestJS server, so a NestJS app is found too.
+
+On serverless, the build bundles from that file, so it is the one file the app needs. The file is
+also what tells an app from a `package.json` that only holds tooling, such as the SDK of a project
+that declares only resources. A `package.json` that depends on `next` or `@sveltejs/kit` is that
+framework's app instead, whatever files sit beside it.
+
+Ocel deploys a directory only when exactly one framework matches it. A `pyproject.toml` or
+`go.mod` beside the Express app is fine while it holds no app. If it holds a
+[Python](/docs/frameworks/python#how-ocel-finds-the-app) or
+[Go](/docs/frameworks/go#how-ocel-finds-the-app) app, both match, so ocel deploys neither and
+`ocel doctor` names the two. List the app under `apps` with `framework: "node"` then.
+
+If your server lives anywhere else, name the file with [`entrypoint`](/docs/configuration#apps).
+Detection does not read `entrypoint`, so set `framework: "node"` beside it. An app that sets
+`framework: "node"` with no `entrypoint` and none of those files has nothing to bundle, so it is
+refused on serverless, naming the files ocel looked for.
 
 ## Containers
 

@@ -32,6 +32,22 @@ route renders in one function. Prerendered pages and `static/` are served beside
 `/_app/immutable/` are cached for a year, and everything else is revalidated on each request, so
 an open tab sees a new deployment through `/_app/version.json`.
 
+## How ocel finds the app
+
+A directory is a SvelteKit app when its `package.json` lists `@sveltejs/kit` in `dependencies` or
+`devDependencies`. The `svelte.config.js` and `vite.config.ts` aren't read, so the dependency has
+to be there.
+
+Within one `package.json`, SvelteKit wins over node, so a server file such as `src/server.ts`
+beside the app does not make it a node app. A `package.json` that also depends on `next` matches
+two frameworks, and ocel deploys neither until the app sets `framework`.
+
+With no `apps` in your config, the project root is deployed as the SvelteKit app. A
+`pyproject.toml` or `go.mod` beside it is fine while it holds no app. If it holds a
+[Python](/docs/frameworks/python#how-ocel-finds-the-app) or
+[Go](/docs/frameworks/go#how-ocel-finds-the-app) app, ocel cannot tell which to deploy and asks
+you to list the app under `apps` with `framework: "sveltekit"`.
+
 ## Containers
 
 On `compute: "container"`, and on a [VPS](/docs/providers/vps), which runs only containers, the

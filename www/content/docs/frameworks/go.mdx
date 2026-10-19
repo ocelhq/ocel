@@ -1,0 +1,113 @@
+---
+title: Go
+description: Deploy a Go app.
+---
+
+```go title="main.go"
+package main
+
+import (
+	"net/http"
+	"os"
+)
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("Hello"))
+	})
+	http.ListenAndServe(":"+os.Getenv("PORT"), mux)
+}
+```
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws"
+}
+```
+
+```bash
+ocel deploy
+```
+
+Your `main` listens on `PORT`, and ocel sends each request there. There is no Lambda handler or
+adapter to write. The same binary runs on serverless and in a container.
+
+## How ocel finds the app
+
+A directory is a Go app when a `go.mod` sits in it, or in a directory above it up to the project
+root, and one of `.`, `cmd/api` and `cmd/server` is `package main`. Ocel serves the first of the
+three that is. A `go.mod` above the directory counts only when one of those three holds a `.go`
+file, so a Next.js app or a `Dockerfile` below a Go module at the project root is not a Go app. The build compiles with `GOOS=linux` and `CGO_ENABLED=0`, so ocel checks the
+package the same way. A `main.go` behind a `//go:build cgo` constraint does not count, since that build would skip it.
+
+Other directories under `cmd/` are not looked at. A module whose commands are `cmd/migrate` and
+`cmd/seed` holds no app, which is what lets a Go module of tooling sit beside a Next.js app. To
+deploy such a package, set `framework` and `entrypoint`, below.
+
+The `go.mod` may sit above the app, so an app can be one package of a larger module, such as
+`services/api` in a project with one `go.mod` at its root. The search stops at the project root,
+the directory holding your config. Detection, discovery, the function build and the image all
+look in the same places, so a `go.mod` above the project root is never the app's. Keep your config
+beside the `go.mod` or above it.
+
+With no `apps` in your config, the project root is the Go app only when it holds one of those
+`main` packages. If the root also holds another app, such as a Next.js one, ocel cannot tell which
+to deploy and asks you to list it under `apps` with `framework: "go"`.
+
+## Entrypoint
+
+`entrypoint` names the directory of the `main` package, relative to the app. Detection does not
+read it, so an app whose only `main` package is elsewhere also sets `framework`:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", framework: "go", entrypoint: "./cmd/web" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "framework": "go", "entrypoint": "./cmd/web" }]
+}
+```
+
+It has to be a directory inside the app. A path that leaves the app, such as `../cmd/web`, or a
+path to a `.go` file is refused when the config loads.
+
+## Building
+
+The build uses the `go` on your PATH, whatever its version, and runs from the root of the module
+the app belongs to, with `GOWORK=off`, so a `go.work` above it changes nothing. It compiles with
+cgo off, so a package that needs C does not build.
+
+## Containers
+
+On `compute: "container"`, and on a [VPS](/docs/providers/vps), which runs only containers, ocel
+builds the image from your `Dockerfile` when the app has one, and with
+[Railpack](https://railpack.com) otherwise. Railpack builds from the module root too, and compiles
+the same `main` package a function would. The image is built from the module's directory, or from
+the nearest directory above it that also holds every local directory a `replace` in its `go.mod`
+points at, but never from above the repository.
+
+An app at its module's root with no entrypoint, detected or set, is built however Railpack
+decides: the module root's package when it holds `.go` files, else the first directory under
+`cmd/`, else the module root. An app below its module's root builds its own directory's package.
+The container sets `PORT` to a port of its own choosing, so read it rather than hard-coding one.

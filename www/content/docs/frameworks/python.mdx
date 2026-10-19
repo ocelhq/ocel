@@ -1,0 +1,107 @@
+---
+title: Python
+description: Deploy a Python app.
+---
+
+```python title="main.py"
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/")
+def hello():
+    return {"hello": "world"}
+```
+
+```text title="requirements.txt"
+fastapi
+uvicorn
+```
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws"
+}
+```
+
+```bash
+ocel deploy
+```
+
+Ocel imports `main.py` and serves the `app` it defines on the port in `PORT`. An ASGI app, such
+as FastAPI, runs on uvicorn and no other server, so list `uvicorn` in your dependencies. A WSGI app, such as Flask,
+runs on gunicorn when the app installs it, and on the standard library's `wsgiref` when it does
+not. Django's `wsgi.py` and `asgi.py` define `application`, which ocel serves the same way when
+there is no `app`.
+
+A file that defines neither `app` nor `application` runs as a script, so one that starts its own
+server works too, such as a Quart app started with Hypercorn under `if __name__ == "__main__"`. It
+has to listen on `PORT`.
+
+## How ocel finds the app
+
+A directory is a Python app when it has a `pyproject.toml`, `requirements.txt` or `Pipfile` and an
+entrypoint, which is the first of `app.py`, `index.py`, `server.py`, `main.py`, `wsgi.py`,
+`asgi.py` in the app's directory, then in `src/`, then in `app/`.
+
+The manifest alone is not enough, because Python often sits beside another app as tooling. A
+`pyproject.toml` of helper scripts next to a Next.js app has none of those files, so only the
+Next.js app matches and ocel deploys it. When the root holds a Python app and another app, both
+match, and ocel deploys neither. List the app under `apps` with `framework: "python"` then.
+
+To serve another file, set `entrypoint` to a `.py` path inside the app's directory, or to a module
+as `module` or `module:name`, where `name` is the object to serve. An `entrypoint` in neither
+form is refused when the config loads. Detection does not read `entrypoint`, so an app with none
+of the files above also sets `framework: "python"`. An app that sets `framework: "python"` with no
+`entrypoint` and none of those files is refused on serverless, and the message names the files
+ocel looked for. In a container it is built as below.
+
+## Dependencies
+
+On serverless, the build installs the first of these the app has:
+
+1. `requirements.txt`.
+2. `pyproject.toml` with a `uv.lock`, exported with `uv export --frozen`. The build needs `uv` on
+   your PATH for this.
+3. The `[project].dependencies` of `pyproject.toml`. A `pyproject.toml` that lists its
+   dependencies only under `[tool.poetry.dependencies]` fails the build.
+4. The `default` packages of `Pipfile.lock`. A `Pipfile` without a `Pipfile.lock` fails the build.
+
+The build runs pip from the app's `.venv` or `venv` when there is one, and `python3` on your PATH
+otherwise. It installs wheels only, for Linux and Python 3.13, the version every serverless Python
+function runs. A package that ships no wheel for that platform fails the build, and so does an app
+that installs Starlette, Quart, Litestar or BlackSheep and defines an `app` or `application` for
+ocel to serve without installing uvicorn.
+
+The function gets the whole app directory, except files starting with `.`, `__pycache__`, `venv`
+and `node_modules`. A symlink in the directory fails the build.
+
+## Containers
+
+On `compute: "container"`, and on a [VPS](/docs/providers/vps), which runs only containers, ocel
+builds the image from your `Dockerfile` when the app has one, and with
+[Railpack](https://railpack.com) otherwise. Railpack installs `requirements.txt` with pip, a
+`uv.lock` with `uv sync`, or Poetry, PDM or Pipenv projects with their own tools. The image starts
+the same entrypoint the same way a function does, unless your `railpack.json` sets
+`deploy.startCommand`.
+
+An app with no entrypoint, detected or set, is started however Railpack decides: a Django project
+(a `manage.py` and a `django` dependency) runs its migrations and then gunicorn on the
+`WSGI_APPLICATION` its settings name; FastAPI and FastHTML apps with uvicorn, and Flask apps with
+gunicorn, serve `main:app`; anything else runs the first of `main.py`, `app.py`, `start.py`,
+`bot.py`, `hello.py` and `server.py` with `python`. With none of those, the image is refused before
+it is built. The container sets `PORT` to a port of its own choosing, so read it rather than
+hard-coding one.

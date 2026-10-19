@@ -54,9 +54,9 @@ The CLI reads a folder's language from its source files:
 | Language | Install | Discovery runs |
 | --- | --- | --- |
 | TypeScript | [`ocel`](https://www.npmjs.com/package/ocel) | the folder's files |
-| Go | [`ocel.dev`](https://pkg.go.dev/ocel.dev) | a generated `main` that imports the folder's package, with `go run` under the `.ocel/` of the nearest `go.mod`. Your `main` and `go.work` are untouched. |
+| Go | [`ocel.dev`](https://pkg.go.dev/ocel.dev) | a generated `main` that imports the folder's package, with `go run` under the `.ocel/` of the nearest `go.mod` at or above the folder, up to the project root. Your `main` and `go.work` are untouched. |
 | Python | [`ocel`](https://pypi.org/project/ocel/) | the folder imported as a package from the nearest `pyproject.toml` or `requirements.txt`, using the project's `.venv` when present. The folder ships with the app, so `from resources import db` resolves once deployed. |
-| Rust | [`ocel-sdk`](https://crates.io/crates/ocel-sdk) | your own binary (`cargo run` of the crate the config names). No discovery folder: see below. |
+| Rust | [`ocel-sdk`](https://crates.io/crates/ocel-sdk) | your own binary (`cargo run --bin` of the binary the app's `entrypoint` names, or else of the one the crate runs by default). No discovery folder: see below. |
 
 Rust declares from the app crate. Derive `ocel::Resources` on a struct of resources and `ocel::Env` on a struct of variables, put `#[ocel::main]` on `main`, and read them with `Infra::load()?` and `Env::load()?`. During discovery `#[ocel::main]` reports what the binary links and returns before your `main` body runs.
 

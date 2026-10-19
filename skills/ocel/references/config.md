@@ -23,7 +23,7 @@ The JSON Schema is at `https://ocel.dev/schema/ocel.schema.json`, and an editor 
 - **`slug`:** the project's identity, and the only required key. Changing it creates a different project, with new infrastructure.
 - **`provider`:** where the apps run: `"aws"` alone, or `{ "<id>": { …options } }` with `aws`, `gcp` or `vps` as the id (`gcp` and `vps` always take this form) for provider options, `edge` (for example Cloudflare in front) and `dns`.
 - **`apps`:** each app's `name` and `path`.
-  - The framework is detected from the app (`node`, `next`, `sveltekit`, `go`, `python`, `rust`); set `compute: { "serverless": { "framework": … } }` only to override it.
+  - The framework (`node`, `next`, `sveltekit`, `go`, `python`, `rust`) is detected only when exactly one framework matches the app's directory, and `ocel doctor` prints each app's framework and the evidence. When none or several match, set the app's own `framework`. Set `entrypoint` where the app starts elsewhere than ocel looks: a node file, a go package's directory, a python file or `module:name`, or the binary to run when a rust crate builds several. Detection does not read `entrypoint`, so an app found only through it also sets `framework`. An app no detector matches whose directory holds one language's manifest (a `package.json` with only a `start` script, say) is written in that language; with several languages' manifests, set `framework`.
   - `compute` is `serverless` or `container`, named alone or keyed with its options.
   - Optional per-app keys: `domains.production` and `arch`.
 - **`domains`:** the project's production domain and the preview wildcard (`*.preview.example.com`).

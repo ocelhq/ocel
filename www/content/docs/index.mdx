@@ -188,9 +188,15 @@ package main
 
 import (
 	"net/http"
+	"os"
 
 	"acme.dev/web/resources"
 )
+
+func main() {
+	http.HandleFunc("GET /documents", documents)
+	http.ListenAndServe(":"+os.Getenv("PORT"), nil)
+}
 
 func documents(w http.ResponseWriter, r *http.Request) {
 	pool, err := resources.DB.Pool(r.Context())

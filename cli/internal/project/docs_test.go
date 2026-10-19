@@ -14,7 +14,9 @@ import (
 	"github.com/tailscale/hujson"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
@@ -271,5 +273,38 @@ func TestOnlyTheConfigurationPageNamesTheDefaultDiscoveryDirectory(t *testing.T)
 		if !strings.Contains(pages[page], link) {
 			t.Errorf("%s does not link to %s", page, link)
 		}
+	}
+}
+
+func quotedNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		out = append(out, "`"+name+"`")
+	}
+	return out
+}
+
+func prose(page string) string {
+	return strings.Join(strings.Fields(page), " ")
+}
+
+func TestEachNodeFrameworkPageListsTheEntrypointsTheBuildLooksForInItsOrder(t *testing.T) {
+	pages := mdxPages(t, fixturetest.RepoDir(t))
+	listed := strings.Join(quotedNames(language.NodeEntrypointBases), ", ") + ", each with " + english.And(quotedNames(language.NodeEntrypointExtensions)) + " in turn"
+	for _, page := range []string{"frameworks/express.mdx", "frameworks/hono.mdx"} {
+		if !strings.Contains(prose(pages[filepath.FromSlash(page)]), listed) {
+			t.Errorf("%s does not list the node entrypoints as the build looks for them: %s", page, listed)
+		}
+	}
+}
+
+func TestThePythonPageListsTheEntrypointsDetectionLooksForInItsOrder(t *testing.T) {
+	pages := mdxPages(t, fixturetest.RepoDir(t))
+	listed := "the first of " + strings.Join(quotedNames(language.PythonEntrypointFiles), ", ") + " in the app's directory"
+	for _, dir := range language.PythonEntrypointDirs[1:] {
+		listed += ", then in `" + dir + "`"
+	}
+	if !strings.Contains(prose(pages[filepath.FromSlash("frameworks/python.mdx")]), listed) {
+		t.Errorf("frameworks/python.mdx does not list the python entrypoints as detection looks for them: %s", listed)
 	}
 }
