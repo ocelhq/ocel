@@ -20,6 +20,8 @@ cloud.google.com/go/iam v1.12.0 h1:Aki3bX9aHUDKPHfnRJfDcTdVedvy6quGBQcTqx3DRXk=
 cloud.google.com/go/iam v1.12.0/go.mod h1:FEZ4lXpADAC2AIpQY7LANNjjwyQ2jK439CI2VaD+sLY=
 cloud.google.com/go/kms v1.33.0 h1:pG0X78m212b2pv9N4fdMoUO69LuZGQ9kSvn8sHBOFAo=
 cloud.google.com/go/kms v1.33.0/go.mod h1:CSGvW6GnMQbY+1nOHcIzhMtHSbExXlOmCKjWtYVjcpA=
+cloud.google.com/go/logging v1.19.0 h1:NCqhdVUg3wQ8Cobdf16FDSuTGi3+6+hdSBHrY5TsR6Q=
+cloud.google.com/go/logging v1.19.0/go.mod h1:i40NZCHC9Gqvod4yE+yQfDWwlgwW/SrshkkGibCHxcA=
 cloud.google.com/go/longrunning v1.2.0 h1:WjYH3YHBGCxGJP9M4dWGHBfXr/cFIjMkNgWcJj7/iMM=
 cloud.google.com/go/longrunning v1.2.0/go.mod h1:5KMQALFGOCtFoi2xSOA1u3H7WKlhmckgiyFw7+LGQp0=
 cloud.google.com/go/monitoring v1.30.0 h1:r/d+JUbyKmJ8b07iznuKfzVzrIXTWxHQ3lBRm3x2LlY=
@@ -207,3 +209,7 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+gotest.tools/v3 v3.5.2 h1:7koQfIKdy+I8UTetycgUqXWSDwpgv193Ka+qRsmBY8Q=
+gotest.tools/v3 v3.5.2/go.mod h1:LtdLGcnqToBH83WByAAi/wiwSFCArdFIUV/xxN4pcjA=
+pgregory.net/rapid v1.2.0 h1:keKAYRcjm+e1F0oAuU5F5+YPAWcyxNNRK2wud503Gnk=
+pgregory.net/rapid v1.2.0/go.mod h1:PY5XlDGj0+V1FCq0o192FdRhpKHGTRIWBgqjDBTrq04=
