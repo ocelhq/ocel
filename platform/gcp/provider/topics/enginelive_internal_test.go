@@ -8,9 +8,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"math"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -49,17 +49,32 @@ func emulatedScope(t *testing.T) Scope {
 	return Scope{Slug: "shop", Tier: environment.TierPreview, Environment: "t" + hex.EncodeToString(sum[:6])}
 }
 
+// HACK: floci-gcp hands a pulled message out once, never again past its ack deadline, and
+// answers modifyAckDeadline with a 404, so this receiver keeps each pulled message's lease
+// itself, as Pub/Sub keeps it; pull and lease through Pub/Sub alone once floci-gcp
+// redelivers and serves modifyAckDeadline.
 type pullReceiver struct {
 	service *pubsub.Service
 	project string
 	names   Names
+	topics  map[string]*provider.TopicSpec
+
+	mu   sync.Mutex
+	held map[string][]*leased
 }
 
-func (p pullReceiver) subscription(topic, consumer string) string {
+type leased struct {
+	handle    string
+	message   runs.Message
+	receives  int
+	visibleAt time.Time
+}
+
+func (p *pullReceiver) subscription(topic, consumer string) string {
 	return subscriptionPath(p.project, p.names.Subscription(topic, consumer))
 }
 
-func (p pullReceiver) Receive(ctx context.Context, req runs.ReceiveRequest) ([]runs.Received, error) {
+func (p *pullReceiver) Receive(ctx context.Context, req runs.ReceiveRequest) ([]runs.Received, error) {
 	deadline := time.Now().Add(req.Wait)
 	subscription := p.subscription(req.Topic, req.Consumer)
 	for {
@@ -67,18 +82,11 @@ func (p pullReceiver) Receive(ctx context.Context, req runs.ReceiveRequest) ([]r
 		if err != nil {
 			return nil, err
 		}
-		if len(pulled.ReceivedMessages) > 0 {
-			received := make([]runs.Received, 0, len(pulled.ReceivedMessages))
-			handles := make([]string, 0, len(pulled.ReceivedMessages))
-			for _, message := range pulled.ReceivedMessages {
-				msg, err := messageOf(message.Message, time.Now())
-				if err != nil {
-					return nil, err
-				}
-				received = append(received, runs.Received{Handle: message.AckId, Message: msg, Receives: int(message.DeliveryAttempt)})
-				handles = append(handles, message.AckId)
-			}
-			return received, p.Extend(ctx, req.Topic, req.Consumer, handles, req.Hidden)
+		if err := p.hold(subscription, pulled.ReceivedMessages); err != nil {
+			return nil, err
+		}
+		if received := p.take(subscription, req); len(received) > 0 {
+			return received, nil
 		}
 		if !time.Now().Before(deadline) {
 			return nil, nil
@@ -91,26 +99,72 @@ func (p pullReceiver) Receive(ctx context.Context, req runs.ReceiveRequest) ([]r
 	}
 }
 
-func ackDeadlineOf(hidden time.Duration) int64 {
-	return int64(math.Ceil(min(hidden, pushAckDeadline).Seconds()))
-}
-
-func (p pullReceiver) Extend(ctx context.Context, topic, consumer string, handles []string, hidden time.Duration) error {
-	if len(handles) == 0 {
-		return nil
+func (p *pullReceiver) hold(subscription string, pulled []*pubsub.ReceivedMessage) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, each := range pulled {
+		msg, err := messageOf(each.Message, time.Now())
+		if err != nil {
+			return err
+		}
+		p.held[subscription] = append(p.held[subscription], &leased{handle: each.AckId, message: msg})
 	}
-	_, err := p.service.Projects.Subscriptions.ModifyAckDeadline(p.subscription(topic, consumer), &pubsub.ModifyAckDeadlineRequest{
-		AckIds: handles, AckDeadlineSeconds: ackDeadlineOf(hidden), ForceSendFields: []string{"AckDeadlineSeconds"},
-	}).Context(ctx).Do()
-	return err
+	return nil
 }
 
-func (p pullReceiver) Ack(ctx context.Context, topic, consumer string, handles []string) error {
-	_, err := p.service.Projects.Subscriptions.Acknowledge(p.subscription(topic, consumer), &pubsub.AcknowledgeRequest{AckIds: handles}).Context(ctx).Do()
-	return err
+func (p *pullReceiver) take(subscription string, req runs.ReceiveRequest) []runs.Received {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	ordered := p.topics[req.Topic] != nil && p.topics[req.Topic].Ordered
+	blocked := map[string]bool{}
+	var received []runs.Received
+	for _, each := range p.held[subscription] {
+		if len(received) == req.Max {
+			break
+		}
+		key := each.message.Key
+		if ordered && key != "" && blocked[key] {
+			continue
+		}
+		if each.visibleAt.After(now) {
+			blocked[key] = true
+			continue
+		}
+		each.receives++
+		each.visibleAt = now.Add(req.Hidden)
+		received = append(received, runs.Received{Handle: each.handle, Message: each.message, Receives: each.receives})
+	}
+	return received
 }
 
-func (p pullReceiver) Hide(ctx context.Context, topic, consumer, handle string, hidden time.Duration) error {
+func (p *pullReceiver) lease(subscription string, handles []string, visibleAt time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, each := range p.held[subscription] {
+		if slices.Contains(handles, each.handle) {
+			each.visibleAt = visibleAt
+		}
+	}
+}
+
+func (p *pullReceiver) Extend(_ context.Context, topic, consumer string, handles []string, hidden time.Duration) error {
+	p.lease(p.subscription(topic, consumer), handles, time.Now().Add(hidden))
+	return nil
+}
+
+func (p *pullReceiver) Ack(ctx context.Context, topic, consumer string, handles []string) error {
+	subscription := p.subscription(topic, consumer)
+	if _, err := p.service.Projects.Subscriptions.Acknowledge(subscription, &pubsub.AcknowledgeRequest{AckIds: handles}).Context(ctx).Do(); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.held[subscription] = slices.DeleteFunc(p.held[subscription], func(each *leased) bool { return slices.Contains(handles, each.handle) })
+	return nil
+}
+
+func (p *pullReceiver) Hide(ctx context.Context, topic, consumer, handle string, hidden time.Duration) error {
 	return p.Extend(ctx, topic, consumer, []string{handle}, hidden)
 }
 
@@ -203,7 +257,7 @@ func TestLiveFirestoreAndPubSubKeepEveryRunSemanticOfTheEngine(t *testing.T) {
 		return runsconformance.Wiring{
 			Store:    deployment.Store(),
 			Queue:    deployment.Queue(),
-			Receiver: pullReceiver{service: service, project: clients.Project, names: names},
+			Receiver: &pullReceiver{service: service, project: clients.Project, names: names, topics: declared, held: map[string][]*leased{}},
 		}
 	})
 }
