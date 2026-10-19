@@ -344,6 +344,32 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	}
 }
 
+func TestAHookThatSaysWhatItDoesProvisionsAndRemovesForACallerThatPassesNoLog(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	speaking := &resources.ResourceHooks{
+		Plan: planFromRecord,
+		Provision: func(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
+			log.Say("Provisioning bucket " + in.Resource.Name)
+			return (&buckets{}).ProvisionBucket(ctx, in, log)
+		},
+		Remove: func(_ context.Context, _ provider.StackRef, binding provider.Binding, log progress.Log) error {
+			log.Say("Removing bucket " + binding.Name)
+			return nil
+		},
+	}
+	stacks := resources.NewHookStacks(fake.NewKeyValues(), resources.Hooks{Bucket: speaking})
+	spec := provider.StackSpec{Ref: infraRef(), Kind: provider.StackInfra, Resources: []provider.Resource{{Name: "uploads", Type: provider.BindingBucket}}}
+
+	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
+		t.Fatalf("Provision() with no log = %v", err)
+	}
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref}, nil); err != nil {
+		t.Fatalf("Destroy() with no log = %v", err)
+	}
+}
+
 func rowsOf(plan provider.Plan) map[string]provider.ChangeAction {
 	rows := map[string]provider.ChangeAction{}
 	for _, group := range plan.Groups {
