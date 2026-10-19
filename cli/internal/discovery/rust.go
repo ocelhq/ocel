@@ -44,17 +44,32 @@ func cargoRunCommand(ctx context.Context, root Root) (*exec.Cmd, string, error) 
 	if !ok {
 		return nil, "", fmt.Errorf("discovery: %s has no Cargo.toml naming a package to declare from", root.Dir)
 	}
-	bins := crate.Bins()
-	if len(bins) == 0 {
-		return nil, "", fmt.Errorf("discovery: %s contains %s, which builds no binary to declare from", root.Dir, crate.Name)
+	bin, err := crate.FindBin(root.Bin)
+	if err != nil {
+		return nil, "", fmt.Errorf("discovery: resources are declared by running one binary of the crate at %s: %w", root.Dir, err)
 	}
-	if len(bins) > 1 {
-		return nil, "", fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per crate: keep one bin target in the crate at %s", crate.Name, len(bins), root.Dir)
+	if err := refuseDivergentDefaultBin(root, crate, bin); err != nil {
+		return nil, "", err
 	}
 
-	cmd := exec.Command("cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
+	cmd := exec.Command("cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bin.Name)
 	cmd.Dir = workspace.Root
 	return cmd, workspace.Root, nil
+}
+
+func refuseDivergentDefaultBin(root Root, crate cargo.Package, bin cargo.Target) error {
+	if root.Bin == "" || root.DefaultBinApp == "" {
+		return nil
+	}
+	runs, err := crate.FindBin("")
+	if err == nil && runs.Name == bin.Name {
+		return nil
+	}
+	ran := "no one binary"
+	if err == nil {
+		ran = fmt.Sprintf("%q", runs.Name)
+	}
+	return fmt.Errorf("discovery: apps %q and %q are both built from the crate at %s: %q names the binary %q, and %q names none, so it runs %s: resources are declared by running one binary of a crate, so give both apps the same \"entrypoint\"", root.BinApp, root.DefaultBinApp, root.Dir, root.BinApp, bin.Name, root.DefaultBinApp, ran)
 }
 
 func declaresThroughOcel(at string) bool {

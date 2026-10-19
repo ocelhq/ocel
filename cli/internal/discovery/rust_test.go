@@ -115,9 +115,68 @@ func TestRustDiscoveryRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with two binaries, want an error")
 	}
-	want := "discovery: web builds 2 binaries, and ocel runs one binary per crate: keep one bin target in the crate at " + configDir
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err, want)
+	for _, want := range []string{configDir, `"web"`, `"worker"`, `"entrypoint"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to name %s", err, want)
+		}
+	}
+}
+
+func TestRustDiscoveryRunsTheBinaryTheAppsEntrypointNames(t *testing.T) {
+	needsCargo(t)
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest+"\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
+	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
+	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
+
+	cmd, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust, Bin: "worker"}, testServer)
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	if want := []string{"--bin", "worker"}; !slices.Equal(cmd.Args[len(cmd.Args)-2:], want) {
+		t.Errorf("Args = %q, want them to end %q", cmd.Args, want)
+	}
+}
+
+func TestRustDiscoveryRefusesTwoAppsOnOneCrateWhereTheOneNamingNoBinaryRunsAnother(t *testing.T) {
+	needsCargo(t)
+	bins := "\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n"
+	shared := Root{Language: language.Rust, Bin: "worker", BinApp: "jobs", DefaultBinApp: "web"}
+
+	for _, tt := range []struct {
+		name, manifest string
+		refused        bool
+	}{
+		{"the crate runs web by default", strings.Replace(rustBinManifest, "[package]\n", "[package]\ndefault-run = \"web\"\n", 1) + bins, true},
+		{"the crate runs no one binary by default", rustBinManifest + bins, true},
+		{"the crate runs worker by default", strings.Replace(rustBinManifest, "[package]\n", "[package]\ndefault-run = \"worker\"\n", 1) + bins, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			configDir := t.TempDir()
+			write(t, filepath.Join(configDir, "Cargo.toml"), tt.manifest)
+			write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
+			write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
+			root := shared
+			root.Dir = configDir
+
+			_, err := rustCommand(context.Background(), configDir, root, testServer)
+			if tt.refused && (err == nil || !strings.Contains(err.Error(), `"jobs"`) || !strings.Contains(err.Error(), `"web"`)) {
+				t.Errorf("Command = %v, want jobs and web refused: they run different binaries of one crate", err)
+			}
+			if !tt.refused && err != nil {
+				t.Errorf("Command = %v, want worker run: web runs it too, as the crate's default", err)
+			}
+		})
+	}
+}
+
+func TestRustDiscoveryRefusesAnEntrypointNamingNoBinaryOfTheCrate(t *testing.T) {
+	needsCargo(t)
+	configDir := rustFixture(t, rustBinManifest)
+
+	_, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust, Bin: "worker"}, testServer)
+	if err == nil || !strings.Contains(err.Error(), `"worker"`) || !strings.Contains(err.Error(), `"web"`) {
+		t.Fatalf("error = %v, want a refusal naming the entrypoint worker and the binary web the crate builds", err)
 	}
 }
 
@@ -278,5 +337,21 @@ func TestRustDiscoveryRunsACrateReachedThroughASymlink(t *testing.T) {
 	}
 	if want := []string{"--bin", "web"}; !slices.Equal(cmd.Args[len(cmd.Args)-2:], want) {
 		t.Errorf("Args = %q, want the crate's binary %q", cmd.Args, want)
+	}
+}
+
+func TestRustDiscoveryRunsTheBinaryTheCrateRunsByDefault(t *testing.T) {
+	needsCargo(t)
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\ndefault-run = \"worker\"\n\n[workspace]\n\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
+	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
+	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
+
+	cmd, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	if want := []string{"--bin", "worker"}; !slices.Equal(cmd.Args[len(cmd.Args)-2:], want) {
+		t.Errorf("Args = %q, want them to end %q — the binary default-run names", cmd.Args, want)
 	}
 }

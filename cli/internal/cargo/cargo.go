@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/english"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -42,6 +43,7 @@ type Package struct {
 	ID           string              `json:"id"`
 	Name         string              `json:"name"`
 	ManifestPath string              `json:"manifest_path"`
+	DefaultRun   string              `json:"default_run"`
 	Targets      []Target            `json:"targets"`
 	Dependencies []Dependency        `json:"dependencies"`
 	Features     map[string][]string `json:"features"`
@@ -65,6 +67,30 @@ func (p Package) Bins() []Target {
 	}
 	slices.SortFunc(bins, func(a, b Target) int { return strings.Compare(a.Name, b.Name) })
 	return bins
+}
+
+func (p Package) FindBin(name string) (Target, error) {
+	if name == "" {
+		name = p.DefaultRun
+	}
+	bins := p.Bins()
+	if len(bins) == 0 {
+		return Target{}, fmt.Errorf("the crate %s builds no binary", p.Name)
+	}
+	names := make([]string, 0, len(bins))
+	for _, bin := range bins {
+		if bin.Name == name {
+			return bin, nil
+		}
+		names = append(names, bin.Name)
+	}
+	if name != "" {
+		return Target{}, fmt.Errorf("the crate %s builds no binary named %q: its %s %s", p.Name, name, english.Number(len(names), "binary is", "binaries are"), english.And(english.Quoted(names)))
+	}
+	if len(bins) == 1 {
+		return bins[0], nil
+	}
+	return Target{}, fmt.Errorf("the crate %s builds the binaries %s, and an app runs one: set \"entrypoint\" on the app to the one it runs", p.Name, english.And(english.Quoted(names)))
 }
 
 func (w Workspace) PackageAt(dir string) (Package, bool) {

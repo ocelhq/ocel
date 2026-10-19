@@ -190,6 +190,8 @@ func (l Location) Commands() (Commands, error) {
 	switch l.Language {
 	case language.Go:
 		commands = l.planGoCommands()
+	case language.Rust:
+		commands = l.planRustCommands()
 	case language.Python:
 		planned, err := l.planPythonCommands()
 		if err != nil {

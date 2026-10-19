@@ -239,7 +239,7 @@ Each takes a `zone`. Left off, ocel picks the zone that covers the hostname.
 | `name` | Yes | A DNS label. It labels every resource the app deploys and its preview hostname. |
 | `path` | Yes | The app's directory, relative to the config. |
 | `framework` | | `node`, `next`, `sveltekit`, `go`, `python` or `rust`. Left off, [detected](#how-ocel-finds-each-app) from the app's directory. |
-| `entrypoint` | | Where the app starts, when not where ocel looks, as a node file, a go package's directory, or a python `.py` file or `module:name`. Detection does not read it, so an app ocel cannot detect also sets `framework`. A `next` or `sveltekit` app builds from its own config and takes none. |
+| `entrypoint` | | Where the app starts, when not where ocel looks, as a node file, a go package's directory, a python `.py` file or `module:name`, or a rust binary's name. Detection does not read it, so an app ocel cannot detect also sets `framework`. A `next` or `sveltekit` app builds from its own config and takes none. |
 | [`compute`](#compute) | | `serverless` or `container`. Left off, the first compute the provider runs. |
 | `arch` | | `x86_64` or `arm64`. Left off, what the provider runs the app on. A provider that cannot run the one named refuses the deploy before building. |
 | `buildWithResources` | | Default `true`: a Next app's build reaches its deployed resources, so prerendered pages read them. `false` builds as if none were provisioned. |
