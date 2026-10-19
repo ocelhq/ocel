@@ -1,6 +1,7 @@
 package image_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/pythonserver"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
@@ -21,6 +24,8 @@ type builtPlan struct {
 			Cmd  string `json:"cmd"`
 			Src  string `json:"src"`
 			Dest string `json:"dest"`
+			Path string `json:"path"`
+			Name string `json:"name"`
 		} `json:"commands"`
 		Caches    []string          `json:"caches"`
 		Variables map[string]string `json:"variables"`
@@ -377,7 +382,7 @@ func TestAnAppWithAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.T) {
 const polyglotPythonApp = "testdata/polyglotworkspace/apps/svc"
 
 func TestAnAppWithAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideIt(t *testing.T) {
-	plan := planned(t, polyglotPythonApp, language.Python)
+	plan := plannedFrom(t, locatedWith(t, polyglotPythonApp, language.Python, "main.py"))
 
 	install := strings.Join(plan.step(t, "install"), "\n")
 	if !strings.Contains(install, "pip install") {
@@ -387,7 +392,7 @@ func TestAnAppWithAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideIt(t 
 		t.Errorf("the plan starts the app with %q, and no package manager starts a python module", plan.Deploy.StartCommand)
 	}
 	if !strings.Contains(plan.Deploy.StartCommand, "main.py") {
-		t.Errorf("the plan starts the app with %q, want the module the runtime contract names", plan.Deploy.StartCommand)
+		t.Errorf("the plan starts the app with %q, want the entrypoint the app is served from", plan.Deploy.StartCommand)
 	}
 }
 
@@ -543,4 +548,123 @@ func contains(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+func pythonProject(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		full := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func describedPython(t *testing.T, app string, files map[string]string) image.App {
+	t.Helper()
+	files[project.DefaultFileName] = `{"slug":"shop","apps":[` + app + `]}`
+	cfg, err := project.Load(context.Background(), pythonProject(t, files), "")
+	if err != nil {
+		t.Fatalf("Load() = %v", err)
+	}
+	described, err := image.Describe(cfg, cfg.Apps[0])
+	if err != nil {
+		t.Fatalf("Describe() = %v", err)
+	}
+	return described
+}
+
+func plannedPython(t *testing.T, app string, files map[string]string) builtPlan {
+	t.Helper()
+	described := describedPython(t, app, files)
+	return plannedFrom(t, described.Workspace)
+}
+
+func (p builtPlan) writes(step, path string) (string, bool) {
+	for _, planned := range p.Steps {
+		if planned.Name != step {
+			continue
+		}
+		for _, command := range planned.Commands {
+			if command.Name != "" && command.Path == path {
+				asset, ok := planned.Assets[command.Name]
+				return asset, ok
+			}
+		}
+	}
+	return "", false
+}
+
+func TestAPythonImageStartsTheDetectedEntrypointThroughOcelsServerProgram(t *testing.T) {
+	plan := plannedPython(t, `{"name":"api","path":".","compute":"container"}`, map[string]string{
+		"requirements.txt": "flask==3.1.1\n",
+		"src/app.py":       "app = None\n",
+		"src/main.py":      "print('hi')\n",
+	})
+
+	if want := "python3 ocel-server.py file src/app.py"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q — an image serves the entrypoint the project detected, as the function does", plan.Deploy.StartCommand, want)
+	}
+	written, ok := plan.writes("build", "/app/"+pythonserver.File)
+	if !ok || written != pythonserver.Source {
+		t.Errorf("the build step writes no %s holding the server program beside the app, and the start command runs it", pythonserver.File)
+	}
+}
+
+func TestAPythonImageServesTheEntrypointTheAppNames(t *testing.T) {
+	plan := plannedPython(t, `{"name":"api","path":".","entrypoint":"shop.api:app","compute":"container"}`, map[string]string{
+		"requirements.txt": "flask==3.1.1\n",
+		"main.py":          "print('hi')\n",
+	})
+
+	if want := "python3 ocel-server.py module shop.api:app"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
+	}
+}
+
+func TestAPythonImageBuiltFromAContextAboveTheAppStartsInTheAppsDirectory(t *testing.T) {
+	plan := plannedPython(t, `{"name":"api","path":"server dir","compute":{"container":{"image":{"context":"."}}}}`, map[string]string{
+		"server dir/main.py":          "print('hi')\n",
+		"server dir/requirements.txt": "flask==3.1.1\n",
+	})
+
+	if want := "cd 'server dir' && python3 ocel-server.py file main.py"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
+	}
+	if _, ok := plan.writes("build", "/app/server dir/"+pythonserver.File); !ok {
+		t.Errorf("the build step writes no server program in the app's own directory under the context")
+	}
+}
+
+func TestAPythonAppsOwnRailpackStartCommandIsWhatItsImageRuns(t *testing.T) {
+	plan := plannedPython(t, `{"name":"api","path":".","compute":"container"}`, map[string]string{
+		"requirements.txt": "gunicorn==23.0.0\n",
+		"main.py":          "app = None\n",
+		"railpack.json":    `{"deploy": {"startCommand": "gunicorn main:app"}}`,
+	})
+
+	if plan.Deploy.StartCommand != "gunicorn main:app" {
+		t.Errorf("the plan starts the app with %q, want the start command its railpack.json names", plan.Deploy.StartCommand)
+	}
+}
+
+func TestTheImageOfAPythonAppWithNoEntrypointIsLeftToRailpack(t *testing.T) {
+	plan := plannedPython(t, `{"name":"site","path":".","compute":"container"}`, map[string]string{
+		"requirements.txt":   "django==5.2\ngunicorn==23.0.0\n",
+		"manage.py":          "\n",
+		"mysite/settings.py": "WSGI_APPLICATION = 'mysite.wsgi.application'\n",
+		"mysite/wsgi.py":     "application = None\n",
+	})
+
+	if want := "mysite.wsgi:application"; !strings.Contains(plan.Deploy.StartCommand, want) || strings.Contains(plan.Deploy.StartCommand, pythonserver.File) {
+		t.Errorf("the plan starts the app with %q, want railpack's own start of the Django app (%s): no entrypoint was resolved for ocel's server program to serve", plan.Deploy.StartCommand, want)
+	}
+	if _, ok := plan.writes("build", "/app/"+pythonserver.File); ok {
+		t.Errorf("the build step writes %s, which nothing starts", pythonserver.File)
+	}
 }

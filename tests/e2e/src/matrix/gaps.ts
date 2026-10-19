@@ -474,20 +474,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "python-function-vendors-requirements-alone",
-    reason:
-      "a Python function vendors what requirements.txt lists and nothing else, and sdk/python declares its dependencies, the SDK among them, in pyproject.toml, so the function cannot import them and Cloud Run never sees it ready",
-    issue: 1260,
-    where: [
-      {
-        on: ["gcp", "gcp.floci"],
-        fixtures: [sdk.python],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
     id: "rust-attribution-resolves-offline",
     reason:
       "attribution resolves a rust app's whole lockfile with cargo metadata --offline, and the build downloaded only what its musl target builds, so a crate only another platform builds is missing and the manifest is never assembled",

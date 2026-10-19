@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/pythonserver"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
@@ -216,7 +217,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	assertFunctions(t, "ReadFunctions", fns, []Function{{
 		Route:        "index",
 		Framework:    buildoutput.Framework{Name: "python", Arch: arch.X8664},
-		EntryFile:    "main.py",
+		EntryFile:    pythonserver.File,
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
 		App:          "api",

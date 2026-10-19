@@ -71,7 +71,7 @@ export interface AppConfig {
   compute?: ComputeDescriptor;
   /** The hostnames this app is served on. */
   domains?: AppDomainConfig;
-  /** Where the app starts, if not the detected one: a node file, a go directory or a python file. */
+  /** Where the app starts, if not the detected one: a node file, a go directory or a python module. */
   entrypoint?: string;
   /** The variables folder this app reads, when it does not read the project's own. */
   folder?: string;

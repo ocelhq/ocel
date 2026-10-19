@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	railpack "github.com/railwayapp/railpack/buildkit"
 	"github.com/railwayapp/railpack/core"
 	"github.com/railwayapp/railpack/core/app"
 	railpackplan "github.com/railwayapp/railpack/core/plan"
@@ -75,12 +77,33 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	if err := scope(result.Plan, loc, commands, outside); err != nil {
 		return nil, err
 	}
+	if commands.Asset.Name != "" {
+		if err := addAsset(result.Plan, loc, commands.Asset); err != nil {
+			return nil, err
+		}
+	}
 	limitSecretsToBuildStep(result.Plan)
 	plan, err := json.Marshal(result.Plan)
 	if err != nil {
 		return nil, fmt.Errorf("serialize the railpack plan for %s: %w", loc.Root, err)
 	}
 	return plan, nil
+}
+
+func addAsset(built *railpackplan.BuildPlan, loc workspace.Location, asset workspace.Asset) error {
+	for i := range built.Steps {
+		step := &built.Steps[i]
+		if step.Name != buildStep {
+			continue
+		}
+		if step.Assets == nil {
+			step.Assets = map[string]string{}
+		}
+		step.Assets[asset.Name] = asset.Content
+		step.Commands = append(step.Commands, railpackplan.NewFileCommand(path.Join(railpack.WorkingDir, loc.Path, asset.Name), asset.Name))
+		return nil
+	}
+	return fmt.Errorf("railpack planned %s with no %s step, and ocel writes %s, which the image starts with, in that step", loc.Root, buildStep, asset.Name)
 }
 
 func providerFor(loc workspace.Location) string {

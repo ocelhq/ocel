@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/pythonserver"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -81,7 +82,7 @@ func (a *App) refuseUnserved(lacking, dir string, field func(string) string) err
 	switch a.Framework {
 	case buildoutput.FrameworkPython:
 		if a.Entrypoint == "" {
-			return a.refuseServerless(newInvalidConfigError(fmt.Errorf("app %q is built with python, and %s: set \"entrypoint\" to the file that serves it", a.Name, lacking), field("entrypoint")))
+			return a.refuseServerless(newInvalidConfigError(fmt.Errorf("app %q is built with python, and %s: set \"entrypoint\" to the file or module that serves it", a.Name, lacking), field("entrypoint")))
 		}
 	case buildoutput.FrameworkNode:
 		if a.Entrypoint == "" {
@@ -104,8 +105,15 @@ func (a *App) refuseServerless(refusal error) error {
 }
 
 func refuseEntrypointForm(app, framework, entrypoint string) error {
-	if framework == buildoutput.FrameworkGo && !filepath.IsLocal(filepath.FromSlash(entrypoint)) {
-		return fmt.Errorf("app %q is built with go and sets entrypoint %q, which names no directory inside the app: give it the directory of the main package, relative to the app's path", app, entrypoint)
+	switch framework {
+	case buildoutput.FrameworkPython:
+		if _, err := pythonserver.ParseEntrypoint(entrypoint); err != nil {
+			return fmt.Errorf("app %q is built with python, and %w", app, err)
+		}
+	case buildoutput.FrameworkGo:
+		if !filepath.IsLocal(filepath.FromSlash(entrypoint)) {
+			return fmt.Errorf("app %q is built with go and sets entrypoint %q, which names no directory inside the app: give it the directory of the main package, relative to the app's path", app, entrypoint)
+		}
 	}
 	return nil
 }

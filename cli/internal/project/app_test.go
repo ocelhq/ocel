@@ -175,6 +175,9 @@ func TestAnEntrypointInTheWrongFormForItsFrameworkIsRefusedAtLoad(t *testing.T) 
 	}{
 		{"go", "/srv/cmd/api", "directory"},
 		{"go", "../cmd/api", "directory"},
+		{"python", "my-pkg:app", "module"},
+		{"python", "../main.py", "inside the app's directory"},
+		{"python", "bin/serve", ".py"},
 	} {
 		t.Run(tt.framework+" "+tt.entrypoint, func(t *testing.T) {
 			t.Parallel()
@@ -190,7 +193,7 @@ func TestAnEntrypointInTheWrongFormForItsFrameworkIsRefusedAtLoad(t *testing.T) 
 func TestAnEntrypointInTheFormOfItsFrameworkIsTakenAtLoad(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range [][2]string{{"go", "cmd/api"}, {"go", "."}} {
+	for _, tt := range [][2]string{{"go", "cmd/api"}, {"go", "."}, {"python", "shop.api:app"}, {"python", "src/main.py"}} {
 		framework, entrypoint := tt[0], tt[1]
 		cfg, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","framework":"`+framework+`","entrypoint":"`+entrypoint+`","compute":"serverless"}]}`)
 		if err != nil {
