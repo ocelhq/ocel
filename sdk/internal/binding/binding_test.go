@@ -30,7 +30,7 @@ func TestABindingsTypeIsItsPropertiesCase(t *testing.T) {
 	}
 	for want, record := range cases {
 		if got := typeOf(record); got != want {
-			t.Errorf("typeOf(%v) = %v, want %v", record, got, want)
+			t.Errorf("typeOf(a binding with %T properties) = %v, want %v", record.GetProperties(), got, want)
 		}
 	}
 }

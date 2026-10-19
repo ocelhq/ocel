@@ -98,16 +98,16 @@ func TestTheSealedValueCarriesTheGrantsAndTheRecordOnlyItsShape(t *testing.T) {
 	}
 	value, err := variablestoreserver.DecodePublishedBinding(pair.Value)
 	if err != nil || !proto.Equal(value, published) {
-		t.Errorf("value = %v, %v, want the published binding with its grants: a deploy renders the app's permissions from it", value, err)
+		t.Errorf("value %q with grants %v, %v, want the published binding with its grants: a deploy renders the app's permissions from it", value.GetBinding().GetName(), value.GetGrants(), err)
 	}
 	record, err := variablestoreserver.DecodePublishedBinding(pair.Record)
 	if err != nil {
 		t.Fatalf("record: %v", err)
 	}
 	if record.GetBinding().GetPostgres().GetPassword() != "" || record.GetBinding().GetPostgres().GetHost() != "" {
-		t.Errorf("record = %v, want the properties left out of what is stored unsealed", record)
+		t.Errorf("record keeps host %q or a password, want the properties left out of what is stored unsealed", record.GetBinding().GetPostgres().GetHost())
 	}
 	if record.GetBinding().GetPostgres() == nil || record.GetBinding().GetSource() != "pulumi" || !proto.Equal(record.GetGrants()[0], published.GetGrants()[0]) {
-		t.Errorf("record = %v, want its type, source and grants kept for a listing", record)
+		t.Errorf("record has postgres %t, source %q, grants %v, want its type, source and grants kept for a listing", record.GetBinding().GetPostgres() != nil, record.GetBinding().GetSource(), record.GetGrants())
 	}
 }
