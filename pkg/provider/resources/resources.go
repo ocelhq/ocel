@@ -129,6 +129,7 @@ func recordedResult(recorded stackrecords.Stack) provider.StackResult {
 }
 
 func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
+	progress = orDiscard(progress)
 	release, err := f.running.Claim(spec.Ref)
 	if err != nil {
 		return provider.StackResult{}, err
@@ -191,6 +192,13 @@ func (f *hookStacks) Provision(ctx context.Context, spec provider.StackSpec, pro
 		return provider.StackResult{}, err
 	}
 	return result, nil
+}
+
+func orDiscard(log progress.Log) progress.Log {
+	if log == nil {
+		return progress.Discard()
+	}
+	return log
 }
 
 type computeProvisioner func(context.Context, progress.Log) (provider.StackResult, error)
@@ -271,6 +279,7 @@ func (f *hookStacks) hooksFor(kind provider.BindingType, name string) (*Resource
 }
 
 func (f *hookStacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	progress = orDiscard(progress)
 	ref, images := req.Ref, req.Images
 	release, err := f.running.Claim(ref)
 	if err != nil {
