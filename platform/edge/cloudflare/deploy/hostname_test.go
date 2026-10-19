@@ -76,20 +76,25 @@ type cfMock struct {
 	deletedMTLSCertificates  []string
 	refuseMTLSDelete         bool
 
-	originRequests   [][]string
-	originCSRs       []string
-	revokedOrigin    []string
-	uploadedKeys     []string
-	originPulls      bool
-	globalPulls      bool
-	originPullWrites []bool
-	afterListing     func(m *cfMock)
-	purges           [][]string
-	sslMode          string
+	originRequests           [][]string
+	originCSRs               []string
+	revokedOrigin            []string
+	uploadedKeys             []string
+	originPulls              bool
+	globalPulls              bool
+	originPullWrites         []bool
+	deniedClientCertificates clientCertificateAccess
+	afterListing             func(m *cfMock)
+	purges                   [][]string
+	sslMode                  string
 
 	tunnels tunnelMock
 
 	bootstrapInstalled bool
+}
+
+type clientCertificateAccess struct {
+	reads, writes bool
 }
 
 type putSecret struct {
@@ -119,6 +124,14 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	firstPage := func(r *http.Request) bool {
 		p := r.URL.Query().Get("page")
 		return p == "" || p == "1"
+	}
+	writeAuthenticationError := func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": false, "messages": []any{}, "result": nil,
+			"errors": []any{map[string]any{"code": 10000, "message": "Authentication error"}},
+		})
 	}
 	writeResult := func(w http.ResponseWriter, result any) {
 		w.Header().Set("Content-Type", "application/json")
@@ -383,6 +396,10 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
+		if m.deniedClientCertificates.reads {
+			writeAuthenticationError(w)
+			return
+		}
 		if !firstPage(r) {
 			writeResult(w, []any{})
 			return
@@ -395,6 +412,10 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("POST /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
+		if m.deniedClientCertificates.writes {
+			writeAuthenticationError(w)
+			return
+		}
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		m.uploadedKeys = append(m.uploadedKeys, fmt.Sprint(body["private_key"]))
@@ -502,10 +523,18 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, _ *http.Request) {
+		if m.deniedClientCertificates.reads {
+			writeAuthenticationError(w)
+			return
+		}
 		writeResult(w, map[string]any{"enabled": m.originPulls})
 	})
 
 	mux.HandleFunc("PUT /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, r *http.Request) {
+		if m.deniedClientCertificates.writes {
+			writeAuthenticationError(w)
+			return
+		}
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		enabled, _ := body["enabled"].(bool)
