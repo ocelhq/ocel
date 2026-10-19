@@ -270,11 +270,13 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 	if err != nil {
 		return nil, err
 	}
-	if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "variables", "read"), &awsiam.RolePolicyArgs{
-		Role:   role.Name,
-		Policy: pulumi.String(variablesPolicy),
-	}); err != nil {
-		return nil, err
+	if variablesPolicy != "" {
+		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "variables", "read"), &awsiam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(variablesPolicy),
+		}); err != nil {
+			return nil, err
+		}
 	}
 	return role, nil
 }

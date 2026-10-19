@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
 
@@ -702,5 +703,44 @@ func TestARoleWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
 	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", &inputRecorder{}))
 	if err == nil || !strings.Contains(err.Error(), "boundary") {
 		t.Fatalf("newFunctionRole with no boundary = %v, want a refusal naming the boundary", err)
+	}
+}
+
+func TestAFunctionRoleGrantsTheVariablesKeyOnlyWhereTheAccountNamesOne(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		key  string
+	}{
+		{"an account with a variables key grants decrypt on it", productionVariablesKeyARN},
+		{"an account without one declares no variables policy", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := &inputRecorder{}
+			program := func(pctx *pulumi.Context) error {
+				_, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{
+					App: "api", Boundary: componenttest.BoundaryARN, Variables: variables.Reader{KeyARN: tc.key},
+				})
+				return err
+			}
+			if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
+				t.Fatalf("run program: %v", err)
+			}
+
+			name := naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "variables", "read")
+			raw, declared := rec.inputs(rolePolicyToken, name)["policy"]
+			if tc.key == "" {
+				if declared {
+					t.Errorf("%s = %v, want none: IAM refuses a policy that grants nothing as malformed", name, raw)
+				}
+				return
+			}
+			if !declared || !raw.IsString() || !strings.Contains(raw.StringValue(), tc.key) {
+				t.Errorf("%s = %v, want a grant on %q", name, raw, tc.key)
+			}
+		})
 	}
 }
