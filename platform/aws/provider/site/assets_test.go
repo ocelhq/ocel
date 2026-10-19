@@ -125,6 +125,19 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 	})
 
+	t.Run("uploads for an edge that reads the bucket by its policy and holds no key", func(t *testing.T) {
+		t.Parallel()
+		asset := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := publication{root: staticAppTree(t), buckets: Buckets{Assets: "assets", Objects: asset}}
+
+		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
+			t.Fatalf("uploadStaticAssets: %v", err)
+		}
+		if got := sortedPuts(asset); !slices.Contains(got, assetKeyFor("web", testBuildID, "_next/static/chunk.js")) {
+			t.Errorf("uploaded %v, want the static files a CloudFront edge serves from the bucket", got)
+		}
+	})
+
 	t.Run("stamps content type and cache control per path tier", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
@@ -195,19 +208,6 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 		if got := sortedPuts(asset); len(got) != 0 {
 			t.Errorf("asset bucket put %v, want the HEAD hit to skip the upload", got)
-		}
-	})
-
-	t.Run("a deploy whose edge holds no key to the asset bucket uploads nothing", func(t *testing.T) {
-		t.Parallel()
-		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: staticAppTree(t), buckets: Buckets{Assets: "assets", Objects: asset}}
-
-		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
-			t.Fatalf("uploadStaticAssets: %v", err)
-		}
-		if len(asset.puts) != 0 {
-			t.Errorf("asset bucket received %v, want nothing where no edge reads static files from it", asset.puts)
 		}
 	})
 
