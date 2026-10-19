@@ -70,6 +70,9 @@ func ReadPolicy(r Reader) (string, error) {
 			},
 		})
 	}
+	if len(statements) == 0 {
+		return "", nil
+	}
 	out, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
 	if err != nil {
 		return "", fmt.Errorf("render variables read policy: %w", err)
