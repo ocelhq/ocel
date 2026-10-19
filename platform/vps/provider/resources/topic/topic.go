@@ -55,7 +55,7 @@ func newQueueContainer(ref provider.StackRef) container.Spec {
 		container.Volume{Path: queueData, Generation: images.QueueDatabaseMajor()})
 	spec.Args = []string{"postgres", "-c", "listen_addresses="}
 	spec.Sockets = boxapi.QueueSocketsPath
-	spec.Ready = []string{"pg_isready", "-U", postgres.Superuser}
+	spec.Ready = []string{"sh", "-c", `[ "$(cat /proc/1/comm)" = postgres ] && exec pg_isready -U ` + postgres.Superuser}
 	spec.Labels = map[string]string{docker.LabelOwner: boxapi.QueueRole}
 	superuser := spec.Credential.Reassert
 	spec.Credential.Reassert = func(secret string) ([]string, string) {
