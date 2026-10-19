@@ -174,7 +174,6 @@ export const gaps: Gap[] = [
       {
         on: ["gcp.floci"],
         fixtures: [deploy.sveltekit],
-        variants: [container],
         fails: [check(publicOriginFormActionCheck)],
       },
       {
