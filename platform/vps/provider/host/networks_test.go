@@ -228,7 +228,7 @@ func TestTheSwitchboardJoinsEveryLabelledNetworkBeforeItStartsServing(t *testing
 		"restored":      board.Restoring(docker.ContainerRising, routing.Locked("-x")),
 	} {
 		created := strings.Index(command, shell.Quote("docker")+" "+shell.Quote("create"))
-		rejoin := strings.Index(command, "docker network ls --quiet --filter "+shell.Quote("label="+docker.LabelTier))
+		rejoin := strings.Index(command, "docker network ls --format "+shell.Quote("{{.Name}}")+" --filter "+shell.Quote("label="+docker.LabelTier))
 		started := strings.Index(command, "docker start "+shell.Quote(boxapi.Switchboard))
 		rising := strings.Index(command, "while :; do")
 		if created < 0 || rejoin < created || started < rejoin || rising < started {
