@@ -311,7 +311,7 @@ func (b *Box) deployLoginOnBox(ctx context.Context) (prefix, bool) {
 	if err != nil || dest.User == boxapi.DeployLogin {
 		return asLogin, false
 	}
-	result, err := b.streamAs(ctx, asLogin, "id -u "+shell.Quote(boxapi.DeployLogin)+" >/dev/null 2>&1", nil)
+	result, err := b.streamAs(ctx, asLogin, "id -u "+shell.Quote(boxapi.DeployLogin)+" >/dev/null 2>&1 && [ -x "+shell.Quote(boxapi.DockerShims+"/docker")+" ]", nil)
 	if err != nil || result.Code != 0 {
 		return asLogin, false
 	}
