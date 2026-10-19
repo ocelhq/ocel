@@ -242,10 +242,8 @@ func (s *stack) clearTrustStore(ctx context.Context, c Clients, listener publicL
 		return err
 	}
 	if store != "" {
-		_, err := c.Balancers.DeleteTrustStore(ctx, &elbv2.DeleteTrustStoreInput{TrustStoreArn: aws.String(store)})
-		var absent *elbv2types.TrustStoreNotFoundException
-		if err != nil && !errors.As(err, &absent) {
-			return fmt.Errorf("delete the trust store %s, which no hostname trusts a CA in any more: %w", store, err)
+		if err := s.deleteTrustStore(ctx, c, store); err != nil {
+			return err
 		}
 	}
 	if err := deleteObject(ctx, c, formatBundleKey(s.state.Tier), ""); err != nil {
@@ -255,6 +253,25 @@ func (s *stack) clearTrustStore(ctx context.Context, c Clients, listener publicL
 		return nil
 	}
 	return deleteObject(ctx, c, formatRecordKey(s.state.Tier), recordETag)
+}
+
+func (s *stack) deleteTrustStore(ctx context.Context, c Clients, store string) error {
+	var err error
+	for attempt := range trustStoreReads {
+		if err := s.pauseBeforeRead(ctx, attempt); err != nil {
+			return err
+		}
+		_, err = c.Balancers.DeleteTrustStore(ctx, &elbv2.DeleteTrustStoreInput{TrustStoreArn: aws.String(store)})
+		var associated *elbv2types.TrustStoreInUseException
+		if !errors.As(err, &associated) {
+			break
+		}
+	}
+	var absent *elbv2types.TrustStoreNotFoundException
+	if err != nil && !errors.As(err, &absent) {
+		return fmt.Errorf("delete the trust store %s, which no hostname trusts a CA in any more: %w", store, err)
+	}
+	return nil
 }
 
 func deleteObject(ctx context.Context, c Clients, key, etag string) error {
