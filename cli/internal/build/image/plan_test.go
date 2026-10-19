@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -238,6 +239,37 @@ func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
 	build := strings.Join(plan.step(t, "build"), "\n")
 	if want := "pnpm --filter \"{./apps/web}...\" run build"; !strings.Contains(build, want) {
 		t.Errorf("the build step runs:\n%s\nwant %q — a workspace dependency has to be built before the app that imports it", build, want)
+	}
+}
+
+func pnpmWorkspaceWithAdapter(t *testing.T, libBuild string) string {
+	t.Helper()
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		".git/HEAD":                     "ref: refs/heads/main\n",
+		"package.json":                  `{"name":"root","private":true,"scripts":{"build":"turbo run build"}}`,
+		"pnpm-workspace.yaml":           "packages:\n  - apps/*\n  - packages/*\n",
+		"pnpm-lock.yaml":                "lockfileVersion: '9.0'\n\nimporters:\n  .: {}\n  apps/web:\n    devDependencies:\n      '@fixture/adapter':\n        specifier: workspace:^\n        version: link:../../packages/adapter\n  packages/adapter:\n    dependencies:\n      '@fixture/lib':\n        specifier: workspace:^\n        version: link:../lib\n  packages/lib: {}\n",
+		"apps/web/package.json":         `{"name":"@fixture/web","scripts":{"build":"vite build","start":"node build"},"devDependencies":{"@fixture/adapter":"workspace:^"}}`,
+		"packages/adapter/package.json": `{"name":"@fixture/adapter","scripts":{"build":"tsc"},"dependencies":{"@fixture/lib":"workspace:^"}}`,
+		"packages/lib/package.json":     `{"name":"@fixture/lib","scripts":{"build":` + strconv.Quote(libBuild) + `}}`,
+	})
+	return filepath.Join(root, "apps", "web")
+}
+
+func TestAWorkspacePackageTheAppDependsOnThatBuildsWithBunGetsBunInTheImage(t *testing.T) {
+	plan := plannedFrom(t, located(t, pnpmWorkspaceWithAdapter(t, "bun build.mjs && tsc"), language.JS))
+
+	if !strings.Contains(assets(t, plan), "bun = ") {
+		t.Errorf("the plan installs:\n%s\nand no bun: the build step runs every workspace dependency's build, and one of them runs bun", assets(t, plan))
+	}
+}
+
+func TestAWorkspaceWhoseBuildsNeverCallBunGetsNoBunInTheImage(t *testing.T) {
+	plan := plannedFrom(t, located(t, pnpmWorkspaceWithAdapter(t, "tsc --outDir bundle"), language.JS))
+
+	if strings.Contains(assets(t, plan), "bun = ") {
+		t.Errorf("the plan installs:\n%s\nwhich includes bun, and no script the app reaches runs it", assets(t, plan))
 	}
 }
 
