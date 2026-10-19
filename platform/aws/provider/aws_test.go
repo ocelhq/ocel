@@ -514,6 +514,22 @@ func TestLambdaDeclaresA200MiBFunctionSizeBudget(t *testing.T) {
 	}
 }
 
+func TestANamespaceThatStartsItsBalancerNamesWithTheELBReservedPrefixIsRefused(t *testing.T) {
+	for _, namespace := range []string{"internal", "internal-x"} {
+		t.Setenv(provider.NamespaceEnvVar, namespace)
+		_, err := New(context.Background(), provider.Settings{Options: provider.Options{"region": "eu-west-2"}})
+		if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid || !strings.Contains(err.Error(), "internal-") {
+			t.Errorf("New() in namespace %q = %v, want it refused as invalid naming the internal- prefix ELB reserves", namespace, err)
+		}
+	}
+	for _, namespace := range []string{"internals", "internal-platform"} {
+		t.Setenv(provider.NamespaceEnvVar, namespace)
+		if _, err := New(context.Background(), provider.Settings{Options: provider.Options{"region": "eu-west-2"}}); err != nil {
+			t.Errorf("New() in namespace %q = %v, want it accepted: its balancer names start with %s-", namespace, err, naming.NamespaceField(namespace))
+		}
+	}
+}
+
 func TestEmbeddingACompileCacheNobodyWarmsIsRefused(t *testing.T) {
 	t.Parallel()
 

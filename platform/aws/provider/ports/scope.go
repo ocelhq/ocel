@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -18,6 +21,8 @@ const (
 	ContainersSlug = "ocel-containers"
 
 	PublicListenerPort = 443
+
+	reservedBalancerPrefix = "internal-"
 
 	containerFrontSegment = "front"
 	containersWord        = "containers"
@@ -51,6 +56,15 @@ func PublicTargetGroupName(namespace string, tier environment.Tier) string {
 
 func PublicLivenessName(namespace string, tier environment.Tier) string {
 	return naming.Join(naming.WordSeparator, PublicBalancerName(namespace, tier), livenessWord)
+}
+
+func RefuseReservedBalancerPrefix(namespace string) error {
+	if strings.HasPrefix(naming.NamespaceField(namespace)+naming.WordSeparator, reservedBalancerPrefix) {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"%s: namespace %q would start every load balancer name with %q, a prefix Elastic Load Balancing reserves; choose another namespace",
+			provider.NamespaceEnvVar, namespace, reservedBalancerPrefix)
+	}
+	return nil
 }
 
 func ContainerFrontKey(tier environment.Tier) records.Key {
