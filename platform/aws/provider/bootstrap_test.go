@@ -127,3 +127,36 @@ func TestTheContainerInfrastructureTheFunctionNetworkAndTheBastionAreOfferedForR
 		}
 	}
 }
+
+type plansRecorded struct {
+	*fake.Bootstrap
+	planned []provider.BootstrapRequest
+}
+
+func (p *plansRecorded) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
+	p.planned = append(p.planned, req)
+	return p.Bootstrap.Plan(ctx, req)
+}
+
+func TestAPartADeployAddsIsNeverAskedOfTheAccountBootstrap(t *testing.T) {
+	t.Parallel()
+
+	b, inner, _ := removingParts(t)
+	recorded := &plansRecorded{Bootstrap: inner}
+	b.Bootstrap = recorded
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{imageoptimizer.Part, fake.PartCache}}
+
+	if _, err := b.Plan(context.Background(), req); err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if err := b.Apply(context.Background(), req, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+
+	applied := inner.Applied()
+	for name, asked := range map[string]provider.BootstrapRequest{"Plan": recorded.planned[0], "Apply": applied[len(applied)-1]} {
+		if !slices.Equal(asked.Parts, []string{fake.PartCache}) {
+			t.Errorf("%s() asked the account bootstrap for %v, want %s alone: only a deploy adds %s, and the account bootstrap holds no template for it", name, asked.Parts, fake.PartCache, imageoptimizer.Part)
+		}
+	}
+}
