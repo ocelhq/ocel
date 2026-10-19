@@ -210,6 +210,48 @@ func TestBundle(t *testing.T) {
 		}
 	})
 
+	t.Run("a dependency's import of a package the app never installed fails only where it runs", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, tree{
+			"package.json":                       appPkg,
+			"server.js":                          "import dep from 'lazy-dep';\nconsole.log(dep.answer);\n",
+			"node_modules/lazy-dep/package.json": `{"name":"lazy-dep","main":"index.js"}`,
+			"node_modules/lazy-dep/index.js": "const load = (name, fn) => { try { return fn(); } catch { return null; } };\n" +
+				"exports.answer = 'lazy:' + load('optional-peer', () => require('optional-peer'));\n" +
+				"exports.later = () => require('later-peer/sub');\n",
+		})
+		var log strings.Builder
+		target := l.target("server.js")
+		target.Log = &log
+
+		if err := Bundle(context.Background(), target); err != nil {
+			t.Fatalf("Bundle: %v", err)
+		}
+		for _, name := range []string{"optional-peer", "later-peer/sub"} {
+			if !strings.Contains(log.String(), name) {
+				t.Errorf("build log does not name %q, which the bundle leaves unresolved:\n%s", name, log.String())
+			}
+		}
+		if got := runNode(t, l.functionDir); !strings.Contains(got, "lazy:null") {
+			t.Errorf("bundle printed %q, want the dependency to load and handle the missing package itself", got)
+		}
+	})
+
+	t.Run("the app's own import of a package it never installed fails the build", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, tree{
+			"package.json": appPkg,
+			"server.js":    "import missing from 'never-installed';\nconsole.log(missing);\n",
+		})
+
+		err := Bundle(context.Background(), l.target("server.js"))
+		if err == nil || !strings.Contains(err.Error(), "never-installed") {
+			t.Fatalf("Bundle = %v, want an error naming never-installed", err)
+		}
+	})
+
 	t.Run("a native addon stays external and is copied beside the bundle", func(t *testing.T) {
 		t.Parallel()
 

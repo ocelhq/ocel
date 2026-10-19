@@ -25,7 +25,7 @@ const (
 	npmConfigFile = ".npmrc"
 )
 
-type resolvingForPerPlatformPackage struct{}
+type resolvingPastPlugins struct{}
 
 type manifest struct {
 	Name                 string            `json:"name"`
@@ -51,14 +51,14 @@ func (p *crossInstall) plugin() api.Plugin {
 		Name: "ocel-platform-package",
 		Setup: func(build api.PluginBuild) {
 			build.OnResolve(api.OnResolveOptions{Filter: `^[^./]`}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
-				if _, again := args.PluginData.(resolvingForPerPlatformPackage); again || args.Kind == api.ResolveEntryPoint {
+				if _, again := args.PluginData.(resolvingPastPlugins); again || args.Kind == api.ResolveEntryPoint {
 					return api.OnResolveResult{}, nil
 				}
 				resolved := build.Resolve(args.Path, api.ResolveOptions{
 					Importer:   args.Importer,
 					ResolveDir: args.ResolveDir,
 					Kind:       args.Kind,
-					PluginData: resolvingForPerPlatformPackage{},
+					PluginData: resolvingPastPlugins{},
 				})
 				if len(resolved.Errors) > 0 || resolved.External || !filepath.IsAbs(resolved.Path) {
 					return api.OnResolveResult{}, nil

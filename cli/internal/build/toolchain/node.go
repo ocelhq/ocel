@@ -74,7 +74,8 @@ func Bundle(ctx context.Context, t Target) error {
 
 	native := &addons{arch: t.Framework.Arch}
 	install := &crossInstall{arch: t.Framework.Arch}
-	options := bundleOptions(filepath.Dir(t.Entrypoint), filepath.Join(t.FunctionDir, handlerFile), install, native)
+	missing := &unresolved{}
+	options := bundleOptions(filepath.Dir(t.Entrypoint), filepath.Join(t.FunctionDir, handlerFile), install, native, missing)
 	options.EntryPoints = []string{t.Entrypoint}
 	result := api.Build(options)
 	if len(result.Errors) > 0 {
@@ -85,11 +86,12 @@ func Bundle(ctx context.Context, t Target) error {
 	reportRuntimeFileRisk(t.Log, t.App, result.Metafile, filepath.Dir(t.Entrypoint))
 	var worker []string
 	if t.WorkerSource != "" {
-		if err := t.bundleWorkerEntry(install, native); err != nil {
+		if err := t.bundleWorkerEntry(install, native, missing); err != nil {
 			return err
 		}
 		worker = containerimage.NodeWorkerEntry.ArtifactCommand()
 	}
+	missing.report(t.Log, t.App)
 
 	if err := native.verify(); err != nil {
 		return err
@@ -103,8 +105,8 @@ func Bundle(ctx context.Context, t Target) error {
 	return describeArtifact(t.App, t.Framework, handlerFile, nil, worker, t.FunctionDir, t.AppDir)
 }
 
-func (t Target) bundleWorkerEntry(install *crossInstall, native *addons) error {
-	options := bundleOptions(t.WorkerResolveDir, filepath.Join(t.FunctionDir, containerimage.NodeWorkerEntry.ArtifactFile), install, native)
+func (t Target) bundleWorkerEntry(install *crossInstall, native *addons, missing *unresolved) error {
+	options := bundleOptions(t.WorkerResolveDir, filepath.Join(t.FunctionDir, containerimage.NodeWorkerEntry.ArtifactFile), install, native, missing)
 	options.Stdin = &api.StdinOptions{Contents: t.WorkerSource, ResolveDir: t.WorkerResolveDir, Sourcefile: "ocel-worker-entry.ts", Loader: api.LoaderTS}
 	result := api.Build(options)
 	if len(result.Errors) > 0 {
@@ -129,9 +131,11 @@ func BundleWorker(ctx context.Context, t Target) error {
 	}
 	native := &addons{arch: t.Framework.Arch}
 	install := &crossInstall{arch: t.Framework.Arch}
-	if err := t.bundleWorkerEntry(install, native); err != nil {
+	missing := &unresolved{}
+	if err := t.bundleWorkerEntry(install, native, missing); err != nil {
 		return err
 	}
+	missing.report(t.Log, t.App)
 	if err := native.verify(); err != nil {
 		return err
 	}
@@ -144,7 +148,7 @@ func BundleWorker(ctx context.Context, t Target) error {
 	return nameWorker(t.FunctionDir, containerimage.NodeWorkerEntry.ArtifactCommand())
 }
 
-func bundleOptions(workingDir, outfile string, install *crossInstall, native *addons) api.BuildOptions {
+func bundleOptions(workingDir, outfile string, install *crossInstall, native *addons, missing *unresolved) api.BuildOptions {
 	return api.BuildOptions{
 		AbsWorkingDir:     workingDir,
 		Bundle:            true,
@@ -163,7 +167,7 @@ func bundleOptions(workingDir, outfile string, install *crossInstall, native *ad
 			"__dirname":  "__ocelDirname",
 			"__filename": "__ocelFilename",
 		},
-		Plugins: []api.Plugin{install.plugin(), native.plugin()},
+		Plugins: []api.Plugin{install.plugin(), native.plugin(), missing.plugin()},
 	}
 }
 
