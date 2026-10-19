@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -52,6 +53,34 @@ func TestADeployWhoseForwardedHostnameTheEdgeRefusesProvisionsNothing(t *testing
 				}
 			}
 		})
+	}
+}
+
+func TestADeployOfOneContainerAppRefusesTheProjectDomainItForwardsBeforeProvisioning(t *testing.T) {
+	dependencies, fixture, _ := registryProject(t, "")
+	fixture.Provider.WithFacts(func(facts *provider.Facts) {
+		facts.Pairings = []provider.Pairing{
+			{Edge: fake.KindRelay, Router: fake.RouterRelayStore, Computes: []provider.Compute{provider.ComputeServerless}},
+			{Edge: fake.KindRelay, Router: fake.RouterRelay, Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
+		}
+	})
+	fixture.Provider.Edges().(*fake.Edges).PairAppsWithStoreRouter(fake.KindRelay)
+	refused := `zone acme.com reaches origins with SSL mode "full", which does not check the certificate the origin answers with: set the zone's SSL mode to Full (strict)`
+	relay := forwardingRelay(fixture)
+	relay.RefusesUnreadyHostnames(refusal.Refuse(refusal.CodeInvalid, "%s", refused))
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+
+	if err == nil || !strings.Contains(err.Error()+stdout.String()+stderr.String(), refused) {
+		t.Fatalf("runDeploy err = %v, want the edge's refusal %q: the container app serves %s, so the edge forwards it to the origin", err, refused, productionDomain)
+	}
+	if asked := relay.HostnamesAskedReady(); !slices.Equal(asked, []string{productionDomain}) {
+		t.Errorf("the edge was asked about %v, want %s, the project's own domain its one app serves", asked, productionDomain)
+	}
+	if provisioned := fixture.Provider.FakeStacks().Provisioned(); len(provisioned) != 0 {
+		t.Errorf("the deploy provisioned %d stacks, want none: the zone refuses %s before anything is provisioned", len(provisioned), productionDomain)
 	}
 }
 
