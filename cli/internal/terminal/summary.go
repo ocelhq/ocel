@@ -72,10 +72,12 @@ func (s summary) failed(took string) []string {
 		out = append(out, target)
 	}
 	if unpromoted := s.unpromoted(); len(unpromoted) > 0 {
-		return append(out, unpromoted...)
-	}
-	if place := servedPlace(result.GetTier()); place != "" && !result.GetChangeStarted() {
+		out = append(out, unpromoted...)
+	} else if place := servedPlace(result.GetTier()); place != "" && !result.GetChangeStarted() {
 		out = append(out, blockIndent+"nothing was changed; "+place+" still serves what it served before this run")
+	}
+	for _, note := range result.GetUrlNotes() {
+		out = append(out, blockIndent+note)
 	}
 	return out
 }

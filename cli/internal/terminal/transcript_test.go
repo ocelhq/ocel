@@ -1055,6 +1055,26 @@ func TestAFailedSingleAppDeploySaysNothingWasPromoted(t *testing.T) {
 	}
 }
 
+func TestAFailedDeployEndsWithTheNotesItsResultCarries(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := productionRun(t)
+	forwardOutcome(run, &progressv1.OperationResult{
+		Error:    "deploy failed",
+		Apps:     []*progressv1.AppResult{{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED}},
+		UrlNotes: []string{"the containers bootstrap part stays, though no release uses it: a retry reuses it, and `ocel bootstrap production --remove containers` takes it down"},
+	})
+	ended(run, errors.New("deploy failed"))
+
+	want := "✗ Deploy failed in 0s — deploy failed\n" +
+		"  nothing was promoted: web failed\n" +
+		"  production still serves what it served before this run\n" +
+		"  the containers bootstrap part stays, though no release uses it: a retry reuses it, and `ocel bootstrap production --remove containers` takes it down\n"
+	if got := strings.TrimPrefix(out.String(), productionHead); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestADeployThatFailedBeforeReachingSomeAppsNamesThemAsNotRun(t *testing.T) {
 	t.Parallel()
 

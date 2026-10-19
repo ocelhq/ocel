@@ -83,6 +83,8 @@ type deployRun struct {
 	configured  []ConfiguredHost
 	pending     []string
 
+	failureNotes []string
+
 	values    variablestore.Store
 	scope     variablestore.Scope
 	published *publishedBindings
@@ -190,7 +192,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	run.spans = run.newSpans()
 	run.outcomes = pendingOutcomes(spec.Apps)
 	run.provisioned = make([]appProvisioned, len(spec.Apps))
-	sender.detailing(run.reportApps)
+	sender.detailing(run.reportFailure)
 	return run, nil
 }
 
@@ -204,6 +206,11 @@ func pendingOutcomes(apps []provider.AppEntry) []*progressv1.AppResult {
 
 func (r *deployRun) reportApps(result *progressv1.OperationResult) {
 	result.Apps = r.outcomes
+}
+
+func (r *deployRun) reportFailure(result *progressv1.OperationResult) {
+	r.reportApps(result)
+	result.UrlNotes = r.failureNotes
 }
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
