@@ -13,6 +13,8 @@ interface IncrementalCacheOptions {
   maxMemoryCacheSize: number | undefined;
   fetchCacheKeyPrefix: string;
   getPrerenderManifest: () => unknown;
+  prerenderManifest: unknown;
+  previewProps: { previewModeId: string };
   CurCacheHandler: new (opts: never) => unknown;
 }
 
@@ -47,6 +49,8 @@ export function newIncrementalCacheFactory(
       maxMemoryCacheSize: cacheMaxMemorySize,
       fetchCacheKeyPrefix,
       getPrerenderManifest: () => prerenderManifest,
+      prerenderManifest,
+      previewProps: prerenderManifest.preview,
       CurCacheHandler: CacheHandler,
     });
 }

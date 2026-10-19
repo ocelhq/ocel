@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -111,4 +111,26 @@ test("each request constructs its own handler with that request's headers", asyn
   expect(second.opts._requestHeaders["x-probe"]).toBe("two");
   expect(first.opts.fetchCacheKeyPrefix).toBe("prefix");
   expect(first.opts.serverDistDir).toMatch(/\.next\/server$/);
+});
+
+test("a next that takes the prerender manifest and preview props directly gets both", async () => {
+  const projectDir = join(dir, "next-16-4");
+  const moduleDir = join(projectDir, "node_modules/next/dist/server/lib/incremental-cache");
+  await mkdir(moduleDir, { recursive: true });
+  await writeFile(join(projectDir, "package.json"), "{}");
+  await writeFile(
+    join(moduleDir, "index.js"),
+    `exports.IncrementalCache = class {
+      constructor({ previewProps, prerenderManifest }) {
+        this.previewModeId = previewProps.previewModeId;
+        this.manifestVersion = prerenderManifest.version;
+      }
+    };`,
+  );
+  const config: any = { distDir: ".next", cache: { previewModeId: "preview-id" } };
+
+  const cache: any = newIncrementalCacheFactory(config, projectDir, class {})(fakeReq());
+
+  expect(cache.previewModeId).toBe("preview-id");
+  expect(cache.manifestVersion).toBe(4);
 });
