@@ -2,6 +2,7 @@ package kv
 
 import (
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -233,6 +234,23 @@ func TestAStoreAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
 	groups := rule["securityGroups"].ArrayValue()
 	if len(groups) != 1 || groups[0].StringValue() != "sg-vpc-clients" {
 		t.Errorf("ingress admits %v, want the tier's vpc-clients group alone", groups)
+	}
+}
+
+func TestAStoresSecurityGroupDescribesItselfAndItsRuleInWhatEC2Accepts(t *testing.T) {
+	t.Parallel()
+
+	accepted := regexp.MustCompile(`^[0-9A-Za-z_ .:/()#,@\[\]+=&;{}!$*-]*$`)
+	sg := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, "kv-cache-security-group")
+
+	descriptions := []string{sg["description"].StringValue()}
+	for _, rule := range sg["ingress"].ArrayValue() {
+		descriptions = append(descriptions, rule.ObjectValue()["description"].StringValue())
+	}
+	for _, described := range descriptions {
+		if !accepted.MatchString(described) {
+			t.Errorf("description %q holds a character EC2 refuses, so the group is never created and no store in a VPC deploys", described)
+		}
 	}
 }
 
