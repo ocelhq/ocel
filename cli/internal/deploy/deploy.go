@@ -31,6 +31,7 @@ type Dependencies struct {
 	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 	ReadGitBranch           func(dir string) (string, error)
 	DiscoverPRNumber        func() string
+	SaveImage               func(ctx context.Context, repository, digest string, w io.Writer) error
 }
 
 type Options struct {
@@ -43,6 +44,9 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	policy, cfg, err := ensureProject(ctx, dependencies, target.command(), cwd, opts.Yes, opts.Dry, stdout, stdin)
 	if err != nil || cfg == nil {
 		return err
+	}
+	if cfg.Provider == nil && !target.isPreview() {
+		return deployToOcelCloud(ctx, dependencies, cfg, target, opts, stderr)
 	}
 	env, err := target.environment(dependencies, cwd)
 	if err != nil {

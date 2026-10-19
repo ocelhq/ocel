@@ -55,6 +55,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 type flags struct {
@@ -208,6 +209,7 @@ func newCommand() *command {
 		ServeVariableEditor:     env.ServeVariableEditor,
 		ReadGitBranch:           previewid.ReadGitBranch,
 		DiscoverPRNumber:        previewid.DiscoverPRNumber,
+		SaveImage:               images.SaveFromDaemon,
 	}
 	rootCmd.AddCommand(deploycommand.NewCommand(deployDependencies))
 	rootCmd.AddCommand(deploycommand.NewPreviewCommand(deployDependencies))

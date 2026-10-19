@@ -50,7 +50,7 @@ func (c Console) ReportEnvironmentEvent(ctx context.Context, projectDir string, 
 }
 
 func (c Console) send(ctx context.Context, projectDir, subject string, stderr io.Writer, call func(ctx context.Context, client *console.Client, accessToken, projectID string) error) {
-	credentials, err := c.loadCredentials()
+	credentials, err := c.ReadCredentials()
 	if errors.Is(err, console.ErrNotLoggedIn) {
 		linked, err := console.IsLinked(projectDir)
 		if err != nil {
@@ -85,7 +85,7 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 	}
 }
 
-func (c Console) loadCredentials() (console.Credentials, error) {
+func (c Console) ReadCredentials() (console.Credentials, error) {
 	if c.LoadCredentials == nil {
 		return console.Credentials{}, console.ErrNotLoggedIn
 	}
