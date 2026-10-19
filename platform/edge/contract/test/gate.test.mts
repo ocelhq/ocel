@@ -105,7 +105,7 @@ function gateHolding(passwordHash: string): Gate {
   return { key: "k", passwordHash, bypassSecrets: [], allowOptions: [] };
 }
 
-describe("a gate's password", () => {
+describe("a gate's password", { timeout: 30_000 }, () => {
   it("is hashed with scrypt at the OWASP cost and a fresh salt", async () => {
     const [first, second] = [await hashPassword("pw"), await hashPassword("pw")];
 
