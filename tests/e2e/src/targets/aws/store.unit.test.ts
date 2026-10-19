@@ -12,6 +12,7 @@ import {
 const TABLES: Record<string, string> = {
   VariablesTableName: "ocel-variables",
   StateBucketName: "ocel-statebucket",
+  ArtifactBucketName: "ocel-artifacts",
 };
 
 const VARIABLES_TABLE = TABLES.VariablesTableName as string;
@@ -117,6 +118,60 @@ describe("releaseLocks", () => {
   it("refuses when the bootstrap publishes no state bucket", async () => {
     const { cli } = cliOver(() => "None");
     await assert.rejects(awsStore(undefined, cli).releaseLocks("j-1-node"), /StateBucketName/);
+  });
+});
+
+describe("listClientCAObjects", () => {
+  it("lists only the production tier's client CA objects in the namespace's artifact bucket", async () => {
+    const { cli, calls } = cliOver((args) =>
+      describeStacks(args)
+        ? tableAsked(args)
+        : JSON.stringify(["ocel/trust/production/client-cas.json"]),
+    );
+    assert.deepEqual(await awsStore(undefined, cli, "j-9-deploy-go").listClientCAObjects(), [
+      "ocel/trust/production/client-cas.json",
+    ]);
+    assert.ok(
+      calls.filter(describeStacks).every((args) => args.includes("j-9-deploy-go-bootstrap")),
+    );
+    assert.deepEqual(
+      calls.filter((args) => args[0] === "s3api"),
+      [
+        [
+          "s3api",
+          "list-objects-v2",
+          "--bucket",
+          "ocel-artifacts",
+          "--prefix",
+          "ocel/trust/production/",
+          "--query",
+          "Contents[].Key",
+          "--output",
+          "json",
+        ],
+      ],
+    );
+  });
+
+  it("lists none when the prefix holds no object", async () => {
+    const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : "null"));
+    assert.deepEqual(await awsStore(undefined, cli).listClientCAObjects(), []);
+  });
+
+  it("lists none and reads no bucket when the namespace has no bootstrap", async () => {
+    const { cli, calls } = cliOver((args) => {
+      if (describeStacks(args)) {
+        throw Object.assign(new Error("Command failed"), { stderr: "Stack does not exist" });
+      }
+      return "";
+    });
+    assert.deepEqual(await awsStore(undefined, cli).listClientCAObjects(), []);
+    assert.equal(calls.filter((args) => args[0] === "s3api").length, 0);
+  });
+
+  it("refuses when the bootstrap publishes no artifact bucket", async () => {
+    const { cli } = cliOver(() => "None");
+    await assert.rejects(awsStore(undefined, cli).listClientCAObjects(), /ArtifactBucketName/);
   });
 });
 
