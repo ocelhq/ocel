@@ -28,7 +28,7 @@ func TestDomainReleaseTearsDownTheGlobalDomainOnlyOnceNothingIsServedOnIt(t *tes
 		if err == nil {
 			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
 		}
-		for _, want := range []string{"shop", "blog", "ocel preview rm", "ocel destroy preview"} {
+		for _, want := range []string{"shop", "blog", "ocel preview rm", "ocel projects destroy --tier preview"} {
 			if !strings.Contains(stdout.String(), want) {
 				t.Errorf("stdout = %q, want the refusal to contain %q", stdout.String(), want)
 			}

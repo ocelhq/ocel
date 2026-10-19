@@ -164,7 +164,7 @@ func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) e
 	if claimed.Len() > 0 {
 		refusals = append(refusals, "another project already serves a hostname this project declares:"+claimed.String()+
 			"\n    → a hostname belongs to one project, so deploying would take it over: remove it from this project's "+
-			configName+", or tear the owning project down (`ocel destroy production` / `ocel destroy preview` in it), then deploy again")
+			configName+", or tear the owning project down (`ocel projects destroy <slug>`), then deploy again")
 	}
 	if unread.Len() > 0 {
 		refusals = append(refusals, "the provider could not say whether another project serves a hostname this project declares:"+unread.String()+

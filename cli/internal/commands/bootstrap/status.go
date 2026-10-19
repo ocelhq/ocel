@@ -150,7 +150,7 @@ func statusResult(read []tierStatus) *resultv1.BootstrapStatusResult {
 				WantedBy:            part.GetWantedBy(),
 			}
 			for _, resource := range part.GetResources() {
-				out.Resources = append(out.Resources, &resultv1.BootstrapPartResource{Kind: resource.GetKind(), Id: resource.GetId()})
+				out.Resources = append(out.Resources, &resultv1.PhysicalResource{Kind: resource.GetKind(), Id: resource.GetId(), Location: resource.GetLocation(), ConsoleUrl: resource.GetConsoleUrl()})
 			}
 			tier.Parts = append(tier.Parts, out)
 		}
@@ -171,7 +171,7 @@ func partState(part *contractv1.BootstrapPart) string {
 
 func renderTierStatus(out io.Writer, status tierStatus, opts StatusOptions) {
 	name := readiness.TierName(status.tier)
-	header := strings.Join(append([]string{name}, identityCells(status.identity)...), " · ")
+	header := strings.Join(append([]string{name}, readiness.IdentityCells(status.identity)...), " · ")
 	if !status.described.GetBootstrap().GetPresent() {
 		fmt.Fprintf(out, "%s · not bootstrapped\n  → run `%s` to set it up\n", header, readiness.BootstrapCommand(status.tier))
 		return
@@ -200,26 +200,6 @@ func renderResources(out io.Writer, parts []*contractv1.BootstrapPart) {
 		}
 		_ = tw.Flush()
 	}
-}
-
-func identityCells(identity *contractv1.Identity) []string {
-	var account []string
-	for _, value := range []string{identity.GetProvider(), identity.GetAccount(), identity.GetLocation()} {
-		if value != "" {
-			account = append(account, value)
-		}
-	}
-	var cells []string
-	if len(account) > 0 {
-		cells = append(cells, strings.Join(account, " "))
-	}
-	for _, detail := range identity.GetDetails() {
-		if detail.GetValue() == "" {
-			continue
-		}
-		cells = append(cells, strings.TrimSpace(detail.GetLabel()+" "+detail.GetValue()))
-	}
-	return cells
 }
 
 func addedCell(part *contractv1.BootstrapPart) string {

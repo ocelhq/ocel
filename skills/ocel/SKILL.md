@@ -41,7 +41,9 @@ as theirs to approve.
 5. **Release.** A preview the human asked for is yours to run: `ocel preview up --json`.
    Production waits for the human to approve the plan you showed; then `ocel deploy --json`.
 6. **Verify.** The run's final `summary` carries the URLs. `ocel logs --since 15m` reads
-   what the deployed app logged; add `--preview` for a preview.
+   what the deployed app logged; add `--preview` for a preview. `ocel projects show --json`
+   lists the project's environments, the promotion each serves and every resource Ocel
+   created for it; `ocel projects --json` lists every project deployed in the account.
 
 ## Reading output
 
@@ -50,8 +52,8 @@ Pass `--json` (or set `OCEL_JSON=1` once) on every command you run.
 - A command that returns data prints one line: `{"ok":true,"data":{…}}` or
   `{"ok":false,"error":{…}}`.
 - A command that changes something (`deploy`, `preview up`, `build`, `rollback`,
-  `bootstrap`, `destroy`) prints one JSON event per line and ends with a `summary` event
-  holding `success`, the apps and URLs, `error` on failure, and `assumed`.
+  `bootstrap`, `projects destroy`) prints one JSON event per line and ends with a `summary`
+  event holding `success`, the apps and URLs, `error` on failure, and `assumed`.
 - `ocel schema <command>` prints the JSON Schema of a command's output.
 
 An `error` has a stable `code`, a `message`, often a `hint` and a `docsUrl`. Act on the
@@ -74,7 +76,7 @@ Ask the binary, which always matches the installed version:
 
 These stay with the human; bring them the plan or the question and wait:
 
-- production deploys, rollbacks, `bootstrap` and every `destroy`;
+- production deploys, rollbacks, `bootstrap`, `bootstrap destroy` and `projects destroy`;
 - `--yes` on any of those, which is consent to a plan the human has read;
 - choosing the provider, the account, a domain, or anything that costs money.
 

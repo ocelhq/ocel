@@ -673,20 +673,20 @@ func (x *BootstrapTierStatus) GetParts() []*BootstrapPartStatus {
 }
 
 type BootstrapPartStatus struct {
-	state               protoimpl.MessageState   `protogen:"open.v1"`
-	Name                string                   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Summary             string                   `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
-	AddedBy             string                   `protobuf:"bytes,3,opt,name=added_by,json=addedBy,proto3" json:"added_by,omitempty"`
-	AddedAt             string                   `protobuf:"bytes,4,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
-	State               string                   `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
-	Current             bool                     `protobuf:"varint,6,opt,name=current,proto3" json:"current,omitempty"`
-	UsedBy              []string                 `protobuf:"bytes,7,rep,name=used_by,json=usedBy,proto3" json:"used_by,omitempty"`
-	IdleMonthlyFixed    *string                  `protobuf:"bytes,8,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
-	Currency            string                   `protobuf:"bytes,9,opt,name=currency,proto3" json:"currency,omitempty"`
-	Resources           []*BootstrapPartResource `protobuf:"bytes,10,rep,name=resources,proto3" json:"resources,omitempty"`
-	AddedWith           string                   `protobuf:"bytes,11,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
-	RetiresWithLastUser bool                     `protobuf:"varint,12,opt,name=retires_with_last_user,json=retiresWithLastUser,proto3" json:"retires_with_last_user,omitempty"`
-	WantedBy            []string                 `protobuf:"bytes,13,rep,name=wanted_by,json=wantedBy,proto3" json:"wanted_by,omitempty"`
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Summary             string                 `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	AddedBy             string                 `protobuf:"bytes,3,opt,name=added_by,json=addedBy,proto3" json:"added_by,omitempty"`
+	AddedAt             string                 `protobuf:"bytes,4,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
+	State               string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	Current             bool                   `protobuf:"varint,6,opt,name=current,proto3" json:"current,omitempty"`
+	UsedBy              []string               `protobuf:"bytes,7,rep,name=used_by,json=usedBy,proto3" json:"used_by,omitempty"`
+	IdleMonthlyFixed    *string                `protobuf:"bytes,8,opt,name=idle_monthly_fixed,json=idleMonthlyFixed,proto3,oneof" json:"idle_monthly_fixed,omitempty"`
+	Currency            string                 `protobuf:"bytes,9,opt,name=currency,proto3" json:"currency,omitempty"`
+	Resources           []*PhysicalResource    `protobuf:"bytes,10,rep,name=resources,proto3" json:"resources,omitempty"`
+	AddedWith           string                 `protobuf:"bytes,11,opt,name=added_with,json=addedWith,proto3" json:"added_with,omitempty"`
+	RetiresWithLastUser bool                   `protobuf:"varint,12,opt,name=retires_with_last_user,json=retiresWithLastUser,proto3" json:"retires_with_last_user,omitempty"`
+	WantedBy            []string               `protobuf:"bytes,13,rep,name=wanted_by,json=wantedBy,proto3" json:"wanted_by,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -784,7 +784,7 @@ func (x *BootstrapPartStatus) GetCurrency() string {
 	return ""
 }
 
-func (x *BootstrapPartStatus) GetResources() []*BootstrapPartResource {
+func (x *BootstrapPartStatus) GetResources() []*PhysicalResource {
 	if x != nil {
 		return x.Resources
 	}
@@ -812,28 +812,30 @@ func (x *BootstrapPartStatus) GetWantedBy() []string {
 	return nil
 }
 
-type BootstrapPartResource struct {
+type PhysicalResource struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Location      string                 `protobuf:"bytes,3,opt,name=location,proto3" json:"location,omitempty"`
+	ConsoleUrl    string                 `protobuf:"bytes,4,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BootstrapPartResource) Reset() {
-	*x = BootstrapPartResource{}
+func (x *PhysicalResource) Reset() {
+	*x = PhysicalResource{}
 	mi := &file_cli_result_v1_result_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BootstrapPartResource) String() string {
+func (x *PhysicalResource) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BootstrapPartResource) ProtoMessage() {}
+func (*PhysicalResource) ProtoMessage() {}
 
-func (x *BootstrapPartResource) ProtoReflect() protoreflect.Message {
+func (x *PhysicalResource) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_result_v1_result_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -845,21 +847,35 @@ func (x *BootstrapPartResource) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BootstrapPartResource.ProtoReflect.Descriptor instead.
-func (*BootstrapPartResource) Descriptor() ([]byte, []int) {
+// Deprecated: Use PhysicalResource.ProtoReflect.Descriptor instead.
+func (*PhysicalResource) Descriptor() ([]byte, []int) {
 	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *BootstrapPartResource) GetKind() string {
+func (x *PhysicalResource) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *BootstrapPartResource) GetId() string {
+func (x *PhysicalResource) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *PhysicalResource) GetLocation() string {
+	if x != nil {
+		return x.Location
+	}
+	return ""
+}
+
+func (x *PhysicalResource) GetConsoleUrl() string {
+	if x != nil {
+		return x.ConsoleUrl
 	}
 	return ""
 }
@@ -4052,6 +4068,422 @@ func (x *SkillTarget) GetFiles() []string {
 	return nil
 }
 
+type ProjectListResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Projects      []*ProjectSummary      `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectListResult) Reset() {
+	*x = ProjectListResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectListResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectListResult) ProtoMessage() {}
+
+func (x *ProjectListResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectListResult.ProtoReflect.Descriptor instead.
+func (*ProjectListResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *ProjectListResult) GetProjects() []*ProjectSummary {
+	if x != nil {
+		return x.Projects
+	}
+	return nil
+}
+
+type ProjectSummary struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Slug                  string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Tiers                 []v1.Tier              `protobuf:"varint,2,rep,packed,name=tiers,proto3,enum=common.environment.v1.Tier" json:"tiers,omitempty"`
+	Edge                  string                 `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
+	ProductionPromotionId string                 `protobuf:"bytes,4,opt,name=production_promotion_id,json=productionPromotionId,proto3" json:"production_promotion_id,omitempty"`
+	Previews              int32                  `protobuf:"varint,5,opt,name=previews,proto3" json:"previews,omitempty"`
+	LastDeployedAt        string                 `protobuf:"bytes,6,opt,name=last_deployed_at,json=lastDeployedAt,proto3" json:"last_deployed_at,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *ProjectSummary) Reset() {
+	*x = ProjectSummary{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectSummary) ProtoMessage() {}
+
+func (x *ProjectSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectSummary.ProtoReflect.Descriptor instead.
+func (*ProjectSummary) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *ProjectSummary) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *ProjectSummary) GetTiers() []v1.Tier {
+	if x != nil {
+		return x.Tiers
+	}
+	return nil
+}
+
+func (x *ProjectSummary) GetEdge() string {
+	if x != nil {
+		return x.Edge
+	}
+	return ""
+}
+
+func (x *ProjectSummary) GetProductionPromotionId() string {
+	if x != nil {
+		return x.ProductionPromotionId
+	}
+	return ""
+}
+
+func (x *ProjectSummary) GetPreviews() int32 {
+	if x != nil {
+		return x.Previews
+	}
+	return 0
+}
+
+func (x *ProjectSummary) GetLastDeployedAt() string {
+	if x != nil {
+		return x.LastDeployedAt
+	}
+	return ""
+}
+
+type ProjectShowResult struct {
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Slug          string                      `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Edge          string                      `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
+	Environments  []*ProjectEnvironmentStatus `protobuf:"bytes,3,rep,name=environments,proto3" json:"environments,omitempty"`
+	Resources     []*ProjectResourceGroup     `protobuf:"bytes,4,rep,name=resources,proto3" json:"resources,omitempty"`
+	Shared        []*ProjectSharedPart        `protobuf:"bytes,5,rep,name=shared,proto3" json:"shared,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectShowResult) Reset() {
+	*x = ProjectShowResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectShowResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectShowResult) ProtoMessage() {}
+
+func (x *ProjectShowResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectShowResult.ProtoReflect.Descriptor instead.
+func (*ProjectShowResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *ProjectShowResult) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *ProjectShowResult) GetEdge() string {
+	if x != nil {
+		return x.Edge
+	}
+	return ""
+}
+
+func (x *ProjectShowResult) GetEnvironments() []*ProjectEnvironmentStatus {
+	if x != nil {
+		return x.Environments
+	}
+	return nil
+}
+
+func (x *ProjectShowResult) GetResources() []*ProjectResourceGroup {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
+func (x *ProjectShowResult) GetShared() []*ProjectSharedPart {
+	if x != nil {
+		return x.Shared
+	}
+	return nil
+}
+
+type ProjectEnvironmentStatus struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Environment   string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
+	PromotionId   string                 `protobuf:"bytes,3,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	Releases      map[string]string      `protobuf:"bytes,4,rep,name=releases,proto3" json:"releases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Urls          []string               `protobuf:"bytes,5,rep,name=urls,proto3" json:"urls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectEnvironmentStatus) Reset() {
+	*x = ProjectEnvironmentStatus{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectEnvironmentStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectEnvironmentStatus) ProtoMessage() {}
+
+func (x *ProjectEnvironmentStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectEnvironmentStatus.ProtoReflect.Descriptor instead.
+func (*ProjectEnvironmentStatus) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *ProjectEnvironmentStatus) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *ProjectEnvironmentStatus) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *ProjectEnvironmentStatus) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
+}
+
+func (x *ProjectEnvironmentStatus) GetReleases() map[string]string {
+	if x != nil {
+		return x.Releases
+	}
+	return nil
+}
+
+func (x *ProjectEnvironmentStatus) GetUrls() []string {
+	if x != nil {
+		return x.Urls
+	}
+	return nil
+}
+
+type ProjectResourceGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Environment   string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
+	Stack         string                 `protobuf:"bytes,3,opt,name=stack,proto3" json:"stack,omitempty"`
+	Resources     []*PhysicalResource    `protobuf:"bytes,4,rep,name=resources,proto3" json:"resources,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectResourceGroup) Reset() {
+	*x = ProjectResourceGroup{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectResourceGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectResourceGroup) ProtoMessage() {}
+
+func (x *ProjectResourceGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectResourceGroup.ProtoReflect.Descriptor instead.
+func (*ProjectResourceGroup) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *ProjectResourceGroup) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *ProjectResourceGroup) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *ProjectResourceGroup) GetStack() string {
+	if x != nil {
+		return x.Stack
+	}
+	return ""
+}
+
+func (x *ProjectResourceGroup) GetResources() []*PhysicalResource {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
+type ProjectSharedPart struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	UsedBy        []string               `protobuf:"bytes,3,rep,name=used_by,json=usedBy,proto3" json:"used_by,omitempty"`
+	Resources     []*PhysicalResource    `protobuf:"bytes,4,rep,name=resources,proto3" json:"resources,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectSharedPart) Reset() {
+	*x = ProjectSharedPart{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectSharedPart) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectSharedPart) ProtoMessage() {}
+
+func (x *ProjectSharedPart) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectSharedPart.ProtoReflect.Descriptor instead.
+func (*ProjectSharedPart) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *ProjectSharedPart) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *ProjectSharedPart) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ProjectSharedPart) GetUsedBy() []string {
+	if x != nil {
+		return x.UsedBy
+	}
+	return nil
+}
+
+func (x *ProjectSharedPart) GetResources() []*PhysicalResource {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
 var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
@@ -4080,7 +4512,7 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x13BootstrapTierStatus\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x18\n" +
 	"\apresent\x18\x02 \x01(\bR\apresent\x128\n" +
-	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\xdd\x03\n" +
+	"\x05parts\x18\x03 \x03(\v2\".cli.result.v1.BootstrapPartStatusR\x05parts\"\xd8\x03\n" +
 	"\x13BootstrapPartStatus\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\asummary\x18\x02 \x01(\tR\asummary\x12\x19\n" +
@@ -4090,17 +4522,20 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\acurrent\x18\x06 \x01(\bR\acurrent\x12\x17\n" +
 	"\aused_by\x18\a \x03(\tR\x06usedBy\x121\n" +
 	"\x12idle_monthly_fixed\x18\b \x01(\tH\x00R\x10idleMonthlyFixed\x88\x01\x01\x12\x1a\n" +
-	"\bcurrency\x18\t \x01(\tR\bcurrency\x12B\n" +
+	"\bcurrency\x18\t \x01(\tR\bcurrency\x12=\n" +
 	"\tresources\x18\n" +
-	" \x03(\v2$.cli.result.v1.BootstrapPartResourceR\tresources\x12\x1d\n" +
+	" \x03(\v2\x1f.cli.result.v1.PhysicalResourceR\tresources\x12\x1d\n" +
 	"\n" +
 	"added_with\x18\v \x01(\tR\taddedWith\x123\n" +
 	"\x16retires_with_last_user\x18\f \x01(\bR\x13retiresWithLastUser\x12\x1b\n" +
 	"\twanted_by\x18\r \x03(\tR\bwantedByB\x15\n" +
-	"\x13_idle_monthly_fixed\";\n" +
-	"\x15BootstrapPartResource\x12\x12\n" +
+	"\x13_idle_monthly_fixed\"s\n" +
+	"\x10PhysicalResource\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xb1\x01\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1a\n" +
+	"\blocation\x18\x03 \x01(\tR\blocation\x12\x1f\n" +
+	"\vconsole_url\x18\x04 \x01(\tR\n" +
+	"consoleUrl\"\xb1\x01\n" +
 	"\x12DomainStatusResult\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12'\n" +
 	"\x0frecords_written\x18\x02 \x03(\tR\x0erecordsWritten\x12%\n" +
@@ -4382,7 +4817,41 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\atargets\x18\x03 \x03(\v2\x1a.cli.result.v1.SkillTargetR\atargets\"5\n" +
 	"\vSkillTarget\x12\x10\n" +
 	"\x03dir\x18\x01 \x01(\tR\x03dir\x12\x14\n" +
-	"\x05files\x18\x02 \x03(\tR\x05files*\x8d\x01\n" +
+	"\x05files\x18\x02 \x03(\tR\x05files\"N\n" +
+	"\x11ProjectListResult\x129\n" +
+	"\bprojects\x18\x01 \x03(\v2\x1d.cli.result.v1.ProjectSummaryR\bprojects\"\xe9\x01\n" +
+	"\x0eProjectSummary\x12\x12\n" +
+	"\x04slug\x18\x01 \x01(\tR\x04slug\x121\n" +
+	"\x05tiers\x18\x02 \x03(\x0e2\x1b.common.environment.v1.TierR\x05tiers\x12\x12\n" +
+	"\x04edge\x18\x03 \x01(\tR\x04edge\x126\n" +
+	"\x17production_promotion_id\x18\x04 \x01(\tR\x15productionPromotionId\x12\x1a\n" +
+	"\bpreviews\x18\x05 \x01(\x05R\bpreviews\x12(\n" +
+	"\x10last_deployed_at\x18\x06 \x01(\tR\x0elastDeployedAt\"\x85\x02\n" +
+	"\x11ProjectShowResult\x12\x12\n" +
+	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
+	"\x04edge\x18\x02 \x01(\tR\x04edge\x12K\n" +
+	"\fenvironments\x18\x03 \x03(\v2'.cli.result.v1.ProjectEnvironmentStatusR\fenvironments\x12A\n" +
+	"\tresources\x18\x04 \x03(\v2#.cli.result.v1.ProjectResourceGroupR\tresources\x128\n" +
+	"\x06shared\x18\x05 \x03(\v2 .cli.result.v1.ProjectSharedPartR\x06shared\"\xb4\x02\n" +
+	"\x18ProjectEnvironmentStatus\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12 \n" +
+	"\venvironment\x18\x02 \x01(\tR\venvironment\x12!\n" +
+	"\fpromotion_id\x18\x03 \x01(\tR\vpromotionId\x12Q\n" +
+	"\breleases\x18\x04 \x03(\v25.cli.result.v1.ProjectEnvironmentStatus.ReleasesEntryR\breleases\x12\x12\n" +
+	"\x04urls\x18\x05 \x03(\tR\x04urls\x1a;\n" +
+	"\rReleasesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbe\x01\n" +
+	"\x14ProjectResourceGroup\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12 \n" +
+	"\venvironment\x18\x02 \x01(\tR\venvironment\x12\x14\n" +
+	"\x05stack\x18\x03 \x01(\tR\x05stack\x12=\n" +
+	"\tresources\x18\x04 \x03(\v2\x1f.cli.result.v1.PhysicalResourceR\tresources\"\xb0\x01\n" +
+	"\x11ProjectSharedPart\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
+	"\aused_by\x18\x03 \x03(\tR\x06usedBy\x12=\n" +
+	"\tresources\x18\x04 \x03(\v2\x1f.cli.result.v1.PhysicalResourceR\tresources*\x8d\x01\n" +
 	"\x0ePromotionState\x12\x1f\n" +
 	"\x1bPROMOTION_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16PROMOTION_STATE_ACTIVE\x10\x01\x12\x1e\n" +
@@ -4422,105 +4891,112 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 }
 
 var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
 var file_cli_result_v1_result_proto_goTypes = []any{
-	(PromotionState)(0),            // 0: cli.result.v1.PromotionState
-	(ConnectorLiveness)(0),         // 1: cli.result.v1.ConnectorLiveness
-	(DoctorVerdict)(0),             // 2: cli.result.v1.DoctorVerdict
-	(ConfigFormat)(0),              // 3: cli.result.v1.ConfigFormat
-	(CommandOutput)(0),             // 4: cli.result.v1.CommandOutput
-	(*BindingSetResult)(nil),       // 5: cli.result.v1.BindingSetResult
-	(*BindingRemoveResult)(nil),    // 6: cli.result.v1.BindingRemoveResult
-	(*BindingListResult)(nil),      // 7: cli.result.v1.BindingListResult
-	(*BindingGenerateResult)(nil),  // 8: cli.result.v1.BindingGenerateResult
-	(*BindingSummary)(nil),         // 9: cli.result.v1.BindingSummary
-	(*BootstrapStatusResult)(nil),  // 10: cli.result.v1.BootstrapStatusResult
-	(*BootstrapTierStatus)(nil),    // 11: cli.result.v1.BootstrapTierStatus
-	(*BootstrapPartStatus)(nil),    // 12: cli.result.v1.BootstrapPartStatus
-	(*BootstrapPartResource)(nil),  // 13: cli.result.v1.BootstrapPartResource
-	(*DomainStatusResult)(nil),     // 14: cli.result.v1.DomainStatusResult
-	(*DomainHostStatus)(nil),       // 15: cli.result.v1.DomainHostStatus
-	(*Certificate)(nil),            // 16: cli.result.v1.Certificate
-	(*CostScanResult)(nil),         // 17: cli.result.v1.CostScanResult
-	(*PromotionListResult)(nil),    // 18: cli.result.v1.PromotionListResult
-	(*PromotionSummary)(nil),       // 19: cli.result.v1.PromotionSummary
-	(*PreviewListResult)(nil),      // 20: cli.result.v1.PreviewListResult
-	(*PreviewSummary)(nil),         // 21: cli.result.v1.PreviewSummary
-	(*ProtectionResult)(nil),       // 22: cli.result.v1.ProtectionResult
-	(*TierProtection)(nil),         // 23: cli.result.v1.TierProtection
-	(*BypassSecretListResult)(nil), // 24: cli.result.v1.BypassSecretListResult
-	(*PasswordResult)(nil),         // 25: cli.result.v1.PasswordResult
-	(*BypassSecretResult)(nil),     // 26: cli.result.v1.BypassSecretResult
-	(*PublicationResult)(nil),      // 27: cli.result.v1.PublicationResult
-	(*EdgeResult)(nil),             // 28: cli.result.v1.EdgeResult
-	(*DomainListResult)(nil),       // 29: cli.result.v1.DomainListResult
-	(*PreviewDomainResult)(nil),    // 30: cli.result.v1.PreviewDomainResult
-	(*ConnectorStatusResult)(nil),  // 31: cli.result.v1.ConnectorStatusResult
-	(*ConnectorStatus)(nil),        // 32: cli.result.v1.ConnectorStatus
-	(*ConnectorDenial)(nil),        // 33: cli.result.v1.ConnectorDenial
-	(*DoctorResult)(nil),           // 34: cli.result.v1.DoctorResult
-	(*DoctorSection)(nil),          // 35: cli.result.v1.DoctorSection
-	(*DoctorCheck)(nil),            // 36: cli.result.v1.DoctorCheck
-	(*EnvCoordinate)(nil),          // 37: cli.result.v1.EnvCoordinate
-	(*EnvListResult)(nil),          // 38: cli.result.v1.EnvListResult
-	(*EnvValueSummary)(nil),        // 39: cli.result.v1.EnvValueSummary
-	(*EnvGetResult)(nil),           // 40: cli.result.v1.EnvGetResult
-	(*EnvRefsResult)(nil),          // 41: cli.result.v1.EnvRefsResult
-	(*EnvHistoryResult)(nil),       // 42: cli.result.v1.EnvHistoryResult
-	(*EnvVersion)(nil),             // 43: cli.result.v1.EnvVersion
-	(*EnvSourceResult)(nil),        // 44: cli.result.v1.EnvSourceResult
-	(*EnvSourceLink)(nil),          // 45: cli.result.v1.EnvSourceLink
-	(*PermissionsResult)(nil),      // 46: cli.result.v1.PermissionsResult
-	(*PermissionGroup)(nil),        // 47: cli.result.v1.PermissionGroup
-	(*LoginResult)(nil),            // 48: cli.result.v1.LoginResult
-	(*LogoutResult)(nil),           // 49: cli.result.v1.LogoutResult
-	(*LinkResult)(nil),             // 50: cli.result.v1.LinkResult
-	(*ConsoleOrganization)(nil),    // 51: cli.result.v1.ConsoleOrganization
-	(*ConsoleProject)(nil),         // 52: cli.result.v1.ConsoleProject
-	(*UnlinkResult)(nil),           // 53: cli.result.v1.UnlinkResult
-	(*LockResult)(nil),             // 54: cli.result.v1.LockResult
-	(*PinnedExecutable)(nil),       // 55: cli.result.v1.PinnedExecutable
-	(*GenerateResult)(nil),         // 56: cli.result.v1.GenerateResult
-	(*InitResult)(nil),             // 57: cli.result.v1.InitResult
-	(*SchemaListResult)(nil),       // 58: cli.result.v1.SchemaListResult
-	(*SchemaResult)(nil),           // 59: cli.result.v1.SchemaResult
-	(*ListedCommand)(nil),          // 60: cli.result.v1.ListedCommand
-	(*SkillInstallResult)(nil),     // 61: cli.result.v1.SkillInstallResult
-	(*SkillTarget)(nil),            // 62: cli.result.v1.SkillTarget
-	nil,                            // 63: cli.result.v1.PromotionSummary.ReleasesEntry
-	nil,                            // 64: cli.result.v1.PinnedExecutable.DigestsEntry
-	(v1.Tier)(0),                   // 65: common.environment.v1.Tier
-	(*v11.ResourceSet)(nil),        // 66: provider.cost.v1.ResourceSet
-	(*v11.Estimate)(nil),           // 67: provider.cost.v1.Estimate
-	(v1.Lifecycle)(0),              // 68: common.environment.v1.Lifecycle
-	(*structpb.Value)(nil),         // 69: google.protobuf.Value
-	(*structpb.Struct)(nil),        // 70: google.protobuf.Struct
+	(PromotionState)(0),              // 0: cli.result.v1.PromotionState
+	(ConnectorLiveness)(0),           // 1: cli.result.v1.ConnectorLiveness
+	(DoctorVerdict)(0),               // 2: cli.result.v1.DoctorVerdict
+	(ConfigFormat)(0),                // 3: cli.result.v1.ConfigFormat
+	(CommandOutput)(0),               // 4: cli.result.v1.CommandOutput
+	(*BindingSetResult)(nil),         // 5: cli.result.v1.BindingSetResult
+	(*BindingRemoveResult)(nil),      // 6: cli.result.v1.BindingRemoveResult
+	(*BindingListResult)(nil),        // 7: cli.result.v1.BindingListResult
+	(*BindingGenerateResult)(nil),    // 8: cli.result.v1.BindingGenerateResult
+	(*BindingSummary)(nil),           // 9: cli.result.v1.BindingSummary
+	(*BootstrapStatusResult)(nil),    // 10: cli.result.v1.BootstrapStatusResult
+	(*BootstrapTierStatus)(nil),      // 11: cli.result.v1.BootstrapTierStatus
+	(*BootstrapPartStatus)(nil),      // 12: cli.result.v1.BootstrapPartStatus
+	(*PhysicalResource)(nil),         // 13: cli.result.v1.PhysicalResource
+	(*DomainStatusResult)(nil),       // 14: cli.result.v1.DomainStatusResult
+	(*DomainHostStatus)(nil),         // 15: cli.result.v1.DomainHostStatus
+	(*Certificate)(nil),              // 16: cli.result.v1.Certificate
+	(*CostScanResult)(nil),           // 17: cli.result.v1.CostScanResult
+	(*PromotionListResult)(nil),      // 18: cli.result.v1.PromotionListResult
+	(*PromotionSummary)(nil),         // 19: cli.result.v1.PromotionSummary
+	(*PreviewListResult)(nil),        // 20: cli.result.v1.PreviewListResult
+	(*PreviewSummary)(nil),           // 21: cli.result.v1.PreviewSummary
+	(*ProtectionResult)(nil),         // 22: cli.result.v1.ProtectionResult
+	(*TierProtection)(nil),           // 23: cli.result.v1.TierProtection
+	(*BypassSecretListResult)(nil),   // 24: cli.result.v1.BypassSecretListResult
+	(*PasswordResult)(nil),           // 25: cli.result.v1.PasswordResult
+	(*BypassSecretResult)(nil),       // 26: cli.result.v1.BypassSecretResult
+	(*PublicationResult)(nil),        // 27: cli.result.v1.PublicationResult
+	(*EdgeResult)(nil),               // 28: cli.result.v1.EdgeResult
+	(*DomainListResult)(nil),         // 29: cli.result.v1.DomainListResult
+	(*PreviewDomainResult)(nil),      // 30: cli.result.v1.PreviewDomainResult
+	(*ConnectorStatusResult)(nil),    // 31: cli.result.v1.ConnectorStatusResult
+	(*ConnectorStatus)(nil),          // 32: cli.result.v1.ConnectorStatus
+	(*ConnectorDenial)(nil),          // 33: cli.result.v1.ConnectorDenial
+	(*DoctorResult)(nil),             // 34: cli.result.v1.DoctorResult
+	(*DoctorSection)(nil),            // 35: cli.result.v1.DoctorSection
+	(*DoctorCheck)(nil),              // 36: cli.result.v1.DoctorCheck
+	(*EnvCoordinate)(nil),            // 37: cli.result.v1.EnvCoordinate
+	(*EnvListResult)(nil),            // 38: cli.result.v1.EnvListResult
+	(*EnvValueSummary)(nil),          // 39: cli.result.v1.EnvValueSummary
+	(*EnvGetResult)(nil),             // 40: cli.result.v1.EnvGetResult
+	(*EnvRefsResult)(nil),            // 41: cli.result.v1.EnvRefsResult
+	(*EnvHistoryResult)(nil),         // 42: cli.result.v1.EnvHistoryResult
+	(*EnvVersion)(nil),               // 43: cli.result.v1.EnvVersion
+	(*EnvSourceResult)(nil),          // 44: cli.result.v1.EnvSourceResult
+	(*EnvSourceLink)(nil),            // 45: cli.result.v1.EnvSourceLink
+	(*PermissionsResult)(nil),        // 46: cli.result.v1.PermissionsResult
+	(*PermissionGroup)(nil),          // 47: cli.result.v1.PermissionGroup
+	(*LoginResult)(nil),              // 48: cli.result.v1.LoginResult
+	(*LogoutResult)(nil),             // 49: cli.result.v1.LogoutResult
+	(*LinkResult)(nil),               // 50: cli.result.v1.LinkResult
+	(*ConsoleOrganization)(nil),      // 51: cli.result.v1.ConsoleOrganization
+	(*ConsoleProject)(nil),           // 52: cli.result.v1.ConsoleProject
+	(*UnlinkResult)(nil),             // 53: cli.result.v1.UnlinkResult
+	(*LockResult)(nil),               // 54: cli.result.v1.LockResult
+	(*PinnedExecutable)(nil),         // 55: cli.result.v1.PinnedExecutable
+	(*GenerateResult)(nil),           // 56: cli.result.v1.GenerateResult
+	(*InitResult)(nil),               // 57: cli.result.v1.InitResult
+	(*SchemaListResult)(nil),         // 58: cli.result.v1.SchemaListResult
+	(*SchemaResult)(nil),             // 59: cli.result.v1.SchemaResult
+	(*ListedCommand)(nil),            // 60: cli.result.v1.ListedCommand
+	(*SkillInstallResult)(nil),       // 61: cli.result.v1.SkillInstallResult
+	(*SkillTarget)(nil),              // 62: cli.result.v1.SkillTarget
+	(*ProjectListResult)(nil),        // 63: cli.result.v1.ProjectListResult
+	(*ProjectSummary)(nil),           // 64: cli.result.v1.ProjectSummary
+	(*ProjectShowResult)(nil),        // 65: cli.result.v1.ProjectShowResult
+	(*ProjectEnvironmentStatus)(nil), // 66: cli.result.v1.ProjectEnvironmentStatus
+	(*ProjectResourceGroup)(nil),     // 67: cli.result.v1.ProjectResourceGroup
+	(*ProjectSharedPart)(nil),        // 68: cli.result.v1.ProjectSharedPart
+	nil,                              // 69: cli.result.v1.PromotionSummary.ReleasesEntry
+	nil,                              // 70: cli.result.v1.PinnedExecutable.DigestsEntry
+	nil,                              // 71: cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
+	(v1.Tier)(0),                     // 72: common.environment.v1.Tier
+	(*v11.ResourceSet)(nil),          // 73: provider.cost.v1.ResourceSet
+	(*v11.Estimate)(nil),             // 74: provider.cost.v1.Estimate
+	(v1.Lifecycle)(0),                // 75: common.environment.v1.Lifecycle
+	(*structpb.Value)(nil),           // 76: google.protobuf.Value
+	(*structpb.Struct)(nil),          // 77: google.protobuf.Struct
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
 	9,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
 	9,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
 	11, // 2: cli.result.v1.BootstrapStatusResult.tiers:type_name -> cli.result.v1.BootstrapTierStatus
-	65, // 3: cli.result.v1.BootstrapTierStatus.tier:type_name -> common.environment.v1.Tier
+	72, // 3: cli.result.v1.BootstrapTierStatus.tier:type_name -> common.environment.v1.Tier
 	12, // 4: cli.result.v1.BootstrapTierStatus.parts:type_name -> cli.result.v1.BootstrapPartStatus
-	13, // 5: cli.result.v1.BootstrapPartStatus.resources:type_name -> cli.result.v1.BootstrapPartResource
+	13, // 5: cli.result.v1.BootstrapPartStatus.resources:type_name -> cli.result.v1.PhysicalResource
 	15, // 6: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	16, // 7: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	66, // 8: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	67, // 9: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	73, // 8: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	74, // 9: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
 	19, // 10: cli.result.v1.PromotionListResult.promotions:type_name -> cli.result.v1.PromotionSummary
-	63, // 11: cli.result.v1.PromotionSummary.releases:type_name -> cli.result.v1.PromotionSummary.ReleasesEntry
+	69, // 11: cli.result.v1.PromotionSummary.releases:type_name -> cli.result.v1.PromotionSummary.ReleasesEntry
 	0,  // 12: cli.result.v1.PromotionSummary.state:type_name -> cli.result.v1.PromotionState
 	21, // 13: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	68, // 14: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	75, // 14: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
 	23, // 15: cli.result.v1.ProtectionResult.tiers:type_name -> cli.result.v1.TierProtection
-	65, // 16: cli.result.v1.TierProtection.tier:type_name -> common.environment.v1.Tier
+	72, // 16: cli.result.v1.TierProtection.tier:type_name -> common.environment.v1.Tier
 	28, // 17: cli.result.v1.TierProtection.edges:type_name -> cli.result.v1.EdgeResult
-	65, // 18: cli.result.v1.BypassSecretListResult.tier:type_name -> common.environment.v1.Tier
-	65, // 19: cli.result.v1.PasswordResult.tier:type_name -> common.environment.v1.Tier
+	72, // 18: cli.result.v1.BypassSecretListResult.tier:type_name -> common.environment.v1.Tier
+	72, // 19: cli.result.v1.PasswordResult.tier:type_name -> common.environment.v1.Tier
 	28, // 20: cli.result.v1.PasswordResult.edges:type_name -> cli.result.v1.EdgeResult
-	65, // 21: cli.result.v1.BypassSecretResult.tier:type_name -> common.environment.v1.Tier
+	72, // 21: cli.result.v1.BypassSecretResult.tier:type_name -> common.environment.v1.Tier
 	28, // 22: cli.result.v1.BypassSecretResult.edges:type_name -> cli.result.v1.EdgeResult
-	65, // 23: cli.result.v1.PublicationResult.tier:type_name -> common.environment.v1.Tier
+	72, // 23: cli.result.v1.PublicationResult.tier:type_name -> common.environment.v1.Tier
 	28, // 24: cli.result.v1.PublicationResult.edges:type_name -> cli.result.v1.EdgeResult
 	15, // 25: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	16, // 26: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
@@ -4531,38 +5007,49 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	35, // 31: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
 	36, // 32: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
 	2,  // 33: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
-	65, // 34: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
+	72, // 34: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
 	39, // 35: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
 	37, // 36: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	37, // 37: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
-	65, // 38: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
+	72, // 38: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
 	37, // 39: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	37, // 40: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
-	65, // 41: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
+	72, // 41: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
 	37, // 42: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	37, // 43: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
-	65, // 44: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
+	72, // 44: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
 	37, // 45: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	43, // 46: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
-	65, // 47: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
+	72, // 47: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
 	45, // 48: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
 	47, // 49: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
-	69, // 50: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
+	76, // 50: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
 	51, // 51: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
 	52, // 52: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
 	55, // 53: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
 	55, // 54: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
-	64, // 55: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
+	70, // 55: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
 	3,  // 56: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
 	60, // 57: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
-	70, // 58: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
+	77, // 58: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
 	4,  // 59: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
 	62, // 60: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
-	61, // [61:61] is the sub-list for method output_type
-	61, // [61:61] is the sub-list for method input_type
-	61, // [61:61] is the sub-list for extension type_name
-	61, // [61:61] is the sub-list for extension extendee
-	0,  // [0:61] is the sub-list for field type_name
+	64, // 61: cli.result.v1.ProjectListResult.projects:type_name -> cli.result.v1.ProjectSummary
+	72, // 62: cli.result.v1.ProjectSummary.tiers:type_name -> common.environment.v1.Tier
+	66, // 63: cli.result.v1.ProjectShowResult.environments:type_name -> cli.result.v1.ProjectEnvironmentStatus
+	67, // 64: cli.result.v1.ProjectShowResult.resources:type_name -> cli.result.v1.ProjectResourceGroup
+	68, // 65: cli.result.v1.ProjectShowResult.shared:type_name -> cli.result.v1.ProjectSharedPart
+	72, // 66: cli.result.v1.ProjectEnvironmentStatus.tier:type_name -> common.environment.v1.Tier
+	71, // 67: cli.result.v1.ProjectEnvironmentStatus.releases:type_name -> cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
+	72, // 68: cli.result.v1.ProjectResourceGroup.tier:type_name -> common.environment.v1.Tier
+	13, // 69: cli.result.v1.ProjectResourceGroup.resources:type_name -> cli.result.v1.PhysicalResource
+	72, // 70: cli.result.v1.ProjectSharedPart.tier:type_name -> common.environment.v1.Tier
+	13, // 71: cli.result.v1.ProjectSharedPart.resources:type_name -> cli.result.v1.PhysicalResource
+	72, // [72:72] is the sub-list for method output_type
+	72, // [72:72] is the sub-list for method input_type
+	72, // [72:72] is the sub-list for extension type_name
+	72, // [72:72] is the sub-list for extension extendee
+	0,  // [0:72] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -4580,7 +5067,7 @@ func file_cli_result_v1_result_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   60,
+			NumMessages:   67,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

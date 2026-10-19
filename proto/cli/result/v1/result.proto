@@ -74,7 +74,7 @@ message BootstrapPartStatus {
 
   string currency = 9;
 
-  repeated BootstrapPartResource resources = 10;
+  repeated PhysicalResource resources = 10;
 
   string added_with = 11;
 
@@ -83,10 +83,14 @@ message BootstrapPartStatus {
   repeated string wanted_by = 13;
 }
 
-message BootstrapPartResource {
+message PhysicalResource {
   string kind = 1;
 
   string id = 2;
+
+  string location = 3;
+
+  string console_url = 4;
 }
 
 message DomainStatusResult {
@@ -580,4 +584,66 @@ message SkillTarget {
   string dir = 1;
 
   repeated string files = 2;
+}
+
+message ProjectListResult {
+  repeated ProjectSummary projects = 1;
+}
+
+message ProjectSummary {
+  string slug = 1;
+
+  repeated common.environment.v1.Tier tiers = 2;
+
+  string edge = 3;
+
+  string production_promotion_id = 4;
+
+  int32 previews = 5;
+
+  string last_deployed_at = 6;
+}
+
+message ProjectShowResult {
+  string slug = 1;
+
+  string edge = 2;
+
+  repeated ProjectEnvironmentStatus environments = 3;
+
+  repeated ProjectResourceGroup resources = 4;
+
+  repeated ProjectSharedPart shared = 5;
+}
+
+message ProjectEnvironmentStatus {
+  common.environment.v1.Tier tier = 1;
+
+  string environment = 2;
+
+  string promotion_id = 3;
+
+  map<string, string> releases = 4;
+
+  repeated string urls = 5;
+}
+
+message ProjectResourceGroup {
+  common.environment.v1.Tier tier = 1;
+
+  string environment = 2;
+
+  string stack = 3;
+
+  repeated PhysicalResource resources = 4;
+}
+
+message ProjectSharedPart {
+  common.environment.v1.Tier tier = 1;
+
+  string name = 2;
+
+  repeated string used_by = 3;
+
+  repeated PhysicalResource resources = 4;
 }
