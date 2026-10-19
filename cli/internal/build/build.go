@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/redaction"
 	"github.com/ocelhq/ocel/cli/internal/userconfig"
+	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -248,13 +249,21 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				Folder:    a.Folder,
 				Env:       env.set,
 			})
-		case name == buildoutput.FrameworkNode:
-			target, err := nodeTarget(cfg, a, outputDir)
+		case name == buildoutput.FrameworkNode || name == buildoutput.FrameworkNestJS:
+			var appLog io.Writer
+			ended := func(error) {}
+			if name == buildoutput.FrameworkNestJS || !preferTracing {
+				appLog, ended = log.App(a.Name)
+			}
+			target, err := nodeTarget(ctx, cfg, a, outputDir, appLog)
 			if err != nil {
+				ended(err)
 				return err
 			}
 			if preferTracing {
-				if _, err := target.TracedHandler(); err != nil {
+				_, err := target.TracedHandler()
+				ended(err)
+				if err != nil {
 					return err
 				}
 				req.Apps = append(req.Apps, nodeAppBuild{
@@ -267,8 +276,6 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				traced = append(traced, target)
 				continue
 			}
-			appLog, ended := log.App(a.Name)
-			target.Log = appLog
 			err = toolchain.Bundle(ctx, target)
 			ended(err)
 			if err != nil {
@@ -387,11 +394,11 @@ func dirBytes(dir string) (int64, error) {
 	return total, err
 }
 
-func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchain.Target, error) {
+func nodeTarget(ctx context.Context, cfg *project.Project, a project.App, outputDir string, log io.Writer) (toolchain.Target, error) {
 	source := filepath.Join(cfg.Dir, a.Path)
-	entrypoint, err := toolchain.NodeEntrypoint(source, a.Entrypoint)
+	entrypoint, err := nodeEntrypoint(ctx, a, source, log)
 	if err != nil {
-		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
+		return toolchain.Target{}, err
 	}
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
@@ -404,12 +411,37 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	return toolchain.Target{
 		App:              a.Name,
-		Framework:        buildoutput.Framework{Name: buildoutput.FrameworkNode, Arch: a.Architecture()},
+		Framework:        buildoutput.Framework{Name: a.Framework, Arch: a.Architecture()},
 		Source:           source,
 		Entrypoint:       entrypoint,
+		Log:              log,
 		FunctionDir:      filepath.Join(appDir, buildoutput.FunctionsDir, buildoutput.RootFunctionDir),
 		AppDir:           appDir,
 		WorkerSource:     workerSource,
 		WorkerResolveDir: workerResolveDir,
 	}, nil
+}
+
+func nodeEntrypoint(ctx context.Context, a project.App, source string, log io.Writer) (string, error) {
+	if a.Framework != buildoutput.FrameworkNestJS {
+		entrypoint, err := toolchain.NodeEntrypoint(source, a.Entrypoint)
+		if err != nil {
+			return "", fmt.Errorf("app %q: %w", a.Name, err)
+		}
+		return entrypoint, nil
+	}
+	located, err := workspace.Locate(source, a.Program())
+	if err != nil {
+		return "", fmt.Errorf("app %q: %w", a.Name, err)
+	}
+	if !located.Package.Build {
+		return "", fmt.Errorf("app %q is a NestJS app, and its package.json has no \"build\" script to compile it: add one, such as \"nest build\" or \"tsc\"", a.Name)
+	}
+	return toolchain.BuildNest(ctx, toolchain.NestBuild{
+		App:        a.Name,
+		Source:     source,
+		Command:    located.RunScript("build"),
+		Entrypoint: a.Entrypoint,
+		Log:        log,
+	})
 }

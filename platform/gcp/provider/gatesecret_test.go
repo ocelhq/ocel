@@ -822,3 +822,17 @@ func TestAPreviewContainerWhoseServiceCannotBeReadIsNotDeployedAndMintsNoProbeTo
 		t.Errorf("the deploy wrote the service (%d created, %d patched), want nothing written with a token minted over an unread one", len(server.Created), len(server.Patched))
 	}
 }
+
+func TestAGatedProductionFunctionOfEveryFrameworkThatRunsOnNodeChecksTheGate(t *testing.T) {
+	for _, name := range buildoutput.Frameworks() {
+		if !buildoutput.RunsOnNode(name) {
+			continue
+		}
+		server := &googletest.Run{}
+		p := providerServing(server, t)
+		spec := functionSpec(gatedProductionSpec(p, &shopGate), name)
+		if err := cloudrun.RefuseGateOnFunction(spec, spec.App.Functions[0]); err != nil {
+			t.Errorf("RefuseGateOnFunction(%s) = %v, want the node runtime trusted to check the gate", name, err)
+		}
+	}
+}

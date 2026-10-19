@@ -41,7 +41,7 @@ export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk", "iac"];
 const FRAMEWORKS = ["go", "next", "node", "python", "rust", "sveltekit", "workspace"];
 
 export const APPS: Record<Concern, string[]> = {
-  deploy: [...FRAMEWORKS, "next-ppr"],
+  deploy: [...FRAMEWORKS, "nestjs", "next-ppr"],
   lifecycle: ["next"],
   sdk: FRAMEWORKS,
   iac: ["with-pulumi", "with-sst"],

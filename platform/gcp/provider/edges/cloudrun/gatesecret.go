@@ -99,7 +99,7 @@ func mountsGateOnAnyService(spec provider.StackSpec) bool {
 		slices.ContainsFunc(spec.App.Functions, func(fn provider.FunctionSpec) bool { return !IgnoresGate(spec, fn) })
 }
 
-var gateFrameworks = []string{buildoutput.FrameworkNode, buildoutput.FrameworkNext, buildoutput.FrameworkSvelteKit}
+var gateFrameworks = slices.DeleteFunc(buildoutput.Frameworks(), func(name string) bool { return !buildoutput.RunsOnNode(name) })
 
 type GatedServing struct {
 	env    map[string]string

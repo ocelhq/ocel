@@ -52,7 +52,7 @@ edge shown as pending until `ocel protection sync` publishes the recorded creden
 
 An edge has to run the gate for a tier to be protected on it, and a deploy through one that does
 not is refused. On GCP a tier served on its own Cloud Run URL is gated by its own service: the gate
-lives in a Secret Manager secret of that tier that every container and Node, Next or SvelteKit
+lives in a Secret Manager secret of that tier that every container and Node, Next, SvelteKit or NestJS
 function of the tier mounts, even while protection is off, so turning it on or changing the
 credentials reaches the running instances without a deploy. A Go, Python or Rust function checks no
 gate: a protected tier with one is refused, and while an unprotected one is still deployed,

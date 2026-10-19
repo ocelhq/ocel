@@ -5,7 +5,7 @@ description: Tag cached responses, revalidate them, and state which routes an ed
 
 An edge that caches your app's responses keeps a page until its lifetime ends. `cacheTag`
 names the page, and `revalidateTag` and `revalidatePath` refresh it sooner. They work in any
-Node framework: Express, Hono, Fastify, SvelteKit, and a plain handler. Next has its own
+Node framework: Express, Hono, Fastify, NestJS, SvelteKit, and a plain handler. Next has its own
 `revalidateTag` and `revalidatePath`, which work as they always do.
 
 ```ts title="app.ts"

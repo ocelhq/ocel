@@ -238,7 +238,7 @@ Each takes a `zone`. Left off, ocel picks the zone that covers the hostname.
 | --- | --- | --- |
 | `name` | Yes | A DNS label. It labels every resource the app deploys and its preview hostname. |
 | `path` | Yes | The app's directory, relative to the config. |
-| `framework` | | `node`, `next`, `sveltekit`, `go`, `python` or `rust`. Left off, [detected](#how-ocel-finds-each-app) from the app's directory. |
+| `framework` | | `node`, `next`, `sveltekit`, `nestjs`, `go`, `python` or `rust`. Left off, [detected](#how-ocel-finds-each-app) from the app's directory. |
 | `entrypoint` | | Where the app starts, when not where ocel looks, as a node file, a go package's directory, a python `.py` file or `module:name`, or a rust binary's name. Detection does not read it, so an app ocel cannot detect also sets `framework`. A `next` or `sveltekit` app builds from its own config and takes none. |
 | [`compute`](#compute) | | `serverless` or `container`. Left off, the first compute the provider runs. |
 | `arch` | | `x86_64` or `arm64`. Left off, what the provider runs the app on. A provider that cannot run the one named refuses the deploy before building. |
@@ -255,7 +255,7 @@ With no `apps`, ocel deploys the project root as one app named after the `slug`.
 any app with no `framework`, takes the framework of the one detector that matches its directory.
 Every framework has a detector of its own, and its page says what the detector looks for and why:
 [Next.js](/docs/frameworks/nextjs), [SvelteKit](/docs/frameworks/sveltekit),
-[Express](/docs/frameworks/express), [Hono](/docs/frameworks/hono),
+[NestJS](/docs/frameworks/nestjs), [Express](/docs/frameworks/express), [Hono](/docs/frameworks/hono),
 [Python](/docs/frameworks/python), [Go](/docs/frameworks/go) and [Rust](/docs/frameworks/rust).
 
 `ocel doctor` and `ocel deploy` print each app's framework and what decided it, such as
@@ -529,7 +529,7 @@ own, and a preview password never opens production. An edge that cannot run the 
 deploy rather than serve a protected tier to anyone. On GCP with no edge in front, each Cloud Run
 service checks every request itself against its tier's gate, which it reads from a secret it mounts
 even while protection is off, so turning protection on reaches the services already running. Only
-Node, Next and SvelteKit functions and containers can check it, so a protected tier with a Go,
+Node, Next, SvelteKit and NestJS functions and containers can check it, so a protected tier with a Go,
 Python or Rust function there is refused. While an unprotected one is still deployed, a protected
 deploy warns, naming those functions, and changing the credentials or running
 `ocel protection sync` writes the gate and then exits with an error naming them, until they are

@@ -78,6 +78,21 @@
   },
   "overrides": [
     {
+      "includes": ["tests/fixtures/*/nestjs/**"],
+      "javascript": {
+        "parser": {
+          "unsafeParameterDecoratorsEnabled": true
+        }
+      },
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/components/ui/**"],
       "linter": {
         "rules": {

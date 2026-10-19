@@ -275,6 +275,10 @@ func inDir(dir, command string) string {
 	return "cd " + shellword.Quote(dir) + " && " + command
 }
 
+func (l Location) RunScript(name string) []string {
+	return []string{l.runner(), "run", name}
+}
+
 func (l Location) runner() string {
 	if runner := behaviours[l.PackageManager].runner; runner != "" {
 		return runner

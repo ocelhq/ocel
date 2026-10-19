@@ -19,6 +19,7 @@ const (
 	nodeManifest        = "package.json"
 	nextDependency      = "next"
 	svelteKitDependency = "@sveltejs/kit"
+	nestDependency      = "@nestjs/core"
 	goBuildOS           = "linux"
 )
 
@@ -150,6 +151,14 @@ var detectors = []detector{
 		supersedes: []string{buildoutput.FrameworkNode},
 		lacks:      "no " + svelteKitDependency + " dependency",
 		match:      matchSvelteKit,
+	},
+	{
+		framework:  buildoutput.FrameworkNestJS,
+		label:      "a NestJS app",
+		manifest:   nodePackage,
+		supersedes: []string{buildoutput.FrameworkNode},
+		lacks:      "no " + nestDependency + " dependency",
+		match:      matchNestJS,
 	},
 	{
 		framework: buildoutput.FrameworkNode,
@@ -478,6 +487,13 @@ func matchNext(dir string, c contents) (string, string) {
 func matchSvelteKit(_ string, c contents) (string, string) {
 	if c.dependencies[svelteKitDependency] {
 		return nodeManifest + " depends on " + svelteKitDependency, ""
+	}
+	return "", ""
+}
+
+func matchNestJS(_ string, c contents) (string, string) {
+	if c.dependencies[nestDependency] {
+		return nodeManifest + " depends on " + nestDependency, ""
 	}
 	return "", ""
 }

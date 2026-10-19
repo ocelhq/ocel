@@ -176,6 +176,7 @@
               "node",
               "next",
               "sveltekit",
+              "nestjs",
               "go",
               "python",
               "rust"

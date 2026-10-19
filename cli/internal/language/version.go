@@ -13,6 +13,7 @@ import (
 var frameworkDependencies = map[string]string{
 	buildoutput.FrameworkNext:      nextDependency,
 	buildoutput.FrameworkSvelteKit: svelteKitDependency,
+	buildoutput.FrameworkNestJS:    nestDependency,
 }
 
 const npmAliasPrefix = "npm:"
