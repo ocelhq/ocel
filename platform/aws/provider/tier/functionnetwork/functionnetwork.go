@@ -196,6 +196,15 @@ func (s *Stacks) Release(ctx context.Context, store records.Store, ref provider.
 	return Shared.Release(ctx, s.Open, store, ref, progress)
 }
 
+func (s *Stacks) ForgetConsumer(ctx context.Context, store records.Store, ref provider.StackRef) error {
+	if store == nil {
+		return nil
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return Shared.ForgetConsumer(ctx, store, ref)
+}
+
 func (s *Stacks) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()

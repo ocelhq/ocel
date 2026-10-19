@@ -305,6 +305,25 @@ func TestADeployRefusedBusyAfterItProvisionedReclaimsWhatItProvisioned(t *testin
 	}
 }
 
+func TestAFailedDeployReclaimsItsReleaseStacksAndKeepsEveryBootstrapPartTheyUsed(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	releases := seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1")
+	overtakenWhileItBuilds(t, vendor, releases)
+
+	if result, _ := deploy(t, client, deployRequest()); result.GetSuccess() {
+		t.Fatal("Deploy() overtaken while it built = success, want it refused")
+	}
+
+	destroyed, kept := destroyedStacks(vendor), vendor.FakeStacks().ListDestroysKeepingParts()
+	if len(destroyed) == 0 {
+		t.Fatal("the failed deploy destroyed nothing, so the parts it kept prove nothing")
+	}
+	if !slices.Equal(kept, destroyed) {
+		t.Errorf("the failed deploy kept the bootstrap parts of %v, want every release stack it destroyed, %v: a retry converges on shared infrastructure, and raising it again costs minutes", kept, destroyed)
+	}
+}
+
 func TestADeployThatFailsAfterProvisioningRemovesTheFunctionsItsStackHolds(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)

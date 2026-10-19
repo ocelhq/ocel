@@ -229,6 +229,10 @@ func (s Stack) Release(ctx context.Context, open func(context.Context, provider.
 	return s.retire(ctx, owner, store, ref.Tier, progress)
 }
 
+func (s Stack) ForgetConsumer(ctx context.Context, store records.Store, ref provider.StackRef) error {
+	return records.Forget(ctx, store, s.ConsumerAt(ref))
+}
+
 func (s Stack) Remove(ctx context.Context, owner Owner, tier environment.Tier, progress progress.Log) error {
 	store := owner.KeyValues
 	users, err := s.ListUsers(ctx, store, tier)

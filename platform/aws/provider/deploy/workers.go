@@ -101,19 +101,20 @@ func (r *release) hasRecordedWorkers(ctx context.Context, ref provider.StackRef)
 	return err == nil, err
 }
 
-func (r *release) destroyWorkersStack(ctx context.Context, ref provider.StackRef, lease provider.Lease, progress progress.Log) error {
-	if err := r.automation.Destroy(ctx, ref, lease, progress); err != nil {
+func (r *release) destroyWorkersStack(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	ref := req.Ref
+	if err := r.automation.Destroy(ctx, ref, req.Lease, progress); err != nil {
 		return fmt.Errorf("take down the workers of %s: %w", ref.Name.App, err)
 	}
 	if ref.Name.HoldsContainerWorkers() {
-		if err := r.containers.Release(ctx, r.cfg.KeyValues, ref, progress); err != nil {
+		if err := releasePart(ctx, r.containers, r.cfg.KeyValues, req, progress); err != nil {
 			return err
 		}
 	}
 	if err := records.Forget(ctx, r.cfg.KeyValues, workersAt(ref)); err != nil {
 		return err
 	}
-	return r.functionNetwork.Release(ctx, r.cfg.KeyValues, ref, progress)
+	return releasePart(ctx, r.functionNetwork, r.cfg.KeyValues, req, progress)
 }
 
 func (r *release) previewWorkers(ctx context.Context, spec provider.StackSpec, work *appWork, progress progress.Log) ([]provider.ChangeGroup, error) {
@@ -174,14 +175,17 @@ func (r *release) planWorkersOfLastRelease(ctx context.Context, app provider.Sta
 	return groups, nil
 }
 
-func (r *release) destroyWorkersOfLastRelease(ctx context.Context, app provider.StackRef, lease provider.Lease, progress progress.Log) error {
+func (r *release) destroyWorkersOfLastRelease(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
+	app := req.Ref
 	refs, err := r.listWorkersOfLastRelease(ctx, app)
 	if err != nil {
 		return err
 	}
 	for _, ref := range refs {
 		say(progress, fmt.Sprintf("Removing stack %s: release %s is the last of app %s", ref.Name, app.Name.Release, app.Name.App))
-		if err := r.destroyWorkersStack(ctx, ref, lease, progress); err != nil {
+		workers := req
+		workers.Ref = ref
+		if err := r.destroyWorkersStack(ctx, workers, progress); err != nil {
 			return err
 		}
 	}
@@ -212,7 +216,7 @@ func (r *Stacks) RetireWorkers(ctx context.Context, live provider.LiveApps, prog
 	}
 	for _, stack := range retired {
 		say(progress, fmt.Sprintf("Removing stack %s: %s", stack.ref.Name, stack.reason))
-		if err := opened.destroyWorkersStack(ctx, stack.ref, live.Lease, progress); err != nil {
+		if err := opened.destroyWorkersStack(ctx, provider.StackDestroy{Ref: stack.ref, Lease: live.Lease}, progress); err != nil {
 			return err
 		}
 	}

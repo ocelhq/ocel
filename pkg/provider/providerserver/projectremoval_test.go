@@ -257,6 +257,9 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 	if len(entries) != 0 {
 		t.Errorf("the project still records %v, want every stack forgotten", entries)
 	}
+	if kept := vendor.FakeStacks().ListDestroysKeepingParts(); len(kept) != 0 {
+		t.Errorf("the removal kept the bootstrap parts of %v, want none kept: the last project to leave a part takes it down", kept)
+	}
 }
 
 func removeProject(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.ProjectRequest) *progressv1.OperationResult {

@@ -275,11 +275,13 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 			Prefixes: []string{appCoordinate(r.spec, entry.App, entry.Release.Token()).StoragePrefix()},
 		})
 	}
+	teardown := r.teardown()
+	teardown.KeepParts = true
 	var errs []error
 	reclaimed := make([]string, 0, len(targets))
 	for i, target := range targets {
 		progress.Say(fmt.Sprintf("Destroying the stack of %s release %s (%d of %d)", target.App, target.Release, i+1, len(targets)))
-		if err := destroyReclaimTarget(ctx, r.provider, r.teardown(), r.spec.Slug, r.spec.Tier, target, progress); err != nil {
+		if err := destroyReclaimTarget(ctx, r.provider, teardown, r.spec.Slug, r.spec.Tier, target, progress); err != nil {
 			errs = append(errs, err)
 			continue
 		}

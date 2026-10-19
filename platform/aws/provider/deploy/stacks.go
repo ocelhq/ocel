@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -608,7 +609,7 @@ func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progres
 	if err != nil {
 		return err
 	}
-	if err := opened.destroyWorkersOfLastRelease(ctx, ref, req.Lease, progress); err != nil {
+	if err := opened.destroyWorkersOfLastRelease(ctx, req, progress); err != nil {
 		return err
 	}
 	if err := opened.prepareTeardown(ctx, ref, progress); err != nil {
@@ -627,16 +628,28 @@ func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progres
 			return err
 		}
 	}
-	if err := r.containers.Release(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
+	if err := releasePart(ctx, r.containers, opened.cfg.KeyValues, req, progress); err != nil {
 		return err
 	}
-	if err := r.functionNetwork.Release(ctx, opened.cfg.KeyValues, ref, progress); err != nil {
+	if err := releasePart(ctx, r.functionNetwork, opened.cfg.KeyValues, req, progress); err != nil {
 		return err
 	}
 	if ref.Name.IsInfra() {
 		return nil
 	}
 	return resources.ForgetReleases(ctx, opened.cfg.Retention, ref, ref.Name.App, req.Images, progress)
+}
+
+type sharedPart interface {
+	Release(context.Context, records.Store, provider.StackRef, progress.Log) error
+	ForgetConsumer(context.Context, records.Store, provider.StackRef) error
+}
+
+func releasePart(ctx context.Context, part sharedPart, store records.Store, req provider.StackDestroy, progress progress.Log) error {
+	if req.KeepParts {
+		return part.ForgetConsumer(ctx, store, req.Ref)
+	}
+	return part.Release(ctx, store, req.Ref, progress)
 }
 
 func (r *release) prepareTeardown(ctx context.Context, ref provider.StackRef, progress progress.Log) error {

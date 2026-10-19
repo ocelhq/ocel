@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -97,7 +99,7 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 	}
 }
 
-func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
+func TestAContainerDeployThatFailsLeavesNoConsumerBehindAndKeepsTheContainerInfraItRaised(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
@@ -119,9 +121,10 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	if len(remaining) != 0 {
 		t.Errorf("a failed deploy left %d consumer records, so the shared container infrastructure could never be taken down", len(remaining))
 	}
-	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != containers.StackRef(environment.TierProduction).Name.String() {
-		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the container infrastructure stack it had just provisioned: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
+	if torn := engine.torn(); len(torn) != 1 || torn[0] != spec.Ref.Name.String() {
+		t.Errorf("after the only consumer failed the engine tore down %v, want only the half-built app stack: the retry converges on the container infrastructure rather than raising it again", torn)
 	}
+	requireContainerInfraRecorded(t, cfg.KeyValues)
 
 	spec.App.HealthCheckPath = "not a path"
 	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err == nil {
@@ -129,5 +132,86 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	}
 	if ran := engine.stacks(); len(ran) != 2 {
 		t.Errorf("a refused deploy ran %v, want no second container infrastructure stack: the app is checked before anything is provisioned", ran)
+	}
+}
+
+func TestReclaimingAFailedDeploysReleaseKeepsTheContainerInfraItRaisedAndTheRetryReusesIt(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	engine := &mockedEngine{outputs: containerPartOutputs()}
+	stacks := stacksWith(cfg, engine)
+	ctx := context.Background()
+	tier := environment.TierProduction
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision(the failing deploy's release) = %v", err)
+	}
+
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref, KeepParts: true}, progress.Discard()); err != nil {
+		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
+	}
+	if torn := engine.torn(); len(torn) != 1 || torn[0] != spec.Ref.Name.String() {
+		t.Fatalf("reclaiming the failed deploy's release tore down %v, want only its own stack: the retry would spend minutes raising the container infrastructure again", torn)
+	}
+	requireContainerInfraRecorded(t, cfg.KeyValues)
+	if remaining, err := listConsumers(ctx, cfg.KeyValues); err != nil || len(remaining) != 0 {
+		t.Errorf("consumers = %v (%v) after the failed release went, want none: a claim naming a stack that is gone would refuse the part's removal forever", remaining, err)
+	}
+	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier)
+	if err != nil || !present || len(part.UsedBy) != 0 {
+		t.Errorf("containers.ReadPart() = %+v, %v, %v, want the container infrastructure listed and used by no project", part, present, err)
+	}
+
+	retry := spec
+	retry.Ref.Name = naming.AppStack("prod", "web", mustReleaseToken(t, "r00000009"))
+	if _, err := stacks.Provision(ctx, retry, progress.Discard()); err != nil {
+		t.Fatalf("Provision(the retry) = %v", err)
+	}
+	if ran := engine.stacks(); len(ran) != 3 || ran[2] != retry.Ref.Name.String() {
+		t.Errorf("the retry ran %v, want only its own app stack: the container infrastructure the failed deploy raised is still there", ran)
+	}
+	if part, _, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier); err != nil || !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
+		t.Errorf("containers used by %v (%v) after the retry, want %s", part.UsedBy, err, spec.Ref.Project)
+	}
+}
+
+func TestTheContainerInfraAFailedDeployLeftUnusedIsTakenDownByItsRemoval(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	engine := &mockedEngine{outputs: containerPartOutputs()}
+	stacks := stacksWith(cfg, engine)
+	ctx := context.Background()
+	tier := environment.TierProduction
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision(the failing deploy's release) = %v", err)
+	}
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref, KeepParts: true}, progress.Discard()); err != nil {
+		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
+	}
+
+	if err := stacks.containers.Remove(ctx, tier, progress.Discard()); err != nil {
+		t.Fatalf("containers.Remove() of the infrastructure no project uses = %v", err)
+	}
+	if torn := engine.torn(); len(torn) != 2 || torn[1] != containers.StackRef(tier).Name.String() {
+		t.Errorf("the removal tore down %v, want the container infrastructure stack after the failed release", torn)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, containers.Part); err != nil || present {
+		t.Errorf("containers record present %v (%v) after its removal, want it forgotten", present, err)
+	}
+}
+
+func requireContainerInfraRecorded(t *testing.T, store records.Store) {
+	t.Helper()
+	ctx := context.Background()
+	tier := environment.TierProduction
+	if _, present, err := stackrecords.Read(ctx, store, tier, containers.Slug, containers.StackRef(tier).Name); err != nil || !present {
+		t.Errorf("the shared container infrastructure is recorded %v (%v), want its stack record kept for the next deploy to find", present, err)
+	}
+	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, tier, containers.Part); err != nil || !present || recorded.State != stackrecords.PartReady {
+		t.Errorf("containers record = %+v, %v, %v, want it kept ready", recorded, present, err)
+	}
+	if _, recorded, err := awsports.ReadContainerFront(ctx, store, tier); err != nil || !recorded {
+		t.Errorf("the front is recorded %v (%v), want it kept with the container infrastructure it names", recorded, err)
 	}
 }
