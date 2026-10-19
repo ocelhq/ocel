@@ -118,6 +118,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		BindingAccess:       &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		Retirement:          &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
+		ContainerReleases:   &provider.ContainerReleaseHooks{ScaleUp: p.ScaleUpContainerReleases, ScaleDown: p.ScaleDownContainerReleases},
 
 		ListProjectResources: p.ListProjectResources,
 	}

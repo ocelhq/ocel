@@ -340,6 +340,35 @@ func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 	}
 }
 
+func TestTheDeployCredentialSchedulesAndCancelsScaleDownsOnlyOnTheECSServicesTaggedForItsTier(t *testing.T) {
+	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
+	tagged := conditionJSON(t, iam.ScalesECSServices(productionScope.TaggedForItsTier()))
+	want := map[grant]bool{
+		{action: "application-autoscaling:PutScheduledAction", resource: iam.ScalableTargetARN, condition: tagged}:    true,
+		{action: "application-autoscaling:DeleteScheduledAction", resource: iam.ScalableTargetARN, condition: tagged}: true,
+	}
+	for wanted := range want {
+		if !grants[wanted] {
+			t.Errorf("the deploy credential does not grant %s on %s under %s: a promotion schedules the release it demoted to scale to zero, and a rollback cancels that before it serves the release again", wanted.action, wanted.resource, wanted.condition)
+		}
+	}
+	for g := range grants {
+		if strings.Contains(g.action, "ScheduledAction") && !want[g] {
+			t.Errorf("the deploy credential grants %s on %s under %s, which reaches past the scheduled actions of the ECS services tagged for its tier", g.action, g.resource, g.condition)
+		}
+	}
+	for _, needed := range []grant{
+		{action: "application-autoscaling:DescribeScalableTargets", resource: iam.AnyResource, condition: "null"},
+		{action: "application-autoscaling:ListTagsForResource", resource: iam.AnyResource, condition: "null"},
+		{action: "elasticloadbalancing:DescribeTargetHealth", resource: iam.AnyResource, condition: "null"},
+		{action: "ecs:UpdateService", resource: productionScope.ContainerServiceARN(), condition: conditionJSON(t, productionScope.TaggedForItsTier())},
+	} {
+		if !grants[needed] {
+			t.Errorf("the deploy credential does not grant %s on %s under %s, which scaling a demoted release down and back up reads or changes", needed.action, needed.resource, needed.condition)
+		}
+	}
+}
+
 type ecrRequest struct {
 	action           string
 	principalProject string
