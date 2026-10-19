@@ -31,7 +31,7 @@ const (
 	ExitMoved       = 9
 	ExitUnseeded    = 10
 	ExitPlaceFailed = 11
-	Lock            = boxapi.StateRoot
+	Lock            = boxapi.RoutingDir
 )
 
 func Locked(mode string) string {
