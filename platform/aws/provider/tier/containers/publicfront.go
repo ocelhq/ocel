@@ -59,7 +59,7 @@ func (w *work) createPublicSecurityGroup(ctx *pulumi.Context, vpc string, tags p
 				FromPort:    pulumi.Int(originListenerPort),
 				ToPort:      pulumi.Int(originListenerPort),
 				CidrBlocks:  pulumi.ToStringArray(w.public),
-				Description: pulumi.String("Ocel: the edge's plain http is redirected to https, forwarding nothing"),
+				Description: pulumi.String("Ocel: plain http from the edge is redirected to https, forwarding nothing"),
 			},
 		},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{

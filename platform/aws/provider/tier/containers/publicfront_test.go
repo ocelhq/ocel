@@ -1,6 +1,7 @@
 package containers
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -126,5 +127,37 @@ func TestTheContainerInfraRaisesNoPublicFrontForAnEdgeThatForwardsToNone(t *test
 	}
 	if balancers := rec.registered("aws:lb/loadBalancer:LoadBalancer"); len(balancers) != 1 {
 		t.Errorf("declared load balancers %v, want the internal one alone: a public one costs by the hour whether anything answers behind it or not", balancers)
+	}
+}
+
+func TestTheContainerInfrasSecurityGroupsDescribeThemselvesInTheCharactersAWSAccepts(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
+		t.Fatalf("run the container infrastructure program: %v", err)
+	}
+
+	accepted := regexp.MustCompile(`^[0-9A-Za-z_ .:/()#,@\[\]+=&;{}!$*-]*$`)
+	for key, inputs := range rec.recorded {
+		if !strings.HasPrefix(key, "aws:ec2/securityGroup:SecurityGroup::") {
+			continue
+		}
+		descriptions := []string{inputs["description"].StringValue()}
+		for _, direction := range []resource.PropertyKey{"ingress", "egress"} {
+			if !inputs[direction].IsArray() {
+				continue
+			}
+			for _, rule := range inputs[direction].ArrayValue() {
+				if description := rule.ObjectValue()["description"]; description.IsString() {
+					descriptions = append(descriptions, description.StringValue())
+				}
+			}
+		}
+		for _, description := range descriptions {
+			if !accepted.MatchString(description) {
+				t.Errorf("%s is described %q, which AWS refuses: a security group and its rules take only %s", key, description, accepted)
+			}
+		}
 	}
 }
