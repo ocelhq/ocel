@@ -163,7 +163,7 @@
             "type": "object"
           },
           "entrypoint": {
-            "description": "Where the app starts, if not the detected one: a node file, a go directory or a python file.",
+            "description": "Where the app starts, if not the detected one: a node file, a go directory or a python module.",
             "type": "string"
           },
           "folder": {

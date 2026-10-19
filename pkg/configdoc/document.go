@@ -75,7 +75,7 @@ type AppConfig struct {
 	Name               string             `json:"name" doc:"The app's name. It must be a valid DNS label."`
 	Path               string             `json:"path" doc:"The app's directory, relative to the config."`
 	Framework          string             `json:"framework,omitempty" doc:"What the app is built with, when ocel is not to detect it from the app's own files." enum:"node,next,sveltekit,go,python,rust"`
-	Entrypoint         string             `json:"entrypoint,omitempty" doc:"Where the app starts, if not the detected one: a node file, a go directory or a python file."`
+	Entrypoint         string             `json:"entrypoint,omitempty" doc:"Where the app starts, if not the detected one: a node file, a go directory or a python module."`
 	Compute            *ComputeDescriptor `json:"compute,omitempty" doc:"What the app runs on, named alone or keyed with its options. Left off, the provider's first compute."`
 	Arch               string             `json:"arch,omitempty" doc:"The processor architecture the app is built for. Left off, what the provider runs the app on." enum:"x86_64,arm64"`
 	Folder             string             `json:"folder,omitempty" doc:"The variables folder this app reads, when it does not read the project's own."`

@@ -3,7 +3,6 @@ package toolchain
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -15,24 +14,24 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/pythonserver"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 const (
-	pythonRequirementsFile = "requirements.txt"
-	pythonBytecodeDir      = "__pycache__"
-	pythonVirtualenvDir    = "venv"
+	pythonBytecodeDir   = "__pycache__"
+	pythonVirtualenvDir = "venv"
+	distInfoSuffix      = ".dist-info"
+	asgiServer          = "uvicorn"
 )
 
+var asgiFrameworks = []string{"starlette", "quart", "litestar", "blacksheep"}
+
 func (c Compilation) vendorPython(ctx context.Context) error {
-	if c.Entrypoint == "" {
-		return fmt.Errorf("app %q is built with python and %s holds none of %s, the files a python app is served from: set \"entrypoint\" to the file that serves it", c.App, c.Source, strings.Join(language.PythonEntrypoints, ", "))
-	}
-	entry, err := os.Stat(filepath.Join(c.Source, filepath.FromSlash(c.Entrypoint)))
-	if err != nil || !entry.Mode().IsRegular() {
-		return fmt.Errorf("app %q is built with python and entrypoint %q names no file in %s", c.App, c.Entrypoint, c.Source)
+	entrypoint, err := pythonserver.ResolveEntrypoint(c.Source, c.Entrypoint)
+	if err != nil {
+		return fmt.Errorf("app %q is built with python and %w", c.App, err)
 	}
 	platform, runs := arch.PythonPlatformTag(c.Framework.Arch)
 	if !runs {
@@ -50,14 +49,62 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := c.copyPythonPackages(); err != nil {
 		return err
 	}
-	if err := c.installRequirements(ctx, platform); err != nil {
+	if err := c.installDependencies(ctx, platform); err != nil {
+		return err
+	}
+	if err := c.writePythonServer(); err != nil {
+		return err
+	}
+	if err := c.refuseUnservedASGI(ctx, entrypoint); err != nil {
 		return err
 	}
 	worker, err := c.writePythonWorkerEntry()
 	if err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Framework, c.Entrypoint, []string{containerimage.PythonWorkerEntry.Interpreter, c.Entrypoint}, worker, c.FunctionDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, pythonserver.File, entrypoint.Command(), worker, c.FunctionDir, c.AppDir)
+}
+
+func (c Compilation) refuseUnservedASGI(ctx context.Context, entrypoint pythonserver.Entrypoint) error {
+	entries, err := os.ReadDir(c.FunctionDir)
+	if err != nil {
+		return err
+	}
+	installed := map[string]bool{}
+	for _, entry := range entries {
+		if name, ok := strings.CutSuffix(entry.Name(), distInfoSuffix); ok && entry.IsDir() {
+			distribution, _, _ := strings.Cut(name, "-")
+			installed[strings.ToLower(distribution)] = true
+		}
+	}
+	if installed[asgiServer] {
+		return nil
+	}
+	framework := ""
+	for _, candidate := range asgiFrameworks {
+		if installed[candidate] {
+			framework = candidate
+			break
+		}
+	}
+	if framework == "" {
+		return nil
+	}
+	definesApp, err := entrypoint.DefinesApp(ctx, discovery.PythonInterpreter(c.Source), c.FunctionDir)
+	if err != nil {
+		return fmt.Errorf("app %q: %w", c.App, err)
+	}
+	if !definesApp {
+		return nil
+	}
+	return fmt.Errorf("app %q depends on %s, an ASGI framework, and its entrypoint %s defines app or application, which ocel serves with %s, and %s is not installed: add %s to its dependencies, or make the entrypoint a script that starts the server it installs", c.App, framework, entrypoint, asgiServer, asgiServer, asgiServer)
+}
+
+func (c Compilation) writePythonServer() error {
+	if err := os.WriteFile(filepath.Join(c.FunctionDir, pythonserver.File), []byte(pythonserver.Source), 0o644); err != nil {
+		return fmt.Errorf("write app %q's server program: %w", c.App, err)
+	}
+	return nil
 }
 
 func (c Compilation) writePythonWorkerEntry() ([]string, error) {
@@ -83,24 +130,23 @@ func (c Compilation) copyPythonPackages() error {
 	return nil
 }
 
-func (c Compilation) installRequirements(ctx context.Context, platform string) error {
-	requirements := filepath.Join(c.Source, pythonRequirementsFile)
-	declared, err := os.Stat(requirements)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return nil
-	case err != nil:
-		return fmt.Errorf("read app %q's %s: %w", c.App, requirements, err)
-	case !declared.Mode().IsRegular():
-		return fmt.Errorf("app %q has %s as %s, and pip reads the dependencies it vendors from a file", c.App, requirements, declared.Mode().Type())
+func (c Compilation) installDependencies(ctx context.Context, platform string) error {
+	scratch, err := os.MkdirTemp("", "ocel-python-dependencies-")
+	if err != nil {
+		return err
 	}
-	cmd := exec.Command(discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, requirements, platform)...)
+	defer func() { _ = os.RemoveAll(scratch) }()
+	deps, err := c.exportDependencies(ctx, scratch)
+	if err != nil || deps.requirements == "" {
+		return err
+	}
+	cmd := exec.Command(discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, deps.requirements, platform)...)
 	cmd.Dir = c.Source
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
 	if err := childprocess.Run(ctx, cmd); err != nil {
-		return fmt.Errorf("vendor app %q's %s for %s (%w):\n%s", c.App, pythonRequirementsFile, platform, err, said.String())
+		return fmt.Errorf("vendor what app %q's %s declares for %s (%w):\n%s", c.App, deps.declaredIn, platform, err, said.String())
 	}
 	c.report("vendoring", said.String())
 	return nil

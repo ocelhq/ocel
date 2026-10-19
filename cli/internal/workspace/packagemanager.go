@@ -36,6 +36,12 @@ type Commands struct {
 	Install string
 	Build   string
 	Start   string
+	Asset   Asset
+}
+
+type Asset struct {
+	Name    string
+	Content string
 }
 
 type behaviour struct {
@@ -181,8 +187,15 @@ func yarnGeneration(version string) PackageManager {
 
 func (l Location) Commands() (Commands, error) {
 	var commands Commands
-	if l.Language == language.Go {
+	switch l.Language {
+	case language.Go:
 		commands = l.planGoCommands()
+	case language.Python:
+		planned, err := l.planPythonCommands()
+		if err != nil {
+			return Commands{}, err
+		}
+		commands = planned
 	}
 	if l.Member {
 		start := l.start()

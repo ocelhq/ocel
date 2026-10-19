@@ -736,11 +736,12 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
     }
   });
 
-  it("runs Go on gcp, expecting nothing red, and skips Python and Rust under the tickets for their builds", () => {
+  it("runs Go and Python on gcp, expecting nothing red, and skips Rust under the ticket for its build", () => {
     const planned = planOn("gcp");
-    expect(planned.skipped["sdk/go"]).toBeUndefined();
-    expect(planned.expectedFailures["sdk/go/web"] ?? {}).toEqual({});
-    expect(planned.skipped["sdk/python"]?.map((gap) => gap.issue)).toEqual([1260]);
+    for (const cell of ["sdk/go", "sdk/python"]) {
+      expect(planned.skipped[cell]).toBeUndefined();
+      expect(planned.expectedFailures[`${cell}/web`] ?? {}).toEqual({});
+    }
     expect(planned.skipped["sdk/rust"]?.map((gap) => gap.issue)).toEqual([1609]);
   });
 

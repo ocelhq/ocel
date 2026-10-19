@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/pythonserver"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
@@ -89,18 +90,21 @@ func TestCompileCopiesThePythonAppsOwnSourceIntoTheArtifact(t *testing.T) {
 	}
 }
 
-func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
+func TestCompileDeclaresTheServerProgramAPythonArtifactIsServedBy(t *testing.T) {
 	t.Parallel()
 
 	appDir, functionDir := vendored(t, pythonApp(t, map[string]string{"main.py": "print('hi')\n"}), "arm64")
 
 	var config buildoutput.FunctionConfig
 	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionConfigFile), &config)
-	if config.EntryFile != "main.py" {
-		t.Errorf("entryFile = %q, want %q — a host refuses a package whose entry names no file in it", config.EntryFile, "main.py")
+	if config.EntryFile != pythonserver.File {
+		t.Errorf("entryFile = %q, want %q — a host refuses a package whose entry names no file in it", config.EntryFile, pythonserver.File)
 	}
-	if len(config.Command) != 2 || config.Command[0] != containerimage.PythonWorkerEntry.Interpreter || config.Command[1] != "main.py" {
-		t.Errorf("command = %q, want the interpreter and the module it runs, which whatever hosts the artifact execs", config.Command)
+	if want := []string{containerimage.PythonWorkerEntry.Interpreter, pythonserver.File, "file", "main.py"}; !slices.Equal(config.Command, want) {
+		t.Errorf("command = %q, want %q: the server program serves the entrypoint it is handed, as the file it resolved to", config.Command, want)
+	}
+	if served := readFile(t, filepath.Join(functionDir, pythonserver.File)); served != pythonserver.Source {
+		t.Errorf("the artifact's %s is not the server program ocel ships", pythonserver.File)
 	}
 	if config.Framework != (buildoutput.Framework{Name: "python", Arch: "arm64"}) {
 		t.Errorf("runtime = %+v, want the python runtime at the architecture it was vendored for", config.Framework)
@@ -119,6 +123,34 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	}
 	if len(hosting.Needs) != 0 {
 		t.Errorf("hosting.json names needs %v: a python app speaks http and asks the edge for nothing", hosting.Needs)
+	}
+}
+
+func TestCompileServesTheEntrypointAPythonAppNames(t *testing.T) {
+	t.Parallel()
+
+	source := pythonApp(t, map[string]string{
+		"main.py":         "print('hi')\n",
+		"api/__init__.py": "",
+		"api/routes.py":   "app = None\n",
+	})
+	functionDir := filepath.Join(t.TempDir(), "index.func")
+	err := Compile(context.Background(), Compilation{
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
+		Source:      source,
+		Entrypoint:  "api.routes:app",
+		FunctionDir: functionDir,
+		AppDir:      t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	var config buildoutput.FunctionConfig
+	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionConfigFile), &config)
+	if want := []string{containerimage.PythonWorkerEntry.Interpreter, pythonserver.File, "module", "api.routes:app"}; !slices.Equal(config.Command, want) {
+		t.Errorf("command = %q, want %q", config.Command, want)
 	}
 }
 
@@ -220,10 +252,35 @@ func TestVendoringRunsTheInterpretersPipAndNeverAModuleOfTheApps(t *testing.T) {
 		AppDir:      t.TempDir(),
 	}
 
-	_ = c.installRequirements(context.Background(), "manylinux2014_x86_64")
+	_ = c.installDependencies(context.Background(), "manylinux2014_x86_64")
 
 	if _, err := os.Stat(marker); err == nil {
 		t.Error("vendoring ran the app's own pip.py, want the interpreter's pip whatever the app's directory holds")
+	}
+}
+
+func TestCompileVendorsWhatAUvLockPinsIntoTheArtifact(t *testing.T) {
+	t.Parallel()
+
+	if !pipAvailable() {
+		t.Skip("no python interpreter with pip on PATH to vendor with")
+	}
+	if _, err := exec.LookPath("uv"); err != nil {
+		t.Skip("no uv on PATH to export the lock with")
+	}
+	source := pythonApp(t, map[string]string{
+		"main.py":        "import six\n",
+		"pyproject.toml": "[project]\nname = \"web\"\nversion = \"0\"\nrequires-python = \">=3.12\"\ndependencies = [\"six==1.17.0\"]\n\n[tool.uv]\npackage = false\n",
+	})
+	lock := exec.Command("uv", "lock")
+	lock.Dir = source
+	if said, err := lock.CombinedOutput(); err != nil {
+		t.Skipf("uv could not lock the fixture, so the index is out of reach: %v\n%s", err, said)
+	}
+	_, functionDir := vendored(t, source, "x86_64")
+
+	if _, err := os.Stat(filepath.Join(functionDir, "six.py")); err != nil {
+		t.Errorf("the artifact contains no six.py, which uv.lock pins: %v", err)
 	}
 }
 
@@ -308,7 +365,7 @@ func TestVendoringReportsAnythingButAMissingRequirementsFile(t *testing.T) {
 		AppDir:      t.TempDir(),
 	}
 
-	err := c.installRequirements(context.Background(), "manylinux2014_x86_64")
+	err := c.installDependencies(context.Background(), "manylinux2014_x86_64")
 	if err == nil || !strings.Contains(err.Error(), pythonRequirementsFile) {
 		t.Fatalf("err = %v, want the stat error naming %s — only a missing file says the app declares no dependencies", err, pythonRequirementsFile)
 	}
@@ -478,5 +535,97 @@ func TestCompileCopiesADiscoveryFolderThatIsTheAppsOwnDirectoryUnderTheNameItIsI
 
 	if _, err := os.Stat(filepath.Join(functionDir, "server", "__init__.py")); err != nil {
 		t.Errorf("the artifact holds no server/__init__.py, and its worker entry imports server from the artifact root: %v", err)
+	}
+}
+
+const asgiApp = "async def app(scope, receive, send):\n    pass\n"
+
+func refusedASGI(t *testing.T, entrypoint string, files map[string]string) error {
+	t.Helper()
+	if _, err := exec.LookPath(containerimage.PythonWorkerEntry.Interpreter); err != nil {
+		t.Skip("no python interpreter on PATH to run the server program with")
+	}
+	files[pythonserver.File] = pythonserver.Source
+	dir := pythonApp(t, files)
+	resolved, err := pythonserver.ResolveEntrypoint(dir, entrypoint)
+	if err != nil {
+		t.Fatalf("ResolveEntrypoint(%q) = %v", entrypoint, err)
+	}
+	return Compilation{App: "web", Source: dir, FunctionDir: dir}.refuseUnservedASGI(context.Background(), resolved)
+}
+
+func TestAnArtifactServingAnASGIAppWithNoUvicornIsRefused(t *testing.T) {
+	t.Parallel()
+
+	err := refusedASGI(t, "main.py", map[string]string{
+		"main.py":                             asgiApp,
+		"starlette-0.47.2.dist-info/METADATA": "Name: starlette\n",
+		"fastapi-0.116.1.dist-info/METADATA":  "Name: fastapi\n",
+	})
+	if err == nil || !strings.Contains(err.Error(), "starlette") || !strings.Contains(err.Error(), "uvicorn") {
+		t.Fatalf("err = %v, want a refusal naming starlette and uvicorn — nothing in the artifact could serve the app", err)
+	}
+}
+
+func TestAnArtifactServingAnASGIAppWithAServerOcelDoesNotRunIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, server := range []string{"Hypercorn-0.17.3.dist-info", "granian-2.5.0.dist-info", "daphne-4.2.1.dist-info"} {
+		err := refusedASGI(t, "main.py", map[string]string{
+			"main.py":                         asgiApp,
+			"Quart-0.20.0.dist-info/METADATA": "Name: Quart\n",
+			server + "/METADATA":              "Name: server\n",
+		})
+		if err == nil || !strings.Contains(err.Error(), "uvicorn") {
+			t.Errorf("with %s: err = %v, want a refusal naming uvicorn — the server program serves app with uvicorn alone, and the app would fail at boot", server, err)
+		}
+	}
+}
+
+func TestAnArtifactServingAnASGIAppWithUvicornIsAdmitted(t *testing.T) {
+	t.Parallel()
+
+	err := refusedASGI(t, "main.py", map[string]string{
+		"main.py":                           asgiApp,
+		"Quart-0.20.0.dist-info/METADATA":   "Name: Quart\n",
+		"uvicorn-0.35.0.dist-info/METADATA": "Name: uvicorn\n",
+	})
+	if err != nil {
+		t.Errorf("err = %v, want the artifact admitted — uvicorn serves the app", err)
+	}
+}
+
+func TestAnASGIScriptThatStartsTheServerItInstallsIsAdmitted(t *testing.T) {
+	t.Parallel()
+
+	err := refusedASGI(t, "main.py", map[string]string{
+		"main.py": `import asyncio
+
+from hypercorn.asyncio import serve
+from hypercorn.config import Config
+from quart import Quart
+
+web = Quart(__name__)
+
+if __name__ == "__main__":
+    asyncio.run(serve(web, Config()))
+`,
+		"Quart-0.20.0.dist-info/METADATA":     "Name: Quart\n",
+		"Hypercorn-0.17.3.dist-info/METADATA": "Name: Hypercorn\n",
+	})
+	if err != nil {
+		t.Errorf("err = %v, want the artifact admitted — the entrypoint defines no app, so the server program runs it as the script that serves itself", err)
+	}
+}
+
+func TestAnArtifactHoldingNoASGIFrameworkIsAdmittedWithoutAServer(t *testing.T) {
+	t.Parallel()
+
+	err := refusedASGI(t, "main.py", map[string]string{
+		"main.py":                        "app = None\n",
+		"flask-3.1.1.dist-info/METADATA": "Name: Flask\n",
+	})
+	if err != nil {
+		t.Errorf("err = %v, want a WSGI app admitted: the standard library serves it when gunicorn is absent", err)
 	}
 }
