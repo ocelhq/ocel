@@ -194,7 +194,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { fake: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],
 };
 `)
 	WriteFile(t, filepath.Join(DiscoveryDir(root), "main.ts"), `
@@ -256,7 +256,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { fake: { `+providerOptions+` } },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],
 };
 `)
 }

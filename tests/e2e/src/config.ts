@@ -195,7 +195,7 @@ function frontOf(overlay: Overlay): string[] {
 
 function computeExpressionOf(compute: Compute, target: TargetName, image?: ContainerImage): string {
   if (compute === "serverless") {
-    return `{ serverless: { ...(typeof app.compute === "object" ? app.compute.serverless : {}) } }`;
+    return `"serverless"`;
   }
   const built = image ? `, image: ${JSON.stringify(image)}` : "";
   if (target === "vps") {
@@ -327,12 +327,7 @@ type Document = Record<string, unknown> & {
   apps?: App[];
 };
 
-function computeDocumentOf(
-  compute: Compute,
-  target: TargetName,
-  declared: unknown,
-  image?: ContainerImage,
-): unknown {
+function computeDocumentOf(compute: Compute, target: TargetName, image?: ContainerImage): unknown {
   if (compute === "container") {
     const built = image ? { image } : {};
     if (target === "vps") {
@@ -340,25 +335,21 @@ function computeDocumentOf(
     }
     return image ? { container: built } : compute;
   }
-  const serverless =
-    declared !== null && typeof declared === "object"
-      ? (declared as { serverless?: unknown }).serverless
-      : undefined;
-  return serverless === undefined ? compute : { serverless };
+  return compute;
 }
 
 function appDocument(app: App, overlay: Overlay): App {
   const written: App = {
     ...app,
     ...(overlay.target === "vps"
-      ? { compute: computeDocumentOf("container", overlay.target, app.compute, overlay.image) }
+      ? { compute: computeDocumentOf("container", overlay.target, overlay.image) }
       : {}),
     ...(app.name === undefined ? {} : overlay.apps?.[app.name]),
   };
   const compute =
     (app.name === undefined ? undefined : overlay.computes?.[app.name]) ?? overlay.compute;
   if (compute) {
-    written.compute = computeDocumentOf(compute, overlay.target, app.compute, overlay.image);
+    written.compute = computeDocumentOf(compute, overlay.target, overlay.image);
   }
   if (compute === "container") {
     delete written.arch;

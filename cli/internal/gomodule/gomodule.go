@@ -17,7 +17,7 @@ type Module struct {
 	ReplacementDirs []string
 }
 
-func FindEnclosing(dir string, isLast func(dir string) bool) (Module, bool, error) {
+func findEnclosing(dir string, isLast func(dir string) bool) (Module, bool, error) {
 	at, err := filepath.Abs(dir)
 	if err != nil {
 		return Module{}, false, err
@@ -38,6 +38,34 @@ func FindEnclosing(dir string, isLast func(dir string) bool) (Module, bool, erro
 		}
 		at = parent
 	}
+}
+
+func FindInProject(dir, projectDir string) (Module, bool, error) {
+	root, err := filepath.Abs(projectDir)
+	if err != nil {
+		return Module{}, false, err
+	}
+	return findEnclosing(dir, func(at string) bool { return at == root || !within(root, at) })
+}
+
+func PackagePath(moduleDir, appDir, entrypoint string) (string, error) {
+	dir := filepath.Join(appDir, filepath.FromSlash(entrypoint))
+	rel, err := filepath.Rel(moduleDir, dir)
+	if err != nil || !within(moduleDir, dir) {
+		return "", fmt.Errorf("entrypoint %q of the go app in %s names %s, outside the module rooted at %s: an app is built from a package of the module it belongs to", entrypoint, appDir, dir, moduleDir)
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("entrypoint %q of the go app in %s names no directory there to build its main package from: give it the directory of the main package, not a .go file", entrypoint, appDir)
+	}
+	if rel == "." {
+		return ".", nil
+	}
+	return "./" + filepath.ToSlash(rel), nil
+}
+
+func within(root, dir string) bool {
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && filepath.IsLocal(rel)
 }
 
 func parse(dir, named string, read []byte) (Module, error) {

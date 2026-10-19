@@ -11,7 +11,7 @@ func TestAFrameworkAppThatFallsBackToAContainerIsPreflightedAsAContainer(t *test
 	t.Parallel()
 
 	cfg := &project.Project{Apps: []project.App{
-		{Name: "web", Serverless: &project.Serverless{Framework: "next"}},
+		{Name: "web", Framework: "next"},
 	}}
 
 	t.Run("a provider that runs containers first", func(t *testing.T) {

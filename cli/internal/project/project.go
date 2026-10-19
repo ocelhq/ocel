@@ -32,22 +32,23 @@ type DNS struct {
 }
 
 type Project struct {
-	Slug           string
-	Transforms     []string
-	DiscoveryPaths []string
-	Provider       *Provider
-	Edge           *Edge
-	DNS            *DNS
-	AllowDegraded  []edge.Need
-	Apps           []App
-	Bindings       []Binding
-	Domains        Domains
-	Registry       *Registry
-	Lifecycle      Lifecycle
-	Protection     Protection
-	EnvSource      envsource.Tiers
-	Dir            string
-	Path           string
+	Slug              string
+	Transforms        []string
+	DiscoveryPaths    []string
+	Provider          *Provider
+	Edge              *Edge
+	DNS               *DNS
+	AllowDegraded     []edge.Need
+	Apps              []App
+	RootAppUndetected error
+	Bindings          []Binding
+	Domains           Domains
+	Registry          *Registry
+	Lifecycle         Lifecycle
+	Protection        Protection
+	EnvSource         envsource.Tiers
+	Dir               string
+	Path              string
 }
 
 type Protection struct {
@@ -134,11 +135,9 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
+	var rootAppUndetected error
 	if len(doc.Apps) == 0 {
-		apps, err = rootApp(doc.Slug, filepath.Dir(configPath))
-		if err != nil {
-			return nil, err
-		}
+		apps, rootAppUndetected = rootApp(doc.Slug, filepath.Dir(configPath))
 		if len(apps) > 0 && doc.Slug == naming.InfraApp {
 			return nil, newInvalidConfigError(fmt.Errorf("%s names no apps, so the app at the project root is named after the slug, and %q is reserved for the stack holding each environment's shared infrastructure: list the app under \"apps\" with another name, or change the slug", configPath, naming.InfraApp), "slug")
 		}
@@ -172,22 +171,23 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	}
 
 	return &Project{
-		Slug:           doc.Slug,
-		Transforms:     doc.Transforms,
-		DiscoveryPaths: discoveryPaths,
-		Provider:       provider,
-		Edge:           front,
-		DNS:            normalizeDNS(dns),
-		AllowDegraded:  allowDegraded,
-		Apps:           apps,
-		Bindings:       bindings,
-		Domains:        domains,
-		Registry:       registry,
-		Lifecycle:      lifecycle,
-		Protection:     protection,
-		EnvSource:      doc.EnvSource.Tiers(),
-		Dir:            filepath.Dir(configPath),
-		Path:           configPath,
+		Slug:              doc.Slug,
+		Transforms:        doc.Transforms,
+		DiscoveryPaths:    discoveryPaths,
+		Provider:          provider,
+		Edge:              front,
+		DNS:               normalizeDNS(dns),
+		AllowDegraded:     allowDegraded,
+		Apps:              apps,
+		RootAppUndetected: rootAppUndetected,
+		Bindings:          bindings,
+		Domains:           domains,
+		Registry:          registry,
+		Lifecycle:         lifecycle,
+		Protection:        protection,
+		EnvSource:         doc.EnvSource.Tiers(),
+		Dir:               filepath.Dir(configPath),
+		Path:              configPath,
 	}, nil
 }
 

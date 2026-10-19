@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/shellword"
 )
 
 type PackageManager string
@@ -245,11 +246,18 @@ func (l Location) startsItself() string {
 	if entry == "" {
 		return ""
 	}
-	return l.inAppDir(l.runtime() + " " + entry)
+	return l.inAppDir(l.runtime() + " " + shellword.Quote(entry))
 }
 
 func (l Location) inAppDir(command string) string {
-	return fmt.Sprintf("cd %s && %s", l.Path, command)
+	return inDir(l.Path, command)
+}
+
+func inDir(dir, command string) string {
+	if dir == "." {
+		return command
+	}
+	return "cd " + shellword.Quote(dir) + " && " + command
 }
 
 func (l Location) runner() string {

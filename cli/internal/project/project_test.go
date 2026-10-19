@@ -247,8 +247,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "services/api", compute: { serverless: { framework: "node", entrypoint: "src/main.ts" } } },
-    { name: "web", path: "services/web", compute: { serverless: { framework: "node" } } },
+    { name: "api", path: "services/api", framework: "node", entrypoint: "src/main.ts", compute: "serverless" },
+    { name: "web", path: "services/web", framework: "node", compute: "serverless" },
   ],
 };
 `,
@@ -258,12 +258,12 @@ export default {
 				}
 
 				api := cfg.Apps[0]
-				if api.Name != "api" || api.Path != "services/api" || *api.Serverless != (Serverless{Framework: "node", Entrypoint: "src/main.ts"}) {
+				if api.Name != "api" || api.Path != "services/api" || api.Framework != "node" || api.Entrypoint != "src/main.ts" {
 					t.Fatalf("Apps[0] = %+v, unexpected fields", api)
 				}
 
 				web := cfg.Apps[1]
-				if web.Name != "web" || web.Path != "services/web" || *web.Serverless != (Serverless{Framework: "node"}) {
+				if web.Name != "web" || web.Path != "services/web" || web.Framework != "node" || web.Entrypoint != "" {
 					t.Fatalf("Apps[1] = %+v, unexpected fields", web)
 				}
 			},
@@ -433,12 +433,12 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "next" } } }],
+  apps: [{ name: "api", path: "services/api", framework: "next", compute: "serverless" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got, want := cfg.Apps[0].Framework(), "next"; got != want {
-					t.Fatalf("Apps[0].Framework() = %q, want %q", got, want)
+				if got, want := cfg.Apps[0].Framework, "next"; got != want {
+					t.Fatalf("Apps[0].Framework = %q, want %q", got, want)
 				}
 			},
 		},
@@ -447,12 +447,12 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "go" } } }],
+  apps: [{ name: "api", path: "services/api", framework: "go", compute: "serverless" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got, want := cfg.Apps[0].Framework(), "go"; got != want {
-					t.Fatalf("Apps[0].Framework() = %q, want %q", got, want)
+				if got, want := cfg.Apps[0].Framework, "go"; got != want {
+					t.Fatalf("Apps[0].Framework = %q, want %q", got, want)
 				}
 			},
 		},
@@ -461,11 +461,11 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "node" } }, arch: "arm64" }],
+  apps: [{ name: "api", path: "services/api", framework: "node", compute: "serverless", arch: "arm64" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Project) {
-				if got := cfg.Apps[0]; got.Framework() != "node" || got.Arch != "arm64" {
+				if got := cfg.Apps[0]; got.Framework != "node" || got.Arch != "arm64" {
 					t.Fatalf("Apps[0] = %+v, want a node app built for arm64", got)
 				}
 			},
@@ -496,9 +496,6 @@ export default {
 				if cfg.Apps[0].Container.Build != nil {
 					t.Fatalf("Apps[0].Container.Build = %+v, want nil where the app configures no build", cfg.Apps[0].Container.Build)
 				}
-				if cfg.Apps[0].Serverless != nil {
-					t.Fatalf("Apps[0].Serverless = %+v, want a container app to load with none", cfg.Apps[0].Serverless)
-				}
 			},
 		},
 		{
@@ -521,8 +518,8 @@ export default {
   slug: "test-app",
   domains: { production: "acme.com" },
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "App.Acme.com" } },
-    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless", domains: { production: "App.Acme.com" } },
+    { name: "admin", path: "apps/admin", framework: "node", compute: "serverless" },
   ],
 };
 `,
@@ -548,7 +545,7 @@ export default {
   slug: "test-app",
   domains: { preview: "*.preview.acme.com" },
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { production: "app.acme.com" } },
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless", domains: { production: "app.acme.com" } },
   ],
 };
 `,
@@ -592,8 +589,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "next" } }, folder: "/web" },
-    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "next" } } },
+    { name: "web", path: "apps/web", framework: "next", compute: "serverless", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "next", compute: "serverless" },
   ],
 };
 `,
@@ -834,7 +831,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "deno" } } }],
+  apps: [{ name: "api", path: "services/api", framework: "deno", compute: "serverless" }],
 };
 `,
 			wantErr: []string{`app "api"`, "deno", "node", "next", "go"},
@@ -844,7 +841,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "node" } }, arch: "riscv" }],
+  apps: [{ name: "api", path: "services/api", framework: "node", compute: "serverless", arch: "riscv" }],
 };
 `,
 			wantErr: []string{`app "api"`, "riscv", "x86_64", "arm64"},
@@ -855,8 +852,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "services/api", compute: { serverless: { framework: "node" } } },
-    { name: "api", path: "services/other", compute: { serverless: { framework: "node" } } },
+    { name: "api", path: "services/api", framework: "node", compute: "serverless" },
+    { name: "api", path: "services/other", framework: "node", compute: "serverless" },
   ],
 };
 `,
@@ -907,7 +904,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", compute: { serverless: { framework: "node" } } }],
+  apps: [{ name: "api", framework: "node", compute: "serverless" }],
 };
 `,
 			wantErr: []string{"path"},
@@ -918,7 +915,7 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, domains: { preview: "*.preview.acme.com" } },
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless", domains: { preview: "*.preview.acme.com" } },
   ],
 };
 `,
@@ -948,8 +945,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "next" } }, folder: "/shared" },
-    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "next" } }, folder: "/shared" },
+    { name: "web", path: "apps/web", framework: "next", compute: "serverless", folder: "/shared" },
+    { name: "admin", path: "apps/admin", framework: "next", compute: "serverless", folder: "/shared" },
   ],
 };
 `,
@@ -1386,7 +1383,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", compute: { serverless: { framework: "node" } } }],
+  apps: [{ name: "`+name+`", path: "services/api", framework: "node", compute: "serverless" }],
 };
 `)
 
@@ -1412,7 +1409,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", compute: { serverless: { framework: "node" } } }],
+  apps: [{ name: "`+name+`", path: "services/api", framework: "node", compute: "serverless" }],
 };
 `)
 
@@ -1441,7 +1438,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", compute: { serverless: { framework: "node" } } }],
+  apps: [{ name: "`+name+`", path: "services/api", framework: "node", compute: "serverless" }],
 };
 `)
 
@@ -1473,7 +1470,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: "apps/web", compute: { serverless: { framework: "next" } }, folder: "`+folder+`" }],
+  apps: [{ name: "web", path: "apps/web", framework: "next", compute: "serverless", folder: "`+folder+`" }],
 };
 `)
 

@@ -5,6 +5,7 @@ import (
 	"debug/elf"
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -34,6 +35,8 @@ func compiled(t *testing.T, pkg, arch string) (string, string) {
 	err := Compile(context.Background(), Compilation{
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "go", Arch: arch},
+		GoModuleDir: pkg,
+		GoPackage:   ".",
 		Source:      pkg,
 		FunctionDir: functionDir,
 		AppDir:      appDir,
@@ -135,42 +138,78 @@ func TestCompileBuildsTheAppsOwnModuleWhateverWorkspaceEnclosesIt(t *testing.T) 
 	}
 }
 
-func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
+func compileGoApp(t *testing.T, c Compilation) (string, error) {
+	t.Helper()
+	c.App = "web"
+	c.Framework = buildoutput.Framework{Name: "go", Arch: "x86_64"}
+	c.FunctionDir = filepath.Join(t.TempDir(), "index.func")
+	c.AppDir = t.TempDir()
+	return c.FunctionDir, Compile(context.Background(), c)
+}
+
+func TestCompileBuildsAnAppBelowTheModuleItBelongsToFromThatModule(t *testing.T) {
 	t.Parallel()
 
-	source := t.TempDir()
-	pkg := filepath.Join(source, "cmd", "server")
-	if err := os.MkdirAll(pkg, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for name, body := range map[string]string{
-		filepath.Join(pkg, "go.mod"):  "module fixture\n\ngo 1.24\n",
-		filepath.Join(pkg, "main.go"): "package main\n\nfunc main() {}\n",
-	} {
-		if err := os.WriteFile(name, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	for name, entrypoint := range map[string]string{"its own package": "", "a package below it": "cmd/api"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			module := t.TempDir()
+			main := filepath.ToSlash(filepath.Join("services", "api", entrypoint, "main.go"))
+			writeTree(t, module, tree{
+				"go.mod":     "module example.com/shop\n\ngo 1.24\n",
+				"lib/lib.go": "package lib\n\nfunc Serve() {}\n",
+				main:         "package main\n\nimport \"example.com/shop/lib\"\n\nfunc main() { lib.Serve() }\n",
+			})
 
-	err := Compile(context.Background(), Compilation{
-		App:         "web",
-		Framework:   buildoutput.Framework{Name: "go", Arch: "x86_64"},
-		Source:      source,
-		Entrypoint:  filepath.Join("cmd", "server"),
-		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:      t.TempDir(),
+			pkg := "./" + path.Join("services/api", entrypoint)
+			functionDir, err := compileGoApp(t, Compilation{GoModuleDir: module, GoPackage: pkg, Source: filepath.Join(module, "services", "api"), Entrypoint: entrypoint})
+			if err != nil {
+				t.Fatalf("compile: %v — the go.mod above the app's directory is the module it is built from", err)
+			}
+			if _, err := os.Stat(filepath.Join(functionDir, "web")); err != nil {
+				t.Fatalf("the compile wrote no binary: %v", err)
+			}
+		})
+	}
+}
+
+func TestCompileBuildsTheWorkerPackageOfAnAppBelowItsModuleFromThatModule(t *testing.T) {
+	t.Parallel()
+	module := t.TempDir()
+	writeTree(t, module, tree{
+		"go.mod":               "module example.com/shop\n\ngo 1.24\n",
+		"services/api/main.go": "package main\n\nfunc main() {}\n",
+		"cmd/worker/main.go":   "package main\n\nfunc main() {}\n",
 	})
-	if err == nil || !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), goModuleFile) {
-		t.Fatalf("err = %v, want a refusal naming %s and %s — the container path reads the app directory for a module and would plan this app as node", err, source, goModuleFile)
+
+	functionDir, err := compileGoApp(t, Compilation{GoModuleDir: module, GoPackage: "./services/api", Source: filepath.Join(module, "services", "api"), WorkerPackage: "./cmd/worker"})
+	if err != nil {
+		t.Fatalf("compile: %v — the worker package is a path in the module, and the module is rooted above the app", err)
+	}
+	if _, err := os.Stat(filepath.Join(functionDir, buildoutput.GoWorkerBinary)); err != nil {
+		t.Fatalf("the compile wrote no worker binary: %v", err)
+	}
+}
+
+func TestCompileRefusesAGoAppCompiledFromNoModule(t *testing.T) {
+	t.Parallel()
+
+	source := goModule(t)
+	_, err := compileGoApp(t, Compilation{Source: source})
+	if err == nil || !strings.Contains(err.Error(), "module") {
+		t.Fatalf("err = %v, want a refusal saying the app is compiled from no module", err)
 	}
 }
 
 func TestCompileRefusesAnArchitectureGoBuildsNothingFor(t *testing.T) {
 	t.Parallel()
+	module := goModule(t)
 	err := Compile(context.Background(), Compilation{
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "go", Arch: "riscv"},
-		Source:      goModule(t),
+		GoModuleDir: module,
+		GoPackage:   ".",
+		Source:      module,
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
@@ -188,6 +227,8 @@ func TestCompileReportsWhatTheCompilerSaidWhenTheAppDoesNotBuild(t *testing.T) {
 	err := Compile(context.Background(), Compilation{
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "go", Arch: "x86_64"},
+		GoModuleDir: pkg,
+		GoPackage:   ".",
 		Source:      pkg,
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
@@ -211,6 +252,8 @@ func TestCompileBuildsTheWorkerPackageAsASecondBinaryInTheSameArtifact(t *testin
 	err := Compile(context.Background(), Compilation{
 		App:           "web",
 		Framework:     buildoutput.Framework{Name: "go", Arch: "arm64"},
+		GoModuleDir:   pkg,
+		GoPackage:     ".",
 		Source:        pkg,
 		WorkerPackage: "./cmd/worker",
 		FunctionDir:   functionDir,

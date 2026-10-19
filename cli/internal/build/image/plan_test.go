@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
+	"github.com/ocelhq/ocel/cli/internal/gomodule"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
@@ -66,18 +68,40 @@ func (p builtPlan) copied(name string) []string {
 	return srcs
 }
 
-func located(t *testing.T, dir string) workspace.Location {
+func located(t *testing.T, dir string, written language.Language) workspace.Location {
 	t.Helper()
-	loc, err := workspace.Locate(dir)
+	return locatedIn(t, dir, dir, written, "")
+}
+
+func locatedWith(t *testing.T, dir string, written language.Language, entrypoint string) workspace.Location {
+	t.Helper()
+	return locatedIn(t, dir, dir, written, entrypoint)
+}
+
+func locatedIn(t *testing.T, project, dir string, written language.Language, entrypoint string) workspace.Location {
+	t.Helper()
+	dir, err := filepath.Abs(dir)
 	if err != nil {
-		t.Fatalf("Locate(%s) = %v", dir, err)
+		t.Fatal(err)
+	}
+	program := workspace.Program{Language: written, Entrypoint: entrypoint}
+	if found, ok, err := gomodule.FindInProject(dir, project); err == nil && ok && written == language.Go {
+		pkg, err := gomodule.PackagePath(found.Dir, dir, entrypoint)
+		if err != nil {
+			t.Fatalf("PackagePath(%s, %q) = %v", dir, entrypoint, err)
+		}
+		program.GoModule, program.GoPackage = &found, pkg
+	}
+	loc, err := workspace.Locate(dir, program)
+	if err != nil {
+		t.Fatalf("Locate(%s, %s) = %v", project, dir, err)
 	}
 	return loc
 }
 
-func planned(t *testing.T, dir string) builtPlan {
+func planned(t *testing.T, dir string, written language.Language) builtPlan {
 	t.Helper()
-	return plannedFrom(t, located(t, dir))
+	return plannedFrom(t, located(t, dir, written))
 }
 
 func plannedFrom(t *testing.T, loc workspace.Location) builtPlan {
@@ -105,7 +129,7 @@ func assets(t *testing.T, plan builtPlan) string {
 }
 
 func TestAPlainServerIsPlannedWithNothingButItsOwnDirectory(t *testing.T) {
-	plan := planned(t, "testdata/plainserver")
+	plan := planned(t, "testdata/plainserver", language.JS)
 
 	if plan.Deploy.StartCommand != "npm run start" {
 		t.Errorf("the plan starts the app with %q, want the start script the app already declares", plan.Deploy.StartCommand)
@@ -116,7 +140,7 @@ func TestAPlainServerIsPlannedWithNothingButItsOwnDirectory(t *testing.T) {
 }
 
 func TestARailpackFileInTheAppChangesTheBuildOcelNeverReads(t *testing.T) {
-	plan := planned(t, "testdata/configured")
+	plan := planned(t, "testdata/configured", language.JS)
 
 	if want := "node server.js --from-railpack-json"; plan.Deploy.StartCommand != want {
 		t.Errorf("the plan starts the app with %q, want %q from the app's own railpack.json", plan.Deploy.StartCommand, want)
@@ -127,7 +151,7 @@ func TestThePlanTakesNothingFromTheEnvironmentOcelRunsIn(t *testing.T) {
 	t.Setenv("NODE_VERSION", "20")
 	t.Setenv("RAILPACK_START_CMD", "node leaked.js")
 
-	plan := planned(t, "testdata/plainserver")
+	plan := planned(t, "testdata/plainserver", language.JS)
 
 	if strings.Contains(assets(t, plan), `node = "20`) {
 		t.Errorf("a variable in ocel's own environment pinned the build's node version, so the build is not bare:\n%s", assets(t, plan))
@@ -141,7 +165,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 	const leak = "a value the plan must never contain"
 	t.Setenv("OCEL_PLAN_LEAK", leak)
 
-	raw, err := image.Plan(located(t, "testdata/plainserver"))
+	raw, err := image.Plan(located(t, "testdata/plainserver", language.JS))
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -154,7 +178,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 }
 
 func TestADirectoryRailpackCannotReadSaysWhyInsteadOfPlanningNothing(t *testing.T) {
-	_, err := image.Plan(located(t, t.TempDir()))
+	_, err := image.Plan(located(t, t.TempDir(), language.JS))
 	if err == nil {
 		t.Fatal("Plan() over an empty directory succeeded, so a build with nothing in it would be attempted")
 	}
@@ -166,7 +190,7 @@ func TestADirectoryRailpackCannotReadSaysWhyInsteadOfPlanningNothing(t *testing.
 const workspaceApp = "testdata/pnpmworkspace/apps/web"
 
 func TestAnAppInAWorkspaceInstallsFromTheRootLockfileAndOnlyWhatItReaches(t *testing.T) {
-	loc := located(t, workspaceApp)
+	loc := located(t, workspaceApp, language.JS)
 	if loc.Path != "apps/web" || loc.PackageManager != workspace.Pnpm {
 		t.Fatalf("Locate(%s) = %+v, want the app located inside the pnpm workspace above it", workspaceApp, loc)
 	}
@@ -189,7 +213,7 @@ func TestAnAppInAWorkspaceInstallsFromTheRootLockfileAndOnlyWhatItReaches(t *tes
 }
 
 func TestAnAppInAWorkspaceRunsItsOwnScriptsAndNeverTheRoots(t *testing.T) {
-	plan := plannedFrom(t, located(t, workspaceApp))
+	plan := plannedFrom(t, located(t, workspaceApp, language.JS))
 
 	if want := "pnpm --filter \"{./apps/web}\" run start"; plan.Deploy.StartCommand != want {
 		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
@@ -201,7 +225,7 @@ func TestAnAppInAWorkspaceRunsItsOwnScriptsAndNeverTheRoots(t *testing.T) {
 }
 
 func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
-	loc := located(t, workspaceApp)
+	loc := located(t, workspaceApp, language.JS)
 	loc.Package.Build = true
 
 	plan := plannedFrom(t, loc)
@@ -213,7 +237,7 @@ func TestAWorkspaceAppWithABuildScriptBuildsWhatItDependsOnFirst(t *testing.T) {
 }
 
 func TestAnInstallOcelCannotScopeStopsTheBuildRatherThanInstallingTheWholeWorkspace(t *testing.T) {
-	loc := located(t, workspaceApp)
+	loc := located(t, workspaceApp, language.JS)
 	loc.PackageManager = workspace.YarnBerry
 
 	_, err := image.Plan(loc)
@@ -226,7 +250,7 @@ func TestAnInstallOcelCannotScopeStopsTheBuildRatherThanInstallingTheWholeWorksp
 }
 
 func TestAConfiguredBuildCommandIsWhatTheImageRuns(t *testing.T) {
-	loc := located(t, workspaceApp)
+	loc := located(t, workspaceApp, language.JS)
 	loc.BuildCommand = "turbo run build --filter=@fixture/web"
 
 	plan := plannedFrom(t, loc)
@@ -237,8 +261,8 @@ func TestAConfiguredBuildCommandIsWhatTheImageRuns(t *testing.T) {
 }
 
 func TestScopingAnInstallKeepsTheCachesAndTheSetupRailpackPutAroundIt(t *testing.T) {
-	scoped := plannedFrom(t, located(t, workspaceApp))
-	unscoped := planned(t, "testdata/plainserver")
+	scoped := plannedFrom(t, located(t, workspaceApp, language.JS))
+	unscoped := planned(t, "testdata/plainserver", language.JS)
 
 	var install []string
 	for _, step := range scoped.Steps {
@@ -272,7 +296,7 @@ func TestThePlanNeverCopiesWhatTheContextNoLongerContains(t *testing.T) {
 		}
 	}
 
-	plan := planned(t, root)
+	plan := planned(t, root, language.JS)
 
 	for _, src := range plan.copied("install") {
 		if strings.HasPrefix(filepath.ToSlash(src), "node_modules/") {
@@ -282,7 +306,7 @@ func TestThePlanNeverCopiesWhatTheContextNoLongerContains(t *testing.T) {
 }
 
 func TestANextAppInAWorkspaceIsBuiltAndStartedAsTheAppRatherThanTheRoot(t *testing.T) {
-	loc := located(t, "testdata/nextworkspace/apps/web")
+	loc := located(t, "testdata/nextworkspace/apps/web", language.JS)
 	if !loc.Member {
 		t.Fatalf("Locate() = %+v, want the next app read as a member of the workspace above it", loc)
 	}
@@ -325,7 +349,7 @@ func TestANextAppInAWorkspaceIsBuiltAndStartedAsTheAppRatherThanTheRoot(t *testi
 const polyglotApp = "testdata/polyglotworkspace/apps/web"
 
 func TestANodeAppIsPlannedAsOneEvenWhereAnotherLanguageSitsAtTheRoot(t *testing.T) {
-	plan := planned(t, polyglotApp)
+	plan := planned(t, polyglotApp, language.JS)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
 	if want := "pnpm install --frozen-lockfile --filter \"{./apps/web}...\""; !strings.Contains(install, want) {
@@ -339,7 +363,7 @@ func TestANodeAppIsPlannedAsOneEvenWhereAnotherLanguageSitsAtTheRoot(t *testing.
 const polyglotGoApp = "testdata/polyglotworkspace/apps/api"
 
 func TestAnAppWithAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.T) {
-	plan := planned(t, polyglotGoApp)
+	plan := planned(t, polyglotGoApp, language.Go)
 
 	build := strings.Join(plan.step(t, "build"), "\n")
 	if !strings.Contains(build, "go build") {
@@ -353,7 +377,7 @@ func TestAnAppWithAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.T) {
 const polyglotPythonApp = "testdata/polyglotworkspace/apps/svc"
 
 func TestAnAppWithAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideIt(t *testing.T) {
-	plan := planned(t, polyglotPythonApp)
+	plan := planned(t, polyglotPythonApp, language.Python)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
 	if !strings.Contains(install, "pip install") {
@@ -370,7 +394,7 @@ func TestAnAppWithAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideIt(t 
 const polyglotCrateApp = "testdata/polyglotworkspace/apps/crate"
 
 func TestAnAppWithACargoManifestIsPlannedAsRustRatherThanLeftToRailpacksOwnDetection(t *testing.T) {
-	plan := planned(t, polyglotCrateApp)
+	plan := planned(t, polyglotCrateApp, language.Rust)
 
 	build := strings.Join(plan.step(t, "build"), "\n")
 	if !strings.Contains(build, "cargo build") {
@@ -387,7 +411,7 @@ func TestAnAppWithACargoManifestIsPlannedAsRustRatherThanLeftToRailpacksOwnDetec
 const polyglotStrayScriptApp = "testdata/polyglotworkspace/apps/stray"
 
 func TestANodeAppShippingAScriptBesideItselfIsStillPlannedAsNode(t *testing.T) {
-	plan := planned(t, polyglotStrayScriptApp)
+	plan := planned(t, polyglotStrayScriptApp, language.JS)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
 	if want := "pnpm install --frozen-lockfile --filter \"{./apps/stray}...\""; !strings.Contains(install, want) {
@@ -399,11 +423,73 @@ func TestANodeAppShippingAScriptBesideItselfIsStillPlannedAsNode(t *testing.T) {
 }
 
 func TestTheRootsOwnRailpackFileStillShapesAPlanOcelForcesTheProviderOn(t *testing.T) {
-	plan := planned(t, polyglotApp)
+	plan := planned(t, polyglotApp, language.JS)
 
 	apt := strings.Join(plan.step(t, "packages:apt:build"), "\n")
 	if !strings.Contains(apt, "libvips-dev") {
 		t.Errorf("the apt step runs:\n%s\nand the root's %s asks for libvips-dev: naming the provider replaced the file the user wrote rather than adding to it", apt, image.ConfigFileName)
+	}
+}
+
+func writeFiles(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for path, body := range files {
+		named := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(named), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(named, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+const goModuleWithCommands = "module example.com/api\n\ngo 1.25.0\n"
+
+func goAppWithCommands(t *testing.T, extra map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		".git/HEAD":          "ref: refs/heads/main\n",
+		"go.mod":             goModuleWithCommands,
+		"lib/lib.go":         "package lib\n",
+		"cmd/admin/main.go":  "package main\n\nfunc main() {}\n",
+		"cmd/api/main.go":    "package main\n\nfunc main() {}\n",
+		"tools/seed/main.go": "package main\n\nfunc main() {}\n",
+	})
+	writeFiles(t, root, extra)
+	return root
+}
+
+func TestAGoAppIsBuiltFromThePackageItsEntrypointNamesRatherThanTheCommandRailpackPicks(t *testing.T) {
+	for _, entrypoint := range []string{"cmd/api", "tools/seed"} {
+		t.Run(entrypoint, func(t *testing.T) {
+			plan := plannedFrom(t, locatedWith(t, goAppWithCommands(t, nil), language.Go, entrypoint))
+
+			build := strings.Join(plan.step(t, "build"), "\n")
+			if want := "go build -ldflags=\"-w -s\" -o out ./" + entrypoint; !strings.Contains(build, want) {
+				t.Errorf("the build step runs:\n%s\nwant %q — railpack alone builds cmd/admin, the first command it finds", build, want)
+			}
+			if plan.Deploy.StartCommand != "./out" {
+				t.Errorf("the plan starts the app with %q, want the binary the build step writes", plan.Deploy.StartCommand)
+			}
+		})
+	}
+}
+
+func TestARailpackFileBuildingAGoAppStillChoosesWhatTheImageBuilds(t *testing.T) {
+	root := goAppWithCommands(t, map[string]string{
+		image.ConfigFileName: `{"steps":{"build":{"commands":["go build -o out ./cmd/admin"]}},"deploy":{"startCommand":"./out --admin"}}`,
+	})
+
+	plan := plannedFrom(t, locatedWith(t, root, language.Go, "cmd/api"))
+
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if !strings.Contains(build, "go build -o out ./cmd/admin") || strings.Contains(build, "./cmd/api") {
+		t.Errorf("the build step runs:\n%s\nwant only the build the app's %s names", build, image.ConfigFileName)
+	}
+	if plan.Deploy.StartCommand != "./out --admin" {
+		t.Errorf("the plan starts the app with %q, want the start command the app's %s names", plan.Deploy.StartCommand, image.ConfigFileName)
 	}
 }
 
@@ -427,11 +513,11 @@ func TestAGoAppBelowItsModuleIsBuiltFromThePackageWithTheModulesItReplacesAndNot
 		}
 	}
 
-	plan := planned(t, filepath.Join(root, "apps", "web", "server"))
+	plan := plannedFrom(t, locatedIn(t, root, filepath.Join(root, "apps", "web", "server"), language.Go, ""))
 
 	build := strings.Join(plan.step(t, "build"), "\n")
-	if !strings.Contains(build, "cd apps/web/server && GOWORK=off CGO_ENABLED=0 go build") {
-		t.Errorf("the build step runs:\n%s\nwant go build run in the app's package, where go finds the module above it", build)
+	if !strings.Contains(build, "cd apps/web && GOWORK=off CGO_ENABLED=0 go build -ldflags=\"-w -s\" -o ../../out ./server") {
+		t.Errorf("the build step runs:\n%s\nwant go build run in the app's module, of the app's package", build)
 	}
 	install := plan.step(t, "install")
 	if !contains(install, "sh -c 'cd apps/web && GOWORK=off go mod download'") || contains(install, "go mod download") {

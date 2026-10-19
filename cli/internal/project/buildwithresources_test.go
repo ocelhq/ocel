@@ -8,9 +8,9 @@ func TestAnAppIsBuiltWithItsResourcesUnlessItSaysOtherwise(t *testing.T) {
 	t.Parallel()
 
 	cfg := mustLoadJSON(t, `{"slug":"shop","apps":[
-		{"name":"web","path":"web","compute":{"serverless":{"framework":"next"}},"buildWithResources":false},
+		{"name":"web","path":"web","framework":"next","compute":"serverless","buildWithResources":false},
 		{"name":"site","path":"site","compute":{"container":{"image":{"command":"make"}}},"buildWithResources":false},
-		{"name":"admin","path":"admin","compute":{"serverless":{"framework":"next"}}}
+		{"name":"admin","path":"admin","framework":"next","compute":"serverless"}
 	]}`)
 
 	for _, app := range cfg.Apps {

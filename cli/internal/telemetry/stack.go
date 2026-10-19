@@ -26,8 +26,7 @@ func NewStack(cfg *project.Project) Stack {
 	}
 	for _, app := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, app.Path)
-		framework := app.Framework()
-		lang := language.OfApp(framework, dir)
+		framework, lang := app.Framework, app.Language
 		if framework != "" {
 			stack.Frameworks = append(stack.Frameworks, framework)
 		}

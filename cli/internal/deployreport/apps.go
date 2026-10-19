@@ -83,7 +83,7 @@ func AppsRolledBack(cfg *project.Project, releases map[string]string) ([]*consol
 			Compute: computeKind(cfg.Apps[at].Compute),
 			Outcome: consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
 		}
-		if framework := cfg.Apps[at].Framework(); buildoutput.IsKnownFramework(framework) {
+		if framework := cfg.Apps[at].Framework; buildoutput.IsKnownFramework(framework) {
 			app.Framework = framework
 		}
 		apps = append(apps, app)

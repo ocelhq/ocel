@@ -22,6 +22,7 @@ export default {
 };
 `)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "package.json"), `{"name":"web"}`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "src", "server.ts"), "export {};\n")
 
 	dependencies := newTestDependencies()
 	var held bool

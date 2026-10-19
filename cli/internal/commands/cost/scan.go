@@ -268,7 +268,7 @@ func scannedOutput(dependencies Dependencies, cfg *project.Project) (build.Outpu
 func unbuiltFunctions(cfg *project.Project) []build.Function {
 	functions := make([]build.Function, 0, len(cfg.Apps))
 	for _, a := range build.FunctionApps(cfg.Apps) {
-		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: buildoutput.Framework{Name: a.Framework(), Arch: a.Arch}})
+		functions = append(functions, build.Function{Route: a.Name, App: a.Name, Framework: buildoutput.Framework{Name: a.Framework, Arch: a.Arch}})
 	}
 	return functions
 }

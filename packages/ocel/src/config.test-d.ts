@@ -40,27 +40,45 @@ describe("an app's compute", () => {
   });
 });
 
-describe("a serverless app", () => {
-  it("names what it is built with", () => {
+describe("what an app is built with", () => {
+  it("is named beside its compute", () => {
     defineConfig({
       slug: "shop",
-      apps: [{ name: "api", path: "services/api", compute: { serverless: { framework: "node" } } }],
+      apps: [{ name: "api", path: "services/api", framework: "node", compute: "serverless" }],
     });
   });
 
-  it("names the main package of a go app", () => {
+  it("names the main package of a go app in a container", () => {
     defineConfig({
       slug: "shop",
       apps: [
         {
           name: "api",
           path: "services/api",
-          compute: { serverless: { framework: "go", entrypoint: "cmd/server" } },
+          framework: "go",
+          entrypoint: "cmd/server",
+          compute: "container",
         },
       ],
     });
   });
 
+  it("is refused under its compute", () => {
+    defineConfig({
+      slug: "shop",
+      apps: [
+        {
+          name: "web",
+          path: "apps/web",
+          // @ts-expect-error framework is the app's, whatever it runs on
+          compute: { serverless: { framework: "next" } },
+        },
+      ],
+    });
+  });
+});
+
+describe("a serverless app", () => {
   it("names an architecture beside its compute", () => {
     defineConfig({
       slug: "shop",
@@ -68,7 +86,8 @@ describe("a serverless app", () => {
         {
           name: "web",
           path: "apps/web",
-          compute: { serverless: { framework: "next" } },
+          framework: "next",
+          compute: "serverless",
           arch: "arm64",
         },
       ],

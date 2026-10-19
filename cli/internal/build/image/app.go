@@ -18,7 +18,7 @@ type App struct {
 func (a App) Dir() string { return a.Workspace.Dir() }
 
 func Describe(cfg *project.Project, app project.App) (App, error) {
-	located, err := workspace.Locate(filepath.Join(cfg.Dir, app.Path))
+	located, err := workspace.Locate(filepath.Join(cfg.Dir, app.Path), app.Program())
 	if err != nil {
 		return App{}, fmt.Errorf("app %q: %w", app.Name, err)
 	}

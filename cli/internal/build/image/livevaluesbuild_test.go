@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/enginetest"
 )
 
@@ -136,7 +137,7 @@ func holdsInside(blob []byte, value string) bool {
 func builtWithBinding(t *testing.T, name, fixture string) (image.Image, string) {
 	t.Helper()
 	value := bindingValue(t, answeringOnTheHost(t))
-	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: name, Workspace: located(t, fixture)}, "", image.NewLiveValues(map[string]string{bindingKey: value}, nil, []byte("the integration test machine")), os.Stderr)
+	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: name, Workspace: located(t, fixture, language.JS)}, "", image.NewLiveValues(map[string]string{bindingKey: value}, nil, []byte("the integration test machine")), os.Stderr)
 	if err != nil {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -180,7 +181,7 @@ func TestARailpackBuildReadsABindingFromTheLiveDirAndLeavesItInNoLayer(t *testin
 func TestARailpackBuildReadsTheBindingProxysSessionTokenFromItsEnvironmentAndLeavesItInNoLayer(t *testing.T) {
 	value := bindingValue(t, answeringOnTheHost(t))
 	token := bindingValue(t, 0)
-	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: "Railpack Proxy", Workspace: located(t, "testdata/secretrailpack")}, "", image.NewLiveValues(map[string]string{bindingKey: value}, map[string]string{"OCEL_SESSION_TOKEN": token}, []byte("the integration test machine")), os.Stderr)
+	built, err := image.Build(context.Background(), image.App{Slug: "secrets", Name: "Railpack Proxy", Workspace: located(t, "testdata/secretrailpack", language.JS)}, "", image.NewLiveValues(map[string]string{bindingKey: value}, map[string]string{"OCEL_SESSION_TOKEN": token}, []byte("the integration test machine")), os.Stderr)
 	if err != nil {
 		t.Fatalf("Build() = %v", err)
 	}

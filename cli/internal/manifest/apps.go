@@ -42,7 +42,7 @@ func appsOf(configured []project.App, usages []attribution.Usage, images map[str
 		out = append(out, app{
 			Name:            a.Name,
 			Path:            a.Path,
-			Framework:       a.Framework(),
+			Framework:       a.Framework,
 			Arch:            a.Arch,
 			Compute:         a.Compute,
 			Domains:         a.ProductionDomains,

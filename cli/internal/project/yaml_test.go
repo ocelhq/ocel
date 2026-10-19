@@ -18,9 +18,8 @@ provider:
 apps:
   - name: web
     path: ./server
-    compute:
-      serverless:
-        framework: go
+    framework: go
+    compute: serverless
 `)
 	t.Setenv("PATH", "")
 
@@ -37,7 +36,7 @@ apps:
 	if string(cfg.Provider.Options) != `{"size":"large"}` {
 		t.Fatalf("options = %s", cfg.Provider.Options)
 	}
-	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "go" {
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework != "go" {
 		t.Fatalf("apps = %+v", cfg.Apps)
 	}
 	if cfg.Path != filepath.Join(dir, YAMLFileName) {
@@ -99,9 +98,8 @@ apps:
   - &app
     name: web
     path: ./server
-    compute:
-      serverless:
-        framework: go
+    framework: go
+    compute: serverless
   - <<: *app
     name: worker
 `)
@@ -110,7 +108,7 @@ apps:
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if len(cfg.Apps) != 2 || cfg.Apps[1].Name != "worker" || cfg.Apps[1].Path != "./server" || cfg.Apps[1].Framework() != "go" {
+	if len(cfg.Apps) != 2 || cfg.Apps[1].Name != "worker" || cfg.Apps[1].Path != "./server" || cfg.Apps[1].Framework != "go" {
 		t.Fatalf("apps = %+v", cfg.Apps)
 	}
 }

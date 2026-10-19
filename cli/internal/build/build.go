@@ -197,7 +197,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	var traced []toolchain.Target
 	var scriptBuilt []project.App
 	for _, a := range FunctionApps(cfg.Apps) {
-		switch name := a.Framework(); {
+		switch name := a.Framework; {
 		case compiledFromSource(name):
 			env, err := deliverValues(a)
 			if err != nil {
@@ -275,7 +275,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				return err
 			}
 		default:
-			return fmt.Errorf("app %q: nothing in %s says what it is built with; set `compute: { serverless: { framework: … } }` in the app config", a.Name, filepath.Join(cfg.Dir, a.Path))
+			return &project.FrameworkUnstatedError{App: a.Name, Path: filepath.Join(cfg.Dir, a.Path)}
 		}
 	}
 
@@ -333,12 +333,12 @@ func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a proje
 		return err
 	}
 	if len(functions) == 0 {
-		return fmt.Errorf("app %q is built with %s and ships no function to run a worker from", a.Name, a.Framework())
+		return fmt.Errorf("app %q is built with %s and ships no function to run a worker from", a.Name, a.Framework)
 	}
 	hosting := functions[0]
 	return toolchain.BundleWorker(ctx, toolchain.Target{
 		App:              a.Name,
-		Framework:        buildoutput.Framework{Name: a.Framework(), Arch: a.Architecture()},
+		Framework:        buildoutput.Framework{Name: a.Framework, Arch: a.Architecture()},
 		Source:           filepath.Join(cfg.Dir, a.Path),
 		FunctionDir:      filepath.Join(outputDir, filepath.FromSlash(hosting.ArtifactPath)),
 		WorkerSource:     workerSource,
@@ -389,7 +389,7 @@ func dirBytes(dir string) (int64, error) {
 
 func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchain.Target, error) {
 	source := filepath.Join(cfg.Dir, a.Path)
-	entrypoint, err := toolchain.NodeEntrypoint(source, a.Serverless.Entrypoint)
+	entrypoint, err := toolchain.NodeEntrypoint(source, a.Entrypoint)
 	if err != nil {
 		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
 	}

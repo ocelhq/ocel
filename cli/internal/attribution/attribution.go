@@ -98,7 +98,7 @@ func FindUsages(ctx context.Context, root string, apps []App, declarations []Dec
 			continue
 		}
 		if app.Language == "" {
-			return nil, fmt.Errorf("attribution: app %q names no language", app.Name)
+			return nil, fmt.Errorf("attribution: app %q has no framework, so ocel cannot read which resources its code uses: set \"framework\" on it", app.Name)
 		}
 		read, ok := readImports[app.Language]
 		if !ok {

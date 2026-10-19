@@ -88,6 +88,7 @@ func emptyProjectDir(t *testing.T) (string, clitest.FakeProject) {
 	t.Setenv(providerprocess.ReadyTimeoutEnvVar, "5s")
 	root := filepath.Join(t.TempDir(), "shop")
 	clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
+	clitest.WriteFile(t, filepath.Join(root, "src", "server.js"), "export default {};\n")
 	p := fake.NewForProject(fake.Options{})
 	return root, clitest.FakeProject{Root: root, Provider: p, Requests: clitest.ServeFake(t, p)}
 }

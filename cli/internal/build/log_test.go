@@ -236,7 +236,7 @@ func TestAGoAppCompiledHereBuildsInASpanOfItsOwnThatEndsWithItsCompileError(t *t
 	}
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
+		Apps: []project.App{inGoModule(t, root, project.App{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "go"})},
 	}
 
 	var spans appSpans

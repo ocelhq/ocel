@@ -5,25 +5,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/railwayapp/railpack/core/plan"
 	"github.com/railwayapp/railpack/core/providers/golang"
 
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/shellword"
 )
 
 const (
 	goWorkFile    = "go.work"
 	goModDownload = "go mod download"
 )
-
-func findGoModule(dir string) (gomodule.Module, bool, error) {
-	written, _ := language.Of(dir)
-	if written != language.Go && (written != "" || !language.HasGoSource(dir)) {
-		return gomodule.Module{}, false, nil
-	}
-	return gomodule.FindEnclosing(dir, atBoundary)
-}
 
 func findGoContext(module gomodule.Module) (string, error) {
 	repository := module.Dir
@@ -46,15 +38,16 @@ func findGoContext(module gomodule.Module) (string, error) {
 }
 
 func (l Location) planGoCommands() Commands {
-	if l.Path == "." {
+	if l.ModuleDir == "" || l.GoPackage == "" || l.Entrypoint == "" && l.Path == "." {
 		return Commands{}
 	}
-	binary := strings.Repeat("../", strings.Count(l.Path, "/")+1) + golang.GO_BINARY_NAME
-	commands := Commands{
-		Build: fmt.Sprintf(`cd %s && GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o %s .`, l.Path, binary),
+	binary := golang.GO_BINARY_NAME
+	if l.ModuleDir != "." {
+		binary = strings.Repeat("../", strings.Count(l.ModuleDir, "/")+1) + binary
 	}
+	commands := Commands{Build: inDir(l.ModuleDir, `GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o `+shellword.Quote(binary)+" "+shellword.Quote(l.GoPackage))}
 	if l.ModuleDir != "." && isGoModuleOrWorkspaceRoot(l.Root) {
-		commands.Install = plan.ShellCommandString(fmt.Sprintf("cd %s && GOWORK=off %s", l.ModuleDir, goModDownload))
+		commands.Install = "sh -c " + shellword.Quote(inDir(l.ModuleDir, "GOWORK=off "+goModDownload))
 	}
 	return commands
 }

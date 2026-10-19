@@ -71,8 +71,12 @@ export interface AppConfig {
   compute?: ComputeDescriptor;
   /** The hostnames this app is served on. */
   domains?: AppDomainConfig;
+  /** Where the app starts, if not the detected one: a node file, a go directory or a python file. */
+  entrypoint?: string;
   /** The variables folder this app reads, when it does not read the project's own. */
   folder?: string;
+  /** What the app is built with, when ocel is not to detect it from the app's own files. */
+  framework?: "node" | "next" | "sveltekit" | "go" | "python" | "rust";
   /** The app's name. It must be a valid DNS label. */
   name: string;
   /** The app's directory, relative to the config. */
@@ -95,12 +99,7 @@ export type ComputeDescriptor =
     };
 
 /** Serverless functions packed per route, which scale themselves. */
-export interface ServerlessCompute {
-  /** The file a node app is served from, or a go app's main package directory, if not the detected one. */
-  entrypoint?: string;
-  /** What the app is built with, when ocel is not to read it off the app's own manifest. */
-  framework?: "node" | "next" | "sveltekit" | "go" | "python" | "rust";
-}
+export type ServerlessCompute = Record<string, never>;
 
 /** One container image serving every route. */
 export interface ContainerCompute {

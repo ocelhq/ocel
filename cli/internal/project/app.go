@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -8,9 +9,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -24,16 +26,18 @@ type App struct {
 	Arch              string
 	ProductionDomains []string
 	Compute           provider.Compute
-	Serverless        *Serverless
+	Framework         string
+	Language          language.Language
+	Languages         []language.Language
+	Entrypoint        string
+	FrameworkSource   language.Source
+	Evidence          string
+	GoModule          *gomodule.Module
+	GoPackage         string
 	Container         *Container
-	undetected        error
+	serverlessRefusal error
 
 	BuildsWithResources bool
-}
-
-type Serverless struct {
-	Framework  string
-	Entrypoint string
 }
 
 type Container struct {
@@ -41,7 +45,6 @@ type Container struct {
 	Health       *Health
 	MinInstances *int
 	MaxInstances *int
-	Framework    string
 }
 
 func (c *Container) Instances() provider.Instances {
@@ -68,22 +71,39 @@ type Health struct {
 
 func (a App) RunsOn(compute provider.Compute) bool { return a.Compute == compute }
 
-func (a App) Framework() string {
-	if a.Serverless != nil {
-		return a.Serverless.Framework
-	}
-	if a.Container != nil {
-		return a.Container.Framework
-	}
-	return ""
+func (a App) Architecture() string { return arch.Architecture(a.Arch) }
+
+func (a App) Program() workspace.Program {
+	return workspace.Program{Language: a.Language, GoModule: a.GoModule, GoPackage: a.GoPackage, Entrypoint: a.Entrypoint}
 }
 
-func (a App) Architecture() string { return arch.Architecture(a.Arch) }
+func (a App) HasLanguageManifest() bool { return a.Language != "" || len(a.Languages) > 0 }
+
+func (p *Project) HasUnclearRootApp() bool {
+	var undetected *language.UndetectedAppError
+	return errors.As(p.RootAppUndetected, &undetected) && (undetected.Ambiguous() || undetected.HasUnreadableManifest())
+}
 
 func (p *Project) HasJSApp() bool {
 	return slices.ContainsFunc(p.Apps, func(a App) bool {
-		return language.OfApp(a.Framework(), filepath.Join(p.Dir, a.Path)) == language.JS
+		return a.Language == language.JS
 	})
+}
+
+func (p *Project) DescribeFrameworks() []string {
+	config := filepath.Base(p.Path)
+	described := make([]string, 0, len(p.Apps))
+	for _, a := range p.Apps {
+		switch {
+		case a.Framework == "":
+			described = append(described, a.Name+": no framework detected")
+		case a.FrameworkSource == language.Configured:
+			described = append(described, a.Name+": "+a.Framework+" (set in "+config+")")
+		default:
+			described = append(described, a.Name+": "+a.Framework+" ("+a.Evidence+")")
+		}
+	}
+	return described
 }
 
 func SharedFolder(apps []App) string {
@@ -164,7 +184,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 
 			BuildsWithResources: a.BuildWithResources == nil || *a.BuildWithResources,
 		}
-		if err := shapeApp(&app, a, filepath.Join(dir, filepath.FromSlash(a.Path))); err != nil {
+		if err := shapeApp(&app, a, filepath.Join(dir, filepath.FromSlash(a.Path)), dir, field); err != nil {
 			return nil, err
 		}
 		apps = append(apps, app)
@@ -173,7 +193,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 	return apps, nil
 }
 
-func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
+func shapeApp(app *App, a configdoc.AppConfig, dir, root string, field func(string) string) error {
 	var compute configdoc.ComputeDescriptor
 	if a.Compute != nil {
 		compute = *a.Compute
@@ -185,50 +205,25 @@ func shapeApp(app *App, a configdoc.AppConfig, dir string) error {
 		if err != nil {
 			return newInvalidConfigError(err, "")
 		}
-		if isDir(dir) {
-			framework, _, err := language.DetectFramework(dir)
-			if err != nil {
-				return fmt.Errorf("app %q: %w", a.Name, err)
-			}
-			if framework == buildoutput.FrameworkNext {
-				container.Framework = framework
-			}
-		}
 		app.Container = container
 	case compute.Serverless != nil:
 		app.Compute = provider.ComputeServerless
-		named := strings.TrimSpace(compute.Serverless.Framework)
-		framework, err := frameworkOf(a.Name, dir, named)
-		if err != nil {
-			return err
-		}
-		app.Serverless = &Serverless{Framework: framework, Entrypoint: compute.Serverless.Entrypoint}
 	default:
-		framework, err := frameworkOf(a.Name, dir, "")
-		switch {
-		case err != nil:
-			app.undetected = err
-		case framework != "":
-			app.Serverless = &Serverless{Framework: framework}
-		}
 		app.Container = &Container{}
 	}
-	return nil
+	return resolveFramework(app, a, dir, root, field)
 }
 
 func rootApp(name, dir string) ([]App, error) {
-	framework, found, err := language.DetectFramework(dir)
-	if err != nil || !found || language.OfApp(framework, dir) != language.JS {
+	detected, err := language.Resolve(dir, dir, "")
+	if err != nil {
 		return nil, err
 	}
-	return []App{{
-		Name:       name,
-		Path:       ".",
-		Serverless: &Serverless{Framework: framework},
-		Container:  &Container{},
-
-		BuildsWithResources: true,
-	}}, nil
+	app := App{Name: name, Path: ".", Container: &Container{}, BuildsWithResources: true}
+	if err := app.resolve(detected, []language.Language{detected.Language}, "", dir, func(key string) string { return key }); err != nil {
+		return nil, err
+	}
+	return []App{app}, nil
 }
 
 func normalizeContainer(app string, raw *configdoc.ContainerCompute) (*Container, error) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/incustest"
+	"github.com/ocelhq/ocel/cli/internal/language"
 )
 
 const leaked = "a value the build must never see"
@@ -23,7 +24,7 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 	vm.Forward(t)
 	t.Setenv("OCEL_LIVE_LEAK", leaked)
 
-	built, err := image.Build(context.Background(), image.App{Slug: "Shop Live", Name: "Web API", Workspace: located(t, "testdata/plainserver")}, "", image.LiveValues{}, incustest.Progress{T: t})
+	built, err := image.Build(context.Background(), image.App{Slug: "Shop Live", Name: "Web API", Workspace: located(t, "testdata/plainserver", language.JS)}, "", image.LiveValues{}, incustest.Progress{T: t})
 	if err != nil {
 		t.Fatalf("Build() against a real daemon = %v", err)
 	}
@@ -94,7 +95,7 @@ func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) 
 	vm.Engine(t)
 	vm.Forward(t)
 
-	built, err := image.Build(context.Background(), image.App{Slug: "Shop Live", Name: "Docs Site", Workspace: located(t, "testdata/dockerfileapp")}, "", image.LiveValues{}, incustest.Progress{T: t})
+	built, err := image.Build(context.Background(), image.App{Slug: "Shop Live", Name: "Docs Site", Workspace: located(t, "testdata/dockerfileapp", language.JS)}, "", image.LiveValues{}, incustest.Progress{T: t})
 	if err != nil {
 		t.Fatalf("Build() of an app with a Dockerfile against a real daemon = %v", err)
 	}
@@ -111,7 +112,7 @@ func TestLiveAnImageGainsFilesOverWhatItWasBuiltFromAndStillServes(t *testing.T)
 	vm.Engine(t)
 	vm.Forward(t)
 
-	built, err := image.Build(context.Background(), image.App{Slug: "Shop Live", Name: "Worker Host", Workspace: located(t, "testdata/dockerfileapp")}, "", image.LiveValues{}, incustest.Progress{T: t})
+	built, err := image.Build(context.Background(), image.App{Slug: "Shop Live", Name: "Worker Host", Workspace: located(t, "testdata/dockerfileapp", language.JS)}, "", image.LiveValues{}, incustest.Progress{T: t})
 	if err != nil {
 		t.Fatalf("Build() = %v", err)
 	}

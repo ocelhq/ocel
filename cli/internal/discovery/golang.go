@@ -79,11 +79,7 @@ func writeGoEntry(moduleRoot, role, source string) (string, error) {
 }
 
 func goModule(configDir, dir string) (string, string, error) {
-	stop, err := filepath.Abs(configDir)
-	if err != nil {
-		return "", "", err
-	}
-	module, found, err := gomodule.FindEnclosing(dir, func(at string) bool { return at == stop })
+	module, found, err := gomodule.FindInProject(dir, configDir)
 	if err != nil {
 		return "", "", fmt.Errorf("discovery: %w", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -75,24 +74,28 @@ func (p *Project) UnresolvedApps() []string {
 func (a App) runningOn(compute provider.Compute) (App, error) {
 	a.Compute = compute
 	if compute == provider.ComputeContainer {
-		keepsNext := a.Serverless != nil && a.Serverless.Framework == buildoutput.FrameworkNext
-		a.Serverless = nil
 		container := Container{}
 		if a.Container != nil {
 			container = *a.Container
 		}
-		if keepsNext {
-			container.Framework = buildoutput.FrameworkNext
-		}
 		a.Container = &container
 		return a, nil
 	}
-	if a.Serverless == nil {
-		if a.undetected != nil {
-			return App{}, a.undetected
-		}
-		return App{}, fmt.Errorf("app %q: nothing in %s says what it is built with; set `compute: { serverless: { framework: … } }` in the app config", a.Name, a.Path)
+	if a.serverlessRefusal != nil {
+		return App{}, a.serverlessRefusal
+	}
+	if a.Framework == "" {
+		return App{}, &FrameworkUnstatedError{App: a.Name, Path: a.Path}
 	}
 	a.Container = nil
 	return a, nil
+}
+
+type FrameworkUnstatedError struct {
+	App  string
+	Path string
+}
+
+func (e *FrameworkUnstatedError) Error() string {
+	return fmt.Sprintf("app %q: nothing in %s says what it is built with: set \"framework\" in the app config", e.App, e.Path)
 }

@@ -386,7 +386,7 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 	if cfg.Provider == nil || !slices.Contains(configdoc.ProviderIDs(), cfg.Provider.ID) {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
-	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "go" {
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework != "go" {
 		t.Fatalf("apps = %+v", cfg.Apps)
 	}
 }
@@ -407,7 +407,7 @@ func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
 	if cfg.Provider == nil || !slices.Contains(configdoc.ProviderIDs(), cfg.Provider.ID) {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
-	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "rust" {
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework != "rust" {
 		t.Fatalf("apps = %+v, want the one app read as rust off its Cargo.toml", cfg.Apps)
 	}
 }

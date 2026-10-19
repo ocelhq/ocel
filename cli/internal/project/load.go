@@ -47,11 +47,8 @@ func find(ctx context.Context, startDir, explicitPath string, optional bool) (*P
 	configPath := defaultConfigFile(root)
 	if configPath == "" {
 		if optional {
-			apps, err := rootApp(DeriveSlug(filepath.Base(root)), root)
-			if err != nil {
-				return nil, err
-			}
-			return &Project{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers(), Apps: apps}, nil
+			apps, undetected := rootApp(DeriveSlug(filepath.Base(root)), root)
+			return &Project{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers(), Apps: apps, RootAppUndetected: undetected}, nil
 		}
 		missing := NoConfigError{Names: fileNames(""), StartDir: startDir}
 		return nil, newNoConfigError(missing, missing.Hint())

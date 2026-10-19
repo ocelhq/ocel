@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"gopkg.in/yaml.v3"
 )
@@ -30,6 +31,13 @@ type Package struct {
 	Index string
 }
 
+type Program struct {
+	Language   language.Language
+	GoModule   *gomodule.Module
+	GoPackage  string
+	Entrypoint string
+}
+
 type Location struct {
 	Root           string
 	Path           string
@@ -40,6 +48,8 @@ type Location struct {
 	BuildCommand   string
 	ModuleDir      string
 	GoVersion      string
+	GoPackage      string
+	Entrypoint     string
 }
 
 func (l Location) Dir() string { return filepath.Join(l.Root, filepath.FromSlash(l.Path)) }
@@ -59,12 +69,12 @@ func (l Location) Rebase(context string) (Location, error) {
 	if l.ModuleDir != "" {
 		rebased, err = locateGoApp(l.Dir(), filepath.Join(l.Root, filepath.FromSlash(l.ModuleDir)), l.GoVersion, root)
 	} else {
-		rebased, err = locatedAt(l.Dir(), root)
+		rebased, err = locatedAt(l.Dir(), root, l.Language)
 	}
 	if err != nil {
 		return Location{}, err
 	}
-	rebased.BuildCommand = l.BuildCommand
+	rebased.BuildCommand, rebased.GoPackage, rebased.Entrypoint = l.BuildCommand, l.GoPackage, l.Entrypoint
 	return rebased, nil
 }
 
@@ -87,32 +97,37 @@ type manifest struct {
 	DevDeps        map[string]string `json:"devDependencies"`
 }
 
-func Locate(appDir string) (Location, error) {
+func Locate(appDir string, program Program) (Location, error) {
 	dir, err := filepath.Abs(appDir)
 	if err != nil {
 		return Location{}, err
 	}
-	module, ok, err := findGoModule(dir)
+	located, err := locate(dir, program)
 	if err != nil {
 		return Location{}, err
 	}
-	if ok {
-		root, err := findGoContext(module)
+	located.GoPackage, located.Entrypoint = program.GoPackage, program.Entrypoint
+	return located, nil
+}
+
+func locate(dir string, program Program) (Location, error) {
+	if module := program.GoModule; program.Language == language.Go && module != nil {
+		root, err := findGoContext(*module)
 		if err != nil {
 			return Location{}, err
 		}
 		return locateGoApp(dir, module.Dir, module.GoVersion, root)
 	}
 	root := dir
-	if !isStandalone(dir) {
+	if program.Language == "" || program.Language == language.JS {
 		if enclosingRoot, ok := enclosing(dir); ok {
 			root = enclosingRoot
 		}
 	}
-	return locatedAt(dir, root)
+	return locatedAt(dir, root, program.Language)
 }
 
-func locatedAt(dir, root string) (Location, error) {
+func locatedAt(dir, root string, written language.Language) (Location, error) {
 	app, err := readManifest(filepath.Join(dir, manifestName))
 	if err != nil {
 		return Location{}, fmt.Errorf("read the %s of the app in %s: %w", manifestName, dir, err)
@@ -125,10 +140,10 @@ func locatedAt(dir, root string) (Location, error) {
 	located := Location{
 		Root:           root,
 		Path:           filepath.ToSlash(rel),
+		Language:       written,
 		Package:        describe(dir, app),
 		PackageManager: detect(root),
 	}
-	located.Language, _ = language.Of(dir)
 	if globs, ok := declaredPackages(root); ok {
 		_, located.Member = memberOf(root, dir, globs)
 	}
@@ -177,11 +192,6 @@ func (l Location) Members() []string {
 	members := slices.Collect(maps.Keys(named))
 	slices.Sort(members)
 	return members
-}
-
-func isStandalone(dir string) bool {
-	written, _ := language.Of(dir)
-	return written != "" && written != language.JS
 }
 
 func isRegularFile(path string) bool {

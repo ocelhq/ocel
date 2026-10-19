@@ -110,7 +110,7 @@ func writeAppsConfig(t *testing.T, root, apps string) {
 
 func addAppToFixtureConfig(t *testing.T, root string) {
 	t.Helper()
-	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }`)
+	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }`)
 	writeAppSource(t, root, "api")
 }
 
@@ -128,6 +128,7 @@ export function handler() {
 func writeRootApp(t *testing.T, root string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
+	clitest.WriteFile(t, filepath.Join(root, "src", "server.js"), "export default {};\n")
 }
 
 func writeUsageMonorepo(t *testing.T, root, fields string) {
@@ -138,7 +139,7 @@ func writeUsageMonorepo(t *testing.T, root, fields string) {
 func writeUsageMonorepoWithProvider(t *testing.T, root, providerOptions, fields string) {
 	t.Helper()
 	clitest.WriteUsageMonorepo(t, root)
-	writeConfigWithProvider(t, root, providerOptions, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+	writeConfigWithProvider(t, root, providerOptions, `  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],
 `+fields)
 }
 

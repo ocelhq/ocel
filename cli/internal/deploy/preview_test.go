@@ -148,7 +148,7 @@ func TestAPreviewDeploySendsWhetherTheConfigProtectsPreviews(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			fixture := setUpPreviewProject(t)
-			writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],`+"\n"+fields)
+			writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],`+"\n"+fields)
 			writeAppSource(t, fixture.Root, "api")
 			dependencies := previewDependencies("feature/login", "")
 			stubBuild(&dependencies, apiFunction())

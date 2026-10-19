@@ -49,7 +49,7 @@ func AppsOf(cfg *project.Project) []App {
 		apps = append(apps, App{
 			Name:      a.Name,
 			Folder:    a.Folder,
-			Framework: a.Framework(),
+			Framework: a.Framework,
 		})
 	}
 	return apps

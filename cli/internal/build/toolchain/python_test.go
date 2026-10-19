@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
@@ -41,6 +42,7 @@ func vendored(t *testing.T, source, architecture string) (string, string) {
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "python", Arch: architecture},
 		Source:      source,
+		Entrypoint:  "main.py",
 		FunctionDir: functionDir,
 		AppDir:      appDir,
 	})
@@ -50,10 +52,10 @@ func vendored(t *testing.T, source, architecture string) (string, string) {
 	return appDir, functionDir
 }
 
-func TestCompileRefusesAPythonAppDirectoryWithNoEntrypoint(t *testing.T) {
+func TestCompileRefusesAPythonAppDirectoryHoldingNoEntrypoint(t *testing.T) {
 	t.Parallel()
 
-	source := pythonApp(t, map[string]string{"server/main.py": "print('hi')\n"})
+	source := pythonApp(t, map[string]string{"lib/main.py": "print('hi')\n"})
 	err := Compile(context.Background(), Compilation{
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
@@ -61,8 +63,8 @@ func TestCompileRefusesAPythonAppDirectoryWithNoEntrypoint(t *testing.T) {
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
-	if err == nil || !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), pythonEntryFile) {
-		t.Fatalf("err = %v, want a refusal naming %s and %s — nothing else in the directory says which module serves the app", err, source, pythonEntryFile)
+	if err == nil || !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), language.PythonEntrypoints[0]) {
+		t.Fatalf("err = %v, want a refusal naming %s and the files an app is served from — nothing else in the directory says which module serves the app", err, source)
 	}
 }
 
@@ -94,10 +96,10 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 
 	var config buildoutput.FunctionConfig
 	readJSON(t, filepath.Join(functionDir, buildoutput.FunctionConfigFile), &config)
-	if config.EntryFile != pythonEntryFile {
-		t.Errorf("entryFile = %q, want %q — a host refuses a package whose entry names no file in it", config.EntryFile, pythonEntryFile)
+	if config.EntryFile != "main.py" {
+		t.Errorf("entryFile = %q, want %q — a host refuses a package whose entry names no file in it", config.EntryFile, "main.py")
 	}
-	if len(config.Command) != 2 || config.Command[0] != containerimage.PythonWorkerEntry.Interpreter || config.Command[1] != pythonEntryFile {
+	if len(config.Command) != 2 || config.Command[0] != containerimage.PythonWorkerEntry.Interpreter || config.Command[1] != "main.py" {
 		t.Errorf("command = %q, want the interpreter and the module it runs, which whatever hosts the artifact execs", config.Command)
 	}
 	if config.Framework != (buildoutput.Framework{Name: "python", Arch: "arm64"}) {
@@ -120,27 +122,7 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	}
 }
 
-func TestCompileRefusesAPythonAppThatNamesAnEntrypointOfItsOwn(t *testing.T) {
-	t.Parallel()
-
-	source := pythonApp(t, map[string]string{
-		"main.py":     "print('hi')\n",
-		"api/main.py": "print('hi')\n",
-	})
-	err := Compile(context.Background(), Compilation{
-		App:         "web",
-		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
-		Source:      source,
-		Entrypoint:  "api",
-		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:      t.TempDir(),
-	})
-	if err == nil || !strings.Contains(err.Error(), pythonEntryFile) {
-		t.Fatalf("err = %v, want a refusal naming %s — an entrypoint the build ignores would ship a different app than the one it names", err, pythonEntryFile)
-	}
-}
-
-func TestCompileRefusesAPythonAppsEntrypointBeforeLookingForTheDirectoryItNames(t *testing.T) {
+func TestCompileRefusesAPythonEntrypointNamingNoFileInTheApp(t *testing.T) {
 	t.Parallel()
 
 	source := pythonApp(t, map[string]string{"main.py": "print('hi')\n"})
@@ -148,12 +130,12 @@ func TestCompileRefusesAPythonAppsEntrypointBeforeLookingForTheDirectoryItNames(
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:      source,
-		Entrypoint:  "api",
+		Entrypoint:  "api/main.py",
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
-	if err == nil || !strings.Contains(err.Error(), pythonEntryFile) {
-		t.Fatalf("err = %v, want the refusal naming %s — an entrypoint the python build ignores is wrong whether or not the directory it names exists, and a stat error says nothing about that", err, pythonEntryFile)
+	if err == nil || !strings.Contains(err.Error(), "api/main.py") || !strings.Contains(err.Error(), `"web"`) {
+		t.Fatalf("err = %v, want a refusal naming the app and the entrypoint — an entrypoint the build cannot find would ship an app that never starts", err)
 	}
 }
 
@@ -192,6 +174,7 @@ func TestCompileRefusesAPythonAppWithDependenciesAndNoInterpreterToVendorThemWit
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:      source,
+		Entrypoint:  "main.py",
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
@@ -259,6 +242,7 @@ func TestCompileRefusesAnArchitectureNoWheelIsBuiltFor(t *testing.T) {
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "python", Arch: "riscv"},
 		Source:      pythonApp(t, map[string]string{"main.py": "print('hi')\n"}),
+		Entrypoint:  "main.py",
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
@@ -279,6 +263,7 @@ func TestCompileRefusesAPythonAppContainingWhatCannotBeCopiedIntoTheArtifact(t *
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:      source,
+		Entrypoint:  "main.py",
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
@@ -298,6 +283,7 @@ func TestCompileRefusesAPythonAppWhoseDeclaredDependenciesCannotBeRead(t *testin
 		App:         "web",
 		Framework:   buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:      source,
+		Entrypoint:  "main.py",
 		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:      t.TempDir(),
 	})
@@ -368,6 +354,7 @@ func TestCompileCopiesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *tes
 		App:            "web",
 		Framework:      buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
+		Entrypoint:     "main.py",
 		PythonPackages: []discovery.PythonPackage{{Name: discovery.DefaultRootDirName, Dir: filepath.Join(project, discovery.DefaultRootDirName)}},
 		FunctionDir:    functionDir,
 		AppDir:         appDir,
@@ -397,6 +384,7 @@ func TestCompileCopiesNoDiscoveryRootTheAppsOwnDirectoryAlreadyContains(t *testi
 		App:            "web",
 		Framework:      buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
+		Entrypoint:     "main.py",
 		PythonPackages: []discovery.PythonPackage{{Name: "..infra", Dir: filepath.Join(project, "server", "..infra")}},
 		FunctionDir:    functionDir,
 		AppDir:         appDir,
@@ -422,9 +410,10 @@ func TestCompileWritesTheWorkerEntryBesideAPythonAppThatImportsDiscoveryRoots(t 
 	appDir := filepath.Join(out, "apps", "web")
 	functionDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
-		App:       "web",
-		Framework: buildoutput.Framework{Name: "python", Arch: "x86_64"},
-		Source:    filepath.Join(project, "server"),
+		App:        "web",
+		Framework:  buildoutput.Framework{Name: "python", Arch: "x86_64"},
+		Source:     filepath.Join(project, "server"),
+		Entrypoint: "main.py",
 		PythonPackages: []discovery.PythonPackage{
 			{Name: discovery.DefaultRootDirName, Dir: filepath.Join(project, discovery.DefaultRootDirName)},
 			{Name: "jobs", Dir: filepath.Join(project, "server", "jobs")},
@@ -478,6 +467,7 @@ func TestCompileCopiesADiscoveryFolderThatIsTheAppsOwnDirectoryUnderTheNameItIsI
 		App:            "web",
 		Framework:      buildoutput.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
+		Entrypoint:     "main.py",
 		PythonPackages: []discovery.PythonPackage{{Name: "server", Dir: filepath.Join(project, "server")}},
 		FunctionDir:    functionDir,
 		AppDir:         appDir,

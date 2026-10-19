@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
@@ -29,8 +30,8 @@ func TestAStackNamesEachAppsFrameworkLanguageAndTheVersionsItDeclares(t *testing
 		Dir:      root,
 		Provider: &project.Provider{ID: "gcp"},
 		Apps: []project.App{
-			{Name: "web", Path: "web", Serverless: &project.Serverless{Framework: "next"}},
-			{Name: "api", Path: "api", Container: &project.Container{Framework: "go"}},
+			{Name: "web", Path: "web", Framework: "next", Language: language.JS},
+			{Name: "api", Path: "api", Framework: "go", Language: language.Go, Container: &project.Container{}},
 		},
 	}
 

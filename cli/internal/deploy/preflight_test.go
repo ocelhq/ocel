@@ -180,7 +180,7 @@ export default {
   slug: "test-app",
   provider: { fake: {} },
   domains: { production: "acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } }, domains: { production: "api.acme.com" } }],
+  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless", domains: { production: "api.acme.com" } }],
 };
 `)
 		writeAppSource(t, fixture.Root, "api")
@@ -480,7 +480,7 @@ func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
 	stubBuild(&dependencies, nil)
 	fixture := setUpDeployProject(t)
 	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeServerless} })
-	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", compute: "container" }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", framework: "node", compute: "container" }`)
 	writeAppSource(t, fixture.Root, "api")
 
 	var stdout, stderr bytes.Buffer
