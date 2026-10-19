@@ -37,12 +37,12 @@ func staticAssetSet(b Buckets, root, app string, static *edge.Static, coord nami
 	if static == nil {
 		return nil, nil
 	}
-	if !b.CanEdgeRead() {
+	if !b.CanStoreAssets() {
 		return nil, nil
 	}
 
 	assetBucket := uploadTarget{up: b.Objects, bucket: b.Assets, tier: b.Tier}
-	plane := []uploadTarget{{up: b.Objects, bucket: b.Assets, tier: b.Tier, edgeReadable: true}}
+	plane := []uploadTarget{{up: b.Objects, bucket: b.Assets, tier: b.Tier, edgeReadable: b.CanEdgeRead()}}
 	var uploads []assetUpload
 	manifest := newSetManifest()
 	appRoot := appArtifactRoot(root, app)

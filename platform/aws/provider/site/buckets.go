@@ -16,8 +16,12 @@ type Buckets struct {
 	EdgeHoldsKey bool
 }
 
+func (b Buckets) CanStoreAssets() bool {
+	return b.Assets != "" && b.Objects != nil
+}
+
 func (b Buckets) CanEdgeRead() bool {
-	return b.Assets != "" && b.Objects != nil && b.EdgeHoldsKey
+	return b.CanStoreAssets() && b.EdgeHoldsKey
 }
 
 func (b Buckets) Find(store string) (string, error) {
