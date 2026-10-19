@@ -86,34 +86,6 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		}
 	})
 
-	t.Run("Plan shows a removed part leaving", func(t *testing.T) {
-		if len(wanted) == 0 {
-			t.Skipf("the %q edge installs no part of this provider, so nothing can be dropped", kind)
-		}
-		tier := environment.TierProduction
-		drop := wanted
-		plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, Remove: drop})
-		if err != nil {
-			t.Fatalf("Plan(%s, drop %v) = %v", tier, drop, err)
-		}
-		leaving := map[string]provider.ChangeAction{}
-		for _, group := range plan.Groups {
-			if group.Part != "" {
-				leaving[group.Part] = group.Action
-			}
-		}
-		for _, name := range drop {
-			action, planned := leaving[name]
-			if !planned {
-				t.Errorf("Plan() drops %q and shows no group for it; the plan is the only thing asked about before the apply", name)
-				continue
-			}
-			if action != provider.ActionDelete {
-				t.Errorf("Plan() shows %q as %q though it was dropped, and a drop takes its stack down", name, action)
-			}
-		}
-	})
-
 	t.Run("what Apply installs, Describe reports and Remove takes down", func(t *testing.T) {
 		tier := environment.TierPreview
 		raising := wanted
@@ -150,6 +122,38 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 				}
 			}
 		}
+
+		t.Run("Plan shows a removed part leaving", func(t *testing.T) {
+			var held []string
+			for _, part := range parts {
+				if part.Name != provider.BasePart {
+					held = append(held, part.Name)
+				}
+			}
+			if len(held) == 0 {
+				t.Skipf("the %s tier holds no part beside the base, so no removal takes one down", tier)
+			}
+			plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, Remove: held})
+			if err != nil {
+				t.Fatalf("Plan(%s, drop %v) = %v", tier, held, err)
+			}
+			leaving := map[string]provider.ChangeAction{}
+			for _, group := range plan.Groups {
+				if group.Part != "" {
+					leaving[group.Part] = group.Action
+				}
+			}
+			for _, name := range held {
+				action, planned := leaving[name]
+				if !planned {
+					t.Errorf("Plan() drops %q and shows no group for it; the plan is the only thing asked about before the apply", name)
+					continue
+				}
+				if action != provider.ActionDelete {
+					t.Errorf("Plan() shows %q as %q though it was dropped, and a drop takes its stack down", name, action)
+				}
+			}
+		})
 
 		removal, err := bootstrap.PlanRemove(ctx, tier)
 		if err != nil {
