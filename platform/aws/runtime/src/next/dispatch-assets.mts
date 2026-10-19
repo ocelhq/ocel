@@ -9,7 +9,7 @@ export function s3AssetBucket(bucket: string, region: string, doFetch: typeof fe
     async get(key: string): Promise<AssetObject | null> {
       const response = retainOwner(await doFetch(`${origin}/${objectPath(key)}`));
       if (!response.ok || !response.body) {
-        await response.body?.cancel();
+        await response.arrayBuffer().catch(() => undefined);
         if (response.ok || ABSENT.has(response.status)) return null;
         throw new Error(`ocel: reading ${key} out of ${bucket} answered ${response.status}`);
       }
