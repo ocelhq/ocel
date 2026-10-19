@@ -4,6 +4,8 @@ package aws_test
 
 import (
 	"context"
+	"net"
+	"net/url"
 	"os"
 	"testing"
 
@@ -23,6 +25,8 @@ import (
 const (
 	liveRegion = "us-east-1"
 	liveWriter = provider.WrittenBy("live-suite")
+
+	flociHostname = "localhost.localstack.cloud"
 )
 
 type liveAccount struct {
@@ -37,6 +41,7 @@ func live(t *testing.T) liveAccount {
 		t.Fatal("no floci emulator in the environment; run under `scripts/floci.sh run <name> -- go test ./...`")
 	}
 	t.Setenv("AWS_ENDPOINT_URL", endpoint)
+	t.Setenv("AWS_ENDPOINT_URL_S3_CONTROL", accountPrefixable(t, endpoint))
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
 	t.Setenv("AWS_REGION", liveRegion)
@@ -46,6 +51,16 @@ func live(t *testing.T) liveAccount {
 		t.Fatalf("sdkconfig.Control() against %s = %v", endpoint, err)
 	}
 	return liveAccount{endpoint: endpoint, aws: cfg}
+}
+
+func accountPrefixable(t *testing.T, endpoint string) string {
+	t.Helper()
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		t.Fatalf("the emulator's endpoint %q is no URL: %v", endpoint, err)
+	}
+	parsed.Host = net.JoinHostPort(flociHostname, parsed.Port())
+	return parsed.String()
 }
 
 func (a liveAccount) emulated() bool { return a.endpoint != "" }
