@@ -28,10 +28,10 @@ func TestLiveVPSProviderConformsWithItsBoxBehindIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: environment.TierProduction, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
+		t.Fatalf("Apply(%s) = %v, want the record tier every port beneath it writes into", environment.TierProduction, err)
+	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
-			t.Fatalf("Apply(%s) = %v, want the record tier every port beneath it writes into", tier, err)
-		}
 		defer func() {
 			if err := bootstrap.Remove(ctx, tier, progress.Discard()); err != nil {
 				t.Errorf("Remove(%s) = %v", tier, err)
