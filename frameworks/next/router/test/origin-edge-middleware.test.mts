@@ -9,6 +9,10 @@ import { type RouteDeps, serve } from "../src/index.mjs";
 import type { TestRouteDeps } from "../test-support/dispatch-scenario.mjs";
 import { assetStoreServing } from "../test-support/dispatch-scenario.mjs";
 
+vi.mock("../../adapter/src/runtime-requires.mts", () => ({
+  traceRuntimeRequires: async () => ({}),
+}));
+
 const PAGE_ENTRY = "app/api/docs/route";
 
 const emptyRoutes = {
