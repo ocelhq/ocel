@@ -1,8 +1,6 @@
 package bindingproxy
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -54,10 +52,7 @@ func Serve(grants []Grant, report func(error)) (Served, error) {
 	sessions := make([]Session, 0, len(grants))
 	muxes := make([]tokenMux, 0, len(grants))
 	for _, grant := range grants {
-		token, err := mintToken()
-		if err != nil {
-			return Served{}, err
-		}
+		token := localrpc.NewSessionToken()
 		sessions = append(sessions, Session{Grantee: grant.Grantee, Token: token})
 		muxes = append(muxes, tokenMux{token: token, mux: NewMux(grant.Services)})
 	}
@@ -74,12 +69,4 @@ func Serve(grants []Grant, report func(error)) (Served, error) {
 		}
 	}()
 	return Served{Address: "http://" + ln.Addr().String(), Sessions: sessions, server: srv, watched: watched}, nil
-}
-
-func mintToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("draw a proxy session token: %w", err)
-	}
-	return hex.EncodeToString(b), nil
 }
