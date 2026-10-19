@@ -118,29 +118,38 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
-	client, err := s.client()
-	if err != nil {
-		return provider.ExpiringRecord{}, false, err
-	}
-	kept := record
+	written := recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt}
+	var kept provider.ExpiringRecord
 	var created bool
-	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		snapshot, found, err := readInTransaction(tx, doc)
-		if err != nil {
-			return err
-		}
-		if found {
-			var current recordDocument
-			if err := snapshot.DataTo(&current); err != nil {
-				return err
-			}
-			if current.ExpiresAt.After(time.Now()) {
-				kept.Value, kept.ExpiresAt, created = json.RawMessage(current.Value), current.ExpiresAt, false
-				return nil
-			}
-		}
+	err = records.RetryWhileStale(ctx, func() (bool, error) {
 		kept, created = record, true
-		return tx.Set(doc, recordDocument{Value: string(record.Value), ExpiresAt: record.ExpiresAt})
+		_, err := doc.Create(ctx, written)
+		if status.Code(err) != codes.AlreadyExists {
+			return false, err
+		}
+		snapshot, err := doc.Get(ctx)
+		if isNotFound(err) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		var current recordDocument
+		if err := snapshot.DataTo(&current); err != nil {
+			return false, err
+		}
+		if current.ExpiresAt.After(time.Now()) {
+			kept.Value, kept.ExpiresAt, created = json.RawMessage(current.Value), current.ExpiresAt, false
+			return false, nil
+		}
+		_, err = doc.Update(ctx, []firestore.Update{
+			{Path: "value", Value: written.Value},
+			{Path: "expiresAt", Value: written.ExpiresAt},
+		}, firestore.LastUpdateTime(snapshot.UpdateTime))
+		if status.Code(err) == codes.FailedPrecondition || isNotFound(err) {
+			return true, nil
+		}
+		return false, err
 	})
 	if err != nil {
 		return provider.ExpiringRecord{}, false, fmt.Errorf("ensure the %s record %q of %s: %w", record.Purpose, record.Key, record.Topic, err)

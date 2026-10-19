@@ -160,3 +160,50 @@ func TestLiveARunOfAnotherTopicUnderTheSameExecutionIsNotFound(t *testing.T) {
 		t.Errorf("ReadRun of another topic's run = %v, want ErrNotFound", err)
 	}
 }
+
+func TestLiveOfConcurrentEnsuresOfARecordDueSoonExactlyOneCreatesIt(t *testing.T) {
+	store := topics.Store{Clients: liveClients(t), Scope: scopeOf(t)}
+	const callers = 8
+	const lifetime = 500 * time.Millisecond
+	ensureAtOnce := func(round string) {
+		t.Helper()
+		created := make([]bool, callers)
+		held := make([]string, callers)
+		errs := make([]error, callers)
+		var ready, done sync.WaitGroup
+		ready.Add(callers)
+		start := make(chan struct{})
+		for i := range callers {
+			done.Go(func() {
+				record := provider.ExpiringRecord{Purpose: provider.RecordDebounce, Topic: "digest", Key: "user-9", Value: json.RawMessage(fmt.Sprintf(`"%s-%d"`, round, i)), ExpiresAt: time.Now().Add(lifetime)}
+				ready.Done()
+				<-start
+				kept, made, err := store.EnsureRecord(context.Background(), record)
+				created[i], held[i], errs[i] = made, string(kept.Value), err
+			})
+		}
+		ready.Wait()
+		close(start)
+		done.Wait()
+
+		creators := 0
+		for i := range callers {
+			if errs[i] != nil {
+				t.Fatalf("EnsureRecord %d of the %s round = %v", i, round, errs[i])
+			}
+			if created[i] {
+				creators++
+			}
+			if held[i] != held[0] {
+				t.Errorf("concurrent ensures of the %s round answered %s and %s, want every caller handed the one record", round, held[0], held[i])
+			}
+		}
+		if creators != 1 {
+			t.Errorf("%d of %d concurrent ensures of the %s round created the record, want exactly one: a debounce key folds the triggers its delay covers into one run", creators, callers, round)
+		}
+	}
+
+	ensureAtOnce("fresh")
+	time.Sleep(lifetime)
+	ensureAtOnce("expired")
+}
