@@ -65,7 +65,7 @@ jobs:
         run: echo "groups=$(jq -c . .github/go-groups.json)" >> "$GITHUB_OUTPUT"
 
   modules:
-    if: always() && github.event_name != 'schedule'
+    if: ${{ !cancelled() && github.event_name != 'schedule' }}
     name: modules
     needs: [build, binaries, lint]
     runs-on: ubuntu-latest
