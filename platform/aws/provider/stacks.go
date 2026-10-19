@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -25,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
+	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
@@ -85,6 +87,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		WrittenBy: p.writtenBy,
 		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
 		Network:   ec2.NewFromConfig(p.aws),
+
+		VPCOrigins: cloudfront.NewFromConfig(p.aws, func(o *cloudfront.Options) { o.Region = certs.CloudFrontRegion }),
 
 		Tier:                scope.Tier,
 		Slug:                scope.Slug,
