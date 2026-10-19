@@ -53,6 +53,18 @@ test("a published tag is written under a document named for the ISR prefix and t
   ).toEqual(["stale", "expired", "writtenAt"]);
 });
 
+test("a record stamped at a fractional millisecond is written as the next whole millisecond, the only number an integer field takes", async () => {
+  const { fake, tags } = open();
+
+  await tags.publish("posts", { stale: 1760873293983.25, expired: 1760873293983.75 });
+
+  expect(fake.commits[0]?.writes[0].updateTransforms).toEqual([
+    { fieldPath: "stale", maximum: { integerValue: "1760873293984" } },
+    { fieldPath: "expired", maximum: { integerValue: "1760873293984" } },
+    { fieldPath: "writtenAt", setToServerValue: "REQUEST_TIME" },
+  ]);
+});
+
 test("a later stale time another instance recorded is kept when an earlier one is published", async () => {
   const { fake, tags } = open();
 
