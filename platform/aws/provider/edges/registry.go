@@ -33,7 +33,7 @@ type Deps struct {
 
 	Namespace account.Namespace
 
-	EnsurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
+	EnsurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error)
 
 	StateBucket func(ctx context.Context, tier environment.Tier) (string, error)
 }

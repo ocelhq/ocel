@@ -65,7 +65,7 @@ func createError(what, name string, err error) error {
 	)
 	switch {
 	case errors.As(err, &tooManyDistributions):
-		return fmt.Errorf("create the %s %q: this account is at its CloudFront limit, so there is no room for another distribution. Every project the %q edge fronts gets one distribution, and the account-wide ceiling is the \"Distributions per AWS account\" quota for Amazon CloudFront. Open the Service Quotas console, find Amazon CloudFront, request an increase on that quota, and deploy again once AWS grants it. If you would rather not raise it, run `ocel destroy production` on a project you no longer serve and the next deploy will fit: %w", what, name, Kind, err)
+		return fmt.Errorf("create the %s %q: this account is at its CloudFront limit, so there is no room for another distribution. Every project the %q edge fronts gets one distribution, and the account-wide ceiling is the \"Distributions per AWS account\" quota for Amazon CloudFront. Open the Service Quotas console, find Amazon CloudFront, request an increase on that quota, and deploy again once AWS grants it. If you would rather not raise it, run `ocel projects destroy --tier production` in a project you no longer serve and the next deploy will fit: %w", what, name, Kind, err)
 	case errors.As(err, &onFunction):
 		return tierFullError(what, name, "Distributions associated with the same function", false, err)
 	case errors.As(err, &onCachePolicy):
@@ -87,7 +87,7 @@ func tierFullError(what, name, quota string, raisable bool, err error) error {
 	if raisable {
 		remedy = "request an increase on that quota in the Service Quotas console, or through AWS Support where Service Quotas does not list it, and deploy again once AWS grants it"
 	}
-	return fmt.Errorf("create the %s %q: every distribution the %q edge makes in a tier shares that tier's resolver function, cache policy, response headers policy and origin access control, and this one would exceed the %q quota for Amazon CloudFront (100 distributions). %s. Run `ocel destroy` on a project of this tier you no longer serve, or serve this project from another edge, and the next deploy will fit: %w", what, name, Kind, quota, remedy, err)
+	return fmt.Errorf("create the %s %q: every distribution the %q edge makes in a tier shares that tier's resolver function, cache policy, response headers policy and origin access control, and this one would exceed the %q quota for Amazon CloudFront (100 distributions). %s. Run `ocel projects destroy` in a project of this tier you no longer serve, or serve this project from another edge, and the next deploy will fit: %w", what, name, Kind, quota, remedy, err)
 }
 
 func pagedForever(what string) error {

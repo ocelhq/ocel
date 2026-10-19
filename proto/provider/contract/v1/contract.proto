@@ -92,6 +92,12 @@ service ProviderService {
     rpc ReadLogs(ReadLogsRequest) returns (stream ReadLogsResponse);
 
     rpc ForwardPorts(ForwardPortsRequest) returns (stream ForwardPortsEvent);
+
+    rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+
+    rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+
+    rpc DescribeProject(DescribeProjectRequest) returns (DescribeProjectResponse);
 }
 
 message ProviderConfig {
@@ -518,7 +524,7 @@ message BootstrapPart {
 
   bool current = 6;
 
-  repeated BootstrapPartResource resources = 7;
+  repeated PhysicalResource resources = 7;
 
   repeated string used_by = 8;
 
@@ -531,10 +537,14 @@ message BootstrapPart {
   repeated string wanted_by = 12;
 }
 
-message BootstrapPartResource {
+message PhysicalResource {
   string kind = 1;
 
   string id = 2;
+
+  string location = 3;
+
+  string console_url = 4;
 }
 
 message BootstrapStack {
@@ -639,6 +649,78 @@ message ProjectRequest {
   common.plan.v1.ChangePlan consented = 4;
 
   ImageRegistry project_registry = 5;
+}
+
+message ListProjectsRequest {}
+
+message ListProjectsResponse {
+  repeated ProjectSummary projects = 1;
+}
+
+message ProjectSummary {
+  string slug = 1;
+
+  repeated common.environment.v1.Tier tiers = 2;
+
+  string edge = 3;
+
+  string production_promotion_id = 4;
+
+  int32 previews = 5;
+
+  int64 updated_at = 6;
+}
+
+message GetProjectRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+}
+
+message GetProjectResponse {
+  repeated common.environment.v1.Tier tiers = 1;
+
+  EdgeSelection edge = 2;
+
+  ImageRegistry registry = 3;
+}
+
+message DescribeProjectRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+}
+
+message DescribeProjectResponse {
+  ProjectSummary project = 1;
+
+  repeated ProjectEnvironment environments = 2;
+
+  repeated ResourceGroup resources = 3;
+
+  repeated SharedPart shared = 4;
+}
+
+message ProjectEnvironment {
+  common.environment.v1.Environment environment = 1;
+
+  string promotion_id = 2;
+
+  map<string, string> releases = 3;
+
+  repeated string urls = 4;
+}
+
+message ResourceGroup {
+  common.environment.v1.Tier tier = 1;
+
+  string environment = 2;
+
+  string stack = 3;
+
+  repeated PhysicalResource resources = 4;
+}
+
+message SharedPart {
+  common.environment.v1.Tier tier = 1;
+
+  BootstrapPart part = 2;
 }
 
 message ListEnvironmentsRequest {

@@ -20,7 +20,7 @@ func NewPart(records tier.Records, api API, namespace string) tier.Part {
 		Work: func(_ context.Context, at environment.Tier) (tier.Work, error) {
 			return Work(api, namespace, at, records.Region), nil
 		},
-		Remove: func(ctx context.Context, _ environment.Tier, recorded []provider.PartResource) error {
+		Remove: func(ctx context.Context, _ environment.Tier, recorded []provider.PhysicalResource) error {
 			return Remove(ctx, api, recorded)
 		},
 	})
@@ -29,7 +29,7 @@ func NewPart(records tier.Records, api API, namespace string) tier.Part {
 func Work(api API, namespace string, at environment.Tier, region string) tier.Work {
 	return tier.Work{
 		Digest: Digest(namespace, at),
-		Make: func(ctx context.Context, _ []provider.PartResource, _ bool) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context, _ []provider.PhysicalResource, _ bool) ([]provider.PhysicalResource, error) {
 			return Ensure(ctx, api, namespace, at, region)
 		},
 	}

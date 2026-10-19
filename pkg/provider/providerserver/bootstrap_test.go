@@ -228,7 +228,7 @@ func TestBootstrapLeavesAPartNoRunNamed(t *testing.T) {
 func recordProject(t *testing.T, vendor *fake.Provider, slug string, parts ...string) {
 	t.Helper()
 
-	body, err := json.Marshal(stackrecords.Project{Parts: parts})
+	body, err := json.Marshal(stackrecords.Project{Parts: parts, Edge: &stackrecords.ProjectEdge{Kind: fake.KindRelay}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -900,7 +900,7 @@ func withADeployAddedPart(t *testing.T, vendor *fake.Provider, users ...string) 
 	}
 	bootstrap.AddPart(environment.TierProduction, provider.BootstrapPart{
 		Name:      deployAddedPart,
-		Resources: []provider.PartResource{{Kind: "Fake::Function", ID: "optimizer"}},
+		Resources: []provider.PhysicalResource{{Kind: "Fake::Function", ID: "optimizer"}},
 		UsedBy:    users,
 	})
 }

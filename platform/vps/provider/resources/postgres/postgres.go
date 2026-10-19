@@ -42,7 +42,7 @@ func New(box component.Box) Resource { return Resource{box: box} }
 
 var postgresCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"}
 
-func resolvePostgresContainer(in resources.ProvisionRequest) (container.Spec, error) {
+func ResolveContainer(in resources.ProvisionRequest) (container.Spec, error) {
 	version := images.DefaultPostgresVersion
 	if in.Resource.Postgres != nil && in.Resource.Postgres.Version != "" {
 		version = in.Resource.Postgres.Version
@@ -86,7 +86,7 @@ func NewContainer(ref provider.StackRef, database, kind, image string, volume co
 }
 
 func (r Resource) container(ctx context.Context, in resources.ProvisionRequest) (container.Spec, error) {
-	spec, err := resolvePostgresContainer(in)
+	spec, err := ResolveContainer(in)
 	if err != nil {
 		return container.Spec{}, err
 	}

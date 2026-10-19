@@ -429,10 +429,11 @@ func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store r
 
 func (p *Bucket) Component() component.Component {
 	return component.Component{
-		Types:     []provider.BindingType{provider.BindingBucket},
-		Hooks:     resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
-		Preflight: refusePublicBucket,
-		Shape:     shapeBuckets,
+		Types:         []provider.BindingType{provider.BindingBucket},
+		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
+		ListResources: p.ListResources,
+		Preflight:     refusePublicBucket,
+		Shape:         shapeBuckets,
 		Grants: func(_ context.Context, app component.App) ([]grants.Grant, error) {
 			return bucketGrants(app.Spec, app.Account, app.Member), nil
 		},

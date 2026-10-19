@@ -255,6 +255,23 @@ func TestAnApplyOverAReplacedKeyRefusesRatherThanRestampingIt(t *testing.T) {
 	}
 }
 
+func TestARefusalOverAReplacedKeyNamesTheBootstrapDestroyOfItsTier(t *testing.T) {
+	t.Parallel()
+
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		minted := machine.Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: machine.SealAlgorithm}
+		read := Reading{Tier: tier, Present: true, Stamp: machine.Stamp{State: machine.StateComplete, Seal: minted}}
+		err := read.adopting()
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) {
+			t.Fatalf("%s: adopting() = %v, want a refusal", tier, err)
+		}
+		if want := "`ocel bootstrap destroy " + string(tier) + "`"; !strings.Contains(refused.Message, want) {
+			t.Errorf("%s refuses with %q, want it to name %s, the command that removes the tier and its key", tier, refused.Message, want)
+		}
+	}
+}
+
 func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t *testing.T) {
 	t.Parallel()
 

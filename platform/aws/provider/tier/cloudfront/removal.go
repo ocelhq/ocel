@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func Remove(ctx context.Context, c API, spec Spec, recorded []provider.PartResource) error {
+func Remove(ctx context.Context, c API, spec Spec, recorded []provider.PhysicalResource) error {
 	names := NamesFor(spec.Namespace, spec.Tier)
 	set := SetOf(names, recorded)
 	for _, name := range []string{names.Resolver, names.EmptyBody} {

@@ -3,6 +3,7 @@ package machine
 const (
 	KindNetwork      = "docker:network"
 	KindContainer    = "docker:container"
+	KindVolume       = "docker:volume"
 	KindProxyConfig  = "ocel:proxy-config"
 	KindRoutingTable = "ocel:routing-table"
 	KindPlaced       = "ocel:placed-file"

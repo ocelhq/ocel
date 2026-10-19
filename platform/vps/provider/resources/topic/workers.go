@@ -141,6 +141,25 @@ func (w Workers) Retire(ctx context.Context, ref provider.StackRef, retiring fun
 	return nil
 }
 
+func (w Workers) ListContainers(ctx context.Context, ref provider.StackRef) ([]string, error) {
+	partition, under := boxapi.QueueWorkersUnder(ref.Tier, ref.Project, ref.Name.Env)
+	entries, err := w.box.KeyValues.List(ctx, partition, under...)
+	if err != nil {
+		return nil, err
+	}
+	var containers []string
+	for _, entry := range entries {
+		var worker boxapi.QueueWorker
+		if err := json.Unmarshal(entry.Value, &worker); err != nil {
+			return nil, fmt.Errorf("read %s: %w", entry.Key, err)
+		}
+		if worker.Stack == ref.Name.String() {
+			containers = append(containers, worker.Container)
+		}
+	}
+	return containers, nil
+}
+
 func (w Workers) Remove(ctx context.Context, ref provider.StackRef) error {
 	if ref.Project == "" || ref.Name.Env == "" {
 		return nil

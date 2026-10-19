@@ -36,10 +36,13 @@ const (
 	outputKeyExecutionRole = "executionRoleArn"
 	outputKeyLogGroup      = "logGroup"
 
-	outputKeyPublicListener = "publicListenerArn"
-	outputKeyPublicHost     = "publicHost"
-	outputKeyPublicRanges   = "publicRanges"
-	outputKeyLivenessRole   = "livenessRoleArn"
+	outputKeyPublicListener         = "publicListenerArn"
+	outputKeyPublicHost             = "publicHost"
+	outputKeyPublicRanges           = "publicRanges"
+	outputKeyPublicRedirectListener = "publicRedirectListenerArn"
+	outputKeyLivenessRole           = "livenessRoleArn"
+	outputKeyLivenessTargets        = "livenessTargetGroupArn"
+	outputKeyLivenessRule           = "livenessRuleArn"
 
 	nameTagKey = "Name"
 )
@@ -193,10 +196,17 @@ func decode(outputs auto.OutputMap, private bool) (Infrastructure, error) {
 			return Infrastructure{}, err
 		}
 	}
-	infra.PublicListener, _ = fields[outputKeyPublicListener].(string)
-	infra.PublicHost, _ = fields[outputKeyPublicHost].(string)
-	infra.PublicRanges, _ = fields[outputKeyPublicRanges].(string)
-	infra.LivenessRole, _ = fields[outputKeyLivenessRole].(string)
+	for key, into := range map[string]*string{
+		outputKeyPublicListener:         &infra.PublicListener,
+		outputKeyPublicHost:             &infra.PublicHost,
+		outputKeyPublicRanges:           &infra.PublicRanges,
+		outputKeyPublicRedirectListener: &infra.PublicRedirectListener,
+		outputKeyLivenessRole:           &infra.LivenessRole,
+		outputKeyLivenessTargets:        &infra.LivenessTargets,
+		outputKeyLivenessRule:           &infra.LivenessRule,
+	} {
+		*into, _ = fields[key].(string)
+	}
 	encoded, err := component.RequireStringField(fields, Slug, outputKeySubnets)
 	if err != nil {
 		return Infrastructure{}, err

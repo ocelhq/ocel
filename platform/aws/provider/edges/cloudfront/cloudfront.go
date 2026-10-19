@@ -76,7 +76,7 @@ type Clients struct {
 
 type cloudFront struct {
 	ns         account.Namespace
-	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
+	ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error)
 	open       func(context.Context) (Clients, error)
 	options    Options
 	pacing     Rollout
@@ -85,7 +85,7 @@ type cloudFront struct {
 	clients *Clients
 }
 
-func New(ns account.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
+func New(ns account.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
 	front := newCloudFront(ns, open, options)
 	front.ensurePart = ensurePart
 	return front
@@ -269,7 +269,7 @@ func (p *cloudFront) Teardown(ctx context.Context, tier environment.Tier) error 
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge still fronts %d project(s) of tier %s with a distribution of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
-		Kind, len(fronted), tier, strings.Join(fronted, ", "), "ocel destroy "+string(tier))
+		Kind, len(fronted), tier, strings.Join(fronted, ", "), "ocel projects destroy --tier "+string(tier))
 }
 
 func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {

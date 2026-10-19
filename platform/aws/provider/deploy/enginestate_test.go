@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 )
 
 type stateResource struct {
@@ -107,6 +108,19 @@ func (s *engineState) teardown(stack string) []provider.Change {
 		changes = append(changes, provider.Change{Kind: current.kind, Name: current.name, Action: provider.ActionDelete})
 	}
 	return changes
+}
+
+func (s *engineState) export(stack string) []pulumi.ExportedResource {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var exported []pulumi.ExportedResource
+	for _, held := range s.stacks[stack] {
+		exported = append(exported, pulumi.ExportedResource{Type: held.kind, ID: held.name + "-id"})
+	}
+	slices.SortFunc(exported, func(a, b pulumi.ExportedResource) int {
+		return cmp.Or(cmp.Compare(a.Type, b.Type), cmp.Compare(a.ID, b.ID))
+	})
+	return exported
 }
 
 func (s *engineState) forget(stack string) {

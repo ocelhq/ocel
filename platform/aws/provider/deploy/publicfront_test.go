@@ -150,11 +150,11 @@ func TestTheContainersPartListsAndPricesThePublicFrontAForwardedContainerAppRais
 	if err != nil || !present {
 		t.Fatalf("containers.ReadPart() = %v, %v, want the containers part", present, err)
 	}
-	for _, want := range []provider.PartResource{
-		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-public"},
-		{Kind: "AWS::Lambda::Function", ID: "ocel-prod-public-liveness"},
-		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-live-abc"},
-		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-exec-abc"},
+	for _, want := range []provider.PhysicalResource{
+		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-public", Location: "us-east-1"},
+		{Kind: "AWS::Lambda::Function", ID: "ocel-prod-public-liveness", Location: "us-east-1"},
+		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-live-abc", Location: "global"},
+		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-exec-abc", Location: "global"},
 	} {
 		if !slices.Contains(part.Resources, want) {
 			t.Errorf("resources = %v, want %v among them", part.Resources, want)

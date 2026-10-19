@@ -99,7 +99,7 @@ func (p *Provider) tagInvalidatorSpec(ctx context.Context, tier environment.Tier
 	}, nil
 }
 
-func (p *Provider) ensurePartNamed(ctx context.Context, tier environment.Tier, name, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
+func (p *Provider) ensurePartNamed(ctx context.Context, tier environment.Tier, name, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error) {
 	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil {
 		return nil, err

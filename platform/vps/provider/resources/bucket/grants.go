@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
@@ -22,7 +21,7 @@ func (r Resource) ensureRoot(ctx context.Context, ref provider.StackRef) (*conta
 	}
 	container := r.stores.shape(name)
 	if container == nil {
-		shaped, err := storeContainer(resources.ProvisionRequest{Ref: storeRef(ref)})
+		shaped, err := NewStoreContainer(storeRef(ref))
 		if err != nil {
 			return nil, storeCredential{}, err
 		}

@@ -76,7 +76,7 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 		"written_by": "1.0.0",
 		"digest":     digest,
 		"added_at":   "2026-10-16T00:00:00Z",
-		"resources":  []provider.PartResource{{Kind: "AWS::Lambda::Url", ID: "https://optimizer.lambda-url.eu-west-2.on.aws/"}},
+		"resources":  []provider.PhysicalResource{{Kind: "AWS::Lambda::Url", ID: "https://optimizer.lambda-url.eu-west-2.on.aws/"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -86,9 +86,9 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 		Name:    imageoptimizer.Part,
 		Summary: imageoptimizer.Summary,
 		Shape:   func(environment.Tier) []pricing.Shaped { return nil },
-		Remove:  func(context.Context, environment.Tier, []provider.PartResource) error { return nil },
+		Remove:  func(context.Context, environment.Tier, []provider.PhysicalResource) error { return nil },
 		Work: func(context.Context, environment.Tier) (tier.Work, error) {
-			return tier.Work{Digest: digest, Make: func(context.Context, []provider.PartResource, bool) ([]provider.PartResource, error) {
+			return tier.Work{Digest: digest, Make: func(context.Context, []provider.PhysicalResource, bool) ([]provider.PhysicalResource, error) {
 				t.Error("the part was made again, though its record is current for this build")
 				return nil, nil
 			}}, nil

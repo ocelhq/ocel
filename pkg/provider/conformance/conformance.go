@@ -105,6 +105,22 @@ func RunHooks(t *testing.T, p provider.Provider) {
 		}
 		RunRetirement(t, hooks.Retirement)
 	})
+	t.Run("ListProjectResources", func(t *testing.T) {
+		if hooks.ListProjectResources == nil {
+			t.Skip("this provider keeps nothing per project outside its stacks, so a project's stacks name everything it holds")
+		}
+		for _, fault := range projectResourceFaults(context.Background(), hooks.ListProjectResources) {
+			t.Error(fault)
+		}
+	})
+	t.Run("ProjectRemoval", func(t *testing.T) {
+		if hooks.ProjectRemoval == nil {
+			t.Skip("this provider keeps nothing per project outside its stacks, so tearing the stacks down removes the project")
+		}
+		for _, fault := range projectRemovalFaults(context.Background(), hooks.ProjectRemoval) {
+			t.Error(fault)
+		}
+	})
 	t.Run("NextServerRuntime", func(t *testing.T) {
 		if hooks.NextServerRuntime == nil {
 			t.Skip("this provider ships no Next server runtime, so its Next containers run Next with Next's defaults")

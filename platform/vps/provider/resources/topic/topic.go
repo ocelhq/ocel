@@ -51,7 +51,7 @@ func New(box component.Box, queues *QueueDatabases) Resource {
 	return Resource{box: box, queues: queues}
 }
 
-func newQueueContainer(ref provider.StackRef) (container.Spec, error) {
+func NewQueueContainer(ref provider.StackRef) (container.Spec, error) {
 	spec, err := postgres.NewContainer(ref, boxapi.QueueDatabaseName, queueKind, images.QueueDatabase(),
 		container.Volume{Path: queueData, Generation: images.QueueDatabaseMajor()})
 	if err != nil {
@@ -202,7 +202,7 @@ func newQueueDatabaseRecord(ref provider.StackRef, spec container.Spec, delivery
 }
 
 func (r Resource) planQueue(ctx context.Context, ref provider.StackRef, change *component.Change) error {
-	spec, err := newQueueContainer(ref)
+	spec, err := NewQueueContainer(ref)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func (r Resource) planQueue(ctx context.Context, ref provider.StackRef, change *
 }
 
 func (r Resource) ensureQueue(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	spec, err := newQueueContainer(ref)
+	spec, err := NewQueueContainer(ref)
 	if err != nil {
 		return err
 	}
@@ -310,7 +310,7 @@ func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding pro
 	if len(remaining) > 0 {
 		return nil
 	}
-	spec, err := newQueueContainer(ref)
+	spec, err := NewQueueContainer(ref)
 	if err != nil {
 		return err
 	}

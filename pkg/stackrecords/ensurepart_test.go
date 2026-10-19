@@ -18,7 +18,7 @@ import (
 
 type making struct {
 	calls     atomic.Int32
-	resources []provider.PartResource
+	resources []provider.PhysicalResource
 	err       error
 	hold      chan struct{}
 }
@@ -29,7 +29,7 @@ func (m *making) work(addedBy, writtenBy, digest string) stackrecords.PartWork {
 		WrittenBy: writtenBy,
 		Digest:    digest,
 		AddedBy:   addedBy,
-		Make: func(ctx context.Context) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
 			m.calls.Add(1)
 			if m.hold != nil {
 				<-m.hold
@@ -39,7 +39,7 @@ func (m *making) work(addedBy, writtenBy, digest string) stackrecords.PartWork {
 	}
 }
 
-var syncResources = []provider.PartResource{{Kind: "AWS::Lambda::Function", ID: "ocel-env-sync"}}
+var syncResources = []provider.PhysicalResource{{Kind: "AWS::Lambda::Function", ID: "ocel-env-sync"}}
 
 func TestEnsuringAMissingPartMakesItOnceAndRecordsItReadyAsAddedByItsCaller(t *testing.T) {
 	t.Parallel()
@@ -252,7 +252,7 @@ func TestAPartBeingMadeAgainStaysReadyWithItsResourcesUntilTheNewOneIsRecorded(t
 
 	var during stackrecords.BootstrapPart
 	work := (&making{resources: syncResources}).work("api", "1.3.0", "d2")
-	work.Make = func(ctx context.Context) ([]provider.PartResource, error) {
+	work.Make = func(ctx context.Context) ([]provider.PhysicalResource, error) {
 		var err error
 		during, _, err = stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, "env-source-sync")
 		return syncResources, err
@@ -319,7 +319,7 @@ func cancelledMidMake(t *testing.T, err error) (context.Context, stackrecords.Pa
 		WrittenBy: "1.2.0",
 		Digest:    "d1",
 		AddedBy:   "web",
-		Make: func(context.Context) ([]provider.PartResource, error) {
+		Make: func(context.Context) ([]provider.PhysicalResource, error) {
 			cancel()
 			return syncResources, err
 		},

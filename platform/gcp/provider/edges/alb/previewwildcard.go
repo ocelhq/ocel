@@ -90,7 +90,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	if len(served) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s still serves the previews of %s on the %s load balancer of tier %s, and releasing its certificate would leave every one of them "+
-				"refusing TLS: take those previews down with `ocel destroy preview` in each project first",
+				"refusing TLS: take those previews down with `ocel projects destroy --tier preview` in each project first",
 			wildcard, strings.Join(served, ", "), Kind, environment.TierPreview)
 	}
 	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(environment.TierPreview))

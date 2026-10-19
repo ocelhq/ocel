@@ -41,9 +41,9 @@ func syncDigest(b bootstrap.Engine, tier environment.Tier) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func syncResources(b bootstrap.Engine, tier environment.Tier) []provider.PartResource {
+func syncResources(b bootstrap.Engine, tier environment.Tier) []provider.PhysicalResource {
 	name := b.Clients.EnvSourceSync(tier)
-	return []provider.PartResource{{Kind: string(bootstrap.KindService), ID: name}, {Kind: string(bootstrap.KindSchedule), ID: name}}
+	return []provider.PhysicalResource{{Kind: string(bootstrap.KindService), ID: name}, {Kind: string(bootstrap.KindSchedule), ID: name}}
 }
 
 func Ensure(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) error {
@@ -56,7 +56,7 @@ func envSourceSyncWork(b bootstrap.Engine, tier environment.Tier, project string
 		WrittenBy: string(b.WrittenBy),
 		Digest:    syncDigest(b, tier),
 		AddedBy:   project,
-		Make: func(ctx context.Context) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
 			if err := mendEnvSourceSync(ctx, b, tier); err != nil {
 				return nil, err
 			}

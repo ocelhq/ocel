@@ -27,7 +27,7 @@ type Part struct {
 	Content     string
 	APIs        []string
 	Retires     bool
-	Resources   []provider.PartResource
+	Resources   []provider.PhysicalResource
 	Shape       []pricing.Shaped
 	Make        func(ctx context.Context) error
 	Claim       func(ctx context.Context, project string) error
@@ -65,7 +65,7 @@ func (b Engine) partWork(tier environment.Tier, project string, want Part) stack
 		WrittenBy: string(b.WrittenBy),
 		Digest:    want.digest(),
 		AddedBy:   project,
-		Make: func(ctx context.Context) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
 			if err := b.servicesOn(ctx, want.APIs); err != nil {
 				return nil, err
 			}

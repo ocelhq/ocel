@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
@@ -40,6 +41,9 @@ const (
 	kindRole          = "AWS::IAM::Role"
 	kindCertificate   = "AWS::CertificateManager::Certificate"
 	kindFunction      = "AWS::Lambda::Function"
+	kindListener      = "AWS::ElasticLoadBalancingV2::Listener"
+	kindTargetGroup   = "AWS::ElasticLoadBalancingV2::TargetGroup"
+	kindListenerRule  = "AWS::ElasticLoadBalancingV2::ListenerRule"
 
 	executionWord   = "exec"
 	certificateWord = "certificate"
@@ -75,10 +79,13 @@ type Infrastructure struct {
 	ExecutionRole string
 	LogGroup      string
 
-	PublicListener string
-	PublicHost     string
-	PublicRanges   string
-	LivenessRole   string
+	PublicListener         string
+	PublicHost             string
+	PublicRanges           string
+	PublicRedirectListener string
+	LivenessRole           string
+	LivenessTargets        string
+	LivenessRule           string
 }
 
 type Raised struct {
@@ -220,12 +227,12 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 		progress.Say("Raising the public load balancer of the " + string(tier) + " tier: the edge in front of a container app forwards its hostnames there")
 	}
 	var decoded Infrastructure
-	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PartResource, error) {
+	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
 		if decoded, err = provision(ctx, owner, StackRef(tier), raised, progress); err != nil {
 			return nil, err
 		}
-		return listResources(owner.Namespace, tier, decoded), nil
+		return listResources(owner.Namespace, owner.Region, tier, decoded), nil
 	})
 	if err != nil {
 		return Infrastructure{}, err
@@ -342,30 +349,42 @@ func ReadPart(ctx context.Context, store records.Store, namespace, region string
 	}, true, nil
 }
 
-func listResources(namespace string, tier environment.Tier, infra Infrastructure) []provider.PartResource {
-	resources := []provider.PartResource{
-		{Kind: kindCluster, ID: nameFor(namespace, tier)},
-		{Kind: kindSecurityGroup, ID: tasksGroupName(namespace, tier)},
-		{Kind: kindLogGroup, ID: awsports.ContainerLogGroupName(namespace, tier)},
-		{Kind: kindRole, ID: parseRoleName(infra.ExecutionRole)},
+func listResources(namespace, region string, tier environment.Tier, infra Infrastructure) []provider.PhysicalResource {
+	resource := func(kind, id string) provider.PhysicalResource { return cfn.NewPhysicalResource(kind, id, region) }
+	resources := []provider.PhysicalResource{
+		resource(kindCluster, nameFor(namespace, tier)),
+		resource(kindSecurityGroup, tasksGroupName(namespace, tier)),
+		resource(kindLogGroup, awsports.ContainerLogGroupName(namespace, tier)),
+		resource(kindRole, parseRoleName(infra.ExecutionRole)),
 	}
 	fronts := infra.Raised()
 	if fronts.Private {
 		resources = append(resources,
-			provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(namespace, tier)},
-			provider.PartResource{Kind: kindSecurityGroup, ID: frontGroupName(namespace, tier)})
+			resource(kindLoadBalancer, nameFor(namespace, tier)),
+			resource(kindListener, infra.Listener),
+			resource(kindSecurityGroup, frontGroupName(namespace, tier)))
 	}
 	if infra.VPCOrigin != "" {
-		resources = append(resources, provider.PartResource{Kind: kindVPCOrigin, ID: infra.VPCOrigin})
+		resources = append(resources, resource(kindVPCOrigin, infra.VPCOrigin))
 	}
 	if fronts.Public {
 		resources = append(resources,
-			provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(namespace, tier)},
-			provider.PartResource{Kind: kindSecurityGroup, ID: publicGroupName(namespace, tier)},
-			provider.PartResource{Kind: kindCertificate, ID: nameCertificateHost(awsports.PublicBalancerName(namespace, tier))},
-			provider.PartResource{Kind: kindFunction, ID: awsports.PublicLivenessName(namespace, tier)})
+			resource(kindLoadBalancer, awsports.PublicBalancerName(namespace, tier)),
+			resource(kindListener, infra.PublicListener),
+			resource(kindSecurityGroup, publicGroupName(namespace, tier)),
+			resource(kindCertificate, nameCertificateHost(awsports.PublicBalancerName(namespace, tier))),
+			resource(kindFunction, awsports.PublicLivenessName(namespace, tier)))
+		for _, recorded := range []provider.PhysicalResource{
+			resource(kindListener, infra.PublicRedirectListener),
+			resource(kindTargetGroup, infra.LivenessTargets),
+			resource(kindListenerRule, infra.LivenessRule),
+		} {
+			if recorded.ID != "" {
+				resources = append(resources, recorded)
+			}
+		}
 		if infra.LivenessRole != "" {
-			resources = append(resources, provider.PartResource{Kind: kindRole, ID: parseRoleName(infra.LivenessRole)})
+			resources = append(resources, resource(kindRole, parseRoleName(infra.LivenessRole)))
 		}
 	}
 	return resources
@@ -375,10 +394,13 @@ func parseRoleName(arn string) string {
 	return arn[strings.LastIndex(arn, "/")+1:]
 }
 
-func findFronts(namespace string, tier environment.Tier, resources []provider.PartResource) Raised {
+func findFronts(namespace string, tier environment.Tier, resources []provider.PhysicalResource) Raised {
+	names := func(id string) func(provider.PhysicalResource) bool {
+		return func(r provider.PhysicalResource) bool { return r.Kind == kindLoadBalancer && r.ID == id }
+	}
 	return Raised{
-		Private: slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(namespace, tier)}),
-		Public:  slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(namespace, tier)}),
+		Private: slices.ContainsFunc(resources, names(nameFor(namespace, tier))),
+		Public:  slices.ContainsFunc(resources, names(awsports.PublicBalancerName(namespace, tier))),
 	}
 }
 

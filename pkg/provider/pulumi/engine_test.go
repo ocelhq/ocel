@@ -14,6 +14,8 @@ type recordingEngine struct {
 	up        pulumi.WorkspaceSpec
 	down      pulumi.WorkspaceSpec
 	outputs   auto.OutputMap
+	exported  pulumi.WorkspaceSpec
+	resources []pulumi.ExportedResource
 	rows      []provider.Change
 	previewed pulumi.Operation
 	err       error
@@ -36,6 +38,11 @@ func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec,
 
 func (e *recordingEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.OutputMap, error) {
 	return e.outputs, e.err
+}
+
+func (e *recordingEngine) Export(_ context.Context, setup pulumi.WorkspaceSpec) ([]pulumi.ExportedResource, error) {
+	e.exported = setup
+	return e.resources, e.err
 }
 
 func (*recordingEngine) Unlock(context.Context, pulumi.WorkspaceSpec) error { return nil }

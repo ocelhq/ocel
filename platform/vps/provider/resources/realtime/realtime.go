@@ -44,7 +44,7 @@ type Resource struct{ box component.Box }
 
 func New(box component.Box) Resource { return Resource{box: box} }
 
-func gatewayName(ref provider.StackRef) (string, error) {
+func GatewayName(ref provider.StackRef) (string, error) {
 	return container.Name(ref, gatewayOwner, gatewayKind)
 }
 
@@ -60,7 +60,7 @@ func FindPublishURL(bindings []provider.Binding) string {
 	return "http://" + bindings[at].Properties[provider.PropertyHost] + gatewayenv.PublishPath
 }
 
-func newGateway(ref provider.StackRef, name string, keys map[string]string) (container.Spec, error) {
+func NewGateway(ref provider.StackRef, name string, keys map[string]string) (container.Spec, error) {
 	encoded, err := json.Marshal(keys)
 	if err != nil {
 		return container.Spec{}, err
@@ -160,7 +160,7 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 	if err != nil {
 		return "", "", err
 	}
-	gateway, err := gatewayName(in.Ref)
+	gateway, err := GatewayName(in.Ref)
 	if err != nil {
 		return "", "", err
 	}
@@ -199,7 +199,7 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 		return "", "", err
 	}
 	keys[record.namespace] = record.verifyKey
-	spec, err := newGateway(in.Ref, gateway, keys)
+	spec, err := NewGateway(in.Ref, gateway, keys)
 	if err != nil {
 		return "", "", err
 	}
@@ -222,7 +222,7 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 	if err := refuseUnconfigured(in); err != nil {
 		return provider.Binding{}, err
 	}
-	gateway, err := gatewayName(in.Ref)
+	gateway, err := GatewayName(in.Ref)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -322,7 +322,7 @@ func (r Resource) placeGateway(ctx context.Context, ref provider.StackRef, gatew
 		progress.Say("Removing the realtime gateway " + gateway + ": " + ref.Name.Env + " declares no realtime any more")
 		return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: gatewayResource, Name: gateway})
 	}
-	spec, err := newGateway(ref, gateway, keys)
+	spec, err := NewGateway(ref, gateway, keys)
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func (r Resource) placeGateway(ctx context.Context, ref provider.StackRef, gatew
 
 func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	namespace := component.ChooseDeclaredName(binding.Resource, binding.Name)
-	gateway, err := gatewayName(ref)
+	gateway, err := GatewayName(ref)
 	if err != nil {
 		return err
 	}

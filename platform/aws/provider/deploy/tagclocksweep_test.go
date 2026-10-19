@@ -15,7 +15,8 @@ import (
 )
 
 type fakeEngine struct {
-	record func(string)
+	record   func(string)
+	exported []pulumi.ExportedResource
 }
 
 var _ pulumi.Engine = (*fakeEngine)(nil)
@@ -37,6 +38,10 @@ func (f *fakeEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ pr
 
 func (f *fakeEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.OutputMap, error) {
 	return auto.OutputMap{}, nil
+}
+
+func (f *fakeEngine) Export(context.Context, pulumi.WorkspaceSpec) ([]pulumi.ExportedResource, error) {
+	return f.exported, nil
 }
 
 func (*fakeEngine) Unlock(context.Context, pulumi.WorkspaceSpec) error { return nil }

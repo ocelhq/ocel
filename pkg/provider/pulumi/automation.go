@@ -59,6 +59,8 @@ type Engine interface {
 
 	Outputs(ctx context.Context, setup WorkspaceSpec) (auto.OutputMap, error)
 
+	Export(ctx context.Context, setup WorkspaceSpec) ([]ExportedResource, error)
+
 	Unlock(ctx context.Context, setup WorkspaceSpec) error
 }
 
@@ -368,6 +370,19 @@ func (a *Automation[S]) Outputs(ctx context.Context, ref provider.StackRef, prog
 	return outputs, nil
 }
 
+func (a *Automation[S]) Export(ctx context.Context, ref provider.StackRef) ([]ExportedResource, error) {
+	var none S
+	setup, err := a.setup(ctx, ref, none, OperationProvision, nil)
+	if err != nil {
+		return nil, err
+	}
+	exported, err := a.engine().Export(ctx, setup)
+	if err != nil {
+		return nil, masked(err, setup.Secrets)
+	}
+	return exported, nil
+}
+
 const lockedMessage = "the stack is currently locked"
 
 func isLocked(err error) bool {
@@ -562,6 +577,25 @@ func (autoEngine) Outputs(ctx context.Context, setup WorkspaceSpec) (auto.Output
 		return nil, fmt.Errorf("read what stack %s already provisions: %w", setup.Stack, err)
 	}
 	return outputs, nil
+}
+
+func (autoEngine) Export(ctx context.Context, setup WorkspaceSpec) ([]ExportedResource, error) {
+	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
+	if auto.IsSelectStack404Error(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select stack %s: %w", setup.Stack, err)
+	}
+	deployment, err := stack.Export(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export the state of stack %s: %w", setup.Stack, err)
+	}
+	exported, err := decodeExportedResources(deployment)
+	if err != nil {
+		return nil, fmt.Errorf("read what stack %s holds: %w", setup.Stack, err)
+	}
+	return exported, nil
 }
 
 func (autoEngine) Unlock(ctx context.Context, setup WorkspaceSpec) error {

@@ -67,10 +67,11 @@ func New(
 
 func (p *Realtime) Component() component.Component {
 	return component.Component{
-		Types:    []provider.BindingType{provider.BindingRealtime},
-		Hooks:    resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
-		Shape:    shapeRealtime,
-		Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}},
+		Types:         []provider.BindingType{provider.BindingRealtime},
+		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
+		ListResources: p.ListResources,
+		Shape:         shapeRealtime,
+		Accounts:      []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}},
 	}
 }
 

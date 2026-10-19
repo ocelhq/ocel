@@ -455,6 +455,24 @@ func removePersistentPreview(t *testing.T, client contractv1connect.ProviderServ
 	return result
 }
 
+func TestRemovingTheProductionEnvironmentIsRefusedNamingTheCommandThatRemovesProduction(t *testing.T) {
+	t.Parallel()
+	client, _ := contractServed(t, "1.0.0")
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	result, err := drain(stream)
+	said := result.GetError() + connectMessage(err)
+	if result.GetSuccess() || !strings.Contains(said, "`ocel projects destroy --tier production`") {
+		t.Errorf("RemoveEnvironment(production) = %q, want it refused naming the command that removes the production footprint", said)
+	}
+}
+
 func TestRemoveEnvironmentIsRefusedWhileADeployHoldsIt(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")

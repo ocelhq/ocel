@@ -29,6 +29,7 @@ func (p *Provider) realtimeHooks() *realtime.Realtime {
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	hooks := p.components().Hooks()
+	hooks.ListResources = p.ListStackResources
 
 	return p.computeHooks(hooks)
 }

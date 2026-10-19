@@ -52,16 +52,11 @@ type BootstrapPart struct {
 	Summary             string
 	Current             bool
 	Digest              string
-	Resources           []PartResource
+	Resources           []PhysicalResource
 	UsedBy              []string
 	UsedByEveryProject  bool
 	RetiresWithLastUser bool
 	Shape               *PartShape
-}
-
-type PartResource struct {
-	Kind string
-	ID   string
 }
 
 type PartShape struct {

@@ -151,7 +151,7 @@ func TestRememberingAProjectRacedByAnotherPreviewKeepsThePartThatOneAdded(t *tes
 	writeProject(t, store, name, []string{"edge"})
 
 	store.BeforeNextWrite(name, func() { writeProject(t, store, name, []string{"edge", "images"}) })
-	run := &deployRun{edgeSession: &edgeSession{provider: vendor}, spec: provider.DeploySpec{Tier: environment.TierPreview, Slug: "shop"}, parts: []string{"edge", "queues"}}
+	run := previewProjectRun(t, vendor, "edge", "queues")
 	if err := run.rememberProject(ctx); err != nil {
 		t.Fatalf("rememberProject() raced by another preview = %v, want it re-read and re-applied", err)
 	}
@@ -168,12 +168,25 @@ func TestEnsuringAProjectAnotherPreviewRecordedFirstKeepsThatRecord(t *testing.T
 	name := stackrecords.ProjectKey(environment.TierPreview, "shop")
 
 	store.BeforeNextWrite(name, func() { writeProject(t, store, name, []string{"images"}) })
-	run := &deployRun{edgeSession: &edgeSession{provider: vendor}, spec: provider.DeploySpec{Tier: environment.TierPreview, Slug: "shop"}, parts: []string{"queues"}}
+	run := previewProjectRun(t, vendor, "queues")
 	if err := run.ensureProject(ctx); err != nil {
 		t.Fatalf("ensureProject() raced by another preview = %v, want the record that preview wrote kept", err)
 	}
 	if got, want := readProjectParts(t, store, name), []string{"images"}; !slices.Equal(got, want) {
 		t.Errorf("recorded parts %v, want %v", got, want)
+	}
+}
+
+func previewProjectRun(t *testing.T, vendor *fake.Provider, parts ...string) *deployRun {
+	t.Helper()
+	front, err := vendor.Edges().Open(fake.KindRelay, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &deployRun{
+		edgeSession: &edgeSession{sharedStack: &sharedStack{front: front}, provider: vendor},
+		spec:        provider.DeploySpec{Tier: environment.TierPreview, Slug: "shop"},
+		parts:       parts,
 	}
 }
 
@@ -183,7 +196,7 @@ func writeProject(t *testing.T, store records.Store, name records.Key, parts []s
 	if err != nil {
 		t.Fatal(err)
 	}
-	if entry.Value, err = json.Marshal(stackrecords.Project{Parts: parts}); err != nil {
+	if entry.Value, err = json.Marshal(stackrecords.Project{Parts: parts, Edge: &stackrecords.ProjectEdge{Kind: fake.KindRelay}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Write(context.Background(), entry); err != nil {

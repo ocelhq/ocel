@@ -507,7 +507,8 @@ func TestAnEngineErrorNeverCarriesASecretTheRunKnowsYetStillUnwrapsToTheEngines(
 	_, runErr := automation.Run(context.Background(), spec().Ref, spec(), provider.Lease{}, nil)
 	destroyErr := automation.Destroy(context.Background(), spec().Ref, provider.Lease{}, nil)
 	_, outputsErr := automation.Outputs(context.Background(), spec().Ref, nil)
-	for op, err := range map[string]error{"Preview": previewErr, "Run": runErr, "Destroy": destroyErr, "Outputs": outputsErr} {
+	_, exportErr := automation.Export(context.Background(), spec().Ref)
+	for op, err := range map[string]error{"Preview": previewErr, "Run": runErr, "Destroy": destroyErr, "Outputs": outputsErr, "Export": exportErr} {
 		if !errors.Is(err, failed) {
 			t.Errorf("%s() = %v, want it to unwrap to the engine's error", op, err)
 		}
@@ -519,6 +520,52 @@ func TestAnEngineErrorNeverCarriesASecretTheRunKnowsYetStillUnwrapsToTheEngines(
 		if !strings.Contains(err.Error(), "stdout: creating db with password [secret]") {
 			t.Errorf("%s() reads %q, want the engine's output kept with the secret masked", op, err)
 		}
+	}
+}
+
+func TestAutomationExportsTheStackItNames(t *testing.T) {
+	t.Parallel()
+
+	uploads := pulumi.ExportedResource{
+		Type: "aws:s3/bucketV2:BucketV2",
+		ID:   "shop-prod-uploads",
+	}
+	engine := &recordingEngine{resources: []pulumi.ExportedResource{uploads}}
+	exported, err := pulumi.New(pulumi.Config[provider.StackSpec]{
+		Backend: backend(),
+		Program: program{}.Run,
+		Engine:  engine,
+	}).Export(context.Background(), spec().Ref)
+	if err != nil {
+		t.Fatalf("Export() = %v", err)
+	}
+	if engine.exported.Stack != spec().Ref.Name.String() {
+		t.Errorf("the engine exported stack %q, want %q", engine.exported.Stack, spec().Ref.Name)
+	}
+	if string(engine.exported.Project.Name) != naming.PulumiProject("shop") {
+		t.Errorf("the engine exported from project %q, want %q", engine.exported.Project.Name, naming.PulumiProject("shop"))
+	}
+	if engine.exported.Project.Backend.URL != backend().URL {
+		t.Errorf("the engine exported from backend %q, want %q", engine.exported.Project.Backend.URL, backend().URL)
+	}
+	if !slices.Equal(exported, []pulumi.ExportedResource{uploads}) {
+		t.Errorf("Export() = %+v, want the resources the engine exported", exported)
+	}
+}
+
+func TestExportOfAStackNeverCreatedIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	exported, err := pulumi.New(pulumi.Config[provider.StackSpec]{
+		Backend: backend(),
+		Program: program{}.Run,
+		Engine:  &recordingEngine{},
+	}).Export(context.Background(), spec().Ref)
+	if err != nil {
+		t.Fatalf("Export() = %v", err)
+	}
+	if len(exported) != 0 {
+		t.Errorf("Export() = %+v, want nothing for a stack never created", exported)
 	}
 }
 

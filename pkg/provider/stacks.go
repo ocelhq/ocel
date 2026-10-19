@@ -24,6 +24,13 @@ type Stacks interface {
 	PlanDestroy(ctx context.Context, ref StackRef, progress progress.Log) (Plan, error)
 
 	Destroy(ctx context.Context, req StackDestroy, progress progress.Log) error
+
+	Resources(ctx context.Context, req StackResources) ([]PhysicalResource, error)
+}
+
+type StackResources struct {
+	Ref           StackRef
+	NewestRelease bool
 }
 
 type StackDestroy struct {

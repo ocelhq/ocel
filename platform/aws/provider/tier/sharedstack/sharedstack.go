@@ -127,7 +127,7 @@ func (s Stack) ListUsers(ctx context.Context, store records.Store, tier environm
 	return slices.Compact(users), nil
 }
 
-func (s Stack) Raise(ctx context.Context, owner Owner, tier environment.Tier, addedBy string, raise func() ([]provider.PartResource, error)) error {
+func (s Stack) Raise(ctx context.Context, owner Owner, tier environment.Tier, addedBy string, raise func() ([]provider.PhysicalResource, error)) error {
 	store, writer := owner.KeyValues, string(owner.WrittenBy)
 	claim, claimed, err := stackrecords.ClaimBootstrapPart(ctx, store, tier, s.Part, stackrecords.BootstrapPart{
 		WrittenBy: writer,

@@ -86,7 +86,7 @@ func NewProvider(options Options) *Provider {
 		images:    NewImages(),
 		cipher:    NewCipher(),
 		bootstrap: NewBootstrap(),
-		stacks:    NewStacks(artifacts).journalling(journal),
+		stacks:    NewStacks(artifacts).journalling(journal).recordedIn(store),
 		creds:     NewCredentials(options.Region),
 		edges:     edges,
 		routers:   newRouters(edges),
@@ -101,6 +101,8 @@ func NewProvider(options Options) *Provider {
 		OpenRegistryImages: p.OpenRegistryImages,
 		Cost:               &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
+
+		ListProjectResources: p.ListProjectResources,
 	}
 	return p
 }

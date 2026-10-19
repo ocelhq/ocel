@@ -440,7 +440,7 @@ func (w *wildcards) refuseReleaseWhileLive(ctx context.Context) error {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"%s still has live preview pointers for %d project(s): %s — nothing would serve them the moment it is released. Remove one preview with `ocel preview rm`, or a project's whole preview footprint with `ocel destroy preview`, in each of them first",
+		"%s still has live preview pointers for %d project(s): %s — nothing would serve them the moment it is released. Remove one preview with `ocel preview rm`, or a project's whole preview footprint with `ocel projects destroy --tier preview`, in each of them first",
 		w.recorded.Hostname(), len(live), strings.Join(live, ", "))
 }
 

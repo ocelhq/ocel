@@ -223,3 +223,23 @@ func List(ctx context.Context, store records.Store, tier environment.Tier, slug 
 	})
 	return stacks, nil
 }
+
+func NewestReleases(stacks []NamedStack) []naming.StackName {
+	type app struct{ env, name string }
+	newest := map[app]NamedStack{}
+	for _, stack := range stacks {
+		if stack.Name.Release.IsZero() {
+			continue
+		}
+		of := app{env: stack.Name.Env, name: stack.Name.App}
+		if held, found := newest[of]; !found || cmp.Or(cmp.Compare(stack.UpdatedAt, held.UpdatedAt), cmp.Compare(stack.Name.String(), held.Name.String())) > 0 {
+			newest[of] = stack
+		}
+	}
+	names := make([]naming.StackName, 0, len(newest))
+	for _, stack := range newest {
+		names = append(names, stack.Name)
+	}
+	slices.SortFunc(names, func(a, b naming.StackName) int { return cmp.Compare(a.String(), b.String()) })
+	return names
+}

@@ -253,7 +253,7 @@ type limitAdvice struct {
 	again  string
 }
 
-var previewLimitAdvice = limitAdvice{remove: "remove previews this tier no longer needs with `ocel destroy preview`", again: "promote again"}
+var previewLimitAdvice = limitAdvice{remove: "remove previews this tier no longer needs with `ocel projects destroy --tier preview`", again: "promote again"}
 
 func (e *Edge) refuseExhaustedBackendServiceQuota(ctx context.Context, adding []string, advice limitAdvice) error {
 	quota, found, err := e.deps.Routes.ReadBackendServiceQuota(ctx)

@@ -521,6 +521,10 @@ func (halfBindingStacks) Destroy(context.Context, provider.StackDestroy, progres
 	return nil
 }
 
+func (halfBindingStacks) Resources(context.Context, provider.StackResources) ([]provider.PhysicalResource, error) {
+	return nil, nil
+}
+
 func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsItsBindings(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
@@ -650,6 +654,10 @@ func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec
 
 func (r *resolvingStacks) Destroy(ctx context.Context, req provider.StackDestroy, progress progress.Log) error {
 	return r.inner.Destroy(ctx, req, progress)
+}
+
+func (r *resolvingStacks) Resources(ctx context.Context, req provider.StackResources) ([]provider.PhysicalResource, error) {
+	return r.inner.Resources(ctx, req)
 }
 
 func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {

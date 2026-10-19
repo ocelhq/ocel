@@ -92,8 +92,8 @@ func (w *world) records() records.Store {
 	return awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
 }
 
-func fakePartResources(tier environment.Tier) []provider.PartResource {
-	return []provider.PartResource{
+func fakePartResources(tier environment.Tier) []provider.PhysicalResource {
+	return []provider.PhysicalResource{
 		{Kind: cloudfrontpart.KindRoutesStore, ID: fakeRoutesARN(tier)},
 		{Kind: cloudfrontpart.KindFunction, ID: fakeResolverARN(tier)},
 		{Kind: cloudfrontpart.KindFunction, ID: fakeEmptyBodyARN(tier)},
@@ -103,7 +103,7 @@ func fakePartResources(tier environment.Tier) []provider.PartResource {
 	}
 }
 
-func (w *world) ensurePart(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error) {
+func (w *world) ensurePart(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error) {
 	w.parts.mu.Lock()
 	defer w.parts.mu.Unlock()
 	w.parts.ensured = append(w.parts.ensured, part+" for "+addedBy+addedWith)

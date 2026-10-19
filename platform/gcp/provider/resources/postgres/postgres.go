@@ -702,10 +702,11 @@ func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store r
 
 func (p *Postgres) Component() component.Component {
 	return component.Component{
-		Types:  []provider.BindingType{provider.BindingPostgres},
-		Hooks:  resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
-		Egress: true,
-		Parts:  []component.Part{network.Part},
+		Types:         []provider.BindingType{provider.BindingPostgres},
+		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
+		ListResources: p.ListResources,
+		Egress:        true,
+		Parts:         []component.Part{network.Part},
 		Preflight: func(resource provider.Resource) error {
 			_, err := readPostgres(resource)
 			return err

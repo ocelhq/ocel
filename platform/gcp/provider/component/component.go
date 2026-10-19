@@ -23,6 +23,8 @@ type Component struct {
 	Grants    func(ctx context.Context, app App) ([]grants.Grant, error)
 	Egress    bool
 	Accounts  []bootstrap.Account
+
+	ListResources func(ctx context.Context, clients *gcloud.Clients, ref provider.StackRef, binding provider.Binding) ([]provider.PhysicalResource, error)
 }
 
 type Part struct {

@@ -491,9 +491,9 @@ func bootstrapDestroyCommand(tier environment.Tier) string {
 
 func destroyCommand(tier environment.Tier) string {
 	if tier == environment.TierPreview {
-		return "ocel destroy preview"
+		return "ocel projects destroy --tier preview"
 	}
-	return "ocel destroy production"
+	return "ocel projects destroy --tier production"
 }
 
 func warn(progress progress.Log, message string) {

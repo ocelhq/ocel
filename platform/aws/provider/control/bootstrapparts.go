@@ -61,8 +61,8 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 	return parts, nil
 }
 
-func (b Bootstrap) stackResources(ctx context.Context, stackName string) []provider.PartResource {
-	var out []provider.PartResource
+func (b Bootstrap) stackResources(ctx context.Context, stackName string) []provider.PhysicalResource {
+	var out []provider.PhysicalResource
 	var token *string
 	for {
 		page, err := b.CFN.ListStackResources(ctx, &cloudformation.ListStackResourcesInput{
@@ -77,7 +77,7 @@ func (b Bootstrap) stackResources(ctx context.Context, stackName string) []provi
 			if id == "" {
 				id = aws.ToString(summary.LogicalResourceId)
 			}
-			out = append(out, provider.PartResource{Kind: aws.ToString(summary.ResourceType), ID: id})
+			out = append(out, provider.PhysicalResource{Kind: aws.ToString(summary.ResourceType), ID: id})
 		}
 		if token = page.NextToken; token == nil {
 			return out

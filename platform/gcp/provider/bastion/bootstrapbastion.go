@@ -61,7 +61,7 @@ func describeBastionPart(ctx context.Context, b bootstrap.Engine, tier environme
 		Name:    PartName,
 		Summary: bastionSummary,
 		Current: true,
-		Resources: []provider.PartResource{
+		Resources: []provider.PhysicalResource{
 			{Kind: string(bootstrap.KindService), ID: b.Clients.Bastion(tier)},
 			{Kind: string(bootstrap.KindServiceAccount), ID: b.Clients.BastionAccount(tier)},
 		},

@@ -42,7 +42,7 @@ func SurveyedParts(b Engine, read Survey, stacks []provider.BootstrapStack) []pr
 		Shape:   &provider.PartShape{Vendor: string(gcloud.Vendor), Region: read.Region},
 	}
 	for _, item := range Resources(read.Names, read.Tier, read.Emulated) {
-		base.Resources = append(base.Resources, provider.PartResource{Kind: string(item.Kind), ID: item.Name})
+		base.Resources = append(base.Resources, provider.PhysicalResource{Kind: string(item.Kind), ID: item.Name})
 		if shaped, priced := item.Shape(read.Region); priced {
 			base.Shape.Resources = append(base.Shape.Resources, shaped)
 		}

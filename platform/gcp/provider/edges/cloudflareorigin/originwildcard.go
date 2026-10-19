@@ -213,7 +213,7 @@ func (w Wildcards) Destroy(ctx context.Context, tier environment.Tier) error {
 	if len(served) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s still serves the deployments of %s behind the Cloudflare worker on the %s load balancer of tier %s, and releasing its certificate would leave every one of them "+
-				"unreachable: take those projects down with `ocel destroy` first",
+				"unreachable: take those projects down with `ocel projects destroy` first",
 			"*."+recorded.BaseDomain, strings.Join(served, ", "), alb.Kind, tier)
 	}
 	if err := w.Balancer.DestroyOriginWildcard(ctx, tier); err != nil {

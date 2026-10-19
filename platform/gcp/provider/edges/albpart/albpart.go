@@ -57,11 +57,11 @@ func LeaseAt(tier environment.Tier) records.Key {
 var Part = bootstrap.RemovablePart{Part: provider.Part{Name: PartName, Summary: Summary}, Deployed: NewPart}
 
 func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
-	var resources []provider.PartResource
+	var resources []provider.PhysicalResource
 	for _, shaped := range alb.ShapeLoadBalancer(string(b.Clients.Namespace()), tier) {
-		resources = append(resources, provider.PartResource{Kind: shaped.Type, ID: shaped.Name})
+		resources = append(resources, provider.PhysicalResource{Kind: shaped.Type, ID: shaped.Name})
 	}
-	resources = append(resources, provider.PartResource{Kind: string(bootstrap.KindRepository), ID: b.Clients.Repository(tier) + PluginRepository})
+	resources = append(resources, provider.PhysicalResource{Kind: string(bootstrap.KindRepository), ID: b.Clients.Repository(tier) + PluginRepository})
 	var shape []pricing.Shaped
 	if shaped, err := alb.Shape(string(b.Clients.Namespace()), pricing.EdgeSite{Tier: tier, Region: b.Clients.Region}); err == nil {
 		shape = shaped.Shared

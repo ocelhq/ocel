@@ -32,7 +32,7 @@ func TestTeardownRefusesWhileAProjectStillHasARestAPI(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Teardown = %v, want a refusal while %s still has a REST API", err, conformanceSlug)
 	}
-	if !strings.Contains(err.Error(), conformanceSlug) || !strings.Contains(err.Error(), "ocel destroy production") {
+	if !strings.Contains(err.Error(), conformanceSlug) || !strings.Contains(err.Error(), "ocel projects destroy --tier production") {
 		t.Errorf("refusal = %q, want it to name the project and the command that clears it", err)
 	}
 	if err := e.Teardown(ctx, environment.TierPreview); err != nil {

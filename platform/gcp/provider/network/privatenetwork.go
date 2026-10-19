@@ -61,12 +61,12 @@ const (
 )
 
 func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
-	resources := []provider.PartResource{
+	resources := []provider.PhysicalResource{
 		{Kind: string(KindNetwork), ID: b.Clients.Network(tier)},
 		{Kind: string(KindSubnetwork), ID: b.Clients.Subnetwork(tier)},
 	}
 	for _, policy := range connectionPolicies {
-		resources = append(resources, provider.PartResource{Kind: string(KindConnectionPolicy), ID: b.Clients.ConnectionPolicy(tier, policy.name)})
+		resources = append(resources, provider.PhysicalResource{Kind: string(KindConnectionPolicy), ID: b.Clients.ConnectionPolicy(tier, policy.name)})
 	}
 	return bootstrap.Part{
 		Name:      PartName,

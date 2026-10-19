@@ -332,3 +332,34 @@ func TestAStackRecordKeepsOnlyTheBindingPropertiesItKnowsAreNotSecret(t *testing
 		}
 	}
 }
+
+func TestTheNewestReleasesAreTheLastUpdatedStackOfEachAppInEachEnvironment(t *testing.T) {
+	t.Parallel()
+
+	older := naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))
+	newer := naming.AppStack("prod", "web", naming.NewReleaseToken("b2", ""))
+	api := naming.AppStack("prod", "api", naming.NewReleaseToken("b1", ""))
+	preview := naming.AppStack("pr-1", "web", naming.NewReleaseToken("b3", ""))
+	tiedA := naming.AppStack("pr-2", "web", naming.NewReleaseToken("b4", ""))
+	tiedB := naming.AppStack("pr-2", "web", naming.NewReleaseToken("b5", ""))
+	stacks := []stackrecords.NamedStack{
+		{Name: naming.InfraStack("prod"), Stack: stackrecords.Stack{UpdatedAt: 900}},
+		{Name: newer, Stack: stackrecords.Stack{UpdatedAt: 200}},
+		{Name: older, Stack: stackrecords.Stack{UpdatedAt: 100}},
+		{Name: api, Stack: stackrecords.Stack{UpdatedAt: 50}},
+		{Name: preview, Stack: stackrecords.Stack{UpdatedAt: 10}},
+		{Name: tiedA, Stack: stackrecords.Stack{UpdatedAt: 300}},
+		{Name: tiedB, Stack: stackrecords.Stack{UpdatedAt: 300}},
+	}
+
+	var got []string
+	for _, name := range stackrecords.NewestReleases(stacks) {
+		got = append(got, name.String())
+	}
+	slices.Sort(got)
+	want := []string{api.String(), newer.String(), preview.String(), max(tiedA.String(), tiedB.String())}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("NewestReleases() = %v, want %v: per app and environment the last updated, and of two updated together the greater name", got, want)
+	}
+}

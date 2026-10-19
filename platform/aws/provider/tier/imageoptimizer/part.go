@@ -25,7 +25,7 @@ func NewPart(records tier.Records, c Clients, namespace string, specFor func(con
 			}
 			return Work(c, spec), nil
 		},
-		Remove: func(ctx context.Context, tier environment.Tier, _ []provider.PartResource) error {
+		Remove: func(ctx context.Context, tier environment.Tier, _ []provider.PhysicalResource) error {
 			return Remove(ctx, c, namespace, tier)
 		},
 		IsUsedBy: isUsedBy,
@@ -39,7 +39,7 @@ func isUsedBy(uses []buildoutput.Uses, _ edge.Kind) bool {
 func Work(c Clients, spec Spec) tier.Work {
 	return tier.Work{
 		Digest: Digest(spec),
-		Make: func(ctx context.Context, _ []provider.PartResource, updatesTrust bool) ([]provider.PartResource, error) {
+		Make: func(ctx context.Context, _ []provider.PhysicalResource, updatesTrust bool) ([]provider.PhysicalResource, error) {
 			spec := spec
 			spec.UpdatesTrust = updatesTrust
 			return Ensure(ctx, c, spec)
