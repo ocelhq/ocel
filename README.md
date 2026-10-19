@@ -65,7 +65,7 @@ one container:
 ```
 
 Ocel deploys [Next.js](https://ocel.dev/docs/frameworks/nextjs),
-[SvelteKit](https://ocel.dev/docs/frameworks/sveltekit), Node servers such as
+[SvelteKit](https://ocel.dev/docs/frameworks/sveltekit), [NestJS](https://ocel.dev/docs/frameworks/nestjs), Node servers such as
 [Express](https://ocel.dev/docs/frameworks/express) and [Hono](https://ocel.dev/docs/frameworks/hono),
 and Go, Python and Rust apps, to [AWS, Google Cloud or a VPS](https://ocel.dev/docs/providers),
 optionally behind [Cloudflare](https://ocel.dev/docs/providers/cloudflare). Infrastructure lands

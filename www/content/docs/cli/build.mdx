@@ -11,10 +11,10 @@ Build every app in your project without deploying: a serverless app's functions
 into .ocel/output, and a container app's image into the local docker daemon.
 `ocel deploy --prebuilt` deploys what this built.
 
-Express, Fastify and Hono servers are bundled, so only what the entrypoint imports
-reaches the function: static directories, view templates and files read at run
-time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency
-tree instead.
+Express, Fastify, Hono and compiled NestJS servers are bundled, so only what the
+entrypoint imports reaches the function: static directories, view templates and
+files read at run time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy
+the dependency tree instead.
 
 ## Behaviour
 

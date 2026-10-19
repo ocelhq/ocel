@@ -45,12 +45,10 @@ the first it finds:
 
 `src/server`, `src/index`, `src/app`, `index`, `server`, `app`, `src/main`, each with `.ts`, `.mts`, `.cts`, `.js`, `.mjs` and `.cjs` in turn
 
-`src/main` is where `nest new` writes a NestJS server, so a NestJS app is found too.
-
 On serverless, the build bundles from that file, so it is the one file the app needs. The file is
 also what tells an app from a `package.json` that only holds tooling, such as the SDK of a project
-that declares only resources. A `package.json` that depends on `next` or `@sveltejs/kit` is that
-framework's app instead, whatever files sit beside it.
+that declares only resources. A `package.json` that depends on `next`, `@sveltejs/kit` or
+`@nestjs/core` is that framework's app instead, whatever files sit beside it.
 
 Ocel deploys a directory only when exactly one framework matches it. A `pyproject.toml` or
 `go.mod` beside the Hono app is fine while it holds no app. If it holds a

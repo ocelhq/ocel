@@ -3,4 +3,91 @@ title: NestJS
 description: Deploy a NestJS app.
 ---
 
-Dummy content.
+```bash
+ocel deploy
+```
+
+Ocel recognises the app by its `@nestjs/core` dependency. It runs the app's `build` script and
+deploys the JavaScript that build wrote. Ocel never compiles your TypeScript itself. Nest injects
+dependencies through the decorator metadata `tsc` emits, and bundlers such as esbuild drop it.
+`nest build` and plain `tsc` both work.
+
+```json title="package.json"
+{
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main",
+    "start:dev": "nest start --watch"
+  }
+}
+```
+
+`main.ts` stays as `nest new` wrote it. On serverless compute, `app.listen` opens no port. Ocel
+takes the server Nest listens with and hands it each request.
+
+```ts title="src/main.ts"
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  await app.listen(process.env.PORT ?? 3000);
+}
+bootstrap();
+```
+
+## The compiled entry
+
+Ocel serves the file `nest start` would run:
+
+1. The tsconfig is the one `compilerOptions.tsConfigPath` in `nest-cli.json` names, else
+   `tsconfig.build.json`, else `tsconfig.json`. Its `outDir`, following relative `extends`, is
+   where the build writes. With no `outDir`, that is `dist`.
+2. There, ocel serves `<entryFile>.js`, or `<sourceRoot>/<entryFile>.js` when `tsc` kept the source
+   tree. `nest-cli.json` sets `entryFile` and `sourceRoot`, and they default to `main` and `src`.
+
+When the build writes the server somewhere else, as a monorepo app or a webpack config with its
+own output does, set `entrypoint` to the compiled file:
+
+```ts title="ocel.config.ts"
+apps: [{ name: "api", path: ".", framework: "nestjs", entrypoint: "dist/apps/api/main.js" }],
+```
+
+A build that writes no compiled entry fails the deploy, and the error names each place ocel looked.
+
+On serverless, ocel bundles the compiled entry, so only what it imports reaches the function. Nest
+loads packages such as `@nestjs/microservices` and `class-validator` only when the app uses them.
+The build lists each one that isn't installed and leaves it out, and code that reaches one fails
+at runtime, as it would under `node`. Files read at run time, such as view templates or a
+`ServeStaticModule` directory, are left behind too. Set `OCEL_BUILD_PREFER_TRACING=1` to copy the
+dependency tree instead.
+
+The build gets no Ocel variables and cannot reach deployed resources. Read both at runtime.
+
+## How ocel finds the app
+
+A directory is a NestJS app when its `package.json` lists `@nestjs/core` in `dependencies` or
+`devDependencies`. `nest-cli.json` isn't read for this, so the dependency has to be there.
+
+Within one `package.json`, NestJS wins over node, so `src/main.ts` does not make it a node app. A
+`package.json` that also depends on `next` or `@sveltejs/kit` matches two frameworks, and ocel
+deploys neither until the app sets `framework`.
+
+With no `apps` in your config, the project root is deployed as the NestJS app. A `pyproject.toml`
+or `go.mod` beside it is fine while it holds no app. If it holds a
+[Python](/docs/frameworks/python#how-ocel-finds-the-app) or
+[Go](/docs/frameworks/go#how-ocel-finds-the-app) app, ocel cannot tell which to deploy and asks
+you to list the app under `apps` with `framework: "nestjs"`.
+
+## Containers
+
+On `compute: "container"`, and on a [VPS](/docs/providers/vps), which runs only containers, the
+image runs your `build` script and then your `start` script. `nest new` writes `start` as
+`nest start`, which compiles the app again on every boot and needs `@nestjs/cli` in the image.
+Point `start` at the compiled entry instead:
+
+```json title="package.json"
+{
+  "scripts": { "build": "nest build", "start": "node dist/main" }
+}
+```

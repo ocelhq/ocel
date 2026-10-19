@@ -133,7 +133,7 @@ A deployment with no edge in front is answered on its own `run.app` URL, which t
 prints, and the service gates itself. A tier's gate, which holds the keys and never
 the plain password, is kept in one Secret Manager secret per project and tier, so production and
 previews never share one. Every service of the
-project in that tier that runs an Ocel runtime in front of the app, a container or a Node, Next or SvelteKit
+project in that tier that runs an Ocel runtime in front of the app, a container or a Node, Next, SvelteKit or NestJS
 function, mounts that secret as a volume at version `latest`, whether
 [`protection`](/docs/configuration#protection) is on for the tier or not. While it is off, the secret
 holds `null`, the runtimes serve every request, and the deploy says the tier answers anyone

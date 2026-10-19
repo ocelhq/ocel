@@ -1,4 +1,4 @@
 {
   "title": "Frameworks",
-  "pages": ["nextjs", "sveltekit", "express", "hono", "python", "go", "rust"]
+  "pages": ["nextjs", "sveltekit", "nestjs", "express", "hono", "python", "go", "rust"]
 }

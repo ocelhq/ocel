@@ -43,10 +43,10 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		Long: "Build every app in your project without deploying: a serverless app's functions\n" +
 			"into " + buildoutput.Dir + ", and a container app's image into the local docker daemon.\n" +
 			"`ocel deploy --prebuilt` deploys what this built.\n\n" +
-			"Express, Fastify and Hono servers are bundled, so only what the entrypoint imports\n" +
-			"reaches the function: static directories, view templates and files read at run\n" +
-			"time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency\n" +
-			"tree instead.",
+			"Express, Fastify, Hono and compiled NestJS servers are bundled, so only what the\n" +
+			"entrypoint imports reaches the function: static directories, view templates and\n" +
+			"files read at run time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy\n" +
+			"the dependency tree instead.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
