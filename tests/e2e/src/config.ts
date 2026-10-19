@@ -149,6 +149,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         slug: cell.slug,
         ...cell.fixture.configOn?.vps,
         ...(image ? { image } : {}),
+        ...(migrates(cell.fixture.checks) ? { preBuild: migrateLine() } : {}),
         hostnames: hostnamesOf(cell, vpsZoneOf(cell, env)),
         ...registryOf(cell, env),
         ...(front ? { proxy: front.proxy } : {}),

@@ -181,6 +181,14 @@ describe("overlayFor", () => {
     });
   });
 
+  it("declares the migration as the pre-build of a vps cell whose checks need one, since an app's image holds only that app's packages", () => {
+    expect(overlayFor(cell(sdk.workspace), "vps", {}).preBuild).toBe("pnpm run migrate");
+  });
+
+  it("gives a vps cell whose checks need no migration no pre-build", () => {
+    expect(overlayFor(cell(deploy.node), "vps", {}).preBuild).toBeUndefined();
+  });
+
   it("keeps a vps cell nothing fronts off the run's zone, since no record would reach it there", () => {
     expect(overlayFor(cell(deploy.node), "vps", { OCEL_E2E_ZONE: "j.example" })).toEqual({
       target: "vps",
