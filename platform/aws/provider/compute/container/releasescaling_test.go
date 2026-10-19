@@ -387,3 +387,56 @@ func TestScalingReadsTheTargetsOfManyReleasesInBatchesTheAPIAccepts(t *testing.T
 		t.Errorf("described targets %d times for 120 releases, want 3 batches of at most 50", account.described)
 	}
 }
+
+func TestARefusedScaleUpScalesTheReleaseItStartedBackToZeroSoARetryWaitsForItsHealthAgain(t *testing.T) {
+	t.Parallel()
+	rolledBackTo := appRelease(t, "web", "0000000000000000000000000000000a~00000000000a")
+	account := newScalingAccount()
+	account.targets[resourceOf(t, rolledBackTo)] = capacity{0, 0}
+	account.tagged[resourceOf(t, rolledBackTo)] = capacity{1, 1}
+	clock := &testClock{now: windowStart}
+	scaling := scalingOver(account, clock)
+	promoted := provider.PromotedReleases{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Releases: []provider.AppRelease{rolledBackTo}}
+
+	if err := scaling.ScaleUp(context.Background(), promoted, progress.Discard()); err == nil {
+		t.Fatal("ScaleUp() = nil, want a release that never turns healthy refused")
+	}
+	if held := account.targets[resourceOf(t, rolledBackTo)]; held != (capacity{0, 0}) {
+		t.Errorf("after the refusal the release's target is held at %v, want {0 0}, as it was before the promotion started it", held)
+	}
+	if desired := account.updated[serviceOf(t, rolledBackTo)]; desired != 0 {
+		t.Errorf("after the refusal the release's service is set to %d tasks, want 0", desired)
+	}
+
+	polls := account.polls
+	if err := scaling.ScaleUp(context.Background(), promoted, progress.Discard()); err == nil {
+		t.Errorf("a retried ScaleUp() = nil after %d more health reads, want it refused again rather than moving the pointer to a release whose tasks are not healthy", account.polls-polls)
+	}
+}
+
+func TestARefusedScaleUpSchedulesTheScaleToZeroItCancelledAgain(t *testing.T) {
+	t.Parallel()
+	previous := appRelease(t, "web", "0000000000000000000000000000000c~00000000000c")
+	unhealthy := appRelease(t, "api", "0000000000000000000000000000000a~00000000000a")
+	account := newScalingAccount()
+	account.targets[resourceOf(t, previous)] = capacity{2, 4}
+	account.scheduled[resourceOf(t, previous)+"/"+scaleToZeroAction] = "at(2026-10-20T09:45:00)"
+	account.targets[resourceOf(t, unhealthy)] = capacity{0, 0}
+	account.tagged[resourceOf(t, unhealthy)] = capacity{1, 1}
+	clock := &testClock{now: windowStart}
+
+	err := scalingOver(account, clock).ScaleUp(context.Background(), provider.PromotedReleases{
+		Slug: "shop", Tier: environment.TierProduction, Env: "prod", Releases: []provider.AppRelease{previous, unhealthy},
+	}, progress.Discard())
+	if err == nil {
+		t.Fatal("ScaleUp() = nil, want a release that never turns healthy refused")
+	}
+
+	want := "at(" + clock.Now().UTC().Add(previousReleaseWindow).Format(scheduleLayout) + ")"
+	if scheduled := account.scheduled[resourceOf(t, previous)+"/"+scaleToZeroAction]; scheduled != want {
+		t.Errorf("after the refusal the previous release's scale to zero is scheduled %q, want %q, so a release the refused promotion never served does not keep running until another promotion", scheduled, want)
+	}
+	if held := account.targets[resourceOf(t, previous)]; held != (capacity{2, 4}) {
+		t.Errorf("after the refusal the previous release is held at %v, want {2 4} until its window ends", held)
+	}
+}
