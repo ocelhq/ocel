@@ -26,7 +26,7 @@ type InlineRecord struct {
 }
 
 type Ref struct {
-	Env string `json:"$env" doc:"The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own."`
+	Env string `json:"$env" doc:"The name of the ocel variable holding this value."`
 }
 
 type Text struct {
@@ -35,8 +35,8 @@ type Text struct {
 }
 
 type PostgresTLS struct {
-	Mode string `json:"mode" enum:"require,verify-full" doc:"require encrypts the connection; verify-full also checks the server's certificate and hostname."`
-	CA   *Ref   `json:"ca,omitempty" doc:"The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts."`
+	Mode string `json:"mode" enum:"require,verify-full" doc:"require encrypts the connection. verify-full also checks the server's certificate and hostname."`
+	CA   *Ref   `json:"ca,omitempty" doc:"The CA the server's certificate chains to, as PEM, when the system does not trust it."`
 }
 
 type PostgresBinding struct {
@@ -50,7 +50,7 @@ type PostgresBinding struct {
 }
 
 type postgresURL struct {
-	URL Ref `json:"url" doc:"The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client."`
+	URL Ref `json:"url" doc:"The full connection string, passed to the client unchanged."`
 }
 
 type postgresHost struct {
@@ -74,11 +74,11 @@ type BucketBinding struct {
 }
 
 type bucketShape struct {
-	Endpoint        Text  `json:"endpoint" doc:"The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com."`
-	Region          Text  `json:"region" doc:"The region requests to the store are signed for; auto for R2."`
+	Endpoint        Text  `json:"endpoint" doc:"The address of the S3-compatible store, such as https://<account>.r2.cloudflarestorage.com."`
+	Region          Text  `json:"region" doc:"The region requests to the store are signed for, such as auto for R2."`
 	Bucket          Text  `json:"bucket" doc:"The bucket's name in that store."`
-	Prefix          *Text `json:"prefix,omitempty" doc:"The prefix every key the app writes is kept under, so one bucket can store several resources or environments."`
-	PathStyle       bool  `json:"pathStyle,omitempty" doc:"Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts."`
+	Prefix          *Text `json:"prefix,omitempty" doc:"The key prefix the app's objects are stored under."`
+	PathStyle       bool  `json:"pathStyle,omitempty" doc:"Address the bucket as a path on the endpoint instead of a subdomain."`
 	AccessKeyID     Ref   `json:"accessKeyId" doc:"The public half of the key pair the runtime reaches the store with."`
 	SecretAccessKey Ref   `json:"secretAccessKey" doc:"The secret half of that key pair."`
 	PublicBaseURL   *Text `json:"publicBaseUrl,omitempty" doc:"The address the bucket's objects are served from publicly, when the code declares it public."`
@@ -294,7 +294,7 @@ var tlsModes = []string{"require", "verify-full"}
 func (PostgresBinding) jsonSchema() object {
 	return object{
 		"title":       "PostgresBinding",
-		"description": "An existing Postgres database a tier binds rather than provisioning its own, reached by a connection string or by host and role.",
+		"description": "An existing Postgres database a tier binds, by connection string or by host and role.",
 		"oneOf": []any{
 			titled(objectSchema(reflect.TypeFor[postgresURL]()), "PostgresUrlBinding"),
 			titled(objectSchema(reflect.TypeFor[postgresHost]()), "PostgresHostBinding"),
@@ -321,7 +321,7 @@ type refShape struct {
 
 func (Ref) jsonSchema() object {
 	schema := titled(objectSchema(reflect.TypeFor[Ref]()), "VariableRef")
-	schema["description"] = "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config."
+	schema["description"] = "An ocel variable holding this value, written { \"$env\": \"NAME\" }."
 	schema["properties"].(object)["$env"].(object)["pattern"] = `^[A-Z_][A-Z0-9_]*$`
 	return schema
 }
@@ -359,7 +359,7 @@ func (Bindings) jsonSchema() object {
 				"type":                 "object",
 				"additionalProperties": published,
 				"description": fmt.Sprintf(
-					"Each key is a %s resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@shared-cache\".",
+					"The %s resources this project binds, keyed by name. Each value is \"@\" plus a record name, such as \"@shared-cache\".",
 					name),
 			}
 			continue
@@ -383,7 +383,7 @@ func (Bindings) jsonSchema() object {
 				},
 			}},
 			"description": fmt.Sprintf(
-				"Each key is a %s resource this project declares. Its value is \"@\" followed by the name a record is published under, such as \"@warehouse\"; or the record itself, whose secrets are ocel variables written { \"$env\": \"NAME\" }; or that record keyed by the tier it serves, leaving the other tier to provision its own.",
+				"The %s resources this project binds, keyed by name. Each value is \"@\" plus a record name, or the record itself.",
 				name),
 		}
 	}

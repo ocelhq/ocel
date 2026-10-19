@@ -15,11 +15,11 @@ import (
 
 type Options struct {
 	SSH          Target            `json:"ssh" doc:"The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."`
-	DeployKey    string            `json:"deployKey,omitempty" doc:"Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys."`
-	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine."`
-	Proxy        *front.Proxy      `json:"proxy,omitempty" doc:"What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it."`
+	DeployKey    string            `json:"deployKey,omitempty" doc:"Path to the public key the ocel-deploy login accepts. Left off, the bootstrapping login's keys."`
+	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates keyed by hostname, each the path to the certificate on the machine."`
+	Proxy        *front.Proxy      `json:"proxy,omitempty" doc:"What fronts this machine on ports 80 and 443. Left off, ocel runs its own proxy."`
 
-	PerHostnamePreviewCertificates bool `json:"perHostnamePreviewCertificates,omitempty" doc:"Deploy previews even though the proxy orders a publicly trusted certificate for each preview hostname, which Certificate Transparency logs publish within minutes. Left out, such a preview deploy is refused: set proxy.traefik.previewResolver, pin a wildcard certificate for the preview base, or front the box with an edge that shields it with an origin certificate instead."`
+	PerHostnamePreviewCertificates bool `json:"perHostnamePreviewCertificates,omitempty" doc:"Deploy previews even when each gets its own publicly logged certificate. Left off, those deploys are refused."`
 }
 
 type Target struct {

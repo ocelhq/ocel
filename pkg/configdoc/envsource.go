@@ -128,8 +128,8 @@ func spelledAs(target reflect.Type) reflect.Type {
 
 type EnvSourceConfig struct {
 	Production *EnvSourceDescriptor    `json:"production,omitempty" doc:"Where production's values are read from. Left off, ocel's own store in your account (\"builtin\")."`
-	Preview    *EnvSourceDescriptor    `json:"preview,omitempty" doc:"Where every preview's tier-wide values are read from. Left off, ocel's own store in your account (\"builtin\"). A value set for one named preview stays ocel's own."`
-	Dev        *DevEnvSourceDescriptor `json:"dev,omitempty" doc:"Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file (\"dotenv\"). .env.local overrides whatever this reads."`
+	Preview    *EnvSourceDescriptor    `json:"preview,omitempty" doc:"Where every preview's values are read from. Left off, ocel's own store in your account (\"builtin\")."`
+	Dev        *DevEnvSourceDescriptor `json:"dev,omitempty" doc:"Where ocel dev and ocel run read values from. Left off, the project's .env file (\"dotenv\")."`
 }
 
 func (c *EnvSourceConfig) Tiers() envsource.Tiers {
@@ -154,7 +154,7 @@ type EnvSourceDescriptor struct {
 }
 
 func (EnvSourceDescriptor) Doc() string {
-	return "Where production or preview reads its values from: ocel's own store in your account (\"builtin\"), or an env source keyed by its identifier with its options as the value."
+	return "Where a tier reads its values from: \"builtin\" for ocel's own store, or an env source keyed with its options."
 }
 
 func (d *EnvSourceDescriptor) UnmarshalJSON(data []byte) (err error) {
@@ -175,7 +175,7 @@ type DevEnvSourceDescriptor struct {
 }
 
 func (DevEnvSourceDescriptor) Doc() string {
-	return "Where ocel dev and ocel run read values from on your machine: the project's .env file (\"dotenv\"), or an env source keyed by its identifier with its options as the value."
+	return "Where ocel dev reads values from: \"dotenv\" for the .env file, or an env source keyed with its options."
 }
 
 func (d *DevEnvSourceDescriptor) UnmarshalJSON(data []byte) (err error) {

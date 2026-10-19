@@ -11,11 +11,11 @@ export interface OcelConfig {
     | "streaming"
     | "revalidation"
   )[];
-  /** The apps this project deploys. Left off, ocel detects one at the project root. */
+  /** The apps this project deploys. Left off, ocel deploys the app it detects at the project root. */
   apps?: AppConfig[];
-  /** Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is "@" followed by the name a record your own infrastructure published, such as "@warehouse", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves. */
+  /** Resources ocel binds instead of provisioning, keyed by resource type, then by the name the app declares. */
   bindings?: {
-    /** Each key is a bucket resource this project declares. Its value is "@" followed by the name a record is published under, such as "@warehouse"; or the record itself, whose secrets are ocel variables written { "$env": "NAME" }; or that record keyed by the tier it serves, leaving the other tier to provision its own. */
+    /** The bucket resources this project binds, keyed by name. Each value is "@" plus a record name, or the record itself. */
     bucket?: Record<
       string,
       | `@${string}`
@@ -27,9 +27,9 @@ export interface OcelConfig {
           production?: BucketBinding;
         }
     >;
-    /** Each key is a kv resource this project declares; its value is "@" followed by the name the record is published under, such as "@shared-cache". */
+    /** The kv resources this project binds, keyed by name. Each value is "@" plus a record name, such as "@shared-cache". */
     kv?: Record<string, `@${string}`>;
-    /** Each key is a postgres resource this project declares. Its value is "@" followed by the name a record is published under, such as "@warehouse"; or the record itself, whose secrets are ocel variables written { "$env": "NAME" }; or that record keyed by the tier it serves, leaving the other tier to provision its own. */
+    /** The postgres resources this project binds, keyed by name. Each value is "@" plus a record name, or the record itself. */
     postgres?: Record<
       string,
       | `@${string}`
@@ -46,40 +46,40 @@ export interface OcelConfig {
   discovery?: DiscoveryConfig;
   /** The hostnames this project is served on. */
   domains?: ProjectDomainConfig;
-  /** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
+  /** Where each tier's values are read from. */
   envSource?: EnvSourceConfig;
   /** Commands ocel runs on this machine at points of a deploy. */
   lifecycle?: LifecycleConfig;
   /** Which tiers ask for a password before they answer. */
   protection?: ProtectionConfig;
-  /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */
+  /** The provider ocel deploys into, named alone or keyed by its identifier with its options as the value. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */
   registry?: RegistryConfig;
-  /** The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project. */
+  /** The project's deployment identity. Changing it forks a new project. */
   slug: string;
-  /** Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches. */
+  /** Paths to transform modules applied while provisioning, in order. Each default-exports a defineTransform(...) result. */
   transforms?: string | string[];
 }
 
 export interface AppConfig {
-  /** The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on. */
+  /** The processor architecture the app is built for. Left off, what the provider runs the app on. */
   arch?: "x86_64" | "arm64";
-  /** Whether ocel deploy lets the app's build reach the resources it uses in the deployed environment, so a page prerendered at build time reads them. Only a Next app's build reaches them, on serverless or container compute: its postgres databases and kv stores over ports the provider forwards, and its buckets through the binding proxy the provider serves. Any other build goes without. Left off, true. Set false to build as if no resource were provisioned. */
+  /** Whether a Next app's build can reach its deployed resources, so prerendered pages can read them. Left off, true. */
   buildWithResources?: boolean;
-  /** What the app runs on, keyed by the compute with its options as the value, or named alone. Left off, the first compute the provider runs. */
+  /** What the app runs on, named alone or keyed with its options. Left off, the provider's first compute. */
   compute?: ComputeDescriptor;
   /** The hostnames this app is served on. */
   domains?: AppDomainConfig;
   /** The variables folder this app reads, when it does not read the project's own. */
   folder?: string;
-  /** The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label. */
+  /** The app's name. It must be a valid DNS label. */
   name: string;
   /** The app's directory, relative to the config. */
   path: string;
 }
 
-/** What the app runs on: serverless functions packed per route, or one container image serving everything. Named alone, or keyed by the compute with its options as the value. */
+/** What the app runs on: serverless functions or one container image. Named alone, or keyed with its options. */
 export type ComputeDescriptor =
   | "serverless"
   | "container"
@@ -96,7 +96,7 @@ export type ComputeDescriptor =
 
 /** Serverless functions packed per route, which scale themselves. */
 export interface ServerlessCompute {
-  /** The file a node app is served from, or the directory of a go app's main package, when it is not the one ocel would detect. */
+  /** The file a node app is served from, or a go app's main package directory, if not the detected one. */
   entrypoint?: string;
   /** What the app is built with, when ocel is not to read it off the app's own manifest. */
   framework?: "node" | "next" | "sveltekit" | "go" | "python" | "rust";
@@ -114,7 +114,7 @@ export interface ContainerCompute {
 
 /** How the app is checked before it is served. */
 export interface HealthConfig {
-  /** The path the check requests, off the app's own root. Any 2xx answer means up. Left off, a VPS finds the path by probing /up, /health, /healthz and / in turn and keeps the first that exists, and AWS and Google Cloud request /. */
+  /** The path the health check requests. Any 2xx means up. Left off, / or, on a VPS, the first common path that answers. */
   path?: string;
 }
 
@@ -122,7 +122,7 @@ export interface HealthConfig {
 export interface ImageConfig {
   /** The command that builds the app inside the image. Left off, the app's own build script runs. */
   command?: string;
-  /** The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to. */
+  /** The directory the image is built from, relative to the project. Left off, the workspace root the app belongs to. */
   context?: string;
   /** The Dockerfile to build from. A relative path resolves against the app's directory. */
   dockerfile?: string;
@@ -130,9 +130,9 @@ export interface ImageConfig {
 
 /** How many instances of the app run. */
 export interface InstancesConfig {
-  /** The most instances run at once, however busy the app is. Left off, as many as min, or 1. */
+  /** The most instances run at once. Left off, as many as min, or 1. */
   max?: number;
-  /** The fewest instances kept running, however quiet the app is. Left off, 1, or 0 for an app a worker joins by name. */
+  /** The fewest instances kept running. Left off, 1, or 0 for an app a worker joins by name. */
   min?: number;
 }
 
@@ -148,31 +148,31 @@ export interface BucketBinding {
   accessKeyId: VariableRef;
   /** The bucket's name in that store. */
   bucket: string | VariableRef;
-  /** The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com. */
+  /** The address of the S3-compatible store, such as https://<account>.r2.cloudflarestorage.com. */
   endpoint: string | VariableRef;
-  /** Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts. */
+  /** Address the bucket as a path on the endpoint instead of a subdomain. */
   pathStyle?: boolean;
-  /** The prefix every key the app writes is kept under, so one bucket can store several resources or environments. */
+  /** The key prefix the app's objects are stored under. */
   prefix?: string | VariableRef;
   /** The address the bucket's objects are served from publicly, when the code declares it public. */
   publicBaseUrl?: string | VariableRef;
-  /** The region requests to the store are signed for; auto for R2. */
+  /** The region requests to the store are signed for, such as auto for R2. */
   region: string | VariableRef;
   /** The secret half of that key pair. */
   secretAccessKey: VariableRef;
 }
 
-/** An ocel variable holding this value, written { "$env": "NAME" }, so the value itself never sits in the config. */
+/** An ocel variable holding this value, written { "$env": "NAME" }. */
 export interface VariableRef {
-  /** The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own. */
+  /** The name of the ocel variable holding this value. */
   $env: string;
 }
 
-/** An existing Postgres database a tier binds rather than provisioning its own, reached by a connection string or by host and role. */
+/** An existing Postgres database a tier binds, by connection string or by host and role. */
 export type PostgresBinding = PostgresUrlBinding | PostgresHostBinding;
 
 export interface PostgresUrlBinding {
-  /** The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client. */
+  /** The full connection string, passed to the client unchanged. */
   url: VariableRef;
 }
 
@@ -193,15 +193,15 @@ export interface PostgresHostBinding {
 
 /** How the connection is encrypted. Left off, each client library connects as it does by default. */
 export interface PostgresTLS {
-  /** The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts. */
+  /** The CA the server's certificate chains to, as PEM, when the system does not trust it. */
   ca?: VariableRef;
-  /** require encrypts the connection; verify-full also checks the server's certificate and hostname. */
+  /** require encrypts the connection. verify-full also checks the server's certificate and hostname. */
   mode: "require" | "verify-full";
 }
 
 /** Where the resources an app declares are found. */
 export interface DiscoveryConfig {
-  /** The directories containing infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory. */
+  /** Directories of infrastructure declarations, relative to the config. Left off, infra next to the config. */
   paths?: string[];
 }
 
@@ -213,17 +213,17 @@ export interface ProjectDomainConfig {
   production?: string | string[];
 }
 
-/** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
+/** Where each tier's values are read from. */
 export interface EnvSourceConfig {
-  /** Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file ("dotenv"). .env.local overrides whatever this reads. */
+  /** Where ocel dev and ocel run read values from. Left off, the project's .env file ("dotenv"). */
   dev?: DevEnvSourceDescriptor;
-  /** Where every preview's tier-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's own. */
+  /** Where every preview's values are read from. Left off, ocel's own store in your account ("builtin"). */
   preview?: EnvSourceDescriptor;
   /** Where production's values are read from. Left off, ocel's own store in your account ("builtin"). */
   production?: EnvSourceDescriptor;
 }
 
-/** Where ocel dev and ocel run read values from on your machine: the project's .env file ("dotenv"), or an env source keyed by its identifier with its options as the value. */
+/** Where ocel dev reads values from: "dotenv" for the .env file, or an env source keyed with its options. */
 export type DevEnvSourceDescriptor =
   | "dotenv"
   | {
@@ -232,32 +232,32 @@ export type DevEnvSourceDescriptor =
       infisical?: never;
     }
   | {
-      /** Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to. */
+      /** Infisical, read as you through INFISICAL_TOKEN or the logged-in infisical CLI. */
       infisical: InfisicalOptions;
       exec?: never;
     };
 
-/** A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev. */
+/** A command whose output is a tier's values. */
 export interface ExecOptions {
-  /** The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read. */
+  /** The command and its arguments. {folder} in an argument becomes the variables folder being read. */
   command: string[];
   /** What the command prints: a JSON object of names to values, or KEY=VALUE lines. */
   format: "json" | "dotenv";
 }
 
-/** The Infisical project and environment a tier reads its values from. Production and preview read it as the machine identity auth names; dev reads it as you. */
+/** The Infisical project and environment a tier reads its values from. */
 export interface InfisicalOptions {
-  /** The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you. */
+  /** The machine identity production or preview reads as, keyed by login method. Required there, refused for dev. */
   auth?: InfisicalAuth;
   /** The slug of the Infisical environment this tier reads, such as prod. */
   environment: string;
   /** The base URL of a self-hosted Infisical. Left off, https://app.infisical.com. */
   host?: string;
-  /** The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /. */
+  /** The Infisical folder the project's values sit under. Left off, the environment's root, /. */
   path?: string;
   /** The id of the Infisical project the values live in. */
   project: string;
-  /** What ocel may write into Infisical. "missing" creates a key a declaration names and Infisical lacks, and never overwrites one. "values" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, "never". Refused for dev, which only reads. */
+  /** What ocel may write into Infisical: "missing" adds absent keys, "values" also updates existing ones. Left off, "never". */
   write?: "never" | "missing" | "values";
 }
 
@@ -288,11 +288,11 @@ export interface IdentityAuth {
   identityId: string;
 }
 
-/** Where production or preview reads its values from: ocel's own store in your account ("builtin"), or an env source keyed by its identifier with its options as the value. */
+/** Where a tier reads its values from: "builtin" for ocel's own store, or an env source keyed with its options. */
 export type EnvSourceDescriptor =
   | "builtin"
   | {
-      /** A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule. */
+      /** A command run on the machine that deploys, whose output is the tier's values. */
       exec: ExecOptions;
       infisical?: never;
     }
@@ -304,31 +304,31 @@ export type EnvSourceDescriptor =
 
 /** Commands ocel runs on this machine at points of a deploy. */
 export interface LifecycleConfig {
-  /** Runs once per deploy, after the project's infrastructure is provisioned and before any app is built, with the bindings of the deployed environment. A non-zero exit or a timeout stops the deploy before it builds anything, and nothing is promoted. Written as the command alone, or as an object. */
+  /** Runs once per deploy, after provisioning and before any app is built. A non-zero exit stops the deploy. */
   preBuild?: string | LifecycleCommand;
 }
 
-/** A shell command ocel runs on this machine with the bindings of the deployed environment, and where, when and for how long it runs. */
+/** A shell command ocel runs on this machine with the deployed environment's bindings. */
 export interface LifecycleCommand {
-  /** The app whose variables the command also receives, and whose directory it runs from. Left off, the command gets the bindings alone and runs from the project directory. */
+  /** The app whose variables the command also receives and whose directory it runs from. */
   app?: string;
   /** The shell command to run, from the project directory, or from the app's directory when app is set. */
   command: string;
-  /** Which previews run the command: persistent previews only, all previews, or none. Production always runs it. Left off, all: every preview provisions its own database, which starts empty, so a preview that skips the migration serves an unmigrated one. */
+  /** Which previews run the command. Production always runs it. Left off, all. */
   previews?: "persistent" | "all" | "none";
-  /** How long the command may run, as a duration such as 90s or 15m, before it is stopped and the deploy fails. Left off, 30m. */
+  /** How long the command may run, as a duration such as 90s or 15m. Left off, 30m. */
   timeout?: string;
 }
 
 /** Which tiers ask for a password before they answer. */
 export interface ProtectionConfig {
-  /** Whether every preview of this project asks for a password before it answers. Every preview deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens the previews again while keeping the password. A preview password never opens production. The password is shown with ocel protection password --preview and rotated with ocel protection password rotate --preview. Left off, false. */
+  /** Whether every preview asks for a password before it answers. Left off, false. */
   preview?: boolean;
-  /** Whether production asks for a password before it answers. Every production deploy enforces it: turning it on makes the first deploy create the password, and turning it off or leaving it out opens production again while keeping the password, so turning it back on restores it. The password is shown with ocel protection password and rotated with ocel protection password rotate. Left off, false. */
+  /** Whether production asks for a password before it answers. Left off, false. */
   production?: boolean;
 }
 
-/** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. Its options also name the edge in front of the origin and the DNS service hostname records are written into. A provider that needs no options may be named alone. */
+/** The provider ocel deploys into, named alone or keyed by its identifier with its options as the value. */
 export type ProviderDescriptor =
   | "aws"
   | {
@@ -350,11 +350,11 @@ export type ProviderDescriptor =
 export interface AwsProviderOptions {
   /** What a deploy does with the V8 compile cache it warms for each node function. */
   bytecode?: AwsBytecodeOptions;
-  /** Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again. */
+  /** ARNs of issued ACM certificates, keyed by hostname. A hostname left off gets a certificate ocel manages. */
   certificates?: Record<string, string>;
   /** How ocel logs --tail reads this account's logs. */
   logs?: AwsLogOptions;
-  /** The AWS region to deploy into, such as us-east-1: a region, never an availability zone such as us-east-1a. Omit it and ocel reads AWS_REGION, AWS_DEFAULT_REGION, then the profile. */
+  /** The AWS region to deploy into, such as us-east-1. Left off, read from AWS_REGION, AWS_DEFAULT_REGION or the profile. */
   region?:
     | "af-south-1"
     | "ap-east-1"
@@ -391,29 +391,29 @@ export interface AwsProviderOptions {
     | "us-west-1"
     | "us-west-2"
     | (string & {});
-  /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap makes a key ocel owns, once a project here first seals a value. */
+  /** ARN of a KMS key to encrypt this account's variables with. Left off, ocel creates one. */
   variablesKey?: string;
-  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+  /** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */
   edge?: AwsEdgeDescriptor;
-  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+  /** Where the project's hostname records are written, named alone or keyed with its options. */
   dns?: AwsDNSDescriptor;
 }
 
 /** What a deploy does with the V8 compile cache it warms for each node function. */
 export interface AwsBytecodeOptions {
-  /** Warm a V8 compile cache for each node function at deploy and keep it in S3, so a cold start compiles less. Off, functions start with no cache and a deploy warms nothing. */
+  /** Warm a V8 compile cache for each node function at deploy, so cold starts compile less. Left off, false. */
   cache?: boolean;
-  /** Fold each function's warmed compile cache into its own code package, so a cold start loads it with the code rather than fetching it from S3. Off, a cold start fetches it. Needs cache. */
+  /** Bundle each function's compile cache into its code package instead of fetching it from S3. Needs cache. */
   embed?: boolean;
 }
 
 /** How ocel logs --tail reads this account's logs. */
 export interface AwsLogOptions {
-  /** Tail through CloudWatch Live Tail: lower latency and no sampling gaps between polls, billed per session-minute past the free tier and capped at 15 sessions per account. Off, ocel logs --tail polls FilterLogEvents. */
+  /** Tail logs through CloudWatch Live Tail instead of polling. Billed per session-minute past the free tier. */
   liveTail?: boolean;
 }
 
-/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+/** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */
 export type AwsEdgeDescriptor =
   | "api-gateway"
   | "cloudflare"
@@ -434,24 +434,24 @@ export type AwsEdgeDescriptor =
       cloudfront: CloudFrontEdgeOptions;
     };
 
-/** Options for the API Gateway edge. Everything API Gateway needs comes from the provider's own options. */
+/** The API Gateway edge. It takes no options of its own. */
 export type ApiGatewayEdgeOptions = Record<string, never>;
 
 /** Options for the Cloudflare edge. The token and account id are read from the environment. */
 export interface CloudflareEdgeOptions {
-  /** A domain in a Cloudflare zone of this account. When Cloudflare runs its worker in front of Google Cloud, the worker reaches each deployment of a serverless app on its own DNS-only hostname under it: production under the domain itself, previews under preview.<domain>. One wildcard certificate and one DNS-only record per tier are kept under it, so give it a domain nothing else uses. AWS refuses it. */
+  /** A domain in your Cloudflare zone, used by nothing else, that the worker reaches Google Cloud apps under. AWS refuses it. */
   originDomain?: string;
-  /** Reach the origin through a tunnel the origin opens to the edge, rather than at its address, so the origin takes no traffic from anything else. Cloudflare in front of a VPS box opens one. */
+  /** Reach the origin through a tunnel it opens to Cloudflare, instead of at its address. A VPS always does. */
   tunnel?: boolean;
 }
 
-/** Options for the CloudFront edge. Everything CloudFront needs comes from the provider's own options. */
+/** Options for the CloudFront edge. */
 export interface CloudFrontEdgeOptions {
-  /** Send the cache misses of a release with prerendered pages through CloudFront Origin Shield, so a burst of requests for an uncached page reaches the function once instead of once per edge location. On unless set to false. CloudFront bills it per request, about $0.0075 per 10,000 requests in the US. Only GET and HEAD requests to the app's function pass through it, never static files or other methods. */
+  /** Route cache misses for prerendered pages through CloudFront Origin Shield. Left off, true. */
   originShield?: boolean;
 }
 
-/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+/** Where the project's hostname records are written, named alone or keyed with its options. */
 export type AwsDNSDescriptor =
   | "cloudflare"
   | "route53"
@@ -465,14 +465,14 @@ export type AwsDNSDescriptor =
     };
 
 export interface DNSOptions {
-  /** The zone the records are written into. Omit it and ocel picks the zone that covers the hostname. */
+  /** The zone the records are written into. Left off, the zone covering the hostname. */
   zone?: string;
 }
 
 export interface GcpProviderOptions {
-  /** The Google Cloud project to deploy into. Omit it and ocel reads GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT, then the credentials and gcloud config. ocel cost scan reads no credentials and runs no gcloud, so it needs the project here or in one of those two variables. */
+  /** The Google Cloud project to deploy into. Left off, from GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT or gcloud config. */
   project?: string;
-  /** The region to deploy into, such as us-central1: a region, never a zone such as us-central1-f. A project spans them all, so this names the one. */
+  /** The region to deploy into, such as us-central1, never a zone such as us-central1-f. */
   region:
     | "africa-south1"
     | "asia-east1"
@@ -518,13 +518,13 @@ export interface GcpProviderOptions {
     | "us-west3"
     | "us-west4"
     | (string & {});
-  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+  /** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */
   edge?: GcpEdgeDescriptor;
-  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+  /** Where the project's hostname records are written, named alone or keyed with its options. */
   dns?: GcpDNSDescriptor;
 }
 
-/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+/** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */
 export type GcpEdgeDescriptor =
   | "alb"
   | "cloudflare"
@@ -537,10 +537,10 @@ export type GcpEdgeDescriptor =
       cloudflare: CloudflareEdgeOptions;
     };
 
-/** Options for the Application Load Balancer edge. Everything the load balancer needs comes from the provider's own options. */
+/** The Application Load Balancer edge. It takes no options of its own. */
 export type AlbEdgeOptions = Record<string, never>;
 
-/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+/** Where the project's hostname records are written, named alone or keyed with its options. */
 export type GcpDNSDescriptor =
   | "cloudflare"
   | {
@@ -548,27 +548,27 @@ export type GcpDNSDescriptor =
     };
 
 export interface VpsProviderOptions {
-  /** Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine. */
+  /** Certificates keyed by hostname, each the path to the certificate on the machine. */
   certificates?: Record<string, string>;
-  /** Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys. */
+  /** Path to the public key the ocel-deploy login accepts. Left off, the bootstrapping login's keys. */
   deployKey?: string;
-  /** Deploy previews even though the proxy orders a publicly trusted certificate for each preview hostname, which Certificate Transparency logs publish within minutes. Left out, such a preview deploy is refused: set proxy.traefik.previewResolver, pin a wildcard certificate for the preview base, or front the box with an edge that shields it with an origin certificate instead. */
+  /** Deploy previews even when each gets its own publicly logged certificate. Left off, those deploys are refused. */
   perHostnamePreviewCertificates?: boolean;
-  /** What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it. */
+  /** What fronts this machine on ports 80 and 443. Left off, ocel runs its own proxy. */
   proxy?: VpsProxy;
   /** The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out. */
   ssh: string | VpsTarget;
-  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+  /** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */
   edge?: VpsEdgeDescriptor;
-  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+  /** Where the project's hostname records are written, named alone or keyed with its options. */
   dns?: VpsDNSDescriptor;
 }
 
-/** What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it. */
+/** What fronts this machine on ports 80 and 443. Left off, ocel runs its own proxy. */
 export type VpsProxy =
   | "manual"
   | {
-      /** A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches. */
+      /** A Traefik the machine already runs, reading ocel's routes from a watched directory. */
       traefik: VpsTraefik;
       caddy?: never;
       manual?: never;
@@ -580,16 +580,16 @@ export type VpsProxy =
       manual?: never;
     }
   | {
-      /** A proxy you route to ocel yourself; ocel writes nothing to it. */
+      /** A proxy you route to ocel yourself. ocel writes nothing to it. */
       manual: VpsManual;
       traefik?: never;
       caddy?: never;
     };
 
-/** A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches. */
+/** A Traefik the machine already runs, reading ocel's routes from a watched directory. */
 export type VpsTraefik =
   | {
-      /** Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself. */
+      /** Where directory is mounted inside Traefik's container. Left off, directory itself. */
       containerDirectory?: string;
       /** The directory Traefik's file provider watches, where ocel writes its routers. */
       directory?: string;
@@ -597,17 +597,17 @@ export type VpsTraefik =
       entrypoints?: VpsEntrypoints;
       /** A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard listens on for Traefik. Left off, 8480. Not with network. */
       port?: number;
-      /** The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides. */
+      /** The host tool whose Traefik this is, which fills in the other fields. Fields set beside it override. */
       preset: "coolify" | "dokploy";
-      /** A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver. */
+      /** A resolver that issues the preview wildcard certificate over DNS-01. Left off, each preview gets its own certificate. */
       previewResolver?: string;
       /** The certificate resolver every hostname router ocel writes names. */
       resolver?: string;
     }
   | {
-      /** Where directory is mounted in the container your Traefik runs in, as its providers.file.directory names it; ocel.yml names the origin certificates it places in directory by this path. Left out, directory itself. */
+      /** Where directory is mounted inside Traefik's container. Left off, directory itself. */
       containerDirectory?: string;
       /** The directory Traefik's file provider watches, where ocel writes its routers. */
       directory: string;
@@ -615,10 +615,10 @@ export type VpsTraefik =
       entrypoints?: VpsEntrypoints;
       /** A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard listens on for Traefik. Left off, 8480. Not with network. */
       port?: number;
       preset?: never;
-      /** A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver. */
+      /** A resolver that issues the preview wildcard certificate over DNS-01. Left off, each preview gets its own certificate. */
       previewResolver?: string;
       /** The certificate resolver every hostname router ocel writes names. */
       resolver: string;
@@ -626,51 +626,51 @@ export type VpsTraefik =
 
 /** The entry points ocel's routers attach to. */
 export interface VpsEntrypoints {
-  /** The entry point ocel's http-to-https redirect routers attach to; web when left out. */
+  /** The entry point ocel's http-to-https redirect routers attach to. Left off, web. */
   http?: string;
-  /** The entry point ocel's hostname routers attach to; websecure when left out. */
+  /** The entry point ocel's hostname routers attach to. Left off, websecure. */
   https?: string;
 }
 
 /** A Caddy the machine already runs, importing ocel's site blocks from a directory. */
 export type VpsCaddy =
   | {
-      /** The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out. */
+      /** The config file caddy reload names inside the container. Left off, /etc/caddy/Caddyfile. */
       config?: string;
-      /** The container Caddy runs in; left out, Caddy runs as the systemd caddy.service. */
+      /** The container Caddy runs in. Left off, Caddy runs as the systemd caddy.service. */
       container?: string;
-      /** Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself. */
+      /** Where directory is mounted inside Caddy's container. Left off, directory itself. */
       containerDirectory?: string;
       /** The directory the running Caddy imports site blocks from. */
       directory?: string;
       /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard listens on for Caddy. Left off, 8480. Not with network. */
       port?: number;
-      /** The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides. */
+      /** The host tool whose Caddy this is, which fills in the other fields. Fields set beside it override. */
       preset: "coolify";
     }
   | {
-      /** The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out. */
+      /** The config file caddy reload names inside the container. Left off, /etc/caddy/Caddyfile. */
       config?: string;
-      /** The container Caddy runs in; left out, Caddy runs as the systemd caddy.service. */
+      /** The container Caddy runs in. Left off, Caddy runs as the systemd caddy.service. */
       container?: string;
-      /** Where directory is mounted in the container Caddy runs in; ocel.caddy names the origin certificates it places in directory by this path. Left out, directory itself. */
+      /** Where directory is mounted inside Caddy's container. Left off, directory itself. */
       containerDirectory?: string;
       /** The directory the running Caddy imports site blocks from. */
       directory: string;
       /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard listens on for Caddy. Left off, 8480. Not with network. */
       port?: number;
       preset?: never;
     };
 
-/** A proxy you route to ocel yourself; ocel writes nothing to it. */
+/** A proxy you route to ocel yourself. ocel writes nothing to it. */
 export interface VpsManual {
-  /** A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated. */
+  /** A docker network ocel's switchboard joins, so your proxy reaches it by name. */
   network?: string;
-  /** The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out. */
+  /** The loopback port your proxy forwards to ocel's switchboard on. Left off, 8480. */
   port?: number;
 }
 
@@ -685,14 +685,14 @@ export interface VpsTarget {
   user?: string;
 }
 
-/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS. */
+/** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */
 export type VpsEdgeDescriptor =
   | "cloudflare"
   | {
       cloudflare: CloudflareEdgeOptions;
     };
 
-/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
+/** Where the project's hostname records are written, named alone or keyed with its options. */
 export type VpsDNSDescriptor =
   | "cloudflare"
   | {
@@ -701,9 +701,9 @@ export type VpsDNSDescriptor =
 
 /** Where this project's container images are pushed. */
 export interface RegistryConfig {
-  /** The environment variable containing the password or token, written as "${REGISTRY_TOKEN}" and read where the push authenticates — never the secret itself. */
+  /** The environment variable holding the password or token, written as "${REGISTRY_TOKEN}". Never the secret itself. */
   password: `\${${string}`;
-  /** The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials. */
+  /** The registry host and namespace, such as ghcr.io/acme, with no scheme or credentials. */
   server: string;
   /** The username the push authenticates as, where the registry wants one. */
   username?: string;

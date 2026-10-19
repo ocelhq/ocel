@@ -33,7 +33,7 @@ const FolderPlaceholder = "{folder}"
 var _ = register(Kind{
 	Name: execKind,
 	Deployed: &Config{
-		Doc:     "A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule.",
+		Doc:     "A command run on the machine that deploys, whose output is the tier's values.",
 		Options: ExecOptions{},
 		decode:  decodeAs(decodeExec),
 	},
@@ -45,12 +45,12 @@ var _ = register(Kind{
 })
 
 type ExecOptions struct {
-	Command []string `json:"command" doc:"The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read."`
+	Command []string `json:"command" doc:"The command and its arguments. {folder} in an argument becomes the variables folder being read."`
 	Format  Format   `json:"format" enum:"json,dotenv" doc:"What the command prints: a JSON object of names to values, or KEY=VALUE lines."`
 }
 
 func (ExecOptions) Doc() string {
-	return "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev."
+	return "A command whose output is a tier's values."
 }
 
 func decodeExec(options ExecOptions) (behaviour, error) {

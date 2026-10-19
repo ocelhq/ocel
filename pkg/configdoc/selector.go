@@ -95,9 +95,9 @@ const (
 	dnsKey  = "dns"
 )
 
-const edgeDoc = "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it for the provider's default: CloudFront on AWS, and no edge on GCP or a VPS."
+const edgeDoc = "The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere."
 
-const dnsDoc = "Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone."
+const dnsDoc = "Where the project's hostname records are written, named alone or keyed with its options."
 
 type ProviderDescriptor struct {
 	Selector[json.RawMessage]
@@ -237,7 +237,7 @@ type DNSDescriptor struct {
 }
 
 type DNSOptions struct {
-	Zone string `json:"zone,omitempty" doc:"The zone the records are written into. Omit it and ocel picks the zone that covers the hostname."`
+	Zone string `json:"zone,omitempty" doc:"The zone the records are written into. Left off, the zone covering the hostname."`
 }
 
 func (DNSDescriptor) jsonSchema() object {
