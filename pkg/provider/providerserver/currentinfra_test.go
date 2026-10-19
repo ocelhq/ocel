@@ -91,7 +91,7 @@ func servedConfigured(t *testing.T, version string, p provider.Provider, config 
 	return client
 }
 
-func TestADeployDeclaringNoResourcesProvisionsNoInfraStackAndRecordsIt(t *testing.T) {
+func TestADeployDeclaringNoResourcesProvisionsNoInfraStackAndRecordsNone(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
 
@@ -100,8 +100,35 @@ func TestADeployDeclaringNoResourcesProvisionsNoInfraStackAndRecordsIt(t *testin
 	if provisioned := infraProvisions(vendor.FakeStacks()); provisioned != 0 {
 		t.Errorf("a deploy declaring no resources provisioned the infra stack %d times, want none: an empty stack over nothing changes nothing", provisioned)
 	}
-	if _, recorded := readInfraRecord(t, vendor); !recorded {
-		t.Error("a deploy declaring no resources left no infra stack record, want one recorded as current")
+	if record, recorded := readInfraRecord(t, vendor); recorded {
+		t.Errorf("a deploy declaring no resources recorded the infra stack %+v, want no record of a stack it never provisioned", record)
+	}
+}
+
+func TestADeployAddingAResourceAfterOneDeclaringNoneTellsTheStacksPortNoRecordNamesTheInfraStack(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	deploySucceeded(t, client, declaringNoResources(deployRequest()))
+
+	deploySucceeded(t, client, deployRequest())
+
+	for _, spec := range vendor.FakeStacks().Provisioned() {
+		if spec.Kind == provider.StackInfra && spec.Recorded {
+			t.Error("the deploy adding a resource says its records name the infra stack, so a vendor would deploy over a stack of that name it finds but never made")
+		}
+	}
+}
+
+func TestADeployDeclaringNoResourcesOverInfraItEmptiedProvisionsNoInfraStack(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	deploySucceeded(t, client, deployRequest())
+	deploySucceeded(t, client, declaringNoResources(deployRequest()))
+
+	deploySucceeded(t, client, declaringNoResources(deployRequest()))
+
+	if provisioned := infraProvisions(vendor.FakeStacks()); provisioned != 2 {
+		t.Errorf("the infra was provisioned %d times over three deploys, want twice: the third declares nothing over a stack the second emptied", provisioned)
 	}
 }
 
@@ -288,9 +315,12 @@ func TestRemoveProjectAfterADeployDeclaringNoResourcesForgetsTheInfraStack(t *te
 	builtProject(t)
 	client, vendor := deployServed(t)
 	deploySucceeded(t, client, declaringNoResources(deployRequest()))
+	if _, recorded := readInfraRecord(t, vendor); recorded {
+		t.Fatal("the deploy declaring no resources recorded an infra stack, want none for removal to find")
+	}
 
 	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
-		t.Fatalf("RemoveProject() = %q, want the project removed though its infra stack was never provisioned", result.GetError())
+		t.Fatalf("RemoveProject() = %q, want the project removed though it records no infra stack", result.GetError())
 	}
 	if record, recorded := readInfraRecord(t, vendor); recorded {
 		t.Errorf("the removed project still records its infra stack %+v", record)

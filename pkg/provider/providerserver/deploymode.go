@@ -204,9 +204,7 @@ func (a applied) infra(ctx context.Context, r *deployRun, stack provider.StackSp
 	return r.provisionInfraStack(ctx, stack, held, progress)
 }
 
-func (applied) currentInfra(ctx context.Context, r *deployRun) error {
-	return r.ensureInfraRecorded(ctx)
-}
+func (applied) currentInfra(context.Context, *deployRun) error { return nil }
 
 func (a applied) app(ctx context.Context, r *deployRun, _ int, release appStack, progress progress.Log) (appProvisioned, error) {
 	if err := a.refuseUnconsentedStack(ctx, r, release.spec, progress, &release.entry); err != nil {
