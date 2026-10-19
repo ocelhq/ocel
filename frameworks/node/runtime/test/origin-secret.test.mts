@@ -72,6 +72,13 @@ const echo: Invoke = (req, res) => {
   res.end("ok");
 };
 
+let seenRaw: string[] | undefined;
+
+const echoRaw: Invoke = (req, res) => {
+  seenRaw = [...req.rawHeaders];
+  res.end("ok");
+};
+
 beforeAll(async () => {
   sockDir = await mkdtemp(join(tmpdir(), "ocel-origin-secret-"));
   const sockPath = join(sockDir, "control.sock");
@@ -151,6 +158,16 @@ describe.each(Object.keys(doors))("%s", (door) => {
 
     expect(await reach(port, { "x-ocel-origin-secret": SECRET })).toBe(200);
     expect(seen?.["x-ocel-origin-secret"]).toBeUndefined();
+  });
+
+  test("an app that reads the raw headers never sees the secret either", async () => {
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
+    process.env.OCEL_ORIGIN_SECRET = SECRET;
+    const port = await start(door, echoRaw);
+
+    expect(await reach(port, { "x-ocel-origin-secret": SECRET })).toBe(200);
+    expect(seenRaw?.map((name) => name.toLowerCase())).not.toContain("x-ocel-origin-secret");
+    expect(seenRaw).not.toContain(SECRET);
   });
 
   test("while a rotation runs, the secret it replaced is served too, and neither reaches the app", async () => {
