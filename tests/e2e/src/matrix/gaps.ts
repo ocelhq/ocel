@@ -68,6 +68,7 @@ const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.r
 const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
 const SERVED_FROM_NEXT_CACHE =
   /serves a static page|keeps an ISR page|revalidating a (path|tag)|calling updateTag makes/;
+const WITHHELD_FROM_CLOUD_CDN = /a prefetch|image optimizer/;
 
 export const gaps: Gap[] = [
   {
@@ -464,13 +465,15 @@ export const gaps: Gap[] = [
   {
     id: "gcp-next-container-withholds-from-cloud-cdn",
     reason:
-      "a Next container on Cloud Run makes every s-maxage response private, so Cloud CDN never stores a page it cannot invalidate",
+      "a Next container on Cloud Run makes every response Cloud CDN would store private, an optimized image among them, so Cloud CDN never stores a response it cannot invalidate",
     where: [
       {
         on: ["gcp", "gcp.floci"],
         fixtures: [deploy.next],
         variants: [container],
-        fails: [check(nextOriginCacheChecks.filter((one) => one.title.includes("a prefetch")))],
+        fails: [
+          check(nextOriginCacheChecks.filter((one) => WITHHELD_FROM_CLOUD_CDN.test(one.title))),
+        ],
       },
     ],
   },
