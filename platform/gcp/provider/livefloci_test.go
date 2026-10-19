@@ -75,18 +75,23 @@ func TestLiveCredentials(t *testing.T) {
 	}
 }
 
-func TestLiveStacks(t *testing.T) {
-	p := live(t)
-	facts := p.Facts()
+func servableFacts(facts provider.Facts) provider.Facts {
 	if emulated() {
 		facts.Bindings = slices.DeleteFunc(slices.Clone(facts.Bindings), func(b provider.BindingType) bool { return b == provider.BindingKV })
+	}
+	return facts
+}
+
+func TestLiveStacks(t *testing.T) {
+	p := live(t)
+	if emulated() {
 		bootstrappedWith(t, p, environment.TierPreview)
 	} else {
 		bootstrappedWith(t, p, environment.TierPreview, gcp.NetworkPart)
 	}
 	writableDatabaseMade(t, p, environment.TierPreview, "conformance")
 
-	conformance.RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.KeyValues(), realtime.RootRealtime, postgres.RootPostgres)
+	conformance.RunStacks(t, servableFacts(p.Facts()), p.Stacks(), p.Artifacts(), p.KeyValues(), realtime.RootRealtime, postgres.RootPostgres)
 }
 
 func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
