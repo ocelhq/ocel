@@ -111,7 +111,7 @@ const ARTIFACT_BUCKET_OUTPUT = "ArtifactBucketName";
 
 const PRODUCTION_TRUST_STORE_PREFIX = "ocel/trust/production/";
 
-async function bootstrapTable(
+async function bootstrapOutput(
   cli: Cli,
   stack: string,
   output: string,
@@ -179,7 +179,7 @@ export function awsStore(
     },
 
     async releaseLocks(slug) {
-      const bucket = await bootstrapTable(
+      const bucket = await bootstrapOutput(
         cli,
         stack,
         STATE_BUCKET_OUTPUT,
@@ -192,7 +192,7 @@ export function awsStore(
     },
 
     async listTrustStoreObjects() {
-      const bucket = await bootstrapTable(
+      const bucket = await bootstrapOutput(
         cli,
         stack,
         ARTIFACT_BUCKET_OUTPUT,
@@ -278,7 +278,12 @@ export function awsBindingStore(
   const stack = bootstrapStackOf(namespace);
 
   async function bindingTableOrThrow(): Promise<string> {
-    const name = await bootstrapTable(cli, stack, VARIABLES_TABLE_OUTPUT, "no binding can be read");
+    const name = await bootstrapOutput(
+      cli,
+      stack,
+      VARIABLES_TABLE_OUTPUT,
+      "no binding can be read",
+    );
     if (!name) {
       throw new Error(
         `the ${stack} stack publishes no ${VARIABLES_TABLE_OUTPUT} output, so no binding can be read`,
