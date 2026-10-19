@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -287,4 +288,15 @@ func TestServeWhenReady(t *testing.T) {
 			t.Errorf("status = %d, want %d", p.StatusCode, http.StatusServiceUnavailable)
 		}
 	})
+}
+
+func TestAnErrorTheAppReportsAfterBootReachesTheFunctionLog(t *testing.T) {
+	var logged strings.Builder
+	m := &nodeChild{logs: &logged}
+
+	m.drainControl(bufio.NewReader(strings.NewReader(`{"type":"log","payload":{"level":"error","message":"TypeError: boom\n    at page.js:1"}}` + "\n")))
+
+	if !strings.Contains(logged.String(), "TypeError: boom") {
+		t.Errorf("function log = %q, want the error the app reported mid-request", logged.String())
+	}
 }
