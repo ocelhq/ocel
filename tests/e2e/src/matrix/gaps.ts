@@ -436,13 +436,19 @@ export const gaps: Gap[] = [
   {
     id: "image-build-inlines-no-public-value",
     reason:
-      "a Next app built as an image is built without ocel's Next adapter and with none of its plaintext values, so next build defines no OCEL_PUBLIC_ENV and inlines no NEXT_PUBLIC_ value into the browser bundle",
+      "an app built as an image is built with none of its plaintext values, so next build, run without ocel's Next adapter, defines no OCEL_PUBLIC_ENV and inlines no NEXT_PUBLIC_ value into the browser bundle, and a SvelteKit build refuses the public value its schema requires as undefined",
     where: [
       {
         on: ["vps", "vps.incus"],
         fixtures: [sdk.next],
         variants: [defaults, dockerfile],
         fails: [check(nextPublicValueInlinedCheck)],
+      },
+      {
+        on: ["vps", "vps.incus"],
+        fixtures: [sdk.sveltekit],
+        fails: [step.deploy],
+        skipsCell: true,
       },
     ],
   },
