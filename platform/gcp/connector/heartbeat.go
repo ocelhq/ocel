@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jws"
 	"github.com/lestrrat-go/jwx/v3/jwt"
 
-	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/jwks"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 )
 
 type scheduledCaller struct {
-	keys    *connectorserver.Keyring
+	keys    *jwks.Keyring
 	account string
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/jwks"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
@@ -76,7 +77,7 @@ func run(listen, config string, reporting bool) error {
 		Addr:            listen,
 		ConfigPath:      config,
 		VariableStore:   variableStore(bindings),
-		VerifyHeartbeat: scheduledCaller{keys: connectorserver.NewKeyring(googleCertsURL), account: account}.verify,
+		VerifyHeartbeat: scheduledCaller{keys: jwks.NewKeyring(googleCertsURL), account: account}.verify,
 	})
 }
 
