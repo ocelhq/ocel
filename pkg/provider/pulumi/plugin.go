@@ -1,10 +1,13 @@
 package pulumi
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	provider "github.com/pulumi/pulumi-go-provider"
 	rpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
@@ -48,16 +51,70 @@ func (h *hostedPlugins) attach() (string, error) {
 }
 
 func host(plugin Plugin) (int, error) {
-	server, err := provider.RawServer(plugin.Package, plugin.Version, plugin.Provider)(nil)
-	if err != nil {
-		return 0, fmt.Errorf("build the %s plugin the engine attaches to: %w", plugin.Package, err)
-	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, fmt.Errorf("listen for the engine's calls into the %s plugin: %w", plugin.Package, err)
 	}
+	go serveEngines(plugin, listener)
+	return listener.Addr().(*net.TCPAddr).Port, nil
+}
+
+func serveEngines(plugin Plugin, listener net.Listener) {
+	for {
+		conn, err := listener.Accept()
+		if errors.Is(err, net.ErrClosed) {
+			return
+		}
+		if err != nil {
+			time.Sleep(acceptRetryDelay)
+			continue
+		}
+		go serveEngine(plugin, conn)
+	}
+}
+
+func serveEngine(plugin Plugin, conn net.Conn) {
+	server, err := provider.RawServer(plugin.Package, plugin.Version, plugin.Provider)(nil)
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
 	serving := grpc.NewServer()
 	rpc.RegisterResourceProviderServer(serving, server)
-	go func() { _ = serving.Serve(listener) }()
-	return listener.Addr().(*net.TCPAddr).Port, nil
+	_ = serving.Serve(newEngineListener(conn))
+	serving.Stop()
+}
+
+const acceptRetryDelay = 10 * time.Millisecond
+
+type engineListener struct {
+	conn     *engineConn
+	accepted atomic.Bool
+}
+
+func newEngineListener(conn net.Conn) *engineListener {
+	return &engineListener{conn: &engineConn{Conn: conn, closed: make(chan struct{})}}
+}
+
+func (l *engineListener) Accept() (net.Conn, error) {
+	if l.accepted.CompareAndSwap(false, true) {
+		return l.conn, nil
+	}
+	<-l.conn.closed
+	return nil, net.ErrClosed
+}
+
+func (l *engineListener) Close() error { return l.conn.Close() }
+
+func (l *engineListener) Addr() net.Addr { return l.conn.LocalAddr() }
+
+type engineConn struct {
+	net.Conn
+	closing sync.Once
+	closed  chan struct{}
+}
+
+func (c *engineConn) Close() error {
+	c.closing.Do(func() { close(c.closed) })
+	return c.Conn.Close()
 }
