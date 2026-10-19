@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -13,11 +14,21 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
+type servedHere struct{ provider.Provider }
+
+func (s servedHere) Facts() provider.Facts { return servableFacts(s.Provider.Facts()) }
+
 func TestLiveGCPProviderConformsWithItsProjectBehindIt(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+	if emulated() {
+		t.Setenv(provider.NamespaceEnvVar, namesOf(t, live(t)).Namespace().String()+"-conformance")
+	}
+	bootstrapped(t, live(t), environment.TierProduction)
+	writableDatabaseMade(t, live(t), environment.TierPreview, "conformance")
+
 	conformance.Run(t, conformance.Suite{
 		New: func(context.Context, provider.Settings) (provider.Provider, error) {
-			return live(t), nil
+			return servedHere{live(t)}, nil
 		},
 		Server:       providerserver.Config{Version: "test", New: gcp.New},
 		Options:      provider.Options{"project": liveProject(), "region": liveRegion()},
