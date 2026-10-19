@@ -804,15 +804,14 @@ describe("the fixtures a lane deploys", () => {
           apps?: {
             name: string;
             path: string;
-            compute?: string | { serverless?: { framework?: string } };
+            framework?: string;
           }[];
         };
         const changed = fixtures.find((one) => one.name === cell.fixture)?.configOn?.[target]?.apps;
         for (const declared of config.apps ?? []) {
           const app = { ...declared, ...changed?.[declared.name] };
           const appDir = path.join(dir, app.path ?? ".");
-          const framework =
-            typeof app.compute === "object" ? app.compute.serverless?.framework : undefined;
+          const framework = app.framework;
           const goSource = readdirSync(appDir).some((name) => name.endsWith(".go"));
           if (
             !framework &&
@@ -825,6 +824,37 @@ describe("the fixtures a lane deploys", () => {
       }
     }
     expect([...undetectable].sort()).toEqual([]);
+  });
+
+  it("builds every go app a planned cell deploys from a package directory its entrypoint names under its path", () => {
+    const unbuildable = new Set<string>();
+    for (const lane of LANES) {
+      const target = targetOfLane(lane);
+      for (const cell of planOn(lane).cells) {
+        const dir = fixtureDir(cell.fixture);
+        const base = path.join(dir, JSON_BASE);
+        if (!existsSync(base)) {
+          continue;
+        }
+        const config = JSON.parse(stripJsonComments(readFileSync(base, "utf8"))) as {
+          apps?: { name: string; path?: string; framework?: string; entrypoint?: string }[];
+        };
+        const changed = fixtures.find((one) => one.name === cell.fixture)?.configOn?.[target]?.apps;
+        for (const declared of config.apps ?? []) {
+          const app = { ...declared, ...changed?.[declared.name] };
+          if (app.framework !== "go") {
+            continue;
+          }
+          const pkg = path.join(dir, app.path ?? ".", app.entrypoint ?? ".");
+          if (!existsSync(pkg) || !readdirSync(pkg).some((name) => name.endsWith(".go"))) {
+            unbuildable.add(
+              `${lane}: ${cell.fixture} on ${target} app ${app.name} at ${path.relative(dir, pkg)}`,
+            );
+          }
+        }
+      }
+    }
+    expect([...unbuildable].sort()).toEqual([]);
   });
 });
 

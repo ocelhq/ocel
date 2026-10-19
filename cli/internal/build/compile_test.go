@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
+	"github.com/ocelhq/ocel/cli/internal/gomodule"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -38,6 +40,21 @@ func writeGoApp(t *testing.T, root, path string) {
 	}
 }
 
+func inGoModule(t *testing.T, root string, app project.App) project.App {
+	t.Helper()
+	dir := filepath.Join(root, filepath.FromSlash(app.Path))
+	module, found, err := gomodule.FindInProject(dir, root)
+	if err != nil || !found {
+		t.Fatalf("FindInProject(%s) = %+v, %v, %v, want the app's module", dir, module, found, err)
+	}
+	pkg, err := gomodule.PackagePath(module.Dir, dir, app.Entrypoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.GoModule, app.GoPackage = &module, pkg
+	return app
+}
+
 func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) {
 	t.Parallel()
 
@@ -46,7 +63,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	writeGoApp(t, root, "apps/api")
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
+		Apps: []project.App{inGoModule(t, root, project.App{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "go"})},
 	}
 
 	ran := false
@@ -80,11 +97,8 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuildScript(t *testing.T) 
 	}
 }
 
-func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeBuildScript(t, root)
+func writeGoWorkerModule(t *testing.T, root string) {
+	t.Helper()
 	fixture := filepath.Join(fixturetest.RepoDir(t), "cli", "testdata", "worker", "go")
 	module, err := os.ReadFile(filepath.Join(fixture, "go.mod"))
 	if err != nil {
@@ -102,22 +116,35 @@ func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testin
 	writeFile(t, filepath.Join(root, "go.mod"), string(module))
 	writeFile(t, filepath.Join(root, "go.sum"), string(sums))
 	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "infra.go"), string(declarations))
-	writeFile(t, filepath.Join(root, "main.go"), "package main\n\nfunc main() {}\n")
-	cfg := &project.Project{
-		Dir:  root,
-		Apps: []project.App{{Name: "worker", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
-	}
+}
 
-	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
-	if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
+func TestAGoAppWhoseModuleDeclaresTasksCarriesTheWorkerAsASecondBinary(t *testing.T) {
+	t.Parallel()
 
-	functionDir := filepath.Join(root, buildoutput.StateDir, "output", "apps", "worker", "functions", "index.func")
-	for _, binary := range []string{"worker", buildoutput.GoWorkerBinary} {
-		if _, err := os.Stat(filepath.Join(functionDir, binary)); err != nil {
-			t.Errorf("the artifact has no %s binary: %v", binary, err)
-		}
+	for name, path := range map[string]string{"at the module root": ".", "below the module root": "apps/api"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeBuildScript(t, root)
+			writeGoWorkerModule(t, root)
+			writeFile(t, filepath.Join(root, filepath.FromSlash(path), "main.go"), "package main\n\nfunc main() {}\n")
+			cfg := &project.Project{
+				Dir:  root,
+				Apps: []project.App{inGoModule(t, root, project.App{Name: "worker", Path: path, Compute: provider.ComputeServerless, Framework: "go"})},
+			}
+
+			builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
+			if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+
+			functionDir := filepath.Join(root, buildoutput.StateDir, "output", "apps", "worker", "functions", "index.func")
+			for _, binary := range []string{"worker", buildoutput.GoWorkerBinary} {
+				if _, err := os.Stat(filepath.Join(functionDir, binary)); err != nil {
+					t.Errorf("the artifact has no %s binary: %v", binary, err)
+				}
+			}
+		})
 	}
 }
 
@@ -131,7 +158,7 @@ func TestAGoAppWhoseDiscoveryFolderIsAModuleOfItsOwnCarriesNoWorkerAndGetsNothin
 	writeFile(t, filepath.Join(root, discovery.DefaultRootDirName, "infra.go"), "package infra\n")
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "go"}}},
+		Apps: []project.App{inGoModule(t, root, project.App{Name: "api", Path: ".", Compute: provider.ComputeServerless, Framework: "go"})},
 	}
 
 	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
@@ -167,7 +194,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	writePythonApp(t, root, "apps/api")
 	cfg := &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "python"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "python", Entrypoint: "main.py"}},
 	}
 
 	ran := false
@@ -264,7 +291,7 @@ func writeRustApp(t *testing.T, buildScript string) (string, *project.Project) {
 	}
 	return root, &project.Project{
 		Dir:  root,
-		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "rust"}}},
+		Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "rust"}},
 	}
 }
 
@@ -409,13 +436,12 @@ func TestAPythonAppsWorkerEntryImportsNeitherTheFoldersNorTheCodeOfAnotherPython
 			t.Fatal(err)
 		}
 	}
-	python := &project.Serverless{Framework: buildoutput.FrameworkPython}
 	cfg := &project.Project{
 		Dir:            root,
 		DiscoveryPaths: []string{"a/jobs", "b/tasks", discovery.DefaultRootDirName},
 		Apps: []project.App{
-			{Name: "a", Path: "a", Compute: provider.ComputeServerless, Serverless: python},
-			{Name: "b", Path: "b", Compute: provider.ComputeServerless, Serverless: python},
+			{Name: "a", Path: "a", Compute: provider.ComputeServerless, Framework: buildoutput.FrameworkPython, Language: language.Python, Entrypoint: "main.py"},
+			{Name: "b", Path: "b", Compute: provider.ComputeServerless, Framework: buildoutput.FrameworkPython, Language: language.Python, Entrypoint: "main.py"},
 		},
 	}
 

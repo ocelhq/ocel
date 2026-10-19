@@ -83,8 +83,8 @@ func TestClientAppsOfHandsEachAppOnlyTheDeclarationsThatReachIt(t *testing.T) {
 	t.Parallel()
 
 	cfg := &project.Project{Apps: []project.App{
-		{Name: "web", Folder: "/web", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}},
-		{Name: "admin", Folder: "/admin", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}},
+		{Name: "web", Folder: "/web", Framework: buildoutput.FrameworkNext},
+		{Name: "admin", Folder: "/admin", Framework: buildoutput.FrameworkNext},
 	}}
 	definitions := []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_SHARED"), plainDefinition("NEXT_PUBLIC_ADMIN_URL", "/admin")}
 

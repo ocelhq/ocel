@@ -1165,7 +1165,7 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 
 	t.Run("a folder no app binds is a warning, not a refusal", func(t *testing.T) {
 		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
-		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }`)
+		writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }`)
 		writeAppSource(t, fixture.Root, "api")
 		envSet(t, fixture, "PAGE_ID", "page_web", envOptions{folder: "/web"})
 		dependencies := newTestDependencies()
@@ -1183,8 +1183,8 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("each app is built with its own diverged value", func(t *testing.T) {
 		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 		writeAppsConfig(t, fixture.Root, `
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, folder: "/web" },
-    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } }, folder: "/admin" }`)
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "node", compute: "serverless", folder: "/admin" }`)
 		writeAppSource(t, fixture.Root, "web", "admin")
 		envSet(t, fixture, "PAGE_ID", "page_web", envOptions{folder: "/web"})
 		envSet(t, fixture, "PAGE_ID", "page_admin", envOptions{folder: "/admin"})
@@ -1203,8 +1203,8 @@ func TestADeployIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 	t.Run("a half-completed folder rename stops the deploy naming both files", func(t *testing.T) {
 		fixture := setUpVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
 		writeAppsConfig(t, fixture.Root, `
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } }, folder: "/web" },
-    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "node" } }, folder: "/administration" }`)
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "node", compute: "serverless", folder: "/administration" }`)
 		envSet(t, fixture, "PAGE_ID", "page_web", envOptions{folder: "/web"})
 		envSet(t, fixture, "PAGE_ID", "page_admin", envOptions{folder: "/admin"})
 
@@ -1387,15 +1387,25 @@ func nothingToDeployHeadline(t *testing.T, fields string) string {
 
 func TestAProjectWithoutAppsOrResourcesHasNothingToDeploy(t *testing.T) {
 	headline := nothingToDeployHeadline(t, "")
-	if want := "Nothing to deploy: test-app declares no apps or resources"; headline != want {
+	if want := `Nothing to deploy: test-app declares no apps or resources, and the project root holds none of package.json, pyproject.toml, requirements.txt, Pipfile, go.mod or Cargo.toml: name the app to deploy under "apps"`; headline != want {
 		t.Errorf("headline = %q, want %q", headline, want)
+	}
+}
+
+func TestNothingToDeploySaysWhyNoAppIsDetectedAtTheProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{Slug: "shop", RootAppUndetected: errors.New("no app is detected at the project root, which holds both a python app (main.py) and a Next.js app")}
+	want := `Nothing to deploy: shop declares no apps or resources, and no app is detected at the project root, which holds both a python app (main.py) and a Next.js app: name the app to deploy under "apps"`
+	if got := nothingToDeploy(cfg); got != want {
+		t.Errorf("nothingToDeploy = %q, want %q", got, want)
 	}
 }
 
 func TestAppsThatBuildNoFunctionOrImageAreNamedWhenNothingIsLeftToDeploy(t *testing.T) {
 	headline := nothingToDeployHeadline(t, `  apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
-    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless" },
+    { name: "api", path: "apps/api", framework: "node", compute: "serverless" },
   ],
 `)
 	if want := "Nothing to deploy: 2 apps (web and api) built no function or image, and test-app declares no resources"; headline != want {

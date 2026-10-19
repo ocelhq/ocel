@@ -10,6 +10,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
 
@@ -93,7 +94,7 @@ func TestTheSolveExportsIntoTheDaemonsOwnImageStore(t *testing.T) {
 
 func at(t *testing.T, dir string) workspace.Location {
 	t.Helper()
-	loc, err := workspace.Locate(dir)
+	loc, err := workspace.Locate(dir, workspace.Program{Language: language.JS})
 	if err != nil {
 		t.Fatalf("Locate(%s) = %v", dir, err)
 	}

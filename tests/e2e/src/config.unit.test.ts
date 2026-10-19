@@ -6,6 +6,7 @@ import {
   awsSweepOverlay,
   JOURNEY_JSON,
   JOURNEY_TS,
+  JSON_BASE,
   journeyConfigIn,
   journeyZone,
   overlayFor,
@@ -30,6 +31,7 @@ import {
   dockerfile,
   registry,
 } from "./matrix/variants";
+import { fixturesDir } from "./paths";
 import type { CellUnderTest } from "./run/cellRun";
 
 const TS_BASE = "./ocel.config.ts";
@@ -393,13 +395,13 @@ const ARCHED_JSON_BASE = `{
   "slug": "go",
   "provider": "aws",
   "apps": [
-    { "name": "web", "path": "./server", "compute": { "serverless": { "framework": "go" } }, "arch": "arm64" }
+    { "name": "web", "path": "./server", "framework": "go", "compute": "serverless", "arch": "arm64" }
   ]
 }
 `;
 
 describe("a container cell", () => {
-  it("replaces the fixture's compute on every target, so no framework survives into a container", () => {
+  it("replaces the fixture's compute on every target", () => {
     for (const target of ["aws", "gcp", "vps"] as const) {
       const rendered = renderConfig(TS_BASE, {
         target,
@@ -411,7 +413,6 @@ describe("a container cell", () => {
           ? `    compute: { container: { health: { path: "/health" } } },`
           : `    compute: "container",`,
       );
-      expect(rendered).not.toContain("framework");
     }
   });
 
@@ -423,7 +424,7 @@ describe("a container cell", () => {
     }
   });
 
-  it("writes neither a framework nor an arch as data, whatever the fixture declared", () => {
+  it("writes no arch as data, whatever the fixture declared, and keeps the app's framework", () => {
     const written = JSON.parse(
       renderJsonConfig(ARCHED_JSON_BASE, {
         target: "aws",
@@ -432,10 +433,11 @@ describe("a container cell", () => {
       }),
     ) as { apps: Record<string, unknown>[] };
     expect(written.apps[0]?.compute).toBe("container");
+    expect(written.apps[0]?.framework).toBe("go");
     expect(written.apps[0]).not.toHaveProperty("arch");
   });
 
-  it("runs only the apps a mixed cell names as containers, with no framework or arch", () => {
+  it("runs only the apps a mixed cell names as containers, with no arch", () => {
     const rendered = renderConfig(TS_BASE, {
       target: "aws",
       slug: "j-1-workspace",
@@ -485,12 +487,10 @@ describe("a container cell", () => {
     expect(overlayFor(cell(sdk.next), "vps", {}).image).toBeUndefined();
   });
 
-  it("keeps the serverless options the fixture declares where the cell runs serverless", () => {
+  it("runs an app serverless where the cell does, keeping the framework the app declares", () => {
     expect(
       renderConfig(TS_BASE, { target: "gcp", slug: "j-1-deploy-node", compute: "serverless" }),
-    ).toContain(
-      `    compute: { serverless: { ...(typeof app.compute === "object" ? app.compute.serverless : {}) } },`,
-    );
+    ).toContain(`    compute: "serverless",`);
     expect(
       JSON.parse(
         renderJsonConfig(ARCHED_JSON_BASE, {
@@ -498,8 +498,8 @@ describe("a container cell", () => {
           slug: "j-1-go",
           compute: "serverless",
         }),
-      ).apps[0].compute,
-    ).toEqual({ serverless: { framework: "go" } });
+      ).apps[0],
+    ).toMatchObject({ framework: "go", compute: "serverless" });
   });
 });
 
@@ -689,7 +689,8 @@ const COMMENTED_JSON_BASE = `{
       "path": "./server",
       // The architecture the binary is built for, x86_64 unless named:
       // "arch": "arm64",
-      "compute": { "serverless": { "framework": "go" } }
+      "framework": "go",
+      "compute": "serverless"
     }
   ]
 }
@@ -703,7 +704,7 @@ describe("renderJsonConfig", () => {
       $schema: "https://ocel.dev/schema/ocel.schema.json",
       slug: "j-1-go",
       provider: "aws",
-      apps: [{ name: "web", path: "./server", compute: { serverless: { framework: "go" } } }],
+      apps: [{ name: "web", path: "./server", framework: "go", compute: "serverless" }],
     });
   });
 
@@ -730,6 +731,7 @@ describe("renderJsonConfig", () => {
         {
           name: "web",
           path: "./server",
+          framework: "go",
           compute: "container",
           domains: { production: "web-j-1-go.j.example" },
         },
@@ -791,6 +793,7 @@ describe("renderJsonConfig", () => {
       {
         name: "web",
         path: "./server",
+        framework: "go",
         compute: { container: { health: { path: "/health" } } },
       },
     ]);
@@ -815,13 +818,12 @@ describe("renderJsonConfig", () => {
     expect(overlayFor(cell(deploy.next), "aws", {}).allowDegraded).toBeUndefined();
   });
 
-  it("moves a go app on vps to its server directory, since a container takes no entrypoint", () => {
-    const base = `{"slug":"go","provider":"aws","apps":[{"name":"web","path":".","compute":{"serverless":{"entrypoint":"./server"}}}]}`;
+  it("builds the sdk go app's container on vps from the package its entrypoint names, under the path it declares", async () => {
+    const base = await readFile(path.join(fixturesDir, "sdk", "go", JSON_BASE), "utf8");
     const written = JSON.parse(renderJsonConfig(base, overlayFor(cell(sdk.go), "vps", {})));
 
-    expect(written.apps[0]).toMatchObject({ name: "web", path: "./server" });
+    expect(written.apps[0]).toMatchObject({ name: "web", path: ".", entrypoint: "./server" });
     expect(written.apps[0].compute).toEqual({ container: { health: { path: "/health" } } });
-    expect(overlayFor(cell(sdk.go), "gcp", {}).apps).toBeUndefined();
   });
 
   it("still runs a vps app on the compute its cell names", () => {
@@ -833,7 +835,7 @@ describe("renderJsonConfig", () => {
           compute: "serverless",
         }),
       ).apps[0].compute,
-    ).toEqual({ serverless: { framework: "go" } });
+    ).toBe("serverless");
   });
 
   it("seals variables under aws when the fixture's provider is null", () => {

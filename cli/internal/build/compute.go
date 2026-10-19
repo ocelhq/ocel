@@ -18,7 +18,7 @@ func CanReadVariablesAtBuild(a project.App) bool {
 	if !a.RunsOn(provider.ComputeServerless) {
 		return false
 	}
-	return buildoutput.BuildsWithItsOwnScript(a.Framework()) || a.Framework() == buildoutput.FrameworkRust
+	return buildoutput.BuildsWithItsOwnScript(a.Framework) || a.Framework == buildoutput.FrameworkRust
 }
 
 func appsOn(apps []project.App, compute provider.Compute) []project.App {

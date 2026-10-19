@@ -500,7 +500,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
 		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), tsconfig)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app", apps: [{ name: "web", path: ".", compute: { serverless: { framework: "next" } } }] };
+export default { slug: "test-app", apps: [{ name: "web", path: ".", framework: "next", compute: "serverless" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(
@@ -771,9 +771,9 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	t.Setenv("PORT", "")
 	root := t.TempDir()
 	cfg := &project.Project{Dir: root, Apps: []project.App{
-		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}},
-		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Serverless: &project.Serverless{Framework: buildoutput.FrameworkGo}},
-		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Serverless: &project.Serverless{Framework: buildoutput.FrameworkPython}},
+		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: buildoutput.FrameworkNext},
+		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: buildoutput.FrameworkGo},
+		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: buildoutput.FrameworkPython},
 		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: provider.ComputeContainer},
 		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: provider.ComputeContainer},
 	}}

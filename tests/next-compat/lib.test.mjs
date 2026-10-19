@@ -318,7 +318,7 @@ describe("renderOcelConfig", () => {
   it("declares one app explicitly, under the constant app name", () => {
     expect(APP_NAME).toBe("app");
     expect(config).toContain(
-      `apps: [{ name: "app", path: ".", compute: { serverless: { framework: "next" } } }]`,
+      `apps: [{ name: "app", path: ".", framework: "next", compute: "serverless" }]`,
     );
   });
 
@@ -1597,7 +1597,7 @@ describe("renderOcelConfig for a target", () => {
     `export default defineConfig({`,
     `  slug: "e2e-42",`,
     `  provider: awsProvider({ edge: cloudflare(), dns: cloudflareDns() }),`,
-    `  apps: [{ name: "app", path: ".", compute: { serverless: { framework: "next" } } }],`,
+    `  apps: [{ name: "app", path: ".", framework: "next", compute: "serverless" }],`,
     `});`,
     ``,
   ].join("\n");

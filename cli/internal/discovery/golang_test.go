@@ -72,6 +72,18 @@ func TestGoDiscoveryRefusesARootWithNoModuleAboveIt(t *testing.T) {
 	}
 }
 
+func TestGoDiscoveryLooksForNoModuleAboveTheProjectRoot(t *testing.T) {
+	outer := t.TempDir()
+	write(t, filepath.Join(outer, "go.mod"), "module example.com/monorepo\n\ngo 1.24\n")
+	configDir := filepath.Join(outer, "deploy")
+	write(t, filepath.Join(configDir, "declarations", "declarations.go"), "package declarations\n")
+
+	_, err := goCommands(context.Background(), configDir, []Root{{Dir: filepath.Join(configDir, "declarations"), Language: language.Go}}, testServer)
+	if err == nil || !strings.Contains(err.Error(), configDir) {
+		t.Fatalf("goCommands() = %v, want a refusal naming the project root %s — the go.mod above it is not the project's, as the detector and the build also hold", err, configDir)
+	}
+}
+
 func repoFixture(t *testing.T, name string) string {
 	t.Helper()
 	dir, err := filepath.Abs(filepath.Join("..", "..", "testdata", name))

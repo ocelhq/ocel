@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/skill"
@@ -189,8 +190,8 @@ export default {
   provider: { fake: {} },
   domains: { production: "shop.example.com", preview: "*.preview.example.com" },
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
-    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless" },
+    { name: "api", path: "apps/api", framework: "node", compute: "serverless" },
   ],
 };
 `)
@@ -230,6 +231,8 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 		"Project  my-shop · ocel.config.ts",
 		"  ✓ node is needed — ocel.config.ts is TypeScript, an app is JavaScript, this project declares resources in JavaScript — node vX on PATH",
 		"  ✓ config loads — 2 apps (web, api)",
+		"    web: node (set in ocel.config.ts)",
+		"    api: node (set in ocel.config.ts)",
 		"  ✓ provider fake " + version.Version + "",
 		"  ✓ provider default edge",
 		"",
@@ -277,7 +280,7 @@ export default {
   slug: "my-shop",
   provider: { fake: {} },
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless" },
     { name: "api", path: "apps/api", compute: "container" },
   ],
 };
@@ -506,8 +509,8 @@ export default {
   provider: { fake: {} },
   domains: { production: "shop.example.com" },
   apps: [
-    { name: "web", path: "apps/web", compute: { serverless: { framework: "node" } } },
-    { name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } },
+    { name: "web", path: "apps/web", framework: "node", compute: "serverless" },
+    { name: "api", path: "apps/api", framework: "node", compute: "serverless" },
   ],
 };
 `)
@@ -713,6 +716,7 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 
 	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "go.mod"), "module fixture\n\ngo 1.24\n")
+	clitest.WriteFile(t, filepath.Join(root, discovery.DefaultRootDirName, "resources.go"), "package resources\n")
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{
   "slug": "go-shop",
   "provider": { "fake": {} },

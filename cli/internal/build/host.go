@@ -34,7 +34,7 @@ func ReadHost(facts *contractv1.ProviderFacts) Host {
 func FindNextFunctionApps(apps []project.App) []string {
 	var names []string
 	for _, a := range FunctionApps(apps) {
-		if a.Framework() == buildoutput.FrameworkNext {
+		if a.Framework == buildoutput.FrameworkNext {
 			names = append(names, a.Name)
 		}
 	}

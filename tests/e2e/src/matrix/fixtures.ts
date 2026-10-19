@@ -212,7 +212,6 @@ export const sdk = {
     devCommands: { web: ["go", "run", "./server"] },
     checks: SDK_GO_CHECKS,
     on: { dev: [defaults], aws: [defaults, apiGateway], vps: [defaults], gcp: [defaults] },
-    configOn: { vps: { apps: { web: { path: "./server" } } } },
   }),
   python: fixture("sdk/python", {
     apps: ["web"],

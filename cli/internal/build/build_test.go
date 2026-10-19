@@ -87,11 +87,11 @@ func expressFixture(t *testing.T) string {
 }
 
 func nextApp(name, path string) project.App {
-	return project.App{Name: name, Path: path, Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}}
+	return project.App{Name: name, Path: path, Compute: provider.ComputeServerless, Framework: buildoutput.FrameworkNext}
 }
 
 func nextContainerApp(name, path string) project.App {
-	return project.App{Name: name, Path: path, Compute: provider.ComputeContainer, Container: &project.Container{Framework: buildoutput.FrameworkNext}}
+	return project.App{Name: name, Path: path, Compute: provider.ComputeContainer, Framework: buildoutput.FrameworkNext, Container: &project.Container{}}
 }
 
 func requestOf(got *nodeBuildRequest) nodeRun {
@@ -173,7 +173,7 @@ func TestBuild(t *testing.T) {
 
 		root := t.TempDir()
 		writeBuildScript(t, root)
-		shop := project.App{Name: "shop", Path: "apps/shop", Folder: "/shop", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: buildoutput.FrameworkSvelteKit}}
+		shop := project.App{Name: "shop", Path: "apps/shop", Folder: "/shop", Compute: provider.ComputeServerless, Framework: buildoutput.FrameworkSvelteKit}
 		cfg := &project.Project{Dir: root, Apps: []project.App{shop}}
 
 		var got nodeBuildRequest
@@ -529,7 +529,7 @@ func TestBuild(t *testing.T) {
 			ran = true
 			return nil
 		}}
-		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "src/server.js"}}}
 		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -549,24 +549,13 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("a node app with no entrypoint names the files it looked for", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
-		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
-		if err == nil || !strings.Contains(err.Error(), "src/server.ts") || !strings.Contains(err.Error(), `"api"`) {
-			t.Errorf("Build err = %v, want the app and the entrypoints tried named", err)
-		}
-	})
-
 	t.Run("an app that states no framework is refused", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
 		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless}}}
 		err := nodeOnly{node: runNode}.Build(context.Background(), cfg, nil, Log{})
-		if err == nil || !strings.Contains(err.Error(), "compute: { serverless: { framework: … } }") {
+		if err == nil || !strings.Contains(err.Error(), `set "framework"`) {
 			t.Errorf("Build err = %v, want the app told to state its framework", err)
 		}
 	})
@@ -577,7 +566,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		fixtureRoot := expressFixture(t)
-		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
+		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "src/server.ts"}}}
 
 		var stderr bytes.Buffer
 		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, Host{}, Log{Shared: &stderr}); err != nil {
@@ -650,7 +639,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			writeFile(t, filepath.Join(got.Apps[0].FunctionDir, "src", "server.js"), "export default {};\n")
 			return nil
 		}}
-		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}, Arch: "arm64"}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "src/server.ts", Arch: "arm64"}}}
 		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -690,7 +679,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			ran = true
 			return nil
 		}}
-		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node", Entrypoint: "../../shared/server.js"}}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "../../shared/server.js"}}}
 		err := builder.Build(context.Background(), cfg, nil, Log{})
 		if err == nil || !strings.Contains(err.Error(), toolchain.PreferTracingEnv) {
 			t.Errorf("Build err = %v, want a refusal that names how to bundle instead", err)
@@ -717,7 +706,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 			writeDarwinSharp(t, functionDir)
 			return nil
 		}}
-		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}, Arch: "arm64"}}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "src/server.ts", Arch: "arm64"}}}
 		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -731,7 +720,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		}
 
 		fixtureRoot := expressFixture(t)
-		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "node"}}}}
+		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "src/server.ts"}}}
 
 		var stderr bytes.Buffer
 		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, Host{}, Log{Shared: &stderr}); err != nil {

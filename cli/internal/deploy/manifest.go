@@ -135,6 +135,9 @@ func (d *deployRun) readPrebuilt(ctx context.Context, c collected) (build.Output
 }
 
 func (d *deployRun) provisionAndBuild(ctx context.Context, steps *buildSteps, c collected) (build.Output, error) {
+	for _, described := range d.cfg.DescribeFrameworks() {
+		d.span.Say(described)
+	}
 	for _, warning := range findImageAppsBuiltWithoutValues(d.cfg, c.clients) {
 		d.span.Warn(warning)
 	}
@@ -199,7 +202,12 @@ func (d *deployRun) assemble(c collected, built build.Output) (*contractv1.Manif
 		if len(c.resources) == 0 {
 			return nil, nil
 		}
-		d.phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", english.Count(len(c.resources), "resource"), cfg.Slug))
+		only := fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", english.Count(len(c.resources), "resource"), cfg.Slug)
+		if cfg.HasUnclearRootApp() {
+			d.phase.Warn(only + ", and " + cfg.RootAppUndetected.Error())
+		} else {
+			d.phase.Say(only)
+		}
 	}
 
 	if err := manifest.RefuseUnnamedApps(cfg, built); err != nil {
@@ -334,7 +342,7 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []variables.C
 	for _, app := range build.ImageApps(cfg.Apps) {
 		var keys []string
 		for _, v := range variablesOf[app.Name] {
-			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && !processenv.IsInjected(app.Framework(), v.Key) {
+			if v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && !processenv.IsInjected(app.Framework, v.Key) {
 				keys = append(keys, v.Key)
 			}
 		}

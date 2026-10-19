@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -147,11 +148,12 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 		return found
 	}
 
-	if needed, applies := nodeCheck(ctx, cfg); applies {
+	roots, rootsErr := discovery.RootsOf(cfg)
+	if needed, applies := nodeCheck(ctx, cfg, roots, rootsErr); applies {
 		checked.checks = append(checked.checks, needed)
 	}
 	checked.identity = join(cfg.Slug, filepath.Base(cfg.Path))
-	checked.pass(appsText(cfg))
+	checked.checks = append(checked.checks, appsCheck(cfg, roots, rootsErr))
 
 	descriptor, providerErr := cfg.RequireProvider()
 	if providerErr != nil {
@@ -270,17 +272,6 @@ func splitHint(message string) (string, string, bool) {
 		}
 	}
 	return message, "", false
-}
-
-func appsText(cfg *project.Project) string {
-	if len(cfg.Apps) == 0 {
-		return "config loads — no apps declared"
-	}
-	names := make([]string, 0, len(cfg.Apps))
-	for _, app := range cfg.Apps {
-		names = append(names, app.Name)
-	}
-	return fmt.Sprintf("config loads — %s (%s)", english.Count(len(names), "app"), strings.Join(names, ", "))
 }
 
 func providerText(descriptor *project.Provider) string {

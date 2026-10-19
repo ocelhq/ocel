@@ -30,7 +30,7 @@ export type {
   VpsTarget,
 } from "./generated/config.js";
 
-import type { ComputeDescriptor, OcelConfig, ServerlessCompute } from "./generated/config.js";
+import type { AppConfig, ComputeDescriptor, OcelConfig } from "./generated/config.js";
 
 /**
  * Something an app needs of wherever it is served. A need listed in
@@ -43,8 +43,8 @@ export type Need = NonNullable<OcelConfig["allowDegraded"]>[number];
 /** What an app runs on, named alone. */
 export type Compute = Extract<ComputeDescriptor, string>;
 
-/** What a serverless app is built with. */
-export type Framework = NonNullable<ServerlessCompute["framework"]>;
+/** What an app is built with. */
+export type Framework = NonNullable<AppConfig["framework"]>;
 
 /**
  * Declares a project. The object it takes is the same document `ocel.json`

@@ -88,7 +88,7 @@ func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, c colle
 func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, runsPreBuild bool) (buildUses, preBuildUses []portforward.Use, err error) {
 	built := map[string]bool{}
 	for _, app := range cfg.Apps {
-		if app.BuildsWithResources && buildoutput.BuildsWithItsOwnScript(app.Framework()) {
+		if app.BuildsWithResources && buildoutput.BuildsWithItsOwnScript(app.Framework) {
 			built[app.Name] = true
 		}
 	}

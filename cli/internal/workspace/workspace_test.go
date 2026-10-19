@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 )
@@ -150,7 +151,7 @@ func TestTheWorkspaceAnAppIsAMemberOfIsWhatTheImageIsBuiltFrom(t *testing.T) {
 			dir := t.TempDir()
 			write(t, dir, tt.files)
 
-			got, err := workspace.Locate(filepath.Join(dir, filepath.FromSlash(tt.app)))
+			got, err := workspace.Locate(filepath.Join(dir, filepath.FromSlash(tt.app)), workspace.Program{Language: language.JS})
 			if err != nil {
 				t.Fatalf("Locate() = %v", err)
 			}
@@ -182,7 +183,7 @@ func TestTheSearchStopsAtTheRepositoryItIsRunIn(t *testing.T) {
 		"repo/apps/web/package.json": `{"name":"web"}`,
 	})
 
-	got, err := workspace.Locate(filepath.Join(outer, "repo", "apps", "web"))
+	got, err := locate(t, outer, filepath.Join(outer, "repo", "apps", "web"), language.JS)
 	if err != nil {
 		t.Fatalf("Locate() = %v", err)
 	}
@@ -202,7 +203,7 @@ func TestARepositoryRootThatIsItselfTheWorkspaceIsStillFound(t *testing.T) {
 		"apps/web/package.json": `{"name":"web"}`,
 	})
 
-	got, err := workspace.Locate(filepath.Join(dir, "apps", "web"))
+	got, err := locate(t, dir, filepath.Join(dir, "apps", "web"), language.JS)
 	if err != nil {
 		t.Fatalf("Locate() = %v", err)
 	}
@@ -220,7 +221,7 @@ func TestAWorkspaceDependencyWithNoLockfileToResolveItIsRefusedWithTheFileToAdd(
 		"apps/web/package.json": `{"name":"web","dependencies":{"@acme/lib":"workspace:^"}}`,
 	})
 
-	_, err := workspace.Locate(filepath.Join(dir, "apps", "web"))
+	_, err := locate(t, dir, filepath.Join(dir, "apps", "web"), language.JS)
 	if err == nil {
 		t.Fatal("Locate() accepted an app whose workspace: dependency nothing in the image could resolve")
 	}
@@ -240,7 +241,7 @@ func TestTheAppsOwnScriptsAreWhatTheImageRuns(t *testing.T) {
 		"apps/web/package.json": `{"name":"@acme/web","scripts":{"start":"node server.js"}}`,
 	})
 
-	got, err := workspace.Locate(filepath.Join(dir, "apps", "web"))
+	got, err := locate(t, dir, filepath.Join(dir, "apps", "web"), language.JS)
 	if err != nil {
 		t.Fatalf("Locate() = %v", err)
 	}
@@ -268,7 +269,7 @@ func TestTheMembersOfAWorkspaceAreTheNamesItsPackagesGoBy(t *testing.T) {
 		"packages/lib/node_modules/dep/package.json": `{"name":"dep"}`,
 	})
 
-	members := located(t, filepath.Join(dir, "apps", "web")).Members()
+	members := located(t, filepath.Join(dir, "apps", "web"), language.JS).Members()
 
 	want := []string{"@acme/lib", "@acme/web"}
 	if len(members) != len(want) {
@@ -281,98 +282,34 @@ func TestTheMembersOfAWorkspaceAreTheNamesItsPackagesGoBy(t *testing.T) {
 	}
 }
 
-func TestWhatMakesAnAppAPythonProjectIsTheFileThatDeclaresItOne(t *testing.T) {
-	for _, tt := range []struct {
-		name     string
-		declares map[string]string
-		python   bool
-		member   bool
-	}{
-		{
-			name:     "a script beside a node app declares nothing",
-			declares: map[string]string{"apps/svc/main.py": "print('hi')\n"},
-		},
-		{
-			name:     "requirements.txt declares a python project",
-			declares: map[string]string{"apps/svc/main.py": "print('hi')\n", "apps/svc/requirements.txt": "six==1.17.0\n"},
-			python:   true,
-		},
-		{
-			name:     "pyproject.toml declares a python project",
-			declares: map[string]string{"apps/svc/main.py": "print('hi')\n", "apps/svc/pyproject.toml": "[project]\nname = \"svc\"\n"},
-			python:   true,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
+func TestAnAppIsBuiltFromTheNodeWorkspaceItSitsInUnlessItIsWrittenInAnotherLanguage(t *testing.T) {
+	for _, written := range []language.Language{language.JS, language.Python, language.Rust, ""} {
+		t.Run("language "+string(written), func(t *testing.T) {
 			dir := t.TempDir()
 			write(t, dir, map[string]string{
-				"pnpm-workspace.yaml":   "packages:\n  - apps/*\n",
-				"pnpm-lock.yaml":        "lockfileVersion: '9.0'\n",
-				"package.json":          `{"name":"root"}`,
-				"apps/svc/package.json": `{"name":"@acme/svc"}`,
+				"pnpm-workspace.yaml":     "packages:\n  - apps/*\n",
+				"pnpm-lock.yaml":          "lockfileVersion: '9.0'\n",
+				"package.json":            `{"name":"root"}`,
+				"apps/svc/package.json":   `{"name":"@acme/svc"}`,
+				"apps/svc/pyproject.toml": "[project]\nname = \"svc\"\n",
+				"apps/svc/main.py":        "print('hi')\n",
 			})
-			write(t, dir, tt.declares)
 			app := filepath.Join(dir, "apps", "svc")
 
-			loc := located(t, app)
+			loc := located(t, app, written)
 
-			if python := loc.Language == language.Python; python != tt.python {
-				t.Errorf("Language = %q, want python %v — a python app is told by the file that declares the project, the way a go one is told by its go.mod", loc.Language, tt.python)
+			if loc.Language != written {
+				t.Errorf("Language = %q, want %q, the language the app is written in", loc.Language, written)
 			}
-			wantRoot, wantMember := dir, true
-			if tt.python {
-				wantRoot, wantMember = app, false
+			wantRoot, wantMember := app, false
+			if written == language.JS || written == "" {
+				wantRoot, wantMember = dir, true
 			}
 			if loc.Root != wantRoot {
-				t.Errorf("Root = %s, want %s — an app with no python project file is built from the workspace it installs with", loc.Root, wantRoot)
+				t.Errorf("Root = %s, want %s — an app is built from the workspace it installs with unless it is written in a language other than JS", loc.Root, wantRoot)
 			}
 			if loc.Member != wantMember {
 				t.Errorf("Member = %v, want %v", loc.Member, wantMember)
-			}
-		})
-	}
-}
-
-func TestACargoManifestMakesAnAppRustOnlyWhereNoNodeOrPythonProjectClaimsTheDirectory(t *testing.T) {
-	for _, tt := range []struct {
-		name     string
-		declares map[string]string
-		rust     bool
-	}{
-		{
-			name:     "a crate on its own is rust",
-			declares: map[string]string{"apps/svc/Cargo.toml": "[package]\nname = \"svc\"\n", "apps/svc/src/main.rs": "fn main() {}\n"},
-			rust:     true,
-		},
-		{
-			name:     "a crate beside a package.json builds that app's native addon",
-			declares: map[string]string{"apps/svc/Cargo.toml": "[package]\nname = \"svc\"\n", "apps/svc/package.json": `{"name":"@acme/svc"}`},
-		},
-		{
-			name:     "a crate beside a pyproject.toml builds that app's extension module",
-			declares: map[string]string{"apps/svc/Cargo.toml": "[package]\nname = \"svc\"\n", "apps/svc/pyproject.toml": "[project]\nname = \"svc\"\n"},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			write(t, dir, map[string]string{
-				"pnpm-workspace.yaml": "packages:\n  - apps/*\n",
-				"pnpm-lock.yaml":      "lockfileVersion: '9.0'\n",
-				"package.json":        `{"name":"root"}`,
-			})
-			write(t, dir, tt.declares)
-			app := filepath.Join(dir, "apps", "svc")
-
-			loc := located(t, app)
-
-			if rust := loc.Language == language.Rust; rust != tt.rust {
-				t.Errorf("Language = %q, want rust %v — a Cargo.toml makes an app rust only where nothing else declares the directory an app of its own", loc.Language, tt.rust)
-			}
-			if tt.rust && loc.Root != app {
-				t.Errorf("Root = %s, want %s — a crate roots its own build, and no node workspace installs it", loc.Root, app)
-			}
-			if tt.rust && loc.Member {
-				t.Error("Member = true, and a crate is a member of no node workspace")
 			}
 		})
 	}
@@ -385,7 +322,7 @@ func TestAnAppInNoWorkspaceHasNoMembersToTellApartFromTheRegistry(t *testing.T) 
 		"package-lock.json": `{"lockfileVersion":3}`,
 	})
 
-	if members := located(t, dir).Members(); len(members) != 0 {
+	if members := located(t, dir, language.JS).Members(); len(members) != 0 {
 		t.Errorf("Members() = %v, want none for an app that is its own root", members)
 	}
 }
@@ -402,7 +339,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		dir := t.TempDir()
 		write(t, dir, workspaceFiles)
 
-		rebased, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(filepath.Join(dir, "repo"))
+		rebased, err := located(t, filepath.Join(dir, "repo", "apps", "web"), language.JS).Rebase(filepath.Join(dir, "repo"))
 		if err != nil {
 			t.Fatalf("Rebase() = %v", err)
 		}
@@ -415,7 +352,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		dir := t.TempDir()
 		write(t, dir, workspaceFiles)
 
-		rebased, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(dir)
+		rebased, err := located(t, filepath.Join(dir, "repo", "apps", "web"), language.JS).Rebase(dir)
 		if err != nil {
 			t.Fatalf("Rebase() = %v", err)
 		}
@@ -443,7 +380,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 			"repo/apps/web/package.json": `{"name":"web","dependencies":{"@acme/lib":"workspace:^"}}`,
 		})
 
-		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(dir)
+		_, err := located(t, filepath.Join(dir, "repo", "apps", "web"), language.JS).Rebase(dir)
 		if err == nil {
 			t.Fatal("Rebase() took a context containing no lockfile for the app's workspace: dependency, so the install inside the image resolves nothing")
 		}
@@ -460,7 +397,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 			t.Fatal(err)
 		}
 
-		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(elsewhere)
+		_, err := located(t, filepath.Join(dir, "repo", "apps", "web"), language.JS).Rebase(elsewhere)
 		if err == nil {
 			t.Fatal("Rebase() took a context the app is not inside, so the image would be built without the app in it")
 		}
@@ -473,7 +410,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		dir := t.TempDir()
 		write(t, dir, workspaceFiles)
 
-		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(filepath.Join(dir, "repo", "apps"))
+		_, err := located(t, filepath.Join(dir, "repo", "apps", "web"), language.JS).Rebase(filepath.Join(dir, "repo", "apps"))
 		if err == nil {
 			t.Fatal("Rebase() took a context below the workspace root, so the install would read a lockfile the context does not contain")
 		}
@@ -482,11 +419,45 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 
 const pnpmLockName = "pnpm-lock.yaml"
 
-func located(t *testing.T, dir string) workspace.Location {
+func locate(t *testing.T, project, dir string, written language.Language) (workspace.Location, error) {
 	t.Helper()
-	loc, err := workspace.Locate(dir)
+	return locateWith(t, project, dir, written, "")
+}
+
+func locateWith(t *testing.T, project, dir string, written language.Language, entrypoint string) (workspace.Location, error) {
+	t.Helper()
+	program := workspace.Program{Language: written, Entrypoint: entrypoint}
+	if written == language.Go {
+		module, found, err := gomodule.FindInProject(dir, project)
+		if err != nil {
+			t.Fatalf("FindInProject(%s, %s) = %v", dir, project, err)
+		}
+		if found {
+			pkg, err := gomodule.PackagePath(module.Dir, dir, entrypoint)
+			if err != nil {
+				t.Fatalf("PackagePath(%s, %q) = %v", dir, entrypoint, err)
+			}
+			program.GoModule, program.GoPackage = &module, pkg
+		}
+	}
+	return workspace.Locate(dir, program)
+}
+
+func located(t *testing.T, dir string, written language.Language) workspace.Location {
+	t.Helper()
+	return locatedIn(t, dir, dir, written)
+}
+
+func locatedIn(t *testing.T, project, dir string, written language.Language) workspace.Location {
+	t.Helper()
+	return locatedWith(t, project, dir, written, "")
+}
+
+func locatedWith(t *testing.T, project, dir string, written language.Language, entrypoint string) workspace.Location {
+	t.Helper()
+	loc, err := locateWith(t, project, dir, written, entrypoint)
 	if err != nil {
-		t.Fatalf("Locate(%s) = %v", dir, err)
+		t.Fatalf("Locate(%s, %s) = %v", project, dir, err)
 	}
 	return loc
 }
@@ -539,7 +510,7 @@ func TestYarnBerryIsToldFromClassicByEverythingThatNamesIt(t *testing.T) {
 			}
 			write(t, dir, files)
 
-			got, err := workspace.Locate(filepath.Join(dir, "apps", "web"))
+			got, err := locate(t, dir, filepath.Join(dir, "apps", "web"), language.JS)
 			if err != nil {
 				t.Fatalf("Locate() = %v", err)
 			}
@@ -587,7 +558,7 @@ func TestAGlobTheWorkspaceNegatesLeavesTheAppOutOfIt(t *testing.T) {
 			})
 
 			appDir := filepath.Join(dir, "apps", "legacy")
-			got, err := workspace.Locate(appDir)
+			got, err := locate(t, dir, appDir, language.JS)
 			if err != nil {
 				t.Fatalf("Locate() = %v", err)
 			}
@@ -611,7 +582,7 @@ func TestAGoAppIsBuiltFromTheModuleItsPackageBelongsTo(t *testing.T) {
 		"server/main.go": "package main\n\nfunc main() {}\n",
 	})
 
-	got := located(t, filepath.Join(dir, "server"))
+	got := locatedIn(t, dir, filepath.Join(dir, "server"), language.Go)
 
 	if got.Root != dir || got.Path != "server" || got.ModuleDir != "." || got.Language != language.Go {
 		t.Errorf("Locate() = %+v, want the app at server inside the Go module rooted at %s — go build in the image reads the go.mod above the package", got, dir)
@@ -630,7 +601,7 @@ func TestAGoAppIsBuiltFromTheDirectoryHoldingItsModuleAndEveryModuleItReplacesLo
 		"tests/fixtures/web/server/main.go": "package main\n\nfunc main() {}\n",
 	})
 
-	got := located(t, filepath.Join(dir, "tests", "fixtures", "web", "server"))
+	got := locatedIn(t, dir, filepath.Join(dir, "tests", "fixtures", "web", "server"), language.Go)
 
 	if got.Root != dir || got.Path != "tests/fixtures/web/server" || got.ModuleDir != "tests/fixtures/web" {
 		t.Errorf("Locate() = %+v, want the context %s, the nearest directory holding both the module and the sdk it replaces ocel.dev with", got, dir)
@@ -646,29 +617,38 @@ func TestAGoAppBuildsItsOwnPackageWithTheModuleItBelongsTo(t *testing.T) {
 		"sdk/go.mod": "module ocel.dev\n\ngo 1.27.0\n",
 		"apps/web/go.mod": "module example.com/web\n\ngo 1.27.0\n\n" +
 			"require ocel.dev v0.0.0\n\nreplace ocel.dev => ../../sdk\n",
-		"apps/web/server/main.go": "package main\n\nfunc main() {}\n",
+		"apps/web/server/main.go":         "package main\n\nfunc main() {}\n",
+		"apps/web/server/cmd/api/main.go": "package main\n\nfunc main() {}\n",
 	}
-	const build = `cd apps/web/server && GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o ../../../out .`
 
-	t.Run("built from the package's own directory into the binary railpack starts", func(t *testing.T) {
-		dir := t.TempDir()
-		write(t, dir, module)
+	for _, tt := range []struct {
+		name       string
+		entrypoint string
+		build      string
+	}{
+		{"its own directory", ".", `cd apps/web && GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o ../../out ./server`},
+		{"the directory its entrypoint names", "cmd/api", `cd apps/web && GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o ../../out ./server/cmd/api`},
+	} {
+		t.Run("the package in "+tt.name+" is built from its module into the binary railpack starts", func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, module)
 
-		commands, err := located(t, filepath.Join(dir, "apps", "web", "server")).Commands()
-		if err != nil {
-			t.Fatalf("Commands() = %v", err)
-		}
-		if commands != (workspace.Commands{Build: build}) {
-			t.Errorf("Commands() = %+v, want only the build %q — railpack's own go build runs at the context root, which holds no go.mod", commands, build)
-		}
-	})
+			commands, err := locatedWith(t, dir, filepath.Join(dir, "apps", "web", "server"), language.Go, tt.entrypoint).Commands()
+			if err != nil {
+				t.Fatalf("Commands() = %v", err)
+			}
+			if commands != (workspace.Commands{Build: tt.build}) {
+				t.Errorf("Commands() = %+v, want only the build %q — railpack's own go build runs at the context root, which holds no go.mod", commands, tt.build)
+			}
+		})
+	}
 
 	t.Run("a go.work at the context root downloads only what the app's module requires", func(t *testing.T) {
 		dir := t.TempDir()
 		write(t, dir, module)
 		write(t, dir, map[string]string{"go.work": "go 1.27.0\n\nuse (\n\t./sdk\n\t./tools\n)\n"})
 
-		commands, err := located(t, filepath.Join(dir, "apps", "web", "server")).Commands()
+		commands, err := locatedWith(t, dir, filepath.Join(dir, "apps", "web", "server"), language.Go, ".").Commands()
 		if err != nil {
 			t.Fatalf("Commands() = %+v", err)
 		}
@@ -677,22 +657,139 @@ func TestAGoAppBuildsItsOwnPackageWithTheModuleItBelongsTo(t *testing.T) {
 		}
 	})
 
-	t.Run("a module rooted in the app's own directory is left to railpack", func(t *testing.T) {
-		dir := t.TempDir()
-		write(t, dir, map[string]string{
-			".git/HEAD": "ref: refs/heads/main\n",
-			"go.mod":    "module example.com/web\n\ngo 1.27.0\n",
-			"main.go":   "package main\n\nfunc main() {}\n",
-		})
+	for _, tt := range []struct {
+		entrypoint string
+		build      string
+	}{
+		{".", `GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o out .`},
+		{"cmd/api", `GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o out ./cmd/api`},
+	} {
+		t.Run("a module rooted in the app's own directory builds the package in "+tt.entrypoint+" rather than the one railpack picks", func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, map[string]string{
+				".git/HEAD":           "ref: refs/heads/main\n",
+				"go.mod":              "module example.com/web\n\ngo 1.27.0\n",
+				"main.go":             "package main\n\nfunc main() {}\n",
+				"cmd/api/main.go":     "package main\n\nfunc main() {}\n",
+				"cmd/another/main.go": "package main\n\nfunc main() {}\n",
+			})
 
-		commands, err := located(t, dir).Commands()
-		if err != nil {
-			t.Fatalf("Commands() = %v", err)
-		}
-		if commands != (workspace.Commands{}) {
-			t.Errorf("Commands() = %+v, want nothing — railpack builds a module at the context root itself", commands)
-		}
+			commands, err := locatedWith(t, dir, dir, language.Go, tt.entrypoint).Commands()
+			if err != nil {
+				t.Fatalf("Commands() = %v", err)
+			}
+			if commands != (workspace.Commands{Build: tt.build}) {
+				t.Errorf("Commands() = %+v, want only the build %q", commands, tt.build)
+			}
+		})
+	}
+}
+
+func TestAGoAppInNoModuleIsBuiltFromItsOwnDirectory(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		".git/HEAD":           "ref: refs/heads/main\n",
+		"go.mod":              "module example.com/monorepo\n\ngo 1.27.0\n",
+		"deploy/ocel.json":    `{"slug":"shop"}`,
+		"deploy/api/main.go":  "package main\n\nfunc main() {}\n",
+		"project/go.mod":      "module example.com/shop\n\ngo 1.27.0\n",
+		"project/api/main.go": "package main\n\nfunc main() {}\n",
 	})
+
+	project, app := filepath.Join(dir, "deploy"), filepath.Join(dir, "deploy", "api")
+	if got := locatedIn(t, project, app, language.Go); got.ModuleDir != "" || got.Root != app {
+		t.Errorf("Locate() = %+v, want the app built from its own directory with no module — the image looks for the module where the function build does", got)
+	}
+}
+
+func TestAGoAppsBuildQuotesEachDirectoryItNames(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		".git/HEAD":                 "ref: refs/heads/main\n",
+		"go.work":                   "go 1.27.0\n",
+		"sdk/go.mod":                "module ocel.dev\n\ngo 1.27.0\n",
+		"my web/go.mod":             "module example.com/web\n\ngo 1.27.0\n\nrequire ocel.dev v0.0.0\n\nreplace ocel.dev => ../sdk\n",
+		"my web/cmd/my api/main.go": "package main\n\nfunc main() {}\n",
+		"my web/cmd/it's/main.go":   "package main\n\nfunc main() {}\n",
+	})
+
+	for _, tt := range []struct {
+		entrypoint string
+		build      string
+	}{
+		{"cmd/my api", `cd 'my web' && GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o ../out './cmd/my api'`},
+		{"cmd/it's", `cd 'my web' && GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o ../out './cmd/it'\''s'`},
+	} {
+		commands, err := locatedWith(t, dir, filepath.Join(dir, "my web"), language.Go, tt.entrypoint).Commands()
+		if err != nil {
+			t.Fatalf("Commands(%q) = %v", tt.entrypoint, err)
+		}
+		if commands.Build != tt.build {
+			t.Errorf("Commands(%q).Build = %s, want %s", tt.entrypoint, commands.Build, tt.build)
+		}
+		if want := `sh -c 'cd '\''my web'\'' && GOWORK=off go mod download'`; commands.Install != want {
+			t.Errorf("Commands(%q).Install = %s, want %s", tt.entrypoint, commands.Install, want)
+		}
+	}
+}
+
+func TestAGoAppAtItsModuleRootNamingNoEntrypointIsLeftToRailpackAndOneBelowItBuildsItsOwnPackage(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		".git/HEAD":          "ref: refs/heads/main\n",
+		"go.mod":             "module example.com/web\n\ngo 1.27.0\n",
+		"cmd/worker/main.go": "package main\n\nfunc main() {}\n",
+		"api/main.go":        "package main\n\nfunc main() {}\n",
+	})
+
+	commands, err := located(t, dir, language.Go).Commands()
+	if err != nil || commands != (workspace.Commands{}) {
+		t.Errorf("Commands() = %+v, %v, want nothing: railpack builds cmd/worker, the first command it finds", commands, err)
+	}
+
+	commands, err = locatedIn(t, dir, filepath.Join(dir, "api"), language.Go).Commands()
+	if want := `GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o out ./api`; err != nil || commands.Build != want {
+		t.Errorf("Commands() = %+v, %v, want the build %q: railpack would build the module root, not the app", commands, err, want)
+	}
+}
+
+func TestANodeAppStartingItselfFromADirectoryWithASpaceStartsThere(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		"pnpm-workspace.yaml":      "packages:\n  - \"apps/*\"\n",
+		"pnpm-lock.yaml":           "lockfileVersion: '9.0'\n",
+		"package.json":             `{"name":"root"}`,
+		"apps/my web/package.json": `{"name":"web","main":"my server.js"}`,
+	})
+
+	commands, err := located(t, filepath.Join(dir, "apps", "my web"), language.JS).Commands()
+	if want := "cd 'apps/my web' && node 'my server.js'"; err != nil || commands.Start != want {
+		t.Errorf("Commands() = %+v, %v, want the start %q", commands, err, want)
+	}
+}
+
+func TestAnAppInNoLanguageJoinsTheJSWorkspaceItSitsIn(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{
+		"pnpm-workspace.yaml": "packages:\n  - \"apps/*\"\n",
+		"pnpm-lock.yaml":      "lockfileVersion: '9.0'\n",
+		"package.json":        `{"name":"root"}`,
+		"apps/box/Dockerfile": "FROM scratch\n",
+	})
+
+	if got := located(t, filepath.Join(dir, "apps", "box"), ""); got.Root != dir || got.Path != "apps/box" {
+		t.Errorf("Locate() = %+v, want the app at apps/box in the workspace at %s: nothing says it is written in a language other than JS", got, dir)
+	}
+}
+
+func TestAJSAppIgnoresAGoModuleItIsHanded(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, map[string]string{"go.mod": "module example.com/shop\n\ngo 1.27.0\n", "web/package.json": `{"name":"web"}`})
+
+	got, err := workspace.Locate(filepath.Join(dir, "web"), workspace.Program{Language: language.JS, GoModule: &gomodule.Module{Dir: dir}, GoPackage: "./web"})
+	if err != nil || got.ModuleDir != "" || got.Language != language.JS || got.Root != filepath.Join(dir, "web") {
+		t.Errorf("Locate() = %+v, %v, want the JS app at its own directory: a go module is read only for a go app", got, err)
+	}
 }
 
 func TestAGoModuleReplacingADirectoryOutsideTheRepositoryIsRefusedRatherThanBuiltFromAboveIt(t *testing.T) {
@@ -705,7 +802,7 @@ func TestAGoModuleReplacingADirectoryOutsideTheRepositoryIsRefusedRatherThanBuil
 		"repo/web/lib/doc.go":  "package lib\n",
 	})
 
-	_, err := workspace.Locate(filepath.Join(dir, "repo", "web"))
+	_, err := locate(t, filepath.Join(dir, "repo"), filepath.Join(dir, "repo", "web"), language.Go)
 	if err == nil {
 		t.Fatal("Locate() took a context above the repository the app is checked out in, so the image would be built from whatever else sits beside it")
 	}
@@ -723,7 +820,7 @@ func TestANodeAppInsideAGoModuleIsStillBuiltAsNodeFromItsOwnDirectory(t *testing
 		"web/tools.go":     "package tools\n",
 	})
 
-	got := located(t, filepath.Join(dir, "web"))
+	got := located(t, filepath.Join(dir, "web"), language.JS)
 
 	if got.Root != filepath.Join(dir, "web") || got.Language != language.JS {
 		t.Errorf("Locate() = %+v, want the node app built from its own directory — the go.mod above it is another app's module", got)
@@ -738,7 +835,7 @@ func TestAGoAppPointedAtAWiderContextStillBuildsItsPackageWithItsModule(t *testi
 		"repo/web/server/main.go": "package main\n\nfunc main() {}\n",
 	})
 
-	rebased, err := located(t, filepath.Join(dir, "repo", "web", "server")).Rebase(filepath.Join(dir, "repo"))
+	rebased, err := locatedIn(t, filepath.Join(dir, "repo"), filepath.Join(dir, "repo", "web", "server"), language.Go).Rebase(filepath.Join(dir, "repo"))
 	if err != nil {
 		t.Fatalf("Rebase() = %v", err)
 	}

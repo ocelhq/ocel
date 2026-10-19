@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
@@ -23,7 +24,8 @@ func workerFixture(t *testing.T, name string) *project.Project {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &project.Project{Slug: "worker-" + name, Dir: dir, Apps: []project.App{{Name: "web", Path: ".", Compute: "container"}}}
+	written := map[string]language.Language{"node": language.JS, "go": language.Go, "python": language.Python}[name]
+	return &project.Project{Slug: "worker-" + name, Dir: dir, Apps: []project.App{{Name: "web", Path: ".", Compute: "container", Language: written}}}
 }
 
 type addedFiles struct {
@@ -99,6 +101,30 @@ func TestAContainerAppHostingAGoWorkerCarriesTheWorkerBinaryBuiltForItsImagesArc
 	}
 }
 
+func TestWorkersJoiningAnAppWrittenInSeveralLanguagesAreRefusedNamingFramework(t *testing.T) {
+	cfg := workerFixture(t, "python")
+	cfg.Apps[0].Language, cfg.Apps[0].Languages = "", []language.Language{language.JS, language.Python}
+	_, added, err := buildingWithWorkers(t, cfg, HostedWorkers{"web": {discovery.DefaultRootDirName + "/__init__.py:1"}})
+	if err == nil || !strings.Contains(err.Error(), `set "framework" on "web"`) {
+		t.Errorf("apps() = %v, want the workers refused until web states its framework", err)
+	}
+	if added != nil {
+		t.Errorf("the image gained %v, want nothing added to an image whose language is unknown", keysOf(added.entries))
+	}
+}
+
+func TestWorkersJoiningAnAppHoldingNoLanguageManifestJoinItsImageInTheirOwnLanguage(t *testing.T) {
+	cfg := workerFixture(t, "python")
+	cfg.Apps[0].Language = ""
+	_, added, err := buildingWithWorkers(t, cfg, HostedWorkers{"web": {discovery.DefaultRootDirName + "/__init__.py:1"}})
+	if err != nil {
+		t.Fatalf("apps() = %v, want the workers joined: an image built from a Dockerfile alone names no language to disagree with them", err)
+	}
+	if added == nil || len(added.entries[containerimage.PythonWorkerEntry.ImageFile]) == 0 {
+		t.Errorf("the image gained %v, want the python worker entry", added)
+	}
+}
+
 func TestAContainerAppHostingNoWorkerGainsNothing(t *testing.T) {
 	cfg := workerFixture(t, "node")
 	built, added, err := buildingWithWorkers(t, cfg, nil)
@@ -138,7 +164,7 @@ func keysOf(entries map[string][]byte) []string {
 
 func TestAScriptBuiltAppGainsTheWorkerEntryInTheFunctionAWorkerRunsFrom(t *testing.T) {
 	cfg := workerFixture(t, "node")
-	app := project.App{Name: "web", Path: ".", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}}
+	app := project.App{Name: "web", Path: ".", Compute: provider.ComputeServerless, Framework: buildoutput.FrameworkNext}
 	outputDir := t.TempDir()
 	appDir := buildoutput.AppRoot(outputDir, app.Name)
 	for _, id := range []string{"bundle-1", "bundle-0"} {

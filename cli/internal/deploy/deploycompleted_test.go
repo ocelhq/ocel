@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/clitest/confighome"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
@@ -75,7 +76,7 @@ func (r *recordedEvents) onlyDeployCompleted(t *testing.T) telemetry.Event {
 func setUpNamedAppProject(t *testing.T) (clitest.FakeProject, Dependencies) {
 	t.Helper()
 	fixture := setUpPreviewProject(t)
-	writeAppsConfig(t, fixture.Root, `{ name: "`+namedApp+`", path: "apps/`+namedApp+`", compute: { serverless: { framework: "node" } } }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "`+namedApp+`", path: "apps/`+namedApp+`", framework: "node", compute: "serverless" }`)
 	writeAppSource(t, fixture.Root, namedApp)
 	dependencies := previewDependencies("feature/login", "")
 	stubBuild(&dependencies, []build.Function{
@@ -487,10 +488,10 @@ func TestADeployCompletionListsTheFrameworksAndLanguagesOfItsApps(t *testing.T) 
 	cfg := &project.Project{
 		Dir: t.TempDir(),
 		Apps: []project.App{
-			{Name: "a", Path: "a", Serverless: &project.Serverless{Framework: "next"}},
-			{Name: "b", Path: "b", Serverless: &project.Serverless{Framework: "node"}},
-			{Name: "c", Path: "c", Serverless: &project.Serverless{Framework: "python"}},
-			{Name: "d", Path: "d", Serverless: &project.Serverless{Framework: "node"}},
+			{Name: "a", Path: "a", Framework: "next", Language: language.JS},
+			{Name: "b", Path: "b", Framework: "node", Language: language.JS},
+			{Name: "c", Path: "c", Framework: "python", Language: language.Python},
+			{Name: "d", Path: "d", Framework: "node", Language: language.JS},
 		},
 	}
 	metrics := watchDeploy(run.NewBus(time.Now), cfg, telemetry.DeployTargetPreview, false)

@@ -27,7 +27,7 @@ func TestLoadReadsJSONWithoutNode(t *testing.T) {
   // the provider this project deploys into
   "slug": "go-only",
   "provider": { "fake": { "size": "large" } },
-  "apps": [{ "name": "web", "path": "./server", "compute": { "serverless": { "framework": "go" } } }],
+  "apps": [{ "name": "web", "path": "./server", "framework": "go", "compute": "serverless" }],
 }`)
 
 	cfg, err := Load(context.Background(), dir, "")
@@ -43,7 +43,7 @@ func TestLoadReadsJSONWithoutNode(t *testing.T) {
 	if string(cfg.Provider.Options) != `{"size":"large"}` {
 		t.Fatalf("options = %s", cfg.Provider.Options)
 	}
-	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework() != "go" {
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework != "go" {
 		t.Fatalf("apps = %+v", cfg.Apps)
 	}
 	if cfg.Path != filepath.Join(dir, DefaultFileName) {

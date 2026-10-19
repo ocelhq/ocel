@@ -30,7 +30,7 @@ export default defineConfig({
 | --- | --- | --- |
 | `slug` | Yes | The project's identity in your provider account. Every stack and resource is keyed on it, so changing it starts a new project. |
 | [`provider`](#provider) | | Where `ocel deploy` provisions, with its [edge](#edge) and [DNS](#dns). |
-| [`apps`](#apps) | | The apps to deploy. Left off, ocel detects one at the project root. |
+| [`apps`](#apps) | | The apps to deploy. Left off, ocel deploys [the app at the project root](#how-ocel-finds-each-app). |
 | `domains` | | `production`: the hostname or hostnames production serves. `preview`: the wildcard previews are served under, such as `*.preview.example.com`. See [Environments](/docs/environments). |
 | [`discovery`](#discoverypaths) | | Where resource declarations are found. |
 | [`bindings`](#bindings) | | Resources to bind to instead of provisioning. |
@@ -238,6 +238,8 @@ Each takes a `zone`. Left off, ocel picks the zone that covers the hostname.
 | --- | --- | --- |
 | `name` | Yes | A DNS label. It labels every resource the app deploys and its preview hostname. |
 | `path` | Yes | The app's directory, relative to the config. |
+| `framework` | | `node`, `next`, `sveltekit`, `go`, `python` or `rust`. Left off, [detected](#how-ocel-finds-each-app) from the app's directory. |
+| `entrypoint` | | Where the app starts, when not where ocel looks, as a node file, a go package's directory or a python `.py` file. Detection does not read it, so an app ocel cannot detect also sets `framework`. A `next` or `sveltekit` app builds from its own config and takes none. |
 | [`compute`](#compute) | | `serverless` or `container`. Left off, the first compute the provider runs. |
 | `arch` | | `x86_64` or `arm64`. Left off, what the provider runs the app on. A provider that cannot run the one named refuses the deploy before building. |
 | `buildWithResources` | | Default `true`: a Next app's build reaches its deployed resources, so prerendered pages read them. `false` builds as if none were provisioned. |
@@ -247,10 +249,55 @@ Each takes a `zone`. Left off, ocel picks the zone that covers the hostname.
 A provider that forwards no ports and serves no binding proxy builds without resources, and
 the deploy says so.
 
+### How ocel finds each app
+
+With no `apps`, ocel deploys the project root as one app named after the `slug`. The root, and
+any app with no `framework`, takes the framework of the one detector that matches its directory.
+Every framework has a detector of its own, and its page says what the detector looks for and why:
+[Next.js](/docs/frameworks/nextjs), [SvelteKit](/docs/frameworks/sveltekit),
+[Express](/docs/frameworks/express), [Hono](/docs/frameworks/hono),
+[Python](/docs/frameworks/python), [Go](/docs/frameworks/go) and [Rust](/docs/frameworks/rust).
+
+`ocel doctor` and `ocel deploy` print each app's framework and what decided it, such as
+`web: next (package.json depends on next)`, or `api: go (set in ocel.json)`.
+
+When no detector matches, or several do, nothing is detected and the message names what it found.
+The app then sets `framework`, and `entrypoint` when it starts somewhere ocel does not look. Here
+the only `main` package of a Go module is `cmd/web`:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "web", path: ".", framework: "go", entrypoint: "./cmd/web" }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "framework": "go", "entrypoint": "./cmd/web" }]
+}
+```
+
+The root has no key to set them on, so list it under `apps` as above. Until then, a deploy
+carries only the resources the project declares.
+
+A serverless app is refused without a framework, since its functions are built for one. A
+container app loads without one and builds from its `Dockerfile` or with Railpack. When its
+directory holds the manifest of one language only, such as a `package.json` whose `start` script
+runs the app, the app is written in that language, and ocel reads which resources its code uses
+as it does for any app of that language. When the directory holds the manifests of several
+languages, or of none, nothing says which language the app is written in, so a project that
+declares resources refuses the deploy, and workers refuse to join the app, until it sets
+`framework`.
+
 ### compute
 
-`serverless` packs functions per route that scale themselves. `container` runs one image
-serving every route. Name it alone, or key it with its options:
+`serverless` packs functions per route that scale themselves, and takes no options.
+`container` runs one image serving every route. Name it alone, or key it with its options:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -297,77 +344,9 @@ export default defineConfig({
 
 A container option on a serverless app, or the reverse, is refused when the config is read.
 
-### serverless
-
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: "my-app",
-  apps: [
-    {
-      name: "web",
-      path: ".",
-      arch: "arm64",
-      compute: { serverless: { framework: "go", entrypoint: "./cmd/web" } },
-    },
-  ],
-});
-```
-
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "apps": [
-    {
-      "name": "web",
-      "path": ".",
-      "arch": "arm64",
-      "compute": { "serverless": { "framework": "go", "entrypoint": "./cmd/web" } }
-    }
-  ]
-}
-```
-
-| Field | Means |
-| --- | --- |
-| `framework` | `node`, `next`, `sveltekit`, `go`, `python` or `rust`. Left off, read from the app's directory (below). |
-| `entrypoint` | The file a node app is served from, or the directory of a go app's main package, when it is not where ocel looks. |
-
-With no `framework`, ocel reads the app's directory, in this order:
-
-| Found | Framework |
-| --- | --- |
-| `go.mod` | `go` |
-| `pyproject.toml` or `requirements.txt` | `python` |
-| `package.json` naming `next`, or a `next.config.js`, `.mjs` or `.ts` | `next` |
-| `package.json` naming `@sveltejs/kit` | `sveltekit` |
-| `package.json` | `node` |
-| `Cargo.toml` | `rust` |
-
-A `Cargo.toml` beside a node or python manifest is that app's native extension, not a rust app.
-
-A rust app builds as a static musl binary for its `arch`, so install the target:
-
-```bash
-rustup target add x86_64-unknown-linux-musl   # or aarch64-unknown-linux-musl
-```
-
-A crate that compiles C (`ring`, `aws-lc-rs`, `openssl-sys`) also needs a musl C cross
-toolchain, most of all for `arm64` on an x86_64 machine: set `CC_aarch64_unknown_linux_musl`
-and a linker, below or in `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`. With neither,
-ocel links with `rust-lld`.
-
-```toml title=".cargo/config.toml"
-[target.aarch64-unknown-linux-musl]
-linker = "aarch64-linux-musl-gcc"
-```
-
 ### container
 
-Fields as in the [compute](#compute) example. A container takes no `framework`: ocel detects
-a Next app and builds any other as its image describes.
+Fields as in the [compute](#compute) example.
 
 | Field | Means |
 | --- | --- |

@@ -25,39 +25,15 @@ const PreferTracingEnv = "OCEL_BUILD_PREFER_TRACING"
 
 const tracingHint = "set " + PreferTracingEnv + "=1 to build this app by tracing instead of bundling"
 
-var entrypointCandidates = []string{
-	"src/server.ts",
-	"src/server.js",
-	"src/index.ts",
-	"src/index.js",
-	"src/app.ts",
-	"src/app.js",
-	"index.ts",
-	"index.js",
-	"server.ts",
-	"server.js",
-	"app.ts",
-	"app.js",
-}
-
-func NodeEntrypoint(source, declared string) (string, error) {
-	if declared != "" {
-		path := filepath.FromSlash(declared)
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(source, path)
-		}
-		if !regularFile(path) {
-			return "", fmt.Errorf("entrypoint %q not found in %s", declared, source)
-		}
-		return path, nil
+func NodeEntrypoint(source, entrypoint string) (string, error) {
+	path := filepath.FromSlash(entrypoint)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(source, path)
 	}
-	for _, candidate := range entrypointCandidates {
-		path := filepath.Join(source, filepath.FromSlash(candidate))
-		if regularFile(path) {
-			return path, nil
-		}
+	if !regularFile(path) {
+		return "", fmt.Errorf("entrypoint %q not found in %s", entrypoint, source)
 	}
-	return "", fmt.Errorf("no entrypoint found in %s; tried: %s", source, strings.Join(entrypointCandidates, ", "))
+	return path, nil
 }
 
 func regularFile(path string) bool {

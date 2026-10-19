@@ -6,7 +6,6 @@ import (
 	"io"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -19,6 +18,8 @@ type Compilation struct {
 	Framework      buildoutput.Framework
 	Source         string
 	Entrypoint     string
+	GoModuleDir    string
+	GoPackage      string
 	WorkerPackage  string
 	FunctionDir    string
 	AppDir         string
@@ -38,13 +39,6 @@ func (c Compilation) environ(own ...string) []string {
 		environ = append(environ, name+"="+c.Env[name])
 	}
 	return append(environ, own...)
-}
-
-func (c Compilation) pkg() string {
-	if c.Entrypoint == "" {
-		return c.Source
-	}
-	return filepath.Join(c.Source, c.Entrypoint)
 }
 
 func Compile(ctx context.Context, c Compilation) error {
@@ -78,19 +72,15 @@ func (c Compilation) validate() error {
 	}); err != nil {
 		return err
 	}
-	if c.Framework.Name == buildoutput.FrameworkPython && c.Entrypoint != "" {
-		return fmt.Errorf("app %q is built with python and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
-	}
 	if c.Framework.Name == buildoutput.FrameworkRust && c.Entrypoint != "" {
 		return fmt.Errorf("app %q is built with rust and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
 	}
-	pkg := c.pkg()
-	info, err := os.Stat(pkg)
+	info, err := os.Stat(c.Source)
 	if err != nil {
-		return fmt.Errorf("package %s for app %q: %w", pkg, c.App, err)
+		return fmt.Errorf("source %s for app %q: %w", c.Source, c.App, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("package %s for app %q is not a directory containing a main package", pkg, c.App)
+		return fmt.Errorf("source %s for app %q is not a directory", c.Source, c.App)
 	}
 	return nil
 }

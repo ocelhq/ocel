@@ -102,7 +102,7 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 func writeNextUsageProject(t *testing.T, root, appFields string) {
 	t.Helper()
 	clitest.WriteUsageMonorepo(t, root)
-	writeConfig(t, root, `  apps: [{ name: "web", path: "apps/api", compute: { serverless: { framework: "next" } }`+appFields+` }],
+	writeConfig(t, root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "serverless"`+appFields+` }],
 `)
 }
 
@@ -540,7 +540,7 @@ func TestAnAppWhoseBuildTakesNoBindingsIsHandedNoBindingProxy(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
 	writeNextDatabaseAndBucketProject(t, fixture.Root)
-	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", compute: { serverless: { framework: "next" } }, buildWithResources: false }],
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "serverless", buildWithResources: false }],
 `)
 	servingBindingProxy(t, fixture)
 	built := capturingBuild(t, &dependencies)
@@ -588,8 +588,8 @@ export function handler() {
 }
 `)
 	writeConfig(t, fixture.Root, `  apps: [
-    { name: "web", path: "apps/api", compute: { serverless: { framework: "next" } } },
-    { name: "admin", path: "apps/admin", compute: { serverless: { framework: "next" } } },
+    { name: "web", path: "apps/api", framework: "next", compute: "serverless" },
+    { name: "admin", path: "apps/admin", framework: "next", compute: "serverless" },
   ],
 `)
 	servingBindingProxy(t, fixture)

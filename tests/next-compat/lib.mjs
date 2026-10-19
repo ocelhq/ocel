@@ -266,7 +266,7 @@ export function renderOcelConfig({
   variablesKey = process.env.OCEL_AWS_VARIABLES_KEY?.trim(),
   bytecodeEmbed = process.env[BYTECODE_EMBED_ENV] === "1",
 }) {
-  const app = `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", compute: { serverless: { framework: "next" } } }],`;
+  const app = `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", framework: "next", compute: "serverless" }],`;
   if (target.name === DEFAULT_COMPAT_TARGET) {
     return [
       `import { defineConfig } from "ocel/config";`,

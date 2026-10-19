@@ -121,7 +121,7 @@ func TestAnAppSucceedsOnlyWhenItsBuildAndReleaseAreKnown(t *testing.T) {
 func TestARolledBackPromotionRecordsEachAppAtTheReleaseItWentLiveWith(t *testing.T) {
 	t.Parallel()
 	cfg := &project.Project{Apps: []project.App{
-		{Name: "web", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "next"}},
+		{Name: "web", Compute: provider.ComputeServerless, Framework: "next"},
 		{Name: "api", Compute: provider.ComputeContainer, Container: &project.Container{}},
 	}}
 
@@ -148,7 +148,7 @@ func TestARolledBackPromotionRecordsEachAppAtTheReleaseItWentLiveWith(t *testing
 func TestARolledBackReleaseThatNamesNoBuildIsLeftOutAndNamedInTheError(t *testing.T) {
 	t.Parallel()
 	cfg := &project.Project{Apps: []project.App{
-		{Name: "web", Compute: provider.ComputeServerless, Serverless: &project.Serverless{Framework: "next"}},
+		{Name: "web", Compute: provider.ComputeServerless, Framework: "next"},
 		{Name: "api", Compute: provider.ComputeContainer, Container: &project.Container{}},
 	}}
 

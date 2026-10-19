@@ -3,6 +3,6 @@
   "slug": "sdk-go",
   "provider": "aws",
   "apps": [
-    { "name": "web", "path": ".", "compute": { "serverless": { "entrypoint": "./server" } } }
+    { "name": "web", "path": ".", "framework": "go", "entrypoint": "./server", "compute": "serverless" }
   ]
 }

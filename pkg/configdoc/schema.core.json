@@ -56,24 +56,7 @@
                       "serverless": {
                         "additionalProperties": false,
                         "description": "Serverless functions packed per route, which scale themselves.",
-                        "properties": {
-                          "entrypoint": {
-                            "description": "The file a node app is served from, or a go app's main package directory, if not the detected one.",
-                            "type": "string"
-                          },
-                          "framework": {
-                            "description": "What the app is built with, when ocel is not to read it off the app's own manifest.",
-                            "enum": [
-                              "node",
-                              "next",
-                              "sveltekit",
-                              "go",
-                              "python",
-                              "rust"
-                            ],
-                            "type": "string"
-                          }
-                        },
+                        "properties": {},
                         "title": "ServerlessCompute",
                         "type": "object"
                       }
@@ -178,8 +161,24 @@
             "title": "AppDomainConfig",
             "type": "object"
           },
+          "entrypoint": {
+            "description": "Where the app starts, if not the detected one: a node file, a go directory or a python file.",
+            "type": "string"
+          },
           "folder": {
             "description": "The variables folder this app reads, when it does not read the project's own.",
+            "type": "string"
+          },
+          "framework": {
+            "description": "What the app is built with, when ocel is not to detect it from the app's own files.",
+            "enum": [
+              "node",
+              "next",
+              "sveltekit",
+              "go",
+              "python",
+              "rust"
+            ],
             "type": "string"
           },
           "name": {

@@ -18,19 +18,25 @@ func compiledFromSource(framework string) bool {
 func compile(ctx context.Context, cfg *project.Project, a project.App, outputDir string, env environment, log io.Writer) error {
 	appDir := buildoutput.AppRoot(outputDir, a.Name)
 	source := filepath.Join(cfg.Dir, a.Path)
-	packages, err := listAppPythonPackages(cfg, a.Framework(), source)
+	packages, err := listAppPythonPackages(cfg, a.Framework, source)
 	if err != nil {
 		return err
 	}
-	workerPackage, err := goWorkerPackage(cfg, a.Framework(), source)
+	workerPackage, err := goWorkerPackage(cfg, a)
 	if err != nil {
 		return err
+	}
+	var goModuleDir string
+	if a.GoModule != nil {
+		goModuleDir = a.GoModule.Dir
 	}
 	return toolchain.Compile(ctx, toolchain.Compilation{
 		App:            a.Name,
-		Framework:      buildoutput.Framework{Name: a.Framework(), Arch: a.Architecture()},
+		Framework:      buildoutput.Framework{Name: a.Framework, Arch: a.Architecture()},
 		Source:         source,
-		Entrypoint:     a.Serverless.Entrypoint,
+		GoModuleDir:    goModuleDir,
+		GoPackage:      a.GoPackage,
+		Entrypoint:     a.Entrypoint,
 		WorkerPackage:  workerPackage,
 		FunctionDir:    filepath.Join(appDir, buildoutput.FunctionsDir, buildoutput.RootFunctionDir),
 		AppDir:         appDir,
@@ -52,13 +58,13 @@ func listAppPythonPackages(cfg *project.Project, framework, source string) ([]di
 	return discovery.ListPythonPackages(cfg.Dir, roots, source)
 }
 
-func goWorkerPackage(cfg *project.Project, framework, source string) (string, error) {
-	if framework != buildoutput.FrameworkGo {
+func goWorkerPackage(cfg *project.Project, a project.App) (string, error) {
+	if a.Framework != buildoutput.FrameworkGo || a.GoModule == nil {
 		return "", nil
 	}
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return "", err
 	}
-	return discovery.GoWorkerPackage(cfg.Dir, roots, source)
+	return discovery.GoWorkerPackage(cfg.Dir, roots, a.GoModule.Dir)
 }

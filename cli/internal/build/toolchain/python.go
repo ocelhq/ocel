@@ -15,21 +15,24 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
 const (
-	pythonEntryFile        = "main.py"
 	pythonRequirementsFile = "requirements.txt"
 	pythonBytecodeDir      = "__pycache__"
 	pythonVirtualenvDir    = "venv"
 )
 
 func (c Compilation) vendorPython(ctx context.Context) error {
-	entry, err := os.Stat(filepath.Join(c.Source, pythonEntryFile))
+	if c.Entrypoint == "" {
+		return fmt.Errorf("app %q is built with python and %s holds none of %s, the files a python app is served from: set \"entrypoint\" to the file that serves it", c.App, c.Source, strings.Join(language.PythonEntrypoints, ", "))
+	}
+	entry, err := os.Stat(filepath.Join(c.Source, filepath.FromSlash(c.Entrypoint)))
 	if err != nil || !entry.Mode().IsRegular() {
-		return fmt.Errorf("app %q is built with python and %s has no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)
+		return fmt.Errorf("app %q is built with python and entrypoint %q names no file in %s", c.App, c.Entrypoint, c.Source)
 	}
 	platform, runs := arch.PythonPlatformTag(c.Framework.Arch)
 	if !runs {
@@ -54,7 +57,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{containerimage.PythonWorkerEntry.Interpreter, pythonEntryFile}, worker, c.FunctionDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, c.Entrypoint, []string{containerimage.PythonWorkerEntry.Interpreter, c.Entrypoint}, worker, c.FunctionDir, c.AppDir)
 }
 
 func (c Compilation) writePythonWorkerEntry() ([]string, error) {

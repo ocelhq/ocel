@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/english"
-	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/bindings"
@@ -62,15 +61,18 @@ func attributionApps(cfg *project.Project) ([]attribution.App, error) {
 	}
 	out := make([]attribution.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
+		if !a.HasLanguageManifest() {
+			continue
+		}
 		inAnImage := a.RunsOn(provider.ComputeContainer)
 		appDir := filepath.Join(cfg.Dir, a.Path)
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  language.OfApp(a.Framework(), appDir),
+			Language:  a.Language,
 			Roots:     roots,
 			Container: inAnImage,
-			Members:   workspaceMembers(inAnImage, appDir),
+			Members:   workspaceMembers(inAnImage, appDir, a),
 		})
 	}
 	return out, nil
@@ -103,11 +105,11 @@ func detectedApps(functions []build.Function) []string {
 	return detected
 }
 
-func workspaceMembers(inAnImage bool, appDir string) []string {
+func workspaceMembers(inAnImage bool, appDir string, a project.App) []string {
 	if !inAnImage {
 		return nil
 	}
-	located, err := workspace.Locate(appDir)
+	located, err := workspace.Locate(appDir, a.Program())
 	if err != nil {
 		return nil
 	}

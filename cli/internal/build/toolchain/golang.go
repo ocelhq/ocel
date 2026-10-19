@@ -15,12 +15,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 )
 
-const goModuleFile = "go.mod"
-
 func (c Compilation) compileGo(ctx context.Context) error {
-	module, err := os.Stat(filepath.Join(c.Source, goModuleFile))
-	if err != nil || !module.Mode().IsRegular() {
-		return fmt.Errorf("app %q is built with go and %s has no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
+	if c.GoModuleDir == "" || c.GoPackage == "" {
+		return fmt.Errorf("app %q is built with go and is compiled from no package of a go module: an app is compiled from the module it belongs to", c.App)
 	}
 	goarch, runs := arch.GoArch(c.Framework.Arch)
 	if !runs {
@@ -32,12 +29,12 @@ func (c Compilation) compileGo(ctx context.Context) error {
 	if err := os.MkdirAll(c.FunctionDir, 0o755); err != nil {
 		return err
 	}
-	if err := c.buildGo(ctx, goarch, c.pkg(), ".", c.App); err != nil {
+	if err := c.buildGo(ctx, goarch, c.GoModuleDir, c.GoPackage, c.App); err != nil {
 		return err
 	}
 	var worker []string
 	if c.WorkerPackage != "" {
-		if err := c.buildGo(ctx, goarch, c.Source, c.WorkerPackage, buildoutput.GoWorkerBinary); err != nil {
+		if err := c.buildGo(ctx, goarch, c.GoModuleDir, c.WorkerPackage, buildoutput.GoWorkerBinary); err != nil {
 			return err
 		}
 		worker = containerimage.GoWorkerEntry.ArtifactCommand()

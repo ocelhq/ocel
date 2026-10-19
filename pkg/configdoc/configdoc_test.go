@@ -13,8 +13,8 @@ func TestDecodeNamesTheComputeAnOptionUnderTheOtherComputeBelongsTo(t *testing.T
 	}{
 		{`{"serverless":{"health":{"path":"/up"}}}`, "health is an option of container compute"},
 		{`{"serverless":{"instances":{"min":1}}}`, "instances is an option of container compute"},
-		{`{"container":{"framework":"next"}}`, "framework is an option of serverless compute"},
-		{`{"container":{"entrypoint":"server.js"}}`, "entrypoint is an option of serverless compute"},
+		{`{"container":{"framework":"next"}}`, "framework is an option of the app — write it beside compute"},
+		{`{"serverless":{"entrypoint":"server.js"}}`, "entrypoint is an option of the app — write it beside compute"},
 	}
 	for _, c := range cases {
 		_, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":`+c.compute+`}]}`), env(nil))
@@ -237,16 +237,24 @@ func TestDecodeEscapesDoubleDollar(t *testing.T) {
 	}
 }
 
-func TestDecodeKeepsTheFrameworkAndArchitectureAnAppNames(t *testing.T) {
-	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":{"serverless":{"framework":"go","entrypoint":"cmd/server"}}},{"name":"b","path":".","compute":{"serverless":{"framework":"node"}},"arch":"arm64"}]}`), env(nil))
+func TestDecodeKeepsTheFrameworkEntrypointAndArchitectureAnAppNamesOnEitherCompute(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","framework":"go","entrypoint":"cmd/server","compute":"serverless"},{"name":"b","path":".","framework":"node","entrypoint":"src/main.ts","compute":"container","arch":"arm64"}]}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if a := doc.Apps[0]; a.Compute.Serverless.Framework != "go" || a.Compute.Serverless.Entrypoint != "cmd/server" || a.Arch != "" {
-		t.Fatalf("app a = %+v", a.Compute.Serverless)
+	if a := doc.Apps[0]; a.Framework != "go" || a.Entrypoint != "cmd/server" || a.Arch != "" {
+		t.Fatalf("app a = %+v", a)
 	}
-	if b := doc.Apps[1]; b.Compute.Serverless.Framework != "node" || b.Arch != "arm64" {
-		t.Fatalf("app b = %+v", b.Compute.Serverless)
+	if b := doc.Apps[1]; b.Framework != "node" || b.Entrypoint != "src/main.ts" || b.Compute.Container == nil || b.Arch != "arm64" {
+		t.Fatalf("app b = %+v", b)
+	}
+}
+
+func TestDecodeRefusesAFrameworkUnderServerlessCompute(t *testing.T) {
+	_, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","compute":{"serverless":{"framework":"go"}}}]}`), env(nil))
+	var unknown UnknownKeyError
+	if !errors.As(err, &unknown) || unknown.Path != "apps[0].compute.serverless.framework" {
+		t.Fatalf("Decode error = %v, want an unknown key at apps[0].compute.serverless.framework", err)
 	}
 }
 

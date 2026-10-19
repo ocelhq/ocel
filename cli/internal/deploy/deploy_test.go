@@ -111,6 +111,22 @@ func TestADeployStreamsTheProvidersProgressAndPromotesProduction(t *testing.T) {
 	})
 }
 
+func TestADeploySaysWhatEachAppIsBuiltWithAndWhy(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+	fixture := setUpDeployProject(t)
+	addAppToFixtureConfig(t, fixture.Root)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "api: node (set in ocel.config.ts)") {
+		t.Errorf("stdout = %q, want the app's framework and where it was set", stdout.String())
+	}
+}
+
 func TestADeployWhoseStdinIsNotATerminalProceedsWithoutPrompting(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
@@ -161,7 +177,7 @@ func TestADeployRecordsWhatItDeployed(t *testing.T) {
 		dependencies := newTestDependencies()
 		stubBuild(&dependencies, apiFunction())
 		fixture := setUpDeployProject(t)
-		writeConfigWithProvider(t, fixture.Root, `dns: { zone: { zone: "acme.com" } }`, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+		writeConfigWithProvider(t, fixture.Root, `dns: { zone: { zone: "acme.com" } }`, `  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],
 `)
 		writeAppSource(t, fixture.Root, "api")
 		writeHosting(t, fixture.Root, "api", "bld_api_1")
@@ -260,7 +276,7 @@ export default {
   transforms: [`+transforms+`],
   provider: { fake: `+options+` },
   domains: { production: "`+productionDomain+`" },
-  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],
 };
 `)
 
@@ -406,7 +422,7 @@ func registryProject(t *testing.T, registry string) (Dependencies, clitest.FakeP
 
 	fixture := setUpDeployProject(t)
 	clitest.ServeImageDaemon(t, "amd64")
-	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: "container" }],`+registry+"\n")
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "container" }],`+registry+"\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
 	return dependencies, fixture, func() bool { return built }
 }
@@ -524,7 +540,7 @@ func containerProject(t *testing.T, health string) (Dependencies, clitest.FakePr
 
 	fixture := setUpDeployProject(t)
 	clitest.ServeImageDaemon(t, "amd64")
-	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { container: { `+health+` } } }],`+"\n")
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", framework: "node", compute: { container: { `+health+` } } }],`+"\n")
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
 	return dependencies, fixture
 }
@@ -620,7 +636,7 @@ func TestAServerlessOnlyDeployStillSendsTheRegistryItsFunctionsMayBeRunFrom(t *t
 		{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	fixture := setUpDeployProject(t)
-	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],
+	writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],
   registry: { server: "registry.example.com", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
 `)
 	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
@@ -669,7 +685,7 @@ func TestAnAppThatFallsBackToContainerIsBuiltForTheArchitectureTheProviderNames(
 	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
 	fixture.Provider.WrappingContainers("arm64", []byte(fake.RuntimeBinary))
 	clitest.ServeImageDaemon(t, "arm64")
-	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api" }`)
+	writeAppsConfig(t, fixture.Root, `{ name: "api", path: "apps/api", framework: "node" }`)
 	var required, built map[string]string
 	dependencies.RefuseUnbuildableImages = func(_ context.Context, _ *run.Span, _ *project.Project, archs map[string]string) error {
 		required = archs
@@ -730,7 +746,7 @@ func TestAProductionDeploySendsWhetherTheConfigProtectsProduction(t *testing.T) 
 				{Route: "index", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "src/server.js", ArtifactPath: "output/api", App: "api"},
 			})
 			fixture := setUpDeployProject(t)
-			writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", compute: { serverless: { framework: "node" } } }],`+"\n"+fields)
+			writeConfig(t, fixture.Root, `  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "serverless" }],`+"\n"+fields)
 			clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "api", "src", "server.ts"), "export {};\n")
 
 			var stdout, stderr bytes.Buffer

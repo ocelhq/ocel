@@ -90,9 +90,9 @@ func TestPrepend(t *testing.T) {
 	t.Parallel()
 
 	cfg := &project.Project{Apps: []project.App{
-		{Name: "web", Serverless: &project.Serverless{Framework: buildoutput.FrameworkNext}},
-		{Name: "api", Serverless: &project.Serverless{Framework: buildoutput.FrameworkGo}},
-		{Name: "kit", Serverless: &project.Serverless{Framework: buildoutput.FrameworkSvelteKit}},
+		{Name: "web", Framework: buildoutput.FrameworkNext},
+		{Name: "api", Framework: buildoutput.FrameworkGo},
+		{Name: "kit", Framework: buildoutput.FrameworkSvelteKit},
 		{Name: "docs"},
 	}}
 	byApp := map[string][]variables.Variable{
