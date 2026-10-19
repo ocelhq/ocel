@@ -82,6 +82,7 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	}
 	arn := aws.ToString(out.Arn)
 	return provider.Principal{
+		Vendor:   groupVendor,
 		Account:  aws.ToString(out.Account),
 		Name:     principalOf(arn),
 		Location: c.Region,
