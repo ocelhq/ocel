@@ -111,3 +111,26 @@ func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
 		t.Errorf("the refusal names %v, want roles/resourcemanager.projectIamAdmin among them: it is what covers a project policy write", bootstrap.RolesCovering(nil))
 	}
 }
+
+func TestAProjectOwnerIsPermittedABootstrapThoughOnlyTheBucketsItCreatesGrantItTheirObjects(t *testing.T) {
+	t.Parallel()
+
+	bucketOnly := []string{"storage.buckets.get", "storage.objects.create", "storage.objects.list", "storage.objects.delete"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ Permissions []string }
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode testIamPermissions: %v", err)
+		}
+		granted := slices.DeleteFunc(request.Permissions, func(permission string) bool {
+			return slices.Contains(bucketOnly, permission)
+		})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string][]string{"permissions": granted})
+	}))
+	t.Cleanup(server.Close)
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}})
+
+	if err := b.Permitted(context.Background(), []string{bootstrap.CloudflareOriginPart}); err != nil {
+		t.Fatalf("permitted: %v", err)
+	}
+}
