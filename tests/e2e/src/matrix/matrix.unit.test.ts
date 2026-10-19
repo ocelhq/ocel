@@ -680,8 +680,16 @@ describe("sdk/next and sdk/sveltekit", () => {
   });
 
   it("expects nothing of the SvelteKit app red where the deploy writes the deployment url", () => {
-    for (const lane of ["aws", "dev", "vps", "vps.incus"] as const) {
+    for (const lane of ["aws", "dev"] as const) {
       expect(planOn(lane).expectedFailures["sdk/sveltekit/web"] ?? {}).toEqual({});
+    }
+  });
+
+  it("skips the SvelteKit app on a box, whose image build gets no public value for its schema to accept", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      expect(planOn(lane).skipped["sdk/sveltekit"]?.map((gap) => gap.id)).toEqual([
+        "image-build-inlines-no-public-value",
+      ]);
     }
   });
 
