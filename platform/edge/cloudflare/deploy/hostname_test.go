@@ -1096,6 +1096,29 @@ func TestRouteOwnerRequestBudget(t *testing.T) {
 	}
 }
 
+func TestAHostnameAReconcileRoutedIsOwnedByTheProjectBeforeAnyBindRecordsIt(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+
+	p := previewZoneMock().provider(t)
+	spec := productionSpec(fakeStoreServer(t, "").URL, "v1")
+	spec.Domains = []string{"shop.app.com"}
+	stack, err := p.Reconcile(t.Context(), spec, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if bound := stack.State().Bound; len(bound) != 0 {
+		t.Fatalf("bound = %v, want none: a deploy that fails after the reconcile never binds", bound)
+	}
+
+	owner, err := p.DomainOwner(t.Context(), "shop.app.com")
+	if err != nil {
+		t.Fatalf("DomainOwner: %v", err)
+	}
+	if mine := p.ProjectOwner(spec.Slug, spec.Tier); owner == "" || owner != mine {
+		t.Errorf("DomainOwner = %q, ProjectOwner = %q: a retried deploy's preflight refuses the project its own hostname", owner, mine)
+	}
+}
+
 func TestRoutePattern(t *testing.T) {
 	t.Parallel()
 

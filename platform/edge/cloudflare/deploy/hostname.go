@@ -128,7 +128,10 @@ func routePattern(hostname string) string {
 	return hostname + "/*"
 }
 
-func (p *cloudflare) ProjectOwner(string, environment.Tier) string { return "" }
+func (p *cloudflare) ProjectOwner(slug string, tier environment.Tier) string {
+	name, _ := entryWorkerName(p.namespace, slug, tier)
+	return name
+}
 
 func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	accountID, err := requireAccountID("read Cloudflare worker routes")
