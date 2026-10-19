@@ -62,14 +62,14 @@ describe("namespaceOf", () => {
 describe("the labels a service is found by", () => {
   it("are the keys the provider labels every service of a project with", async () => {
     const go = await readFile(
-      path.join(repoRoot, "platform", "gcp", "provider", "labels.go"),
+      path.join(repoRoot, "platform", "gcp", "provider", "internal", "names", "labels.go"),
       "utf8",
     );
-    expect(go).toMatch(new RegExp(`namespaceLabel\\s*=\\s*"${NAMESPACE_LABEL}"`));
-    expect(go).toMatch(new RegExp(`projectLabel\\s*=\\s*"${PROJECT_LABEL}"`));
-    expect(go).toMatch(new RegExp(`appLabel\\s*=\\s*"${APP_LABEL}"`));
-    expect(go).toMatch(new RegExp(`environmentLabel\\s*=\\s*"${ENVIRONMENT_LABEL}"`));
-    expect(go).toMatch(new RegExp(`tierLabel\\s*=\\s*"${TIER_LABEL}"`));
+    expect(go).toMatch(new RegExp(`NamespaceLabel\\s*=\\s*"${NAMESPACE_LABEL}"`));
+    expect(go).toMatch(new RegExp(`ProjectLabel\\s*=\\s*"${PROJECT_LABEL}"`));
+    expect(go).toMatch(new RegExp(`AppLabel\\s*=\\s*"${APP_LABEL}"`));
+    expect(go).toMatch(new RegExp(`EnvironmentLabel\\s*=\\s*"${ENVIRONMENT_LABEL}"`));
+    expect(go).toMatch(new RegExp(`TierLabel\\s*=\\s*"${TIER_LABEL}"`));
   });
 
   it("finds the production tier by the name the provider gives it", async () => {

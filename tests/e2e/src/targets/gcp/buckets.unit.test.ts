@@ -34,7 +34,7 @@ describe("appBucketPrefix", () => {
   it("is the prefix the provider names a namespace's app buckets under", async () => {
     expect(appBucketPrefix("ocel")).toBe("ocel--");
     const go = await readFile(
-      path.join(repoRoot, "platform", "gcp", "provider", "namespace.go"),
+      path.join(repoRoot, "platform", "gcp", "provider", "internal", "names", "namespace.go"),
       "utf8",
     );
     expect(go).toContain('namespaceEnd        = "--"');
