@@ -83,6 +83,16 @@ jobs:
         if: steps.gate-live.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true'
         run: docker pull "$OCEL_FLOCI_IMAGE"
 
+      - name: Seed the image the bastion task runs from Docker Hub's mirror
+        if: steps.gate-live.outputs.green != 'true'
+        run: |
+          set -euo pipefail
+          image=$(sed -n 's/^[[:space:]]*image[[:space:]]*= "\(public\.ecr\.aws\/docker\/library\/.*\)"$/\1/p' platform/aws/provider/bastion/bastion.go)
+          [ -n "$image" ] || { echo "::error::no public.ecr.aws/docker/library image named in platform/aws/provider/bastion/bastion.go"; exit 1; }
+          mirrored="$OCEL_VPS_OFFICIAL_IMAGES_MIRROR/${image#public.ecr.aws/docker/library/}"
+          docker pull "$mirrored"
+          docker tag "$mirrored" "$image"
+
       - name: Run every integration test but the lifecycle suite on an emulator
         if: steps.gate-live.outputs.green != 'true'
         run: scripts/floci.sh run "$LIVE" -- go test -race -count=1 -timeout 30m -tags integration -skip '^TestLifecycle' ./platform/aws/provider/... ./platform/aws/runtime/...
