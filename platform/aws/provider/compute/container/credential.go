@@ -38,8 +38,10 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions: []string{
 				"application-autoscaling:DeleteScalingPolicy",
+				"application-autoscaling:DeleteScheduledAction",
 				"application-autoscaling:DeregisterScalableTarget",
 				"application-autoscaling:PutScalingPolicy",
+				"application-autoscaling:PutScheduledAction",
 				"application-autoscaling:RegisterScalableTarget",
 			},
 			Resources: []string{iam.ScalableTargetARN},
