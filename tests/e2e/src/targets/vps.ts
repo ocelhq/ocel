@@ -6,7 +6,6 @@ import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import {
   BUILD_VARIABLES,
   clientEnvValuesOf,
-  migrates,
   setsBuildVariables,
   setsEnv,
   setsSecret,
@@ -24,10 +23,9 @@ import { BOX_ZONE, journeyConfigIn, journeyZone, vpsZoneOf } from "../config";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane, Phase } from "../matrix/types";
 import { NonzeroExitError, ocel, recordOutput, runOcel, spawnOcel, workTree } from "../ocel";
-import { fixtureMember, outputRoot } from "../paths";
+import { outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
-import { migrateLine } from "../workspace";
 import { bootstrappedMissed, unbootstrappedMissed } from "./doctor";
 import { adoptionMissed, engineSeries } from "./engine";
 import {
@@ -61,8 +59,6 @@ const KEYVALUES_TIER = `${STATE_ROOT}/production/keyvalues`;
 const PROJECT_ENTRIES = `${KEYVALUES_TIER}/projects`;
 const NO_KEYVALUES_TIER = "no-keyvalues-tier";
 const ENTRY_SUFFIX = ".json";
-const CONTAINER_APP_ROOT = "/app";
-const CONTAINER_LIVE_DIR = "/ocel/live";
 const BOOTSTRAP_DIR = path.join(outputRoot, "vps", "box");
 const BOOTSTRAP_SLUG = `${HARNESS_PREFIX}journey-bootstrap`;
 const BOOTSTRAP_REMOVED = "Removed the production bootstrap";
@@ -576,9 +572,6 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
           "pending instead of attaching it",
       );
     }
-    if (migrates(cell.fixture.checks)) {
-      await this.migrateInPlace(cell);
-    }
     return this.deployment(cell, session);
   }
 
@@ -735,35 +728,6 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
       "utf8",
     );
     return dir;
-  }
-
-  private async migrateInPlace(cell: CellUnderTest): Promise<void> {
-    const target = this.box();
-    const app = cell.fixture.apps[0];
-    if (!app) {
-      throw new Error(`${cell.fixture.name} names no app to migrate its database from`);
-    }
-    const named = await ssh(
-      target,
-      target.user,
-      `sudo docker ps --filter label=ocel.project=${cell.slug} --filter label=ocel.app=${app} ` +
-        "--format '{{.Names}}'",
-    );
-    const container = named.trim().split("\n")[0] ?? "";
-    if (container === "") {
-      throw new Error(
-        `no container on the box is labelled ocel.project=${cell.slug} and ocel.app=${app}, and a ` +
-          "deployed database is migrated from the release that binds it",
-      );
-    }
-    const said = await ssh(
-      target,
-      target.user,
-      `sudo docker exec -e OCEL_LIVE_DIR=${CONTAINER_LIVE_DIR} ` +
-        `-w ${CONTAINER_APP_ROOT}/${fixtureMember(cell.fixture.name)} ${container} ` +
-        migrateLine(),
-    );
-    await cell.evidence.write("deploy", "migrate.log", redact(said));
   }
 
   private hostnamesOf(cell: CellUnderTest): Map<string, string> {
