@@ -69,7 +69,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("the data a second deploy finds is %q, want the row the first one wrote", said)
 	}
 
-	dumped := strings.TrimSpace(vm.ssh(t, "sudo "+boxapi.BackupsHelper+" production dump "+quote(name)+" main"))
+	dumped := strings.TrimSpace(vm.ssh(t, "sudo "+boxapi.BackupsHelper+" production dump "+quote(name)))
 	if !vm.exists(t, dumped) {
 		t.Fatalf("the helper said it dumped %s to %q and nothing exists there", name, dumped)
 	}
