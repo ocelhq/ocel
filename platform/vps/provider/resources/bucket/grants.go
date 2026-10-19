@@ -16,7 +16,7 @@ import (
 )
 
 func (r Resource) ensureRoot(ctx context.Context, ref provider.StackRef) (*container.Spec, storeCredential, error) {
-	container := r.stores.shape()
+	container := r.stores.shape(StoreName(ref))
 	if container == nil {
 		shaped := storeContainer(resources.ProvisionRequest{Ref: storeRef(ref)})
 		container = &shaped
