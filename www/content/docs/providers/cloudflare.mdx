@@ -111,7 +111,7 @@ export default defineConfig({
 - A tier has one origin domain; a deploy naming another is refused. AWS refuses `originDomain`.
 - The first deploy of a tier asks you to deploy again while Google issues the wildcard
   certificate.
-- A project deployed through the proxy before this existed is refused until `ocel destroy` has
+- A project deployed through the proxy before this existed is refused until `ocel projects destroy` has
   taken its deployments down.
 
 Under the hood, these records are DNS-only (a Workers mutual TLS binding cannot reach a proxied

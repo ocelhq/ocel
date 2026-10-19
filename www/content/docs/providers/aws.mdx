@@ -186,7 +186,7 @@ rest, in the default subnets.
   with a token minted from your own credentials, which need `rds-db:connect` (the deploy
   credential has it).
 - **Production is protected.** A production cluster has deletion protection and keeps a final
-  snapshot; `ocel destroy` turns the protection off first and plans it as a slow delete.
+  snapshot; `ocel projects destroy` turns the protection off first and plans it as a slow delete.
 
 ## KV stores
 
@@ -226,7 +226,7 @@ export default defineTransform({
 
 With no replica and no append-only file, a replaced node comes back empty.
 
-`ocel destroy` takes the replication group, its snapshots, parameter and subnet groups,
+`ocel projects destroy` takes the replication group, its snapshots, parameter and subnet groups,
 security group and token.
 
 ## Serverless apps and the VPC
@@ -305,7 +305,7 @@ Limits and differences:
 - Workers, Lambda or container, run the most recently deployed code. Rolling an app back
   changes its routes, not its workers; deploy again to change them.
 
-`ocel destroy` takes the workers, queues, topics and schedules. Records expire on their own: a
+`ocel projects destroy` takes the workers, queues, topics and schedules. Records expire on their own: a
 run 30 days after it finishes or was due, an idempotency key an hour after its
 `idempotencyKeyTTL` (30 days by default).
 
@@ -348,6 +348,6 @@ on the new compute and takes the old ones down once the promotion serves.
 ## Logs
 
 Each Lambda function and worker logs to a CloudWatch log group of its own, deleted with it by
-`ocel destroy`. Containers log to `/ecs/<namespace>-<prod|preview>-containers`, one group per tier. Both keep 14
+`ocel projects destroy`. Containers log to `/ecs/<namespace>-<prod|preview>-containers`, one group per tier. Both keep 14
 days. Read them with [`ocel logs`](/docs/cli/logs), which lists the CloudWatch rate limits a read
 shares.

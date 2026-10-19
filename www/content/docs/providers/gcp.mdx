@@ -404,7 +404,7 @@ The instance has no public address. It is reached at a private address on the ti
 bills about $7.30 a month of its own, and refuses any connection that is not encrypted. Apps connect as the `ocel` user to the `ocel` database with a
 password ocel generates, keeps sealed under the tier key, and hands each app in its binding.
 
-Creating an instance takes several minutes. `ocel destroy`, or dropping the database from the
+Creating an instance takes several minutes. `ocel projects destroy`, or dropping the database from the
 code, deletes the instance and its data; a database created again afterwards is
 a new, empty instance.
 
@@ -428,7 +428,7 @@ Apps authenticate with the token Memorystore generates for the default user, whi
 reads back on every deploy, and reach the store over TLS under the instance's own certificate
 authority, which every SDK's client trusts from the binding.
 
-A store is reached over the tier's [private network](#private-network). `ocel destroy` deletes
+A store is reached over the tier's [private network](#private-network). `ocel projects destroy` deletes
 the instance and its data.
 
 ## Private network

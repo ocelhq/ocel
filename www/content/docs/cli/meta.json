@@ -15,6 +15,7 @@
     "rollback",
     "logs",
     "run",
+    "projects",
     "---Configure---",
     "env",
     "domain",
@@ -35,7 +36,6 @@
     "---Tools---",
     "doctor",
     "schema",
-    "skill",
-    "projects"
+    "skill"
   ]
 }

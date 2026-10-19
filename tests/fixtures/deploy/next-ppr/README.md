@@ -25,4 +25,4 @@ ocel dev
 ocel deploy
 ```
 
-`ocel destroy` takes it all down again.
+`ocel projects destroy` takes it all down again.

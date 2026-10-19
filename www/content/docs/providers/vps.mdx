@@ -65,7 +65,7 @@ An unknown host key is shown and you are asked to record it; check it against th
 ## Bootstrap
 
 `ocel bootstrap <tier>` (`production` or `preview`) prepares the box once per tier. Running
-it again changes only what drifted. `ocel destroy` removes it all, except Docker and its
+it again changes only what drifted. `ocel bootstrap destroy <tier>` removes it all, except Docker and its
 containers.
 
 What lands on the box:
@@ -408,7 +408,7 @@ sudo /usr/local/lib/ocel/backups <tier> restore <container> [<backup>]
 `restore` takes the newest backup when it names none, and works for every kind. A kv store is
 restored as the base of a fresh AOF; a bucket store from a read-only mount.
 
-`ocel destroy` removes each resource with its volume, password and backups.
+`ocel projects destroy` removes each resource with its volume, password and backups.
 
 ## Logs and caching
 

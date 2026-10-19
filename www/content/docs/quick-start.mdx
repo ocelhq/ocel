@@ -145,12 +145,13 @@ production alone. [`ocel preview`](/docs/cli/preview) covers names, CI and persi
 ## Clean up
 
 ```bash
-ocel destroy production
+ocel projects destroy
 ```
 
-It asks you to type the project name, then removes the project's apps, resources and hostnames,
-and nothing else. The shared infrastructure stays for other projects. Remove it once nothing is
-deployed on it:
+It asks you to type the project name, then removes the project's apps, resources and hostnames from
+production and every preview, and nothing else. The shared infrastructure stays for other
+projects. [`ocel projects`](/docs/cli/projects) lists what is still deployed on it; remove it once
+nothing is:
 
 ```bash
 ocel bootstrap destroy production

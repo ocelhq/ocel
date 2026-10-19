@@ -350,7 +350,7 @@ Each deploy checks that the bucket answers, that its CORS allows every `allowedO
 - Only the apps that bind it can read and write. Each app runs as its own account in each environment, so `web` in one preview cannot reach another preview's buckets.
 - Signed urls are signed through IAM by the app's account; no key exists.
 - Abandoned multipart uploads are aborted after a day; upload sessions are deleted a day after their last write.
-- `ocel destroy`, or removing the bucket from code, deletes the bucket and its objects.
+- `ocel projects destroy`, or removing the bucket from code, deletes the bucket and its objects.
 
 ## On AWS
 
