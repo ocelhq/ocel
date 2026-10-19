@@ -228,10 +228,13 @@ func TestBundle(t *testing.T) {
 		if err := Bundle(context.Background(), target); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
-		for _, name := range []string{"optional-peer", "later-peer/sub"} {
-			if !strings.Contains(log.String(), name) {
-				t.Errorf("build log does not name %q, which the bundle leaves unresolved:\n%s", name, log.String())
+		for _, line := range []string{`"later-peer/sub" imported by lazy-dep`, `"optional-peer" imported by lazy-dep`} {
+			if !strings.Contains(log.String(), line) {
+				t.Errorf("build log does not say %s, which the bundle leaves unresolved:\n%s", line, log.String())
 			}
+		}
+		if strings.Count(log.String(), "imported by") != 2 || strings.Contains(log.String(), l.appSrc) {
+			t.Errorf("build log = %s, want each unresolved import once, named by the package importing it", log.String())
 		}
 		if got := runNode(t, l.functionDir); !strings.Contains(got, "lazy:null") {
 			t.Errorf("bundle printed %q, want the dependency to load and handle the missing package itself", got)

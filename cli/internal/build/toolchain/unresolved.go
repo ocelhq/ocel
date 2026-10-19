@@ -33,7 +33,11 @@ func (u *unresolved) plugin() api.Plugin {
 				if len(resolved.Errors) == 0 {
 					return api.OnResolveResult{}, nil
 				}
-				u.record(fmt.Sprintf("%q imported by %s", args.Path, args.Importer))
+				importer := args.Importer
+				if _, name, found := packageRoot(filepath.Dir(importer)); found {
+					importer = name
+				}
+				u.record(fmt.Sprintf("%q imported by %s", args.Path, importer))
 				return api.OnResolveResult{Path: args.Path, External: true}, nil
 			})
 		},
