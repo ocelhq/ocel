@@ -40,11 +40,20 @@ type nodeChild struct {
 
 	lifecycle bool
 
+	logs io.Writer
+
 	mu           sync.Mutex
 	pending      map[string]chan struct{}
 	flushWaiter  chan compileCacheFlushedPayload
 	warmWaiter   chan compileCacheWarmedPayload
 	bytecodeDone bool
+}
+
+func (m *nodeChild) logOutput() io.Writer {
+	if m.logs == nil {
+		return os.Stderr
+	}
+	return m.logs
 }
 
 func (m *nodeChild) cacheSource() bytecode.Source {
@@ -550,6 +559,10 @@ func (m *nodeChild) drainControl(reader *bufio.Reader) {
 		}
 		switch msg.Type {
 		case "log":
+			var p logPayload
+			if json.Unmarshal(msg.Payload, &p) == nil && p.Message != "" {
+				fmt.Fprintln(m.logOutput(), p.Message)
+			}
 		case "metric":
 		case "request-end":
 		case "invocation-complete":
