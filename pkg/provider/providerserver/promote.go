@@ -58,7 +58,7 @@ func promote(ctx context.Context, l projectLedger, releases *provider.ContainerR
 		}
 		moves[i] = router.PointerMove{Pointer: pointer, Promotion: promoted, Records: records, Hosts: routed.hosts, Superseded: routed.superseded, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
 	}
-	if err := scaleUpPromoted(ctx, releases, l, pointer, promoted, progress); err != nil {
+	if err := scaleUpPromoted(ctx, releases, l, req, progress); err != nil {
 		return nil, err
 	}
 	if req.confirm != nil {
