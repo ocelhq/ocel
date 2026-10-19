@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"net"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -83,14 +85,18 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 type projectKeysKMS struct {
 	kmspb.UnimplementedKeyManagementServiceServer
 
-	mu      sync.Mutex
-	keys    map[string]bool
-	created []string
+	mu       sync.Mutex
+	keys     map[string]bool
+	created  []string
+	ringless bool
 }
 
 func (k *projectKeysKMS) CreateCryptoKey(_ context.Context, req *kmspb.CreateCryptoKeyRequest) (*kmspb.CryptoKey, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	if k.ringless {
+		return nil, status.Error(codes.NotFound, "KeyRing not found: "+req.GetParent())
+	}
 	name := req.GetParent() + "/cryptoKeys/" + req.GetCryptoKeyId()
 	if k.keys[name] {
 		return nil, status.Error(codes.AlreadyExists, name)
@@ -136,6 +142,21 @@ func TestTheFirstValueAProjectSealsMakesTheProjectsKeyAndIsSealedUnderIt(t *test
 
 	if want := []string{ports.ProjectKey(environment.TierProduction, "shop")}; !slices.Equal(kms.created, want) {
 		t.Errorf("made the keys %q, want %q once: the second seal finds the key there", kms.created, want)
+	}
+}
+
+func TestTheFirstValueAProjectSealsWhereNoKeyRingExistsIsRefusedNamingTheBootstrap(t *testing.T) {
+	t.Parallel()
+	p, kms := servingProjectKeys(t)
+	kms.ringless = true
+
+	_, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "STRIPE_KEY"), []byte("sk_live"))
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Seal() where no key ring exists = %v, want a %s refusal: no project key can be made before the bootstrap makes the ring", err, refusal.CodeNotReady)
+	}
+	if !strings.Contains(refused.Message, "`ocel bootstrap production`") {
+		t.Errorf("Seal() refused with %q, want it to name the command that makes the key ring", refused.Message)
 	}
 }
 
