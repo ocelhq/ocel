@@ -16,6 +16,7 @@ import (
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -23,6 +24,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
@@ -74,7 +77,8 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 		}
 	}
 	if hasContainers {
-		tree.AddShaped(scopes.Shared, awsports.Vendor, region, containers.Shape(req.Deploy.Tier))
+		public := routesContainersPublicly(req.Edge)
+		tree.AddShaped(scopes.Shared, awsports.Vendor, region, containers.Shape(req.Deploy.Tier, containers.Raised{Private: !public, Public: public}))
 	}
 	if reachesVPCFromFunctions(req) {
 		tree.AddShaped(scopes.Shared, awsports.Vendor, region, functionnetwork.Shape(req.Deploy.Tier))
@@ -255,6 +259,11 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 		})
 	}
 	s.AddPlain(scope, component.TerraformECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
+}
+
+func routesContainersPublicly(front edge.Kind) bool {
+	paired, _ := provider.Facts{Pairings: edges.Pairings()}.PairedRouter(front, provider.ComputeContainer)
+	return paired == alb.Kind
 }
 
 func reachesVPCFromFunctions(req provider.ShapeRequest) bool {

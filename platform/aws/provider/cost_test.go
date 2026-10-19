@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -235,6 +236,29 @@ func TestShapeBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
 	counts := typeCounts(set)
 	if counts["aws_api_gateway_rest_api"] != 1 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 || counts["aws_data_transfer"] != 1 {
 		t.Errorf("counts = %v, want the project's own REST API, the app's egress, no CloudFront and no container load balancer: the 404 responder is a part only the preview wildcard adds", counts)
+	}
+}
+
+func TestShapeBehindCloudflarePricesTheInternetFacingLoadBalancerItsContainerAppIsForwardedTo(t *testing.T) {
+	client, _ := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    shopManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Edge:        &contractv1.EdgeSelection{Kind: string(cloudflare.Kind)},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	var internal []bool
+	for _, r := range set.GetResources() {
+		if r.GetType() == "aws_lb" {
+			internal = append(internal, r.GetProperties().AsMap()["internal"].(bool))
+		}
+	}
+	if !slices.Equal(internal, []bool{false}) {
+		t.Errorf("load balancers internal = %v, want the one internet-facing load balancer Cloudflare forwards the container app to", internal)
 	}
 }
 
