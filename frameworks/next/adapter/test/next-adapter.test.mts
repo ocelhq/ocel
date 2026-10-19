@@ -21,6 +21,8 @@ import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { defaultImages, writePrerenderManifest } from "./fixtures.mts";
 
+vi.mock("../src/runtime-requires.mts", () => ({ traceRuntimeRequires: async () => ({}) }));
+
 let originalCwd: string;
 
 beforeEach(() => {

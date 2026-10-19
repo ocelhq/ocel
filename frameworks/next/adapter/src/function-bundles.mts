@@ -22,6 +22,7 @@ import {
 } from "./origin-edge.mjs";
 import { type Bundle, type PackedMember, packBundles } from "./pack.mjs";
 import { routeKeyOf } from "./route-keys.mjs";
+import { traceRuntimeRequires } from "./runtime-requires.mjs";
 
 export interface FunctionBundles {
   appRel: string;
@@ -83,7 +84,9 @@ export async function packFunctions(ctx: BuildContext, plan: BuildPlan): Promise
 
   const { entryRoutes, entryKeyByPathname, entryKeyByRouteId } = groupEntryRoutes(plan);
 
+  const runtimeAssets = await traceRuntimeRequires(projectDir, repoRoot);
   const assetsOf = (route: { assets: Record<string, string>; filePath: string }) => ({
+    ...runtimeAssets,
     ...route.assets,
     [relative(repoRoot, route.filePath)]: route.filePath,
   });
@@ -101,6 +104,7 @@ export async function packFunctions(ctx: BuildContext, plan: BuildPlan): Promise
 
   const seeded = nodeMiddleware !== undefined || originEdge !== null;
   const seedAssets = {
+    ...runtimeAssets,
     ...(nodeMiddleware ? assetsOf(nodeMiddleware) : {}),
     ...(originEdge ? originEdge.seedAssets : {}),
   };
