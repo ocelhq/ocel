@@ -38,7 +38,7 @@ func TestABindingsGrantsArePublishedBesideTheRecordAnAppReads(t *testing.T) {
 		t.Fatalf("BindingMessage: %v", err)
 	}
 	if !proto.Equal(published.GetBinding(), app) {
-		t.Errorf("published binding = %v, want the record an app reads, %v", published.GetBinding(), app)
+		t.Errorf("published binding %q (%T) differs from the record an app reads, %q (%T)", published.GetBinding().GetName(), published.GetBinding().GetProperties(), app.GetName(), app.GetProperties())
 	}
 	read := provider.PublishedBindingOf(published)
 	if read.PasswordSecret() != "arn:aws:secretsmanager:us-east-1:1:secret:db" || len(read.Grants) != 1 || len(read.Grants[0].Conditions) != 1 {
