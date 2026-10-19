@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/acm v1.42.1
 	github.com/aws/aws-sdk-go-v2/service/apigateway v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.37.6
+	github.com/aws/aws-sdk-go-v2/service/applicationautoscaling v1.51.2
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.74.0
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.67.6
 	github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore v1.15.6
@@ -67,7 +68,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.38 // indirect
-	github.com/aws/aws-sdk-go-v2/service/applicationautoscaling v1.51.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.24 // indirect
