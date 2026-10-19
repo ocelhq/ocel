@@ -725,3 +725,17 @@ type warningLog struct {
 }
 
 func (l *warningLog) Warn(message string) { l.warnings = append(l.warnings, message) }
+
+func TestABootstrapRunRefusesAPartItHoldsNoTemplateForBeforeItWritesAnything(t *testing.T) {
+	stacks, apis := installedBootstrap(t)
+	before := stacks.updates
+
+	err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Parts: []string{"image-optimizer"}}, nil)
+
+	if err == nil || !strings.Contains(err.Error(), `"image-optimizer"`) {
+		t.Fatalf("Run() asked for a part the account bootstrap does not hold = %v, want a refusal naming it", err)
+	}
+	if stacks.updates != before {
+		t.Errorf("Run() wrote %d change sets before refusing a part it cannot apply", stacks.updates-before)
+	}
+}
