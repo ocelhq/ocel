@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/machine"
@@ -108,7 +109,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		"/var/lib/ocel/production/keyvalues",
 		"/var/lib/ocel/.ssh/authorized_keys",
 		"/usr/local/lib/ocel",
-		"/usr/local/lib/ocel/keyvalues",
+		boxapi.LiveBinary,
 		deployLogin,
 	} {
 		if planned := planFor(group, want); planned.Action != provider.ActionCreate {
