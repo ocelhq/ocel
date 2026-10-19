@@ -364,11 +364,10 @@ func (r *projectRemoval) refuseIfPlanGrew(ctx context.Context, consented *planv1
 }
 
 func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
-	var errs []error
-
 	if err := r.unbind(ctx, progress); err != nil {
-		errs = append(errs, err)
+		return r.keepOnRecord(err, progress)
 	}
+	var errs []error
 	for _, env := range r.environments() {
 		if err := retire(ctx, r.provider, noAppLive(r.slug, r.tier, env, r.lease), progress); err != nil {
 			errs = append(errs, err)
@@ -409,10 +408,14 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
-		progress.Say(fmt.Sprintf("Keeping %s on record in %s: a rerun reads its progress from what is still here", r.slug, r.tier))
-		return err
+		return r.keepOnRecord(err, progress)
 	}
 	return r.forgetProjectIfEmpty(ctx, progress)
+}
+
+func (r *projectRemoval) keepOnRecord(err error, progress progress.Log) error {
+	progress.Say(fmt.Sprintf("Keeping %s on record in %s: a rerun reads its progress from what is still here", r.slug, r.tier))
+	return err
 }
 
 func (r *projectRemoval) originCertificates() []string {

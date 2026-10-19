@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -534,5 +535,34 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	}); err == nil {
 		t.Fatal("PlanRemoveProject() with no slug succeeded, want it refused")
+	}
+}
+
+func TestRemoveProjectWhosePointerCannotBeRemovedDestroysNoStackAndRetiresNothingUntilARerunRemovesIt(t *testing.T) {
+	client, vendor := deployedProject(t)
+	retirements := len(vendor.Retirements())
+	relayPlane(vendor).FailNextPointerRemoval(errors.New("the trust store is still associated"))
+
+	result := removeProject(t, client, projectRequest())
+
+	if result.GetSuccess() || !strings.Contains(result.GetError(), "the trust store is still associated") {
+		t.Fatalf("RemoveProject() while its pointer cannot be removed = %q, want the failure reported", result.GetError())
+	}
+	if destroyed := slices.DeleteFunc(vendor.Journal(), func(entry string) bool { return !strings.HasPrefix(entry, "destroy ") }); len(destroyed) != 0 {
+		t.Errorf("the removal reached %v while the pointer still routed to them, want no stack destroyed: the origin a pointer routes to stands until the pointer is gone", destroyed)
+	}
+	if retired := vendor.Retirements()[retirements:]; len(retired) != 0 {
+		t.Errorf("the removal retired %v while the pointer still routed to them, want nothing retired: the shared parts the origin runs on stand until the pointer is gone", retired)
+	}
+
+	if result := removeProject(t, client, projectRequest()); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() rerun = %q, want the project removed", result.GetError())
+	}
+	entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("the project still records %v after the rerun, want every stack forgotten", entries)
 	}
 }
