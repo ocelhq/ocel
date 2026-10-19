@@ -27,9 +27,10 @@ type Stacks interface {
 }
 
 type StackDestroy struct {
-	Ref    StackRef
-	Images ImageStore
-	Lease  Lease
+	Ref       StackRef
+	Images    ImageStore
+	Lease     Lease
+	KeepParts bool
 }
 
 type StackRef struct {

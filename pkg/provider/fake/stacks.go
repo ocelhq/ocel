@@ -36,6 +36,7 @@ type Stacks struct {
 	taken          []string
 	destroyedWith  []provider.ImageStore
 	leasedDestroys []string
+	partsKeptBy    []string
 	entered        func(provider.StackSpec) error
 	destroying     func(provider.StackRef) error
 	teardown       func(provider.StackRef) provider.Plan
@@ -250,6 +251,12 @@ func (r *Stacks) ListDestroysUnderLease() []string {
 	return slices.Clone(r.leasedDestroys)
 }
 
+func (r *Stacks) ListDestroysKeepingParts() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.partsKeptBy)
+}
+
 func (r *Stacks) Destroy(_ context.Context, req provider.StackDestroy, progress progress.Log) error {
 	ref, images := req.Ref, req.Images
 	r.journal.note("destroy " + ref.Name.String())
@@ -257,6 +264,9 @@ func (r *Stacks) Destroy(_ context.Context, req provider.StackDestroy, progress 
 	destroying := r.destroying
 	if req.Lease.Covers(ref) {
 		r.leasedDestroys = append(r.leasedDestroys, ref.Name.String())
+	}
+	if req.KeepParts {
+		r.partsKeptBy = append(r.partsKeptBy, ref.Name.String())
 	}
 	r.mu.Unlock()
 	if destroying != nil {

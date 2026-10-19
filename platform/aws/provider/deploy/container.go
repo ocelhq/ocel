@@ -100,7 +100,7 @@ func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, l
 	if err := r.automation.Destroy(ctx, ref, lease, progress); err != nil {
 		return err
 	}
-	return r.containers.Release(ctx, r.cfg.KeyValues, ref, progress)
+	return r.containers.ForgetConsumer(ctx, r.cfg.KeyValues, ref)
 }
 
 func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.Plan, error) {

@@ -111,6 +111,31 @@ func TestTakingDownAnEnvironmentTakesItsContainerWorkersAndLetsGoTheirHoldOnTheC
 	}
 }
 
+func TestReclaimingTheFailedOnlyReleaseOfAnAppHostingContainerWorkersTakesTheirStackAndKeepsTheContainerInfra(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	stacks, engine, spec := containerStacksHostingWorkers(t, store)
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref, KeepParts: true}, progress.Discard()); err != nil {
+		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
+	}
+
+	torn := engine.torn()
+	if !slices.Contains(torn, naming.ContainerWorkersStack("prod", "web").String()) {
+		t.Errorf("torn down = %v, want the workers stack %s: no release of web is left to run them", torn, naming.ContainerWorkersStack("prod", "web"))
+	}
+	if slices.Contains(torn, containers.StackRef(environment.TierProduction).Name.String()) {
+		t.Errorf("torn down = %v, want the container infrastructure kept for the retry", torn)
+	}
+	if consumers, err := listConsumers(ctx, store); err != nil || len(consumers) != 0 {
+		t.Errorf("consumers left = %v (%v), want none: neither stack that claimed the cluster is left", consumers, err)
+	}
+}
+
 func liveContainerApp(workers ...string) provider.LiveApps {
 	return provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Compute: provider.ComputeContainer, Workers: workers}}}
 }

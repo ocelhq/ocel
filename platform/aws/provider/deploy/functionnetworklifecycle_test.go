@@ -497,3 +497,40 @@ func TestTheFunctionNetworkIsDescribedAsAPartWithTheProjectsInItAndTheIdleCostOf
 		t.Errorf("function network priced as %v, want its NAT gateway and elastic IP: they bill by the hour whether or not a function runs", priced)
 	}
 }
+
+func TestReclaimingAFailedDeploysReleaseKeepsTheFunctionNetworkItRaisedAndTheRetryReusesIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stacks, engine, store := functionNetworkStacks(t, "web")
+	web := usingPostgres(t, "web")
+	if _, err := stacks.Provision(ctx, web, progress.Discard()); err != nil {
+		t.Fatalf("Provision(the failing deploy's release) = %v", err)
+	}
+
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: web.Ref, KeepParts: true}, progress.Discard()); err != nil {
+		t.Fatalf("Destroy(the failed deploy's release) = %v", err)
+	}
+	if torn := engine.torn(); len(torn) != 1 || torn[0] != web.Ref.Name.String() {
+		t.Fatalf("reclaiming the failed deploy's release tore down %v, want only its own stack: the retry would raise the function network again", torn)
+	}
+	tier := environment.TierProduction
+	if _, present, err := stackrecords.Read(ctx, store, tier, functionnetwork.Slug, functionnetwork.StackRef(tier).Name); err != nil || !present {
+		t.Errorf("the function network is recorded %v (%v), want its stack record kept for the retry to find", present, err)
+	}
+	if recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, tier, functionnetwork.Part); err != nil || !present || recorded.State != stackrecords.PartReady {
+		t.Errorf("function-network record = %+v, %v, %v, want it kept ready", recorded, present, err)
+	}
+	if users, err := functionnetwork.Shared.ListUsers(ctx, store, tier); err != nil || len(users) != 0 {
+		t.Errorf("function network users = %v (%v), want none once the failed release went", users, err)
+	}
+
+	retry := web
+	retry.Ref.Name = naming.AppStack("prod", "web", mustReleaseToken(t, "r00000009"))
+	if _, err := stacks.Provision(ctx, retry, progress.Discard()); err != nil {
+		t.Fatalf("Provision(the retry) = %v", err)
+	}
+	if ran := engine.stacks(); len(ran) != 3 || ran[2] != retry.Ref.Name.String() {
+		t.Errorf("the retry ran %v, want only its own app stack: the function network the failed deploy raised is still there", ran)
+	}
+}
