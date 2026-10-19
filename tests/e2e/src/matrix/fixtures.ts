@@ -147,6 +147,16 @@ export const deploy = {
       gcp: [defaults, container],
     },
   }),
+  nestjs: fixture("deploy/nestjs", {
+    apps: ["web"],
+    checks: NODE_CHECKS,
+    on: {
+      dev: [defaults],
+      aws: [defaults, container],
+      vps: [defaults],
+      gcp: [defaults, container],
+    },
+  }),
   nextPpr: fixture("deploy/next-ppr", {
     apps: ["web"],
     checks: [...healthChecks, ...nextPprChecks, ...nextStoreReadChecks],
