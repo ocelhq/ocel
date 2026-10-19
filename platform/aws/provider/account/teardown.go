@@ -121,16 +121,6 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		return err
 	}
 
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
-		if bucket == "" {
-			continue
-		}
-		progress.Say("Emptying bucket " + bucket)
-		if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
-			return err
-		}
-	}
-
 	installed, err := installedParts(ctx, apis.CFN, ns, tier)
 	if err != nil {
 		return err
@@ -152,6 +142,16 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	if deployed.AppBoundaryARN != "" {
 		progress.Say("Releasing the app boundary from every role still under it")
 		if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, progress); err != nil {
+			return err
+		}
+	}
+
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
+		if bucket == "" {
+			continue
+		}
+		progress.Say("Emptying bucket " + bucket)
+		if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
 			return err
 		}
 	}

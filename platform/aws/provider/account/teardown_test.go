@@ -287,6 +287,30 @@ func TestTeardownRemovesTheTiersPartsBeforeTheCoreStackTheirTableIsIn(t *testing
 	}
 }
 
+func TestTeardownEmptiesTheBucketsOnlyOnceTheTiersPartsAreGone(t *testing.T) {
+	t.Parallel()
+
+	apis, _, _, buckets := teardownFakes(t)
+	var emptiedFirst []string
+	apis.RemoveParts = func(context.Context, environment.Tier, progress.Log) error {
+		emptiedFirst = slices.Clone(buckets.listed)
+		return nil
+	}
+
+	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+
+	if len(emptiedFirst) != 0 {
+		t.Errorf("%v were emptied before the tier's parts were removed, so a shared stack's state was gone before its destroy read it, and what its destroy wrote kept the state bucket from being deleted", emptiedFirst)
+	}
+	for _, bucket := range []string{"ocel-state", "ocel-artifacts", "ocel-assets"} {
+		if !slices.Contains(buckets.listed, bucket) {
+			t.Errorf("emptied %v, want %s emptied before the core stack goes", buckets.listed, bucket)
+		}
+	}
+}
+
 func TestTeardownStopsWhenAPartCannotBeRemovedSoNothingIsLeftBehindUnreachable(t *testing.T) {
 	t.Parallel()
 
