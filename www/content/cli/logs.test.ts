@@ -7,7 +7,7 @@ const read = (path: string) => readFileSync(resolve(repo, path), "utf8");
 
 const sources = {
   output: "cli/internal/commands/logs/output.go",
-  containers: "platform/vps/provider/host/containers.go",
+  logging: "platform/vps/provider/docker/hardening.go",
 };
 
 const page = read("www/content/cli/logs.mdx");
@@ -46,9 +46,9 @@ describe("the ocel logs prose", () => {
   });
 
   it("states the VPS retention the host sets", () => {
-    const containers = read(sources.containers);
-    const size = Number(containers.match(/logMaxSize\s*=\s*"(\d+)m"/)?.[1]);
-    const files = Number(containers.match(/logMaxFiles\s*=\s*"(\d+)"/)?.[1]);
+    const logging = read(sources.logging);
+    const size = Number(logging.match(/LogMaxSize\s*=\s*"(\d+)m"/)?.[1]);
+    const files = Number(logging.match(/LogMaxFiles\s*=\s*"(\d+)"/)?.[1]);
     expect(size).toBeGreaterThan(0);
     expect(files).toBeGreaterThan(0);
     expect(page).toContain(`${size * files} MB`);
