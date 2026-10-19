@@ -47,6 +47,20 @@ func TestWhoamiPlacesTheRegionBesideTheAccountRatherThanAmongTheDetails(t *testi
 	}
 }
 
+func TestWhoamiNamesAWSAsTheProviderThePrincipalBelongsTo(t *testing.T) {
+	t.Parallel()
+
+	creds := Credentials{STS: callerIdentity{account: "123456789012", arn: "arn:aws:iam::123456789012:user/deployer"}}
+
+	principal, err := creds.Whoami(context.Background())
+	if err != nil {
+		t.Fatalf("Whoami() = %v", err)
+	}
+	if principal.Vendor != "aws" {
+		t.Errorf("Whoami().Vendor = %q, want aws: a principal naming no provider fails the credentials conformance suite", principal.Vendor)
+	}
+}
+
 func TestWhoamiKeepsTheProfileAmongTheDetails(t *testing.T) {
 	t.Parallel()
 
