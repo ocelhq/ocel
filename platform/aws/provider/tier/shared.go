@@ -20,6 +20,13 @@ type SharedSpec struct {
 }
 
 func Shared(spec SharedSpec) Part {
+	removeRaised := func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+		_, present, err := spec.Describe(ctx, tier)
+		if err != nil || !present {
+			return err
+		}
+		return spec.Remove(ctx, tier, progress)
+	}
 	return Part{
 		Name:     spec.Part,
 		Summary:  spec.Summary,
@@ -33,7 +40,7 @@ func Shared(spec SharedSpec) Part {
 				}
 				return Deletion(part.Name, "the bootstrap it belongs to is being removed", part.Resources), nil
 			},
-			Remove: spec.Remove,
+			Remove: removeRaised,
 		},
 		Removal: &Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
@@ -46,7 +53,7 @@ func Shared(spec SharedSpec) Part {
 				}
 				return Deletion(part.Name, spec.RemovalReason, part.Resources), nil
 			},
-			Remove: spec.Remove,
+			Remove: removeRaised,
 		},
 	}
 }
