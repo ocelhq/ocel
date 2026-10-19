@@ -76,7 +76,7 @@ export interface AppConfig {
   /** The variables folder this app reads, when it does not read the project's own. */
   folder?: string;
   /** What the app is built with, when ocel is not to detect it from the app's own files. */
-  framework?: "node" | "next" | "sveltekit" | "go" | "python" | "rust";
+  framework?: "node" | "next" | "sveltekit" | "nestjs" | "go" | "python" | "rust";
   /** The app's name. It must be a valid DNS label. */
   name: string;
   /** The app's directory, relative to the config. */

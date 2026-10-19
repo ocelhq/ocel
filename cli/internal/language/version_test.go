@@ -31,6 +31,7 @@ func TestDeclaredFrameworkVersionIsTheMajorOfTheRangeThePackageManifestDeclares(
 		{"next", `{"devDependencies":{"next":"~14.2.3"}}`, "14"},
 		{"next", `{"dependencies":{"next":">=13 <16"}}`, "13"},
 		{"sveltekit", `{"devDependencies":{"@sveltejs/kit":"2.5.0"}}`, "2"},
+		{"nestjs", `{"dependencies":{"@nestjs/core":"^11.0.1"}}`, "11"},
 		{"next", `{"dependencies":{"next":"latest"}}`, ""},
 		{"next", `{"dependencies":{"next":"workspace:*"}}`, ""},
 		{"next", `{"dependencies":{"next":"workspace:^15.0.0"}}`, ""},

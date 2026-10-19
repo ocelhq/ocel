@@ -549,6 +549,36 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
+	t.Run("a nestjs app is built by its own build script and its compiled entry bundled here", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		source := filepath.Join(root, "apps", "api")
+		writeFile(t, filepath.Join(source, "package.json"), `{"scripts":{"build":"mkdir -p dist && cp src/main.ts dist/main.js"}}`)
+		writeFile(t, filepath.Join(source, "src", "main.ts"), "export default { fetch: () => new Response('hi') };\n")
+
+		ran := false
+		builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+			ran = true
+			return nil
+		}}
+		cfg := &project.Project{Dir: root, Apps: []project.App{{Name: "api", Path: "apps/api", Compute: provider.ComputeServerless, Framework: "nestjs", Language: "js"}}}
+		if err := builder.Build(context.Background(), cfg, nil, Log{}); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		if ran {
+			t.Error("the node build script ran for an app bundled here")
+		}
+		fns, err := ReadFunctions(root)
+		if err != nil {
+			t.Fatalf("ReadFunctions: %v", err)
+		}
+		assertFunctions(t, "ReadFunctions", fns, []Function{
+			{Route: "index", Framework: buildoutput.Framework{Name: "nestjs", Arch: arch.X8664}, EntryFile: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
+		})
+	})
+
 	t.Run("an app that states no framework is refused", func(t *testing.T) {
 		t.Parallel()
 

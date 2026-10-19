@@ -77,7 +77,7 @@ func TestAProjectNamingNoAppsHasNoAppAtARootNoBuildWouldServe(t *testing.T) {
 		files map[string]string
 		why   string
 	}{
-		{"a package.json with no framework and no entrypoint", map[string]string{nodeManifest: `{"dependencies":{"ocel":"0.0.2"}}`}, "a package.json with no next dependency or next config, no @sveltejs/kit dependency and no entrypoint among src/server"},
+		{"a package.json with no framework and no entrypoint", map[string]string{nodeManifest: `{"dependencies":{"ocel":"0.0.2"}}`}, "a package.json with no next dependency or next config, no @sveltejs/kit dependency, no @nestjs/core dependency and no entrypoint among src/server"},
 		{"a go module whose main package is under cmd/worker", map[string]string{"go.mod": "module example.com/api\n", "cmd/worker/main.go": "package main\n\nfunc main() {}\n"}, "a go.mod with no package main in ., cmd/api or cmd/server"},
 		{"a library crate", map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "src/lib.rs": "\n"}, "a Cargo.toml with no binary target"},
 		{"a pyproject.toml with no entrypoint", map[string]string{"pyproject.toml": "[project]\nname = \"helpers\"\n"}, "a pyproject.toml with no app.py"},

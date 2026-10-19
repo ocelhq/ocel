@@ -93,21 +93,15 @@ func TestTheNodeEntrypointsAreEachBaseWithEachExtensionInTurn(t *testing.T) {
 	}
 }
 
-func TestANestJSAppIsANodeAppServedFromSrcMainWhenNoOtherEntrypointIsThere(t *testing.T) {
+func TestANestJSAppIsDetectedByItsNestjsCoreDependencyRatherThanAsANodeApp(t *testing.T) {
 	t.Parallel()
 
-	nest := map[string]string{"package.json": `{"dependencies":{"@nestjs/core":"11"}}`, "src/main.ts": "\n", "src/app.module.ts": "\n"}
-	dir := dirWithFiles(t, nest)
-	got, err := language.Resolve(dir, dir, "")
-	if err != nil || got.Framework != buildoutput.FrameworkNode || got.Entrypoint != "src/main.ts" {
-		t.Errorf("Resolve = %+v, %v, want node served from src/main.ts, where nest new writes the server", got, err)
-	}
-
-	nest["app.js"] = "\n"
-	dir = dirWithFiles(t, nest)
-	got, err = language.Resolve(dir, dir, "")
-	if err != nil || got.Entrypoint != "app.js" {
-		t.Errorf("Resolve = %+v, %v, want app.js: src/main is the last place looked", got, err)
+	for _, manifest := range []string{`{"dependencies":{"@nestjs/core":"11"}}`, `{"devDependencies":{"@nestjs/core":"11"}}`} {
+		dir := dirWithFiles(t, map[string]string{"package.json": manifest, "src/main.ts": "\n", "app.js": "\n"})
+		got, err := language.Resolve(dir, dir, "")
+		if err != nil || got.Framework != buildoutput.FrameworkNestJS || got.Evidence != "package.json depends on @nestjs/core" || got.Entrypoint != "" {
+			t.Errorf("Resolve(%s) = %+v, %v, want nestjs on the evidence of its @nestjs/core dependency, with the entrypoint left to its build", manifest, got, err)
+		}
 	}
 }
 
@@ -186,7 +180,7 @@ func TestANextAppWithANodeEntrypointIsNext(t *testing.T) {
 func TestResolveDetectsNothingWhereNoDetectorMatches(t *testing.T) {
 	t.Parallel()
 
-	nodeLacks := "a package.json with no next dependency or next config, no @sveltejs/kit dependency and no entrypoint among src/server, src/index, src/app, index, server, app or src/main with a .ts, .mts, .cts, .js, .mjs or .cjs extension"
+	nodeLacks := "a package.json with no next dependency or next config, no @sveltejs/kit dependency, no @nestjs/core dependency and no entrypoint among src/server, src/index, src/app, index, server, app or src/main with a .ts, .mts, .cts, .js, .mjs or .cjs extension"
 	cases := []struct {
 		name  string
 		files map[string]string
@@ -235,6 +229,12 @@ func TestResolveDetectsNothingWhereSeveralDetectorsMatch(t *testing.T) {
 			map[string]string{"package.json": `{"dependencies":{"next":"15","@sveltejs/kit":"2"}}`},
 			[]string{"next", "sveltekit"},
 			"both a Next.js app (package.json depends on next) and a SvelteKit app (package.json depends on @sveltejs/kit)",
+		},
+		{
+			"a next app that is also a nestjs app",
+			map[string]string{"package.json": `{"dependencies":{"next":"15","@nestjs/core":"11"}}`},
+			[]string{"next", "nestjs"},
+			"both a Next.js app (package.json depends on next) and a NestJS app (package.json depends on @nestjs/core)",
 		},
 		{
 			"a go main package beside a node entrypoint",
@@ -301,7 +301,7 @@ func TestANamedFrameworkIsWrittenInTheLanguageOfItsDetectorsManifest(t *testing.
 	t.Parallel()
 
 	dir := t.TempDir()
-	cases := map[string]language.Language{"node": language.JS, "next": language.JS, "sveltekit": language.JS, "go": language.Go, "python": language.Python, "rust": language.Rust}
+	cases := map[string]language.Language{"node": language.JS, "next": language.JS, "sveltekit": language.JS, "nestjs": language.JS, "go": language.Go, "python": language.Python, "rust": language.Rust}
 	for _, framework := range buildoutput.Frameworks() {
 		got, err := language.Resolve(dir, dir, framework)
 		if err != nil || got.Language != cases[framework] || cases[framework] == "" {

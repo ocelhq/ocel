@@ -43,14 +43,17 @@ type base struct {
 }
 
 func functionBases() map[string]base {
-	return map[string]base{
-		buildoutput.FrameworkNode:      {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkNext:      {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkSvelteKit: {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkGo:        {ref: run.StaticImage},
-		buildoutput.FrameworkPython:    {ref: pythonImage},
-		buildoutput.FrameworkRust:      {ref: run.StaticImage},
+	bases := map[string]base{
+		buildoutput.FrameworkGo:     {ref: run.StaticImage},
+		buildoutput.FrameworkPython: {ref: pythonImage},
+		buildoutput.FrameworkRust:   {ref: run.StaticImage},
 	}
+	for _, name := range buildoutput.Frameworks() {
+		if buildoutput.RunsOnNode(name) {
+			bases[name] = base{ref: nodeImage, bins: []string{nodeBinDir}}
+		}
+	}
+	return bases
 }
 
 func (p Images) ResolveBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
@@ -99,11 +102,11 @@ func onPath(env []string, bins []string) []string {
 }
 
 func (p Images) ReadRuntime(_ context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
-	switch framework.Name {
-	case buildoutput.FrameworkNode, buildoutput.FrameworkSvelteKit:
-		return map[string][]byte{images.RuntimeEntrypointFile: payloads.NodeRuntime()}, nil
-	case buildoutput.FrameworkNext:
+	switch {
+	case framework.Name == buildoutput.FrameworkNext:
 		return maps.Clone(payloads.NextRuntime()), nil
+	case buildoutput.RunsOnNode(framework.Name):
+		return map[string][]byte{images.RuntimeEntrypointFile: payloads.NodeRuntime()}, nil
 	default:
 		return nil, nil
 	}

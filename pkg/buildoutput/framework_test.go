@@ -58,3 +58,17 @@ func TestSvelteKitIsAFrameworkThatRunsOnNodeAndBuildsWithItsOwnScript(t *testing
 		}
 	}
 }
+
+func TestNestJSIsAFrameworkThatRunsOnNodeAndReadsNoValuesAtBuild(t *testing.T) {
+	t.Parallel()
+
+	if !buildoutput.IsKnownFramework(buildoutput.FrameworkNestJS) {
+		t.Fatalf("Frameworks() = %v, and none of them is %q", buildoutput.Frameworks(), buildoutput.FrameworkNestJS)
+	}
+	if !buildoutput.RunsOnNode(buildoutput.FrameworkNestJS) {
+		t.Error("a NestJS function is served by something other than node")
+	}
+	if buildoutput.BuildsWithItsOwnScript(buildoutput.FrameworkNestJS) {
+		t.Error("a NestJS build is handed build-time values, port forwards and a refusal of entrypoint, which only an adapter build reads")
+	}
+}

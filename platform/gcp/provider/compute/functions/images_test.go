@@ -263,3 +263,19 @@ func TestABaseFetchedForOneRequestStillReadsItsLayersAfterThatRequestEnds(t *tes
 		t.Errorf("the shared base reads its layers with a context that is %v once the request that first pulled it ended, so a later deploy's image load fails", err)
 	}
 }
+
+func TestEveryFrameworkThatRunsOnNodeBootsFromTheNodeBaseThroughAShippedRuntime(t *testing.T) {
+	p, _ := basedOn(t, v1.Config{})
+	for _, name := range buildoutput.Frameworks() {
+		if !buildoutput.RunsOnNode(name) {
+			continue
+		}
+		if got := functionBases()[name].ref; got != nodeImage {
+			t.Errorf("functionBases()[%q] = %q, want the node base %q", name, got, nodeImage)
+		}
+		runtime, err := p.ReadRuntime(context.Background(), buildoutput.Framework{Name: name})
+		if err != nil || len(runtime["entrypoint.mjs"]) == 0 {
+			t.Errorf("ReadRuntime(%q) = %d files, %v, want the entrypoint its function boots through", name, len(runtime), err)
+		}
+	}
+}
