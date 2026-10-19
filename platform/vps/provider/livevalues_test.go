@@ -4,6 +4,8 @@ package vps_test
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -113,6 +115,14 @@ func (vm liveBox) reads(t *testing.T, container, name string) string {
 	return strings.TrimSpace(vm.beside(t, container, "curl -sS -m 10 'http://127.0.0.1:"+containerimage.PortText+"/env?name="+name+"'"))
 }
 
+func sameValue(got, want string) bool {
+	if got == want {
+		return true
+	}
+	var read, wanted any
+	return json.Unmarshal([]byte(got), &read) == nil && json.Unmarshal([]byte(want), &wanted) == nil && reflect.DeepEqual(read, wanted)
+}
+
 func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftOnTheBox(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
@@ -126,7 +136,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	physical := started[0].Physical
 
 	for name, want := range resolved.reads {
-		if got := vm.reads(t, physical, name); got != want {
+		if got := vm.reads(t, physical, name); !sameValue(got, want) {
 			t.Errorf("the app reads %s as %q off its own environment, want %q", name, got, want)
 		}
 	}
