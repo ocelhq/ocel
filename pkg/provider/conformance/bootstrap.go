@@ -97,10 +97,8 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		if err != nil {
 			t.Fatalf("Describe() after Apply() = %v", err)
 		}
-		for _, stack := range described.Stacks {
-			if stack.Part != "" && !slices.Contains(raising, stack.Part) {
-				t.Errorf("Describe() reports a stack for %q, which Apply() was never asked for", stack.Part)
-			}
+		for _, part := range unasked(described, raising) {
+			t.Errorf("Describe() reports a stack for %q, which Apply() was never asked for", part)
 		}
 		parts, err := bootstrap.DescribeParts(ctx, described)
 		if err != nil {
@@ -208,4 +206,14 @@ func applicable(offered []provider.Part, kind edge.Kind) []string {
 		}
 	}
 	return wanted
+}
+
+func unasked(described provider.BootstrapDescription, raised []string) []string {
+	var parts []string
+	for _, stack := range described.Stacks {
+		if stack.Present && stack.Part != "" && !slices.Contains(raised, stack.Part) {
+			parts = append(parts, stack.Part)
+		}
+	}
+	return parts
 }
