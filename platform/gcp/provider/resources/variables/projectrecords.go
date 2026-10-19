@@ -110,6 +110,11 @@ func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.T
 	if err == nil || status.Code(err) == codes.AlreadyExists {
 		return nil
 	}
+	if status.Code(err) == codes.NotFound {
+		return refusal.Refuse(refusal.CodeNotReady,
+			"this project has no %s key ring to make project %s's %s key on, and no value of %s can be sealed without that key.\nRun `%s` to add the ring, then try again",
+			c.KeyRing(), project, tier, project, provider.BootstrapCommand(tier))
+	}
 	return gcloud.ExplainMissingGrant(fmt.Errorf("create the key project %s seals its %s values under: %w", project, tier, err), ProjectRecordsGrant(c.Names, c.Region))
 }
 
