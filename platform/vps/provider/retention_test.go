@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -102,7 +103,7 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 		switch {
 		case strings.Contains(command, "echo present"):
 			return ssh.Result{Stdout: "present\n"}, true
-		case strings.Contains(command, "/usr/local/lib/ocel/keyvalues"):
+		case strings.Contains(command, boxapi.LiveBinary+"' '"+boxapi.RecordsCommand):
 			return ssh.Result{Code: 1, Stderr: "refused"}, true
 		}
 		return ssh.Result{}, false

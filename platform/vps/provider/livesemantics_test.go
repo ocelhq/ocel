@@ -19,9 +19,8 @@ import (
 )
 
 const (
-	helperDir       = "/usr/local/lib/ocel"
-	keyValuesHelper = helperDir + "/keyvalues"
-	keyValuesDir    = "/var/lib/ocel/production/keyvalues"
+	helperDir    = "/usr/local/lib/ocel"
+	keyValuesDir = "/var/lib/ocel/production/keyvalues"
 )
 
 type killer struct {
@@ -228,22 +227,22 @@ func TestLiveAReplacementRefusingApplyInstallsWhatIsAbsentAndStopsAtWhatExists(t
 		t.Errorf("%s is %q after the replacement-refusing converge, want 755", helperDir, got)
 	}
 
-	vm.ssh(t, "sudo chmod 700 "+keyValuesHelper)
+	vm.ssh(t, "sudo chmod 700 "+boxapi.ReleasesHelper)
 	if _, err := bootstrap.Describe(ctx, tier); err != nil {
 		t.Fatal(err)
 	}
 	got := refused(t, bootstrap.Apply(ctx, refusing, progress.Discard()), refusal.CodeNotReady)
-	if !strings.Contains(got.Message, keyValuesHelper) {
-		t.Errorf("the refusal says %q, want it to name %s as what it would write over", got.Message, keyValuesHelper)
+	if !strings.Contains(got.Message, boxapi.ReleasesHelper) {
+		t.Errorf("the refusal says %q, want it to name %s as what it would write over", got.Message, boxapi.ReleasesHelper)
 	}
-	if got := mode(t, vm, keyValuesHelper); got != "700" {
-		t.Errorf("%s is %q after the apply that refused it, want the refusal to have written nothing", keyValuesHelper, got)
+	if got := mode(t, vm, boxapi.ReleasesHelper); got != "700" {
+		t.Errorf("%s is %q after the apply that refused it, want the refusal to have written nothing", boxapi.ReleasesHelper, got)
 	}
 
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, progress.Discard()); err != nil {
 		t.Fatalf("the same apply accepting replacements = %v", err)
 	}
-	if got := mode(t, vm, keyValuesHelper); got != "755" {
-		t.Errorf("%s is %q after the apply that accepted the write, want 755", keyValuesHelper, got)
+	if got := mode(t, vm, boxapi.ReleasesHelper); got != "755" {
+		t.Errorf("%s is %q after the apply that accepted the write, want 755", boxapi.ReleasesHelper, got)
 	}
 }
