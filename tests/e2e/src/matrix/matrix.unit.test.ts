@@ -173,6 +173,77 @@ const ZONED_RUN = {
 const skippedBy = (planned: ReturnType<typeof planOn>, cell: string) =>
   (planned.skipped[cell] ?? []).map((gap) => gap.id).sort();
 
+describe("a deploy app as a container on aws", () => {
+  const RUNTIMES = ["node", "go", "python", "rust"];
+  const BEHIND_CLOUDFLARE = RUNTIMES.map((one) => `deploy/${one}-cloudflare-container`);
+  const BEHIND_CLOUDFRONT = [...RUNTIMES, "next", "sveltekit", "workspace"].map(
+    (one) => `deploy/${one}-container`,
+  );
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const plannedCell = (planned: ReturnType<typeof planOn>, name: string) =>
+    planned.cells.find((cell) => cell.name === name);
+
+  it("runs every runtime behind Cloudflare when the run names a zone, through a second release and back, expecting nothing red", () => {
+    const planned = planOn("aws", ZONED_RUN);
+    for (const name of BEHIND_CLOUDFLARE) {
+      expect(planned.skipped[name]).toBeUndefined();
+      expect(planned.expectedFailures[`${name}/web`] ?? {}).toEqual({});
+      expect(plannedCell(planned, name)?.phases).toEqual([
+        "deploy",
+        "verify",
+        "redeploy",
+        "rollback",
+        "destroy",
+      ]);
+    }
+  });
+
+  it("asks each runtime's origin for a client certificate after its deploy, its redeploy and its rollback", () => {
+    const planned = planOn("aws", ZONED_RUN);
+    const refusal =
+      "the origin refuses a request that skips Cloudflare, over TLS with no client certificate";
+    for (const name of BEHIND_CLOUDFLARE) {
+      const titles = plannedCell(planned, name)?.steps.map((one) => one.title) ?? [];
+      expect(titles).toEqual(
+        expect.arrayContaining([refusal, `redeploy · ${refusal}`, `rollback · ${refusal}`]),
+      );
+    }
+  });
+
+  it("skips every runtime behind Cloudflare where no zone or no Cloudflare API is", () => {
+    for (const name of BEHIND_CLOUDFLARE) {
+      expect(skippedBy(planOn("aws"), name)).toEqual(["no-cloudflare-zone"]);
+      expect(skippedBy(planOn("aws.floci", ZONED_RUN), name)).toEqual(["no-cloudflare-api"]);
+    }
+  });
+
+  it("plans every deploy app behind CloudFront through a second release and back, skipped under #923", () => {
+    const planned = planOn("aws", ZONED_RUN);
+    const run = planOn("aws", ZONED_RUN, EVERY_CELL);
+    for (const name of BEHIND_CLOUDFRONT) {
+      expect(planned.skipped[name]?.map((gap) => gap.issue)).toEqual([923]);
+      expect(plannedCell(run, name)?.phases).toEqual([
+        "deploy",
+        "verify",
+        "redeploy",
+        "rollback",
+        "destroy",
+      ]);
+    }
+  });
+
+  it("walks no second release for a container on gcp", () => {
+    const planned = planOn("gcp", ZONED_RUN);
+    for (const runtime of RUNTIMES) {
+      expect(plannedCell(planned, `deploy/${runtime}-container`)?.phases).toEqual([
+        "deploy",
+        "verify",
+        "destroy",
+      ]);
+    }
+  });
+});
+
 describe("the cloudflare variant on floci's aws", () => {
   it("skips every cloudflare cell, whatever framework its fixture builds", () => {
     expect(skippedBy(planOn("aws.floci"), "deploy/sveltekit-cloudflare")).toContain(

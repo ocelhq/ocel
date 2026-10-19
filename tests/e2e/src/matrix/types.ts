@@ -96,6 +96,7 @@ export type Variant = {
   offeredOn: TargetName[];
   config: ConfigDelta;
   checks?: Check[];
+  redeploys?: true;
 };
 
 export function variant(name: string, shape: Omit<Variant, "name">): Variant {

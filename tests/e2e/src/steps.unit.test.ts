@@ -79,12 +79,12 @@ describe("the preview phase", () => {
     target: "gcp",
   });
   const titlesOf = (one: typeof defaults, keep = false) => {
-    const phases = phasesOf(previewing, keep, true, walksPreviews(cellOf(one), true));
+    const phases = phasesOf(cellOf(one), keep, true, walksPreviews(cellOf(one), true));
     return stepsOf(cellOf(one), phases).map((step) => step.title);
   };
 
   it("walks the preview phase after rollback and before destroy for a variant the fixture previews", () => {
-    expect(phasesOf(previewing, false, true, walksPreviews(cellOf(front), true))).toEqual([
+    expect(phasesOf(cellOf(front), false, true, walksPreviews(cellOf(front), true))).toEqual([
       "deploy",
       "verify",
       "redeploy",
@@ -96,11 +96,11 @@ describe("the preview phase", () => {
 
   it("walks no preview phase on a lane whose target offers none", () => {
     expect(walksPreviews(cellOf(front), false)).toBe(false);
-    expect(phasesOf(previewing, false, true, false)).not.toContain("preview");
+    expect(phasesOf(cellOf(front), false, true, false)).not.toContain("preview");
   });
 
   it("walks no preview phase in a cell kept for inspection", () => {
-    expect(phasesOf(previewing, true, true, true)).not.toContain("preview");
+    expect(phasesOf(cellOf(front), true, true, true)).not.toContain("preview");
   });
 
   it("walks the hostname steps in a cell the fixture previews", () => {
@@ -127,7 +127,7 @@ describe("the preview phase", () => {
       target: "vps",
     };
 
-    const phases = phasesOf(boxed, false, true, walksPreviews(cell, true));
+    const phases = phasesOf(cell, false, true, walksPreviews(cell, true));
     const titles = (gatesPreviews: boolean) =>
       stepsOf(cell, phases, gatesPreviews).map((step) => step.title);
 
@@ -255,7 +255,7 @@ describe("a fixture whose resources restart", () => {
   });
 
   it("restarts them after the first checks, and checks again before any redeploy", () => {
-    const phases = phasesOf(restarting, false);
+    const phases = phasesOf({ fixture: restarting, variant: defaults }, false);
     expect(phases).toEqual(["deploy", "verify", "restart", "redeploy", "rollback", "destroy"]);
     const titles = stepsOf(
       {
@@ -398,7 +398,7 @@ describe("a cell with an external stack", () => {
       keep: false,
       evidence: { dir: "", write: async () => {}, append: async () => {} },
     });
-    for (const step of stepsOf(cell, phasesOf(stacked, false))) {
+    for (const step of stepsOf(cell, phasesOf(cell, false))) {
       await step.run(run);
     }
     expect(calls).toEqual([
