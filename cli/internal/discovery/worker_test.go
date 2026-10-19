@@ -255,6 +255,20 @@ func TestARustBinaryInTheWorkerRoleServesATaskAndAConsumerWithItsWorkersOnStartA
 	wantAudited(t, url)
 }
 
+func TestTheRustDevWorkerRefusesABinaryWithoutOcelMainInsteadOfStartingTheApp(t *testing.T) {
+	needsCargo(t)
+	configDir := rustFixture(t, rustBinManifest)
+	write(t, filepath.Join(configDir, "src", "main.rs"), servesForever)
+	crate := Root{Dir: configDir, Language: language.Rust}
+
+	run := workdir.NewRun()
+	t.Cleanup(func() { _ = run.Remove() })
+	_, err := WorkerCommand(context.Background(), configDir, []Root{crate}, crate, run)
+	if err == nil || !strings.Contains(err.Error(), "#[ocel::main]") || !strings.Contains(err.Error(), `"web"`) {
+		t.Fatalf("WorkerCommand = %v, want a refusal asking the binary web for #[ocel::main]", err)
+	}
+}
+
 func TestTheGeneratedPythonWorkerServesATaskAndAConsumerWithItsWorkersOnStartAndMiddleware(t *testing.T) {
 	t.Setenv("PATH", pythonSDKEnvironment(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	url := servedFixture(t, "python")

@@ -6,9 +6,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -33,9 +36,12 @@ func rustFixture(t *testing.T, manifest string) string {
 
 const rustBinManifest = "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n"
 
+const markedMain = "fn main() {\n    let _ = std::hint::black_box(b\"" + ocelMainMarker + "\");\n}\n"
+
 func TestRustDiscoveryRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	needsCargo(t)
 	configDir := rustFixture(t, rustBinManifest)
+	write(t, filepath.Join(configDir, "src", "main.rs"), markedMain)
 	root := Root{Dir: configDir, Language: language.Rust}
 
 	cmd, err := rustCommand(context.Background(), configDir, root, testServer)
@@ -57,6 +63,23 @@ func TestRustDiscoveryRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	}
 }
 
+const refusesTheDevServerBuildScript = "fn main() {\n    for name in [\"" + processenv.DevServerEnvVar + "\", \"" + processenv.DevServerTokenEnvVar + "\"] {\n        if std::env::var_os(name).is_some() {\n            panic!(\"the build sees {name}\");\n        }\n    }\n}\n"
+
+func TestRustDiscoveryBuildsWithoutTheDevServersAddressOrTokenAndRunsWithoutRebuilding(t *testing.T) {
+	needsCargo(t)
+	configDir := rustFixture(t, rustBinManifest)
+	write(t, filepath.Join(configDir, "src", "main.rs"), markedMain)
+	write(t, filepath.Join(configDir, "build.rs"), refusesTheDevServerBuildScript)
+
+	cmd, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	if err != nil {
+		t.Fatalf("Command = %v, want the build to see neither the dev server's address nor its token", err)
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("cargo run with the discovery environment: %v: %s, want the built binary run without rebuilding", err, out)
+	}
+}
+
 func TestRustDiscoveryRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	needsCargo(t)
 	configDir := t.TempDir()
@@ -65,12 +88,12 @@ func TestRustDiscoveryRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	write(t, filepath.Join(crate, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(crate, "src", "main.rs"), "fn main() {}\n")
 
-	cmd, err := rustCommand(context.Background(), configDir, Root{Dir: crate, Language: language.Rust}, testServer)
+	binary, err := findRustBinary(context.Background(), Root{Dir: crate, Language: language.Rust})
 	if err != nil {
-		t.Fatalf("Command: %v", err)
+		t.Fatalf("findRustBinary: %v", err)
 	}
-	if cmd.Dir != crate {
-		t.Errorf("Dir = %q, want %q", cmd.Dir, crate)
+	if binary.workspace.Root != crate {
+		t.Errorf("workspace root = %q, want %q", binary.workspace.Root, crate)
 	}
 }
 
@@ -80,9 +103,9 @@ func TestRustDiscoveryRefusesADirThatIsNoCrate(t *testing.T) {
 	root := filepath.Join(configDir, "server")
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 
-	_, err := rustCommand(context.Background(), configDir, Root{Dir: root, Language: language.Rust}, testServer)
+	_, err := findRustBinary(context.Background(), Root{Dir: root, Language: language.Rust})
 	if err == nil {
-		t.Fatal("Command succeeded on a dir with no Cargo.toml, want an error")
+		t.Fatal("findRustBinary succeeded on a dir with no Cargo.toml, want an error")
 	}
 	if !strings.Contains(err.Error(), root) {
 		t.Errorf("error = %q, want it to name the root", err)
@@ -95,9 +118,9 @@ func TestRustDiscoveryRefusesACrateThatBuildsNoBinary(t *testing.T) {
 	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(configDir, "src", "lib.rs"), "")
 
-	_, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	_, err := findRustBinary(context.Background(), Root{Dir: configDir, Language: language.Rust})
 	if err == nil {
-		t.Fatal("Command succeeded on a crate with no binary, want an error")
+		t.Fatal("findRustBinary succeeded on a crate with no binary, want an error")
 	}
 	if !strings.Contains(err.Error(), configDir) || !strings.Contains(err.Error(), "web") {
 		t.Errorf("error = %q, want it to name the crate dir and the crate", err)
@@ -111,9 +134,9 @@ func TestRustDiscoveryRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
 	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
 
-	_, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	_, err := findRustBinary(context.Background(), Root{Dir: configDir, Language: language.Rust})
 	if err == nil {
-		t.Fatal("Command succeeded on a crate with two binaries, want an error")
+		t.Fatal("findRustBinary succeeded on a crate with two binaries, want an error")
 	}
 	for _, want := range []string{configDir, `"web"`, `"worker"`, `"entrypoint"`} {
 		if !strings.Contains(err.Error(), want) {
@@ -129,12 +152,12 @@ func TestRustDiscoveryRunsTheBinaryTheAppsEntrypointNames(t *testing.T) {
 	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
 
-	cmd, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust, Bin: "worker"}, testServer)
+	binary, err := findRustBinary(context.Background(), Root{Dir: configDir, Language: language.Rust, Bin: "worker"})
 	if err != nil {
-		t.Fatalf("Command: %v", err)
+		t.Fatalf("findRustBinary: %v", err)
 	}
-	if want := []string{"--bin", "worker"}; !slices.Equal(cmd.Args[len(cmd.Args)-2:], want) {
-		t.Errorf("Args = %q, want them to end %q", cmd.Args, want)
+	if binary.bin.Name != "worker" {
+		t.Errorf("binary = %q, want worker", binary.bin.Name)
 	}
 }
 
@@ -159,7 +182,7 @@ func TestRustDiscoveryRefusesTwoAppsOnOneCrateWhereTheOneNamingNoBinaryRunsAnoth
 			root := shared
 			root.Dir = configDir
 
-			_, err := rustCommand(context.Background(), configDir, root, testServer)
+			_, err := findRustBinary(context.Background(), root)
 			if tt.refused && (err == nil || !strings.Contains(err.Error(), `"jobs"`) || !strings.Contains(err.Error(), `"web"`)) {
 				t.Errorf("Command = %v, want jobs and web refused: they run different binaries of one crate", err)
 			}
@@ -174,7 +197,7 @@ func TestRustDiscoveryRefusesAnEntrypointNamingNoBinaryOfTheCrate(t *testing.T) 
 	needsCargo(t)
 	configDir := rustFixture(t, rustBinManifest)
 
-	_, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust, Bin: "worker"}, testServer)
+	_, err := findRustBinary(context.Background(), Root{Dir: configDir, Language: language.Rust, Bin: "worker"})
 	if err == nil || !strings.Contains(err.Error(), `"worker"`) || !strings.Contains(err.Error(), `"web"`) {
 		t.Fatalf("error = %v, want a refusal naming the entrypoint worker and the binary web the crate builds", err)
 	}
@@ -331,12 +354,12 @@ func TestRustDiscoveryRunsACrateReachedThroughASymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd, err := rustCommand(context.Background(), link, Root{Dir: link, Language: language.Rust}, testServer)
+	binary, err := findRustBinary(context.Background(), Root{Dir: link, Language: language.Rust})
 	if err != nil {
-		t.Fatalf("Command: %v", err)
+		t.Fatalf("findRustBinary: %v", err)
 	}
-	if want := []string{"--bin", "web"}; !slices.Equal(cmd.Args[len(cmd.Args)-2:], want) {
-		t.Errorf("Args = %q, want the crate's binary %q", cmd.Args, want)
+	if binary.bin.Name != "web" {
+		t.Errorf("binary = %q, want the crate's binary web", binary.bin.Name)
 	}
 }
 
@@ -347,11 +370,188 @@ func TestRustDiscoveryRunsTheBinaryTheCrateRunsByDefault(t *testing.T) {
 	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
 
-	cmd, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	binary, err := findRustBinary(context.Background(), Root{Dir: configDir, Language: language.Rust})
 	if err != nil {
-		t.Fatalf("Command: %v", err)
+		t.Fatalf("findRustBinary: %v", err)
 	}
-	if want := []string{"--bin", "worker"}; !slices.Equal(cmd.Args[len(cmd.Args)-2:], want) {
-		t.Errorf("Args = %q, want them to end %q — the binary default-run names", cmd.Args, want)
+	if binary.bin.Name != "worker" {
+		t.Errorf("binary = %q, want worker, the binary default-run names", binary.bin.Name)
+	}
+}
+
+const servesForever = "use std::net::TcpListener;\n\nfn main() {\n    let listener = TcpListener::bind(\"127.0.0.1:0\").expect(\"bind\");\n    for stream in listener.incoming() {\n        drop(stream);\n    }\n}\n"
+
+func TestRunRefusesARustBinaryWithoutOcelMainInsteadOfStartingTheApp(t *testing.T) {
+	needsCargo(t)
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest)
+	write(t, filepath.Join(configDir, "src", "main.rs"), servesForever)
+	mainFile, err := filepath.EvalSymlinks(filepath.Join(configDir, "src", "main.rs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var stdout, stderr bytes.Buffer
+	err = Run(ctx, configDir, prepared, okServer(t), &stdout, &stderr)
+
+	if err == nil {
+		t.Fatal("Run succeeded, want a refusal: the binary has no #[ocel::main]")
+	}
+	for _, want := range []string{"#[ocel::main]", "ocel::discover()", `"web"`, filepath.Dir(filepath.Dir(mainFile)), mainFile} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to name %s", err, want)
+		}
+	}
+}
+
+func TestRunShowsTheWarningsOfARustBinaryOnce(t *testing.T) {
+	needsCargo(t)
+	configDir := rustFixture(t, rustBinManifest)
+	write(t, filepath.Join(configDir, "src", "main.rs"), strings.Replace(markedMain, "fn main() {\n", "fn main() {\n    let unread = 1;\n", 1))
+	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), configDir, prepared, okServer(t), &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+	if n := strings.Count(stderr.String(), "unused variable"); n != 1 {
+		t.Errorf("stderr = %q, want the warning once", stderr.String())
+	}
+}
+
+func reuseTheRustFixturesSDKBuild(t *testing.T) {
+	t.Helper()
+	t.Setenv("CARGO_TARGET_DIR", filepath.Join(repoFixture(t, "rust"), "target"))
+}
+
+func rustSDKApp(t *testing.T, editMain func(main string) string) string {
+	t.Helper()
+	fixture := repoFixture(t, "rust")
+	app, err := os.ReadFile(filepath.Join(fixture, "src", "main.rs"))
+	if err != nil {
+		t.Fatalf("read the fixture app: %v", err)
+	}
+	edited := editMain(string(app))
+	if edited == string(app) {
+		t.Fatal("the fixture app's main was left as it is")
+	}
+	lock, err := os.ReadFile(filepath.Join(fixture, "Cargo.lock"))
+	if err != nil {
+		t.Fatalf("read the fixture lock: %v", err)
+	}
+	sdk, err := filepath.Abs(filepath.Join("..", "..", "..", "crates", "ocel-sdk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "Cargo.toml"), "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[dependencies]\nocel-sdk = { path = "+strconv.Quote(sdk)+" }\n")
+	write(t, filepath.Join(configDir, "Cargo.lock"), strings.Replace(string(lock), "name = \"web\"", "name = \"api\"", 1))
+	write(t, filepath.Join(configDir, "src", "main.rs"), edited)
+	return configDir
+}
+
+func TestRunRefusesARustBinaryThatLinksTheSDKWithoutOcelMain(t *testing.T) {
+	needsCargo(t)
+	configDir := rustSDKApp(t, func(main string) string {
+		return strings.Replace(main, "#[ocel::main]\n", "", 1)
+	})
+	reuseTheRustFixturesSDKBuild(t)
+	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	var stdout, stderr bytes.Buffer
+	err = Run(ctx, configDir, prepared, okServer(t), &stdout, &stderr)
+
+	if err == nil || !strings.Contains(err.Error(), "#[ocel::main]") || !strings.Contains(err.Error(), `"api"`) {
+		t.Fatalf("Run = %v, want a refusal asking the binary api for #[ocel::main]; stderr=%s", err, stderr.String())
+	}
+}
+
+func TestRustDiscoveryRefusesABinaryThatCallsOnlyOcelServeWorker(t *testing.T) {
+	needsCargo(t)
+	configDir := rustSDKApp(t, func(main string) string {
+		return strings.Replace(main, "#[ocel::main]\nfn main() {\n", "fn main() {\n    if ocel::serve_worker().expect(\"ocel worker\") {\n        return;\n    }\n", 1)
+	})
+	reuseTheRustFixturesSDKBuild(t)
+
+	_, err := rustCommand(context.Background(), configDir, Root{Dir: configDir, Language: language.Rust}, testServer)
+	if err == nil || !strings.Contains(err.Error(), "ocel::discover()") || !strings.Contains(err.Error(), `"api"`) {
+		t.Fatalf("Command = %v, want a refusal: serve_worker alone never declares, so the binary would start the app", err)
+	}
+}
+
+func TestRunDeclaresWhatARustBinaryThatCallsOcelDiscoverItselfDeclares(t *testing.T) {
+	needsCargo(t)
+	configDir := rustSDKApp(t, func(main string) string {
+		return strings.Replace(main, "#[ocel::main]\nfn main() {\n", "fn main() {\n    if ocel::discover().expect(\"ocel discovery\") {\n        return;\n    }\n", 1)
+	})
+	reuseTheRustFixturesSDKBuild(t)
+	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	collected, server := declareCollector(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(ctx, configDir, prepared, server, &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+	if declares := collected.declared(); len(declares) != 2 {
+		t.Errorf("declares = %v, want the postgres and the bucket the app declares", declares)
+	}
+}
+
+func TestOcelMainMarkerIsTheOneTheSDKDefines(t *testing.T) {
+	source, err := os.ReadFile(filepath.Join("..", "..", "..", "crates", "ocel-sdk", "src", "lib.rs"))
+	if err != nil {
+		t.Fatalf("read the SDK: %v", err)
+	}
+	defined := regexp.MustCompile(`pub\(crate\) const MAIN_MARKER: &\[u8\] = b"([^"]+)";`).FindSubmatch(source)
+	if defined == nil {
+		t.Fatal("the SDK defines no MAIN_MARKER")
+	}
+	if string(defined[1]) != ocelMainMarker {
+		t.Errorf("ocelMainMarker = %q, want the SDK's MAIN_MARKER %q", ocelMainMarker, defined[1])
+	}
+}
+
+func TestHasOcelMainMarkerFindsTheMarkerWhereverItLies(t *testing.T) {
+	marker := []byte(ocelMainMarker)
+	for _, tt := range []struct {
+		name     string
+		contents []byte
+		want     bool
+	}{
+		{"none", bytes.Repeat([]byte{0}, 3<<20), false},
+		{"a prefix of it at the end", append(bytes.Repeat([]byte{0}, 1<<20), marker[:len(marker)-1]...), false},
+		{"at the start", append(slices.Clone(marker), bytes.Repeat([]byte{0}, 3<<20)...), true},
+		{"across the end of the first read", append(bytes.Repeat([]byte{0}, 1<<20-len(marker)/2), marker...), true},
+		{"at the end", append(bytes.Repeat([]byte{0}, 3<<20), marker...), true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "web")
+			if err := os.WriteFile(path, tt.contents, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			got, err := hasOcelMainMarker(path)
+			if err != nil || got != tt.want {
+				t.Errorf("hasOcelMainMarker = %v, %v, want %v", got, err, tt.want)
+			}
+		})
 	}
 }

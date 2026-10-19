@@ -1,8 +1,11 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +16,8 @@ import (
 )
 
 const ocelCrate = "ocel-sdk"
+
+const ocelMainMarker = "ocel-main-marker-v1:a97e2b52f933853f5f606937"
 
 func rustCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error) {
 	commands := make([]*exec.Cmd, 0, len(roots))
@@ -36,25 +41,82 @@ func rustCommand(ctx context.Context, _ string, root Root, server Server) (*exec
 }
 
 func cargoRunCommand(ctx context.Context, root Root) (*exec.Cmd, string, error) {
+	binary, err := findRustBinary(ctx, root)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := refuseABinaryWithoutOcelMain(ctx, binary); err != nil {
+		return nil, "", err
+	}
+	cmd := exec.Command("cargo", "run", "--quiet", "--manifest-path", binary.crate.ManifestPath, "--bin", binary.bin.Name)
+	cmd.Dir = binary.workspace.Root
+	return cmd, binary.workspace.Root, nil
+}
+
+type rustBinary struct {
+	workspace cargo.Workspace
+	crate     cargo.Package
+	bin       cargo.Target
+}
+
+func findRustBinary(ctx context.Context, root Root) (rustBinary, error) {
 	workspace, err := cargo.Metadata(ctx, root.Dir, "--no-deps")
 	if err != nil {
-		return nil, "", fmt.Errorf("discovery: %w", err)
+		return rustBinary{}, fmt.Errorf("discovery: %w", err)
 	}
 	crate, ok := workspace.PackageAt(root.Dir)
 	if !ok {
-		return nil, "", fmt.Errorf("discovery: %s has no Cargo.toml naming a package to declare from", root.Dir)
+		return rustBinary{}, fmt.Errorf("discovery: %s has no Cargo.toml naming a package to declare from", root.Dir)
 	}
 	bin, err := crate.FindBin(root.Bin)
 	if err != nil {
-		return nil, "", fmt.Errorf("discovery: resources are declared by running one binary of the crate at %s: %w", root.Dir, err)
+		return rustBinary{}, fmt.Errorf("discovery: resources are declared by running one binary of the crate at %s: %w", root.Dir, err)
 	}
 	if err := refuseDivergentDefaultBin(root, crate, bin); err != nil {
-		return nil, "", err
+		return rustBinary{}, err
 	}
+	return rustBinary{workspace: workspace, crate: crate, bin: bin}, nil
+}
 
-	cmd := exec.Command("cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bin.Name)
-	cmd.Dir = workspace.Root
-	return cmd, workspace.Root, nil
+func refuseABinaryWithoutOcelMain(ctx context.Context, binary rustBinary) error {
+	executable, err := cargo.Build{Crate: binary.crate, Bin: binary.bin.Name, Dir: binary.workspace.Root}.Run(ctx)
+	if err != nil {
+		return fmt.Errorf("discovery: %w", err)
+	}
+	marked, err := hasOcelMainMarker(executable)
+	if err != nil {
+		return fmt.Errorf("discovery: %w", err)
+	}
+	if !marked {
+		return fmt.Errorf("discovery: the binary %q of the crate at %s has no #[ocel::main] and no call to ocel::discover(), or was built with an ocel-sdk older than this CLI, so running it would start the app instead of declaring its resources: put #[ocel::main] on fn main in %s", binary.bin.Name, binary.crate.Dir(), binary.bin.SrcPath)
+	}
+	return nil
+}
+
+func hasOcelMainMarker(executable string) (bool, error) {
+	file, err := os.Open(executable)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+	marker := []byte(ocelMainMarker)
+	buf := make([]byte, 1<<20)
+	kept := 0
+	for {
+		n, err := file.Read(buf[kept:])
+		read := buf[:kept+n]
+		if bytes.Contains(read, marker) {
+			return true, nil
+		}
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		kept = min(len(marker)-1, len(read))
+		copy(buf, read[len(read)-kept:])
+	}
 }
 
 func refuseDivergentDefaultBin(root Root, crate cargo.Package, bin cargo.Target) error {

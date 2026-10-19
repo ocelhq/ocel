@@ -101,6 +101,8 @@ pub use worker::Worker;
 /// runs as a worker serves its tasks and consumers instead of entering `main`.
 pub use ocel_macros::main;
 
+pub(crate) const MAIN_MARKER: &[u8] = b"ocel-main-marker-v1:a97e2b52f933853f5f606937";
+
 /// Declares every [`Postgres`], [`Bucket`], [`Topic`], [`Worker`] and [`Kv`] field of a struct, and
 /// writes the `load` that hands the struct back with a handle in each field. For each
 /// [`Topic`] field it also writes a [`TopicName`] constant named after the field in upper
