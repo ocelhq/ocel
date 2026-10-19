@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -125,8 +126,26 @@ func manifestAppsOf(apps []app, functions []build.Function, functionsByApp map[s
 		}
 	}
 
-	slices.SortFunc(manifestApps, func(a, b *contractv1.ManifestApp) int { return strings.Compare(a.GetName(), b.GetName()) })
 	return manifestApps, nil
+}
+
+func orderApps(apps []app) []app {
+	return slices.SortedStableFunc(slices.Values(apps), func(a, b app) int { return strings.Compare(a.Name, b.Name) })
+}
+
+func AttributeProductionHostnames(cfg *project.Project) map[string]string {
+	apps := orderApps(appsOf(cfg.Apps, nil, nil))
+	own := make([][]string, len(apps))
+	for slot, a := range apps {
+		own[slot] = a.Domains
+	}
+	served := map[string]string{}
+	for slot, hosts := range edge.AttributeHostnames(cfg.Domains.Production, own) {
+		for _, host := range hosts {
+			served[host] = apps[slot].Name
+		}
+	}
+	return served
 }
 
 func manifestVariables(values []variables.Variable) []*contractv1.ManifestVariable {

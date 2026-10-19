@@ -8,20 +8,40 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func TestAPreflightNamesTheAppServingEachDomainAnAppDeclares(t *testing.T) {
+func TestAPreflightNamesTheAppTheDeployServesEachDomainOn(t *testing.T) {
 	t.Parallel()
 
-	cfg := &project.Project{
-		Domains: project.Domains{Production: []string{"acme.com"}},
-		Apps: []project.App{
-			{Name: "web"},
-			{Name: "api", ProductionDomains: []string{"api.acme.com"}},
+	for name, tc := range map[string]struct {
+		cfg  *project.Project
+		want map[string]string
+	}{
+		"a single app serves the project's own domain": {
+			cfg: &project.Project{
+				Domains: project.Domains{Production: []string{"acme.com"}},
+				Apps:    []project.App{{Name: "go", Compute: "container"}},
+			},
+			want: map[string]string{"acme.com": "go"},
 		},
-	}
-	sent := newPreflightRequest(cfg, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Domains: cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)})
+		"the app the manifest lists first serves the project's own domain, and each app its own": {
+			cfg: &project.Project{
+				Domains: project.Domains{Production: []string{"acme.com"}},
+				Apps: []project.App{
+					{Name: "web"},
+					{Name: "api", ProductionDomains: []string{"api.acme.com"}},
+				},
+			},
+			want: map[string]string{"acme.com": "api", "api.acme.com": "api"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	if want := map[string]string{"api.acme.com": "api"}; !maps.Equal(sent.GetDomainApps(), want) {
-		t.Errorf("preflight names the apps %v serving its domains, want %v: the hostnames forwarded to an origin are checked before provisioning, and which origin a hostname reaches depends on the app serving it", sent.GetDomainApps(), want)
+			sent := newPreflightRequest(tc.cfg, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Domains: tc.cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)})
+
+			if !maps.Equal(sent.GetDomainApps(), tc.want) {
+				t.Errorf("preflight names the apps %v serving its domains, want %v: which origin a hostname reaches depends on the app the deploy serves it on, so the check before provisioning asks about the hostnames the deploy forwards", sent.GetDomainApps(), tc.want)
+			}
+		})
 	}
 }
 

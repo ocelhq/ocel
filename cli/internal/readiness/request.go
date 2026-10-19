@@ -1,10 +1,13 @@
 package readiness
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -32,12 +35,11 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 }
 
 func domainApps(cfg *project.Project, req Request) map[string]string {
-	apps := map[string]string{}
-	for _, host := range cfg.Hostnames(req.Tier) {
-		if host.App != "" && slices.Contains(req.Domains, host.Name) {
-			apps[host.Name] = host.App
-		}
+	if req.Tier != environmentv1.Tier_TIER_PRODUCTION {
+		return nil
 	}
+	apps := manifest.AttributeProductionHostnames(cfg)
+	maps.DeleteFunc(apps, func(host, _ string) bool { return !slices.Contains(req.Domains, host) })
 	if len(apps) == 0 {
 		return nil
 	}
