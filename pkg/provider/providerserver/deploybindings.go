@@ -15,7 +15,7 @@ import (
 )
 
 func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) error {
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return err
 	}

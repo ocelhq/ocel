@@ -68,7 +68,7 @@ func withReleaseMintedAtDeploy(plan provider.Plan, release naming.ReleaseToken) 
 }
 
 func (r *deployRun) planValuesGroup(ctx context.Context) (provider.ChangeGroup, error) {
-	declared, err := manifestResources(r.manifest)
+	declared, err := ReadResources(r.manifest)
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}

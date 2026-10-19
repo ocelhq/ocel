@@ -298,7 +298,7 @@ func (r *deployRun) planPreflight(ctx context.Context) (provider.Plan, error) {
 }
 
 func (r *deployRun) deployPreflight(ctx context.Context, progress progress.Log) (provider.DeployPreflight, error) {
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return provider.DeployPreflight{}, err
 	}
@@ -333,7 +333,7 @@ func (r *deployRun) refuseUnsupportedDeclarations(ctx context.Context) error {
 	if err := RefuseUnsupportedRealtime(r.provider.Facts(), r.manifest); err != nil {
 		return err
 	}
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return err
 	}

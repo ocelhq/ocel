@@ -19,7 +19,7 @@ var resourceTypes = map[resourcesv1.ResourceType]provider.BindingType{
 	resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME: provider.BindingRealtime,
 }
 
-func manifestResources(manifest *contractv1.Manifest) ([]provider.Resource, error) {
+func ReadResources(manifest *contractv1.Manifest) ([]provider.Resource, error) {
 	declared := manifest.GetResources()
 	resources := make([]provider.Resource, 0, len(declared))
 	for _, resource := range declared {

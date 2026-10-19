@@ -95,7 +95,7 @@ func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1
 }
 
 func (r *deployRun) infraStack(ctx context.Context, undeclared []*contractv1.ManifestResource) (provider.StackSpec, infraHeld, error) {
-	declaredResources, err := manifestResources(r.manifest)
+	declaredResources, err := ReadResources(r.manifest)
 	if err != nil {
 		return provider.StackSpec{}, infraHeld{}, err
 	}
@@ -358,14 +358,14 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 }
 
 func (r *deployRun) boundNamesUsedBy(app string) (map[string]bool, error) {
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return nil, err
 	}
-	return boundNamesUsedBy(r.manifest, resources, app), nil
+	return ReadBoundNamesUsedBy(r.manifest, resources, app), nil
 }
 
-func boundNamesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) map[string]bool {
+func ReadBoundNamesUsedBy(manifest *contractv1.Manifest, resources []provider.Resource, app string) map[string]bool {
 	names := map[string]bool{}
 	for _, resource := range resourcesUsedBy(manifest, resources, app) {
 		names[boundName(resource)] = true
@@ -390,7 +390,7 @@ func resourcesUsedBy(manifest *contractv1.Manifest, resources []provider.Resourc
 }
 
 func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]provider.Binding, error) {
-	resources, err := manifestResources(r.manifest)
+	resources, err := ReadResources(r.manifest)
 	if err != nil {
 		return nil, err
 	}
