@@ -14,10 +14,10 @@ import (
 func stubAgent(t *testing.T, body string) agentCipher {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "live")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return agentCipher{argv: []string{path, "seal"}}
+	return agentCipher{argv: []string{"/bin/sh", path, "seal"}}
 }
 
 func TestTheConnectorSealsThroughTheAgentsSealCommandForTheTierAndAssociatedData(t *testing.T) {
