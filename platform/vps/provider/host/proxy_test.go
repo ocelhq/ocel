@@ -1302,3 +1302,31 @@ func TestADeployOverAConfigAnOlderOcelRenderedRendersItAgainEvenWhenTheTableIsUn
 		t.Errorf("the config was rendered again and the proxy never reloaded it: %v", rig.commands())
 	}
 }
+
+func TestTheDeployLoginCanTakeTheRoutingLockBeneathADirectoryOnlyRootCanChange(t *testing.T) {
+	t.Parallel()
+
+	for what, fronting := range map[string]front.Proxy{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "Coolify's Traefik": coolifysTraefik(), "Coolify's Caddy": coolifysCaddy()} {
+		items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, fronting)
+		made := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindDir && item.Name == routing.Lock })
+		if made < 0 {
+			t.Errorf("beside %s nothing makes %s, so the first deploy has no lock to take", what, routing.Lock)
+			continue
+		}
+		if lock := items[made]; lock.Owner != deployUser || lock.Mode&0o500 != 0o500 {
+			t.Errorf("beside %s %s is %s's at %04o: %s takes the routing lock by opening it to read, as itself when it has no sudo", what, routing.Lock, lock.Owner, lock.Mode, deployUser)
+		}
+		parent := slices.IndexFunc(items, func(item machine.Item) bool {
+			return item.Kind == machine.KindDir && item.Name == filepath.Dir(routing.Lock)
+		})
+		if parent < 0 || items[parent].Owner != machine.RootOwner || items[parent].Mode&0o022 != 0 {
+			t.Errorf("beside %s %s sits in a directory the deploy login can change, so it can swap the lock for one nobody else holds", what, routing.Lock)
+		}
+		locking := slices.IndexFunc(items, func(item machine.Item) bool {
+			return strings.Contains(item.Command(), "exec 9<"+shell.Quote(routing.Lock))
+		})
+		if locking >= 0 && locking < made {
+			t.Errorf("beside %s %s takes the routing lock at %d, before %s is made at %d", what, items[locking].ID(), locking, routing.Lock, made)
+		}
+	}
+}
