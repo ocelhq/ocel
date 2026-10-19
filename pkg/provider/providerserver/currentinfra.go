@@ -116,19 +116,3 @@ func (r *deployRun) isInfraCurrent(infra recordedInfra) bool {
 	}
 	return infra.found && infra.stack.SpecDigest == infra.digest && (r.infraProvisioned || len(r.transforms) == 0)
 }
-
-func (r *deployRun) ensureInfraRecorded(ctx context.Context) error {
-	_, found, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra)
-	if err != nil || found {
-		return err
-	}
-	digest, err := r.digestInfraSpec()
-	if err != nil {
-		return err
-	}
-	return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
-		Kind:       provider.StackInfra,
-		SpecDigest: digest,
-		WrittenBy:  r.readiness.WrittenBy,
-	})
-}
