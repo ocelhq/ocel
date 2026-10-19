@@ -8,7 +8,9 @@ import {
   buildVariablesChecks,
   clientEnvDeploymentUrlCheck,
   imageShowsNoBindingCheck,
+  immutableChunkCheck,
   lanesCheck,
+  missingImmutableChunkCheck,
   nextCacheChecks,
   nextClientEnvChecks,
   nextDataCacheChecks,
@@ -884,5 +886,32 @@ describe("deploy/next-ppr", () => {
     const skipped = planOn("aws.floci").skipped;
     expect(skipped["deploy/next-ppr"]?.map((gap) => gap.issue)).toEqual([852]);
     expect(skipped["deploy/next-ppr-cloudflare"]?.map((gap) => gap.issue)).toEqual([904]);
+  });
+});
+
+describe("deploy/sveltekit behind api-gateway on floci's aws", () => {
+  const listedOn = (lane: Lane) =>
+    Object.fromEntries(
+      Object.entries(planOn(lane).expectedFailures["deploy/sveltekit-api-gateway/web"] ?? {}).map(
+        ([title, listed]) => [title, listed.map((gap) => gap.id).sort()],
+      ),
+    );
+
+  it("expects every check the function answers red, since floci boots no function that reaches its packages through a symlink", () => {
+    const listed = listedOn("aws.floci");
+    const checks = fixtures.find((one) => one.name === "deploy/sveltekit")?.checks ?? [];
+    for (const one of checks.filter((one) => one !== missingImmutableChunkCheck)) {
+      expect(listed[one.title], one.title).toContain("floci-unzips-symlinks-as-files");
+    }
+  });
+
+  it("expects the content-hashed route red too, since floci's API Gateway serves no S3 integration", () => {
+    const listed = listedOn("aws.floci");
+    expect(listed[immutableChunkCheck.title]).toContain("floci-api-gateway-serves-no-s3");
+    expect(listed[missingImmutableChunkCheck.title]).toEqual(["floci-api-gateway-serves-no-s3"]);
+  });
+
+  it("expects nothing of it red on aws", () => {
+    expect(listedOn("aws")).toEqual({});
   });
 });

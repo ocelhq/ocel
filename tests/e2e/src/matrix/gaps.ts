@@ -6,8 +6,10 @@ import {
   corsCheck,
   emptyBodyCheck,
   encodedSlashCheck,
+  immutableChunkCheck,
   lanesCheck,
   malformedQueryCheck,
+  missingImmutableChunkCheck,
   nextCacheChecks,
   nextDataCacheChecks,
   nextOriginCacheChecks,
@@ -109,6 +111,32 @@ export const gaps: Gap[] = [
         fixtures: [deploy.node, sdk.node],
         variants: [apiGateway],
         fails: [check(nodeRuntimeChecks)],
+      },
+    ],
+  },
+  {
+    id: "floci-unzips-symlinks-as-files",
+    reason:
+      "floci unpacks a symlink in a function's zip as a file holding the link's target, so a function traced from a pnpm install finds none of the packages it reaches through one, and never boots",
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: [deploy.sveltekit],
+        variants: [apiGateway],
+        fails: [check(deploy.sveltekit.checks.filter((one) => one !== missingImmutableChunkCheck))],
+      },
+    ],
+  },
+  {
+    id: "floci-api-gateway-serves-no-s3",
+    reason:
+      "floci's API Gateway answers an S3 service integration as a call to its own query API, so the static route serves its MissingAction error with a 200 for every content-hashed file",
+    where: [
+      {
+        on: ["aws.floci"],
+        fixtures: [deploy.sveltekit],
+        variants: [apiGateway],
+        fails: [check([immutableChunkCheck, missingImmutableChunkCheck])],
       },
     ],
   },
