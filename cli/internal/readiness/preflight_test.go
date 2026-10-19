@@ -1,11 +1,41 @@
 package readiness
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
+
+func TestAPreflightNamesTheAppServingEachDomainAnAppDeclares(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{
+		Domains: project.Domains{Production: []string{"acme.com"}},
+		Apps: []project.App{
+			{Name: "web"},
+			{Name: "api", ProductionDomains: []string{"api.acme.com"}},
+		},
+	}
+	sent := newPreflightRequest(cfg, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Domains: cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)})
+
+	if want := map[string]string{"api.acme.com": "api"}; !maps.Equal(sent.GetDomainApps(), want) {
+		t.Errorf("preflight names the apps %v serving its domains, want %v: the hostnames forwarded to an origin are checked before provisioning, and which origin a hostname reaches depends on the app serving it", sent.GetDomainApps(), want)
+	}
+}
+
+func TestAPreflightAsksForTheForwardingCheckOnlyWhenTheCommandDoes(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{}
+	if !newPreflightRequest(cfg, Request{CheckForwarding: true}).GetCheckForwarding() {
+		t.Error("a command that asks for the forwarding check sent a preflight that does not")
+	}
+	if newPreflightRequest(cfg, Request{}).GetCheckForwarding() {
+		t.Error("a command that does not ask for the forwarding check sent a preflight that does")
+	}
+}
 
 func TestAFrameworkAppThatFallsBackToAContainerIsPreflightedAsAContainer(t *testing.T) {
 	t.Parallel()

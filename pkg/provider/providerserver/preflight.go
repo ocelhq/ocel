@@ -131,6 +131,9 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 			return nil, provider.RefusalError(err)
 		}
 	}
+	if err := h.refuseUnreadyForwards(ctx, steps, p, tier, req, status.previewWildcard); err != nil {
+		return nil, err
+	}
 	if req.GetCheckHosts() {
 		_ = steps.run(string(vendor), progress.Checking.Title("the hosts"), func() error {
 			resp.HostChecks = h.hostChecks(ctx, p, provider.HostCheckRequest{Tier: tier, Edge: readiness.Edge, Hostnames: req.GetHostCheckDomains()})

@@ -23,6 +23,19 @@ func TestADeployChecksWhatItsTierNeeds(t *testing.T) {
 	}
 }
 
+func TestOnlyADeployAsksTheProviderToCheckItsEdgeCanForwardItsHostnames(t *testing.T) {
+	cfg := &project.Project{Slug: "shop"}
+
+	for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW} {
+		if req := (OpenOptions{Intent: Deploy, Tier: tier}).request(cfg); !req.CheckForwarding {
+			t.Errorf("%v deploy request = %+v, want the forwarding checked: a zone that cannot forward a hostname otherwise fails the deploy after it provisioned every stack", tier, req)
+		}
+	}
+	if req := (OpenOptions{Intent: UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION}).request(cfg); req.CheckForwarding {
+		t.Errorf("request = %+v, want no forwarding checked by a command that forwards nothing", req)
+	}
+}
+
 func TestOnlyAnExplicitDryRunPinsTheProviderAsADryRun(t *testing.T) {
 	cfg := &project.Project{Slug: "shop"}
 
