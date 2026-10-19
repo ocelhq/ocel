@@ -138,6 +138,9 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 func (p *Provider) requireBootstrapped(deployed account.Deployed, tier environment.Tier) error {
 	command := provider.BootstrapCommand(tier)
+	if !deployed.Present {
+		return refusal.Refuse(refusal.CodeNotReady, "the %s tier has no Ocel bootstrap; run `%s`", tier, command)
+	}
 	for _, missing := range []struct {
 		value string
 		what  string

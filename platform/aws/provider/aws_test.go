@@ -397,9 +397,20 @@ func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *t
 	}
 }
 
+func TestAReleaseIntoATierWithNoBootstrapSaysSoRatherThanThatPartOfItIsMissing(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+
+	err := p.requireBootstrapped(account.Deployed{}, environment.TierPreview)
+
+	if err == nil || !strings.Contains(err.Error(), "the preview tier has no Ocel bootstrap") || strings.Contains(err.Error(), "partial rollback") {
+		t.Errorf("requireBootstrapped() of a tier with no bootstrap = %v, want it to say the tier has none", err)
+	}
+}
+
 func TestBootstrapReadyWithoutAVariablesKey(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	deployed := account.Deployed{
+		Present:        true,
 		StateBucket:    "state",
 		ArtifactBucket: "artifacts",
 		AssetBucket:    "assets",
