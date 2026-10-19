@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
@@ -331,6 +332,11 @@ func specFor(ns Namespace, tier environment.Tier) (spec, error) {
 
 func run(ctx context.Context, apis APIs, target spec, req Request, progress progress.Log) error {
 	requested := req.Parts
+	for _, name := range requested {
+		if _, known := partNamed(name); !known {
+			return refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap part named %q", name)
+		}
+	}
 
 	progress.Say("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
 	secret, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.tier, time.Now())
