@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -32,7 +33,7 @@ func (s tierBootstrap) Parts() []provider.Part {
 	return append(s.Bootstrap.Parts(), s.parts.Offered()...)
 }
 
-func (s tierBootstrap) removals(req provider.BootstrapRequest) (tier.Parts, provider.BootstrapRequest) {
+func (s tierBootstrap) splitTierParts(req provider.BootstrapRequest) (tier.Parts, provider.BootstrapRequest) {
 	var removed tier.Parts
 	var stacks []string
 	for _, name := range req.Remove {
@@ -43,11 +44,15 @@ func (s tierBootstrap) removals(req provider.BootstrapRequest) (tier.Parts, prov
 		}
 	}
 	req.Remove = stacks
+	req.Parts = slices.DeleteFunc(slices.Clone(req.Parts), func(name string) bool {
+		_, deployAdded := s.parts.Named(name)
+		return deployAdded
+	})
 	return removed, req
 }
 
 func (s tierBootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	removed, req := s.removals(req)
+	removed, req := s.splitTierParts(req)
 	plan, err := s.Bootstrap.Plan(ctx, req)
 	if err != nil {
 		return provider.Plan{}, err
@@ -89,7 +94,7 @@ func (s tierBootstrap) Apply(ctx context.Context, req provider.BootstrapRequest,
 	if err != nil {
 		return err
 	}
-	removed, req := s.removals(req)
+	removed, req := s.splitTierParts(req)
 	if err := s.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err
 	}
