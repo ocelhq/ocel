@@ -157,6 +157,7 @@ func bundleOptions(workingDir, outfile string, install *crossInstall, native *ad
 		Engines:           []api.Engine{engine},
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
+		KeepNames:         true,
 		MinifySyntax:      true,
 		Outfile:           outfile,
 		Write:             true,

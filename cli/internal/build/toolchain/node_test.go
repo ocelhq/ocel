@@ -238,6 +238,22 @@ func TestBundle(t *testing.T) {
 		}
 	})
 
+	t.Run("a class keeps the name its source gave it", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, tree{
+			"package.json": appPkg,
+			"server.js":    "class UserEntity {}\nconst handler = function handleUsers() {};\nconsole.log(UserEntity.name + ':' + handler.name);\n",
+		})
+
+		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
+			t.Fatalf("Bundle: %v", err)
+		}
+		if got, want := runNode(t, l.functionDir), "UserEntity:handleUsers"; !strings.Contains(got, want) {
+			t.Errorf("bundle printed %q, want %q", got, want)
+		}
+	})
+
 	t.Run("the app's own import of a package it never installed fails the build", func(t *testing.T) {
 		t.Parallel()
 
