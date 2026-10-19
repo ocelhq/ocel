@@ -284,7 +284,7 @@ func TestCompileRefusesACrateThatBuildsNoOneBinary(t *testing.T) {
 			"src/lib.rs": "",
 		},
 		"two binaries": {
-			"Cargo.toml":    rustCrateManifest + "\n[[bin]]\nname = \"server\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n",
+			"Cargo.toml":    twoBinCrateManifest,
 			"src/main.rs":   "fn main() {}\n",
 			"src/worker.rs": "fn main() {}\n",
 		},
@@ -297,6 +297,9 @@ func TestCompileRefusesACrateThatBuildsNoOneBinary(t *testing.T) {
 			_, _, err := compileRust(t, source, arch.X8664)
 			if err == nil || !strings.Contains(err.Error(), `"web"`) || !strings.Contains(err.Error(), "server") {
 				t.Fatalf("err = %v, want a refusal naming the app and the crate, which must build exactly one binary to serve", err)
+			}
+			if name == "two binaries" && (!strings.Contains(err.Error(), `"entrypoint"`) || !strings.Contains(err.Error(), `"worker"`)) {
+				t.Errorf("err = %v, want it to offer the binaries to set \"entrypoint\" to", err)
 			}
 		})
 	}
@@ -311,23 +314,82 @@ func TestCompileRefusesAnArchitectureRustBuildsNothingFor(t *testing.T) {
 	}
 }
 
-func TestCompileRefusesAnEntrypointForARustApp(t *testing.T) {
-	t.Parallel()
+const twoBinCrateManifest = rustCrateManifest + "\n[[bin]]\nname = \"server\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n"
 
-	source := rustCrate(t)
-	if err := os.MkdirAll(filepath.Join(source, "bin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+func compileRustBin(t *testing.T, source, entrypoint string) (string, error) {
+	t.Helper()
+	appDir := filepath.Join(t.TempDir(), "apps", "web")
+	functionDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:         "web",
-		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkRust},
+		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkRust, Arch: arch.X8664},
 		Source:      source,
-		Entrypoint:  "bin",
-		FunctionDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:      t.TempDir(),
+		Entrypoint:  entrypoint,
+		FunctionDir: functionDir,
+		AppDir:      appDir,
 	})
-	if err == nil || !strings.Contains(err.Error(), "bin") || !strings.Contains(err.Error(), "Cargo.toml") {
-		t.Fatalf("err = %v, want a refusal naming the entrypoint and the crate a rust app is built from", err)
+	return functionDir, err
+}
+
+func TestCompileBuildsOnlyTheBinaryTheEntrypointNames(t *testing.T) {
+	t.Parallel()
+	needsRustTarget(t, arch.X8664)
+
+	source := t.TempDir()
+	writeTree(t, source, map[string]string{
+		"Cargo.toml":    twoBinCrateManifest,
+		"src/main.rs":   "fn main() { undefined_call() }\n",
+		"src/worker.rs": "fn main() {}\n",
+	})
+
+	functionDir, err := compileRustBin(t, source, "worker")
+	if err != nil {
+		t.Fatalf("compile: %v — the entrypoint names worker, and the server binary that does not compile is never built", err)
+	}
+	if _, err := os.Stat(filepath.Join(functionDir, "web")); err != nil {
+		t.Fatalf("the compile wrote no binary named after the app: %v", err)
+	}
+}
+
+func TestCompileBuildsTheBinaryTheCrateRunsByDefaultWhenNoEntrypointNamesOne(t *testing.T) {
+	t.Parallel()
+	needsRustTarget(t, arch.X8664)
+
+	source := t.TempDir()
+	writeTree(t, source, map[string]string{
+		"Cargo.toml":    strings.Replace(twoBinCrateManifest, "[package]\n", "[package]\ndefault-run = \"worker\"\n", 1),
+		"src/main.rs":   "fn main() { undefined_call() }\n",
+		"src/worker.rs": "fn main() {}\n",
+	})
+
+	functionDir, err := compileRustBin(t, source, "")
+	if err != nil {
+		t.Fatalf("compile: %v — default-run names worker, and the server binary that does not compile is never built", err)
+	}
+	if _, err := os.Stat(filepath.Join(functionDir, "web")); err != nil {
+		t.Fatalf("the compile wrote no binary named after the app: %v", err)
+	}
+}
+
+func TestCompileRefusesAnEntrypointNamingNoBinaryOfTheCrate(t *testing.T) {
+	t.Parallel()
+	needsRustTarget(t, arch.X8664)
+
+	source := t.TempDir()
+	writeTree(t, source, map[string]string{
+		"Cargo.toml":    twoBinCrateManifest,
+		"src/main.rs":   "fn main() {}\n",
+		"src/worker.rs": "fn main() {}\n",
+	})
+
+	_, err := compileRustBin(t, source, "api")
+	if err == nil {
+		t.Fatal("compile built a binary the crate does not have")
+	}
+	for _, want := range []string{`"web"`, `"api"`, `"server"`, `"worker"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to name %s — the app, the entrypoint and the binaries the crate does build", err, want)
+		}
 	}
 }
 

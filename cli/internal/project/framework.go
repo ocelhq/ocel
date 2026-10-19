@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
@@ -104,8 +105,14 @@ func (a *App) refuseServerless(refusal error) error {
 	return nil
 }
 
+var cargoTargetName = regexp.MustCompile(`^[\p{L}\p{N}_-]+$`)
+
 func refuseEntrypointForm(app, framework, entrypoint string) error {
 	switch framework {
+	case buildoutput.FrameworkRust:
+		if !cargoTargetName.MatchString(entrypoint) {
+			return fmt.Errorf("app %q is built with rust and sets entrypoint %q, which names no binary: give it the name of one of the crate's binaries, as cargo run --bin takes it", app, entrypoint)
+		}
 	case buildoutput.FrameworkPython:
 		if _, err := pythonserver.ParseEntrypoint(entrypoint); err != nil {
 			return fmt.Errorf("app %q is built with python, and %w", app, err)

@@ -13,8 +13,11 @@ import (
 )
 
 type Root struct {
-	Dir      string
-	Language language.Language
+	Dir           string
+	Language      language.Language
+	Bin           string
+	BinApp        string
+	DefaultBinApp string
 }
 
 var languageExtensions = map[string]language.Language{
@@ -36,26 +39,47 @@ func RootsOf(cfg *project.Project) ([]Root, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(roots, crateRoots(cfg)...), nil
+	crates, err := crateRoots(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return append(roots, crates...), nil
 }
 
-func crateRoots(cfg *project.Project) []Root {
-	dirs := []string{filepath.Clean(cfg.Dir)}
-	for _, app := range cfg.Apps {
-		dirs = append(dirs, filepath.Join(cfg.Dir, app.Path))
+func crateRoots(cfg *project.Project) ([]Root, error) {
+	type crate struct {
+		dir string
+		app *project.App
+	}
+	crates := []crate{{dir: filepath.Clean(cfg.Dir)}}
+	for i := range cfg.Apps {
+		crates = append(crates, crate{dir: filepath.Join(cfg.Dir, cfg.Apps[i].Path), app: &cfg.Apps[i]})
 	}
 
 	var roots []Root
-	for _, dir := range dirs {
-		if !declaresThroughOcel(dir) {
+	for _, c := range crates {
+		if !declaresThroughOcel(c.dir) {
 			continue
 		}
-		if slices.ContainsFunc(roots, func(r Root) bool { return r.Dir == dir }) {
-			continue
+		at := slices.IndexFunc(roots, func(r Root) bool { return r.Dir == c.dir })
+		if at < 0 {
+			roots = append(roots, Root{Dir: c.dir, Language: language.Rust})
+			at = len(roots) - 1
 		}
-		roots = append(roots, Root{Dir: dir, Language: language.Rust})
+		root := &roots[at]
+		switch {
+		case c.app == nil || c.app.Language != language.Rust:
+		case c.app.Entrypoint == "":
+			if root.DefaultBinApp == "" {
+				root.DefaultBinApp = c.app.Name
+			}
+		case root.Bin != "" && root.Bin != c.app.Entrypoint:
+			return nil, fmt.Errorf("discovery: apps %q and %q are both built from the crate at %s, and name the binaries %q and %q: resources are declared by running one binary of a crate, so give both apps the same \"entrypoint\"", root.BinApp, c.app.Name, c.dir, root.Bin, c.app.Entrypoint)
+		default:
+			root.Bin, root.BinApp = c.app.Entrypoint, c.app.Name
+		}
 	}
-	return roots
+	return roots, nil
 }
 
 func Roots(configDir string, paths []string) ([]Root, error) {

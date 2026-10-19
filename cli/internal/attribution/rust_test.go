@@ -1,6 +1,7 @@
 package attribution
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -241,20 +242,39 @@ func TestRustReachGrantsNothingFromASiblingCrateUnderTheConfigDir(t *testing.T) 
 	}
 }
 
-func TestRustReachRefusesAnAppThatBuildsSeveralBinaries(t *testing.T) {
+const rustTwoBinManifest = "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n"
+
+func TestRustReachRefusesAnAppThatBuildsSeveralBinariesAndNamesNone(t *testing.T) {
 	needsCargo(t)
 	root := t.TempDir()
-	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
+	write(t, filepath.Join(root, "Cargo.toml"), rustTwoBinManifest)
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(root, "src", "worker.rs"), "fn main() {}\n")
 
 	_, err := readRustImports(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust})
 	if err == nil {
-		t.Fatal("Entries succeeded on an app with two binaries, want an error")
+		t.Fatal("Entries succeeded on an app with two binaries and no entrypoint, want an error")
 	}
-	want := `attribution: app "web" builds 2 binaries, and ocel attributes one binary per app`
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err, want)
+	for _, want := range []string{`app "web"`, `"worker"`, `"entrypoint"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to name %s", err, want)
+		}
+	}
+}
+
+func TestRustReachEntersAnAppThroughTheBinaryItsEntrypointNames(t *testing.T) {
+	needsCargo(t)
+	root := t.TempDir()
+	write(t, filepath.Join(root, "Cargo.toml"), rustTwoBinManifest)
+	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
+	write(t, filepath.Join(root, "src", "worker.rs"), "fn main() {}\n")
+
+	entries, err := readRustImports(t.Context(), root, App{Name: "web", Path: ".", Language: language.Rust, Entrypoint: "worker"})
+	if err != nil {
+		t.Fatalf("readRustImports: %v", err)
+	}
+	if got := slices.Sorted(maps.Keys(entries)); !slices.Equal(got, []string{"src/worker.rs"}) {
+		t.Errorf("entries = %v, want only src/worker.rs, the binary the app runs", got)
 	}
 }
 

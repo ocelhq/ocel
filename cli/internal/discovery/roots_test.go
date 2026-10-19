@@ -324,6 +324,62 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		}
 	})
 
+	t.Run("a crate an app is built from runs the binary the app's entrypoint names", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "Cargo.toml"), rustOcelManifest)
+		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustOcelManifest)
+
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{
+			{Name: "web", Path: ".", Language: language.Rust, Entrypoint: "web"},
+			{Name: "api", Path: "apps/api", Language: language.Rust, Entrypoint: "api"},
+		}})
+		if err != nil {
+			t.Fatalf("RootsOf: %v", err)
+		}
+		bins := map[string]string{}
+		for _, r := range roots {
+			rel, _ := filepath.Rel(root, r.Dir)
+			bins[rel] = r.Bin
+		}
+		if bins["."] != "web" || bins[filepath.Join("apps", "api")] != "api" {
+			t.Errorf("bins = %v, want . running web and apps/api running api", bins)
+		}
+	})
+
+	t.Run("two apps built from one crate naming different binaries are refused", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "Cargo.toml"), rustOcelManifest)
+
+		_, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{
+			{Name: "web", Path: ".", Language: language.Rust, Entrypoint: "web"},
+			{Name: "api", Path: ".", Language: language.Rust, Entrypoint: "api"},
+		}})
+		if err == nil {
+			t.Fatal("RootsOf chose one of two binaries to declare the crate's resources from")
+		}
+		for _, want := range []string{`"web"`, `"api"`, root} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("RootsOf = %v, want it to name %s", err, want)
+			}
+		}
+	})
+
+	t.Run("an app naming no binary of a crate another app names one of is recorded beside it", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "Cargo.toml"), rustOcelManifest)
+
+		roots, err := RootsOf(&project.Project{Dir: root, Apps: []project.App{
+			{Name: "web", Path: ".", Language: language.Rust},
+			{Name: "api", Path: ".", Language: language.Rust, Entrypoint: "api"},
+		}})
+		if err != nil {
+			t.Fatalf("RootsOf: %v", err)
+		}
+		if len(roots) != 1 || roots[0].Bin != "api" || roots[0].BinApp != "api" || roots[0].DefaultBinApp != "web" {
+			t.Errorf("roots = %+v, want the crate running api for api, with web running the crate's default binary", roots)
+		}
+	})
+
 	t.Run("a project with no crate gets no rust root", func(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, DefaultRootDirName, "main.ts"), "export {};")

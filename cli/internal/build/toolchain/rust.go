@@ -44,13 +44,13 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("app %q is built with rust and the %s in %s names no package to build", c.App, cargoManifestFile, source)
 	}
-	bins := crate.Bins()
-	if len(bins) != 1 {
-		return fmt.Errorf("app %q is built from the crate %s at %s, which builds %d binaries, and a function execs exactly one: keep one bin target in the crate", c.App, crate.Name, source, len(bins))
+	bin, err := crate.FindBin(c.Entrypoint)
+	if err != nil {
+		return fmt.Errorf("app %q is built from the crate at %s, and a function execs one binary: %w", c.App, source, err)
 	}
 
 	cmd := exec.Command("cargo", "build", "--release",
-		"--manifest-path", crate.ManifestPath, "--bin", bins[0].Name, "--target", target)
+		"--manifest-path", crate.ManifestPath, "--bin", bin.Name, "--target", target)
 	cmd.Dir = workspace.Root
 	cmd.Env = c.environ("CARGO_PROFILE_RELEASE_STRIP=symbols")
 	linker := "CARGO_TARGET_" + strings.ToUpper(strings.ReplaceAll(target, "-", "_")) + "_LINKER"
@@ -69,7 +69,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	if err := os.MkdirAll(c.FunctionDir, 0o755); err != nil {
 		return err
 	}
-	built := filepath.Join(workspace.Target, target, "release", bins[0].Name)
+	built := filepath.Join(workspace.Target, target, "release", bin.Name)
 	if err := copyFile(built, filepath.Join(c.FunctionDir, c.App), 0o755); err != nil {
 		return fmt.Errorf("app %q: cargo reported a build and left no binary at %s: %w", c.App, built, err)
 	}

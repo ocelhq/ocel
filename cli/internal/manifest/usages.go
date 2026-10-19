@@ -67,12 +67,13 @@ func attributionApps(cfg *project.Project) ([]attribution.App, error) {
 		inAnImage := a.RunsOn(provider.ComputeContainer)
 		appDir := filepath.Join(cfg.Dir, a.Path)
 		out = append(out, attribution.App{
-			Name:      a.Name,
-			Path:      a.Path,
-			Language:  a.Language,
-			Roots:     roots,
-			Container: inAnImage,
-			Members:   workspaceMembers(inAnImage, appDir, a),
+			Name:       a.Name,
+			Path:       a.Path,
+			Language:   a.Language,
+			Entrypoint: a.Entrypoint,
+			Roots:      roots,
+			Container:  inAnImage,
+			Members:    workspaceMembers(inAnImage, appDir, a),
 		})
 	}
 	return out, nil

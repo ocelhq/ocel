@@ -52,8 +52,9 @@ func Plan(loc workspace.Location) ([]byte, error) {
 		return nil, err
 	}
 	options := &core.GenerateBuildPlanOptions{
-		BuildCommand: commands.Build,
-		StartCommand: commands.Start,
+		BuildCommand:             commands.Build,
+		StartCommand:             commands.Start,
+		ErrorMissingStartCommand: true,
 	}
 	if provider := providerFor(loc); provider != "" {
 		named, done, err := providerConfigFile(loc, provider)

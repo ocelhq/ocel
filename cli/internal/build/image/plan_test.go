@@ -498,6 +498,59 @@ func TestARailpackFileBuildingAGoAppStillChoosesWhatTheImageBuilds(t *testing.T)
 	}
 }
 
+func TestARustAppIsBuiltAndStartedFromTheBinaryItsEntrypointNamesWithoutCargoOnTheHost(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"Cargo.toml":  "[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[[bin]]\nname = \"server\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"api\"\npath = \"src/api.rs\"\n",
+		"src/main.rs": "fn main() {}\n",
+		"src/api.rs":  "fn main() {}\n",
+	})
+
+	plan := plannedFrom(t, locatedWith(t, root, language.Rust, "api"))
+
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if !strings.Contains(build, "cargo build --release --bin api") {
+		t.Errorf("the build step runs:\n%s\nwant only the api binary built, as the function build does", build)
+	}
+	if plan.Deploy.StartCommand != "./bin/api" {
+		t.Errorf("the plan starts the app with %q, want ./bin/api — the binary the entrypoint names", plan.Deploy.StartCommand)
+	}
+}
+
+const twoBinCrateManifest = "[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n"
+
+func TestARustAppNamingNoEntrypointIsLeftToRailpackWhichStartsTheBinaryTheCrateRunsByDefault(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"Cargo.toml":     strings.Replace(twoBinCrateManifest, "[package]\n", "[package]\ndefault-run = \"api\"\n", 1),
+		"src/main.rs":    "fn main() {}\n",
+		"src/bin/api.rs": "fn main() {}\n",
+	})
+
+	plan := planned(t, root, language.Rust)
+
+	if build := strings.Join(plan.step(t, "build"), "\n"); strings.Contains(build, "--bin") {
+		t.Errorf("the build step runs:\n%s\nwant railpack's own build of every binary: the app names none", build)
+	}
+	if plan.Deploy.StartCommand != "./bin/api" {
+		t.Errorf("the plan starts the app with %q, want ./bin/api — the binary default-run names", plan.Deploy.StartCommand)
+	}
+}
+
+func TestARustAppBuildingSeveralBinariesAndNamingNoneIsRefusedBeforeItsImageIsBuilt(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"Cargo.toml":     twoBinCrateManifest,
+		"src/main.rs":    "fn main() {}\n",
+		"src/bin/api.rs": "fn main() {}\n",
+	})
+
+	if _, err := image.Plan(located(t, root, language.Rust)); err == nil || !strings.Contains(err.Error(), "start command") {
+		t.Fatalf("Plan() = %v, want railpack's refusal to plan an image it has no command to start", err)
+	}
+}
+
 func TestAGoAppBelowItsModuleIsBuiltFromThePackageWithTheModulesItReplacesAndNothingTheGoWorkUses(t *testing.T) {
 	root := t.TempDir()
 	for path, body := range map[string]string{

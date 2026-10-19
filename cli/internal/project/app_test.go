@@ -173,6 +173,8 @@ func TestAnEntrypointInTheWrongFormForItsFrameworkIsRefusedAtLoad(t *testing.T) 
 	for _, tt := range []struct {
 		framework, entrypoint, want string
 	}{
+		{"rust", "src/bin/worker.rs", "binary"},
+		{"rust", "worker server", "binary"},
 		{"go", "/srv/cmd/api", "directory"},
 		{"go", "../cmd/api", "directory"},
 		{"python", "my-pkg:app", "module"},
@@ -193,7 +195,7 @@ func TestAnEntrypointInTheWrongFormForItsFrameworkIsRefusedAtLoad(t *testing.T) 
 func TestAnEntrypointInTheFormOfItsFrameworkIsTakenAtLoad(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range [][2]string{{"go", "cmd/api"}, {"go", "."}, {"python", "shop.api:app"}, {"python", "src/main.py"}} {
+	for _, tt := range [][2]string{{"rust", "worker-api_2"}, {"go", "cmd/api"}, {"go", "."}, {"python", "shop.api:app"}, {"python", "src/main.py"}} {
 		framework, entrypoint := tt[0], tt[1]
 		cfg, err := loadJSON(t, `{"slug":"shop","apps":[{"name":"api","path":"api","framework":"`+framework+`","entrypoint":"`+entrypoint+`","compute":"serverless"}]}`)
 		if err != nil {

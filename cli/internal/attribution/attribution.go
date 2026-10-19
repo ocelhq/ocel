@@ -27,12 +27,13 @@ type Declaration struct {
 }
 
 type App struct {
-	Name      string
-	Path      string
-	Language  language.Language
-	Roots     []discovery.Root
-	Container bool
-	Members   []string
+	Name       string
+	Path       string
+	Language   language.Language
+	Entrypoint string
+	Roots      []discovery.Root
+	Container  bool
+	Members    []string
 }
 
 type Reachability func(file string) bool

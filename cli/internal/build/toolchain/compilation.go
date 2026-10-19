@@ -72,9 +72,6 @@ func (c Compilation) validate() error {
 	}); err != nil {
 		return err
 	}
-	if c.Framework.Name == buildoutput.FrameworkRust && c.Entrypoint != "" {
-		return fmt.Errorf("app %q is built with rust and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
-	}
 	info, err := os.Stat(c.Source)
 	if err != nil {
 		return fmt.Errorf("source %s for app %q: %w", c.Source, c.App, err)

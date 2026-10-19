@@ -29,18 +29,16 @@ func readRustImports(ctx context.Context, root string, app App) (map[string]Reac
 		return nil, fmt.Errorf("attribution: app %q: %w", app.Name, err)
 	}
 
-	bins := crate.Bins()
-	if len(bins) > 1 {
-		return nil, fmt.Errorf("attribution: app %q builds %d binaries, and ocel attributes one binary per app", app.Name, len(bins))
-	}
-
-	reached := reachedDirs(root, workspace, crate, patchedDirs)
 	entries := map[string]Reachability{}
-	for _, bin := range bins {
-		entry, inside := relativeToRoot(root, bin.SrcPath)
-		if !inside {
-			continue
-		}
+	if len(crate.Bins()) == 0 {
+		return entries, nil
+	}
+	bin, err := crate.FindBin(app.Entrypoint)
+	if err != nil {
+		return nil, fmt.Errorf("attribution: app %q runs one binary of its crate: %w", app.Name, err)
+	}
+	reached := reachedDirs(root, workspace, crate, patchedDirs)
+	if entry, inside := relativeToRoot(root, bin.SrcPath); inside {
 		entries[entry] = func(file string) bool { return under(reached, file) }
 	}
 	return entries, nil
