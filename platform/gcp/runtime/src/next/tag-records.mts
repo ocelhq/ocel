@@ -62,13 +62,13 @@ export function newFirestoreTagRecords(
     if (record.stale !== undefined) {
       updateTransforms.push({
         fieldPath: "stale",
-        maximum: { integerValue: String(record.stale) },
+        maximum: { integerValue: String(Math.ceil(record.stale)) },
       });
     }
     if (record.expired !== undefined) {
       updateTransforms.push({
         fieldPath: "expired",
-        maximum: { integerValue: String(record.expired) },
+        maximum: { integerValue: String(Math.ceil(record.expired)) },
       });
     }
     updateTransforms.push({ fieldPath: "writtenAt", setToServerValue: "REQUEST_TIME" });
