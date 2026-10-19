@@ -5,12 +5,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/shellword"
 	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -113,11 +113,7 @@ func printInstall(stdout io.Writer, result *resultv1.SkillInstallResult, opts in
 	case opts.global:
 		again = "ocel skill install --global --yes"
 	case configPath != "":
-		again = "ocel skill install --config " + shellQuoted(configPath) + " --yes"
+		again = "ocel skill install --config " + shellword.Quote(configPath) + " --yes"
 	}
 	fmt.Fprintf(stdout, "Nothing was written. Run `%s` to write them.\n", again)
-}
-
-func shellQuoted(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
