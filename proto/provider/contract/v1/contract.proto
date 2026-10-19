@@ -792,6 +792,10 @@ message PreflightRequest {
   bool record_wants = 10;
 
   repeated string wanted_parts = 11;
+
+  map<string, string> domain_apps = 12;
+
+  bool check_forwarding = 13;
 }
 
 message ContainerApp {

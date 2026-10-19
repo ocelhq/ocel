@@ -62,6 +62,7 @@ func (o OpenOptions) request(cfg *project.Project) readiness.Request {
 		req.Slug, req.RecordWants, req.Domains = cfg.Slug, true, cfg.HostnameNames(req.Tier)
 		req.RequireHostname = req.Tier == environmentv1.Tier_TIER_PRODUCTION
 		req.CheckPreviewRoute = req.Tier == environmentv1.Tier_TIER_PREVIEW
+		req.CheckForwarding = true
 	}
 	return req
 }

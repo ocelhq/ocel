@@ -38,6 +38,7 @@ type Request struct {
 	Registry         *contractv1.ImageRegistry
 
 	CheckPreviewRoute bool
+	CheckForwarding   bool
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {

@@ -1,6 +1,8 @@
 package readiness
 
 import (
+	"slices"
+
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -15,6 +17,7 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 		RequiredTier:     req.Tier,
 		Slug:             req.Slug,
 		Domains:          req.Domains,
+		DomainApps:       domainApps(cfg, req),
 		Containers:       containers(cfg),
 		Edge:             cfg.EdgeSelection(),
 		CheckHosts:       req.CheckHosts,
@@ -22,9 +25,23 @@ func newPreflightRequest(cfg *project.Project, req Request) *contractv1.Prefligh
 		ProjectRegistry:  req.Registry,
 
 		CheckPreviewRoute: req.CheckPreviewRoute,
+		CheckForwarding:   req.CheckForwarding,
 		RecordWants:       req.RecordWants && !req.DryRun,
 		WantedParts:       wanted,
 	}
+}
+
+func domainApps(cfg *project.Project, req Request) map[string]string {
+	apps := map[string]string{}
+	for _, host := range cfg.Hostnames(req.Tier) {
+		if host.App != "" && slices.Contains(req.Domains, host.Name) {
+			apps[host.Name] = host.App
+		}
+	}
+	if len(apps) == 0 {
+		return nil
+	}
+	return apps
 }
 
 func containers(cfg *project.Project) []*contractv1.ContainerApp {
