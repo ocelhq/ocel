@@ -33,6 +33,7 @@ const (
 	targetsPerRead        = 50
 	servicesPerRead       = 10
 	scaleUpTimeout        = 5 * time.Minute
+	lowerTimeout          = 30 * time.Second
 	firstHealthPoll       = 5 * time.Second
 	maxHealthPoll         = 20 * time.Second
 	healthPollGrowthRatio = 2
@@ -99,33 +100,79 @@ func (s ReleaseScaling) ScaleUp(ctx context.Context, promoted provider.PromotedR
 	if err != nil {
 		return err
 	}
+	var raised raisedReleases
+	if err := s.raise(ctx, services, targets, &raised, progress); err != nil {
+		return errors.Join(err, s.lower(ctx, raised))
+	}
+	return nil
+}
+
+type raisedReleases struct {
+	cancelled []releaseService
+	started   []startedRelease
+}
+
+func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, targets map[string]scalingtypes.ScalableTarget, raised *raisedReleases, progress progress.Log) error {
 	var scaled []releaseService
 	for _, service := range services {
 		if _, found := targets[service.resource]; !found {
 			continue
 		}
-		if err := s.cancelScaleToZero(ctx, service); err != nil {
+		cancelled, err := s.cancelScaleToZero(ctx, service)
+		if err != nil {
 			return err
+		}
+		if cancelled {
+			raised.cancelled = append(raised.cancelled, service)
 		}
 		scaled = append(scaled, service)
 	}
-	if targets, err = s.readTargets(ctx, scaled); err != nil {
+	targets, err := s.readTargets(ctx, scaled)
+	if err != nil {
 		return err
 	}
-	var started []startedRelease
 	for _, service := range scaled {
 		target := targets[service.resource]
 		if aws.ToInt32(target.MaxCapacity) > 0 {
 			continue
 		}
-		tasks, err := s.restore(ctx, service, target)
+		least, most, err := s.readInstanceCounts(ctx, service, target)
 		if err != nil {
 			return err
 		}
-		progress.Say(fmt.Sprintf("Scaling %s release %s back up to %d tasks before it serves", service.release.App, service.release.Release, tasks))
-		started = append(started, startedRelease{releaseService: service, tasks: tasks})
+		raised.started = append(raised.started, startedRelease{releaseService: service, tasks: least})
+		if err := s.scale(ctx, service, least, most); err != nil {
+			return err
+		}
+		progress.Say(fmt.Sprintf("Scaling %s release %s back up to %d tasks before it serves", service.release.App, service.release.Release, least))
 	}
-	return s.waitHealthy(ctx, started)
+	return s.waitHealthy(ctx, raised.started)
+}
+
+func (s ReleaseScaling) lower(ctx context.Context, raised raisedReleases) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lowerTimeout)
+	defer cancel()
+	var errs []error
+	stopped := map[string]bool{}
+	for _, release := range raised.started {
+		stopped[release.resource] = true
+		if err := s.scale(ctx, release.releaseService, 0, 0); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	at := s.Now().UTC().Add(previousReleaseWindow)
+	for _, service := range raised.cancelled {
+		if stopped[service.resource] {
+			continue
+		}
+		if err := s.scheduleScaleToZero(ctx, service, at); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("the releases this refused promotion scaled up keep running until a later promotion scales them down: %w", err)
+	}
+	return nil
 }
 
 func (s ReleaseScaling) ScaleDown(ctx context.Context, demoted provider.DemotedReleases, progress progress.Log) error {
@@ -194,7 +241,7 @@ func (s ReleaseScaling) readTargets(ctx context.Context, services []releaseServi
 	return targets, nil
 }
 
-func (s ReleaseScaling) cancelScaleToZero(ctx context.Context, service releaseService) error {
+func (s ReleaseScaling) cancelScaleToZero(ctx context.Context, service releaseService) (bool, error) {
 	_, err := s.AutoScaling.DeleteScheduledAction(ctx, &applicationautoscaling.DeleteScheduledActionInput{
 		ServiceNamespace:    scalingtypes.ServiceNamespaceEcs,
 		ScalableDimension:   scalingtypes.ScalableDimensionECSServiceDesiredCount,
@@ -202,10 +249,13 @@ func (s ReleaseScaling) cancelScaleToZero(ctx context.Context, service releaseSe
 		ScheduledActionName: aws.String(scaleToZeroAction),
 	})
 	var absent *scalingtypes.ObjectNotFoundException
-	if err != nil && !errors.As(err, &absent) {
-		return fmt.Errorf("cancel the scale to zero of %s release %s: %w", service.release.App, service.release.Release, err)
+	if errors.As(err, &absent) {
+		return false, nil
 	}
-	return nil
+	if err != nil {
+		return false, fmt.Errorf("cancel the scale to zero of %s release %s: %w", service.release.App, service.release.Release, err)
+	}
+	return true, nil
 }
 
 func (s ReleaseScaling) scheduleScaleToZero(ctx context.Context, service releaseService, at time.Time) error {
@@ -224,19 +274,19 @@ func (s ReleaseScaling) scheduleScaleToZero(ctx context.Context, service release
 	return nil
 }
 
-func (s ReleaseScaling) restore(ctx context.Context, service releaseService, target scalingtypes.ScalableTarget) (int32, error) {
+func (s ReleaseScaling) readInstanceCounts(ctx context.Context, service releaseService, target scalingtypes.ScalableTarget) (int32, int32, error) {
 	tagged, err := s.AutoScaling.ListTagsForResource(ctx, &applicationautoscaling.ListTagsForResourceInput{ResourceARN: target.ScalableTargetARN})
 	if err != nil {
-		return 0, fmt.Errorf("read the instance counts of %s release %s: %w", service.release.App, service.release.Release, err)
+		return 0, 0, fmt.Errorf("read the instance counts of %s release %s: %w", service.release.App, service.release.Release, err)
 	}
 	least, leastErr := readInstanceCount(tagged.Tags, minInstancesTag)
 	most, mostErr := readInstanceCount(tagged.Tags, maxInstancesTag)
 	if err := errors.Join(leastErr, mostErr); err != nil || least < 1 || most < least {
-		return 0, refusal.Refuse(refusal.CodeNotReady,
+		return 0, 0, refusal.Refuse(refusal.CodeNotReady,
 			"%s release %s runs no tasks, and its scalable target names no instance counts to scale it back up to in %s and %s: deploy its build again rather than roll back to it",
 			service.release.App, service.release.Release, minInstancesTag, maxInstancesTag)
 	}
-	return least, s.scale(ctx, service, least, most)
+	return least, most, nil
 }
 
 func readInstanceCount(tags map[string]string, key string) (int32, error) {
