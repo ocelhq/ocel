@@ -19,7 +19,7 @@ const DEPLOYMENT_OPTIMIZER = `${FN_URL}_ocel/image`;
 const ENV_OPTIMIZER = "https://opt.lambda-url.eu-west-2.on.aws/";
 
 const PAYLOAD: ImageOriginRequest = {
-  assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
+  storage: { project: "p1", env: "prod", app: "web", release: "r1a2b3c4d" },
   url: "/a.png",
   w: 640,
   q: 75,

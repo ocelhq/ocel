@@ -103,9 +103,9 @@ type AppSpec struct {
 	ISR            *ISRSpec
 	Gate           *gate.Gate
 
-	Storage    naming.Coordinate
-	Static     *edge.Static
-	OutputRoot string
+	StorageCoordinate naming.Coordinate
+	Static            *edge.Static
+	OutputRoot        string
 
 	Proxied bool
 

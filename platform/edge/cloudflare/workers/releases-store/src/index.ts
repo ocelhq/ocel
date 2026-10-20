@@ -75,6 +75,12 @@ export default class extends WorkerEntrypoint<Env> {
           { status: 409 },
         );
       }
+      if (outcome.kind === "unlocated") {
+        return new Response(
+          `release ${outcome.release} of ${outcome.app} locates none of its objects, so no edge could serve its files`,
+          { status: 422 },
+        );
+      }
       if (outcome.kind === "different-record") {
         return new Response(
           `release ${outcome.release} of ${outcome.app} is already served with another record, and a release's record never changes once it is served`,

@@ -292,7 +292,7 @@ func (r *release) secrets(program component.Program) []string {
 func (r *release) appSecrets(spec provider.StackSpec) []string {
 	secrets := slices.Collect(maps.Values(spec.App.Values.Sensitive))
 	if r.cfg.PurgeSeed != "" && spec.App.ISR != nil {
-		secrets = append(secrets, edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.Storage.StorageCoordinate()))
+		secrets = append(secrets, edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.StorageCoordinate.StorageCoordinate()))
 	}
 	return secrets
 }

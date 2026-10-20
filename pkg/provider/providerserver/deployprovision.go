@@ -278,7 +278,7 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 			OcelRouteTable:            facts.OcelRouteTable,
 			EdgeRouteTable:            facts.EdgeRouteTable,
 			ISR:                       facts.ISR,
-			Storage:                   appCoordinate(r.spec, entry.App, entry.Release.Token()),
+			StorageCoordinate:         appCoordinate(r.spec, entry.App, entry.Release.Token()),
 			OutputRoot:                r.artifactRoot,
 			Static:                    facts.Static,
 			Guard:                     facts.Guard,

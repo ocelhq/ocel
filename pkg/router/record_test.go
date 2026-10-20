@@ -141,3 +141,27 @@ func TestAPruneNamesTheReleasesItRemovedOnTheWire(t *testing.T) {
 		t.Errorf("prune = %s, want %s", raw, want)
 	}
 }
+
+func TestAReleaseRecordLocatesItsObjectsByItsStorageCoordinate(t *testing.T) {
+	t.Parallel()
+
+	got, err := ReleaseRecord{App: "web", Release: "b1", StorageCoordinate: "shop/prod/web/r1a2b3c4d"}.ParseStorageCoordinate()
+	if err != nil {
+		t.Fatalf("ParseStorageCoordinate() = %v", err)
+	}
+	if got.Project != "shop" || got.Env != "prod" || got.App != "web" || got.Release.String() != "r1a2b3c4d" {
+		t.Errorf("ParseStorageCoordinate() = %+v, want shop/prod/web/r1a2b3c4d", got)
+	}
+}
+
+func TestAReleaseRecordWhoseStorageCoordinateLocatesNothingIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, coordinate := range []string{"", "shop/prod/web", "shop/prod/web/release1", "shop/prod/web/r1a2b3c4d/x"} {
+		record := ReleaseRecord{App: "web", Release: "b1", StorageCoordinate: coordinate}
+		_, err := record.ParseStorageCoordinate()
+		if err == nil || !strings.Contains(err.Error(), "web/b1") {
+			t.Errorf("ParseStorageCoordinate() of %q = %v, want an error naming release web/b1", coordinate, err)
+		}
+	}
+}

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/processenv"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -147,7 +149,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		TimeoutSeconds: timeoutSeconds,
 		Role:           "arn:aws:iam::" + account + ":role" + spec.RolePath + names.Role,
 		Code:           payloads.ImageOptimizer().Bytes,
-		Variables:      map[string]string{naming.StorageEdge.BucketVar(): spec.EdgeBucket, threadpoolEnvVar: strconv.Itoa(threadpoolSize)},
+		Variables:      map[string]string{processenv.BucketEnvVar(naming.StorageEdge): spec.EdgeBucket, threadpoolEnvVar: strconv.Itoa(threadpoolSize)},
 		LogGroup:       names.LogGroup,
 		RetentionDays:  retentionDays,
 		Tags:           functionTags,

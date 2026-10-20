@@ -1,5 +1,5 @@
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
 import {
   type PointerRecordResult,
   RECORD_CACHE_MAX,
@@ -11,6 +11,10 @@ import {
 import { answerEveryRecordWith } from "./origin-deps";
 import { routeTableKey } from "./route-table-store";
 
+function found(record: StoredRecord) {
+  return { kind: "found", record, storage: parseStorageCoordinate(record.storageCoordinate) };
+}
+
 function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
   return {
     app: "web",
@@ -20,7 +24,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     rootFunction: "/",
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
-    storageCoordinate: "p1/prod/web/build-1",
+    storageCoordinate: "p1/prod/web/r00000001",
     createdAt: 1_000,
     edge: {},
     ...over,
@@ -81,6 +85,19 @@ function lookupOf(
 }
 
 describe("resolveRelease", () => {
+  it("answers unavailable for a record that locates none of its objects", async () => {
+    const binding = createCountingBinding({
+      pointerRelease: { "web/": "deploy-1" },
+      records: { "web/deploy-1": makeRecord({ storageCoordinate: "p1/prod/web" }) },
+    });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const resolution = await resolveRelease(lookupOf(binding, { ms: 0 }));
+
+    expect(resolution).toEqual({ kind: "unavailable" });
+    expect(String(error.mock.calls[0]?.[0])).toContain("locates none of its objects");
+  });
+
   it("resolves and returns the active release record", async () => {
     const binding = createCountingBinding({
       pointerRelease: { "web/": "deploy-1" },
@@ -90,7 +107,7 @@ describe("resolveRelease", () => {
 
     const resolution = await resolveRelease(lookupOf(binding, clock));
 
-    expect(resolution).toEqual({ kind: "found", record: makeRecord() });
+    expect(resolution).toEqual(found(makeRecord()));
   });
 
   it("returns not-found when no active pointer exists for the app", async () => {
@@ -141,7 +158,7 @@ describe("resolveRelease", () => {
     const resolution = await resolveRelease(lookup);
     expect(binding.pointerRecordCalls).toBe(2);
     expect(binding.lastReturnedRecord).toBe(false);
-    expect(resolution).toEqual({ kind: "found", record: makeRecord() });
+    expect(resolution).toEqual(found(makeRecord()));
   });
 
   it("re-reads the record when the build moves (promotion/rollback)", async () => {
@@ -157,16 +174,13 @@ describe("resolveRelease", () => {
     const lookup = lookupOf(binding, clock);
 
     const first = await resolveRelease(lookup);
-    expect(first).toEqual({ kind: "found", record: makeRecord() });
+    expect(first).toEqual(found(makeRecord()));
 
     pointerRelease["web/"] = "deploy-2";
     clock.ms = 5_001;
     const second = await resolveRelease(lookup);
 
-    expect(second).toEqual({
-      kind: "found",
-      record: makeRecord({ release: "deploy-2" }),
-    });
+    expect(second).toEqual(found(makeRecord({ release: "deploy-2" })));
     expect(binding.lastReturnedRecord).toBe(true);
   });
 
@@ -184,7 +198,7 @@ describe("resolveRelease", () => {
     binding.down = true;
     const resolution = await resolveRelease(lookup);
 
-    expect(resolution).toEqual({ kind: "found", record: makeRecord() });
+    expect(resolution).toEqual(found(makeRecord()));
   });
 
   it("returns unavailable on a cold isolate when the store is unreachable", async () => {
@@ -228,7 +242,7 @@ describe("resolveRelease", () => {
     binding.down = true;
     const resolution = await resolveRelease(lookup);
 
-    expect(resolution).toEqual({ kind: "found", record: makeRecord() });
+    expect(resolution).toEqual(found(makeRecord()));
     expect(errors).toHaveBeenCalledTimes(1);
     expect(errors.mock.calls[0]?.[0]).toContain("acme-web/web");
     expect(errors.mock.calls[0]?.[0]).toContain("cached 5s ago");
@@ -262,11 +276,8 @@ describe("resolveRelease", () => {
     const web = await resolveRelease(lookupOf(binding, clock, "web"));
     const admin = await resolveRelease(lookupOf(binding, clock, "admin"));
 
-    expect(web).toEqual({ kind: "found", record: makeRecord() });
-    expect(admin).toEqual({
-      kind: "found",
-      record: makeRecord({ app: "admin", release: "deploy-9" }),
-    });
+    expect(web).toEqual(found(makeRecord()));
+    expect(admin).toEqual(found(makeRecord({ app: "admin", release: "deploy-9" })));
   });
 
   it("resolves a preview by its full label, independently of production", async () => {
@@ -292,16 +303,16 @@ describe("resolveRelease", () => {
       now: () => clock.ms,
     });
 
-    expect(production).toEqual({ kind: "found", record: makeRecord() });
-    expect(preview).toEqual({ kind: "found", record: previewRecord });
+    expect(production).toEqual(found(makeRecord()));
+    expect(preview).toEqual(found(previewRecord));
     expect(binding.pointerRecordCalls).toBe(1);
     expect(binding.labelRecordCalls).toBe(1);
   });
 
   it("keeps caches independent across projects sharing one binding", async () => {
     const records: Record<string, StoredRecord> = {
-      acme: makeRecord({ storageCoordinate: "prev/acme/web/build-1" }),
-      globex: makeRecord({ storageCoordinate: "prev/globex/web/build-1" }),
+      acme: makeRecord({ storageCoordinate: "acme/prev/web/r00000001" }),
+      globex: makeRecord({ storageCoordinate: "globex/prev/web/r00000001" }),
     };
     const binding = answerEveryRecordWith(async (args) => {
       const record = records[args.slug];
@@ -325,8 +336,8 @@ describe("resolveRelease", () => {
       now: () => clock.ms,
     });
 
-    expect(acme).toEqual({ kind: "found", record: records.acme });
-    expect(globex).toEqual({ kind: "found", record: records.globex });
+    expect(acme).toEqual(found(records.acme));
+    expect(globex).toEqual(found(records.globex));
   });
 
   it("caches on the host, so one host reuses the entry within the TTL", async () => {

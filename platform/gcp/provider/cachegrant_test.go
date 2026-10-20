@@ -19,7 +19,7 @@ import (
 func cachedAt(release naming.Coordinate) provider.StackSpec {
 	spec := nextSpec()
 	spec.App.ISR = &provider.ISRSpec{}
-	spec.App.Storage = release
+	spec.App.StorageCoordinate = release
 	return spec
 }
 
@@ -157,7 +157,7 @@ func TestARedeployOfANextAppWritesNoIAMPolicyAtAll(t *testing.T) {
 	redeployed := routedNextSpec()
 	release := cachedRelease()
 	release.Release = naming.NewReleaseToken("d2", "f2")
-	redeployed.App.Storage = release
+	redeployed.App.StorageCoordinate = release
 	if _, err := p.release().EnsureAccount(context.Background(), c, redeployed, nil); err != nil {
 		t.Fatalf("second EnsureAccount() = %v", err)
 	}

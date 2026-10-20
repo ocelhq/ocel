@@ -37,14 +37,14 @@ test("lets the failure of the edge reach the caller", async () => {
 });
 
 test("finds an edge to clear where the service is told a url map and a release, or a purge endpoint", () => {
-  const release = "shop/prod/web/r1a2b3c4d";
+  const coordinate = "shop/prod/web/r1a2b3c4d";
 
   expect(openPurgeFor({})).toBeUndefined();
   expect(
     openPurgeFor({
       OCEL_CDN_URL_MAP: "projects/acme/global/urlMaps/routes",
       OCEL_CACHE_TAG_PURGE: "1",
-      OCEL_STORAGE_COORDINATE: release,
+      OCEL_RELEASE_TOKEN: "r1a2b3c4d",
     }),
   ).toBeTypeOf("function");
   expect(
@@ -52,7 +52,8 @@ test("finds an edge to clear where the service is told a url map and a release, 
       OCEL_PURGE_URL: "https://shop.acct.workers.dev/.ocel/purge",
       OCEL_PURGE_SECRET: "secret",
       OCEL_CACHE_TAG_PURGE: "1",
-      OCEL_STORAGE_COORDINATE: release,
+      OCEL_RELEASE_TOKEN: "r1a2b3c4d",
+      OCEL_STORAGE_COORDINATE: coordinate,
     }),
   ).toBeTypeOf("function");
 });

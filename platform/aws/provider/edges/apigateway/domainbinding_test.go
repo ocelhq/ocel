@@ -121,7 +121,7 @@ func TestBindDomainAfterAPromotionMapsTheHostOntoThePromotedStage(t *testing.T) 
 	ctx := context.Background()
 	w := newWorld()
 	stack := reconciled(t, w)
-	staged(t, stack, entryFunction, "")
+	staged(t, stack, entryFunction, "shop/prod/web/r1111aaaa")
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": "d1.f1"}}
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)

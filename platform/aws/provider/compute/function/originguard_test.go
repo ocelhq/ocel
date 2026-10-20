@@ -79,7 +79,7 @@ func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, sta
 
 func registerGuarded(t *testing.T, cfg testConfig, spec provider.StackSpec, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
 	t.Helper()
-	host := NewDispatchHost(spec.App, cfg.Slug, cfg.EdgeBucket, cfg.ImageOptimizerURL)
+	host := NewDispatchHost(spec.App, cfg.EdgeBucket, cfg.ImageOptimizerURL)
 	guard, err := NewOriginGuard(spec.App, cfg.Tier, cfg.OriginSecret, cfg.PreviousOriginSecret)
 	if err != nil {
 		t.Fatalf("originGuard: %v", err)

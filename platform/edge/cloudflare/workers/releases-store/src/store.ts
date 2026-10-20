@@ -1,5 +1,8 @@
 import type { ReleaseRecord } from "@platform/edge-contract/release-record";
-import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
+import {
+  parseStorageCoordinate,
+  type StorageCoordinate,
+} from "@platform/edge-contract/storage-key";
 import { matchesSecret } from "./auth";
 
 export interface SqlStore {
@@ -34,7 +37,8 @@ export interface ServedLabel {
 export type PointerMoveOutcome =
   | { kind: "moved" }
   | { kind: "stale" }
-  | { kind: "different-record"; app: string; release: string };
+  | { kind: "different-record"; app: string; release: string }
+  | { kind: "unlocated"; app: string; release: string };
 
 const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
@@ -113,6 +117,13 @@ export function readServedPromotion(
 
 export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutcome {
   const pointer = move.pointer || DEFAULT_POINTER;
+  const located: { record: StoredRecord; storage: StorageCoordinate }[] = [];
+  for (const record of move.records) {
+    const storage = parseStorageCoordinate(record.storageCoordinate);
+    if (storage === undefined)
+      return { kind: "unlocated", app: record.app, release: record.release };
+    located.push({ record, storage });
+  }
   return store.transactionSync(() => {
     if ((readServedPromotion(store, pointer) ?? null) !== (move.replaces || null)) {
       return { kind: "stale" };
@@ -129,13 +140,13 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
       );
     }
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
-    for (const record of move.records) {
+    for (const { record, storage } of located) {
       store.sql.exec(
         `INSERT INTO served (pointer, app, release, data) VALUES (?, ?, ?, ?)`,
         pointer,
         record.app,
         record.release,
-        JSON.stringify(withBuildCoordinates(record, recordBuild(store, pointer, record))),
+        JSON.stringify(withBuildCoordinates(record, recordBuild(store, pointer, record, storage))),
       );
     }
     store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
@@ -182,6 +193,7 @@ function recordBuild(
   store: SqlStore,
   pointer: string,
   record: StoredRecord,
+  storage: StorageCoordinate,
 ): Record<string, string> {
   store.sql.exec(
     `INSERT INTO builds (pointer, app, build_id, storage_coordinate, release_token, seq)
@@ -193,7 +205,7 @@ function recordBuild(
     record.app,
     record.buildId,
     record.storageCoordinate,
-    parseStorageCoordinate(record.storageCoordinate)?.release ?? "",
+    storage.release,
   );
   store.sql.exec(
     `DELETE FROM builds WHERE pointer = ? AND app = ? AND NOT EXISTS (

@@ -172,7 +172,7 @@ func TestTheBytecodeCacheFollowsTheSpecWhateverTheOperatorsShell(t *testing.T) {
 	for _, shell := range []string{"", "0", "1"} {
 		t.Run("OCEL_BYTECODE_CACHE="+shell, func(t *testing.T) {
 			t.Setenv("OCEL_BYTECODE_CACHE", shell)
-			cache := Bytecode{Bucket: "artifacts-xyz", Storage: storageCoordinate("prod", "proj", "api", fixedRelease(t))}
+			cache := Bytecode{Bucket: "artifacts-xyz", StorageCoordinate: storageCoordinate("prod", "proj", "api", fixedRelease(t))}
 
 			env := Env(map[string]string{}, Args{Handler: "index.mjs"}, nil, &cache)
 			if env["OCEL_COMPILE_CACHE"] != "1" {
@@ -228,8 +228,8 @@ func TestISREnv(t *testing.T) {
 func bytecodeCacheFor(t *testing.T, env, project, app, buildID string) Bytecode {
 	t.Helper()
 	return Bytecode{
-		Bucket:  "artifacts-xyz",
-		Storage: storageCoordinate(env, project, app, deployedAs(buildID).Token()),
+		Bucket:            "artifacts-xyz",
+		StorageCoordinate: storageCoordinate(env, project, app, deployedAs(buildID).Token()),
 	}
 }
 

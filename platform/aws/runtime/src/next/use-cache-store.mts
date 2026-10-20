@@ -9,7 +9,8 @@ import {
   tagSnapshotKey,
 } from "@framework/next-cache";
 import type { TagSnapshotRead, UseCacheStore } from "@framework/next-runtime/use-cache-store";
-import { bucketVars, objectKey as storageKey } from "@platform/edge-contract/storage-key";
+import { bucketVars } from "@platform/edge-contract/runtime-env";
+import { objectKey as storageKey } from "@platform/edge-contract/storage-key";
 import { newDynamoDBClient, newS3Client } from "../cache/sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
 import { isNotFound, readBodyText, requireEnv, requireStorageCoordinate } from "./object-store.mjs";

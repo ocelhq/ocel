@@ -4,7 +4,8 @@ import type { ImageConfig } from "@framework/next-router/image";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import type { ReleasesBinding, StoredRecord } from "../src/releases";
-import { servedNextRelease, UNTOKENED_STORAGE_COORDINATE } from "./next-release";
+import { SERVE_REFUSED_HEADER } from "../src/serve-key";
+import { STORAGE_COORDINATE, servedNextRelease } from "./next-release";
 import { answerEveryRecordWith, capturing } from "./origin-deps";
 import { resolveBase } from "./resolve-base";
 import {
@@ -34,7 +35,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     rootFunction: "/",
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
-    storageCoordinate: "p1/prod/web/build-1",
+    storageCoordinate: "p1/prod/web/r00000001",
     createdAt: 1_000,
     edge: {},
     ...over,
@@ -163,25 +164,6 @@ describe("a routed release", () => {
     await serve(new Request("https://shop.example.com/blog"));
 
     expect(served.calls[0].coordinates.release).not.toBe("build-1~abc");
-  });
-
-  it("leaves prerenders to the origin when the storage coordinate names no release token", async () => {
-    const served = fakeServing();
-    const wire = capturing();
-    const serve = servedNextRelease({
-      table: { dispatch: prerender },
-      record: {
-        functionUrls: { "/blog": "https://fn.example.com" },
-        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
-      },
-      serve: served.serving.serve,
-      fetch: wire.fetch,
-    });
-
-    await serve(new Request("https://shop.example.com/blog"));
-
-    expect(served.calls).toHaveLength(0);
-    expect(wire.calls.map(({ url }) => url)).toEqual(["https://fn.example.com/blog"]);
   });
 
   it("returns the baked-in 404 when the app has no active pointer", async () => {
@@ -393,12 +375,13 @@ describe("the image origin of a routed deployment", () => {
   }
 
   function imageRelease(base: Partial<ResolveBase>) {
+    const refusing = fakeServing(
+      () => new Response(null, { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),
+    );
     return servedNextRelease({
       table: { rootFunction: "bundle-0", images, assetHashes: { "/a.png": "a-hash" } },
-      record: {
-        functionUrls: { "bundle-0": entryUrl },
-        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
-      },
+      record: { functionUrls: { "bundle-0": entryUrl } },
+      serve: refusing.serving.serve,
       base,
     });
   }
@@ -448,7 +431,7 @@ describe("the image origin of a routed deployment", () => {
       },
       record: {
         functionUrls: { "bundle-0": entryUrl, "/api/og": "https://og.fn.example" },
-        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
+        storageCoordinate: STORAGE_COORDINATE,
       },
       base: {
         originFetch: (async () =>

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/processenv"
+
 	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/arch"
@@ -35,13 +37,13 @@ func nextSpec() provider.StackSpec {
 		Kind:   provider.StackApp,
 		Images: provider.ImagePushes{Store: alreadyPushed{}, Pushes: []provider.ImagePush{{App: "bundle-0", ImageRef: "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc", Function: true}}},
 		App: &provider.AppSpec{
-			App:          "web",
-			Framework:    buildoutput.FrameworkNext,
-			RootFunction: "bundle-0",
-			BuildID:      "dpl_7",
-			Compute:      provider.ComputeServerless,
-			Router:       "cloudrun",
-			Storage:      cachedRelease(),
+			App:               "web",
+			Framework:         buildoutput.FrameworkNext,
+			RootFunction:      "bundle-0",
+			BuildID:           "dpl_7",
+			Compute:           provider.ComputeServerless,
+			Router:            "cloudrun",
+			StorageCoordinate: cachedRelease(),
 			Functions: []provider.FunctionSpec{{
 				Name:      "bundle-0",
 				Route:     "bundle-0",
@@ -140,13 +142,16 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 	for name, want := range map[string]string{
 		"OCEL_NEXT_ROUTE_TABLE":   "/ocel/app/" + edge.NextRouteTableFile,
 		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r1a2b3c4d",
-		"OCEL_SLUG":               "shop",
-		"OCEL_APP":                "web",
 		"OCEL_BUILD_ID":           "dpl_7",
 		"OCEL_ROUTER_KIND":        "cloudrun",
 	} {
 		if got := env[name]; got != want {
 			t.Errorf("the Next service reads %s=%q, want %q", name, got, want)
+		}
+	}
+	for _, name := range []string{"OCEL_SLUG", "OCEL_APP"} {
+		if got, told := env[name]; told {
+			t.Errorf("the Next service reads %s=%q, want none: its storage coordinate names the project and the app", name, got)
 		}
 	}
 }
@@ -389,14 +394,14 @@ func nextContainerSpec() provider.StackSpec {
 		},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
-			App:             "web",
-			Framework:       buildoutput.FrameworkNext,
-			Compute:         provider.ComputeContainer,
-			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
-			HealthCheckPath: "/",
-			Instances:       provider.Instances{Min: 1, Max: 1},
-			Storage:         cachedRelease(),
-			ISR:             &provider.ISRSpec{TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
+			App:               "web",
+			Framework:         buildoutput.FrameworkNext,
+			Compute:           provider.ComputeContainer,
+			Image:             "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
+			HealthCheckPath:   "/",
+			Instances:         provider.Instances{Min: 1, Max: 1},
+			StorageCoordinate: cachedRelease(),
+			ISR:               &provider.ISRSpec{TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
 		},
 	}
 }
@@ -480,7 +485,7 @@ func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.
 
 	env := googletest.EnvOf(service.Template.Containers[0])
 	for _, name := range []string{
-		next.RouteTableEnvVar, next.RouterKindEnvVar,
+		processenv.RouteTableEnvVar, processenv.RouterKindEnvVar,
 		edge.OriginDispatchVar, edge.OriginSignedVar,
 	} {
 		if _, told := env[name]; told {

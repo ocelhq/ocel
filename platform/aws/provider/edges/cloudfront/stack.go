@@ -273,9 +273,9 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names root function %s but no URL the edge can reach it on, and the %q edge fronts a release over its root function's URL; re-run the deploy to write the record again", promotionID, app, release, record.RootFunctionPhysical, Kind)
 	}
 	published.Assets = assetOriginDomain(s.own.EdgeBucket, s.own.Region)
-	storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate)
+	storage, err := record.ParseStorageCoordinate()
 	if err != nil {
-		return route{}, fmt.Errorf("promote %s: the release record for %s/%s locates none of its objects: %w", promotionID, app, release, err)
+		return route{}, fmt.Errorf("promote %s: %w", promotionID, err)
 	}
 	published.AssetPrefix = assetOriginPath(storage.StoragePrefix(naming.ObjectAssets))
 	if record.Static != nil {

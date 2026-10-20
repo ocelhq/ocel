@@ -14,6 +14,7 @@ const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";
 const SIBLING_URL = "https://sibling.example";
 const ROUTER_KIND = "api-gateway";
+const STORAGE = "shop/prod/web/r0a1b2c3d";
 
 const emptyRoutes = {
   beforeMiddleware: [],
@@ -70,10 +71,8 @@ function host(): DispatchHost {
     keepCacheTags: true,
     localOrigin,
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
-    slug: "p1",
-    app: "web",
+    storage: { project: "p1", env: "prod", app: "web", release: "r0a1b2c3d" },
     appBuildId: "d1",
-    assetPrefix: "",
     originFetch: capturing,
   };
 }
@@ -126,10 +125,14 @@ test("a dispatch host serves assets from the bucket its host handed it", async (
   const assetBucket = { get: async () => null };
   const originFetch = (async () => new Response("sibling")) as unknown as typeof fetch;
 
-  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
-    assetBucket,
-    originFetch,
-  });
+  const built = readDispatchHost(
+    { OCEL_NEXT_ROUTE_TABLE: path, OCEL_STORAGE_COORDINATE: STORAGE },
+    localOrigin,
+    {
+      assetBucket,
+      originFetch,
+    },
+  );
 
   expect(built.assetBucket).toBe(assetBucket);
   expect(built.originFetch).toBe(originFetch);
@@ -165,13 +168,17 @@ test("an image request is answered by the image origin its host handed the dispa
     }),
   );
   const asked: { url: string; w: number }[] = [];
-  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
-    originFetch: fetch,
-    imageOrigin: async (payload) => {
-      asked.push({ url: payload.url, w: payload.w });
-      return new Response("resized", { headers: { "content-type": "image/webp" } });
+  const built = readDispatchHost(
+    { OCEL_NEXT_ROUTE_TABLE: path, OCEL_STORAGE_COORDINATE: STORAGE },
+    localOrigin,
+    {
+      originFetch: fetch,
+      imageOrigin: async (payload) => {
+        asked.push({ url: payload.url, w: payload.w });
+        return new Response("resized", { headers: { "content-type": "image/webp" } });
+      },
     },
-  });
+  );
 
   const response = await dispatchRequest(
     new Request("https://app.example/_next/image?url=%2Flogo.png&w=64&q=75", {
@@ -217,8 +224,22 @@ test("only a deploy that declared origin dispatch hosts it", () => {
 
 test("origin dispatch without a route table refuses to boot", () => {
   expect(() =>
-    readDispatchHost({ OCEL_ROUTER_KIND: "cloudfront" }, localOrigin, { originFetch: fetch }),
+    readDispatchHost(
+      { OCEL_ROUTER_KIND: "cloudfront", OCEL_STORAGE_COORDINATE: STORAGE },
+      localOrigin,
+      {
+        originFetch: fetch,
+      },
+    ),
   ).toThrow(/OCEL_NEXT_ROUTE_TABLE/);
+});
+
+test("origin dispatch that names no release's storage coordinate refuses to boot", () => {
+  expect(() =>
+    readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: "/var/task/next-route-table.json" }, localOrigin, {
+      originFetch: fetch,
+    }),
+  ).toThrow(/OCEL_STORAGE_COORDINATE/);
 });
 
 test("sibling urls arrive as a routeId-to-URL object", () => {
@@ -242,8 +263,6 @@ test("the env names the entry function's own bundle as the loopback origin", asy
       OCEL_NEXT_ROUTE_TABLE: path,
       OCEL_FUNCTION_URLS: JSON.stringify({ [SIBLING_BUNDLE]: SIBLING_URL }),
       OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d",
-      OCEL_SLUG: "shop",
-      OCEL_APP: "web",
       OCEL_BUILD_ID: "d1",
     },
     localOrigin,
@@ -253,7 +272,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
   expect(built.manifest.rootFunction).toBe(LOCAL_BUNDLE);
   expect(built.routerKind).toBe("cloudfront");
   expect(built.functionUrls).toEqual({ [SIBLING_BUNDLE]: SIBLING_URL });
-  expect(built.assetPrefix).toBe("assets/shop/prod/web/r0a1b2c3d");
+  expect(built.storage).toEqual({ project: "shop", env: "prod", app: "web", release: "r0a1b2c3d" });
   expect(built.assetBucket).toBeUndefined();
 });
 
@@ -295,7 +314,11 @@ test("a dispatch host serves by the static rules its host states", async () => {
   const rules = { immutablePrefixes: ["/docs/_next/static/"] };
 
   const built = readDispatchHost(
-    { OCEL_NEXT_ROUTE_TABLE: path, OCEL_STATIC_RULES: JSON.stringify(rules) },
+    {
+      OCEL_NEXT_ROUTE_TABLE: path,
+      OCEL_STATIC_RULES: JSON.stringify(rules),
+      OCEL_STORAGE_COORDINATE: STORAGE,
+    },
     localOrigin,
     { originFetch: fetch },
   );
@@ -345,10 +368,14 @@ test("a dispatch host carries the throttle check its host's access names", async
   await writeFile(path, JSON.stringify(manifest));
   const isOriginThrottle = () => true;
 
-  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
-    originFetch: fetch,
-    isOriginThrottle,
-  });
+  const built = readDispatchHost(
+    { OCEL_NEXT_ROUTE_TABLE: path, OCEL_STORAGE_COORDINATE: STORAGE },
+    localOrigin,
+    {
+      originFetch: fetch,
+      isOriginThrottle,
+    },
+  );
 
   expect(built.isOriginThrottle).toBe(isOriginThrottle);
 });
@@ -388,14 +415,18 @@ test("a route image is refused under the image request limit its host's access n
     }),
   );
   const asked: string[] = [];
-  const built = readDispatchHost({ OCEL_NEXT_ROUTE_TABLE: path }, localOrigin, {
-    originFetch: fetch,
-    imageOrigin: async (payload) => {
-      asked.push(payload.url);
-      return new Response("resized", { headers: { "content-type": "image/webp" } });
+  const built = readDispatchHost(
+    { OCEL_NEXT_ROUTE_TABLE: path, OCEL_STORAGE_COORDINATE: STORAGE },
+    localOrigin,
+    {
+      originFetch: fetch,
+      imageOrigin: async (payload) => {
+        asked.push(payload.url);
+        return new Response("resized", { headers: { "content-type": "image/webp" } });
+      },
+      maxImageRequestBytes: 100,
     },
-    maxImageRequestBytes: 100,
-  });
+  );
 
   const response = await dispatchRequest(
     new Request("https://app.example/_next/image?url=%2Fapi%2Fog&w=64&q=75", {

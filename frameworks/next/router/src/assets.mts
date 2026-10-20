@@ -4,6 +4,7 @@ import {
   IMMUTABLE_CACHE_CONTROL,
   isUnderImmutablePrefix,
 } from "@platform/edge-contract/static";
+import { objectKey, type StorageCoordinate } from "@platform/edge-contract/storage-key";
 import type { ResponseCache } from "./http-cache.mjs";
 
 export interface AssetObject {
@@ -17,7 +18,7 @@ export interface AssetBucket {
 
 export interface AssetStoreDeps {
   store?: AssetBucket;
-  assetPrefix: string;
+  storage?: StorageCoordinate;
   basePath?: string;
   static?: Static;
   cache: ResponseCache;
@@ -91,11 +92,16 @@ function plainNotFound(): Response {
   });
 }
 
+function storedAsset(deps: AssetStoreDeps, pathname: string): Promise<AssetObject | null> {
+  if (!deps.store || !deps.storage) return Promise.resolve(null);
+  return deps.store.get(objectKey("assets", deps.storage, pathname));
+}
+
 async function notFound(deps: AssetStoreDeps, locale?: string): Promise<Response> {
   const base = deps.basePath ?? "";
   const names = locale ? [`${base}/${locale}/404.html`, `${base}/404.html`] : [`${base}/404.html`];
   for (const name of names) {
-    const page = await deps.store?.get(`${deps.assetPrefix}${name}`);
+    const page = await storedAsset(deps, name);
     if (page?.body) {
       return new Response(page.body, {
         status: 404,
@@ -115,14 +121,14 @@ export async function serveStaticAsset(
   const miss = () =>
     isImmutablePathname(deps, url.pathname) ? plainNotFound() : notFound(deps, locale);
 
-  if (!deps.store) return miss();
+  if (!deps.store || !deps.storage) return miss();
 
   const cached = await deps.cache.match(request);
   if (cached) return cached;
 
   let hit: { pathname: string; object: AssetObject & { body: ReadableStream } } | undefined;
   for (const pathname of storedPathnames(url.pathname, deps.basePath)) {
-    const object = await deps.store.get(`${deps.assetPrefix}${pathname}`);
+    const object = await storedAsset(deps, pathname);
     if (object?.body) {
       hit = { pathname, object: { ...object, body: object.body } };
       break;

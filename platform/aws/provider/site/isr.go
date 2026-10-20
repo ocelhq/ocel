@@ -30,7 +30,7 @@ func (c ISR) TagNamespace() string {
 }
 
 func (c ISR) Env() map[string]string {
-	env := naming.StorageEnv(c.Coord, naming.Buckets{
+	env := processenv.StorageEnv(c.Coord, naming.Buckets{
 		naming.StorageEdge:  c.Buckets[naming.StorageEdge],
 		naming.StorageCache: c.Buckets[naming.StorageCache],
 	})

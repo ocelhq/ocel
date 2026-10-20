@@ -35,7 +35,7 @@ func (p *Store) UploadStaticFiles(ctx context.Context, spec provider.StackSpec, 
 	if !servesStaticFiles(spec) {
 		return nil
 	}
-	release := spec.App.Storage
+	release := spec.App.StorageCoordinate
 	imageConfig := release.ImageConfigKey()
 	appRoot := buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App)
 	files, err := staticFilesOf(appRoot, release)

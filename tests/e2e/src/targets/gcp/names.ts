@@ -21,9 +21,6 @@ export const PRODUCTION_ENVIRONMENT = "prod";
 
 const LONGEST_LABEL = 63;
 const TAG_CHARS = 6;
-const LONGEST_NAMESPACE_FIELD = 12;
-const NAMESPACE_HEAD_CHARS = LONGEST_NAMESPACE_FIELD - 1 - TAG_CHARS;
-const APP_WORD = "app";
 
 function hashTag(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, TAG_CHARS);
@@ -36,17 +33,6 @@ export function labelValue(value: string): string {
   }
   const head = sanitized.slice(0, LONGEST_LABEL - TAG_CHARS - 2).replace(/-+$/, "");
   return `${head}-${hashTag(sanitized)}`;
-}
-
-export function namespaceField(namespace: string): string {
-  if (namespace.length <= LONGEST_NAMESPACE_FIELD) {
-    return namespace;
-  }
-  let head = namespace.slice(0, NAMESPACE_HEAD_CHARS).replace(/-+$/, "");
-  if (`-${head}`.endsWith(`-${APP_WORD}`)) {
-    head = head.slice(0, -1).replace(/-+$/, "");
-  }
-  return `${head}-${hashTag(namespace)}`;
 }
 
 export function namespaceOf(env: NodeJS.ProcessEnv): string {

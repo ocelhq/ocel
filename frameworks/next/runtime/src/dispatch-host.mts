@@ -7,13 +7,15 @@ import type { OriginThrottle } from "@framework/next-router/retry";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { withRouterHeader } from "@framework/node-runtime/router-header";
-import { assetPrefix, readStorageCoordinate } from "@platform/edge-contract/storage-key";
+import {
+  buildIdVar,
+  readStorageCoordinate,
+  routerKindVar,
+  routeTableVar,
+  storageCoordinateVar,
+} from "@platform/edge-contract/runtime-env";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { uncachedResponses } from "./uncached-responses.mjs";
-
-function releaseAssetPrefix(env: NodeJS.ProcessEnv): string {
-  const coordinate = readStorageCoordinate(env);
-  return coordinate ? assetPrefix(coordinate) : "";
-}
 
 export interface DispatchHost {
   manifest: NextRouteTable;
@@ -21,10 +23,8 @@ export interface DispatchHost {
   keepCacheTags: boolean;
   localOrigin: string;
   functionUrls: Record<string, string>;
-  slug: string;
-  app: string;
+  storage: StorageCoordinate;
   appBuildId: string;
-  assetPrefix: string;
   static?: Static;
   assetBucket?: AssetBucket;
   imageOptimizerUrl?: string;
@@ -44,8 +44,8 @@ function newRouteDeps(
       ...host.functionUrls,
       [host.manifest.rootFunction]: host.localOrigin,
     },
-    slug: host.slug,
-    app: host.app,
+    slug: host.storage.project,
+    app: host.storage.app,
     appBuildId: host.appBuildId,
     originFetch: host.originFetch,
     ...(host.isOriginThrottle ? { isOriginThrottle: host.isOriginThrottle } : {}),
@@ -55,7 +55,7 @@ function newRouteDeps(
     maxImageRequestBytes: host.maxImageRequestBytes,
     assetStore: {
       store: host.assetBucket,
-      assetPrefix: host.assetPrefix,
+      storage: host.storage,
       basePath: host.manifest.basePath,
       ...(host.static ? { static: host.static } : {}),
       cache: uncachedResponses(),
@@ -84,8 +84,6 @@ export interface DispatchAccess {
   originFetch: typeof fetch;
   isOriginThrottle?: OriginThrottle;
 }
-
-const routeTablePathVar = "OCEL_NEXT_ROUTE_TABLE";
 
 const functionUrlsVar = "OCEL_FUNCTION_URLS";
 
@@ -123,22 +121,26 @@ export function readDispatchHost(
   localOrigin: string,
   access: DispatchAccess,
 ): DispatchHost {
-  const routeTablePath = env[routeTablePathVar];
+  const routeTablePath = env[routeTableVar];
   if (!routeTablePath) {
-    throw new Error(`ocel: ${routeTablePathVar} names no route table`);
+    throw new Error(`ocel: ${routeTableVar} names no route table`);
+  }
+  const storage = readStorageCoordinate(env);
+  if (!storage) {
+    throw new Error(
+      `ocel: ${storageCoordinateVar} names no release, so the dispatcher reads no static file`,
+    );
   }
   const manifest = JSON.parse(readFileSync(routeTablePath, "utf8")) as NextRouteTable;
 
   return {
     manifest,
-    routerKind: env.OCEL_ROUTER_KIND ?? "",
+    routerKind: env[routerKindVar] ?? "",
     keepCacheTags: invalidatesByCacheTag(env),
     localOrigin,
     functionUrls: siblingFunctionUrls(env[functionUrlsVar]),
-    slug: env.OCEL_SLUG ?? "",
-    app: env.OCEL_APP ?? manifest.appName ?? "",
-    appBuildId: env.OCEL_BUILD_ID ?? "",
-    assetPrefix: releaseAssetPrefix(env),
+    storage,
+    appBuildId: env[buildIdVar] ?? "",
     ...(env[staticRulesVar] ? { static: parseStaticRules(env[staticRulesVar]) } : {}),
     ...(access.assetBucket ? { assetBucket: access.assetBucket } : {}),
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),

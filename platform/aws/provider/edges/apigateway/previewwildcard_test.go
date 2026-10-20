@@ -88,7 +88,7 @@ func rulesOn(t *testing.T, w *world, domain string) map[string]*fakeRule {
 func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
-	record := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: previewEntry}
+	record := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: previewEntry, StorageCoordinate: "shop/pr-1/web/r1111aaaa"}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}

@@ -1,3 +1,4 @@
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 export interface CompiledRemotePattern {
   protocol?: string;
   hostname: string;
@@ -34,7 +35,7 @@ export interface ImageConfig extends CompiledImageConfig {
 }
 
 export interface ImageOriginRequest {
-  assetPrefix: string;
+  storage?: StorageCoordinate;
   url: string;
   w: number;
   q: number;

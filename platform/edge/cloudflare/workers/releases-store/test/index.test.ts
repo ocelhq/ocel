@@ -159,6 +159,15 @@ describe("authenticated endpoints", () => {
     expect(await served.json()).toEqual({ promotionId: "promo-1" });
   });
 
+  it("refuses with 422 a pointer move whose record locates none of its objects", async () => {
+    await initialize();
+
+    const res = await movePointer({ records: [makeRecord({ storageCoordinate: "p1/prod/web" })] });
+
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("locates none of its objects");
+  });
+
   it("refuses with 422 a pointer move that carries a different record for a release it serves", async () => {
     await initialize();
     await movePointer();

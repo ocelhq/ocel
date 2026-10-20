@@ -10,7 +10,7 @@ import {
 import { noteTags } from "../src/origin-tags.mjs";
 import { launcherConfig } from "../test-support/next-project-fixture.mjs";
 
-const coordinate = "shop/prod/web/r0a1b2c3d";
+const release = "r0a1b2c3d";
 
 function manifest(
   cache: Parameters<typeof launcherConfig>[0] = {},
@@ -68,7 +68,7 @@ function shaping(
     {
       OCEL_EDGE_CACHE: "all",
       OCEL_CACHE_TAG_PURGE: "1",
-      OCEL_STORAGE_COORDINATE: coordinate,
+      OCEL_RELEASE_TOKEN: release,
       ...env,
       ...extra,
     } as NodeJS.ProcessEnv,
@@ -154,30 +154,23 @@ test("leaves the tag header off a front that invalidates by nothing", () => {
   expect(headers["cache-tag"]).toBeUndefined();
 });
 
-test("reads the release out of the storage coordinate", () => {
-  expect(releaseOf({ OCEL_STORAGE_COORDINATE: coordinate })).toBe("r0a1b2c3d");
+test("reads the release the caching edge named, with no storage coordinate set", () => {
+  expect(releaseOf({ OCEL_RELEASE_TOKEN: release })).toBe("r0a1b2c3d");
 });
 
-test("names no release when the origin set no storage coordinate", () => {
+test("names no release when the origin set no release token", () => {
   expect(releaseOf({})).toBeNull();
-  expect(releaseOf({ OCEL_STORAGE_COORDINATE: "" })).toBeNull();
+  expect(releaseOf({ OCEL_RELEASE_TOKEN: "" })).toBeNull();
 });
 
-test("throws on a storage coordinate no origin could have set", () => {
-  for (const value of [
-    "shop/prod/web",
-    "shop/prod/web/r0a1b2c3d/bytecode",
-    "shop/prod/web/deadbeef",
-    "shop/prod/web/rZZZZZZZZ",
-  ]) {
-    expect(() => releaseOf({ OCEL_STORAGE_COORDINATE: value }), value).toThrow(
-      "OCEL_STORAGE_COORDINATE",
-    );
+test("throws on a release token no origin could have set", () => {
+  for (const value of ["shop/prod/web/r0a1b2c3d", "deadbeef", "rZZZZZZZZ"]) {
+    expect(() => releaseOf({ OCEL_RELEASE_TOKEN: value }), value).toThrow("OCEL_RELEASE_TOKEN");
   }
 });
 
-test("leaves the tag header off when the coordinate names no release", () => {
-  const headers = serve(shaping({ OCEL_STORAGE_COORDINATE: "" }), "/isr", fakeRes(), {
+test("leaves the tag header off when the origin names no release", () => {
+  const headers = serve(shaping({ OCEL_RELEASE_TOKEN: "" }), "/isr", fakeRes(), {
     tags: ["products"],
   });
 

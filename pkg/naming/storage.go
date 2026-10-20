@@ -77,28 +77,6 @@ func (b Buckets) Holding(kind ObjectKind) string {
 	return b[kind.Class()]
 }
 
-const StorageCoordinateVar = "OCEL_STORAGE_COORDINATE"
-
-var runtimeBucketVars = map[StorageClass]string{
-	StorageArtifacts: "OCEL_ARTIFACTS_BUCKET",
-	StorageEdge:      "OCEL_EDGE_BUCKET",
-	StorageCache:     "OCEL_CACHE_BUCKET",
-}
-
-func (c StorageClass) BucketVar() string {
-	return runtimeBucketVars[c]
-}
-
-func StorageEnv(storage Coordinate, buckets Buckets) map[string]string {
-	env := map[string]string{StorageCoordinateVar: storage.StorageCoordinate()}
-	for class, variable := range runtimeBucketVars {
-		if bucket := buckets[class]; bucket != "" {
-			env[variable] = bucket
-		}
-	}
-	return env
-}
-
 func (c Coordinate) StoragePrefix(kind ObjectKind) string {
 	return string(kind) + PathSeparator + c.StorageCoordinate() + PathSeparator
 }

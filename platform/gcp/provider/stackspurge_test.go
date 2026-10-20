@@ -61,7 +61,7 @@ func isrSpec(front edge.Edge, compute provider.Compute, isr *provider.ISRSpec) p
 		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction},
 		Kind: provider.StackApp,
 		Edge: front,
-		App:  &provider.AppSpec{App: "web", Compute: compute, ISR: isr, Storage: cachedRelease()},
+		App:  &provider.AppSpec{App: "web", Compute: compute, ISR: isr, StorageCoordinate: cachedRelease()},
 	}
 }
 

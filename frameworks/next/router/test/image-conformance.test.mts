@@ -58,7 +58,6 @@ for (const { variant, config, cases } of variants) {
         const response = await serveImage(request, url, {
           config,
           basePath: "",
-          assetPrefix: "",
           slug: "fixture",
           app: "fixture",
           appBuildId: "fixture",

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AssetBucket } from "../src/assets.mjs";
 import { type RouteDeps, serve } from "../src/index.mjs";
 import type { TestRouteDeps } from "../test-support/dispatch-scenario.mjs";
+import { storedPathname, TEST_STORAGE } from "../test-support/stored-assets.mjs";
 
 const ENTRY_HEADER = "x-ocel-entry";
 const MW_ID = "middleware-bundle";
@@ -19,14 +20,15 @@ const emptyRoutes = {
 function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
-      const body = files[key];
+      const pathname = storedPathname(key);
+      const body = pathname === undefined ? undefined : files[pathname];
       if (body === undefined) return null;
       return { body: new Blob([body]).stream() };
     },
   };
   return {
     store,
-    assetPrefix: "",
+    storage: TEST_STORAGE,
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };

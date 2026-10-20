@@ -1,4 +1,4 @@
-import { namespaceField } from "./names";
+import { namespaceField } from "@ocel-tests/shared/naming";
 import { bearer, type Where } from "./store";
 
 const STORAGE = "https://storage.googleapis.com/storage/v1";

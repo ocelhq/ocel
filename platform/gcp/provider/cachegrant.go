@@ -18,7 +18,7 @@ func cacheGrants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec
 	if err != nil {
 		return nil, err
 	}
-	storage := spec.App.Storage
+	storage := spec.App.StorageCoordinate
 	app, err := naming.AppScope(storage)
 	if err != nil {
 		return nil, err

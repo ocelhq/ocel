@@ -173,7 +173,7 @@ func TestTheStagedRecordNamesTheStorageCoordinateTheFunctionWritesUnder(t *testi
 	if app == nil || app.ISR == nil {
 		t.Fatal("the last spec the stacks port saw has no ISR spec")
 	}
-	if want := app.Storage.StorageCoordinate(); staged[0].StorageCoordinate != want {
+	if want := app.StorageCoordinate.StorageCoordinate(); staged[0].StorageCoordinate != want {
 		t.Errorf("storageCoordinate = %q, want %q: the edge reads entries under the coordinate's pages prefix, so a coordinate that differs from the one the function writes under misses every prerender",
 			staged[0].StorageCoordinate, want)
 	}

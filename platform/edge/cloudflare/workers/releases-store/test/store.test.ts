@@ -51,6 +51,18 @@ describe("movePointer", () => {
     });
   });
 
+  it("refuses a record that locates none of its objects, and moves nothing", async () => {
+    const store = storeStub();
+
+    expect(
+      await store.movePointer(
+        makePointerMove({ records: [makeRecord({ storageCoordinate: "p1/prod/web" })] }),
+      ),
+    ).toEqual({ kind: "unlocated", app: "web", release: "deploy-1" });
+
+    expect(await store.readServedPromotion()).toBeUndefined();
+  });
+
   it("replaces the promotion it names and serves the new one", async () => {
     const store = storeStub();
     await store.movePointer(makePointerMove());

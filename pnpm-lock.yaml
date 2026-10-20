@@ -476,6 +476,9 @@ importers:
       '@next/routing':
         specifier: ^16.2.10
         version: 16.2.10
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../platform/edge/contract
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -1650,6 +1653,9 @@ importers:
 
   tests/next-compat:
     dependencies:
+      '@ocel-tests/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@platform/edge-contract':
         specifier: workspace:*
         version: link:../../platform/edge/contract
@@ -1660,6 +1666,9 @@ importers:
 
   tests/shared:
     devDependencies:
+      '@types/bun':
+        specifier: ^1.4.0
+        version: 1.4.0
       '@types/node':
         specifier: ^20
         version: 20.19.43

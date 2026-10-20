@@ -32,7 +32,10 @@ afterAll(() => rm(dir, { recursive: true, force: true }));
 
 function isOriginThrottle() {
   const host = readGcpDispatchHost(
-    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
+    {
+      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
+      OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
+    },
     "http://127.0.0.1:1",
   );
   return host.isOriginThrottle;

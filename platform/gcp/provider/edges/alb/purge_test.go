@@ -293,15 +293,12 @@ func TestAPurgeThatFailsWarnsWithTheCommandToClearItAndLeavesThePromotionServed(
 func TestAReleaseTagIsTheReleaseTokenOfTheStorageCoordinate(t *testing.T) {
 	t.Parallel()
 
-	for coordinate, want := range map[string]string{
-		"shop/prod/web/r1a2b3c4d":        "r1a2b3c4d",
-		"shop/prod/web/r1a2b3c4d/x.json": "",
-		"shop/prod/web/rXYZ":             "",
-		"shop/prod/web":                  "",
-		"":                               "",
-	} {
-		if got := readReleaseTag(router.ReleaseRecord{StorageCoordinate: coordinate}); got != want {
-			t.Errorf("readReleaseTag(%q) = %q, want %q", coordinate, got, want)
+	if got, err := readReleaseTag(router.ReleaseRecord{StorageCoordinate: "shop/prod/web/r1a2b3c4d"}); err != nil || got != "r1a2b3c4d" {
+		t.Errorf("readReleaseTag() = %q, %v, want r1a2b3c4d", got, err)
+	}
+	for _, coordinate := range []string{"shop/prod/web/r1a2b3c4d/x.json", "shop/prod/web/rXYZ", "shop/prod/web", ""} {
+		if got, err := readReleaseTag(router.ReleaseRecord{StorageCoordinate: coordinate}); err == nil {
+			t.Errorf("readReleaseTag(%q) = %q, want an error: an empty tag purges nothing and forgets what the hostname served", coordinate, got)
 		}
 	}
 }

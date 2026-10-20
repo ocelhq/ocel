@@ -12,7 +12,7 @@ import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import type { OriginImages } from "@platform/edge-contract/origin-reach";
 import { type PurgeMode, purgeHeader, readPurge } from "@platform/edge-contract/purge";
-import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
+import { isStorageCoordinate, parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { createReleaseEdgeInvoker, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { newPurgeQueuePort, openPurgeQueue } from "./exports";
@@ -69,16 +69,11 @@ function readImageCall(header: string | null): ImageCall | undefined {
       minimumCacheTTL?: unknown;
     };
     const { payload } = parsed;
-    const text = [
-      payload?.assetPrefix,
-      payload?.url,
-      payload?.accept,
-      payload?.mimeType,
-      payload?.configHash,
-    ];
+    const text = [payload?.url, payload?.accept, payload?.mimeType, payload?.configHash];
     if (
       !payload ||
       !text.every((value) => typeof value === "string") ||
+      !isStorageCoordinate(payload.storage) ||
       typeof payload.w !== "number" ||
       typeof payload.q !== "number" ||
       typeof parsed.minimumCacheTTL !== "number"

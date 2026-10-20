@@ -149,13 +149,8 @@ test("a service told no release adds no tag", () => {
 });
 
 test("a service whose edge purges nothing by tag is told no release", () => {
-  expect(cloudCdnRelease({ OCEL_STORAGE_COORDINATE: `shop/prod/web/${release}` })).toBeNull();
-  expect(
-    cloudCdnRelease({
-      OCEL_CACHE_TAG_PURGE: "1",
-      OCEL_STORAGE_COORDINATE: `shop/prod/web/${release}`,
-    }),
-  ).toBe(release);
+  expect(cloudCdnRelease({ OCEL_RELEASE_TOKEN: release })).toBeNull();
+  expect(cloudCdnRelease({ OCEL_CACHE_TAG_PURGE: "1", OCEL_RELEASE_TOKEN: release })).toBe(release);
 });
 
 test("tags dropped past Cloud CDN's limits are named in one warning", () => {

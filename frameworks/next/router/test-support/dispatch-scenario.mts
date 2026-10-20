@@ -1,6 +1,7 @@
 import type { NextRouteTable, RoutingTable } from "@framework/next-protocol/route-table";
 import type { AssetBucket } from "../src/assets.mjs";
 import type { RouteDeps } from "../src/index.mjs";
+import { storedPathname, TEST_STORAGE } from "./stored-assets.mjs";
 
 export type TestManifest = Omit<NextRouteTable, "rootFunction" | "routes"> & {
   rootFunction?: string;
@@ -33,14 +34,15 @@ export function assetStoreServing(
 ): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
-      const body = files[key];
+      const pathname = storedPathname(key);
+      const body = pathname === undefined ? undefined : files[pathname];
       if (body === undefined) return null;
       return { body: new Blob([body]).stream() };
     },
   };
   return {
     store,
-    assetPrefix: "",
+    storage: TEST_STORAGE,
     static: nextStatic(basePath),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
@@ -49,7 +51,6 @@ export function assetStoreServing(
 
 export function noAssets(): RouteDeps["assetStore"] {
   return {
-    assetPrefix: "",
     static: nextStatic(),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},

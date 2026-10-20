@@ -2,6 +2,7 @@ import type { Route } from "@next/routing";
 import type { AssetBucket } from "../src/assets.mjs";
 import type { RouteDeps } from "../src/index.mjs";
 import { nextStatic } from "./dispatch-scenario.mjs";
+import { storedPathname, TEST_STORAGE } from "./stored-assets.mjs";
 
 export function assetStoreServing(
   files: Record<string, string>,
@@ -10,15 +11,16 @@ export function assetStoreServing(
 ): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
-      probes?.push(key);
-      const body = files[key];
+      probes?.push(storedPathname(key) ?? key);
+      const pathname = storedPathname(key);
+      const body = pathname === undefined ? undefined : files[pathname];
       if (body === undefined) return null;
       return { body: new Blob([body]).stream() };
     },
   };
   return {
     store,
-    assetPrefix: "",
+    storage: TEST_STORAGE,
     basePath,
     static: nextStatic(basePath),
     cache: { match: async () => undefined, put: async () => {} },

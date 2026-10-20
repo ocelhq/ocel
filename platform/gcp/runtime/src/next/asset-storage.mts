@@ -1,4 +1,4 @@
-import { bucketVars } from "@platform/edge-contract/storage-key";
+import { bucketVars } from "@platform/edge-contract/runtime-env";
 import { newCloudStorage } from "./cloud-storage.mjs";
 
 const storageEndpointVar = "OCEL_STORAGE_ENDPOINT";

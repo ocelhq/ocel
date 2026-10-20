@@ -8,8 +8,8 @@ import {
   edgeCacheHeader,
   edgeCacheTagHeader,
   readEdgeCacheMode,
+  readReleaseToken,
 } from "@platform/edge-contract/edge-cache";
-import { readStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 
@@ -30,7 +30,7 @@ export interface OriginShaping extends RevalidatingRoutes {
 }
 
 export function releaseOf(env: NodeJS.ProcessEnv): string | null {
-  return readStorageCoordinate(env)?.release ?? null;
+  return readReleaseToken(env) ?? null;
 }
 
 export function revalidatingRoutes(config: LauncherConfig): RevalidatingRoutes {

@@ -74,10 +74,8 @@ function host(): DispatchHost {
     keepCacheTags: true,
     localOrigin,
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
-    slug: "p1",
-    app: "web",
+    storage: { project: "p1", env: "prod", app: "web", release: "r0a1b2c3d" },
     appBuildId: "d1",
-    assetPrefix: "",
     originFetch: siblingOriginFetch(credentials, "us-east-1", capturing),
   };
 }

@@ -2,8 +2,10 @@ package router
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type ReleaseRecord struct {
@@ -33,6 +35,14 @@ type ReleaseRecord struct {
 	Waived               []edge.Need         `json:"waived,omitempty"`
 	Secrets              ReleaseSecrets      `json:"-"`
 	Sealed               []byte              `json:"sealed,omitempty" ts:"-"`
+}
+
+func (r ReleaseRecord) ParseStorageCoordinate() (naming.Coordinate, error) {
+	storage, err := naming.ParseStorageCoordinate(r.StorageCoordinate)
+	if err != nil {
+		return naming.Coordinate{}, fmt.Errorf("the release record for %s/%s locates none of its objects; re-run the deploy to write it again: %w", r.App, r.Release, err)
+	}
+	return storage, nil
 }
 
 type ReleaseSecrets struct {

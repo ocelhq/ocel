@@ -8,7 +8,6 @@ import {
   bootstrapStackOf,
   DEFAULT_NAMESPACE,
   LONGEST_NAMESPACE,
-  namespaceField,
   namespaceFor,
   namespaceOf,
   namespaceOfSlug,
@@ -69,18 +68,6 @@ describe("namespaceOf", () => {
 
   it("is what OCEL_NAMESPACE names", () => {
     assert.equal(namespaceOf({ OCEL_NAMESPACE: "j-1874-deploy-node" }), "j-1874-deploy-node");
-  });
-});
-
-describe("namespaceField", () => {
-  it("is a namespace of twelve characters or fewer as it is", () => {
-    assert.equal(namespaceField("ocel"), "ocel");
-    assert.equal(namespaceField("j-abc-cache1"), "j-abc-cache1");
-  });
-
-  it("is a longer namespace's head and the hash of all of it, as the provider writes it", () => {
-    assert.equal(namespaceField("j-1874-deploy-node"), "j-187-e5b227");
-    assert.equal(namespaceField("j-1799-deploy-next-cloudflare"), "j-179-c00ae4");
   });
 });
 

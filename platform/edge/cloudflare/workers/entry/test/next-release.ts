@@ -1,7 +1,6 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import type { AssetBucket } from "@framework/next-router/assets";
 import type { PurgeMode } from "@platform/edge-contract/purge";
-import { recordAssetPrefix } from "../src/build-assets";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import type { RaisedTag } from "../src/purge-backlog";
 import type { StoredRecord } from "../src/releases";
@@ -14,8 +13,6 @@ import { freshRouteTableKey, objectStoreHolding } from "./route-table-store";
 export const RELEASE_TOKEN = "r0a1b2c3d";
 
 export const STORAGE_COORDINATE = `p1/prod/web/${RELEASE_TOKEN}`;
-
-export const UNTOKENED_STORAGE_COORDINATE = "p1/prod/web/build-1";
 
 export const EMPTY_ROUTES = {
   beforeMiddleware: [],
@@ -69,11 +66,12 @@ function nextTable(over: Partial<NextRouteTable> = {}): NextRouteTable {
   };
 }
 
-function assetBucket(files: Record<string, string>, assetPrefix: string): AssetBucket {
+function assetBucket(files: Record<string, string>, storageCoordinate: string): AssetBucket {
+  const prefix = `assets/${storageCoordinate}`;
   return {
     async get(key) {
-      if (!key.startsWith(assetPrefix)) return null;
-      const body = files[key.slice(assetPrefix.length)];
+      if (!key.startsWith(prefix)) return null;
+      const body = files[key.slice(prefix.length)];
       if (body === undefined) return null;
       return { body: new Blob([body]).stream() };
     },
@@ -99,7 +97,7 @@ export function servedNextRelease(release: NextRelease = {}): ServeFetch {
     fetch: release.fetch,
     routeTableStore: objectStoreHolding(objects),
     assetStore: {
-      store: assetBucket(release.assets ?? {}, recordAssetPrefix(record)),
+      store: assetBucket(release.assets ?? {}, record.storageCoordinate),
       cache: { match: async () => undefined, put: async () => {} },
       waitUntil: () => {},
     },

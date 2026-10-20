@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-
+import { namespaceField } from "@ocel-tests/shared/naming";
 import { DEFAULT_NAMESPACE, lambdaFunctionNames } from "./lib.mjs";
 
 export const POLL_INTERVAL_MS = 3_000;
@@ -184,26 +183,6 @@ export function resolveFunctionName({ project, app, env, release }, fail) {
     );
   }
   return names[0];
-}
-
-const LONGEST_NAMESPACE_FIELD = 12;
-const NAMESPACE_FIELD_DIGEST_CHARS = 6;
-
-export function namespaceField(namespace) {
-  if (namespace.length <= LONGEST_NAMESPACE_FIELD) {
-    return namespace;
-  }
-  let head = namespace
-    .slice(0, LONGEST_NAMESPACE_FIELD - NAMESPACE_FIELD_DIGEST_CHARS - 1)
-    .replace(/-+$/, "");
-  if (`-${head}`.endsWith("-app")) {
-    head = head.slice(0, -1).replace(/-+$/, "");
-  }
-  const digest = createHash("sha256")
-    .update(namespace)
-    .digest("hex")
-    .slice(0, NAMESPACE_FIELD_DIGEST_CHARS);
-  return `${head}-${digest}`;
 }
 
 export function previewBootstrapStack(env = process.env) {

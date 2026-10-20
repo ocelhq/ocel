@@ -3,7 +3,6 @@ package naming_test
 import (
 	"encoding/json"
 	"errors"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -181,26 +180,6 @@ func TestOnlyWhatTheAppCanRebuildExpiresFromTheCacheBucket(t *testing.T) {
 		if !slices.Contains(naming.ExpiringObjectKinds, kind) {
 			t.Errorf("%s does not expire, so its entries outlive any use", kind)
 		}
-	}
-}
-
-func TestTheRuntimeLearnsTheStorageCoordinateAndEveryBucketButState(t *testing.T) {
-	release := naming.Coordinate{Project: "shop", Env: "prod", App: "web", Release: naming.NewReleaseToken("b1", "f1")}
-	buckets := naming.Buckets{naming.StorageState: "s", naming.StorageArtifacts: "a", naming.StorageEdge: "e", naming.StorageCache: "c"}
-	want := map[string]string{
-		"OCEL_STORAGE_COORDINATE": "shop/prod/web/" + release.Release.String(),
-		"OCEL_ARTIFACTS_BUCKET":   "a",
-		"OCEL_EDGE_BUCKET":        "e",
-		"OCEL_CACHE_BUCKET":       "c",
-	}
-	if got := naming.StorageEnv(release, buckets); !maps.Equal(got, want) {
-		t.Errorf("StorageEnv() = %v, want %v", got, want)
-	}
-	if got := naming.StorageEnv(release, naming.Buckets{naming.StorageEdge: "e"}); !maps.Equal(got, map[string]string{
-		"OCEL_STORAGE_COORDINATE": "shop/prod/web/" + release.Release.String(),
-		"OCEL_EDGE_BUCKET":        "e",
-	}) {
-		t.Errorf("StorageEnv() of an origin with only an edge bucket = %v, want the coordinate and that bucket", got)
 	}
 }
 

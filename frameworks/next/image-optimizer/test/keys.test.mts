@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { BootstrapError } from "../src/errors.mjs";
-import { assetKey, assetPath, imageConfigKey, releaseOfAssetPrefix } from "../src/keys.mjs";
+import { assetKey, assetPath, imageConfigKey, readRequestStorage } from "../src/keys.mjs";
 
 const PREFIX = "assets/proj1/prod/web/r3f8a1c9d";
 const RELEASE = { project: "proj1", env: "prod", app: "web", release: "r3f8a1c9d" };
@@ -51,29 +51,20 @@ describe("traversal guard", () => {
   });
 });
 
-describe("asset prefix", () => {
-  test("names the release whose assets it prefixes", () => {
-    expect(releaseOfAssetPrefix(PREFIX)).toEqual(RELEASE);
+describe("the storage a request names", () => {
+  test("is the release whose assets and image config it reads", () => {
+    expect(readRequestStorage(RELEASE)).toEqual(RELEASE);
   });
 
-  test("refuses a prefix that is not one release's assets", () => {
-    expect(() => releaseOfAssetPrefix("assets/proj1/prod/web")).toThrow(BootstrapError);
-    expect(() => releaseOfAssetPrefix("pages/proj1/prod/web/r3f8a1c9d")).toThrow(BootstrapError);
-    expect(() => releaseOfAssetPrefix("assets/proj1/prod/web/r3f8a1c9d/logo.png")).toThrow(
-      BootstrapError,
-    );
-    expect(() => releaseOfAssetPrefix("prod/proj1/web/r3f8a1c9d/assets")).toThrow(BootstrapError);
-  });
-
-  test("refuses a traversal in any segment", () => {
-    expect(() => releaseOfAssetPrefix("assets/proj1/prod/../r3f8a1c9d")).toThrow(BootstrapError);
-    expect(() => releaseOfAssetPrefix("assets/proj1/prod/.../r3f8a1c9d")).toThrow(BootstrapError);
-    expect(() => releaseOfAssetPrefix("assets/proj1//web/r3f8a1c9d")).toThrow(BootstrapError);
-  });
-
-  test("refuses a missing or empty prefix", () => {
-    expect(() => releaseOfAssetPrefix(undefined)).toThrow(BootstrapError);
-    expect(() => releaseOfAssetPrefix("")).toThrow(BootstrapError);
-    expect(() => releaseOfAssetPrefix(42)).toThrow(BootstrapError);
+  test("refuses a coordinate that names no one release", () => {
+    for (const storage of [
+      undefined,
+      "assets/proj1/prod/web/r3f8a1c9d",
+      { ...RELEASE, release: "" },
+      { ...RELEASE, env: ".." },
+      { ...RELEASE, app: "web/../other" },
+    ]) {
+      expect(() => readRequestStorage(storage)).toThrow(BootstrapError);
+    }
   });
 });

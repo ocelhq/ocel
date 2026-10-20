@@ -107,13 +107,13 @@ func servingSpec(t *testing.T, cfg testConfig, app, runtime string, coord naming
 		Recorded: true,
 		Edge:     cfg.Edge,
 		App: &provider.AppSpec{
-			App:       app,
-			Framework: runtime,
-			BuildID:   "d1",
-			Routing:   serving.OriginDispatch,
-			Guard:     serving.Guard,
-			Storage:   coord,
-			Static:    serving.Static,
+			App:               app,
+			Framework:         runtime,
+			BuildID:           "d1",
+			Routing:           serving.OriginDispatch,
+			Guard:             serving.Guard,
+			StorageCoordinate: coord,
+			Static:            serving.Static,
 		},
 	}
 }
@@ -125,7 +125,7 @@ func routedSpec(t *testing.T, cfg testConfig) provider.StackSpec {
 
 func newDispatchHostFor(t *testing.T, cfg testConfig) *DispatchHost {
 	t.Helper()
-	return NewDispatchHost(routedSpec(t, cfg).App, cfg.Slug, cfg.EdgeBucket, cfg.ImageOptimizerURL)
+	return NewDispatchHost(routedSpec(t, cfg).App, cfg.EdgeBucket, cfg.ImageOptimizerURL)
 }
 
 func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
@@ -140,19 +140,19 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 		t.Errorf("rootFunction = %q, want the route id the spec names", host.RootFunction)
 	}
 	want := map[string]string{
-		routeTableEnv:             routeTableInTask,
-		slugEnv:                   "shop",
-		appNameEnv:                "web",
-		"OCEL_BUILD_ID":           "d1",
-		edge.ImageOptimizerURLVar: "https://optimizer.lambda-url.us-east-1.on.aws/",
+		processenv.RouteTableEnvVar: routeTableInTask,
+		"OCEL_BUILD_ID":             "d1",
+		edge.ImageOptimizerURLVar:   "https://optimizer.lambda-url.us-east-1.on.aws/",
 	}
 	for key, value := range want {
 		if host.Env[key] != value {
 			t.Errorf("entry env %s = %q, want %q", key, host.Env[key], value)
 		}
 	}
-	if value, told := host.Env["OCEL_ASSET_PREFIX"]; told {
-		t.Errorf("entry env OCEL_ASSET_PREFIX = %q, want none: the asset prefix derives from the storage coordinate", value)
+	for _, key := range []string{"OCEL_ASSET_PREFIX", "OCEL_SLUG", "OCEL_APP"} {
+		if value, told := host.Env[key]; told {
+			t.Errorf("entry env %s = %q, want none: the storage coordinate names the project, the app and the asset prefix", key, value)
+		}
 	}
 }
 
@@ -220,7 +220,7 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 				"fn--web--admin": {Bucket: "artifacts", Key: "admin.zip"},
 			},
 			Layers:   testRuntimeLayers(),
-			Env:      map[string]string{routerKindEnv: string(cloudfront.Kind)},
+			Env:      map[string]string{processenv.RouterKindEnvVar: string(cloudfront.Kind)},
 			Dispatch: host,
 			RoleArn:  role.Arn,
 			RoleName: role.Name,
@@ -231,11 +231,11 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	}
 
 	entry := functionEnvOf(t, rec, namedFunction(stack, "fn--web--entry").Pulumi)
-	if entry[routerKindEnv] != string(cloudfront.Kind) {
-		t.Errorf("%s = %q, want the router kind the deploy chose", routerKindEnv, entry[routerKindEnv])
+	if entry[processenv.RouterKindEnvVar] != string(cloudfront.Kind) {
+		t.Errorf("%s = %q, want the router kind the deploy chose", processenv.RouterKindEnvVar, entry[processenv.RouterKindEnvVar])
 	}
-	if entry[routeTableEnv] != routeTableInTask {
-		t.Errorf("%s = %q, want the manifest packed beside the handler", routeTableEnv, entry[routeTableEnv])
+	if entry[processenv.RouteTableEnvVar] != routeTableInTask {
+		t.Errorf("%s = %q, want the manifest packed beside the handler", processenv.RouteTableEnvVar, entry[processenv.RouteTableEnvVar])
 	}
 	var siblings map[string]string
 	if err := json.Unmarshal([]byte(entry[functionURLsEnv]), &siblings); err != nil {
@@ -263,7 +263,7 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 			Args:      argsFor(routedFunctions()),
 			Artifacts: map[string]Artifact{},
 			Layers:    testRuntimeLayers(),
-			Env:       map[string]string{routerKindEnv: string(cloudfront.Kind)},
+			Env:       map[string]string{processenv.RouterKindEnvVar: string(cloudfront.Kind)},
 			Dispatch:  host,
 			RoleArn:   pulumi.String("arn:aws:iam::123456789012:role/app"),
 			RoleName:  pulumi.String("app"),
@@ -274,10 +274,10 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 	}
 
 	sibling := functionEnvOf(t, rec, namedFunction(stack, "fn--web--admin").Pulumi)
-	if sibling[routerKindEnv] != string(cloudfront.Kind) {
-		t.Errorf("%s = %q, want every function to learn the router kind", routerKindEnv, sibling[routerKindEnv])
+	if sibling[processenv.RouterKindEnvVar] != string(cloudfront.Kind) {
+		t.Errorf("%s = %q, want every function to learn the router kind", processenv.RouterKindEnvVar, sibling[processenv.RouterKindEnvVar])
 	}
-	for _, key := range []string{routeTableEnv, functionURLsEnv} {
+	for _, key := range []string{processenv.RouteTableEnvVar, functionURLsEnv} {
 		if _, wired := sibling[key]; wired {
 			t.Errorf("sibling has %s, want dispatch wired into the root function alone", key)
 		}
@@ -395,7 +395,7 @@ func TestADispatchHostIsMadeOfANextRouteTableAlone(t *testing.T) {
 		App:      &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
 	}
 	cfg := routedConfig(t, cloudfront.Kind)
-	if host := NewDispatchHost(spec.App, cfg.Slug, cfg.EdgeBucket, cfg.ImageOptimizerURL); host != nil {
+	if host := NewDispatchHost(spec.App, cfg.EdgeBucket, cfg.ImageOptimizerURL); host != nil {
 		t.Errorf("newDispatchHost = %+v, want none: an ocel route table dispatches between no functions", host)
 	}
 }
@@ -428,7 +428,7 @@ func TestTheEnvBudgetChargesForSiblingURLsStillToResolve(t *testing.T) {
 
 	host := newDispatchHostFor(t, routedConfig(t, cloudfront.Kind))
 
-	base := map[string]string{routerKindEnv: string(cloudfront.Kind)}
+	base := map[string]string{processenv.RouterKindEnvVar: string(cloudfront.Kind)}
 	planned := host.plannedRootFunctionEnv(base, manifestAppFunctions(routedFunctions()))
 	if charged := len(planned[functionURLsEnv]); charged < len("/admin")+functionURLBudgetBytes {
 		t.Errorf("%s charges %d bytes, want an upper bound on the URL Pulumi resolves later", functionURLsEnv, charged)
@@ -479,7 +479,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 			Args:      argsFor(routedFunctions()),
 			Artifacts: map[string]Artifact{},
 			Layers:    testRuntimeLayers(),
-			Env:       map[string]string{routerKindEnv: string(cloudfront.Kind)},
+			Env:       map[string]string{processenv.RouterKindEnvVar: string(cloudfront.Kind)},
 			Dispatch:  host,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
@@ -553,7 +553,7 @@ func TestDispatchHostIsToldTheStaticRulesTheBuildStates(t *testing.T) {
 	cfg := routedConfig(t, cloudfront.Kind)
 	spec := routedSpec(t, cfg)
 	spec.App.Static = &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}}
-	host := NewDispatchHost(spec.App, cfg.Slug, cfg.EdgeBucket, cfg.ImageOptimizerURL)
+	host := NewDispatchHost(spec.App, cfg.EdgeBucket, cfg.ImageOptimizerURL)
 	if got, want := host.Env[edge.StaticRulesVar], `{"immutablePrefixes":["/docs/_next/static/"]}`; got != want {
 		t.Errorf("entry env %s = %q, want %q", edge.StaticRulesVar, got, want)
 	}

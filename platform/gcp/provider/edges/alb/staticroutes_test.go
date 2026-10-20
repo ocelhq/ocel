@@ -3,9 +3,11 @@ package alb
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -69,6 +71,22 @@ func TestTheReleaseThatTakesAHostnameLiveRoutesItsImmutablePrefixesToTheBackendB
 	promote(t, stack, "p1", "b1")
 
 	expectStaticRoutes(t, w, "shop.example.com", staticRoutesFor("b1"), "the release that gives the hostname a service is the one whose files it serves")
+}
+
+func TestAReleaseWhoseRecordLocatesNoneOfItsObjectsIsRefusedRatherThanServedWithoutItsFiles(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	bindShop(t, stack)
+	record := staticRecord("b1")
+	record.StorageCoordinate = "shop/prod/web"
+	stage(t, stack, record)
+
+	err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Releases: map[string]string{"web": "b1"}}}, progress.Discard())
+	if err == nil || !strings.Contains(err.Error(), "locates none of its objects") {
+		t.Errorf("Promote = %v, want a refusal: without its storage coordinate the hostname serves no static file", err)
+	}
+	expectStaticRoutes(t, w, "shop.example.com", nil, "a refused promotion routes nothing")
 }
 
 func TestAHostnameBoundAfterAReleaseRoutesThatReleasesStaticFiles(t *testing.T) {
@@ -203,4 +221,8 @@ func TestAShieldedBalancerWithNoBackendBucketIsProvisioned(t *testing.T) {
 	if !loadBalancerOf(shieldedLoadBalancer()).provisioned() {
 		t.Error("a shielded load balancer counts as unprovisioned without a backend bucket, so every claim re-raises it for a bucket it never routes to")
 	}
+}
+
+func storageCoordinateOf(app, build string) string {
+	return naming.Coordinate{Project: "shop", Env: "prod", App: app, Release: naming.NewReleaseToken(build, "")}.StorageCoordinate()
 }

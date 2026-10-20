@@ -75,7 +75,10 @@ afterAll(async () => {
 
 test("every function a route names is rendered by the instance that routed it", async () => {
   const host = readGcpDispatchHost(
-    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
+    {
+      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
+      OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
+    },
     localOrigin,
   );
 
@@ -94,7 +97,10 @@ test("every function a route names is rendered by the instance that routed it", 
 
 test("a body the app gzipped itself reaches the client with its own bytes and encoding", async () => {
   const host = readGcpDispatchHost(
-    { OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json") },
+    {
+      OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
+      OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
+    },
     localOrigin,
   );
 
@@ -175,6 +181,7 @@ test("a page the GCP dispatch serves carries its release tag when its edge purge
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
     OCEL_EDGE_CACHE: "all",
     OCEL_CACHE_TAG_PURGE: "1",
+    OCEL_RELEASE_TOKEN: "r1a2b3c4d",
     OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
   });
   const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));

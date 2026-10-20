@@ -6,9 +6,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const (
@@ -108,9 +109,9 @@ func nonEmpty(values ...string) []string {
 func tierWord(tier environmentv1.Tier) string {
 	switch tier {
 	case environmentv1.Tier_TIER_PREVIEW:
-		return "preview"
+		return naming.TierWord(environment.TierPreview)
 	case environmentv1.Tier_TIER_PRODUCTION:
-		return stackrecords.ProductionEnv
+		return naming.TierWord(environment.TierProduction)
 	default:
 		return ""
 	}

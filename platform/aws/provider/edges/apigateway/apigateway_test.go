@@ -93,7 +93,7 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 		return fixture(w, e, stack)
 	}
 	record := func(app, build string) router.ReleaseRecord {
-		return router.ReleaseRecord{App: app, Release: build, RootFunction: "/", RootFunctionPhysical: "fn-" + build}
+		return router.ReleaseRecord{App: app, Release: build, RootFunction: "/", RootFunctionPhysical: "fn-" + build, StorageCoordinate: "shop/prod/" + app + "/r1111aaaa"}
 	}
 	t.Run("on a preview pointer", func(t *testing.T) {
 		routerconformance.Run(t, routerconformance.Suite{

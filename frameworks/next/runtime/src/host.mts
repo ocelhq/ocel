@@ -1,4 +1,5 @@
 import { type Bind, dispatchesAtOrigin, type Invoke } from "@framework/node-runtime/host";
+import { isrVar } from "@platform/edge-contract/runtime-env";
 import type { CacheStore } from "./cache-store.mjs";
 import type { InstanceCache } from "./instance-cache.mjs";
 import type { UseCacheStore } from "./use-cache-store.mjs";
@@ -17,8 +18,6 @@ export interface NextHost {
 const hostKey = Symbol.for("ocel.next.host.v1");
 
 const slots = globalThis as Record<symbol, NextHost | (() => NextHost) | undefined>;
-
-const isrVar = "OCEL_ISR";
 
 export function installNextHost(host: NextHost): void {
   slots[hostKey] = host;

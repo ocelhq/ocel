@@ -30,7 +30,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 		t.Fatal(err)
 	}
 	bundle := variables.Bundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
-	spec.App.EdgeRouteTable = edgeRouteTable(spec.App.Storage.RouteTableKey("ab"))
+	spec.App.EdgeRouteTable = edgeRouteTable(spec.App.StorageCoordinate.RouteTableKey("ab"))
 
 	release := releasing(t, cfg)
 	work, err := release.appWork(spec, nil, nil, bundle, stagedOf(spec))
@@ -50,7 +50,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeApp() = %v", err)
 	}
-	if want := appEdgeBundleKey(spec.App.Storage); result.EdgeBundleKey != want {
+	if want := appEdgeBundleKey(spec.App.StorageCoordinate); result.EdgeBundleKey != want {
 		t.Errorf("EdgeBundleKey = %q, want %q: the record the edge loads code by names the key only the vendor's upload knows",
 			result.EdgeBundleKey, want)
 	}

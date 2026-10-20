@@ -9,6 +9,7 @@ import {
   UPSTREAM_TIMEOUT_MS,
   validateImage,
 } from "@framework/next-protocol/image";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 
 import { mediaType } from "./accept.mjs";
 import { deltaSeconds, headResponse, NEXT_CACHE_STATUS, withStatus } from "./http-cache.mjs";
@@ -33,7 +34,7 @@ export type ImageCache = (context: ImageCacheContext) => Promise<Response>;
 export interface ImageDeps {
   config: ImageConfig;
   basePath: string;
-  assetPrefix: string;
+  storage?: StorageCoordinate;
   slug: string;
   app: string;
   appBuildId: string;
@@ -146,7 +147,7 @@ export async function serveImage(request: Request, url: URL, deps: ImageDeps): P
 
   const { params } = result;
   const payload: ImageOriginRequest = {
-    assetPrefix: deps.assetPrefix,
+    storage: deps.storage,
     url: params.href,
     w: params.width,
     q: params.quality,

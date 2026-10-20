@@ -21,8 +21,6 @@ const RuntimeAddressEnvVar = "OCEL_RUNTIME_ADDRESS"
 
 const WorkerEnvVar = "OCEL_WORKER"
 
-const ISREnvVar = "OCEL_ISR"
-
 const LiveKeysEnvVar = "OCEL_LIVE_KEYS"
 
 const ResourceEnvVarPrefix = "OCEL_RESOURCE_"

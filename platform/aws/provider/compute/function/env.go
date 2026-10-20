@@ -4,7 +4,6 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -16,7 +15,7 @@ func AppEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Se
 	app := spec.App
 	env := map[string]string{}
 	if app.Router != "" {
-		env[routerKindEnv] = string(app.Router)
+		env[processenv.RouterKindEnvVar] = string(app.Router)
 	}
 	if spec.Edge != nil {
 		facts := spec.Edge.Facts()
@@ -26,9 +25,6 @@ func AppEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Se
 		}
 		if !isForwardedPastEdge(spec) {
 			maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
-			if facts.InvalidatesByCacheTag {
-				maps.Copy(env, naming.StorageEnv(app.Storage, nil))
-			}
 		}
 	}
 	if app.OcelRouteTable != nil {

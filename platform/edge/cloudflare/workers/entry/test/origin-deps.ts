@@ -11,7 +11,7 @@ export function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     buildId: "deploy-1",
     rootFunction: "api",
     functionUrls: { api: FN_URL },
-    storageCoordinate: "",
+    storageCoordinate: "p1/prod/api/r00000001",
     createdAt: 1_000,
     edge: {},
     ...over,

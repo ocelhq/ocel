@@ -109,6 +109,10 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 }
 
 func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, progress progress.Log) error {
+	releases, err := readReleaseTags(move.Records)
+	if err != nil {
+		return router.Unserved{Err: err}
+	}
 	if err := r.s.shareImmutableFiles(ctx, move); err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -132,7 +136,7 @@ func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, p
 	if err := r.s.released(ctx, move.Records, progress); err != nil {
 		return err
 	}
-	r.s.purgeReplaced(ctx, move, progress)
+	r.s.purgeReplaced(ctx, move, releases, progress)
 	pin.WarmRevisions(ctx, r.s.warmThroughLoadBalancer, move.Records, progress)
 	return nil
 }

@@ -2,17 +2,12 @@ import { describe, expect, it } from "vitest";
 import fixture from "../fixtures/storage-keys.json" with { type: "json" };
 
 import {
-  assetPrefix,
-  bucketVars,
   formatStorageCoordinate,
   isStorageCoordinate,
   type ObjectKind,
   objectKey,
-  parseAssetPrefix,
   parseObjectKey,
   parseStorageCoordinate,
-  readStorageCoordinate,
-  storageCoordinateVar,
   storagePrefix,
 } from "../src/storage-key.mjs";
 
@@ -58,43 +53,10 @@ describe("storage keys", () => {
     expect(isStorageCoordinate({ ...release, env: "pr--7" })).toBe(false);
     expect(isStorageCoordinate({ ...release, release: "release1" })).toBe(false);
   });
-});
 
-describe("the router's asset prefix", () => {
-  it("is the release's assets prefix that an absolute pathname follows", () => {
-    expect(`${assetPrefix(release)}/_next/static/a.js`).toBe(
-      objectKey("assets", release, "_next/static/a.js"),
-    );
-  });
-
-  it("reads back to the coordinate it names, and to nothing outside the assets kind", () => {
-    expect(parseAssetPrefix(assetPrefix(release))).toEqual(release);
-    expect(parseAssetPrefix("pages/shop/prod/web/r1a2b3c4d")).toBeUndefined();
-    expect(parseAssetPrefix("assets/shop/prod/web")).toBeUndefined();
-    expect(parseAssetPrefix(`${assetPrefix(release)}/`)).toBeUndefined();
-  });
-});
-
-describe("the runtime's storage env", () => {
-  it("names the variables the Go origin sets", () => {
-    expect(storageCoordinateVar).toBe("OCEL_STORAGE_COORDINATE");
-    expect(bucketVars).toEqual({
-      artifacts: "OCEL_ARTIFACTS_BUCKET",
-      edge: "OCEL_EDGE_BUCKET",
-      cache: "OCEL_CACHE_BUCKET",
-    });
-  });
-
-  it("reads the coordinate the origin set, and nothing when it set none", () => {
-    expect(readStorageCoordinate({ OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d" })).toEqual(
-      release,
-    );
-    expect(readStorageCoordinate({})).toBeUndefined();
-  });
-
-  it("throws on a coordinate no origin could have set", () => {
-    expect(() => readStorageCoordinate({ OCEL_STORAGE_COORDINATE: "shop/prod/web" })).toThrow(
-      "OCEL_STORAGE_COORDINATE",
-    );
+  it("refuses a value that is no coordinate at all", () => {
+    for (const value of [undefined, null, "shop/prod/web/r1a2b3c4d", { ...release, app: 7 }, {}]) {
+      expect(isStorageCoordinate(value), JSON.stringify(value)).toBe(false);
+    }
   });
 });
