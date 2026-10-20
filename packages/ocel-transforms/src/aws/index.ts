@@ -278,14 +278,29 @@ type AwsOwned = typeof awsOwnedFields;
 
 type OwnedNames<L> = L extends readonly (infer F)[] ? Extract<F, string> : never;
 
+type WrittenDown<T> = T extends undefined | null
+  ? never
+  : T extends readonly (infer E)[]
+    ? WrittenDown<E>[]
+    : T extends object
+      ? { readonly [K in keyof T]?: WrittenDown<T[K]> }
+      : T;
+
+type Patchable<T extends AwsResourceType, K extends keyof AwsResourceArgs[T]> = Omit<
+  Unwrap<AwsResourceArgs[T][K]>,
+  OwnedNames<AwsOwned[T][K & keyof AwsOwned[T]]>
+>;
+
 /**
  * What a rule may patch under `aws`, typed from the args pulumi-aws takes with
- * the fields ocel owns removed. A binding output can take the place of any leaf.
+ * the fields ocel owns removed. A binding output can take the place of any leaf
+ * but the network's: the network belongs to every project of the tier, so no
+ * project's binding fills it.
  */
 export type AwsSurfaces = {
   [T in AwsResourceType]: {
-    [K in keyof AwsResourceArgs[T]]: Patch<
-      Omit<Unwrap<AwsResourceArgs[T][K]>, OwnedNames<AwsOwned[T][K & keyof AwsOwned[T]]>>
-    >;
+    [K in keyof AwsResourceArgs[T]]: T extends "network"
+      ? WrittenDown<Patchable<T, K>>
+      : Patch<Patchable<T, K>>;
   };
 };
