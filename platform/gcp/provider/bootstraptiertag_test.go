@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	crm "google.golang.org/api/cloudresourcemanager/v3"
@@ -78,6 +79,21 @@ func TestABootstrapMakesTheTierTagKeyUnderTheProjectWithAValueForEachTier(t *tes
 	found, err := b.PresenceOf(ctx, read, tierTagKey)
 	if err != nil || !found.Present || found.Mends != "" {
 		t.Errorf("the tag key just made reads %+v, %v, want present and current", found, err)
+	}
+}
+
+func TestACredentialThatMayNotReadTheTierTagKeyIsToldWhatItLacksRatherThanShownAPlanToMakeIt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, denied := range []string{"resourcemanager.tagKeys.get", "resourcemanager.tagValues.get"} {
+		tags := googletest.NewTieredTags(t)
+		tags.Denied = []string{denied}
+		b, read := tierTagEngine(t, tags)
+
+		found, err := b.PresenceOf(ctx, read, tierTagKey)
+		if err == nil || !strings.Contains(err.Error(), denied) {
+			t.Errorf("a credential lacking %s reads the tag key as %+v, %v, want an error naming %s", denied, found, err, denied)
+		}
 	}
 }
 
