@@ -19,6 +19,11 @@ func LoadOptional(ctx context.Context, startDir, explicitPath string) (*Project,
 	return find(ctx, startDir, explicitPath, true)
 }
 
+func NewUnconfigured(dir, slug string) *Project {
+	apps, undetected := rootApp(slug, dir)
+	return &Project{Slug: slug, Dir: dir, Path: filepath.Join(dir, DefaultFileName), EnvSource: envsource.DefaultTiers(), Apps: apps, RootAppUndetected: undetected}
+}
+
 func FindRoot(startDir, explicitPath string) (string, error) {
 	if explicitPath == "" {
 		return findProjectRoot(startDir)

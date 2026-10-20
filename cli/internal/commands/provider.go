@@ -128,7 +128,7 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 		if provider != nil {
 			provider.Close()
 			provider = nil
-			if loaded, err = project.Load(ctx, cfg.Dir, cfg.Path); err != nil {
+			if loaded, err = i.reloadProject(ctx, cfg); err != nil {
 				return err
 			}
 		}
@@ -147,6 +147,13 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded})
 	check.End(err)
 	return err
+}
+
+func (i Invocation) reloadProject(ctx context.Context, cfg *project.Project) (*project.Project, error) {
+	if i.BuilderJob != nil {
+		return i.BuilderJob.loadProject(ctx, cfg.Dir, i.ConfigPath())
+	}
+	return project.Load(ctx, cfg.Dir, cfg.Path)
 }
 
 func providerID(cfg *project.Project) string {

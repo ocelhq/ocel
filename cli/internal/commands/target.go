@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/envsource"
 )
 
 type CloudTarget struct {
@@ -32,6 +31,10 @@ func (t Target) IsCloud() bool {
 }
 
 func (i Invocation) ResolveTarget(ctx context.Context, cwd string) (Target, error) {
+	if i.BuilderJob != nil {
+		cfg, err := i.LoadProject(ctx, cwd)
+		return Target{Project: cfg}, err
+	}
 	configPath, err := project.FindConfig(cwd, i.ConfigPath())
 	if err != nil {
 		return Target{}, nil
@@ -58,7 +61,7 @@ func (i Invocation) ResolveTarget(ctx context.Context, cwd string) (Target, erro
 		if err != nil {
 			return Target{}, err
 		}
-		return Target{Project: synthesize(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("No %s here, so this runs as %s, named after this directory", english.Or([]string{project.DefaultFileName, project.YAMLFileName, project.TSFileName}), slug)}, nil
+		return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("No %s here, so this runs as %s, named after this directory", english.Or([]string{project.DefaultFileName, project.YAMLFileName, project.TSFileName}), slug)}, nil
 	}
 	if mentionsProvider(configPath) {
 		return Target{}, nil
@@ -67,13 +70,13 @@ func (i Invocation) ResolveTarget(ctx context.Context, cwd string) (Target, erro
 	base := filepath.Base(configPath)
 	if link, err := console.ReadLink(dir, cloud.ConsoleURL); err == nil && link != nil && project.DeriveSlug(link.ProjectName) != "" {
 		slug := project.DeriveSlug(link.ProjectName)
-		return Target{Project: synthesize(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, the console project this directory is linked to", base, slug)}, nil
+		return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, the console project this directory is linked to", base, slug)}, nil
 	}
 	slug, err := deriveSlug(dir)
 	if err != nil {
 		return Target{}, err
 	}
-	return Target{Project: synthesize(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, named after this directory", base, slug)}, nil
+	return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, named after this directory", base, slug)}, nil
 }
 
 func (i Invocation) RequireProvider(ctx context.Context, cfg *project.Project, command string) (*project.Provider, error) {
@@ -118,10 +121,6 @@ func deriveSlug(dir string) (string, error) {
 		return "", fmt.Errorf("no slug can be named after %s: %w — run `ocel init` to write a config that names one", dir, err)
 	}
 	return slug, nil
-}
-
-func synthesize(dir, slug string) *project.Project {
-	return &project.Project{Slug: slug, Dir: dir, Path: filepath.Join(dir, project.DefaultFileName), EnvSource: envsource.DefaultTiers()}
 }
 
 func isNodeOnPath() bool {
