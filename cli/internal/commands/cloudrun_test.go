@@ -2,23 +2,37 @@ package commands_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/previewid"
+	"github.com/ocelhq/ocel/cli/internal/version"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
 func runOnCloud(t *testing.T, invocation commands.Invocation, root, command string) (string, error) {
 	t.Helper()
-	target, err := invocation.ResolveTarget(t.Context(), root)
+	return runJobOnCloud(t, t.Context(), invocation, root, commands.CloudJob{Command: command, Tier: environmentv1.Tier_TIER_PRODUCTION, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY})
+}
+
+func runJobOnCloud(t *testing.T, ctx context.Context, invocation commands.Invocation, root string, job commands.CloudJob) (string, error) {
+	t.Helper()
+	target, err := invocation.ResolveTarget(ctx, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,25 +41,35 @@ func runOnCloud(t *testing.T, invocation commands.Invocation, root, command stri
 	}
 	var out bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &out)
-	err = invocation.UploadToCloud(t.Context(), target, command, environmentv1.Tier_TIER_PRODUCTION)
+	err = invocation.RunOnCloud(ctx, target, job)
 	if closeErr := invocation.Events.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
 	return out.String(), err
 }
 
-func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndStopsBeforeAJob(t *testing.T) {
-	invocation, fake := loggedIn(t)
+func writeShop(t *testing.T) string {
+	t.Helper()
 	root := filepath.Join(t.TempDir(), "shop")
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop"}`)
 	clitest.WriteFile(t, filepath.Join(root, "index.js"), "console.log('hi')")
+	return root
+}
+
+func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndRunsAJob(t *testing.T) {
+	t.Setenv(previewid.PRNumberEnvVar, "")
+	t.Setenv("GITHUB_REF", "")
+	invocation, fake := loggedIn(t)
+	root := writeShop(t)
 	clitest.WriteFile(t, filepath.Join(root, ".env"), "SECRET=1")
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED, Result: &cloudv1.JobResult{
+		Urls:         []string{"https://shop.ocel.app"},
+		DeploymentId: "dep_1",
+	}}}
 
 	out, err := runOnCloud(t, invocation, root, "ocel deploy")
-
-	var coded *clierror.Error
-	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), clitest.FakeCloudSourceID) {
-		t.Fatalf("err = %v, want the run stopped before a job, naming the source id", err)
+	if err != nil {
+		t.Fatal(err)
 	}
 	first, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
 	if !strings.Contains(first, "shop") {
@@ -53,6 +77,13 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndStopsBeforeA
 	}
 	if !strings.Contains(out, "Ocel Cloud") || !strings.Contains(out, "Acme Inc") || !strings.Contains(out, "127.0.0.1") {
 		t.Fatalf("output = %q, want the target named: Ocel Cloud, the organization and the console", out)
+	}
+	jobURL := fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID
+	if !strings.Contains(out, jobURL) {
+		t.Fatalf("output = %q, want the console's job page %s", out, jobURL)
+	}
+	if !strings.Contains(out, "https://shop.ocel.app") || !strings.Contains(out, "dep_1") {
+		t.Fatalf("output = %q, want the job's result", out)
 	}
 	if len(fake.Created) != 1 || fake.Created[0].GetSlug() != "shop" {
 		t.Fatalf("created %v, want the console project shop", fake.Created)
@@ -64,6 +95,10 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndStopsBeforeA
 	if got := fake.CommittedPaths(); !slices.Equal(got, []string{"index.js", "ocel.json"}) {
 		t.Fatalf("committed %q, want the source without .env or .ocel", got)
 	}
+	want := &cloudv1.StartJobRequest{ProjectId: link.ProjectID, Slug: "shop", Command: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, SourceId: clitest.FakeCloudSourceID, CliVersion: version.Version}
+	if len(fake.Started) != 1 || !proto.Equal(fake.Started[0], want) {
+		t.Fatalf("started %v, want %v", fake.Started, want)
+	}
 	for _, bearer := range fake.CloudBearers {
 		if bearer != "Bearer "+clitest.FakeCloudToken {
 			t.Fatalf("Ocel Cloud saw %q, want the token the console issued", bearer)
@@ -71,7 +106,7 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndStopsBeforeA
 	}
 
 	again, err := runOnCloud(t, newInvocationLoggedInTo(fake), root, "ocel deploy")
-	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported {
+	if err != nil {
 		t.Fatalf("second run err = %v", err)
 	}
 	if len(fake.Created) != 1 {
@@ -79,6 +114,158 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndStopsBeforeA
 	}
 	if !strings.Contains(again, "already holds every file") {
 		t.Fatalf("second run = %q, want nothing uploaded again", again)
+	}
+}
+
+func TestAnOcelCloudJobCarriesTheGitContextReadOnTheLaptop(t *testing.T) {
+	clitest.UnsetGitEnv()
+	invocation, fake := loggedIn(t)
+	root := writeShop(t)
+	for _, args := range [][]string{{"init", "-q", "-b", "feat/cart"}, {"add", "."}, {"-c", "user.email=dev@acme.test", "-c", "user.name=dev", "commit", "-q", "-m", "shop"}} {
+		if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	clitest.WriteFile(t, filepath.Join(root, "index.js"), "console.log('changed')")
+	t.Setenv(previewid.PRNumberEnvVar, "12")
+
+	if _, err := runOnCloud(t, invocation, root, "ocel deploy"); err != nil {
+		t.Fatal(err)
+	}
+	git := fake.Started[0].GetGit()
+	if len(git.GetCommit()) != 40 || git.GetBranch() != "feat/cart" || !git.GetDirty() || git.GetPullRequest() != 12 {
+		t.Fatalf("git = %v, want the commit, feat/cart, dirty and pull request 12", git)
+	}
+}
+
+func TestAnOcelCloudJobNamesWhereTheProjectSitsInTheUploadedSource(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(repo, "apps", "web")
+	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "web"}`)
+	clitest.WriteFile(t, filepath.Join(repo, "package.json"), `{}`)
+
+	if _, err := runOnCloud(t, invocation, root, "ocel deploy"); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.Started[0].GetProjectPath(); got != "apps/web" {
+		t.Fatalf("project path = %q, want apps/web", got)
+	}
+	if got := fake.CommittedPaths(); !slices.Equal(got, []string{"apps/web/ocel.json", "package.json"}) {
+		t.Fatalf("committed %q, want the whole repository", got)
+	}
+}
+
+func TestAnOcelCloudJobThatFailsFailsTheRunWithItsErrorAndLink(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_FAILED, Error: &cloudv1.JobError{Code: "build.failed", Message: "app web failed to build"}}}
+
+	out, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudJobFailed {
+		t.Fatalf("err = %v, want %s", err, clierror.CodeCloudJobFailed)
+	}
+	for _, want := range []string{"build.failed", "app web failed to build", fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %v, want %q named", err, want)
+		}
+	}
+	if !strings.Contains(out, "app web failed to build") {
+		t.Fatalf("output = %q, want the failure shown", out)
+	}
+}
+
+func TestAnOcelCloudJobThatIsCanceledFailsTheRun(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_CANCELED}}
+
+	_, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudJobCanceled {
+		t.Fatalf("err = %v, want %s", err, clierror.CodeCloudJobCanceled)
+	}
+}
+
+func TestAnOcelCloudRunWithNoWaitReturnsOnceTheJobStarts(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	fake.OnJobRead = func(*cloudv1.Job) { t.Error("read the job of a run that does not wait") }
+
+	out, err := runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{Command: "ocel build", Kind: cloudv1.JobCommand_JOB_COMMAND_BUILD, NoWait: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, clitest.FakeCloudJobID) || !strings.Contains(out, fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
+		t.Fatalf("output = %q, want the job id and its link", out)
+	}
+	if len(fake.Started) != 1 {
+		t.Fatalf("started %d jobs, want one", len(fake.Started))
+	}
+}
+
+func TestInterruptingAnOcelCloudRunStopsWatchingAndLeavesTheJobRunning(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_RUNNING, Phase: cloudv1.JobPhase_JOB_PHASE_BUILD, Step: "Building web"}}
+	fake.OnJobRead = func(*cloudv1.Job) { cancel() }
+
+	out, err := runJobOnCloud(t, ctx, invocation, writeShop(t), commands.CloudJob{Command: "ocel deploy", Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY})
+	if err != nil {
+		t.Fatalf("err = %v, want stopping to watch to succeed", err)
+	}
+	if !strings.Contains(out, "keeps running") || !strings.Contains(out, fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
+		t.Fatalf("output = %q, want the job named still running, with its link", out)
+	}
+	if len(fake.Canceled) != 0 {
+		t.Fatalf("canceled %v, want the job left running", fake.Canceled)
+	}
+}
+
+func TestAnOcelCloudJobThatNeedsInputOpensItsPageOnceAndKeepsWaiting(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	needs := &cloudv1.Job{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_INPUT_REQUIRED}
+	fake.JobReads = []*cloudv1.Job{needs, needs, {Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+	var opened []string
+
+	out, err := runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{
+		Command:     "ocel deploy",
+		Kind:        cloudv1.JobCommand_JOB_COMMAND_DEPLOY,
+		OpenBrowser: func(url string) error { opened = append(opened, url); return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobURL := fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID
+	if !slices.Equal(opened, []string{jobURL}) {
+		t.Fatalf("opened %q, want the job page once", opened)
+	}
+	if !strings.Contains(out, "needs your input") {
+		t.Fatalf("output = %q, want the input asked for", out)
+	}
+}
+
+func TestTheJSONSummaryOfAnOcelCloudRunNamesTheJob(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	invocation.Presentation = clitest.ResolveJSONPresentation
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED, Result: &cloudv1.JobResult{Urls: []string{"https://shop.ocel.app"}}}}
+
+	out, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := clitest.RunEvents(t, out)
+	summary := events[len(events)-1].GetSummary()
+	want := &streamv1.CloudJob{
+		Id:     clitest.FakeCloudJobID,
+		Url:    fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID,
+		State:  cloudv1.JobState_JOB_STATE_SUCCEEDED,
+		Result: &cloudv1.JobResult{Urls: []string{"https://shop.ocel.app"}},
+	}
+	if !summary.GetSuccess() || !proto.Equal(summary.GetCloudJob(), want) {
+		t.Fatalf("summary = %v, want a success naming %v", summary, want)
 	}
 }
 
@@ -94,8 +281,8 @@ func TestAnOcelCloudRunSelectsTheConsoleProjectWithTheProjectsSlug(t *testing.T)
 	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop"}`)
 
-	if _, err := runOnCloud(t, invocation, root, "ocel build"); err == nil {
-		t.Fatal("want the run stopped before a job")
+	if _, err := runOnCloud(t, invocation, root, "ocel build"); err != nil {
+		t.Fatal(err)
 	}
 	if len(fake.Created) != 0 {
 		t.Fatalf("created %v, want the existing project selected", fake.Created)
@@ -135,8 +322,8 @@ func TestAnOcelCloudRunDeploysUnderTheActiveOrganizationOrAsksForOne(t *testing.
 		if !errors.As(err, &coded) || coded.Code != clierror.CodeInputRequired || !strings.Contains(err.Error(), "ocel link --org") {
 			t.Fatalf("err = %v, want ocel link --org asked for", err)
 		}
-		if len(fake.Created) != 0 || fake.Committed != nil {
-			t.Fatal("linked or uploaded without an organization")
+		if len(fake.Created) != 0 || fake.Committed != nil || len(fake.Started) != 0 {
+			t.Fatal("linked, uploaded or started a job without an organization")
 		}
 	})
 }

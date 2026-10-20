@@ -27,7 +27,8 @@ import (
 
 const (
 	FakeCloudToken    = "cloud-token"
-	FakeCloudSourceID = "src_fake"
+	FakeCloudSourceID = "5f1c0a3e9b7d2c4f6a8e0b1d3c5f7a9e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a"
+	FakeCloudJobID    = "job_fake"
 )
 
 type FakeOcelCloud struct {
@@ -37,6 +38,7 @@ type FakeOcelCloud struct {
 	consolev1connect.UnimplementedProjectServiceHandler
 	consolev1connect.UnimplementedConsoleServiceHandler
 	cloudv1connect.UnimplementedUploadServiceHandler
+	cloudv1connect.UnimplementedJobServiceHandler
 
 	mu            sync.Mutex
 	Organizations []console.Organization
@@ -47,6 +49,10 @@ type FakeOcelCloud struct {
 	Blobs         map[string][]byte
 	Committed     *cloudv1.SourceManifest
 	CloudBearers  []string
+	Started       []*cloudv1.StartJobRequest
+	JobReads      []*cloudv1.Job
+	OnJobRead     func(*cloudv1.Job)
+	Canceled      []string
 }
 
 func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
@@ -91,6 +97,7 @@ func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
 
 	cloudMux := http.NewServeMux()
 	cloudMux.Handle(cloudv1connect.NewUploadServiceHandler(fake, validate))
+	cloudMux.Handle(cloudv1connect.NewJobServiceHandler(fake, validate))
 	cloudMux.HandleFunc("PUT /v1/blobs/{digest}", fake.putBlob)
 	cloudServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fake.mu.Lock()
@@ -153,6 +160,37 @@ func (f *FakeOcelCloud) CommitSource(_ context.Context, req *cloudv1.CommitSourc
 	}
 	f.Committed = req.GetManifest()
 	return &cloudv1.CommitSourceResponse{SourceId: FakeCloudSourceID}, nil
+}
+
+func (f *FakeOcelCloud) StartJob(_ context.Context, req *cloudv1.StartJobRequest) (*cloudv1.StartJobResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Started = append(f.Started, req)
+	return &cloudv1.StartJobResponse{Job: &cloudv1.Job{Id: FakeCloudJobID, ProjectId: req.GetProjectId(), Command: req.GetCommand(), State: cloudv1.JobState_JOB_STATE_QUEUED, SourceId: req.GetSourceId()}}, nil
+}
+
+func (f *FakeOcelCloud) GetJob(_ context.Context, req *cloudv1.GetJobRequest) (*cloudv1.GetJobResponse, error) {
+	f.mu.Lock()
+	read := &cloudv1.Job{Id: req.GetJobId(), State: cloudv1.JobState_JOB_STATE_SUCCEEDED}
+	if len(f.JobReads) > 0 {
+		read = f.JobReads[0]
+		if len(f.JobReads) > 1 {
+			f.JobReads = f.JobReads[1:]
+		}
+	}
+	onRead := f.OnJobRead
+	f.mu.Unlock()
+	if onRead != nil {
+		onRead(read)
+	}
+	return &cloudv1.GetJobResponse{Job: read}, nil
+}
+
+func (f *FakeOcelCloud) CancelJob(_ context.Context, req *cloudv1.CancelJobRequest) (*cloudv1.CancelJobResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Canceled = append(f.Canceled, req.GetJobId())
+	return &cloudv1.CancelJobResponse{}, nil
 }
 
 func (f *FakeOcelCloud) putBlob(w http.ResponseWriter, r *http.Request) {

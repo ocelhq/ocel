@@ -36,7 +36,7 @@ export default {
 		held = err != nil
 		return build.Output{}, nil
 	}
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
 	if !held {

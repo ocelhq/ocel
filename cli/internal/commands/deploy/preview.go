@@ -134,6 +134,7 @@ func addPreviewUpFlags(cmd *cobra.Command, up *previewUpFlags) {
 	cmd.Flags().BoolVar(&up.opts.Prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	commands.AddDryFlag(cmd, &up.opts.Dry, dryFlagUsage)
 	commands.AddYesFlag(cmd, &up.opts.Yes)
+	commands.AddNoWaitFlag(cmd, &up.opts.NoWait)
 }
 
 func previewUpRunE(dependencies deploy.Dependencies, up *previewUpFlags) func(cmd *cobra.Command, args []string) error {

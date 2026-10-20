@@ -22,6 +22,8 @@ const (
 	CodeConsoleNotLoggedIn         = "console.not_logged_in"
 	CodeConsoleNotLinked           = "console.not_linked"
 	CodeCloudUnsupported           = "cloud.unsupported"
+	CodeCloudJobFailed             = "cloud.job_failed"
+	CodeCloudJobCanceled           = "cloud.job_canceled"
 	CodeDoctorChecksFailed         = "doctor.checks_failed"
 	CodeDevCommandFailed           = "dev.command_failed"
 )
@@ -47,6 +49,8 @@ func Codes() []string {
 		CodeConsoleNotLoggedIn,
 		CodeConsoleNotLinked,
 		CodeCloudUnsupported,
+		CodeCloudJobFailed,
+		CodeCloudJobCanceled,
 		CodeDoctorChecksFailed,
 		CodeDevCommandFailed,
 	}

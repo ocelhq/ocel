@@ -195,7 +195,7 @@ func newCommand() *command {
 	invocation.Setups[prerequisite.Domain] = domain.NewSetup()
 	rootCmd.AddCommand(projectinit.NewCommand(initDependencies))
 	rootCmd.AddCommand(generate.NewCommand(generate.Dependencies{Invocation: invocation, CollectDeclarations: declaration.Collect}))
-	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps, CollectDeclarations: declaration.Collect}))
+	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps, CollectDeclarations: declaration.Collect, OpenBrowser: browser.OpenURL}))
 	rootCmd.AddCommand(lock.NewCommand(lock.Dependencies{Invocation: invocation, Pin: executables.Pin}))
 	deployDependencies := deploy.Dependencies{
 		Invocation:              invocation,

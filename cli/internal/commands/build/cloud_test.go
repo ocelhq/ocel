@@ -3,18 +3,17 @@ package build
 import (
 	"bytes"
 	"context"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
-	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 )
 
-func TestBuildOfAProjectNamingNoProviderUploadsItsSourceToOcelCloudWhenLoggedIn(t *testing.T) {
+func TestBuildOfAProjectNamingNoProviderRunsAsAnOcelCloudBuildJobWhenLoggedIn(t *testing.T) {
 	fake := clitest.ServeOcelCloud(t)
 	dependencies := newTestDependencies()
 	fake.LogIn(&dependencies.Invocation)
@@ -28,13 +27,21 @@ func TestBuildOfAProjectNamingNoProviderUploadsItsSourceToOcelCloudWhenLoggedIn(
 
 	var out bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &out)
-	err := runBuild(t.Context(), dependencies, root)
-
-	var coded *clierror.Error
-	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), "ocel build") {
-		t.Fatalf("err = %v, want ocel build stopped after the upload", err)
+	if err := runBuild(t.Context(), dependencies, root, options{}, strings.NewReader("")); err != nil {
+		t.Fatal(err)
 	}
-	if fake.Committed == nil {
-		t.Fatal("the source was never committed")
+	if len(fake.Started) != 1 || fake.Started[0].GetCommand() != cloudv1.JobCommand_JOB_COMMAND_BUILD || fake.Started[0].GetSourceId() != clitest.FakeCloudSourceID {
+		t.Fatalf("started %v, want one build job of the committed source", fake.Started)
+	}
+}
+
+func TestBuildRefusesNoWaitWhenTheProjectDoesNotRunOnOcelCloud(t *testing.T) {
+	dependencies := newTestDependencies()
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop", "apps": [{"name": "api", "path": ".", "framework": "node", "compute": "serverless"}]}`)
+
+	err := runBuild(t.Context(), dependencies, root, options{noWait: true}, strings.NewReader(""))
+	if err == nil || !strings.Contains(err.Error(), "--no-wait") {
+		t.Fatalf("err = %v, want --no-wait refused", err)
 	}
 }
