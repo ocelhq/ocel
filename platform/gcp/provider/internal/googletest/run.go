@@ -20,7 +20,6 @@ import (
 )
 
 type Run struct {
-	Admitted  TierAdmissions
 	Mu        sync.Mutex
 	Service   *runv2.GoogleCloudRunV2Service
 	Revision  int
@@ -83,9 +82,6 @@ func (s *Run) Identities() *IAM {
 func (s *Run) Serve(t *testing.T) http.HandlerFunc {
 	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.Admitted.Serve(w, r) {
-			return
-		}
 		s.Mu.Lock()
 		defer s.Mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")

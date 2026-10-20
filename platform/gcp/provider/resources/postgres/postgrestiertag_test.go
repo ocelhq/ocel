@@ -55,37 +55,3 @@ func TestADatabasesCloudSQLInstanceIsCreatedCarryingItsTiersTagAndIsNotBoundAfte
 		t.Errorf("a binding was asked for %d times after the instance was created carrying its tag, want none", tags.BindingsAsked)
 	}
 }
-
-func TestADatabaseFoundWithoutItsTiersTagIsTouchedOnlyOnceTheTagAdmitsTheCredential(t *testing.T) {
-	h := servingPostgres(t)
-	h.provision(t, "17")
-	instance := h.server.Created[0].Name
-	h.server.Databases[instance] = nil
-	tags := googletest.NewTieredTags(t)
-	tags.Tagged(h.instances.clients)
-	h.server.Unadmitted = 2
-
-	h.provision(t, "17")
-
-	if got := tags.Bound(h.instances.clients.SQLInstanceTagged(instance).Name); !slices.Equal(got, []string{tags.ValueOf(environment.TierProduction)}) {
-		t.Errorf("Cloud SQL instance %s carries %v, want the production value", instance, got)
-	}
-	if !slices.Contains(h.server.Databases[instance], "ocel") {
-		t.Errorf("the instance holds the databases %v once its tag admitted the credential, want ocel", h.server.Databases[instance])
-	}
-}
-
-func TestAFreshlyCreatedInstanceIsTouchedOnlyOnceItsInlineTagAdmitsTheCredential(t *testing.T) {
-	h := servingPostgres(t)
-	tags := googletest.NewTieredTags(t)
-	tags.Tagged(h.instances.clients)
-	h.server.TierTags = tags
-	h.server.Unadmitted = 2
-
-	h.provision(t, "17")
-
-	instance := h.server.Created[0].Name
-	if !slices.Contains(h.server.Databases[instance], "ocel") || h.server.Unadmitted != 0 {
-		t.Errorf("the new instance holds the databases %v with %d denials left, want ocel made once its tag admitted the credential", h.server.Databases[instance], h.server.Unadmitted)
-	}
-}

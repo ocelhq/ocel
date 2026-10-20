@@ -351,10 +351,7 @@ func (i postgresInstances) ensureInstance(ctx context.Context, database string, 
 		return nil, err
 	}
 	if current == nil {
-		if current, err = i.create(ctx, database, spec, progress); err != nil {
-			return nil, err
-		}
-		return current, i.clients.AwaitTierAdmits(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name))
+		return i.create(ctx, database, spec, progress)
 	}
 	if current, err = i.awaitSettled(ctx, database, current); err != nil {
 		return nil, err

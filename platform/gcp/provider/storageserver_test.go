@@ -17,7 +17,6 @@ import (
 )
 
 type storageServer struct {
-	admitted googletest.TierAdmissions
 	mu       sync.Mutex
 	buckets  map[string]*raw.Bucket
 	policies map[string]*raw.Policy
@@ -46,9 +45,6 @@ func servingStorage(t *testing.T) (*Provider, *storageServer) {
 
 func (s *storageServer) serve() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.admitted.Serve(w, r) {
-			return
-		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")

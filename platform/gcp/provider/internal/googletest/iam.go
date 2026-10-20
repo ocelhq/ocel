@@ -31,7 +31,6 @@ type IAM struct {
 	iampb.UnimplementedIAMPolicyServer
 
 	Mu        sync.Mutex
-	Admitted  TierAdmissions
 	keys      map[string]bool
 	KeyPolicy map[string]*iampb.Policy
 	KeyRaces  int
@@ -374,9 +373,6 @@ func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			grpcServer.ServeHTTP(w, r)
-			return
-		}
-		if s.Admitted.Serve(w, r) {
 			return
 		}
 		rest(w, r)
