@@ -214,7 +214,7 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 	raised := fronts
 	if present {
 		raised = fronts.addInstalled(infra.installed())
-	} else if _, err := component.ReadDefaultVPC(ctx, owner.Subnets, owner.Region, "the cluster and load balancer container apps run behind"); err != nil {
+	} else if _, err := component.ReadDefaultVPC(ctx, owner.EC2, owner.Region, "the cluster and load balancer container apps run behind"); err != nil {
 		return Infrastructure{}, err
 	}
 	switch {

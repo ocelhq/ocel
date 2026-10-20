@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
 const (
@@ -47,8 +48,6 @@ const (
 	nameTagKey = "Name"
 )
 
-var vpcOriginUnsupportedZones = []string{"use1-az3", "usw1-az2", "apne1-az3", "cac1-az3"}
-
 type work struct {
 	namespace string
 	tier      environment.Tier
@@ -68,7 +67,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
 	}
-	zones, err := aws.GetAvailabilityZones(ctx, &aws.GetAvailabilityZonesArgs{ExcludeZoneIds: vpcOriginUnsupportedZones})
+	zones, err := aws.GetAvailabilityZones(ctx, &aws.GetAvailabilityZonesArgs{ExcludeZoneIds: network.VPCOriginUnsupportedZones})
 	if err != nil {
 		return fmt.Errorf("look up the availability zones a VPC origin reaches: %w", err)
 	}

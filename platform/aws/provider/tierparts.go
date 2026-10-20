@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
@@ -44,6 +45,7 @@ func (p *Provider) tierParts(records tier.Records) tier.Parts {
 		vpcclients.NewPart(records, ec2.NewFromConfig(p.aws), namespace),
 		containers.NewPart(p.stacks.Containers(), records.KeyValues, namespace, region),
 		functionnetwork.NewPart(p.stacks.FunctionNetwork(), records.KeyValues, region),
+		network.NewPart(p.stacks.Network(), records.KeyValues, region),
 		envsourcesync.NewPart(records, envsourcesync.NewClients(p.aws), namespace, p.envSourceSyncSpec),
 		notfoundapi.NewPart(records, apigatewaysdk.NewFromConfig(p.aws), namespace, apigateway.Kind),
 		cloudfrontpart.NewPart(records, p.namespace, cloudfront.Kind, cloudfrontpart.OpenAPI),

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
@@ -27,6 +28,8 @@ var actionsOnWhatBothTiersShare = []string{
 
 var resourcesAWSOwns = []string{
 	bastion.PortForwardingDocumentARN,
+	component.VPCQuota.ARN(),
+	component.ElasticIPQuota.ARN(),
 }
 
 var resourcesAWSNamesByIDAndScopesByNoTag = []string{

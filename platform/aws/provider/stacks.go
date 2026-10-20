@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/servicequotas"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -88,6 +89,9 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		WrittenBy: p.writtenBy,
 		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
 		Network:   ec2.NewFromConfig(p.aws),
+		Quotas:    servicequotas.NewFromConfig(p.aws),
+
+		NetworkCIDR: p.options.Network.CIDRFor(scope.Tier),
 
 		VPCOrigins: cloudfront.NewFromConfig(p.aws, func(o *cloudfront.Options) { o.Region = certs.CloudFrontRegion }),
 

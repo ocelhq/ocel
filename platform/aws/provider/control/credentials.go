@@ -37,6 +37,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
@@ -124,6 +125,7 @@ func deployStatements(s iam.Scope) []iam.Statement {
 		registry.Credential(s),
 		certs.Credential(s),
 		functionnetwork.Credential(s),
+		network.Credential(s),
 		containers.Credential(s),
 		envsourcesync.Credential(s),
 		taginvalidator.Credential(s),

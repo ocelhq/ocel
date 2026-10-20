@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	"fmt"
 	"maps"
 
@@ -80,4 +81,5 @@ func LookupDefaultSubnetsIn(ctx *pulumi.Context, vpcID string, zoneIDs []string)
 type NetworkAPI interface {
 	VPCsAPI
 	awsec2.DescribeSubnetsAPIClient
+	DescribeAvailabilityZones(ctx context.Context, in *awsec2.DescribeAvailabilityZonesInput, optFns ...func(*awsec2.Options)) (*awsec2.DescribeAvailabilityZonesOutput, error)
 }
