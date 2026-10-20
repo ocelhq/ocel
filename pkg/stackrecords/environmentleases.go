@@ -20,6 +20,8 @@ type EnvironmentLease struct {
 
 type LeaseHolder string
 
+const EnvironmentLeaseTTL = 5 * time.Minute
+
 const (
 	LeaseDeploy   LeaseHolder = "deploy"
 	LeaseRollback LeaseHolder = "rollback"

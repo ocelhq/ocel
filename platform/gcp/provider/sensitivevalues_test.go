@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	runv2 "google.golang.org/api/run/v2"
 
@@ -390,5 +392,38 @@ func TestRetiringAReleaseKeepsTheVersionAReleaseMadeBeforeItsPinWasRecorded(t *t
 	stripe := valueSecretOf(t, p, stopped, "STRIPE_KEY")
 	if enabled := server.Secrets.EnabledVersions(stripe); !slices.Contains(enabled, 3) {
 		t.Errorf("enabled versions of %s = %v, want 3 kept, which release d2 made while its pin was still pending", stripe, enabled)
+	}
+}
+
+func TestAPinLeftPendingByAReleaseThatDiedStopsHoldingItsSecretsVersionsOnceTheEnvironmentLeaseHasLapsed(t *testing.T) {
+	server := &googletest.Run{Secrets: googletest.NewSecrets()}
+	p := providerServing(server, t)
+	clock := time.Now()
+	p.now = func() time.Time { return clock }
+	released := newReleasedStacks(p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
+	previous := withValues(functionRelease("d0", image), map[string]string{"STRIPE_KEY": "value-0"})
+	released.provision(t, previous)
+	died := withValues(functionRelease("dx", image), map[string]string{"STRIPE_KEY": "died"})
+	stripe := valueSecretOf(t, p, died, "STRIPE_KEY")
+	server.Secrets.Forbidden = []string{stripe}
+	if _, err := released.stacks.Provision(context.Background(), died, nil); err == nil {
+		t.Fatal("Provision(dx) added a version the credential may not add")
+	}
+	server.Secrets.Forbidden = nil
+	clock = clock.Add(stackrecords.EnvironmentLeaseTTL + time.Minute)
+
+	for i := 1; i <= 6; i++ {
+		next := withValues(functionRelease(fmt.Sprintf("d%d", i), image), map[string]string{"STRIPE_KEY": fmt.Sprintf("value-%d", i)})
+		serving := released.provision(t, next)
+		if _, err := p.services().Pin(context.Background(), serving.Physical, serving.Revision, nil); err != nil {
+			t.Fatalf("Pin(%s) = %v", serving.Revision, err)
+		}
+		released.destroy(t, previous.Ref)
+		previous = next
+	}
+
+	if enabled := server.Secrets.EnabledVersions(stripe); !slices.Equal(enabled, []int{6, 7}) {
+		t.Errorf("enabled versions of %s = %v, want 6 and 7: release dx died long enough ago that no deploy of it can still be pinning", stripe, enabled)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -39,6 +40,7 @@ type Provider struct {
 	tagEndpoint string
 
 	sensitiveInEnv bool
+	now            func() time.Time
 	namespace      provider.Namespace
 	warmRoots      *x509.CertPool
 
@@ -104,6 +106,7 @@ func NewProvider(options Options) (*Provider, error) {
 		images:      &run.Images{Pull: run.PullBase},
 
 		sensitiveInEnv: endpoint != "",
+		now:            time.Now,
 	}, nil
 }
 

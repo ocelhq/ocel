@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -28,6 +29,7 @@ func pushing(t *testing.T, endpoint string) *Provider {
 		namespace: names.Namespace(),
 		resolved:  googletest.WithTierBuckets(&gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint, Records: store}),
 		records:   store,
+		now:       time.Now,
 	}
 }
 

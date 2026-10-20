@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -30,14 +31,13 @@ type valueSecrets struct {
 }
 
 type releasePins struct {
-	Versions map[string][]string `json:"versions,omitempty"`
-	Pending  []string            `json:"pending,omitempty"`
+	Versions map[string][]string  `json:"versions,omitempty"`
+	Pending  map[string]time.Time `json:"pending,omitempty"`
 }
 
 func (v *valueSecrets) normalize() {
 	v.Secrets = sortedUnique(v.Secrets)
 	for release, pins := range v.Releases {
-		pins.Pending = sortedUnique(pins.Pending)
 		for secret, versions := range pins.Versions {
 			if pins.Versions[secret] = sortedUnique(versions); len(pins.Versions[secret]) == 0 {
 				delete(pins.Versions, secret)
@@ -135,10 +135,16 @@ func (p *Release) PinValues(ctx context.Context, c *gcloud.Clients, ref provider
 		}
 		secrets[key] = secret
 	}
+	pinning := p.Now()
 	if err := changeValueSecrets(ctx, p.Records, ref.Tier, account, func(held *valueSecrets) {
 		pins := held.Releases[release]
-		held.Secrets = append(held.Secrets, slices.Collect(maps.Values(secrets))...)
-		pins.Pending = append(pins.Pending, slices.Collect(maps.Values(secrets))...)
+		if pins.Pending == nil {
+			pins.Pending = map[string]time.Time{}
+		}
+		for _, secret := range secrets {
+			held.Secrets = append(held.Secrets, secret)
+			pins.Pending[secret] = pinning
+		}
 		held.Releases[release] = pins
 	}); err != nil {
 		return nil, err
@@ -161,7 +167,7 @@ func (p *Release) PinValues(ctx context.Context, c *gcloud.Clients, ref provider
 			pins.Versions = map[string][]string{}
 		}
 		for _, version := range pinned {
-			pins.Pending = slices.DeleteFunc(pins.Pending, func(secret string) bool { return secret == version.Secret })
+			delete(pins.Pending, version.Secret)
 			pins.Versions[version.Secret] = append(pins.Versions[version.Secret], version.Version)
 		}
 		held.Releases[release] = pins
@@ -214,7 +220,7 @@ func (p *Release) destroyUnpinnedVersions(ctx context.Context, ref provider.Stac
 	if err != nil {
 		return err
 	}
-	kept, pending, gone := map[string][]string{}, map[string]bool{}, map[string]releasePins{}
+	kept, pending, gone, lapsed := map[string][]string{}, map[string]bool{}, map[string]releasePins{}, map[string]map[string]time.Time{}
 	for release, pins := range recorded.Releases {
 		stack, err := naming.ParseStackName(release)
 		if err != nil {
@@ -228,8 +234,15 @@ func (p *Release) destroyUnpinnedVersions(ctx context.Context, ref provider.Stac
 			gone[release] = pins
 			continue
 		}
-		for _, secret := range pins.Pending {
-			pending[secret] = true
+		for secret, since := range pins.Pending {
+			if p.Now().Sub(since) < stackrecords.EnvironmentLeaseTTL {
+				pending[secret] = true
+				continue
+			}
+			if lapsed[release] == nil {
+				lapsed[release] = map[string]time.Time{}
+			}
+			lapsed[release][secret] = since
 		}
 		for secret, versions := range pins.Versions {
 			kept[secret] = append(kept[secret], versions...)
@@ -248,7 +261,7 @@ func (p *Release) destroyUnpinnedVersions(ctx context.Context, ref provider.Stac
 			}
 		}
 	}
-	if len(gone) == 0 {
+	if len(gone) == 0 && len(lapsed) == 0 {
 		return nil
 	}
 	return changeValueSecrets(ctx, p.Records, ref.Tier, account, func(held *valueSecrets) {
@@ -257,11 +270,18 @@ func (p *Release) destroyUnpinnedVersions(ctx context.Context, ref provider.Stac
 				delete(held.Releases, release)
 			}
 		}
+		for release, secrets := range lapsed {
+			for secret, since := range secrets {
+				if held.Releases[release].Pending[secret].Equal(since) {
+					delete(held.Releases[release].Pending, secret)
+				}
+			}
+		}
 	})
 }
 
 func samePins(a, b releasePins) bool {
-	return slices.Equal(a.Pending, b.Pending) && maps.EqualFunc(a.Versions, b.Versions, slices.Equal)
+	return maps.EqualFunc(a.Pending, b.Pending, time.Time.Equal) && maps.EqualFunc(a.Versions, b.Versions, slices.Equal)
 }
 
 func removeValueSecrets(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, account string) error {

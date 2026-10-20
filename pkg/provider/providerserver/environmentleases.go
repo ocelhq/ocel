@@ -21,7 +21,6 @@ import (
 )
 
 const (
-	environmentLeaseTTL            = 5 * time.Minute
 	environmentLeaseRenewal        = 2 * time.Minute
 	environmentLeaseRetry          = 15 * time.Second
 	environmentLeaseMargin         = time.Minute
@@ -95,7 +94,7 @@ type subjectLeases struct {
 
 func newSubjectLeases() *subjectLeases {
 	return &subjectLeases{
-		ttl:     environmentLeaseTTL,
+		ttl:     stackrecords.EnvironmentLeaseTTL,
 		renewal: environmentLeaseRenewal,
 		retry:   environmentLeaseRetry,
 		margin:  environmentLeaseMargin,

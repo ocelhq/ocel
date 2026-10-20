@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -36,4 +37,5 @@ type Release struct {
 	ContainerTagEndpoint string
 	GateInEnv            bool
 	SensitiveInEnv       bool
+	Now                  func() time.Time
 }
