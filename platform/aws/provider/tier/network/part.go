@@ -12,7 +12,7 @@ import (
 func NewPart(stacks *Stacks, store records.Store, region string) tier.Part {
 	return tier.Shared(tier.SharedSpec{
 		Part:          Shared.Part,
-		RefuseInUse:   Shared.RefuseInUse,
+		RefuseInUse:   stacks.RefuseInUse,
 		Summary:       Summary,
 		Shape:         Shape,
 		RemovalReason: "this run removes it; the next container app, VPC-attached function, database, cache or port forward adds it again",

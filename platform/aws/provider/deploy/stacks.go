@@ -30,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -106,7 +107,11 @@ func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) 
 		pending:    site.NewPendingSets(),
 		opened:     map[Scope]*release{},
 	}
-	r.network = &network.Stacks{Open: r.openShared}
+	r.network = &network.Stacks{Open: r.openShared, PartsByConsumer: map[string]string{
+		containers.Slug:      containers.Part,
+		functionnetwork.Slug: functionnetwork.Part,
+		bastion.ConsumerSlug: bastion.Part,
+	}}
 	r.containers = &containers.Stacks{Open: r.openShared, Network: r.network}
 	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared, Network: r.network}
 	return r

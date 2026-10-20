@@ -40,12 +40,11 @@ const (
 )
 
 var Shared = sharedstack.Stack{
-	Slug:        Slug,
-	Part:        Part,
-	Subject:     "network",
-	Consumer:    "part or database that runs in it",
-	Ref:         StackRef,
-	RefuseInUse: RefuseInUse,
+	Slug:     Slug,
+	Part:     Part,
+	Subject:  "network",
+	Consumer: "part or database that runs in it",
+	Ref:      StackRef,
 }
 
 type Network struct {
@@ -86,8 +85,9 @@ func stackTags(namespace string, tier environment.Tier) map[string]string {
 }
 
 type Stacks struct {
-	Open func(context.Context, provider.StackRef) (sharedstack.Owner, error)
-	lock sync.Mutex
+	Open            func(context.Context, provider.StackRef) (sharedstack.Owner, error)
+	PartsByConsumer map[string]string
+	lock            sync.Mutex
 }
 
 func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Network, bool, error) {
@@ -224,7 +224,9 @@ func (s *Stacks) Remove(ctx context.Context, tier environment.Tier, progress pro
 	if err != nil {
 		return err
 	}
-	return Shared.Remove(ctx, owner, tier, progress)
+	shared := Shared
+	shared.RefuseInUse = s.RefuseInUse
+	return shared.Remove(ctx, owner, tier, progress)
 }
 
 func listResources(namespace string, tier environment.Tier, network Network) []provider.PhysicalResource {
@@ -269,11 +271,34 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 	}, true, nil
 }
 
-func RefuseInUse(tier environment.Tier, users []string) error {
+func (s *Stacks) RefuseInUse(tier environment.Tier, users []string) error {
+	var parts, projects []string
+	for _, user := range users {
+		if part, isPart := s.PartsByConsumer[user]; isPart {
+			parts = append(parts, part)
+		} else {
+			projects = append(projects, user)
+		}
+	}
+	var steps []string
+	if len(parts) > 0 {
+		steps = append(steps, fmt.Sprintf("remove the %s %s with `%s --remove <part>`",
+			strings.Join(parts, " and "), plural(len(parts), "part", "parts"), provider.BootstrapCommand(tier)))
+	}
+	if len(projects) > 0 {
+		steps = append(steps, fmt.Sprintf("destroy the environments of %s whose databases and caches sit in it", strings.Join(projects, ", ")))
+	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s still run in the network of the %s tier, and a VPC is not deleted while anything is in it.\n"+
-			"Remove those parts with `%s --remove`, and destroy the environments whose databases and caches sit in it: the last one to leave takes it down",
-		strings.Join(users, ", "), tier, provider.BootstrapCommand(tier))
+			"To free it, %s; the last one to leave takes the network down",
+		strings.Join(users, ", "), tier, strings.Join(steps, ", and "))
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 func Shape(tier environment.Tier) []pricing.Shaped {
