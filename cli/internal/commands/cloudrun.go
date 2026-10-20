@@ -120,23 +120,29 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 
 func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cloud.Client, started *cloudv1.Job, jobURL, slug string, job CloudJob) error {
 	watching := phase.Child(slug, progress.Title{Started: "Waiting for the job on Ocel Cloud", Ended: "Waited for the job on Ocel Cloud"})
-	var asked *cloudv1.JobInput
+	var opened string
+	resume := func(string) {}
 	ended, err := jobs.WaitForJob(ctx, started.GetId(), func(read *cloudv1.Job) {
 		running.SetCloudJob(summarizeJob(read, jobURL))
-		if read.GetState() != cloudv1.JobState_JOB_STATE_INPUT_REQUIRED {
-			if !cloud.IsJobEnded(read.GetState()) {
-				watching.Say(describeJob(read))
-			}
+		switch state := read.GetState(); {
+		case state == cloudv1.JobState_JOB_STATE_SUCCEEDED:
+			resume("answered on Ocel Cloud")
+			return
+		case cloud.IsJobEnded(state):
+			resume("the job stopped waiting")
+			return
+		case state != cloudv1.JobState_JOB_STATE_INPUT_REQUIRED:
+			resume("answered on Ocel Cloud")
+			watching.Say(describeJob(read))
 			return
 		}
-		if asked != nil && asked.GetId() == read.GetInput().GetId() {
+		resume("answered on Ocel Cloud")
+		input := cmp.Or(read.GetInput(), &cloudv1.JobInput{})
+		resume = watching.Hold(&streamv1.WaitingEvent{Url: jobURL, Missing: missingVariables(input.GetVariables()), Input: input})
+		if opened == input.GetId() && opened != "" {
 			return
 		}
-		asked = read.GetInput()
-		if asked == nil {
-			asked = &cloudv1.JobInput{}
-		}
-		watching.Warn(describeInput(asked, jobURL))
+		opened = input.GetId()
 		if job.OpenBrowser != nil {
 			_ = job.OpenBrowser(jobURL)
 		}
@@ -215,23 +221,24 @@ func describeJob(job *cloudv1.Job) string {
 	return "Running"
 }
 
-func describeInput(input *cloudv1.JobInput, jobURL string) string {
-	if confirmation := input.GetConfirmation(); confirmation != nil {
-		return fmt.Sprintf("Ocel Cloud asks: %s — answer at %s", confirmation.GetQuestion(), jobURL)
+func missingVariables(needed *cloudv1.VariablesNeeded) *streamv1.MissingVariables {
+	if needed == nil {
+		return nil
 	}
-	needed := input.GetVariables().GetVariables()
-	if len(needed) == 0 {
-		return "The job needs your input: open " + jobURL
+	missing := &streamv1.MissingVariables{}
+	for _, variable := range needed.GetVariables() {
+		missing.Cells = append(missing.Cells, &streamv1.MissingVariable{
+			Key:         variable.GetKey(),
+			Folder:      variable.GetFolder(),
+			Reason:      variable.GetReason(),
+			Description: variable.GetDescription(),
+			Group:       variable.GetGroup(),
+		})
 	}
-	keys := make([]string, 0, len(needed))
-	for _, variable := range needed {
-		key := variable.GetKey()
-		if folder := variable.GetFolder(); folder != "" {
-			key += " (" + folder + ")"
-		}
-		keys = append(keys, key)
+	for _, group := range needed.GetGroups() {
+		missing.Groups = append(missing.Groups, &streamv1.MissingGroup{Key: group.GetKey(), Description: group.GetDescription()})
 	}
-	return fmt.Sprintf("Ocel Cloud needs values for %s — enter them at %s", english.And(keys), jobURL)
+	return missing
 }
 
 func jobResultLines(result *cloudv1.JobResult) []string {
