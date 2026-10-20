@@ -38,3 +38,34 @@ func TestAnEdgeServingPlainHTTPHasItsHostnamesAnnouncedListedAndStatedAsHTTP(t *
 		t.Errorf("ListEnvironments = %v, want the alias listed as an http:// URL", got)
 	}
 }
+
+func TestAnEdgeServingOnAPortOfItsOwnHasItsHostnamesAnnouncedAndListedWithThePort(t *testing.T) {
+	builtProject(t)
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	front := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+	front.ServesPlainHTTP(true)
+	front.ServesOnPort(8130)
+	client, facts := configuredProvider(t, "1.0.0", vendor)
+	if facts.GetEdge().GetUrlPort() != 8130 {
+		t.Errorf("Configure() edge facts = %v, want them to name port 8130", facts.GetEdge())
+	}
+	bootstrappedOverRPC(t, client)
+	previewBootstrapped(t, client)
+
+	result, _ := deploy(t, client, previewRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	for _, url := range append(servedURLs(result), findDeploymentURL(result, "web")) {
+		if !strings.HasPrefix(url, "http://pr-7-") || !strings.HasSuffix(url, ":8130") {
+			t.Errorf("the deploy announced %q, want the preview's http:// URL on port 8130", url)
+		}
+	}
+	listed, err := client.ListEnvironments(context.Background(), &contractv1.ListEnvironmentsRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.GetEnvironments(); len(got) != 1 || len(got[0].GetAliasUrls()) == 0 || !strings.HasSuffix(got[0].GetAliasUrls()[0], ":8130") {
+		t.Errorf("ListEnvironments = %v, want the alias listed on port 8130", got)
+	}
+}

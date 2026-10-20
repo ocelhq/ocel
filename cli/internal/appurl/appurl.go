@@ -18,7 +18,7 @@ func FormatProductionURLs(cfg *project.Project) map[string]string {
 }
 
 func FormatPreviewURLs(hostnames map[string]string, served *contractv1.EdgeFacts) map[string]string {
-	front := edge.Facts{ServesPlainHTTP: served.GetServesPlainHttp()}
+	front := edge.Facts{ServesPlainHTTP: served.GetServesPlainHttp(), URLPort: uint16(served.GetUrlPort())}
 	urls := make(map[string]string, len(hostnames))
 	for app, hostname := range hostnames {
 		if hostname != "" {

@@ -140,6 +140,8 @@ message EdgeFacts {
   CacheTagLimits cache_tag_limits = 2;
 
   bool serves_plain_http = 3;
+
+  uint32 url_port = 4 [(buf.validate.field).uint32.lte = 65535];
 }
 
 message CacheTagLimits {
