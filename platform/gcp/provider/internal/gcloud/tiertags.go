@@ -1,6 +1,7 @@
 package gcloud
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -165,14 +166,18 @@ func (c *Clients) ensureTag(ctx context.Context, asked tagValue, target TaggedRe
 	case Taken(err):
 		return false, nil
 	case googleretry.AnsweredCode(err) == http.StatusBadRequest:
-		binding, readErr := c.tagBinding(ctx, asked, target)
-		if readErr != nil || binding != "" {
+		bound, readErr := c.boundValue(ctx, target)
+		switch {
+		case readErr != nil:
 			return false, readErr
+		case bound.is(value, c.valuePath(asked)):
+			return false, nil
+		case bound.binding != "":
+			return false, refusal.Refuse(refusal.CodeInvalid,
+				"%s carries %s, another value of the %s tag than %s, and %s carries %s alone.\n"+
+					"Remove that binding with `gcloud resource-manager tags bindings delete`, then try again",
+				target.Name, bound.named(), c.TierTagKeyPath(), asked.short, asked.marks, c.valuePath(asked))
 		}
-		return false, refusal.Refuse(refusal.CodeInvalid,
-			"%s carries another value of the %s tag than %s, and %s carries that value alone.\n"+
-				"Remove that binding with `gcloud resource-manager tags bindings delete`, then try again",
-			target.Name, c.TierTagKeyPath(), asked.short, asked.marks)
 	}
 	return false, ExplainMissingGrant(fmt.Errorf("bind %s to %s: %w", c.valuePath(asked), target.Name, err),
 		c.tagGrant(asked, target, "createTagBinding"))
@@ -190,25 +195,8 @@ func (c *Clients) CarriesTierTag(ctx context.Context, target TaggedResource) (bo
 	if !c.TierTagged() {
 		return true, nil
 	}
-	service, err := c.tagServiceOf(target)
-	if err != nil {
-		return false, err
-	}
-	listed, err := googleretry.Attempted(ctx, service.TagBindings.List().Parent(target.Name).Context(ctx).Do)
-	switch {
-	case Forbidden(err):
-		return true, nil
-	case Absent(err):
-		return false, nil
-	case err != nil:
-		return false, fmt.Errorf("read the tags bound to %s: %w", target.Name, err)
-	}
-	for _, binding := range listed.TagBindings {
-		if strings.HasPrefix(binding.TagValueNamespacedName, c.TierTagKeyPath()+"/") {
-			return true, nil
-		}
-	}
-	return false, nil
+	bound, err := c.boundValue(ctx, target)
+	return bound.binding != "", err
 }
 
 func (c *Clients) RemoveTierTag(ctx context.Context, tier environment.Tier, target TaggedResource) error {
@@ -255,23 +243,58 @@ func (c *Clients) tagBinding(ctx context.Context, asked tagValue, target TaggedR
 	if err != nil {
 		return "", err
 	}
+	bound, err := c.boundValue(ctx, target)
+	if err != nil || !bound.is(value, c.valuePath(asked)) {
+		return "", err
+	}
+	return bound.binding, nil
+}
+
+type boundTag struct {
+	binding string
+	value   string
+	path    string
+}
+
+func (b boundTag) is(value, path string) bool {
+	return b.binding != "" && (b.value == value || b.path == path)
+}
+
+func (b boundTag) named() string { return cmp.Or(b.path, b.value) }
+
+func (c *Clients) boundValue(ctx context.Context, target TaggedResource) (boundTag, error) {
 	service, err := c.tagServiceOf(target)
 	if err != nil {
-		return "", err
+		return boundTag{}, err
 	}
 	listed, err := googleretry.Attempted(ctx, service.TagBindings.List().Parent(target.Name).Context(ctx).Do)
 	if Absent(err) {
-		return "", nil
+		return boundTag{}, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("read the tags bound to %s: %w", target.Name, err)
+		return boundTag{}, fmt.Errorf("read the tags bound to %s: %w", target.Name, err)
 	}
 	for _, binding := range listed.TagBindings {
-		if binding.TagValue == value || binding.TagValueNamespacedName == c.valuePath(asked) {
-			return binding.Name, nil
+		path := binding.TagValueNamespacedName
+		if path == "" {
+			path = c.knownValuePath(binding.TagValue)
+		}
+		if strings.HasPrefix(path, c.TierTagKeyPath()+"/") {
+			return boundTag{binding: binding.Name, value: binding.TagValue, path: path}, nil
 		}
 	}
-	return "", nil
+	return boundTag{}, nil
+}
+
+func (c *Clients) knownValuePath(value string) string {
+	c.tierTags.mu.Lock()
+	defer c.tierTags.mu.Unlock()
+	for short, known := range c.tierTags.values {
+		if known == value {
+			return c.TierTagKeyPath() + "/" + short
+		}
+	}
+	return ""
 }
 
 func TagOperationDone(ctx context.Context, service *crm.Service, doing string, started *crm.Operation) error {

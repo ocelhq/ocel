@@ -178,6 +178,23 @@ func TestABootstrapAccountCarriesItsTiersTagBeforeItIsGrantedAnything(t *testing
 	}
 }
 
+func TestAnAccountWhoseTagsADeployMayNotReadCountsAsTagged(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, c, tags := projectHoldingAccounts(t)
+	p := pushing(t, c.Endpoint)
+	tags.Tagged(p.resolved)
+	outside := tags.Values[c.OutsideTagValuePath()].Name
+	for _, email := range outsideAccounts {
+		tags.Bindings[accountParent(email)] = []string{outside}
+	}
+	tags.ListsDenied = []string{accountParent(computeAccount)}
+
+	if _, err := p.PlanPreflight(ctx, preflightOf(environment.TierPreview)); err != nil {
+		t.Errorf("PlanPreflight() beside an account whose tags it may not read = %v, want no refusal: only another value of the tag denies reading them", err)
+	}
+}
+
 func TestABootstrapLeavesAnotherNamespacesAccountsForThatNamespaceToBindToItsTier(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
