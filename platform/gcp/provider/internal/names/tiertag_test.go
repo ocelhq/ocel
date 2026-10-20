@@ -16,7 +16,7 @@ func TestEveryServiceAccountAnyNamespaceMakesIsKnownAsOcels(t *testing.T) {
 			made = append(made, n.RealtimeAccount(tier), n.AssetReaderAccount(tier), n.EnvSourceSyncAccount(tier), n.BastionAccount(tier), n.PushAccount(tier))
 		}
 		for _, id := range made {
-			if !names.IsOcelAccount(id) {
+			if !names.IsOcelAccount(id, names.MarkedAccountDescription("an account ocel makes")) {
 				t.Errorf("IsOcelAccount(%q) = false for an account namespace %s makes, so another namespace's bootstrap would bind it to outside", id, namespace)
 			}
 		}
@@ -25,7 +25,7 @@ func TestEveryServiceAccountAnyNamespaceMakesIsKnownAsOcels(t *testing.T) {
 
 func TestAServiceAccountNoNamespaceMakesIsNotKnownAsOcels(t *testing.T) {
 	for _, id := range []string{"deployer", "billing-prod-runner", "ocel-connector", "ocel-prod-probe", "my-app-runner", "ocel-app-0123", "514957526729-compute"} {
-		if names.IsOcelAccount(id) {
+		if names.IsOcelAccount(id, names.MarkedAccountDescription("an account ocel makes")) {
 			t.Errorf("IsOcelAccount(%q) = true, and no namespace makes it, so no bootstrap binds it to outside", id)
 		}
 	}

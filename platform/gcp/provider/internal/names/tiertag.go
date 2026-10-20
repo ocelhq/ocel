@@ -27,4 +27,15 @@ var ocelAccount = regexp.MustCompile("^[a-z][a-z0-9-]{0," + strconv.Itoa(naming.
 	naming.TierWord(environment.TierProduction) + "|" + naming.TierWord(environment.TierPreview) + ")-(" +
 	strings.Join([]string{realtimeInfix, assetReaderInfix, envSourceSyncName, bastionName, pushAccountName}, "|") + "))$")
 
-func IsOcelAccount(id string) bool { return ocelAccount.MatchString(id) }
+const accountMark = "; made by ocel"
+
+func MarkedAccountDescription(description string) string { return description + accountMark }
+
+func UnmarkedAccountDescription(description string) string {
+	unmarked, _ := strings.CutSuffix(description, accountMark)
+	return unmarked
+}
+
+func IsOcelAccount(id, description string) bool {
+	return ocelAccount.MatchString(id) && strings.HasSuffix(description, accountMark)
+}

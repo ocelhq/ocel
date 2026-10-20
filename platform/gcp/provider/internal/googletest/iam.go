@@ -73,6 +73,7 @@ type IAM struct {
 
 	DeletedAccounts []string
 	Listed          []string
+	Described       map[string]string
 
 	TierTags      *TierTags
 	DeletedTagged []string
@@ -314,7 +315,7 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 		case r.Method == http.MethodGet && strings.HasSuffix(path, "/serviceAccounts"):
 			listed := &iam.ListServiceAccountsResponse{}
 			for _, email := range s.Listed {
-				listed.Accounts = append(listed.Accounts, &iam.ServiceAccount{Email: email, UniqueId: UniqueIDOf(strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com"))})
+				listed.Accounts = append(listed.Accounts, &iam.ServiceAccount{Email: email, UniqueId: UniqueIDOf(strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com")), Description: s.Described[email]})
 			}
 			WriteBody(w, listed)
 		case r.Method == http.MethodPost && strings.HasSuffix(path, "/serviceAccounts"):
