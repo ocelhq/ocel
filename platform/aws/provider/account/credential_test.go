@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"unicode"
 
@@ -408,22 +406,12 @@ func mustRender(t *testing.T, render func(Namespace, environment.Tier, string) (
 	return document
 }
 
-var compiledLikePatterns sync.Map
-
 func conditionAdmits(operator, pattern, value string) bool {
 	switch operator {
 	case "StringEquals":
 		return pattern == value
 	case "StringLike":
-		if compiled, ok := compiledLikePatterns.Load(pattern); ok {
-			return compiled.(*regexp.Regexp).MatchString(value)
-		}
-		quoted := regexp.QuoteMeta(pattern)
-		quoted = strings.ReplaceAll(quoted, `\*`, ".*")
-		quoted = strings.ReplaceAll(quoted, `\?`, ".")
-		compiled := regexp.MustCompile("^" + quoted + "$")
-		compiledLikePatterns.Store(pattern, compiled)
-		return compiled.MatchString(value)
+		return iamGlob(pattern).MatchString(value)
 	}
 	return false
 }
@@ -518,12 +506,18 @@ type requestContext map[string]string
 
 func allows(t *testing.T, document, action, arn string, request requestContext) bool {
 	t.Helper()
-	for _, statement := range parsePolicy(t, document).Statement {
+	return anyStatementAllows(t, parsePolicy(t, document).Statement, action, arn, request)
+}
+
+func anyStatementAllows(t *testing.T, statements []parsedStatement, action, arn string, request requestContext) bool {
+	t.Helper()
+	for _, statement := range statements {
 		if !grantsAction(stringsOf(t, statement.Action, "Action"), action) {
 			continue
 		}
 		if !slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(pattern string) bool {
-			return iamResourceMatches(pattern, arn)
+			resolved, ok := resolveVariables(t, pattern, request)
+			return ok && iamResourceMatches(resolved, arn)
 		}) {
 			continue
 		}
@@ -556,17 +550,7 @@ func conditionHolds(t *testing.T, condition map[string]any, request requestConte
 	for operator, operands := range condition {
 		base, ifExists := strings.CutSuffix(operator, "IfExists")
 		for key, operand := range operands.(map[string]any) {
-			var wanted []string
-			switch v := operand.(type) {
-			case string:
-				wanted = []string{v}
-			case []any:
-				for _, each := range v {
-					wanted = append(wanted, each.(string))
-				}
-			default:
-				t.Fatalf("condition %s %s has operand %v of type %T", operator, key, operand, operand)
-			}
+			wanted := operandValues(t, operand)
 			got, present := request[key]
 			if base == "Null" {
 				if len(wanted) != 1 || (wanted[0] == "true") == present {
@@ -591,12 +575,28 @@ func conditionHolds(t *testing.T, condition map[string]any, request requestConte
 	return true
 }
 
+func operandValues(t *testing.T, operand any) []string {
+	t.Helper()
+	switch v := operand.(type) {
+	case string:
+		return []string{v}
+	case []any:
+		var values []string
+		for _, each := range v {
+			values = append(values, each.(string))
+		}
+		return values
+	}
+	t.Fatalf("condition operand %v has type %T, which IAM never writes", operand, operand)
+	return nil
+}
+
 func operatorAdmits(t *testing.T, operator, pattern, value string) bool {
 	t.Helper()
 	switch operator {
-	case "StringEquals", "ArnEquals", "Bool", "ForAnyValue:StringEquals":
+	case "StringEquals", "Bool", "ForAnyValue:StringEquals":
 		return pattern == value
-	case "StringLike", "ArnLike":
+	case "StringLike", "ArnEquals", "ArnLike":
 		return conditionAdmits("StringLike", pattern, value)
 	}
 	t.Fatalf("condition operator %s has no evaluation in this test", operator)

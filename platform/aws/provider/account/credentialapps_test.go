@@ -344,12 +344,21 @@ type ecrRequest struct {
 	action           string
 	principalProject string
 	repository       string
+	foreign          bool
 	requestProject   string
 	resourceProject  string
 }
 
-func (r ecrRequest) context() map[string]string {
-	context := map[string]string{
+func (r ecrRequest) arn(tier environment.Tier) string {
+	repository := registry.RepositoryPrefix(string(defaultNamespace), tier) + "/" + r.repository
+	if r.foreign {
+		repository = r.repository
+	}
+	return "arn:aws:ecr:us-east-1:123456789012:repository/" + repository
+}
+
+func (r ecrRequest) context() requestContext {
+	context := requestContext{
 		"aws:PrincipalAccount": "123456789012",
 		"aws:ResourceAccount":  "123456789012",
 	}
@@ -384,58 +393,35 @@ func resolveVariables(t *testing.T, value string, context map[string]string) (st
 	return out, resolved
 }
 
-func allowsECR(t *testing.T, document string, r ecrRequest) bool {
-	t.Helper()
-	context := r.context()
-	arn := "arn:aws:ecr:us-east-1:123456789012:repository/" + r.repository
-	for _, statement := range parsePolicy(t, document).Statement {
-		if !slices.Contains(stringsOf(t, statement.Action, "Action"), r.action) {
-			continue
-		}
-		matches := slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(resource string) bool {
-			resolved, ok := resolveVariables(t, resource, context)
-			return ok && conditionAdmits("StringLike", resolved, arn)
-		})
-		if matches && conditionHolds(t, statement.Condition, context) {
-			return true
-		}
-	}
-	return false
-}
-
 func TestEveryCredentialReachesImageRepositoriesOnlyOfTheProjectItsPrincipalIsTaggedWith(t *testing.T) {
 	cases := []struct {
 		name    string
 		request ecrRequest
 		allowed bool
 	}{
-		{"an untagged principal deletes in an Ocel repository tagged with a project", ecrRequest{action: "ecr:BatchDeleteImage", repository: "ocel/shop.web", resourceProject: "shop"}, true},
-		{"an untagged principal removes an Ocel repository tagged with a project", ecrRequest{action: "ecr:DeleteRepository", repository: "ocel/shop.web", resourceProject: "shop"}, true},
-		{"an untagged principal deletes in a repository no project is tagged on", ecrRequest{action: "ecr:BatchDeleteImage", repository: "ocel/shop.web"}, false},
-		{"an untagged principal creates a repository tagged with its project", ecrRequest{action: "ecr:CreateRepository", repository: "ocel/shop.web", requestProject: "shop"}, true},
-		{"an untagged principal creates a repository with no project tag", ecrRequest{action: "ecr:CreateRepository", repository: "ocel/shop.web"}, false},
-		{"an untagged principal tags a repository made before the tag existed", ecrRequest{action: "ecr:TagResource", repository: "ocel/shop.web", requestProject: "shop"}, true},
-		{"a tagged principal deletes in its project's repository", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "shop"}, true},
-		{"a tagged principal removes its project's repository", ecrRequest{action: "ecr:DeleteRepository", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "shop"}, true},
-		{"a tagged principal deletes in another project's repository", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/blog.web", resourceProject: "blog"}, false},
-		{"a tagged principal deletes in another project's repository it tagged as its own", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/blog.web", resourceProject: "shop"}, false},
-		{"a tagged principal deletes in its project's repository tagged with another project", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "blog"}, false},
-		{"a tagged principal creates its project's repository", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/shop.web", requestProject: "shop"}, true},
-		{"a tagged principal creates another project's repository tagged as its own", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/blog.web", requestProject: "shop"}, false},
-		{"a tagged principal creates its project's repository tagged with another project", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/shop.web", requestProject: "blog"}, false},
-		{"a tagged principal creates a repository whose project only starts with its own", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "ocel/shop-two.web", requestProject: "shop"}, false},
-		{"a tagged principal tags its project's repository", ecrRequest{action: "ecr:TagResource", principalProject: "shop", repository: "ocel/shop.web", requestProject: "shop"}, true},
-		{"a tagged principal tags another project's repository as its own", ecrRequest{action: "ecr:TagResource", principalProject: "shop", repository: "ocel/blog.web", requestProject: "shop", resourceProject: "blog"}, false},
-		{"a tagged principal pushes to its project's repository", ecrRequest{action: "ecr:PutImage", principalProject: "shop", repository: "ocel/shop.web", resourceProject: "shop"}, true},
-		{"any principal deletes outside the ocel namespace", ecrRequest{action: "ecr:BatchDeleteImage", repository: "theirs/web", resourceProject: "shop"}, false},
+		{"an untagged principal deletes in an Ocel repository tagged with a project", ecrRequest{action: "ecr:BatchDeleteImage", repository: "shop.web", resourceProject: "shop"}, true},
+		{"an untagged principal removes an Ocel repository tagged with a project", ecrRequest{action: "ecr:DeleteRepository", repository: "shop.web", resourceProject: "shop"}, true},
+		{"an untagged principal deletes in a repository no project is tagged on", ecrRequest{action: "ecr:BatchDeleteImage", repository: "shop.web"}, false},
+		{"an untagged principal creates a repository tagged with its project", ecrRequest{action: "ecr:CreateRepository", repository: "shop.web", requestProject: "shop"}, true},
+		{"an untagged principal creates a repository with no project tag", ecrRequest{action: "ecr:CreateRepository", repository: "shop.web"}, false},
+		{"an untagged principal tags a repository made before the tag existed", ecrRequest{action: "ecr:TagResource", repository: "shop.web", requestProject: "shop"}, true},
+		{"a tagged principal deletes in its project's repository", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "shop.web", resourceProject: "shop"}, true},
+		{"a tagged principal removes its project's repository", ecrRequest{action: "ecr:DeleteRepository", principalProject: "shop", repository: "shop.web", resourceProject: "shop"}, true},
+		{"a tagged principal deletes in another project's repository", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "blog.web", resourceProject: "blog"}, false},
+		{"a tagged principal deletes in another project's repository it tagged as its own", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "blog.web", resourceProject: "shop"}, false},
+		{"a tagged principal deletes in its project's repository tagged with another project", ecrRequest{action: "ecr:BatchDeleteImage", principalProject: "shop", repository: "shop.web", resourceProject: "blog"}, false},
+		{"a tagged principal creates its project's repository", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "shop.web", requestProject: "shop"}, true},
+		{"a tagged principal creates another project's repository tagged as its own", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "blog.web", requestProject: "shop"}, false},
+		{"a tagged principal creates its project's repository tagged with another project", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "shop.web", requestProject: "blog"}, false},
+		{"a tagged principal creates a repository whose project only starts with its own", ecrRequest{action: "ecr:CreateRepository", principalProject: "shop", repository: "shop-two.web", requestProject: "shop"}, false},
+		{"a tagged principal tags its project's repository", ecrRequest{action: "ecr:TagResource", principalProject: "shop", repository: "shop.web", requestProject: "shop"}, true},
+		{"a tagged principal tags another project's repository as its own", ecrRequest{action: "ecr:TagResource", principalProject: "shop", repository: "blog.web", requestProject: "shop", resourceProject: "blog"}, false},
+		{"a tagged principal pushes to its project's repository", ecrRequest{action: "ecr:PutImage", principalProject: "shop", repository: "shop.web", resourceProject: "shop"}, true},
+		{"any principal deletes outside the ocel namespace", ecrRequest{action: "ecr:BatchDeleteImage", repository: "theirs/web", foreign: true, resourceProject: "shop"}, false},
 	}
 	for purpose, document := range bothCredentials(t) {
 		for _, c := range cases {
-			request := c.request
-			if rest, ours := strings.CutPrefix(request.repository, string(defaultNamespace)+"/"); ours {
-				request.repository = registry.RepositoryPrefix(string(defaultNamespace), tierOf(purpose)) + "/" + rest
-			}
-			if got := allowsECR(t, document, request); got != c.allowed {
+			if got := allows(t, document, c.request.action, c.request.arn(tierOf(purpose)), c.request.context()); got != c.allowed {
 				t.Errorf("the %s credential: %s is allowed = %t, want %t", purpose, c.name, got, c.allowed)
 			}
 		}

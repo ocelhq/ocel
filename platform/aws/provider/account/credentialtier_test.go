@@ -14,7 +14,7 @@ import (
 
 const witnessWord = "w"
 
-type productionWitness struct {
+type witness struct {
 	action   string
 	resource string
 	arn      string
@@ -40,12 +40,12 @@ var actionsOnCertificatesEitherTierMayAdopt = []string{
 	"acm:DescribeCertificate",
 }
 
-func carriedByEveryProductionResource() requestContext {
+func requestTaggedFor(tier environment.Tier) requestContext {
 	return requestContext{
 		"aws:ResourceTag/" + naming.ManagedByTagKey: string(defaultNamespace),
-		"aws:ResourceTag/" + naming.EnvTierTagKey:   string(environment.TierProduction),
+		"aws:ResourceTag/" + naming.EnvTierTagKey:   string(tier),
 		"aws:RequestTag/" + naming.ManagedByTagKey:  string(defaultNamespace),
-		"aws:RequestTag/" + naming.EnvTierTagKey:    string(environment.TierProduction),
+		"aws:RequestTag/" + naming.EnvTierTagKey:    string(tier),
 		"aws:PrincipalAccount":                      "111122223333",
 		"aws:ResourceAccount":                       "111122223333",
 		"aws:PrincipalTag/ocel:project":             "shop",
@@ -58,26 +58,12 @@ func filledIn(t *testing.T, pattern string, request requestContext) string {
 	return strings.NewReplacer("*", witnessWord, "?", witnessWord).Replace(resolved)
 }
 
-func operandValues(operand any) []string {
-	switch v := operand.(type) {
-	case string:
-		return []string{v}
-	case []any:
-		var values []string
-		for _, each := range v {
-			values = append(values, each.(string))
-		}
-		return values
-	}
-	return nil
-}
-
-func productionRequestSatisfying(t *testing.T, condition map[string]any) requestContext {
+func requestSatisfying(t *testing.T, tier environment.Tier, condition map[string]any) requestContext {
 	t.Helper()
-	request := carriedByEveryProductionResource()
+	request := requestTaggedFor(tier)
 	nulls, _ := condition["Null"].(map[string]any)
 	for key, operand := range nulls {
-		if operandValues(operand)[0] == "true" {
+		if operandValues(t, operand)[0] == "true" {
 			delete(request, key)
 		} else if _, present := request[key]; !present {
 			request[key] = witnessWord
@@ -88,21 +74,28 @@ func productionRequestSatisfying(t *testing.T, condition map[string]any) request
 			continue
 		}
 		for key, operand := range operands.(map[string]any) {
-			request[key] = filledIn(t, operandValues(operand)[0], request)
+			request[key] = filledIn(t, operandValues(t, operand)[0], request)
 		}
 	}
 	return request
 }
 
-func productionWitnesses(t *testing.T) []productionWitness {
+func tagsOnlyInsideACreate(condition map[string]any) bool {
+	return conditionNames(condition, "ec2:CreateAction")
+}
+
+func witnessesOf(t *testing.T, tier environment.Tier) []witness {
 	t.Helper()
-	var witnesses []productionWitness
-	for _, document := range credentialsOfTier(t, environment.TierProduction) {
+	var witnesses []witness
+	for _, document := range credentialsOfTier(t, tier) {
 		for _, statement := range parsePolicy(t, document).Statement {
-			request := productionRequestSatisfying(t, statement.Condition)
+			if tagsOnlyInsideACreate(statement.Condition) {
+				continue
+			}
+			request := requestSatisfying(t, tier, statement.Condition)
 			for _, action := range stringsOf(t, statement.Action, "Action") {
 				for _, resource := range stringsOf(t, statement.Resource, "Resource") {
-					witnesses = append(witnesses, productionWitness{
+					witnesses = append(witnesses, witness{
 						action:   filledIn(t, action, request),
 						resource: resource,
 						arn:      filledIn(t, resource, request),
@@ -115,7 +108,7 @@ func productionWitnesses(t *testing.T) []productionWitness {
 	return witnesses
 }
 
-func isOfNoTier(w productionWitness) bool {
+func isOfNoTier(w witness) bool {
 	switch {
 	case w.resource == iam.AnyResource && readOnly(w.action):
 		return true
@@ -127,41 +120,37 @@ func isOfNoTier(w productionWitness) bool {
 	return slices.Contains(resourcesAWSOwns, w.resource) || slices.Contains(resourcesAWSNamesByIDAndScopesByNoTag, w.resource)
 }
 
-func tagsOnlyInsideACreate(condition map[string]any) bool {
-	return conditionNames(condition, "ec2:CreateAction")
-}
-
-func allowsTheWitness(t *testing.T, statements []parsedStatement, w productionWitness) bool {
+func statementsOfTier(t *testing.T, tier environment.Tier) []parsedStatement {
 	t.Helper()
-	for _, statement := range statements {
-		if !grantsAction(stringsOf(t, statement.Action, "Action"), w.action) {
-			continue
-		}
-		if !slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(pattern string) bool {
-			resolved, ok := resolveVariables(t, pattern, w.request)
-			return ok && iamResourceMatches(resolved, w.arn)
-		}) {
-			continue
-		}
-		if namesAResourceTagAWSIgnoresFor(w.action, statement.Condition) || tagsOnlyInsideACreate(statement.Condition) {
-			continue
-		}
-		if conditionHolds(t, statement.Condition, w.request) {
-			return true
-		}
+	var statements []parsedStatement
+	for _, document := range credentialsOfTier(t, tier) {
+		statements = append(statements, parsePolicy(t, document).Statement...)
 	}
-	return false
+	return statements
 }
 
-func TestAPreviewCredentialReachesNoResourceAProductionCredentialReaches(t *testing.T) {
+func TestACredentialReachesNoResourceTheOtherTiersCredentialsReach(t *testing.T) {
 	t.Parallel()
 
-	witnesses := productionWitnesses(t)
-	for purpose, document := range credentialsOfTier(t, environment.TierPreview) {
-		statements := parsePolicy(t, document).Statement
-		for _, w := range witnesses {
-			if !isOfNoTier(w) && allowsTheWitness(t, statements, w) {
-				t.Errorf("the preview %s credential can %s on %s, which the production credentials reach as %s", purpose, w.action, w.arn, w.resource)
+	for _, tier := range bothTiers {
+		own := statementsOfTier(t, tier)
+		var witnesses []witness
+		for _, w := range witnessesOf(t, tier) {
+			if isOfNoTier(w) {
+				continue
+			}
+			if !anyStatementAllows(t, own, w.action, w.arn, w.request) {
+				t.Fatalf("no %s credential can %s on %s, the request its own grant on %s was built to satisfy", tier, w.action, w.arn, w.resource)
+			}
+			witnesses = append(witnesses, w)
+		}
+		sibling := tier.Sibling()
+		for purpose, document := range credentialsOfTier(t, sibling) {
+			statements := parsePolicy(t, document).Statement
+			for _, w := range witnesses {
+				if anyStatementAllows(t, statements, w.action, w.arn, w.request) {
+					t.Errorf("the %s %s credential can %s on %s, which the %s credentials reach as %s", sibling, purpose, w.action, w.arn, tier, w.resource)
+				}
 			}
 		}
 	}

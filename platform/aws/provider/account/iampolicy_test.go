@@ -72,11 +72,15 @@ func (s *templateText) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-var compiledResourcePatterns sync.Map
+var compiledGlobs sync.Map
 
 func iamResourceMatches(pattern, arn string) bool {
-	if compiled, ok := compiledResourcePatterns.Load(pattern); ok {
-		return compiled.(*regexp.Regexp).MatchString(arn)
+	return iamGlob(pattern).MatchString(arn)
+}
+
+func iamGlob(pattern string) *regexp.Regexp {
+	if compiled, ok := compiledGlobs.Load(pattern); ok {
+		return compiled.(*regexp.Regexp)
 	}
 	var expr strings.Builder
 	for _, r := range pattern {
@@ -90,8 +94,8 @@ func iamResourceMatches(pattern, arn string) bool {
 		}
 	}
 	compiled := regexp.MustCompile("^" + expr.String() + "$")
-	compiledResourcePatterns.Store(pattern, compiled)
-	return compiled.MatchString(arn)
+	compiledGlobs.Store(pattern, compiled)
+	return compiled
 }
 
 func iamResourceMatchesAny(patterns []string, arn string) bool {
