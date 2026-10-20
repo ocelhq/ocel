@@ -45,7 +45,7 @@ func tagInvalidatorRoleResource(ns Namespace, tier environment.Tier) cfn.Resourc
 					{
 						Actions:        []string{"cloudfront:CreateInvalidation"},
 						ResourceValues: []any{cfn.Sub("arn:aws:cloudfront::${AWS::AccountId}:distribution/*")},
-						Condition:      map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier)}},
+						Condition:      ns.Scope(tier).TaggedForItsTier(),
 					},
 					{
 						Actions:        []string{"sqs:SendMessage"},
