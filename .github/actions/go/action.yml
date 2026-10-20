@@ -82,7 +82,7 @@ runs:
       run: |
         set -euo pipefail
         cd "$(dirname "$GO_VERSION_FILE")"
-        sums=$(find . \( -name node_modules -o -name .git \) -prune -o \( -name go.sum -o -name go.work -o -name go.work.sum \) -print | sort | xargs sha256sum | sha256sum)
+        sums=$(find . \( -name node_modules -o -name .git \) -prune -o \( -name go.sum -o -name go.work \) -print | sort | xargs sha256sum | sha256sum)
         base="$RUNNER_OS-$RUNNER_ARCH-$(go env GOVERSION)-"
         wants() { [[ ",${CACHES// /}," == *",$1,"* ]]; }
         if wants build && [ -z "$SCOPE" ]; then
