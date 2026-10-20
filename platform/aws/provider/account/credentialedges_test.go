@@ -203,25 +203,21 @@ func TestBothCredentialsUpdateOnlyTheirOwnTiersEdgeFunctionsAndOnlyTheBootstrapC
 
 func TestTheDeployCredentialCreatesARestAPIOnlyTaggedAsItsOwnTiers(t *testing.T) {
 	const restAPIs = "arn:aws:apigateway:us-east-1::/restapis"
-	tagging := func(managedBy, tier string) requestContext {
-		request := requestContext{}
-		if managedBy != "" {
-			request["aws:RequestTag/"+naming.ManagedByTagKey] = managedBy
+	tagging := func(tier string) requestContext {
+		if tier == "" {
+			return requestContext{}
 		}
-		if tier != "" {
-			request["aws:RequestTag/"+naming.EnvTierTagKey] = tier
-		}
-		return request
+		return requestContext{"aws:RequestTag/" + naming.EnvTierTagKey: tier}
 	}
 	for _, tier := range bothTiers {
 		_, deployDoc := renderedCredentialsOf(t, tier)
-		if !allows(t, deployDoc, "apigateway:POST", restAPIs, tagging(string(defaultNamespace), string(tier))) {
+		if !allows(t, deployDoc, "apigateway:POST", restAPIs, tagging(string(tier))) {
 			t.Errorf("the %s deploy credential cannot create a REST API tagged as its own tier's", tier)
 		}
 		for name, request := range map[string]requestContext{
-			"untagged":                     tagging("", ""),
-			"without the tier tag":         tagging(string(defaultNamespace), ""),
-			"tagged as the sibling tier's": tagging(string(defaultNamespace), string(tier.Sibling())),
+			"untagged":                     tagging(""),
+			"without the tier tag":         {"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace)},
+			"tagged as the sibling tier's": tagging(string(tier.Sibling())),
 		} {
 			if allows(t, deployDoc, "apigateway:POST", restAPIs, request) {
 				t.Errorf("the %s deploy credential can create a REST API %s", tier, name)
@@ -232,15 +228,11 @@ func TestTheDeployCredentialCreatesARestAPIOnlyTaggedAsItsOwnTiers(t *testing.T)
 
 func TestTheDeployCredentialManagesOnlyTheDistributionsTaggedForItsTier(t *testing.T) {
 	const distribution = "arn:aws:cloudfront::111122223333:distribution/E2QWRUHAPOMQZL"
-	tags := func(prefix, managedBy, tier string) requestContext {
-		request := requestContext{}
-		if managedBy != "" {
-			request[prefix+naming.ManagedByTagKey] = managedBy
+	tags := func(prefix, tier string) requestContext {
+		if tier == "" {
+			return requestContext{}
 		}
-		if tier != "" {
-			request[prefix+naming.EnvTierTagKey] = tier
-		}
-		return request
+		return requestContext{prefix + naming.EnvTierTagKey: tier}
 	}
 	onExisting := []string{
 		"cloudfront:DeleteDistribution",
@@ -254,7 +246,7 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsTaggedForItsTier(t *testi
 		if !allows(t, deployDoc, "cloudfront:ListDistributions", iam.AnyResource, nil) {
 			t.Errorf("the %s deploy credential cannot list the distributions it finds its own among", tier)
 		}
-		created := tags("aws:RequestTag/", string(defaultNamespace), string(tier))
+		created := tags("aws:RequestTag/", string(tier))
 		if !allows(t, deployDoc, "cloudfront:CreateDistribution", iam.AnyResource, created) {
 			t.Errorf("the %s deploy credential cannot create a distribution tagged as its own tier's", tier)
 		}
@@ -262,9 +254,9 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsTaggedForItsTier(t *testi
 			t.Errorf("the %s deploy credential cannot tag the distribution it creates as its own tier's", tier)
 		}
 		for name, request := range map[string]requestContext{
-			"untagged":                     tags("aws:RequestTag/", "", ""),
-			"without the tier tag":         tags("aws:RequestTag/", string(defaultNamespace), ""),
-			"tagged as the sibling tier's": tags("aws:RequestTag/", string(defaultNamespace), sibling),
+			"untagged":                     tags("aws:RequestTag/", ""),
+			"without the tier tag":         {"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace)},
+			"tagged as the sibling tier's": tags("aws:RequestTag/", sibling),
 		} {
 			if allows(t, deployDoc, "cloudfront:CreateDistribution", iam.AnyResource, request) {
 				t.Errorf("the %s deploy credential can create a distribution %s", tier, name)
@@ -273,18 +265,18 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsTaggedForItsTier(t *testi
 				t.Errorf("the %s deploy credential can tag a distribution %s", tier, name)
 			}
 		}
-		retagged := tags("aws:ResourceTag/", string(defaultNamespace), sibling)
+		retagged := tags("aws:ResourceTag/", sibling)
 		maps.Copy(retagged, created)
 		if allows(t, deployDoc, "cloudfront:TagResource", distribution, retagged) {
 			t.Errorf("the %s deploy credential can retag the %s tier's distribution as its own", tier, sibling)
 		}
 		for _, action := range onExisting {
-			if !allows(t, deployDoc, action, distribution, tags("aws:ResourceTag/", string(defaultNamespace), string(tier))) {
+			if !allows(t, deployDoc, action, distribution, tags("aws:ResourceTag/", string(tier))) {
 				t.Errorf("the %s deploy credential cannot call %s on a distribution tagged for its tier", tier, action)
 			}
 			for name, request := range map[string]requestContext{
-				"untagged":                     tags("aws:ResourceTag/", "", ""),
-				"tagged as the sibling tier's": tags("aws:ResourceTag/", string(defaultNamespace), sibling),
+				"untagged":                     tags("aws:ResourceTag/", ""),
+				"tagged as the sibling tier's": tags("aws:ResourceTag/", sibling),
 			} {
 				if allows(t, deployDoc, action, distribution, request) {
 					t.Errorf("the %s deploy credential can call %s on a distribution %s", tier, action, name)
@@ -296,11 +288,11 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsTaggedForItsTier(t *testi
 
 func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedForItsTier(t *testing.T) {
 	const vpcOrigin = "arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"
-	tagged := func(managedBy string, tier environment.Tier) requestContext {
-		if managedBy == "" {
+	tagged := func(tier environment.Tier) requestContext {
+		if tier == "" {
 			return requestContext{}
 		}
-		return requestContext{"aws:RequestTag/" + naming.ManagedByTagKey: managedBy, "aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
+		return requestContext{"aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
 	}
 	onCreate := map[string]string{
 		"cloudfront:CreateVpcOrigin": iam.AnyResource,
@@ -309,12 +301,12 @@ func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedForItsTier(t
 	for purpose, document := range bothCredentials(t) {
 		tier := tierOf(purpose)
 		for action, resource := range onCreate {
-			if !allows(t, document, action, resource, tagged(string(defaultNamespace), tier)) {
+			if !allows(t, document, action, resource, tagged(tier)) {
 				t.Errorf("the %s credential cannot call %s on %q for a VPC origin it creates tagged for its tier", purpose, action, resource)
 			}
 			for name, request := range map[string]requestContext{
-				"untagged":                  tagged("", tier),
-				"tagged for the other tier": tagged(string(defaultNamespace), tier.Sibling()),
+				"untagged":                  tagged(""),
+				"tagged for the other tier": tagged(tier.Sibling()),
 			} {
 				if allows(t, document, action, resource, request) {
 					t.Errorf("the %s credential can call %s on %q for a VPC origin %s", purpose, action, resource, name)
@@ -334,8 +326,8 @@ func TestEveryCredentialReadsTheAvailabilityZonesTheContainerFrontsVPCOriginReac
 
 func TestEveryCredentialFindsAndRemovesOnlyItsOwnTiersFailedVPCOrigins(t *testing.T) {
 	const vpcOrigin = "arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"
-	tagged := func(managedBy string, tier environment.Tier) requestContext {
-		return requestContext{"aws:ResourceTag/" + naming.ManagedByTagKey: managedBy, "aws:ResourceTag/" + naming.EnvTierTagKey: string(tier)}
+	tagged := func(tier environment.Tier) requestContext {
+		return requestContext{"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier)}
 	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
@@ -344,12 +336,12 @@ func TestEveryCredentialFindsAndRemovesOnlyItsOwnTiersFailedVPCOrigins(t *testin
 				t.Errorf("the %s %s credential cannot call cloudfront:ListVpcOrigins, so a retried deploy cannot find the VPC origin a failed one left behind", tier, purpose)
 			}
 			for _, action := range []string{"cloudfront:GetVpcOrigin", "cloudfront:DeleteVpcOrigin", "cloudfront:ListTagsForResource"} {
-				if !allows(t, document, action, vpcOrigin, tagged(string(defaultNamespace), tier)) {
+				if !allows(t, document, action, vpcOrigin, tagged(tier)) {
 					t.Errorf("the %s %s credential cannot call %s on a VPC origin tagged for its tier", tier, purpose, action)
 				}
 				for name, request := range map[string]requestContext{
 					"untagged":                     {},
-					"tagged as the sibling tier's": tagged(string(defaultNamespace), tier.Sibling()),
+					"tagged as the sibling tier's": tagged(tier.Sibling()),
 				} {
 					if allows(t, document, action, vpcOrigin, request) {
 						t.Errorf("the %s %s credential can call %s on a VPC origin %s", tier, purpose, action, name)
