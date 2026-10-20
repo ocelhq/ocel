@@ -533,3 +533,40 @@ func TestAPortForwardClaimsTheNetworkWithoutProvisioningItAgainForThisProjectsPa
 		t.Errorf("the network ran %d times, want only its raise: a port forward has no plan that consents to provisioning it again", ups)
 	}
 }
+
+func TestThePlanOfTheFirstContainerAppShowsTheNetworkProvisionedAgainWhenItsTransformsPatchItOtherwise(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	cfg.Transform = &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"enableNetworkAddressUsageMetrics": true}}}}
+	cfg.Network = networkRegion{}
+	cfg.Quotas = roomyQuotas{}
+	stacks := stacksWith(cfg, &mockedEngine{outputs: containerPartOutputs()})
+	if _, err := stacks.Network().ClaimWithoutRepatch(ctx, consumerRef("blog"), progress.Discard()); err != nil {
+		t.Fatalf("ClaimWithoutRepatch(blog) = %v", err)
+	}
+
+	plan, err := stacks.Plan(ctx, spec, progress.Discard())
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
+		return group.Part == network.Part && group.Action == provider.ActionUpdate
+	}) {
+		t.Errorf("plan groups = %+v, want the network provisioned again: raising the container infrastructure claims it with this project's patches", plan.Groups)
+	}
+
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	plan, err = stacks.Plan(ctx, spec, progress.Discard())
+	if err != nil {
+		t.Fatalf("Plan() once the container infrastructure stands = %v", err)
+	}
+	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
+		return group.Part == network.Part && group.Action == provider.ActionUpdate
+	}) {
+		t.Errorf("plan groups = %+v, want the network provisioned again: a container deploy claims it with this project's patches", plan.Groups)
+	}
+}

@@ -11,10 +11,17 @@ import (
 
 func (r *release) planNetwork(ctx context.Context, tier environment.Tier) ([]provider.ChangeGroup, error) {
 	_, present, err := r.network.Read(ctx, tier)
-	if err != nil || present {
+	if err != nil {
 		return nil, err
 	}
-	return []provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, tier)}, nil
+	if !present {
+		return []provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, tier)}, nil
+	}
+	repatched, err := r.network.PlanRepatch(ctx, tier)
+	if err != nil || repatched == nil {
+		return nil, err
+	}
+	return []provider.ChangeGroup{*repatched}, nil
 }
 
 func (r *release) planRepatches(ctx context.Context, tier environment.Tier, functionNetwork bool) ([]provider.ChangeGroup, error) {
