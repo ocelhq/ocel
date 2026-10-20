@@ -1,0 +1,82 @@
+syntax = "proto3";
+package cloud.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/cloud/v1;cloudv1";
+
+import "buf/validate/validate.proto";
+
+message MissingRequest {
+  repeated string digests = 1 [(buf.validate.field).repeated = {
+    max_items: 20000
+    unique: true
+    items: {string: {pattern: "^[0-9a-f]{64}$"}}
+  }];
+}
+
+message MissingResponse {
+  repeated string digests = 1;
+}
+
+message SourceFile {
+  option (buf.validate.message).cel = {
+    id: "source_file.digest_or_symlink"
+    message: "a file is either a regular file with a digest or a symlink with a target"
+    expression: "(this.digest == '') != (this.symlink_target == '')"
+  };
+  option (buf.validate.message).cel = {
+    id: "source_file.symlink_is_bare"
+    message: "a symlink has no size and is not executable"
+    expression: "this.symlink_target == '' || (this.size == 0u && !this.executable)"
+  };
+
+  string path = 1 [
+    (buf.validate.field).string = {min_len: 1, max_len: 4096},
+    (buf.validate.field).cel = {
+      id: "source_file.path"
+      message: "a path is relative and slash-separated: every segment must be non-empty and neither \".\" nor \"..\", and the path may contain no backslash and no control character"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')"
+    }
+  ];
+
+  string digest = 2 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {pattern: "^[0-9a-f]{64}$"}
+  }];
+
+  uint64 size = 3;
+
+  bool executable = 4;
+
+  string symlink_target = 5 [
+    (buf.validate.field).string.max_len = 4096,
+    (buf.validate.field).cel = {
+      id: "source_file.symlink_target"
+      message: "a symlink target is relative to the symlink and may contain no backslash and no control character"
+      expression: "!this.startsWith('/') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')"
+    }
+  ];
+}
+
+message SourceManifest {
+  option (buf.validate.message).cel = {
+    id: "source_manifest.unique_paths"
+    message: "each path is listed once"
+    expression: "this.files.map(f, f.path).unique()"
+  };
+
+  repeated SourceFile files = 1 [(buf.validate.field).repeated = {min_items: 1, max_items: 200000}];
+}
+
+message CommitSourceRequest {
+  SourceManifest manifest = 1 [(buf.validate.field).required = true];
+}
+
+message CommitSourceResponse {
+  string source_id = 1;
+}
+
+service UploadService {
+  rpc Missing(MissingRequest) returns (MissingResponse);
+
+  rpc CommitSource(CommitSourceRequest) returns (CommitSourceResponse);
+}
