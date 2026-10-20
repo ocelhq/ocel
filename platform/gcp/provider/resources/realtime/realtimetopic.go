@@ -64,7 +64,7 @@ func (r realtimeEnvironment) ensureTopic(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	topic := &pubsub.Topic{Labels: labels}
+	topic := &pubsub.Topic{Labels: labels, Tags: r.clients.InlineTierTags(r.ref.Tier)}
 	_, err = googleretry.Attempted(ctx, service.Projects.Topics.Create(r.topic(), topic).Context(ctx).Do)
 	if err != nil && googleretry.AnsweredCode(err) != http.StatusConflict {
 		return fmt.Errorf("create the realtime topic %s: %w", r.topic(), err)
@@ -76,6 +76,16 @@ func (r realtimeEnvironment) ensureTopic(ctx context.Context) error {
 func (r realtimeEnvironment) removeTopic(ctx context.Context) error {
 	service, err := r.clients.Workload().PubSub()
 	if err != nil {
+		return err
+	}
+	_, err = googleretry.Attempted(ctx, service.Projects.Topics.Get(r.topic()).Context(ctx).Do)
+	if googleretry.AnsweredCode(err) == http.StatusNotFound {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read the realtime topic %s: %w", r.topic(), err)
+	}
+	if err := r.clients.RemoveTierTag(ctx, r.ref.Tier, r.clients.PubSubTagged(r.topic())); err != nil {
 		return err
 	}
 	_, err = googleretry.Attempted(ctx, service.Projects.Topics.Delete(r.topic()).Context(ctx).Do)

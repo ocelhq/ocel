@@ -239,12 +239,8 @@ func (c *Clients) AccountTagged(uniqueID string) TaggedResource {
 	return TaggedResource{Name: "//iam.googleapis.com/projects/" + c.Project() + "/serviceAccounts/" + uniqueID}
 }
 
-func (c *Clients) TopicTagged(topic string) TaggedResource {
-	return TaggedResource{Name: "//pubsub.googleapis.com/projects/" + c.Project() + "/topics/" + topic}
-}
-
-func (c *Clients) SubscriptionTagged(subscription string) TaggedResource {
-	return TaggedResource{Name: "//pubsub.googleapis.com/projects/" + c.Project() + "/subscriptions/" + subscription}
+func (c *Clients) PubSubTagged(path string) TaggedResource {
+	return TaggedResource{Name: "//pubsub.googleapis.com/" + path}
 }
 
 func (c *Clients) RepositoryTagged(repository string) TaggedResource {

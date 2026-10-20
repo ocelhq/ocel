@@ -34,12 +34,33 @@ type Push struct {
 type Topology struct {
 	Names  Names
 	Topics map[string]*provider.TopicSpec
+	Tags   TierTags
 }
 
 type Subscriptions struct {
 	Names  Names
 	Topics map[string]*provider.TopicSpec
 	Pushes map[string]Push
+	Tags   TierTags
+}
+
+type TierTags struct {
+	Inline map[string]string
+	Remove func(ctx context.Context, path string) error
+}
+
+func (t TierTags) removeFrom(ctx context.Context, path string, read func() error) error {
+	if t.Remove == nil {
+		return nil
+	}
+	err := googleretry.Done(ctx, read)
+	if isAnswered(err, http.StatusNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read Pub/Sub %s: %w", path, err)
+	}
+	return t.Remove(ctx, path)
 }
 
 func PushPath(topic, consumer string) string {
@@ -59,7 +80,7 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 		if err != nil {
 			return err
 		}
-		if err := ensureTopic(ctx, service, path); err != nil {
+		if err := ensureTopic(ctx, service, path, t.Tags.Inline); err != nil {
 			return err
 		}
 		if isScheduled(topic) {
@@ -91,6 +112,7 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 			if err != nil {
 				return err
 			}
+			desired.Tags = s.Tags.Inline
 			if err := ensureSubscription(ctx, service, path, desired); err != nil {
 				return err
 			}
@@ -125,9 +147,9 @@ func durationText(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', -1, 64) + "s"
 }
 
-func ensureTopic(ctx context.Context, service *pubsub.Service, path string) error {
+func ensureTopic(ctx context.Context, service *pubsub.Service, path string, tags map[string]string) error {
 	err := googleretry.Done(ctx, func() error {
-		_, err := service.Projects.Topics.Create(path, &pubsub.Topic{}).Context(ctx).Do()
+		_, err := service.Projects.Topics.Create(path, &pubsub.Topic{Tags: tags}).Context(ctx).Do()
 		return err
 	})
 	if err != nil && !isAnswered(err, http.StatusConflict) {
@@ -222,6 +244,12 @@ func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, t
 	for _, consumer := range consumers {
 		subscription, err := t.Names.subscriptionPath(clients.Project, topic, consumer)
 		if err != nil {
+			return err
+		}
+		if err := t.Tags.removeFrom(ctx, subscription, func() error {
+			_, err := service.Projects.Subscriptions.Get(subscription).Context(ctx).Do()
+			return err
+		}); err != nil {
 			return err
 		}
 		if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
@@ -359,6 +387,12 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 		}
 		topic, err := t.Names.topicPath(clients.Project, name)
 		if err != nil {
+			return err
+		}
+		if err := t.Tags.removeFrom(ctx, topic, func() error {
+			_, err := service.Projects.Topics.Get(topic).Context(ctx).Do()
+			return err
+		}); err != nil {
 			return err
 		}
 		if err := deleteIgnoringMissing(ctx, "topic "+topic, func() error {
