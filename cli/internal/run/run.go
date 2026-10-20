@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
 type missingVariablesError interface {
@@ -45,6 +46,7 @@ type Run struct {
 	headline    string
 	assumed     []*streamv1.Assumption
 	cloudJob    *streamv1.CloudJob
+	report      *consolev1.Deployment
 
 	endOnce sync.Once
 }
@@ -61,6 +63,7 @@ func (r *Run) End(errp *error) {
 		result.UrlNotes = r.urlNotes
 		result.Assumed = r.assumed
 		result.CloudJob = r.cloudJob
+		result.DeploymentReport = r.report
 		result.Tier, result.Origin = r.identity.GetTier(), r.identity.GetOrigin()
 		r.mu.Unlock()
 		result.DurationMs = r.bus.now().Sub(r.start).Milliseconds()
@@ -143,6 +146,12 @@ func (r *Run) SetCloudJob(job *streamv1.CloudJob) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.cloudJob = job
+}
+
+func (r *Run) SetDeploymentReport(report *consolev1.Deployment) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.report = report
 }
 
 func (r *Run) SetApps(apps []*progressv1.AppResult) {

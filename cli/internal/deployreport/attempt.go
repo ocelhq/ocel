@@ -39,6 +39,18 @@ func (a Attempt) Failed(finishedAt time.Time, apps []*consolev1.App, cause error
 	return deployment
 }
 
+func (a *Attempt) Report(finishedAt time.Time, apps []*consolev1.App, succeeded *consolev1.Deployment, runErr error) *consolev1.Deployment {
+	switch {
+	case a == nil:
+		return nil
+	case succeeded != nil:
+		return succeeded
+	case runErr != nil:
+		return a.Failed(finishedAt, apps, runErr)
+	}
+	return nil
+}
+
 func (a Attempt) deployment(finishedAt time.Time, apps []*consolev1.App) *consolev1.Deployment {
 	if finishedAt.Before(a.StartedAt) {
 		finishedAt = a.StartedAt

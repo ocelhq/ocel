@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -76,10 +77,15 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		}
 	}
 
-	var attempt *deployreport.Attempt
-	var succeeded *consolev1.Deployment
-	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) error {
+	var report *consolev1.Deployment
+	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
+		var attempt *deployreport.Attempt
+		var succeeded *consolev1.Deployment
+		defer func() {
+			report = attempt.Report(time.Now(), nil, succeeded, err)
+			run.SetDeploymentReport(report)
+		}()
 		history, err := promotionHistory(ctx, check, provider, cfg)
 		check.End(err)
 		if err != nil {
@@ -134,7 +140,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, rolled.GetPromotionId(), noteSuffix))
 		return nil
 	})
-	invocation.Console.ReportAttempt(ctx, attempt, nil, succeeded, err, stderr)
+	invocation.Console.ReportDeployment(ctx, cfg.Dir, report, stderr)
 	return err
 }
 

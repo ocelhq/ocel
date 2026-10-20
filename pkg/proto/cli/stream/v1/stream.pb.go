@@ -11,6 +11,7 @@ import (
 	v12 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	v13 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -666,26 +667,27 @@ func (x *ResumedEvent) GetReason() string {
 }
 
 type RunSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Detail        string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
-	DurationMs    int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	LogPath       string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
-	Headline      string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
-	UrlNotes      []string               `protobuf:"bytes,7,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
-	Propagation   *v1.Propagation        `protobuf:"bytes,8,opt,name=propagation,proto3" json:"propagation,omitempty"`
-	Interrupted   bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
-	Apps          []*v1.AppResult        `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
-	Missing       *MissingVariables      `protobuf:"bytes,11,opt,name=missing,proto3" json:"missing,omitempty"`
-	ChangeStarted bool                   `protobuf:"varint,12,opt,name=change_started,json=changeStarted,proto3" json:"change_started,omitempty"`
-	Tier          v11.Tier               `protobuf:"varint,13,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
-	Origin        *Party                 `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"`
-	PromotionId   string                 `protobuf:"bytes,15,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
-	Error         *RunError              `protobuf:"bytes,16,opt,name=error,proto3" json:"error,omitempty"`
-	Assumed       []*Assumption          `protobuf:"bytes,17,rep,name=assumed,proto3" json:"assumed,omitempty"`
-	CloudJob      *CloudJob              `protobuf:"bytes,18,opt,name=cloud_job,json=cloudJob,proto3" json:"cloud_job,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Success          bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Detail           string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	DurationMs       int64                  `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	LogPath          string                 `protobuf:"bytes,4,opt,name=log_path,json=logPath,proto3" json:"log_path,omitempty"`
+	Headline         string                 `protobuf:"bytes,5,opt,name=headline,proto3" json:"headline,omitempty"`
+	UrlNotes         []string               `protobuf:"bytes,7,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
+	Propagation      *v1.Propagation        `protobuf:"bytes,8,opt,name=propagation,proto3" json:"propagation,omitempty"`
+	Interrupted      bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
+	Apps             []*v1.AppResult        `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
+	Missing          *MissingVariables      `protobuf:"bytes,11,opt,name=missing,proto3" json:"missing,omitempty"`
+	ChangeStarted    bool                   `protobuf:"varint,12,opt,name=change_started,json=changeStarted,proto3" json:"change_started,omitempty"`
+	Tier             v11.Tier               `protobuf:"varint,13,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Origin           *Party                 `protobuf:"bytes,14,opt,name=origin,proto3" json:"origin,omitempty"`
+	PromotionId      string                 `protobuf:"bytes,15,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	Error            *RunError              `protobuf:"bytes,16,opt,name=error,proto3" json:"error,omitempty"`
+	Assumed          []*Assumption          `protobuf:"bytes,17,rep,name=assumed,proto3" json:"assumed,omitempty"`
+	CloudJob         *CloudJob              `protobuf:"bytes,18,opt,name=cloud_job,json=cloudJob,proto3" json:"cloud_job,omitempty"`
+	DeploymentReport *v13.Deployment        `protobuf:"bytes,19,opt,name=deployment_report,json=deploymentReport,proto3" json:"deployment_report,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *RunSummary) Reset() {
@@ -833,6 +835,13 @@ func (x *RunSummary) GetAssumed() []*Assumption {
 func (x *RunSummary) GetCloudJob() *CloudJob {
 	if x != nil {
 		return x.CloudJob
+	}
+	return nil
+}
+
+func (x *RunSummary) GetDeploymentReport() *v13.Deployment {
+	if x != nil {
+		return x.DeploymentReport
 	}
 	return nil
 }
@@ -1045,7 +1054,7 @@ var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a\x12cloud/v1/job.proto\x1a'common/environment/v1/environment.proto\x1a!common/progress/v1/progress.proto\"\xb8\x02\n" +
+	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a\x12cloud/v1/job.proto\x1a'common/environment/v1/environment.proto\x1a!common/progress/v1/progress.proto\x1a\x1bconsole/v1/deployment.proto\"\xb8\x02\n" +
 	"\bRunEvent\x12@\n" +
 	"\toperation\x18\x01 \x01(\v2\".common.progress.v1.OperationEventR\toperation\x127\n" +
 	"\awaiting\x18\x14 \x01(\v2\x1b.cli.stream.v1.WaitingEventH\x00R\awaiting\x127\n" +
@@ -1086,7 +1095,7 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xc9\x05\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x8e\x06\n" +
 	"\n" +
 	"RunSummary\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
@@ -1107,7 +1116,8 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\fpromotion_id\x18\x0f \x01(\tR\vpromotionId\x12-\n" +
 	"\x05error\x18\x10 \x01(\v2\x17.cli.stream.v1.RunErrorR\x05error\x123\n" +
 	"\aassumed\x18\x11 \x03(\v2\x19.cli.stream.v1.AssumptionR\aassumed\x124\n" +
-	"\tcloud_job\x18\x12 \x01(\v2\x17.cli.stream.v1.CloudJobR\bcloudJob\"\xad\x01\n" +
+	"\tcloud_job\x18\x12 \x01(\v2\x17.cli.stream.v1.CloudJobR\bcloudJob\x12C\n" +
+	"\x11deployment_report\x18\x13 \x01(\v2\x16.console.v1.DeploymentR\x10deploymentReport\"\xad\x01\n" +
 	"\bCloudJob\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12(\n" +
@@ -1159,9 +1169,10 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*v12.JobInput)(nil),      // 15: cloud.v1.JobInput
 	(*v1.Propagation)(nil),    // 16: common.progress.v1.Propagation
 	(*v1.AppResult)(nil),      // 17: common.progress.v1.AppResult
-	(v12.JobState)(0),         // 18: cloud.v1.JobState
-	(*v12.JobResult)(nil),     // 19: cloud.v1.JobResult
-	(*v12.JobError)(nil),      // 20: cloud.v1.JobError
+	(*v13.Deployment)(nil),    // 18: console.v1.Deployment
+	(v12.JobState)(0),         // 19: cloud.v1.JobState
+	(*v12.JobResult)(nil),     // 20: cloud.v1.JobResult
+	(*v12.JobError)(nil),      // 21: cloud.v1.JobError
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	13, // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
@@ -1184,14 +1195,15 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	11, // 17: cli.stream.v1.RunSummary.error:type_name -> cli.stream.v1.RunError
 	12, // 18: cli.stream.v1.RunSummary.assumed:type_name -> cli.stream.v1.Assumption
 	10, // 19: cli.stream.v1.RunSummary.cloud_job:type_name -> cli.stream.v1.CloudJob
-	18, // 20: cli.stream.v1.CloudJob.state:type_name -> cloud.v1.JobState
-	19, // 21: cli.stream.v1.CloudJob.result:type_name -> cloud.v1.JobResult
-	20, // 22: cli.stream.v1.CloudJob.error:type_name -> cloud.v1.JobError
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	18, // 20: cli.stream.v1.RunSummary.deployment_report:type_name -> console.v1.Deployment
+	19, // 21: cli.stream.v1.CloudJob.state:type_name -> cloud.v1.JobState
+	20, // 22: cli.stream.v1.CloudJob.result:type_name -> cloud.v1.JobResult
+	21, // 23: cli.stream.v1.CloudJob.error:type_name -> cloud.v1.JobError
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }
