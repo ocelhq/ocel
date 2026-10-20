@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -66,7 +67,7 @@ func (b Engine) MakeAccount(ctx context.Context, read Survey, name string) error
 	if err != nil {
 		return err
 	}
-	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.Clients.Project(), &iam.CreateServiceAccountRequest{
+	made, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.Clients.Project(), &iam.CreateServiceAccountRequest{
 		AccountId: name,
 		ServiceAccount: &iam.ServiceAccount{
 			DisplayName: purpose.DisplayName,
@@ -75,6 +76,14 @@ func (b Engine) MakeAccount(ctx context.Context, read Survey, name string) error
 	}).Context(ctx).Do)
 	if err != nil && !gcloud.Taken(err) {
 		return fmt.Errorf("create the %s service account: %w", name, err)
+	}
+	if made == nil {
+		if made, err = b.Clients.ReadAccount(ctx, name); err != nil || made == nil {
+			return cmp.Or(err, fmt.Errorf("the %s service account was taken and cannot be read back", name))
+		}
+	}
+	if err := b.Clients.EnsureTierTag(ctx, read.Tier, b.Clients.AccountTagged(made.UniqueId)); err != nil {
+		return err
 	}
 	if err := b.GrantRunAs(ctx, name); err != nil {
 		return err

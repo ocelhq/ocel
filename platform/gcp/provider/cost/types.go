@@ -21,4 +21,5 @@ const (
 	SQLInstanceType         = "google_sql_database_instance"
 	MemorystoreInstanceType = "google_memorystore_instance"
 	TagKeyType              = "google_tags_tag_key"
+	TagBindingType          = "google_tags_tag_binding"
 )

@@ -26,6 +26,7 @@ const (
 	KindGrant          Kind = "resourcemanager:grant"
 	KindQueue          Kind = "cloudtasks:queue"
 	KindTierTag        Kind = "resourcemanager:tagkey"
+	KindOutsideTag     Kind = "resourcemanager:tagbinding"
 
 	KindSQLInstance          Kind = "sqladmin:instance"
 	KindMemorystoreInstance  Kind = "memorystore:instance"
@@ -74,6 +75,7 @@ func init() {
 		KindGrant:          grantKind,
 		KindQueue:          queueKind,
 		KindTierTag:        tierTagKind,
+		KindOutsideTag:     outsideAccountsKind,
 		KindService:        {noun: "Cloud Run service", terraform: cost.CloudRunServiceType},
 		KindSchedule:       {noun: "Cloud Scheduler job", terraform: cost.SchedulerJobType},
 	}

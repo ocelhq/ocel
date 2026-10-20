@@ -42,6 +42,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_tags_tag_binding:acme-prod/ocel-tier/outside",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_tags_tag_binding",
+      "name": "acme-prod/ocel-tier/outside",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_firestore_database:ocel-preview-records",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

@@ -8,6 +8,10 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_tags_tag_binding:acme-prod/ocel-tier/outside",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_firestore_database:ocel-prod-records",
       "status": "STATUS_PRICED",
       "components": [
@@ -595,7 +599,7 @@
   ],
   "coverage": {
     "supported": 16,
-    "free": 20,
+    "free": 21,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
@@ -619,6 +623,7 @@
       "google_secret_manager_secret",
       "google_service_account",
       "google_storage_bucket",
+      "google_tags_tag_binding",
       "google_tags_tag_key"
     ]
   },

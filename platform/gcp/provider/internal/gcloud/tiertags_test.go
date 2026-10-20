@@ -148,7 +148,7 @@ func TestAProjectWithoutTheTierTagValueIsToldToBootstrapTheTier(t *testing.T) {
 	clients := tags.Tagged(googletest.Clients("http://127.0.0.1:1"))
 
 	err := clients.EnsureTierTag(ctx, environment.TierPreview, clients.BucketTagged("ocel-preview-state"))
-	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap --tier preview") {
+	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap preview") {
 		t.Fatalf("binding a tag value the project lacks answered %v, want it to name the bootstrap that makes it", err)
 	}
 }
