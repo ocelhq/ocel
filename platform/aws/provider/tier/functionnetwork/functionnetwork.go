@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
@@ -103,9 +102,14 @@ func nameFor(namespace string, tier environment.Tier, parts ...string) string {
 	return naming.OcelName(namespace, tier, append([]string{functionsWord}, parts...)...)
 }
 
-func stackTags(namespace string, tier environment.Tier) map[string]string {
+func projectTags(namespace string, tier environment.Tier) map[string]string {
 	tags := naming.OcelTags(namespace, tier)
 	tags["ocel:project"] = Slug
+	return tags
+}
+
+func stackTags(namespace string, tier environment.Tier) map[string]string {
+	tags := projectTags(namespace, tier)
 	tags[stackTagKey] = StackRef(tier).Name.String()
 	return tags
 }
@@ -191,18 +195,7 @@ func refuseFullAddresses(ctx context.Context, owner sharedstack.Owner, tier envi
 }
 
 func isAddressOf(address ec2types.Address, namespace string, tier environment.Tier) bool {
-	want := stackTags(namespace, tier)
-	matched := 0
-	for _, tag := range address.Tags {
-		key := aws.ToString(tag.Key)
-		if key == "ocel:project" || key == naming.ManagedByTagKey || key == naming.EnvTierTagKey {
-			if aws.ToString(tag.Value) != want[key] {
-				return false
-			}
-			matched++
-		}
-	}
-	return matched == 3
+	return component.HasTags(address.Tags, projectTags(namespace, tier))
 }
 
 func (s *Stacks) RecordConsumer(ctx context.Context, ref provider.StackRef) error {

@@ -12,7 +12,6 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
@@ -148,18 +147,7 @@ func (o otherVPCs) pick(at Placement) (string, error) {
 }
 
 func isNetworkOf(vpc ec2types.Vpc, namespace string, tier environment.Tier) bool {
-	want := stackTags(namespace, tier)
-	matched := 0
-	for _, tag := range vpc.Tags {
-		key := aws.ToString(tag.Key)
-		if key == projectTagKey || key == naming.ManagedByTagKey || key == naming.EnvTierTagKey {
-			if aws.ToString(tag.Value) != want[key] {
-				return false
-			}
-			matched++
-		}
-	}
-	return matched == 3
+	return component.HasTags(vpc.Tags, projectTags(namespace, tier))
 }
 
 func blocksOf(vpc ec2types.Vpc) []string {
