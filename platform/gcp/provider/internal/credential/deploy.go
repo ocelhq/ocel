@@ -124,7 +124,7 @@ func (d Deploy) Untagged() Grant {
 }
 
 func (d Deploy) TagValue() Grant {
-	return Grant{Role: TagUserRole, On: d.names.TierTagValuePath(d.tier)}
+	return Grant{Role: TagUserRole, On: Resource{Noun: "the tag value", Name: d.names.TierTagValuePath(d.tier)}}
 }
 
 func (d Deploy) keyRingPath() string {
@@ -151,7 +151,7 @@ func (d Deploy) ProjectKeys() Grant {
 }
 
 func (d Deploy) Queue() Grant {
-	return Grant{Role: QueueRole, On: d.names.DelayQueuePath(d.region, d.tier)}
+	return Grant{Role: QueueRole, On: Resource{Noun: "the queue", Name: d.names.DelayQueuePath(d.region, d.tier)}}
 }
 
 func (d Deploy) Stores() Grant {

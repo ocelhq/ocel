@@ -129,11 +129,11 @@ func grantableRolesOf(t *testing.T, grant credential.Grant) []string {
 
 func grantReaches(t *testing.T, grant credential.Grant, resource checkedResource) bool {
 	t.Helper()
-	if grant.On != "" {
-		if !resourceName.MatchString(grant.On) {
-			t.Fatalf("%s is granted on %q, which is not a resource name this test can place", grant, grant.On)
+	if on := grant.On.Name; on != "" {
+		if !resourceName.MatchString(on) {
+			t.Fatalf("%s is granted on %q, which is not a resource name this test can place", grant, on)
 		}
-		if resource.name != grant.On && !strings.HasPrefix(resource.name, grant.On+"/") {
+		if resource.name != on && !strings.HasPrefix(resource.name, on+"/") {
 			return false
 		}
 	}
