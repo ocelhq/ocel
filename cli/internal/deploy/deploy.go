@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
@@ -51,6 +52,9 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	}
 	if opts.NoWait {
 		return commands.RefuseNoWait()
+	}
+	if opts.Yes && dependencies.JobAnswers != nil {
+		return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("`%s` runs inside an Ocel Cloud job, where the console answers every confirmation, so --yes would consent for a person nobody asked: drop it", target.command())}
 	}
 	policy, cfg, err := ensureProject(ctx, dependencies, target.command(), cwd, resolved.Project, opts.Yes, opts.Dry, stdout, stdin)
 	if err != nil || cfg == nil {

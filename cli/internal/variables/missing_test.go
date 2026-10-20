@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -314,5 +315,52 @@ func TestMissingCredentialsReportVariablesMissing(t *testing.T) {
 	got := clierror.NewRunError(err)
 	if got.GetCode() != "variables.missing" || !strings.Contains(got.GetMessage(), "AWS_SECRET_ACCESS_KEY") {
 		t.Fatalf("run error = %s, want variables.missing naming the key", protojson.Format(got))
+	}
+}
+
+func TestAMissingErrorNamesTheVariablesAJobNeedsWithWhatTheConsoleShowsForEach(t *testing.T) {
+	t.Parallel()
+
+	refusal := &variables.MissingError{
+		Problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), invalid("API_BASE", "/web", "not a URL")},
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Description: "Where orders are kept.", Group: "db"},
+			{Key: "API_BASE", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+		},
+		Groups: []*resourcesv1.GroupDefinition{{Key: "db", Description: "The database."}},
+		Scope:  variables.Scope{Tier: environmentv1.Tier_TIER_PREVIEW},
+	}
+
+	want := &cloudv1.VariablesNeeded{
+		Tier: environmentv1.Tier_TIER_PREVIEW,
+		Variables: []*cloudv1.NeededVariable{
+			{Key: "DATABASE_URL", Secret: true, Description: "Where orders are kept.", Reason: "no value", Group: "db"},
+			{Key: "API_BASE", Folder: "/web", Reason: "set, but not a URL"},
+		},
+		Groups: []*cloudv1.NeededGroup{{Key: "db", Description: "The database."}},
+	}
+	if got := refusal.Needed(); !proto.Equal(got, want) {
+		t.Errorf("Needed() = %v, want %v", got, want)
+	}
+}
+
+func TestAJobAsksForMissingValuesOnlyWhereOcelStoresThem(t *testing.T) {
+	t.Parallel()
+
+	doppler := variables.EnvSource{ID: "doppler", CanCreate: true, Credentials: []string{"DOPPLER_TOKEN"}}
+	for _, tc := range []struct {
+		name     string
+		source   variables.EnvSource
+		problems []*resourcesv1.VariableProblem
+		want     bool
+	}{
+		{name: "no env source", problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", "")}, want: true},
+		{name: "an env source owns the values", source: doppler, problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", "")}, want: false},
+		{name: "ocel stores the env source's credentials", source: doppler, problems: []*resourcesv1.VariableProblem{missing("DOPPLER_TOKEN", "")}, want: true},
+	} {
+		refusal := &variables.MissingError{Problems: tc.problems, Scope: variables.Scope{EnvSource: tc.source}}
+		if got := refusal.SetInStore(); got != tc.want {
+			t.Errorf("%s: SetInStore() = %t, want %t", tc.name, got, tc.want)
+		}
 	}
 }
