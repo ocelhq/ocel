@@ -3,10 +3,12 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	crm "google.golang.org/api/cloudresourcemanager/v3"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -16,6 +18,9 @@ const (
 	ReasonTierTagKept     = "every namespace and both tiers of this project bind their resources to its values, and Google refuses to delete a value a resource, even a deleted one, is still bound to"
 	reasonTierValueAbsent = "it lacks the value of a tier, which that tier's resources would carry"
 	reasonUntagged        = "it carries no ocel-tier tag, and the deploy credential is fenced to its tier by that tag"
+
+	tagKeyReadPermission   = "resourcemanager.tagKeys.get"
+	tagValueReadPermission = "resourcemanager.tagValues.get"
 )
 
 var tierTagKind = KindOps{
@@ -58,13 +63,33 @@ func (b Engine) readTierTagKey(ctx context.Context) (*crm.TagKey, error) {
 		return nil, err
 	}
 	key, err := googleretry.Attempted(ctx, service.TagKeys.GetNamespaced().Name(b.Clients.TierTagKeyPath()).Context(ctx).Do)
-	if gcloud.Absent(err) || gcloud.Forbidden(err) {
-		return nil, nil
+	if err == nil {
+		return key, nil
 	}
+	_, err = b.tagAbsent(ctx, service, err, b.Clients.TierTagKeyPath(), tagKeyReadPermission)
+	return nil, err
+}
+
+func (b Engine) tagAbsent(ctx context.Context, service *crm.Service, err error, path, permission string) (bool, error) {
+	switch {
+	case gcloud.Absent(err):
+		return true, nil
+	case !gcloud.Forbidden(err):
+		return false, fmt.Errorf("read the %s tag: %w", path, err)
+	}
+	project := "projects/" + b.Clients.Project()
+	answer, err := googleretry.Attempted(ctx, service.Projects.TestIamPermissions(project,
+		&crm.TestIamPermissionsRequest{Permissions: []string{permission}}).Context(ctx).Do)
 	if err != nil {
-		return nil, fmt.Errorf("read the %s tag key: %w", b.Clients.TierTagKeyPath(), err)
+		return false, fmt.Errorf("ask %s whether this credential may read its tags: %w", project, err)
 	}
-	return key, nil
+	if slices.Contains(answer.Permissions, permission) {
+		return true, nil
+	}
+	return false, refusal.Refuse(refusal.CodeDenied,
+		"this credential lacks %s on project %s, and Google answers a tag it may not read as it answers a tag that does not exist, so whether %s exists is unknown.\n"+
+			"Granting roles/resourcemanager.tagAdmin, which a bootstrap credential holds, covers it",
+		permission, b.Clients.Project(), path)
 }
 
 func (b Engine) missingTierValues(ctx context.Context) ([]environment.Tier, error) {
@@ -74,12 +99,17 @@ func (b Engine) missingTierValues(ctx context.Context) ([]environment.Tier, erro
 	}
 	var missing []environment.Tier
 	for _, tier := range tierTagValues() {
-		_, err := googleretry.Attempted(ctx, service.TagValues.GetNamespaced().Name(b.Clients.TierTagValuePath(tier)).Context(ctx).Do)
-		switch {
-		case gcloud.Absent(err) || gcloud.Forbidden(err):
+		path := b.Clients.TierTagValuePath(tier)
+		_, err := googleretry.Attempted(ctx, service.TagValues.GetNamespaced().Name(path).Context(ctx).Do)
+		if err == nil {
+			continue
+		}
+		absent, err := b.tagAbsent(ctx, service, err, path, tagValueReadPermission)
+		if err != nil {
+			return nil, err
+		}
+		if absent {
 			missing = append(missing, tier)
-		case err != nil:
-			return nil, fmt.Errorf("read the %s tag value: %w", b.Clients.TierTagValuePath(tier), err)
 		}
 	}
 	return missing, nil
