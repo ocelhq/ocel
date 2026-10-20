@@ -23,8 +23,8 @@ import (
 type Provider struct {
 	span      *run.Span
 	questions Questions
-	spec      LaunchSpec
-	process   *Process
+	name      string
+	transport transport
 }
 
 func Start(ctx context.Context, cfg *project.Project, span *run.Span, questions Questions, pinning executables.Pinning) (*Provider, error) {
@@ -47,21 +47,21 @@ func start(ctx context.Context, span *run.Span, questions Questions, spec Launch
 		process.Close()
 		return nil, err
 	}
-	return &Provider{span: span, questions: questions, spec: spec, process: process}, nil
+	return &Provider{span: span, questions: questions, name: spec.ProviderName, transport: process}, nil
 }
 
-func (p *Provider) Name() string { return p.spec.ProviderName }
+func (p *Provider) Name() string { return p.name }
 
-func (p *Provider) Facts() *contractv1.ProviderFacts { return p.process.Facts() }
+func (p *Provider) Facts() *contractv1.ProviderFacts { return p.transport.Facts() }
 
-func (p *Provider) Close() { p.process.Close() }
+func (p *Provider) Close() { p.transport.Close() }
 
-func (p *Provider) callAnswering(ctx context.Context, call func(*Process) error) error {
-	err := call(p.process)
-	if confirmed, err := p.questions.answer(ctx, p.process, err); !confirmed {
+func (p *Provider) callAnswering(ctx context.Context, call func(transport) error) error {
+	err := call(p.transport)
+	if confirmed, err := p.questions.answer(ctx, p.transport, err); !confirmed {
 		return unsupportedIn(err)
 	}
-	return unsupportedIn(call(p.process))
+	return unsupportedIn(call(p.transport))
 }
 
 type unsupportedCall struct {
@@ -89,8 +89,8 @@ func unsupportedIn(err error) error {
 }
 
 func (p *Provider) Call(ctx context.Context, call func(contractv1connect.ProviderServiceClient) error) error {
-	return p.callAnswering(ctx, func(r *Process) error {
-		client, err := r.Client()
+	return p.callAnswering(ctx, func(t transport) error {
+		client, err := t.Client()
 		if err != nil {
 			return err
 		}
@@ -104,8 +104,8 @@ func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, cal
 
 func ReadLogs(ctx context.Context, p *Provider, req *contractv1.ReadLogsRequest, onResponse func(*contractv1.ReadLogsResponse) error) error {
 	delivered := false
-	return p.callAnswering(ctx, func(r *Process) error {
-		err := r.readLogs(ctx, req, func(resp *contractv1.ReadLogsResponse) error {
+	return p.callAnswering(ctx, func(t transport) error {
+		err := readLogs(ctx, t, req, func(resp *contractv1.ReadLogsResponse) error {
 			delivered = true
 			return onResponse(resp)
 		})
@@ -118,8 +118,8 @@ func ReadLogs(ctx context.Context, p *Provider, req *contractv1.ReadLogsRequest,
 
 func Preflight(ctx context.Context, p *Provider, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
 	var resp *contractv1.PreflightResponse
-	err := p.callAnswering(ctx, func(r *Process) (err error) {
-		resp, err = r.preflight(ctx, req, p.span.Forward)
+	err := p.callAnswering(ctx, func(t transport) (err error) {
+		resp, err = preflight(ctx, t, req, p.span.Forward)
 		return err
 	})
 	return resp, err
@@ -139,20 +139,20 @@ func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call 
 
 func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
 	var result *progressv1.OperationResult
-	err := p.callAnswering(ctx, func(r *Process) error {
+	err := p.callAnswering(ctx, func(t transport) error {
 		var err error
-		result, err = stream(ctx, r, rpc, req, call, each)
+		result, err = stream(ctx, t, rpc, req, call, each)
 		return err
 	})
 	return result, err
 }
 
 func (p *Provider) VariableStore() (variablestorev1connect.VariableStoreServiceClient, error) {
-	return p.process.VariableStore()
+	return p.transport.VariableStore()
 }
 
 func (p *Provider) Cost() (costv1connect.CostServiceClient, error) {
-	return p.process.Cost()
+	return p.transport.Cost()
 }
 
 type processLines struct {

@@ -15,19 +15,15 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/localrpc"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
-	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const DefaultReadyTimeout = 10 * time.Second
@@ -133,9 +129,7 @@ type Process struct {
 
 	mu               sync.Mutex
 	network, address string
-	client           contractv1connect.ProviderServiceClient
-	variableStore    variablestorev1connect.VariableStoreServiceClient
-	cost             costv1connect.CostServiceClient
+	clients          clients
 	facts            *contractv1.ProviderFacts
 
 	closeOnce sync.Once
@@ -287,19 +281,12 @@ func (r *Process) configure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	configured, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig, Edge: r.edge})
+	facts, err := configure(ctx, client, r.providerName, r.providerConfig, r.edge)
 	if err != nil {
-		var rejected *connect.Error
-		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
-			if code, named := provider.RefusedCode(err); named && code == refusal.CodeUnknownOption {
-				return fmt.Errorf("the config configures provider %q with options it does not accept: %s", r.providerName, rejected.Message())
-			}
-			return fmt.Errorf("provider %q refuses the config it was given: %s", r.providerName, rejected.Message())
-		}
-		return fmt.Errorf("provider: configure the provider session: %w", err)
+		return err
 	}
 	r.mu.Lock()
-	r.facts = configured.GetFacts()
+	r.facts = facts
 	r.mu.Unlock()
 	return nil
 }
@@ -322,17 +309,10 @@ func (r *Process) dial(ready localrpc.Readiness) error {
 	}
 	httpClient := localrpc.HTTPClient(network, address, config)
 
-	opts := connect.WithClientOptions(
-		connect.WithInterceptors(traceParentInterceptor{}, validate.NewInterceptor()),
-		connect.WithReadMaxBytes(r.maxMessageBytes),
-	)
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.network, r.address = network, address
-	r.client = contractv1connect.NewProviderServiceClient(httpClient, "https://localhost", opts)
-	r.variableStore = variablestorev1connect.NewVariableStoreServiceClient(httpClient, "https://localhost", opts)
-	r.cost = costv1connect.NewCostServiceClient(httpClient, "https://localhost", opts)
+	r.clients = newClients(httpClient, "https://localhost", r.maxMessageBytes)
 	return nil
 }
 
@@ -343,148 +323,40 @@ func (r *Process) Name() string {
 func (r *Process) Cost() (costv1connect.CostServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.cost == nil {
+	if r.clients.cost == nil {
 		return nil, ErrClientUnavailable
 	}
-	return r.cost, nil
+	return r.clients.cost, nil
 }
 
 func (r *Process) VariableStore() (variablestorev1connect.VariableStoreServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.variableStore == nil {
+	if r.clients.variableStore == nil {
 		return nil, ErrVariableStoreUnavailable
 	}
-	return r.variableStore, nil
+	return r.clients.variableStore, nil
 }
 
 func (r *Process) Client() (contractv1connect.ProviderServiceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.client == nil {
+	if r.clients.provider == nil {
 		return nil, ErrClientUnavailable
 	}
-	return r.client, nil
+	return r.clients.provider, nil
 }
 
 var ErrVariableStoreUnavailable = errors.New("provider: the variable store was reached before a successful Ready")
 
 var ErrClientUnavailable = errors.New("provider: the provider was reached before a successful Ready")
 
-type streamCall[Req any] func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
-
-func stream[Req any](ctx context.Context, r *Process, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
-	client, err := r.Client()
-	if err != nil {
-		return nil, err
-	}
-	events, callErr := call(client, ctx, req)
-	return r.driveStream(rpc, events, callErr, onEvent)
-}
-
-func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
-	if callErr != nil {
-		return nil, r.callError(rpc, callErr)
-	}
-	defer stream.Close()
-
-	refused := false
-	for stream.Receive() {
-		event := stream.Msg()
-		if onEvent != nil {
-			onEvent(event)
-		}
-		result := event.GetResult()
-		refused = refused || result.GetRefused()
-		if result != nil && !result.GetRefused() {
-			if result.GetSuccess() {
-				return result, nil
-			}
-			return result, &OperationFailedError{Message: result.GetError(), ConnectCode: result.GetConnectCode()}
-		}
-	}
-
-	if err := stream.Err(); err != nil {
-		return nil, r.streamError(rpc, err, refused)
-	}
-	return nil, r.withExitStderr(fmt.Errorf("provider: provider closed the %s stream without a result", rpc))
-}
-
-func (r *Process) callError(rpc string, err error) error {
-	if IsCancelled(err) {
-		return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
-	}
-	return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
-}
-
-func (r *Process) streamError(rpc string, err error, refused bool) error {
-	if IsCancelled(err) {
-		return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
-	}
-	if _, named := provider.RefusedCode(err); refused || named {
-		return fmt.Errorf("provider: call %s: %w", rpc, err)
-	}
-	if connect.IsWireError(err) {
-		return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
-	}
-	return r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
-}
-
-func (r *Process) preflight(ctx context.Context, req *contractv1.PreflightRequest, onProgress func(*progressv1.OperationEvent)) (*contractv1.PreflightResponse, error) {
-	client, err := r.Client()
-	if err != nil {
-		return nil, err
-	}
-	stream, err := client.Preflight(ctx, req)
-	if err != nil {
-		return nil, r.callError("Preflight", err)
-	}
-	defer stream.Close()
-
-	for stream.Receive() {
-		event := stream.Msg()
-		if response := event.GetResponse(); response != nil {
-			return response, nil
-		}
-		onProgress(event.GetProgress())
-	}
-	if err := stream.Err(); err != nil {
-		if connect.IsWireError(err) {
-			return nil, err
-		}
-		return nil, r.streamError("Preflight", err, false)
-	}
-	return nil, r.withExitStderr(errors.New("provider: provider closed the Preflight stream without a response"))
-}
-
-func (r *Process) readLogs(ctx context.Context, req *contractv1.ReadLogsRequest, onResponse func(*contractv1.ReadLogsResponse) error) error {
-	client, err := r.Client()
-	if err != nil {
-		return err
-	}
-	stream, err := client.ReadLogs(ctx, req)
-	if err != nil {
-		return r.callError("ReadLogs", err)
-	}
-	defer stream.Close()
-
-	for stream.Receive() {
-		if err := onResponse(stream.Msg()); err != nil {
-			return err
-		}
-	}
-	if err := stream.Err(); err != nil {
-		return r.streamError("ReadLogs", err, false)
-	}
-	return nil
-}
-
 const (
 	exitGrace      = 500 * time.Millisecond
 	exitStderrTail = 20
 )
 
-func (r *Process) withExitStderr(err error) error {
+func (r *Process) explainLost(err error) error {
 	select {
 	case <-r.done:
 	case <-time.After(exitGrace):
@@ -500,10 +372,6 @@ func (r *Process) withExitStderr(err error) error {
 		return fmt.Errorf("%w\n%s", err, tail)
 	}
 	return err
-}
-
-func IsCancelled(err error) bool {
-	return errors.Is(err, context.Canceled) || connect.CodeOf(err) == connect.CodeCanceled
 }
 
 func (r *Process) Close() {

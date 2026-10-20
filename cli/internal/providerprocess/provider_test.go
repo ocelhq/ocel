@@ -104,7 +104,7 @@ func TestACleanupCallMadeAfterTheRunIsInterruptedStillReachesTheProvider(t *test
 	interrupt()
 
 	select {
-	case <-p.process.done:
+	case <-p.transport.(*Process).done:
 		t.Fatal("the provider exited when the run was interrupted, before its deferred cleanup could reach it")
 	case <-time.After(500 * time.Millisecond):
 	}

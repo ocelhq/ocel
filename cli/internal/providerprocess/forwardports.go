@@ -10,13 +10,13 @@ import (
 func ForwardPorts(ctx context.Context, p *Provider, req *contractv1.ForwardPortsRequest,
 	onResponse func(*contractv1.ForwardPortsResponse), onProgress func(*progressv1.OperationEvent),
 ) error {
-	client, err := p.process.Client()
+	client, err := p.transport.Client()
 	if err != nil {
 		return err
 	}
 	stream, err := client.ForwardPorts(ctx, req)
 	if err != nil {
-		return p.process.callError("ForwardPorts", err)
+		return callError(p.transport, "ForwardPorts", err)
 	}
 	defer stream.Close()
 	for stream.Receive() {
@@ -27,7 +27,7 @@ func ForwardPorts(ctx context.Context, p *Provider, req *contractv1.ForwardPorts
 		onProgress(stream.Msg().GetProgress())
 	}
 	if err := stream.Err(); err != nil {
-		return p.process.streamError("ForwardPorts", err, false)
+		return streamError(p.transport, "ForwardPorts", err, false)
 	}
 	return nil
 }

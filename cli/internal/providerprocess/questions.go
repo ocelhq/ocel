@@ -39,7 +39,7 @@ func (q Questions) holding(ask func() error) error {
 	return q.run.Ask(ask)
 }
 
-func (q Questions) answer(ctx context.Context, process *Process, refused error) (bool, error) {
+func (q Questions) answer(ctx context.Context, t transport, refused error) (bool, error) {
 	question, asked := questionIn(refused)
 	if !asked {
 		return false, refused
@@ -47,7 +47,7 @@ func (q Questions) answer(ctx context.Context, process *Process, refused error) 
 	if !q.attended() && q.Job == nil {
 		return false, clierror.NewInputRequired(refused, printable(question.GetRemedy()))
 	}
-	client, err := process.Client()
+	client, err := t.Client()
 	if err != nil {
 		return false, errors.Join(refused, fmt.Errorf("provider: confirm: %w", err))
 	}
