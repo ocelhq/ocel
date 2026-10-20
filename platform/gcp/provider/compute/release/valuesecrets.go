@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -52,21 +53,36 @@ func ReadValueSecrets(ctx context.Context, store records.Store, tier environment
 }
 
 func changeValueSecrets(ctx context.Context, store records.Store, tier environment.Tier, account string, change func([]string) []string) error {
-	return records.Change(ctx, store, valueSecretsKey(tier, account), func(recorded records.Entry) ([]byte, bool, error) {
+	key := valueSecretsKey(tier, account)
+	return records.RetryWhileStale(ctx, func() (bool, error) {
+		recorded, err := records.ReadOrEmpty(ctx, store, key)
+		if err != nil {
+			return false, err
+		}
 		var held []string
 		if len(recorded.Value) > 0 {
 			if err := json.Unmarshal(recorded.Value, &held); err != nil {
-				return nil, false, fmt.Errorf("read the secrets that hold the values of %s: %w", account, err)
+				return false, fmt.Errorf("read the secrets that hold the values of %s: %w", account, err)
 			}
 		}
 		changed := change(slices.Clone(held))
 		slices.Sort(changed)
 		changed = slices.Compact(changed)
 		if slices.Equal(changed, held) {
-			return nil, false, nil
+			return false, nil
 		}
-		encoded, err := json.Marshal(changed)
-		return encoded, true, err
+		if len(changed) == 0 {
+			err = store.Remove(ctx, key, recorded.Revision)
+		} else if recorded.Value, err = json.Marshal(changed); err == nil {
+			_, err = store.Write(ctx, recorded)
+		}
+		if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
+			return true, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("record the secrets that hold the values of %s: %w", account, err)
+		}
+		return false, nil
 	})
 }
 
@@ -170,7 +186,7 @@ func (p *Release) destroyUnpinnedValues(ctx context.Context, ref provider.StackR
 
 func removeValueSecrets(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, account string) error {
 	secrets, err := ReadValueSecrets(ctx, store, tier, account)
-	if err != nil || len(secrets) == 0 {
+	if err != nil {
 		return err
 	}
 	service, err := c.Secrets()

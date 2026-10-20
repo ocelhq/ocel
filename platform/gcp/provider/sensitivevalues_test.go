@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
@@ -248,5 +251,33 @@ func TestAnEmulatedServiceTakesItsSensitiveValuesAsLiterals(t *testing.T) {
 
 	if got := googletest.EnvOf(server.Service.Template.Containers[0])["STRIPE_KEY"]; got != stripeKey {
 		t.Errorf("STRIPE_KEY = %q, want the value itself: floci-gcp refuses an env valueSource", got)
+	}
+}
+
+func valueSecretsRecordOf(t *testing.T, p *Provider, spec provider.StackSpec) records.Key {
+	t.Helper()
+	account := namesOf(t, p).AppAccount(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App)
+	return records.Partition{Tier: spec.Ref.Tier, Root: stackrecords.RootBootstrap}.Key("appvaluesecrets", account)
+}
+
+func TestDestroyingEveryReleaseOfAnAppEnvironmentLeavesNoRecordOfItsValueSecrets(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	released := newReleasedStacks(p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
+	first := withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": stripeKey})
+	second := functionRelease("d2", image)
+	released.provision(t, first)
+	active := released.provision(t, second)
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+
+	released.destroy(t, first.Ref)
+	released.destroy(t, second.Ref)
+
+	key := valueSecretsRecordOf(t, p, first)
+	if recorded, err := released.store.Read(context.Background(), key); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("%s holds %q after every release of its app environment was destroyed, want it gone", key, recorded.Value)
 	}
 }
