@@ -90,7 +90,10 @@ the project's services reads every environment variable they set, the other tier
 deploy writes each [`sensitive`](/docs/environments#classes) value an app declares to a Secret Manager
 secret of its own, named `<namespace>_values-<project>-<environment>-<app>-<key>-<hash>`, and the
 service reads it from there: the variable references the secret and the version the release pinned,
-and holds no value. Plain values stay in the service's configuration.
+and holds no value. Plain values stay in the service's configuration. The one secret value it still shows is a
+gated container's probe token, which the startup probe sends as a header because Cloud Run takes a
+probe's headers only as written. The token admits only a GET or HEAD of the health check path past
+the [gate](#edge), answered with the app's status and no body.
 
 A deploy adds a new version only when the value changed, and each release pins the version it
 shipped with, so rolling back serves the old value again. Once a release is destroyed, the next
