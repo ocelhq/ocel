@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/ocelhq/ocel/cli/internal/browser"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
