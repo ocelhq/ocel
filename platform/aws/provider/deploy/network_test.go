@@ -521,3 +521,15 @@ func TestANetworkBeingTakenDownIsNotProvisionedAgainByAClaimWhosePatchesDiffer(t
 		t.Errorf("the network ran %d times, want only its raise: a claim the lease refuses provisions nothing under the takedown", ups)
 	}
 }
+
+func TestAPortForwardClaimsTheNetworkWithoutProvisioningItAgainForThisProjectsPatches(t *testing.T) {
+	t.Parallel()
+
+	stacks, engine, _ := repatchingNetwork(t)
+	if _, err := stacks.Network().ClaimWithoutRepatch(context.Background(), consumerRef("ocel-bastion"), progress.Discard()); err != nil {
+		t.Fatalf("ClaimWithoutRepatch() = %v", err)
+	}
+	if ups, _ := engine.networkRuns(); ups != 1 {
+		t.Errorf("the network ran %d times, want only its raise: a port forward has no plan that consents to provisioning it again", ups)
+	}
+}
