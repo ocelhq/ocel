@@ -46,7 +46,7 @@ func (p *Release) EnsureAccount(ctx context.Context, c *gcloud.Clients, spec pro
 
 func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Registry, cacheGrants CacheGrants, spec provider.StackSpec, account, member string, declared map[string]*provider.TopicSpec, referenced []string) ([]grants.Grant, error) {
 	var granted []grants.Grant
-	for _, project := range append([]string{spec.Ref.Project}, referenced...) {
+	for _, project := range valueOwners(spec, referenced) {
 		if err := variables.EnsureProjectKey(ctx, c, spec.Ref.Tier, project); err != nil {
 			return nil, err
 		}
@@ -75,6 +75,13 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 		return nil, err
 	}
 	return append(granted, gated...), nil
+}
+
+func valueOwners(spec provider.StackSpec, referenced []string) []string {
+	if len(spec.App.Values.Secrets) == 0 && len(spec.App.Values.Bindings) == 0 {
+		return nil
+	}
+	return append([]string{spec.Ref.Project}, referenced...)
 }
 
 func CreateAppAccount(ctx context.Context, c *gcloud.Clients, ref provider.StackRef, app string) error {

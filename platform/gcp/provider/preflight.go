@@ -14,17 +14,26 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
+const (
+	runAPI     = "run.googleapis.com"
+	signingAPI = "iamcredentials.googleapis.com"
+)
+
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
 	parts, err := p.partsUsedBy(pre)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	writes := writesProjectDatabase(pre)
-	if !writes && len(parts) == 0 {
+	apis := deployAPIs(pre)
+	if !writes && len(parts) == 0 && len(apis) == 0 {
 		return provider.Plan{}, nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
 	if err != nil {
+		return provider.Plan{}, err
+	}
+	if err := b.RefuseServicesOff(ctx, apis); err != nil {
 		return provider.Plan{}, err
 	}
 	var plan provider.Plan
@@ -50,6 +59,9 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err != nil {
 		return err
 	}
+	if err := p.refuseAPIsOff(ctx, pre); err != nil {
+		return err
+	}
 	if err := p.ensureProjectWritableDatabase(ctx, pre); err != nil {
 		return err
 	}
@@ -69,14 +81,48 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 }
 
 func (p *Provider) partsUsedBy(pre provider.DeployPreflight) ([]string, error) {
-	parts, err := p.components().Preflight(pre.Resources)
+	used, err := p.components().Preflight(pre.Resources)
 	if err != nil {
 		return nil, err
 	}
-	if pre.Edge == alb.Kind {
-		parts = append(parts, albpart.PartName)
+	for _, part := range (deployUse{deploy: pre.Deploy, front: pre.Edge, usages: pre.Apps, uses: pre.Uses}).parts() {
+		if !slices.Contains(used, part.Name) {
+			used = append(used, part.Name)
+		}
 	}
-	return parts, nil
+	if pre.Edge == alb.Kind {
+		used = append(used, albpart.PartName)
+	}
+	var ordered []string
+	for _, each := range tierParts() {
+		if slices.Contains(used, each.Name) {
+			ordered = append(ordered, each.Name)
+		}
+	}
+	return ordered, nil
+}
+
+func deployAPIs(pre provider.DeployPreflight) []string {
+	var apis []string
+	if len(pre.Deploy.Apps) > 0 {
+		apis = append(apis, runAPI)
+	}
+	if slices.ContainsFunc(pre.Resources, func(resource provider.Resource) bool { return resource.Type == provider.BindingBucket }) {
+		apis = append(apis, signingAPI)
+	}
+	return apis
+}
+
+func (p *Provider) refuseAPIsOff(ctx context.Context, pre provider.DeployPreflight) error {
+	apis := deployAPIs(pre)
+	if len(apis) == 0 {
+		return nil
+	}
+	b, err := bootstrapGate{p}.openBootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	return b.RefuseServicesOff(ctx, apis)
 }
 
 func writesProjectDatabase(pre provider.DeployPreflight) bool {

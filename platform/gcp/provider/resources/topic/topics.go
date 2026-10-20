@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -260,6 +259,7 @@ func (p *Topic) Component() component.Component {
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Shape:         shapeTopics,
+		Parts:         []component.Part{component.NewPart(bootstrap.Topics)},
 		Accounts:      []bootstrap.Account{{Name: names.Names.PushAccount, Purpose: task.PushPurpose}},
 		Grants: func(ctx context.Context, app component.App) ([]grants.Grant, error) {
 			if !ReachesTopics(app.Spec.App) {
@@ -273,7 +273,6 @@ func (p *Topic) Component() component.Component {
 func shapeTopics(shape component.Shape, declared []provider.Resource) error {
 	req := shape.Request
 	scope := Names(shape.Names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
-	shape.Tree.AddShaped(shape.Shared, shape.Vendor, shape.Region, []pricing.Shaped{task.DelayQueueShape(shape.Names, req.Deploy.Tier, shape.Region)})
 	for _, resource := range declared {
 		topic := declaredTopicOf(resource)
 		name, err := scope.Topic(topic.declared)

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
 
@@ -30,11 +31,7 @@ func declaringAStore(memory int64) provider.DeployPreflight {
 }
 
 func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneNeedsNoPart(t *testing.T) {
-	served := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		t.Errorf("preflight called %s %s, and a bucket needs nothing of the tier's bootstrap to be judged", r.Method, r.URL.Path)
-	}))
-	t.Cleanup(served.Close)
-	p := pushing(t, served.URL)
+	p := pushing(t, servingOnlyEnabledAPIs(t))
 	declaring := func(spec provider.BucketSpec) provider.DeployPreflight {
 		return provider.DeployPreflight{
 			Deploy:    provider.DeploySpec{Tier: environment.TierProduction},
@@ -141,7 +138,9 @@ func TestANextAppIsAdmittedWithoutReadingWhatTheTierHasInstalled(t *testing.T) {
 		for _, front := range []edge.Kind{edge.None, cloudflare.Kind} {
 			pre := shippingNext(container)
 			pre.Edge = front
-			if err := failingOnAnyCall(t).ApplyPreflight(context.Background(), pre); err != nil {
+			p := pushing(t, servingOnlyEnabledAPIs(t))
+			recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys, bootstrap.EdgeBucket, bootstrap.CacheBucket)
+			if err := p.ApplyPreflight(context.Background(), pre); err != nil {
 				t.Errorf("ApplyPreflight() of a Next app (container %v) behind %q = %v, want it admitted without reading the stamp: the edge refreshes a stale page", container, front, err)
 			}
 		}
@@ -152,7 +151,7 @@ func TestADeployWithoutANextAppIsNotRefusedForAnEdgeThatCannotBeOpened(t *testin
 	pre := shippingNext(false)
 	pre.Deploy.Apps[0].Manifest.Framework = nil
 	pre.Edge = edge.Kind("unregistered")
-	if err := failingOnAnyCall(t).ApplyPreflight(context.Background(), pre); err != nil {
+	if err := pushing(t, servingOnlyEnabledAPIs(t)).ApplyPreflight(context.Background(), pre); err != nil {
 		t.Errorf("ApplyPreflight() = %v, want an app that is not Next admitted whatever edge fronts it", err)
 	}
 }
@@ -162,12 +161,13 @@ func TestTheFirstDeployDeclaringADatabaseAddsThePrivateNetworkAsAPartItRecords(t
 	ctx := context.Background()
 	pre := declaringADatabase("17")
 	pre.Deploy.Slug = "shop"
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
 
 	if err := p.ApplyPreflight(ctx, pre); err != nil {
 		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 
-	want := []string{"create network ocel-prod-network", "create subnetwork ocel-prod-network", "create policy ocel-prod-network-memorystore", "create policy ocel-prod-network-cloudsql"}
+	want := []string{"create network ocel-prod-network", "create subnetwork ocel-prod-network", "grant on ocel-prod-network", "create policy ocel-prod-network-memorystore", "create policy ocel-prod-network-cloudsql"}
 	if got := server.wrote(); !slices.Equal(got, want) {
 		t.Errorf("the first deploy declaring a database wrote %v, want %v", got, want)
 	}
@@ -195,7 +195,7 @@ func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *te
 	if len(server.wrote()) != 0 {
 		t.Errorf("a dry deploy wrote %v, want nothing", server.wrote())
 	}
-	if len(planned) != 1 || planned[0].Part != network.PartName || planned[0].Action != provider.ActionCreate || len(planned[0].Changes) != 4 {
-		t.Errorf("a dry deploy planned %+v, want the %s part created with its four resources", planned, network.PartName)
+	if len(planned) != 2 || planned[0].Part != bootstrap.KeysPart || planned[1].Part != network.PartName || planned[1].Action != provider.ActionCreate || len(planned[1].Changes) != 4 {
+		t.Errorf("a dry deploy planned %+v, want the keys its password is sealed under and the %s part created with its four resources", planned, network.PartName)
 	}
 }

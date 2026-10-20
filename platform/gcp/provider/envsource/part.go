@@ -24,10 +24,12 @@ import (
 
 const (
 	PartName             = "env-source-sync"
-	envSourceSyncSummary = "the service Cloud Scheduler calls once a minute to read each scheduled env source of the tier and write what changed"
+	envSourceSyncSummary = "the service Cloud Scheduler calls once a minute to read each scheduled env source of the tier and write what changed, and the identity it runs as"
 
 	reasonSyncOnDemand = "the tier's first scheduled env source made it, so the bootstrap's own list does not name it"
 )
+
+var SyncAPIs = []string{"run.googleapis.com", "cloudscheduler.googleapis.com"}
 
 func syncDigest(b bootstrap.Engine, tier environment.Tier) string {
 	s := SyncServing(b, tier)
@@ -43,11 +45,18 @@ func syncDigest(b bootstrap.Engine, tier environment.Tier) string {
 
 func syncResources(b bootstrap.Engine, tier environment.Tier) []provider.PhysicalResource {
 	name := b.Clients.EnvSourceSync(tier)
-	return []provider.PhysicalResource{{Kind: string(bootstrap.KindService), ID: name}, {Kind: string(bootstrap.KindSchedule), ID: name}}
+	return []provider.PhysicalResource{
+		{Kind: string(bootstrap.KindServiceAccount), ID: b.Clients.EnvSourceSyncAccount(tier)},
+		{Kind: string(bootstrap.KindService), ID: name},
+		{Kind: string(bootstrap.KindSchedule), ID: name},
+	}
 }
 
 func Ensure(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) error {
-	return stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, envSourceSyncWork(b, tier, project))
+	if err := stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, envSourceSyncWork(b, tier, project)); err != nil {
+		return err
+	}
+	return letSyncSealFor(ctx, b, tier, project)
 }
 
 func envSourceSyncWork(b bootstrap.Engine, tier environment.Tier, project string) stackrecords.PartWork {
@@ -57,7 +66,10 @@ func envSourceSyncWork(b bootstrap.Engine, tier environment.Tier, project string
 		Digest:    syncDigest(b, tier),
 		AddedBy:   project,
 		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
-			if err := mendEnvSourceSync(ctx, b, tier); err != nil {
+			if err := b.RefuseServicesOff(ctx, SyncAPIs); err != nil {
+				return nil, err
+			}
+			if err := mendEnvSourceSync(ctx, b, tier, project); err != nil {
 				return nil, err
 			}
 			return syncResources(b, tier), nil
@@ -65,7 +77,13 @@ func envSourceSyncWork(b bootstrap.Engine, tier environment.Tier, project string
 	}
 }
 
-func mendEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+func mendEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) error {
+	if err := b.EnsurePart(ctx, tier, project, bootstrap.Keys.For(b, tier)); err != nil {
+		return err
+	}
+	if err := ensureSyncAccount(ctx, b, tier); err != nil {
+		return err
+	}
 	name := b.Clients.EnvSourceSync(tier)
 	service, err := servicePresence(ctx, b, tier, name)
 	if err != nil {
@@ -81,6 +99,15 @@ func mendEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment
 		return err
 	}
 	return makeSchedule(ctx, b, tier, name)
+}
+
+func ensureSyncAccount(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	account := b.Clients.EnvSourceSyncAccount(tier)
+	found, err := b.AccountPresence(ctx, tier, account)
+	if err != nil || (found.Present && found.Mends == "") {
+		return err
+	}
+	return b.MakeAccount(ctx, bootstrap.Survey{Tier: tier, Names: b.Clients.Names}, account)
 }
 
 func Shape(name, region string) []pricing.Shaped {
@@ -111,6 +138,9 @@ func describeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier env
 }
 
 func envSourceSyncRemovals(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]provider.Change, error) {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, PartName); err != nil || !present {
+		return nil, err
+	}
 	name := b.Clients.EnvSourceSync(tier)
 	var changes []provider.Change
 	schedule, err := schedulePresence(ctx, b, tier, name)
@@ -127,23 +157,35 @@ func envSourceSyncRemovals(ctx context.Context, b bootstrap.Engine, tier environ
 	if service != nil {
 		changes = append(changes, provider.Change{Kind: string(bootstrap.KindService), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
 	}
+	account, err := b.AccountPresence(ctx, tier, b.Clients.EnvSourceSyncAccount(tier))
+	if err != nil {
+		return nil, err
+	}
+	if account.Present {
+		changes = append(changes, provider.Change{Kind: string(bootstrap.KindServiceAccount), Name: b.Clients.EnvSourceSyncAccount(tier), Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
+	}
 	return changes, nil
 }
 
 func removeEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier, progress progress.Log) error {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, PartName); err != nil || !present {
+		return err
+	}
 	name := b.Clients.EnvSourceSync(tier)
 	if err := gcloud.TakeSchedule(ctx, b.Clients, name); err != nil {
 		return err
 	}
 	service, err := readService(ctx, b, name)
-	if err != nil || service == nil {
+	if err != nil {
 		return err
 	}
-	if err := takeService(ctx, b, name); err != nil {
-		return err
+	if service != nil {
+		if err := takeService(ctx, b, name); err != nil {
+			return err
+		}
+		gcloud.EnsureProgress(progress).Say("Removed the env source sync " + name)
 	}
-	gcloud.EnsureProgress(progress).Say("Removed the env source sync " + name)
-	return nil
+	return b.TakeAccount(ctx, tier, b.Clients.EnvSourceSyncAccount(tier))
 }
 
 func ServiceProperties(region string) map[string]any {

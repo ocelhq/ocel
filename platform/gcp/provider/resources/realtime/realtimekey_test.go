@@ -44,6 +44,21 @@ func TestAnotherRealtimeIsTrustedThroughANewKeysVersionWithoutANewRevision(t *te
 	}
 }
 
+func TestTheGatewayMayReadItsKeysSecretAndNoOtherSecret(t *testing.T) {
+	t.Parallel()
+
+	h := newRealtimeHarness(t)
+	h.provision(t, "app")
+
+	member := "serviceAccount:" + h.env.clients.RealtimeAccountEmail(environment.TierProduction)
+	if got := h.secrets.Members(must(h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")), realtimeKeysReaderRole); !slices.Contains(got, member) {
+		t.Errorf("the keys secret lets %v read it, want %s: the gateway mounts it", got, member)
+	}
+	if got := h.secrets.Members(must(h.env.clients.RealtimeSigningSecret("shop", "prod", "app")), realtimeKeysReaderRole); slices.Contains(got, member) {
+		t.Errorf("the signing secret lets %v read it, and the gateway verifies with the keys alone", got)
+	}
+}
+
 func TestTheKeysSecretKeepsOnlyTheVersionTheGatewayReads(t *testing.T) {
 	t.Parallel()
 

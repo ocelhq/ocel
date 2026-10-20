@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -64,32 +65,40 @@ func TestABootstrapNamesNoAccountEveryAppMayActAs(t *testing.T) {
 	}
 }
 
-func TestEachTierHasAnAccountItsRealtimeGatewaysRunAs(t *testing.T) {
+func TestTheBaseHoldsWhatEveryDeployNeedsAndWhatOnlyABootstrapCredentialMakes(t *testing.T) {
 	t.Parallel()
 
-	tier := environment.TierProduction
-	names := names.New("ocel", "acme-prod")
-	account := bootstrap.Resource{Kind: bootstrap.KindServiceAccount, Name: names.RealtimeAccount(tier)}
-	for _, emulated := range []bool{false, true} {
-		if ids := googletest.IdsOf(bootstrap.Resources(names, tier, emulated)); !slices.Contains(ids, account.ID()) {
-			t.Errorf("a bootstrap with emulated=%t provisions %v, want %s among them", emulated, ids, account.ID())
+	named := names.New("ocel", "acme-prod")
+	for _, tier := range googletest.BothTiers {
+		want := []string{
+			string(bootstrap.KindTierTag) + "/" + names.TierTagKey,
+			string(bootstrap.KindDatabase) + "/" + named.RecordsDatabase(tier),
+			string(bootstrap.KindBucket) + "/" + named.TierBucketStem(tier, naming.StorageState),
+			string(bootstrap.KindRole) + "/" + named.CDNPurgeRole(),
+			string(bootstrap.KindRole) + "/" + named.PartsRole(),
+			string(bootstrap.KindRepository) + "/" + named.Repository(tier),
+			string(bootstrap.KindLogView) + "/" + named.LogView(tier),
+			string(bootstrap.KindSecret) + "/" + named.PassphraseSecret(tier),
+		}
+		if got := googletest.IdsOf(bootstrap.Resources(named, tier, false)); !slices.Equal(got, want) {
+			t.Errorf("a %s bootstrap provisions\n%v\nwant only\n%v\nthe rest is a part a deploy adds on first use", tier, got, want)
 		}
 	}
 }
 
-func TestTheBaseGrantsCloudRunTheNetworkEveryTierSubnetworkIsUsedThrough(t *testing.T) {
+func TestTheBaseChecksOnlyTheAPIsItsOwnItemsAreServedBy(t *testing.T) {
 	t.Parallel()
 
-	names := names.New("ocel", "acme-prod")
-	grant := bootstrap.Resource{Kind: bootstrap.KindGrant, Name: bootstrap.NetworkUserRole}
-	for _, tier := range googletest.BothTiers {
-		items := bootstrap.Resources(names, tier, false)
-		at := slices.IndexFunc(items, func(each bootstrap.Resource) bool { return each.ID() == grant.ID() })
-		if at < 0 || !items[at].Shared {
-			t.Errorf("a %s bootstrap provisions %v, want %s shared by both tiers: a deploy adding the network may not grant the Cloud Run agent on it", tier, googletest.IdsOf(items), grant.ID())
-		}
-		if slices.Contains(googletest.IdsOf(bootstrap.Resources(names, tier, true)), grant.ID()) {
-			t.Errorf("an emulated %s bootstrap grants %s, and no emulator serves project IAM", tier, grant.ID())
-		}
+	want := []string{
+		"firestore.googleapis.com",
+		"storage.googleapis.com",
+		"secretmanager.googleapis.com",
+		"artifactregistry.googleapis.com",
+		"iam.googleapis.com",
+		"cloudresourcemanager.googleapis.com",
+		"logging.googleapis.com",
+	}
+	if !slices.Equal(bootstrap.BootstrapAPIs, want) {
+		t.Errorf("a bootstrap checks %v are on, want %v: each part checks its own APIs when a deploy adds it", bootstrap.BootstrapAPIs, want)
 	}
 }

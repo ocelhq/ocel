@@ -31,7 +31,10 @@ type IAM struct {
 	iampb.UnimplementedIAMPolicyServer
 
 	Mu        sync.Mutex
+	rings     map[string]bool
 	keys      map[string]bool
+	Destroyed map[string]bool
+	Minted    []string
 	KeyPolicy map[string]*iampb.Policy
 	KeyRaces  int
 	Project   *cloudresourcemanager.Policy
@@ -142,6 +145,50 @@ func (q delayQueues) SetIamPolicy(_ context.Context, req *iampb.SetIamPolicyRequ
 	return req.GetPolicy(), nil
 }
 
+func (s *IAM) CreateKeyRing(_ context.Context, req *kmspb.CreateKeyRingRequest) (*kmspb.KeyRing, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	name := req.GetParent() + "/keyRings/" + req.GetKeyRingId()
+	if s.rings == nil {
+		s.rings = map[string]bool{}
+	}
+	if s.rings[name] {
+		return nil, status.Error(codes.AlreadyExists, name)
+	}
+	s.rings[name] = true
+	return &kmspb.KeyRing{Name: name}, nil
+}
+
+func (s *IAM) GetKeyRing(_ context.Context, req *kmspb.GetKeyRingRequest) (*kmspb.KeyRing, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if !s.rings[req.GetName()] {
+		return nil, status.Error(codes.NotFound, req.GetName())
+	}
+	return &kmspb.KeyRing{Name: req.GetName()}, nil
+}
+
+func (s *IAM) HasKeyRing(name string) bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	return s.rings[name]
+}
+
+func (s *IAM) HasKey(name string) bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	return s.keys[name]
+}
+
+func (s *IAM) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.EncryptResponse, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if !s.keys[req.GetName()] {
+		return nil, status.Error(codes.NotFound, req.GetName())
+	}
+	return &kmspb.EncryptResponse{Name: req.GetName(), Ciphertext: append([]byte("sealed:"), req.GetPlaintext()...)}, nil
+}
+
 func (s *IAM) CreateCryptoKey(_ context.Context, req *kmspb.CreateCryptoKeyRequest) (*kmspb.CryptoKey, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -188,8 +235,30 @@ func (s *IAM) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*
 	if !s.keys[req.GetName()] {
 		return nil, status.Error(codes.NotFound, req.GetName())
 	}
+	primary := kmspb.CryptoKeyVersion_ENABLED
+	if s.Destroyed[req.GetName()] {
+		primary = kmspb.CryptoKeyVersion_DESTROYED
+	}
 	return &kmspb.CryptoKey{Name: req.GetName(), Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT,
-		Primary: &kmspb.CryptoKeyVersion{Name: req.GetName() + "/cryptoKeyVersions/1", State: kmspb.CryptoKeyVersion_ENABLED}}, nil
+		Primary: &kmspb.CryptoKeyVersion{Name: req.GetName() + "/cryptoKeyVersions/1", State: primary}}, nil
+}
+
+func (s *IAM) CreateCryptoKeyVersion(_ context.Context, req *kmspb.CreateCryptoKeyVersionRequest) (*kmspb.CryptoKeyVersion, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.Minted = append(s.Minted, req.GetParent())
+	return &kmspb.CryptoKeyVersion{Name: req.GetParent() + "/cryptoKeyVersions/2", State: kmspb.CryptoKeyVersion_ENABLED}, nil
+}
+
+func (s *IAM) GetCryptoKeyVersion(_ context.Context, req *kmspb.GetCryptoKeyVersionRequest) (*kmspb.CryptoKeyVersion, error) {
+	return &kmspb.CryptoKeyVersion{Name: req.GetName(), State: kmspb.CryptoKeyVersion_ENABLED}, nil
+}
+
+func (s *IAM) UpdateCryptoKeyPrimaryVersion(_ context.Context, req *kmspb.UpdateCryptoKeyPrimaryVersionRequest) (*kmspb.CryptoKey, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	delete(s.Destroyed, req.GetName())
+	return &kmspb.CryptoKey{Name: req.GetName()}, nil
 }
 
 func (s *IAM) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
@@ -402,6 +471,7 @@ func (s *IAM) KeyMembers(key, role string) []string {
 
 func GrantedIAM() *IAM {
 	return &IAM{
+		rings:     map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel": true},
 		keys:      map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production": true},
 		KeyPolicy: map[string]*iampb.Policy{},
 		Project:   &cloudresourcemanager.Policy{Etag: "BwXhoLA="},

@@ -3,7 +3,6 @@ package gcp
 import (
 	"context"
 	"errors"
-	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
@@ -342,39 +342,39 @@ func TestRemovingATierDeletesItsOwnRecordsDatabaseWhileItsSiblingIsInstalled(t *
 	}
 }
 
-func replacingTheTierKey(t *testing.T) (bootstrap.Engine, bootstrap.Survey, *int) {
+func replacingTheTierKey(t *testing.T) (bootstrap.Engine, *googletest.IAM) {
 	t.Helper()
-	asked := 0
-	b := composed(bootstrap.Engine{Clients: (&googletest.IAM{}).Serve(t, func(w http.ResponseWriter, r *http.Request) {
-		asked++
-		w.WriteHeader(http.StatusNotImplemented)
-	})})
-	key := bootstrap.Resource{Kind: bootstrap.KindKey, Name: string(environment.TierProduction)}
-	read := bootstrap.Survey{
-		Tier:      environment.TierProduction,
-		Names:     b.Clients.Names,
-		Project:   "acme-prod",
-		Region:    "europe-west1",
-		Held:      map[string]bool{},
-		Mending:   map[string]string{},
-		Replacing: map[string]string{key.ID(): bootstrap.ReasonKeyReplaced},
-	}
-	return b, read, &asked
+	server := googletest.GrantedIAM()
+	b := composed(bootstrap.Engine{Clients: server.Open(t), Records: fake.NewKeyValues()})
+	server.Destroyed = map[string]bool{gcloud.KeyPath(b.Clients, string(environment.TierProduction)): true}
+	return b, server
 }
 
-func TestABootstrapRefusingReplacementsRefusesBeforeWritingAnythingWhenItWouldReplaceTheTierKey(t *testing.T) {
-	b, read, asked := replacingTheTierKey(t)
+func TestADeployAddingTheKeysPartRefusesToReplaceATierKeyWhosePrimaryIsDestroyed(t *testing.T) {
+	t.Parallel()
+	b, server := replacingTheTierKey(t)
 
-	b.Surveyed = &bootstrap.Surveys{}
-	b.Surveyed.Remember(read)
-	err := b.Apply(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, RefuseReplacements: true}, nil)
+	err := b.EnsurePart(t.Context(), environment.TierProduction, "shop", bootstrap.Keys.For(b, environment.TierProduction))
 
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "KMS key production") || !strings.Contains(err.Error(), "--yes") {
-		t.Fatalf("Apply() = %v, want a %s refusal naming the KMS key it would replace and the flag that consents to it", err, refusal.CodeNotReady)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "KMS key production") || !strings.Contains(err.Error(), "`ocel bootstrap production --yes`") {
+		t.Fatalf("EnsurePart() = %v, want a %s refusal naming the KMS key it would replace and the bootstrap that consents to it", err, refusal.CodeNotReady)
 	}
-	if *asked != 0 {
-		t.Errorf("the bootstrap sent %d requests before refusing, want none", *asked)
+	if len(server.Minted) != 0 {
+		t.Errorf("the deploy minted %v before refusing, want nothing", server.Minted)
+	}
+}
+
+func TestABootstrapThatConsentsMintsANewPrimaryForATierKeyWhosePrimaryIsDestroyed(t *testing.T) {
+	t.Parallel()
+	b, server := replacingTheTierKey(t)
+	b.ReplacementsConsented = true
+
+	if err := b.EnsurePart(t.Context(), environment.TierProduction, "", bootstrap.Keys.For(b, environment.TierProduction)); err != nil {
+		t.Fatalf("EnsurePart() with consent = %v", err)
+	}
+	if want := []string{gcloud.KeyPath(b.Clients, string(environment.TierProduction))}; !slices.Equal(server.Minted, want) {
+		t.Errorf("minted versions of %v, want one of %v", server.Minted, want)
 	}
 }
 
@@ -383,22 +383,7 @@ func TestABootstrapRefusingReplacementsGoesAheadWhenNothingWouldBeReplaced(t *te
 
 	read := bootstrap.Survey{Tier: environment.TierProduction, Names: names.New("ocel", "acme-prod"), Held: map[string]bool{}}
 
-	if err := bootstrap.RefuseReplacements(read, bootstrap.Resources(read.Names, read.Tier, false)); err != nil {
+	if err := bootstrap.RefuseReplacements(read, bootstrap.Resources(read.Names, read.Tier, false), "re-run with --yes"); err != nil {
 		t.Errorf("refuseReplacements() over a tier that replaces nothing = %v, want nil: making what is missing and mending what drifted replace nothing", err)
 	}
-}
-
-func TestABootstrapThatWouldReplaceTheTierKeyPlansItAsAReplacement(t *testing.T) {
-	_, read, _ := replacingTheTierKey(t)
-
-	for _, change := range bootstrap.Planned(read, bootstrap.Resources(read.Names, read.Tier, false)) {
-		if change.Kind != string(bootstrap.KindKey) {
-			continue
-		}
-		if change.Action != provider.ActionReplace || change.Reason != bootstrap.ReasonKeyReplaced {
-			t.Errorf("the tier key is planned as %s (%s), want %s (%s)", change.Action, change.Reason, provider.ActionReplace, bootstrap.ReasonKeyReplaced)
-		}
-		return
-	}
-	t.Fatal("the plan names no KMS key")
 }

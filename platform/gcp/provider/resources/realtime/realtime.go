@@ -71,6 +71,7 @@ func (p *Realtime) Component() component.Component {
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Shape:         shapeRealtime,
+		Parts:         []component.Part{component.NewPart(bootstrap.Realtime)},
 		Accounts:      []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}},
 	}
 }

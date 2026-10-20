@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-const baseSummary = "the database, buckets, keys, secrets, accounts and roles every deploy in this tier runs on"
+const baseSummary = "the tier tag, the records database, the state bucket and passphrase, the image repository and log view every deploy in this tier runs on, and the custom roles no deploy credential may make"
 
 func DescribeParts(ctx context.Context, b Engine, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
 	read, err := b.surveyFor(ctx, described.Tier)

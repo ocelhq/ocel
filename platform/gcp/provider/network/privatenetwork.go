@@ -21,9 +21,12 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 const (
+	NetworkUserRole         = "roles/compute.networkUser"
+	runAgentDomain          = "@serverless-robot-prod.iam.gserviceaccount.com"
 	SubnetRange             = "10.240.0.0/20"
 	MemorystoreServiceClass = "gcp-memorystore"
 	CloudSQLServiceClass    = "google-cloud-sql"
@@ -52,7 +55,7 @@ var networkAPIs = []string{
 
 const (
 	PartName = "private-network"
-	Summary  = "a network of the tier's own with one subnetwork, " + SubnetRange + ", and the service connection policies Memorystore and Cloud SQL reach it through: " +
+	Summary  = "a network of the tier's own with one subnetwork, " + SubnetRange + ", which Cloud Run's agent may attach services to, and the service connection policies Memorystore and Cloud SQL reach it through: " +
 		"what kv stores, databases and the apps bound to them are connected over, with no recurring cost of its own"
 
 	KindNetwork          bootstrap.Kind = "compute:network"
@@ -71,7 +74,7 @@ func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 	return bootstrap.Part{
 		Name:      PartName,
 		Summary:   Summary,
-		Content:   SubnetRange,
+		Content:   SubnetRange + " " + NetworkUserRole,
 		APIs:      networkAPIs,
 		Resources: resources,
 		Shape:     Shape(b.Clients.Names, tier, b.Clients.Region),
@@ -104,6 +107,9 @@ func Make(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error 
 		return err
 	}
 	if err := ensureSubnetwork(ctx, b, engine, tier); err != nil {
+		return err
+	}
+	if err := letCloudRunUseSubnetwork(ctx, b, engine, tier); err != nil {
 		return err
 	}
 	for _, policy := range connectionPolicies {
@@ -152,6 +158,56 @@ func ensureSubnetwork(ctx context.Context, b bootstrap.Engine, engine *compute.S
 			IpCidrRange: SubnetRange,
 		}).Context(ctx).Do(call...)
 	})
+}
+
+func letCloudRunUseSubnetwork(ctx context.Context, b bootstrap.Engine, engine *compute.Service, tier environment.Tier) error {
+	agent, err := b.Clients.ReadServiceAgent(ctx, runAgentDomain)
+	if err != nil {
+		return err
+	}
+	if _, err := policy.Edit(ctx, subnetworkPolicy(b, engine, tier), policy.Grant(NetworkUserRole, agent, nil)); err != nil {
+		return fmt.Errorf("let Cloud Run attach services to the %s subnetwork: %w", b.Clients.Subnetwork(tier), err)
+	}
+	return nil
+}
+
+func subnetworkPolicy(b bootstrap.Engine, engine *compute.Service, tier environment.Tier) policy.Resource {
+	project, region, name := b.Clients.Project(), b.Clients.Region, b.Clients.Subnetwork(tier)
+	return policy.Resource{Name: "the " + name + " subnetwork", Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
+		held, err := googleretry.Attempted(ctx, engine.Subnetworks.GetIamPolicy(project, region, name).
+			OptionsRequestedPolicyVersion(policy.ConditionalVersion).Context(ctx).Do)
+		if err != nil {
+			return nil, nil, err
+		}
+		write := func(ctx context.Context, bindings []policy.Binding) error {
+			held.Bindings = make([]*compute.Binding, 0, len(bindings))
+			for _, binding := range bindings {
+				held.Bindings = append(held.Bindings, &compute.Binding{Role: binding.Role, Members: binding.Members, Condition: subnetworkExpr(binding.Condition)})
+			}
+			_, err := googleretry.Attempted(ctx, engine.Subnetworks.SetIamPolicy(project, region, name,
+				&compute.RegionSetPolicyRequest{Policy: held}).Context(ctx).Do)
+			return err
+		}
+		bindings := make([]policy.Binding, 0, len(held.Bindings))
+		for _, binding := range held.Bindings {
+			bindings = append(bindings, policy.Binding{Role: binding.Role, Members: binding.Members, Condition: subnetworkCondition(binding.Condition)})
+		}
+		return bindings, write, nil
+	}}
+}
+
+func subnetworkCondition(condition *compute.Expr) *policy.Condition {
+	if condition == nil {
+		return nil
+	}
+	return &policy.Condition{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
+}
+
+func subnetworkExpr(condition *policy.Condition) *compute.Expr {
+	if condition == nil {
+		return nil
+	}
+	return &compute.Expr{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
 }
 
 func connectionPolicyPath(b bootstrap.Engine, tier environment.Tier, policy connectionPolicy) string {

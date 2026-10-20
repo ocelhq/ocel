@@ -296,10 +296,7 @@ func (n Names) PurgeSeedSecret(tier environment.Tier, kind edge.Kind) string {
 	return n.ocelName(tier, string(kind), purgeSeedWord)
 }
 
-const (
-	partsSuffix                 = "parts"
-	realtimeSubscriptionsSuffix = "realtime_subscriptions"
-)
+const partsSuffix = "parts"
 
 func (n Names) PartsRole() string { return customRoleID(n.namespace, partsSuffix) }
 
@@ -313,14 +310,6 @@ func (n Names) ProjectDatabase(tier environment.Tier, project string) string {
 
 func (n Names) ProjectDatabasePrefix(tier environment.Tier) string {
 	return ports.ProjectDatabasePrefix(n.namespace, tier)
-}
-
-func (n Names) RealtimeSubscriptionsRole() string {
-	return customRoleID(n.namespace, realtimeSubscriptionsSuffix)
-}
-
-func (n Names) RealtimeSubscriptionsRolePath() string {
-	return "projects/" + n.project + "/roles/" + n.RealtimeSubscriptionsRole()
 }
 
 func (n Names) ProjectWritableDatabase(tier environment.Tier, project string) string {

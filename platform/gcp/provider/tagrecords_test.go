@@ -73,7 +73,9 @@ func revalidating(revalidates bool) provider.DeployPreflight {
 
 func TestADryDeployWhoseBuildRevalidatesPlansItsProjectsWritableDatabaseAndOneThatDoesNotPlansNothing(t *testing.T) {
 	database := ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")
-	if planned := plannedBy(t, failingOnAnyCall(t), revalidating(true)); !plansWritableDatabase(planned, database) {
+	cached := failingOnAnyCall(t)
+	recordedCurrent(t, cached, environment.TierProduction, bootstrap.CacheBucket)
+	if planned := plannedBy(t, cached, revalidating(true)); !plansWritableDatabase(planned, database) {
 		t.Errorf("a dry deploy whose build revalidates planned %+v, want %s created", planned, database)
 	}
 	p := failingOnAnyCall(t)
@@ -85,6 +87,7 @@ func TestADryDeployWhoseBuildRevalidatesPlansItsProjectsWritableDatabaseAndOneTh
 func TestTheFirstDeployThatRevalidatesMakesItsProjectsWritableDatabaseAndTheNextPlansNothing(t *testing.T) {
 	p, _ := deployingNetworks(t)
 	ctx := context.Background()
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.CacheBucket)
 
 	if err := p.ApplyPreflight(ctx, revalidating(true)); err != nil {
 		t.Fatalf("ApplyPreflight() = %v", err)
@@ -97,6 +100,7 @@ func TestTheFirstDeployThatRevalidatesMakesItsProjectsWritableDatabaseAndTheNext
 func TestRemovingAProjectFromATierForgetsTheDatabaseOfItsRunsAndTagRecords(t *testing.T) {
 	p, _ := deployingNetworks(t)
 	ctx := context.Background()
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.CacheBucket)
 	if err := p.ApplyPreflight(ctx, revalidating(true)); err != nil {
 		t.Fatalf("ApplyPreflight() = %v", err)
 	}

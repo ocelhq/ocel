@@ -122,7 +122,7 @@ func TestLiveTheFirstScheduledEnvSourceRunsItsTiersSyncAndRemovingTheTierTakesIt
 
 	account := "projects/" + liveProject() + "/serviceAccounts/" + names.EnvSourceSyncAccountEmail(tier)
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(account).Context(ctx).Do(); err != nil {
-		t.Errorf("Get(%s) after a bootstrap = %v, want the account", account, err)
+		t.Errorf("Get(%s) after the first scheduled env source = %v, want the account the sync runs as", account, err)
 	}
 	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", tier, err)

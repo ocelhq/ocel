@@ -7,11 +7,9 @@ import (
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
@@ -107,10 +105,4 @@ func RunLayout() variables.Layout {
 		layout.Indexes = append(layout.Indexes, variables.LayoutIndex{Group: runsCollectionGroup, Index: index})
 	}
 	return layout
-}
-
-func DelayQueueShape(names names.Names, tier environment.Tier, region string) pricing.Shaped {
-	queue := bootstrap.Resource{Kind: bootstrap.KindQueue, Name: names.DelayQueue(tier)}
-	shaped, _ := queue.Shape(region)
-	return shaped
 }

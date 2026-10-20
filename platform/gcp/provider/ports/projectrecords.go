@@ -28,6 +28,7 @@ const (
 var (
 	ErrNoProjectRecords = errors.New("the project keeps no records database in this tier")
 	ErrNoProjectKey     = errors.New("the project has no key in this tier")
+	ErrNoTierKey        = errors.New("the tier has no key")
 )
 
 func projectHash(tier environment.Tier, project string) string {

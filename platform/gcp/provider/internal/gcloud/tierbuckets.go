@@ -58,11 +58,19 @@ func (c *Clients) TierBuckets(ctx context.Context, tier environment.Tier, classe
 		return nil, err
 	}
 	for _, class := range classes {
-		if recorded[class] == "" {
+		switch {
+		case recorded[class] != "":
+		case class == naming.StorageState:
 			c.DropTierBucketsRead(tier)
 			return nil, refusal.Refuse(refusal.CodeNotReady,
 				"Google Cloud project %s records no %s bucket of the %s tier, so the tier is not bootstrapped.\nRun `%s` to create it, then try again",
 				c.Project(), class, tier, provider.BootstrapCommand(tier))
+		default:
+			c.DropTierBucketsRead(tier)
+			return nil, refusal.Refuse(refusal.CodeNotReady,
+				"Google Cloud project %s records no %s bucket of the %s tier yet, and the first deploy that ships what it holds adds it.\n"+
+					"Deploy to the %s tier, or run `%s` to add the parts its deploys use, then try again",
+				c.Project(), class, tier, tier, provider.BootstrapCommand(tier))
 		}
 	}
 	return recorded, nil

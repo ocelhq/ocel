@@ -29,6 +29,7 @@ type Part struct {
 	Retires     bool
 	Resources   []provider.PhysicalResource
 	Shape       []pricing.Shaped
+	Removals    []provider.Change
 	Make        func(ctx context.Context) error
 	Claim       func(ctx context.Context, project string) error
 	Users       func(ctx context.Context) ([]string, error)
@@ -36,7 +37,7 @@ type Part struct {
 	Remove      func(ctx context.Context) error
 }
 
-func (p Part) digest() string {
+func (p Part) Digest() string {
 	sum := sha256.New()
 	sum.Write([]byte(p.Name + "\n" + p.Content + "\n"))
 	for _, resource := range p.Resources {
@@ -63,10 +64,10 @@ func (b Engine) partWork(tier environment.Tier, project string, want Part) stack
 	return stackrecords.PartWork{
 		Name:      want.Name,
 		WrittenBy: string(b.WrittenBy),
-		Digest:    want.digest(),
+		Digest:    want.Digest(),
 		AddedBy:   project,
 		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
-			if err := b.servicesOn(ctx, want.APIs); err != nil {
+			if err := b.RefuseServicesOff(ctx, want.APIs); err != nil {
 				return nil, err
 			}
 			if err := want.Make(ctx); err != nil {
@@ -82,7 +83,7 @@ func (b Engine) planPart(ctx context.Context, tier environment.Tier, want Part) 
 	if err != nil {
 		return provider.ChangeGroup{}, false, err
 	}
-	if present && recorded.CurrentFor(string(b.WrittenBy), want.digest()) {
+	if present && recorded.CurrentFor(string(b.WrittenBy), want.Digest()) {
 		return provider.ChangeGroup{}, false, nil
 	}
 	group := provider.ChangeGroup{
@@ -113,7 +114,7 @@ func (b Engine) describePart(ctx context.Context, tier environment.Tier, want Pa
 	described := provider.BootstrapPart{
 		Name:                want.Name,
 		Summary:             want.Summary,
-		Current:             recorded.CurrentFor(string(b.WrittenBy), want.digest()),
+		Current:             recorded.CurrentFor(string(b.WrittenBy), want.Digest()),
 		Digest:              recorded.Digest,
 		Resources:           want.Resources,
 		RetiresWithLastUser: want.Retires,
@@ -193,6 +194,10 @@ func (b Engine) removalGroup(tier environment.Tier, each Part) provider.ChangeGr
 		Name:   b.partGroupName(tier, each.Name),
 		Part:   each.Name,
 		Action: provider.ActionDelete,
+	}
+	if len(each.Removals) > 0 {
+		group.Changes = slices.Clone(each.Removals)
+		return group
 	}
 	for _, resource := range each.Resources {
 		group.Changes = append(group.Changes, provider.Change{Kind: resource.Kind, Name: resource.ID, Action: provider.ActionDelete})

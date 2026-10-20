@@ -80,9 +80,6 @@ func grantSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.T
 	if _, err := gcloud.BindKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, SyncKeyRoles); err != nil {
 		return fmt.Errorf("let %s seal and open values under the %s key: %w", member, tier, err)
 	}
-	if _, err := variables.BindProjectKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, SyncKeyRoles); err != nil {
-		return fmt.Errorf("let %s seal and open values under the %s tier's project keys: %w", member, tier, err)
-	}
 	return nil
 }
 
@@ -96,10 +93,6 @@ func forgetSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.
 			_, err := gcloud.BindKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, nil)
 			return err
 		},
-		func() error {
-			_, err := variables.BindProjectKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, nil)
-			return err
-		},
 	)
 }
 
@@ -109,11 +102,23 @@ func syncWritesGranted(ctx context.Context, b bootstrap.Engine, tier environment
 	if err != nil || !records {
 		return false, err
 	}
-	keyed, err := gcloud.KeyRolesGranted(ctx, b.Clients, tier, member, SyncKeyRoles)
-	if err != nil || !keyed {
-		return false, err
+	return gcloud.KeyRolesGranted(ctx, b.Clients, tier, member, SyncKeyRoles)
+}
+
+func letSyncSealFor(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) error {
+	if err := variables.EnsureProjectKey(ctx, b.Clients, tier, project); err != nil {
+		return err
 	}
-	return variables.ProjectKeyRolesGranted(ctx, b.Clients, tier, member, SyncKeyRoles)
+	key := b.Clients.Workload().ProjectKeyPath(tier, project)
+	member := syncMember(b.Clients, tier)
+	changes := make([]policy.Change, 0, len(SyncKeyRoles))
+	for _, role := range SyncKeyRoles {
+		changes = append(changes, policy.Grant(role, member, nil))
+	}
+	if _, err := policy.Edit(ctx, gcloud.KeyPolicy(b.Clients, key, "project "+project+"'s "+string(tier)), policy.Each(changes...)); err != nil {
+		return fmt.Errorf("let %s seal and open project %s's %s values: %w", member, project, tier, err)
+	}
+	return nil
 }
 
 func SyncServing(b bootstrap.Engine, tier environment.Tier) run.Serving {

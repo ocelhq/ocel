@@ -353,6 +353,7 @@ func TestDestroyingTheLastReleaseOfAnAppRevokesItsAccountAndAnotherReleaseKeepsI
 	released := newReleasedStacks(p)
 	first := functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one")
 	second := functionRelease("d2", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:two")
+	first.App.Values, second.App.Values = openingASecret, openingASecret
 	released.provision(t, first)
 	released.provision(t, second)
 	member := appMember(p.resolved, first.Ref, "web")
