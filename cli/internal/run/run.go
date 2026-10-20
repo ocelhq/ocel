@@ -44,6 +44,7 @@ type Run struct {
 	propagation *progressv1.Propagation
 	headline    string
 	assumed     []*streamv1.Assumption
+	cloudJob    *streamv1.CloudJob
 
 	endOnce sync.Once
 }
@@ -59,6 +60,7 @@ func (r *Run) End(errp *error) {
 		result.Apps, result.ChangeStarted, result.PromotionId = r.apps, r.changed, r.promotion
 		result.UrlNotes = r.urlNotes
 		result.Assumed = r.assumed
+		result.CloudJob = r.cloudJob
 		result.Tier, result.Origin = r.identity.GetTier(), r.identity.GetOrigin()
 		r.mu.Unlock()
 		result.DurationMs = r.bus.now().Sub(r.start).Milliseconds()
@@ -135,6 +137,12 @@ func (r *Run) Succeed(headline string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.headline = headline
+}
+
+func (r *Run) SetCloudJob(job *streamv1.CloudJob) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cloudJob = job
 }
 
 func resultLevel(result *streamv1.RunSummary) progressv1.Level {
