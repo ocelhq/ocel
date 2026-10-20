@@ -52,6 +52,24 @@ func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 	}
 }
 
+func TestEveryGrantOfADeployCredentialSaysWhatItReachesAndWhyWhenItIsTheWholeProject(t *testing.T) {
+	t.Parallel()
+
+	document, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel", Region: "europe-west1"}.Permissions(edge.PurposeDeploy, environment.TierPreview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(document.Heading, "each fenced") {
+		t.Errorf("the deploy credential is headed %q, and some of its grants reach the whole project", document.Heading)
+	}
+	for _, line := range strings.Split(document.Document, "\n") {
+		scoped := strings.Contains(line, ", on the condition ") || strings.Contains(line, ", on the queue ") || strings.Contains(line, ", on the tag value ")
+		if !scoped && !strings.Contains(line, ", unconditioned: ") {
+			t.Errorf("Permissions(deploy) grants %q, which reads as fenced: a grant on the whole project says so and why", line)
+		}
+	}
+}
+
 func TestADeployCredentialIsRenderedForATierAndNoOtherWord(t *testing.T) {
 	t.Parallel()
 
@@ -89,7 +107,7 @@ func TestADeployCredentialHoldsNoUnconditionedRoleOverWhatATierTagFences(t *test
 		"roles/resourcemanager.tagUser",
 		"roles/compute.networkAdmin",
 	}) {
-		if slices.Contains(lines, role) {
+		if slices.ContainsFunc(lines, func(line string) bool { return strings.HasPrefix(line, role+", unconditioned") }) {
 			t.Errorf("Permissions(deploy) =\n%s\ngrants %s on the whole project, over the other tier's resources too", strings.Join(lines, "\n"), role)
 		}
 	}
@@ -190,7 +208,7 @@ func TestADeployCredentialReadsOnlyItsOwnTiersLogs(t *testing.T) {
 	t.Parallel()
 
 	for _, line := range renderedDeploy(t, environment.TierPreview) {
-		if line == credential.LogsRole {
+		if strings.HasPrefix(line, credential.LogsRole+", unconditioned") {
 			t.Errorf("Permissions(deploy, preview) grants %s on the project, which reads production's logs too", line)
 		}
 	}

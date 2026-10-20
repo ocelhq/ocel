@@ -145,7 +145,9 @@ func TestTheDeployCredentialIsGrantedTheRoleThatReadsLogEntries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Permissions(%s) error = %v", purpose, err)
 		}
-		if !slices.Contains(strings.Split(document.Document, "\n"), "roles/logging.viewer") {
+		if !slices.ContainsFunc(strings.Split(document.Document, "\n"), func(line string) bool {
+			return line == "roles/logging.viewer" || strings.HasPrefix(line, "roles/logging.viewer, ")
+		}) {
 			t.Errorf("the %s credential is granted %q, want roles/logging.viewer among them: a log read lists Cloud Logging entries", purpose, document.Document)
 		}
 	}

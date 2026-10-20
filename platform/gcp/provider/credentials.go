@@ -103,8 +103,8 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 	names := names.New(c.Namespace, project)
 	deploy := credential.Deploy{Names: names, Region: c.Region, Tier: tier, GrantableRoles: grants.ListGrantedRoles(names)}
 	return edge.CredentialDocument{
-		Heading: fmt.Sprintf("the roles a deploy credential of the %s tier is granted on project %s, each fenced to the resources carrying the %s tag; make each custom role named by its permissions yourself",
-			tier, project, names.TierTagValuePath(tier)),
+		Heading: fmt.Sprintf("the roles a deploy credential of the %s tier is granted on project %s, whose %s resources carry the %s tag; make each custom role named by its permissions yourself",
+			tier, project, tier, names.TierTagValuePath(tier)),
 		Document: strings.Join(credential.Lines(deploy.Grants()), "\n"),
 	}, nil
 }
