@@ -78,6 +78,10 @@ func TestInsideAnOcelCloudJobARunRefusesAProjectThatIsNotTheJobs(t *testing.T) {
 		{name: "a config naming another slug", config: `{"slug": "cart"}`, want: "started for the project shop"},
 		{name: "a job naming no slug", config: `{"slug": "shop"}`, job: func(j *commands.BuilderJob) { j.Slug = "" }, want: commands.CloudSlugEnvVar},
 		{name: "a job with no providers", config: `{"slug": "shop"}`, job: func(j *commands.BuilderJob) { j.ProvidersDir = "" }, want: "OCEL_PROVIDERS_DIR"},
+		{name: "a preview label that is not a DNS label", config: `{"slug": "shop"}`, job: func(j *commands.BuilderJob) { j.PreviewLabel = "PR 12" }, want: commands.CloudPreviewLabelEnvVar},
+		{name: "a commit that is not a git object name", config: `{"slug": "shop"}`, job: func(j *commands.BuilderJob) { j.GitCommit = "main" }, want: commands.CloudGitCommitEnvVar},
+		{name: "a dirty state that is not a boolean", config: `{"slug": "shop"}`, job: func(j *commands.BuilderJob) { j.GitDirty = "maybe" }, want: commands.CloudGitDirtyEnvVar},
+		{name: "a pull request that is not a number", config: `{"slug": "shop"}`, job: func(j *commands.BuilderJob) { j.GitPullRequest = "twelve" }, want: commands.CloudGitPullRequestEnvVar},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			invocation := insideCloudJob(t, "shop")
@@ -100,9 +104,43 @@ func TestReadBuilderJobReadsTheJobOnlyWhenOcelCloudSetsOne(t *testing.T) {
 	if job := commands.ReadBuilderJob(func(key string) string { return env[key] }); job != nil {
 		t.Fatalf("job = %+v outside a job", job)
 	}
-	env = map[string]string{commands.CloudJobEnvVar: "job_1", commands.CloudSlugEnvVar: "shop", "OCEL_PROVIDERS_DIR": "/opt/ocel/providers"}
+	env = map[string]string{
+		commands.CloudJobEnvVar: "job_1", commands.CloudSlugEnvVar: "shop", "OCEL_PROVIDERS_DIR": "/opt/ocel/providers",
+		commands.CloudPreviewLabelEnvVar: "pr-12",
+		commands.CloudGitCommitEnvVar:    "0123abc", commands.CloudGitBranchEnvVar: "feature/login", commands.CloudGitDirtyEnvVar: "true", commands.CloudGitPullRequestEnvVar: "12",
+	}
 	job := commands.ReadBuilderJob(func(key string) string { return env[key] })
-	if job == nil || *job != (commands.BuilderJob{ID: "job_1", Slug: "shop", ProvidersDir: "/opt/ocel/providers"}) {
-		t.Fatalf("job = %+v, want job_1 for shop with its providers", job)
+	want := commands.BuilderJob{
+		ID: "job_1", Slug: "shop", ProvidersDir: "/opt/ocel/providers",
+		PreviewLabel: "pr-12",
+		GitCommit:    "0123abc", GitBranch: "feature/login", GitDirty: "true", GitPullRequest: "12",
+	}
+	if job == nil || *job != want {
+		t.Fatalf("job = %+v, want %+v", job, want)
+	}
+}
+
+func TestInsideAnOcelCloudJobTheGitContextIsTheOneTheJobWasStartedWith(t *testing.T) {
+	job := commands.BuilderJob{ID: "job_1", GitCommit: "0123abc", GitBranch: "feature/login", GitDirty: "true", GitPullRequest: "12"}
+
+	if source := job.Source(); source.GetCommit() != "0123abc" || source.GetBranch() != "feature/login" || !source.GetDirty() {
+		t.Errorf("source = %v, want the job's commit, branch and dirty state", source)
+	}
+	if branch, err := job.ReadGitBranch(t.TempDir()); err != nil || branch != "feature/login" {
+		t.Errorf("branch = %q, %v, want the job's branch", branch, err)
+	}
+	if pr := job.DiscoverPRNumber(); pr != "12" {
+		t.Errorf("pull request = %q, want the job's", pr)
+	}
+}
+
+func TestInsideAnOcelCloudJobStartedWithNoGitContextNoBranchOrSourceIsRead(t *testing.T) {
+	job := commands.BuilderJob{ID: "job_1"}
+
+	if source := job.Source(); source != nil {
+		t.Errorf("source = %v, want none for a job started outside git", source)
+	}
+	if _, err := job.ReadGitBranch(t.TempDir()); err == nil || !strings.Contains(err.Error(), commands.CloudGitBranchEnvVar) {
+		t.Errorf("err = %v, want it to say the job names no branch", err)
 	}
 }

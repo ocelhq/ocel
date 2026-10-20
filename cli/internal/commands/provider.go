@@ -103,6 +103,8 @@ type ProviderRun struct {
 	Provider  *providerprocess.Provider
 	Preflight readiness.Preflight
 	Project   *project.Project
+
+	job *BuilderJob
 }
 
 func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, command string, opts OpenOptions, work func(context.Context, ProviderRun) error) (err error) {
@@ -144,7 +146,7 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 		check.End(err)
 		return err
 	}
-	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded})
+	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded, job: i.BuilderJob})
 	check.End(err)
 	return err
 }
