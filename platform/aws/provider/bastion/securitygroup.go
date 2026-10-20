@@ -70,22 +70,22 @@ func rulesOf(permissions []ec2types.IpPermission) []rule {
 	return rules
 }
 
-func egressRules(net network, ports []int) []rule {
+func egressRules(net Network, ports []int) []rule {
 	rules := []rule{{protocol: "tcp", from: httpsPort, to: httpsPort, peer: ipv4Range, address: anywhere}}
 	for _, port := range ports {
-		rules = append(rules, rule{protocol: "tcp", from: int32(port), to: int32(port), peer: ipv4Range, address: net.cidr})
+		rules = append(rules, rule{protocol: "tcp", from: int32(port), to: int32(port), peer: ipv4Range, address: net.CIDR})
 	}
 	return rules
 }
 
-func (c Clients) reconcileSecurityGroup(ctx context.Context, namespace string, tier environment.Tier, net network, ports []int) (string, error) {
+func (c Clients) reconcileSecurityGroup(ctx context.Context, namespace string, tier environment.Tier, net Network, ports []int) (string, error) {
 	name := NameFor(namespace, tier)
-	group, err := c.findSecurityGroup(ctx, namespace, name, net.vpc)
+	group, err := c.findSecurityGroup(ctx, namespace, name, net.VPC)
 	if err != nil {
 		return "", err
 	}
 	if group == nil {
-		if group, err = c.createSecurityGroup(ctx, namespace, tier, net.vpc); err != nil {
+		if group, err = c.createSecurityGroup(ctx, namespace, tier, net.VPC); err != nil {
 			return "", err
 		}
 	}

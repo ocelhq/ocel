@@ -31,6 +31,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
 type ShapeScopes struct {
@@ -85,6 +86,9 @@ func Shape(ctx context.Context, pass transform.Pass, namespace, region string, r
 	}
 	if reachesVPCFromFunctions(req) {
 		tree.AddShaped(scopes.Shared, awsports.Vendor, region, functionnetwork.Shape(req.Deploy.Tier))
+	}
+	if hasContainers || reachesVPCFromFunctions(req) || len(registry.PlacesInVPC(req.Resources)) > 0 {
+		tree.AddShaped(scopes.Shared, awsports.Vendor, region, network.Shape(req.Deploy.Tier))
 	}
 	return nil
 }

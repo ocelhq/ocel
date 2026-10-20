@@ -2,37 +2,41 @@ package deploy
 
 import (
 	"context"
-	"strings"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/vpcclients"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
-func (r *release) placeInVPC(ctx context.Context, spec provider.StackSpec, work *infraWork) error {
-	placed := r.registry.PlacesInVPC(spec.Resources)
-	if len(placed) == 0 {
+func (r *release) planNetwork(ctx context.Context, tier environment.Tier) ([]provider.ChangeGroup, error) {
+	_, present, err := r.network.Read(ctx, tier)
+	if err != nil || present {
+		return nil, err
+	}
+	return []provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, tier)}, nil
+}
+
+func (r *release) placeInVPC(ctx context.Context, spec provider.StackSpec, work *infraWork, progress progress.Log) error {
+	if len(r.registry.PlacesInVPC(spec.Resources)) == 0 {
 		return nil
 	}
-	names := make([]string, 0, len(placed))
-	for _, resource := range placed {
-		names = append(names, string(resource.Type)+" "+resource.Declared)
+	if !work.previewing {
+		placed, err := r.network.Claim(ctx, spec.Ref, progress)
+		if err != nil {
+			return err
+		}
+		work.network = &placed
+		return nil
 	}
-	vpc, err := component.ReadDefaultVPC(ctx, r.cfg.Network, r.cfg.Region, strings.Join(names, ", "))
+	placed, present, err := r.network.Read(ctx, spec.Ref.Tier)
 	if err != nil {
 		return err
 	}
-	work.vpc = &vpc
-	work.clients = r.cfg.VPCClients
-	switch {
-	case work.clients != "":
-	case work.previewing:
-		work.clients = component.PendingClients
-	default:
-		return refusal.Refuse(refusal.CodeNotReady,
-			"%s admit the %s tier's %s security group alone, and it is not recorded: deploy again, and its preflight adds it",
-			strings.Join(names, ", "), spec.Ref.Tier, vpcclients.Part)
+	if !present {
+		placed = network.Pending
+		work.networkPending = true
 	}
+	work.network = &placed
 	return nil
 }

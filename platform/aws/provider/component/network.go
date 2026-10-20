@@ -33,7 +33,7 @@ type VPCSecurityGroup struct {
 
 func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSecurityGroup) (*ec2.SecurityGroup, error) {
 	if group.Clients == "" {
-		return nil, fmt.Errorf("%s admits the tier's vpc-clients security group alone, and this deploy resolved none", group.Subject)
+		return nil, fmt.Errorf("%s admits the clients security group of the tier's network alone, and this deploy resolved none", group.Subject)
 	}
 	tags := pulumi.StringMap{nameTag: pulumi.String(group.Name)}
 	maps.Copy(tags, group.Tags)
@@ -47,7 +47,7 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 				FromPort:       pulumi.Int(group.Port),
 				ToPort:         pulumi.Int(group.Port),
 				SecurityGroups: pulumi.StringArray{pulumi.String(group.Clients)},
-				Description:    CapDescription(at.Description(group.Engine+" access to "+group.Subject+" from the tier vpc-clients group"), MaxSecurityGroupDescriptionLen),
+				Description:    CapDescription(at.Description(group.Engine+" access to "+group.Subject+" from the tier clients group"), MaxSecurityGroupDescriptionLen),
 			},
 		},
 		Egress: group.Egress,
@@ -59,27 +59,8 @@ func SecurityGroupName(owner string) string {
 	return owner + naming.WordSeparator + SecurityGroupSuffix
 }
 
-func LookupDefaultSubnets(ctx *pulumi.Context, vpcID string) ([]string, error) {
-	return LookupDefaultSubnetsIn(ctx, vpcID, nil)
-}
-
-func LookupDefaultSubnetsIn(ctx *pulumi.Context, vpcID string, zoneIDs []string) ([]string, error) {
-	filters := []ec2.GetSubnetsFilter{
-		{Name: "vpc-id", Values: []string{vpcID}},
-		{Name: "default-for-az", Values: []string{"true"}},
-	}
-	if zoneIDs != nil {
-		filters = append(filters, ec2.GetSubnetsFilter{Name: "availability-zone-id", Values: zoneIDs})
-	}
-	subnets, err := ec2.GetSubnets(ctx, &ec2.GetSubnetsArgs{Filters: filters})
-	if err != nil {
-		return nil, fmt.Errorf("look up default VPC subnets: %w", err)
-	}
-	return subnets.Ids, nil
-}
-
 type NetworkAPI interface {
-	VPCsAPI
-	awsec2.DescribeSubnetsAPIClient
+	awsec2.DescribeVpcsAPIClient
 	DescribeAvailabilityZones(ctx context.Context, in *awsec2.DescribeAvailabilityZonesInput, optFns ...func(*awsec2.Options)) (*awsec2.DescribeAvailabilityZonesOutput, error)
+	DescribeAddresses(ctx context.Context, in *awsec2.DescribeAddressesInput, optFns ...func(*awsec2.Options)) (*awsec2.DescribeAddressesOutput, error)
 }

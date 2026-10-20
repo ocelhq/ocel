@@ -46,6 +46,7 @@ func fixtureContainerInfra() containers.Infrastructure {
 		OriginHost:    fixtureOrigin,
 		VPCOrigin:     fixtureFront,
 		TaskSecurity:  "sg-tasks",
+		Clients:       "sg-clients",
 		Cluster:       "arn:aws:ecs:us-east-1:123456789012:cluster/ocel-containers-production",
 		ExecutionRole: "arn:aws:iam::123456789012:role/ocel-containers-production-exec-abc",
 		LogGroup:      "/ocel/containers/production",

@@ -204,7 +204,8 @@ func (s *Stacks) Release(ctx context.Context, store records.Store, consumer prov
 	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return Shared.Release(ctx, s.Open, store, consumer, progress)
+	_, err := Shared.Release(ctx, s.Open, store, consumer, progress)
+	return err
 }
 
 func (s *Stacks) ForgetConsumer(ctx context.Context, store records.Store, consumer provider.StackRef) error {

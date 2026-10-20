@@ -686,6 +686,46 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/aws_vpc:ocel-network-production",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_internet_gateway:ocel-network-production",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_subnet:ocel-network-production-public-1",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_subnet:ocel-network-production-public-2",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_subnet:ocel-network-production-private-1",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_subnet:ocel-network-production-private-2",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_subnet:ocel-network-production-isolated-1",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_subnet:ocel-network-production-isolated-2",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_vpc_endpoint:ocel-network-production-s3",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_vpc_endpoint:ocel-network-production-dynamodb",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/cloudflare_account_subscription:Workers Paid",
       "status": "STATUS_PRICED",
       "components": [
@@ -900,11 +940,12 @@
   ],
   "coverage": {
     "supported": 26,
-    "free": 5,
+    "free": 15,
     "supportedTypes": [
       "aws_cloudwatch_log_group",
       "aws_data_transfer",
       "aws_dynamodb_table",
+      "aws_internet_gateway",
       "aws_kms_key",
       "aws_lambda_event_source_mapping",
       "aws_lambda_function",
@@ -915,6 +956,9 @@
       "aws_s3_bucket",
       "aws_secretsmanager_secret",
       "aws_sqs_queue",
+      "aws_subnet",
+      "aws_vpc",
+      "aws_vpc_endpoint",
       "cloudflare_account_subscription",
       "cloudflare_workers_script"
     ]

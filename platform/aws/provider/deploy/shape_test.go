@@ -31,10 +31,15 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 var pulumiTokens = map[string]string{
+	"aws:ec2/vpc:Vpc":                         "aws_vpc",
+	"aws:ec2/subnet:Subnet":                   "aws_subnet",
+	"aws:ec2/internetGateway:InternetGateway": "aws_internet_gateway",
+	"aws:ec2/vpcEndpoint:VpcEndpoint":         "aws_vpc_endpoint",
 	"aws:lambda/function:Function":            "aws_lambda_function",
 	"aws:lambda/functionUrl:FunctionUrl":      "aws_lambda_function_url",
 	"aws:cloudwatch/logGroup:LogGroup":        "aws_cloudwatch_log_group",
@@ -143,7 +148,7 @@ func (s secretedCluster) NewResource(args pulumi.MockResourceArgs) (string, reso
 }
 
 func (s secretedCluster) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
-	return (&functionNetworkCloud{inputRecorder: s.inputRecorder, vpcCIDR: "172.31.0.0/16", subnets: defaultVPCSubnets()}).Call(args)
+	return s.inputRecorder.Call(args)
 }
 
 func everyProgramRecorded(t *testing.T) *inputRecorder {
@@ -167,8 +172,13 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 		t.Fatal(err)
 	}
 	run("container", containerWork.Declare)
-	run("function-network", functionnetwork.NewProgram("ocel", environment.TierProduction, "us-east-1", &functionNetworkCloud{subnets: defaultVPCSubnets()}).Run)
-	run("container-infra", containers.NewProgram("ocel", environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, containers.Fronts{Private: true}).Run)
+	layout, err := network.NewLayout("10.20.0.0/16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run("network", network.NewProgram(testNamespace, environment.TierProduction, "us-east-1", layout, []string{"use1-az1", "use1-az2"}).Run)
+	run("function-network", functionnetwork.NewProgram(testNamespace, environment.TierProduction, network.Pending).Run)
+	run("container-infra", containers.NewProgram(testNamespace, environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, containers.Fronts{Private: true}, network.Pending).Run)
 	topicsRelease := &release{cfg: Config{Namespace: testNamespace, Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)
 	run("topics", func(pctx *pulumi.Context) error {

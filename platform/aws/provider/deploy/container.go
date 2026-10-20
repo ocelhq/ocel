@@ -125,7 +125,11 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		} else if present {
 			shared.Reason = "the first container app in the " + string(spec.Ref.Tier) + " tier routed through CloudFront raises the internal load balancer and VPC origin every such app shares"
 		}
-		groups := []provider.ChangeGroup{shared, unpreviewedStack(spec.Ref)}
+		groups, err := r.planNetwork(ctx, spec.Ref.Tier)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		groups = append(groups, shared, unpreviewedStack(spec.Ref))
 		if hostsContainerWorkers(spec) {
 			groups = append(groups, unpreviewedStack(containerWorkersRef(spec.Ref)))
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,6 +24,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
@@ -81,7 +84,6 @@ func networkStacks(t *testing.T, cfg Config) (*Stacks, *mockedEngine, records.St
 	if cfg.Network == nil {
 		cfg.Network = networkRegion{}
 	}
-	cfg.Quotas = roomyQuotas{}
 	engine := &mockedEngine{outputs: tierNetworkOutputs(network.DefaultCIDR("ocel", environment.TierProduction))}
 	return stacksWith(cfg, engine), engine, store
 }
@@ -111,8 +113,8 @@ func TestTheFirstConsumerOfATiersNetworkProvisionsItAndTheLastToLeaveTakesItDown
 	if _, err := stacks.Network().Claim(ctx, shop, progress.Discard()); err != nil {
 		t.Fatalf("Claim(shop) = %v", err)
 	}
-	if ran := engine.stacks(); len(ran) != 1 || ran[0] != network.StackRef(environment.TierProduction).Name.String() {
-		t.Fatalf("two claims ran %v, want the network provisioned once", ran)
+	if ups, _ := engine.networkRuns(); ups != 1 {
+		t.Fatalf("two claims ran the network %d times, want it provisioned once", ups)
 	}
 	part, present, err := network.ReadPart(ctx, store, "us-east-1", environment.TierProduction)
 	if err != nil || !present || !part.Current || !part.RetiresWithLastUser || len(part.UsedBy) != 2 || len(part.Resources) == 0 {
@@ -122,14 +124,14 @@ func TestTheFirstConsumerOfATiersNetworkProvisionsItAndTheLastToLeaveTakesItDown
 	if err := stacks.Network().Release(ctx, store, containers, progress.Discard()); err != nil {
 		t.Fatalf("Release(containers) = %v", err)
 	}
-	if torn := engine.torn(); len(torn) != 0 {
-		t.Fatalf("one of two consumers leaving tore down %v, want nothing: shop's database still sits in it", torn)
+	if _, downs := engine.networkRuns(); downs != 0 {
+		t.Fatalf("one of two consumers leaving tore the network down %d times, want never: shop's database still sits in it", downs)
 	}
 	if err := stacks.Network().Release(ctx, store, shop, progress.Discard()); err != nil {
 		t.Fatalf("Release(shop) = %v", err)
 	}
-	if torn := engine.torn(); len(torn) != 1 {
-		t.Fatalf("the last consumer leaving tore down %v, want the network", torn)
+	if _, downs := engine.networkRuns(); downs != 1 {
+		t.Fatalf("the last consumer leaving tore the network down %d times, want once", downs)
 	}
 	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, network.Part); err != nil || present {
 		t.Errorf("network part present %v (%v) after its last consumer left, want it forgotten", present, err)
@@ -172,8 +174,8 @@ func TestARaisedNetworkKeepsTheBlockItWasRaisedWithThoughAnotherVPCNowOverlapsIt
 	if err != nil || claimed.CIDR != held {
 		t.Fatalf("Claim(admin) = %+v, %v, want the network on %s it was raised with: a VPC made since does not move it", claimed, err, held)
 	}
-	if ran := engine.stacks(); len(ran) != 1 {
-		t.Errorf("ran %v, want the network provisioned once", ran)
+	if ups, _ := engine.networkRuns(); ups != 1 {
+		t.Errorf("the network was provisioned %d times, want once", ups)
 	}
 }
 
@@ -190,10 +192,176 @@ func TestANetworkWhoseBlockOverlapsAVPCInTheRegionIsRefusedBeforeAnythingIsProvi
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "vpc-peered") {
 		t.Fatalf("Claim() = %v, want a refusal naming the VPC in the way", err)
 	}
-	if ran := engine.stacks(); len(ran) != 0 {
-		t.Errorf("ran %v, want nothing provisioned", ran)
+	if ups, _ := engine.networkRuns(); ups != 0 {
+		t.Errorf("ran the network %d times, want nothing provisioned", ups)
 	}
 	if _, present, _ := stackrecords.ReadBootstrapPart(context.Background(), store, environment.TierProduction, network.Part); present {
 		t.Error("the network part is recorded though nothing was provisioned")
+	}
+}
+
+func TestTheContainerInfraRunsInTheTiersNetworkAndLetsGoOfItWhenItGoes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	engine := &mockedEngine{outputs: containerPartOutputs()}
+	stacks := stacksWith(cfg, engine)
+	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if ups, _ := engine.networkRuns(); ups != 1 {
+		t.Fatalf("the first container deploy raised the network %d times, want once: the cluster's load balancer sits in its public subnets", ups)
+	}
+	users, err := network.Shared.ListUsers(ctx, cfg.KeyValues, environment.TierProduction)
+	if err != nil || len(users) != 1 || users[0] != containers.Slug {
+		t.Fatalf("the network is used by %v (%v), want the containers part alone: a container app holds the containers part, not the network", users, err)
+	}
+
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: spec.Ref}, progress.Discard()); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if _, downs := engine.networkRuns(); downs != 1 {
+		t.Fatalf("the last container app leaving tore the network down %d times, want once, after the containers part it held", downs)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, network.Part); err != nil || present {
+		t.Errorf("network part present %v (%v) after the containers part went, want it forgotten", present, err)
+	}
+}
+
+func TestADatabaseSitsInTheIsolatedSubnetsOfTheTiersNetworkAndAdmitsItsClientsGroup(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: secretedCluster{rec}}
+	spec := provider.StackSpec{
+		Ref:       provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:      provider.StackInfra,
+		Recorded:  true,
+		Resources: []provider.Resource{{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}},
+	}
+	if _, err := conformingStacks(engine).Provision(context.Background(), spec, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	groups := rec.registered("aws:rds/subnetGroup:SubnetGroup")
+	if len(groups) != 1 {
+		t.Fatalf("declared subnet groups %v, want the database's", groups)
+	}
+	if got := stringsAt(rec.inputs("aws:rds/subnetGroup:SubnetGroup", groups[0]), "subnetIds"); !slices.Equal(got, []string{"subnet-isolated-a", "subnet-isolated-b"}) {
+		t.Errorf("the database's subnets are %v, want the network's isolated subnets, which have no route out", got)
+	}
+	for _, name := range rec.registered("aws:ec2/securityGroup:SecurityGroup") {
+		group := rec.inputs("aws:ec2/securityGroup:SecurityGroup", name)
+		if group["vpcId"].StringValue() != "vpc-ocel" {
+			t.Errorf("security group %s sits in %q, want the tier's network", name, group["vpcId"].StringValue())
+		}
+		admitted := group["ingress"].ArrayValue()[0].ObjectValue()
+		if got := stringsAt(admitted, "securityGroups"); !slices.Equal(got, []string{"sg-clients"}) {
+			t.Errorf("security group %s admits %v, want the network's clients group alone", name, got)
+		}
+	}
+}
+
+func TestThePlanOfTheFirstDatabaseInATierShowsTheNetworkItRaises(t *testing.T) {
+	t.Parallel()
+
+	engine := &mockedEngine{outputs: provisionedOutputs()}
+	plan, err := conformingStacks(engine).Plan(context.Background(), provider.StackSpec{
+		Ref:       provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:      provider.StackInfra,
+		Recorded:  true,
+		Resources: []provider.Resource{{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if len(plan.Groups) == 0 || plan.Groups[0].Part != network.Part || plan.Groups[0].Action != provider.ActionCreate {
+		t.Fatalf("plan groups = %+v, want the network part created first", plan.Groups)
+	}
+	if ups, _ := engine.networkRuns(); ups != 0 {
+		t.Errorf("planning raised the network %d times, want never", ups)
+	}
+}
+
+func TestAnInfraStackThatDropsItsLastDatabaseLetsGoOfTheTiersNetwork(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	engine := &mockedEngine{outputs: provisionedOutputs()}
+	stacks := conformingStacks(engine)
+	spec := provider.StackSpec{
+		Ref:       provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:      provider.StackInfra,
+		Recorded:  true,
+		Resources: []provider.Resource{{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}},
+	}
+	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
+		t.Fatalf("Provision(with a database) = %v", err)
+	}
+	spec.Resources = []provider.Resource{{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}}}
+	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
+		t.Fatalf("Provision(without one) = %v", err)
+	}
+	if _, downs := engine.networkRuns(); downs != 1 {
+		t.Errorf("dropping the only database tore the network down %d times, want once: nothing else runs in it", downs)
+	}
+}
+
+func TestTheFunctionNetworkLetsGoOfTheTiersNetworkWhenItsLastAppLeaves(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stacks, _, store := functionNetworkStacks(t, "web")
+	web := usingPostgres(t, "web")
+	if _, err := stacks.Provision(ctx, web, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	users, err := network.Shared.ListUsers(ctx, store, environment.TierProduction)
+	if err != nil || !slices.Contains(users, functionnetwork.Slug) {
+		t.Fatalf("the network is used by %v (%v), want the function network among them", users, err)
+	}
+	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: web.Ref}, progress.Discard()); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if users, err := network.Shared.ListUsers(ctx, store, environment.TierProduction); err != nil || slices.Contains(users, functionnetwork.Slug) {
+		t.Errorf("the network is used by %v (%v) after the function network went, want it let go of", users, err)
+	}
+}
+
+type addressesHeld struct {
+	networkRegion
+	held int
+}
+
+func (a addressesHeld) DescribeAddresses(context.Context, *awsec2.DescribeAddressesInput, ...func(*awsec2.Options)) (*awsec2.DescribeAddressesOutput, error) {
+	return &awsec2.DescribeAddressesOutput{Addresses: make([]ec2types.Address, a.held)}, nil
+}
+
+func TestAFunctionNetworkTheAccountHasNoElasticIPsLeftForIsRefusedNamingTheQuota(t *testing.T) {
+	t.Parallel()
+
+	stacks, engine, _ := functionNetworkStacksOver(t, addressesHeld{held: 4}, "web")
+	_, err := stacks.Provision(context.Background(), usingPostgres(t, "web"), progress.Discard())
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "L-0263D0A3") {
+		t.Fatalf("Provision() = %v, want a refusal naming quota L-0263D0A3: two NAT gateways need two more of five", err)
+	}
+	if ran := engine.stacks(); len(ran) != 0 {
+		t.Errorf("ran %v, want nothing provisioned", ran)
+	}
+}
+
+func TestThePlanOfTheFirstContainerAppInATierShowsTheNetworkBeforeTheContainerInfra(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	engine := &mockedEngine{outputs: containerPartOutputs()}
+	plan, err := stacksWith(cfg, engine).Plan(context.Background(), spec, progress.Discard())
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if len(plan.Groups) < 2 || plan.Groups[0].Part != network.Part || plan.Groups[1].Name != containers.StackRef(environment.TierProduction).Name.String() {
+		t.Fatalf("plan groups = %+v, want the network part and then the container infrastructure it runs in", plan.Groups)
 	}
 }

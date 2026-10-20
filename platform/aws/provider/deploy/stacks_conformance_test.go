@@ -13,6 +13,7 @@ import (
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
@@ -43,6 +44,9 @@ type mockedEngine struct {
 	downErr   func(stack string) error
 	state     *engineState
 	exported  map[string][]pulumi.ExportedResource
+
+	networkUps   int
+	networkDowns int
 }
 
 type pushingAssetSets struct {
@@ -67,6 +71,9 @@ func stacksWith(cfg Config, engine *mockedEngine) *Stacks {
 	if cfg.Network == nil {
 		cfg.Network = defaultVPCNetwork{}
 	}
+	if cfg.Quotas == nil {
+		cfg.Quotas = roomyQuotas{}
+	}
 	if engine == nil {
 		return newStacks(fixed(cfg), &Realized{}, nil)
 	}
@@ -84,6 +91,19 @@ func (e *mockedEngine) stacks() []string {
 var _ pulumi.Engine = (*mockedEngine)(nil)
 
 func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, log progress.Log) (auto.OutputMap, error) {
+	if setup.Ref.Project == network.Slug {
+		declared := recordDeclared(standInCloud{})
+		if err := sdk.RunErr(setup.Program, sdk.WithMocks(network.Slug, setup.Stack, declared)); err != nil {
+			return nil, err
+		}
+		if e.state != nil {
+			e.state.apply(network.Slug+"/"+setup.Stack, declared.declared, log)
+		}
+		e.mu.Lock()
+		e.networkUps++
+		e.mu.Unlock()
+		return e.outputsOf(setup), nil
+	}
 	var monitor sdk.MockResourceMonitor = standInCloud{}
 	if e.mocks != nil {
 		monitor = e.mocks
@@ -111,7 +131,17 @@ func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, log pro
 	e.ran = append(e.ran, setup.Stack)
 	e.sequence = append(e.sequence, "up "+setup.Stack)
 	e.mu.Unlock()
-	return e.outputs, nil
+	return e.outputsOf(setup), nil
+}
+
+func (e *mockedEngine) outputsOf(setup pulumi.WorkspaceSpec) auto.OutputMap {
+	if setup.Ref.Project != network.Slug {
+		return e.outputs
+	}
+	if _, set := e.outputs["network"]; set {
+		return e.outputs
+	}
+	return tierNetworkOutputs("10.20.0.0/16")
 }
 
 func (e *mockedEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Log) ([]provider.Change, error) {
@@ -176,6 +206,13 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if setup.Ref.Project == network.Slug {
+		e.networkDowns++
+		if e.state != nil {
+			e.state.forget(network.Slug + "/" + setup.Stack)
+		}
+		return nil
+	}
 	if e.downErr != nil {
 		if err := e.downErr(setup.Stack); err != nil {
 			return err
@@ -187,6 +224,12 @@ func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ 
 		e.state.forget(setup.Stack)
 	}
 	return nil
+}
+
+func (e *mockedEngine) networkRuns() (ups, downs int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.networkUps, e.networkDowns
 }
 
 func (e *mockedEngine) operations() []string {
@@ -201,8 +244,8 @@ func (e *mockedEngine) torn() []string {
 	return slices.Clone(e.torndown)
 }
 
-func (e *mockedEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.OutputMap, error) {
-	return e.outputs, nil
+func (e *mockedEngine) Outputs(_ context.Context, setup pulumi.WorkspaceSpec) (auto.OutputMap, error) {
+	return e.outputsOf(setup), nil
 }
 
 func (e *mockedEngine) Export(_ context.Context, setup pulumi.WorkspaceSpec) ([]pulumi.ExportedResource, error) {
@@ -241,6 +284,7 @@ func provisionedOutputs() auto.OutputMap {
 		"c-bucket":   auto.OutputValue{Value: map[string]any{bucket.OutputKeyBucket: "shop-prod-uploads"}},
 		"c-kv":       kvOutput("c-kv"),
 		"c-realtime": realtimeOutput("c-realtime"),
+		"network":    tierNetworkOutputs("10.20.0.0/16")["network"],
 	}
 }
 
@@ -274,7 +318,7 @@ func conformingConfig(uploader *fakeArtifactStore) Config {
 		SigningKeys:    keys,
 		SigningKeyRoot: conformanceSigningKeyRoot,
 		Network:        defaultVPCNetwork{},
-		VPCClients:     "sg-vpc-clients",
+		KeyValues:      fake.NewKeyValues(),
 	}
 }
 
@@ -400,8 +444,8 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 	if err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if len(engine.ran) != 1 {
-		t.Fatalf("the engine ran %d stacks, want the one the plan named", len(engine.ran))
+	if ups, _ := engine.networkRuns(); len(engine.ran) != 1 || ups != 1 {
+		t.Fatalf("the engine ran %v and the tier's network %d times, want the network the database sits in raised once and the stack the plan named", engine.ran, ups)
 	}
 	for _, binding := range result.Bindings {
 		if err := provider.VerifyProperties(binding); err != nil {

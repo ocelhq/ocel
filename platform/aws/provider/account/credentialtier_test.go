@@ -29,6 +29,7 @@ var actionsOnWhatBothTiersShare = []string{
 var resourcesAWSOwns = []string{
 	bastion.PortForwardingDocumentARN,
 	component.VPCQuota.ARN(),
+	component.ElasticIPQuota.ARN(),
 }
 
 var resourcesAWSNamesByIDAndScopesByNoTag = []string{

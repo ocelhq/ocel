@@ -11,14 +11,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
 func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
+	infra := &work{network: testNetwork, namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
@@ -72,7 +72,7 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 func TestTheContainerSecurityGroupsKeepTheDescriptionsTheyWereCreatedWith(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{namespace: "ocel", tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierPreview), fronts: Fronts{Private: true}}
+	infra := &work{network: testNetwork, namespace: "ocel", tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierPreview), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "preview--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
@@ -109,33 +109,6 @@ func TestDecodeContainerInfraReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) 
 	if _, err := decode(partial, true); err == nil {
 		t.Error("decode accepted outputs with no listener, so a container would have no rule to hang off")
 	}
-}
-
-type subnetLookups struct {
-	inputRecorder
-	lookupMu sync.Mutex
-	filters  [][]string
-}
-
-func (s *subnetLookups) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
-	if args.Token != "aws:ec2/getSubnets:getSubnets" {
-		return s.inputRecorder.Call(args)
-	}
-	var seen []string
-	for _, filter := range args.Args["filters"].ArrayValue() {
-		fields := filter.ObjectValue()
-		seen = append(seen, fields["name"].StringValue())
-	}
-	s.lookupMu.Lock()
-	s.filters = append(s.filters, seen)
-	s.lookupMu.Unlock()
-	return resource.PropertyMap{}, nil
-}
-
-func (s *subnetLookups) filtered() [][]string {
-	s.lookupMu.Lock()
-	defer s.lookupMu.Unlock()
-	return slices.Clone(s.filters)
 }
 
 type vpcOriginRegistrations struct {
@@ -183,64 +156,39 @@ func TestTheFrontsVPCOriginTakesAFreshNameEachTimeItIsCreatedAndKeepsTheOneItWas
 	}
 }
 
-type zoneLookups struct {
-	inputRecorder
-	lookupMu sync.Mutex
-	excluded []string
-	zoneIDs  []string
-}
-
-func (z *zoneLookups) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
-	z.lookupMu.Lock()
-	defer z.lookupMu.Unlock()
-	switch args.Token {
-	case "aws:index/getAvailabilityZones:getAvailabilityZones":
-		for _, zone := range args.Args["excludeZoneIds"].ArrayValue() {
-			z.excluded = append(z.excluded, zone.StringValue())
-		}
-		return resource.PropertyMap{"zoneIds": resource.NewArrayProperty([]resource.PropertyValue{
-			resource.NewStringProperty("use1-az1"), resource.NewStringProperty("use1-az2"),
-		})}, nil
-	case "aws:ec2/getSubnets:getSubnets":
-		for _, filter := range args.Args["filters"].ArrayValue() {
-			fields := filter.ObjectValue()
-			if fields["name"].StringValue() != "availability-zone-id" {
-				continue
-			}
-			for _, value := range fields["values"].ArrayValue() {
-				z.zoneIDs = append(z.zoneIDs, value.StringValue())
-			}
-		}
-	}
-	return z.inputRecorder.Call(args)
-}
-
-func TestTheContainerInfraLooksOnlyInZonesACloudFrontVPCOriginReaches(t *testing.T) {
+func TestTheContainerInfraRunsInThePublicSubnetsOfTheTiersNetwork(t *testing.T) {
 	t.Parallel()
 
-	lookups := &zoneLookups{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", lookups)); err != nil {
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
 	}
 
-	lookups.lookupMu.Lock()
-	defer lookups.lookupMu.Unlock()
-	if !slices.Contains(lookups.excluded, "use1-az3") {
-		t.Errorf("the zone lookup excluded %v, want use1-az3 among them: CloudFront refuses a VPC origin whose load balancer has a subnet there", lookups.excluded)
+	for key, balancer := range rec.recorded {
+		if !strings.HasPrefix(key, "aws:lb/loadBalancer:LoadBalancer::") {
+			continue
+		}
+		var subnets []string
+		for _, subnet := range balancer["subnets"].ArrayValue() {
+			subnets = append(subnets, subnet.StringValue())
+		}
+		if !slices.Equal(subnets, testNetwork.Public) {
+			t.Errorf("%s sits in %v, want the network's public subnets %v, which sit only in zones a VPC origin reaches", key, subnets, testNetwork.Public)
+		}
 	}
-	if !slices.Equal(lookups.zoneIDs, []string{"use1-az1", "use1-az2"}) {
-		t.Errorf("the subnet lookup kept zones %v, want only those the zone lookup returned", lookups.zoneIDs)
+	for key, group := range rec.recorded {
+		if strings.HasPrefix(key, "aws:ec2/securityGroup:SecurityGroup::") && group["vpcId"].StringValue() != testNetwork.VPC {
+			t.Errorf("%s sits in %q, want the tier's network %s", key, group["vpcId"].StringValue(), testNetwork.VPC)
+		}
 	}
 }
 
-func TestTheContainerInfraLooksOnlyInTheDefaultSubnetsOfTheDefaultVPC(t *testing.T) {
+func TestTheContainerInfraIsRefusedWithoutATierNetworkToRunIn(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: componenttest.BoundaryARN, tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
-	lookups := &subnetLookups{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", lookups)); err != nil {
-		t.Fatalf("run the container infrastructure program: %v", err)
+	infra := publicInfraWork()
+	infra.network = network.Network{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", &inputRecorder{})); err == nil {
+		t.Fatal("run = nil, want the container infrastructure refused with no network to run in")
 	}
-
-	assertDefaultSubnetsOnly(t, lookups.filtered())
 }

@@ -462,6 +462,100 @@
       }
     },
     {
+      "id": "project:shop/shared:preview/aws_vpc:ocel-network-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_vpc",
+      "name": "ocel-network-preview",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_internet_gateway:ocel-network-preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_internet_gateway",
+      "name": "ocel-network-preview",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_subnet:ocel-network-preview-public-1",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-preview-public-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_subnet:ocel-network-preview-public-2",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-preview-public-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_subnet:ocel-network-preview-private-1",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-preview-private-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_subnet:ocel-network-preview-private-2",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-preview-private-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_subnet:ocel-network-preview-isolated-1",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-preview-isolated-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_subnet:ocel-network-preview-isolated-2",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-preview-isolated-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_vpc_endpoint:ocel-network-preview-s3",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "ocel-network-preview-s3",
+      "region": "us-east-1",
+      "properties": {
+        "vpc_endpoint_type": "Gateway"
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/aws_vpc_endpoint:ocel-network-preview-dynamodb",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "ocel-network-preview-dynamodb",
+      "region": "us-east-1",
+      "properties": {
+        "vpc_endpoint_type": "Gateway"
+      }
+    },
+    {
       "id": "project:shop/shared:preview/aws_cloudfront_distribution:preview-wildcard",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",

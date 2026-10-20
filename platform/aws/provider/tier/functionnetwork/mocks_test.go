@@ -56,17 +56,3 @@ func (r *inputRecorder) object(t *testing.T, typeToken, name, key string) resour
 	}
 	return value.ObjectValue()
 }
-
-func stringsAt(m resource.PropertyMap, key string) []string {
-	value, ok := m[resource.PropertyKey(key)]
-	if !ok || !value.IsArray() {
-		return nil
-	}
-	out := make([]string, 0, len(value.ArrayValue()))
-	for _, item := range value.ArrayValue() {
-		if item.IsString() {
-			out = append(out, item.StringValue())
-		}
-	}
-	return out
-}

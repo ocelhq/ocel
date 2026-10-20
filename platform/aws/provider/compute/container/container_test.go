@@ -733,14 +733,11 @@ func taskResource(name string, consumer provider.ConsumerSpec, options ...func(*
 	return provider.Resource{Name: "topic--" + name, Declared: name, Type: provider.BindingTask, Topic: topic}
 }
 
-func TestAContainerTaskJoinsTheTiersVPCClientsSoItsDatabasesAdmitIt(t *testing.T) {
+func TestAContainerTaskJoinsTheNetworksClientsGroupSoItsDatabasesAdmitIt(t *testing.T) {
 	t.Parallel()
 
-	d := &Definition{Infra: containers.Infrastructure{TaskSecurity: "sg-tasks"}, vpcClients: "sg-vpc-clients"}
-	if joined := d.TaskSecurityGroups(); len(joined) != 2 || joined[0] != pulumi.String("sg-tasks") || joined[1] != pulumi.String("sg-vpc-clients") {
-		t.Errorf("a task joins %v, want the tier's task group and its vpc-clients group", joined)
-	}
-	if alone := (&Definition{Infra: containers.Infrastructure{TaskSecurity: "sg-tasks"}}).TaskSecurityGroups(); len(alone) != 1 {
-		t.Errorf("a task joins %v with no clients group recorded, want the task group alone", alone)
+	d := &Definition{Infra: containers.Infrastructure{TaskSecurity: "sg-tasks", Clients: "sg-clients"}}
+	if joined := d.TaskSecurityGroups(); len(joined) != 2 || joined[0] != pulumi.String("sg-tasks") || joined[1] != pulumi.String("sg-clients") {
+		t.Errorf("a task joins %v, want the tier's task group and its network's clients group", joined)
 	}
 }

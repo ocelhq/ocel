@@ -45,3 +45,17 @@ func TestAContainerAppUsingPostgresPaysForNoNATGateway(t *testing.T) {
 		t.Errorf("shaped %d NAT gateways and %d elastic IPs, want none: a container app runs in the VPC already", counts["aws_nat_gateway"], counts["aws_eip"])
 	}
 }
+
+func TestADeployThatNeedsTheTiersNetworkShapesItFreeInTheTiersSharedCost(t *testing.T) {
+	set := shapedWithUsage(t, "api")
+
+	counts := typeCounts(set)
+	if counts["aws_vpc"] != 1 || counts["aws_subnet"] != 6 || counts["aws_internet_gateway"] != 1 || counts["aws_vpc_endpoint"] != 2 {
+		t.Fatalf("shaped %v, want one VPC, six subnets, one internet gateway and two gateway endpoints for the network the database and container app run in", counts)
+	}
+	for _, r := range set.GetResources() {
+		if r.GetType() == "aws_vpc" && r.GetScope() != "project:shop/shared:production" {
+			t.Errorf("the VPC is in scope %q, want the tier's shared scope", r.GetScope())
+		}
+	}
+}

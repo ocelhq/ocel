@@ -462,6 +462,100 @@
       }
     },
     {
+      "id": "project:shop/shared:production/aws_vpc:ocel-network-production",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_vpc",
+      "name": "ocel-network-production",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_internet_gateway:ocel-network-production",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_internet_gateway",
+      "name": "ocel-network-production",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-public-1",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-public-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-public-2",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-public-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-private-1",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-private-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-private-2",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-private-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-isolated-1",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-isolated-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-isolated-2",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-isolated-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_vpc_endpoint:ocel-network-production-s3",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "ocel-network-production-s3",
+      "region": "us-east-1",
+      "properties": {
+        "vpc_endpoint_type": "Gateway"
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_vpc_endpoint:ocel-network-production-dynamodb",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "ocel-network-production-dynamodb",
+      "region": "us-east-1",
+      "properties": {
+        "vpc_endpoint_type": "Gateway"
+      }
+    },
+    {
       "id": "project:shop/environment:prod/aws_cloudfront_distribution:shop",
       "scope": "project:shop/environment:prod",
       "vendor": "aws",

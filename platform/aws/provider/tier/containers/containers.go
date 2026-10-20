@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
@@ -75,6 +76,7 @@ type Infrastructure struct {
 	OriginHost    string
 	VPCOrigin     string
 	TaskSecurity  string
+	Clients       string
 	Cluster       string
 	ExecutionRole string
 	LogGroup      string
@@ -165,8 +167,9 @@ func joinRanges(ranges []string) string {
 }
 
 type Stacks struct {
-	Open func(context.Context, provider.StackRef) (sharedstack.Owner, error)
-	lock sync.Mutex
+	Open    func(context.Context, provider.StackRef) (sharedstack.Owner, error)
+	Network *network.Stacks
+	lock    sync.Mutex
 }
 
 func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Infrastructure, bool, error) {
@@ -214,8 +217,6 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 	raised := fronts
 	if present {
 		raised = fronts.addInstalled(infra.installed())
-	} else if _, err := component.ReadDefaultVPC(ctx, owner.EC2, owner.Region, "the cluster and load balancer container apps run behind"); err != nil {
-		return Infrastructure{}, err
 	}
 	switch {
 	case progress == nil:
@@ -229,7 +230,7 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 	var decoded Infrastructure
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
-		if decoded, err = provision(ctx, owner, StackRef(tier), raised, progress); err != nil {
+		if decoded, err = s.provision(ctx, owner, StackRef(tier), raised, progress); err != nil {
 			return nil, err
 		}
 		return listResources(owner.Namespace, owner.Region, tier, decoded), nil
@@ -240,7 +241,7 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 	return decoded, s.claim(ctx, ref)
 }
 
-func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, fronts Fronts, progress progress.Log) (Infrastructure, error) {
+func (s *Stacks) provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, fronts Fronts, progress progress.Log) (Infrastructure, error) {
 	tier := ref.Tier
 	if err := stackrecords.Write(ctx, owner.KeyValues, tier, Slug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
@@ -248,12 +249,16 @@ func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackR
 	}); err != nil {
 		return Infrastructure{}, err
 	}
+	placed, err := s.Network.Claim(ctx, ref, progress)
+	if err != nil {
+		return Infrastructure{}, err
+	}
 	if owner.VPCOrigins != nil {
 		if err := reclaimFailedVPCOrigins(ctx, owner.VPCOrigins, owner.Namespace, tier, progress); err != nil {
 			return Infrastructure{}, err
 		}
 	}
-	program := NewProgram(owner.Namespace, tier, owner.AppBoundaryARN, owner.AppRolePath, fronts)
+	program := NewProgram(owner.Namespace, tier, owner.AppBoundaryARN, owner.AppRolePath, fronts, placed)
 	outputs, err := owner.Automation.Run(ctx, ref, program, provider.Lease{}, progress)
 	if err != nil {
 		return Infrastructure{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
@@ -295,7 +300,11 @@ func (s *Stacks) Release(ctx context.Context, store records.Store, ref provider.
 	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return Shared.Release(ctx, s.Open, store, ref, progress)
+	retired, err := Shared.Release(ctx, s.Open, store, ref, progress)
+	if err != nil || !retired {
+		return err
+	}
+	return s.Network.Release(ctx, store, StackRef(ref.Tier), progress)
 }
 
 func (s *Stacks) ForgetConsumer(ctx context.Context, store records.Store, ref provider.StackRef) error {
@@ -314,7 +323,10 @@ func (s *Stacks) Remove(ctx context.Context, tier environment.Tier, progress pro
 	if err != nil {
 		return err
 	}
-	return Shared.Remove(ctx, owner, tier, progress)
+	if err := Shared.Remove(ctx, owner, tier, progress); err != nil {
+		return err
+	}
+	return s.Network.Release(ctx, owner.KeyValues, StackRef(tier), progress)
 }
 
 func RefuseInUse(tier environment.Tier, users []string) error {

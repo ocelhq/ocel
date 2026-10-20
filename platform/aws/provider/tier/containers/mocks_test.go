@@ -2,7 +2,6 @@ package containers
 
 import (
 	"encoding/json"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
 const (
@@ -108,6 +108,17 @@ func recordedOf(t *testing.T, rec *inputRecorder, typeToken string) resource.Pro
 	return nil
 }
 
+var testNetwork = network.Network{
+	VPC:           "vpc-ocel",
+	CIDR:          "10.20.0.0/16",
+	Zones:         []string{"use1-az1", "use1-az2"},
+	Public:        []string{"subnet-public-a", "subnet-public-b"},
+	Private:       []string{"subnet-private-a", "subnet-private-b"},
+	Isolated:      []string{"subnet-isolated-a", "subnet-isolated-b"},
+	PrivateRoutes: []string{"rtb-private-a", "rtb-private-b"},
+	Clients:       "sg-clients",
+}
+
 func fixtureInfrastructure() Infrastructure {
 	return Infrastructure{
 		VPC:           "vpc-123",
@@ -116,6 +127,7 @@ func fixtureInfrastructure() Infrastructure {
 		OriginHost:    fixtureOrigin,
 		VPCOrigin:     fixtureFront,
 		TaskSecurity:  "sg-tasks",
+		Clients:       "sg-clients",
 		Cluster:       "arn:aws:ecs:us-east-1:123456789012:cluster/ocel-containers-production",
 		ExecutionRole: "arn:aws:iam::123456789012:role/ocel-containers-production-exec-abc",
 		LogGroup:      "/ocel/containers/production",
@@ -132,18 +144,9 @@ func infrastructureOutputs() auto.OutputMap {
 		outputKeyOriginHost:    auto.OutputValue{Value: infra.OriginHost},
 		outputKeyVPCOrigin:     auto.OutputValue{Value: infra.VPCOrigin},
 		outputKeyTaskSecurity:  auto.OutputValue{Value: infra.TaskSecurity},
+		outputKeyClients:       auto.OutputValue{Value: infra.Clients},
 		outputKeyCluster:       auto.OutputValue{Value: infra.Cluster},
 		outputKeyExecutionRole: auto.OutputValue{Value: infra.ExecutionRole},
 		outputKeyLogGroup:      auto.OutputValue{Value: infra.LogGroup},
-	}
-}
-
-func assertDefaultSubnetsOnly(t *testing.T, filters [][]string) {
-	t.Helper()
-	if len(filters) != 1 {
-		t.Fatalf("looked subnets up %d times, want once", len(filters))
-	}
-	if !slices.Contains(filters[0], "default-for-az") {
-		t.Errorf("subnet lookup filtered on %v, want default-for-az too: a private subnet Ocel adds to the VPC must never enter a database subnet group, a cluster or a load balancer", filters[0])
 	}
 }

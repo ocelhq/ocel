@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
@@ -23,6 +24,11 @@ import (
 )
 
 func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine, records.Store) {
+	t.Helper()
+	return functionNetworkStacksOver(t, defaultVPCNetwork{}, apps...)
+}
+
+func functionNetworkStacksOver(t *testing.T, region component.NetworkAPI, apps ...string) (*Stacks, *mockedEngine, records.Store) {
 	t.Helper()
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
@@ -48,9 +54,9 @@ func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine
 	for key, value := range newWorkerOutputs(map[string]string{"media": "ocel-app-shop-prod-web-media"}) {
 		outputs[key] = value
 	}
-	cloud := &functionNetworkCloud{inputRecorder: &inputRecorder{}, vpcCIDR: "172.31.0.0/16", subnets: defaultVPCSubnets()}
-	cfg.Network = cloud
-	engine := &mockedEngine{outputs: outputs, mocks: cloud}
+	cfg.Network = region
+	seedTierNetwork(t, store, "shop-db")
+	engine := &mockedEngine{outputs: outputs, mocks: &inputRecorder{}}
 	return stacksWith(cfg, engine), engine, store
 }
 

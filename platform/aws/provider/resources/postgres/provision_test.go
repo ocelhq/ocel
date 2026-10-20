@@ -293,7 +293,7 @@ func TestADatabaseAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
 		return register(ctx, testStack("shop", component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-1"}}), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
 	}, pulumi.WithMocks("shop", "prod--infra", componenttest.NewRecorder(masterUserSecret)))
-	if err == nil || !strings.Contains(err.Error(), "vpc-clients") {
+	if err == nil || !strings.Contains(err.Error(), "clients security group") {
 		t.Errorf("register() with no clients group = %v, want it refused rather than admitting nothing or everything", err)
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
-func NewPart(c Clients, namespace, region string) tier.Part {
+func NewPart(c Clients, namespace, region string, release func(context.Context, environment.Tier, progress.Log) error) tier.Part {
 	return tier.Part{
 		Name:    Part,
 		Summary: Summary,
@@ -24,8 +24,11 @@ func NewPart(c Clients, namespace, region string) tier.Part {
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
 				return planDeletion(ctx, c, namespace, tier, "this run removes it; the next port forward adds it again")
 			},
-			Remove: func(ctx context.Context, tier environment.Tier, _ progress.Log) error {
-				return Remove(ctx, c, namespace, tier)
+			Remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+				if err := Remove(ctx, c, namespace, tier); err != nil {
+					return err
+				}
+				return release(ctx, tier, progress)
 			},
 		},
 		Teardown: &tier.Removal{
@@ -36,7 +39,10 @@ func NewPart(c Clients, namespace, region string) tier.Part {
 				if progress != nil {
 					progress.Say(fmt.Sprintf("Removing the %s tier's bastion (ECS, IAM, EC2)", tier))
 				}
-				return Remove(ctx, c, namespace, tier)
+				if err := Remove(ctx, c, namespace, tier); err != nil {
+					return err
+				}
+				return release(ctx, tier, progress)
 			},
 		},
 	}

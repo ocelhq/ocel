@@ -17,7 +17,26 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 )
 
-var testSpec = bastion.Spec{Namespace: "ocel", Tier: environment.TierProduction, Boundary: testBoundary, Ports: []int{5432, 6379}}
+const testNamespace = "ocel"
+
+var testSpec = bastion.Spec{
+	Namespace: testNamespace, Tier: environment.TierProduction, Boundary: testBoundary, Ports: []int{5432, 6379},
+	Network: bastion.Network{VPC: testVPC, CIDR: testVPCCIDR, Subnets: testSubnets},
+}
+
+func TestReconcileRefusesASpecThatNamesNoNetworkToPlaceTheBastionIn(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	spec := testSpec
+	spec.Network = bastion.Network{}
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), spec); err == nil {
+		t.Fatal("Reconcile() = nil, want a bastion with no network refused")
+	}
+	if len(account.clusters) != 0 || len(account.roles) != 0 {
+		t.Errorf("made clusters %v and roles %v for a bastion with nowhere to run", account.clusters, account.roles)
+	}
+}
 
 func TestReconcileCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTaggedAsOcels(t *testing.T) {
 	t.Parallel()
@@ -32,7 +51,7 @@ func TestReconcileCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTagg
 		t.Errorf("Reconcile().Cluster = %q, want ocel-prod-bastion", got.Cluster)
 	}
 	if want := []string{"subnet-a", "subnet-b"}; !slices.Equal(got.Subnets, want) {
-		t.Errorf("Reconcile().Subnets = %v, want the default VPC's subnets %v", got.Subnets, want)
+		t.Errorf("Reconcile().Subnets = %v, want the network's public subnets %v", got.Subnets, want)
 	}
 	if tags := account.clusters["ocel-prod-bastion"]; tags["ocel:managed-by"] != "ocel" {
 		t.Errorf("the cluster is tagged %v, want ocel:managed-by=ocel so the deploy credential may delete it", tags)
@@ -69,7 +88,7 @@ func TestReconcileShapesTheSecurityGroupSoNothingReachesTheTaskAndItReachesOnlyH
 		group = found
 	}
 	if group == nil || group.vpc != testVPC || group.tags["ocel:managed-by"] != "ocel" {
-		t.Fatalf("the security group = %+v, want one in the default VPC tagged ocel:managed-by=ocel", group)
+		t.Fatalf("the security group = %+v, want one in the tier's network tagged ocel:managed-by=ocel", group)
 	}
 	if len(group.ingress) != 0 {
 		t.Errorf("the security group admits %v, want no ingress: the task is reached over Session Manager alone", group.ingress)
@@ -84,7 +103,7 @@ func TestReconcileShapesTheSecurityGroupSoNothingReachesTheTaskAndItReachesOnlyH
 		}
 	}
 	slices.Sort(got)
-	want := []string{"tcp 443-443 0.0.0.0/0", "tcp 5432-5432 172.31.0.0/16", "tcp 6379-6379 172.31.0.0/16"}
+	want := []string{"tcp 443-443 0.0.0.0/0", "tcp 5432-5432 10.20.0.0/16", "tcp 6379-6379 10.20.0.0/16"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the security group egress = %v, want only %v", got, want)
 	}

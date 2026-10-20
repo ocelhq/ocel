@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 
@@ -33,11 +34,33 @@ func flociClients(t *testing.T) bastion.Clients {
 	return bastion.NewClients(cfg)
 }
 
+func flociNetwork(t *testing.T) bastion.Network {
+	t.Helper()
+	cfg, err := sdkconfig.Control(context.Background(), "us-east-1")
+	if err != nil {
+		t.Fatalf("sdkconfig.Control() = %v", err)
+	}
+	api := ec2.NewFromConfig(cfg)
+	vpc, err := api.CreateVpc(context.Background(), &ec2.CreateVpcInput{CidrBlock: aws.String("10.20.0.0/16")})
+	if err != nil {
+		t.Fatalf("CreateVpc() = %v", err)
+	}
+	subnet, err := api.CreateSubnet(context.Background(), &ec2.CreateSubnetInput{VpcId: vpc.Vpc.VpcId, CidrBlock: aws.String("10.20.0.0/19")})
+	if err != nil {
+		t.Fatalf("CreateSubnet() = %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = api.DeleteSubnet(context.Background(), &ec2.DeleteSubnetInput{SubnetId: subnet.Subnet.SubnetId})
+		_, _ = api.DeleteVpc(context.Background(), &ec2.DeleteVpcInput{VpcId: vpc.Vpc.VpcId})
+	})
+	return bastion.Network{VPC: aws.ToString(vpc.Vpc.VpcId), CIDR: "10.20.0.0/16", Subnets: []string{aws.ToString(subnet.Subnet.SubnetId)}}
+}
+
 func TestABastionIsReconciledRunAndRemovedAgainstTheEmulator(t *testing.T) {
 	ctx := context.Background()
 	clients := flociClients(t)
-	spec := bastion.Spec{Namespace: "ocel", Tier: environment.TierPreview, Boundary: "arn:aws:iam::000000000000:policy/ocel-app-boundary-preview", Ports: []int{5432, 6379}}
-	t.Cleanup(func() { _ = bastion.Remove(context.WithoutCancel(ctx), clients, "ocel", spec.Tier) })
+	spec := bastion.Spec{Namespace: testNamespace, Tier: environment.TierPreview, Boundary: "arn:aws:iam::000000000000:policy/ocel-app-boundary-preview", Ports: []int{5432, 6379}, Network: flociNetwork(t)}
+	t.Cleanup(func() { _ = bastion.Remove(context.WithoutCancel(ctx), clients, testNamespace, spec.Tier) })
 
 	reconciled, err := bastion.Reconcile(ctx, clients, spec)
 	if err != nil {

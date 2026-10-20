@@ -14,7 +14,7 @@ import (
 )
 
 func attachedNetwork() *functionnetwork.Network {
-	return &functionnetwork.Network{Subnets: []string{"subnet-private-a", "subnet-private-b"}, SecurityGroup: "sg-functions"}
+	return &functionnetwork.Network{Subnets: []string{"subnet-private-a", "subnet-private-b"}, SecurityGroup: "sg-functions", Clients: "sg-clients"}
 }
 
 func runAppProgram(t *testing.T, work *appWork) *inputRecorder {
@@ -48,8 +48,8 @@ func TestAnAppAttachedToTheFunctionNetworkPlacesEveryFunctionInItsPrivateSubnets
 		if got := stringsAt(placed, "subnetIds"); !slices.Equal(got, attachedNetwork().Subnets) {
 			t.Errorf("%s runs in subnets %v, want the function network's private subnets", name, got)
 		}
-		if got := stringsAt(placed, "securityGroupIds"); !slices.Equal(got, []string{"sg-functions"}) {
-			t.Errorf("%s runs in security groups %v, want the function network's", name, got)
+		if got := stringsAt(placed, "securityGroupIds"); !slices.Equal(got, []string{"sg-functions", "sg-clients"}) {
+			t.Errorf("%s runs in security groups %v, want the function network's and its clients group", name, got)
 		}
 	}
 	if !slices.Contains(rec.attached, iam.LambdaVPCAccessPolicyARN) {

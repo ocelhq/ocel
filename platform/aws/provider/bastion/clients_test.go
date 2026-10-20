@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	testVPC      = "vpc-default"
-	testVPCCIDR  = "172.31.0.0/16"
+	testVPC      = "vpc-ocel"
+	testVPCCIDR  = "10.20.0.0/16"
 	testBoundary = "arn:aws:iam::123456789012:policy/ocel-app-boundary-production"
 )
 
@@ -498,18 +498,6 @@ func (a *account) DeleteRole(_ context.Context, in *iam.DeleteRoleInput, _ ...fu
 	a.record("DeleteRole " + name)
 	delete(a.roles, name)
 	return &iam.DeleteRoleOutput{}, nil
-}
-
-func (a *account) DescribeVpcs(_ context.Context, _ *ec2.DescribeVpcsInput, _ ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error) {
-	return &ec2.DescribeVpcsOutput{Vpcs: []ec2types.Vpc{{VpcId: aws.String(testVPC), CidrBlock: aws.String(testVPCCIDR), IsDefault: aws.Bool(true)}}}, nil
-}
-
-func (a *account) DescribeSubnets(_ context.Context, _ *ec2.DescribeSubnetsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
-	out := &ec2.DescribeSubnetsOutput{}
-	for _, id := range testSubnets {
-		out.Subnets = append(out.Subnets, ec2types.Subnet{SubnetId: aws.String(id), VpcId: aws.String(testVPC)})
-	}
-	return out, nil
 }
 
 func (a *account) groupView(g *securityGroup) ec2types.SecurityGroup {

@@ -24,15 +24,16 @@ func containerInfraOutputs() auto.OutputMap {
 	infra := fixtureContainerInfra()
 	subnets, _ := json.Marshal(infra.Subnets)
 	return auto.OutputMap{
-		"vpcId":             auto.OutputValue{Value: infra.VPC},
-		"subnets":           auto.OutputValue{Value: string(subnets)},
-		"listenerArn":       auto.OutputValue{Value: infra.Listener},
-		"originHost":        auto.OutputValue{Value: infra.OriginHost},
-		"vpcOrigin":         auto.OutputValue{Value: infra.VPCOrigin},
-		"taskSecurityGroup": auto.OutputValue{Value: infra.TaskSecurity},
-		"cluster":           auto.OutputValue{Value: infra.Cluster},
-		"executionRoleArn":  auto.OutputValue{Value: infra.ExecutionRole},
-		"logGroup":          auto.OutputValue{Value: infra.LogGroup},
+		"vpcId":                auto.OutputValue{Value: infra.VPC},
+		"subnets":              auto.OutputValue{Value: string(subnets)},
+		"listenerArn":          auto.OutputValue{Value: infra.Listener},
+		"originHost":           auto.OutputValue{Value: infra.OriginHost},
+		"vpcOrigin":            auto.OutputValue{Value: infra.VPCOrigin},
+		"taskSecurityGroup":    auto.OutputValue{Value: infra.TaskSecurity},
+		"clientsSecurityGroup": auto.OutputValue{Value: infra.Clients},
+		"cluster":              auto.OutputValue{Value: infra.Cluster},
+		"executionRoleArn":     auto.OutputValue{Value: infra.ExecutionRole},
+		"logGroup":             auto.OutputValue{Value: infra.LogGroup},
 	}
 }
 

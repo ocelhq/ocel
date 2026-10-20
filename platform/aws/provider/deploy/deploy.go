@@ -61,7 +61,6 @@ type Config struct {
 	VariablesKeyARN     string
 	AppBoundaryARN      string
 	AppRolePath         string
-	VPCClients          string
 	Tier                environment.Tier
 	VariablesReferenced map[variablestore.Coordinate]string
 
@@ -136,7 +135,6 @@ func (c Config) containerTarget() container.Target {
 		AppRolePath:          c.AppRolePath,
 		OriginSecret:         c.OriginSecret,
 		PreviousOriginSecret: c.PreviousOriginSecret,
-		VPCClients:           c.VPCClients,
 	}
 }
 

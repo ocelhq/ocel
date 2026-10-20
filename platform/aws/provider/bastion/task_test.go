@@ -150,7 +150,7 @@ func TestABastionTaskJoinsTheTiersClientsGroupSoTheDatabasesItForwardsToAdmitIt(
 	account := newAccount()
 	clients := account.clients()
 	spec := testSpec
-	spec.Clients = "sg-vpc-clients"
+	spec.Network.Clients = "sg-vpc-clients"
 	reconciled, err := bastion.Reconcile(context.Background(), clients, spec)
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
