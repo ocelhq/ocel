@@ -634,17 +634,19 @@ func TestACredentialPassesTheBastionTaskRoleOfOnlyItsOwnTierToECS(t *testing.T) 
 	}
 }
 
-func TestTheDeployCredentialRaisesAndRemovesBacklogAlarmsOnlyUnderTheAppScope(t *testing.T) {
+func TestTheDeployCredentialRaisesAndRemovesOnlyItsOwnTiersBacklogAlarmsUnderTheAppScope(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
-	for _, action := range []string{
-		"cloudwatch:PutMetricAlarm",
-		"cloudwatch:DeleteAlarms",
-		"cloudwatch:TagResource",
-		"cloudwatch:UntagResource",
-		"cloudwatch:ListTagsForResource",
+	ofItsTier := conditionJSON(t, productionScope.TaggedOnlyAsItsTier())
+	byOcel := conditionJSON(t, productionScope.TaggedByOcelForItsTier())
+	for action, condition := range map[string]string{
+		"cloudwatch:PutMetricAlarm":      ofItsTier,
+		"cloudwatch:TagResource":         ofItsTier,
+		"cloudwatch:DeleteAlarms":        byOcel,
+		"cloudwatch:UntagResource":       byOcel,
+		"cloudwatch:ListTagsForResource": byOcel,
 	} {
-		if wanted := (grant{action: action, resource: productionScope.AppAlarmARN(), condition: "null"}); !grants[wanted] {
-			t.Errorf("the deploy credential does not grant %s on %s: a container worker at no tasks is started by an alarm on its queues", action, productionScope.AppAlarmARN())
+		if wanted := (grant{action: action, resource: productionScope.AppAlarmARN(), condition: condition}); !grants[wanted] {
+			t.Errorf("the deploy credential does not grant %s on %s under %s: a container worker at no tasks is started by an alarm on its queues, and the other tier's alarms are not its own", action, productionScope.AppAlarmARN(), condition)
 		}
 	}
 	for g := range grants {

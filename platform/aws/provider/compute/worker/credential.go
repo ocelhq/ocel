@@ -29,14 +29,14 @@ func Credential(s iam.Scope) []iam.Statement {
 			Condition: s.RetaggedByOcelOnlyAsItsTier(),
 		},
 		{
-			Actions: []string{
-				"cloudwatch:DeleteAlarms",
-				"cloudwatch:ListTagsForResource",
-				"cloudwatch:PutMetricAlarm",
-				"cloudwatch:TagResource",
-				"cloudwatch:UntagResource",
-			},
+			Actions:   []string{"cloudwatch:PutMetricAlarm", "cloudwatch:TagResource"},
 			Resources: []string{s.AppAlarmARN()},
+			Condition: s.TaggedOnlyAsItsTier(),
+		},
+		{
+			Actions:   []string{"cloudwatch:DeleteAlarms", "cloudwatch:ListTagsForResource", "cloudwatch:UntagResource"},
+			Resources: []string{s.AppAlarmARN()},
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 	}
 }
