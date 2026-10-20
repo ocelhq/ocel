@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-const productionFence = "on the condition resource.matchTag('acme-prod/ocel-tier', 'production')"
+const productionFence = "on the condition !resource.hasTagKey('acme-prod/ocel-tier') || resource.matchTag('acme-prod/ocel-tier', 'production')"
 
 func renderedDeploy(t *testing.T, tier environment.Tier) []string {
 	t.Helper()

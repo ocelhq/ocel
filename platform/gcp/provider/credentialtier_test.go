@@ -14,8 +14,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-const outsideValue = "outside"
-
 var accountPowers = []string{
 	"iam.serviceAccounts.actAs",
 	"iam.serviceAccounts.setIamPolicy",
@@ -140,7 +138,7 @@ func grantReaches(t *testing.T, grant credential.Grant, resource checkedResource
 	return grant.Condition == nil || conditionAdmits(t, grant.Condition.Expression, resource)
 }
 
-func powersOver(t *testing.T, deploy credential.Deploy, resource checkedResource) map[string]string {
+func grantedOver(t *testing.T, deploy credential.Deploy, resource checkedResource) map[string]string {
 	t.Helper()
 	predefined := predefinedRoles(t)
 	held := map[string]string{}
@@ -148,11 +146,19 @@ func powersOver(t *testing.T, deploy credential.Deploy, resource checkedResource
 		if !grantReaches(t, grant, resource) {
 			continue
 		}
-		permissions := grantPermissions(t, predefined, grant)
-		for _, permission := range permissions {
+		for _, permission := range grantPermissions(t, predefined, grant) {
 			held[permission] = grant.String()
 		}
-		if !slices.Contains(permissions, projectPolicyWrite) {
+	}
+	return held
+}
+
+func powersOver(t *testing.T, deploy credential.Deploy, resource checkedResource) map[string]string {
+	t.Helper()
+	predefined := predefinedRoles(t)
+	held := grantedOver(t, deploy, resource)
+	for _, grant := range deploy.Grants() {
+		if !grantReaches(t, grant, resource) || !slices.Contains(grantPermissions(t, predefined, grant), projectPolicyWrite) {
 			continue
 		}
 		for _, role := range grantableRolesOf(t, grant) {
@@ -164,25 +170,31 @@ func powersOver(t *testing.T, deploy credential.Deploy, resource checkedResource
 	return held
 }
 
-func TestADeployCredentialHoldsNoPowerOverAServiceAccountOutsideItsTier(t *testing.T) {
+func TestADeployCredentialHoldsNoPowerOverAServiceAccountOfTheOtherTier(t *testing.T) {
 	t.Parallel()
 
 	key := names.New("ocel", "acme-prod").TierTagKeyPath()
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
-		for label, tags := range map[string]map[string]string{
-			"tagged " + string(tier.Sibling()): {key: string(tier.Sibling())},
-			"tagged " + outsideValue:           {key: outsideValue},
-			"carrying no tier tag":             nil,
-		} {
-			account := checkedResource{name: "projects/acme-prod/serviceAccounts/someone@acme-prod.iam.gserviceaccount.com", tags: tags}
-			held := powersOver(t, deployOf(tier), account)
-			for _, power := range accountPowers {
-				if via, holds := held[power]; holds {
-					t.Errorf("the %s deploy credential holds %s on a service account %s, through %s", tier, power, label, via)
-				}
+		account := checkedResource{name: "projects/acme-prod/serviceAccounts/someone@acme-prod.iam.gserviceaccount.com", tags: map[string]string{key: string(tier.Sibling())}}
+		held := powersOver(t, deployOf(tier), account)
+		for _, power := range append(slices.Clone(accountPowers), "iam.serviceAccounts.createTagBinding") {
+			if via, holds := held[power]; holds {
+				t.Errorf("the %s deploy credential holds %s on a service account tagged %s, through %s", tier, power, tier.Sibling(), via)
 			}
-			if via, holds := held["iam.serviceAccounts.createTagBinding"]; holds && tags != nil {
-				t.Errorf("the %s deploy credential may bind a tag to a service account %s, through %s", tier, label, via)
+		}
+	}
+}
+
+func TestADeployCredentialReachesAnUntaggedResourceAsItReachesItsOwnTiers(t *testing.T) {
+	t.Parallel()
+
+	key := names.New("ocel", "acme-prod").TierTagKeyPath()
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		untagged := powersOver(t, deployOf(tier), checkedResource{name: "projects/acme-prod/serviceAccounts/new@acme-prod.iam.gserviceaccount.com"})
+		own := powersOver(t, deployOf(tier), checkedResource{name: "projects/acme-prod/serviceAccounts/new@acme-prod.iam.gserviceaccount.com", tags: map[string]string{key: string(tier)}})
+		for power := range own {
+			if _, holds := untagged[power]; !holds {
+				t.Errorf("the %s deploy credential holds %s on its own tier's account and not on an untagged one: a resource it has just made carries no tier tag until Google applies the binding", tier, power)
 			}
 		}
 	}
@@ -203,41 +215,21 @@ func TestADeployCredentialHoldsItsTiersPowersOverItsOwnTiersServiceAccounts(t *t
 	}
 }
 
-func TestEveryRoleAFenceHoldsIsConditionedOnItsOwnTiersTagAlone(t *testing.T) {
+func TestEveryRoleAFenceHoldsIsConditionedOnItsOwnTiersTagOrNoTierTag(t *testing.T) {
 	t.Parallel()
 
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
-		want := "resource.matchTag('acme-prod/ocel-tier', '" + string(tier) + "')"
+		want := ", on the condition !resource.hasTagKey('acme-prod/ocel-tier') || resource.matchTag('acme-prod/ocel-tier', '" + string(tier) + "')"
 		lines := credential.Lines(deployOf(tier).Grants())
 		for _, role := range credential.TieredRoles {
-			if line := role + ", on the condition " + want; !slices.Contains(lines, line) {
+			if line := role + want; !slices.Contains(lines, line) {
 				t.Errorf("the %s deploy credential is granted\n%s\nwant the line %s", tier, strings.Join(lines, "\n"), line)
 			}
 		}
 		for _, line := range lines {
-			if strings.Contains(line, "hasTagKey") && !strings.HasPrefix(line, "a custom role holding ") {
-				t.Errorf("the %s deploy credential grants %s: a predefined role on every untagged resource reaches what no tier owns", tier, line)
+			if strings.Contains(line, "hasTagKey") && !strings.HasSuffix(line, want) {
+				t.Errorf("the %s deploy credential grants %s: a grant on an untagged resource is a tiered role, admitting its own tier's resources too", tier, line)
 			}
-		}
-	}
-}
-
-func TestTheGrantOnUntaggedResourcesOnlyReadsAndBindsThem(t *testing.T) {
-	t.Parallel()
-
-	untagged := deployOf(environment.TierPreview).Untagged()
-	if untagged.Condition == nil || untagged.Condition.Expression != "!resource.hasTagKey('acme-prod/ocel-tier')" {
-		t.Fatalf("the grant on untagged resources is %s, want it conditioned on the resource carrying no ocel-tier tag", untagged)
-	}
-	for _, permission := range untagged.Permissions {
-		verb := permission[strings.LastIndex(permission, ".")+1:]
-		if verb != "get" && verb != "createTagBinding" && verb != "listTagBindings" {
-			t.Errorf("the grant on untagged resources holds %s, which reaches a resource of no tier beyond reading it and binding its tier", permission)
-		}
-	}
-	for _, kind := range []string{"run.services", "iam.serviceAccounts", "artifactregistry.repositories", "storage.buckets", "cloudsql.instances"} {
-		if !slices.Contains(untagged.Permissions, kind+".createTagBinding") {
-			t.Errorf("the grant on untagged resources lacks %s.createTagBinding: a deploy binds that kind's tier right after making it", kind)
 		}
 	}
 }
@@ -303,14 +295,13 @@ func TestAPreviewDeployCredentialMayNeitherOpenNorReadWhatProductionKeeps(t *tes
 	}
 }
 
-func TestAPreviewDeployCredentialMayNotReadProductionsRecords(t *testing.T) {
-	t.Skip("Needs a ruling: Firestore has no per-database IAM policy, so an app's records grant lives on the project, and modifiedGrantsByRole limits which roles a deploy grants there but not to whom or on what condition: the preview credential can grant itself roles/datastore.user on the whole project")
+func TestAPreviewDeployCredentialIsGrantedNothingOnProductionsRecords(t *testing.T) {
 	t.Parallel()
 
 	key := names.New("ocel", "acme-prod").TierTagKeyPath()
 	records := checkedResource{name: "projects/acme-prod/databases/ocel-prod-records", tags: map[string]string{key: string(environment.TierProduction)}}
-	held := powersOver(t, deployOf(environment.TierPreview), records)
-	for _, power := range []string{"datastore.entities.get", "datastore.entities.update"} {
+	held := grantedOver(t, deployOf(environment.TierPreview), records)
+	for _, power := range []string{"datastore.entities.get", "datastore.entities.update", "datastore.databases.delete"} {
 		if via, holds := held[power]; holds {
 			t.Errorf("the preview deploy credential holds %s on production's records, through %s", power, via)
 		}
