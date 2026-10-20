@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -48,18 +48,22 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 			t.Errorf("a bootstrap checks %v, want %s among them: the base makes, purges and grants on the delay queue", bootstrap.BootstrapPermissions, permission)
 		}
 	}
-	databases := bootstrap.NewProjectRecordsRole(b.Clients.Names).Permissions
-	for _, permission := range []string{"datastore.databases.create", "datastore.databases.update", "datastore.databases.delete", "datastore.operations.get", "datastore.schemas.create", "datastore.schemas.update"} {
-		if !slices.Contains(databases, permission) {
-			t.Errorf("the project records role holds %v, want %s among them: a deploy makes a project's database of runs, its indexes and time to live, and removing the project deletes it", databases, permission)
+	deploy := deployOf(environment.TierProduction)
+	for _, permission := range []string{"datastore.databases.create", "datastore.databases.list"} {
+		if !slices.Contains(deploy.ProjectPermissions().Permissions, permission) {
+			t.Errorf("a deploy is granted %s, want %s among them: a deploy makes a project's database of runs, and Firestore checks that against the project", deploy.ProjectPermissions(), permission)
 		}
 	}
-	if !slices.Contains(bootstrap.RolesFor(edge.PurposeBootstrap), "roles/cloudtasks.admin") {
-		t.Errorf("a bootstrap credential is granted %v, want roles/cloudtasks.admin: removing a bootstrap purges its delay queue", bootstrap.RolesFor(edge.PurposeBootstrap))
+	lines := credential.Lines(deploy.Grants())
+	if want := deploy.Tiered(credential.DatabasesRole).String(); !slices.Contains(lines, want) {
+		t.Errorf("a deploy credential is granted\n%s\nwant %s: a deploy indexes a project's database of runs and sets its time to live, and removing the project deletes it", strings.Join(lines, "\n"), want)
 	}
-	for _, role := range []string{"roles/pubsub.admin", "roles/cloudscheduler.admin"} {
-		if !slices.Contains(bootstrap.RolesFor(edge.PurposeDeploy), role) {
-			t.Errorf("a deploy credential is granted %v, want %s: a deploy makes and removes topics, subscriptions and schedules", bootstrap.RolesFor(edge.PurposeDeploy), role)
+	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/cloudtasks.admin") {
+		t.Errorf("a bootstrap credential is granted %v, want roles/cloudtasks.admin: removing a bootstrap purges its delay queue", bootstrap.BootstrapRoles())
+	}
+	for _, want := range []string{deploy.Tiered(credential.TopicsRole).String(), credential.SchedulesRole} {
+		if !slices.Contains(lines, want) {
+			t.Errorf("a deploy credential is granted\n%s\nwant %s: a deploy makes and removes topics, subscriptions and schedules", strings.Join(lines, "\n"), want)
 		}
 	}
 }
@@ -126,7 +130,7 @@ func TestABootstrapChecksEveryPermissionItsFirestoreAdminCallsNeed(t *testing.T)
 func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing.T) {
 	t.Parallel()
 
-	for _, permission := range slices.Concat(bootstrap.PermissionsFor(nil), bootstrap.NewProjectRecordsRole(names.New("ocel", "acme-prod")).Permissions) {
+	for _, permission := range slices.Concat(bootstrap.PermissionsFor(nil), deployOf(environment.TierProduction).ProjectPermissions().Permissions, deployOf(environment.TierProduction).Untagged().Permissions) {
 		if strings.HasPrefix(permission, "datastore.indexes.") {
 			t.Errorf("a bootstrap or a deploy is granted %s, want datastore.schemas.*: Google's role reference lists only the schemas names", permission)
 		}

@@ -39,21 +39,11 @@ var roleKind = KindOps{
 
 const (
 	ReasonRoleDeleted = "it was deleted, and its bindings grant nothing until it is undeleted"
-	ReasonRoleDrifted = "it holds other permissions than a deploy needs on the service accounts its apps run as"
 	ReasonRoleKept    = "Google holds a deleted custom role's id for up to 44 days, so this role outlives every bootstrap that used it"
 
 	roleStageGA       = "GA"
 	roleStageDisabled = "DISABLED"
 )
-
-var AppAccountsPermissions = []string{
-	"iam.serviceAccounts.create",
-	"iam.serviceAccounts.get",
-	"iam.serviceAccounts.getIamPolicy",
-	"iam.serviceAccounts.setIamPolicy",
-	"iam.serviceAccounts.createTagBinding",
-	"iam.serviceAccounts.listTagBindings",
-}
 
 type customRole struct {
 	ID          string
@@ -63,18 +53,8 @@ type customRole struct {
 	DriftReason string
 }
 
-func NewAppAccountsRole(names names.Names) customRole {
-	return customRole{
-		ID:          names.AppAccountsRole(),
-		title:       "ocel app accounts (" + string(names.Namespace()) + ")",
-		description: "lets a deploy create the service accounts its apps run as and set who may act as them, and nothing else",
-		Permissions: AppAccountsPermissions,
-		DriftReason: ReasonRoleDrifted,
-	}
-}
-
 func FindCustomRole(names names.Names, id string) (customRole, bool) {
-	for _, role := range []customRole{NewAppAccountsRole(names), NewCDNPurgeRole(names), NewPartsRole(names), NewProjectRecordsRole(names), newRealtimeSubscriptionsRole(names)} {
+	for _, role := range []customRole{NewCDNPurgeRole(names), NewPartsRole(names), newRealtimeSubscriptionsRole(names)} {
 		if role.ID == id {
 			return role, true
 		}
@@ -186,33 +166,6 @@ func refusePurgedRole(path string) error {
 		"the custom role %s was deleted, and Google undeletes a role only in the first 7 days and holds its id from reuse until it is purged, up to 44 days after the deletion.\n"+
 			"Bootstrap again once Google has purged it, or under another namespace in %s",
 		path, provider.NamespaceEnvVar)
-}
-
-var projectRecordsPermissions = []string{
-	"datastore.databases.create",
-	"datastore.databases.get",
-	"datastore.databases.getMetadata",
-	"datastore.databases.update",
-	"datastore.databases.delete",
-	"datastore.operations.get",
-	"datastore.schemas.create",
-	"datastore.schemas.list",
-	"datastore.schemas.update",
-	"cloudkms.cryptoKeys.create",
-	"cloudkms.cryptoKeys.get",
-	"datastore.databases.createTagBinding",
-	"datastore.databases.listTagBindings",
-	"datastore.databases.deleteTagBinding",
-}
-
-func NewProjectRecordsRole(names names.Names) customRole {
-	return customRole{
-		ID:          names.ProjectRecordsRole(),
-		title:       "ocel project records (" + string(names.Namespace()) + ")",
-		description: "lets a deploy make the Firestore databases a project's values, runs and tag records are kept in, with their indexes, and the key its values are sealed under, and remove the database of its runs and tag records, granted on the condition it names them, and nothing else",
-		Permissions: projectRecordsPermissions,
-		DriftReason: "it holds other permissions than a deploy needs to make a project's records databases and key",
-	}
 }
 
 func newRealtimeSubscriptionsRole(names names.Names) customRole {

@@ -14,12 +14,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-var tierTagKey = bootstrap.Resource{Kind: bootstrap.KindTierTag, Name: gcloud.TierTagKey, Shared: true}
+var tierTagKey = bootstrap.Resource{Kind: bootstrap.KindTierTag, Name: names.TierTagKey, Shared: true}
 
 func TestABootstrapBeginsWithTheProjectsTierTagKeyWhichBothTiersShare(t *testing.T) {
 	t.Parallel()
@@ -101,7 +100,7 @@ func TestATierTagKeyLackingATiersValueIsMendedWithIt(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	tags := googletest.NewTierTags(t)
-	tags.Keys["acme-prod/ocel-tier"] = &crm.TagKey{Name: "tagKeys/7", Parent: "projects/123456789", ShortName: gcloud.TierTagKey, NamespacedName: "acme-prod/ocel-tier"}
+	tags.Keys["acme-prod/ocel-tier"] = &crm.TagKey{Name: "tagKeys/7", Parent: "projects/123456789", ShortName: names.TierTagKey, NamespacedName: "acme-prod/ocel-tier"}
 	b, read := tierTagEngine(t, tags)
 
 	found, err := b.PresenceOf(ctx, read, tierTagKey)

@@ -190,10 +190,6 @@
       "monthlyUsage": "0.03"
     },
     {
-      "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_app_accounts",
-      "status": "STATUS_FREE"
-    },
-    {
       "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_cdn_purge",
       "status": "STATUS_FREE"
     },
@@ -233,10 +229,6 @@
     },
     {
       "resource": "project:shop/shared:production/google_service_account:ocel-prod-push",
-      "status": "STATUS_FREE"
-    },
-    {
-      "resource": "project:shop/shared:production/google_project_iam_custom_role:ocel_project_records",
       "status": "STATUS_FREE"
     },
     {
@@ -603,7 +595,7 @@
   ],
   "coverage": {
     "supported": 16,
-    "free": 22,
+    "free": 20,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",

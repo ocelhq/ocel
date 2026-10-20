@@ -9,14 +9,10 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
-	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const (
@@ -124,122 +120,26 @@ var bootstrapRoles = []string{
 	"roles/datastore.owner",
 	"roles/storage.admin",
 	"roles/cloudkms.admin",
+	"roles/cloudkms.cryptoKeyEncrypterDecrypter",
 	"roles/secretmanager.admin",
 	"roles/artifactregistry.admin",
 	"roles/iam.serviceAccountAdmin",
+	"roles/iam.serviceAccountUser",
 	"roles/iam.roleAdmin",
 	"roles/resourcemanager.projectIamAdmin",
-	"roles/cloudscheduler.admin",
-	"roles/compute.networkAdmin",
-	"roles/cloudsql.viewer",
-	"roles/cloudtasks.admin",
-	"roles/resourcemanager.tagAdmin",
-	gcloud.TierTagUserRole,
-}
-
-var deployRoles = []string{
-	"roles/datastore.user",
-	"roles/storage.objectAdmin",
-	"roles/cloudkms.cryptoKeyEncrypterDecrypter",
-	"roles/secretmanager.secretAccessor",
-	"roles/artifactregistry.writer",
-	"roles/iam.serviceAccountUser",
 	"roles/run.admin",
 	"roles/memorystore.admin",
 	"roles/pubsub.admin",
 	"roles/cloudscheduler.admin",
+	"roles/compute.networkAdmin",
+	"roles/cloudsql.viewer",
+	"roles/cloudtasks.admin",
 	"roles/logging.viewer",
+	"roles/resourcemanager.tagAdmin",
+	gcloud.TierTagUserRole,
 }
 
-const (
-	realtimeSecretsRole = "roles/secretmanager.editor"
-	gateSecretsRole     = "roles/secretmanager.admin"
-	ProjectNumberHole   = "PROJECT_NUMBER"
-)
-
-func prefixedSecretsGrant(role, prefix string) string {
-	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
-		role, "projects/"+ProjectNumberHole+"/secrets/"+prefix)
-}
-
-func GateSecretsGrant(names names.Names) string {
-	return prefixedSecretsGrant(gateSecretsRole, names.GateSecretPrefix())
-}
-
-func RealtimeSecretsGrant(names names.Names) string {
-	return prefixedSecretsGrant(realtimeSecretsRole, names.RealtimeSecretPrefix())
-}
-
-func QueueGrants(names names.Names, region string) []string {
-	var granted []string
-	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		granted = append(granted, grants.QueueAdminGrant(names.DelayQueuePath(region, tier)))
-	}
-	return granted
-}
-
-const untaggingRole = "roles/artifactregistry.repoAdmin"
-
-func UntaggingGrants(names names.Names, region string) []string {
-	var grants []string
-	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
-		grants = append(grants, fmt.Sprintf("%s, on the repository projects/%s/locations/%s/repositories/%s",
-			untaggingRole, names.Project(), region, names.Repository(tier)))
-	}
-	return grants
-}
-
-const (
-	bucketsRole   = "roles/storage.admin"
-	databasesRole = "roles/cloudsql.admin"
-)
-
-var projectPermissions = []string{
-	"storage.buckets.create",
-	"cloudsql.instances.create",
-	"cloudsql.instances.list",
-	"cloudsql.instances.get",
-	"secretmanager.secrets.create",
-	"secretmanager.secrets.createTagBinding",
-	"secretmanager.secrets.deleteTagBinding",
-}
-
-func AppBucketsGrant(names names.Names) string {
-	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
-		bucketsRole, "projects/_/buckets/"+names.AppFence())
-}
-
-func DatabasesGrant(names names.Names) string {
-	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
-		databasesRole, "projects/"+names.Project()+"/instances/"+names.AppFence())
-}
-
-func PartsGrant(names names.Names) string {
-	return names.PartsRolePath() + ", unconditioned: Compute Engine, Network Connectivity, Artifact Registry and Service Usage name no resource attribute an IAM condition could hold a part by"
-}
-
-func ProjectPermissionsGrant() string {
-	return "a custom role holding " + strings.Join(projectPermissions, ", ") +
-		", unconditioned: Google checks creating a bucket, an instance or a secret, listing instances and reading Cloud SQL operations against the project, " +
-		"where no name condition admits them, and the role a deploy holds on its realtime secrets may not bind their tier tag"
-}
-
-func TierTagsGrant(names names.Names, tier environment.Tier) string {
-	return gcloud.TierTagUserRole + ", on the tag value " + names.Project() + "/" + gcloud.TierTagKey + "/" + string(tier)
-}
-
-func RolesFor(purpose edge.CredentialPurpose) []string {
-	if purpose != edge.PurposeBootstrap {
-		return deployRoles
-	}
-	granted := slices.Clone(deployRoles)
-	for _, role := range bootstrapRoles {
-		if !slices.Contains(granted, role) {
-			granted = append(granted, role)
-		}
-	}
-	return granted
-}
+func BootstrapRoles() []string { return slices.Clone(bootstrapRoles) }
 
 func (b Engine) preflight(ctx context.Context, read Survey, parts []string) error {
 	if err := b.servicesOn(ctx, APIsFor(read.Tier, parts)); err != nil {
@@ -261,7 +161,7 @@ func PermissionsFor(parts []string) []string {
 }
 
 func RolesCovering(parts []string) []string {
-	roles := RolesFor(edge.PurposeBootstrap)
+	roles := BootstrapRoles()
 	if slices.Contains(parts, CloudflareOriginPart) {
 		roles = AppendMissing(roles, alb.ShieldedRoles())
 	}

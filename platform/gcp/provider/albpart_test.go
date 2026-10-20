@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
@@ -155,11 +156,12 @@ func TestADryDeployBehindTheALBPlansItsLoadBalancerAndRaisesNothing(t *testing.T
 func TestADeployMayAddAndRetireTheALBsGateRepositoryAndTheBaseKeepsTheCDNPurgeRole(t *testing.T) {
 	t.Parallel()
 	names := names.New("ocel", "acme-prod")
-	parts := bootstrap.NewPartsRole(names).Permissions
-	for _, permission := range []string{"artifactregistry.repositories.create", "artifactregistry.repositories.delete"} {
-		if !slices.Contains(parts, permission) {
-			t.Errorf("the parts role holds %v, want %s: a deploy adds the gate's repository with the load balancer and the last destroy removes it", parts, permission)
-		}
+	deploy := deployOf(environment.TierProduction)
+	if !slices.Contains(deploy.ProjectPermissions().Permissions, "artifactregistry.repositories.create") {
+		t.Errorf("a deploy is granted %s, want artifactregistry.repositories.create: a deploy adds the gate's repository with the load balancer", deploy.ProjectPermissions())
+	}
+	if lines, want := credential.Lines(deploy.Grants()), deploy.Tiered(credential.RepositoriesRole).String(); !slices.Contains(lines, want) {
+		t.Errorf("a deploy is granted\n%s\nwant %s: the last destroy removes the gate's repository, which carries its tier's tag", strings.Join(lines, "\n"), want)
 	}
 	role := bootstrap.Resource{Kind: bootstrap.KindRole, Name: names.CDNPurgeRole()}
 	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), role.ID()) {

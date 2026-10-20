@@ -3,7 +3,6 @@ package gcp
 import (
 	"context"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -14,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 func TestTheTagRecordsOfAnISRPrefixAreReadThroughOneIndexOnPrefixThenWriteTime(t *testing.T) {
@@ -57,10 +55,6 @@ func TestNoTierKeepsADatabaseOfRunsOrTagRecordsAndADeployMayMakeEachProjectsOwn(
 			if item.Kind == bootstrap.KindDatabase && item.Name != names.Database() {
 				t.Errorf("a %s bootstrap provisions database %s, and every database but the namespace's is a project's own", tier, item.Name)
 			}
-		}
-		prefix := `resource.name.startsWith("projects/acme-prod/databases/` + names.ProjectWritableDatabasePrefix(tier) + `")`
-		if grant := variables.ProjectRecordsGrant(names, "europe-west1"); !strings.Contains(grant, prefix) {
-			t.Errorf("a deploy is granted %s, want it to name the %s databases of projects' runs and tag records it makes", grant, tier)
 		}
 	}
 	for _, offered := range composed(bootstrap.Engine{}).Parts() {

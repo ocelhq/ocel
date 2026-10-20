@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
@@ -298,7 +299,7 @@ func databaseOf(read Survey) Resource {
 }
 
 func tierTagOf() Resource {
-	return Resource{Kind: KindTierTag, Name: gcloud.TierTagKey, Shared: true}
+	return Resource{Kind: KindTierTag, Name: names.TierTagKey, Shared: true}
 }
 
 func foremostItems(read Survey, items []Resource) []Resource {

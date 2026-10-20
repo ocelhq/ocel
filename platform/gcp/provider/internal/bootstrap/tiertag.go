@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const (
@@ -149,7 +150,7 @@ func (b Engine) makeTierTag(ctx context.Context) error {
 func (b Engine) createTierTagKey(ctx context.Context, service *crm.Service) (*crm.TagKey, error) {
 	started, err := googleretry.Attempted(ctx, service.TagKeys.Create(&crm.TagKey{
 		Parent:      "projects/" + b.Clients.Project(),
-		ShortName:   gcloud.TierTagKey,
+		ShortName:   names.TierTagKey,
 		Description: "the tier an ocel resource belongs to, which the tier's deploy credential is fenced by",
 	}).Context(ctx).Do)
 	if err != nil && !gcloud.Taken(err) {

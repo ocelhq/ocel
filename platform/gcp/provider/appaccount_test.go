@@ -337,9 +337,13 @@ func TestAQueueGrantRacedByAnotherDeployIsReadAgainAndWritten(t *testing.T) {
 	}
 }
 
-func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *testing.T) {
+func TestADeployCredentialThatMayNotReadOrMakeAnAppsAccountIsToldWhichGrantItLacks(t *testing.T) {
 	t.Parallel()
 	for name, deniedAt := range map[string]string{"reading": http.MethodGet, "creating": http.MethodPost} {
+		lacking := map[string]string{
+			http.MethodGet:  "roles/iam.serviceAccountAdmin, on the condition resource.matchTag('acme-prod/ocel-tier', 'production')",
+			http.MethodPost: "a custom role holding resourcemanager.projects.get, run.services.create",
+		}[deniedAt]
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := (&googletest.IAM{}).Serve(t, func(w http.ResponseWriter, r *http.Request) {
@@ -357,8 +361,8 @@ func TestADeployCredentialWithoutTheAppAccountsRoleIsToldWhichRoleItLacks(t *tes
 
 			err := release.CreateAppAccount(context.Background(), c, provider.StackRef{Tier: environment.TierProduction, Project: "shop", Name: stackOf("production", "api", "r1")}, "api")
 
-			if err == nil || !strings.Contains(err.Error(), "projects/acme-prod/roles/ocel_app_accounts") {
-				t.Errorf("createAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)
+			if err == nil || !strings.Contains(err.Error(), lacking) {
+				t.Errorf("createAppAccount() = %v, want an error naming %s", err, lacking)
 			}
 		})
 	}
@@ -387,7 +391,7 @@ func TestAnAppsOwnAccountNotYetReadableIsActedAsOnceItIs(t *testing.T) {
 	}
 }
 
-func TestAnAppsOwnAccountItMayNotActAsNamesTheCustomRole(t *testing.T) {
+func TestAnAppsOwnAccountItMayNotActAsNamesTheTiersAccountsGrant(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	server.AccountPolicies = map[string]*iam.Policy{}
@@ -397,8 +401,9 @@ func TestAnAppsOwnAccountItMayNotActAsNamesTheCustomRole(t *testing.T) {
 
 	_, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
 
-	if err == nil || !strings.Contains(err.Error(), "projects/acme-prod/roles/ocel_app_accounts") {
-		t.Errorf("ensureAppAccount() = %v, want an error naming projects/acme-prod/roles/ocel_app_accounts", err)
+	const lacking = "roles/iam.serviceAccountAdmin, on the condition resource.matchTag('acme-prod/ocel-tier', 'production')"
+	if err == nil || !strings.Contains(err.Error(), lacking) {
+		t.Errorf("ensureAppAccount() = %v, want an error naming %s", err, lacking)
 	}
 }
 
