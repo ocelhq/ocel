@@ -22,8 +22,6 @@ const transformTypeNetwork = "network"
 type tierPatches struct {
 	network         component.Patches
 	functionNetwork component.Patches
-
-	claims *transformPatches
 }
 
 func (r *Stacks) tierPatchesFor(ctx context.Context, tier environment.Tier) (tierPatches, error) {
@@ -93,11 +91,6 @@ func evaluateTierPatches(ctx context.Context, pass transform.Pass, namespace str
 			"a transform patches the %s tier's network's %s, and ocel constructs no such resource for it", tier, patched)
 	}
 	var evaluated tierPatches
-	every := maps.Clone(parts["network"])
-	maps.Copy(every, parts["function network"])
-	if evaluated.claims, err = indexPatches([]transformCandidate{{key: key, names: every}}, results); err != nil {
-		return tierPatches{}, err
-	}
 	if evaluated.network, err = patchesOver(key, parts["network"], result); err != nil {
 		return tierPatches{}, err
 	}
