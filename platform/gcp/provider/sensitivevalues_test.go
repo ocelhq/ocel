@@ -354,12 +354,41 @@ func TestAValueSecretThatWasNeverMadeDoesNotStopTheNextReleaseThatDropsItsKey(t 
 	released := newReleasedStacks(p)
 	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
 	refused := withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": stripeKey})
-	server.Secrets.ForbiddenCreates = []string{valueSecretOf(t, p, refused, "STRIPE_KEY")}
+	server.Secrets.Forbidden = []string{valueSecretOf(t, p, refused, "STRIPE_KEY")}
 	if _, err := released.stacks.Provision(context.Background(), refused, nil); err == nil {
 		t.Fatal("Provision(d1) made a value secret the credential may not create")
 	}
 
 	if _, err := released.stacks.Provision(context.Background(), functionRelease("d2", image), nil); err != nil {
 		t.Errorf("Provision(d2) = %v, want the release that no longer declares STRIPE_KEY to deploy", err)
+	}
+}
+
+func TestRetiringAReleaseKeepsTheVersionAReleaseMadeBeforeItsPinWasRecorded(t *testing.T) {
+	server := &googletest.Run{Secrets: googletest.NewSecrets()}
+	p := providerServing(server, t)
+	released := newReleasedStacks(p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
+	retiring := withValues(functionRelease("d0", image), map[string]string{"STRIPE_KEY": "zero"})
+	gone := released.provision(t, retiring)
+	active := released.provision(t, withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": "one"}))
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+	stopped := withValues(functionRelease("d2", image), map[string]string{"STRIPE_KEY": "two", "ZETA_KEY": "zeta"})
+	server.Secrets.Forbidden = []string{valueSecretOf(t, p, stopped, "ZETA_KEY")}
+	if _, err := released.stacks.Provision(context.Background(), stopped, nil); err == nil {
+		t.Fatal("Provision(d2) made a value secret the credential may not create")
+	}
+	server.Secrets.Forbidden = nil
+	released.provision(t, withValues(functionRelease("d3", image), map[string]string{"STRIPE_KEY": "three"}))
+
+	if _, err := p.RemoveFunctionRevisions(context.Background(), retiring.Ref, []provider.Function{gone}, nil, &fake.Log{}); err != nil {
+		t.Fatalf("RemoveFunctionRevisions() = %v", err)
+	}
+
+	stripe := valueSecretOf(t, p, stopped, "STRIPE_KEY")
+	if enabled := server.Secrets.EnabledVersions(stripe); !slices.Contains(enabled, 3) {
+		t.Errorf("enabled versions of %s = %v, want 3 kept, which release d2 made while its pin was still pending", stripe, enabled)
 	}
 }

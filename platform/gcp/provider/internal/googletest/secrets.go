@@ -28,7 +28,7 @@ type Secrets struct {
 	added   int
 
 	WrittenFirstElsewhere map[string]string
-	ForbiddenCreates      []string
+	Forbidden             []string
 
 	TierTags      *TierTags
 	InlineTags    map[string]map[string]string
@@ -57,9 +57,8 @@ func (s *Secrets) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 			delete(s.WrittenFirstElsewhere, name)
 			s.Secrets[name] = &storedSecret{versions: []storedVersion{{payload: base64.StdEncoding.EncodeToString([]byte(payload))}}}
 		}
-		if slices.Contains(s.ForbiddenCreates, name) {
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"error":{"code":403,"message":"Permission 'secretmanager.secrets.create' denied"}}`))
+		if slices.Contains(s.Forbidden, name) {
+			secretForbidden(w, "secretmanager.secrets.create")
 			return
 		}
 		if _, taken := s.Secrets[name]; taken {
@@ -103,6 +102,10 @@ func (s *Secrets) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		secret.policy = asked.Policy
 		WriteBody(w, asked.Policy)
 	case r.Method == http.MethodPost && strings.HasSuffix(path, ":addVersion"):
+		if slices.Contains(s.Forbidden, strings.TrimSuffix(path, ":addVersion")) {
+			secretForbidden(w, "secretmanager.versions.add")
+			return
+		}
 		secret := s.Secrets[strings.TrimSuffix(path, ":addVersion")]
 		asked := ReadBody[secretmanager.AddSecretVersionRequest](w, r)
 		if secret == nil || asked == nil {
@@ -191,6 +194,11 @@ func (s *Secrets) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		t.Errorf("Secret Manager was called %s %s, which nothing here serves", r.Method, r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+func secretForbidden(w http.ResponseWriter, permission string) {
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(`{"error":{"code":403,"message":"Permission '` + permission + `' denied"}}`))
 }
 
 func secretAbsent(w http.ResponseWriter) {
