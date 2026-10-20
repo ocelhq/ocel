@@ -76,7 +76,10 @@ func IsolateConfigHome() func() {
 		panic(err)
 	}
 	confighome.Set(dir, func(name, value string) { os.Setenv(name, value) })
+	os.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+filepath.Join(dir, "no-session-bus"))
 	os.Unsetenv(commands.ConfigEnvVar)
+	os.Unsetenv("OCEL_ACCESS_TOKEN")
+	os.Unsetenv(console.URLEnvVar)
 	return func() { os.RemoveAll(dir) }
 }
 
