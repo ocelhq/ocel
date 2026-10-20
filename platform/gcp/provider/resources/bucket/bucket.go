@@ -47,6 +47,7 @@ type appBucket struct {
 	mint     func(tag string) (string, error)
 	attrs    storage.BucketAttrs
 	emulated bool
+	tag      func(ctx context.Context, name string) error
 }
 
 type recordedBucket struct {
@@ -72,6 +73,9 @@ func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionR
 			return clients.AppBucket(in.Ref.Project, in.Ref.Name.Env, in.Resource.Name, tag)
 		},
 		emulated: clients.Emulated(),
+		tag: func(ctx context.Context, name string) error {
+			return clients.EnsureTierTag(ctx, in.Ref.Tier, clients.BucketTagged(name))
+		},
 		attrs: storage.BucketAttrs{
 			Location:                 clients.Region,
 			Labels:                   labels,
@@ -195,6 +199,9 @@ func (p *Bucket) Provision(ctx context.Context, in resources.ProvisionRequest, p
 	}
 	name, err := declared.ensure(ctx, p.records, client, clients.Project(), in.Resource.Name, progress)
 	if err != nil {
+		return provider.Binding{}, err
+	}
+	if err := declared.tag(ctx, name); err != nil {
 		return provider.Binding{}, err
 	}
 	return bucketBinding(in.Resource, name), nil

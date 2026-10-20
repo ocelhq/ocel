@@ -81,7 +81,7 @@ func EnsureProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, pre 
 	}
 	database := b.Clients.ProjectWritableDatabase(tier, project)
 	if !b.Clients.Emulated() {
-		if err := makeWritableDatabase(ctx, b, database); err != nil {
+		if err := makeWritableDatabase(ctx, b, tier, database); err != nil {
 			return err
 		}
 		for _, layout := range layouts {
@@ -99,8 +99,8 @@ func EnsureProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, pre 
 	})
 }
 
-func makeWritableDatabase(ctx context.Context, b bootstrap.Engine, database string) error {
-	err := b.MakeDatabase(ctx, bootstrap.Survey{Project: b.Clients.Project(), Region: b.Clients.Region}, database)
+func makeWritableDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, database string) error {
+	err := b.MakeTierDatabase(ctx, tier, database)
 	if googleretry.AnsweredCode(err) == http.StatusTooManyRequests || err != nil && strings.Contains(strings.ToLower(err.Error()), databaseQuotaMessage) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project that runs topics, tasks or a revalidating Next app keeps its runs and tag records in one of its own per tier.\n"+
@@ -166,7 +166,7 @@ func takeWritableDatabase(ctx context.Context, b bootstrap.Engine, stores projec
 	database := b.Clients.ProjectWritableDatabase(tier, project)
 	if !b.Clients.Emulated() {
 		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Deleting Firestore database %s, which kept the runs and tag records of %s in %s", database, project, tier))
-		if err := stores.takeDatabase(ctx, database); err != nil {
+		if err := stores.takeDatabase(ctx, tier, database); err != nil {
 			return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(b.Clients.Names, b.Clients.Region))
 		}
 	}
