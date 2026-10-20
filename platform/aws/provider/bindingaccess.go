@@ -39,7 +39,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	clients := bastion.NewClients(p.aws)
 	reconciled, err := bastionPlacement{
 		claim: func(ctx context.Context) (network.Network, error) {
-			return p.stacks.Network().Claim(ctx, bastion.ConsumerRef(req.Tier), progress)
+			return p.stacks.Network().ClaimWithoutRepatch(ctx, bastion.ConsumerRef(req.Tier), progress)
 		},
 		reconcile: func(ctx context.Context, placed network.Network) (bastion.Bastion, error) {
 			return bastion.Reconcile(ctx, clients, bastion.Spec{

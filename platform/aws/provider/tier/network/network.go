@@ -133,6 +133,18 @@ func read(ctx context.Context, owner sharedstack.Owner, tier environment.Tier) (
 }
 
 func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress progress.Log) (Network, error) {
+	patches, err := s.patchesFor(ctx, consumer.Tier)
+	if err != nil {
+		return Network{}, err
+	}
+	return s.claimWith(ctx, consumer, patches, progress)
+}
+
+func (s *Stacks) ClaimWithoutRepatch(ctx context.Context, consumer provider.StackRef, progress progress.Log) (Network, error) {
+	return s.claimWith(ctx, consumer, component.Patches{}, progress)
+}
+
+func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patches component.Patches, progress progress.Log) (Network, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	tier := consumer.Tier
@@ -146,10 +158,6 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 		}
 	}
 	current, present, err := read(ctx, owner, tier)
-	if err != nil {
-		return Network{}, err
-	}
-	patches, err := s.patchesFor(ctx, tier)
 	if err != nil {
 		return Network{}, err
 	}
