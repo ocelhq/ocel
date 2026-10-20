@@ -25,8 +25,7 @@ type Quota struct {
 }
 
 var (
-	VPCQuota       = Quota{Service: "vpc", Code: "L-F678F1CE", Name: "VPCs per Region"}
-	ElasticIPQuota = Quota{Service: "ec2", Code: "L-0263D0A3", Name: "EC2-VPC Elastic IPs"}
+	VPCQuota = Quota{Service: "vpc", Code: "L-F678F1CE", Name: "VPCs per Region"}
 )
 
 func (q Quota) ARN() string {

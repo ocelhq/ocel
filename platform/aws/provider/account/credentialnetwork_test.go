@@ -55,16 +55,14 @@ func TestTheDeployCredentialBuildsAndTearsDownTheTiersNetworkOnlyWhereItIsTagged
 	}
 }
 
-func TestEveryCredentialReadsTheVPCAndElasticIPQuotasAndNoOther(t *testing.T) {
+func TestEveryCredentialReadsTheVPCQuotaAndNoOther(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
-		for _, quota := range []string{"arn:aws:servicequotas:*:*:vpc/L-F678F1CE", "arn:aws:servicequotas:*:*:ec2/L-0263D0A3"} {
-			if !grants[grant{action: "servicequotas:GetServiceQuota", resource: quota, condition: conditionJSON(t, nil)}] {
-				t.Errorf("the %s credential cannot read quota %s, so preflight cannot say the account is out of room", purpose, quota)
-			}
+		if !grants[grant{action: "servicequotas:GetServiceQuota", resource: "arn:aws:servicequotas:*:*:vpc/L-F678F1CE", condition: conditionJSON(t, nil)}] {
+			t.Errorf("the %s credential cannot read quota L-F678F1CE, so preflight cannot say the account is out of room", purpose)
 		}
 		for g := range grants {
-			if g.action == "servicequotas:GetServiceQuota" && g.resource != "arn:aws:servicequotas:*:*:vpc/L-F678F1CE" && g.resource != "arn:aws:servicequotas:*:*:ec2/L-0263D0A3" {
+			if g.action == "servicequotas:GetServiceQuota" && g.resource != "arn:aws:servicequotas:*:*:vpc/L-F678F1CE" {
 				t.Errorf("the %s credential reads quota %s, which no preflight checks", purpose, g.resource)
 			}
 		}

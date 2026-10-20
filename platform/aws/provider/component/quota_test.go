@@ -55,13 +55,13 @@ func TestAQuotaNeverChangedIsReadAtItsAWSDefault(t *testing.T) {
 	t.Parallel()
 
 	quotas := &fakeQuotas{fallback: 5}
-	if err := RefuseFullQuota(context.Background(), quotas, ElasticIPQuota, "us-east-1", 3, 2, "the NAT gateways"); err != nil {
+	if err := RefuseFullQuota(context.Background(), quotas, VPCQuota, "us-east-1", 3, 2, "the networks"); err != nil {
 		t.Fatalf("RefuseFullQuota() = %v, want 3 + 2 within a default of 5", err)
 	}
-	if len(quotas.asked) != 2 || quotas.asked[1] != "default ec2/L-0263D0A3" {
+	if len(quotas.asked) != 2 || quotas.asked[1] != "default vpc/L-F678F1CE" {
 		t.Errorf("asked %v, want the applied value and then the AWS default", quotas.asked)
 	}
-	if err := RefuseFullQuota(context.Background(), quotas, ElasticIPQuota, "us-east-1", 4, 2, "the NAT gateways"); err == nil {
+	if err := RefuseFullQuota(context.Background(), quotas, VPCQuota, "us-east-1", 4, 2, "the networks"); err == nil {
 		t.Error("RefuseFullQuota() = nil, want 4 + 2 refused past a default of 5")
 	}
 }
