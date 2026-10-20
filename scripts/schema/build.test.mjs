@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { writeSchemas } from "./build.mjs";
+import { toECMAScriptPattern, writeSchemas } from "./build.mjs";
 
 const merged = {
   type: "object",
@@ -57,5 +57,23 @@ describe("writeSchemas", () => {
       published.$id,
       "https://docs.example.test/schema/cli/cli.stream.v1.RunEvent.schema.json",
     );
+  });
+});
+
+describe("toECMAScriptPattern", () => {
+  it("drops the escape from a character JavaScript's unicode mode refuses to see escaped", () => {
+    const uri =
+      "^(?:(?:[a-zA-Z][a-zA-Z\\d+\\-.]*):)?(?://(?:[A-Za-z0-9\\-\\.]+(?::\\d+)?))?(/[^\\?#]*)?(?:\\?([^\\#]*))?(?:\\#(.*))?$";
+    const pattern = toECMAScriptPattern(uri);
+    const regexp = new RegExp(pattern, "u");
+    assert.equal(
+      pattern,
+      "^(?:(?:[a-zA-Z][a-zA-Z\\d+\\-.]*):)?(?://(?:[A-Za-z0-9\\-\\.]+(?::\\d+)?))?(/[^\\?#]*)?(?:\\?([^#]*))?(?:#(.*))?$",
+    );
+    assert.ok(regexp.test("https://example.com/a?b#c"));
+  });
+
+  it("keeps an escaped backslash and every escape that means something", () => {
+    assert.equal(toECMAScriptPattern("^\\\\#\\.\\/\\d$"), "^\\\\#\\.\\/\\d$");
   });
 });

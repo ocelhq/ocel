@@ -368,6 +368,7 @@ function generateMessageSchemas() {
       .map((file) => {
         const name = file.slice(0, -BUNDLE_SUFFIX.length);
         const bundle = read(join(scratch, file));
+        rewriteECMAScriptPatterns(bundle);
         refuseNonECMAScriptPatterns(name, bundle);
         constrainOneofs(name, bundle, oneofs);
         return { name, bundle };
@@ -419,6 +420,20 @@ function present(field) {
   const spellings = [...new Set([field.jsonName, field.name])];
   if (spellings.length === 1) return { required: spellings };
   return { anyOf: spellings.map((spelling) => ({ required: [spelling] })) };
+}
+
+const ECMASCRIPT_ESCAPABLE = new Set("^$\\.*+?()[]{}|/-");
+
+export function toECMAScriptPattern(pattern) {
+  return pattern.replace(/\\([\s\S])/g, (escaped, char) =>
+    /[!-/:-@[-`{-~]/.test(char) && !ECMASCRIPT_ESCAPABLE.has(char) ? char : escaped,
+  );
+}
+
+function rewriteECMAScriptPatterns(node) {
+  if (!node || typeof node !== "object") return;
+  if (typeof node.pattern === "string") node.pattern = toECMAScriptPattern(node.pattern);
+  for (const value of Object.values(node)) rewriteECMAScriptPatterns(value);
 }
 
 function refuseNonECMAScriptPatterns(name, node) {
