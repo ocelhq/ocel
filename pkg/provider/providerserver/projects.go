@@ -124,10 +124,10 @@ func (h *handlers) describeProject(ctx context.Context, vendor provider.Provider
 			return nil, err
 		}
 		if tier == environment.TierProduction && len(stacks) > 0 {
-			described.Environments = append(described.Environments, describeProduction(state, active))
+			described.Environments = append(described.Environments, describeProduction(h.session.edgeFacts(), state, active))
 		}
 		if tier == environment.TierPreview {
-			environments, err := describePreviews(ctx, store, project.slug, previews)
+			environments, err := describePreviews(ctx, h.session.edgeFacts(), store, project.slug, previews)
 			if err != nil {
 				return nil, err
 			}

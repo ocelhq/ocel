@@ -61,6 +61,14 @@ type Facts struct {
 	GatesAtOrigin         bool
 	ChecksSignedPasswords bool
 	CredentialScope       string
+	ServesPlainHTTP       bool
+}
+
+func (f Facts) FormatURL(hostname string) string {
+	if f.ServesPlainHTTP {
+		return "http://" + hostname
+	}
+	return "https://" + hostname
 }
 
 type Edge interface {

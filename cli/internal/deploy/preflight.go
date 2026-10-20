@@ -77,7 +77,7 @@ func runPreflight(ctx context.Context, dependencies Dependencies, policy consent
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	facts.urls = appurl.FormatPreviewURLs(ensured.GetHostnames())
+	facts.urls = appurl.FormatPreviewURLs(ensured.GetHostnames(), process.Facts().GetEdge())
 	facts.builtAlias = ensured.GetToken()
 	if !policy.DryRun {
 		facts.mintedAlias = token

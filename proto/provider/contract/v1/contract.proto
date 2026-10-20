@@ -138,6 +138,8 @@ message EdgeFacts {
   bool runs_code = 1;
 
   CacheTagLimits cache_tag_limits = 2;
+
+  bool serves_plain_http = 3;
 }
 
 message CacheTagLimits {
