@@ -32,7 +32,6 @@ type CloudSQL struct {
 	Primary    string
 	RefusedSet int
 	TierTags   *TierTags
-	Unadmitted int
 }
 
 func SQLInstanceTagParent(instance string) string {
@@ -85,10 +84,6 @@ func (s *CloudSQL) Serve(w http.ResponseWriter, r *http.Request) {
 		s.operation(w)
 	case len(parts) == 2:
 		s.instance(w, r, parts[1])
-	case len(parts) >= 3 && s.Unadmitted > 0:
-		s.Unadmitted--
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"The client is not authorized to make this request."}}`))
 	case len(parts) >= 3 && parts[2] == "databases":
 		s.database(w, r, parts)
 	case len(parts) >= 3 && parts[2] == "users":
@@ -178,12 +173,6 @@ func (s *CloudSQL) patch(w http.ResponseWriter, r *http.Request, instance *sqlad
 func (s *CloudSQL) database(w http.ResponseWriter, r *http.Request, parts []string) {
 	instance := parts[1]
 	switch {
-	case r.Method == http.MethodGet && len(parts) == 3:
-		listed := &sqladmin.DatabasesListResponse{}
-		for _, name := range s.Databases[instance] {
-			listed.Items = append(listed.Items, &sqladmin.Database{Name: name, Instance: instance})
-		}
-		WriteBody(w, listed)
 	case r.Method == http.MethodGet && len(parts) == 4:
 		if !slices.Contains(s.Databases[instance], parts[3]) {
 			w.WriteHeader(http.StatusNotFound)

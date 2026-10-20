@@ -600,10 +600,6 @@ gcloud projects add-iam-policy-binding my-project \
   --role=roles/run.admin --condition-from-file=preview.yaml
 ```
 
-Google takes a resource's new tag into account for IAM a few seconds after it is bound, so a deploy
-that binds a resource it made waits, for up to about two minutes, until its tier's grants reach
-the resource.
-
 Each app runs as a service account of its own in each environment, which a deploy creates the first
 time the app ships to that environment and grants only what the app's runtime reads. Its key and
 storage grants are on the resource: decrypt on its project's key and any key its values reference,
