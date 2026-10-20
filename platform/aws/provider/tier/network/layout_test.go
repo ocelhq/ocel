@@ -10,33 +10,40 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func TestEachTierOfANamespaceGetsAPrivateSixteenOfItsOwnDerivedFromTheNamespaceWhenTheConfigNamesNone(t *testing.T) {
+func TestEachTierOfANamespaceTriesEveryDefaultSixteenOnceStartingFromOneDerivedFromTheNamespace(t *testing.T) {
 	t.Parallel()
 
 	tenNet := netip.MustParsePrefix("10.0.0.0/8")
 	for _, namespace := range []string{"ocel", "acme", "acme-staging", "a"} {
-		production, preview := CIDRFor(namespace, environment.TierProduction, ""), CIDRFor(namespace, environment.TierPreview, "")
-		if again := CIDRFor(namespace, environment.TierProduction, ""); again != production {
-			t.Errorf("namespace %s defaults to %s and then %s, want the same block every run", namespace, production, again)
+		production, preview := DefaultCIDRs(namespace, environment.TierProduction), DefaultCIDRs(namespace, environment.TierPreview)
+		if again := DefaultCIDRs(namespace, environment.TierProduction); !slices.Equal(again, production) {
+			t.Errorf("namespace %s tries %v and then %v, want the same blocks in the same order every run", namespace, production, again)
 		}
-		for _, block := range []string{production, preview} {
+		if production[0] != DefaultCIDR(namespace, environment.TierProduction) {
+			t.Errorf("namespace %s tries %s first, want its default %s", namespace, production[0], DefaultCIDR(namespace, environment.TierProduction))
+		}
+		tried := map[string]bool{}
+		for i, block := range append(slices.Clone(production), preview...) {
 			parsed := netip.MustParsePrefix(block)
 			if parsed.Bits() != 16 || !tenNet.Contains(parsed.Addr()) || parsed.Addr().As4()[1] < 16 {
-				t.Errorf("namespace %s defaults to %s, want a /16 in 10.16.0.0 to 10.255.0.0", namespace, block)
+				t.Errorf("namespace %s tries %s, want a /16 in 10.16.0.0 to 10.255.0.0", namespace, block)
 			}
 			if _, err := NewLayout(block); err != nil {
-				t.Errorf("namespace %s defaults to %s, which NewLayout refuses: %v", namespace, block, err)
+				t.Errorf("namespace %s tries %s, which NewLayout refuses: %v", namespace, block, err)
+			}
+			if tried[block] {
+				t.Errorf("namespace %s tries %s twice (candidate %d)", namespace, block, i)
+			}
+			tried[block] = true
+		}
+		for i := range production {
+			if second := netip.MustParsePrefix(production[i]).Addr().As4()[1]; netip.MustParsePrefix(preview[i]).Addr().As4()[1] != second+1 {
+				t.Errorf("namespace %s tries %s and %s, want each preview block right after production's", namespace, production[i], preview[i])
 			}
 		}
-		if second := netip.MustParsePrefix(production).Addr().As4()[1]; netip.MustParsePrefix(preview).Addr().As4()[1] != second+1 {
-			t.Errorf("namespace %s defaults to %s and %s, want preview's block right after production's", namespace, production, preview)
-		}
 	}
-	if CIDRFor("ocel", environment.TierProduction, "") == CIDRFor("acme", environment.TierProduction, "") {
-		t.Errorf("namespaces ocel and acme both default to %s, want them apart so a second namespace in a region needs no block of its own", CIDRFor("ocel", environment.TierProduction, ""))
-	}
-	if got := CIDRFor("ocel", environment.TierProduction, "192.168.0.0/20"); got != "192.168.0.0/20" {
-		t.Errorf("CIDRFor() = %s, want the block the config names", got)
+	if DefaultCIDR("ocel", environment.TierProduction) == DefaultCIDR("acme", environment.TierProduction) {
+		t.Errorf("namespaces ocel and acme both default to %s, want them apart so a second namespace in a region rarely walks past its first block", DefaultCIDR("ocel", environment.TierProduction))
 	}
 }
 

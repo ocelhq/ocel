@@ -56,35 +56,92 @@ func PickZones(ctx context.Context, api ZonesAPI) ([]string, error) {
 	return reachable[:Zones], nil
 }
 
-func RefusePlacement(ctx context.Context, region RegionAPI, quotas component.QuotasAPI, regionName, namespace string, tier environment.Tier, cidr string) error {
-	ours, err := netip.ParsePrefix(cidr)
+type Placement struct {
+	Region     string
+	Namespace  string
+	Tier       environment.Tier
+	Configured string
+}
+
+type heldBlock struct {
+	vpc   string
+	block netip.Prefix
+}
+
+type otherVPCs struct {
+	owned  int
+	blocks []heldBlock
+}
+
+func Place(ctx context.Context, region RegionAPI, quotas component.QuotasAPI, at Placement) (Layout, error) {
+	others, err := readOtherVPCs(ctx, region, at)
 	if err != nil {
-		return fmt.Errorf("read the network's block %q: %w", cidr, err)
+		return Layout{}, err
 	}
-	held := 0
+	cidr, err := others.pick(at)
+	if err != nil {
+		return Layout{}, err
+	}
+	if err := component.RefuseFullQuota(ctx, quotas, component.VPCQuota, at.Region, others.owned, 1, "the "+string(at.Tier)+" tier's network"); err != nil {
+		return Layout{}, err
+	}
+	return NewLayout(cidr)
+}
+
+func readOtherVPCs(ctx context.Context, region RegionAPI, at Placement) (otherVPCs, error) {
+	var others otherVPCs
 	pages := ec2.NewDescribeVpcsPaginator(region, &ec2.DescribeVpcsInput{})
 	for pages.HasMorePages() {
 		page, err := pages.NextPage(ctx)
 		if err != nil {
-			return fmt.Errorf("list the VPCs in %s: %w", regionName, err)
+			return otherVPCs{}, fmt.Errorf("list the VPCs in %s: %w", at.Region, err)
 		}
 		for _, vpc := range page.Vpcs {
-			if isNetworkOf(vpc, namespace, tier) {
+			if isNetworkOf(vpc, at.Namespace, at.Tier) {
 				continue
 			}
-			held++
+			others.owned++
 			for _, block := range blocksOf(vpc) {
-				theirs, err := netip.ParsePrefix(block)
-				if err != nil || !theirs.Overlaps(ours) {
-					continue
+				if parsed, err := netip.ParsePrefix(block); err == nil {
+					others.blocks = append(others.blocks, heldBlock{vpc: aws.ToString(vpc.VpcId), block: parsed})
 				}
-				return refusal.Refuse(refusal.CodeInvalid,
-					"the %s tier's network would take %s, and %s in %s already holds %s: set `network.%s.cidr` in the provider options to a private block clear of it",
-					tier, cidr, aws.ToString(vpc.VpcId), regionName, block, tier)
 			}
 		}
 	}
-	return component.RefuseFullQuota(ctx, quotas, component.VPCQuota, regionName, held, 1, "the "+string(tier)+" tier's network")
+	return others, nil
+}
+
+func (o otherVPCs) overlapping(ours netip.Prefix) (heldBlock, bool) {
+	for _, held := range o.blocks {
+		if held.block.Overlaps(ours) {
+			return held, true
+		}
+	}
+	return heldBlock{}, false
+}
+
+func (o otherVPCs) pick(at Placement) (string, error) {
+	if at.Configured != "" {
+		configured, err := netip.ParsePrefix(at.Configured)
+		if err != nil {
+			return "", fmt.Errorf("read the network's block %q: %w", at.Configured, err)
+		}
+		if held, overlaps := o.overlapping(configured); overlaps {
+			return "", refusal.Refuse(refusal.CodeInvalid,
+				"the %s tier's network would take %s, and %s in %s already holds %s: set `network.%s.cidr` in the provider options to a private block clear of it",
+				at.Tier, at.Configured, held.vpc, at.Region, held.block, at.Tier)
+		}
+		return at.Configured, nil
+	}
+	candidates := DefaultCIDRs(at.Namespace, at.Tier)
+	for _, candidate := range candidates {
+		if _, overlaps := o.overlapping(netip.MustParsePrefix(candidate)); !overlaps {
+			return candidate, nil
+		}
+	}
+	return "", refusal.Refuse(refusal.CodeInvalid,
+		"every one of the %d blocks the %s tier's network defaults to overlaps a VPC already in %s: set `network.%s.cidr` in the provider options to a private block clear of them",
+		len(candidates), at.Tier, at.Region, at.Tier)
 }
 
 func isNetworkOf(vpc ec2types.Vpc, namespace string, tier environment.Tier) bool {

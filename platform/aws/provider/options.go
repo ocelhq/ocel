@@ -17,7 +17,7 @@ type NetworkOptions struct {
 }
 
 type TierNetworkOptions struct {
-	CIDR string `json:"cidr,omitempty" pattern:"^[0-9]{1,3}(\\.[0-9]{1,3}){3}/(1[6-9]|2[0-4])$" doc:"The private IPv4 block of the tier's VPC, a /16 to a /24 inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16. Left off, a /16 from 10.16.0.0 to 10.255.0.0 picked from the namespace, preview's right after production's. Fixed once the VPC exists."`
+	CIDR string `json:"cidr,omitempty" pattern:"^[0-9]{1,3}(\\.[0-9]{1,3}){3}/(1[6-9]|2[0-4])$" doc:"The private IPv4 block of the tier's VPC, a /16 to a /24 inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16. Left off, the first /16 from 10.16.0.0 to 10.255.0.0 no VPC in the region overlaps, tried from one picked from the namespace. Fixed once the VPC exists."`
 }
 
 func (n NetworkOptions) CIDRFor(tier environment.Tier) string {
