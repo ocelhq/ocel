@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -20,13 +21,7 @@ func taggedPubSub(t *testing.T) (*googletest.PubSub, *ports.Clients, topics.Tier
 	server := httptest.NewServer(fake.Serve(t))
 	t.Cleanup(server.Close)
 	clients := tags.Tagged(googletest.Clients(server.URL))
-	tier := environment.TierProduction
-	return fake, clients.Workload(), topics.TierTags{
-		Inline: clients.InlineTierTags(tier),
-		Remove: func(ctx context.Context, path string) error {
-			return clients.RemoveTierTag(ctx, tier, clients.PubSubTagged(path))
-		},
-	}
+	return fake, clients.Workload(), topic.TierTagsOf(clients, environment.TierProduction)
 }
 
 func TestEveryTopicAndSubscriptionOfATierCarriesItsTiersTagFromItsCreation(t *testing.T) {
