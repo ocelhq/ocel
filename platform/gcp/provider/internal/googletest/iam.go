@@ -71,8 +71,6 @@ type IAM struct {
 	QueuesPurged []string
 
 	DeletedAccounts []string
-	Listed          []string
-	Described       map[string]string
 
 	TierTags      *TierTags
 	DeletedTagged []string
@@ -311,12 +309,6 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			_, _ = w.Write([]byte(`{"etag":"BwXhoLA=","bindings":[{"role":"roles/iam.serviceAccountUser","members":["user:emulator"]}]}`))
 		case strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":setIamPolicy"):
 			_, _ = w.Write([]byte(`{"etag":"BwXhoLB="}`))
-		case r.Method == http.MethodGet && strings.HasSuffix(path, "/serviceAccounts"):
-			listed := &iam.ListServiceAccountsResponse{}
-			for _, email := range s.Listed {
-				listed.Accounts = append(listed.Accounts, &iam.ServiceAccount{Email: email, UniqueId: UniqueIDOf(strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com")), Description: s.Described[email]})
-			}
-			WriteBody(w, listed)
 		case r.Method == http.MethodPost && strings.HasSuffix(path, "/serviceAccounts"):
 			var asked iam.CreateServiceAccountRequest
 			if err := json.NewDecoder(r.Body).Decode(&asked); err == nil {

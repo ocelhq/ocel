@@ -535,21 +535,14 @@ Apps sign their buckets' urls through `iamcredentials.googleapis.com`.
 
 A tier is a credential boundary: one project often holds both tiers, and the preview deploy
 credential must neither change nor read what production runs. `ocel bootstrap` makes a tag key,
-`<project>/ocel-tier`, with the values `production`, `preview` and `outside`. Every resource ocel
+`<project>/ocel-tier`, with the values `production` and `preview`. Every resource ocel
 makes for a tier that Google lets carry a tag is bound to its tier's value: its Cloud Run
 services, service accounts, Pub/Sub topics and subscriptions, buckets, secrets, image
 repositories, Cloud SQL instances and Firestore databases, the tier's records database among
-them. Each deploy credential holds its roles only on the resources carrying its own tier's value.
+them. Each deploy credential holds its roles on the resources carrying its own tier's value or
+none, and holds none on a resource carrying the other tier's.
 Every namespace and both tiers in the project share the key, and `ocel bootstrap destroy` keeps
 it: Google refuses to delete a value a resource is still bound to.
-
-`ocel bootstrap` also binds `outside` to every service account of the project that ocel does not
-make: the default compute account, the accounts your bootstrap and deploy credentials run as,
-the connector's, and any other. No deploy credential reaches an account carrying `outside`. The
-plan names each account it binds, and removing a tier keeps the bindings. A deploy refuses to run
-while an account ocel does not make carries no `ocel-tier` tag, naming `ocel bootstrap <tier>`:
-a deploy may bind an untagged resource to its own tier, and an untagged account bound that way
-is one it could act as.
 
 ### The bootstrap credential
 

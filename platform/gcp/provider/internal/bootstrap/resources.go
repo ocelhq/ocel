@@ -55,10 +55,6 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 			Note: "the tag every resource of a tier carries its tier's value of, production or preview, which fences a tier's deploy credential to that tier's resources",
 		},
 		{
-			Kind: KindOutsideTag, Name: names.OutsideTagValuePath(), Shared: true,
-			Note: "the outside value bound to every service account of this project ocel does not make, such as the default compute account and the accounts deploys run as, so no tier's deploy credential may bind one to its own tier and act as it",
-		},
-		{
 			Kind: KindDatabase, Name: names.RecordsDatabase(tier), Slow: true,
 			Note: "every record this tier stores, carrying the tier's tag so no other tier's credential reaches it",
 		},

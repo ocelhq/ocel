@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -85,8 +84,6 @@ func tierValue(tier environment.Tier) tagValue {
 	return tagValue{short: string(tier), marks: "every resource of the " + string(tier) + " tier", command: provider.BootstrapCommand(tier)}
 }
 
-var outsideValue = tagValue{short: names.OutsideValue, marks: "every service account of the project ocel does not make", command: "ocel bootstrap"}
-
 func (c *Clients) valuePath(value tagValue) string { return c.TierTagKeyPath() + "/" + value.short }
 
 func (c *Clients) ReadTierTagValue(ctx context.Context, tier environment.Tier) (string, error) {
@@ -126,10 +123,6 @@ func (c *Clients) readTagValue(ctx context.Context, asked tagValue) (string, err
 
 func (c *Clients) EnsureTierTag(ctx context.Context, tier environment.Tier, target TaggedResource) error {
 	return c.ensureTag(ctx, tierValue(tier), target)
-}
-
-func (c *Clients) EnsureOutsideTag(ctx context.Context, target TaggedResource) error {
-	return c.ensureTag(ctx, outsideValue, target)
 }
 
 func (c *Clients) ensureTag(ctx context.Context, asked tagValue, target TaggedResource) error {
@@ -183,14 +176,6 @@ func (c *Clients) HasTierTag(ctx context.Context, tier environment.Tier, target 
 	}
 	binding, err := c.tagBinding(ctx, tierValue(tier), target)
 	return binding != "", err
-}
-
-func (c *Clients) CarriesTierTag(ctx context.Context, target TaggedResource) (bool, error) {
-	if !c.TierTagged() {
-		return true, nil
-	}
-	bound, err := c.boundValue(ctx, target)
-	return bound.binding != "", err
 }
 
 func (c *Clients) RemoveTierTag(ctx context.Context, tier environment.Tier, target TaggedResource) error {

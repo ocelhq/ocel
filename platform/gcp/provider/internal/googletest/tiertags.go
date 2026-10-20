@@ -31,11 +31,9 @@ type TierTags struct {
 	KeysMade        int
 	ValuesMade      int
 	ValueLookups    int
-	BindingLists    int
 
 	BindingsUnseen int
 	BindingsDenied bool
-	ListsDenied    []string
 	NumberedNames  bool
 	ValuesAbsent   bool
 	Denied         []string
@@ -60,7 +58,6 @@ func NewTieredTags(t *testing.T) *TierTags {
 	for _, tier := range BothTiers {
 		tags.addValue(key, string(tier))
 	}
-	tags.addValue(key, names.OutsideValue)
 	return tags
 }
 
@@ -205,12 +202,7 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		s.BindingsMade = append(s.BindingsMade, asked.Parent)
 		writeDoneOperation(w, &crm.TagBinding{Name: bindingName(asked.Parent, asked.TagValue), Parent: asked.Parent, TagValue: asked.TagValue})
 	case r.Method == http.MethodGet && path == "tagBindings":
-		s.BindingLists++
 		parent := r.URL.Query().Get("parent")
-		if slices.Contains(s.ListsDenied, parent) {
-			writeDenied(w)
-			return
-		}
 		listed := &crm.ListTagBindingsResponse{}
 		for _, value := range s.Bindings[parent] {
 			listed.TagBindings = append(listed.TagBindings, &crm.TagBinding{Name: bindingName(parent, value), Parent: parent, TagValue: value, TagValueNamespacedName: s.namespacedName(value)})
