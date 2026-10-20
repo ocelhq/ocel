@@ -45,7 +45,7 @@ func TestAnAppsAccountMayUseItsOwnEnvAndAppsCacheKindsAndNoOther(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.Open(t)
-	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
+	member := "serviceAccount:" + c.AppAccountEmail("shop", stackrecords.ProductionEnv, "web")
 
 	if err := applyAppGrants(t, c, cachedAt(cachedRelease())); err != nil {
 		t.Fatalf("applyAppGrants() = %v", err)
@@ -83,7 +83,7 @@ func TestAPreviewEnvsAccountMayUseItsOwnCacheAndNoOtherPreviewEnvsOrProductions(
 
 	var want []string
 	for _, env := range []string{"pr-7", "pr-8"} {
-		member := "serviceAccount:" + c.AppAccountEmail(environment.TierPreview, "shop", env, "web")
+		member := "serviceAccount:" + c.AppAccountEmail("shop", env, "web")
 		want = append(want, grants.ObjectsRole+" "+member+" "+cacheCondition("ocel-preview-edge-k3x9q2", "ocel-preview-cache-k3x9q2", "shop/"+env+"/web"))
 	}
 	slices.Sort(want)
@@ -206,7 +206,7 @@ func TestANextAppsAccountMayUseItsProjectsTagRecordsAndNoOtherDatabase(t *testin
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.Open(t)
-	account := c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
+	account := c.AppAccountEmail("shop", stackrecords.ProductionEnv, "web")
 
 	if err := applyAppGrants(t, c, routedNextSpec()); err != nil {
 		t.Fatalf("applyAppGrants() = %v", err)

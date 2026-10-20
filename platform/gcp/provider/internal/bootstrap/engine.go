@@ -180,7 +180,7 @@ func Planned(read Survey, items []Resource) []provider.Change {
 	for _, item := range items {
 		change := provider.Change{
 			Kind:   string(item.Kind),
-			Name:   item.Name,
+			Name:   read.named(item),
 			Action: provider.ActionCreate,
 			Reason: item.Note,
 			Slow:   item.Slow,
@@ -223,14 +223,14 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 		return err
 	}
 
-	stampBucket := stateBucketOf(read)
-	if err := b.Provision(ctx, read, stampItem(items, stampBucket), progress); err != nil {
-		return err
-	}
-	if read.StateBucket == "" {
-		if read.StateBucket, err = b.stateBucket(ctx, req.Tier); err != nil {
+	foremost := foremostItems(read, items)
+	for _, item := range foremost {
+		if err := b.Provision(ctx, read, item, progress); err != nil {
 			return err
 		}
+	}
+	if read.Buckets, err = b.Clients.TierBuckets(ctx, req.Tier, naming.StorageState); err != nil {
+		return err
 	}
 	if err := b.dropParts(ctx, read, req, progress); err != nil {
 		return err
@@ -250,7 +250,7 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 		return err
 	}
 	for _, item := range items {
-		if item.ID() == stampBucket.ID() {
+		if slices.ContainsFunc(foremost, func(first Resource) bool { return first.ID() == item.ID() }) {
 			continue
 		}
 		if err := b.Provision(ctx, read, item, progress); err != nil {
@@ -290,14 +290,22 @@ func RefuseReplacements(read Survey, items []Resource) error {
 }
 
 func stateBucketOf(read Survey) Resource {
-	return Resource{Kind: KindBucket, Name: read.Names.UntaggedTierBucket(read.Tier, naming.StorageState), Class: naming.StorageState}
+	return Resource{Kind: KindBucket, Name: read.Names.TierBucketStem(read.Tier, naming.StorageState), Class: naming.StorageState}
 }
 
-func stampItem(items []Resource, stampBucket Resource) Resource {
-	if at := slices.IndexFunc(items, func(each Resource) bool { return each.ID() == stampBucket.ID() }); at >= 0 {
-		return items[at]
+func databaseOf(read Survey) Resource {
+	return Resource{Kind: KindDatabase, Name: read.Names.Database()}
+}
+
+func foremostItems(read Survey, items []Resource) []Resource {
+	foremost := make([]Resource, 0, 2)
+	for _, first := range []Resource{databaseOf(read), stateBucketOf(read)} {
+		if at := slices.IndexFunc(items, func(each Resource) bool { return each.ID() == first.ID() }); at >= 0 {
+			first = items[at]
+		}
+		foremost = append(foremost, first)
 	}
-	return stampBucket
+	return foremost
 }
 
 func (b Engine) Provision(ctx context.Context, read Survey, target Resource, progress progress.Log) error {
@@ -328,7 +336,7 @@ func (b Engine) stampWith(ctx context.Context, read Survey, written Stamp, gener
 	if err != nil {
 		return 0, fmt.Errorf("write %s: %w", StampObject, err)
 	}
-	object := client.Bucket(read.StateBucket).Object(StampObject).If(onlyWriter(generation))
+	object := client.Bucket(read.Buckets[naming.StorageState]).Object(StampObject).If(onlyWriter(generation))
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write(append(body, '\n')); err != nil {
 		writer.Close()
@@ -355,11 +363,11 @@ func (b Engine) stampRefusal(ctx context.Context, read Survey, err error) error 
 	return refusal.Refuse(refusal.CodeBusy,
 		"%s wrote %s in %s while this run was writing it, and two bootstraps of the same tier interleaving leave a stack neither of them describes.\n"+
 			"Wait for that run to finish, then try again",
-		writerNamed(read.Stamp.Writer), StampObject, read.StateBucket)
+		writerNamed(read.Stamp.Writer), StampObject, read.Buckets[naming.StorageState])
 }
 
 func (b Engine) writerNow(ctx context.Context, read Survey) string {
-	now, err := b.stamped(ctx, read.StateBucket)
+	now, err := b.stamped(ctx, read.Buckets[naming.StorageState])
 	if err != nil || !now.present {
 		return read.Stamp.Writer
 	}
@@ -417,7 +425,7 @@ func (b Engine) PlanRemove(ctx context.Context, tier environment.Tier) (provider
 	for _, taking := range Removals(read) {
 		change := provider.Change{
 			Kind:   string(taking.Resource.Kind),
-			Name:   taking.Resource.Name,
+			Name:   read.named(taking.Resource),
 			Action: taking.Action,
 			Reason: taking.Reason,
 			Slow:   taking.Resource.Slow,
@@ -437,14 +445,17 @@ func (b Engine) PlanRemove(ctx context.Context, tier environment.Tier) (provider
 }
 
 var removalOrder = []Kind{
-	KindSecret, KindGrant, KindKey, KindKeyRing, KindRole, KindQueue, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+	KindSecret, KindGrant, KindKey, KindKeyRing, KindRole, KindQueue, KindServiceAccount, KindRepository, KindBucket,
 }
 
 func Removals(read Survey) []Removal {
 	stampBucket := stateBucketOf(read)
 	rank := func(target Resource) int {
-		if target.ID() == stampBucket.ID() {
+		switch {
+		case target.ID() == stampBucket.ID():
 			return len(removalOrder)
+		case target.Kind == KindDatabase:
+			return len(removalOrder) + 1
 		}
 		return slices.Index(removalOrder, target.Kind)
 	}
@@ -477,7 +488,7 @@ func deleting(read Survey, target Resource) Removal {
 
 func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	defer b.Surveyed.forget(tier)
-	defer b.Clients.ForgetTierBuckets(tier)
+	defer b.Clients.DropTierBucketsRead(tier)
 	read, err := b.survey(ctx, tier)
 	if err != nil {
 		return err
@@ -486,7 +497,7 @@ func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress prog
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s still stores the state of %s, and removing the bucket a stack is recorded in strands what that stack provisioned.\n"+
 				"Run `%s` in every project deployed here first",
-			read.StateBucket, read.stateOf, destroyIn(tier))
+			read.Buckets[naming.StorageState], read.stateOf, destroyIn(tier))
 	}
 	if err := b.partsFree(ctx, tier, read.Stamp.Parts); err != nil {
 		return err

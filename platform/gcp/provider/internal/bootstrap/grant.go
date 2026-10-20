@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -19,7 +18,7 @@ var grantKind = KindOps{
 	noun:          "project grant of",
 	terraform:     cost.ProjectIAMMemberType,
 	emulatorSkips: true,
-	survey: func(ctx context.Context, b Engine, _ environment.Tier, target Resource) (Presence, error) {
+	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		return presenceFrom(b.projectGrantBound(ctx, target.Name))
 	},
 	Make: func(ctx context.Context, b Engine, _ Survey, target Resource) error {

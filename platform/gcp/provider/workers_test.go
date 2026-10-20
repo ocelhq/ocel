@@ -99,7 +99,7 @@ func TestATasksManifestPinsTheTiersQueueAndPublishesDelaysAsTheAppsOwnAccount(t 
 		t.Errorf("tasksManifest() = %+v, want the environment's own runs and the resize topic as deployed", tasks)
 	}
 	if tasks.DelayQueue != "projects/acme-prod/locations/europe-west1/queues/ocel-prod-delays" ||
-		tasks.Account != c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") || tasks.PublishURL != "https://pubsub.googleapis.com" {
+		tasks.Account != c.AppAccountEmail("shop", stackrecords.ProductionEnv, "web") || tasks.PublishURL != "https://pubsub.googleapis.com" {
 		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, the app's own account and Pub/Sub's own url", tasks)
 	}
 }

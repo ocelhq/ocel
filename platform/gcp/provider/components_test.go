@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
-func (p *Provider) bucketHooks() *bucket.Bucket { return bucket.New(p.openClients) }
+func (p *Provider) bucketHooks() *bucket.Bucket { return bucket.New(p.openClients, p.KeyValues()) }
 
 func composed(b bootstrap.Engine) bootstrap.Engine {
 	b.Removable, b.Accounts, b.FrontParts = tierParts(), tierAccounts((&Provider{}).components()), tierFronts()

@@ -35,8 +35,12 @@ func IsRandomTag(value string) bool {
 }
 
 func HashTag(fields ...string) string {
+	return HashDigits(tagChars, fields...)
+}
+
+func HashDigits(digits int, fields ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(fields, FieldSeparator)))
-	return hex.EncodeToString(sum[:])[:tagChars]
+	return hex.EncodeToString(sum[:])[:digits]
 }
 
 func (c Coordinate) HashTag(namespace string) string {

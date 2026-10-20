@@ -454,8 +454,8 @@ func TestADeployAdministersTheBucketsOfItsNamespaceAndNoOtherBucket(t *testing.T
 	if !strings.Contains(document.Document, "a custom role holding storage.buckets.create") {
 		t.Errorf("Permissions(deploy) =\n%s\nwant a custom role holding storage.buckets.create: Cloud Storage checks creating a bucket against the project, where no bucket name condition can admit it", document.Document)
 	}
-	if !strings.Contains(document.Document, "storage.buckets.list") {
-		t.Errorf("Permissions(deploy) =\n%s\nwant storage.buckets.list in the custom role: a deploy finds its tier's randomly tagged buckets and an app's bucket by listing, which Cloud Storage checks against the project", document.Document)
+	if strings.Contains(document.Document, "storage.buckets.list") {
+		t.Errorf("Permissions(deploy) =\n%s\nholds storage.buckets.list, which reads the name of every bucket in the project: a deploy reads its tier's buckets and an app's bucket from their records", document.Document)
 	}
 }
 

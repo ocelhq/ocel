@@ -152,7 +152,7 @@ func sweepingWith(t *testing.T, s *serviceAccountListing, server *googletest.IAM
 const sweptEnv = "pr-8"
 
 func appAccountOf(c *gcloud.Clients, tier environment.Tier, project, app string) listedAccount {
-	return listedAccount{id: c.AppAccount(tier, project, sweptEnv, app), description: release.AppAccountDescription(tier, project, sweptEnv, app)}
+	return listedAccount{id: c.AppAccount(project, sweptEnv, app), description: release.AppAccountDescription(tier, project, sweptEnv, app)}
 }
 
 func sweepNames() names.Names { return names.New("ocel", "acme-prod") }
@@ -388,7 +388,7 @@ func TestABootstrapReadsAProjectsRecordsOnceToChooseAndOnceMoreBeforeEachDelete(
 	if err := release.DeleteUnusedAccounts(context.Background(), b, sweepRequest(tier), log); err != nil {
 		t.Fatalf("deleteUnusedAccounts() = %v", err)
 	}
-	if got, want := server.deletes(), []string{names.AppAccount(tier, "shop", sweptEnv, "worker"), names.AppAccount(tier, "shop", sweptEnv, "cron")}; !slices.Equal(got, want) {
+	if got, want := server.deletes(), []string{names.AppAccount("shop", sweptEnv, "worker"), names.AppAccount("shop", sweptEnv, "cron")}; !slices.Equal(got, want) {
 		t.Errorf("deleted %v, want %v", got, want)
 	}
 	if records.lists != 3 {

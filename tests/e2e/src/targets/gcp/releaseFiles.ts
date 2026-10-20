@@ -1,3 +1,4 @@
+import { namespaceField } from "./names";
 import { bearer, type Where } from "./store";
 
 const STORAGE = "https://storage.googleapis.com/storage/v1";
@@ -13,7 +14,7 @@ type Listing = {
 };
 
 export function edgeBucketPrefix(namespace: string): string {
-  return `${namespace}-${PRODUCTION_EDGE_WORDS}-`;
+  return `${namespaceField(namespace)}-${PRODUCTION_EDGE_WORDS}-`;
 }
 
 export function edgeBucketIn(buckets: string[], namespace: string): string {

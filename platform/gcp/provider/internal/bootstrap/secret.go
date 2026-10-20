@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -23,7 +22,7 @@ var secretKind = KindOps{
 	properties: func(string, Resource) map[string]any {
 		return map[string]any{"replication": map[string]any{"auto": map[string]any{}}}
 	},
-	survey: func(ctx context.Context, b Engine, _ environment.Tier, target Resource) (Presence, error) {
+	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		return b.secretPresence(ctx, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, _ Survey, target Resource) error {

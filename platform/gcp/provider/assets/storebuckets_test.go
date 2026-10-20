@@ -15,7 +15,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -134,5 +136,25 @@ func TestRemovingObjectsTakesEachKindsPrefixFromItsOwnBucketAndNothingBeside(t *
 	}
 	if !slices.Equal(objects.deleted, want) {
 		t.Errorf("RemoveObjects() deleted %q, want exactly %q", objects.deleted, want)
+	}
+}
+
+func TestRemovingObjectsWhereTheTierRecordsNoBucketSaysNothingWasRemoved(t *testing.T) {
+	scope, err := naming.ProjectScope("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrecorded := &gcloud.Clients{Names: googletest.Names, Region: googletest.Region, Endpoint: "http://127.0.0.1:1", Records: fake.NewKeyValues()}
+	store := Store{
+		OpenClients:      googletest.Opener(unrecorded),
+		RemoveTagRecords: func(context.Context, environment.Tier, naming.StorageScope, progress.Log) error { return nil },
+	}
+	log := &fake.Log{}
+
+	if err := store.RemoveObjects(context.Background(), environment.TierPreview, scope, naming.CoordinateObjectKinds, log); err != nil {
+		t.Fatalf("RemoveObjects() = %v", err)
+	}
+	if lines := log.Lines(); len(lines) != 0 {
+		t.Errorf("RemoveObjects() with no bucket recorded said %q, want nothing: it removed no objects", lines)
 	}
 }

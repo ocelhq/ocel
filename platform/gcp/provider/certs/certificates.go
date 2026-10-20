@@ -45,12 +45,12 @@ func authorizationID(namespace, hostname string) string {
 }
 
 func certificateName(namespace, hostname string, role ...string) string {
-	head := naming.MustUntieredOcelName(namespace, certificateWord)
-	tag := naming.HashTag(namespace, hostname)
-	room := maxCertificateName - len(head) - len(tag) - 2*len(naming.WordSeparator) - len(naming.WordSeparator+authorizationRole)
-	readable := naming.SanitizeHost(hostname)
-	readable = strings.TrimRight(readable[:min(len(readable), room)], naming.WordSeparator)
-	return naming.Join(naming.WordSeparator, append([]string{head, readable, tag}, role...)...)
+	name := naming.TaggedName{
+		Head:     naming.MustUntieredOcelName(namespace, certificateWord),
+		Readable: naming.SanitizeHost(hostname),
+		Tag:      naming.HashTag(namespace, hostname),
+	}.Fit(maxCertificateName, authorizationRole)
+	return naming.Join(naming.WordSeparator, append([]string{name}, role...)...)
 }
 
 func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostname, "*.") }

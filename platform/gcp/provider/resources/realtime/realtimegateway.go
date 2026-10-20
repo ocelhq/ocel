@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime/pubsubbus"
+	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
@@ -39,9 +40,9 @@ const (
 
 var realtimeImageTag = run.BinaryImageTag(payloads.RealtimeGateway)
 
-func realtimeGatewayServing(named names.Names, ref provider.StackRef, host, image, inlineKeys, pubsubEndpoint string) run.Serving {
+func realtimeGatewayServing(named names.Names, ref provider.StackRef, service, host, image, inlineKeys, pubsubEndpoint string) run.Serving {
 	gateway := run.Serving{
-		Service:     named.RealtimeGateway(ref.Project, ref.Name.Env),
+		Service:     service,
 		Labels:      names.StackLabels(named, ref),
 		Image:       image,
 		Account:     named.RealtimeAccountEmail(ref.Tier),
@@ -57,7 +58,7 @@ func realtimeGatewayServing(named names.Names, ref provider.StackRef, host, imag
 			gatewayenv.HostVar:       host,
 			gatewayenv.AnyOriginVar:  strconv.FormatBool(true),
 			gatewayenv.MaxSocketsVar: strconv.Itoa(realtimeGatewayMaxSockets),
-			pubsubbus.TopicVar:       realtimeTopic(named, ref),
+			pubsubbus.TopicVar:       topics.TopicPath(named.Project(), service),
 		},
 	}
 	if pubsubEndpoint != "" {
@@ -82,7 +83,7 @@ func (r realtimeEnvironment) readGateway(ctx context.Context) (*runv2.GoogleClou
 	if err != nil {
 		return nil, err
 	}
-	name := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
+	name := r.gateway
 	found, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*runv2.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(r.clients.ServicePath(name)).Context(ctx).Do(call...)
 	})
@@ -110,11 +111,11 @@ func (r realtimeEnvironment) findGatewayHost(current *runv2.GoogleCloudRunV2Serv
 	if current != nil && run.HostOf(current.Uri) != "" {
 		return run.HostOf(current.Uri)
 	}
-	return r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
+	return r.gateway
 }
 
 func (r realtimeEnvironment) compareGateway(current *runv2.GoogleCloudRunV2Service, host, image, inlineKeys string) (run.Serving, string, error) {
-	desired := realtimeGatewayServing(r.clients.Names, r.ref, host, image, inlineKeys, r.pubsubEndpoint)
+	desired := realtimeGatewayServing(r.clients.Names, r.ref, r.gateway, host, image, inlineKeys, r.pubsubEndpoint)
 	wanted, err := run.ServiceOf(desired)
 	if err != nil {
 		return run.Serving{}, "", err
@@ -170,7 +171,7 @@ func (r realtimeEnvironment) serveGateway(ctx context.Context, keys map[string]s
 			return "", err
 		}
 	}
-	name := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
+	name := r.gateway
 	host := r.findGatewayHost(current)
 	for range 2 {
 		desired, difference, err := r.compareGateway(current, host, image, inlineKeys)
@@ -228,5 +229,5 @@ func ImageOf(service *runv2.GoogleCloudRunV2Service) string {
 }
 
 func (r realtimeEnvironment) removeGateway(ctx context.Context, progress progress.Log) error {
-	return r.tearDown(ctx, r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env), progress)
+	return r.tearDown(ctx, r.gateway, progress)
 }

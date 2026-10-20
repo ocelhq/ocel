@@ -32,14 +32,14 @@ func stackOf(env, app, release string) naming.StackName {
 }
 
 func appMember(c *gcloud.Clients, ref provider.StackRef, app string) string {
-	return "serviceAccount:" + c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app)
+	return "serviceAccount:" + c.AppAccountEmail(ref.Project, ref.Name.Env, app)
 }
 
 func applyAppGrants(t *testing.T, c *gcloud.Clients, spec provider.StackSpec) error {
 	t.Helper()
 	ref := spec.Ref
-	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, spec.App.App)
-	want, err := release.AppGrants(context.Background(), c, component.Registry{bucket.New(nil).Component()}, cacheGrants, spec, account, appMember(c, ref, spec.App.App), nil, nil)
+	account := c.AppAccount(ref.Project, ref.Name.Env, spec.App.App)
+	want, err := release.AppGrants(context.Background(), c, component.Registry{bucket.New(nil, nil).Component()}, cacheGrants, spec, account, appMember(c, ref, spec.App.App), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -100,8 +100,8 @@ func holdings(server *googletest.IAM, c *gcloud.Clients, member string) []string
 	return held
 }
 
-func resizePath(c *gcloud.Clients, spec provider.StackSpec) string {
-	return "/v1/projects/acme-prod/topics/" + topic.Names(c.Names, spec.Ref).Topic("resize")
+func resizePath(t *testing.T, c *gcloud.Clients, spec provider.StackSpec) string {
+	return "/v1/projects/acme-prod/topics/" + topicNamed(t, topic.Names(c.Names, spec.Ref), "resize")
 }
 
 func publishersOf(server *googletest.IAM, path string) []string {
@@ -199,7 +199,7 @@ func TestADeployRecordsWhatItGrantsBeforeItGrantsIt(t *testing.T) {
 		t.Fatal("ensureAppAccount() over a denied account policy = nil, want the refusal")
 	}
 
-	recorded, err := grants.Read(context.Background(), p.KeyValues(), spec.Ref.Tier, c.AppAccount(spec.Ref.Tier, "shop", "production", "api"))
+	recorded, err := grants.Read(context.Background(), p.KeyValues(), spec.Ref.Tier, c.AppAccount("shop", "production", "api"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,8 +216,8 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesEveryGrantItsAccountHeld(t 
 	if got := holdings(server, c, member); len(got) != 7 {
 		t.Fatalf("the account holds %q before removal, want the records, key, runs and tag records, cache, assets, queue and own account grants", got)
 	}
-	if !slices.Contains(publishersOf(server, resizePath(c, spec)), member) {
-		t.Fatalf("resize has publishers %q before removal, want the account in them", publishersOf(server, resizePath(c, spec)))
+	if !slices.Contains(publishersOf(server, resizePath(t, c, spec)), member) {
+		t.Fatalf("resize has publishers %q before removal, want the account in them", publishersOf(server, resizePath(t, c, spec)))
 	}
 
 	removeStack(t, p, c, spec.Ref)
@@ -225,10 +225,10 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesEveryGrantItsAccountHeld(t 
 	if got := holdings(server, c, member); len(got) != 0 {
 		t.Errorf("the account still holds %q after its environment's last release was removed, want nothing", got)
 	}
-	if got := publishersOf(server, resizePath(c, spec)); slices.Contains(got, member) {
+	if got := publishersOf(server, resizePath(t, c, spec)); slices.Contains(got, member) {
 		t.Errorf("resize still has publishers %q, want the account gone", got)
 	}
-	account := c.AppAccount(spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name.Env, "web")
+	account := c.AppAccount(spec.Ref.Project, spec.Ref.Name.Env, "web")
 	if recorded, err := grants.Read(context.Background(), p.KeyValues(), spec.Ref.Tier, account); err != nil || recorded != nil {
 		t.Errorf("readAppGrants() after the removal = %+v, %v, want nothing on record", recorded, err)
 	}
@@ -306,7 +306,7 @@ func TestRevokingAnAppsGrantsSkipsWhatIsAlreadyGone(t *testing.T) {
 	server := appAccountsOnly()
 	p, c, spec, member := grantedAppAccount(t, server)
 	server.TasksAbsent = true
-	server.DeletedTopics = map[string]bool{resizePath(c, spec): true}
+	server.DeletedTopics = map[string]bool{resizePath(t, c, spec): true}
 
 	removeStack(t, p, c, spec.Ref)
 
@@ -319,14 +319,14 @@ func TestADeployThatStopsReachingATopicTakesItsPublisherGrantAway(t *testing.T) 
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c, spec, member := grantedAppAccount(t, server)
-	server.TopicPolicies[resizePath(c, spec)].Bindings = append(server.TopicPolicies[resizePath(c, spec)].Bindings,
+	server.TopicPolicies[resizePath(t, c, spec)].Bindings = append(server.TopicPolicies[resizePath(t, c, spec)].Bindings,
 		&pubsub.Binding{Role: "roles/pubsub.publisher", Members: []string{"serviceAccount:other@acme-prod.iam.gserviceaccount.com"}})
 
 	if _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{}); err != nil {
 		t.Fatalf("ensureAppAccount() without the topic = %v", err)
 	}
 
-	if got := publishersOf(server, resizePath(c, spec)); slices.Contains(got, member) || len(got) != 1 {
+	if got := publishersOf(server, resizePath(t, c, spec)); slices.Contains(got, member) || len(got) != 1 {
 		t.Errorf("resize has publishers %q, want the other member alone once the app no longer declares the topic", got)
 	}
 }

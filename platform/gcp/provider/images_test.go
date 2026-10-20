@@ -20,13 +20,14 @@ func (t handedToken) Token(context.Context) (string, error) { return string(t), 
 func pushing(t *testing.T, endpoint string) *Provider {
 	t.Helper()
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
+	store := fake.NewKeyValues()
 	return &Provider{
 		options:   Options{Project: names.Project(), Region: "europe-west1"},
 		tokens:    handedToken("ya29.stub"),
 		endpoint:  endpoint,
 		namespace: names.Namespace(),
-		resolved:  googletest.WithTierBuckets(&gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint}),
-		records:   fake.NewKeyValues(),
+		resolved:  googletest.WithTierBuckets(&gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint, Records: store}),
+		records:   store,
 	}
 }
 

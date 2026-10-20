@@ -7,7 +7,6 @@ import (
 
 	pubsub "google.golang.org/api/pubsub/v1"
 
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
@@ -16,11 +15,7 @@ import (
 
 const topicSubscriberRole = "roles/pubsub.subscriber"
 
-func realtimeTopic(named names.Names, ref provider.StackRef) string {
-	return topics.TopicPath(named.Project(), named.RealtimeGateway(ref.Project, ref.Name.Env))
-}
-
-func (r realtimeEnvironment) topic() string { return realtimeTopic(r.clients.Names, r.ref) }
+func (r realtimeEnvironment) topic() string { return topics.TopicPath(r.clients.Project(), r.gateway) }
 
 func (r realtimeEnvironment) topicGrants() policy.Change {
 	member := realtimeMember(r.clients, r.ref.Tier)

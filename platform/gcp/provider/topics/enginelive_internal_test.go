@@ -70,13 +70,16 @@ type leased struct {
 	visibleAt time.Time
 }
 
-func (p *pullReceiver) subscription(topic, consumer string) string {
-	return subscriptionPath(p.project, p.names.Subscription(topic, consumer))
+func (p *pullReceiver) subscription(topic, consumer string) (string, error) {
+	return p.names.subscriptionPath(p.project, topic, consumer)
 }
 
 func (p *pullReceiver) Receive(ctx context.Context, req runs.ReceiveRequest) ([]runs.Received, error) {
 	deadline := time.Now().Add(req.Wait)
-	subscription := p.subscription(req.Topic, req.Consumer)
+	subscription, err := p.subscription(req.Topic, req.Consumer)
+	if err != nil {
+		return nil, err
+	}
 	for {
 		pulled, err := p.service.Projects.Subscriptions.Pull(subscription, &pubsub.PullRequest{MaxMessages: int64(req.Max), ReturnImmediately: true}).Context(ctx).Do()
 		if err != nil {
@@ -149,12 +152,19 @@ func (p *pullReceiver) lease(subscription string, handles []string, visibleAt ti
 }
 
 func (p *pullReceiver) Extend(_ context.Context, topic, consumer string, handles []string, hidden time.Duration) error {
-	p.lease(p.subscription(topic, consumer), handles, time.Now().Add(hidden))
+	subscription, err := p.subscription(topic, consumer)
+	if err != nil {
+		return err
+	}
+	p.lease(subscription, handles, time.Now().Add(hidden))
 	return nil
 }
 
 func (p *pullReceiver) Ack(ctx context.Context, topic, consumer string, handles []string) error {
-	subscription := p.subscription(topic, consumer)
+	subscription, err := p.subscription(topic, consumer)
+	if err != nil {
+		return err
+	}
 	if _, err := p.service.Projects.Subscriptions.Acknowledge(subscription, &pubsub.AcknowledgeRequest{AckIds: handles}).Context(ctx).Do(); err != nil {
 		return err
 	}
@@ -183,9 +193,16 @@ func pulledTopology(t *testing.T, clients *ports.Clients, names Names, declared 
 	pulled := Subscriptions{Names: names, Topics: declared}
 	for name, topic := range declared {
 		for _, consumer := range topic.Consumers {
-			subscription := pulled.subscription(clients.Project, name, topic, consumer, Push{})
+			subscription, err := pulled.subscription(clients.Project, name, topic, consumer, Push{})
+			if err != nil {
+				t.Fatal(err)
+			}
 			subscription.PushConfig, subscription.AckDeadlineSeconds = nil, int64(pullAckDeadline/time.Second)
-			if err := ensureSubscription(ctx, service, subscriptionPath(clients.Project, names.Subscription(name, consumer.Name)), subscription); err != nil {
+			path, err := names.subscriptionPath(clients.Project, name, consumer.Name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ensureSubscription(ctx, service, path, subscription); err != nil {
 				t.Fatalf("make the pull subscription of %s/%s: %v", name, consumer.Name, err)
 			}
 		}

@@ -94,6 +94,15 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 	}
 }
 
+func TestALabelValueThatFitsIsKeptAndALongerOneIsCutAndTaggedWithItsHash(t *testing.T) {
+	if got := names.LabelValue("feature-login-page-v1"); got != "feature-login-page-v1" {
+		t.Errorf("LabelValue() = %q, want a value that fits kept as it is", got)
+	}
+	if got, want := names.LabelValue(strings.Repeat("a", 70)), strings.Repeat("a", 55)+"-6bd5e5"; got != want {
+		t.Errorf("LabelValue() = %q, want %q: the head that fits and the hash tag of the whole value", got, want)
+	}
+}
+
 func TestALabelValueIsOneGoogleCloudTakes(t *testing.T) {
 	valid := regexp.MustCompile(`^[a-z0-9_-]{0,63}$`)
 	ref := provider.StackRef{Project: "Shop " + strings.Repeat("a", 80), Tier: "production"}

@@ -109,7 +109,7 @@ func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
 	}
 }
 
-func TestTheLoadBalancersServiceAgentListsAndReadsTheTiersEdgeBucketAndNoOther(t *testing.T) {
+func TestTheLoadBalancersServiceAgentListsTheTiersEdgeBucketAndReadsOnlyItsStaticFiles(t *testing.T) {
 	t.Parallel()
 
 	seen, err := declared(loadBalancerProgram(frontSpec()))
@@ -127,10 +127,10 @@ func TestTheLoadBalancersServiceAgentListsAndReadsTheTiersEdgeBucketAndNoOther(t
 	condition, _ := grant.Args["condition"].(map[string]any)
 	expression, _ := condition["expression"].(string)
 	want := `resource.name == "projects/_/buckets/ocel-prod-edge-k3x9q2" || ` +
-		`resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/")`
+		`resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/assets/")`
 	if expression != want {
 		t.Errorf("the grant is conditioned on %q, want %q: the agent lists the edge bucket, so a missing file is a 404, "+
-			"and reads what it holds, which is only what an edge may serve, with only the functions IAM supports on resource.name", expression, want)
+			"and reads its static files alone, never the pages, edge bundles, route tables or image config beside them", expression, want)
 	}
 }
 

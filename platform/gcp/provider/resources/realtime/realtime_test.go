@@ -70,7 +70,12 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 	clients := googletest.Clients(server.URL)
 	records := fake.NewKeyValues()
 	services := &run.Services{OpenClients: googletest.Opener(clients), Records: records}
+	gateway, err := clients.RealtimeGateway("shop", "prod")
+	if err != nil {
+		t.Fatal(err)
+	}
 	h.env = realtimeEnvironment{
+		gateway:        gateway,
 		clients:        clients,
 		records:        records,
 		ref:            googletest.ProductionRef(t),
@@ -185,7 +190,7 @@ func TestARealtimeIsBoundToItsEnvironmentsGatewayByTheHostCloudRunGaveIt(t *test
 }
 
 func (h *realtimeHarness) topic() string {
-	return "projects/acme-prod/topics/" + h.env.clients.RealtimeGateway("shop", "prod")
+	return "projects/acme-prod/topics/" + h.env.gateway
 }
 
 func TestARealtimeGatewaysEnvironmentHasATopicItsAccountMayPublishOnAndSubscribeTo(t *testing.T) {
@@ -454,7 +459,10 @@ func TestARealtimeIsPricedAsAGatewayOfUpToTenInstancesItsTopicAndTheirSubscripti
 	if err != nil {
 		t.Fatal(err)
 	}
-	gateway := named.RealtimeGateway("shop", "prod")
+	gateway, err := named.RealtimeGateway("shop", "prod")
+	if err != nil {
+		t.Fatal(err)
+	}
 	found := map[string]*costv1.Resource{}
 	for _, resource := range set.Resources {
 		found[resource.Type+":"+resource.Name] = resource

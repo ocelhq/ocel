@@ -111,7 +111,7 @@ func TestANextAppBehindTheALBMayClearCloudCDNAndNothingElseOnTheLoadBalancer(t *
 		t.Fatal(err)
 	}
 
-	want := cdnPurgeRolePath + " serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") + " "
+	want := cdnPurgeRolePath + " serviceAccount:" + c.AppAccountEmail("shop", stackrecords.ProductionEnv, "web") + " "
 	if got := purgeBindingsOf(server.Identities()); len(got) != 1 || got[0] != want {
 		t.Fatalf("the project's purge bindings = %q, want exactly %q: one, unconditioned, for the app's own account", got, want)
 	}
@@ -169,7 +169,7 @@ func TestAnAppNoEnvironmentRunsLosesItsCachePurgeGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	account := c.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
+	account := c.AppAccount("shop", stackrecords.ProductionEnv, "web")
 	if _, err := grants.RevokeAll(context.Background(), c, p.KeyValues(), environment.TierProduction, account); err != nil {
 		t.Fatal(err)
 	}

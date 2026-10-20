@@ -22,65 +22,6 @@ func TestSanitizeKeepsTheAlphabet(t *testing.T) {
 	}
 }
 
-func fitFunctionName(c Coordinate) string {
-	return Fit(64, WordSeparator, Fixed(c.Project), Fixed(c.Env), Fixed(c.App), Compressible(c.Name), Fixed(c.Release.String()))
-}
-
-func TestFitKeepsFixedFieldsAndMarksTruncation(t *testing.T) {
-	c := Coordinate{
-		Project: "a-fairly-long-project-slug",
-		Env:     "preview-pr-7",
-		App:     "web",
-		Kind:    KindFunction,
-		Name:    "api-users-with-a-very-long-route-identifier",
-		Release: NewReleaseToken("build-1", ""),
-	}
-	got := fitFunctionName(c)
-	if len(got) > 64 {
-		t.Fatalf("PhysicalName = %q (%d chars), want <= 64", got, len(got))
-	}
-	for _, field := range []string{c.Project, c.Env, c.App, c.Release.String()} {
-		if !strings.Contains(got, field) {
-			t.Errorf("PhysicalName = %q, want it to preserve %q", got, field)
-		}
-	}
-	if !strings.Contains(got, truncationMarker) {
-		t.Errorf("PhysicalName = %q, want a visible truncation marker", got)
-	}
-}
-
-func TestFitStaysCollisionSafe(t *testing.T) {
-	base := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewReleaseToken("b1", "")}
-	long := strings.Repeat("route-segment-", 6)
-
-	a, b := base, base
-	a.Name = long + "one"
-	b.Name = long + "two"
-
-	if fitFunctionName(a) == fitFunctionName(b) {
-		t.Fatalf("distinct routes collided on %q", fitFunctionName(a))
-	}
-}
-
-func TestFitIsStableWhenItFits(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "api-users", Release: NewReleaseToken("build-1", "")}
-	want := "shop-prod-web-api-users-" + c.Release.String()
-	if got := fitFunctionName(c); got != want {
-		t.Errorf("PhysicalName = %q, want %q", got, want)
-	}
-}
-
-func TestFitOmitsEmptySegments(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewReleaseToken("build-1", "")}
-	want := "shop-prod-web-" + c.Release.String()
-	if got := fitFunctionName(c); got != want {
-		t.Errorf("PhysicalName = %q, want %q", got, want)
-	}
-	if got := Fit(64, WordSeparator, Fixed("shop"), Compressible(""), Fixed("prod")); got != "shop-prod" {
-		t.Errorf("Fit = %q, want %q", got, "shop-prod")
-	}
-}
-
 func TestReleaseSeparatesBuildFromFingerprint(t *testing.T) {
 	if NewReleaseToken("build-1", "fp-a") == NewReleaseToken("build-1", "fp-b") {
 		t.Error("a changed value fingerprint must mint a new release")
@@ -180,21 +121,6 @@ func TestTaskKeysPartitionByProjectAndEnvironmentApartFromSessions(t *testing.T)
 	}
 	if !strings.HasSuffix(prod, KeySeparator) {
 		t.Errorf("TaskKeyPrefix = %q, want it to end on %q so %q* cannot match a longer scope", prod, KeySeparator, prod)
-	}
-}
-
-func TestResourceIDsReadAsEnglish(t *testing.T) {
-	for _, tc := range []struct {
-		got, want string
-	}{
-		{ResourceID(KindFunction, "index"), "fn-index"},
-		{ResourceID(KindFunction, "index", "url"), "fn-index-url"},
-		{ResourceID(KindBucket, "uploads", "public-access-block"), "bucket-uploads-public-access-block"},
-		{ResourceID(KindDatabase, "main", "security-group"), "db-main-security-group"},
-	} {
-		if tc.got != tc.want {
-			t.Errorf("ResourceID = %q, want %q", tc.got, tc.want)
-		}
 	}
 }
 

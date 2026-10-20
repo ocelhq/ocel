@@ -50,7 +50,7 @@ import {
   storeFilter,
   strayStores,
 } from "./memorystore";
-import { gcpSlug, namespaceOf } from "./names";
+import { namespaceOf } from "./names";
 import { assetPrefixOf, edgeBucketIn, edgeBucketPrefix, readReleaseFile } from "./releaseFiles";
 import { countOriginRequests } from "./requestLog";
 import {
@@ -187,11 +187,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
   readonly sweeper: Sweeper = {
     list: () => this.deployedSlugs(),
     exists: async (slug) => {
-      const cell = cellOfSlug(gcpCells(), slug);
-      return this.deploys(
-        await this.services(),
-        gcpSlug({ slug, fixture: cell.fixture }, process.env),
-      );
+      return this.deploys(await this.services(), slug);
     },
     sweepStale: (runId) => this.sweepStale(runId),
     sweepRun: (runId) => this.sweepRun(runId),
@@ -339,7 +335,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
 
   async restart(cell: CellUnderTest): Promise<Deployment> {
     const where = await this.where();
-    const slug = gcpSlug(cell, process.env);
+    const slug = cell.slug;
     const stores = await listStores(where, storeFilter(namespaceOf(process.env), slug));
     await cell.evidence.write("restart", "restarted.json", `${JSON.stringify(stores, null, 2)}\n`);
     if (stores.length === 0) {
@@ -361,7 +357,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
     const where = await this.where();
     const namespace = namespaceOf(process.env);
     const listed = await readServices(where);
-    const service = findAppService(servicesIn(listed), namespace, gcpSlug(cell, process.env), app);
+    const service = findAppService(servicesIn(listed), namespace, cell.slug, app);
     const buckets = await listAppBuckets(where, edgeBucketPrefix(namespace));
     return readReleaseFile(
       where,
@@ -378,7 +374,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
     const services = exposedServices(
       await readServices(await this.where()),
       namespaceOf(process.env),
-      gcpSlug(cell, process.env),
+      cell.slug,
     );
     return [...this.outputFor(cell), services].join("\n");
   }
@@ -504,7 +500,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
         cell.fixture.apps.map((app) => [
           app,
           reachable(
-            findAppService(found, namespaceOf(process.env), gcpSlug(cell, process.env), app).uri,
+            findAppService(found, namespaceOf(process.env), cell.slug, app).uri,
             endpoint(),
           ),
         ]),
@@ -545,9 +541,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
     const found = await this.services();
     return gcpCells()
       .map((cell) => ({ cell, slug: projectSlug(cell.name, runId) }))
-      .filter(({ cell, slug }) =>
-        this.deploys(found, gcpSlug({ slug, fixture: cell.fixture }, process.env)),
-      )
+      .filter(({ slug }) => this.deploys(found, slug))
       .map(({ slug }) => slug);
   }
 
@@ -584,9 +578,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
     } catch (error) {
       complaints.push(error instanceof Error ? error.message : String(error));
     }
-    const mine = gcpCells().map((cell) =>
-      gcpSlug({ slug: projectSlug(cell.name, runId), fixture: cell.fixture }, process.env),
-    );
+    const mine = gcpCells().map((cell) => projectSlug(cell.name, runId));
     const found = await this.services();
     const at = await this.where();
     if (!endpoint()) {
@@ -608,11 +600,7 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
   }
 
   private sweptProjects(runId: string): string[] {
-    return gcpCells().map((cell) =>
-      sanitize(
-        gcpSlug({ slug: projectSlug(cell.name, runId), fixture: cell.fixture }, process.env),
-      ),
-    );
+    return gcpCells().map((cell) => sanitize(projectSlug(cell.name, runId)));
   }
 
   private async sweepDatabases(at: Where, runId: string): Promise<string[]> {

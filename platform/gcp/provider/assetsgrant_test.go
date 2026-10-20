@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
@@ -30,7 +29,7 @@ func TestAnAppsAccountMayReadItsOwnStaticFilesAndNoOtherApps(t *testing.T) {
 	}
 
 	granted := assetBindingsOf(server.Identities())
-	want := grants.AssetsRole + " serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") +
+	want := grants.AssetsRole + " serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", stackrecords.ProductionEnv, "web") +
 		` resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/assets/shop/prod/web/")` +
 		` || resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/image-config/shop/prod/web/")`
 	if !slices.Equal(granted, []string{want}) {

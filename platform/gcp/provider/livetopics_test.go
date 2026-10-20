@@ -76,22 +76,22 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 	if err := provider.VerifyProperties(binding); err != nil {
 		t.Errorf("VerifyProperties(%+v) = %v", binding, err)
 	}
-	if !topicExists(t, names.Topic("orders")) {
-		t.Errorf("the Pub/Sub topic %s is missing after ProvisionTopic()", names.Topic("orders"))
+	if !topicExists(t, liveTopicNamed(t, names, "orders")) {
+		t.Errorf("the Pub/Sub topic %s is missing after ProvisionTopic()", liveTopicNamed(t, names, "orders"))
 	}
 
 	pubsubService, err := workloadClients(t).PubSub()
 	if err != nil {
 		t.Fatal(err)
 	}
-	topicPolicy, err := pubsubService.Projects.Topics.GetIamPolicy("projects/" + liveProject() + "/topics/" + names.Topic("orders")).Context(ctx).Do()
+	topicPolicy, err := pubsubService.Projects.Topics.GetIamPolicy("projects/" + liveProject() + "/topics/" + liveTopicNamed(t, names, "orders")).Context(ctx).Do()
 	if err != nil {
-		t.Fatalf("GetIamPolicy(%s) = %v", names.Topic("orders"), err)
+		t.Fatalf("GetIamPolicy(%s) = %v", liveTopicNamed(t, names, "orders"), err)
 	}
 	tierAccount := "serviceAccount:ocel-" + string(ref.Tier) + "@" + liveProject() + ".iam.gserviceaccount.com"
 	for _, bound := range topicPolicy.Bindings {
 		if slices.Contains(bound.Members, tierAccount) {
-			t.Errorf("topic %s grants %s to %s, and no account of the tier's own publishes: a delayed message is published as the app that sent it", names.Topic("orders"), bound.Role, tierAccount)
+			t.Errorf("topic %s grants %s to %s, and no account of the tier's own publishes: a delayed message is published as the app that sent it", liveTopicNamed(t, names, "orders"), bound.Role, tierAccount)
 		}
 	}
 
@@ -105,15 +105,15 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 	if err != nil {
 		t.Fatalf("ProvisionTopic() without bill = %v", err)
 	}
-	if !topicExists(t, names.Topic("orders")) {
-		t.Errorf("the Pub/Sub topic %s went with its dropped consumer bill", names.Topic("orders"))
+	if !topicExists(t, liveTopicNamed(t, names, "orders")) {
+		t.Errorf("the Pub/Sub topic %s went with its dropped consumer bill", liveTopicNamed(t, names, "orders"))
 	}
 
 	if err := p.TopicHooks().Remove(ctx, ref, binding, nil); err != nil {
 		t.Fatalf("RemoveTopic() = %v", err)
 	}
-	if topicExists(t, names.Topic("orders")) {
-		t.Errorf("the Pub/Sub topic %s outlived its binding", names.Topic("orders"))
+	if topicExists(t, liveTopicNamed(t, names, "orders")) {
+		t.Errorf("the Pub/Sub topic %s outlived its binding", liveTopicNamed(t, names, "orders"))
 	}
 }
 
@@ -157,7 +157,16 @@ func TestLiveATopicDeclaredWithNoConfigIsAPubSubTopicAlone(t *testing.T) {
 		t.Fatalf("ProvisionTopic() of a topic with no config = %v", err)
 	}
 	t.Cleanup(func() { _ = p.TopicHooks().Remove(ctx, ref, binding, nil) })
-	if !topicExists(t, taskNamesOf(t, ref).Topic("c-topic")) {
+	if !topicExists(t, liveTopicNamed(t, taskNamesOf(t, ref), "c-topic")) {
 		t.Error("a topic declared with no config made no Pub/Sub topic")
 	}
+}
+
+func liveTopicNamed(t *testing.T, names topics.Names, topic string) string {
+	t.Helper()
+	name, err := names.Topic(topic)
+	if err != nil {
+		t.Fatalf("Topic(%s) = %v", topic, err)
+	}
+	return name
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -25,11 +26,11 @@ const (
 )
 
 func assetReaderCondition(ctx context.Context, c *gcloud.Clients, tier environment.Tier) (*policy.Condition, error) {
-	buckets, err := c.TierBuckets(ctx, tier)
+	buckets, err := c.TierBuckets(ctx, tier, naming.StorageEdge)
 	if err != nil {
 		return nil, err
 	}
-	return gcloud.BucketCondition("ocel "+string(c.Namespace())+" "+string(tier)+" assets", buckets.Edge), nil
+	return gcloud.BucketCondition("ocel "+string(c.Namespace())+" "+string(tier)+" assets", buckets[naming.StorageEdge]), nil
 }
 
 func RaiseAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) error {
@@ -117,11 +118,7 @@ func TakeAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tie
 		return err
 	}
 	member := "serviceAccount:" + c.AssetReaderAccountEmail(tier)
-	condition, err := assetReaderCondition(ctx, c, tier)
-	if err != nil {
-		return err
-	}
-	if err := gcloud.BindProjectRole(ctx, c, member, grants.AssetsRole, condition, false); err != nil {
+	if _, err := policy.Edit(ctx, gcloud.ProjectPolicy(c), policy.RevokeRoles(member, []string{grants.AssetsRole})); err != nil {
 		return err
 	}
 	_, err = c.DeleteAccount(ctx, c.AssetReaderAccount(tier))

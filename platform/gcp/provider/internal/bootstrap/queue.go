@@ -23,8 +23,8 @@ var queueKind = KindOps{
 	properties: func(region string, _ Resource) map[string]any {
 		return map[string]any{"location": region}
 	},
-	survey: func(ctx context.Context, b Engine, tier environment.Tier, _ Resource) (Presence, error) {
-		queue, err := b.readDelayQueue(ctx, tier)
+	survey: func(ctx context.Context, b Engine, read Survey, _ Resource) (Presence, error) {
+		queue, err := b.readDelayQueue(ctx, read.Tier)
 		return Presence{Present: queue != nil}, err
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, _ Resource) error {

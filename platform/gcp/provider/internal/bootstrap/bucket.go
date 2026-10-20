@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
@@ -22,10 +21,8 @@ const (
 )
 
 const (
-	reasonUnlocked     = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
-	reasonUnaged       = "its versioning or the lifecycle that deletes what it no longer needs is not the one this bootstrap sets"
-	reasonBucketRacing = "another bootstrap of the %s tier made the %s bucket %s while this one made %s, and a tier keeps its %s objects in one bucket.\n" +
-		"Wait for that run to finish, then try again"
+	reasonUnlocked = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
+	reasonUnaged   = "its versioning or the lifecycle that deletes what it no longer needs is not the one this bootstrap sets"
 )
 
 var bucketKind = KindOps{
@@ -34,15 +31,16 @@ var bucketKind = KindOps{
 	properties: func(region string, target Resource) map[string]any {
 		return map[string]any{"location": region, "storage_class": "STANDARD", "versioning": map[string]any{"enabled": versioned(target.Class)}}
 	},
-	survey: func(ctx context.Context, b Engine, tier environment.Tier, target Resource) (Presence, error) {
-		attrs, err := b.Clients.FindTierBucket(ctx, tier, target.Class)
+	survey: func(ctx context.Context, b Engine, read Survey, target Resource) (Presence, error) {
+		attrs, err := b.readBucket(ctx, read.Buckets[target.Class])
 		if err != nil || attrs == nil {
 			return Presence{}, err
 		}
 		return BucketPresenceOf(attrs, target.Class, b.Clients.Emulated()), nil
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
-		return b.makeBucket(ctx, read, target)
+		_, err := b.makeBucket(ctx, read, target)
+		return err
 	},
 	mend: func(ctx context.Context, b Engine, read Survey, target Resource) error {
 		return b.mendBucket(ctx, read, target)
@@ -55,7 +53,14 @@ var bucketKind = KindOps{
 		return taking
 	},
 	Take: func(ctx context.Context, b Engine, read Survey, target Resource) (time.Duration, error) {
-		return 0, b.takeBuckets(ctx, read.Tier, target.Class)
+		bucket := read.Buckets[target.Class]
+		if bucket == "" {
+			return 0, nil
+		}
+		if err := b.takeBucket(ctx, bucket); err != nil {
+			return 0, err
+		}
+		return 0, b.Clients.ForgetTierBucket(ctx, read.Tier, target.Class, bucket)
 	},
 }
 
@@ -67,43 +72,71 @@ func lifecycleOf(class naming.StorageClass) storage.Lifecycle {
 	case naming.StorageState:
 		return storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: deleted, Condition: storage.LifecycleCondition{DaysSinceNoncurrentTime: NoncurrentStateLifetimeDays}}}}
 	case naming.StorageCache:
-		return storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: deleted, Condition: storage.LifecycleCondition{AgeInDays: naming.CacheObjectLifetimeDays}}}}
+		return storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: deleted, Condition: storage.LifecycleCondition{
+			AgeInDays:     naming.CacheObjectLifetimeDays,
+			MatchesPrefix: expiringPrefixes(),
+		}}}}
 	}
 	return storage.Lifecycle{}
 }
 
-func (b Engine) makeBucket(ctx context.Context, read Survey, target Resource) error {
-	client, err := b.Clients.Storage()
-	if err != nil {
-		return err
+func expiringPrefixes() []string {
+	prefixes := make([]string, len(naming.ExpiringObjectKinds))
+	for i, kind := range naming.ExpiringObjectKinds {
+		prefixes[i] = string(kind) + "/"
 	}
-	name := read.Names.TierBucket(read.Tier, target.Class, naming.NewRandomTag())
-	if err := client.Bucket(name).Create(ctx, read.Project, BucketAttrs(read.Region, target)); err != nil {
-		if gcloud.Taken(err) {
-			return refusal.Refuse(refusal.CodeInvalid,
-				"the %s bucket of the %s tier would be %s, and another Google Cloud project already holds that name: bucket names are global.\n"+
-					"Bootstrap again, which names the bucket with a new random tag", target.Class, read.Tier, name)
-		}
-		return fmt.Errorf("create the %s bucket: %w", name, err)
-	}
-	return b.refuseRacingBucket(ctx, read, target, name)
+	return prefixes
 }
 
-func (b Engine) refuseRacingBucket(ctx context.Context, read Survey, target Resource, made string) error {
-	matching, err := b.Clients.ListTierBucketsOf(ctx, read.Tier, target.Class)
+func (b Engine) readBucket(ctx context.Context, bucket string) (*storage.BucketAttrs, error) {
+	if bucket == "" {
+		return nil, nil
+	}
+	client, err := b.Clients.Storage()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for _, attrs := range matching {
-		if attrs.Name == made {
-			continue
-		}
-		if err := b.takeBucket(ctx, made); err != nil {
-			return err
-		}
-		return refusal.Refuse(refusal.CodeBusy, reasonBucketRacing, read.Tier, target.Class, attrs.Name, made, target.Class)
+	attrs, err := client.Bucket(bucket).Attrs(ctx)
+	if errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
+		return nil, nil
 	}
-	return nil
+	if err != nil {
+		return nil, fmt.Errorf("read the %s bucket: %w", bucket, err)
+	}
+	return attrs, nil
+}
+
+func (b Engine) makeBucket(ctx context.Context, read Survey, target Resource) (string, error) {
+	client, err := b.Clients.Storage()
+	if err != nil {
+		return "", err
+	}
+	name, err := b.Clients.ClaimTierBucket(ctx, read.Tier, target.Class, func() string {
+		return read.Names.TierBucket(read.Tier, target.Class, naming.NewRandomTag())
+	})
+	if err != nil {
+		return "", err
+	}
+	err = client.Bucket(name).Create(ctx, read.Project, BucketAttrs(read.Region, target))
+	if err == nil {
+		return name, nil
+	}
+	if !gcloud.Taken(err) {
+		return "", fmt.Errorf("create the %s bucket: %w", name, err)
+	}
+	attrs, err := b.readBucket(ctx, name)
+	if err != nil && !gcloud.Forbidden(err) {
+		return "", err
+	}
+	if attrs != nil {
+		return name, nil
+	}
+	if err := b.Clients.ForgetTierBucket(ctx, read.Tier, target.Class, name); err != nil {
+		return "", err
+	}
+	return "", refusal.Refuse(refusal.CodeInvalid,
+		"the %s bucket of the %s tier would be %s, and another Google Cloud project already holds that name: bucket names are global.\n"+
+			"Bootstrap again, which names the bucket with a new random tag", target.Class, read.Tier, name)
 }
 
 func BucketAttrs(region string, target Resource) *storage.BucketAttrs {
@@ -127,16 +160,18 @@ func aged(attrs *storage.BucketAttrs, class naming.StorageClass) bool {
 func sameRule(a, b storage.LifecycleRule) bool {
 	return a.Action.Type == b.Action.Type &&
 		a.Condition.AgeInDays == b.Condition.AgeInDays &&
-		a.Condition.DaysSinceNoncurrentTime == b.Condition.DaysSinceNoncurrentTime
+		a.Condition.DaysSinceNoncurrentTime == b.Condition.DaysSinceNoncurrentTime &&
+		slices.Equal(a.Condition.MatchesPrefix, b.Condition.MatchesPrefix)
 }
 
 func (b Engine) mendBucket(ctx context.Context, read Survey, target Resource) error {
-	attrs, err := b.Clients.FindTierBucket(ctx, read.Tier, target.Class)
+	attrs, err := b.readBucket(ctx, read.Buckets[target.Class])
 	if err != nil {
 		return err
 	}
 	if attrs == nil {
-		return b.makeBucket(ctx, read, target)
+		_, err := b.makeBucket(ctx, read, target)
+		return err
 	}
 	client, err := b.Clients.Storage()
 	if err != nil {
@@ -150,19 +185,6 @@ func (b Engine) mendBucket(ctx context.Context, read Survey, target Resource) er
 		Lifecycle:                &lifecycle,
 	}); err != nil {
 		return fmt.Errorf("restrict the %s bucket to IAM alone and set what it deletes: %w", attrs.Name, err)
-	}
-	return nil
-}
-
-func (b Engine) takeBuckets(ctx context.Context, tier environment.Tier, class naming.StorageClass) error {
-	matching, err := b.Clients.ListTierBucketsOf(ctx, tier, class)
-	if err != nil {
-		return err
-	}
-	for _, attrs := range matching {
-		if err := b.takeBucket(ctx, attrs.Name); err != nil {
-			return err
-		}
 	}
 	return nil
 }

@@ -48,10 +48,6 @@ func PushPath(topic, consumer string) string {
 
 func TopicPath(project, topic string) string { return "projects/" + project + "/topics/" + topic }
 
-func subscriptionPath(project, subscription string) string {
-	return "projects/" + project + "/subscriptions/" + subscription
-}
-
 func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 	service, err := clients.PubSub()
 	if err != nil {
@@ -59,12 +55,15 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 	}
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
 		topic := t.Topics[name]
-		path := TopicPath(clients.Project, t.Names.Topic(name))
+		path, err := t.Names.topicPath(clients.Project, name)
+		if err != nil {
+			return err
+		}
 		if err := ensureTopic(ctx, service, path); err != nil {
 			return err
 		}
 		if isScheduled(topic) {
-			if err := t.ensureSchedule(ctx, clients, name, topic.Cron); err != nil {
+			if err := t.ensureSchedule(ctx, clients, name, topic); err != nil {
 				return err
 			}
 		}
@@ -84,8 +83,15 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 			if !hosted {
 				continue
 			}
-			path := subscriptionPath(clients.Project, s.Names.Subscription(name, consumer.Name))
-			if err := ensureSubscription(ctx, service, path, s.subscription(clients.Project, name, topic, consumer, push)); err != nil {
+			path, err := s.Names.subscriptionPath(clients.Project, name, consumer.Name)
+			if err != nil {
+				return err
+			}
+			desired, err := s.subscription(clients.Project, name, topic, consumer, push)
+			if err != nil {
+				return err
+			}
+			if err := ensureSubscription(ctx, service, path, desired); err != nil {
 				return err
 			}
 		}
@@ -93,9 +99,13 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 	return nil
 }
 
-func (s Subscriptions) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push) *pubsub.Subscription {
+func (s Subscriptions) subscription(project, name string, topic *provider.TopicSpec, consumer provider.ConsumerSpec, push Push) (*pubsub.Subscription, error) {
+	path, err := s.Names.topicPath(project, name)
+	if err != nil {
+		return nil, err
+	}
 	return &pubsub.Subscription{
-		Topic:                 TopicPath(project, s.Names.Topic(name)),
+		Topic:                 path,
 		AckDeadlineSeconds:    int64(pushAckDeadline / time.Second),
 		EnableMessageOrdering: topic.Ordered,
 		Filter:                fmt.Sprintf(`NOT attributes:%s OR attributes.%s = %q`, ConsumerAttribute, ConsumerAttribute, consumer.Name),
@@ -108,7 +118,7 @@ func (s Subscriptions) subscription(project, name string, topic *provider.TopicS
 			MaximumBackoff: durationText(min(consumer.Retry.MaxDelay, maxBackoff)),
 		},
 		ExpirationPolicy: &pubsub.ExpirationPolicy{},
-	}
+	}, nil
 }
 
 func durationText(d time.Duration) string {
@@ -210,7 +220,10 @@ func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, t
 		return err
 	}
 	for _, consumer := range consumers {
-		subscription := subscriptionPath(clients.Project, t.Names.Subscription(topic, consumer))
+		subscription, err := t.Names.subscriptionPath(clients.Project, topic, consumer)
+		if err != nil {
+			return err
+		}
 		if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
 			_, err := service.Projects.Subscriptions.Delete(subscription).Context(ctx).Do()
 			return err
@@ -247,7 +260,7 @@ func (t Topology) RemoveDropped(ctx context.Context, clients *ports.Clients, pre
 			return err
 		}
 		if isCronDropped(before, t.Topics[name]) {
-			if err := t.removeSchedule(ctx, clients, name); err != nil {
+			if err := t.removeSchedule(ctx, clients, name, before); err != nil {
 				return err
 			}
 		}
@@ -262,8 +275,11 @@ func (t Topology) FindMissing(ctx context.Context, clients *ports.Clients) ([]st
 	}
 	var missing []string
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
-		path := TopicPath(clients.Project, t.Names.Topic(name))
-		_, err := googleretry.Attempted(ctx, service.Projects.Topics.Get(path).Context(ctx).Do)
+		path, err := t.Names.topicPath(clients.Project, name)
+		if err != nil {
+			return nil, err
+		}
+		_, err = googleretry.Attempted(ctx, service.Projects.Topics.Get(path).Context(ctx).Do)
 		switch {
 		case isAnswered(err, http.StatusNotFound):
 			missing = append(missing, name)
@@ -284,8 +300,11 @@ func (t Topology) ReadDifferences(ctx context.Context, clients *ports.Clients, p
 		topic := t.Topics[name]
 		if before, declared := previous[name]; declared {
 			for _, consumer := range findDroppedConsumers(before, topic) {
-				path := subscriptionPath(clients.Project, t.Names.Subscription(name, consumer))
-				_, err := googleretry.Attempted(ctx, service.Projects.Subscriptions.Get(path).Context(ctx).Do)
+				path, err := t.Names.subscriptionPath(clients.Project, name, consumer)
+				if err != nil {
+					return nil, err
+				}
+				_, err = googleretry.Attempted(ctx, service.Projects.Subscriptions.Get(path).Context(ctx).Do)
 				switch {
 				case isAnswered(err, http.StatusNotFound):
 				case err != nil:
@@ -295,7 +314,7 @@ func (t Topology) ReadDifferences(ctx context.Context, clients *ports.Clients, p
 				}
 			}
 			if isCronDropped(before, topic) {
-				difference, err := t.readDroppedScheduleDifference(ctx, clients, name)
+				difference, err := t.readDroppedScheduleDifference(ctx, clients, name, before)
 				if err != nil {
 					return nil, err
 				}
@@ -303,7 +322,7 @@ func (t Topology) ReadDifferences(ctx context.Context, clients *ports.Clients, p
 			}
 		}
 		if isScheduled(topic) {
-			difference, err := t.readScheduleDifference(ctx, clients, name, topic.Cron)
+			difference, err := t.readScheduleDifference(ctx, clients, name, topic)
 			if err != nil {
 				return nil, err
 			}
@@ -334,11 +353,14 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 			return err
 		}
 		if t.Topics[name].Cron != "" {
-			if err := t.removeSchedule(ctx, clients, name); err != nil {
+			if err := t.removeSchedule(ctx, clients, name, t.Topics[name]); err != nil {
 				return err
 			}
 		}
-		topic := TopicPath(clients.Project, t.Names.Topic(name))
+		topic, err := t.Names.topicPath(clients.Project, name)
+		if err != nil {
+			return err
+		}
 		if err := deleteIgnoringMissing(ctx, "topic "+topic, func() error {
 			_, err := service.Projects.Topics.Delete(topic).Context(ctx).Do()
 			return err

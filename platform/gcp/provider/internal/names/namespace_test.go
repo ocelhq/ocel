@@ -123,11 +123,11 @@ func TestAWorkerServiceIsNamedForItsAppAndWorkerUnderTheAppFence(t *testing.T) {
 }
 
 func TestARealtimeGatewayIsNamedForItsEnvironmentUnderTheAppFence(t *testing.T) {
-	if gateway := names.New("ocel", "acme-prod").RealtimeGateway("shop", "prod"); gateway != "ocel-app-shop-prod-realtime-660706" {
-		t.Errorf("RealtimeGateway() = %q, want ocel-app-shop-prod-realtime-660706", gateway)
+	if gateway, err := names.New("ocel", "acme-prod").RealtimeGateway("shop", "prod"); err != nil || gateway != "ocel-app-shop-prod-realtime-660706" {
+		t.Errorf("RealtimeGateway() = %q, %v, want ocel-app-shop-prod-realtime-660706", gateway, err)
 	}
-	if gateway := names.New("northwind-traders", "acme-prod").RealtimeGateway("feature-checkout-redesign", "storefront-emea-west"); len(gateway) > 49 {
-		t.Errorf("RealtimeGateway() = %q (%d characters), want it cut to the 49 Cloud Run takes", gateway, len(gateway))
+	if gateway, err := names.New("northwind-traders", "acme-prod").RealtimeGateway("feature-checkout-redesign", "storefront-emea-west"); err != nil || len(gateway) > 49 {
+		t.Errorf("RealtimeGateway() = %q (%d characters), %v, want it cut to the 49 Cloud Run takes", gateway, len(gateway), err)
 	}
 }
 
@@ -143,7 +143,7 @@ func TestAKVStoreIsNamedForItsEnvironmentAndStoreUnderTheAppFence(t *testing.T) 
 
 func TestAnAppsServiceAccountIsItsNamespaceFenceAndAHashThatFitsGoogle(t *testing.T) {
 	for _, namespace := range []provider.Namespace{"ocel", "northwind-traders-europe-west-production-blue"} {
-		account := names.New(namespace, "acme-prod").AppAccount(environment.TierPreview, "feature-checkout-redesign", "storefront", "web")
+		account := names.New(namespace, "acme-prod").AppAccount("feature-checkout-redesign", "storefront", "web")
 		if !strings.HasPrefix(account, naming.AppFence(string(namespace))) || len(account) > names.MaxAccountID {
 			t.Errorf("AppAccount() in namespace %s = %q (%d characters), want it under the app fence and at most %d", namespace, account, len(account), names.MaxAccountID)
 		}
@@ -253,31 +253,5 @@ func TestATierBucketIsNamedForItsTierWordAndClassWithItsRandomTagLast(t *testing
 	long := names.New("northwind-traders", "acme-prod")
 	if got := long.TierBucket(environment.TierPreview, naming.StorageCache, "k3x9q2"); got != naming.NamespaceField("northwind-traders")+"-preview-cache-k3x9q2" {
 		t.Errorf("TierBucket() of a long namespace = %q, want it under the namespace's compacted field", got)
-	}
-}
-
-func TestATierBucketIsReadBackAsItsClassAndNoOtherNameIs(t *testing.T) {
-	named := names.New("ocel", "acme-prod")
-	for bucket, want := range map[string]naming.StorageClass{
-		"ocel-prod-state-k3x9q2": naming.StorageState,
-		"ocel-prod-edge-k3x9q2":  naming.StorageEdge,
-		"ocel-prod-cache-000000": naming.StorageCache,
-	} {
-		if class, ok := named.TierBucketClass(environment.TierProduction, bucket); !ok || class != want {
-			t.Errorf("TierBucketClass(production, %q) = %q, %v, want %q", bucket, class, ok, want)
-		}
-	}
-	for _, bucket := range []string{
-		"ocel-preview-edge-k3x9q2",
-		"ocel-prod-edge-K3X9Q2",
-		"ocel-prod-edge-k3x9q",
-		"ocel-prod-edge-k3x9q2-x",
-		"ocel-prod-x-edge-k3x9q2",
-		"ocel-prod-artifacts-k3x9q2",
-		"ocel-prod-edge",
-	} {
-		if class, ok := named.TierBucketClass(environment.TierProduction, bucket); ok {
-			t.Errorf("TierBucketClass(production, %q) = %q, want no class: it is no production bucket of namespace ocel", bucket, class)
-		}
 	}
 }

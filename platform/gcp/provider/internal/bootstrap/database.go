@@ -36,7 +36,7 @@ var databaseKind = KindOps{
 	noun:          "Firestore database",
 	terraform:     cost.FirestoreDatabaseType,
 	emulatorKeeps: reasonEmulated,
-	survey: func(ctx context.Context, b Engine, _ environment.Tier, target Resource) (Presence, error) {
+	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		return b.databasePresence(ctx, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {

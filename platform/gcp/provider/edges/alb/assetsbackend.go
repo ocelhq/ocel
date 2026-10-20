@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -46,8 +47,8 @@ func declareAssetsBackend(ctx *pulumi.Context, names names, tier environment.Tie
 		Member:  pulumi.String(assets.Agent),
 		Condition: &projects.IAMMemberConditionArgs{
 			Title:       pulumi.String(names.AssetsReader),
-			Description: pulumi.String("lists and reads the tier's edge bucket, which holds only what an edge may serve"),
-			Expression:  pulumi.String(gcloud.BucketCondition(names.AssetsReader, assets.Name).Expression),
+			Description: pulumi.String("lists the tier's edge bucket and reads the static files in it"),
+			Expression:  pulumi.String(gcloud.ListedKindCondition(names.AssetsReader, assets.Name, naming.ObjectAssets).Expression),
 		},
 	}, pulumi.DependsOn([]pulumi.Resource{bucket}))
 	return bucket, err

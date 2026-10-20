@@ -49,10 +49,17 @@ type Survey struct {
 	Sibling   bool
 	stateOf   string
 
-	StateBucket string
+	Buckets naming.Buckets
 }
 
 func (s Survey) has(target Resource) bool { return s.Held[target.ID()] }
+
+func (s Survey) named(target Resource) string {
+	if bucket := s.Buckets[target.Class]; target.Kind == KindBucket && bucket != "" {
+		return bucket
+	}
+	return target.Name
+}
 
 func (s Survey) mends(target Resource) string { return s.Mending[target.ID()] }
 
@@ -78,8 +85,22 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 		Mending:   map[string]string{},
 		Replacing: map[string]string{},
 	}
+	read.Buckets = naming.Buckets{}
+	sibling := naming.Buckets{}
+	database, err := b.databasePresence(ctx, read.Names.Database())
+	if err != nil {
+		return Survey{}, err
+	}
+	if database.Present {
+		if read.Buckets, err = b.Clients.RecordedTierBuckets(ctx, tier); err != nil {
+			return Survey{}, err
+		}
+		if sibling, err = b.Clients.RecordedTierBuckets(ctx, tier.Sibling()); err != nil {
+			return Survey{}, err
+		}
+	}
 	for _, item := range Resources(read.Names, tier, read.Emulated) {
-		found, err := b.PresenceOf(ctx, tier, item)
+		found, err := b.PresenceOf(ctx, read, item)
 		if err != nil {
 			return Survey{}, err
 		}
@@ -92,41 +113,22 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 		}
 	}
 
-	sibling, err := b.stampedIn(ctx, tier.Sibling())
+	stampedSibling, err := b.stamped(ctx, sibling[naming.StorageState])
 	if err != nil {
 		return Survey{}, err
 	}
-	read.Sibling = sibling.present
+	read.Sibling = stampedSibling.present
 
-	if read.StateBucket, err = b.stateBucket(ctx, tier); err != nil {
-		return Survey{}, err
-	}
-	own, err := b.stamped(ctx, read.StateBucket)
+	own, err := b.stamped(ctx, read.Buckets[naming.StorageState])
 	if err != nil {
 		return Survey{}, err
 	}
 	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
 
-	if read.stateOf, err = b.stateIn(ctx, read.StateBucket); err != nil {
+	if read.stateOf, err = b.stateIn(ctx, read.Buckets[naming.StorageState]); err != nil {
 		return Survey{}, err
 	}
 	return read, nil
-}
-
-func (b Engine) stateBucket(ctx context.Context, tier environment.Tier) (string, error) {
-	attrs, err := b.Clients.FindTierBucket(ctx, tier, naming.StorageState)
-	if err != nil || attrs == nil {
-		return "", err
-	}
-	return attrs.Name, nil
-}
-
-func (b Engine) stampedIn(ctx context.Context, tier environment.Tier) (stamped, error) {
-	bucket, err := b.stateBucket(ctx, tier)
-	if err != nil {
-		return stamped{}, err
-	}
-	return b.stamped(ctx, bucket)
 }
 
 type stamped struct {
@@ -202,12 +204,12 @@ type Presence struct {
 	Replaces string
 }
 
-func (b Engine) PresenceOf(ctx context.Context, tier environment.Tier, target Resource) (Presence, error) {
+func (b Engine) PresenceOf(ctx context.Context, read Survey, target Resource) (Presence, error) {
 	surveyed := target.KindOps().survey
 	if surveyed == nil {
 		return Presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 	}
-	return surveyed(ctx, b, tier, target)
+	return surveyed(ctx, b, read, target)
 }
 
 func presenceFrom(present bool, err error) (Presence, error) { return Presence{Present: present}, err }

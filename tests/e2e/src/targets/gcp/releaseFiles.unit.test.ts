@@ -58,6 +58,15 @@ describe("the production edge bucket", () => {
     ).toBe("ocel-prod-edge-k3x9q2");
   });
 
+  it("is named under the compacted field of a namespace longer than twelve characters", () => {
+    expect(
+      edgeBucketIn(
+        ["acme-staging-eu-west-blue-team-prod-edge-k3x9q2", "acme-20ddf6-prod-edge-k3x9q2"],
+        "acme-staging-eu-west-blue-team",
+      ),
+    ).toBe("acme-20ddf6-prod-edge-k3x9q2");
+  });
+
   it("cannot be told apart where two are listed", () => {
     expect(() => edgeBucketIn(["ocel-prod-edge-k3x9q2", "ocel-prod-edge-a1b2c3"], "ocel")).toThrow(
       /one production edge bucket/,

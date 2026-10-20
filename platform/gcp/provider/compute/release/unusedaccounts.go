@@ -52,7 +52,7 @@ func ReadAppAccount(n names.Names, account *iam.ServiceAccount) (AppAccount, boo
 	}
 	named, env := running[:at], running[at+len(appDescriptionEnvironment):]
 	app, project, found := strings.Cut(named, appDescriptionProject)
-	if !found || n.AppAccount(tier, project, env, app) != id {
+	if !found || n.AppAccount(project, env, app) != id {
 		return AppAccount{}, false
 	}
 	for _, each := range []environment.Tier{environment.TierPreview, environment.TierProduction} {

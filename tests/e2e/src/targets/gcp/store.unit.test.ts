@@ -203,7 +203,7 @@ describe("the services the sweep finds of a project", () => {
 
   it("matches a project whose slug is longer than a label holds by the label the provider fitted it to", () => {
     const slug = "ocel-e2e-j-1-deploy-node-with-a-project-slug-long-enough-to-pass-the-label-limit";
-    const fitted = "ocel-e2e-j-1-deploy-node-with-a-project-slug-long-eno-x75c4919d";
+    const fitted = "ocel-e2e-j-1-deploy-node-with-a-project-slug-long-enoug-75c491";
     expect(labelValue(slug)).toBe(fitted);
     const long = servicesIn({ services: [{ name: "a/long-1", labels: labelled(fitted) }] });
     expect(servicesOf(long, "ocel-nightly", slug).map((s) => s.name)).toEqual(["long-1"]);

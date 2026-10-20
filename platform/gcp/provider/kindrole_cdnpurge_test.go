@@ -46,7 +46,7 @@ func TestTheCDNPurgeRoleHoldsOnlyThePermissionToClearCloudCDN(t *testing.T) {
 func TestTheCDNPurgeRoleIDFitsTheLongestNamespaceAnAccountAllows(t *testing.T) {
 	t.Parallel()
 
-	width := names.MaxAccountID - 1 - names.AccountHashLen
+	width := names.MaxAccountID - 1 - names.AccountHashDigits
 	namespace := strings.Repeat("a-", width/2) + strings.Repeat("b", width%2)
 	names := names.New(provider.Namespace(namespace), "acme-prod")
 
@@ -67,7 +67,7 @@ func TestABootstrapCreatesTheCDNPurgeRoleOnceAndReusesIt(t *testing.T) {
 	ctx := t.Context()
 	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_cdn_purge"}
 
-	found, err := b.PresenceOf(ctx, environment.TierProduction, target)
+	found, err := b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
 	if err != nil || found.Present {
 		t.Fatalf("presenceOf() = %+v, %v, want an absent role", found, err)
 	}
@@ -87,7 +87,7 @@ func TestABootstrapCreatesTheCDNPurgeRoleOnceAndReusesIt(t *testing.T) {
 		t.Errorf("the role is titled %q, want %q", asked.Role.Title, "ocel cache purge (ocel)")
 	}
 
-	found, err = b.PresenceOf(ctx, environment.TierProduction, target)
+	found, err = b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
 	if err != nil || !found.Present || found.Mends != "" {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role with nothing to mend", found, err)
 	}
@@ -106,7 +106,7 @@ func TestACDNPurgeRoleWithOtherPermissionsIsPutBackToClearingCloudCDN(t *testing
 	b := server.bootstrap(t)
 	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_cdn_purge"}
 
-	found, err := b.PresenceOf(t.Context(), environment.TierProduction, target)
+	found, err := b.PresenceOf(t.Context(), bootstrap.Survey{Tier: environment.TierProduction}, target)
 	want := bootstrap.NewCDNPurgeRole(b.Clients.Names).DriftReason
 	if err != nil || !found.Present || found.Mends != want {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, want)
@@ -126,7 +126,7 @@ func TestADeletedCachePurgeRoleIsUndeleted(t *testing.T) {
 	b := server.bootstrap(t)
 	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_cdn_purge"}
 
-	found, err := b.PresenceOf(t.Context(), environment.TierProduction, target)
+	found, err := b.PresenceOf(t.Context(), bootstrap.Survey{Tier: environment.TierProduction}, target)
 	if err != nil || !found.Present || found.Mends != bootstrap.ReasonRoleDeleted {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, bootstrap.ReasonRoleDeleted)
 	}

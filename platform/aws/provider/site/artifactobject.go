@@ -6,7 +6,6 @@ import (
 	s3 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 )
 
@@ -20,7 +19,7 @@ func ShipArtifacts(pctx *sdk.Context, b Buckets, uploads []functioncode.Upload) 
 		if err != nil {
 			return nil, fmt.Errorf("ship %s's artifact: %w", upload.Name, err)
 		}
-		object, err := s3.NewBucketObjectv2(pctx, naming.ResourceID(functioncode.Kind, upload.Name), &s3.BucketObjectv2Args{
+		object, err := s3.NewBucketObjectv2(pctx, upload.Ref.Key, &s3.BucketObjectv2Args{
 			Bucket:     sdk.String(bucket),
 			Key:        sdk.String(upload.Ref.Key),
 			Source:     sdk.NewFileAsset(upload.Path),

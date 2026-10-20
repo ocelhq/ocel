@@ -134,7 +134,7 @@ func TestABootstrapCreatesTheAppAccountsRoleOnceAndReusesIt(t *testing.T) {
 	ctx := t.Context()
 	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_app_accounts"}
 
-	found, err := b.PresenceOf(ctx, environment.TierProduction, target)
+	found, err := b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
 	if err != nil || found.Present {
 		t.Fatalf("presenceOf() = %+v, %v, want an absent role", found, err)
 	}
@@ -152,7 +152,7 @@ func TestABootstrapCreatesTheAppAccountsRoleOnceAndReusesIt(t *testing.T) {
 		t.Errorf("the role is titled %q, want %q", asked.Role.Title, "ocel app accounts (ocel)")
 	}
 
-	found, err = b.PresenceOf(ctx, environment.TierProduction, target)
+	found, err = b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
 	if err != nil || !found.Present || found.Mends != "" {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role with nothing to mend", found, err)
 	}
@@ -172,7 +172,7 @@ func TestADeletedAppAccountsRoleIsUndeleted(t *testing.T) {
 	ctx := t.Context()
 	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_app_accounts"}
 
-	found, err := b.PresenceOf(ctx, environment.TierProduction, target)
+	found, err := b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
 	if err != nil || !found.Present || found.Mends != bootstrap.ReasonRoleDeleted {
 		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, bootstrap.ReasonRoleDeleted)
 	}
@@ -200,7 +200,7 @@ func TestAnAppAccountsRoleWithOtherPermissionsIsPutBack(t *testing.T) {
 			b := server.bootstrap(t)
 			target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_app_accounts"}
 
-			found, err := b.PresenceOf(t.Context(), environment.TierProduction, target)
+			found, err := b.PresenceOf(t.Context(), bootstrap.Survey{Tier: environment.TierProduction}, target)
 			if err != nil || !found.Present || found.Mends != bootstrap.ReasonRoleDrifted {
 				t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, bootstrap.ReasonRoleDrifted)
 			}
@@ -250,7 +250,7 @@ func TestAnAppAccountsRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) 
 func TestTheAppAccountsRoleIDFitsTheLongestNamespaceAnAccountAllows(t *testing.T) {
 	t.Parallel()
 
-	width := names.MaxAccountID - 1 - names.AccountHashLen
+	width := names.MaxAccountID - 1 - names.AccountHashDigits
 	namespace := strings.Repeat("a-", width/2) + strings.Repeat("b", width%2)
 	if len(namespace) != width || !strings.Contains(namespace, "-") {
 		t.Fatalf("the test namespace %q is %d characters, want %d with dashes", namespace, len(namespace), width)

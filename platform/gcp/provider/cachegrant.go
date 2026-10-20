@@ -14,7 +14,7 @@ func cacheGrants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec
 	if spec.App.ISR == nil {
 		return nil, nil
 	}
-	buckets, err := c.TierBuckets(ctx, spec.Ref.Tier)
+	buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageCache)
 	if err != nil {
 		return nil, err
 	}

@@ -2,135 +2,132 @@ package gcloud
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
-	"strings"
+	"maps"
 	"sync"
-
-	"cloud.google.com/go/storage"
-	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-type tierBucketsFound struct {
-	mu    sync.Mutex
-	found map[environment.Tier]names.TierBuckets
+const RootTierBuckets records.Root = "tierbuckets"
+
+const tierBucketsEntry = "names"
+
+func TierBucketsKey(tier environment.Tier) records.Key {
+	return records.Partition{Tier: tier, Root: RootTierBuckets}.Key(tierBucketsEntry)
 }
 
-func (c *Clients) TierBuckets(ctx context.Context, tier environment.Tier) (names.TierBuckets, error) {
+type tierBucketsRead struct {
+	mu   sync.Mutex
+	read map[environment.Tier]naming.Buckets
+}
+
+func (c *Clients) RecordedTierBuckets(ctx context.Context, tier environment.Tier) (naming.Buckets, error) {
 	c.tierBuckets.mu.Lock()
 	defer c.tierBuckets.mu.Unlock()
-	if found, ok := c.tierBuckets.found[tier]; ok {
-		return found, nil
+	if read, ok := c.tierBuckets.read[tier]; ok {
+		return maps.Clone(read), nil
 	}
-	listed, err := c.listBuckets(ctx, c.TierBucketPrefix(tier))
+	entry, err := records.ReadOrEmpty(ctx, c.Records, TierBucketsKey(tier))
 	if err != nil {
-		return names.TierBuckets{}, err
+		return nil, fmt.Errorf("read the buckets the %s tier keeps its objects in: %w", tier, err)
 	}
-	byClass := map[naming.StorageClass][]*storage.BucketAttrs{}
-	for _, attrs := range listed {
-		if class, ok := c.TierBucketClass(tier, attrs.Name); ok {
-			byClass[class] = append(byClass[class], attrs)
-		}
-	}
-	var found names.TierBuckets
-	for _, class := range names.TierStorageClasses {
-		one, err := c.soleTierBucket(tier, class, byClass[class])
-		if err != nil {
-			return names.TierBuckets{}, err
-		}
-		if one != nil {
-			found = found.With(class, one.Name)
-		}
-	}
-	if missing := found.Missing(); len(missing) > 0 {
-		return names.TierBuckets{}, refusal.Refuse(refusal.CodeNotReady,
-			"Google Cloud project %s holds no %s bucket of the %s tier, so the tier is not bootstrapped.\nRun `%s` to create it, then try again",
-			c.Project(), missing[0], tier, provider.BootstrapCommand(tier))
-	}
-	c.rememberTierBuckets(tier, found)
-	return found, nil
-}
-
-func (c *Clients) RememberTierBuckets(tier environment.Tier, buckets names.TierBuckets) {
-	c.tierBuckets.mu.Lock()
-	defer c.tierBuckets.mu.Unlock()
-	c.rememberTierBuckets(tier, buckets)
-}
-
-func (c *Clients) ForgetTierBuckets(tier environment.Tier) {
-	c.tierBuckets.mu.Lock()
-	defer c.tierBuckets.mu.Unlock()
-	delete(c.tierBuckets.found, tier)
-}
-
-func (c *Clients) rememberTierBuckets(tier environment.Tier, buckets names.TierBuckets) {
-	if c.tierBuckets.found == nil {
-		c.tierBuckets.found = map[environment.Tier]names.TierBuckets{}
-	}
-	c.tierBuckets.found[tier] = buckets
-}
-
-func (c *Clients) FindTierBucket(ctx context.Context, tier environment.Tier, class naming.StorageClass) (*storage.BucketAttrs, error) {
-	matching, err := c.ListTierBucketsOf(ctx, tier, class)
+	read, err := decodeTierBuckets(entry)
 	if err != nil {
 		return nil, err
 	}
-	return c.soleTierBucket(tier, class, matching)
+	if c.tierBuckets.read == nil {
+		c.tierBuckets.read = map[environment.Tier]naming.Buckets{}
+	}
+	c.tierBuckets.read[tier] = read
+	return maps.Clone(read), nil
 }
 
-func (c *Clients) ListTierBucketsOf(ctx context.Context, tier environment.Tier, class naming.StorageClass) ([]*storage.BucketAttrs, error) {
-	listed, err := c.listBuckets(ctx, c.UntaggedTierBucket(tier, class)+naming.WordSeparator)
+func (c *Clients) TierBuckets(ctx context.Context, tier environment.Tier, classes ...naming.StorageClass) (naming.Buckets, error) {
+	recorded, err := c.RecordedTierBuckets(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
-	var matching []*storage.BucketAttrs
-	for _, attrs := range listed {
-		if found, ok := c.TierBucketClass(tier, attrs.Name); ok && found == class {
-			matching = append(matching, attrs)
+	for _, class := range classes {
+		if recorded[class] == "" {
+			c.DropTierBucketsRead(tier)
+			return nil, refusal.Refuse(refusal.CodeNotReady,
+				"Google Cloud project %s records no %s bucket of the %s tier, so the tier is not bootstrapped.\nRun `%s` to create it, then try again",
+				c.Project(), class, tier, provider.BootstrapCommand(tier))
 		}
 	}
-	return matching, nil
+	return recorded, nil
 }
 
-func (c *Clients) soleTierBucket(tier environment.Tier, class naming.StorageClass, matching []*storage.BucketAttrs) (*storage.BucketAttrs, error) {
-	switch len(matching) {
-	case 0:
-		return nil, nil
-	case 1:
-		return matching[0], nil
-	}
-	named := make([]string, len(matching))
-	for i, attrs := range matching {
-		named[i] = attrs.Name
-	}
-	return nil, refusal.Refuse(refusal.CodeInvalid,
-		"the %s tier keeps its %s objects in %d Cloud Storage buckets, %s, and a tier keeps them in one.\n"+
-			"Delete the one that holds nothing you need with `gcloud storage rm --recursive gs://<bucket>`, then try again",
-		tier, class, len(named), strings.Join(named, ", "))
-}
-
-func (c *Clients) listBuckets(ctx context.Context, prefix string) ([]*storage.BucketAttrs, error) {
-	client, err := c.Storage()
+func (c *Clients) ClaimTierBucket(ctx context.Context, tier environment.Tier, class naming.StorageClass, mint func() string) (string, error) {
+	recorded, err := c.changeTierBuckets(ctx, tier, func(buckets naming.Buckets) bool {
+		if buckets[class] != "" {
+			return false
+		}
+		buckets[class] = mint()
+		return true
+	})
 	if err != nil {
+		return "", fmt.Errorf("record the %s bucket of the %s tier: %w", class, tier, err)
+	}
+	return recorded[class], nil
+}
+
+func (c *Clients) ForgetTierBucket(ctx context.Context, tier environment.Tier, class naming.StorageClass, bucket string) error {
+	_, err := c.changeTierBuckets(ctx, tier, func(buckets naming.Buckets) bool {
+		if buckets[class] != bucket {
+			return false
+		}
+		delete(buckets, class)
+		return true
+	})
+	if err != nil {
+		return fmt.Errorf("forget the %s bucket %s of the %s tier: %w", class, bucket, tier, err)
+	}
+	return nil
+}
+
+func (c *Clients) changeTierBuckets(ctx context.Context, tier environment.Tier, change func(naming.Buckets) bool) (naming.Buckets, error) {
+	var recorded naming.Buckets
+	err := records.Change(ctx, c.Records, TierBucketsKey(tier), func(entry records.Entry) ([]byte, bool, error) {
+		var err error
+		if recorded, err = decodeTierBuckets(entry); err != nil || !change(recorded) {
+			return nil, false, err
+		}
+		value, err := json.Marshal(recorded)
+		return value, err == nil, err
+	})
+	if err != nil {
+		c.DropTierBucketsRead(tier)
 		return nil, err
 	}
-	listed := client.Buckets(ctx, c.Project())
-	listed.Prefix = prefix
-	var found []*storage.BucketAttrs
-	for {
-		attrs, err := listed.Next()
-		if errors.Is(err, iterator.Done) {
-			return found, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("list the Cloud Storage buckets of project %s named %s…: %w", c.Project(), prefix, err)
-		}
-		found = append(found, attrs)
+	c.tierBuckets.mu.Lock()
+	defer c.tierBuckets.mu.Unlock()
+	if c.tierBuckets.read == nil {
+		c.tierBuckets.read = map[environment.Tier]naming.Buckets{}
 	}
+	c.tierBuckets.read[tier] = maps.Clone(recorded)
+	return recorded, nil
+}
+
+func (c *Clients) DropTierBucketsRead(tier environment.Tier) {
+	c.tierBuckets.mu.Lock()
+	defer c.tierBuckets.mu.Unlock()
+	delete(c.tierBuckets.read, tier)
+}
+
+func decodeTierBuckets(entry records.Entry) (naming.Buckets, error) {
+	buckets := naming.Buckets{}
+	if len(entry.Value) == 0 {
+		return buckets, nil
+	}
+	if err := json.Unmarshal(entry.Value, &buckets); err != nil {
+		return nil, fmt.Errorf("read %s: %w", entry.Key, err)
+	}
+	return buckets, nil
 }

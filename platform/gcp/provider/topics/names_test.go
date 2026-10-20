@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
@@ -25,8 +24,8 @@ func TestEveryPubSubNameIsOnePubSubTakesAndNamesOneDeclarationOnly(t *testing.T)
 		{"resize-image", "resize-image"},
 	} {
 		for kind, name := range map[string]string{
-			"topic":        names.Topic(declared.topic),
-			"subscription": names.Subscription(declared.topic, declared.consumer),
+			"topic":        topicOf(t, names, declared.topic),
+			"subscription": subscriptionOf(t, names, declared.topic, declared.consumer),
 		} {
 			if !pubsubName.MatchString(name) || strings.HasPrefix(name, "goog") {
 				t.Errorf("the %s of %s/%s is %q, which Pub/Sub refuses", kind, declared.topic, declared.consumer, name)
@@ -43,36 +42,69 @@ func TestEveryPubSubNameIsOnePubSubTakesAndNamesOneDeclarationOnly(t *testing.T)
 	}
 
 	other := topics.Names{Namespace: "ocel", Scope: topics.Scope{Slug: "shop", Tier: environment.TierPreview, Environment: "pr-7"}}
-	if other.Topic("orders") == names.Topic("orders") {
-		t.Errorf("two environments share the topic %q, so a preview's sends reach production", names.Topic("orders"))
+	if topicOf(t, other, "orders") == topicOf(t, names, "orders") {
+		t.Errorf("two environments share the topic %q, so a preview's sends reach production", topicOf(t, names, "orders"))
 	}
+}
+
+func topicOf(t *testing.T, names topics.Names, topic string) string {
+	t.Helper()
+	name, err := names.Topic(topic)
+	if err != nil {
+		t.Fatalf("Topic(%s) = %v", topic, err)
+	}
+	return name
+}
+
+func subscriptionOf(t *testing.T, names topics.Names, topic, consumer string) string {
+	t.Helper()
+	name, err := names.Subscription(topic, consumer)
+	if err != nil {
+		t.Fatalf("Subscription(%s, %s) = %v", topic, consumer, err)
+	}
+	return name
 }
 
 func TestATopicIsNamedUnderTheAppFenceForItsProjectAndEnvironment(t *testing.T) {
 	names := topics.Names{Namespace: "ocel", Scope: topics.Scope{Slug: "shop", Tier: environment.TierProduction, Environment: "prod"}}
 
-	if got, want := names.Topic("orders"), "ocel-app-shop-prod-orders-747a5d"; got != want {
+	if got, want := topicOf(t, names, "orders"), "ocel-app-shop-prod-orders-747a5d"; got != want {
 		t.Errorf("Topic(orders) = %q, want %q", got, want)
 	}
-	if got, want := names.Subscription("orders", "ship"), names.Topic("orders")+"-ship"; got != want {
+	if got, want := subscriptionOf(t, names, "orders", "ship"), "ocel-app-shop-prod-orders-747a5d-ship"; got != want {
 		t.Errorf("Subscription(orders, ship) = %q, want the topic and its consumer, %q", got, want)
-	}
-	if got, want := names.ScheduleJob("orders"), names.Topic("orders"); got != want {
-		t.Errorf("ScheduleJob(orders) = %q, want the topic it publishes to, %q", got, want)
 	}
 }
 
-func TestATopicWhoseSubscriptionCannotFitPubSubIsRefused(t *testing.T) {
-	names := topics.Names{Namespace: "ocel", Scope: topics.Scope{Slug: "shop", Tier: environment.TierProduction, Environment: "prod"}}
-	declared := map[string]*provider.TopicSpec{
-		"orders": {Consumers: []provider.ConsumerSpec{{Name: strings.Repeat("ship", 60)}}},
+func TestATopicLeavesRoomForTheLongestConsumerSoEverySubscriptionIsTheTopicAndItsConsumer(t *testing.T) {
+	names := topics.Names{Namespace: "ocel", Scope: topics.Scope{Slug: "shop", Tier: environment.TierPreview, Environment: strings.Repeat("e", 200)}}
+	consumer := strings.Repeat("c", 63)
+
+	topic := topicOf(t, names, "orders")
+	subscription := subscriptionOf(t, names, "orders", consumer)
+	if subscription != topic+"-"+consumer || len(subscription) > 255 {
+		t.Errorf("Subscription() = %q (%d characters), want %q and its consumer within the 255 Pub/Sub takes", subscription, len(subscription), topic)
 	}
+}
+
+func TestAConsumerLongerThanASubscriptionLeavesItIsRefused(t *testing.T) {
+	names := topics.Names{Namespace: "ocel", Scope: topics.Scope{Slug: "shop", Tier: environment.TierProduction, Environment: "prod"}}
 
 	var refused refusal.Refusal
-	if err := names.RefuseUnfit(declared); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Errorf("RefuseUnfit() = %v, want an %s refusal: a subscription is the topic and its consumer, and Pub/Sub takes 255 characters", err, refusal.CodeInvalid)
+	if _, err := names.Subscription("orders", strings.Repeat("c", 64)); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("Subscription() = %v, want an %s refusal: a subscription is the topic and its consumer, and Pub/Sub takes 255 characters", err, refusal.CodeInvalid)
 	}
-	if err := names.RefuseUnfit(map[string]*provider.TopicSpec{"orders": {Consumers: []provider.ConsumerSpec{{Name: "ship"}}}}); err != nil {
-		t.Errorf("RefuseUnfit() = %v, want a topic and consumer of ordinary length taken", err)
+	if _, err := names.Subscription("orders", "ship"); err != nil {
+		t.Errorf("Subscription() = %v, want a topic and consumer of ordinary length taken", err)
+	}
+}
+
+func TestASubscriptionFitsPubSubWhateverCharactersItsConsumerIsNamedWith(t *testing.T) {
+	names := topics.Names{Namespace: "ocel", Scope: topics.Scope{Slug: "shop", Tier: environment.TierPreview, Environment: strings.Repeat("e", 200)}}
+	consumer := "ship" + strings.Repeat("_", 30) + "x"
+
+	subscription, err := names.Subscription("orders", consumer)
+	if err == nil && len(subscription) > 255 {
+		t.Errorf("Subscription() = %q, %d characters, want at most the 255 Pub/Sub takes or a refusal", subscription, len(subscription))
 	}
 }

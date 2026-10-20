@@ -43,6 +43,7 @@ type realtimeEnvironment struct {
 	pushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	deployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
 	tearDown       func(ctx context.Context, service string, progress progress.Log) error
+	gateway        string
 }
 
 type Realtime struct {
@@ -78,7 +79,12 @@ func (p *Realtime) openRealtime(ctx context.Context, ref provider.StackRef) (rea
 	if err != nil {
 		return realtimeEnvironment{}, err
 	}
+	gateway, err := opened.RealtimeGateway(ref.Project, ref.Name.Env)
+	if err != nil {
+		return realtimeEnvironment{}, err
+	}
 	return realtimeEnvironment{
+		gateway: gateway,
 		clients: opened,
 		records: p.records,
 		ref:     ref,
@@ -301,7 +307,7 @@ func (r realtimeEnvironment) serve(ctx context.Context, progress progress.Log) (
 }
 
 func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, progress progress.Log) (string, error) {
-	gateway := r.clients.RealtimeGateway(r.ref.Project, r.ref.Name.Env)
+	gateway := r.gateway
 	if len(keys) == 0 {
 		gcloud.EnsureProgress(progress).Say("Removing the realtime gateway " + gateway + ": " + r.ref.Name.Env + " declares no realtime any more")
 		if err := r.removeGateway(ctx, progress); err != nil {
@@ -330,7 +336,10 @@ func shapeRealtime(shape component.Shape, declared []provider.Resource) error {
 		tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret.Properties)
 	}
 	tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret.Properties)
-	gateway := names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env)
+	gateway, err := names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env)
+	if err != nil {
+		return err
+	}
 	tree.Add(environment, shape.Vendor, cost.PubSubTopicType, gateway, region, map[string]any{})
 	tree.Add(environment, shape.Vendor, cost.PubSubSubscriptionType, gateway, region, map[string]any{})
 	tree.Add(environment, shape.Vendor, cost.CloudRunServiceType, gateway, region, map[string]any{

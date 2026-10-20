@@ -101,7 +101,7 @@ func TestAConsumersMessagesAreRetriedUntilItsRunSettlesAndNeverDeadLetteredByPub
 	}
 
 	made := slices.Sorted(slices.Values(captured.topics))
-	if want := []string{names.Topic("orders"), names.Topic("resize")}; !slices.Equal(made, want) {
+	if want := []string{topicOf(t, names, "orders"), topicOf(t, names, "resize")}; !slices.Equal(made, want) {
 		t.Errorf("Ensure() made topics %q, want the declared topics alone: Pub/Sub drops what it forwards to a topic no one subscribes to", made)
 	}
 	for name, shape := range captured.subscriptions {
@@ -123,7 +123,7 @@ func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
 	}
 
 	for _, consumer := range []struct{ topic, consumer, worker string }{{"orders", "ship", "worker"}, {"orders", "bill", "billing"}, {"resize", "resize", "worker"}} {
-		shape, made := captured.subscriptions[names.Subscription(consumer.topic, consumer.consumer)]
+		shape, made := captured.subscriptions[subscriptionOf(t, names, consumer.topic, consumer.consumer)]
 		if !made {
 			t.Errorf("no subscription was made for %s/%s", consumer.topic, consumer.consumer)
 			continue
@@ -196,13 +196,13 @@ func revoking(t *testing.T, policies map[string]*pubsub.Policy) (*policyServer, 
 	t.Cleanup(server.Close)
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
 	for name, policy := range policies {
-		state.policies["/v1/"+topics.TopicPath("acme-prod", names.Topic(name))] = policy
+		state.policies["/v1/"+topics.TopicPath("acme-prod", topicOf(t, names, name))] = policy
 	}
 	return state, names, &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
 }
 
-func (p *policyServer) path(names topics.Names, topic string) string {
-	return "/v1/" + topics.TopicPath("acme-prod", names.Topic(topic))
+func (p *policyServer) path(t *testing.T, names topics.Names, topic string) string {
+	return "/v1/" + topics.TopicPath("acme-prod", topicOf(t, names, topic))
 }
 
 func membersOf(policy *pubsub.Policy, role string) []string {
@@ -220,7 +220,7 @@ func editTopic(t *testing.T, clients *ports.Clients, names topics.Names, topic s
 	if err != nil {
 		t.Fatal(err)
 	}
-	return policy.Edit(context.Background(), topics.TopicPolicy(service, topics.TopicPath("acme-prod", names.Topic(topic))), change)
+	return policy.Edit(context.Background(), topics.TopicPolicy(service, topics.TopicPath("acme-prod", topicOf(t, names, topic))), change)
 }
 
 func TestRevokingAPublisherTakesOnlyThatMemberOffTheTopic(t *testing.T) {
@@ -238,14 +238,14 @@ func TestRevokingAPublisherTakesOnlyThatMemberOffTheTopic(t *testing.T) {
 		}
 	}
 
-	orders := state.policies[state.path(names, "orders")]
+	orders := state.policies[state.path(t, names, "orders")]
 	if got := membersOf(orders, "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
 		t.Errorf("orders publishers = %q, want only the other member", got)
 	}
 	if got := membersOf(orders, "roles/pubsub.viewer"); !slices.Equal(got, []string{revoked}) {
 		t.Errorf("orders viewers = %q, want the viewer role untouched", got)
 	}
-	if n := state.writes[state.path(names, "resize")]; n != 0 {
+	if n := state.writes[state.path(t, names, "resize")]; n != 0 {
 		t.Errorf("resize was written %d times, want none: the member did not hold it", n)
 	}
 }
@@ -259,7 +259,7 @@ func TestRevokingTheLastPublisherOfATopicDropsItsBinding(t *testing.T) {
 		t.Fatalf("revoking the publisher = %v", err)
 	}
 
-	if bindings := state.policies[state.path(names, "orders")].Bindings; len(bindings) != 0 {
+	if bindings := state.policies[state.path(t, names, "orders")].Bindings; len(bindings) != 0 {
 		t.Errorf("orders binds %+v, want no binding left with no members", bindings)
 	}
 }
@@ -268,7 +268,7 @@ func TestRevokingAPublisherFromATopicThatIsGoneIsToldApartAsAbsent(t *testing.T)
 	state, names, clients := revoking(t, map[string]*pubsub.Policy{
 		"orders": {Etag: "BwXhoLA=", Bindings: []*pubsub.Binding{{Role: "roles/pubsub.publisher", Members: []string{revoked}}}},
 	})
-	state.gone[state.path(names, "resize")] = true
+	state.gone[state.path(t, names, "resize")] = true
 
 	_, err := editTopic(t, clients, names, "resize", policy.Revoke(topics.PublisherRole, revoked, nil))
 	if !policy.IsAbsent(err) {
@@ -286,7 +286,7 @@ func TestRevokingAPublisherRetriesAPolicyChangedUnderIt(t *testing.T) {
 		t.Fatalf("revoking the publisher = %v", err)
 	}
 
-	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
+	if got := membersOf(state.policies[state.path(t, names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
 		t.Errorf("orders publishers = %q after a conflict, want only the other member", got)
 	}
 }
@@ -301,7 +301,7 @@ func TestRevokingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T
 		t.Fatalf("revoking the publisher = %v", err)
 	}
 
-	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
+	if got := membersOf(state.policies[state.path(t, names, "orders")], "roles/pubsub.publisher"); !slices.Equal(got, []string{bystander}) {
 		t.Errorf("orders publishers = %q after a 412, want only the other member", got)
 	}
 }
@@ -316,7 +316,7 @@ func TestGrantingAPublisherRetriesAPolicyAnsweredFailedPrecondition(t *testing.T
 		t.Fatalf("granting the publisher = %v", err)
 	}
 
-	if got := membersOf(state.policies[state.path(names, "orders")], "roles/pubsub.publisher"); !slices.Contains(got, revoked) {
+	if got := membersOf(state.policies[state.path(t, names, "orders")], "roles/pubsub.publisher"); !slices.Contains(got, revoked) {
 		t.Errorf("orders publishers = %q after a 412, want the granted member", got)
 	}
 }
