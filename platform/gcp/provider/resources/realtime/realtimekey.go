@@ -57,7 +57,7 @@ func (r realtimeEnvironment) ensureSigningSeed(ctx context.Context, resource str
 	if err != nil {
 		return nil, err
 	}
-	if err := r.clients.EnsureSecret(ctx, service, name); err != nil {
+	if err := r.clients.EnsureSecret(ctx, service, r.ref.Tier, name); err != nil {
 		return nil, err
 	}
 	minted := make([]byte, ed25519.SeedSize)
@@ -86,7 +86,7 @@ func (r realtimeEnvironment) removeSigningKey(ctx context.Context, resource stri
 	if err != nil {
 		return err
 	}
-	return r.clients.DeleteSecret(ctx, service, name)
+	return r.clients.DeleteSecret(ctx, service, r.ref.Tier, name)
 }
 
 type keysSecret struct {
@@ -135,7 +135,7 @@ func (r realtimeEnvironment) writeKeys(ctx context.Context, keys map[string]stri
 		return err
 	}
 	if !secret.found {
-		if err := r.clients.EnsureSecret(ctx, service, secret.name); err != nil {
+		if err := r.clients.EnsureSecret(ctx, service, r.ref.Tier, secret.name); err != nil {
 			return err
 		}
 	}
@@ -155,5 +155,5 @@ func (r realtimeEnvironment) removeKeys(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.clients.DeleteSecret(ctx, service, name)
+	return r.clients.DeleteSecret(ctx, service, r.ref.Tier, name)
 }

@@ -18,6 +18,7 @@ import (
 const reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
 
 var accountKind = KindOps{
+	tagged:    accountTagged,
 	noun:      "service account",
 	terraform: cost.ServiceAccountType,
 	survey: func(ctx context.Context, b Engine, read Survey, target Resource) (Presence, error) {

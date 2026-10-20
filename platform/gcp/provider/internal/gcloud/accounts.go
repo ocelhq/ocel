@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"google.golang.org/api/iam/v1"
@@ -22,45 +23,76 @@ const (
 )
 
 func (c *Clients) AccountExists(ctx context.Context, account string) (bool, error) {
-	service, err := c.Accounts()
-	if err != nil {
-		return false, err
-	}
-	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Get(AccountPath(c, account)).Context(ctx).Do)
-	if Absent(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read the %s service account: %w", account, err)
-	}
-	return true, nil
+	found, err := c.ReadAccount(ctx, account)
+	return found != nil, err
 }
 
-func (c *Clients) CreateAccount(ctx context.Context, account, displayName, description string) error {
-	found, err := c.AccountExists(ctx, account)
-	if found || err != nil {
-		return ExplainMissingGrant(err, c.AppAccountsRolePath())
-	}
+func (c *Clients) ReadAccount(ctx context.Context, account string) (*iam.ServiceAccount, error) {
 	service, err := c.Accounts()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.Project(), &iam.CreateServiceAccountRequest{
+	found, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Get(AccountPath(c, account)).Context(ctx).Do)
+	if Absent(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the %s service account: %w", account, err)
+	}
+	return found, nil
+}
+
+func (c *Clients) CreateAccount(ctx context.Context, tier environment.Tier, account, displayName, description string) error {
+	found, err := c.ReadAccount(ctx, account)
+	if err != nil {
+		return ExplainMissingGrant(err, c.AppAccountsRolePath())
+	}
+	if found == nil {
+		if found, err = c.makeAccount(ctx, account, displayName, description); err != nil {
+			return err
+		}
+	}
+	return c.EnsureTierTag(ctx, tier, c.AccountTagged(found.UniqueId))
+}
+
+func (c *Clients) makeAccount(ctx context.Context, account, displayName, description string) (*iam.ServiceAccount, error) {
+	service, err := c.Accounts()
+	if err != nil {
+		return nil, err
+	}
+	made, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.Project(), &iam.CreateServiceAccountRequest{
 		AccountId:      account,
 		ServiceAccount: &iam.ServiceAccount{DisplayName: displayName, Description: description},
 	}).Context(ctx).Do)
 	switch {
-	case err == nil, Taken(err):
-		return nil
+	case err == nil:
+		return made, nil
+	case Taken(err):
+		return c.readTakenAccount(ctx, account)
 	case googleretry.AnsweredCode(err) == http.StatusTooManyRequests || strings.Contains(err.Error(), accountQuotaMessage):
-		return refusal.Refuse(refusal.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"project %s has as many service accounts as its Service Account Count quota allows, and every app ocel deploys runs as one of its own.\n"+
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.Project())
 	}
-	return ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
+	return nil, ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
 }
 
-func (c *Clients) DeleteAccount(ctx context.Context, id string) (bool, error) {
+func (c *Clients) readTakenAccount(ctx context.Context, account string) (*iam.ServiceAccount, error) {
+	var found *iam.ServiceAccount
+	err := UntilVisible(ctx, func() error {
+		var err error
+		if found, err = c.ReadAccount(ctx, account); err == nil && found == nil {
+			return fmt.Errorf("%w: the %s service account answered that it exists", errUnseenAccount, account)
+		}
+		return err
+	})
+	return found, err
+}
+
+func (c *Clients) DeleteAccount(ctx context.Context, tier environment.Tier, id string) (bool, error) {
+	if err := c.untagAccount(ctx, tier, id); err != nil {
+		return false, err
+	}
 	service, err := c.Accounts()
 	if err != nil {
 		return false, err
@@ -123,4 +155,15 @@ func ExplainMissingGrant(err error, grant string) error {
 		return fmt.Errorf("the deploy credential lacks %s: %w", grant, err)
 	}
 	return err
+}
+
+func (c *Clients) untagAccount(ctx context.Context, tier environment.Tier, id string) error {
+	if !c.TierTagged() {
+		return nil
+	}
+	found, err := c.ReadAccount(ctx, id)
+	if found == nil || err != nil {
+		return err
+	}
+	return c.RemoveTierTag(ctx, tier, c.AccountTagged(found.UniqueId))
 }

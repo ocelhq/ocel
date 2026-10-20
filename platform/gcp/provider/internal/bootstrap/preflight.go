@@ -90,6 +90,24 @@ var BootstrapPermissions = []string{
 	"cloudtasks.queues.purge",
 	"cloudtasks.queues.getIamPolicy",
 	"cloudtasks.queues.setIamPolicy",
+	"resourcemanager.tagKeys.create",
+	"resourcemanager.tagKeys.get",
+	"resourcemanager.tagValues.create",
+	"resourcemanager.tagValues.get",
+	"resourcemanager.tagValueBindings.create",
+	"resourcemanager.tagValueBindings.delete",
+	"storage.buckets.createTagBinding",
+	"storage.buckets.listTagBindings",
+	"iam.serviceAccounts.createTagBinding",
+	"iam.serviceAccounts.listTagBindings",
+	"iam.serviceAccounts.deleteTagBinding",
+	"artifactregistry.repositories.createTagBinding",
+	"artifactregistry.repositories.listTagBindings",
+	"secretmanager.secrets.createTagBinding",
+	"secretmanager.secrets.listTagBindings",
+	"secretmanager.secrets.deleteTagBinding",
+	"run.services.createTagBinding",
+	"run.services.listTagBindings",
 }
 
 var AssetStorePermissions = []string{
@@ -113,6 +131,8 @@ var bootstrapRoles = []string{
 	"roles/compute.networkAdmin",
 	"roles/cloudsql.viewer",
 	"roles/cloudtasks.admin",
+	"roles/resourcemanager.tagAdmin",
+	gcloud.TierTagUserRole,
 }
 
 var deployRoles = []string{
@@ -178,6 +198,8 @@ var projectPermissions = []string{
 	"cloudsql.instances.list",
 	"cloudsql.instances.get",
 	"secretmanager.secrets.create",
+	"secretmanager.secrets.createTagBinding",
+	"secretmanager.secrets.deleteTagBinding",
 }
 
 func AppBucketsGrant(names names.Names) string {
@@ -197,7 +219,15 @@ func PartsGrant(names names.Names) string {
 func ProjectPermissionsGrant() string {
 	return "a custom role holding " + strings.Join(projectPermissions, ", ") +
 		", unconditioned: Google checks creating a bucket, an instance or a secret, listing instances and reading Cloud SQL operations against the project, " +
-		"where no name condition admits them"
+		"where no name condition admits them, and the role a deploy holds on its realtime secrets may not bind their tier tag"
+}
+
+func TierTagsGrant(names names.Names) string {
+	values := make([]string, 0, 2)
+	for _, tier := range TierTagValues() {
+		values = append(values, names.Project()+"/"+gcloud.TierTagKey+"/"+string(tier))
+	}
+	return gcloud.TierTagUserRole + ", on the tag values " + strings.Join(values, " and ")
 }
 
 func RolesFor(purpose edge.CredentialPurpose) []string {

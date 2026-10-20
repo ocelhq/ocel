@@ -124,7 +124,7 @@ func DeleteUnusedAccounts(ctx context.Context, b bootstrap.Engine, req provider.
 			failures = append(failures, err)
 			continue
 		}
-		removed, err := b.Clients.DeleteAccount(ctx, candidate.ID)
+		removed, err := b.Clients.DeleteAccount(ctx, candidate.Tier, candidate.ID)
 		if err != nil {
 			failures = append(failures, err)
 			continue

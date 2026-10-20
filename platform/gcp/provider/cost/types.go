@@ -20,4 +20,5 @@ const (
 	ProjectIAMMemberType    = "google_project_iam_member"
 	SQLInstanceType         = "google_sql_database_instance"
 	MemorystoreInstanceType = "google_memorystore_instance"
+	TagKeyType              = "google_tags_tag_key"
 )

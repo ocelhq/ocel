@@ -49,7 +49,7 @@ func WriteGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, sl
 		return err
 	}
 	if !found {
-		if err := c.EnsureSecret(ctx, service, name); err != nil {
+		if err := c.EnsureSecret(ctx, service, tier, name); err != nil {
 			return err
 		}
 		if current, found, err = c.ReadSecretVersion(ctx, service, name, latestSecretVersion); err != nil {
@@ -92,7 +92,7 @@ func DeleteGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, s
 	if err != nil {
 		return err
 	}
-	return c.DeleteSecret(ctx, service, name)
+	return c.DeleteSecret(ctx, service, tier, name)
 }
 
 func GateGrants(c *gcloud.Clients, spec provider.StackSpec, member string) ([]grants.Grant, error) {

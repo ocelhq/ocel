@@ -35,7 +35,7 @@ func assetReaderCondition(ctx context.Context, c *gcloud.Clients, tier environme
 
 func RaiseAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) error {
 	account := c.AssetReaderAccount(tier)
-	if err := c.CreateAccount(ctx, account, "ocel "+string(tier)+" "+assetReaderName, assetReaderDescription); err != nil {
+	if err := c.CreateAccount(ctx, tier, account, "ocel "+string(tier)+" "+assetReaderName, assetReaderDescription); err != nil {
 		return err
 	}
 	member := "serviceAccount:" + c.AssetReaderAccountEmail(tier)
@@ -121,7 +121,7 @@ func TakeAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tie
 	if _, err := policy.Edit(ctx, gcloud.ProjectPolicy(c), policy.RevokeRoles(member, []string{grants.AssetsRole})); err != nil {
 		return err
 	}
-	_, err = c.DeleteAccount(ctx, c.AssetReaderAccount(tier))
+	_, err = c.DeleteAccount(ctx, tier, c.AssetReaderAccount(tier))
 	return err
 }
 

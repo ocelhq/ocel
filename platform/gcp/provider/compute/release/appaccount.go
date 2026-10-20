@@ -74,7 +74,7 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 }
 
 func CreateAppAccount(ctx context.Context, c *gcloud.Clients, ref provider.StackRef, app string) error {
-	return c.CreateAccount(ctx, c.AppAccount(ref.Project, ref.Name.Env, app),
+	return c.CreateAccount(ctx, ref.Tier, c.AppAccount(ref.Project, ref.Name.Env, app),
 		gcloud.Clipped("ocel "+ref.Project+"/"+app+"@"+ref.Name.Env+" ("+string(ref.Tier)+")", gcloud.MaxDisplayNameBytes),
 		AppAccountDescription(ref.Tier, ref.Project, ref.Name.Env, app))
 }
