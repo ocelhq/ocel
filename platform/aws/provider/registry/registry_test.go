@@ -177,10 +177,10 @@ func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 	}
 
 	api := &fakeECR{existing: []string{"ocel/prod/shop.api"}}
-	if created, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.api"); err != nil || created || len(api.created) != 0 {
+	if created, err := anECRStore(api).ensure(context.Background(), "ocel/prod/shop.api"); err != nil || created || len(api.created) != 0 {
 		t.Errorf("ensure of an existing repository = %v, %v, created %v; want a no-op", created, err, api.created)
 	}
-	if created, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/prod/shop.web"}) {
+	if created, err := anECRStore(api).ensure(context.Background(), "ocel/prod/shop.web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/prod/shop.web"}) {
 		t.Errorf("ensure of a new repository = %v, %v, created %v; want it created immutable under the namespace", created, err, api.created)
 	}
 }
@@ -222,9 +222,8 @@ func (f *fakeECR) BatchDeleteImage(_ context.Context, in *ecr.BatchDeleteImageIn
 	return &out, nil
 }
 
-func anECRStore(api *fakeECR) provider.ImageStore {
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel/prod", Username: "AWS", Password: "tok3n"}
-	return Images(target, api, "ocel")
+func anECRStore(api *fakeECR) ecrImages {
+	return Images(anECRTarget(), api, "ocel").(ecrImages)
 }
 
 const shopWebRef = "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/prod/shop.web:sha256-abc"
@@ -354,7 +353,7 @@ func TestARepositoryAPushCreatesIsTaggedWithTheProjectItsImagesBelongTo(t *testi
 	t.Parallel()
 
 	api := &fakeECR{}
-	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil {
+	if _, err := anECRStore(api).ensure(context.Background(), "ocel/prod/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
@@ -367,7 +366,7 @@ func TestARepositoryAPushFindsInPlaceIsTaggedWithTheProjectItsImagesBelongTo(t *
 	t.Parallel()
 
 	api := &fakeECR{existing: []string{"ocel/prod/shop.web"}}
-	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil {
+	if _, err := anECRStore(api).ensure(context.Background(), "ocel/prod/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
@@ -386,7 +385,7 @@ func TestARepositoryInPlaceAlreadyTaggedWithItsProjectIsNotTaggedAgain(t *testin
 		{Key: aws.String("ocel:project"), Value: aws.String("shop")},
 		{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")},
 	}}}
-	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil {
+	if _, err := anECRStore(api).ensure(context.Background(), "ocel/prod/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
@@ -399,7 +398,7 @@ func TestAPushIntoARepositoryItMayNotTagWithItsProjectFails(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{existing: []string{"ocel/prod/shop.web"}, tagErr: errors.New("AccessDeniedException: not authorized to perform ecr:TagResource")}
-	_, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web")
+	_, err := anECRStore(api).ensure(context.Background(), "ocel/prod/shop.web")
 
 	if err == nil {
 		t.Fatal("ensure() = nil for a repository it could not tag with its project: no credential could ever delete the images pushed there")
@@ -410,7 +409,7 @@ func TestARepositoryNamingNoProjectIsNeverCreated(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{}
-	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/web"); err == nil {
+	if _, err := anECRStore(api).ensure(context.Background(), "ocel/prod/web"); err == nil {
 		t.Error("ensure(ocel/web) = nil: a repository with no project to tag it with is one no project-tagged principal may ever clean")
 	}
 	if len(api.created) != 0 {

@@ -59,7 +59,7 @@ func TestARepositoryIsTaggedWithTheNamespaceThatPushedToIt(t *testing.T) {
 	api := &fakeECR{}
 	target := anECRTarget()
 	target.Namespace = "acme/prod"
-	if _, err := ensure(context.Background(), api, target, "acme", "acme/prod/shop.web"); err != nil {
+	if _, err := Images(target, api, "acme").(ecrImages).ensure(context.Background(), "acme/prod/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 	if got := tagsOf(api.createdTags["acme/prod/shop.web"]); got["ocel:managed-by"] != "acme" || got["ocel:project"] != "shop" {
@@ -71,7 +71,7 @@ func TestARepositoryOutsideItsTiersRepositoriesIsNeverCreated(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{}
-	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/preview/shop.web"); err == nil || len(api.created) != 0 {
+	if _, err := anECRStore(api).ensure(context.Background(), "ocel/preview/shop.web"); err == nil || len(api.created) != 0 {
 		t.Errorf("ensure() = %v, created %v, want a refusal: the production tier's push has no repository of the preview tier to create", err, api.created)
 	}
 }
