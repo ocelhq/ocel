@@ -10,6 +10,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
-func (p *Provider) EnsureImageRegistry(ctx context.Context, _ environment.Tier) (provider.RegistryTarget, error) {
-	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws), string(p.namespace))
+func (p *Provider) EnsureImageRegistry(ctx context.Context, tier environment.Tier) (provider.RegistryTarget, error) {
+	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws), string(p.namespace), tier)
 }

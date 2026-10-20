@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
@@ -430,7 +431,11 @@ func TestEveryCredentialReachesImageRepositoriesOnlyOfTheProjectItsPrincipalIsTa
 	}
 	for purpose, document := range bothCredentials(t) {
 		for _, c := range cases {
-			if got := allowsECR(t, document, c.request); got != c.allowed {
+			request := c.request
+			if rest, ours := strings.CutPrefix(request.repository, string(defaultNamespace)+"/"); ours {
+				request.repository = registry.RepositoryPrefix(string(defaultNamespace), tierOf(purpose)) + "/" + rest
+			}
+			if got := allowsECR(t, document, request); got != c.allowed {
 				t.Errorf("the %s credential: %s is allowed = %t, want %t", purpose, c.name, got, c.allowed)
 			}
 		}

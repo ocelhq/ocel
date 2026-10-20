@@ -18,7 +18,7 @@ import (
 const imageReclaimGrace = 30 * time.Minute
 
 func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, _ provider.ImageStore, log progress.Log) error {
-	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), string(p.namespace), imageRef, otherStacksImages(p.KeyValues(), ref), time.Now().Add(-imageReclaimGrace))
+	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), string(p.namespace), ref.Tier, imageRef, otherStacksImages(p.KeyValues(), ref), time.Now().Add(-imageReclaimGrace))
 	resources.SayRemovedImages(log, app, removed)
 	return err
 }
@@ -52,7 +52,7 @@ func forgetImages(ctx context.Context, store records.Store, api registry.ECRAPI,
 	if len(unkept) == 0 {
 		return nil
 	}
-	target, err := registry.Resolve(ctx, api, namespace)
+	target, err := registry.Resolve(ctx, api, namespace, ref.Tier)
 	if err != nil {
 		return err
 	}

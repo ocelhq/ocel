@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"unicode"
 
@@ -407,15 +408,22 @@ func mustRender(t *testing.T, render func(Namespace, environment.Tier, string) (
 	return document
 }
 
+var compiledLikePatterns sync.Map
+
 func conditionAdmits(operator, pattern, value string) bool {
 	switch operator {
 	case "StringEquals":
 		return pattern == value
 	case "StringLike":
+		if compiled, ok := compiledLikePatterns.Load(pattern); ok {
+			return compiled.(*regexp.Regexp).MatchString(value)
+		}
 		quoted := regexp.QuoteMeta(pattern)
 		quoted = strings.ReplaceAll(quoted, `\*`, ".*")
 		quoted = strings.ReplaceAll(quoted, `\?`, ".")
-		return regexp.MustCompile("^" + quoted + "$").MatchString(value)
+		compiled := regexp.MustCompile("^" + quoted + "$")
+		compiledLikePatterns.Store(pattern, compiled)
+		return compiled.MatchString(value)
 	}
 	return false
 }

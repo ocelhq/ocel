@@ -54,11 +54,11 @@ func listImageRepositories(namespace string, req provider.ProjectResourcesReques
 	project := naming.Sanitize(req.Project)
 	var repositories []provider.PhysicalResource
 	for _, image := range req.Images {
-		name, region, found := registry.ParseImageRepository(namespace, image)
+		name, region, found := registry.ParseImageRepository(namespace, req.Tier, image)
 		if !found {
 			continue
 		}
-		if owner, _ := images.RegistryRepositoryProject(strings.TrimPrefix(name, naming.NamespaceField(namespace)+"/")); owner == project {
+		if owner, _ := images.RegistryRepositoryProject(strings.TrimPrefix(name, registry.RepositoryPrefix(namespace, req.Tier)+naming.PathSeparator)); owner == project {
 			repositories = append(repositories, cfn.NewPhysicalResource("AWS::ECR::Repository", name, region))
 		}
 	}

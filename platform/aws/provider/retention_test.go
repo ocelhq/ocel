@@ -41,10 +41,10 @@ func shopStacks(t *testing.T) (records.Store, provider.StackRef) {
 	own := naming.AppStack("prod", "web", naming.NewReleaseToken("b2", ""))
 	previous := naming.AppStack("prod", "web", naming.NewReleaseToken("b1", ""))
 	preview := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b3", ""))
-	recordImage(t, store, environment.TierProduction, "shop", own, "ecr/ocel/shop.web:sha256-own")
-	recordImage(t, store, environment.TierProduction, "shop", previous, "ecr/ocel/shop.web:sha256-previous")
-	recordImage(t, store, environment.TierPreview, "shop", preview, "ecr/ocel/shop.web:sha256-preview")
-	recordImage(t, store, environment.TierProduction, "blog", previous, "ecr/ocel/blog.web:sha256-other")
+	recordImage(t, store, environment.TierProduction, "shop", own, "ecr/ocel/prod/shop.web:sha256-own")
+	recordImage(t, store, environment.TierProduction, "shop", previous, "ecr/ocel/prod/shop.web:sha256-previous")
+	recordImage(t, store, environment.TierPreview, "shop", preview, "ecr/ocel/preview/shop.web:sha256-preview")
+	recordImage(t, store, environment.TierProduction, "blog", previous, "ecr/ocel/prod/blog.web:sha256-other")
 	return store, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}
 }
 
@@ -58,7 +58,7 @@ func TestTheImagesAReconcileOrAForgetKeepsAreWhatEveryOtherStackOfTheProjectReco
 		t.Fatalf("otherStacksImages() = %v", err)
 	}
 
-	want := map[string]bool{"ecr/ocel/shop.web:sha256-previous": true, "ecr/ocel/shop.web:sha256-preview": true}
+	want := map[string]bool{"ecr/ocel/prod/shop.web:sha256-previous": true, "ecr/ocel/preview/shop.web:sha256-preview": true}
 	if !maps.Equal(kept, want) {
 		t.Errorf("otherStacksImages() = %v, want %v: the stack's own image is kept by the reconcile while its release may run it and taken by its forget, as on gcp, and another project's stacks are not listed at all", kept, want)
 	}
@@ -144,7 +144,7 @@ func TestAReconcileReadsTheStacksOfItsOwnAppAlone(t *testing.T) {
 
 	store, own := shopStacks(t)
 	for _, app := range []string{"api", "admin", "docs", "jobs"} {
-		recordImage(t, store, environment.TierPreview, "shop", naming.AppStack("pr-7", app, naming.NewReleaseToken("b3", "")), "ecr/ocel/shop."+app+":sha256-x")
+		recordImage(t, store, environment.TierPreview, "shop", naming.AppStack("pr-7", app, naming.NewReleaseToken("b3", "")), "ecr/ocel/preview/shop."+app+":sha256-x")
 	}
 	counted := &countedEntries{Store: store}
 
@@ -199,14 +199,14 @@ func TestAReconcileKeepsTheImageADeployInFlightIsAboutToRun(t *testing.T) {
 
 	store, own := shopStacks(t)
 	starting := naming.AppStack("prod", "web", naming.NewReleaseToken("b4", ""))
-	recordReleaseAboutToRun(t, store, environment.TierProduction, "shop", starting, "ecr/ocel/shop.web:sha256-starting")
+	recordReleaseAboutToRun(t, store, environment.TierProduction, "shop", starting, "ecr/ocel/prod/shop.web:sha256-starting")
 
 	kept, err := otherStacksImages(store, own)(context.Background())
 	if err != nil {
 		t.Fatalf("otherStacksImages() = %v", err)
 	}
 
-	if !kept["ecr/ocel/shop.web:sha256-starting"] {
+	if !kept["ecr/ocel/prod/shop.web:sha256-starting"] {
 		t.Errorf("otherStacksImages() = %v, want the image a stack records before it runs it", kept)
 	}
 }
@@ -258,9 +258,9 @@ func TestAReclaimHandedTheECRStoreDeletesTheRepositoryItEmpties(t *testing.T) {
 
 	store := fake.NewKeyValues()
 	failed := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
-	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, "ecr/ocel/shop.web:sha256-failed")
+	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, "ecr/ocel/preview/shop.web:sha256-failed")
 	api := &repositoryECR{tags: []string{"sha256-failed"}}
-	target, err := registry.Resolve(context.Background(), api, "ocel")
+	target, err := registry.Resolve(context.Background(), api, "ocel", environment.TierPreview)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,8 +270,8 @@ func TestAReclaimHandedTheECRStoreDeletesTheRepositoryItEmpties(t *testing.T) {
 		t.Fatalf("forgetImages() = %v", err)
 	}
 
-	if !slices.Equal(api.deleted, []string{"ocel/shop.web"}) {
-		t.Errorf("forgetImages() deleted the repositories %v, want ocel/shop.web: a failed deploy reclaims through the ECR store it pushed with, and that reclaim must empty and delete the repository as a destroy does", api.deleted)
+	if !slices.Equal(api.deleted, []string{"ocel/preview/shop.web"}) {
+		t.Errorf("forgetImages() deleted the repositories %v, want ocel/preview/shop.web: a failed deploy reclaims through the ECR store it pushed with, and that reclaim must empty and delete the repository as a destroy does", api.deleted)
 	}
 }
 
@@ -282,9 +282,9 @@ func TestAReclaimHandedAWrappedECRStoreStillDeletesTheRepositoryItEmpties(t *tes
 
 	store := fake.NewKeyValues()
 	failed := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
-	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, "ecr/ocel/shop.web:sha256-failed")
+	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, "ecr/ocel/preview/shop.web:sha256-failed")
 	api := &repositoryECR{tags: []string{"sha256-failed"}}
-	target, err := registry.Resolve(context.Background(), api, "ocel")
+	target, err := registry.Resolve(context.Background(), api, "ocel", environment.TierPreview)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,8 +294,8 @@ func TestAReclaimHandedAWrappedECRStoreStillDeletesTheRepositoryItEmpties(t *tes
 		t.Fatalf("forgetImages() = %v", err)
 	}
 
-	if !slices.Equal(api.deleted, []string{"ocel/shop.web"}) {
-		t.Errorf("forgetImages() deleted the repositories %v, want ocel/shop.web: an image under this account's ECR is reclaimed as ECR's, whatever store carries it", api.deleted)
+	if !slices.Equal(api.deleted, []string{"ocel/preview/shop.web"}) {
+		t.Errorf("forgetImages() deleted the repositories %v, want ocel/preview/shop.web: an image under this account's ECR is reclaimed as ECR's, whatever store carries it", api.deleted)
 	}
 }
 
@@ -321,8 +321,8 @@ func TestTwoPreviewsSharingAnImageDestroyedTogetherLeaveNeitherTheImageNorItsRep
 	store := fake.NewKeyValues()
 	first := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))}
 	second := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-8", "web", naming.NewReleaseToken("b1", ""))}
-	recordImage(t, store, first.Tier, first.Project, first.Name, "ecr/ocel/shop.web:sha256-shared")
-	recordImage(t, store, second.Tier, second.Project, second.Name, "ecr/ocel/shop.web:sha256-shared")
+	recordImage(t, store, first.Tier, first.Project, first.Name, "ecr/ocel/preview/shop.web:sha256-shared")
+	recordImage(t, store, second.Tier, second.Project, second.Name, "ecr/ocel/preview/shop.web:sha256-shared")
 	api := &repositoryECR{tags: []string{"sha256-shared"}}
 	destroy := func(store records.Store, ref provider.StackRef) {
 		if err := forgetImages(ctx, store, api, "ocel", ref, "web", nil, progress.Discard()); err != nil {
@@ -336,8 +336,8 @@ func TestTwoPreviewsSharingAnImageDestroyedTogetherLeaveNeitherTheImageNorItsRep
 
 	destroy(interleaved, first)
 
-	if len(api.tags) != 0 || !slices.Equal(api.deleted, []string{"ocel/shop.web"}) {
-		t.Errorf("the two destroys left the tags %v and deleted the repositories %v, want no tag and ocel/shop.web deleted: each read the other's image while the other was going, and once both records are gone no stack is left to reclaim it", api.tags, api.deleted)
+	if len(api.tags) != 0 || !slices.Equal(api.deleted, []string{"ocel/preview/shop.web"}) {
+		t.Errorf("the two destroys left the tags %v and deleted the repositories %v, want no tag and ocel/preview/shop.web deleted: each read the other's image while the other was going, and once both records are gone no stack is left to reclaim it", api.tags, api.deleted)
 	}
 }
 
@@ -347,7 +347,7 @@ func TestAForgetThatFailsAfterDroppingItsImagesStillLeavesThemForARetry(t *testi
 	ctx := context.Background()
 	store := fake.NewKeyValues()
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))}
-	recordImage(t, store, ref.Tier, ref.Project, ref.Name, "ecr/ocel/shop.web:sha256-own")
+	recordImage(t, store, ref.Tier, ref.Project, ref.Name, "ecr/ocel/preview/shop.web:sha256-own")
 	api := &repositoryECR{tags: []string{"sha256-own"}, refusal: errors.New("ecr:BatchDeleteImage is not granted")}
 
 	if err := forgetImages(ctx, store, api, "ocel", ref, "web", nil, progress.Discard()); err == nil {

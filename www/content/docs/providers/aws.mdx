@@ -91,9 +91,10 @@ part a project here was refused for. `ocel bootstrap status` shows such a part a
 projects until then. A `--dry` deploy records nothing.
 
 **Scope image deletes to one project.** Untagged, the deploy user or role may delete container
-images in every Ocel ECR repository of the account. Tag it `ocel:project` with the project's
-slug as its repositories spell it (`ocel/<slug>.<app>`: lowercase, each run of other characters
-a single `-`), and it may create, tag and delete images only in that project's repositories.
+images in every Ocel ECR repository of its tier. Tag it `ocel:project` with the project's
+slug as its repositories spell it (`ocel/prod/<slug>.<app>` in production and
+`ocel/preview/<slug>.<app>` in preview: lowercase, each run of other characters a single `-`),
+and it may create, tag and delete images only in that project's repositories.
 
 ## Options
 

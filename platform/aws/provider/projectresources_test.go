@@ -21,7 +21,7 @@ import (
 const (
 	inventoryRegion    = "eu-west-1"
 	inventoryNamespace = account.Namespace("ocel2")
-	shopECRImage       = "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel2/shop.web:sha256-own"
+	shopECRImage       = "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel2/prod/shop.web:sha256-own"
 )
 
 func listShopResources(t *testing.T, store records.Store, req provider.ProjectResourcesRequest) []provider.PhysicalResource {
@@ -45,11 +45,12 @@ func TestProjectResourcesNameTheImageRepositoryOfAProjectThatPushedImages(t *tes
 	listed := listShopResources(t, fake.NewKeyValues(), provider.ProjectResourcesRequest{Images: []string{
 		shopECRImage,
 		"ghcr.io/acme/shop:1",
-		"123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel2/blog.web:sha256-other",
-		"123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/shop.web:sha256-other-namespace",
+		"123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel2/prod/blog.web:sha256-other",
+		"123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel2/preview/shop.web:sha256-other-tier",
+		"123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/prod/shop.web:sha256-other-namespace",
 	}})
 
-	want := []provider.PhysicalResource{{Kind: "AWS::ECR::Repository", ID: "ocel2/shop.web", Location: inventoryRegion}}
+	want := []provider.PhysicalResource{{Kind: "AWS::ECR::Repository", ID: "ocel2/prod/shop.web", Location: inventoryRegion}}
 	if !slices.Equal(listed, want) {
 		t.Errorf("listProjectResources() = %+v, want only shop's own repository %+v", listed, want)
 	}
