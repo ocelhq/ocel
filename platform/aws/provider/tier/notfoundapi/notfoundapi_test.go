@@ -79,7 +79,7 @@ func TestEnsureMakesATaggedRegionalAPIAnsweringEveryPath404OnTheLiveStage(t *tes
 	if api == nil {
 		t.Fatalf("resources %v name no REST API that was made", resources)
 	}
-	if api.name != "ocel-not-found-preview" || api.tags["ocel:managed-by"] != "ocel" || api.tags["ocel:env-tier"] != "preview" {
+	if api.name != "ocel-preview-not-found" || api.tags["ocel:managed-by"] != "ocel" || api.tags["ocel:env-tier"] != "preview" {
 		t.Errorf("api = %+v, want the preview not-found API tagged as ocel's of preview, the tags the deploy credential creates under", api)
 	}
 	if len(api.endpoint) != 1 || api.endpoint[0] != agtypes.EndpointTypeRegional {

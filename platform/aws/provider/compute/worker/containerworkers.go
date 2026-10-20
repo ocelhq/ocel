@@ -68,7 +68,7 @@ func NewContainerStack(spec provider.StackSpec, web *container.Definition, targe
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
 	account := component.AccountOfARN(target.StateTable.ARN)
 	topics := topic.Of(project, env, app.Topics)
-	served := container.WorkerServices(target.Tier, project, env, app.DeploymentWorkers)
+	served := container.WorkerServices(target.Namespace, target.Tier, project, env, app.DeploymentWorkers)
 	floor := Floor(app.App, app.Instances, app.Workers)
 	for _, worker := range app.Workers {
 		if hosted, found := served[worker.Name]; found {
@@ -83,7 +83,7 @@ func NewContainerStack(spec provider.StackSpec, web *container.Definition, targe
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := topic.TasksPolicy(target.StateTable, project, env, topics, container.WorkerServiceARNs(target.StateTable, target.Tier, project, env, app.DeploymentWorkers))
+	tasks, err := topic.TasksPolicy(target.StateTable, project, env, topics, container.WorkerServiceARNs(target.StateTable, target.Namespace, target.Tier, project, env, app.DeploymentWorkers))
 	if err != nil {
 		return nil, err
 	}

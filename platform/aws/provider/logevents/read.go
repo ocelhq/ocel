@@ -11,8 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type Source struct {
@@ -22,11 +20,11 @@ type Source struct {
 }
 
 type Query struct {
-	Sources      []Source
-	Tier         environment.Tier
-	Since, Until time.Time
-	Limit        int
-	Contains     string
+	Sources        []Source
+	ContainerGroup string
+	Since, Until   time.Time
+	Limit          int
+	Contains       string
 }
 
 type Event struct {
@@ -51,7 +49,7 @@ func Read(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.Clie
 	}
 	var events []Event
 	for _, source := range query.Sources {
-		group, err := findGroup(ctx, lambdas, source, query.Tier)
+		group, err := findGroup(ctx, lambdas, source, query.ContainerGroup)
 		if err != nil {
 			return nil, err
 		}
@@ -86,8 +84,8 @@ func refuseInvalidSources(query Query) error {
 		if (source.Function == "") == (source.Container == "") {
 			return fmt.Errorf("source %+v names both or neither of a function and a container", source)
 		}
-		if source.Container != "" && query.Tier == "" {
-			return fmt.Errorf("container %s has no tier to read its log group from", source.Container)
+		if source.Container != "" && query.ContainerGroup == "" {
+			return fmt.Errorf("container %s has no log group to read", source.Container)
 		}
 	}
 	return nil

@@ -157,7 +157,7 @@ func TestReclaimingAFailedDeploysReleaseKeepsTheContainerInfraItRaisedAndTheRetr
 	if remaining, err := listConsumers(ctx, cfg.KeyValues); err != nil || len(remaining) != 0 {
 		t.Errorf("consumers = %v (%v) after the failed release went, want none: a claim naming a stack that is gone would refuse the part's removal forever", remaining, err)
 	}
-	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier)
+	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "ocel", "us-east-1", tier)
 	if err != nil || !present || len(part.UsedBy) != 0 {
 		t.Errorf("containers.ReadPart() = %+v, %v, %v, want the container infrastructure listed and used by no project", part, present, err)
 	}
@@ -170,7 +170,7 @@ func TestReclaimingAFailedDeploysReleaseKeepsTheContainerInfraItRaisedAndTheRetr
 	if ran := engine.stacks(); len(ran) != 3 || ran[2] != retry.Ref.Name.String() {
 		t.Errorf("the retry ran %v, want only its own app stack: the container infrastructure the failed deploy raised is still there", ran)
 	}
-	if part, _, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier); err != nil || !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
+	if part, _, err := containers.ReadPart(ctx, cfg.KeyValues, "ocel", "us-east-1", tier); err != nil || !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
 		t.Errorf("containers used by %v (%v) after the retry, want %s", part.UsedBy, err, spec.Ref.Project)
 	}
 }

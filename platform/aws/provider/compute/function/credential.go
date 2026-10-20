@@ -73,7 +73,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: []string{iam.AppRoleARN},
-			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(true), s.WithinAppBoundary(), s.MadeByItsStacks()),
+			Condition: iam.MergeConditions(s.AttachedPolicyIsAServiceRole(true), s.WithinAppBoundary(), s.MadeByItsStacks()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
@@ -92,8 +92,8 @@ func Credential(s iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"logs:CreateLogGroup"},
-			Resources: []string{iam.AppLogGroupARN, iam.FunctionLogGroupARN},
-			Condition: iam.TaggedOnCreate(),
+			Resources: append(s.ContainerLogGroupARNs(), iam.FunctionLogGroupARN),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions: []string{
@@ -105,8 +105,8 @@ func Credential(s iam.Scope) []iam.Statement {
 				"logs:TagResource",
 				"logs:UntagResource",
 			},
-			Resources: []string{iam.AppLogGroupARN, iam.FunctionLogGroupARN},
-			Condition: iam.TaggedByOcel(),
+			Resources: append(s.ContainerLogGroupARNs(), iam.FunctionLogGroupARN),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"logs:DescribeLogGroups"},

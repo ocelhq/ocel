@@ -16,7 +16,7 @@ const commentLimit = 128
 var longest = account.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 
 func TestNameContainsTheNamespaceTheSlugAndTheTier(t *testing.T) {
-	if got, want := surface.Name("ocel", "shop", environment.TierProduction), "ocel--shop--production"; got != want {
+	if got, want := surface.Name("ocel", "shop", environment.TierProduction), "ocel--shop--prod"; got != want {
 		t.Errorf("Name = %q, want %q", got, want)
 	}
 	if got, want := surface.Name("j-1-a", "shop", environment.TierPreview, "pr-7"), "j-1-a--shop--preview--pr-7"; got != want {
@@ -38,8 +38,8 @@ func TestFittedKeepsTheFieldsAGateReadsWhole(t *testing.T) {
 	if fields[0] != string(longest) {
 		t.Errorf("the namespace field is %q, want %q", fields[0], longest)
 	}
-	if fields[2] != string(environment.TierProduction) {
-		t.Errorf("the tier field is %q, want %q", fields[2], environment.TierProduction)
+	if fields[2] != naming.TierWord(environment.TierProduction) {
+		t.Errorf("the tier field is %q, want %q", fields[2], naming.TierWord(environment.TierProduction))
 	}
 }
 

@@ -104,7 +104,7 @@ func (a *absentBastion) GetRole(context.Context, *iam.GetRoleInput, ...func(*iam
 }
 
 func bastionPart(looking *absentBastion) tier.Part {
-	return bastion.NewPart(bastion.Clients{ECS: looking, IAM: looking, EC2: looking}, "eu-west-2")
+	return bastion.NewPart(bastion.Clients{ECS: looking, IAM: looking, EC2: looking}, "ocel", "eu-west-2")
 }
 
 func registryOf(fronts ...edge.Edge) edgeRegistry {
@@ -397,7 +397,7 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 		t.Fatalf("Remove: %v", err)
 	}
 
-	if looked := looking.looked; !slices.Equal(looked, []string{"ocel-bastion-production"}) {
+	if looked := looking.looked; !slices.Equal(looked, []string{"ocel-prod-bastion"}) {
 		t.Errorf("the bastion clusters looked up = %v, want the production tier's, so its bastion goes with it", looked)
 	}
 	if got := b.Edge.(*teardownEdge).torndown; !slices.Equal(got, []environment.Tier{environment.TierProduction}) {

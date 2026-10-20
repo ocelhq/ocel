@@ -29,7 +29,7 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 	ctx := context.Background()
 	tier := environment.TierProduction
 
-	if _, present, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier); err != nil || present {
+	if _, present, err := containers.ReadPart(ctx, cfg.KeyValues, "ocel", "us-east-1", tier); err != nil || present {
 		t.Fatalf("containers.ReadPart() before any container deploy = %v, %v, want none", present, err)
 	}
 	if _, err := stacks.Provision(ctx, spec, progress.Discard()); err != nil {
@@ -41,7 +41,7 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 		t.Fatalf("Provision(blog) = %v", err)
 	}
 
-	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", tier)
+	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "ocel", "us-east-1", tier)
 	if err != nil || !present {
 		t.Fatalf("containers.ReadPart() = %v, %v, want the container infrastructure", present, err)
 	}

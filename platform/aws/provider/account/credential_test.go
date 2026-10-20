@@ -421,7 +421,7 @@ func conditionAdmits(operator, pattern, value string) bool {
 }
 
 func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
-	const writtenByOcel = "ocel"
+	writtenByOcel := string(defaultNamespace)
 	keys := []string{"aws:RequestTag/ocel:managed-by", "aws:ResourceTag/ocel:managed-by"}
 	for purpose, document := range bothCredentials(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
@@ -455,12 +455,14 @@ func credentialsOfTier(t *testing.T, tier environment.Tier) map[string]string {
 	return map[string]string{"bootstrap": bootstrapDoc, "deploy": deployDoc}
 }
 
+func grantsAction(patterns []string, action string) bool {
+	return slices.ContainsFunc(patterns, func(pattern string) bool { return conditionAdmits("StringLike", pattern, action) })
+}
+
 func reaches(t *testing.T, document, action, arn string) bool {
 	t.Helper()
-	service, _, _ := strings.Cut(action, ":")
 	for _, statement := range parsePolicy(t, document).Statement {
-		actions := stringsOf(t, statement.Action, "Action")
-		if !slices.Contains(actions, action) && !slices.Contains(actions, service+":*") {
+		if !grantsAction(stringsOf(t, statement.Action, "Action"), action) {
 			continue
 		}
 		matched := slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(pattern string) bool {
@@ -493,10 +495,8 @@ type requestContext map[string]string
 
 func allows(t *testing.T, document, action, arn string, request requestContext) bool {
 	t.Helper()
-	service, _, _ := strings.Cut(action, ":")
 	for _, statement := range parsePolicy(t, document).Statement {
-		actions := stringsOf(t, statement.Action, "Action")
-		if !slices.Contains(actions, action) && !slices.Contains(actions, service+":*") {
+		if !grantsAction(stringsOf(t, statement.Action, "Action"), action) {
 			continue
 		}
 		if !slices.ContainsFunc(stringsOf(t, statement.Resource, "Resource"), func(pattern string) bool {
@@ -647,3 +647,5 @@ func TestEveryCredentialFitsTheManagedPoliciesIAMAccepts(t *testing.T) {
 		}
 	}
 }
+
+var productionScope = defaultNamespace.Scope(environment.TierProduction)

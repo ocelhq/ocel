@@ -111,11 +111,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_lambda_function:ocel-env-sync",
+      "id": "project:shop/shared:production/aws_lambda_function:ocel-prod-env-sync",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "ocel-env-sync",
+      "name": "ocel-prod-env-sync",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -127,11 +127,11 @@
       }
     },
     {
-      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-env-sync",
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-env-sync",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "/aws/lambda/ocel-env-sync",
+      "name": "/aws/lambda/ocel-prod-env-sync",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14
@@ -201,22 +201,22 @@
       }
     },
     {
-      "id": "project:shop/shared:production/aws_sqs_queue:ocel-app-ocel-invalidator",
+      "id": "project:shop/shared:production/aws_sqs_queue:ocel-prod-invalidator",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_sqs_queue",
-      "name": "ocel-app-ocel-invalidator",
+      "name": "ocel-prod-invalidator",
       "region": "us-east-1",
       "properties": {
         "fifo_queue": false
       }
     },
     {
-      "id": "project:shop/shared:production/aws_lambda_function:ocel-invalidator",
+      "id": "project:shop/shared:production/aws_lambda_function:ocel-prod-invalidator",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "ocel-invalidator",
+      "name": "ocel-prod-invalidator",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -228,20 +228,20 @@
       }
     },
     {
-      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:ocel-invalidator-stream",
+      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:ocel-prod-invalidator-stream",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_lambda_event_source_mapping",
-      "name": "ocel-invalidator-stream",
+      "name": "ocel-prod-invalidator-stream",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-invalidator",
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-invalidator",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "/aws/lambda/ocel-invalidator",
+      "name": "/aws/lambda/ocel-prod-invalidator",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14
@@ -449,7 +449,6 @@
       "name": "ocel-containers",
       "region": "us-east-1",
       "properties": {
-        "name": "/ocel/containers/production",
         "retention_in_days": 14
       }
     },

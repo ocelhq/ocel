@@ -3,6 +3,7 @@ package containers
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -13,18 +14,18 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
-	ecsTaskExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-	originListenerPort        = 80
-	listenerDeniedStatus      = "404"
-	listenerDeniedContentType = "text/plain"
-	listenerDeniedBody        = "no release answers on this origin"
+	ecsTaskExecutionPolicyName = "AmazonECSTaskExecutionRolePolicy"
+	ecsTaskExecutionPolicyARN  = "arn:aws:iam::aws:policy/service-role/" + ecsTaskExecutionPolicyName
+	originListenerPort         = 80
+	listenerDeniedStatus       = "404"
+	listenerDeniedContentType  = "text/plain"
+	listenerDeniedBody         = "no release answers on this origin"
 
 	outputKeyVPC           = "vpcId"
 	outputKeySubnets       = "subnets"
@@ -40,20 +41,23 @@ const (
 	outputKeyPublicHost     = "publicHost"
 	outputKeyPublicRanges   = "publicRanges"
 	outputKeyLivenessRole   = "livenessRoleArn"
+
+	nameTagKey = "Name"
 )
 
 var vpcOriginUnsupportedZones = []string{"use1-az3", "usw1-az2", "apne1-az3", "cac1-az3"}
 
 type work struct {
-	tier     environment.Tier
-	boundary string
-	rolePath string
-	tags     map[string]string
-	fronts   Fronts
+	namespace string
+	tier      environment.Tier
+	boundary  string
+	rolePath  string
+	tags      map[string]string
+	fronts    Fronts
 }
 
-func NewProgram(tier environment.Tier, boundary, rolePath string, fronts Fronts) component.Program {
-	w := &work{tier: tier, boundary: boundary, rolePath: rolePath, tags: stackTags(tier), fronts: fronts}
+func NewProgram(namespace string, tier environment.Tier, boundary, rolePath string, fronts Fronts) component.Program {
+	w := &work{namespace: namespace, tier: tier, boundary: boundary, rolePath: rolePath, tags: stackTags(namespace, tier), fronts: fronts}
 	return component.Program{Run: w.run, Tags: w.tags}
 }
 
@@ -76,8 +80,8 @@ func (w *work) run(ctx *pulumi.Context) error {
 	}
 	tier := w.tier
 
-	cluster, err := ecs.NewCluster(ctx, naming.ResourceID(naming.KindService, "cluster"), &ecs.ClusterArgs{
-		Name: pulumi.String(nameFor(tier)),
+	cluster, err := ecs.NewCluster(ctx, nameFor(w.namespace, tier), &ecs.ClusterArgs{
+		Name: pulumi.String(nameFor(w.namespace, tier)),
 		Tags: tags,
 	})
 	if err != nil {
@@ -99,8 +103,8 @@ func (w *work) run(ctx *pulumi.Context) error {
 		}
 		sources = append(sources, public.ID())
 	}
-	tasks, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "tasks", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(nameFor(tier, "tasks")),
+	tasks, err := ec2.NewSecurityGroup(ctx, tasksGroupName(w.namespace, tier), &ec2.SecurityGroupArgs{
+		Name:        pulumi.String(tasksGroupName(w.namespace, tier)),
 		Description: pulumi.String("Ocel: the tasks every container app in the " + string(tier) + " class runs as"),
 		VpcId:       pulumi.String(vpc.Id),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
@@ -114,7 +118,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),
 			CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
 		}},
-		Tags: tags,
+		Tags: namedTags(tags, tasksGroupName(w.namespace, tier)),
 	})
 	if err != nil {
 		return err
@@ -125,8 +129,8 @@ func (w *work) run(ctx *pulumi.Context) error {
 		}
 	}
 
-	execution, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, "execution"), &awsiam.RoleArgs{
-		NamePrefix:          pulumi.String(nameFor(tier, "exec") + naming.WordSeparator),
+	execution, err := awsiam.NewRole(ctx, executionRoleName(w.namespace, tier), &awsiam.RoleArgs{
+		Name:                pulumi.String(executionRoleName(w.namespace, tier)),
 		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(tier) + " tier"),
 		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
@@ -136,15 +140,15 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, "execution", "policy", "ecs"), &awsiam.RolePolicyAttachmentArgs{
+	if _, err := awsiam.NewRolePolicyAttachment(ctx, executionRoleName(w.namespace, tier)+partSeparator+ecsTaskExecutionPolicyName, &awsiam.RolePolicyAttachmentArgs{
 		Role:      execution.Name,
 		PolicyArn: pulumi.String(ecsTaskExecutionPolicyARN),
 	}); err != nil {
 		return err
 	}
 
-	logs, err := cloudwatch.NewLogGroup(ctx, naming.ResourceID(naming.KindService, "logs"), &cloudwatch.LogGroupArgs{
-		Name:            pulumi.String(logevents.NameContainerGroup(tier)),
+	logs, err := cloudwatch.NewLogGroup(ctx, awsports.ContainerLogGroupName(w.namespace, tier), &cloudwatch.LogGroupArgs{
+		Name:            pulumi.String(awsports.ContainerLogGroupName(w.namespace, tier)),
 		RetentionInDays: pulumi.Int(logRetentionDays),
 		Tags:            tags,
 	})
@@ -207,4 +211,10 @@ func decode(outputs auto.OutputMap, private bool) (Infrastructure, error) {
 		return Infrastructure{}, fmt.Errorf("output %q for %s names no subnets to place a task in", outputKeySubnets, Slug)
 	}
 	return infra, nil
+}
+
+func namedTags(tags pulumi.StringMap, name string) pulumi.StringMap {
+	named := pulumi.StringMap{nameTagKey: pulumi.String(name)}
+	maps.Copy(named, tags)
+	return named
 }

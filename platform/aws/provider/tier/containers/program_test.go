@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
@@ -17,7 +18,7 @@ import (
 func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierProduction), fronts: Fronts{Private: true}}
+	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
@@ -29,12 +30,12 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 		t.Errorf("default action = %v, want a fixed %s: a request that names no release reaches nothing", action, listenerDeniedStatus)
 	}
 	balancer := recordedOf(t, rec, "aws:lb/loadBalancer:LoadBalancer")
-	if balancer["name"].StringValue() != "ocel-containers-production" || !balancer["internal"].BoolValue() {
+	if balancer["name"].StringValue() != "ocel-prod-containers" || !balancer["internal"].BoolValue() {
 		t.Errorf("load balancer = %v, want an internal front named for the tier: nothing on the internet has a route to it", balancer)
 	}
 	vpcOrigin := recordedOf(t, rec, "aws:cloudfront/vpcOrigin:VpcOrigin")
 	endpoint := vpcOrigin["vpcOriginEndpointConfig"].ObjectValue()
-	if endpoint["arn"].StringValue() == "" || !strings.HasPrefix(endpoint["name"].StringValue(), "ocel-containers-production-") {
+	if endpoint["arn"].StringValue() == "" || !strings.HasPrefix(endpoint["name"].StringValue(), "ocel-prod-containers-") {
 		t.Errorf("vpc origin = %v, want it to name the tier front by its ARN: the edge reaches the front through it and nothing else", endpoint)
 	}
 	if endpoint["originProtocolPolicy"].StringValue() != vpcOriginProtocolPolicy || endpoint["httpPort"].NumberValue() != originListenerPort {
@@ -54,10 +55,10 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 		}
 		groups++
 		ingress := inputs["ingress"].ArrayValue()[0].ObjectValue()
-		if strings.HasSuffix(key, "tasks-security-group") && ingress["fromPort"].NumberValue() != TaskPort {
+		if strings.HasSuffix(key, "::ocel-prod-containers-tasks-sg") && ingress["fromPort"].NumberValue() != TaskPort {
 			t.Errorf("the task security group admits port %v, want %d and only from the front", ingress["fromPort"], TaskPort)
 		}
-		if strings.HasSuffix(key, "front-security-group") {
+		if strings.HasSuffix(key, "::ocel-prod-containers-sg") {
 			if _, open := ingress["cidrBlocks"]; open || len(ingress["prefixListIds"].ArrayValue()) != 1 {
 				t.Errorf("the front admits %v, want only CloudFront's origin-facing prefix list: the secret must never cross the open internet", ingress)
 			}
@@ -71,15 +72,15 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 func TestTheContainerSecurityGroupsKeepTheDescriptionsTheyWereCreatedWith(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierPreview), fronts: Fronts{Private: true}}
+	infra := &work{namespace: "ocel", tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierPreview), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "preview--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
 	}
 
 	want := map[string]string{
-		"front-security-group": "Ocel: the load balancer every container app in the preview class answers behind",
-		"tasks-security-group": "Ocel: the tasks every container app in the preview class runs as",
+		"::ocel-preview-containers-sg":       "Ocel: the load balancer every container app in the preview class answers behind",
+		"::ocel-preview-containers-tasks-sg": "Ocel: the tasks every container app in the preview class runs as",
 	}
 	for key, inputs := range rec.recorded {
 		if !strings.HasPrefix(key, "aws:ec2/securityGroup:SecurityGroup::") {
@@ -172,8 +173,9 @@ func TestTheFrontsVPCOriginTakesAFreshNameEachTimeItIsCreatedAndKeepsTheOneItWas
 		t.Errorf("the VPC origin was named %v across two runs, want a fresh name each time: CloudFront holds a deleted origin's name for a while after it is gone, so a retry under the same name is refused", registrations.names)
 	}
 	for _, name := range registrations.names {
-		if !strings.HasPrefix(name, nameFor(environment.TierProduction)+"-") {
-			t.Errorf("the VPC origin is named %q, want it under the tier's name", name)
+		tag, under := strings.CutPrefix(name, nameFor("ocel", environment.TierProduction)+"-")
+		if !under || !naming.IsRandomTag(tag) {
+			t.Errorf("the VPC origin is named %q, want the tier's name and a random tag", name)
 		}
 	}
 	if !slices.Contains(registrations.ignored, "vpcOriginEndpointConfig.name") {
@@ -234,7 +236,7 @@ func TestTheContainerInfraLooksOnlyInZonesACloudFrontVPCOriginReaches(t *testing
 func TestTheContainerInfraLooksOnlyInTheDefaultSubnetsOfTheDefaultVPC(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierProduction, boundary: componenttest.BoundaryARN, tags: stackTags(environment.TierProduction), fronts: Fronts{Private: true}}
+	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: componenttest.BoundaryARN, tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
 	lookups := &subnetLookups{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", lookups)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)

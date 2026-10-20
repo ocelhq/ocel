@@ -126,6 +126,7 @@ func TestTheContainersPartListsAndPricesThePublicFrontAForwardedContainerAppRais
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
+	cfg.Namespace = "ocel"
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
 		container.OutputKeyURL:      "http://" + fixtureOrigin,
@@ -146,13 +147,13 @@ func TestTheContainersPartListsAndPricesThePublicFrontAForwardedContainerAppRais
 		t.Fatalf("Provision(behind the public front) = %v", err)
 	}
 
-	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "us-east-1", environment.TierProduction)
+	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present {
 		t.Fatalf("containers.ReadPart() = %v, %v, want the containers part", present, err)
 	}
 	for _, want := range []provider.PartResource{
-		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-public-production"},
-		{Kind: "AWS::Lambda::Function", ID: "ocel-containers-production-liveness"},
+		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-public"},
+		{Kind: "AWS::Lambda::Function", ID: "ocel-prod-public-liveness"},
 		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-live-abc"},
 		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-exec-abc"},
 	} {

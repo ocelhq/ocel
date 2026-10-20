@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
@@ -78,7 +79,7 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 }
 
 func newTestRouter(f *fakeAWS) Router {
-	r := NewRouter(f.clients)
+	r := NewRouter(string(provider.DefaultNamespace), f.clients)
 	r.pause = func(context.Context, time.Duration) error { return nil }
 	return r
 }

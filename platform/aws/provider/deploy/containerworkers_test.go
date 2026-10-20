@@ -296,7 +296,7 @@ func TestTheContainersPartIsKeptWhileAContainerWorkersStackRunsInItsCluster(t *t
 		t.Fatalf("let go of the app's own hold: %v", err)
 	}
 
-	part, present, err := containers.ReadPart(ctx, store, "us-east-1", environment.TierProduction)
+	part, present, err := containers.ReadPart(ctx, store, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present {
 		t.Fatalf("containers.ReadPart() = %v, %v, want the containers part while the workers' services run in its cluster", present, err)
 	}
@@ -426,7 +426,7 @@ func TestProvisioningAContainerAppThatOnlyHostsItsWorkerReturnsTheWorkerAloneAnd
 	if len(result.Containers) != 1 || result.Containers[0].Name != resources.WorkerName("web") || result.Containers[0].URL != "" {
 		t.Errorf("Containers = %+v, want the worker alone, with no URL", result.Containers)
 	}
-	part, present, err := containers.ReadPart(context.Background(), store, "us-east-1", environment.TierProduction)
+	part, present, err := containers.ReadPart(context.Background(), store, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present || !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
 		t.Errorf("containers part = %+v, %v, %v, want it added and used by %s: its worker's service runs in the cluster", part, present, err, spec.Ref.Project)
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -180,11 +181,11 @@ func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersClusterT
 			if got := templateStrings(st.Action); !slices.Equal(got, []string{"ecs:DescribeServices", "ecs:UpdateService"}) {
 				t.Errorf("ecs actions %v, want reading a service and setting its task count and nothing else", got)
 			}
-			if want := "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(tier) + "/" + iam.AppScopePrefix + "*"; string(st.Resource) != want {
+			if want := "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(string(defaultNamespace), tier) + "/" + naming.AppFence(string(defaultNamespace)) + "*"; string(st.Resource) != want {
 				t.Errorf("ecs is admitted on %q, want %q: this tier's cluster and the app scope alone", st.Resource, want)
 			}
 			equals, _ := st.Condition["StringEquals"].(map[string]any)
-			if equals["aws:ResourceTag/"+iam.ManagedByTagKey] != iam.ManagedByTagValue {
+			if equals["aws:ResourceTag/"+iam.ManagedByTagKey] != string(defaultNamespace) {
 				t.Errorf("ecs is admitted under %v, want it pinned to services Ocel tagged", st.Condition)
 			}
 		})

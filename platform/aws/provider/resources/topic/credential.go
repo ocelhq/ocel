@@ -6,7 +6,7 @@ func credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"sqs:CreateQueue", "sqs:TagQueue"},
-			Resources: []string{iam.AppQueueARN},
+			Resources: []string{s.AppQueueARN()},
 			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
@@ -18,12 +18,12 @@ func credential(s iam.Scope) []iam.Statement {
 				"sqs:SetQueueAttributes",
 				"sqs:UntagQueue",
 			},
-			Resources: []string{iam.AppQueueARN},
+			Resources: []string{s.AppQueueARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"sns:CreateTopic", "sns:TagResource"},
-			Resources: []string{iam.AppTopicARN},
+			Resources: []string{s.AppTopicARN()},
 			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
@@ -35,7 +35,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"sns:Subscribe",
 				"sns:UntagResource",
 			},
-			Resources: []string{iam.AppTopicARN},
+			Resources: []string{s.AppTopicARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
@@ -44,7 +44,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"sns:SetSubscriptionAttributes",
 				"sns:Unsubscribe",
 			},
-			Resources: []string{iam.AppSubscriptionARN},
+			Resources: []string{s.AppSubscriptionARN()},
 			Condition: s.TaggedOnlyAsItsTier(),
 		},
 	}

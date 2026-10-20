@@ -5,25 +5,34 @@ import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 func credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
-			Actions:   []string{"s3:CreateBucket"},
-			Resources: []string{s.Buckets()},
-			Condition: iam.InCallerAccount(),
+			Actions:   []string{"s3:CreateBucket", "s3:TagResource"},
+			Resources: []string{s.AppBucketARN()},
+			Condition: iam.MergeConditions(iam.InCallerAccount(), s.TaggedOnCreateForItsTier(), s.UnevaluatedOrMadeByItsStacks()),
 		},
 		{
 			Actions: []string{
-				"s3:DeleteBucket",
 				"s3:GetAccelerateConfiguration",
 				"s3:GetBucket*",
 				"s3:GetEncryptionConfiguration",
 				"s3:GetLifecycleConfiguration",
 				"s3:GetReplicationConfiguration",
+				"s3:ListBucket",
+				"s3:ListTagsForResource",
+				"s3:PutBucketAbac",
+			},
+			Resources: []string{s.AppBucketARN()},
+			Condition: iam.MergeConditions(iam.InCallerAccount(), s.UnevaluatedOrMadeByItsStacks()),
+		},
+		{
+			Actions: []string{
+				"s3:DeleteBucket",
 				"s3:PutBucketCORS",
 				"s3:PutBucketNotification",
 				"s3:PutBucketPublicAccessBlock",
-				"s3:PutBucketTagging",
+				"s3:UntagResource",
 			},
-			Resources: []string{s.Buckets()},
-			Condition: iam.InCallerAccount(),
+			Resources: []string{s.AppBucketARN()},
+			Condition: iam.MergeConditions(iam.InCallerAccount(), s.TaggedByOcelForItsTier()),
 		},
 	}
 }

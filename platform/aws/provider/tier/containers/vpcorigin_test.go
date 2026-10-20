@@ -2,6 +2,7 @@ package containers
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -18,8 +19,9 @@ type fakeVPCOrigin struct {
 }
 
 type fakeVPCOrigins struct {
-	origins []fakeVPCOrigin
-	deleted []string
+	origins  []fakeVPCOrigin
+	deleted  []string
+	readable string
 }
 
 func (f *fakeVPCOrigins) ListVpcOrigins(_ context.Context, in *cloudfront.ListVpcOriginsInput, _ ...func(*cloudfront.Options)) (*cloudfront.ListVpcOriginsOutput, error) {
@@ -64,6 +66,9 @@ func (f *fakeVPCOrigins) ListTagsForResource(_ context.Context, in *cloudfront.L
 		if aws.ToString(origin.summary.Arn) != aws.ToString(in.Resource) {
 			continue
 		}
+		if f.readable != "" && origin.tags["ocel:managed-by"] != f.readable {
+			return nil, errors.New("AccessDenied: the credential reads only its own namespace's VPC origins")
+		}
 		var items []cftypes.Tag
 		for key, value := range origin.tags {
 			items = append(items, cftypes.Tag{Key: aws.String(key), Value: aws.String(value)})
@@ -89,18 +94,18 @@ func TestADeployReclaimsEveryFailedVPCOriginTaggedAsItsStacks(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	ours := stackTags(tier)
+	ours := stackTags("ocel", tier)
 	api := &fakeVPCOrigins{origins: []fakeVPCOrigin{
 		vpcOrigin("vo_other", "someone-elses-origin", "Failed", nil),
-		vpcOrigin("vo_failed", nameFor(tier, "0a1b2c3d"), "Failed", ours),
-		vpcOrigin("vo_older", nameFor(tier), "Failed", ours),
+		vpcOrigin("vo_failed", nameFor("ocel", tier, "0a1b2c"), "Failed", ours),
+		vpcOrigin("vo_retried", nameFor("ocel", tier, "3d4e5f"), "Failed", ours),
 	}}
 
-	if err := reclaimFailedVPCOrigins(context.Background(), api, tier, nil); err != nil {
+	if err := reclaimFailedVPCOrigins(context.Background(), api, "ocel", tier, nil); err != nil {
 		t.Fatalf("reclaimFailedVPCOrigins() = %v", err)
 	}
-	if !slices.Equal(api.deleted, []string{"vo_failed", "vo_older"}) {
-		t.Errorf("deleted %v, want vo_failed and vo_older: a failed origin serves nothing and Pulumi does not record it, so nothing else takes it down", api.deleted)
+	if !slices.Equal(api.deleted, []string{"vo_failed", "vo_retried"}) {
+		t.Errorf("deleted %v, want vo_failed and vo_retried: a failed origin serves nothing and Pulumi does not record it, so nothing else takes it down", api.deleted)
 	}
 }
 
@@ -108,19 +113,37 @@ func TestARetriedDeployLeavesEveryVPCOriginItCannotProveIsItsOwnFailedOne(t *tes
 	t.Parallel()
 
 	tier := environment.TierProduction
-	ours := stackTags(tier)
+	ours := stackTags("ocel", tier)
 	untagged := map[string]string{}
-	sibling := stackTags(environment.TierPreview)
+	sibling := stackTags("ocel", environment.TierPreview)
 	api := &fakeVPCOrigins{origins: []fakeVPCOrigin{
-		vpcOrigin("vo_deployed", nameFor(tier), "Deployed", ours),
-		vpcOrigin("vo_untagged", nameFor(tier), "Failed", untagged),
-		vpcOrigin("vo_sibling", nameFor(tier), "Failed", sibling),
+		vpcOrigin("vo_deployed", nameFor("ocel", tier, "0a1b2c"), "Deployed", ours),
+		vpcOrigin("vo_untagged", nameFor("ocel", tier, "3d4e5f"), "Failed", untagged),
+		vpcOrigin("vo_sibling", nameFor("ocel", tier, "6g7h8i"), "Failed", sibling),
 	}}
 
-	if err := reclaimFailedVPCOrigins(context.Background(), api, tier, nil); err != nil {
+	if err := reclaimFailedVPCOrigins(context.Background(), api, "ocel", tier, nil); err != nil {
 		t.Fatalf("reclaimFailedVPCOrigins() = %v", err)
 	}
 	if len(api.deleted) != 0 {
 		t.Errorf("deleted %v, want none: a deployed origin serves the tier, and one not tagged as this stack's is not Ocel's to take", api.deleted)
+	}
+}
+
+func TestARetriedDeployReadsNoOtherNamespacesFailedVPCOrigin(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	api := &fakeVPCOrigins{readable: "ocel", origins: []fakeVPCOrigin{
+		vpcOrigin("vo_neighbour", nameFor("acme", tier, "0a1b2c"), "Failed", stackTags("acme", tier)),
+		vpcOrigin("vo_foreign", "someone-elses-origin", "Failed", nil),
+		vpcOrigin("vo_failed", nameFor("ocel", tier, "3d4e5f"), "Failed", stackTags("ocel", tier)),
+	}}
+
+	if err := reclaimFailedVPCOrigins(context.Background(), api, "ocel", tier, nil); err != nil {
+		t.Fatalf("reclaimFailedVPCOrigins() = %v, want the namespace's own failed origin reclaimed: its credential is denied the tags of every origin another namespace or nothing of Ocel's tagged", err)
+	}
+	if !slices.Equal(api.deleted, []string{"vo_failed"}) {
+		t.Errorf("deleted %v, want vo_failed alone", api.deleted)
 	}
 }

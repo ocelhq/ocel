@@ -2,6 +2,7 @@ package account
 
 import (
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -129,9 +130,9 @@ func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string)
 				appBoundaryKeyStatement(ns, tier, broughtKey),
 				{
 					Actions:   []string{"ecs:DescribeServices", "ecs:UpdateService"},
-					Resources: []string{appWorkerServiceARN(tier)},
+					Resources: []string{appWorkerServiceARN(ns, tier)},
 					Condition: map[string]any{
-						"StringEquals": map[string]any{"aws:ResourceTag/" + iam.ManagedByTagKey: iam.ManagedByTagValue},
+						"StringEquals": map[string]any{"aws:ResourceTag/" + iam.ManagedByTagKey: string(ns)},
 					},
 				},
 				{Actions: []string{"ecr:GetAuthorizationToken"}, Resources: []string{iam.AnyResource}},
@@ -144,8 +145,8 @@ func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string)
 	}
 }
 
-func appWorkerServiceARN(tier environment.Tier) string {
-	return "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(tier) + "/" + iam.AppScopePrefix + "*"
+func appWorkerServiceARN(ns Namespace, tier environment.Tier) string {
+	return "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(string(ns), tier) + "/" + naming.AppFence(string(ns)) + "*"
 }
 
 func appBoundaryOutput() cfn.Output {

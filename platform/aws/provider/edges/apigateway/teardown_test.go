@@ -97,7 +97,7 @@ func TestDestroyReclaimsTheRestAPIThisStackRecorded(t *testing.T) {
 	if api == nil {
 		t.Fatalf("Reconcile created no API named %s", productionAPIName())
 	}
-	api.name = "legacy--" + conformanceSlug + "--production"
+	api.name = "legacy--" + conformanceSlug + "--prod"
 
 	if err := stack.Destroy(ctx); err != nil {
 		t.Fatalf("Destroy: %v", err)

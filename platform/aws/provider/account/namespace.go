@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -60,7 +61,7 @@ func (n Namespace) EdgeUserNameFor(tier environment.Tier) (string, error) {
 }
 
 func (n Namespace) AppBoundaryNameFor(tier environment.Tier) string {
-	return suffixed(tier, string(n)+"-app-boundary")
+	return suffixed(tier, string(n)+"-boundary")
 }
 
 func (n Namespace) OriginSecretParamFor(tier environment.Tier) (string, error) {
@@ -87,15 +88,15 @@ func (n Namespace) EdgeParamPrefix(tier environment.Tier, kind edge.Kind) (strin
 }
 
 func (n Namespace) variablesKeyAliasFor(tier environment.Tier) string {
-	return "alias/" + string(n) + "-variables-" + string(tier)
+	return "alias/" + string(n) + "-variables-" + naming.TierWord(tier)
 }
 
 func (n Namespace) bootstrapRolePathFor(tier environment.Tier) string {
-	return "/" + string(n) + "/" + string(tier) + "/bootstrap/"
+	return "/" + string(n) + "/" + naming.TierWord(tier) + "/bootstrap/"
 }
 
 func (n Namespace) AppRolePathFor(tier environment.Tier) string {
-	return "/" + string(n) + "/" + string(tier) + "/app/"
+	return "/" + string(n) + "/" + naming.TierWord(tier) + "/app/"
 }
 
 func (n Namespace) EdgeInvokeRoleName(tier environment.Tier) string {

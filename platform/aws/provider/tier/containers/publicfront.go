@@ -20,7 +20,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -43,8 +42,8 @@ func renderLivenessSource() string {
 }
 
 func (w *work) createPublicSecurityGroup(ctx *pulumi.Context, vpc string, tags pulumi.StringMap) (*ec2.SecurityGroup, error) {
-	return ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "public", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(nameFor(w.tier, "public")),
+	return ec2.NewSecurityGroup(ctx, publicGroupName(w.namespace, w.tier), &ec2.SecurityGroupArgs{
+		Name:        pulumi.String(publicGroupName(w.namespace, w.tier)),
 		Description: pulumi.String("Ocel: the load balancer the edge forwards the hostnames of the " + string(w.tier) + " class to"),
 		VpcId:       pulumi.String(vpc),
 		Ingress: ec2.SecurityGroupIngressArray{
@@ -67,17 +66,17 @@ func (w *work) createPublicSecurityGroup(ctx *pulumi.Context, vpc string, tags p
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),
 			CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
 		}},
-		Tags: tags,
+		Tags: namedTags(tags, publicGroupName(w.namespace, w.tier)),
 	})
 }
 
 func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, subnets []string, tags pulumi.StringMap) error {
-	name := awsports.PublicBalancerName(w.tier)
+	name := awsports.PublicBalancerName(w.namespace, w.tier)
 	certificate, key, err := mintDefaultCertificate(name)
 	if err != nil {
 		return err
 	}
-	fallback, err := acm.NewCertificate(ctx, naming.ResourceID(naming.KindService, "public", "certificate"), &acm.CertificateArgs{
+	fallback, err := acm.NewCertificate(ctx, name+partSeparator+certificateWord, &acm.CertificateArgs{
 		CertificateBody: pulumi.String(certificate),
 		PrivateKey:      pulumi.ToSecret(pulumi.String(key)).(pulumi.StringOutput),
 		Tags:            tags,
@@ -85,7 +84,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	balancer, err := lb.NewLoadBalancer(ctx, naming.ResourceID(naming.KindService, "public"), &lb.LoadBalancerArgs{
+	balancer, err := lb.NewLoadBalancer(ctx, name, &lb.LoadBalancerArgs{
 		Name:             pulumi.String(name),
 		LoadBalancerType: pulumi.String("application"),
 		Internal:         pulumi.Bool(false),
@@ -96,7 +95,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	listener, err := lb.NewListener(ctx, naming.ResourceID(naming.KindService, "public", "listener"), &lb.ListenerArgs{
+	listener, err := lb.NewListener(ctx, name+partSeparator+httpsWord, &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
 		Port:            pulumi.Int(awsports.PublicListenerPort),
 		Protocol:        pulumi.String("HTTPS"),
@@ -115,7 +114,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	if _, err := lb.NewListener(ctx, naming.ResourceID(naming.KindService, "public", "redirect"), &lb.ListenerArgs{
+	if _, err := lb.NewListener(ctx, name+partSeparator+httpWord, &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
 		Port:            pulumi.Int(originListenerPort),
 		Protocol:        pulumi.String("HTTP"),
@@ -131,7 +130,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	}); err != nil {
 		return err
 	}
-	if err := w.runLiveness(ctx, listener, tags); err != nil {
+	if err := w.runLiveness(ctx, name, listener, tags); err != nil {
 		return err
 	}
 	ctx.Export(outputKeyPublicListener, listener.Arn)
@@ -139,9 +138,10 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	return nil
 }
 
-func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulumi.StringMap) error {
-	role, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, "public", "liveness"), &awsiam.RoleArgs{
-		NamePrefix:          pulumi.String(nameFor(w.tier, "live") + naming.WordSeparator),
+func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Listener, tags pulumi.StringMap) error {
+	liveness, targets := livenessName(w.namespace, w.tier), naming.Join(naming.WordSeparator, balancer, targetGroupWord)
+	role, err := awsiam.NewRole(ctx, liveness, &awsiam.RoleArgs{
+		Name:                pulumi.String(liveness),
 		Description:         pulumi.String("Ocel: the role the public front's liveness answer runs as in the " + string(w.tier) + " tier"),
 		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(lambdaPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
@@ -151,11 +151,12 @@ func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulu
 	if err != nil {
 		return err
 	}
-	function, err := lambda.NewFunction(ctx, naming.ResourceID(naming.KindService, "public", "liveness"), &lambda.FunctionArgs{
-		Name:    pulumi.String(nameLivenessFunction(w.tier)),
-		Runtime: pulumi.String(component.LambdaNodeRuntime),
-		Handler: pulumi.String("index.handler"),
-		Role:    role.Arn,
+	function, err := lambda.NewFunction(ctx, liveness, &lambda.FunctionArgs{
+		Name:        pulumi.String(liveness),
+		Description: pulumi.String("Ocel: answers the liveness probe on the public load balancer of the " + string(w.tier) + " tier"),
+		Runtime:     pulumi.String(component.LambdaNodeRuntime),
+		Handler:     pulumi.String("index.handler"),
+		Role:        role.Arn,
 		Code: pulumi.NewAssetArchive(map[string]any{
 			"index.mjs": pulumi.NewStringAsset(renderLivenessSource()),
 		}),
@@ -164,15 +165,15 @@ func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulu
 	if err != nil {
 		return err
 	}
-	group, err := lb.NewTargetGroup(ctx, naming.ResourceID(naming.KindService, "public", "liveness", "targets"), &lb.TargetGroupArgs{
-		NamePrefix: pulumi.String(TargetGroupNamePrefix),
+	group, err := lb.NewTargetGroup(ctx, targets, &lb.TargetGroupArgs{
+		Name:       pulumi.String(targets),
 		TargetType: pulumi.String("lambda"),
 		Tags:       tags,
 	})
 	if err != nil {
 		return err
 	}
-	invoke, err := lambda.NewPermission(ctx, naming.ResourceID(naming.KindService, "public", "liveness", "invoke"), &lambda.PermissionArgs{
+	invoke, err := lambda.NewPermission(ctx, liveness+partSeparator+invokeWord, &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  function.Name,
 		Principal: pulumi.String(balancerPrincipal),
@@ -181,14 +182,14 @@ func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulu
 	if err != nil {
 		return err
 	}
-	if _, err := lb.NewTargetGroupAttachment(ctx, naming.ResourceID(naming.KindService, "public", "liveness", "target"), &lb.TargetGroupAttachmentArgs{
+	if _, err := lb.NewTargetGroupAttachment(ctx, targets+partSeparator+liveness, &lb.TargetGroupAttachmentArgs{
 		TargetGroupArn: group.Arn,
 		TargetId:       function.Arn,
 	}, pulumi.DependsOn([]pulumi.Resource{invoke})); err != nil {
 		return err
 	}
 	ctx.Export(outputKeyLivenessRole, role.Arn)
-	_, err = lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, "public", "liveness", "rule"), &lb.ListenerRuleArgs{
+	_, err = lb.NewListenerRule(ctx, naming.Join(partSeparator, balancer, httpsWord, livenessWord), &lb.ListenerRuleArgs{
 		ListenerArn: listener.Arn,
 		Priority:    pulumi.Int(livenessRulePriority),
 		Conditions: lb.ListenerRuleConditionArray{&lb.ListenerRuleConditionArgs{
@@ -201,10 +202,6 @@ func (w *work) runLiveness(ctx *pulumi.Context, listener *lb.Listener, tags pulu
 		Tags: tags,
 	})
 	return err
-}
-
-func nameLivenessFunction(tier environment.Tier) string {
-	return nameFor(tier, "liveness")
 }
 
 func nameCertificateHost(balancer string) string {

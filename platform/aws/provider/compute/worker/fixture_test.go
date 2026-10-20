@@ -69,6 +69,7 @@ func fixtureContainerInfra() containers.Infrastructure {
 func containerStackSpec(t *testing.T) (container.Target, provider.StackSpec) {
 	t.Helper()
 	at := container.Target{
+		Namespace:         "ocel",
 		Region:            "us-east-1",
 		AppBoundaryARN:    "arn:aws:iam::123456789012:policy/ocel-app-boundary",
 		AppRolePath:       componenttest.AppRolePath,
@@ -113,7 +114,7 @@ func definitionOf(at container.Target, spec provider.StackSpec) (*container.Defi
 }
 
 func targetOf(at container.Target) Target {
-	return Target{Tier: at.Tier, StateTable: at.StateTable}
+	return Target{Namespace: at.Namespace, Tier: at.Tier, StateTable: at.StateTable}
 }
 
 func hostingContainerWorkers(t *testing.T, workers ...provider.WorkerSpec) (container.Target, provider.StackSpec, *ContainerStack) {

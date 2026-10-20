@@ -176,7 +176,7 @@ func TestForwardSendsEachConnectionToItsEndpointOverASessionOfItsOwnFromTheLoopb
 		t.Fatalf("sessions opened = %+v, want one per connection", sessions.opened)
 	}
 	target := sessions.opened[0].target
-	if !strings.HasPrefix(target, "ecs:ocel-bastion-production_") {
+	if !strings.HasPrefix(target, "ecs:ocel-prod-bastion_") {
 		t.Errorf("session target = %q, want the bastion task", target)
 	}
 	counts := map[opened]int{}

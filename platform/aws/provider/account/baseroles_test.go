@@ -68,8 +68,8 @@ func TestTheCoreDeclaresTheTagInvalidatorRoleAtTheBootstrapRolePathUnderItsFixed
 		path string
 		name string
 	}{
-		{environment.TierProduction, "/ocel/production/bootstrap/", "ocel-invalidator"},
-		{environment.TierPreview, "/ocel/preview/bootstrap/", "ocel-invalidator-preview"},
+		{environment.TierProduction, "/ocel/prod/bootstrap/", "ocel-prod-invalidator"},
+		{environment.TierPreview, "/ocel/preview/bootstrap/", "ocel-preview-invalidator"},
 	} {
 		t.Run(string(tc.tier), func(t *testing.T) {
 			tmpl := coreRoles(t, tc.tier)
@@ -212,8 +212,8 @@ func TestTheTagInvalidatorRoleSendsOnlyToItsOwnTiersDeadLetterQueue(t *testing.T
 		tier         environment.Tier
 		queue, other string
 	}{
-		{environment.TierProduction, "ocel-app-ocel-invalidator", "ocel-app-ocel-invalidator-preview"},
-		{environment.TierPreview, "ocel-app-ocel-invalidator-preview", "ocel-app-ocel-invalidator"},
+		{environment.TierProduction, "ocel-prod-invalidator", "ocel-preview-invalidator"},
+		{environment.TierPreview, "ocel-preview-invalidator", "ocel-prod-invalidator"},
 	} {
 		t.Run(string(tc.tier), func(t *testing.T) {
 			statements := roleStatements(t, coreRoles(t, tc.tier), "TagInvalidatorRole")

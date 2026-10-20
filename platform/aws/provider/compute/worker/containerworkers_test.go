@@ -199,7 +199,7 @@ func TestAContainerWorkersTaskRoleReachesOnlyTheQueuesItServesAndItsOwnService(t
 		"sqs:ReceiveMessage",
 		"sqs:ChangeMessageVisibility",
 		"sqs:GetQueueAttributes",
-		"service/ocel-containers-production/" + container.WorkerServiceName("shop", "prod", "web", "media"),
+		"service/ocel-prod-containers/" + container.WorkerServiceName("shop", "prod", "web", "media"),
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the worker's policies %s name no %s", all, want)

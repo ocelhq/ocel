@@ -72,6 +72,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	}
 
 	cfg := deploy.Config{
+		Namespace:      string(p.namespace),
 		Region:         p.aws.Region,
 		BackendURL:     stateBackendURL(deployed.StateBucket, scope.Slug),
 		Passphrase:     params.Passphrase,

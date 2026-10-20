@@ -12,8 +12,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type tailRun struct {
@@ -322,9 +320,9 @@ func TestTailEmitsEachGroupsEventsLabelledByItsSource(t *testing.T) {
 	fake.add("/ocel/containers/production", storedEvent{Stream: "svc-c/app/t1", Time: addToEpoch(5), Message: "svc 5\n"})
 
 	run := runTail(t, logs, lambdas, Query{
-		Since:   epoch,
-		Sources: []Source{{Function: "web-fn", Label: "web"}, {Function: "api-fn", Label: "api"}, {Container: "svc-c", Label: "svc"}},
-		Tier:    environment.TierProduction,
+		Since:          epoch,
+		Sources:        []Source{{Function: "web-fn", Label: "web"}, {Function: "api-fn", Label: "api"}, {Container: "svc-c", Label: "svc"}},
+		ContainerGroup: "/ocel/containers/production",
 	}, time.Second, func() { fake.add("/aws/lambda/api-fn-2", webLine(6, "api 6")) })
 
 	if got, want := run.batchTexts(), "web 1,web 4|api 2,api 3|svc 5|api 6"; got != want {

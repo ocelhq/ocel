@@ -3,10 +3,12 @@ package iam
 import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 type Scope struct {
-	Tier environment.Tier
+	Namespace string
+	Tier      environment.Tier
 
 	VariablesKeyAlias   string
 	BroughtVariablesKey string
@@ -26,12 +28,15 @@ type Scope struct {
 	RuntimeLayers        []string
 	RuntimeLayerVersions []string
 
-	BastionRole            string
-	EnvSourceSyncFunction  string
-	TagInvalidatorRole     string
-	TagInvalidatorFunction string
-	EdgeFunctions          []string
-	EdgeUser               string
+	BastionRole                string
+	EnvSourceSyncFunction      string
+	EnvSourceSyncScheduleGroup string
+	EnvSourceSyncSchedule      string
+	TagInvalidatorQueue        string
+	TagInvalidatorRole         string
+	TagInvalidatorFunction     string
+	EdgeFunctions              []string
+	EdgeUser                   string
 
 	PassphraseParameter string
 	OriginParameter     string
@@ -46,6 +51,93 @@ func (s Scope) AliasedAsItsVariablesKey() map[string]any {
 
 func (s Scope) WithinAppBoundary() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"iam:PermissionsBoundary": s.AppBoundary}}
+}
+
+func (s Scope) appFenced(arnPrefix, suffix string) string {
+	return arnPrefix + naming.AppFence(s.Namespace) + "*" + suffix
+}
+
+func (s Scope) AppBucketARN() string { return s.appFenced("arn:aws:s3:::", "") }
+
+func (s Scope) AppWorkerFunctionARN() string { return s.appFenced("arn:aws:lambda:*:*:function:", "") }
+
+func (s Scope) AppClusterARN() string { return s.appFenced("arn:aws:rds:*:*:cluster:", "") }
+
+func (s Scope) AppInstanceARN() string { return s.appFenced("arn:aws:rds:*:*:db:", "") }
+
+func (s Scope) AppSubnetGroupARN() string { return s.appFenced("arn:aws:rds:*:*:subgrp:", "") }
+
+func (s Scope) AppClusterSnapshotARN() string {
+	return s.appFenced("arn:aws:rds:*:*:cluster-snapshot:", "")
+}
+
+func (s Scope) AppQueueARN() string { return s.appFenced("arn:aws:sqs:*:*:", "") }
+
+func (s Scope) AppTopicARN() string { return s.appFenced("arn:aws:sns:*:*:", "") }
+
+func (s Scope) AppSubscriptionARN() string { return s.appFenced("arn:aws:sns:*:*:", ":*") }
+
+func (s Scope) AppScheduleGroupARN() string {
+	return s.appFenced("arn:aws:scheduler:*:*:schedule-group/", "")
+}
+
+func (s Scope) AppScheduleARN() string { return s.appFenced("arn:aws:scheduler:*:*:schedule/", "/*") }
+
+func (s Scope) AppReplicationGroupARN() string {
+	return s.appFenced("arn:aws:elasticache:*:*:replicationgroup:", "")
+}
+
+func (s Scope) AppCacheClusterARN() string {
+	return s.appFenced("arn:aws:elasticache:*:*:cluster:", "")
+}
+
+func (s Scope) AppCacheParameterARN() string {
+	return s.appFenced("arn:aws:elasticache:*:*:parametergroup:", "")
+}
+
+func (s Scope) AppCacheSubnetGroupARN() string {
+	return s.appFenced("arn:aws:elasticache:*:*:subnetgroup:", "")
+}
+
+func (s Scope) AppAlarmARN() string { return s.appFenced("arn:aws:cloudwatch:*:*:alarm:", "") }
+
+func (s Scope) containerCluster() string { return awsports.ContainerClusterName(s.Namespace, s.Tier) }
+
+func (s Scope) publicBalancer() string { return awsports.PublicBalancerName(s.Namespace, s.Tier) }
+
+func (s Scope) ContainerClusterARN() string { return "arn:aws:ecs:*:*:cluster/" + s.containerCluster() }
+
+func (s Scope) ContainerServiceARN() string {
+	return "arn:aws:ecs:*:*:service/" + s.containerCluster() + "/*"
+}
+
+func (s Scope) ContainerLogGroupARNs() []string {
+	group := "arn:aws:logs:*:*:log-group:" + awsports.ContainerLogGroupName(s.Namespace, s.Tier)
+	return []string{group, group + ":*"}
+}
+
+func (s Scope) ScalingAlarmARN() string {
+	return "arn:aws:cloudwatch:*:*:alarm:TargetTracking-service/" + s.containerCluster() + "/*"
+}
+
+func (s Scope) balancers(arnPrefix, suffix string) []string {
+	return []string{arnPrefix + s.containerCluster() + suffix, arnPrefix + s.publicBalancer() + suffix}
+}
+
+func (s Scope) ContainerBalancerARNs() []string {
+	return s.balancers("arn:aws:elasticloadbalancing:*:*:loadbalancer/app/", "/*")
+}
+
+func (s Scope) ContainerListenerARNs() []string {
+	return s.balancers("arn:aws:elasticloadbalancing:*:*:listener/app/", "/*/*")
+}
+
+func (s Scope) ContainerRuleARNs() []string {
+	return s.balancers("arn:aws:elasticloadbalancing:*:*:listener-rule/app/", "/*/*/*")
+}
+
+func (s Scope) ContainerTrustStoreARN() string {
+	return "arn:aws:elasticloadbalancing:*:*:truststore/" + s.publicBalancer() + "/*"
 }
 
 func (s Scope) MadeByItsStacks() map[string]any {
@@ -68,11 +160,11 @@ func (s Scope) RetaggedOnlyAsItsTier() map[string]any {
 }
 
 func (s Scope) TaggedOnCreateForItsTier() map[string]any {
-	return MergeConditions(TaggedOnCreate(), s.MadeForItsTier())
+	return MergeConditions(s.TaggedOnCreate(), s.MadeForItsTier())
 }
 
 func (s Scope) TaggedByOcelForItsTier() map[string]any {
-	return MergeConditions(TaggedByOcel(), s.MadeByItsStacks())
+	return MergeConditions(s.TaggedByOcel(), s.MadeByItsStacks())
 }
 
 func (s Scope) RetaggedByOcelOnlyAsItsTier() map[string]any {
@@ -87,46 +179,44 @@ func InCallerAccount() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceAccount": CallerAccount}}
 }
 
-func TaggedOnCreate() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + ManagedByTagKey: ManagedByTagValue}}
+func (s Scope) TaggedOnCreate() map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + ManagedByTagKey: s.Namespace}}
 }
 
-func TaggedByOcel() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + ManagedByTagKey: ManagedByTagValue}}
+func (s Scope) TaggedByOcel() map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + ManagedByTagKey: s.Namespace}}
 }
 
-func OfAppWorker() map[string]any {
-	return map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": AppWorkerFunctionARN}}
+func (s Scope) OfAppWorker() map[string]any {
+	return map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": s.AppWorkerFunctionARN()}}
 }
 
 func KeyPairSuppliedByCaller() map[string]any {
 	return map[string]any{"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}}
 }
 
-func TierScopePrefix(tier environment.Tier) string { return AppScopePrefix + string(tier) + "-" }
-
-func (s Scope) Buckets() string { return "arn:aws:s3:::" + TierScopePrefix(s.Tier) + "*" }
-
-func (s Scope) Clusters() string { return "arn:aws:rds:*:*:cluster:" + TierScopePrefix(s.Tier) + "*" }
-
-func (s Scope) ClusterSnapshots() string {
-	return "arn:aws:rds:*:*:cluster-snapshot:" + TierScopePrefix(s.Tier) + "*"
+func TierScopePrefix(tier environment.Tier) string {
+	return awsports.AppScope + "-" + string(tier) + "-"
 }
 
 func (s Scope) ManagedByItsClusters() map[string]any {
-	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + ManagedSecretClusterTagKey: s.Clusters()}}
+	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + ManagedSecretClusterTagKey: s.AppClusterARN()}}
+}
+
+func (s Scope) UnevaluatedOrMadeByItsStacks() map[string]any {
+	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 
 func (s Scope) TaggedOnCreateOnlyForItsTier() map[string]any {
 	return MergeConditions(s.TaggedOnCreateForItsTier(), s.TaggedOnlyAsItsTier())
 }
 
-func AttachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
+func (s Scope) AttachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 	condition := map[string]any{
 		"ArnEquals": map[string]any{"iam:PolicyARN": []string{LambdaBasicExecutionPolicyARN, LambdaVPCAccessPolicyARN, ECSTaskExecutionPolicyARN}},
 	}
 	if resourceTagged {
-		return MergeConditions(condition, TaggedByOcel())
+		return MergeConditions(condition, s.TaggedByOcel())
 	}
 	return condition
 }

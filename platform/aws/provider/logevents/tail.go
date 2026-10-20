@@ -114,7 +114,7 @@ func refuseInvalidTailQuery(query Query) error {
 
 func findTailedGroups(ctx context.Context, lambdas *lambda.Client, query Query, found []*tailedGroup) ([]*tailedGroup, error) {
 	for _, source := range query.Sources[len(found):] {
-		group, err := findGroup(ctx, lambdas, source, query.Tier)
+		group, err := findGroup(ctx, lambdas, source, query.ContainerGroup)
 		if err != nil {
 			return found, err
 		}

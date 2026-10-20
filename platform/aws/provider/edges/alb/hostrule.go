@@ -64,7 +64,7 @@ func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname str
 			}},
 			Actions: actions,
 			Tags: []elbv2types.Tag{
-				{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")},
+				{Key: aws.String("ocel:managed-by"), Value: aws.String(s.namespace)},
 				{Key: aws.String("ocel:project"), Value: aws.String(s.state.Slug)},
 			},
 		})
@@ -162,7 +162,7 @@ func (s *stack) deleteRule(ctx context.Context, c Clients, rule string) error {
 	return nil
 }
 
-func readTargetGroups(ctx context.Context, c Clients, tier environment.Tier, records map[string]router.ReleaseRecord) (map[string]string, error) {
+func readTargetGroups(ctx context.Context, c Clients, namespace string, tier environment.Tier, records map[string]router.ReleaseRecord) (map[string]string, error) {
 	byService := map[string]string{}
 	for _, app := range slices.Sorted(maps.Keys(records)) {
 		physical := records[app].Physical
@@ -174,7 +174,7 @@ func readTargetGroups(ctx context.Context, c Clients, tier environment.Tier, rec
 	groups := make(map[string]string, len(records))
 	for batch := range slices.Chunk(slices.Sorted(maps.Keys(byService)), servicesPerRead) {
 		read, err := c.Services.DescribeServices(ctx, &ecs.DescribeServicesInput{
-			Cluster:  aws.String(awsports.ContainerClusterName(tier)),
+			Cluster:  aws.String(awsports.ContainerClusterName(namespace, tier)),
 			Services: batch,
 		})
 		if err != nil {

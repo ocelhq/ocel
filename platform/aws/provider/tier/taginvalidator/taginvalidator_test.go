@@ -133,12 +133,12 @@ func TestEnsureAgainUpdatesTheOneMappingItMade(t *testing.T) {
 	}
 }
 
-func TestNamesKeepTheQueueUnderTheAppScopeTheDeployCredentialMakesQueuesIn(t *testing.T) {
+func TestNamesKeepTheInvalidatorAndItsQueueOutOfTheAppFence(t *testing.T) {
 	t.Parallel()
 	names := taginvalidator.NamesFor("ocel", environment.TierPreview)
 
-	if names.Queue != "ocel-app-ocel-invalidator-preview" || names.Function != "ocel-invalidator-preview" {
-		t.Errorf("NamesFor() = %+v, want the preview invalidator and its queue under ocel-app-", names)
+	if names.Queue != "ocel-preview-invalidator" || names.Function != "ocel-preview-invalidator" {
+		t.Errorf("NamesFor() = %+v, want the preview invalidator and its queue named ocel-preview-invalidator, outside the ocel-app- fence of app resources", names)
 	}
 }
 

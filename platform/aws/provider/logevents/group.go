@@ -7,8 +7,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type logGroup struct {
@@ -18,14 +16,10 @@ type logGroup struct {
 	parseLine     func(message string) (event Event, keep bool)
 }
 
-func NameContainerGroup(tier environment.Tier) string {
-	return "/ocel/containers/" + string(tier)
-}
-
-func findGroup(ctx context.Context, lambdas *lambda.Client, source Source, tier environment.Tier) (logGroup, error) {
+func findGroup(ctx context.Context, lambdas *lambda.Client, source Source, containerGroup string) (logGroup, error) {
 	if source.Function == "" {
 		return logGroup{
-			name:          NameContainerGroup(tier),
+			name:          containerGroup,
 			streamPrefix:  aws.String(source.Container + "/"),
 			parseInstance: parseTaskID,
 			parseLine:     keepLine,

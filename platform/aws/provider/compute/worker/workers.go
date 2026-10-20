@@ -32,6 +32,7 @@ const (
 )
 
 type Target struct {
+	Namespace  string
 	Tier       environment.Tier
 	StateTable topic.StateTable
 }

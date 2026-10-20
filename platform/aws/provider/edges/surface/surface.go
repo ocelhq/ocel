@@ -10,7 +10,7 @@ import (
 )
 
 func Name(ns account.Namespace, slug string, tier environment.Tier, tail ...string) string {
-	return naming.Join(naming.FieldSeparator, append([]string{string(ns), slug, string(tier)}, tail...)...)
+	return naming.Join(naming.FieldSeparator, append([]string{string(ns), slug, naming.TierWord(tier)}, tail...)...)
 }
 
 func Fitted(max int, ns account.Namespace, slug string, tier environment.Tier, tail ...string) string {
@@ -22,7 +22,7 @@ func ProjectsNamed(ns account.Namespace, names []string, tier environment.Tier) 
 	var slugs []string
 	for _, name := range names {
 		fields := strings.Split(name, naming.FieldSeparator)
-		if len(fields) < 3 || fields[0] != string(ns) || fields[2] != string(tier) {
+		if len(fields) < 3 || fields[0] != string(ns) || fields[2] != naming.TierWord(tier) {
 			continue
 		}
 		if !slices.Contains(slugs, fields[1]) {

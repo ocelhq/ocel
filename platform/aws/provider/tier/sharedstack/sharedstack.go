@@ -33,6 +33,7 @@ type Owner struct {
 	KeyValues  records.Store
 	WrittenBy  provider.WrittenBy
 
+	Namespace      string
 	Region         string
 	Subnets        component.NetworkAPI
 	VPCOrigins     awsports.VPCOriginsAPI

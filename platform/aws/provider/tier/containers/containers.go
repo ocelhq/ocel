@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
@@ -42,6 +41,17 @@ const (
 	kindRole          = "AWS::IAM::Role"
 	kindCertificate   = "AWS::CertificateManager::Certificate"
 	kindFunction      = "AWS::Lambda::Function"
+
+	securityGroupWord = "sg"
+	executionWord     = "exec"
+	certificateWord   = "certificate"
+	httpWord          = "http"
+	httpsWord         = "https"
+	invokeWord        = "invoke"
+	partSeparator     = "/"
+	targetGroupWord   = "tg"
+	tasksWord         = "tasks"
+	livenessWord      = "liveness"
 )
 
 var Shared = sharedstack.Stack{
@@ -120,13 +130,33 @@ func StackRef(tier environment.Tier) provider.StackRef {
 	return provider.StackRef{Project: Slug, Tier: tier, Name: naming.InfraStack(string(tier))}
 }
 
-func nameFor(tier environment.Tier, parts ...string) string {
-	return naming.Join(naming.WordSeparator, append([]string{Slug, string(tier)}, parts...)...)
+func nameFor(namespace string, tier environment.Tier, parts ...string) string {
+	return naming.Join(naming.WordSeparator, append([]string{awsports.ContainerClusterName(namespace, tier)}, parts...)...)
 }
 
-func stackTags(tier environment.Tier) map[string]string {
+func frontGroupName(namespace string, tier environment.Tier) string {
+	return nameFor(namespace, tier, securityGroupWord)
+}
+
+func tasksGroupName(namespace string, tier environment.Tier) string {
+	return nameFor(namespace, tier, tasksWord, securityGroupWord)
+}
+
+func executionRoleName(namespace string, tier environment.Tier) string {
+	return nameFor(namespace, tier, executionWord)
+}
+
+func publicGroupName(namespace string, tier environment.Tier) string {
+	return naming.Join(naming.WordSeparator, awsports.PublicBalancerName(namespace, tier), securityGroupWord)
+}
+
+func livenessName(namespace string, tier environment.Tier) string {
+	return naming.Join(naming.WordSeparator, awsports.PublicBalancerName(namespace, tier), livenessWord)
+}
+
+func stackTags(namespace string, tier environment.Tier) map[string]string {
 	return map[string]string{
-		"ocel:managed-by":    "ocel",
+		"ocel:managed-by":    namespace,
 		"ocel:project":       Slug,
 		naming.EnvTierTagKey: string(tier),
 		"ocel:stack":         StackRef(tier).Name.String(),
@@ -205,7 +235,7 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 		if decoded, err = provision(ctx, owner, StackRef(tier), raised, progress); err != nil {
 			return nil, err
 		}
-		return listResources(tier, decoded), nil
+		return listResources(owner.Namespace, tier, decoded), nil
 	})
 	if err != nil {
 		return Infrastructure{}, err
@@ -222,11 +252,11 @@ func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackR
 		return Infrastructure{}, err
 	}
 	if owner.VPCOrigins != nil {
-		if err := reclaimFailedVPCOrigins(ctx, owner.VPCOrigins, tier, progress); err != nil {
+		if err := reclaimFailedVPCOrigins(ctx, owner.VPCOrigins, owner.Namespace, tier, progress); err != nil {
 			return Infrastructure{}, err
 		}
 	}
-	program := NewProgram(tier, owner.AppBoundaryARN, owner.AppRolePath, fronts)
+	program := NewProgram(owner.Namespace, tier, owner.AppBoundaryARN, owner.AppRolePath, fronts)
 	outputs, err := owner.Automation.Run(ctx, ref, program, provider.Lease{}, progress)
 	if err != nil {
 		return Infrastructure{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
@@ -297,7 +327,7 @@ func RefuseInUse(tier environment.Tier, users []string) error {
 		strings.Join(users, ", "), tier)
 }
 
-func ReadPart(ctx context.Context, store records.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+func ReadPart(ctx context.Context, store records.Store, namespace, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 	_, present, err := stackrecords.Read(ctx, store, tier, Slug, StackRef(tier).Name)
 	if err != nil || !present {
 		return provider.BootstrapPart{}, false, err
@@ -316,34 +346,34 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 		Current:   true,
 		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier, findFronts(tier, recorded.Resources))},
+		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier, findFronts(namespace, tier, recorded.Resources))},
 
 		RetiresWithLastUser: true,
 	}, true, nil
 }
 
-func listResources(tier environment.Tier, infra Infrastructure) []provider.PartResource {
+func listResources(namespace string, tier environment.Tier, infra Infrastructure) []provider.PartResource {
 	resources := []provider.PartResource{
-		{Kind: kindCluster, ID: nameFor(tier)},
-		{Kind: kindSecurityGroup, ID: nameFor(tier, "tasks")},
-		{Kind: kindLogGroup, ID: logevents.NameContainerGroup(tier)},
+		{Kind: kindCluster, ID: nameFor(namespace, tier)},
+		{Kind: kindSecurityGroup, ID: tasksGroupName(namespace, tier)},
+		{Kind: kindLogGroup, ID: awsports.ContainerLogGroupName(namespace, tier)},
 		{Kind: kindRole, ID: parseRoleName(infra.ExecutionRole)},
 	}
 	fronts := infra.Raised()
 	if fronts.Private {
 		resources = append(resources,
-			provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(tier)},
-			provider.PartResource{Kind: kindSecurityGroup, ID: nameFor(tier, "front")})
+			provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(namespace, tier)},
+			provider.PartResource{Kind: kindSecurityGroup, ID: frontGroupName(namespace, tier)})
 	}
 	if infra.VPCOrigin != "" {
 		resources = append(resources, provider.PartResource{Kind: kindVPCOrigin, ID: infra.VPCOrigin})
 	}
 	if fronts.Public {
 		resources = append(resources,
-			provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(tier)},
-			provider.PartResource{Kind: kindSecurityGroup, ID: nameFor(tier, "public")},
-			provider.PartResource{Kind: kindCertificate, ID: nameCertificateHost(awsports.PublicBalancerName(tier))},
-			provider.PartResource{Kind: kindFunction, ID: nameLivenessFunction(tier)})
+			provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(namespace, tier)},
+			provider.PartResource{Kind: kindSecurityGroup, ID: publicGroupName(namespace, tier)},
+			provider.PartResource{Kind: kindCertificate, ID: nameCertificateHost(awsports.PublicBalancerName(namespace, tier))},
+			provider.PartResource{Kind: kindFunction, ID: livenessName(namespace, tier)})
 		if infra.LivenessRole != "" {
 			resources = append(resources, provider.PartResource{Kind: kindRole, ID: parseRoleName(infra.LivenessRole)})
 		}
@@ -355,21 +385,21 @@ func parseRoleName(arn string) string {
 	return arn[strings.LastIndex(arn, "/")+1:]
 }
 
-func findFronts(tier environment.Tier, resources []provider.PartResource) Raised {
+func findFronts(namespace string, tier environment.Tier, resources []provider.PartResource) Raised {
 	return Raised{
-		Private: slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(tier)}),
-		Public:  slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(tier)}),
+		Private: slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: nameFor(namespace, tier)}),
+		Public:  slices.Contains(resources, provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(namespace, tier)}),
 	}
 }
 
-func Shape(tier environment.Tier, fronts Raised) []pricing.Shaped {
+func Shape(_ environment.Tier, fronts Raised) []pricing.Shaped {
 	shaped := []pricing.Shaped{
 		{Name: Slug, Type: component.TerraformECSCluster, Properties: map[string]any{}},
 	}
 	if fronts.Private {
 		shaped = append(shaped, pricing.Shaped{Name: Slug, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}})
 	}
-	shaped = append(shaped, pricing.Shaped{Name: Slug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": logRetentionDays, "name": logevents.NameContainerGroup(tier)}})
+	shaped = append(shaped, pricing.Shaped{Name: Slug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": logRetentionDays}})
 	if fronts.Public {
 		public := naming.Join(naming.WordSeparator, Slug, "public")
 		shaped = append(shaped,

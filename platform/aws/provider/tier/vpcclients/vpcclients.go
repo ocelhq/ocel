@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -24,8 +25,9 @@ const (
 
 	KindSecurityGroup = "AWS::EC2::SecurityGroup"
 
-	managedByTagKey   = "ocel:managed-by"
-	managedByTagValue = "ocel"
+	managedByTagKey = "ocel:managed-by"
+
+	clientsWord = "vpc-clients"
 )
 
 type API interface {
@@ -36,7 +38,7 @@ type API interface {
 }
 
 func NameFor(namespace string, tier environment.Tier) string {
-	return namespace + "-" + string(tier) + "-vpc-clients"
+	return awsports.TieredName(namespace, tier, clientsWord)
 }
 
 func Digest(namespace string, tier environment.Tier) string {
@@ -79,7 +81,7 @@ func Ensure(ctx context.Context, api API, namespace string, tier environment.Tie
 			ResourceType: ec2types.ResourceTypeSecurityGroup,
 			Tags: []ec2types.Tag{
 				{Key: aws.String("Name"), Value: aws.String(name)},
-				{Key: aws.String(managedByTagKey), Value: aws.String(managedByTagValue)},
+				{Key: aws.String(managedByTagKey), Value: aws.String(namespace)},
 				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))},
 			},
 		}},

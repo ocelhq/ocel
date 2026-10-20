@@ -7,9 +7,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func Describe(ctx context.Context, c Clients, tier environment.Tier) ([]provider.PartResource, bool, error) {
-	name := NameFor(tier)
-	found, err := c.findCluster(ctx, name)
+func Describe(ctx context.Context, c Clients, namespace string, tier environment.Tier) ([]provider.PartResource, bool, error) {
+	name := NameFor(namespace, tier)
+	found, err := c.findCluster(ctx, namespace, name)
 	if err != nil || !found {
 		return nil, false, err
 	}

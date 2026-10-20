@@ -26,6 +26,7 @@ import (
 )
 
 type Config struct {
+	Namespace     string
 	Region        string
 	BackendURL    string
 	Passphrase    string
@@ -119,6 +120,7 @@ func (c Config) functionClients() *function.Clients {
 
 func (c Config) containerTarget() container.Target {
 	return container.Target{
+		Namespace:            c.Namespace,
 		Tier:                 c.Tier,
 		Region:               c.Region,
 		Slug:                 c.Slug,
@@ -134,7 +136,7 @@ func (c Config) containerTarget() container.Target {
 }
 
 func (c Config) workerTarget() worker.Target {
-	return worker.Target{Tier: c.Tier, StateTable: c.stateTable()}
+	return worker.Target{Namespace: c.Namespace, Tier: c.Tier, StateTable: c.stateTable()}
 }
 
 func (c Config) buckets() site.Buckets {

@@ -38,10 +38,11 @@ type recorded struct {
 }
 
 type stack struct {
-	open     func(context.Context, environment.Tier) (Clients, error)
-	pause    func(context.Context, time.Duration) error
-	state    edge.StackState
-	recorded recorded
+	namespace string
+	open      func(context.Context, environment.Tier) (Clients, error)
+	pause     func(context.Context, time.Duration) error
+	state     edge.StackState
+	recorded  recorded
 }
 
 type publicListener struct {
@@ -61,7 +62,7 @@ func (s *stack) openClients(ctx context.Context) (Clients, error) {
 }
 
 func (s *stack) readPublicListener(ctx context.Context, c Clients) (publicListener, error) {
-	name := awsports.PublicBalancerName(s.state.Tier)
+	name := awsports.PublicBalancerName(s.namespace, s.state.Tier)
 	balancers, err := c.Balancers.DescribeLoadBalancers(ctx, &elbv2.DescribeLoadBalancersInput{Names: []string{name}})
 	var absent *elbv2types.LoadBalancerNotFoundException
 	switch {
@@ -222,7 +223,7 @@ func (s *stack) MovePointer(ctx context.Context, move router.PointerMove, _ prog
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
-	groups, err := readTargetGroups(ctx, c, s.state.Tier, move.Records)
+	groups, err := readTargetGroups(ctx, c, s.namespace, s.state.Tier, move.Records)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}

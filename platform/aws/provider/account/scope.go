@@ -25,6 +25,7 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 	sync := envsourcesync.NamesFor(string(n), tier)
 	invalidator := taginvalidator.NamesFor(string(n), tier)
 	s := iam.Scope{
+		Namespace:         string(n),
 		Tier:              tier,
 		VariablesKeyAlias: n.variablesKeyAliasFor(tier),
 		AppBoundary:       appBoundaryARNFor(n, tier),
@@ -36,10 +37,13 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + sync.ScheduleRole,
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + imageoptimizer.NamesFor(string(n), tier).Role,
 		},
-		BastionRole:            "arn:aws:iam::*:role/" + bastion.NameFor(tier),
-		EnvSourceSyncFunction:  "arn:aws:lambda:*:*:function:" + sync.Function,
-		TagInvalidatorRole:     "arn:aws:iam::*:role" + n.bootstrapRolePathFor(tier) + invalidator.Role,
-		TagInvalidatorFunction: "arn:aws:lambda:*:*:function:" + invalidator.Function,
+		BastionRole:                "arn:aws:iam::*:role/" + bastion.NameFor(string(n), tier),
+		EnvSourceSyncFunction:      "arn:aws:lambda:*:*:function:" + sync.Function,
+		EnvSourceSyncScheduleGroup: "arn:aws:scheduler:*:*:schedule-group/" + sync.ScheduleGroup,
+		EnvSourceSyncSchedule:      "arn:aws:scheduler:*:*:schedule/" + sync.ScheduleGroup + "/" + sync.Schedule,
+		TagInvalidatorQueue:        "arn:aws:sqs:*:*:" + invalidator.Queue,
+		TagInvalidatorRole:         "arn:aws:iam::*:role" + n.bootstrapRolePathFor(tier) + invalidator.Role,
+		TagInvalidatorFunction:     "arn:aws:lambda:*:*:function:" + invalidator.Function,
 		EdgeFunctions: []string{
 			iam.EdgeFunctionARNPrefix + n.EdgeResolverName(tier),
 			iam.EdgeFunctionARNPrefix + n.EdgeEmptyBodyName(tier),

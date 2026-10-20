@@ -26,8 +26,7 @@ const (
 
 	maxDistributionNameLen = 128
 
-	managedByTagKey   = "ocel:managed-by"
-	managedByTagValue = "ocel"
+	managedByTagKey = "ocel:managed-by"
 )
 
 type front struct {
@@ -37,6 +36,7 @@ type front struct {
 
 type distributionSpec struct {
 	name          string
+	managedBy     string
 	tier          environment.Tier
 	assetOrigin   string
 	function      string
@@ -353,7 +353,7 @@ func createDistribution(ctx context.Context, c Clients, spec distributionSpec, a
 		DistributionConfigWithTags: &cftypes.DistributionConfigWithTags{
 			DistributionConfig: spec.config(aliases, certificate),
 			Tags: &cftypes.Tags{Items: []cftypes.Tag{
-				{Key: aws.String(managedByTagKey), Value: aws.String(managedByTagValue)},
+				{Key: aws.String(managedByTagKey), Value: aws.String(spec.managedBy)},
 				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(spec.tier))},
 			}},
 		},

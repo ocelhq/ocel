@@ -39,9 +39,9 @@ func (p *Provider) tierParts(records tier.Records) tier.Parts {
 	region := p.aws.Region
 	return tier.Parts{
 		control.RuntimeLayersPart(lambda.NewFromConfig(p.aws), account.DynamoRecords(dynamodb.NewFromConfig(p.aws)), p.namespace, region, p.readBootstrap),
-		bastion.NewPart(bastion.NewClients(p.aws), region),
+		bastion.NewPart(bastion.NewClients(p.aws), namespace, region),
 		vpcclients.NewPart(records, ec2.NewFromConfig(p.aws), namespace),
-		containers.NewPart(p.stacks.Containers(), records.KeyValues, region),
+		containers.NewPart(p.stacks.Containers(), records.KeyValues, namespace, region),
 		functionnetwork.NewPart(p.stacks.FunctionNetwork(), records.KeyValues, region),
 		envsourcesync.NewPart(records, envsourcesync.NewClients(p.aws), namespace, p.envSourceSyncSpec),
 		notfoundapi.NewPart(records, apigatewaysdk.NewFromConfig(p.aws), namespace, apigateway.Kind),

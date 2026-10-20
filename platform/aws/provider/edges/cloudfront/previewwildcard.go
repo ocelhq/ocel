@@ -136,6 +136,7 @@ func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDom
 	}
 	return distributionSpec{
 		name:          previewWildcardName(baseDomain),
+		managedBy:     string(p.ns),
 		tier:          environment.TierPreview,
 		assetOrigin:   assetOriginDomain(deployed.AssetBucket, c.Region),
 		function:      set.functionARN,

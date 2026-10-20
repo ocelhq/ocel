@@ -43,9 +43,10 @@ const (
 
 	StreamFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`
 
-	managedByTagKey   = "ocel:managed-by"
-	managedByTagValue = "ocel"
-	tierTagKey        = "ocel:env-tier"
+	managedByTagKey = "ocel:managed-by"
+	tierTagKey      = "ocel:env-tier"
+
+	invalidatorWord = "invalidator"
 
 	kindQueue    = "AWS::SQS::Queue"
 	kindLogGroup = "AWS::Logs::LogGroup"
@@ -71,20 +72,13 @@ type Names struct {
 	Queue    string
 }
 
-func suffixed(tier environment.Tier, name string) string {
-	if tier == environment.TierPreview {
-		return name + "-preview"
-	}
-	return name
-}
-
 func NamesFor(namespace string, tier environment.Tier) Names {
-	function := suffixed(tier, namespace+"-invalidator")
+	function := awsports.TieredName(namespace, tier, invalidatorWord)
 	return Names{
 		Function: function,
 		Role:     function,
 		LogGroup: "/aws/lambda/" + function,
-		Queue:    suffixed(tier, awsports.AppScope+"-"+namespace+"-invalidator"),
+		Queue:    function,
 	}
 }
 
@@ -124,8 +118,8 @@ func Digest(spec Spec) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func tags(tier environment.Tier) map[string]string {
-	return map[string]string{managedByTagKey: managedByTagValue, tierTagKey: string(tier)}
+func tags(namespace string, tier environment.Tier) map[string]string {
+	return map[string]string{managedByTagKey: namespace, tierTagKey: string(tier)}
 }
 
 func QueueARN(region, account, namespace string, tier environment.Tier) string {
@@ -134,7 +128,7 @@ func QueueARN(region, account, namespace string, tier environment.Tier) string {
 
 func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource, error) {
 	names := NamesFor(spec.Namespace, spec.Tier)
-	if err := ensureQueue(ctx, c.SQS, names.Queue, spec.Tier); err != nil {
+	if err := ensureQueue(ctx, c.SQS, names.Queue, spec.Namespace, spec.Tier); err != nil {
 		return nil, err
 	}
 	if err := lambdapart.Ensure(ctx, c.functions(), lambdapart.Function{
@@ -154,7 +148,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		},
 		LogGroup:      names.LogGroup,
 		RetentionDays: retentionDays,
-		Tags:          tags(spec.Tier),
+		Tags:          tags(spec.Namespace, spec.Tier),
 	}); err != nil {
 		return nil, err
 	}
@@ -170,12 +164,12 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	}, nil
 }
 
-func ensureQueue(ctx context.Context, c SQSAPI, name string, tier environment.Tier) error {
+func ensureQueue(ctx context.Context, c SQSAPI, name, namespace string, tier environment.Tier) error {
 	attributes := map[string]string{
 		string(sqstypes.QueueAttributeNameMessageRetentionPeriod): strconv.Itoa(dlqRetentionSec),
 		string(sqstypes.QueueAttributeNameSqsManagedSseEnabled):   "true",
 	}
-	_, err := c.CreateQueue(ctx, &sqs.CreateQueueInput{QueueName: aws.String(name), Attributes: attributes, Tags: tags(tier)})
+	_, err := c.CreateQueue(ctx, &sqs.CreateQueueInput{QueueName: aws.String(name), Attributes: attributes, Tags: tags(namespace, tier)})
 	var exists *sqstypes.QueueNameExists
 	if !errors.As(err, &exists) {
 		if err != nil {

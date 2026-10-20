@@ -228,7 +228,7 @@
       "monthlyUsage": "0.03"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_function:ocel-env-sync",
+      "resource": "project:shop/shared:production/aws_lambda_function:ocel-prod-env-sync",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -256,7 +256,7 @@
       "monthlyUsage": "0.53"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-env-sync",
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-env-sync",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -344,7 +344,7 @@
       "monthlyUsage": "0.52"
     },
     {
-      "resource": "project:shop/shared:production/aws_sqs_queue:ocel-app-ocel-invalidator",
+      "resource": "project:shop/shared:production/aws_sqs_queue:ocel-prod-invalidator",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -362,7 +362,7 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_function:ocel-invalidator",
+      "resource": "project:shop/shared:production/aws_lambda_function:ocel-prod-invalidator",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -390,11 +390,11 @@
       "monthlyUsage": "1.53"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:ocel-invalidator-stream",
+      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:ocel-prod-invalidator-stream",
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-invalidator",
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-invalidator",
       "status": "STATUS_PRICED",
       "components": [
         {
