@@ -1,6 +1,7 @@
 package network
 
 import (
+	"hash/fnv"
 	"net/netip"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -8,10 +9,11 @@ import (
 )
 
 const (
-	ProductionCIDR = "10.20.0.0/16"
-	PreviewCIDR    = "10.21.0.0/16"
-
 	Zones = 2
+
+	defaultSecondOctetFrom = 16
+	defaultBlockPairs      = 120
+	exampleCIDR            = "10.64.0.0/16"
 
 	widestBits     = 16
 	narrowestBits  = 24
@@ -31,21 +33,28 @@ type Layout struct {
 	Isolated []string
 }
 
-func CIDRFor(tier environment.Tier, configured string) string {
-	switch {
-	case configured != "":
+func CIDRFor(namespace string, tier environment.Tier, configured string) string {
+	if configured != "" {
 		return configured
-	case tier == environment.TierProduction:
-		return ProductionCIDR
 	}
-	return PreviewCIDR
+	return DefaultCIDR(namespace, tier)
+}
+
+func DefaultCIDR(namespace string, tier environment.Tier) string {
+	sum := fnv.New32a()
+	_, _ = sum.Write([]byte(namespace))
+	second := defaultSecondOctetFrom + 2*int(sum.Sum32()%defaultBlockPairs)
+	if tier != environment.TierProduction {
+		second++
+	}
+	return netip.PrefixFrom(netip.AddrFrom4([4]byte{10, byte(second), 0, 0}), widestBits).String()
 }
 
 func NewLayout(cidr string) (Layout, error) {
 	block, err := netip.ParsePrefix(cidr)
 	if err != nil || !block.Addr().Is4() || block.Masked() != block {
 		return Layout{}, refusal.Refuse(refusal.CodeInvalid,
-			"the network's block %q is not an IPv4 CIDR block such as %s", cidr, ProductionCIDR)
+			"the network's block %q is not an IPv4 CIDR block such as %s", cidr, exampleCIDR)
 	}
 	if block.Bits() < widestBits || block.Bits() > narrowestBits {
 		return Layout{}, refusal.Refuse(refusal.CodeInvalid,

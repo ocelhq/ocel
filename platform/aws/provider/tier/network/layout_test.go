@@ -2,6 +2,7 @@ package network
 
 import (
 	"errors"
+	"net/netip"
 	"slices"
 	"testing"
 
@@ -9,14 +10,32 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func TestEachTierGetsAFixedPrivateBlockOfItsOwnWhenTheConfigNamesNone(t *testing.T) {
+func TestEachTierOfANamespaceGetsAPrivateSixteenOfItsOwnDerivedFromTheNamespaceWhenTheConfigNamesNone(t *testing.T) {
 	t.Parallel()
 
-	production, preview := CIDRFor(environment.TierProduction, ""), CIDRFor(environment.TierPreview, "")
-	if production != "10.20.0.0/16" || preview != "10.21.0.0/16" {
-		t.Errorf("default blocks = %s, %s, want 10.20.0.0/16 for production and 10.21.0.0/16 for preview", production, preview)
+	tenNet := netip.MustParsePrefix("10.0.0.0/8")
+	for _, namespace := range []string{"ocel", "acme", "acme-staging", "a"} {
+		production, preview := CIDRFor(namespace, environment.TierProduction, ""), CIDRFor(namespace, environment.TierPreview, "")
+		if again := CIDRFor(namespace, environment.TierProduction, ""); again != production {
+			t.Errorf("namespace %s defaults to %s and then %s, want the same block every run", namespace, production, again)
+		}
+		for _, block := range []string{production, preview} {
+			parsed := netip.MustParsePrefix(block)
+			if parsed.Bits() != 16 || !tenNet.Contains(parsed.Addr()) || parsed.Addr().As4()[1] < 16 {
+				t.Errorf("namespace %s defaults to %s, want a /16 in 10.16.0.0 to 10.255.0.0", namespace, block)
+			}
+			if _, err := NewLayout(block); err != nil {
+				t.Errorf("namespace %s defaults to %s, which NewLayout refuses: %v", namespace, block, err)
+			}
+		}
+		if second := netip.MustParsePrefix(production).Addr().As4()[1]; netip.MustParsePrefix(preview).Addr().As4()[1] != second+1 {
+			t.Errorf("namespace %s defaults to %s and %s, want preview's block right after production's", namespace, production, preview)
+		}
 	}
-	if got := CIDRFor(environment.TierProduction, "192.168.0.0/20"); got != "192.168.0.0/20" {
+	if CIDRFor("ocel", environment.TierProduction, "") == CIDRFor("acme", environment.TierProduction, "") {
+		t.Errorf("namespaces ocel and acme both default to %s, want them apart so a second namespace in a region needs no block of its own", CIDRFor("ocel", environment.TierProduction, ""))
+	}
+	if got := CIDRFor("ocel", environment.TierProduction, "192.168.0.0/20"); got != "192.168.0.0/20" {
 		t.Errorf("CIDRFor() = %s, want the block the config names", got)
 	}
 }

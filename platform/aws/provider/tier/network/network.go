@@ -61,7 +61,7 @@ type Network struct {
 
 var Pending = Network{
 	VPC:           "vpc-pending",
-	CIDR:          ProductionCIDR,
+	CIDR:          exampleCIDR,
 	Zones:         []string{"zone-pending-a", "zone-pending-b"},
 	Public:        []string{"subnet-pending-public-a", "subnet-pending-public-b"},
 	Private:       []string{"subnet-pending-private-a", "subnet-pending-private-b"},
@@ -141,7 +141,7 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 		}
 		return current, Shared.Claim(ctx, owner, consumer)
 	}
-	layout, err := NewLayout(CIDRFor(tier, owner.NetworkCIDR))
+	layout, err := NewLayout(CIDRFor(owner.Namespace, tier, owner.NetworkCIDR))
 	if err != nil {
 		return Network{}, err
 	}
