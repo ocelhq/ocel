@@ -94,7 +94,7 @@ func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec 
 		worker.url, worker.revision = ran.Url, ran.Revision
 		deployed = append(deployed, worker)
 	}
-	subscriptions := topics.Subscriptions{Names: topic.Names(c.Names, spec.Ref), Topics: declared, Pushes: pushes}
+	subscriptions := topics.Subscriptions{Names: topic.Names(c.Names, spec.Ref), Topics: declared, Pushes: pushes, Tags: topic.TierTagsOf(c, spec.Ref.Tier)}
 	if err := subscriptions.Ensure(ctx, c.Workload()); err != nil {
 		return nil, err
 	}
