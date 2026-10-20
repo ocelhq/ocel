@@ -3,6 +3,8 @@ package component
 import (
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -35,4 +37,19 @@ func CapDescription(described string, limit int) pulumi.String {
 		described = strings.ToValidUTF8(described[:limit], "")
 	}
 	return pulumi.String(described)
+}
+
+func HasTags(tags []ec2types.Tag, want map[string]string) bool {
+	matched := 0
+	for _, tag := range tags {
+		value, wanted := want[aws.ToString(tag.Key)]
+		if !wanted {
+			continue
+		}
+		if aws.ToString(tag.Value) != value {
+			return false
+		}
+		matched++
+	}
+	return matched == len(want)
 }

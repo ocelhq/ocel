@@ -77,9 +77,14 @@ func nameFor(namespace string, tier environment.Tier, words ...string) string {
 	return naming.OcelName(namespace, tier, append([]string{networkWord}, words...)...)
 }
 
-func stackTags(namespace string, tier environment.Tier) map[string]string {
+func projectTags(namespace string, tier environment.Tier) map[string]string {
 	tags := naming.OcelTags(namespace, tier)
 	tags[projectTagKey] = Slug
+	return tags
+}
+
+func stackTags(namespace string, tier environment.Tier) map[string]string {
+	tags := projectTags(namespace, tier)
 	tags[stackTagKey] = StackRef(tier).Name.String()
 	return tags
 }
