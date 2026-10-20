@@ -518,19 +518,6 @@ func TestLambdaDeclaresA200MiBFunctionSizeBudget(t *testing.T) {
 	}
 }
 
-func TestAnAWSProjectWarmsNoCompileCacheUnlessItsOptionsAskForOne(t *testing.T) {
-	t.Parallel()
-
-	cfg := aws.Config{Region: "eu-west-2"}
-	if NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace).Facts().CachesBytecode {
-		t.Error("a project that sets no bytecode option caches bytecode, so every deploy warms and writes a cache nobody asked for")
-	}
-	cached := Options{Region: "eu-west-2", Bytecode: BytecodeOptions{Cache: true}}
-	if !NewProvider(cached, nil, cfg, defaultNamespace).Facts().CachesBytecode {
-		t.Error("a project that sets bytecode.cache caches no bytecode")
-	}
-}
-
 func TestEmbeddingACompileCacheNobodyWarmsIsRefused(t *testing.T) {
 	t.Parallel()
 

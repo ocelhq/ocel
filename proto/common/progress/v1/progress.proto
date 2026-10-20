@@ -134,7 +134,7 @@ message AppResult {
 
   string deployment_url = 5;
 
-  string storage_prefix = 6;
+  string storage_coordinate = 6;
 
   string release = 7;
 }

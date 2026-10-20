@@ -55,19 +55,19 @@ func tagLayout() variables.Layout {
 	return layout
 }
 
-func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, scope naming.Coordinate, log progress.Log) error {
-	if naming.Validate("project", scope.Project) != nil {
-		return nil
+func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, scope naming.StorageScope, log progress.Log) error {
+	prefix, err := scope.Prefix(naming.ObjectPages)
+	if err != nil {
+		return err
 	}
 	resolved, err := a.p.openClients(ctx)
 	if err != nil {
 		return err
 	}
-	store, err := resolved.Workload().TagRecordsFirestore(tier, scope.Project)
+	store, err := resolved.Workload().TagRecordsFirestore(tier, scope.Project())
 	if err != nil {
 		return err
 	}
-	prefix := scope.StoragePrefix(naming.ObjectPages)
 	records := store.Collection(tagCollection).
 		Where(tagPrefixField, ">=", prefix).
 		Where(tagPrefixField, "<", prefix+"\uf8ff").
@@ -111,7 +111,7 @@ func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, 
 	}
 	if removed > 0 {
 		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Removed %d tag records under %s from Firestore database %s",
-			removed, prefix, resolved.ProjectWritableDatabase(tier, scope.Project)))
+			removed, prefix, resolved.ProjectWritableDatabase(tier, scope.Project())))
 	}
 	return nil
 }

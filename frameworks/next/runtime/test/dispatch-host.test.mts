@@ -241,7 +241,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
       OCEL_ROUTER_KIND: "cloudfront",
       OCEL_NEXT_ROUTE_TABLE: path,
       OCEL_FUNCTION_URLS: JSON.stringify({ [SIBLING_BUNDLE]: SIBLING_URL }),
-      OCEL_ASSET_PREFIX: "prod/shop/web/r0a1b2c3d/assets",
+      OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d",
       OCEL_SLUG: "shop",
       OCEL_APP: "web",
       OCEL_BUILD_ID: "d1",
@@ -253,7 +253,7 @@ test("the env names the entry function's own bundle as the loopback origin", asy
   expect(built.manifest.rootFunction).toBe(LOCAL_BUNDLE);
   expect(built.routerKind).toBe("cloudfront");
   expect(built.functionUrls).toEqual({ [SIBLING_BUNDLE]: SIBLING_URL });
-  expect(built.assetPrefix).toBe("prod/shop/web/r0a1b2c3d/assets");
+  expect(built.assetPrefix).toBe("assets/shop/prod/web/r0a1b2c3d");
   expect(built.assetBucket).toBeUndefined();
 });
 

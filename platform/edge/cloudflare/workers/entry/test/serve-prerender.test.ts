@@ -11,7 +11,7 @@ import {
   EMPTY_ROUTES,
   heldPurgeQueue,
   servedNextRelease,
-  UNTOKENED_PAGES_PREFIX,
+  UNTOKENED_STORAGE_COORDINATE,
 } from "./next-release";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
@@ -37,7 +37,7 @@ function blogRelease(
     origin?: ReturnType<typeof recorder>;
     queue?: ReturnType<typeof heldPurgeQueue>["queue"];
     pending?: Promise<unknown>[];
-    pagesPrefix?: string;
+    storageCoordinate?: string;
   } = {},
 ): ServeFetch {
   const origin = over.origin ?? recorder();
@@ -55,7 +55,7 @@ function blogRelease(
     },
     record: {
       functionUrls: { "/blog": "https://fn.example.com" },
-      ...(over.pagesPrefix && { pagesPrefix: over.pagesPrefix }),
+      ...(over.storageCoordinate && { storageCoordinate: over.storageCoordinate }),
     },
     fetch: origin.fetch,
     serve: served.serving.serve,
@@ -145,7 +145,7 @@ describe("a prerender served through Serve", () => {
 
     expect(
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null"),
-    ).toMatchObject({ slug: "p1", pagesPrefix: "pages/p1/prod/web/r0a1b2c3d", tags: [] });
+    ).toMatchObject({ slug: "p1", storageCoordinate: "p1/prod/web/r0a1b2c3d", tags: [] });
   });
 
   it("names the entry the durable store may answer from, with the windows of the route", async () => {
@@ -730,7 +730,7 @@ describe("an edge-runtime prerender", () => {
       JSON.parse(served.calls[0].request.headers.get(RENDER_RELEASE_HEADER) ?? "null"),
     ).toEqual({
       slug: "p1",
-      pagesPrefix: "pages/p1/prod/web/r0a1b2c3d",
+      storageCoordinate: "p1/prod/web/r0a1b2c3d",
       tags: ["posts"],
     });
   });
@@ -746,14 +746,14 @@ describe("an edge-runtime prerender", () => {
   });
 });
 
-describe("a prerender of a release whose pages prefix names no release token", () => {
+describe("a prerender of a release whose storage coordinate names no release token", () => {
   it("renders at the origin and stores nothing", async () => {
     const origin = recorder();
     const served = fakeServing();
 
     const res = await get(
       "/blog",
-      blogRelease(served, { origin, pagesPrefix: UNTOKENED_PAGES_PREFIX }),
+      blogRelease(served, { origin, storageCoordinate: UNTOKENED_STORAGE_COORDINATE }),
     );
 
     expect(served.calls).toHaveLength(0);

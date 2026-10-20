@@ -72,7 +72,7 @@ func TestPromoteMovesTheStageOnce(t *testing.T) {
 
 	w := newWorld()
 	stack := reconciled(t, w)
-	record := staged(t, stack, entryFunction, "assets/shop/web/r1234abcd")
+	record := staged(t, stack, entryFunction, "shop/prod/web/r1234abcd")
 
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress.Discard()); err != nil {
@@ -86,8 +86,8 @@ func TestPromoteMovesTheStageOnce(t *testing.T) {
 	if api.variables[entryVariable] != record.RootFunctionPhysical {
 		t.Errorf("stage variable %s = %q, want the root function %q", entryVariable, api.variables[entryVariable], record.RootFunctionPhysical)
 	}
-	if api.variables[assetsVariable] != record.AssetPrefix {
-		t.Errorf("stage variable %s = %q, want %q", assetsVariable, api.variables[assetsVariable], record.AssetPrefix)
+	if want := "assets/shop/prod/web/r1234abcd/"; api.variables[assetsVariable] != want {
+		t.Errorf("stage variable %s = %q, want %q: the release's assets prefix the static integrations read under", assetsVariable, api.variables[assetsVariable], want)
 	}
 	history, err := openRouter(stack).Ledger.History(context.Background(), "")
 	if err != nil {
@@ -150,7 +150,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 
 		w := newWorld()
 		stack := reconciled(t, w)
-		record := staged(t, stack, "", "assets/one")
+		record := staged(t, stack, "", "shop/prod/web/r1111aaaa")
 
 		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}, progress.Discard())
 		if err == nil {
@@ -214,7 +214,7 @@ func TestAPointerMoveTheStageRefusesIsUnserved(t *testing.T) {
 
 	w := newWorld()
 	stack := reconciled(t, w)
-	record := staged(t, stack, entryFunction, "assets/shop/web/r1234abcd")
+	record := staged(t, stack, entryFunction, "shop/prod/web/r1234abcd")
 	w.gateway.stageErr = errors.New("stage is being updated by another operation")
 
 	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}
@@ -231,8 +231,8 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	stack := reconciled(t, w)
-	first := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
-	second := router.ReleaseRecord{App: "web", Release: "d2.f2", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
+	first := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r1111aaaa", StorageCoordinate: "shop/prod/web/r1111aaaa"}
+	second := router.ReleaseRecord{App: "web", Release: "d2.f2", RootFunction: "/", RootFunctionPhysical: "conformance-prod-web-r2222bbbb", StorageCoordinate: "shop/prod/web/r2222bbbb"}
 	for _, record := range []router.ReleaseRecord{first, second} {
 		if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
@@ -272,7 +272,7 @@ func TestARollbackTheStageRefusesIsUnserved(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	stack := reconciled(t, w)
-	record := staged(t, stack, entryFunction, "assets/one")
+	record := staged(t, stack, entryFunction, "shop/prod/web/r1111aaaa")
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}

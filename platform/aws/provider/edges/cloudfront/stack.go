@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -258,7 +259,11 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names root function %s but no URL the edge can reach it on, and the %q edge fronts a release over its root function's URL; re-run the deploy to write the record again", promotionID, app, release, record.RootFunctionPhysical, Kind)
 	}
 	published.Assets = assetOriginDomain(s.own.EdgeBucket, s.own.Region)
-	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
+	storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate)
+	if err != nil {
+		return route{}, fmt.Errorf("promote %s: the release record for %s/%s locates none of its objects: %w", promotionID, app, release, err)
+	}
+	published.AssetPrefix = assetOriginPath(storage.StoragePrefix(naming.ObjectAssets))
 	if record.Static != nil {
 		published.Immutable = record.Static.ImmutablePrefixes
 	}

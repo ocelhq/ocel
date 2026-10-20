@@ -19,11 +19,11 @@ type servedRelease struct {
 }
 
 func readReleaseTag(record router.ReleaseRecord) string {
-	key, err := naming.ParseObjectKey(record.PagesPrefix)
-	if err != nil || key.Kind != naming.ObjectPages || key.Rest != "" {
+	storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate)
+	if err != nil {
 		return ""
 	}
-	return key.Release.String()
+	return storage.Release.String()
 }
 
 func isReleaseTagged(record router.ReleaseRecord) bool {

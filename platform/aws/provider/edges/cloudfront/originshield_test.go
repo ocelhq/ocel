@@ -24,7 +24,7 @@ func promotedWith(t *testing.T, w *world, e *cloudFront, mutate func(*router.Rel
 		RootFunction:         "/",
 		RootFunctionPhysical: entryFunction,
 		FunctionURLs:         map[string]string{"/": fakeEntryURL},
-		AssetPrefix:          fakeAssetPrefix,
+		StorageCoordinate:    fakeStorageCoordinate,
 	}
 	mutate(&record)
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {

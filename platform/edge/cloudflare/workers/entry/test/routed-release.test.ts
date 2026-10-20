@@ -4,7 +4,7 @@ import type { ImageConfig } from "@framework/next-router/image";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import type { ReleasesBinding, StoredRecord } from "../src/releases";
-import { servedNextRelease, UNTOKENED_PAGES_PREFIX } from "./next-release";
+import { servedNextRelease, UNTOKENED_STORAGE_COORDINATE } from "./next-release";
 import { answerEveryRecordWith, capturing } from "./origin-deps";
 import { resolveBase } from "./resolve-base";
 import {
@@ -34,8 +34,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     rootFunction: "/",
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
-    assetPrefix: "build-1",
-    pagesPrefix: "pages/p1/prod/web/build-1",
+    storageCoordinate: "p1/prod/web/build-1",
     createdAt: 1_000,
     edge: {},
     ...over,
@@ -123,10 +122,10 @@ describe("a routed release", () => {
     expect(wire.calls.map(({ url }) => url)).toEqual(["https://fn.example.com/api"]);
   });
 
-  it("reads static pages under the record's asset prefix", async () => {
+  it("reads static pages under the assets of the record's storage coordinate", async () => {
     const serve = servedNextRelease({
       table: { dispatch: { "/a": { kind: "static" } } },
-      record: { assetPrefix: "assets/p1/web/build-1" },
+      record: { storageCoordinate: "p1/prod/web/r0b1c2d3e" },
       assets: { "/a.html": "<h1>a</h1>" },
     });
 
@@ -140,7 +139,7 @@ describe("a routed release", () => {
     "/blog": { kind: "prerender", id: "/blog", config: {} },
   };
 
-  it("serves prerenders through Serve under the release token its pages prefix names", async () => {
+  it("serves prerenders through Serve under the release token its storage coordinate names", async () => {
     const served = fakeServing();
     const serve = servedNextRelease({
       table: { dispatch: prerender },
@@ -166,14 +165,14 @@ describe("a routed release", () => {
     expect(served.calls[0].coordinates.release).not.toBe("build-1~abc");
   });
 
-  it("leaves prerenders to the origin when the pages prefix names no release token", async () => {
+  it("leaves prerenders to the origin when the storage coordinate names no release token", async () => {
     const served = fakeServing();
     const wire = capturing();
     const serve = servedNextRelease({
       table: { dispatch: prerender },
       record: {
         functionUrls: { "/blog": "https://fn.example.com" },
-        pagesPrefix: UNTOKENED_PAGES_PREFIX,
+        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
       },
       serve: served.serving.serve,
       fetch: wire.fetch,
@@ -396,7 +395,10 @@ describe("the image origin of a routed deployment", () => {
   function imageRelease(base: Partial<ResolveBase>) {
     return servedNextRelease({
       table: { rootFunction: "bundle-0", images, assetHashes: { "/a.png": "a-hash" } },
-      record: { functionUrls: { "bundle-0": entryUrl }, pagesPrefix: UNTOKENED_PAGES_PREFIX },
+      record: {
+        functionUrls: { "bundle-0": entryUrl },
+        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
+      },
       base,
     });
   }
@@ -446,7 +448,7 @@ describe("the image origin of a routed deployment", () => {
       },
       record: {
         functionUrls: { "bundle-0": entryUrl, "/api/og": "https://og.fn.example" },
-        pagesPrefix: UNTOKENED_PAGES_PREFIX,
+        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
       },
       base: {
         originFetch: (async () =>

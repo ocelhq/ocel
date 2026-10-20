@@ -545,7 +545,10 @@ func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Log)
 }
 
 func (r *projectRemoval) purgeObjects(ctx context.Context, progress progress.Log) error {
-	scope := naming.Coordinate{Project: naming.Sanitize(r.slug)}
+	scope, err := naming.ProjectScope(naming.Sanitize(r.slug))
+	if err != nil {
+		return err
+	}
 	if err := r.provider.Artifacts().RemoveObjects(ctx, r.tier, scope, naming.CoordinateObjectKinds, progress); err != nil {
 		return fmt.Errorf("remove the objects of %s: %w", r.slug, err)
 	}

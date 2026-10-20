@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func TestTheRouteTableHoldingABypassTokenIsNotPublishedWithTheStaticFiles(t *testing.T) {
@@ -25,12 +26,12 @@ func TestTheRouteTableHoldingABypassTokenIsNotPublishedWithTheStaticFiles(t *tes
 			t.Fatal(err)
 		}
 	}
-	keys, err := newStaticKeys("assets/shop/prod/web/r1a2b3c4d")
+	release, err := naming.ParseStorageCoordinate("shop/prod/web/r1a2b3c4d")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := staticFilesOf(appRoot, keys)
+	files, err := staticFilesOf(appRoot, release)
 	if err != nil {
 		t.Fatal(err)
 	}

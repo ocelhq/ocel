@@ -20,7 +20,6 @@ export interface OriginStore {
   url: string;
   region: string;
   holdsEntries: boolean;
-  entriesPrefix?: string;
   accessKeyId: string;
   secretAccessKey: string;
 }

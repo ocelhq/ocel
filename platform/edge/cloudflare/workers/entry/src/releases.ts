@@ -6,7 +6,7 @@ import { lruSet } from "./lru";
 import type { ServedRecord } from "./served-record";
 
 export interface StoredRecord extends ServedRecord {
-  buildAssets?: Record<string, string>;
+  buildCoordinates?: Record<string, string>;
 }
 
 export type PointerRecordResult = StorePointerRecordResult<StoredRecord>;
@@ -14,7 +14,7 @@ export type PointerRecordResult = StorePointerRecordResult<StoredRecord>;
 export type ServedRecordResult = StoreServedRecordResult<StoredRecord>;
 
 export interface ReleasesBinding {
-  readServedRecord(args: { slug: string; pagesPrefix: string }): Promise<ServedRecordResult>;
+  readServedRecord(args: { slug: string; storageCoordinate: string }): Promise<ServedRecordResult>;
   readPointerRecord(args: {
     slug: string;
     app?: string;

@@ -615,7 +615,7 @@
           "default": "",
           "type": "string"
         },
-        "^(storage_prefix)$": {
+        "^(storage_coordinate)$": {
           "default": "",
           "type": "string"
         }
@@ -660,7 +660,7 @@
           "default": "",
           "type": "string"
         },
-        "storagePrefix": {
+        "storageCoordinate": {
           "default": "",
           "type": "string"
         },

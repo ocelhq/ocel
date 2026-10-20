@@ -155,17 +155,25 @@ test("leaves the tag header off a front that invalidates by nothing", () => {
 });
 
 test("reads the release out of the storage coordinate", () => {
-  expect(releaseOf(coordinate)).toBe("r0a1b2c3d");
+  expect(releaseOf({ OCEL_STORAGE_COORDINATE: coordinate })).toBe("r0a1b2c3d");
 });
 
-test("refuses a release from a coordinate that is absent or shaped differently", () => {
-  expect(releaseOf(undefined)).toBeNull();
-  expect(releaseOf("")).toBeNull();
-  expect(releaseOf("shop/prod/web")).toBeNull();
-  expect(releaseOf("shop/prod/web/r0a1b2c3d/bytecode")).toBeNull();
-  expect(releaseOf("prod/shop/web/r0a1b2c3d/isr")).toBeNull();
-  expect(releaseOf("shop/prod/web/deadbeef")).toBeNull();
-  expect(releaseOf("shop/prod/web/rZZZZZZZZ")).toBeNull();
+test("names no release when the origin set no storage coordinate", () => {
+  expect(releaseOf({})).toBeNull();
+  expect(releaseOf({ OCEL_STORAGE_COORDINATE: "" })).toBeNull();
+});
+
+test("throws on a storage coordinate no origin could have set", () => {
+  for (const value of [
+    "shop/prod/web",
+    "shop/prod/web/r0a1b2c3d/bytecode",
+    "shop/prod/web/deadbeef",
+    "shop/prod/web/rZZZZZZZZ",
+  ]) {
+    expect(() => releaseOf({ OCEL_STORAGE_COORDINATE: value }), value).toThrow(
+      "OCEL_STORAGE_COORDINATE",
+    );
+  }
 });
 
 test("leaves the tag header off when the coordinate names no release", () => {

@@ -4,10 +4,10 @@ import {
   type PurgeMode,
   purgePath,
   purgeSignatureHeader,
-  readReleaseToken,
   tagsPerPurgeRequest,
   verifyPurge,
 } from "@platform/edge-contract/purge";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { readCapped } from "./capped-body";
 import type { Env } from "./env";
 import { type EntryExports, newPurgeQueuePort } from "./exports";
@@ -21,14 +21,14 @@ export const maxPurgeBodyBytes = 512 * 1024;
 
 export interface PurgeGatewayPorts {
   slug: string;
-  readServed(pagesPrefix: string): Promise<ServedRecordResult<Pick<ServedRecord, "edge">>>;
+  readServed(storageCoordinate: string): Promise<ServedRecordResult<Pick<ServedRecord, "edge">>>;
   queue: Pick<PurgeQueuePort, "raise">;
   now?(): number;
   warn?(message: string): void;
 }
 
 interface PurgeBody {
-  pagesPrefix: string;
+  storageCoordinate: string;
   mode: PurgeMode;
   tags: RaisedTag[];
 }
@@ -53,7 +53,10 @@ function parseBody(text: string): PurgeBody | undefined {
   }
   const body = parsed as Partial<PurgeBody> | null;
   if (typeof body !== "object" || body === null) return undefined;
-  if (typeof body.pagesPrefix !== "string" || readReleaseToken(body.pagesPrefix) === undefined) {
+  if (
+    typeof body.storageCoordinate !== "string" ||
+    parseStorageCoordinate(body.storageCoordinate) === undefined
+  ) {
     return undefined;
   }
   if (body.mode !== "purge" && body.mode !== "invalidate") return undefined;
@@ -96,7 +99,7 @@ export function answerPurgeOnWorker(
   if (!slug) return reply(404, "Not Found");
   return answerPurge(request, {
     slug,
-    readServed: (pagesPrefix) => env.RELEASES.readServedRecord({ slug, pagesPrefix }),
+    readServed: (storageCoordinate) => env.RELEASES.readServedRecord({ slug, storageCoordinate }),
     queue: newPurgeQueuePort(ctx.exports),
   });
 }
@@ -111,9 +114,12 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
 
   let served: ServedRecordResult<Pick<ServedRecord, "edge">>;
   try {
-    served = await ports.readServed(body.pagesPrefix);
+    served = await ports.readServed(body.storageCoordinate);
   } catch (error) {
-    console.error(`ocel: cannot tell whether the release at ${body.pagesPrefix} is served`, error);
+    console.error(
+      `ocel: cannot tell whether the release at ${body.storageCoordinate} is served`,
+      error,
+    );
     return reply(503, "unavailable");
   }
   if (served.kind !== "record") return reply(204);
@@ -124,7 +130,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
     return reply(401, "unauthorized");
   }
 
-  const release = readReleaseToken(body.pagesPrefix)!;
+  const { release } = parseStorageCoordinate(body.storageCoordinate)!;
   const now = (ports.now ?? Date.now)();
   const unstorable: string[] = [];
   const raisedAt = new Map<string, number>();
@@ -147,7 +153,7 @@ export async function answerPurge(request: Request, ports: PurgeGatewayPorts): P
   const raisedTags = [...raisedAt].map(([tag, at]) => ({ tag, raisedAt: at }));
   try {
     await ports.queue.raise(
-      { slug: ports.slug, pagesPrefix: body.pagesPrefix },
+      { slug: ports.slug, storageCoordinate: body.storageCoordinate },
       body.mode,
       raisedTags,
     );

@@ -49,7 +49,7 @@ func AppsDeployed(manifest *contractv1.Manifest, results []*progressv1.AppResult
 func applyResult(app *consolev1.App, result *progressv1.AppResult) {
 	app.Urls = result.GetUrls()
 	app.Release = result.GetRelease()
-	app.StoragePrefix = result.GetStoragePrefix()
+	app.StorageCoordinate = result.GetStorageCoordinate()
 	app.Error = result.GetError()
 	switch result.GetOutcome() {
 	case progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED:

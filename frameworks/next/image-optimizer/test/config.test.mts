@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { loadImageConfig, resetConfigMemo } from "../src/config.mjs";
 import { BootstrapError } from "../src/errors.mjs";
 import {
-  ASSET_PREFIX,
   CONFIG_KEY,
   configHash,
   fakeStore,
   imageConfig,
+  RELEASE,
   serialize,
   storeWithConfig,
 } from "../test-support/fixtures.mjs";
@@ -18,7 +18,7 @@ beforeEach(() => resetConfigMemo());
 test("loads the config from the key the deploy wrote it to", async () => {
   const config = imageConfig();
   const store = storeWithConfig(config);
-  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(config))).resolves.toEqual(config);
+  await expect(loadImageConfig(store, RELEASE, configHash(config))).resolves.toEqual(config);
   expect(store.reads).toEqual([KEY]);
 });
 
@@ -30,30 +30,26 @@ test("the digest is over the stored bytes, not over a re-serialization", async (
   });
   const reordered = serialize(config) !== JSON.stringify(config);
   expect(reordered).toBe(true);
-  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(config))).rejects.toThrow(
-    BootstrapError,
-  );
+  await expect(loadImageConfig(store, RELEASE, configHash(config))).rejects.toThrow(BootstrapError);
 });
 
 test("refuses a config that does not hash to configHash", async () => {
   const config = imageConfig();
   const store = storeWithConfig(imageConfig({ domains: ["evil.example"] }));
-  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(config))).rejects.toThrow(
+  await expect(loadImageConfig(store, RELEASE, configHash(config))).rejects.toThrow(
     /does not match configHash/,
   );
 });
 
 test("refuses a configHash that is not a sha256 digest", async () => {
   const store = storeWithConfig(imageConfig());
-  await expect(loadImageConfig(store, ASSET_PREFIX, "../../etc/passwd")).rejects.toThrow(
-    BootstrapError,
-  );
+  await expect(loadImageConfig(store, RELEASE, "../../etc/passwd")).rejects.toThrow(BootstrapError);
   expect(store.reads).toEqual([]);
 });
 
 test("refuses a missing config rather than serving without one", async () => {
   const store = fakeStore();
-  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(imageConfig()))).rejects.toThrow(
+  await expect(loadImageConfig(store, RELEASE, configHash(imageConfig()))).rejects.toThrow(
     /no image config at/,
   );
 });
@@ -64,7 +60,7 @@ test("refuses bytes that hash correctly but are not JSON", async () => {
   store.put(KEY, { bytes });
   const { createHash } = await import("node:crypto");
   const hash = createHash("sha256").update(bytes).digest("hex");
-  await expect(loadImageConfig(store, ASSET_PREFIX, hash)).rejects.toThrow(/is not JSON/);
+  await expect(loadImageConfig(store, RELEASE, hash)).rejects.toThrow(/is not JSON/);
 });
 
 test("refuses an authentic config that is missing fields this side reads", async () => {
@@ -74,7 +70,7 @@ test("refuses an authentic config that is missing fields this side reads", async
   store.put(KEY, { bytes });
   const { createHash } = await import("node:crypto");
   const hash = createHash("sha256").update(bytes).digest("hex");
-  await expect(loadImageConfig(store, ASSET_PREFIX, hash)).rejects.toThrow(/is missing/);
+  await expect(loadImageConfig(store, RELEASE, hash)).rejects.toThrow(/is missing/);
 });
 
 test("refuses an authentic config missing any single field this side reads", async () => {
@@ -100,7 +96,7 @@ test("refuses an authentic config missing any single field this side reads", asy
     const bytes = new TextEncoder().encode(JSON.stringify(partial));
     store.put(KEY, { bytes });
     const hash = createHash("sha256").update(bytes).digest("hex");
-    await expect(loadImageConfig(store, ASSET_PREFIX, hash)).rejects.toThrow(
+    await expect(loadImageConfig(store, RELEASE, hash)).rejects.toThrow(
       new RegExp(`is missing ${field}`),
     );
   }
@@ -111,9 +107,9 @@ describe("memoization", () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
     const hash = configHash(config);
-    await loadImageConfig(store, ASSET_PREFIX, hash);
-    await loadImageConfig(store, ASSET_PREFIX, hash);
-    await loadImageConfig(store, ASSET_PREFIX, hash);
+    await loadImageConfig(store, RELEASE, hash);
+    await loadImageConfig(store, RELEASE, hash);
+    await loadImageConfig(store, RELEASE, hash);
     expect(store.reads).toEqual([KEY]);
   });
 
@@ -121,36 +117,36 @@ describe("memoization", () => {
     const first = imageConfig();
     const second = imageConfig({ minimumCacheTTL: 60 });
     const store = storeWithConfig(first);
-    await loadImageConfig(store, ASSET_PREFIX, configHash(first));
+    await loadImageConfig(store, RELEASE, configHash(first));
     store.put(KEY, { bytes: new TextEncoder().encode(serialize(second)) });
-    await expect(loadImageConfig(store, ASSET_PREFIX, configHash(second))).resolves.toEqual(second);
+    await expect(loadImageConfig(store, RELEASE, configHash(second))).resolves.toEqual(second);
     expect(store.reads).toEqual([KEY, KEY]);
   });
 
-  test("a warm entry is bound to its asset prefix", async () => {
+  test("a warm entry is bound to its release", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
     const hash = configHash(config);
-    await loadImageConfig(store, ASSET_PREFIX, hash);
-    await expect(loadImageConfig(store, "assets/proj1/prod/web/r00000000", hash)).rejects.toThrow(
-      /no image config at/,
-    );
+    await loadImageConfig(store, RELEASE, hash);
+    await expect(
+      loadImageConfig(store, { ...RELEASE, release: "r00000000" }, hash),
+    ).rejects.toThrow(/no image config at/);
   });
 
   test("a rejected config is never memoized", async () => {
     const config = imageConfig();
     const store = storeWithConfig(imageConfig({ domains: ["evil.example"] }));
     const hash = configHash(config);
-    await expect(loadImageConfig(store, ASSET_PREFIX, hash)).rejects.toThrow();
+    await expect(loadImageConfig(store, RELEASE, hash)).rejects.toThrow();
     store.put(KEY, { bytes: new TextEncoder().encode(serialize(config)) });
-    await expect(loadImageConfig(store, ASSET_PREFIX, hash)).resolves.toEqual(config);
+    await expect(loadImageConfig(store, RELEASE, hash)).resolves.toEqual(config);
   });
 });
 
 test("caps the config read", async () => {
   const store = fakeStore();
   store.put(KEY, { bytes: new Uint8Array(2 * 1024 * 1024) });
-  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(imageConfig()))).rejects.toThrow(
+  await expect(loadImageConfig(store, RELEASE, configHash(imageConfig()))).rejects.toThrow(
     BootstrapError,
   );
 });

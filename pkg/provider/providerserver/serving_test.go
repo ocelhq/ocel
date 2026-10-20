@@ -56,37 +56,6 @@ func servingQuery(root, app, framework string) providerserver.AppServingInput {
 	}
 }
 
-func TestAnAppOnAProviderThatCachesNoBytecodeIsHandedNoBytecodeCache(t *testing.T) {
-	facts, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", "astro"))
-	if err != nil {
-		t.Fatalf("AppServingFor() = %v", err)
-	}
-	if facts.Bytecode != nil {
-		t.Errorf("Bytecode = %+v, want none: the compile cache is something a project opts into through its provider", facts.Bytecode)
-	}
-}
-
-func TestEveryAppIncludesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T) {
-	query := servingQuery(t.TempDir(), "web", "astro")
-	query.CachesBytecode = true
-	facts, err := providerserver.AppServingFor(query)
-	if err != nil {
-		t.Fatalf("AppServingFor() = %v", err)
-	}
-	if facts.AssetPrefix == "" {
-		t.Error("an app with no asset prefix serves its static files from nowhere")
-	}
-	if facts.Bytecode == nil || facts.Bytecode.Prefix == "" {
-		t.Fatalf("Bytecode = %+v, want a prefix every framework can warm a cache under", facts.Bytecode)
-	}
-	if strings.HasSuffix(facts.Bytecode.Prefix, naming.PathSeparator) {
-		t.Errorf("Bytecode.Prefix = %q, want it free of the trailing separator a key policy appends", facts.Bytecode.Prefix)
-	}
-	if facts.Bytecode.Prefix == facts.AssetPrefix {
-		t.Error("the bytecode cache and the static assets share a prefix; a deploy would sweep one with the other")
-	}
-}
-
 func TestAnAppServesPrerendersOnlyWhenItsBuildDeclaresCachedRoutes(t *testing.T) {
 	t.Parallel()
 
@@ -133,7 +102,7 @@ func TestABuildThatDeclaresRevalidationAsksForAnISRLedgerWhateverItsFramework(t 
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
-	if declared.ISR == nil || declared.ISR.Coordinate.Release.IsZero() || declared.ISR.TagNamespace == "" {
+	if declared.ISR == nil || declared.ISR.TagNamespace == "" {
 		t.Fatalf("ISR = %+v, want the prefix and tag namespace a revalidation writes through", declared.ISR)
 	}
 	root = servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkNext}, nil)
@@ -303,7 +272,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index", FrameworkBuildID: "b1", Needs: revalidating}, routing)
 
-	vendor := fake.NewProvider(fake.Options{}).WithFacts(func(facts *provider.Facts) { facts.CachesBytecode = true })
+	vendor := fake.NewProvider(fake.Options{})
 	client := servedBy(t, vendor)
 
 	req := deployRequest()
@@ -319,13 +288,10 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	if app == nil {
 		t.Fatal("the last spec the stacks port saw provisions no app")
 	}
-	if app.AssetPrefix == "" {
-		t.Error("the app spec names no asset prefix, so the provisioned app serves its static files from nowhere")
+	if _, err := naming.ParseStorageCoordinate(app.Storage.StorageCoordinate()); err != nil {
+		t.Errorf("Storage = %+v (%v), want the coordinate every object of the release is keyed by", app.Storage, err)
 	}
-	if app.Bytecode == nil || app.Bytecode.Prefix == "" {
-		t.Errorf("Bytecode = %+v, want the prefix the runtime warms its compile cache under", app.Bytecode)
-	}
-	if app.ISR == nil || app.ISR.Coordinate.Release.IsZero() || app.ISR.TagNamespace == "" {
+	if app.ISR == nil || app.ISR.TagNamespace == "" {
 		t.Errorf("ISR = %+v, want the ledger a build declaring ISR revalidates through", app.ISR)
 	}
 	if app.Routing == nil || app.Routing.RootFunction != "index" || string(app.Routing.RouteTable.Table) != string(routing) {

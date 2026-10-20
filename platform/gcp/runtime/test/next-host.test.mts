@@ -306,7 +306,7 @@ test("the GCP host told where the worker purges clears each tag it records at th
     const bodies = fetched.map((call) => JSON.parse(String(call.init?.body)));
     expect(
       bodies.every(
-        (body) => body.pagesPrefix === "pages/shop/prod/web/r1a2b3c4d" && body.mode === "purge",
+        (body) => body.storageCoordinate === "shop/prod/web/r1a2b3c4d" && body.mode === "purge",
       ),
     ).toBe(true);
     expect(

@@ -22,7 +22,7 @@ import (
 
 type Store struct {
 	OpenClients      func(context.Context) (*gcloud.Clients, error)
-	RemoveTagRecords func(ctx context.Context, tier environment.Tier, scope naming.Coordinate, progress progress.Log) error
+	RemoveTagRecords func(ctx context.Context, tier environment.Tier, scope naming.StorageScope, progress progress.Log) error
 }
 
 func (a Store) bucket(ctx context.Context, tier environment.Tier, kind naming.ObjectKind) (*storage.BucketHandle, error) {
@@ -106,9 +106,14 @@ func (a Store) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadClose
 	return reader, nil
 }
 
-func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, progress progress.Log) error {
-	if scope.Project == "" {
-		return refusal.Refuse(refusal.CodeInvalid, "a scope naming no project names every project's objects")
+func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope naming.StorageScope, kinds []naming.ObjectKind, progress progress.Log) error {
+	prefixes := make([]string, len(kinds))
+	for i, kind := range kinds {
+		prefix, err := scope.Prefix(kind)
+		if err != nil {
+			return err
+		}
+		prefixes[i] = prefix
 	}
 	if tier == "" {
 		return ports.Tierless("an artifact")
@@ -127,16 +132,16 @@ func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope n
 	}
 	var errs []error
 	var swept []string
-	for _, kind := range kinds {
+	for i, kind := range kinds {
 		name := buckets.Of(kind.Class())
 		if name == "" {
 			continue
 		}
-		prefix := scope.StoragePrefix(kind)
-		swept = append(swept, "gs://"+name+"/"+prefix)
-		if err := sweep(ctx, client.Bucket(name), prefix); err != nil {
+		if err := sweep(ctx, client.Bucket(name), prefixes[i]); err != nil {
 			errs = append(errs, err)
+			continue
 		}
+		swept = append(swept, "gs://"+name+"/"+prefixes[i])
 	}
 	if slices.Contains(kinds, naming.ObjectPages) {
 		if err := a.RemoveTagRecords(ctx, tier, scope, progress); err != nil {

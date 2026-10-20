@@ -3,6 +3,7 @@ import { areTagsExpired, mergeRecord } from "@framework/next-cache";
 import { keptUntilSettled } from "@framework/node-runtime/background";
 import { runTagWrites } from "@framework/node-runtime/tag-records";
 import type { TagRecord } from "@platform/edge-contract/purge";
+import { storageCoordinateVar } from "@platform/edge-contract/storage-key";
 import { getNextHost } from "./host.mjs";
 import { notePurge } from "./purge-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";
@@ -49,7 +50,7 @@ function initialState(fingerprint: string): ClockState {
 }
 
 function sharedState(): ClockState {
-  const fingerprint = process.env.OCEL_STORAGE_COORDINATE ?? "";
+  const fingerprint = process.env[storageCoordinateVar] ?? "";
 
   const host = globalThis as Record<symbol, ClockState | undefined>;
   const existing = host[stateKey];

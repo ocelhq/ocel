@@ -1,7 +1,7 @@
 import type { NextHost } from "@framework/next-runtime/host";
 import { instanceCacheBytes, newInstanceCache } from "@framework/next-runtime/instance-cache";
 import { readPortBind } from "@framework/node-runtime/host";
-import { pagesPrefix, parseStorageCoordinate } from "@platform/edge-contract/storage-key";
+import { bucketVars, readStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { openPurgeFor } from "../cache/purge-target.mjs";
 import { newGcpCacheStore } from "./cache-store.mjs";
 import { cloudCdnShapedTagsPerObject } from "./cloud-cdn.mjs";
@@ -20,16 +20,16 @@ const memoryVar = "OCEL_FUNCTION_MEMORY_MB";
 export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
   const memoryMb = Number(env[memoryVar]);
   const cache = newInstanceCache(instanceCacheBytes(memoryMb > 0 ? memoryMb * MB : undefined));
-  const edgeBucket = env.OCEL_EDGE_BUCKET;
-  const cacheBucket = env.OCEL_CACHE_BUCKET;
-  const coordinate = parseStorageCoordinate(env.OCEL_STORAGE_COORDINATE ?? "");
+  const edgeBucket = env[bucketVars.edge];
+  const cacheBucket = env[bucketVars.cache];
+  const coordinate = readStorageCoordinate(env);
   const tagDatabase = env.OCEL_TAG_DATABASE;
   const purge = openPurgeFor(env);
   const records =
     edgeBucket && cacheBucket && coordinate && tagDatabase
       ? newFirestoreTagRecords(
           newFirestore({ database: tagDatabase, endpoint: env.OCEL_FIRESTORE_ENDPOINT }),
-          pagesPrefix(coordinate),
+          coordinate,
         )
       : undefined;
   const shared =

@@ -83,11 +83,10 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 			Functions: []provider.FunctionSpec{
 				{Name: "fn--" + app + "--entry", ArtifactDir: writeTree(t, map[string]string{"index.js": "the " + app + " entry"})},
 			},
-			Routing:     &provider.RoutingSpec{RootFunction: "fn--" + app + "--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
-			ISR:         &provider.ISRSpec{Coordinate: coord, TagNamespace: "tag:shop"},
-			Bytecode:    &provider.BytecodeSpec{Prefix: bytecodePrefixOf(coord)},
-			AssetPrefix: coord.AssetPrefix(),
-			Static:      nextStatic,
+			Routing: &provider.RoutingSpec{RootFunction: "fn--" + app + "--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
+			ISR:     &provider.ISRSpec{TagNamespace: "tag:shop"},
+			Storage: coord,
+			Static:  nextStatic,
 		},
 	}
 }
@@ -98,6 +97,7 @@ func siblingAppConfig(t *testing.T, apps ...string) Config {
 	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
 	cfg.Env = "prod"
 	cfg.ArtifactBucket = "artifacts-bucket"
+	cfg.BytecodeCache = true
 	cfg.StateTable = "ocel-state"
 	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
 	cfg.BackendURL = "s3://ocel-state/shop"

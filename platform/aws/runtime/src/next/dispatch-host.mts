@@ -4,10 +4,10 @@ import {
   readDispatchHost,
 } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
+import { bucketVars } from "@platform/edge-contract/storage-key";
 import { s3AssetBucket } from "./dispatch-assets.mjs";
 import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./dispatch-signing.mjs";
 import { isLambdaThrottle } from "./lambda-throttle.mjs";
-import { edgeBucketVar } from "./object-store.mjs";
 
 const lambdaInvokePayloadBytes = 6 * 1024 * 1024;
 
@@ -15,10 +15,10 @@ const functionUrlEventEnvelopeBytes = 64 * 1024;
 
 export function awsDispatchAccess(env: NodeJS.ProcessEnv): DispatchAccess {
   const region = env.AWS_REGION;
-  const bucket = env[edgeBucketVar];
+  const bucket = env[bucketVars.edge];
   if (bucket && !(region && credentialsOf(env))) {
     throw new Error(
-      `ocel: ${edgeBucketVar} names ${bucket} but this function has no credentials to read it with`,
+      `ocel: ${bucketVars.edge} names ${bucket} but this function has no credentials to read it with`,
     );
   }
   return {

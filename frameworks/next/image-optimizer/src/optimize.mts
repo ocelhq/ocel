@@ -7,9 +7,10 @@ import {
   type RouteImage,
   validateImage,
 } from "@framework/next-protocol/image";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { loadImageConfig } from "./config.mjs";
 import { BOOTSTRAP_MESSAGE, ImageError, upstreamFailure } from "./errors.mjs";
-import { assetKey, releaseAssetPrefix } from "./keys.mjs";
+import { assetKey, releaseOfAssetPrefix } from "./keys.mjs";
 import { extensionFor } from "./sniff.mjs";
 import type { ObjectStore } from "./store.mjs";
 import { type Transformed, transform } from "./transform.mjs";
@@ -45,8 +46,8 @@ export async function optimize(
 }
 
 async function run(payload: ImageOriginRequest, deps: OptimizeDeps): Promise<OriginResponse> {
-  const assetPrefix = releaseAssetPrefix(payload.assetPrefix);
-  const config = await loadImageConfig(deps.store, assetPrefix, payload.configHash);
+  const release = releaseOfAssetPrefix(payload.assetPrefix);
+  const config = await loadImageConfig(deps.store, release, payload.configHash);
 
   const result = validateImage(payload, config);
   if (!result.ok) throw new ImageError(result.status, result.message);
@@ -56,7 +57,7 @@ async function run(payload: ImageOriginRequest, deps: OptimizeDeps): Promise<Ori
     ? await fetchUpstream(href, config, deps.upstream)
     : payload.routeImage
       ? decodeRouteImage(payload.routeImage, config)
-      : await readLocal(deps.store, assetPrefix, href, config);
+      : await readLocal(deps.store, release, href, config);
 
   const transformed = await transform({
     bytes: source.bytes,
@@ -71,12 +72,12 @@ async function run(payload: ImageOriginRequest, deps: OptimizeDeps): Promise<Ori
 
 async function readLocal(
   store: ObjectStore,
-  assetPrefix: string,
+  release: StorageCoordinate,
   href: string,
   config: CompiledImageConfig,
 ): Promise<UpstreamImage> {
   const url = new URL(href, "http://n");
-  const key = assetKey(assetPrefix, url.pathname);
+  const key = assetKey(release, url.pathname);
   let object;
   try {
     object = await store.get(key, config.maximumResponseBody);

@@ -34,19 +34,24 @@ describe("the store a Serve miss reads page entries from", () => {
     expect(bucket.asked).toEqual([`https://assets.s3.eu-west-2.amazonaws.com/${key}`]);
   });
 
-  it.each([404, 403])(
-    "finds no entry the bucket answers %d for, and reads nowhere else",
-    async (status) => {
-      const bucket = bucketAnswering(() => new Response(null, { status }));
+  it("finds no entry the bucket answers 404 for, and reads nowhere else", async () => {
+    const bucket = bucketAnswering(() => new Response(null, { status: 404 }));
 
-      const read = await withGlobalFetch(bucket.fetch, async () =>
-        openStore(awsBucket).entries?.get(key),
-      );
+    const read = await withGlobalFetch(bucket.fetch, async () =>
+      openStore(awsBucket).entries?.get(key),
+    );
 
-      expect(read).toBeNull();
-      expect(bucket.asked).toHaveLength(1);
-    },
-  );
+    expect(read).toBeNull();
+    expect(bucket.asked).toHaveLength(1);
+  });
+
+  it("fails a read the bucket refuses the edge's key with 403, rather than finding no entry", async () => {
+    const bucket = bucketAnswering(() => new Response(null, { status: 403 }));
+
+    await expect(
+      withGlobalFetch(bucket.fetch, async () => openStore(awsBucket).entries?.get(key)),
+    ).rejects.toThrow(`403 for https://assets.s3.eu-west-2.amazonaws.com/${key}`);
+  });
 
   it("fails a read the bucket answers with an error, naming where it read", async () => {
     const bucket = bucketAnswering(() => new Response(null, { status: 500 }));

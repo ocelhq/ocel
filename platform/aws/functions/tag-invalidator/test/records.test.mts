@@ -1,9 +1,9 @@
 import { tagNamespace, tagSortKey } from "@platform/aws-runtime/tag-index";
 import { describe, expect, it } from "vitest";
 
-import { coordinateOf, raisesOf, type StreamRecord } from "../src/records.mjs";
+import { raisesOf, type StreamRecord } from "../src/records.mjs";
 
-const PREFIX = "pages/acme/prod/web/r3f8a1c9d";
+const BUILD = "acme/prod/web/r3f8a1c9d";
 
 let nextSequence = 0;
 
@@ -42,9 +42,20 @@ describe("raisesOf", () => {
       tagRecord("cart", { expired: { N: "300" } }, other),
     ]);
 
-    expect([...raises.keys()].sort()).toEqual(["pages/acme/prod/admin/rbbbbbbbb", PREFIX]);
-    expect(raises.get(PREFIX)!.tags).toEqual(["cart", "home"]);
-    expect(raises.get("pages/acme/prod/admin/rbbbbbbbb")!.tags).toEqual(["cart"]);
+    expect([...raises.keys()].sort()).toEqual(["acme/prod/admin/rbbbbbbbb", BUILD]);
+    expect(raises.get(BUILD)!.tags).toEqual(["cart", "home"]);
+    expect(raises.get("acme/prod/admin/rbbbbbbbb")!.tags).toEqual(["cart"]);
+  });
+
+  it("carries the storage coordinate of the build that raised it", () => {
+    const raises = raisesOf([tagRecord("cart", { expired: { N: "100" } })]);
+
+    expect(raises.get(BUILD)!.coordinate).toEqual({
+      project: "acme",
+      env: "prod",
+      app: "web",
+      release: "r3f8a1c9d",
+    });
   });
 
   it("names a tag once however many records raised it", () => {
@@ -53,20 +64,20 @@ describe("raisesOf", () => {
       tagRecord("cart", { stale: { N: "50" } }),
     ]);
 
-    expect(raises.get(PREFIX)!.tags).toEqual(["cart"]);
-    expect(raises.get(PREFIX)!.sequenceNumbers).toHaveLength(2);
+    expect(raises.get(BUILD)!.tags).toEqual(["cart"]);
+    expect(raises.get(BUILD)!.sequenceNumbers).toHaveLength(2);
   });
 
   it("reads a tag expired at once as a purge raised when it was expired", () => {
     const raises = raisesOf([tagRecord("cart", { expired: { N: "300" } })]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([{ tag: "cart", mode: "purge", raisedAt: 300 }]);
+    expect(raises.get(BUILD)!.entries).toEqual([{ tag: "cart", mode: "purge", raisedAt: 300 }]);
   });
 
   it("reads a tag only marked stale as an invalidate raised when it went stale", () => {
     const raises = raisesOf([tagRecord("home", { stale: { N: "200" } })]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([
+    expect(raises.get(BUILD)!.entries).toEqual([
       { tag: "home", mode: "invalidate", raisedAt: 200 },
     ]);
   });
@@ -74,7 +85,7 @@ describe("raisesOf", () => {
   it("reads a tag stale now and expiring later as an invalidate, raised when it went stale", () => {
     const raises = raisesOf([tagRecord("home", { stale: { N: "200" }, expired: { N: "60200" } })]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([
+    expect(raises.get(BUILD)!.entries).toEqual([
       { tag: "home", mode: "invalidate", raisedAt: 200 },
     ]);
   });
@@ -82,7 +93,7 @@ describe("raisesOf", () => {
   it("reads a tag stale and expired together as a purge", () => {
     const raises = raisesOf([tagRecord("home", { stale: { N: "200" }, expired: { N: "200" } })]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([{ tag: "home", mode: "purge", raisedAt: 200 }]);
+    expect(raises.get(BUILD)!.entries).toEqual([{ tag: "home", mode: "purge", raisedAt: 200 }]);
   });
 
   it("reads a tag gone stale and later expired as a purge raised when it expired", () => {
@@ -90,7 +101,7 @@ describe("raisesOf", () => {
       tagRecord("home", { stale: { N: "200" }, expired: { N: "600" } }, undefined, 600),
     ]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([{ tag: "home", mode: "purge", raisedAt: 600 }]);
+    expect(raises.get(BUILD)!.entries).toEqual([{ tag: "home", mode: "purge", raisedAt: 600 }]);
   });
 
   it("reads a tag expired and later gone stale as an invalidate raised when it went stale", () => {
@@ -98,7 +109,7 @@ describe("raisesOf", () => {
       tagRecord("home", { stale: { N: "600" }, expired: { N: "200" } }, undefined, 600),
     ]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([
+    expect(raises.get(BUILD)!.entries).toEqual([
       { tag: "home", mode: "invalidate", raisedAt: 600 },
     ]);
   });
@@ -109,7 +120,7 @@ describe("raisesOf", () => {
       tagRecord("cart", { stale: { N: "500" }, expired: { N: "300" } }, undefined, 500),
     ]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([
+    expect(raises.get(BUILD)!.entries).toEqual([
       { tag: "cart", mode: "purge", raisedAt: 300 },
       { tag: "cart", mode: "invalidate", raisedAt: 500 },
     ]);
@@ -121,7 +132,7 @@ describe("raisesOf", () => {
       tagRecord("cart", { stale: { N: "300" }, expired: { N: "500" } }, undefined, 500),
     ]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([{ tag: "cart", mode: "purge", raisedAt: 500 }]);
+    expect(raises.get(BUILD)!.entries).toEqual([{ tag: "cart", mode: "purge", raisedAt: 500 }]);
   });
 
   it("keeps the later of two raises of a tag in one mode", () => {
@@ -130,7 +141,7 @@ describe("raisesOf", () => {
       tagRecord("cart", { stale: { N: "300" } }, undefined, 300),
     ]);
 
-    expect(raises.get(PREFIX)!.entries).toEqual([
+    expect(raises.get(BUILD)!.entries).toEqual([
       { tag: "cart", mode: "invalidate", raisedAt: 500 },
     ]);
   });
@@ -139,7 +150,7 @@ describe("raisesOf", () => {
     const raises = raisesOf([
       tagRecord("evil#PROJECT#other#STACK#prod--app--r00000000#TAG#", { expired: { N: "1" } }),
     ]);
-    expect([...raises.keys()]).toEqual([PREFIX]);
+    expect([...raises.keys()]).toEqual([BUILD]);
   });
 
   it("acts on no partition that only looks like a tag namespace", () => {
@@ -160,17 +171,5 @@ describe("raisesOf", () => {
 
   it("ignores a record with no new image, which a REMOVE produces", () => {
     expect(raisesOf([{ dynamodb: {} }, {}]).size).toBe(0);
-  });
-});
-
-describe("coordinateOf", () => {
-  it("reads the project the invalidation targets are scoped by and the release the tags are prefixed with", () => {
-    expect(coordinateOf(PREFIX)).toEqual({ project: "acme", release: "r3f8a1c9d" });
-  });
-
-  it("reads nothing from a prefix that is not one release's pages", () => {
-    expect(coordinateOf("pages/acme/prod/web")).toBeNull();
-    expect(coordinateOf("assets/acme/prod/web/r3f8a1c9d")).toBeNull();
-    expect(coordinateOf("prod/acme/web/r3f8a1c9d/isr")).toBeNull();
   });
 });

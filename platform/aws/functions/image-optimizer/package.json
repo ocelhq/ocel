@@ -12,7 +12,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
     "@framework/next-image-optimizer": "workspace:*",
-    "@framework/next-protocol": "workspace:*"
+    "@framework/next-protocol": "workspace:*",
+    "@platform/edge-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",

@@ -25,10 +25,7 @@ function open() {
         sleep: async () => {},
       }),
       coordinate,
-      newFirestoreTagRecords(
-        newFirestore({ database, fetch: fake.fetch }),
-        "pages/shop/prod/web/r1a2b3c4d",
-      ),
+      newFirestoreTagRecords(newFirestore({ database, fetch: fake.fetch }), coordinate),
     );
   return { bucket, instance };
 }

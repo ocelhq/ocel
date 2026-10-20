@@ -1,27 +1,29 @@
-import { objectKey, parseObjectKey } from "@platform/edge-contract/storage-key";
+import {
+  objectKey,
+  parseAssetPrefix,
+  type StorageCoordinate,
+} from "@platform/edge-contract/storage-key";
 import { BootstrapError } from "./errors.mjs";
 
 const IMAGE_CONFIG = "image-config.json";
 
-export function releaseAssetPrefix(value: unknown): string {
+export function releaseOfAssetPrefix(value: unknown): StorageCoordinate {
   if (typeof value !== "string" || value === "") {
     throw new BootstrapError("request has no asset prefix", value);
   }
-  const key = parseObjectKey(value);
-  if (key?.kind !== "assets" || key.rest !== "") {
+  const release = parseAssetPrefix(value);
+  if (release === undefined) {
     throw new BootstrapError("asset prefix names no release's assets", value);
   }
-  return value;
+  return release;
 }
 
-export function imageConfigKey(assetPrefix: string): string {
-  const key = parseObjectKey(assetPrefix);
-  if (key === undefined) throw new BootstrapError("asset prefix names no release", assetPrefix);
-  return objectKey("image-config", key, IMAGE_CONFIG);
+export function imageConfigKey(release: StorageCoordinate): string {
+  return objectKey("image-config", release, IMAGE_CONFIG);
 }
 
-export function assetKey(assetPrefix: string, pathname: string): string {
-  return `${assetPrefix}${assetPath(pathname)}`;
+export function assetKey(release: StorageCoordinate, pathname: string): string {
+  return objectKey("assets", release, assetPath(pathname));
 }
 
 export function assetPath(pathname: string): string {

@@ -9,6 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -24,18 +26,14 @@ const (
 	MemoryEnvVar            = "OCEL_FUNCTION_MEMORY_MB"
 	RouterKindEnvVar        = "OCEL_ROUTER_KIND"
 	RouteTableEnvVar        = "OCEL_NEXT_ROUTE_TABLE"
-	assetPrefixEnvVar       = "OCEL_ASSET_PREFIX"
 	slugEnvVar              = "OCEL_SLUG"
 	appNameEnvVar           = "OCEL_APP"
 	buildIDEnvVar           = "OCEL_BUILD_ID"
-	storageCoordinateEnvVar = "OCEL_STORAGE_COORDINATE"
 	isrTagNamespaceEnvVar   = "OCEL_ISR_TAG_NAMESPACE"
-	CacheBucketEnvVar       = "OCEL_CACHE_BUCKET"
 	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
 	TagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
 	purgeSecretEnvVar       = "OCEL_PURGE_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
-	EdgeBucketEnvVar        = "OCEL_EDGE_BUCKET"
 	imageEndpointEnvVar     = "OCEL_IMAGE_ENDPOINT"
 )
 
@@ -67,8 +65,7 @@ func RefuseGuardWithoutShieldingEdge(spec provider.StackSpec) error {
 }
 
 type nextCache struct {
-	edgeBucket      string
-	cacheBucket     string
+	buckets         naming.Buckets
 	tagDatabase     string
 	storageEndpoint string
 	tagEndpoint     string
@@ -82,7 +79,8 @@ func SignsEdgePurges(spec provider.StackSpec) bool {
 
 func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, cache nextCache) map[string]string {
 	app := spec.App
-	env := map[string]string{MemoryEnvVar: strconv.Itoa(s.Memory)}
+	env := naming.StorageEnv(app.Storage, cache.buckets)
+	env[MemoryEnvVar] = strconv.Itoa(s.Memory)
 	if app.Router != "" {
 		env[RouterKindEnvVar] = string(app.Router)
 	}
@@ -94,14 +92,12 @@ func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, ca
 			env[edge.OriginSignedVar] = "1"
 		}
 		env[RouteTableEnvVar] = routeTableInImage
-		env[EdgeBucketEnvVar] = cache.edgeBucket
 		if cache.storageEndpoint != "" {
 			env[storageEndpointEnvVar] = cache.storageEndpoint
 		}
 		if rules := app.Static.Variable(); rules != "" {
 			env[edge.StaticRulesVar] = rules
 		}
-		env[assetPrefixEnvVar] = app.AssetPrefix
 		env[slugEnvVar] = spec.Ref.Project
 		env[appNameEnvVar] = app.App
 		env[buildIDEnvVar] = app.BuildID
@@ -115,10 +111,8 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	if isr == nil {
 		return env
 	}
-	env[storageCoordinateEnvVar] = isr.Coordinate.StorageCoordinate()
+	env[processenv.ISREnvVar] = "1"
 	env[isrTagNamespaceEnvVar] = isr.TagNamespace
-	env[EdgeBucketEnvVar] = cache.edgeBucket
-	env[CacheBucketEnvVar] = cache.cacheBucket
 	env[TagDatabaseEnvVar] = cache.tagDatabase
 	if cache.purgeSecret != "" {
 		env[purgeSecretEnvVar] = cache.purgeSecret
@@ -136,7 +130,8 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 }
 
 func NewContainerEnv(spec provider.StackSpec, memory int, cache nextCache) map[string]string {
-	env := newNextCacheEnv(spec.App.ISR, cache)
+	env := naming.StorageEnv(spec.App.Storage, cache.buckets)
+	maps.Copy(env, newNextCacheEnv(spec.App.ISR, cache))
 	env[MemoryEnvVar] = strconv.Itoa(memory)
 	return env
 }
@@ -151,8 +146,7 @@ func FillContainerDefaults(s run.Serving) run.Serving {
 func NewCache(names names.Names, buckets names.TierBuckets, ref provider.StackRef, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
 	return nextCache{
 		purgeSecret:     purgeSecret,
-		edgeBucket:      buckets.Edge,
-		cacheBucket:     buckets.Cache,
+		buckets:         naming.Buckets{naming.StorageEdge: buckets.Edge, naming.StorageCache: buckets.Cache},
 		tagDatabase:     "projects/" + names.Project() + "/databases/" + names.ProjectWritableDatabase(ref.Tier, ref.Project),
 		storageEndpoint: storageEndpoint,
 		tagEndpoint:     tagEndpoint,

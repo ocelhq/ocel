@@ -56,7 +56,7 @@ func TestANodeServiceThatRevalidatesBehindTheWorkerIsToldWhereToPurgeAndTheSecre
 	if got := env[edge.PurgeURLVar]; got != "https://shop.acct.workers.dev/purge" {
 		t.Errorf("%s = %q, want the URL the worker takes purges at", edge.PurgeURLVar, got)
 	}
-	if want := edge.DerivePurgeSecret(w.seed, "pages/shop/prod/web/r1a2b3c4d"); env["OCEL_PURGE_SECRET"] != want {
+	if want := edge.DerivePurgeSecret(w.seed, "shop/prod/web/r1a2b3c4d"); env["OCEL_PURGE_SECRET"] != want {
 		t.Errorf("OCEL_PURGE_SECRET = %q, want the deployment's derived secret", env["OCEL_PURGE_SECRET"])
 	}
 	if want := "shop/prod/web/r1a2b3c4d"; env["OCEL_STORAGE_COORDINATE"] != want {

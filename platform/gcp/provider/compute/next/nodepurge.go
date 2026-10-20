@@ -2,6 +2,7 @@ package next
 
 import (
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -14,7 +15,7 @@ func NewNodePurgeEnv(spec provider.StackSpec, purgeSecret string) map[string]str
 	if !signs && !purgesCloudCDN(spec) {
 		return nil
 	}
-	env := map[string]string{storageCoordinateEnvVar: isr.Coordinate.StorageCoordinate()}
+	env := map[string]string{naming.StorageCoordinateVar: spec.App.Storage.StorageCoordinate()}
 	if signs {
 		env[purgeSecretEnvVar] = purgeSecret
 		env[edge.PurgeURLVar] = isr.PurgeURL

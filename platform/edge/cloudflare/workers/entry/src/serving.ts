@@ -17,18 +17,18 @@ export interface ServingPorts {
 
 export function newServing(
   ports: ServingPorts,
-  scope: Omit<RenderCoordinates, "variant"> & { slug: string; pagesPrefix: string },
+  scope: Omit<RenderCoordinates, "variant"> & { slug: string; storageCoordinate: string },
 ): Serving {
   return {
     serve: ports.serve,
     host: scope.host,
     release: scope.release,
     slug: scope.slug,
-    pagesPrefix: scope.pagesPrefix,
+    storageCoordinate: scope.storageCoordinate,
     purge(groups, awaited) {
       const run = purgeInBand(groups, {
         queue: ports.queue,
-        scope: { slug: scope.slug, pagesPrefix: scope.pagesPrefix },
+        scope: { slug: scope.slug, storageCoordinate: scope.storageCoordinate },
         now: ports.now ?? Date.now,
       });
       ports.waitUntil(run);

@@ -13,7 +13,8 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, mem
 	if !servesStaticFiles(spec) {
 		return nil, nil
 	}
-	keys, err := newStaticKeys(spec.App.AssetPrefix)
+	storage := spec.App.Storage
+	app, err := naming.AppScope(storage)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +22,9 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, mem
 	if err != nil {
 		return nil, err
 	}
-	app := keys.app.Project + "/" + keys.app.Env + "/" + keys.app.App
-	condition := gcloud.ObjectKindsCondition("ocel assets of "+app, buckets, keys.app, naming.ObjectAssets, naming.ObjectImageConfig)
+	condition, err := gcloud.ObjectKindsCondition("ocel assets of "+storage.Project+"/"+storage.Env+"/"+storage.App, buckets, app, naming.ObjectAssets, naming.ObjectImageConfig)
+	if err != nil {
+		return nil, err
+	}
 	return []grants.Grant{grants.OnProject(grants.AssetsRole, member, condition)}, nil
 }

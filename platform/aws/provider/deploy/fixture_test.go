@@ -64,10 +64,6 @@ func storageCoordinate(env, slug, app string, release naming.ReleaseToken) namin
 	}
 }
 
-func bytecodePrefixOf(c naming.Coordinate) string {
-	return strings.TrimSuffix(c.StoragePrefix(naming.ObjectBytecode), naming.PathSeparator)
-}
-
 func appEdgeBundleKey(c naming.Coordinate) string {
 	return c.BundleKey("bundle.json")
 }

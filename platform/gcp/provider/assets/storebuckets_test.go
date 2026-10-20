@@ -63,7 +63,7 @@ func (b *bucketObjects) store(t *testing.T) Store {
 	t.Cleanup(server.Close)
 	return Store{
 		OpenClients: googletest.Opener(googletest.Clients(server.URL)),
-		RemoveTagRecords: func(context.Context, environment.Tier, naming.Coordinate, progress.Log) error {
+		RemoveTagRecords: func(context.Context, environment.Tier, naming.StorageScope, progress.Log) error {
 			return nil
 		},
 	}
@@ -118,7 +118,10 @@ func TestRemovingObjectsTakesEachKindsPrefixFromItsOwnBucketAndNothingBeside(t *
 			release.ObjectKey(naming.ObjectFetchCache, "h.cache.json"), sibling.ObjectKey(naming.ObjectUseCache, "u.json"),
 		},
 	}}
-	scope := naming.Coordinate{Project: release.Project, Env: release.Env}
+	scope, err := naming.EnvScope(release.Project, release.Env)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := objects.store(t).RemoveObjects(context.Background(), environment.TierPreview, scope, naming.CoordinateObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects() = %v", err)

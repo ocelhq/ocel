@@ -14,14 +14,15 @@ import {
   purgeSignatureHeader,
   readPurge,
   readPurgeEntry,
-  readReleaseToken,
   signPurge,
   tagsPerPurgeRequest,
   verifyPurge,
 } from "../src/purge.mjs";
+import { parseStorageCoordinate } from "../src/storage-key.mjs";
 
 const URL = "https://acme-prod.sub.workers.dev/.ocel/purge";
-const PREFIX = "pages/acme/prod/web/r0a1b2c3d";
+const COORDINATE = { project: "acme", env: "prod", app: "web", release: "r0a1b2c3d" };
+const RENDERED = "acme/prod/web/r0a1b2c3d";
 const SEED = "seed-1";
 
 interface Sent {
@@ -61,27 +62,28 @@ beforeEach(() => {
 });
 
 describe("derivePurgeSecret", () => {
-  it("is the HMAC of the release's pages prefix under the seed, in hex", async () => {
-    const expected = createHmac("sha256", SEED).update(PREFIX).digest("hex");
+  it("is the HMAC of the release's storage coordinate under the seed, in hex", async () => {
+    const expected = createHmac("sha256", SEED).update(RENDERED).digest("hex");
 
-    expect(await derivePurgeSecret(SEED, PREFIX)).toBe(expected);
+    expect(await derivePurgeSecret(SEED, COORDINATE)).toBe(expected);
   });
 
-  it("is the secret the Go edge contract derives from the same seed and prefix", async () => {
-    const { seed, pagesPrefix, secret } = purgeSecretFixture;
+  it("is the secret the Go edge contract derives from the same seed and coordinate", async () => {
+    const { seed, storageCoordinate, secret } = purgeSecretFixture;
+    const coordinate = parseStorageCoordinate(storageCoordinate)!;
 
-    expect(await derivePurgeSecret(seed, pagesPrefix)).toBe(secret);
+    expect(await derivePurgeSecret(seed, coordinate)).toBe(secret);
   });
 
-  it("differs per prefix and per seed", async () => {
-    const secret = await derivePurgeSecret(SEED, PREFIX);
-    expect(secret).not.toBe(await derivePurgeSecret(SEED, "pages/acme/prod/web/r9abcdef0"));
-    expect(secret).not.toBe(await derivePurgeSecret("seed-2", PREFIX));
+  it("differs per release and per seed", async () => {
+    const secret = await derivePurgeSecret(SEED, COORDINATE);
+    expect(secret).not.toBe(await derivePurgeSecret(SEED, { ...COORDINATE, release: "r9abcdef0" }));
+    expect(secret).not.toBe(await derivePurgeSecret("seed-2", COORDINATE));
   });
 });
 
 describe("signPurge and verifyPurge", () => {
-  const body = JSON.stringify({ pagesPrefix: PREFIX, mode: "purge", tags: [] });
+  const body = JSON.stringify({ storageCoordinate: RENDERED, mode: "purge", tags: [] });
   const bytes = new TextEncoder().encode(body);
 
   it("signs a body with the HMAC of it under the secret, in hex", async () => {
@@ -107,21 +109,6 @@ describe("signPurge and verifyPurge", () => {
     expect(await verifyPurge("secret", bytes, "")).toBe(false);
     expect(await verifyPurge("secret", bytes, "abc")).toBe(false);
     expect(await verifyPurge("secret", bytes, "zz")).toBe(false);
-  });
-});
-
-describe("readReleaseToken", () => {
-  it("is the release token of a release's pages prefix", () => {
-    expect(readReleaseToken(PREFIX)).toBe("r0a1b2c3d");
-  });
-
-  it("is nothing for a prefix that is not a release's pages prefix", () => {
-    expect(readReleaseToken("pages/acme/prod/web")).toBeUndefined();
-    expect(readReleaseToken("assets/acme/prod/web/r0a1b2c3d")).toBeUndefined();
-    expect(readReleaseToken("pages/acme/prod/web/r0a1b2c3d/index.cache.json")).toBeUndefined();
-    expect(readReleaseToken("pages/acme//web/r0a1b2c3d")).toBeUndefined();
-    expect(readReleaseToken("prod/acme/web/r0a1b2c3d/isr")).toBeUndefined();
-    expect(readReleaseToken("")).toBeUndefined();
   });
 });
 
@@ -174,10 +161,10 @@ describe("purgeHeaderFor", () => {
 });
 
 describe("postPurge", async () => {
-  const secret = await derivePurgeSecret(SEED, PREFIX);
+  const secret = await derivePurgeSecret(SEED, COORDINATE);
 
-  it("posts the release's pages prefix, the mode and each tag with its raisedAt, signed over the body", async () => {
-    await postPurge(sender(), URL, secret, PREFIX, [
+  it("posts the release's storage coordinate, the mode and each tag with its raisedAt, signed over the body", async () => {
+    await postPurge(sender(), URL, secret, COORDINATE, [
       { tag: "products", mode: "purge", raisedAt: 100 },
     ]);
 
@@ -185,7 +172,7 @@ describe("postPurge", async () => {
     const sent = worker.sent[0]!;
     expect(sent.url).toBe(URL);
     expect(JSON.parse(sent.body)).toEqual({
-      pagesPrefix: PREFIX,
+      storageCoordinate: RENDERED,
       mode: "purge",
       tags: [{ tag: "products", raisedAt: 100 }],
     });
@@ -193,7 +180,7 @@ describe("postPurge", async () => {
   });
 
   it("sends purges and invalidates as two requests", async () => {
-    await postPurge(sender(), URL, secret, PREFIX, [
+    await postPurge(sender(), URL, secret, COORDINATE, [
       { tag: "a", mode: "invalidate", raisedAt: 1 },
       { tag: "b", mode: "purge", raisedAt: 2 },
     ]);
@@ -208,7 +195,7 @@ describe("postPurge", async () => {
       raisedAt: 1,
     }));
 
-    await postPurge(sender(), URL, secret, PREFIX, entries);
+    await postPurge(sender(), URL, secret, COORDINATE, entries);
 
     expect(worker.sent.map((s) => JSON.parse(s.body).tags.length)).toEqual([
       tagsPerPurgeRequest,
@@ -217,7 +204,7 @@ describe("postPurge", async () => {
   });
 
   it("sends nothing for no tags", async () => {
-    await postPurge(sender(), URL, secret, PREFIX, []);
+    await postPurge(sender(), URL, secret, COORDINATE, []);
 
     expect(worker.sent).toEqual([]);
   });
@@ -225,7 +212,7 @@ describe("postPurge", async () => {
   it("treats 204, the answer for a release no longer served, as sent", async () => {
     worker.answers.push(new Response(null, { status: 204 }));
 
-    await postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(sender(), URL, secret, COORDINATE, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(worker.sent).toHaveLength(1);
   });
@@ -233,7 +220,7 @@ describe("postPurge", async () => {
   it.each([429, 500, 503])("waits and sends again after a %i", async (status) => {
     worker.answers.push(new Response(null, { status }));
 
-    await postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(sender(), URL, secret, COORDINATE, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(worker.sent).toHaveLength(2);
     expect(worker.sent[1]).toEqual(worker.sent[0]);
@@ -243,7 +230,7 @@ describe("postPurge", async () => {
   it("waits and sends again after the network fails", async () => {
     worker.answers.push(new TypeError("fetch failed"));
 
-    await postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(sender(), URL, secret, COORDINATE, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(worker.sent).toHaveLength(2);
   });
@@ -262,7 +249,7 @@ describe("postPurge", async () => {
       }) as typeof fetch,
     };
 
-    await postPurge(stalling, URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(stalling, URL, secret, COORDINATE, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(attempts).toBe(2);
   });
@@ -271,7 +258,7 @@ describe("postPurge", async () => {
     for (let i = 0; i < 3; i++) worker.answers.push(new Response(null, { status: 503 }));
     const jittered = { ...sender(), random: () => 0.5 };
 
-    await postPurge(jittered, URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
+    await postPurge(jittered, URL, secret, COORDINATE, [{ tag: "a", mode: "purge", raisedAt: 1 }]);
 
     expect(waits).toHaveLength(3);
     expect(waits[0]).toBeLessThan(waits[1]!);
@@ -282,7 +269,7 @@ describe("postPurge", async () => {
   it("gives up on a worker that keeps refusing, naming the status and not the secret", async () => {
     for (let i = 0; i < 10; i++) worker.answers.push(new Response(null, { status: 503 }));
 
-    const failure = await postPurge(sender(), URL, secret, PREFIX, [
+    const failure = await postPurge(sender(), URL, secret, COORDINATE, [
       { tag: "a", mode: "purge", raisedAt: 1 },
     ]).catch((error: Error) => error);
 
@@ -294,11 +281,11 @@ describe("postPurge", async () => {
 
   it("rejects with the status the worker last answered, and none for a network failure", async () => {
     worker.answers.push(new Response(null, { status: 404 }));
-    const answered = await postPurge(sender(), URL, secret, PREFIX, [
+    const answered = await postPurge(sender(), URL, secret, COORDINATE, [
       { tag: "a", mode: "purge", raisedAt: 1 },
     ]).catch((error: unknown) => error);
     for (let i = 0; i < 10; i++) worker.answers.push(new TypeError("fetch failed"));
-    const unreached = await postPurge(sender(), URL, secret, PREFIX, [
+    const unreached = await postPurge(sender(), URL, secret, COORDINATE, [
       { tag: "a", mode: "purge", raisedAt: 1 },
     ]).catch((error: unknown) => error);
 
@@ -314,7 +301,7 @@ describe("postPurge", async () => {
       worker.answers.push(new Response(null, { status }));
 
       await expect(
-        postPurge(sender(), URL, secret, PREFIX, [{ tag: "a", mode: "purge", raisedAt: 1 }]),
+        postPurge(sender(), URL, secret, COORDINATE, [{ tag: "a", mode: "purge", raisedAt: 1 }]),
       ).rejects.toThrow(String(status));
 
       expect(worker.sent).toHaveLength(1);

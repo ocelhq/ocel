@@ -18,8 +18,7 @@ import (
 )
 
 func SeedPrerenders(ctx context.Context, store *assets.Store, spec provider.StackSpec, runProgress progress.Log) error {
-	isr := spec.App.ISR
-	seeds, err := prerender.Seeds(buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App), isr.Coordinate)
+	seeds, err := prerender.Seeds(buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App), spec.App.Storage)
 	if err != nil {
 		return err
 	}

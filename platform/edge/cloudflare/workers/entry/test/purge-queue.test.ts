@@ -15,7 +15,7 @@ declare module "cloudflare:test" {
 let objects = 0;
 const freshQueue = () => env.PURGE_QUEUE.getByName(`queue-${objects++}`);
 
-const SCOPE = { slug: "p1", pagesPrefix: "pages/p1/prod/web/r00000001" };
+const SCOPE = { slug: "p1", storageCoordinate: "p1/prod/web/r00000001" };
 
 describeBacklogStore("memory", async (body) => {
   await body(memoryBacklogStore());
@@ -77,10 +77,10 @@ describe("the PurgeQueue object", () => {
 
     await runInDurableObject(queue, async (instance) => {
       await expect(
-        instance.raise({ slug: "p1", pagesPrefix: "not/a/release" }, "purge", [
+        instance.raise({ slug: "p1", storageCoordinate: "not/a/release" }, "purge", [
           { tag: "r00000001|a", raisedAt: 7_000 },
         ]),
-      ).rejects.toThrow(/not the pages prefix of a release/);
+      ).rejects.toThrow(/not the storage coordinate of a release/);
     });
     expect(await queue.readTimes(["r00000001|a"])).toEqual({});
   });
@@ -267,7 +267,7 @@ describe("the PurgeQueue retiring a release", () => {
     await queue.raise(SCOPE, "invalidate", [{ tag: "r00000001|a", raisedAt: 1_800_000_000_000 }]);
     await queue.raise(SCOPE, "purge", [{ tag: "r00000001|b", raisedAt: 1_800_000_000_500 }]);
     vi.setSystemTime(1_800_000_000_000 + RETIREMENT_CHECK_EVERY_MS + 1);
-    await queue.raise({ slug: "p1", pagesPrefix: "pages/p1/prod/web/r00000002" }, "purge", [
+    await queue.raise({ slug: "p1", storageCoordinate: "p1/prod/web/r00000002" }, "purge", [
       { tag: "r00000002|a", raisedAt: Date.now() },
     ]);
     await runDurableObjectAlarm(queue);
@@ -320,7 +320,7 @@ describe("the PurgeQueue retiring a release", () => {
 
       served = "forgotten";
       vi.setSystemTime(Date.now() + RETIREMENT_CHECK_EVERY_MS + 1);
-      await queue.raise({ slug: "p1", pagesPrefix: "pages/p1/prod/web/r00000002" }, "purge", [
+      await queue.raise({ slug: "p1", storageCoordinate: "p1/prod/web/r00000002" }, "purge", [
         { tag: "r00000002|b", raisedAt: Date.now() },
       ]);
       await runDurableObjectAlarm(queue);

@@ -120,7 +120,7 @@ func TestTheDeployReportFileHoldsTheDocumentTheConsoleReceived(t *testing.T) {
 	}
 
 	sent := console.Reports()[0].GetDeployment()
-	if got := readDeployReport(t, fixture.Root); got.GetId() != sent.GetId() || got.GetPromotion().GetId() != sent.GetPromotion().GetId() || got.GetApps()[0].GetStoragePrefix() == "" {
+	if got := readDeployReport(t, fixture.Root); got.GetId() != sent.GetId() || got.GetPromotion().GetId() != sent.GetPromotion().GetId() || got.GetApps()[0].GetStorageCoordinate() == "" {
 		t.Errorf("file holds %v, want the document the console received: %v", got, sent)
 	}
 }

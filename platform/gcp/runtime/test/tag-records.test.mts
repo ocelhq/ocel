@@ -5,8 +5,8 @@ import { newFirestoreTagRecords } from "../src/next/tag-records.mjs";
 import { newFirestoreDatabase } from "./firestore-database.mjs";
 
 const database = "projects/p/databases/ocel-production-tags";
-const pagesPrefix = "pages/shop/prod/web/r1a2b3c4d";
-const prefix = `${pagesPrefix}/`;
+const coordinate = { project: "shop", env: "prod", app: "web", release: "r1a2b3c4d" };
+const prefix = "pages/shop/prod/web/r1a2b3c4d/";
 
 beforeEach(() => {
   vi.useFakeTimers({ now: new Date("2026-01-01T00:00:00Z") });
@@ -19,7 +19,7 @@ afterEach(() => {
 function open(options: { latencyMs?: number | ((commitIndex: number) => number) } = {}) {
   const fake = newFirestoreDatabase({ database, ...options });
   const firestore = newFirestore({ database, fetch: fake.fetch });
-  return { fake, firestore, tags: newFirestoreTagRecords(firestore, pagesPrefix) };
+  return { fake, firestore, tags: newFirestoreTagRecords(firestore, coordinate) };
 }
 
 function documentName(tag: string, forPrefix = prefix): string {
@@ -231,9 +231,9 @@ test("a prefix nothing was revalidated under reads as fresh and empty, so the cl
   });
 });
 
-test("another ISR prefix's records are never read", async () => {
+test("another release's records are never read", async () => {
   const { fake, firestore, tags } = open();
-  const other = newFirestoreTagRecords(firestore, "pages/shop/prod/web/r0f0f0f0f");
+  const other = newFirestoreTagRecords(firestore, { ...coordinate, release: "r0f0f0f0f" });
   await other.publish("posts", { expired: 1 });
 
   expect(fake.documents.size).toBe(1);

@@ -23,7 +23,7 @@ func promotedWithStatic(t *testing.T, w *world, prefixes ...string) (*fakeAPI, e
 		Release:              "d1.f1",
 		RootFunction:         "/",
 		RootFunctionPhysical: entryFunction,
-		AssetPrefix:          "assets/one",
+		StorageCoordinate:    "shop/prod/web/r1111aaaa",
 		Static:               &edge.Static{ImmutablePrefixes: prefixes},
 	}
 	promote(t, stack, record, "p1", 1)
@@ -46,7 +46,7 @@ func TestAPromotionRoutesEachImmutablePrefixTheReleaseStatesToTheEdgeBucket(t *t
 	if static.transfer == agtypes.ResponseTransferModeStream {
 		t.Error("static integration streams, want it buffered so API Gateway maps its response headers")
 	}
-	if want := "s3:path/" + fakeEdgeBucket + "/${stageVariables." + assetsVariable + "}/docs/_app/immutable/{proxy}"; !strings.Contains(static.uri, want) {
+	if want := "s3:path/" + fakeEdgeBucket + "/${stageVariables." + assetsVariable + "}docs/_app/immutable/{proxy}"; !strings.Contains(static.uri, want) {
 		t.Errorf("static URI = %q, want it to hold %q", static.uri, want)
 	}
 	if methodOn(api, "/_next/static/{proxy+}", getMethod) != nil {
@@ -65,7 +65,7 @@ func TestAPromotionRemovesTheStaticRouteOfAPrefixTheReleaseNoLongerStates(t *tes
 	deployments := w.gateway.count("CreateDeployment " + api.name)
 
 	promote(t, stack, router.ReleaseRecord{
-		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, StorageCoordinate: "shop/prod/web/r2222bbbb",
 		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
 	}, "p2", 2)
 
@@ -88,7 +88,7 @@ func TestAPromotionOfTheSameStaticRoutesPublishesNothing(t *testing.T) {
 	deployments := w.gateway.count("CreateDeployment " + api.name)
 
 	promote(t, stack, router.ReleaseRecord{
-		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, StorageCoordinate: "shop/prod/web/r2222bbbb",
 		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
 	}, "p2", 2)
 
@@ -164,7 +164,7 @@ func TestAPromotionRewritesStaticResponseHeadersThatNoLongerMatchThePlan(t *test
 	method.integrationResponse["200"] = map[string]string{routerHeaderParameter: "'stale'"}
 
 	promote(t, stack, router.ReleaseRecord{
-		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, StorageCoordinate: "shop/prod/web/r2222bbbb",
 		Static: &edge.Static{ImmutablePrefixes: []string{"/_next/static/"}},
 	}, "p2", 2)
 
@@ -201,7 +201,7 @@ func TestAPromotionRemovesEveryResourceOnlyAPrefixTheReleaseNoLongerStatesNeeded
 	api, stack := promotedWithStatic(t, w, "/docs/_next/static/")
 
 	promote(t, stack, router.ReleaseRecord{
-		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, StorageCoordinate: "shop/prod/web/r2222bbbb",
 		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
 	}, "p2", 2)
 
@@ -218,7 +218,7 @@ func TestAPromotionPublishesTheStaticRoutesAPromotionThatFailedAfterShapingThemN
 	stack := reconciled(t, w)
 	api := w.gateway.named(productionAPIName())
 	record := router.ReleaseRecord{
-		App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/one",
+		App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, StorageCoordinate: "shop/prod/web/r1111aaaa",
 		Static: &edge.Static{ImmutablePrefixes: []string{"/_app/immutable/"}},
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
@@ -252,7 +252,7 @@ func TestAPromotionSendsTheGetRequestsOfAResourceThatStoppedServingAPrefixToTheR
 	deployments := w.gateway.count("CreateDeployment " + api.name)
 
 	promote(t, stack, router.ReleaseRecord{
-		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, AssetPrefix: "assets/two",
+		App: "web", Release: "d2.f1", RootFunction: "/", RootFunctionPhysical: entryFunction, StorageCoordinate: "shop/prod/web/r2222bbbb",
 		Static: &edge.Static{ImmutablePrefixes: []string{"/a/b/"}},
 	}, "p2", 2)
 
@@ -277,7 +277,7 @@ func TestAPrefixNestedUnderAnotherTheReleaseStatesIsServedByTheOuterStaticRoute(
 	if outer == nil {
 		t.Fatal("GET /a/ reaches no bucket: the nested /a/b/ took over the resource /a/ is served from")
 	}
-	if !strings.HasSuffix(outer.uri, "}/a/{proxy}") {
+	if !strings.HasSuffix(outer.uri, "}a/{proxy}") {
 		t.Errorf("/a/{proxy+} integrates with %q, want the bucket under /a/", outer.uri)
 	}
 	for _, path := range slices.Collect(maps.Values(api.resources)) {

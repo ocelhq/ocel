@@ -21,7 +21,7 @@ func TestAnAppBehindAnEdgeHoldingAKeyToTheEdgeBucketGetsAPurgeSecret(t *testing.
 
 	cache := releasing(t, cfg).isrCache(spec)
 
-	if want := edge.DerivePurgeSecret("a-seed", spec.App.ISR.Coordinate.PagesPrefix()); cache.PurgeSecret != want {
+	if want := edge.DerivePurgeSecret("a-seed", "shop/prod/web/r3f8a1c90"); cache.PurgeSecret != want {
 		t.Errorf("PurgeSecret = %q, want %q", cache.PurgeSecret, want)
 	}
 	env := cache.Env()

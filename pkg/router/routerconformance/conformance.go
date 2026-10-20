@@ -544,6 +544,7 @@ func functionRecord(app, release string) router.ReleaseRecord {
 		RootFunctionPhysical: physical,
 		FunctionURLs:         map[string]string{"/": "https://conformance-" + app + ".example.com/"},
 		Revisions:            map[string]string{physical: physical + "-" + release},
+		StorageCoordinate:    "conformance/prod/" + app + "/r0a1b2c3d",
 	}
 }
 

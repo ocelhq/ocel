@@ -1,11 +1,13 @@
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
-import { pagesPrefix, objectKey as storageKey } from "@platform/edge-contract/storage-key";
+import {
+  bucketVars,
+  formatStorageCoordinate,
+  objectKey as storageKey,
+} from "@platform/edge-contract/storage-key";
 import { newS3Client } from "../cache/sdk-clients.mjs";
 import {
-  cacheBucketVar,
-  edgeBucketVar,
   isNotFound,
   type ObjectStore,
   readBodyText,
@@ -15,17 +17,16 @@ import {
 
 export function newAwsCacheStore(): CacheStore {
   const coordinate = requireStorageCoordinate();
-  const prefix = pagesPrefix(coordinate);
 
   const client = newS3Client();
-  const pages: ObjectStore = { bucket: requireEnv(edgeBucketVar), client };
-  const fetches: ObjectStore = { bucket: requireEnv(cacheBucketVar), client };
+  const pages: ObjectStore = { bucket: requireEnv(bucketVars.edge), client };
+  const fetches: ObjectStore = { bucket: requireEnv(bucketVars.cache), client };
 
   const objectKey = (key: string) => {
-    const addressed = entryObjectKey(prefix, key);
+    const addressed = entryObjectKey(coordinate, key);
     if (addressed === null) {
       throw new Error(
-        `ocel cache handler: cache key ${JSON.stringify(key)} is not addressable inside ${prefix}`,
+        `ocel cache handler: cache key ${JSON.stringify(key)} is not addressable inside the pages of ${formatStorageCoordinate(coordinate)}`,
       );
     }
     return addressed;

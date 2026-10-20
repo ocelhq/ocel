@@ -66,7 +66,11 @@ func TestTheStorelessStoreSweepsAnyScopeWithoutComplaint(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, scope := range []naming.Coordinate{{}, {Project: "shop", Env: "prod"}, {Project: "shop", Env: "nothing-was-ever-written-here"}} {
+		shop, err := naming.ProjectScope("shop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, scope := range []naming.StorageScope{{}, shop} {
 			if err := (NoArtifacts{}).RemoveObjects(ctx, tier, scope, naming.CoordinateObjectKinds, nil); err != nil {
 				t.Errorf("RemoveObjects(%s, %+v) = %v, want nil: teardown sweeps it on every destroy and every preview reap", tier, scope, err)
 			}

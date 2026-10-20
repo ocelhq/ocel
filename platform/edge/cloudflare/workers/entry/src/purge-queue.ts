@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { type PurgeMode, readReleaseToken } from "@platform/edge-contract/purge";
+import type { PurgeMode } from "@platform/edge-contract/purge";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import type { Env } from "./env";
 import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
 import { readPurgeBudget } from "./purge-budget";
@@ -66,9 +67,11 @@ export class PurgeQueue extends DurableObject<Env> {
   }
 
   async raise(scope: ReleaseScope, mode: PurgeMode, tags: RaisedTag[]): Promise<void> {
-    const release = readReleaseToken(scope.pagesPrefix);
+    const release = parseStorageCoordinate(scope.storageCoordinate)?.release;
     if (release === undefined) {
-      throw new Error(`ocel: ${scope.pagesPrefix} is not the pages prefix of a release`);
+      throw new Error(
+        `ocel: ${scope.storageCoordinate} is not the storage coordinate of a release`,
+      );
     }
     this.ctx.storage.transactionSync(() => {
       this.times.record({ ...scope, release }, mode, tags);
@@ -110,9 +113,11 @@ export class PurgeQueue extends DurableObject<Env> {
   }
 
   private async retireUnservedReleases(): Promise<void> {
-    for (const { release, slug, pagesPrefix } of this.readDueChecks(RELEASES_CHECKED_PER_ALARM)) {
+    for (const { release, slug, storageCoordinate } of this.readDueChecks(
+      RELEASES_CHECKED_PER_ALARM,
+    )) {
       try {
-        const served = await this.releases.readServedRecord({ slug, pagesPrefix });
+        const served = await this.releases.readServedRecord({ slug, storageCoordinate });
         if (served.kind === "forgotten") this.times.forget(release);
         else if (served.kind === "not-served") this.times.retire(release, Date.now());
         else this.times.markChecked(release, Date.now());

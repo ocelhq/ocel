@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mergeRecord, type PublishTag } from "@framework/next-cache";
 import type { TagSnapshotRead } from "@framework/next-runtime/use-cache-store";
 import type { TagRecord } from "@platform/edge-contract/purge";
+import { type StorageCoordinate, storagePrefix } from "@platform/edge-contract/storage-key";
 import type { PurgeTags } from "../cache/cdn-purge.mjs";
 import { type Firestore, FirestoreError } from "./firestore.mjs";
 
@@ -36,10 +37,10 @@ const contentionBackoffCeilingMs = 2000;
 
 export function newFirestoreTagRecords(
   firestore: Firestore,
-  pagesPrefix: string,
+  coordinate: StorageCoordinate,
   options: TagRecordsOptions = {},
 ): TagRecords {
-  const prefix = `${pagesPrefix}/`;
+  const prefix = storagePrefix("pages", coordinate);
   const commitLagAllowanceMs = options.commitLagAllowanceMs ?? 2000;
   const rewriteAttempts = options.rewriteAttempts ?? 3;
   const contentionRounds = options.contentionRounds ?? 8;

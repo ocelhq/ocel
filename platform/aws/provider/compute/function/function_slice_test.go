@@ -3,6 +3,7 @@ package function
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -171,11 +172,11 @@ func TestTheBytecodeCacheFollowsTheSpecWhateverTheOperatorsShell(t *testing.T) {
 	for _, shell := range []string{"", "0", "1"} {
 		t.Run("OCEL_BYTECODE_CACHE="+shell, func(t *testing.T) {
 			t.Setenv("OCEL_BYTECODE_CACHE", shell)
-			cache := Bytecode{Bucket: "artifacts-xyz", Prefix: "bytecode/proj/prod/api/API1"}
+			cache := Bytecode{Bucket: "artifacts-xyz", Storage: storageCoordinate("prod", "proj", "api", fixedRelease(t))}
 
 			env := Env(map[string]string{}, Args{Handler: "index.mjs"}, nil, &cache)
-			if env["OCEL_BYTECODE_PREFIX"] != cache.Prefix || env["OCEL_BYTECODE_BUCKET"] != cache.Bucket {
-				t.Errorf("env = %v, want the cache the spec names, the same from every shell", env)
+			if env["OCEL_COMPILE_CACHE"] != "1" {
+				t.Errorf("env = %v, want the compile cache the config turns on, the same from every shell", env)
 			}
 			if targets := warmTargets(nextManifest(), map[string]*Bytecode{"web": &cache}, map[string]string{"web_index": "fn"}); len(targets) != 1 {
 				t.Errorf("warmTargets = %+v, want the function the spec gives a cache warmed from every shell", targets)
@@ -188,11 +189,10 @@ func isrCacheFor(t *testing.T, env, project, app, buildID string) site.ISR {
 	t.Helper()
 	coord := storageCoordinate(env, project, app, deployedAs(buildID).Token())
 	return site.ISR{
-		Coord:       coord,
-		EdgeBucket:  "edge-xyz",
-		CacheBucket: "cache-xyz",
-		Table:       "state-abc",
-		TableARN:    "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		Coord:    coord,
+		Buckets:  naming.Buckets{naming.StorageEdge: "edge-xyz", naming.StorageCache: "cache-xyz"},
+		Table:    "state-abc",
+		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
 	}
 }
 
@@ -200,26 +200,23 @@ func TestISREnv(t *testing.T) {
 	t.Run("says nothing about the bytecode cache", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		env := cfg.Env()
-		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
-			if _, ok := env[key]; ok {
-				t.Errorf("%s = %q, want the bytecode cache passed on its own config", key, env[key])
-			}
+		if _, ok := env["OCEL_COMPILE_CACHE"]; ok {
+			t.Errorf("OCEL_COMPILE_CACHE = %q, want the compile cache passed on its own config", env["OCEL_COMPILE_CACHE"])
 		}
 	})
 
-	t.Run("agrees with the policy scope", func(t *testing.T) {
+	t.Run("says the release revalidates and leaves its location to the base env", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		env := cfg.Env()
 
-		if env["OCEL_EDGE_BUCKET"] != "edge-xyz" {
-			t.Errorf("OCEL_EDGE_BUCKET = %q, want the bucket page entries live in", env["OCEL_EDGE_BUCKET"])
+		if env["OCEL_ISR"] != "1" {
+			t.Errorf("OCEL_ISR = %q, want 1: the runtime installs its cache stores only when told the release revalidates", env["OCEL_ISR"])
 		}
-		if env["OCEL_CACHE_BUCKET"] != "cache-xyz" {
-			t.Errorf("OCEL_CACHE_BUCKET = %q, want the bucket the fetch cache, use-cache entries and tag clock live in", env["OCEL_CACHE_BUCKET"])
-		}
-		if want := "proj123/prod/marketing/" + releaseTokenFor("build456"); env["OCEL_STORAGE_COORDINATE"] != want {
-			t.Errorf("OCEL_STORAGE_COORDINATE = %q, want %q", env["OCEL_STORAGE_COORDINATE"], want)
+		for _, key := range []string{"OCEL_EDGE_BUCKET", "OCEL_CACHE_BUCKET", "OCEL_STORAGE_COORDINATE"} {
+			if _, ok := env[key]; ok {
+				t.Errorf("%s = %q, want it left to every function's base env", key, env[key])
+			}
 		}
 		if env["OCEL_STATE_TABLE"] != "state-abc" {
 			t.Errorf("OCEL_STATE_TABLE = %q", env["OCEL_STATE_TABLE"])
@@ -235,29 +232,20 @@ func TestISREnv(t *testing.T) {
 
 func bytecodeCacheFor(t *testing.T, env, project, app, buildID string) Bytecode {
 	t.Helper()
-	coord := storageCoordinate(env, project, app, deployedAs(buildID).Token())
 	return Bytecode{
-		Bucket: "artifacts-xyz",
-		Prefix: bytecodePrefixOf(coord),
+		Bucket:  "artifacts-xyz",
+		Storage: storageCoordinate(env, project, app, deployedAs(buildID).Token()),
 	}
 }
 
 func TestBytecodeEnv(t *testing.T) {
-	t.Run("names its own bucket and prefix", func(t *testing.T) {
+	t.Run("says only that the compile cache is on", func(t *testing.T) {
 		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		env := cfg.env()
 
-		if want := "bytecode/proj123/prod/marketing/" + releaseTokenFor("build456"); env["OCEL_BYTECODE_PREFIX"] != want {
-			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], want)
-		}
-		if env["OCEL_BYTECODE_BUCKET"] != "artifacts-xyz" {
-			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want the artifacts bucket", env["OCEL_BYTECODE_BUCKET"])
-		}
-		for _, isr := range []string{"OCEL_EDGE_BUCKET", "OCEL_CACHE_BUCKET"} {
-			if _, ok := env[isr]; ok {
-				t.Errorf("%s is set; the compile cache has nothing to do with ISR", isr)
-			}
+		if want := map[string]string{"OCEL_COMPILE_CACHE": "1"}; !maps.Equal(env, want) {
+			t.Errorf("env = %v, want %v: the bucket and coordinate the cache lives under are in every function's base env", env, want)
 		}
 	})
 }
@@ -265,7 +253,7 @@ func TestBytecodeEnv(t *testing.T) {
 func TestBytecodePolicy(t *testing.T) {
 	t.Run("covers the composed bytecode key and nothing else", func(t *testing.T) {
 		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
-		key := fmt.Sprintf("%s/my-function/node22-x64.tar.gz", cfg.Prefix)
+		key := fmt.Sprintf("bytecode/proj123/prod/marketing/%s/my-function/node22-x64.tar.gz", releaseTokenFor("build456"))
 
 		raw, err := bytecodePolicy(cfg)
 		if err != nil {
@@ -297,14 +285,13 @@ func TestBytecodePolicy(t *testing.T) {
 
 	t.Run("cannot reach another app's prefix", func(t *testing.T) {
 		web := bytecodeCacheFor(t, "prod", "proj", "web", "WEB1")
-		admin := bytecodeCacheFor(t, "prod", "proj", "admin", "ADM1")
 
 		raw, err := bytecodePolicy(web)
 		if err != nil {
 			t.Fatalf("bytecodePolicy: %v", err)
 		}
-		if strings.Contains(raw, admin.Prefix) {
-			t.Errorf("web's policy reaches admin's prefix %q: %s", admin.Prefix, raw)
+		if prefix := "bytecode/proj/prod/admin/"; strings.Contains(raw, prefix) {
+			t.Errorf("web's policy reaches admin's prefix %q: %s", prefix, raw)
 		}
 	})
 }
@@ -543,10 +530,11 @@ func TestTagNamespace(t *testing.T) {
 	})
 
 	t.Run("refuses a cache with no coordinate", func(t *testing.T) {
-		if got := (site.ISR{EdgeBucket: "edge-xyz", CacheBucket: "cache-xyz"}).TagNamespace(); got != "" {
+		buckets := naming.Buckets{naming.StorageEdge: "edge-xyz", naming.StorageCache: "cache-xyz"}
+		if got := (site.ISR{Buckets: buckets}).TagNamespace(); got != "" {
 			t.Errorf("TagNamespace() = %q, want %q", got, "")
 		}
-		if _, err := (site.ISR{EdgeBucket: "edge-xyz", CacheBucket: "cache-xyz"}).Policy(); err == nil {
+		if _, err := (site.ISR{Buckets: buckets}).Policy(); err == nil {
 			t.Error("ISR.Policy accepted a cache with no coordinate; an unscoped tag grant must never render")
 		}
 	})

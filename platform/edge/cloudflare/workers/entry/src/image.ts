@@ -61,7 +61,7 @@ export function workersCacheImage(deps: WorkersCacheImageDeps): ImageCache {
     const served = buildServeRequest(url);
     const release: RenderRelease = {
       slug: serving.slug,
-      pagesPrefix: serving.pagesPrefix,
+      storageCoordinate: serving.storageCoordinate,
       tags: [],
     };
     served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));

@@ -79,15 +79,6 @@ func imageConfigKeyFor(app, buildID string) string {
 	return kindKeyFor("image-config", app, buildID, "image-config.json")
 }
 
-func TestAppAssetPrefix(t *testing.T) {
-	t.Parallel()
-	got := appAssetPrefix(storageCoordinate("prod", "proj", "web", deployedAs(testBuildID).Token()))
-	want := assetPrefixFor("web", testBuildID)
-	if got != want {
-		t.Errorf("appAssetPrefix = %q, want %q", got, want)
-	}
-}
-
 func TestUploadStaticAssets(t *testing.T) {
 	t.Parallel()
 

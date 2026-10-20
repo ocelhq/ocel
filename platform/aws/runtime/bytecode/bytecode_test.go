@@ -15,12 +15,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 func TestBytecodeCacheKey(t *testing.T) {
 	cases := []struct {
 		name         string
-		prefix       string
+		storage      string
 		functionName string
 		nodeVersion  string
 		goArch       string
@@ -28,32 +31,32 @@ func TestBytecodeCacheKey(t *testing.T) {
 	}{
 		{
 			name:         "amd64 maps to the AWS x86_64 spelling",
-			prefix:       "prod/proj/web/r1a2b3c4d/bytecode",
+			storage:      "proj/prod/web/r1a2b3c4d",
 			functionName: "my-app",
 			nodeVersion:  "24.3.1",
 			goArch:       "amd64",
-			want:         "prod/proj/web/r1a2b3c4d/bytecode/my-app/node24.3.1-x86_64.tar.gz",
+			want:         "bytecode/proj/prod/web/r1a2b3c4d/my-app/node24.3.1-x86_64.tar.gz",
 		},
 		{
 			name:         "arm64 passes through unchanged",
-			prefix:       "prod/proj/web/r1a2b3c4d/bytecode",
+			storage:      "proj/prod/web/r1a2b3c4d",
 			functionName: "my-app",
 			nodeVersion:  "24.3.1",
 			goArch:       "arm64",
-			want:         "prod/proj/web/r1a2b3c4d/bytecode/my-app/node24.3.1-arm64.tar.gz",
+			want:         "bytecode/proj/prod/web/r1a2b3c4d/my-app/node24.3.1-arm64.tar.gz",
 		},
 		{
 			name:         "an unrecognized arch still passes through",
-			prefix:       "stg/deploy/api/r9f8e7d6c/bytecode",
+			storage:      "deploy/stg/api/r9f8e7d6c",
 			functionName: "other-fn",
 			nodeVersion:  "20.11.0",
 			goArch:       "riscv64",
-			want:         "stg/deploy/api/r9f8e7d6c/bytecode/other-fn/node20.11.0-riscv64.tar.gz",
+			want:         "bytecode/deploy/stg/api/r9f8e7d6c/other-fn/node20.11.0-riscv64.tar.gz",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := cacheKey(tc.prefix, tc.functionName, tc.nodeVersion, tc.goArch)
+			got := cacheKey(storageAt(t, tc.storage), tc.functionName, tc.nodeVersion, tc.goArch)
 			if got != tc.want {
 				t.Errorf("cacheKey() = %q, want %q", got, tc.want)
 			}
@@ -385,13 +388,14 @@ func TestCompileCacheSize(t *testing.T) {
 
 func TestCompileCacheEnv(t *testing.T) {
 	t.Run("gate closed", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "")
+		t.Setenv(awsports.CompileCacheEnvVar, "")
+		t.Setenv(naming.StorageCoordinateVar, "proj/prod/web/r1a2b3c4d")
 		if got := Env(); got != nil {
-			t.Errorf("Env() = %v, want nil with no prefix configured", got)
+			t.Errorf("Env() = %v, want nil when the release caches no bytecode, whatever coordinate it names", got)
 		}
 	})
 	t.Run("gate open", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "ocel")
+		t.Setenv(awsports.CompileCacheEnvVar, "1")
 		want := []string{"NODE_COMPILE_CACHE=" + compileCacheDir}
 		got := Env()
 		if len(got) != 1 || got[0] != want[0] {
@@ -404,19 +408,23 @@ func TestResolveBytecodeResolution(t *testing.T) {
 	t.Run("nil when not fully configured", func(t *testing.T) {
 		cases := []struct {
 			name     string
-			prefix   string
+			gate     string
+			storage  string
 			bucket   string
 			function string
 		}{
-			{name: "no prefix", bucket: "assets", function: "my-app"},
-			{name: "no bucket", prefix: "ocel", function: "my-app"},
-			{name: "no function name", prefix: "ocel", bucket: "assets"},
+			{name: "no gate", storage: "proj/prod/web/r1a2b3c4d", bucket: "artifacts", function: "my-app"},
+			{name: "no storage coordinate", gate: "1", bucket: "artifacts", function: "my-app"},
+			{name: "a storage coordinate naming no release", gate: "1", storage: "proj/prod/web", bucket: "artifacts", function: "my-app"},
+			{name: "no artifacts bucket", gate: "1", storage: "proj/prod/web/r1a2b3c4d", function: "my-app"},
+			{name: "no function name", gate: "1", storage: "proj/prod/web/r1a2b3c4d", bucket: "artifacts"},
 		}
 		nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				t.Setenv(prefixEnvVar, tc.prefix)
-				t.Setenv(bucketEnvVar, tc.bucket)
+				t.Setenv(awsports.CompileCacheEnvVar, tc.gate)
+				t.Setenv(naming.StorageCoordinateVar, tc.storage)
+				t.Setenv(naming.StorageArtifacts.BucketVar(), tc.bucket)
 				t.Setenv("AWS_LAMBDA_FUNCTION_NAME", tc.function)
 				if got := resolve(context.Background(), nodeVersion); got != nil {
 					t.Errorf("resolve() = %+v, want nil", got)
@@ -426,8 +434,7 @@ func TestResolveBytecodeResolution(t *testing.T) {
 	})
 
 	t.Run("nil when the node version cannot be read", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "ocel")
-		t.Setenv(bucketEnvVar, "assets")
+		compileCacheConfigured(t, "proj/prod/web/r1a2b3c4d", "artifacts")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 
 		cases := []struct {
@@ -448,9 +455,8 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("includes the environment and version in the key", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "stg/proj/web/r1a2b3c4d/bytecode")
-		t.Setenv(bucketEnvVar, "artifacts-xyz")
+	t.Run("keys the cache by the release's coordinate, the function and the node version", func(t *testing.T) {
+		compileCacheConfigured(t, "proj/stg/web/r1a2b3c4d", "artifacts-xyz")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 		t.Setenv("AWS_REGION", "us-east-1")
 
@@ -466,17 +472,16 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		if r.store == nil {
 			t.Error("store = nil, want an S3-backed store")
 		}
-		want := "stg/proj/web/r1a2b3c4d/bytecode/my-app/node24.3.1-" + s3Arch(runtime.GOARCH) + ".tar.gz"
+		want := "bytecode/proj/stg/web/r1a2b3c4d/my-app/node24.3.1-" + s3Arch(runtime.GOARCH) + ".tar.gz"
 		if r.key != want {
 			t.Errorf("key = %q, want %q", r.key, want)
 		}
 	})
 
 	t.Run("resolves for a function with no ISR cache", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "ocel/stg")
-		t.Setenv(bucketEnvVar, "artifacts-xyz")
-		t.Setenv("OCEL_EDGE_BUCKET", "")
-		t.Setenv("OCEL_CACHE_BUCKET", "")
+		compileCacheConfigured(t, "proj/stg/api/r1a2b3c4d", "artifacts-xyz")
+		t.Setenv(naming.StorageEdge.BucketVar(), "")
+		t.Setenv(naming.StorageCache.BucketVar(), "")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-express-app")
 		t.Setenv("AWS_REGION", "us-east-1")
 
@@ -514,4 +519,25 @@ func TestBudgetUntil(t *testing.T) {
 			t.Errorf("budgetUntil() = %s, want a non-positive budget", got)
 		}
 	})
+}
+
+func storageAt(t *testing.T, value string) naming.Coordinate {
+	t.Helper()
+	storage, err := naming.ParseStorageCoordinate(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return storage
+}
+
+func compileCacheOn(t *testing.T) {
+	t.Helper()
+	t.Setenv(awsports.CompileCacheEnvVar, "1")
+}
+
+func compileCacheConfigured(t *testing.T, storage, bucket string) {
+	t.Helper()
+	compileCacheOn(t)
+	t.Setenv(naming.StorageCoordinateVar, storage)
+	t.Setenv(naming.StorageArtifacts.BucketVar(), bucket)
 }

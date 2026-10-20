@@ -18,6 +18,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+func scopeOf(t *testing.T) func(naming.StorageScope, error) naming.StorageScope {
+	return func(scope naming.StorageScope, err error) naming.StorageScope {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return scope
+	}
+}
+
 func liveReleases(t *testing.T) (pruned, otherRelease, preview naming.Coordinate) {
 	slug := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
 	pruned = naming.Coordinate{Project: slug, Env: "prod", App: "web", Release: naming.NewReleaseToken("b1", "")}
@@ -36,7 +46,7 @@ func TestLivePruningADeploymentRemovesItsCacheEntriesAndKeepsAnothers(t *testing
 	artifacts := p.Artifacts()
 	tier := environment.TierProduction
 	release, otherRelease, preview := liveReleases(t)
-	project := naming.Coordinate{Project: release.Project}
+	project := scopeOf(t)(naming.ProjectScope(release.Project))
 
 	pruned := []string{
 		release.ObjectKey(naming.ObjectPages, "index.cache.json"),
@@ -63,7 +73,7 @@ func TestLivePruningADeploymentRemovesItsCacheEntriesAndKeepsAnothers(t *testing
 		_ = artifacts.RemoveObjects(ctx, tier, project, naming.CoordinateObjectKinds, nil)
 	})
 
-	if err := artifacts.RemoveObjects(ctx, tier, release, naming.ISRObjectKinds, nil); err != nil {
+	if err := artifacts.RemoveObjects(ctx, tier, scopeOf(t)(naming.ReleaseScope(release)), naming.ISRObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(r1) = %v", err)
 	}
 	for _, key := range pruned {
@@ -77,7 +87,7 @@ func TestLivePruningADeploymentRemovesItsCacheEntriesAndKeepsAnothers(t *testing
 		}
 	}
 
-	if err := artifacts.RemoveObjects(ctx, tier, naming.Coordinate{Project: preview.Project, Env: preview.Env}, naming.CoordinateObjectKinds, nil); err != nil {
+	if err := artifacts.RemoveObjects(ctx, tier, scopeOf(t)(naming.EnvScope(preview.Project, preview.Env)), naming.CoordinateObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(pr-7) = %v", err)
 	}
 	if has(previewed) {
@@ -115,7 +125,7 @@ func TestLivePruningADeploymentRemovesItsTagRecordsAndKeepsAnothers(t *testing.T
 		}
 	}
 	t.Cleanup(func() {
-		_ = p.Artifacts().RemoveObjects(ctx, tier, naming.Coordinate{Project: release.Project}, naming.CoordinateObjectKinds, nil)
+		_ = p.Artifacts().RemoveObjects(ctx, tier, scopeOf(t)(naming.ProjectScope(release.Project)), naming.CoordinateObjectKinds, nil)
 	})
 	has := func(prefix string) bool {
 		t.Helper()
@@ -129,7 +139,7 @@ func TestLivePruningADeploymentRemovesItsTagRecordsAndKeepsAnothers(t *testing.T
 		return true
 	}
 
-	if err := p.Artifacts().RemoveObjects(ctx, tier, release, naming.ISRObjectKinds, nil); err != nil {
+	if err := p.Artifacts().RemoveObjects(ctx, tier, scopeOf(t)(naming.ReleaseScope(release)), naming.ISRObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(r1) = %v", err)
 	}
 	if has(pruned) {
@@ -141,7 +151,7 @@ func TestLivePruningADeploymentRemovesItsTagRecordsAndKeepsAnothers(t *testing.T
 		}
 	}
 
-	if err := p.Artifacts().RemoveObjects(ctx, tier, naming.Coordinate{Project: preview.Project, Env: preview.Env}, naming.CoordinateObjectKinds, nil); err != nil {
+	if err := p.Artifacts().RemoveObjects(ctx, tier, scopeOf(t)(naming.EnvScope(preview.Project, preview.Env)), naming.CoordinateObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(pr-7) = %v", err)
 	}
 	if has(previewed) {

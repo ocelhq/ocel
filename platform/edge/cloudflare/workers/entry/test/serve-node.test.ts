@@ -102,7 +102,7 @@ describe("a request a cached route names", () => {
     const release = JSON.parse(request.headers.get(RENDER_RELEASE_HEADER)!) as RenderRelease;
     expect(release).toEqual({
       slug: "p1",
-      pagesPrefix: "pages/p1/prod/web/r0a1b2c3d",
+      storageCoordinate: "p1/prod/web/r0a1b2c3d",
       tags: [],
     });
   });
@@ -339,7 +339,7 @@ describe("a request on a route no cache rule governs", () => {
     expect(request.headers.has(SERVE_LOOKUP_ONLY_HEADER)).toBe(false);
     expect(JSON.parse(request.headers.get(RENDER_RELEASE_HEADER)!)).toEqual({
       slug: "p1",
-      pagesPrefix: "pages/p1/prod/web/r0a1b2c3d",
+      storageCoordinate: "p1/prod/web/r0a1b2c3d",
       tags: [],
       honoursAppCacheHeaders: true,
     });
@@ -697,7 +697,7 @@ describe("a node release resolved by the gateway", () => {
   ) {
     const tableKey = freshRouteTableKey();
     const record = makeRecord({
-      pagesPrefix: "pages/p1/prod/api/r0a1b2c3d",
+      storageCoordinate: "p1/prod/api/r0a1b2c3d",
       ...over,
       ...(over.routeTable && { routeTable: { ...over.routeTable, key: tableKey } }),
     });

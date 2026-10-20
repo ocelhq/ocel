@@ -31,11 +31,10 @@ const record: StoredRecord = {
   routeTable: { format: "next", key: routeTableKey() },
   static: { immutablePrefixes: ["/_next/static/"] },
   functionUrls: { "/": "https://abc.lambda-url.eu-west-2.on.aws/" },
-  assetPrefix: "assets/p1/prod/web/r00000d02",
-  pagesPrefix: "pages/p1/prod/web/r00000d02",
+  storageCoordinate: "p1/prod/web/r00000d02",
   createdAt: 1_000,
   edge: {},
-  buildAssets: { "build-1": "assets/p1/prod/web/r00000d01" },
+  buildCoordinates: { "build-1": "p1/prod/web/r00000d01" },
 };
 
 const env: Env = {

@@ -7,10 +7,10 @@ declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
 }
 
-const WEB_PREFIX = "pages/p1/prod/web/r0a1b2c3d";
-const PREVIEW_PREFIX = "pages/p1/pr-42/web/r0000000a";
-const OLDER_PREFIX = "pages/p1/prod/web/r00000001";
-const NEWER_PREFIX = "pages/p1/prod/web/r00000002";
+const WEB = "p1/prod/web/r0a1b2c3d";
+const PREVIEW = "p1/pr-42/web/r0000000a";
+const OLDER = "p1/prod/web/r00000001";
+const NEWER = "p1/prod/web/r00000002";
 const WEB_KEPT = { app: "web", releaseToken: "r0a1b2c3d" };
 const OLDER_KEPT = { app: "web", releaseToken: "r00000001" };
 const NEWER_KEPT = { app: "web", releaseToken: "r00000002" };
@@ -30,8 +30,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     rootFunction: "/",
     routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
-    assetPrefix: "assets/p1/prod/web/r0a1b2c3d",
-    pagesPrefix: WEB_PREFIX,
+    storageCoordinate: WEB,
     edge: { purgeSecret: "purge-secret" },
     createdAt: 1_000,
     ...over,
@@ -43,19 +42,19 @@ function makePointerMove(over: Partial<PointerMove> = {}): PointerMove {
 }
 
 describe("readServedRecord", () => {
-  it("returns the record of a release a pointer serves, by its pages prefix, on whichever pointer", async () => {
+  it("returns the record of a release a pointer serves, by its storage coordinate, on whichever pointer", async () => {
     const store = storeStub();
-    const preview = makeRecord({ release: "build-2~fp2", pagesPrefix: PREVIEW_PREFIX });
+    const preview = makeRecord({ release: "build-2~fp2", storageCoordinate: PREVIEW });
     await store.movePointer(makePointerMove());
     await store.movePointer(
       makePointerMove({ promotionId: "promo-preview", pointer: "pr-42", records: [preview] }),
     );
 
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({
+    expect(await store.readServedRecord(WEB)).toEqual({
       kind: "record",
       record: makeRecord(),
     });
-    expect(await store.readServedRecord(PREVIEW_PREFIX)).toEqual({
+    expect(await store.readServedRecord(PREVIEW)).toEqual({
       kind: "record",
       record: preview,
     });
@@ -65,22 +64,22 @@ describe("readServedRecord", () => {
     const store = storeStub();
     const api = makeRecord({
       app: "api",
-      pagesPrefix: "pages/p1/prod/api/r0a1b2c3d",
+      storageCoordinate: "p1/prod/api/r0a1b2c3d",
       edge: { purgeSecret: "api-secret" },
     });
     await store.movePointer(makePointerMove({ records: [api, makeRecord()] }));
 
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({
+    expect(await store.readServedRecord(WEB)).toEqual({
       kind: "record",
       record: makeRecord(),
     });
-    expect(await store.readServedRecord("pages/p1/prod/api/r0a1b2c3d")).toEqual({
+    expect(await store.readServedRecord("p1/prod/api/r0a1b2c3d")).toEqual({
       kind: "record",
       record: api,
     });
   });
 
-  it("does not take a release's name for its pages prefix", async () => {
+  it("does not take a release's name for its storage coordinate", async () => {
     const store = storeStub();
     await store.movePointer(makePointerMove());
 
@@ -88,26 +87,26 @@ describe("readServedRecord", () => {
   });
 
   it("answers forgotten for a release no pointer serves or keeps", async () => {
-    expect(await storeStub().readServedRecord(WEB_PREFIX)).toEqual({ kind: "forgotten" });
+    expect(await storeStub().readServedRecord(WEB)).toEqual({ kind: "forgotten" });
   });
 
   it("answers not-served for a release no pointer serves but one still keeps", async () => {
     const store = storeStub();
     await store.movePointer(
       makePointerMove({
-        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: OLDER_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", storageCoordinate: OLDER })],
         kept: [WEB_KEPT, OLDER_KEPT],
       }),
     );
 
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
+    expect(await store.readServedRecord(WEB)).toEqual({ kind: "not-served" });
   });
 
   it("knows a kept release by its app as well as its release token", async () => {
     const store = storeStub();
     await store.movePointer(makePointerMove({ kept: [WEB_KEPT] }));
 
-    expect(await store.readServedRecord("pages/p1/prod/api/r0a1b2c3d")).toEqual({
+    expect(await store.readServedRecord("p1/prod/api/r0a1b2c3d")).toEqual({
       kind: "forgotten",
     });
   });
@@ -119,13 +118,13 @@ describe("readServedRecord", () => {
       makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: NEWER_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", storageCoordinate: NEWER })],
         kept: [NEWER_KEPT, WEB_KEPT],
       }),
     );
 
-    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "forgotten" });
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
+    expect(await store.readServedRecord(OLDER)).toEqual({ kind: "forgotten" });
+    expect(await store.readServedRecord(WEB)).toEqual({ kind: "not-served" });
   });
 
   it("keeps a release while another pointer still keeps it", async () => {
@@ -138,13 +137,13 @@ describe("readServedRecord", () => {
       makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: NEWER_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", storageCoordinate: NEWER })],
         kept: [NEWER_KEPT],
       }),
     );
     await store.removePointer("pr-42");
 
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "forgotten" });
+    expect(await store.readServedRecord(WEB)).toEqual({ kind: "forgotten" });
   });
 
   it("forgets every release a removed pointer kept", async () => {
@@ -153,8 +152,8 @@ describe("readServedRecord", () => {
 
     await store.removePointer("pr-42");
 
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "forgotten" });
-    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "forgotten" });
+    expect(await store.readServedRecord(WEB)).toEqual({ kind: "forgotten" });
+    expect(await store.readServedRecord(OLDER)).toEqual({ kind: "forgotten" });
   });
 
   it("forgets every release once the store is destroyed", async () => {
@@ -163,7 +162,7 @@ describe("readServedRecord", () => {
 
     await store.destroy();
 
-    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "forgotten" });
+    expect(await store.readServedRecord(OLDER)).toEqual({ kind: "forgotten" });
   });
 
   it("keeps the releases a move kept when the move is stale", async () => {
@@ -174,7 +173,7 @@ describe("readServedRecord", () => {
       makePointerMove({ promotionId: "promo-3", replaces: "promo-2", kept: [NEWER_KEPT] }),
     );
 
-    expect(await store.readServedRecord(OLDER_PREFIX)).toEqual({ kind: "not-served" });
+    expect(await store.readServedRecord(OLDER)).toEqual({ kind: "not-served" });
   });
 
   it("stops returning a release once its pointer moves on", async () => {
@@ -184,25 +183,25 @@ describe("readServedRecord", () => {
       makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: PREVIEW_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", storageCoordinate: PREVIEW })],
         kept: [WEB_KEPT],
       }),
     );
 
-    expect(await store.readServedRecord(WEB_PREFIX)).toEqual({ kind: "not-served" });
-    expect(await store.readServedRecord(PREVIEW_PREFIX)).toMatchObject({ kind: "record" });
+    expect(await store.readServedRecord(WEB)).toEqual({ kind: "not-served" });
+    expect(await store.readServedRecord(PREVIEW)).toMatchObject({ kind: "record" });
   });
 
-  it("is reachable through the entrypoint the entry worker binds, by project and pages prefix", async () => {
+  it("is reachable through the entrypoint the entry worker binds, by project and storage coordinate", async () => {
     const slug = "served-record-entrypoint";
     await env.RELEASES_DO.get(env.RELEASES_DO.idFromName(slug)).movePointer(makePointerMove());
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
 
-    expect(await entry.readServedRecord({ slug, pagesPrefix: WEB_PREFIX })).toEqual({
+    expect(await entry.readServedRecord({ slug, storageCoordinate: WEB })).toEqual({
       kind: "record",
       record: makeRecord(),
     });
-    expect(await entry.readServedRecord({ slug, pagesPrefix: PREVIEW_PREFIX })).toEqual({
+    expect(await entry.readServedRecord({ slug, storageCoordinate: PREVIEW })).toEqual({
       kind: "forgotten",
     });
   });

@@ -22,8 +22,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     rootFunction: "/",
     routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
-    assetPrefix: "deploy-1",
-    pagesPrefix: "pages/p1/prod/web/build-1",
+    storageCoordinate: "p1/prod/web/r00000b01",
     createdAt: 1_000,
     ...over,
   };
@@ -184,7 +183,7 @@ describe("movePointer", () => {
     const admin = makePointerMove({
       pointer: "pr-42",
       promotionId: "promo-preview",
-      records: [makeRecord({ app: "admin", pagesPrefix: "pages/p1/prod/admin/build-1" })],
+      records: [makeRecord({ app: "admin", storageCoordinate: "p1/prod/admin/r00000b01" })],
     });
     expect(await store.movePointer(admin)).toEqual({ kind: "moved" });
   });
@@ -382,8 +381,7 @@ describe("the builds a pointer served before", () => {
     makeRecord({
       release: `deploy-${n}`,
       buildId: `build-${n}`,
-      assetPrefix: `assets/p1/prod/web/${token(n)}`,
-      pagesPrefix: `pages/p1/prod/web/${token(n)}`,
+      storageCoordinate: `p1/prod/web/${token(n)}`,
       ...over,
     });
 
@@ -406,7 +404,7 @@ describe("the builds a pointer served before", () => {
     );
   }
 
-  it("serves a record naming the asset prefix of each build its app served on the pointer before", async () => {
+  it("serves a record naming the storage coordinate of each build its app served on the pointer before", async () => {
     const store = storeStub();
     await promote(store, [build(1)], 1);
     await promote(store, [build(2)], 2);
@@ -418,9 +416,9 @@ describe("the builds a pointer served before", () => {
       kind: "record",
       record: {
         buildId: "build-3",
-        buildAssets: {
-          "build-1": "assets/p1/prod/web/r00000001",
-          "build-2": "assets/p1/prod/web/r00000002",
+        buildCoordinates: {
+          "build-1": "p1/prod/web/r00000001",
+          "build-2": "p1/prod/web/r00000002",
         },
       },
     });
@@ -430,7 +428,7 @@ describe("the builds a pointer served before", () => {
     const store = storeStub();
     await promote(
       store,
-      [build(1), build(1, { app: "admin", assetPrefix: "assets/p1/prod/admin/r00000001" })],
+      [build(1), build(1, { app: "admin", storageCoordinate: "p1/prod/admin/r00000001" })],
       1,
     );
     await store.movePointer(
@@ -442,7 +440,7 @@ describe("the builds a pointer served before", () => {
 
     expect(served).toMatchObject({
       kind: "record",
-      record: { buildAssets: { "build-1": "assets/p1/prod/web/r00000001" } },
+      record: { buildCoordinates: { "build-1": "p1/prod/web/r00000001" } },
     });
   });
 
@@ -451,7 +449,7 @@ describe("the builds a pointer served before", () => {
     for (let n = 1; n <= 23; n++) await promote(store, [build(n)], n);
 
     const served = await store.readPointerRecord("web");
-    const named = served.kind === "record" ? Object.keys(served.record.buildAssets ?? {}) : [];
+    const named = served.kind === "record" ? Object.keys(served.record.buildCoordinates ?? {}) : [];
 
     expect(named).toHaveLength(22);
     expect(named).toContain("build-1");
@@ -467,9 +465,11 @@ describe("the builds a pointer served before", () => {
 
     expect(served).toMatchObject({
       kind: "record",
-      record: { buildAssets: { "build-2": "assets/p1/prod/web/r00000002" } },
+      record: { buildCoordinates: { "build-2": "p1/prod/web/r00000002" } },
     });
-    expect(served.kind === "record" && served.record.buildAssets).not.toHaveProperty("build-1");
+    expect(served.kind === "record" && served.record.buildCoordinates).not.toHaveProperty(
+      "build-1",
+    );
   });
 
   it("forgets the builds of a pointer it removes", async () => {
@@ -489,7 +489,7 @@ describe("the builds a pointer served before", () => {
     const served = await store.readLabelRecord("pr-42-aaaa");
 
     expect(served).toMatchObject({ kind: "record", record: { buildId: "build-2" } });
-    expect(served.kind === "record" && served.record.buildAssets).toBeFalsy();
+    expect(served.kind === "record" && served.record.buildCoordinates).toBeFalsy();
   });
 });
 

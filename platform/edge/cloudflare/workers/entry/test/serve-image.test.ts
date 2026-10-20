@@ -12,7 +12,7 @@ import {
 } from "../src/serve-key";
 import { awsOrigin, FN_URL, withGlobalFetch } from "./origin-deps";
 
-const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
+const storageCoordinate = "p1/prod/web/r1a2b3c4d";
 const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
 const DIGEST = "d".repeat(64);
 const DEPLOYMENT_OPTIMIZER = `${FN_URL}_ocel/image`;
@@ -34,8 +34,7 @@ const record = {
   release: "build-1~fp1",
   buildId: "build-1",
   functionUrls: { "/": `${FN_URL}stage` },
-  assetPrefix: PAYLOAD.assetPrefix,
-  pagesPrefix,
+  storageCoordinate,
   createdAt: 1,
   edge: {},
 };
@@ -62,7 +61,7 @@ function imageRequest(
   const { url } = buildImageCall(optimizer, coordinates, DIGEST);
   return new Request(url, {
     headers: {
-      [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", pagesPrefix }),
+      [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", storageCoordinate }),
       [IMAGE_CALL_HEADER]: JSON.stringify({
         payload: "payload" in over ? over.payload : PAYLOAD,
         minimumCacheTTL: "minimumCacheTTL" in over ? over.minimumCacheTTL : 14400,

@@ -1,6 +1,6 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
-import { EMPTY_ROUTES, servedNextRelease, UNTOKENED_PAGES_PREFIX } from "./next-release";
+import { EMPTY_ROUTES, servedNextRelease, UNTOKENED_STORAGE_COORDINATE } from "./next-release";
 import { fakeServing } from "./serving-deps";
 
 type Dispatch = NextRouteTable["dispatch"];
@@ -11,7 +11,7 @@ describe("a routed prerender", () => {
       table: { dispatch: { "/": { kind: "prerender", id: "/" } } },
       record: {
         functionUrls: { "/": "https://fn.example.com" },
-        pagesPrefix: UNTOKENED_PAGES_PREFIX,
+        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
       },
       fetch: (async () => new Response("rendered", { status: 200 })) as unknown as typeof fetch,
     });

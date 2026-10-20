@@ -16,7 +16,7 @@ type ArtifactStore interface {
 
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
-	RemoveObjects(ctx context.Context, tier environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, progress progress.Log) error
+	RemoveObjects(ctx context.Context, tier environment.Tier, scope naming.StorageScope, kinds []naming.ObjectKind, progress progress.Log) error
 }
 
 type ArtifactRef struct {

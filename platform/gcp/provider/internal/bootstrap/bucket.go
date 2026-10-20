@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	CacheObjectLifetimeDays     = 30
 	NoncurrentStateLifetimeDays = 7
 )
 
@@ -68,7 +67,7 @@ func lifecycleOf(class naming.StorageClass) storage.Lifecycle {
 	case naming.StorageState:
 		return storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: deleted, Condition: storage.LifecycleCondition{DaysSinceNoncurrentTime: NoncurrentStateLifetimeDays}}}}
 	case naming.StorageCache:
-		return storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: deleted, Condition: storage.LifecycleCondition{AgeInDays: CacheObjectLifetimeDays}}}}
+		return storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: deleted, Condition: storage.LifecycleCondition{AgeInDays: naming.CacheObjectLifetimeDays}}}}
 	}
 	return storage.Lifecycle{}
 }

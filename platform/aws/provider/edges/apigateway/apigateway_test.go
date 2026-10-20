@@ -129,14 +129,14 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 	return stack
 }
 
-func staged(t *testing.T, stack edge.EdgeStack, function, assets string) router.ReleaseRecord {
+func staged(t *testing.T, stack edge.EdgeStack, function, storage string) router.ReleaseRecord {
 	t.Helper()
 	record := router.ReleaseRecord{
 		App:                  "web",
 		Release:              "d1.f1",
 		RootFunction:         "/",
 		RootFunctionPhysical: function,
-		AssetPrefix:          assets,
+		StorageCoordinate:    storage,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -275,7 +275,7 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	record := staged(t, stack, entryFunction, "assets/one")
+	record := staged(t, stack, entryFunction, "shop/prod/web/r1111aaaa")
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}

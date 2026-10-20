@@ -1,8 +1,8 @@
 import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
 import {
+  formatStorageCoordinate,
   objectKey,
-  pagesPrefix,
   type StorageCoordinate,
 } from "@platform/edge-contract/storage-key";
 import type { CloudStorage } from "./cloud-storage.mjs";
@@ -10,12 +10,11 @@ import type { CloudStorage } from "./cloud-storage.mjs";
 export type CacheBuckets = { edge: CloudStorage; cache: CloudStorage };
 
 export function newGcpCacheStore(storage: CacheBuckets, coordinate: StorageCoordinate): CacheStore {
-  const pages = pagesPrefix(coordinate);
   const entryName = (key: string) => {
-    const name = entryObjectKey(pages, key);
+    const name = entryObjectKey(coordinate, key);
     if (name === null) {
       throw new Error(
-        `ocel cache handler: cache key ${JSON.stringify(key)} is not addressable inside ${pages}`,
+        `ocel cache handler: cache key ${JSON.stringify(key)} is not addressable inside the pages of ${formatStorageCoordinate(coordinate)}`,
       );
     }
     return name;

@@ -23,13 +23,15 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/naming"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
 const CacheCeiling = 64 << 20
 
-func cacheKey(prefix, functionName, nodeVersion, goArch string) string {
-	return fmt.Sprintf("%s/%s/node%s-%s.tar.gz", prefix, functionName, nodeVersion, s3Arch(goArch))
+func cacheKey(storage naming.Coordinate, functionName, nodeVersion, goArch string) string {
+	return storage.ObjectKey(naming.ObjectBytecode, fmt.Sprintf("%s/node%s-%s.tar.gz", functionName, nodeVersion, s3Arch(goArch)))
 }
 
 func s3Arch(goArch string) string {
@@ -111,18 +113,18 @@ func buildArchive(ctx context.Context, dir string) ([]byte, error) {
 
 const compileCacheDir = "/tmp/" + buildoutput.StateDir + "/compile-cache"
 
-const prefixEnvVar = "OCEL_BYTECODE_PREFIX"
-
-const bucketEnvVar = "OCEL_BYTECODE_BUCKET"
-
 const UploadBudget = 2 * time.Second
 
 const rehydrateBudget = 2 * time.Second
 
 const resolveBudget = 2 * time.Second
 
+func cachesBytecode() bool {
+	return os.Getenv(awsports.CompileCacheEnvVar) == "1"
+}
+
 func Env() []string {
-	if os.Getenv(prefixEnvVar) == "" {
+	if !cachesBytecode() {
 		return nil
 	}
 	return []string{"NODE_COMPILE_CACHE=" + compileCacheDir}
@@ -575,10 +577,14 @@ func loadEmbeddedInto(ctx context.Context, c *Cache) bool {
 }
 
 func resolve(ctx context.Context, nodeVersion func(context.Context) (string, error)) *Cache {
-	prefix := os.Getenv(prefixEnvVar)
-	bucket := os.Getenv(bucketEnvVar)
+	bucket := os.Getenv(naming.StorageArtifacts.BucketVar())
 	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
-	if prefix == "" || bucket == "" || function == "" {
+	if !cachesBytecode() || bucket == "" || function == "" {
+		return nil
+	}
+	storage, err := naming.ParseStorageCoordinate(os.Getenv(naming.StorageCoordinateVar))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: %v, compile cache disabled\n", err)
 		return nil
 	}
 
@@ -602,7 +608,7 @@ func resolve(ctx context.Context, nodeVersion func(context.Context) (string, err
 	return &Cache{
 		store:  s3Store{client: s3.NewFromConfig(cfg)},
 		bucket: bucket,
-		key:    cacheKey(prefix, function, canonical, runtime.GOARCH),
+		key:    cacheKey(storage, function, canonical, runtime.GOARCH),
 		root:   compileCacheDir,
 	}
 }

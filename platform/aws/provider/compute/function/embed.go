@@ -54,10 +54,10 @@ type embedTarget struct {
 	LogicalName  string
 	FunctionName string
 
-	Artifact    Artifact
-	CacheBucket string
-	CacheKey    string
-	TreeBytes   int64
+	Artifact        Artifact
+	ArtifactsBucket string
+	BytecodeKey     string
+	TreeBytes       int64
 }
 
 func missingEmbedClients(clients *Clients) string {
@@ -133,7 +133,7 @@ func (p embedPass) run(ctx context.Context) {
 }
 
 func (p embedPass) embedOne(ctx context.Context, target embedTarget) (string, bool) {
-	entry, err := embeddedTarPath(target.CacheKey)
+	entry, err := embeddedTarPath(target.BytecodeKey)
 	if err != nil {
 		return fmt.Sprintf("%v; not embedded", err), false
 	}
@@ -255,11 +255,11 @@ func mergeEmbeddedTar(dst, srcZip, tarPath, name string) error {
 
 func (p embedPass) fetchCacheTar(ctx context.Context, target embedTarget, dst string) (int64, string, error) {
 	out, err := p.objects.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(target.CacheBucket),
-		Key:    aws.String(target.CacheKey),
+		Bucket: aws.String(target.ArtifactsBucket),
+		Key:    aws.String(target.BytecodeKey),
 	})
 	if err != nil {
-		return 0, "", fmt.Errorf("get %s/%s: %w", target.CacheBucket, target.CacheKey, err)
+		return 0, "", fmt.Errorf("get %s/%s: %w", target.ArtifactsBucket, target.BytecodeKey, err)
 	}
 	defer out.Body.Close()
 

@@ -47,7 +47,7 @@ func (s *countingStore) Open(context.Context, provider.ArtifactRef) (io.ReadClos
 	return nil, os.ErrNotExist
 }
 
-func (s *countingStore) RemoveObjects(context.Context, environment.Tier, naming.Coordinate, []naming.ObjectKind, progress.Log) error {
+func (s *countingStore) RemoveObjects(context.Context, environment.Tier, naming.StorageScope, []naming.ObjectKind, progress.Log) error {
 	return nil
 }
 

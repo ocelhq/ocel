@@ -46,8 +46,8 @@ func TestEmbeddedBytecodePath(t *testing.T) {
 			key  string
 			want string
 		}{
-			{cacheKey("ocel", "my-app", "24.3.1", "arm64"), embeddedDir + "/node24.3.1-arm64.tar"},
-			{cacheKey("stg/deploy", "other-fn", "20.11.0", "amd64"), embeddedDir + "/node20.11.0-x86_64.tar"},
+			{cacheKey(storageAt(t, "proj/prod/web/r1a2b3c4d"), "my-app", "24.3.1", "arm64"), embeddedDir + "/node24.3.1-arm64.tar"},
+			{cacheKey(storageAt(t, "deploy/stg/api/r9f8e7d6c"), "other-fn", "20.11.0", "amd64"), embeddedDir + "/node20.11.0-x86_64.tar"},
 		}
 		for _, c := range cases {
 			if got := embeddedPath(c.key); got != c.want {
@@ -264,7 +264,7 @@ func TestEmbeddedBytecodeCache(t *testing.T) {
 
 func TestBytecodeEmbedded(t *testing.T) {
 	t.Run("targets the dir compile cache env declares", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "ocel")
+		compileCacheOn(t)
 		env := Env()
 		if len(env) != 1 || env[0] != "NODE_COMPILE_CACHE="+compileCacheDir {
 			t.Fatalf("Env() = %v, want exactly [NODE_COMPILE_CACHE=%s]", env, compileCacheDir)

@@ -23,7 +23,7 @@ func (NoArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadClo
 	return nil, refusal.Refuse(refusal.CodeInvalid, "this provider keeps no artifact store, so there is no artifact at %s", ref.Key)
 }
 
-func (NoArtifacts) RemoveObjects(context.Context, environment.Tier, naming.Coordinate, []naming.ObjectKind, progress.Log) error {
+func (NoArtifacts) RemoveObjects(context.Context, environment.Tier, naming.StorageScope, []naming.ObjectKind, progress.Log) error {
 	return nil
 }
 

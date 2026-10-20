@@ -5,15 +5,13 @@ import { IMAGE_CALL_HEADER, parseRenderCall, RENDER_RELEASE_HEADER } from "../sr
 import { countingLoader, edgeBundle } from "./edge-bundle";
 import {
   type NextRelease,
-  PAGES_PREFIX,
+  STORAGE_COORDINATE,
   servedNextRelease,
-  UNTOKENED_PAGES_PREFIX,
+  UNTOKENED_STORAGE_COORDINATE,
 } from "./next-release";
 import { fakeServing } from "./serving-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
-
-const ASSET_PREFIX = "assets/p1/prod/web/r3f8a1c9d";
 
 function imageRelease(over: NextRelease = {}) {
   return servedNextRelease({
@@ -28,7 +26,7 @@ function imageRelease(over: NextRelease = {}) {
       },
       ...over.table,
     },
-    record: { assetPrefix: ASSET_PREFIX, pagesPrefix: UNTOKENED_PAGES_PREFIX, ...over.record },
+    record: { storageCoordinate: UNTOKENED_STORAGE_COORDINATE, ...over.record },
     assets: { "/404.html": "<h1>not found</h1>" },
   });
 }
@@ -73,9 +71,10 @@ describe("the /_next/image route", () => {
     expect(prefixed.status).toBe(400);
   });
 
-  it("routes a valid request to the bound origin", async () => {
+  it("routes a valid request to the bound origin, under the assets of its release", async () => {
     const seen: ImageOriginRequest[] = [];
     const serve = imageRelease({
+      record: { storageCoordinate: "p1/prod/web/r3f8a1c9d" },
       base: {
         imageOrigin: async (payload) => {
           seen.push(payload);
@@ -88,7 +87,7 @@ describe("the /_next/image route", () => {
 
     expect(response.status).toBe(200);
     expect(seen[0]).toMatchObject({
-      assetPrefix: ASSET_PREFIX,
+      assetPrefix: "assets/p1/prod/web/r3f8a1c9d",
       url: "/a.png",
       w: 640,
       q: 75,
@@ -151,7 +150,7 @@ describe("the /_next/image route through Workers Cache", () => {
     const fake = fakeServing(answer);
     let originCalls = 0;
     const serve = imageRelease({
-      record: { pagesPrefix: PAGES_PREFIX },
+      record: { storageCoordinate: STORAGE_COORDINATE },
       serve: fake.serving.serve,
       base: {
         images: optimizerUrl === null ? undefined : { optimizerUrl },
@@ -180,11 +179,11 @@ describe("the /_next/image route through Workers Cache", () => {
     expect(new URL(request.url).pathname).toMatch(/\/[0-9a-f]{64}$/);
     expect(JSON.parse(request.headers.get(RENDER_RELEASE_HEADER)!)).toMatchObject({
       slug: "p1",
-      pagesPrefix: PAGES_PREFIX,
+      storageCoordinate: STORAGE_COORDINATE,
     });
     expect(JSON.parse(request.headers.get(IMAGE_CALL_HEADER)!)).toEqual({
       payload: {
-        assetPrefix: ASSET_PREFIX,
+        assetPrefix: `assets/${STORAGE_COORDINATE}`,
         url: "/a.png",
         w: 640,
         q: 75,
@@ -315,7 +314,7 @@ describe("the /_next/image route through Workers Cache", () => {
     const keyed = async (buildId: string) => {
       const fake = fakeServing(optimized);
       await imageRelease({
-        record: { pagesPrefix: PAGES_PREFIX, buildId },
+        record: { storageCoordinate: STORAGE_COORDINATE, buildId },
         serve: fake.serving.serve,
         base: { images: { optimizerUrl: OPTIMIZER } },
       })(new Request(IMAGE));

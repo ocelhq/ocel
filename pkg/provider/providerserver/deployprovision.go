@@ -278,8 +278,7 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 			OcelRouteTable:            facts.OcelRouteTable,
 			EdgeRouteTable:            facts.EdgeRouteTable,
 			ISR:                       facts.ISR,
-			Bytecode:                  facts.Bytecode,
-			AssetPrefix:               facts.AssetPrefix,
+			Storage:                   appCoordinate(r.spec, entry.App, entry.Release.Token()),
 			OutputRoot:                r.artifactRoot,
 			Static:                    facts.Static,
 			Guard:                     facts.Guard,
@@ -347,7 +346,6 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Coordinate:        appCoordinate(r.spec, entry.App, entry.Release.Token()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
 		EdgeSignsForwards: r.readPairedRouter(entry.App).Facts().SignsOriginForwards,
-		CachesBytecode:    r.provider.Facts().CachesBytecode,
 	})
 	if err != nil {
 		return AppServing{}, err

@@ -18,11 +18,17 @@ func cacheGrants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec
 	if err != nil {
 		return nil, err
 	}
-	release := spec.App.ISR.Coordinate
-	app := naming.Coordinate{Project: release.Project, Env: release.Env, App: release.App}
-	title := "ocel cache of " + app.Project + "/" + app.Env + "/" + app.App
+	storage := spec.App.Storage
+	app, err := naming.AppScope(storage)
+	if err != nil {
+		return nil, err
+	}
+	condition, err := gcloud.ObjectKindsCondition("ocel cache of "+storage.Project+"/"+storage.Env+"/"+storage.App, buckets, app, naming.ISRObjectKinds...)
+	if err != nil {
+		return nil, err
+	}
 	return []grants.Grant{
-		grants.OnProject(grants.ObjectsRole, member, gcloud.ObjectKindsCondition(title, buckets, app, naming.ISRObjectKinds...)),
+		grants.OnProject(grants.ObjectsRole, member, condition),
 		grants.OnProject(tagRecordsRole, member, variables.ProjectWritableDatabaseCondition(c, spec.Ref.Tier, spec.Ref.Project)),
 	}, nil
 }

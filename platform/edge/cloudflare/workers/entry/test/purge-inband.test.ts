@@ -4,7 +4,7 @@ import type { RaisedTag } from "../src/purge-backlog";
 import { type InBandPurgePorts, purgeInBand } from "../src/purge-inband";
 import type { ReleaseScope } from "../src/purge-times";
 
-const scope = { slug: "p1", pagesPrefix: "pages/p1/prod/web/r00000001" };
+const scope = { slug: "p1", storageCoordinate: "p1/prod/web/r00000001" };
 
 function ports() {
   const raised: { scope: ReleaseScope; mode: PurgeMode; tags: RaisedTag[] }[] = [];

@@ -4,6 +4,8 @@ import type { ObjectStore, StoredObject } from "../src/store.mjs";
 
 export const ASSET_PREFIX = "assets/proj1/prod/web/r3f8a1c9d";
 
+export const RELEASE = { project: "proj1", env: "prod", app: "web", release: "r3f8a1c9d" };
+
 export const CONFIG_KEY = "image-config/proj1/prod/web/r3f8a1c9d/image-config.json";
 
 export function imageConfig(overrides: Partial<CompiledImageConfig> = {}): CompiledImageConfig {

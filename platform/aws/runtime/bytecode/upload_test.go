@@ -271,14 +271,14 @@ func TestBytecodeUpload(t *testing.T) {
 	})
 
 	t.Run("is rooted at the dir compile cache env declares", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "ocel")
+		compileCacheOn(t)
 		env := Env()
 		if len(env) != 1 || !strings.HasPrefix(env[0], "NODE_COMPILE_CACHE=") {
 			t.Fatalf("Env() = %v, want exactly one NODE_COMPILE_CACHE entry", env)
 		}
 		dir := strings.TrimPrefix(env[0], "NODE_COMPILE_CACHE=")
 
-		t.Setenv(bucketEnvVar, "assets-xyz")
+		compileCacheConfigured(t, "proj/prod/web/r1a2b3c4d", "assets-xyz")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 		t.Setenv("AWS_REGION", "us-east-1")
 		c := resolve(context.Background(), func(context.Context) (string, error) { return "v24.3.1", nil })

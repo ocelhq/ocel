@@ -3,6 +3,7 @@ import { BOOTSTRAP_MESSAGE } from "@framework/next-image-optimizer/errors";
 import type { OriginResponse } from "@framework/next-image-optimizer/optimize";
 import { type OptimizeDeps, optimize } from "@framework/next-image-optimizer/optimize";
 import type { ImageOriginRequest } from "@framework/next-protocol/image";
+import { bucketVars } from "@platform/edge-contract/storage-key";
 import { s3Store } from "./store.mjs";
 
 interface FunctionUrlEvent {
@@ -37,8 +38,8 @@ let store: ReturnType<typeof s3Store> | undefined;
 
 function assetStore(): ReturnType<typeof s3Store> {
   if (store) return store;
-  const bucket = process.env.OCEL_EDGE_BUCKET;
-  if (!bucket) throw new Error("OCEL_EDGE_BUCKET is not set");
+  const bucket = process.env[bucketVars.edge];
+  if (!bucket) throw new Error(`${bucketVars.edge} is not set`);
   return (store = s3Store(new S3Client({}), bucket));
 }
 

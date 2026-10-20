@@ -99,7 +99,6 @@ func (p *Provider) Facts() provider.Facts {
 		RendersTransforms: true,
 		StoresArtifacts:   true,
 		WorkerCeilings:    topic.WorkerCeilings,
-		CachesBytecode:    p.options.Bytecode.Cache,
 
 		MaxFunctionBytes: function.MaxBytes,
 	}

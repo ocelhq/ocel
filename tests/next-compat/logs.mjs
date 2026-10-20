@@ -75,7 +75,7 @@ function printLambdaLogs() {
     return;
   }
 
-  const env = storageCoordinate(result.apps?.[0]?.storagePrefix)?.env ?? "";
+  const env = storageCoordinate(result.apps?.[0]?.storageCoordinate)?.env ?? "";
   const filters = [
     `Key=ocel:project,Values=${state.slug}`,
     ...(env ? [`Key=ocel:env,Values=${env}`] : []),

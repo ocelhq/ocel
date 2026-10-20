@@ -1,9 +1,9 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import {
-  parseStorageCoordinate,
+  readStorageCoordinate,
   type StorageCoordinate,
+  storageCoordinateVar,
 } from "@platform/edge-contract/storage-key";
-import { newS3Client } from "../cache/sdk-clients.mjs";
 
 export interface ObjectStore {
   client: S3Client;
@@ -17,13 +17,8 @@ export function requireEnv(name: string): string {
 }
 
 export function requireStorageCoordinate(): StorageCoordinate {
-  const value = requireEnv("OCEL_STORAGE_COORDINATE");
-  const coordinate = parseStorageCoordinate(value);
-  if (coordinate === undefined) {
-    throw new Error(
-      `ocel cache: OCEL_STORAGE_COORDINATE ${JSON.stringify(value)} names no release`,
-    );
-  }
+  const coordinate = readStorageCoordinate(process.env);
+  if (coordinate === undefined) throw new Error(`ocel cache: ${storageCoordinateVar} is not set`);
   return coordinate;
 }
 
@@ -39,7 +34,3 @@ export async function readBodyText(body: any): Promise<string> {
   for await (const chunk of body) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks).toString("utf8");
 }
-
-export const edgeBucketVar = "OCEL_EDGE_BUCKET";
-
-export const cacheBucketVar = "OCEL_CACHE_BUCKET";

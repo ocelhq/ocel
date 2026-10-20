@@ -63,7 +63,7 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 		},
 		{
 			Kind: KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageCache), Class: naming.StorageCache,
-			Note: fmt.Sprintf("what only an app's own code reads back, its fetch and use-cache entries, each deleted %d days after its last write", CacheObjectLifetimeDays),
+			Note: fmt.Sprintf("what only an app's own code reads back, its fetch and use-cache entries, each deleted %d days after its last write", naming.CacheObjectLifetimeDays),
 		},
 		{
 			Kind: KindKeyRing, Name: names.KeyRing(), Shared: true,

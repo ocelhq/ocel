@@ -5,7 +5,7 @@ import { newFirestoreDatabase } from "./firestore-database.mjs";
 import { driveTagBurst, percentile, reportTimings } from "./tag-burst.mjs";
 
 const database = "projects/p/databases/ocel-production-tags";
-const pagesPrefix = "pages/shop/prod/web/r1a2b3c4d";
+const coordinate = { project: "shop", env: "prod", app: "web", release: "r1a2b3c4d" };
 const instanceCount = 20;
 const tagsPerInstance = 25;
 const commitLatencyMs = 50;
@@ -27,7 +27,7 @@ test("twenty instances revalidating twenty-five tags each at once land every tag
 
   const burst = await driveTagBurst({
     newTags: () =>
-      newFirestoreTagRecords(newFirestore({ database, fetch: fake.fetch }), pagesPrefix),
+      newFirestoreTagRecords(newFirestore({ database, fetch: fake.fetch }), coordinate),
     wait: async (ms) => {
       await vi.advanceTimersByTimeAsync(ms);
     },

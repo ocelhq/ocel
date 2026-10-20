@@ -15,12 +15,12 @@ describe("the purge queue of a project", () => {
     const queue = newPurgeQueuePort(exports);
 
     await queue.raise(
-      { slug: "slug-a", pagesPrefix: "pages/slug-a/prod/web/r00000001" },
+      { slug: "slug-a", storageCoordinate: "slug-a/prod/web/r00000001" },
       "invalidate",
       [{ tag: "r1|a", raisedAt: 5_000 }],
     );
     await queue.raise(
-      { slug: "slug-b", pagesPrefix: "pages/slug-b/prod/web/r00000002" },
+      { slug: "slug-b", storageCoordinate: "slug-b/prod/web/r00000002" },
       "invalidate",
       [{ tag: "r2|a", raisedAt: 6_000 }],
     );

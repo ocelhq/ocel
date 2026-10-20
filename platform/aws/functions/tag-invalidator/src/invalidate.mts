@@ -6,7 +6,7 @@ import {
   type PurgeSender,
   postPurge,
 } from "@platform/edge-contract/purge";
-import { coordinateOf, type Raise, type Raises } from "./records.mjs";
+import type { Raise, Raises } from "./records.mjs";
 import { invalidationBatches } from "./tags.mjs";
 import {
   type DynamoCommands,
@@ -181,13 +181,12 @@ async function purgeCloudflareTargets(
   inv: Invalidator,
   readSeed: () => Promise<string>,
   urls: readonly string[],
-  pagesPrefix: string,
   raise: Raise,
 ): Promise<void> {
   if (urls.length === 0 || inv.cloudflare === undefined) return;
-  const secret = await derivePurgeSecret(await readSeed(), pagesPrefix);
+  const secret = await derivePurgeSecret(await readSeed(), raise.coordinate);
   const results = await Promise.allSettled(
-    urls.map((url) => postPurge(inv.cloudflare!, url, secret, pagesPrefix, raise.entries)),
+    urls.map((url) => postPurge(inv.cloudflare!, url, secret, raise.coordinate, raise.entries)),
   );
   const refused: unknown[] = [];
   results.forEach((result, i) => {
@@ -209,13 +208,12 @@ async function invalidateOne(
   inv: Invalidator,
   readSeed: () => Promise<string>,
   targets: ProjectTargets,
-  coordinate: { release: string; pagesPrefix: string },
   raise: Raise,
 ): Promise<void> {
   await settleEvery(
     [
-      invalidateCloudFront(inv, targets.cloudfront, coordinate.release, raise),
-      purgeCloudflareTargets(inv, readSeed, targets.cloudflare, coordinate.pagesPrefix, raise),
+      invalidateCloudFront(inv, targets.cloudfront, raise.coordinate.release, raise),
+      purgeCloudflareTargets(inv, readSeed, targets.cloudflare, raise),
     ],
     "some fronts refused this invalidation",
   );
@@ -243,28 +241,21 @@ export async function invalidateAll(inv: Invalidator, raises: Raises): Promise<s
   const readSeed = () => (seed ??= inv.cloudflare!.readSeed());
 
   const results = await settledPool(builds.length, buildsAtOnce, async (i) => {
-    const [pagesPrefix, raise] = builds[i]!;
-    const coordinate = coordinateOf(pagesPrefix);
-    if (coordinate === null) {
-      console.warn(
-        `ocel: ${pagesPrefix} names no project and release, so the tags it raises reach no front`,
-      );
-      return;
-    }
-    const { project, release } = coordinate;
+    const [, raise] = builds[i]!;
+    const { project } = raise.coordinate;
 
     let projectTargets = targets.get(project);
     if (projectTargets === undefined) {
       projectTargets = readTargets(inv, project);
       targets.set(project, projectTargets);
     }
-    await invalidateOne(inv, readSeed, await projectTargets, { release, pagesPrefix }, raise);
+    await invalidateOne(inv, readSeed, await projectTargets, raise);
   });
 
-  return builds.flatMap(([pagesPrefix, raise], i) => {
+  return builds.flatMap(([build, raise], i) => {
     const result = results[i]!;
     if (result.status === "fulfilled") return [];
-    console.error(`ocel: invalidating ${pagesPrefix} failed`, result.reason);
+    console.error(`ocel: invalidating ${build} failed`, result.reason);
     return raise.sequenceNumbers;
   });
 }

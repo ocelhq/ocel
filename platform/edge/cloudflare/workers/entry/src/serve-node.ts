@@ -99,7 +99,7 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
     }
     const release: RenderRelease = {
       slug: serving.slug,
-      pagesPrefix: serving.pagesPrefix,
+      storageCoordinate: serving.storageCoordinate,
       tags: [],
       ...(!rule && { honoursAppCacheHeaders: true }),
     };

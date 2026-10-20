@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { storagePrefix } from "@platform/edge-contract/storage-key";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { newFirestore } from "../../src/next/firestore.mjs";
 import { newFirestoreTagRecords } from "../../src/next/tag-records.mjs";
@@ -10,7 +11,12 @@ const maxDeletesPerCommit = 500;
 describe("a burst of tag publishes against a live backend", () => {
   let backend: Backend;
   let database: string;
-  const pagesPrefix = `pages/live/prod/web/r${randomBytes(4).toString("hex")}`;
+  const coordinate = {
+    project: "live",
+    env: "prod",
+    app: "web",
+    release: `r${randomBytes(4).toString("hex")}`,
+  };
   let tags: string[] = [];
 
   beforeAll(async () => {
@@ -27,7 +33,9 @@ describe("a burst of tag publishes against a live backend", () => {
         metadataOrigin: backend.metadataOrigin,
       });
       const names = tags.map((tag) => {
-        const id = createHash("sha256").update(`${pagesPrefix}/${tag}`).digest("hex");
+        const id = createHash("sha256")
+          .update(`${storagePrefix("pages", coordinate)}${tag}`)
+          .digest("hex");
         return `${database}/documents/tags/${id}`;
       });
       for (let from = 0; from < names.length; from += maxDeletesPerCommit) {
@@ -48,7 +56,7 @@ describe("a burst of tag publishes against a live backend", () => {
             endpoint: backend.firestoreEndpoint,
             metadataOrigin: backend.metadataOrigin,
           }),
-          pagesPrefix,
+          coordinate,
         ),
       wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       durationMs: 15_000,

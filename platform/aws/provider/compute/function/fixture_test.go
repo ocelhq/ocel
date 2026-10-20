@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -104,14 +103,6 @@ func storageCoordinate(env, slug, app string, release naming.ReleaseToken) namin
 		App:     naming.Sanitize(app),
 		Release: release,
 	}
-}
-
-func bytecodePrefixOf(c naming.Coordinate) string {
-	return strings.TrimSuffix(c.StoragePrefix(naming.ObjectBytecode), naming.PathSeparator)
-}
-
-func appAssetPrefix(c naming.Coordinate) string {
-	return c.AssetPrefix()
 }
 
 func nextManifest() *contractv1.Manifest {

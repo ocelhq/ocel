@@ -151,7 +151,7 @@ func TestTheStagedRecordIncludesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testi
 	}
 }
 
-func TestTheStagedRecordNamesThePagesPrefixTheFunctionWritesUnder(t *testing.T) {
+func TestTheStagedRecordNamesTheStorageCoordinateTheFunctionWritesUnder(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	stager := staging(t, provider)
@@ -173,12 +173,9 @@ func TestTheStagedRecordNamesThePagesPrefixTheFunctionWritesUnder(t *testing.T) 
 	if app == nil || app.ISR == nil {
 		t.Fatal("the last spec the stacks port saw has no ISR spec")
 	}
-	if want := app.ISR.Coordinate.PagesPrefix(); staged[0].PagesPrefix != want {
-		t.Errorf("pagesPrefix = %q, want %q: the edge reads entries at <pagesPrefix>/<route>.cache.json, so a prefix that differs from the one the function writes under misses every prerender",
-			staged[0].PagesPrefix, want)
-	}
-	if strings.HasSuffix(staged[0].PagesPrefix, "/") {
-		t.Errorf("pagesPrefix = %q, want no trailing slash", staged[0].PagesPrefix)
+	if want := app.Storage.StorageCoordinate(); staged[0].StorageCoordinate != want {
+		t.Errorf("storageCoordinate = %q, want %q: the edge reads entries under the coordinate's pages prefix, so a coordinate that differs from the one the function writes under misses every prerender",
+			staged[0].StorageCoordinate, want)
 	}
 }
 

@@ -145,8 +145,11 @@ export default class extends WorkerEntrypoint<Env> {
     return stub(this.env, args.slug).readLabelRecord(args.label, args.knownRelease);
   }
 
-  async readServedRecord(args: { slug: string; pagesPrefix: string }): Promise<ServedRecordResult> {
-    return stub(this.env, args.slug).readServedRecord(args.pagesPrefix);
+  async readServedRecord(args: {
+    slug: string;
+    storageCoordinate: string;
+  }): Promise<ServedRecordResult> {
+    return stub(this.env, args.slug).readServedRecord(args.storageCoordinate);
   }
 
   async readGate(args: { slug: string }): Promise<string | undefined> {

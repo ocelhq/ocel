@@ -24,30 +24,30 @@ describe("cacheKey", () => {
 });
 
 describe("entryObjectKey", () => {
-  const PREFIX = "pages/proj/prod/web/r1a2b3c4d";
+  const RELEASE = { project: "proj", env: "prod", app: "web", release: "r1a2b3c4d" };
 
   it("roots the key under the release's pages prefix", () => {
-    expect(entryObjectKey(PREFIX, cacheKey("/blog/post"))).toBe(
+    expect(entryObjectKey(RELEASE, cacheKey("/blog/post"))).toBe(
       "pages/proj/prod/web/r1a2b3c4d/blog/post.cache.json",
     );
   });
 
   it("keys a trailing-slash route, which the direct write path also accepted", () => {
-    expect(entryObjectKey(PREFIX, cacheKey("/blog/"))).toBe(
+    expect(entryObjectKey(RELEASE, cacheKey("/blog/"))).toBe(
       "pages/proj/prod/web/r1a2b3c4d/blog/.cache.json",
     );
-    expect(entryObjectKey(PREFIX, "blog//post")).toBe(
+    expect(entryObjectKey(RELEASE, "blog//post")).toBe(
       "pages/proj/prod/web/r1a2b3c4d/blog//post.cache.json",
     );
   });
 
   it("refuses a key that could climb out of the prefix", () => {
-    expect(entryObjectKey(PREFIX, "../other/entry")).toBeNull();
-    expect(entryObjectKey(PREFIX, "blog/../../escape")).toBeNull();
-    expect(entryObjectKey(PREFIX, "blog/./post")).toBeNull();
-    expect(entryObjectKey(PREFIX, "/absolute")).toBeNull();
-    expect(entryObjectKey(PREFIX, "blog\\post")).toBeNull();
-    expect(entryObjectKey(PREFIX, "")).toBeNull();
+    expect(entryObjectKey(RELEASE, "../other/entry")).toBeNull();
+    expect(entryObjectKey(RELEASE, "blog/../../escape")).toBeNull();
+    expect(entryObjectKey(RELEASE, "blog/./post")).toBeNull();
+    expect(entryObjectKey(RELEASE, "/absolute")).toBeNull();
+    expect(entryObjectKey(RELEASE, "blog\\post")).toBeNull();
+    expect(entryObjectKey(RELEASE, "")).toBeNull();
   });
 });
 

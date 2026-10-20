@@ -99,7 +99,7 @@ func registerGuarded(t *testing.T, cfg testConfig, spec provider.StackSpec, func
 			Args:      argsFor(functions),
 			Artifacts: map[string]Artifact{},
 			Layers:    testRuntimeLayers(),
-			Env:       AppEnv(spec, variables.Bundle{}, bucket.Sessions{}, cfg.StateTable),
+			Env:       AppEnv(spec, nil, variables.Bundle{}, bucket.Sessions{}, cfg.StateTable),
 			Dispatch:  host,
 			Guard:     guard,
 			RoleArn:   role.Arn,

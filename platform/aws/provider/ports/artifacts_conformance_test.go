@@ -179,11 +179,14 @@ func TestASweepReachesEveryBucketTheAccountKeeps(t *testing.T) {
 		}
 	}
 	var progress fake.Log
-	scope := naming.Coordinate{Project: "shop", Env: "prod"}
+	scope, err := naming.AppScope(releaseOf("r1a2b3c4d"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := store.RemoveObjects(ctx, environment.TierProduction, scope, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets, naming.ObjectUseCache}, &progress); err != nil {
 		t.Fatalf("RemoveObjects() = %v", err)
 	}
-	if want := []string{"INFO Removed the production objects under fn/shop/prod/, assets/shop/prod/, use-cache/shop/prod/"}; !slices.Equal(progress.Lines(), want) {
+	if want := []string{"INFO Removed the production objects under fn/shop/prod/web/, assets/shop/prod/web/, use-cache/shop/prod/web/"}; !slices.Equal(progress.Lines(), want) {
 		t.Errorf("RemoveObjects() said %q, want %q", progress.Lines(), want)
 	}
 	for _, ref := range everyBucketRef() {
@@ -205,7 +208,11 @@ func TestASweepOfABucketAlreadyTornDownIsNoWork(t *testing.T) {
 	t.Parallel()
 
 	store := ports.Artifacts{S3: goneS3{newFakeS3()}, Stores: tierBuckets{}}
-	if err := store.RemoveObjects(context.Background(), environment.TierProduction, naming.Coordinate{Project: "shop", Env: "prod"}, naming.CoordinateObjectKinds, nil); err != nil {
+	scope, err := naming.ProjectScope("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveObjects(context.Background(), environment.TierProduction, scope, naming.CoordinateObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects() over buckets already gone = %v, want the destroy to continue", err)
 	}
 }

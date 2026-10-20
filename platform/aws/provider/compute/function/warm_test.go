@@ -107,7 +107,7 @@ func TestWarmTargets(t *testing.T) {
 				{Name: "api", Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "api_handler"})},
 			},
 		}
-		bytecode := map[string]*Bytecode{"web": {Prefix: "prod/proj/web/B1/bytecode"}}
+		bytecode := map[string]*Bytecode{"web": {Bucket: "artifacts"}}
 		names := map[string]string{
 			"web_index":   "ocel-web-index-abc",
 			"api_handler": "ocel-api-handler-def",
@@ -128,7 +128,7 @@ func TestWarmTargets(t *testing.T) {
 			Slug: "proj",
 			Apps: []*contractv1.ManifestApp{{Name: "api", Artifact: serverlessArtifact(&contractv1.ManifestFunction{LogicalName: "api_handler", Framework: &contractv1.Framework{Name: "node"}})}},
 		}
-		bytecode := map[string]*Bytecode{"api": {Prefix: "prod/proj/api/API1/bytecode"}}
+		bytecode := map[string]*Bytecode{"api": {Bucket: "artifacts"}}
 
 		targets := warmTargets(manifest, bytecode, map[string]string{"api_handler": "ocel-api-handler-def"})
 

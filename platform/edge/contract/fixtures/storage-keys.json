@@ -35,37 +35,18 @@
       "app": "web",
       "release": "r1a2b3c4d",
       "rest": "tag-clock.json"
-    },
-    {
-      "key": "pages/shop/prod/web/r1a2b3c4d",
-      "kind": "pages",
-      "project": "shop",
-      "env": "prod",
-      "app": "web",
-      "release": "r1a2b3c4d",
-      "rest": ""
     }
   ],
   "prefixes": [
     {
       "kind": "use-cache",
-      "coordinate": { "project": "shop" },
-      "prefix": "use-cache/shop/"
-    },
-    {
-      "kind": "use-cache",
-      "coordinate": { "project": "shop", "env": "pr-7" },
-      "prefix": "use-cache/shop/pr-7/"
-    },
-    {
-      "kind": "use-cache",
-      "coordinate": { "project": "shop", "env": "pr-7", "app": "web" },
-      "prefix": "use-cache/shop/pr-7/web/"
-    },
-    {
-      "kind": "use-cache",
       "coordinate": { "project": "shop", "env": "pr-7", "app": "web", "release": "r1a2b3c4d" },
       "prefix": "use-cache/shop/pr-7/web/r1a2b3c4d/"
+    },
+    {
+      "kind": "assets",
+      "coordinate": { "project": "shop", "env": "prod", "app": "web", "release": "r1a2b3c4d" },
+      "prefix": "assets/shop/prod/web/r1a2b3c4d/"
     }
   ],
   "coordinates": [
@@ -76,6 +57,7 @@
   ],
   "invalidCoordinates": ["shop/prod/web", "shop/prod/web/r1a2b3c4d/extra", "shop/prod/web/release1", "Shop/prod/web/r1a2b3c4d", ""],
   "invalid": [
+    "pages/shop/prod/web/r1a2b3c4d",
     "isr/shop/prod/web/r1a2b3c4d/index.cache.json",
     "payloads/upload-completer/5e1f.zip",
     "pages/shop/prod/web/r1a2b3c4z/index.cache.json",
