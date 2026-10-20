@@ -22,6 +22,11 @@ import (
 
 const invoker = "ocel-production@floci-local.iam.gserviceaccount.com"
 
+var untagged = topics.TierTags{
+	Ensure: func(context.Context, string) error { return nil },
+	Remove: func(context.Context, string, func(context.Context) (bool, error)) error { return nil },
+}
+
 func ordersAndResize() map[string]*provider.TopicSpec {
 	return map[string]*provider.TopicSpec{
 		"orders": {
@@ -93,10 +98,10 @@ func TestAConsumersMessagesAreRetriedUntilItsRunSettlesAndNeverDeadLetteredByPub
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
 
-	if err := (topics.Topology{Names: names, Topics: ordersAndResize()}).Ensure(context.Background(), clients); err != nil {
+	if err := (topics.Topology{Names: names, Topics: ordersAndResize(), Tags: untagged}).Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() of the topology = %v", err)
 	}
-	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app")}).Ensure(context.Background(), clients); err != nil {
+	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app"), Tags: untagged}).Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() of the subscriptions = %v", err)
 	}
 
@@ -118,7 +123,7 @@ func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
 	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
 
-	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app")}).Ensure(context.Background(), clients); err != nil {
+	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app"), Tags: untagged}).Ensure(context.Background(), clients); err != nil {
 		t.Fatal(err)
 	}
 

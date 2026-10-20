@@ -37,8 +37,6 @@ func readTopicStatus(t *testing.T, endpoint, project, name string) int {
 	return resp.StatusCode
 }
 
-var untagged = topics.TierTags{Remove: func(context.Context, string, func(context.Context) (bool, error)) error { return nil }}
-
 func emulatedEndpoint(t *testing.T) string {
 	t.Helper()
 	endpoint := os.Getenv(emulatorEndpointVariable)
@@ -51,7 +49,7 @@ func emulatedEndpoint(t *testing.T) string {
 func deployedTopology(t *testing.T, clients *ports.Clients, names topics.Names, declared map[string]*provider.TopicSpec) (topics.Topology, topics.Subscriptions) {
 	t.Helper()
 	topology := topics.Topology{Names: names, Topics: declared, Tags: untagged}
-	subscriptions := topics.Subscriptions{Names: names, Topics: declared, Pushes: pushesTo("https://worker.run.app")}
+	subscriptions := topics.Subscriptions{Names: names, Topics: declared, Pushes: pushesTo("https://worker.run.app"), Tags: untagged}
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Topology.Ensure() = %v", err)
 	}
@@ -137,7 +135,7 @@ func TestLiveSubscriptionsAreMadeOnlyForTheWorkersAnAppHosts(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 
-	billing := topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: map[string]topics.Push{"billing": pushesTo("https://worker.run.app")["billing"]}}
+	billing := topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: map[string]topics.Push{"billing": pushesTo("https://worker.run.app")["billing"]}, Tags: untagged}
 	if err := billing.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() for the app hosting billing alone = %v, want the consumers on other workers left to their apps", err)
 	}

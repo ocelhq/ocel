@@ -46,6 +46,7 @@ type Subscriptions struct {
 
 type TierTags struct {
 	Inline map[string]string
+	Ensure func(ctx context.Context, path string) error
 	Remove func(ctx context.Context, path string, exists func(context.Context) (bool, error)) error
 }
 
@@ -79,7 +80,7 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 		if err != nil {
 			return err
 		}
-		if err := ensureTopic(ctx, service, path, t.Tags.Inline); err != nil {
+		if err := ensureTopic(ctx, service, path, t.Tags); err != nil {
 			return err
 		}
 		if isScheduled(topic) {
@@ -112,7 +113,7 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 				return err
 			}
 			desired.Tags = s.Tags.Inline
-			if err := ensureSubscription(ctx, service, path, desired); err != nil {
+			if err := ensureSubscription(ctx, service, path, desired, s.Tags); err != nil {
 				return err
 			}
 		}
@@ -146,18 +147,21 @@ func durationText(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', -1, 64) + "s"
 }
 
-func ensureTopic(ctx context.Context, service *pubsub.Service, path string, tags map[string]string) error {
+func ensureTopic(ctx context.Context, service *pubsub.Service, path string, tags TierTags) error {
 	err := googleretry.Done(ctx, func() error {
-		_, err := service.Projects.Topics.Create(path, &pubsub.Topic{Tags: tags}).Context(ctx).Do()
+		_, err := service.Projects.Topics.Create(path, &pubsub.Topic{Tags: tags.Inline}).Context(ctx).Do()
 		return err
 	})
-	if err != nil && !isAnswered(err, http.StatusConflict) {
-		return fmt.Errorf("create Pub/Sub topic %s: %w", path, err)
+	switch {
+	case err == nil:
+		return nil
+	case isAnswered(err, http.StatusConflict):
+		return tags.Ensure(ctx, path)
 	}
-	return nil
+	return fmt.Errorf("create Pub/Sub topic %s: %w", path, err)
 }
 
-func ensureSubscription(ctx context.Context, service *pubsub.Service, path string, desired *pubsub.Subscription) error {
+func ensureSubscription(ctx context.Context, service *pubsub.Service, path string, desired *pubsub.Subscription, tags TierTags) error {
 	err := googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Subscriptions.Create(path, desired).Context(ctx).Do()
 		return err
@@ -187,7 +191,7 @@ func ensureSubscription(ctx context.Context, service *pubsub.Service, path strin
 	if err != nil {
 		return fmt.Errorf("update Pub/Sub subscription %s: %w", path, err)
 	}
-	return nil
+	return tags.Ensure(ctx, path)
 }
 
 func TopicPolicy(service *pubsub.Service, path string) policy.Resource {
