@@ -29,7 +29,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"rds:RemoveTagsFromResource",
 			},
 			Resources: []string{s.AppClusterARN(), s.AppInstanceARN(), s.AppSubnetGroupARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"rds:DeleteDBCluster"},
@@ -42,7 +42,7 @@ func credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"rds-data:ExecuteStatement"},
 			Resources: []string{s.AppClusterARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"rds-db:connect"},

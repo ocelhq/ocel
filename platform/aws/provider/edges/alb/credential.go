@@ -35,12 +35,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"elasticloadbalancing:RemoveListenerCertificates",
 			},
 			Resources: s.ContainerListenerARNs(),
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags", "elasticloadbalancing:ModifyTrustStore", "elasticloadbalancing:DeleteTrustStore"},
 			Resources: []string{s.ContainerTrustStoreARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -62,7 +62,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"elasticloadbalancing:SetSubnets",
 			},
 			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), s.ContainerTargetGroupARNs()),
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags"},

@@ -134,7 +134,7 @@ func TestEveryCredentialRunsEventAPIsOnlyOnWhatItTagged(t *testing.T) {
 			{action: "appsync:CreateChannelNamespace", resource: namespaces, condition: conditionJSON(t, s.TaggedOnCreateOnlyForItsTier())}: true,
 		}
 		for _, resource := range []string{apis, namespaces} {
-			want[grant{action: "appsync:TagResource", resource: resource, condition: conditionJSON(t, s.RetaggedByOcelOnlyAsItsTier())}] = true
+			want[grant{action: "appsync:TagResource", resource: resource, condition: conditionJSON(t, s.RetaggedOnlyWithinItsTier())}] = true
 		}
 		for _, action := range []string{
 			"appsync:DeleteApi",
@@ -147,7 +147,7 @@ func TestEveryCredentialRunsEventAPIsOnlyOnWhatItTagged(t *testing.T) {
 			"appsync:UpdateChannelNamespace",
 		} {
 			for _, resource := range []string{apis, namespaces} {
-				want[grant{action: action, resource: resource, condition: conditionJSON(t, s.TaggedByOcelForItsTier())}] = true
+				want[grant{action: action, resource: resource, condition: conditionJSON(t, s.TaggedForItsTier())}] = true
 			}
 		}
 		granted := map[grant]bool{}
@@ -173,7 +173,7 @@ func TestEveryCredentialKeepsRealtimeSigningKeysUnderTheirRootAlone(t *testing.T
 			{action: "secretsmanager:ListSecrets", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                    true,
 		}
 		for _, action := range []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"} {
-			want[grant{action: action, resource: keys, condition: conditionJSON(t, s.TaggedByOcelForItsTier())}] = true
+			want[grant{action: action, resource: keys, condition: conditionJSON(t, s.TaggedForItsTier())}] = true
 		}
 		granted := map[grant]bool{}
 		for g := range grantsOf(t, document) {

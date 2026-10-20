@@ -55,7 +55,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"ec2:DisassociateRouteTable",
 			},
 			Resources: []string{iam.AppRouteTableARN, iam.AppSubnetARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -65,27 +65,27 @@ func Credential(s iam.Scope) []iam.Statement {
 				"ec2:ReplaceRoute",
 			},
 			Resources: []string{iam.AppRouteTableARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"ec2:DeleteSubnet", "ec2:ModifySubnetAttribute"},
 			Resources: []string{iam.AppSubnetARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"ec2:DisassociateAddress", "ec2:ReleaseAddress"},
 			Resources: []string{iam.AppElasticIPARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"ec2:DeleteNatGateway"},
 			Resources: []string{iam.AppNATGatewayARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"ec2:DeleteVpcEndpoints", "ec2:ModifyVpcEndpoint"},
 			Resources: []string{iam.AppVPCEndpointARN, iam.AppRouteTableARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 	}
 }

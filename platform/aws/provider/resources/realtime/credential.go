@@ -12,7 +12,7 @@ func credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"secretsmanager:DeleteSecret", "secretsmanager:GetSecretValue"},
 			Resources: []string{s.SigningKeys},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"secretsmanager:ListSecrets"},
@@ -31,7 +31,7 @@ func credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"appsync:TagResource"},
 			Resources: []string{iam.AppEventAPIARN, iam.AppChannelNamespaceARN},
-			Condition: s.RetaggedByOcelOnlyAsItsTier(),
+			Condition: s.RetaggedOnlyWithinItsTier(),
 		},
 		{
 			Actions: []string{
@@ -45,7 +45,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"appsync:UpdateChannelNamespace",
 			},
 			Resources: []string{iam.AppEventAPIARN, iam.AppChannelNamespaceARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 	}
 }

@@ -37,7 +37,7 @@ func NetworkCredential(s iam.Scope) []iam.Statement {
 				"ec2:RevokeSecurityGroupIngress",
 			},
 			Resources: []string{iam.AppSecurityGroupARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 	}
 }

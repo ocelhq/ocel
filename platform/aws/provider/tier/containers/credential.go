@@ -18,7 +18,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"ecs:UntagResource",
 			},
 			Resources: []string{s.ContainerClusterARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:CreateServiceLinkedRole"},
@@ -59,7 +59,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"cloudfront:UpdateVpcOrigin",
 			},
 			Resources: []string{iam.ContainerVPCOriginARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"acm:ImportCertificate"},

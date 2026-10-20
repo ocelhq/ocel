@@ -16,17 +16,17 @@ func Credential(s iam.Scope) []iam.Statement {
 				"lambda:UpdateEventSourceMapping",
 			},
 			Resources: []string{iam.EventSourceMappingARN},
-			Condition: iam.MergeConditions(s.TaggedByOcelForItsTier(), s.OfAppWorker()),
+			Condition: iam.MergeConditions(s.TaggedForItsTier(), s.OfAppWorker()),
 		},
 		{
 			Actions:   []string{"lambda:ListTags", "lambda:UntagResource"},
 			Resources: []string{iam.EventSourceMappingARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"lambda:TagResource"},
 			Resources: []string{iam.EventSourceMappingARN},
-			Condition: s.RetaggedByOcelOnlyAsItsTier(),
+			Condition: s.RetaggedOnlyWithinItsTier(),
 		},
 		{
 			Actions:   []string{"cloudwatch:PutMetricAlarm", "cloudwatch:TagResource"},
@@ -36,7 +36,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"cloudwatch:DeleteAlarms", "cloudwatch:ListTagsForResource", "cloudwatch:UntagResource"},
 			Resources: []string{s.AppAlarmARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 	}
 }

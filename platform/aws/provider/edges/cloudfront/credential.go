@@ -22,7 +22,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"cloudfront:UpdateDistribution",
 			},
 			Resources: []string{iam.EdgeDistributionARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"cloudfront:ListDistributions"},

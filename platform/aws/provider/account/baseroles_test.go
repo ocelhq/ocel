@@ -117,12 +117,12 @@ func TestTheTagInvalidatorRoleReadsTheStateTableAndItsStreamOffTheCore(t *testin
 	}
 }
 
-func onlyWhatOcelTaggedFor(condition map[string]any, tier environment.Tier) bool {
+func onlyWhatIsTaggedFor(condition map[string]any, tier environment.Tier) bool {
 	equals, _ := condition["StringEquals"].(map[string]any)
 	return len(equals) == 1 && equals["aws:ResourceTag/ocel:env-tier"] == string(tier)
 }
 
-func TestTheTagInvalidatorRoleInvalidatesOnlyTheDistributionsOcelTaggedForItsTier(t *testing.T) {
+func TestTheTagInvalidatorRoleInvalidatesOnlyTheDistributionsTaggedForItsTier(t *testing.T) {
 	for _, tier := range bothTiers {
 		t.Run(string(tier), func(t *testing.T) {
 			statements := roleStatements(t, coreRoles(t, tier), "TagInvalidatorRole")
@@ -134,7 +134,7 @@ func TestTheTagInvalidatorRoleInvalidatesOnlyTheDistributionsOcelTaggedForItsTie
 				if !slices.Contains(st.actions(), "cloudfront:CreateInvalidation") {
 					continue
 				}
-				if !onlyWhatOcelTaggedFor(st.Condition, tier) {
+				if !onlyWhatIsTaggedFor(st.Condition, tier) {
 					t.Errorf("invalidation condition = %v, want it gated on ocel:env-tier being %s, or the invalidator flushes distributions Ocel never tagged for its tier", st.Condition, tier)
 				}
 			}
@@ -188,7 +188,7 @@ func TestPassingTheTagInvalidatorRoleReachesNothingTheDeployCredentialCannotAlre
 						resource := resolve.Replace(raw)
 						switch {
 						case deployReaches(action, resource), slices.Contains(appBoundaryActions(), action):
-						case action == "cloudfront:CreateInvalidation" && onlyWhatOcelTaggedFor(st.Condition, tier):
+						case action == "cloudfront:CreateInvalidation" && onlyWhatIsTaggedFor(st.Condition, tier):
 						case action == "dynamodb:ListStreams" && resource == "*":
 						default:
 							standIn, ok := readsTheSameItems[action]
