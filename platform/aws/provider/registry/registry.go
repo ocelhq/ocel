@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -35,11 +36,15 @@ type ECRAPI interface {
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
-func RepositoriesARN(namespace string) string {
-	return "arn:aws:ecr:*:*:repository/" + naming.NamespaceField(namespace) + "/*"
+func RepositoryPrefix(namespace string, tier environment.Tier) string {
+	return naming.NamespaceField(namespace) + naming.PathSeparator + naming.TierWord(tier)
 }
 
-func Resolve(ctx context.Context, api ECRAPI, namespace string) (provider.RegistryTarget, error) {
+func RepositoriesARN(namespace string, tier environment.Tier) string {
+	return "arn:aws:ecr:*:*:repository/" + RepositoryPrefix(namespace, tier) + naming.PathSeparator + "*"
+}
+
+func Resolve(ctx context.Context, api ECRAPI, namespace string, tier environment.Tier) (provider.RegistryTarget, error) {
 	out, err := api.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
 	if err != nil {
 		return provider.RegistryTarget{}, fmt.Errorf("mint a login for this account's image registry: %w", err)
@@ -66,14 +71,19 @@ func Resolve(ctx context.Context, api ECRAPI, namespace string) (provider.Regist
 	}
 	return provider.RegistryTarget{
 		Server:    server,
-		Namespace: naming.NamespaceField(namespace),
+		Namespace: RepositoryPrefix(namespace, tier),
 		Username:  username,
 		Password:  password,
 	}, nil
 }
 
 func Owns(target provider.RegistryTarget, namespace string) bool {
-	return target.Username == ecrUsername && target.Namespace == naming.NamespaceField(namespace)
+	if target.Username != ecrUsername {
+		return false
+	}
+	return slices.ContainsFunc([]environment.Tier{environment.TierProduction, environment.TierPreview}, func(tier environment.Tier) bool {
+		return target.Namespace == RepositoryPrefix(namespace, tier)
+	})
 }
 
 type ecrImages struct {
@@ -110,14 +120,14 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 	if err != nil {
 		return err
 	}
-	if _, err := ensure(ctx, i.api, i.managedBy, repository); err != nil {
+	if _, err := ensure(ctx, i.api, i.target, i.managedBy, repository); err != nil {
 		return err
 	}
 	pushErr := i.pushed.Push(ctx, push, progress)
 	if pushErr == nil {
 		return nil
 	}
-	created, err := ensure(ctx, i.api, i.managedBy, repository)
+	created, err := ensure(ctx, i.api, i.target, i.managedBy, repository)
 	if err != nil || !created && !missingRepository(pushErr) {
 		return pushErr
 	}
@@ -157,8 +167,11 @@ func repositoryOf(target provider.RegistryTarget, imageRef string) (string, erro
 	return repository, nil
 }
 
-func ensure(ctx context.Context, api ECRAPI, managedBy, name string) (bool, error) {
-	_, repository, _ := strings.Cut(name, "/")
+func ensure(ctx context.Context, api ECRAPI, target provider.RegistryTarget, managedBy, name string) (bool, error) {
+	repository, inside := strings.CutPrefix(name, target.Namespace+naming.PathSeparator)
+	if !inside {
+		return false, fmt.Errorf("the image repository %s is outside %s, the only repositories a credential of this tier may create", name, target.Namespace)
+	}
 	project, ok := images.RegistryRepositoryProject(repository)
 	if !ok {
 		return false, fmt.Errorf("the image repository %s names no project, so no credential limited to a project could ever delete its images", name)

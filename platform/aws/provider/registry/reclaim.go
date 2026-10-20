@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -117,8 +118,8 @@ func deleteTags(ctx context.Context, api ECRAPI, target provider.RegistryTarget,
 	return removed, nil
 }
 
-func Reconcile(ctx context.Context, api ECRAPI, namespace, imageRef string, recorded Recorded, pushedBefore time.Time) ([]string, error) {
-	target, err := Resolve(ctx, api, namespace)
+func Reconcile(ctx context.Context, api ECRAPI, namespace string, tier environment.Tier, imageRef string, recorded Recorded, pushedBefore time.Time) ([]string, error) {
+	target, err := Resolve(ctx, api, namespace, tier)
 	if err != nil {
 		return nil, err
 	}

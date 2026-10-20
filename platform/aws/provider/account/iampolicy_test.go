@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 type policyStatement struct {
@@ -71,7 +72,12 @@ func (s *templateText) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+var compiledResourcePatterns sync.Map
+
 func iamResourceMatches(pattern, arn string) bool {
+	if compiled, ok := compiledResourcePatterns.Load(pattern); ok {
+		return compiled.(*regexp.Regexp).MatchString(arn)
+	}
 	var expr strings.Builder
 	for _, r := range pattern {
 		switch r {
@@ -83,7 +89,9 @@ func iamResourceMatches(pattern, arn string) bool {
 			expr.WriteString(regexp.QuoteMeta(string(r)))
 		}
 	}
-	return regexp.MustCompile("^" + expr.String() + "$").MatchString(arn)
+	compiled := regexp.MustCompile("^" + expr.String() + "$")
+	compiledResourcePatterns.Store(pattern, compiled)
+	return compiled.MatchString(arn)
 }
 
 func iamResourceMatchesAny(patterns []string, arn string) bool {

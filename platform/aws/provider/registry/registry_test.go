@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -125,7 +126,7 @@ func TestResolveMintsALoginAndCreatesNothing(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{token: "AWS:tok3n", endpoint: "https://123456789012.dkr.ecr.us-east-1.amazonaws.com"}
-	target, err := Resolve(context.Background(), api, "ocel")
+	target, err := Resolve(context.Background(), api, "ocel", environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -135,10 +136,10 @@ func TestResolveMintsALoginAndCreatesNothing(t *testing.T) {
 	if target.Server != "123456789012.dkr.ecr.us-east-1.amazonaws.com" {
 		t.Errorf("Server = %q, want the proxy endpoint without its scheme, which is what a docker push addresses", target.Server)
 	}
-	if target.Namespace != "ocel" || target.Username != "AWS" || target.Password != "tok3n" {
-		t.Errorf("target = %v, want namespace ocel and the login ECR minted", target)
+	if target.Namespace != "ocel/prod" || target.Username != "AWS" || target.Password != "tok3n" {
+		t.Errorf("target = %v, want the production repositories of namespace ocel and the login ECR minted", target)
 	}
-	if got := target.ImageRef("web", "sha256-abc"); got != "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-abc" {
+	if got := target.ImageRef("web", "sha256-abc"); got != "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/prod/web:sha256-abc" {
 		t.Errorf("Coordinate = %q, want the repository a push creates", got)
 	}
 	if !Owns(target, "ocel") {
@@ -153,7 +154,7 @@ func TestResolveRefusesALoginItCannotSplit(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{token: "no-separator", endpoint: "https://x.dkr.ecr.us-east-1.amazonaws.com"}
-	if _, err := Resolve(context.Background(), api, "ocel"); err == nil {
+	if _, err := Resolve(context.Background(), api, "ocel", environment.TierProduction); err == nil {
 		t.Fatal("Resolve accepted a login that is not user:password, which nothing can push with")
 	}
 }
@@ -161,10 +162,10 @@ func TestResolveRefusesALoginItCannotSplit(t *testing.T) {
 func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 	t.Parallel()
 
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel/prod", Username: "AWS", Password: "tok3n"}
 	for coordinate, want := range map[string]string{
-		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-abc":              "ocel/web",
-		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/api@sha256:" + digest64("0"): "ocel/api",
+		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/prod/web:sha256-abc":              "ocel/prod/web",
+		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/prod/api@sha256:" + digest64("0"): "ocel/prod/api",
 	} {
 		got, err := repositoryOf(target, coordinate)
 		if err != nil || got != want {
@@ -175,11 +176,11 @@ func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 		t.Error("repositoryOf accepted a coordinate under another registry, which no repository of this account's stores")
 	}
 
-	api := &fakeECR{existing: []string{"ocel/shop.api"}}
-	if created, err := ensure(context.Background(), api, "ocel", "ocel/shop.api"); err != nil || created || len(api.created) != 0 {
+	api := &fakeECR{existing: []string{"ocel/prod/shop.api"}}
+	if created, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.api"); err != nil || created || len(api.created) != 0 {
 		t.Errorf("ensure of an existing repository = %v, %v, created %v; want a no-op", created, err, api.created)
 	}
-	if created, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/shop.web"}) {
+	if created, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/prod/shop.web"}) {
 		t.Errorf("ensure of a new repository = %v, %v, created %v; want it created immutable under the namespace", created, err, api.created)
 	}
 }
@@ -222,21 +223,21 @@ func (f *fakeECR) BatchDeleteImage(_ context.Context, in *ecr.BatchDeleteImageIn
 }
 
 func anECRStore(api *fakeECR) provider.ImageStore {
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel/prod", Username: "AWS", Password: "tok3n"}
 	return Images(target, api, "ocel")
 }
 
-const shopWebRef = "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/shop.web:sha256-abc"
+const shopWebRef = "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/prod/shop.web:sha256-abc"
 
 func TestRemovingAnImageDeletesItsTagFromTheRepositoryItWasPushedTo(t *testing.T) {
 	t.Parallel()
 
-	api := &fakeECR{tagged: map[string][]string{"ocel/shop.web": {"sha256-abc", "sha256-def"}}}
+	api := &fakeECR{tagged: map[string][]string{"ocel/prod/shop.web": {"sha256-abc", "sha256-def"}}}
 
 	if err := anECRStore(api).Remove(context.Background(), shopWebRef); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	if got := api.tagged["ocel/shop.web"]; !slices.Equal(got, []string{"sha256-def"}) {
+	if got := api.tagged["ocel/prod/shop.web"]; !slices.Equal(got, []string{"sha256-def"}) {
 		t.Errorf("the repository holds %v, want only the tag Remove was not asked for", got)
 	}
 }
@@ -245,8 +246,8 @@ func TestRemovingAnImageThatIsAlreadyGoneIsDone(t *testing.T) {
 	t.Parallel()
 
 	for name, api := range map[string]*fakeECR{
-		"a tag the repository lacks": {tagged: map[string][]string{"ocel/shop.web": {"sha256-def"}}},
-		"a repository that is gone":  {deleteErr: &ecrtypes.RepositoryNotFoundException{Message: aws.String("ocel/shop.web is gone")}},
+		"a tag the repository lacks": {tagged: map[string][]string{"ocel/prod/shop.web": {"sha256-def"}}},
+		"a repository that is gone":  {deleteErr: &ecrtypes.RepositoryNotFoundException{Message: aws.String("ocel/prod/shop.web is gone")}},
 	} {
 		if err := anECRStore(api).Remove(context.Background(), shopWebRef); err != nil {
 			t.Errorf("Remove() of %s = %v, want nothing", name, err)
@@ -291,13 +292,13 @@ func TestAPushWhoseRepositoryADestroyDeletedMidwayCreatesItAgainAndPushesAgain(t
 
 	api := &fakeECR{}
 	pushed := &pushedOnceRepositoryReturns{api: api}
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel/prod", Username: "AWS", Password: "tok3n"}
 	store := ecrImages{api: api, target: target, pushed: pushed}
 
 	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err != nil {
 		t.Fatalf("Push() = %v, want the push to land: a destroy of the project's last stack deletes its empty repository, and a deploy racing it creates the repository again", err)
 	}
-	if want := []string{"ocel/shop.web", "ocel/shop.web"}; !slices.Equal(api.created, want) || pushed.pushes != 2 {
+	if want := []string{"ocel/prod/shop.web", "ocel/prod/shop.web"}; !slices.Equal(api.created, want) || pushed.pushes != 2 {
 		t.Errorf("Push() created %v and pushed %d times, want %v and 2", api.created, pushed.pushes, want)
 	}
 }
@@ -318,9 +319,9 @@ func (p *pushedOnceAnotherDeployRecreates) Push(context.Context, provider.ImageP
 func TestAPushWhoseRepositoryAnotherDeployRecreatedMidwayPushesAgain(t *testing.T) {
 	t.Parallel()
 
-	api := &fakeECR{existing: []string{"ocel/shop.web"}}
+	api := &fakeECR{existing: []string{"ocel/prod/shop.web"}}
 	pushed := &pushedOnceAnotherDeployRecreates{}
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel/prod", Username: "AWS", Password: "tok3n"}
 	store := ecrImages{api: api, target: target, pushed: pushed}
 
 	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err != nil {
@@ -337,9 +338,9 @@ func TestAPushThatFailsWhileItsRepositoryStandsIsNotRetried(t *testing.T) {
 	api := &fakeECR{}
 	failing := fake.NewImages()
 	failing.FailPushes(errors.New("denied"))
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel/prod", Username: "AWS", Password: "tok3n"}
 	store := ecrImages{api: api, target: target, pushed: failing}
-	api.existing = []string{"ocel/shop.web"}
+	api.existing = []string{"ocel/prod/shop.web"}
 
 	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err == nil {
 		t.Fatal("Push() = nil for a push the registry denied")
@@ -353,11 +354,11 @@ func TestARepositoryAPushCreatesIsTaggedWithTheProjectItsImagesBelongTo(t *testi
 	t.Parallel()
 
 	api := &fakeECR{}
-	if _, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil {
+	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
-	if got := tagsOf(api.createdTags["ocel/shop.web"]); got["ocel:project"] != "shop" || got["ocel:managed-by"] != "ocel" {
+	if got := tagsOf(api.createdTags["ocel/prod/shop.web"]); got["ocel:project"] != "shop" || got["ocel:managed-by"] != "ocel" {
 		t.Errorf("the repository was created tagged %v, want ocel:project=shop beside ocel:managed-by: the deploy credential deletes images only in repositories tagged with its principal's project", got)
 	}
 }
@@ -365,27 +366,27 @@ func TestARepositoryAPushCreatesIsTaggedWithTheProjectItsImagesBelongTo(t *testi
 func TestARepositoryAPushFindsInPlaceIsTaggedWithTheProjectItsImagesBelongTo(t *testing.T) {
 	t.Parallel()
 
-	api := &fakeECR{existing: []string{"ocel/shop.web"}}
-	if _, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil {
+	api := &fakeECR{existing: []string{"ocel/prod/shop.web"}}
+	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
-	got := tagsOf(api.resourceTags["arn:aws:ecr:us-east-1:123456789012:repository/ocel/shop.web"])
+	got := tagsOf(api.resourceTags["arn:aws:ecr:us-east-1:123456789012:repository/ocel/prod/shop.web"])
 	if got["ocel:project"] != "shop" || got["ocel:managed-by"] != "ocel" {
 		t.Errorf("the repository in place was tagged %v, want ocel:project=shop beside ocel:managed-by: one made before the tag existed would otherwise refuse every delete", got)
 	}
 }
 
-const shopWebARN = "arn:aws:ecr:us-east-1:123456789012:repository/ocel/shop.web"
+const shopWebARN = "arn:aws:ecr:us-east-1:123456789012:repository/ocel/prod/shop.web"
 
 func TestARepositoryInPlaceAlreadyTaggedWithItsProjectIsNotTaggedAgain(t *testing.T) {
 	t.Parallel()
 
-	api := &fakeECR{existing: []string{"ocel/shop.web"}, resourceTags: map[string][]ecrtypes.Tag{shopWebARN: {
+	api := &fakeECR{existing: []string{"ocel/prod/shop.web"}, resourceTags: map[string][]ecrtypes.Tag{shopWebARN: {
 		{Key: aws.String("ocel:project"), Value: aws.String("shop")},
 		{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")},
 	}}}
-	if _, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil {
+	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
@@ -397,8 +398,8 @@ func TestARepositoryInPlaceAlreadyTaggedWithItsProjectIsNotTaggedAgain(t *testin
 func TestAPushIntoARepositoryItMayNotTagWithItsProjectFails(t *testing.T) {
 	t.Parallel()
 
-	api := &fakeECR{existing: []string{"ocel/shop.web"}, tagErr: errors.New("AccessDeniedException: not authorized to perform ecr:TagResource")}
-	_, err := ensure(context.Background(), api, "ocel", "ocel/shop.web")
+	api := &fakeECR{existing: []string{"ocel/prod/shop.web"}, tagErr: errors.New("AccessDeniedException: not authorized to perform ecr:TagResource")}
+	_, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/shop.web")
 
 	if err == nil {
 		t.Fatal("ensure() = nil for a repository it could not tag with its project: no credential could ever delete the images pushed there")
@@ -409,7 +410,7 @@ func TestARepositoryNamingNoProjectIsNeverCreated(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{}
-	if _, err := ensure(context.Background(), api, "ocel", "ocel/web"); err == nil {
+	if _, err := ensure(context.Background(), api, anECRTarget(), "ocel", "ocel/prod/web"); err == nil {
 		t.Error("ensure(ocel/web) = nil: a repository with no project to tag it with is one no project-tagged principal may ever clean")
 	}
 	if len(api.created) != 0 {
