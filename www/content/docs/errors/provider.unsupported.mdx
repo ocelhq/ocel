@@ -1,0 +1,10 @@
+---
+title: provider.unsupported
+description: The provider does not do what the command asked of it.
+---
+
+The provider answered that it does not support what the command asked of it: a compute, edge, resource or feature it does not run, or a call this release of the provider does not implement. The message is the provider's own and names what it refused.
+
+## Fix
+
+Change the project so it asks only for what the provider runs, such as a `compute` the provider offers, or name a provider that runs what the project needs. See [configuration](/docs/configuration) and the [providers](/docs/providers).

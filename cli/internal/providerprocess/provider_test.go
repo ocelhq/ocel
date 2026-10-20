@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -309,5 +310,39 @@ func TestAQuestionDeclinedAtThePromptLeavesTheCallsErrorStandingAndConfirmsNothi
 	}
 	if got := bodies(seen); !slices.Equal(got, []string{"waiting", "resumed answered"}) {
 		t.Errorf("the span saw %v around the prompt, want the run held while it asked", got)
+	}
+}
+
+func TestAProviderAnsweringThatItDoesNotSupportACallFailsWithProviderUnsupportedInItsOwnWords(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		call    func(context.Context, *Provider) error
+		message string
+	}{
+		"unsupported-deploy": {func(ctx context.Context, p *Provider) error {
+			_, err := Stream(ctx, p, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy)
+			return err
+		}, "simulated provider runs no serverless app"},
+		"unimplemented-logs": {func(ctx context.Context, p *Provider) error {
+			_, err := readLogMessages(ctx, p)
+			return err
+		}, "simulated older provider"},
+	}
+	for mode, tc := range cases {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, span, _ := deploySpan(t)
+			p := startFake(t, ctx, mode, span, Questions{})
+
+			got := clierror.NewRunError(tc.call(ctx, p))
+			if got.GetCode() != clierror.CodeProviderUnsupported {
+				t.Errorf("run error code = %q, want %q", got.GetCode(), clierror.CodeProviderUnsupported)
+			}
+			if !strings.Contains(got.GetMessage(), tc.message) || strings.Contains(got.GetMessage(), "unimplemented") {
+				t.Errorf("run error message = %q, want the provider's %q without the RPC's code", got.GetMessage(), tc.message)
+			}
+		})
 	}
 }

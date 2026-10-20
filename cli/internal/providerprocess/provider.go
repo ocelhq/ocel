@@ -2,9 +2,13 @@ package providerprocess
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"connectrpc.com/connect"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -55,9 +59,27 @@ func (p *Provider) Close() { p.process.Close() }
 func (p *Provider) callAnswering(ctx context.Context, call func(*Process) error) error {
 	err := call(p.process)
 	if confirmed, err := p.questions.answer(ctx, p.process, err); !confirmed {
+		return unsupportedIn(err)
+	}
+	return unsupportedIn(call(p.process))
+}
+
+type unsupportedCall struct {
+	message string
+	cause   error
+}
+
+func (u unsupportedCall) Error() string { return u.message }
+
+func (u unsupportedCall) Unwrap() error { return u.cause }
+
+func unsupportedIn(err error) error {
+	var rpcErr *connect.Error
+	if connect.CodeOf(err) != connect.CodeUnimplemented || !errors.As(err, &rpcErr) {
 		return err
 	}
-	return call(p.process)
+	message := strings.Replace(err.Error(), rpcErr.Error(), rpcErr.Message(), 1)
+	return &clierror.Error{Code: clierror.CodeProviderUnsupported, Cause: unsupportedCall{message: message, cause: err}}
 }
 
 func (p *Provider) Call(ctx context.Context, call func(contractv1connect.ProviderServiceClient) error) error {

@@ -15,6 +15,7 @@ const (
 	CodeInitAmbiguousLanguage      = "init.ambiguous_language"
 	CodeProviderUnavailable        = "provider.unavailable"
 	CodeProviderVersionMismatch    = "provider.version_mismatch"
+	CodeProviderUnsupported        = "provider.unsupported"
 	CodePrerequisiteMissing        = "prerequisite.missing"
 	CodeVariablesMissing           = "variables.missing"
 	CodeBootstrapMissing           = "bootstrap.missing"
@@ -42,6 +43,7 @@ func Codes() []string {
 		CodeInitAmbiguousLanguage,
 		CodeProviderUnavailable,
 		CodeProviderVersionMismatch,
+		CodeProviderUnsupported,
 		CodePrerequisiteMissing,
 		CodeVariablesMissing,
 		CodeBootstrapMissing,
