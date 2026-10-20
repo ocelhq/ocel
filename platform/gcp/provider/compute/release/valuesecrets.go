@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -96,42 +95,24 @@ func ReadValueSecrets(ctx context.Context, store records.Store, tier environment
 }
 
 func changeValueSecrets(ctx context.Context, store records.Store, tier environment.Tier, account string, change func(*valueSecrets)) error {
-	key := valueSecretsKey(tier, account)
-	return records.RetryWhileStale(ctx, func() (bool, error) {
-		recorded, err := records.ReadOrEmpty(ctx, store, key)
-		if err != nil {
-			return false, err
-		}
+	return records.Change(ctx, store, valueSecretsKey(tier, account), func(recorded records.Entry) ([]byte, bool, error) {
 		held, err := decodeValueSecrets(account, recorded.Value)
 		if err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if held.Releases == nil {
 			held.Releases = map[string]releasePins{}
 		}
 		change(&held)
 		held.normalize()
+		if len(held.Secrets) == 0 && len(held.Releases) == 0 {
+			return nil, false, nil
+		}
 		encoded, err := json.Marshal(held)
-		if err != nil {
-			return false, err
+		if err != nil || bytes.Equal(encoded, recorded.Value) {
+			return nil, false, err
 		}
-		empty := len(held.Secrets) == 0 && len(held.Releases) == 0
-		switch {
-		case bytes.Equal(encoded, recorded.Value), empty && len(recorded.Value) == 0:
-			return false, nil
-		case empty:
-			err = store.Remove(ctx, key, recorded.Revision)
-		default:
-			recorded.Value = encoded
-			_, err = store.Write(ctx, recorded)
-		}
-		if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
-			return true, nil
-		}
-		if err != nil {
-			return false, fmt.Errorf("record the secrets that hold the values of %s: %w", account, err)
-		}
-		return false, nil
+		return encoded, true, nil
 	})
 }
 
