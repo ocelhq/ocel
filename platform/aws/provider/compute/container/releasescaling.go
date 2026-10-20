@@ -132,11 +132,10 @@ func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, ta
 		return raised, err
 	}
 	for _, service := range scaled {
-		target := targets[service.resource]
-		if aws.ToInt32(target.MaxCapacity) > 0 {
+		if runsTasks(targets, service) {
 			continue
 		}
-		least, most, err := s.readInstanceCounts(ctx, service, target)
+		least, most, err := s.readInstanceCounts(ctx, service, targets[service.resource])
 		if err != nil {
 			return raised, err
 		}
@@ -191,24 +190,31 @@ func (s ReleaseScaling) ScaleDown(ctx context.Context, demoted provider.DemotedR
 	at := s.Now().UTC().Add(previousReleaseWindow)
 	var errs []error
 	for _, service := range previous {
-		if target, found := targets[service.resource]; found && aws.ToInt32(target.MaxCapacity) > 0 {
-			if err := s.scheduleScaleToZero(ctx, service, at); err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			progress.Say(fmt.Sprintf("%s release %s keeps running until %s, so a rollback to it is instant, then scales to zero tasks", service.release.App, service.release.Release, at.Format("15:04 MST")))
+		if !runsTasks(targets, service) {
+			continue
 		}
+		if err := s.scheduleScaleToZero(ctx, service, at); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		progress.Say(fmt.Sprintf("%s release %s keeps running until %s, so a rollback to it is instant, then scales to zero tasks", service.release.App, service.release.Release, at.Format("15:04 MST")))
 	}
 	for _, service := range older {
-		if target, found := targets[service.resource]; found && aws.ToInt32(target.MaxCapacity) > 0 {
-			if err := s.scale(ctx, service, 0, 0); err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			progress.Say(fmt.Sprintf("Scaled %s release %s to zero tasks", service.release.App, service.release.Release))
+		if !runsTasks(targets, service) {
+			continue
 		}
+		if err := s.scale(ctx, service, 0, 0); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		progress.Say(fmt.Sprintf("Scaled %s release %s to zero tasks", service.release.App, service.release.Release))
 	}
 	return errors.Join(errs...)
+}
+
+func runsTasks(targets map[string]scalingtypes.ScalableTarget, service releaseService) bool {
+	target, found := targets[service.resource]
+	return found && aws.ToInt32(target.MaxCapacity) > 0
 }
 
 func (s ReleaseScaling) readTargets(ctx context.Context, services []releaseService) (map[string]scalingtypes.ScalableTarget, error) {
