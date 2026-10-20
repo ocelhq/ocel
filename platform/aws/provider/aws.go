@@ -69,7 +69,7 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 	if err != nil {
 		return nil, err
 	}
-	if err := awsports.RefuseReservedBalancerPrefix(string(ns)); err != nil {
+	if err := account.Namespace(ns).RefuseReservedPrefix(); err != nil {
 		return nil, err
 	}
 	cfg, err := sdkconfig.Control(ctx, decoded.Region)
