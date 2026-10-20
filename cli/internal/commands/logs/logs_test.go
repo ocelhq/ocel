@@ -387,10 +387,10 @@ func TestLogsWritesItsOwnProgressToStderr(t *testing.T) {
 
 	got := read(t, project, terminal.FormatHuman, nil)
 
-	if !strings.Contains(got.stderr, "test-app › production") {
+	if !strings.Contains(got.stderr, "test-app › prod") {
 		t.Errorf("stderr = %q, want the identity banner", got.stderr)
 	}
-	if strings.Contains(got.stdout, "test-app › production") || strings.Contains(got.stdout, "ocel") {
+	if strings.Contains(got.stdout, "test-app › prod") || strings.Contains(got.stdout, "ocel") {
 		t.Errorf("stdout = %q, want nothing but log lines", got.stdout)
 	}
 }

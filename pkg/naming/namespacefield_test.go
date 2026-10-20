@@ -30,3 +30,24 @@ func TestNamespaceFieldFitsALongNamespaceWithoutLosingTwoApart(t *testing.T) {
 		t.Errorf("two namespaces both field as %q, so each would reach the other's workers", one)
 	}
 }
+
+func TestNamespaceFieldCompactsALongNamespaceToItsHeadAndAHash(t *testing.T) {
+	for _, tc := range []struct{ namespace, want string }{
+		{"j-1874-deploy-next-cloudflare", "j-187-da21fb"},
+		{"acme-staging-eu-west-blue-team", "acme-20ddf6"},
+	} {
+		if got := naming.NamespaceField(tc.namespace); got != tc.want {
+			t.Errorf("NamespaceField(%q) = %q, want %q", tc.namespace, got, tc.want)
+		}
+	}
+}
+
+func TestNamespaceFieldNeverCutsANamespaceIntoAnotherNamespacesFence(t *testing.T) {
+	field := naming.NamespaceField("x-apple-orchard-namespace")
+	if got, want := field, "x-ap-7e71aa"; got != want {
+		t.Errorf("NamespaceField = %q, want %q", got, want)
+	}
+	if strings.HasPrefix(field+naming.WordSeparator, naming.AppFence("x")) {
+		t.Errorf("NamespaceField = %q, so every name it mints starts with namespace %q's fence %q", field, "x", naming.AppFence("x"))
+	}
+}

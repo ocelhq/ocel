@@ -122,7 +122,7 @@ func TestPromotionsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.T
 			}
 		}
 
-		banner := strings.Index(out, "ocel  dev  test-app › production\n")
+		banner := strings.Index(out, "ocel  dev  test-app › prod\n")
 		cut := strings.Index(out, "ID  ")
 		if banner < 0 || cut < banner {
 			t.Fatalf("stdout = %q, want the identity banner above the table", out)

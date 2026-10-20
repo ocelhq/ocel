@@ -1,4 +1,4 @@
-ocel  dev  acme › production
+ocel  dev  acme › prod
 
   aws         123456789012 · us-east-1 · as deploy
   cloudfront  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
@@ -46,4 +46,4 @@ INFO  [deploy] ✓ web: Deployed the serverless app to production in 12s (2/2) �
 ✗ Deploy failed in 21s — internal: provision api: update failed
   on aws 123456789012 · us-east-1 · as deploy
   web deployed but was not promoted: promotion needs every app, and api failed
-  production still serves what it served before this run
+  prod still serves what it served before this run

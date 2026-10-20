@@ -10,7 +10,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func TestTheIdentityBannerNamesTheProjectAndItsTier(t *testing.T) {
+func TestTheIdentityBannerNamesTheProjectAndItsEnv(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -18,11 +18,12 @@ func TestTheIdentityBannerNamesTheProjectAndItsTier(t *testing.T) {
 		ev   *streamv1.IdentityEvent
 		want string
 	}{
-		{"a project and its tier", originAndEdge, "ocel  dev  acme › production"},
-		{"an unnamed project leaves the tier alone on its line", &streamv1.IdentityEvent{
+		{"a project and its production env", originAndEdge, "ocel  dev  acme › prod"},
+		{"a project and its previews", &streamv1.IdentityEvent{Project: "acme", Tier: environmentv1.Tier_TIER_PREVIEW}, "ocel  dev  acme › preview"},
+		{"an unnamed project leaves the env alone on its line", &streamv1.IdentityEvent{
 			Tier:   environmentv1.Tier_TIER_PRODUCTION,
 			Origin: &streamv1.Party{Vendor: "fake", Account: "123456789012", Location: "example-region"},
-		}, "ocel  dev  production"},
+		}, "ocel  dev  prod"},
 		{"an identity naming neither has no banner", &streamv1.IdentityEvent{Origin: originAndEdge.GetOrigin()}, "  fake  123456789012 · example-region · as deploy"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -38,7 +39,7 @@ func TestTheIdentityBannerNamesTheProjectAndItsTier(t *testing.T) {
 		t.Parallel()
 
 		painted := strings.Join(identityLines(Presentation{Color: true}, originAndEdge), "\n")
-		if !strings.Contains(painted, "\x1b[") || !strings.Contains(ansi.Strip(painted), "acme › production") {
+		if !strings.Contains(painted, "\x1b[") || !strings.Contains(ansi.Strip(painted), "acme › prod") {
 			t.Errorf("coloured banner = %q, want escapes around the pill and the project and tier kept", painted)
 		}
 		if plain := strings.Join(identityLines(Presentation{}, originAndEdge), "\n"); strings.Contains(plain, "\x1b") {
@@ -62,7 +63,7 @@ func TestTheIdentityHeaderHasARowForEachAccountTheRunSignedInTo(t *testing.T) {
 		ev   *streamv1.IdentityEvent
 		want string
 	}{
-		{"an origin and an edge", originAndEdge, "ocel  dev  acme › production\n\n" +
+		{"an origin and an edge", originAndEdge, "ocel  dev  acme › prod\n\n" +
 			"  fake   123456789012 · example-region · as deploy\n" +
 			"  relay  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"},
 		{"a host with no region", &streamv1.IdentityEvent{
@@ -90,7 +91,7 @@ func TestWithColourProductionIsBoldYellowAndAPreviewIsNot(t *testing.T) {
 	t.Parallel()
 
 	production := strings.Join(identityLines(Presentation{Color: true}, originAndEdge), "\n")
-	if want := "\x1b[33;1mproduction\x1b[0;22m"; !strings.Contains(production, want) {
+	if want := "\x1b[33;1mprod\x1b[0;22m"; !strings.Contains(production, want) {
 		t.Errorf("production header = %q, want it to contain %q", production, want)
 	}
 	preview := strings.Join(identityLines(Presentation{Color: true}, &streamv1.IdentityEvent{Project: "acme", Tier: environmentv1.Tier_TIER_PREVIEW}), "\n")

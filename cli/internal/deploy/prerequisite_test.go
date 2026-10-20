@@ -142,7 +142,7 @@ func TestADeployInAnEmptyDirectoryInitializesBootstrapsAndDeploys(t *testing.T) 
 	if want := []string{contractv1connect.ProviderServiceBootstrapProcedure, contractv1connect.ProviderServiceBootstrapProcedure, contractv1connect.ProviderServiceDeployProcedure}; !slices.Equal(applied, want) {
 		t.Errorf("the provider received %q, want the bootstrap planned, then applied, then one deploy", applied)
 	}
-	if !strings.Contains(stdout.String(), "Deployed shop to production") {
+	if !strings.Contains(stdout.String(), "Deployed shop to prod in ") {
 		t.Errorf("stdout = %q, want the deploy to finish", stdout.String())
 	}
 }

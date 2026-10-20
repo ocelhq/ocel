@@ -35,12 +35,12 @@ func TestEverySpanAProductionDeployOpensNamesWhichThingItWorksOnAndWhatItDoes(t 
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 	want := []openedSpan{
-		{"production", "Checking the bootstrap, domains and bindings for shop"},
-		{"relay", "Reconciling the routes for shop in production"},
-		{"production", "Provisioning shared resource orders"},
-		{"web", "Deploying the serverless app to production"},
+		{"prod", "Checking the bootstrap, domains and bindings for shop"},
+		{"relay", "Reconciling the routes for shop in prod"},
+		{"prod", "Provisioning shared resource orders"},
+		{"web", "Deploying the serverless app to prod"},
 		{"relay", "Attaching production hostname shop.example"},
-		{"production", "Switching traffic to promotion " + result.GetPromotionId()},
+		{"prod", "Switching traffic to promotion " + result.GetPromotionId()},
 	}
 	if got := openedSpans(events); !slices.Equal(got, want) {
 		t.Errorf("the deploy opened spans\n%v\nwant\n%v", got, want)
@@ -58,10 +58,10 @@ func TestEverySpanADryRunOpensSaysItOnlyReadsOrPlans(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 	want := []openedSpan{
-		{"production", "Checking the bootstrap, domains and bindings for shop"},
-		{"relay", "Reading the routes for shop in production"},
-		{"production", "Planning shared resource orders"},
-		{"web", "Planning the serverless app for production"},
+		{"prod", "Checking the bootstrap, domains and bindings for shop"},
+		{"relay", "Reading the routes for shop in prod"},
+		{"prod", "Planning shared resource orders"},
+		{"web", "Planning the serverless app for prod"},
 	}
 	if got := openedSpans(events); !slices.Equal(got, want) {
 		t.Errorf("the dry run opened spans\n%v\nwant\n%v", got, want)
@@ -137,7 +137,7 @@ func TestEverySpanALifecycleCallOpensNamesWhichThingItWorksOnAndWhatItDoes(t *te
 		}, openedSpan{"shop", "Destroying the footprint of preview pr-7"}},
 		{"a prune", false, func(c contractv1connect.ProviderServiceClient) (*connect.ServerStreamForClient[progressv1.OperationEvent], error) {
 			return c.RemoveStalePromotions(t.Context(), &contractv1.RemoveStalePromotionsRequest{Slug: "shop", Environment: production, KeepN: 3})
-		}, openedSpan{"shop", "Pruning the promotions of production beyond the newest 3"}},
+		}, openedSpan{"shop", "Pruning the promotions of prod beyond the newest 3"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -193,7 +193,7 @@ func TestTheSharedResourceSpanOfADeployRemovingEveryResourceNamesItsStackInstead
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 	for _, root := range openedSpans(events) {
-		if root.subject == "production" && strings.HasPrefix(root.message, "Provisioning ") {
+		if root.subject == "prod" && strings.HasPrefix(root.message, "Provisioning ") {
 			if want := "Provisioning stack prod--infra"; root.message != want {
 				t.Errorf("the shared resource span opened as %q, want %q", root.message, want)
 			}

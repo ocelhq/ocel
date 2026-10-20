@@ -21,4 +21,4 @@ stages:
 plan:
 waits:
 results:
-  success=true interrupted=false headline="Deployed acme to production" detail="" duration_ms=54000
+  success=true interrupted=false headline="Deployed acme to prod" detail="" duration_ms=54000

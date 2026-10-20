@@ -72,7 +72,7 @@ func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 	if strings.Contains(out, "Deployed") {
 		t.Errorf("stdout = %q, want a dry run to report a plan, never a deploy", out)
 	}
-	if !strings.Contains(out, "✓ Planned the deploy of "+clitest.FixtureSlug+" to production in ") {
+	if !strings.Contains(out, "✓ Planned the deploy of "+clitest.FixtureSlug+" to prod in ") {
 		t.Errorf("stdout = %q, want the run to end naming what it planned and where", out)
 	}
 	if !absent(t, deployreport.Path(root)) {

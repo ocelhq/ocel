@@ -854,7 +854,7 @@ func TestVerboseShowsTheEngineOutputInTheFailedBlockToo(t *testing.T) {
 	}
 }
 
-const productionHead = "ocel  dev  acme › production\n\n"
+const productionHead = "ocel  dev  acme › prod\n\n"
 
 func productionRun(t *testing.T) (*run.Run, *bytes.Buffer, *clock) {
 	t.Helper()
@@ -879,13 +879,13 @@ func TestASuccessfulDeployNamesWhatProductionServesNowAndWhereEachAppIs(t *testi
 		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://acme.example.com"}},
 		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://api.acme.example.com"}},
 	}})
-	run.Succeed("Deployed acme to production")
+	run.Succeed("Deployed acme to prod")
 	c.pass(3*time.Minute + 29*time.Second)
 	ended(run, nil)
 
 	want := productionHead +
-		"✓ Deployed acme to production in 3m29s\n" +
-		"  production now serves promotion p-7f3a\n" +
+		"✓ Deployed acme to prod in 3m29s\n" +
+		"  prod now serves promotion p-7f3a\n" +
 		"  web  https://acme.example.com\n" +
 		"  api  https://api.acme.example.com\n"
 	if got := out.String(); got != want {
@@ -910,7 +910,7 @@ func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServes
 		"\n" +
 		"✗ Deploy failed in 4m02s — api: the stack update failed\n" +
 		"  web deployed but was not promoted: promotion needs every app, and api failed\n" +
-		"  production still serves what it served before this run\n"
+		"  prod still serves what it served before this run\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1049,7 +1049,7 @@ func TestAFailedSingleAppDeploySaysNothingWasPromoted(t *testing.T) {
 
 	want := "✗ Deploy failed in 0s — deploy failed\n" +
 		"  nothing was promoted: web failed\n" +
-		"  production still serves what it served before this run\n"
+		"  prod still serves what it served before this run\n"
 	if got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1068,7 +1068,7 @@ func TestAFailedDeployEndsWithTheNotesItsResultCarries(t *testing.T) {
 
 	want := "✗ Deploy failed in 0s — deploy failed\n" +
 		"  nothing was promoted: web failed\n" +
-		"  production still serves what it served before this run\n" +
+		"  prod still serves what it served before this run\n" +
 		"  the containers bootstrap part stays, though no release uses it: a retry reuses it, and `ocel bootstrap production --remove containers` takes it down\n"
 	if got := strings.TrimPrefix(out.String(), productionHead); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -1086,7 +1086,7 @@ func TestADeployThatFailedBeforeReachingSomeAppsNamesThemAsNotRun(t *testing.T) 
 
 	want := "✗ Deploy failed in 0s — deploy failed\n" +
 		"  nothing was promoted: promotion needs every app, and web failed and api and cron did not run\n" +
-		"  production still serves what it served before this run\n"
+		"  prod still serves what it served before this run\n"
 	if got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1116,7 +1116,7 @@ func TestAppsThatDeployedBesideAFailedOneAreNamedAsNotPromoted(t *testing.T) {
 
 	want := "✗ Deploy failed in 0s — deploy failed\n" +
 		"  web and api deployed but were not promoted: promotion needs every app, and cron failed\n" +
-		"  production still serves what it served before this run\n"
+		"  prod still serves what it served before this run\n"
 	if got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1134,7 +1134,7 @@ func TestTheIdentityHeaderNamesEachAccountTheRunSignedInToAndIsSetApartByBlankLi
 	})
 	check.Say("the credentials for 123456789012 are valid")
 
-	want := "ocel  dev  acme › production\n" +
+	want := "ocel  dev  acme › prod\n" +
 		"\n" +
 		"  fake  123456789012 · example-region · as deploy\n" +
 		"\n" +
@@ -1286,7 +1286,7 @@ func TestARunThatFailedBeforeAnyChangingPhaseSaysNothingChangedAndWhatProduction
 	want := "ERROR [build] ✗ web: Building web failed after 0s: npm run build exited with status 1\n" +
 		"\n" +
 		"✗ Deploy failed in 0s — building web: npm run build exited with status 1\n" +
-		"  nothing was changed; production still serves what it served before this run\n"
+		"  nothing was changed; prod still serves what it served before this run\n"
 	if got := strings.TrimPrefix(out.String(), productionHead); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}

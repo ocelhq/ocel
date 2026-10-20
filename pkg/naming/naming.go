@@ -82,10 +82,22 @@ func SanitizeAlpha(value string) string {
 	return out
 }
 
-const MaxNamespaceField = 12
+const (
+	MaxNamespaceField    = 12
+	namespaceDigestChars = 6
+	namespaceHeadChars   = MaxNamespaceField - len(WordSeparator) - namespaceDigestChars
+)
 
 func NamespaceField(namespace string) string {
-	return Fit(MaxNamespaceField, WordSeparator, Compressible(namespace))
+	if len(namespace) <= MaxNamespaceField {
+		return namespace
+	}
+	head := strings.TrimRight(namespace[:namespaceHeadChars], WordSeparator)
+	if strings.HasSuffix(WordSeparator+head, WordSeparator+AppWord) {
+		head = strings.TrimRight(head[:len(head)-1], WordSeparator)
+	}
+	sum := sha256.Sum256([]byte(namespace))
+	return head + WordSeparator + hex.EncodeToString(sum[:])[:namespaceDigestChars]
 }
 
 const WildcardSuffix = "wildcard"

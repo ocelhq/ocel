@@ -7,4 +7,4 @@ waits:
   waiting on 1 unset, remedy "ocel env ui"
   resumed the page was answered
 results:
-  success=true interrupted=false headline="Deployed acme to production" detail="" duration_ms=12000
+  success=true interrupted=false headline="Deployed acme to prod" detail="" duration_ms=12000

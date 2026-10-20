@@ -306,7 +306,7 @@ func TestBootstrapDestroyShowsItsPlanAndTakesConsentBeforeRemovingAnything(t *te
 		if !strings.Contains(out, "Removed the production bootstrap") {
 			t.Errorf("stdout = %q, want the production teardown", out)
 		}
-		if !strings.Contains(out, "ocel  dev  test-app › production") {
+		if !strings.Contains(out, "ocel  dev  test-app › prod") {
 			t.Errorf("stdout = %q, want the teardown to say which account it runs in", out)
 		}
 	})
@@ -707,7 +707,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		if !strings.Contains(stdout.String(), "± OcelOriginSecret") {
 			t.Fatalf("stdout = %q, want the replacement shown before the confirm that covers it", stdout.String())
 		}
-		if !strings.Contains(stdout.String(), "ocel  dev  test-app › production") {
+		if !strings.Contains(stdout.String(), "ocel  dev  test-app › prod") {
 			t.Errorf("stdout = %q, want the bootstrap to say which account it runs in", stdout.String())
 		}
 		if got := intents(t, project); len(got) != 1 || !strings.Contains(got[0], "acceptReplacements=true") {

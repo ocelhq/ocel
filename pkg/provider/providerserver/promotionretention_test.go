@@ -61,7 +61,7 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 	}{
 		{"past the newest two", 2, true, "Reclaimed promotion p1, kept 2"},
 		{"when every promotion is within the newest", 5, true, "Nothing to prune: all 3 promotions are kept"},
-		{"when nothing was ever deployed", 2, false, "Nothing to prune: shop has no deploy in production"},
+		{"when nothing was ever deployed", 2, false, "Nothing to prune: shop has no deploy in prod"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
