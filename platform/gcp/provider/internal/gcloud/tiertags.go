@@ -21,13 +21,13 @@ import (
 const (
 	TierTagKey          = "ocel-tier"
 	TierTagUserRole     = "roles/resourcemanager.tagUser"
-	GlobalTagLocation   = ""
+	globalTagEndpoint   = "https://cloudresourcemanager.googleapis.com/"
 	tierTagSeenAttempts = 10
 )
 
 type TaggedResource struct {
 	Name             string
-	Location         string
+	Regional         bool
 	PermissionPrefix string
 }
 
@@ -46,11 +46,11 @@ func (c *Clients) InlineTierTags(tier environment.Tier) map[string]string {
 	return map[string]string{c.TierTagKeyPath(): string(tier)}
 }
 
-func TierTagEndpointAt(location string) string {
-	if location == GlobalTagLocation {
-		return "https://cloudresourcemanager.googleapis.com/"
+func (c *Clients) TagEndpointOf(target TaggedResource) string {
+	if !target.Regional {
+		return globalTagEndpoint
 	}
-	return "https://" + location + "-cloudresourcemanager.googleapis.com/"
+	return "https://" + c.Region + "-cloudresourcemanager.googleapis.com/"
 }
 
 type tierTagsRead struct {
@@ -58,14 +58,21 @@ type tierTagsRead struct {
 	values map[environment.Tier]string
 }
 
-func (c *Clients) TagService(location string) (*crm.Service, error) {
-	cache := &c.globalTags
-	if location != GlobalTagLocation {
-		cache = &c.regionalTags
+func (c *Clients) GlobalTagService() (*crm.Service, error) {
+	return c.openTagService(&c.globalTags, globalTagEndpoint)
+}
+
+func (c *Clients) tagServiceOf(target TaggedResource) (*crm.Service, error) {
+	if !target.Regional {
+		return c.GlobalTagService()
 	}
+	return c.openTagService(&c.regionalTags, c.TagEndpointOf(target))
+}
+
+func (c *Clients) openTagService(cache *Memo[*crm.Service], endpoint string) (*crm.Service, error) {
 	options := ports.EmulatorREST(c.TierTagEndpoint)
 	if !c.Emulated() {
-		options = []option.ClientOption{option.WithEndpoint(TierTagEndpointAt(location))}
+		options = []option.ClientOption{option.WithEndpoint(endpoint)}
 	}
 	return opened(c, cache, "Resource Manager tags", func() (*crm.Service, error) {
 		return crm.NewService(context.Background(), options...)
@@ -79,7 +86,7 @@ func (c *Clients) ReadTierTagValue(ctx context.Context, tier environment.Tier) (
 	if known != "" {
 		return known, nil
 	}
-	service, err := c.TagService(GlobalTagLocation)
+	service, err := c.GlobalTagService()
 	if err != nil {
 		return "", err
 	}
@@ -111,7 +118,7 @@ func (c *Clients) EnsureTierTag(ctx context.Context, tier environment.Tier, targ
 	if err != nil {
 		return err
 	}
-	service, err := c.TagService(target.Location)
+	service, err := c.tagServiceOf(target)
 	if err != nil {
 		return err
 	}
@@ -163,7 +170,7 @@ func (c *Clients) RemoveTierTag(ctx context.Context, tier environment.Tier, targ
 	if binding == "" || err != nil {
 		return err
 	}
-	service, err := c.TagService(target.Location)
+	service, err := c.tagServiceOf(target)
 	if err != nil {
 		return err
 	}
@@ -198,7 +205,7 @@ func (c *Clients) tierTagBinding(ctx context.Context, tier environment.Tier, tar
 	if err != nil {
 		return "", err
 	}
-	service, err := c.TagService(target.Location)
+	service, err := c.tagServiceOf(target)
 	if err != nil {
 		return "", err
 	}
@@ -238,7 +245,7 @@ func TagOperationDone(ctx context.Context, service *crm.Service, doing string, s
 }
 
 func (c *Clients) RunServiceTagged(service string) TaggedResource {
-	return TaggedResource{Name: "//run.googleapis.com/" + c.ServicePath(service), Location: c.Region, PermissionPrefix: "run.services"}
+	return TaggedResource{Name: "//run.googleapis.com/" + c.ServicePath(service), Regional: true, PermissionPrefix: "run.services"}
 }
 
 func (c *Clients) AccountTagged(uniqueID string) TaggedResource {
@@ -254,19 +261,19 @@ func (c *Clients) PubSubTagged(path string) TaggedResource {
 }
 
 func (c *Clients) RepositoryTagged(repository string) TaggedResource {
-	return TaggedResource{Name: "//artifactregistry.googleapis.com/" + RepositoryPath(c, repository), Location: c.Region, PermissionPrefix: "artifactregistry.repositories"}
+	return TaggedResource{Name: "//artifactregistry.googleapis.com/" + RepositoryPath(c, repository), Regional: true, PermissionPrefix: "artifactregistry.repositories"}
 }
 
 func (c *Clients) BucketTagged(bucket string) TaggedResource {
-	return TaggedResource{Name: "//storage.googleapis.com/projects/_/buckets/" + bucket, Location: c.Region, PermissionPrefix: "storage.buckets"}
+	return TaggedResource{Name: "//storage.googleapis.com/projects/_/buckets/" + bucket, Regional: true, PermissionPrefix: "storage.buckets"}
 }
 
 func (c *Clients) SQLInstanceTagged(instance string) TaggedResource {
-	return TaggedResource{Name: "//sqladmin.googleapis.com/projects/" + c.Project() + "/instances/" + instance, Location: c.Region, PermissionPrefix: "cloudsql.instances"}
+	return TaggedResource{Name: "//sqladmin.googleapis.com/projects/" + c.Project() + "/instances/" + instance, Regional: true, PermissionPrefix: "cloudsql.instances"}
 }
 
 func (c *Clients) DatabaseTagged(database string) TaggedResource {
-	return TaggedResource{Name: "//firestore.googleapis.com/projects/" + c.Project() + "/databases/" + database, Location: c.Region, PermissionPrefix: "datastore.databases"}
+	return TaggedResource{Name: "//firestore.googleapis.com/projects/" + c.Project() + "/databases/" + database, Regional: true, PermissionPrefix: "datastore.databases"}
 }
 
 func (c *Clients) SecretTagged(ctx context.Context, secret string) (TaggedResource, error) {
