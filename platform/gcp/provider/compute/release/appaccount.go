@@ -24,11 +24,11 @@ const (
 
 func (p *Release) EnsureAccount(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (string, error) {
 	ref, app := spec.Ref, spec.App.App
-	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, app)
+	account := c.AppAccount(ref.Project, ref.Name.Env, app)
 	if err := CreateAppAccount(ctx, c, ref, app); err != nil {
 		return "", err
 	}
-	email := c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app)
+	email := c.AppAccountEmail(ref.Project, ref.Name.Env, app)
 	referenced, err := variables.ReferencedOwners(ctx, p.Records, p.Cipher, spec)
 	if err != nil {
 		return "", err
@@ -70,7 +70,7 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 }
 
 func CreateAppAccount(ctx context.Context, c *gcloud.Clients, ref provider.StackRef, app string) error {
-	return c.CreateAccount(ctx, c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, app),
+	return c.CreateAccount(ctx, c.AppAccount(ref.Project, ref.Name.Env, app),
 		gcloud.Clipped("ocel "+ref.Project+"/"+app+"@"+ref.Name.Env+" ("+string(ref.Tier)+")", gcloud.MaxDisplayNameBytes),
 		AppAccountDescription(ref.Tier, ref.Project, ref.Name.Env, app))
 }

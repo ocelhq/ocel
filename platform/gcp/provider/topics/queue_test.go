@@ -67,7 +67,7 @@ func TestAMessageDueNowIsPublishedToItsTopicOrderedByItsKeyForItsConsumerAlone(t
 		t.Fatalf("Send() published %d messages, want 1", len(captured.published))
 	}
 	published := captured.published[0]
-	if want := topics.TopicPath("acme-prod", queue.Names.Topic("orders")); published.topic != want {
+	if want := topics.TopicPath("acme-prod", topicOf(t, queue.Names, "orders")); published.topic != want {
 		t.Errorf("Send() published to %s, want %s", published.topic, want)
 	}
 	if published.message.OrderingKey != "account-1" || published.message.Attributes[topics.ConsumerAttribute] != "ship" {

@@ -41,8 +41,8 @@ func (q Queue) Send(ctx context.Context, msg runs.Message) error {
 
 func (Queue) Release(context.Context, string, string, string) error { return nil }
 
-func (q Queue) topicPath(topic string) string {
-	return TopicPath(q.Clients.Project, q.Names.Topic(topic))
+func (q Queue) topicPath(topic string) (string, error) {
+	return q.Names.topicPath(q.Clients.Project, topic)
 }
 
 func (q Queue) publish(ctx context.Context, msg runs.Message, message *pubsub.PubsubMessage) error {
@@ -50,7 +50,10 @@ func (q Queue) publish(ctx context.Context, msg runs.Message, message *pubsub.Pu
 	if err != nil {
 		return err
 	}
-	topic := q.topicPath(msg.Topic)
+	topic, err := q.topicPath(msg.Topic)
+	if err != nil {
+		return err
+	}
 	err = googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Topics.Publish(topic, &pubsub.PublishRequest{Messages: []*pubsub.PubsubMessage{message}}).Context(ctx).Do()
 		return err
@@ -70,11 +73,15 @@ func (q Queue) schedule(ctx context.Context, msg runs.Message, message *pubsub.P
 	if err != nil {
 		return err
 	}
+	topic, err := q.topicPath(msg.Topic)
+	if err != nil {
+		return err
+	}
 	task := &cloudtaskspb.Task{
 		Name:         q.Delays.taskOf(msg),
 		ScheduleTime: timestamppb.New(msg.DueAt),
 		MessageType: &cloudtaskspb.Task_HttpRequest{HttpRequest: &cloudtaskspb.HttpRequest{
-			Url:        q.Delays.PublishURL + "/v1/" + q.topicPath(msg.Topic) + ":publish",
+			Url:        q.Delays.PublishURL + "/v1/" + topic + ":publish",
 			HttpMethod: cloudtaskspb.HttpMethod_POST,
 			Headers:    map[string]string{"Content-Type": "application/json"},
 			Body:       body,

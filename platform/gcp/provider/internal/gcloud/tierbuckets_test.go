@@ -2,7 +2,6 @@ package gcloud
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,116 +11,121 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-type bucketListing struct {
-	mu       sync.Mutex
-	buckets  []string
-	prefixes []string
+type countedReads struct {
+	*fake.KeyValues
+	mu    sync.Mutex
+	reads int
 }
 
-func (l *bucketListing) open(t *testing.T) *Clients {
+func (s *countedReads) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	s.mu.Lock()
+	s.reads++
+	s.mu.Unlock()
+	return s.KeyValues.Read(ctx, key)
+}
+
+func (s *countedReads) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reads
+}
+
+func clientsWithoutStorage(t *testing.T) (*Clients, *countedReads) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/storage/v1/b" {
-			t.Errorf("%s %s, want only bucket listings", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		prefix := r.URL.Query().Get("prefix")
-		l.prefixes = append(l.prefixes, prefix)
-		var items []map[string]string
-		for _, bucket := range l.buckets {
-			if strings.HasPrefix(bucket, prefix) {
-				items = append(items, map[string]string{"name": bucket})
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"items": items})
+		t.Errorf("%s %s reached Cloud Storage, want the tier's buckets read from their record alone", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(server.Close)
-	return &Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
+	store := &countedReads{KeyValues: fake.NewKeyValues()}
+	return &Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL, Records: store}, store
 }
 
-func (l *bucketListing) listed() []string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]string(nil), l.prefixes...)
+func claim(t *testing.T, c *Clients, tier environment.Tier, class naming.StorageClass, bucket string) string {
+	t.Helper()
+	claimed, err := c.ClaimTierBucket(context.Background(), tier, class, func() string { return bucket })
+	if err != nil {
+		t.Fatalf("ClaimTierBucket(%s) = %v", class, err)
+	}
+	return claimed
 }
 
-func TestATiersBucketsAreFoundByOneListingUnderTheTierPrefixAndRemembered(t *testing.T) {
+func TestADeployReadsItsTiersBucketsFromOneRecordOnceAndListsNoBucket(t *testing.T) {
 	t.Parallel()
-	listing := &bucketListing{buckets: []string{
-		"ocel-prod-state-k3x9q2", "ocel-prod-edge-a1b2c3", "ocel-prod-cache-000000",
-		"ocel-preview-edge-zzzzzz", "ocel-prod-edge", "ocel-prod-edgy-a1b2c3", "ocel-app-shop-prod-edge-a1b2c3",
-	}}
-	c := listing.open(t)
+	c, store := clientsWithoutStorage(t)
+	claim(t, c, environment.TierProduction, naming.StorageState, "ocel-prod-state-k3x9q2")
+	claim(t, c, environment.TierProduction, naming.StorageEdge, "ocel-prod-edge-a1b2c3")
+	claim(t, c, environment.TierProduction, naming.StorageCache, "ocel-prod-cache-000000")
+	c.DropTierBucketsRead(environment.TierProduction)
+	before := store.count()
 
 	for range 2 {
-		found, err := c.TierBuckets(context.Background(), environment.TierProduction)
+		found, err := c.TierBuckets(context.Background(), environment.TierProduction, naming.StorageEdge, naming.StorageCache)
 		if err != nil {
 			t.Fatalf("TierBuckets() = %v", err)
 		}
-		if want := (names.TierBuckets{State: "ocel-prod-state-k3x9q2", Edge: "ocel-prod-edge-a1b2c3", Cache: "ocel-prod-cache-000000"}); found != want {
-			t.Errorf("TierBuckets() = %+v, want %+v", found, want)
+		if found[naming.StorageEdge] != "ocel-prod-edge-a1b2c3" || found[naming.StorageCache] != "ocel-prod-cache-000000" {
+			t.Errorf("TierBuckets() = %v, want the edge and cache buckets the bootstrap recorded", found)
 		}
 	}
-	if got := listing.listed(); len(got) != 1 || got[0] != "ocel-prod-" {
-		t.Errorf("listed under %q, want one listing under %q", got, "ocel-prod-")
+	if reads := store.count() - before; reads != 1 {
+		t.Errorf("two reads of the tier's buckets read the record %d times, want once", reads)
 	}
 }
 
-func TestATierMissingABucketIsRefusedAsNotBootstrappedAndListedAgainNextTime(t *testing.T) {
+func TestATierMissingTheBucketACallerNeedsIsRefusedAsNotBootstrappedAndReadAgainNextTime(t *testing.T) {
 	t.Parallel()
-	listing := &bucketListing{buckets: []string{"ocel-preview-state-k3x9q2", "ocel-preview-edge-a1b2c3"}}
-	c := listing.open(t)
+	c, _ := clientsWithoutStorage(t)
+	claim(t, c, environment.TierPreview, naming.StorageState, "ocel-preview-state-k3x9q2")
 
-	_, err := c.TierBuckets(context.Background(), environment.TierPreview)
+	if found, err := c.TierBuckets(context.Background(), environment.TierPreview, naming.StorageState); err != nil || found[naming.StorageState] != "ocel-preview-state-k3x9q2" {
+		t.Fatalf("TierBuckets(state) of a tier with only its state bucket = %v, %v, want the state bucket", found, err)
+	}
+	_, err := c.TierBuckets(context.Background(), environment.TierPreview, naming.StorageState, naming.StorageCache)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel bootstrap") {
-		t.Fatalf("TierBuckets() of a tier without its cache bucket = %v, want a not-ready refusal naming the bootstrap", err)
+		t.Fatalf("TierBuckets(state, cache) of a tier without its cache bucket = %v, want a not-ready refusal naming the bootstrap", err)
 	}
 
-	listing.mu.Lock()
-	listing.buckets = append(listing.buckets, "ocel-preview-cache-000000")
-	listing.mu.Unlock()
-	if _, err := c.TierBuckets(context.Background(), environment.TierPreview); err != nil {
-		t.Fatalf("TierBuckets() once the bootstrap made the bucket = %v, want it found", err)
-	}
-}
-
-func TestATierHoldingTwoBucketsOfOneClassIsRefused(t *testing.T) {
-	t.Parallel()
-	listing := &bucketListing{buckets: []string{
-		"ocel-prod-state-k3x9q2", "ocel-prod-edge-a1b2c3", "ocel-prod-edge-d4e5f6", "ocel-prod-cache-000000",
-	}}
-	c := listing.open(t)
-
-	_, err := c.TierBuckets(context.Background(), environment.TierProduction)
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "ocel-prod-edge-a1b2c3") || !strings.Contains(err.Error(), "ocel-prod-edge-d4e5f6") {
-		t.Fatalf("TierBuckets() = %v, want a refusal naming both edge buckets", err)
+	beside := &Clients{Names: c.Names, Region: c.Region, Endpoint: c.Endpoint, Records: c.Records}
+	claim(t, beside, environment.TierPreview, naming.StorageCache, "ocel-preview-cache-000000")
+	if _, err := c.TierBuckets(context.Background(), environment.TierPreview, naming.StorageCache); err != nil {
+		t.Fatalf("TierBuckets(cache) once another run's bootstrap recorded it = %v, want it read", err)
 	}
 }
 
-func TestOneClassesBucketIsFoundByAListingUnderThatClassAlone(t *testing.T) {
+func TestTwoBootstrapsClaimingOneClassesBucketBothGetTheNameClaimedFirst(t *testing.T) {
 	t.Parallel()
-	listing := &bucketListing{buckets: []string{"ocel-prod-state-k3x9q2", "ocel-prod-edge-a1b2c3"}}
-	c := listing.open(t)
+	c, _ := clientsWithoutStorage(t)
 
-	found, err := c.FindTierBucket(context.Background(), environment.TierProduction, naming.StorageState)
-	if err != nil || found == nil || found.Name != "ocel-prod-state-k3x9q2" {
-		t.Fatalf("FindTierBucket(state) = %+v, %v, want ocel-prod-state-k3x9q2", found, err)
+	first := claim(t, c, environment.TierProduction, naming.StorageEdge, "ocel-prod-edge-a1b2c3")
+	second := claim(t, c, environment.TierProduction, naming.StorageEdge, "ocel-prod-edge-d4e5f6")
+	if first != "ocel-prod-edge-a1b2c3" || second != first {
+		t.Errorf("the claims got %s and %s, want both the name claimed first, so one bucket is made", first, second)
 	}
-	absent, err := c.FindTierBucket(context.Background(), environment.TierProduction, naming.StorageCache)
-	if err != nil || absent != nil {
-		t.Fatalf("FindTierBucket(cache) = %+v, %v, want nothing found", absent, err)
+}
+
+func TestForgettingATierBucketLeavesAnotherRunsClaimInPlace(t *testing.T) {
+	t.Parallel()
+	c, _ := clientsWithoutStorage(t)
+	claim(t, c, environment.TierProduction, naming.StorageEdge, "ocel-prod-edge-a1b2c3")
+
+	if err := c.ForgetTierBucket(context.Background(), environment.TierProduction, naming.StorageEdge, "ocel-prod-edge-d4e5f6"); err != nil {
+		t.Fatal(err)
 	}
-	if got := listing.listed(); len(got) != 2 || got[0] != "ocel-prod-state-" || got[1] != "ocel-prod-cache-" {
-		t.Errorf("listed under %q, want one listing under each class's untagged name", got)
+	if found, _ := c.RecordedTierBuckets(context.Background(), environment.TierProduction); found[naming.StorageEdge] != "ocel-prod-edge-a1b2c3" {
+		t.Errorf("forgetting a name not recorded left %v, want ocel-prod-edge-a1b2c3 kept", found)
+	}
+	if err := c.ForgetTierBucket(context.Background(), environment.TierProduction, naming.StorageEdge, "ocel-prod-edge-a1b2c3"); err != nil {
+		t.Fatal(err)
+	}
+	if found, _ := c.RecordedTierBuckets(context.Background(), environment.TierProduction); found[naming.StorageEdge] != "" {
+		t.Errorf("forgetting the recorded name left %v, want no edge bucket recorded", found)
 	}
 }

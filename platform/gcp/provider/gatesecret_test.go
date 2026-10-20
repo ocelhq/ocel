@@ -217,8 +217,8 @@ func TestEachTiersServiceMayReadOnlyItsOwnTiersGateSecret(t *testing.T) {
 		t.Fatalf("ProvisionContainers(production) = %v", err)
 	}
 
-	previewAccount := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
-	productionAccount := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
+	previewAccount := "serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", "pr-7", "web")
+	productionAccount := "serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", stackrecords.ProductionEnv, "web")
 	productionReaders := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierProduction, "shop"), cloudrun.GateReaderRole)
 	previewReaders := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), cloudrun.GateReaderRole)
 	if !slices.Contains(productionReaders, productionAccount) || slices.Contains(productionReaders, previewAccount) {
@@ -246,7 +246,7 @@ func TestRevokingAGatedProductionAppTakesItsReadOfTheProductionGateSecretAway(t 
 		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
-	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
+	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", stackrecords.ProductionEnv, "web")
 	if readers := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierProduction, "shop"), cloudrun.GateReaderRole); slices.Contains(readers, member) {
 		t.Errorf("the production gate secret still lets %s read it after no environment runs the app", member)
 	}
@@ -333,7 +333,7 @@ func TestAnOpenPreviewOnCloudRunMountsTheGateSecretSoTurningProtectionOnReachesI
 	if volumes := server.Service.Template.Volumes; len(volumes) != 1 || volumes[0].Secret.Secret != secret || volumes[0].Secret.Items[0].Version != "latest" {
 		t.Fatalf("volumes = %+v, want the project's gate secret %s mounted at latest while protection is off", volumes, secret)
 	}
-	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
+	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", "pr-7", "web")
 	if readers := server.Secrets.Members(secret, cloudrun.GateReaderRole); !slices.Contains(readers, member) {
 		t.Errorf("the gate secret lets %v read it, want the app's account %s before the service mounts it", readers, member)
 	}
@@ -442,7 +442,7 @@ func TestAGatedPreviewServiceMayReadOnlyItsProjectsGateSecret(t *testing.T) {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
+	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", "pr-7", "web")
 	secret := namesOf(t, p).GateSecret(environment.TierPreview, "shop")
 	if readers := server.Secrets.Members(secret, cloudrun.GateReaderRole); !slices.Contains(readers, member) {
 		t.Errorf("the gate secret %s lets %v read it, want the app's account %s", secret, readers, member)
@@ -471,7 +471,7 @@ func TestRevokingAGatedPreviewAppTakesItsReadOfTheGateSecretAway(t *testing.T) {
 		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
-	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
+	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", "pr-7", "web")
 	if readers := server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), cloudrun.GateReaderRole); slices.Contains(readers, member) {
 		t.Errorf("the gate secret still lets %s read it after no environment runs the app", member)
 	}
@@ -802,7 +802,7 @@ func TestAnOpenPreviewOfOnlyFunctionsThatIgnoreTheGateNeedsNoGateSecretAndGrants
 	if len(functions) != 1 || !functions[0].IgnoresGate {
 		t.Errorf("ProvisionFunctions() = %+v, want the function recorded as ignoring the gate", functions)
 	}
-	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierPreview, "shop", "pr-7", "web")
+	member := "serviceAccount:" + namesOf(t, p).AppAccountEmail("shop", "pr-7", "web")
 	if server.Secrets != nil && slices.Contains(server.Secrets.Members(namesOf(t, p).GateSecret(environment.TierPreview, "shop"), cloudrun.GateReaderRole), member) {
 		t.Errorf("the app's account %s may read the gate secret, and none of its services mounts it", member)
 	}

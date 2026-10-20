@@ -5,50 +5,39 @@ import { repoRoot } from "../../paths";
 import {
   APP_LABEL,
   ENVIRONMENT_LABEL,
-  fittedSlug,
+  labelValue,
   NAMESPACE_LABEL,
+  namespaceField,
   namespaceOf,
   PRODUCTION_ENVIRONMENT,
   PRODUCTION_TIER,
   PROJECT_LABEL,
-  roomForSlug,
   TIER_LABEL,
 } from "./names";
 
-describe("roomForSlug", () => {
-  it("leaves the slug what a Cloud Run service name has left over", () => {
-    expect(roomForSlug("ocel", ["web"])).toBe(22);
+describe("namespaceField", () => {
+  it("is a namespace of twelve characters or fewer as it is", () => {
+    expect(namespaceField("ocel")).toBe("ocel");
+    expect(namespaceField("ocel-nightly")).toBe("ocel-nightly");
   });
 
-  it("counts the longest app, because every app of a fixture shares one slug", () => {
-    expect(roomForSlug("ocel", ["next", "express"])).toBe(18);
+  it("compacts a longer one to its head and six hex of its digest, as the provider names it", () => {
+    expect(namespaceField("acme-staging-eu-west-blue-team")).toBe("acme-20ddf6");
+    expect(namespaceField("j-1874-deploy-next-cloudflare")).toBe("j-187-da21fb");
   });
 
-  it("shrinks with the namespace every name starts with", () => {
-    expect(roomForSlug("ocel-nightly", ["web"])).toBe(14);
+  it("never leaves a head ending in the word app", () => {
+    expect(namespaceField("x-apple-orchard-namespace")).toBe("x-ap-7e71aa");
   });
 });
 
-describe("fittedSlug", () => {
-  it("leaves a slug that fits the room alone", () => {
-    expect(fittedSlug("j-17-deploy-node", 22)).toBe("j-17-deploy-node");
+describe("labelValue", () => {
+  it("keeps a value that fits a label", () => {
+    expect(labelValue("j-1-deploy-node")).toBe("j-1-deploy-node");
   });
 
-  it("cuts a longer one down to a head and a digest of the whole", () => {
-    const fitted = fittedSlug("j-17-deploy-node-container", 20);
-    expect(fitted).toHaveLength(20);
-    expect(fitted.startsWith("j-17-deploy-n")).toBe(true);
-    expect(fitted).not.toBe(fittedSlug("j-17-deploy-node-cloudflare", 20));
-  });
-
-  it("never ends the head in a dash", () => {
-    const fitted = fittedSlug("j-17-deploy-workspace", 19);
-    expect(fitted.startsWith("j-17-deploy-")).toBe(true);
-    expect(fitted).toHaveLength(18);
-  });
-
-  it("refuses a room too small to tell two cells apart", () => {
-    expect(() => fittedSlug("j-17-deploy-node", 7)).toThrow(/room/);
+  it("cuts a longer one ahead of the hash tag of the whole, as the provider labels it", () => {
+    expect(labelValue("a".repeat(70))).toBe(`${"a".repeat(55)}-6bd5e5`);
   });
 });
 

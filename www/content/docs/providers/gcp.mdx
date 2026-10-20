@@ -76,9 +76,12 @@ six random lowercase letters and digits, picked once when the bucket is made. Th
 holds the tier's Pulumi state; it keeps a replaced version for 7 days, and no app may read it. The edge
 bucket holds only what an edge or the load balancer may serve: static files, image config,
 prerendered pages and route tables. The cache bucket holds what only an app's own code
-reads, its fetch and `"use cache"` entries and its tag clock, and deletes an object 30 days after
-its last write. A deploy finds the buckets by listing the names that start with `<namespace>-prod-`
-or `<namespace>-preview-`.
+reads, its fetch and `"use cache"` entries and its tag clock. It deletes a fetch or `"use cache"`
+entry 30 days after its last write, and never the tag clock, which a quiet app rewrites only when it
+revalidates. The bootstrap first makes a Firestore database named for the namespace, records
+each bucket's name in it before it makes the bucket, and a deploy reads the names from there:
+nothing lists the project's buckets. An app's bucket is found the same way, from the name its first deploy recorded for its
+project, environment and bucket.
 
 ## Next.js
 
@@ -121,9 +124,9 @@ prefix. A promotion or rollback moves that rewrite to the release it serves. Bef
 anything, the live and the next release are each given the immutable files only the other uploaded,
 so while the url map and the service's traffic settle, a page from either release finds its files
 under either prefix; the copies are removed with their release. The load balancer's service agent
-may list and read the whole edge bucket, which holds nothing an edge may not serve; the listing is
-what makes a file missing under an immutable prefix a 404 from the bucket rather than a 403, and
-never a request to the service.
+may list the edge bucket and read the files under its `assets/` prefix, and none of the pages, edge
+bundles, route tables or image config beside them; the listing is what makes a file missing under
+an immutable prefix a 404 from the bucket rather than a 403, and never a request to the service.
 
 Each prerendered page renders on its first request after a deploy and is then served from the
 cache. With `instances: { min: 0 }`, Cloud Run stops an idle instance after at most 15 minutes, so the
@@ -664,15 +667,14 @@ gcloud projects add-iam-policy-binding my-project \
 ```
 
 Cloud Storage, Cloud SQL and Secret Manager check creating a bucket, an instance or a secret,
-listing buckets or instances and reading Cloud SQL's operations against the project, where no name
+listing instances and reading Cloud SQL's operations against the project, where no name
 condition admits them, so a deploy also needs a custom role holding those permissions alone.
 It may create a secret under any name, and writes and deletes only its own; it reads
-the settings of every instance in the project, and changes none of them. It lists the project's
-bucket names to find the tier's own buckets:
+the settings of every instance in the project, and changes none of them:
 
 ```bash
 gcloud iam roles create ocelDeployCreates --project my-project \
-  --permissions=storage.buckets.create,storage.buckets.list,cloudsql.instances.create,cloudsql.instances.list,cloudsql.instances.get,secretmanager.secrets.create
+  --permissions=storage.buckets.create,cloudsql.instances.create,cloudsql.instances.list,cloudsql.instances.get,secretmanager.secrets.create
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
   --role=projects/my-project/roles/ocelDeployCreates --condition=None

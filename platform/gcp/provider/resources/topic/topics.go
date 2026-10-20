@@ -65,6 +65,15 @@ func Names(names names.Names, ref provider.StackRef) topics.Names {
 	}
 }
 
+func nameTopic(names topics.Names, topic declaredTopic) (string, error) {
+	for _, consumer := range topic.spec.Consumers {
+		if _, err := names.Subscription(topic.declared, consumer.Name); err != nil {
+			return "", err
+		}
+	}
+	return names.Topic(topic.declared)
+}
+
 func topologyOf(c *gcloud.Clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) topics.Topology {
 	return topics.Topology{Names: Names(c.Names, ref), Topics: declared}
 }
@@ -76,10 +85,11 @@ func (p *Topic) Provision(ctx context.Context, in resources.ProvisionRequest, pr
 	}
 	topic := declaredTopicOf(in.Resource)
 	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
-	if err := topology.Names.RefuseUnfit(topology.Topics); err != nil {
+	name, err := nameTopic(topology.Names, topic)
+	if err != nil {
 		return provider.Binding{}, err
 	}
-	path := topics.TopicPath(c.Project(), topology.Names.Topic(topic.declared))
+	path := topics.TopicPath(c.Project(), name)
 	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
 		return provider.Binding{}, err
@@ -113,7 +123,7 @@ func (p *Topic) Plan(ctx context.Context, in resources.ProvisionRequest, recorde
 	}
 	topic := declaredTopicOf(in.Resource)
 	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
-	if err := topology.Names.RefuseUnfit(topology.Topics); err != nil {
+	if _, err := nameTopic(topology.Names, topic); err != nil {
 		return "", "", err
 	}
 	var previous map[string]*provider.TopicSpec
@@ -248,16 +258,21 @@ func shapeTopics(shape component.Shape, declared []provider.Resource) error {
 	shape.Tree.AddShaped(shape.Shared, shape.Vendor, shape.Region, []pricing.Shaped{task.DelayQueueShape(shape.Names, req.Deploy.Tier, shape.Region)})
 	for _, resource := range declared {
 		topic := declaredTopicOf(resource)
-		if err := scope.RefuseUnfit(map[string]*provider.TopicSpec{topic.declared: topic.spec}); err != nil {
+		name, err := scope.Topic(topic.declared)
+		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, scope.Topic(topic.declared), shape.Region, map[string]any{})
+		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, name, shape.Region, map[string]any{})
 		for _, consumer := range topic.spec.Consumers {
-			shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubSubscriptionType, scope.Subscription(topic.declared, consumer.Name), shape.Region,
+			subscription, err := scope.Subscription(topic.declared, consumer.Name)
+			if err != nil {
+				return err
+			}
+			shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubSubscriptionType, subscription, shape.Region,
 				map[string]any{"ack_deadline_seconds": int(PushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered})
 		}
 		if topic.spec.Cron != "" {
-			shape.Tree.Add(shape.Environment, shape.Vendor, cost.SchedulerJobType, scope.ScheduleJob(topic.declared), shape.Region, map[string]any{"region": shape.Region, "schedule": topic.spec.Cron})
+			shape.Tree.Add(shape.Environment, shape.Vendor, cost.SchedulerJobType, name, shape.Region, map[string]any{"region": shape.Region, "schedule": topic.spec.Cron})
 		}
 	}
 	return nil
@@ -281,7 +296,7 @@ func Manifest(c *gcloud.Clients, ref provider.StackRef, app string, declared map
 		Environment: ref.Name.Env,
 		Topics:      pinned,
 		DelayQueue:  c.DelayQueuePath(c.Region, ref.Tier),
-		Account:     c.AppAccountEmail(ref.Tier, ref.Project, ref.Name.Env, app),
+		Account:     c.AppAccountEmail(ref.Project, ref.Name.Env, app),
 		PublishURL:  publishURL(c),
 	}
 }
@@ -334,7 +349,11 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, acc
 	}
 	names := Names(c.Names, spec.Ref)
 	for _, name := range slices.Sorted(maps.Keys(declared)) {
-		granted = append(granted, grants.On(grants.Topic, topics.TopicPath(c.Project(), names.Topic(name)), topics.PublisherRole, member))
+		topic, err := names.Topic(name)
+		if err != nil {
+			return nil, err
+		}
+		granted = append(granted, grants.On(grants.Topic, topics.TopicPath(c.Project(), topic), topics.PublisherRole, member))
 	}
 	return granted, nil
 }

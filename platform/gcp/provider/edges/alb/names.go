@@ -1,8 +1,6 @@
 package alb
 
 import (
-	"strings"
-
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
@@ -35,11 +33,11 @@ type names struct {
 }
 
 func loadBalancerNames(namespace string, tier environment.Tier, shielded bool) names {
-	words := []string{naming.TierWord(tier), string(Kind)}
+	words := []string{string(Kind)}
 	if shielded {
 		words = append(words, shieldedNameSegment)
 	}
-	stem := mustOcelName(namespace, words...)
+	stem := naming.OcelName(namespace, tier, words...)
 	return names{
 		Address:        stem + "-address",
 		NotFound:       stem + "-notfound",
@@ -60,12 +58,12 @@ func loadBalancerNames(namespace string, tier environment.Tier, shielded bool) n
 }
 
 func hostResourceName(namespace string, tier environment.Tier, purpose, scope, hostname string, role ...string) string {
-	head := mustOcelName(namespace, naming.TierWord(tier), string(Kind))
-	tag := naming.HashTag(namespace, string(tier), purpose, scope, hostname)
-	room := maxResourceName - len(head) - len(tag) - 2*len(naming.WordSeparator) - len(naming.WordSeparator+certRole)
-	readable := naming.Join(naming.WordSeparator, scope, naming.SanitizeHost(hostname))
-	readable = strings.TrimRight(readable[:min(len(readable), room)], naming.WordSeparator)
-	return naming.Join(naming.WordSeparator, append([]string{head, readable, tag}, role...)...)
+	name := naming.TaggedName{
+		Head:     naming.OcelName(namespace, tier, string(Kind)),
+		Readable: naming.Join(naming.WordSeparator, scope, naming.SanitizeHost(hostname)),
+		Tag:      naming.HashTag(namespace, string(tier), purpose, scope, hostname),
+	}.Fit(maxResourceName, certRole, negRole)
+	return naming.Join(naming.WordSeparator, append([]string{name}, role...)...)
 }
 
 func backendName(namespace, slug string, tier environment.Tier, hostname string) string {
@@ -90,8 +88,4 @@ func originEntryName(namespace string, tier environment.Tier, baseDomain string)
 
 func Surface(namespace, slug string, tier environment.Tier) string {
 	return naming.Join(naming.FieldSeparator, naming.NamespaceField(namespace), string(Kind), slug, naming.TierWord(tier))
-}
-
-func mustOcelName(namespace string, words ...string) string {
-	return naming.MustUntieredOcelName(namespace, words...)
 }

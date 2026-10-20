@@ -53,7 +53,7 @@ func (p *Release) RevokeAfterRemoval(ctx context.Context, c *gcloud.Clients, ref
 	if runsAppElsewhere(recorded, ref) {
 		return nil
 	}
-	account := c.AppAccount(ref.Tier, ref.Project, ref.Name.Env, ref.Name.App)
+	account := c.AppAccount(ref.Project, ref.Name.Env, ref.Name.App)
 	revoked, err := grants.RevokeAll(ctx, c, p.Records, ref.Tier, account)
 	if err != nil {
 		return err

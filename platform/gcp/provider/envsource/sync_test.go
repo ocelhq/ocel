@@ -59,7 +59,7 @@ func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T)
 		t.Errorf("the production sync account is %s once and %s again, and a survey could not find the account an apply made", production, again)
 	}
 	for _, tier := range googletest.BothTiers {
-		if named.EnvSourceSyncAccount(tier) == named.AppAccount(tier, "shop", "production", "api") {
+		if named.EnvSourceSyncAccount(tier) == named.AppAccount("shop", "production", "api") {
 			t.Errorf("the %s sync runs as an app's account, and an app would then write every value", tier)
 		}
 	}
@@ -582,7 +582,7 @@ func TestAScheduleCallingAsAnotherAccountIsMended(t *testing.T) {
 	}
 }
 
-func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheBucketWithTheStamp(t *testing.T) {
+func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheStampThenTheDatabase(t *testing.T) {
 	t.Parallel()
 	names := names.New("ocel", "acme-prod")
 	tier := environment.TierProduction
@@ -596,13 +596,15 @@ func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheBucketWithTheStamp(t
 		order = append(order, taking.Resource.ID())
 	}
 	at := func(class naming.StorageClass) int {
-		return slices.Index(order, (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.UntaggedTierBucket(tier, class)}).ID())
+		return slices.Index(order, (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.TierBucketStem(tier, class)}).ID())
 	}
 	if at(naming.StorageEdge) > at(naming.StorageState) || at(naming.StorageCache) > at(naming.StorageState) {
 		t.Errorf("removal runs %v, want the edge and cache buckets before the state bucket with the stamp", order)
 	}
-	if last := order[len(order)-1]; last != (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageState)}).ID() {
-		t.Errorf("removal ends on %s, want the bucket with the stamp: a removal stopped part way reads as unfinished only while the stamp exists", last)
+	stamp, database := (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.TierBucketStem(tier, naming.StorageState)}).ID(), (bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.Database()}).ID()
+	if !slices.Equal(order[len(order)-2:], []string{stamp, database}) {
+		t.Errorf("removal ends on %v, want the bucket with the stamp and then the database the tier's bucket names are recorded in: "+
+			"a removal stopped part way reads as unfinished while the stamp exists, and finds every bucket left while the database does", order[len(order)-2:])
 	}
 	if len(order) != len(bootstrap.Resources(names, tier, false)) {
 		t.Errorf("removal takes %d items, want every one of the %d the bootstrap provisions", len(order), len(bootstrap.Resources(names, tier, false)))

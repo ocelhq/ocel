@@ -19,7 +19,11 @@ const (
 )
 
 func LabelValue(value string) string {
-	return naming.Fit(maxLabelValue, naming.WordSeparator, naming.Compressible(value))
+	sanitized := naming.Sanitize(value)
+	if len(sanitized) <= maxLabelValue {
+		return sanitized
+	}
+	return naming.TaggedName{Readable: sanitized, Tag: naming.HashTag(sanitized)}.Fit(maxLabelValue)
 }
 
 func StackLabels(names Names, ref provider.StackRef) map[string]string {

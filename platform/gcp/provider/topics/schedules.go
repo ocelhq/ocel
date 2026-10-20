@@ -9,27 +9,40 @@ import (
 
 	cloudscheduler "google.golang.org/api/cloudscheduler/v1"
 
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const scheduleTimeZone = "Etc/UTC"
 
-func (t Topology) jobPath(clients *ports.Clients, task string) string {
-	return "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + t.Names.ScheduleJob(task)
+func (t Topology) jobPath(clients *ports.Clients, task string) (string, error) {
+	job, err := t.Names.Topic(task)
+	if err != nil {
+		return "", err
+	}
+	return "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + job, nil
 }
 
-func (t Topology) buildJob(clients *ports.Clients, task, cron string) *cloudscheduler.Job {
+func (t Topology) buildJob(clients *ports.Clients, task string, spec *provider.TopicSpec) (*cloudscheduler.Job, error) {
+	path, err := t.jobPath(clients, task)
+	if err != nil {
+		return nil, err
+	}
+	topic, err := t.Names.topicPath(clients.Project, task)
+	if err != nil {
+		return nil, err
+	}
 	return &cloudscheduler.Job{
-		Name:     t.jobPath(clients, task),
-		Schedule: cron,
+		Name:     path,
+		Schedule: spec.Cron,
 		TimeZone: scheduleTimeZone,
 		PubsubTarget: &cloudscheduler.PubsubTarget{
-			TopicName:  TopicPath(clients.Project, t.Names.Topic(task)),
+			TopicName:  topic,
 			Data:       base64.StdEncoding.EncodeToString([]byte("{}")),
 			Attributes: map[string]string{ScheduleAttribute: "true"},
 		},
-	}
+	}, nil
 }
 
 func isSameTarget(current, desired *cloudscheduler.Job) bool {
@@ -42,12 +55,15 @@ func isSameTarget(current, desired *cloudscheduler.Job) bool {
 		maps.Equal(current.PubsubTarget.Attributes, desired.PubsubTarget.Attributes)
 }
 
-func (t Topology) readJob(ctx context.Context, clients *ports.Clients, task string) (*cloudscheduler.Job, error) {
+func (t Topology) readJob(ctx context.Context, clients *ports.Clients, task string, spec *provider.TopicSpec) (*cloudscheduler.Job, error) {
 	service, err := clients.Scheduler()
 	if err != nil {
 		return nil, err
 	}
-	path := t.jobPath(clients, task)
+	path, err := t.jobPath(clients, task)
+	if err != nil {
+		return nil, err
+	}
 	job, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Get(path).Context(ctx).Do)
 	if isAnswered(err, http.StatusNotFound) {
 		return nil, nil
@@ -58,12 +74,16 @@ func (t Topology) readJob(ctx context.Context, clients *ports.Clients, task stri
 	return job, nil
 }
 
-func (t Topology) readScheduleDifference(ctx context.Context, clients *ports.Clients, task, cron string) (string, error) {
-	current, err := t.readJob(ctx, clients, task)
+func (t Topology) readScheduleDifference(ctx context.Context, clients *ports.Clients, task string, spec *provider.TopicSpec) (string, error) {
+	current, err := t.readJob(ctx, clients, task, spec)
 	if err != nil {
 		return "", err
 	}
-	desired := t.buildJob(clients, task, cron)
+	desired, err := t.buildJob(clients, task, spec)
+	if err != nil {
+		return "", err
+	}
+	cron := spec.Cron
 	switch {
 	case current == nil:
 		return fmt.Sprintf("Cloud Scheduler job %s is created to fire at %q", desired.Name, cron), nil
@@ -75,20 +95,23 @@ func (t Topology) readScheduleDifference(ctx context.Context, clients *ports.Cli
 	return "", nil
 }
 
-func (t Topology) readDroppedScheduleDifference(ctx context.Context, clients *ports.Clients, task string) (string, error) {
-	current, err := t.readJob(ctx, clients, task)
+func (t Topology) readDroppedScheduleDifference(ctx context.Context, clients *ports.Clients, task string, before *provider.TopicSpec) (string, error) {
+	current, err := t.readJob(ctx, clients, task, before)
 	if err != nil || current == nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s no longer declares a cron, so Cloud Scheduler job %s is deleted", task, t.jobPath(clients, task)), nil
+	return fmt.Sprintf("%s no longer declares a cron, so Cloud Scheduler job %s is deleted", task, current.Name), nil
 }
 
-func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, task, cron string) error {
+func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, task string, spec *provider.TopicSpec) error {
 	service, err := clients.Scheduler()
 	if err != nil {
 		return err
 	}
-	desired := t.buildJob(clients, task, cron)
+	desired, err := t.buildJob(clients, task, spec)
+	if err != nil {
+		return err
+	}
 	path := desired.Name
 	parent := "projects/" + clients.Project + "/locations/" + clients.Region
 	err = googleretry.Done(ctx, func() error {
@@ -112,12 +135,15 @@ func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, ta
 	return nil
 }
 
-func (t Topology) removeSchedule(ctx context.Context, clients *ports.Clients, task string) error {
+func (t Topology) removeSchedule(ctx context.Context, clients *ports.Clients, task string, spec *provider.TopicSpec) error {
 	service, err := clients.Scheduler()
 	if err != nil {
 		return err
 	}
-	path := t.jobPath(clients, task)
+	path, err := t.jobPath(clients, task)
+	if err != nil {
+		return err
+	}
 	if err := googleretry.Done(ctx, func() error {
 		_, err := service.Projects.Locations.Jobs.Delete(path).Context(ctx).Do()
 		return err

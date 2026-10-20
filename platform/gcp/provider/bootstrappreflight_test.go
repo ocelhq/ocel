@@ -97,12 +97,13 @@ func TestARegionFirestoreServesIsAdmitted(t *testing.T) {
 	}
 }
 
-func TestABootstrapChecksThePermissionsItFindsAndMendsItsBucketsWith(t *testing.T) {
+func TestABootstrapChecksThePermissionItMendsItsBucketsWithAndListsNone(t *testing.T) {
 	t.Parallel()
-	for _, permission := range []string{"storage.buckets.list", "storage.buckets.update"} {
-		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
-			t.Errorf("a bootstrap does not check %s, and the survey finds a tier's randomly tagged buckets by listing them and mends them by updating", permission)
-		}
+	if !slices.Contains(bootstrap.BootstrapPermissions, "storage.buckets.update") {
+		t.Error("a bootstrap does not check storage.buckets.update, and the survey mends a tier's recorded buckets by updating them")
+	}
+	if slices.Contains(bootstrap.BootstrapPermissions, "storage.buckets.list") {
+		t.Error("a bootstrap checks storage.buckets.list, and it finds no bucket by listing: it records each name before it creates the bucket")
 	}
 }
 

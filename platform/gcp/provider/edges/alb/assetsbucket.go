@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -18,7 +19,7 @@ func (p *AssetsBuckets) Read(ctx context.Context, tier environment.Tier) (Assets
 	if err != nil {
 		return AssetsBucket{}, err
 	}
-	buckets, err := clients.TierBuckets(ctx, tier)
+	buckets, err := clients.TierBuckets(ctx, tier, naming.StorageEdge)
 	if err != nil {
 		return AssetsBucket{}, err
 	}
@@ -26,5 +27,5 @@ func (p *AssetsBuckets) Read(ctx context.Context, tier environment.Tier) (Assets
 	if err != nil {
 		return AssetsBucket{}, err
 	}
-	return AssetsBucket{Name: buckets.Edge, Agent: agent}, nil
+	return AssetsBucket{Name: buckets[naming.StorageEdge], Agent: agent}, nil
 }

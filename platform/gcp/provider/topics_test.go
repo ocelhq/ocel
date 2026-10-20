@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 func aTopic(t *testing.T, kind provider.BindingType, spec *provider.TopicSpec) resources.ProvisionRequest {
@@ -96,7 +97,7 @@ func TestATaskWhoseScheduleJobWasDeletedPlansAnUpdate(t *testing.T) {
 	p, server := servingTopics(t)
 	in := aTopic(t, provider.BindingTask, cronTask("*/5 * * * *"))
 	recorded := provisionTopic(t, p, in)
-	job := "projects/acme-prod/locations/europe-west1/jobs/" + topic.Names(namesOf(t, p), in.Ref).ScheduleJob("orders")
+	job := "projects/acme-prod/locations/europe-west1/jobs/" + topicNamed(t, topic.Names(namesOf(t, p), in.Ref), "orders")
 	if server.job(job) == nil {
 		t.Fatalf("no Cloud Scheduler job %s was made", job)
 	}
@@ -122,7 +123,7 @@ func TestATopicThatDropsAConsumerPlansAnUpdateNamingItsSubscription(t *testing.T
 	p, server := servingTopics(t)
 	in := aTopic(t, provider.BindingTopic, consumersNamed(false, "ship", "bill"))
 	recorded := provisionTopic(t, p, in)
-	subscription := "projects/acme-prod/subscriptions/" + topic.Names(namesOf(t, p), in.Ref).Subscription("orders", "bill")
+	subscription := "projects/acme-prod/subscriptions/" + topicNamed(t, topic.Names(namesOf(t, p), in.Ref), "orders") + "-bill"
 	server.holdSubscription(subscription)
 
 	action, reason, err := planTopic(t, p, server, aTopic(t, provider.BindingTopic, consumersNamed(false, "ship")), recorded)
@@ -152,4 +153,36 @@ func TestATopicWhoseOrderingChangesUnderAKeptConsumerIsRefusedAtPlan(t *testing.
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Errorf("PlanTopic() = %v, want the %s refusal the provision would give", err, refusal.CodeInvalid)
 	}
+}
+
+func TestATopicKeepsItsPubSubTopicWhenItGainsAConsumer(t *testing.T) {
+	p, server := servingTopics(t)
+	in := aTopic(t, provider.BindingTopic, consumersNamed(false, "ship"))
+	in.Ref.Project = strings.Repeat("shop", 50)
+	provisionTopic(t, p, in)
+
+	in.Resource.Topic = consumersNamed(false, "ship", strings.Repeat("c", 40))
+	provisionTopic(t, p, in)
+	if len(server.topics) != 1 {
+		t.Errorf("provisioning orders before and after it gains a consumer made the topics %v, want one: a renamed topic strands the messages its old one holds", server.topics)
+	}
+}
+
+func TestATopicWithAConsumerItsSubscriptionCannotHoldIsRefusedAtPlan(t *testing.T) {
+	p, server := servingTopics(t)
+
+	_, _, err := planTopic(t, p, server, aTopic(t, provider.BindingTopic, consumersNamed(false, "ship", strings.Repeat("c", 64))), nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("PlanTopic() = %v, want an %s refusal before the deploy makes the topic", err, refusal.CodeInvalid)
+	}
+}
+
+func topicNamed(t *testing.T, names topics.Names, topic string) string {
+	t.Helper()
+	name, err := names.Topic(topic)
+	if err != nil {
+		t.Fatalf("Topic(%s) = %v", topic, err)
+	}
+	return name
 }

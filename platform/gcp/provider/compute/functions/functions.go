@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
@@ -118,7 +119,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		}
 		if next.Serves(app) {
 			served = next.FillServingDefaults(served)
-			buckets, err := c.TierBuckets(ctx, spec.Ref.Tier)
+			buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
 			if err != nil {
 				return nil, err
 			}

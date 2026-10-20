@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -33,15 +34,15 @@ func (a Store) bucket(ctx context.Context, tier environment.Tier, kind naming.Ob
 	if err != nil {
 		return nil, err
 	}
-	buckets, err := clients.TierBuckets(ctx, tier)
-	if err != nil {
-		return nil, err
-	}
-	name := buckets.Of(kind.Class())
-	if name == "" {
+	if !slices.Contains(names.TierStorageClasses, kind.Class()) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"GCP keeps no %s objects: Cloud Run runs every function from its image, so nothing deploys %s/ keys here", kind.Class(), kind)
 	}
+	buckets, err := clients.TierBuckets(ctx, tier, kind.Class())
+	if err != nil {
+		return nil, err
+	}
+	name := buckets.Holding(kind)
 	client, err := clients.Storage()
 	if err != nil {
 		return nil, err
@@ -122,7 +123,7 @@ func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope n
 	if err != nil {
 		return err
 	}
-	buckets, err := clients.TierBuckets(ctx, tier)
+	buckets, err := clients.RecordedTierBuckets(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -133,7 +134,7 @@ func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope n
 	var errs []error
 	var swept []string
 	for i, kind := range kinds {
-		name := buckets.Of(kind.Class())
+		name := buckets.Holding(kind)
 		if name == "" {
 			continue
 		}
@@ -150,6 +151,9 @@ func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope n
 	}
 	if err := errors.Join(errs...); err != nil {
 		return err
+	}
+	if len(swept) == 0 {
+		return nil
 	}
 	gcloud.EnsureProgress(progress).Say("Removed the " + string(tier) + " objects under " + strings.Join(swept, ", "))
 	return nil

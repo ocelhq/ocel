@@ -33,6 +33,7 @@ function storageAnswering(answer: (url: URL, method: string) => Response): strin
 describe("appBucketPrefix", () => {
   it("is the prefix the provider names a namespace's app buckets under", async () => {
     expect(appBucketPrefix("ocel")).toBe("ocel-app-");
+    expect(appBucketPrefix("acme-staging-eu-west-blue-team")).toBe("acme-20ddf6-app-");
     const go = await readFile(
       path.join(repoRoot, "platform", "gcp", "provider", "internal", "names", "namespace.go"),
       "utf8",

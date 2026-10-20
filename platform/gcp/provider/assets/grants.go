@@ -18,7 +18,7 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, mem
 	if err != nil {
 		return nil, err
 	}
-	buckets, err := c.TierBuckets(ctx, spec.Ref.Tier)
+	buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge)
 	if err != nil {
 		return nil, err
 	}

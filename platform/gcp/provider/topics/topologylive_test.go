@@ -71,17 +71,17 @@ func TestLiveTopologyGivesEachConsumerASubscriptionOfItsOwn(t *testing.T) {
 		t.Fatalf("Subscriptions.Ensure() over the subscriptions it made = %v, want them kept", err)
 	}
 
-	for _, topic := range []string{names.Topic("orders"), names.Topic("resize")} {
+	for _, topic := range []string{topicOf(t, names, "orders"), topicOf(t, names, "resize")} {
 		if status := readTopicStatus(t, endpoint, clients.Project, topic); status != http.StatusOK {
 			t.Errorf("topic %s answered %d, want it made", topic, status)
 		}
 	}
 
-	ship, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship"))
+	ship, status := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "ship"))
 	if status != http.StatusOK {
 		t.Fatalf("the subscription of orders/ship answered %d, want it made", status)
 	}
-	if ship.Topic != "projects/"+clients.Project+"/topics/"+names.Topic("orders") {
+	if ship.Topic != "projects/"+clients.Project+"/topics/"+topicOf(t, names, "orders") {
 		t.Errorf("orders/ship subscribes %s, want the orders topic", ship.Topic)
 	}
 	if want := "https://worker.run.app/worker/topics/orders/consumers/ship"; ship.PushConfig.PushEndpoint != want {
@@ -103,7 +103,7 @@ func TestLiveTopologyGivesEachConsumerASubscriptionOfItsOwn(t *testing.T) {
 		t.Errorf("orders/ship filters on %q, want a message redriven to one consumer to reach that consumer alone", ship.Filter)
 	}
 
-	bill, _ := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "bill"))
+	bill, _ := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "bill"))
 	if want := "https://worker.run.app/billing/topics/orders/consumers/bill"; bill.PushConfig.PushEndpoint != want {
 		t.Errorf("orders/bill pushes to %s, want %s on the worker it is placed on", bill.PushConfig.PushEndpoint, want)
 	}
@@ -114,11 +114,11 @@ func TestLiveTopologyGivesEachConsumerASubscriptionOfItsOwn(t *testing.T) {
 	if err := topology.Remove(context.Background(), clients); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusNotFound {
+	if _, status := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "ship")); status != http.StatusNotFound {
 		t.Errorf("the subscription of orders/ship answered %d after Remove(), want it gone", status)
 	}
-	if status := readTopicStatus(t, endpoint, clients.Project, names.Topic("orders")); status != http.StatusNotFound {
-		t.Errorf("topic %s answered %d after Remove(), want it gone", names.Topic("orders"), status)
+	if status := readTopicStatus(t, endpoint, clients.Project, topicOf(t, names, "orders")); status != http.StatusNotFound {
+		t.Errorf("topic %s answered %d after Remove(), want it gone", topicOf(t, names, "orders"), status)
 	}
 	if err := topology.Remove(context.Background(), clients); err != nil {
 		t.Errorf("Remove() of a topology already gone = %v, want nothing to do", err)
@@ -139,10 +139,10 @@ func TestLiveSubscriptionsAreMadeOnlyForTheWorkersAnAppHosts(t *testing.T) {
 	if err := billing.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() for the app hosting billing alone = %v, want the consumers on other workers left to their apps", err)
 	}
-	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "bill")); status != http.StatusOK {
+	if _, status := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "bill")); status != http.StatusOK {
 		t.Errorf("orders/bill, on billing, answered %d, want it made", status)
 	}
-	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusNotFound {
+	if _, status := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "ship")); status != http.StatusNotFound {
 		t.Errorf("orders/ship, on another app's worker, answered %d, want it left alone", status)
 	}
 }
@@ -161,10 +161,10 @@ func TestLiveRemovingAConsumerTakesItsSubscriptionAndNoOther(t *testing.T) {
 	if err := topology.RemoveDropped(context.Background(), clients, previous); err != nil {
 		t.Fatalf("RemoveDropped() after bill stopped consuming orders = %v", err)
 	}
-	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "bill")); status != http.StatusNotFound {
+	if _, status := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "bill")); status != http.StatusNotFound {
 		t.Errorf("orders/bill answered %d, want it gone", status)
 	}
-	if _, status := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); status != http.StatusOK {
+	if _, status := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "ship")); status != http.StatusOK {
 		t.Errorf("orders/ship answered %d, want it kept", status)
 	}
 	if err := topology.RemoveDropped(context.Background(), clients, previous); err != nil {
@@ -186,7 +186,7 @@ func TestLiveATopicWhoseOrderingChangedIsRefusedAndItsSubscriptionsKept(t *testi
 	if err == nil || !strings.Contains(err.Error(), "ship") {
 		t.Fatalf("Ensure() after orders stopped being ordered = %v, want it refused naming the subscription: Pub/Sub cannot change a subscription's ordering", err)
 	}
-	if ship, _ := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship")); !ship.EnableOrdering {
+	if ship, _ := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "ship")); !ship.EnableOrdering {
 		t.Error("the refused Ensure() changed orders/ship's ordering anyway")
 	}
 }
@@ -198,7 +198,7 @@ func TestLiveFlociDropsAPushSubscriptionsOIDCToken(t *testing.T) {
 	topology, _ := deployedTopology(t, clients, names, ordersAndResize())
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 
-	ship, _ := readSubscription(t, endpoint, clients.Project, names.Subscription("orders", "ship"))
+	ship, _ := readSubscription(t, endpoint, clients.Project, subscriptionOf(t, names, "orders", "ship"))
 	if ship.PushConfig.OidcToken != nil {
 		t.Fatalf("floci now keeps a push subscription's oidcToken (%+v): read it back in the topology test and drop this guard", ship.PushConfig.OidcToken)
 	}

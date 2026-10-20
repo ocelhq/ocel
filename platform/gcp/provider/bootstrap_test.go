@@ -174,17 +174,32 @@ func TestTheStateBucketKeepsAReplacedVersionAWeekAndNoLonger(t *testing.T) {
 	}
 }
 
-func TestTheCacheBucketDeletesAnObjectThirtyDaysAfterItsLastWrite(t *testing.T) {
+func TestTheCacheBucketDeletesAFetchOrUseCacheEntryThirtyDaysAfterItsLastWriteAndNeverTheTagClock(t *testing.T) {
 	t.Parallel()
 
 	attrs := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Class: naming.StorageCache})
 	want := []storage.LifecycleRule{{
 		Action:    storage.LifecycleAction{Type: storage.DeleteAction},
-		Condition: storage.LifecycleCondition{AgeInDays: 30},
+		Condition: storage.LifecycleCondition{AgeInDays: 30, MatchesPrefix: []string{"fetch-cache/", "use-cache/"}},
 	}}
 	if !reflect.DeepEqual(attrs.Lifecycle.Rules, want) || attrs.VersioningEnabled {
-		t.Errorf("the cache bucket is created as versioned=%t with lifecycle %+v, want unversioned with %+v: a rewrite makes a new object, so its age counts from the last write",
+		t.Errorf("the cache bucket is created as versioned=%t with lifecycle %+v, want unversioned with %+v: the tag clock is rewritten only on a revalidation, "+
+			"and once it expired a revalidated tag would reach no other instance",
 			attrs.VersioningEnabled, attrs.Lifecycle.Rules, want)
+	}
+}
+
+func TestACacheBucketWhoseRuleDeletesEveryObjectIsMended(t *testing.T) {
+	t.Parallel()
+
+	made := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Class: naming.StorageCache})
+	everything := *made
+	everything.Lifecycle = storage.Lifecycle{Rules: []storage.LifecycleRule{{
+		Action:    storage.LifecycleAction{Type: storage.DeleteAction},
+		Condition: storage.LifecycleCondition{AgeInDays: 30},
+	}}}
+	if found := bootstrap.BucketPresenceOf(&everything, naming.StorageCache, false); found.Mends == "" {
+		t.Error("a cache bucket that deletes its tag clock after 30 days reads as current, and the bootstrap would leave it deleting it")
 	}
 }
 

@@ -16,7 +16,6 @@ import (
 	"cloud.google.com/go/storage"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iam/v1"
-	"google.golang.org/api/iterator"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
 
@@ -37,22 +36,25 @@ import (
 
 func endpoint() string { return os.Getenv("OCEL_FLOCI_GCP_ENDPOINT") }
 
-func liveTierBucket(t *testing.T, client *storage.Client, tier environment.Tier, class naming.StorageClass) string {
+func liveTierBucket(t *testing.T, tier environment.Tier, class naming.StorageClass) string {
 	t.Helper()
-	listed := client.Buckets(context.Background(), liveProject())
-	listed.Prefix = liveNames(t).UntaggedTierBucket(tier, class) + naming.WordSeparator
-	for {
-		attrs, err := listed.Next()
-		if errors.Is(err, iterator.Done) {
-			t.Fatalf("no %s %s bucket is listed under %s", tier, class, listed.Prefix)
-		}
-		if err != nil {
-			t.Fatalf("list the %s %s bucket: %v", tier, class, err)
-		}
-		if found, ok := liveNames(t).TierBucketClass(tier, attrs.Name); ok && found == class {
-			return attrs.Name
+	clients := &gcloud.Clients{Names: liveNames(t), Region: liveRegion(), Endpoint: endpoint()}
+	clients.Records = ports.KeyValues{Clients: clients.Workload()}
+	buckets, err := clients.TierBuckets(context.Background(), tier, class)
+	if err != nil {
+		t.Fatalf("read the %s %s bucket: %v", tier, class, err)
+	}
+	return buckets[class]
+}
+
+func plannedRow(t *testing.T, tier environment.Tier, change provider.Change) string {
+	t.Helper()
+	for _, class := range []naming.StorageClass{naming.StorageState, naming.StorageEdge, naming.StorageCache} {
+		if stem := liveNames(t).TierBucketStem(tier, class); strings.HasPrefix(change.Name, stem+naming.WordSeparator) {
+			return change.Kind + "/" + stem
 		}
 	}
+	return change.Kind + "/" + change.Name
 }
 
 func servicesEnabled(t *testing.T) {
@@ -197,19 +199,19 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 			t.Errorf("Plan() returned the group %q, want every group named under the vendor that provisions it", group.Name)
 		}
 		for _, change := range group.Changes {
-			kinds[change.Kind+"/"+change.Name] = string(change.Action)
-			groups[change.Kind+"/"+change.Name] = group.Kind
+			kinds[plannedRow(t, tier, change)] = string(change.Action)
+			groups[plannedRow(t, tier, change)] = group.Kind
 		}
 	}
 	rows := map[string]string{
-		"firestore:database/" + liveNames(t).Database():                                provider.StackGroupKind,
-		"storage:bucket/" + liveNames(t).UntaggedTierBucket(tier, naming.StorageState): provider.StackGroupKind,
-		"storage:bucket/" + liveNames(t).UntaggedTierBucket(tier, naming.StorageEdge):  provider.StackGroupKind,
-		"storage:bucket/" + liveNames(t).UntaggedTierBucket(tier, naming.StorageCache): provider.StackGroupKind,
-		"kms:keyring/" + liveNames(t).KeyRing():                                        provider.StackGroupKind,
-		"kms:key/" + string(tier):                                                      provider.StackGroupKind,
-		"secretmanager:secret/" + liveNames(t).PassphraseSecret(tier):                  provider.ParameterGroupKind,
-		"iam:serviceaccount/" + liveNames(t).EnvSourceSyncAccount(tier):                provider.StackGroupKind,
+		"firestore:database/" + liveNames(t).Database():                            provider.StackGroupKind,
+		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageState): provider.StackGroupKind,
+		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageEdge):  provider.StackGroupKind,
+		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageCache): provider.StackGroupKind,
+		"kms:keyring/" + liveNames(t).KeyRing():                                    provider.StackGroupKind,
+		"kms:key/" + string(tier):                                                  provider.StackGroupKind,
+		"secretmanager:secret/" + liveNames(t).PassphraseSecret(tier):              provider.ParameterGroupKind,
+		"iam:serviceaccount/" + liveNames(t).EnvSourceSyncAccount(tier):            provider.StackGroupKind,
 	}
 	if !emulated() {
 		rows["artifactregistry:repository/"+liveNames(t).Repository(tier)] = provider.StackGroupKind
@@ -235,8 +237,8 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 
 	t.Setenv(provider.NamespaceEnvVar, namesOf(t, p).Namespace().String()+"-beside")
 	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
-	if namesOf(t, beside).UntaggedTierBucket(tier, naming.StorageState) == namesOf(t, p).UntaggedTierBucket(tier, naming.StorageState) {
-		t.Fatalf("both namespaces name the state bucket %s, and this test turns on them naming different ones", namesOf(t, beside).UntaggedTierBucket(tier, naming.StorageState))
+	if namesOf(t, beside).TierBucketStem(tier, naming.StorageState) == namesOf(t, p).TierBucketStem(tier, naming.StorageState) {
+		t.Fatalf("both namespaces name the state bucket %s, and this test turns on them naming different ones", namesOf(t, beside).TierBucketStem(tier, naming.StorageState))
 	}
 
 	ctx := context.Background()
@@ -369,7 +371,7 @@ func interrupt(t *testing.T, p *gcp.Provider, tier environment.Tier) {
 	}
 	t.Cleanup(func() { client.Close() })
 
-	writer := client.Bucket(liveTierBucket(t, client, tier, naming.StorageState)).Object(bootstrap.StampObject).NewWriter(ctx)
+	writer := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object(bootstrap.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(`{"state":"applying","writer":"live-suite","digest":"halfway"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +392,7 @@ func TestLiveAStateBucketStoringAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	}
 	defer client.Close()
 
-	object := client.Bucket(liveTierBucket(t, client, tier, naming.StorageState)).Object(".pulumi/stacks/ocel/shop.json")
+	object := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object(".pulumi/stacks/ocel/shop.json")
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write([]byte("{}")); err != nil {
 		t.Fatal(err)
@@ -596,7 +598,7 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
 	defer client.Close()
-	if err := client.Bucket(liveTierBucket(t, client, tier, naming.StorageCache)).Delete(ctx); err != nil {
+	if err := client.Bucket(liveTierBucket(t, tier, naming.StorageCache)).Delete(ctx); err != nil {
 		t.Fatalf("delete the cache bucket out of band: %v", err)
 	}
 
@@ -694,7 +696,7 @@ func stamped(t *testing.T, tier environment.Tier, body string) {
 	}
 	defer client.Close()
 
-	writer := client.Bucket(liveTierBucket(t, client, tier, naming.StorageState)).Object(bootstrap.StampObject).NewWriter(ctx)
+	writer := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object(bootstrap.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(body)); err != nil {
 		t.Fatal(err)
 	}
@@ -863,12 +865,12 @@ func TestLiveTheEdgeBucketIsRemovedSlowlyBecauseItIsEmptiedFirst(t *testing.T) {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
 	rows := rowsOf(t, plan)
-	edge := rows["storage:bucket/"+liveNames(t).UntaggedTierBucket(tier, naming.StorageEdge)]
+	edge := rows["storage:bucket/"+liveTierBucket(t, tier, naming.StorageEdge)]
 	if edge.Action != provider.ActionDelete || !edge.Slow {
 		t.Errorf("PlanRemove() shows the edge bucket as %q (slow %v), want a delete marked slow: every object in it is deleted one by one first",
 			edge.Action, edge.Slow)
 	}
-	state := rows["storage:bucket/"+liveNames(t).UntaggedTierBucket(tier, naming.StorageState)]
+	state := rows["storage:bucket/"+liveTierBucket(t, tier, naming.StorageState)]
 	if state.Slow {
 		t.Error("PlanRemove() marks the state bucket slow, and it is refused unless it is already empty")
 	}

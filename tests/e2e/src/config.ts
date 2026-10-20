@@ -21,7 +21,6 @@ type PlannedCell = Pick<CellUnderTest, "name" | "slug" | "fixture" | "variant">;
 
 import { emulatorEndpoint } from "./targets/aws/world";
 import { frontNamed } from "./targets/front";
-import { gcpSlug } from "./targets/gcp/names";
 
 export const JOURNEY_TS = "ocel.journey.config.ts";
 export const JOURNEY_JSON = "ocel.journey.json";
@@ -134,7 +133,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         (cell.fixture.previews?.gcp ?? []).some((one) => one.name === cell.variant.name);
       return {
         target,
-        slug: gcpSlug(cell, env),
+        slug: cell.slug,
         ...cell.fixture.configOn?.gcp,
         ...cell.variant.config,
         ...(hostnamed ? { dns: "cloudflare" as const, hostnames: hostnamesOf(cell, zone) } : {}),

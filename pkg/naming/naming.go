@@ -1,11 +1,8 @@
 package naming
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -14,10 +11,6 @@ const (
 	WordSeparator  = "-"
 	PathSeparator  = "/"
 	KeySeparator   = "#"
-
-	truncationMarker = "-x"
-	truncationDigits = 8
-	truncationLen    = len(truncationMarker) + truncationDigits
 )
 
 var (
@@ -95,21 +88,6 @@ func Underscore(value string) string {
 	return strings.ReplaceAll(Sanitize(value), WordSeparator, "_")
 }
 
-type Segment struct {
-	Value    string
-	Priority int
-}
-
-func Fixed(value string) Segment {
-	return Segment{Value: value, Priority: fixedPriority}
-}
-
-func Compressible(value string) Segment {
-	return Segment{Value: value, Priority: 0}
-}
-
-const fixedPriority = 1 << 20
-
 func Join(separator string, values ...string) string {
 	parts := make([]string, 0, len(values))
 	for _, v := range values {
@@ -121,61 +99,6 @@ func Join(separator string, values ...string) string {
 	return strings.Join(parts, separator)
 }
 
-func Fit(max int, separator string, segments ...Segment) string {
-	values := make([]string, len(segments))
-	for i, s := range segments {
-		if s.Value == "" {
-			continue
-		}
-		values[i] = Sanitize(s.Value)
-	}
-	full := strings.Join(nonEmpty(values), separator)
-	if len(full) <= max {
-		return full
-	}
-
-	marker := truncationMarker + digest(full)
-	budget := max - len(marker)
-	for _, i := range trimOrder(segments) {
-		if length(values, separator) <= budget {
-			break
-		}
-		over := length(values, separator) - budget
-		keep := len(values[i]) - over
-		if keep < 1 {
-			keep = 0
-		}
-		values[i] = strings.TrimRight(values[i][:keep], WordSeparator)
-	}
-	trimmed := strings.Join(nonEmpty(values), separator)
-	if len(trimmed) > budget {
-		if budget < 0 {
-			budget = 0
-		}
-		trimmed = strings.TrimRight(trimmed[:budget], WordSeparator)
-	}
-	return trimmed + marker
-}
-
-func trimOrder(segments []Segment) []int {
-	order := make([]int, len(segments))
-	for i := range order {
-		order[i] = i
-	}
-	sort.SliceStable(order, func(a, b int) bool {
-		x, y := order[a], order[b]
-		if segments[x].Priority != segments[y].Priority {
-			return segments[x].Priority < segments[y].Priority
-		}
-		return x > y
-	})
-	return order
-}
-
-func length(values []string, separator string) int {
-	return len(strings.Join(nonEmpty(values), separator))
-}
-
 func nonEmpty(values []string) []string {
 	out := make([]string, 0, len(values))
 	for _, v := range values {
@@ -184,9 +107,4 @@ func nonEmpty(values []string) []string {
 		}
 	}
 	return out
-}
-
-func digest(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])[:truncationDigits]
 }

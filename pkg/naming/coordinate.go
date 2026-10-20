@@ -101,10 +101,6 @@ func (c Coordinate) Stack() StackName {
 	return AppStack(c.Env, c.App, c.Release)
 }
 
-func ResourceID(kind Kind, name string, parts ...string) string {
-	return Join(WordSeparator, append([]string{string(kind), name}, parts...)...)
-}
-
 func (c Coordinate) Description(detail string) string {
 	head := strings.Join(nonEmpty([]string{c.Project, c.Env, c.App}), " / ")
 	if detail == "" {

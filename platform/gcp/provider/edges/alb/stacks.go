@@ -21,12 +21,11 @@ type Target struct {
 }
 
 func OriginHostStack(hostname string, tier environment.Tier) string {
-	return naming.Fit(maxResourceName, naming.WordSeparator,
-		naming.Fixed(string(Kind)),
-		naming.Fixed("origin"),
-		naming.Fixed(string(tier)),
-		naming.Compressible(naming.SanitizeHost(hostname)),
-	)
+	return naming.TaggedName{
+		Head:     dashed(string(Kind), originScope, naming.TierWord(tier)),
+		Readable: naming.SanitizeHost(hostname),
+		Tag:      naming.HashTag(string(tier), hostname),
+	}.Fit(maxResourceName)
 }
 
 func (t Target) Name() string {
@@ -119,13 +118,13 @@ func loadBalancerOf(outputs map[string]string) LoadBalancer {
 }
 
 func LoadBalancerStack(tier environment.Tier) string {
-	return dashed(string(Kind), "front", string(tier))
+	return dashed(string(Kind), "front", naming.TierWord(tier))
 }
 
 func ShieldedLoadBalancerStack(tier environment.Tier) string {
-	return dashed(string(Kind), "front", shieldedNameSegment, string(tier))
+	return dashed(string(Kind), "front", shieldedNameSegment, naming.TierWord(tier))
 }
 
 func BindingStack(slug string, tier environment.Tier) string {
-	return dashed(string(Kind), string(tier), naming.Sanitize(slug))
+	return dashed(string(Kind), naming.TierWord(tier), naming.Sanitize(slug))
 }

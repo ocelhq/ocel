@@ -7,7 +7,6 @@ import (
 
 	"google.golang.org/api/artifactregistry/v1"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
@@ -34,7 +33,7 @@ var repositoryKind = KindOps{
 	properties: func(region string, _ Resource) map[string]any {
 		return map[string]any{"location": region, "format": "DOCKER"}
 	},
-	survey: func(ctx context.Context, b Engine, _ environment.Tier, target Resource) (Presence, error) {
+	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		return b.repositoryPresence(ctx, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, _ Survey, target Resource) error {

@@ -1,4 +1,5 @@
 import { HARNESS_PREFIX } from "../../identity";
+import { namespaceField } from "./names";
 import { bearer, type Where } from "./store";
 
 const STORAGE = "https://storage.googleapis.com/storage/v1";
@@ -11,7 +12,7 @@ type Listing = {
 };
 
 export function appBucketPrefix(namespace: string): string {
-  return `${namespace}-app-`;
+  return `${namespaceField(namespace)}-app-`;
 }
 
 export function bucketsIn(body: unknown): AppBucket[] {

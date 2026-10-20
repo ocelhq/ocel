@@ -54,16 +54,16 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 			Note: "every record this project stores, and both tiers keep theirs in it",
 		},
 		{
-			Kind: KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageState), Class: naming.StorageState,
+			Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageState), Class: naming.StorageState,
 			Note: fmt.Sprintf("the state every stack in this tier writes and the stamp saying what this bootstrap is, versioned so a bad write is recoverable for %d days", NoncurrentStateLifetimeDays),
 		},
 		{
-			Kind: KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageEdge), Class: naming.StorageEdge,
+			Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageEdge), Class: naming.StorageEdge,
 			Note: "what this tier's edges and its load balancer may serve: static files, prerendered pages, route tables, edge bundles and image settings",
 		},
 		{
-			Kind: KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageCache), Class: naming.StorageCache,
-			Note: fmt.Sprintf("what only an app's own code reads back, its fetch and use-cache entries, each deleted %d days after its last write", naming.CacheObjectLifetimeDays),
+			Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageCache), Class: naming.StorageCache,
+			Note: fmt.Sprintf("what only an app's own code reads back: its fetch and use-cache entries, each deleted %d days after its last write, and its tag clock, which is kept", naming.CacheObjectLifetimeDays),
 		},
 		{
 			Kind: KindKeyRing, Name: names.KeyRing(), Shared: true,

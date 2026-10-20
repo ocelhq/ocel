@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
@@ -35,19 +36,19 @@ func (p Offers) Program(ctx context.Context, req provider.EdgeProgramRequest) (e
 	if !credentials.hasAssetStoreKey() {
 		return edge.Program{}, notBootstrapped(req.Tier, req.Kind, "no asset-store credential")
 	}
-	buckets, err := c.TierBuckets(ctx, req.Tier)
+	buckets, err := c.TierBuckets(ctx, req.Tier, naming.StorageEdge)
 	if err != nil {
 		return edge.Program{}, err
 	}
 	return edge.Program{
 		Origin: edge.OriginReach{
 			Reach: edge.Reach{Kind: edge.ReachClientCertificate, Certificate: adopted.ClientCertificate.ID},
-			// TODO: serve ISR entries from the store at the edge (HoldsEntries) once the edge
-			// reads with a per-project identity. The asset-store key belongs to one account per
-			// tier and reads the whole edge bucket, so each project's worker can already read
-			// every other project's pages entries.
+			// TODO: the asset-store key is one account per tier that reads the whole edge
+			// bucket, so every project's worker can read every other project's static files,
+			// pages entries and edge bundles. Bind a reader per project to its own prefixes,
+			// then set HoldsEntries so the edge serves pages entries from the store.
 			Store: &edge.OriginStore{
-				URL:             bucket.GoogleStorage + "/" + url.PathEscape(buckets.Edge),
+				URL:             bucket.GoogleStorage + "/" + url.PathEscape(buckets[naming.StorageEdge]),
 				Region:          storeSigningRegion,
 				AccessKeyID:     credentials.AssetStoreAccessKeyID,
 				SecretAccessKey: credentials.AssetStoreSecretAccessKey,

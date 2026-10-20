@@ -19,10 +19,19 @@ import (
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
 
+func servingOf(t *testing.T, named names.Names, ref provider.StackRef, host, image, inlineKeys, pubsubEndpoint string) run.Serving {
+	t.Helper()
+	service, err := named.RealtimeGateway(ref.Project, ref.Name.Env)
+	if err != nil {
+		t.Fatalf("RealtimeGateway() = %v", err)
+	}
+	return realtimeGatewayServing(named, ref, service, host, image, inlineKeys, pubsubEndpoint)
+}
+
 func gatewayService(t *testing.T, host string) *runv2.GoogleCloudRunV2Service {
 	t.Helper()
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
-	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", "", ""))
+	desired, err := run.ServiceOf(servingOf(t, names, googletest.ProductionRef(t), host, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-realtime:abc", "", ""))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -112,7 +121,11 @@ func TestTheGatewayHearsItsSiblingInstancesThroughItsEnvironmentsRealtimeTopic(t
 
 	env := googletest.EnvOf(gatewayService(t, "ocel-shop-prod-realtime-abc123-ew.a.run.app").Template.Containers[0])
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
-	if want := "projects/acme-prod/topics/" + names.RealtimeGateway("shop", "prod"); env[pubsubbus.TopicVar] != want {
+	gateway, err := names.RealtimeGateway("shop", "prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "projects/acme-prod/topics/" + gateway; env[pubsubbus.TopicVar] != want {
 		t.Errorf("%s = %q, want %q", pubsubbus.TopicVar, env[pubsubbus.TopicVar], want)
 	}
 	if endpoint, set := env[pubsubbus.EndpointVar]; set {
@@ -124,7 +137,7 @@ func TestOnTheEmulatorTheGatewayReachesTheEmulatorsPubSub(t *testing.T) {
 	t.Parallel()
 
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
-	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", `{"app":"AAAA"}`, "http://host.docker.internal:4588"))
+	desired, err := run.ServiceOf(servingOf(t, names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", `{"app":"AAAA"}`, "http://host.docker.internal:4588"))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -138,7 +151,7 @@ func TestOnTheEmulatorTheGatewayTakesItsKeysFromItsEnvironmentForWantOfSecretVol
 
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
 	keys := `{"app":"AAAA"}`
-	desired, err := run.ServiceOf(realtimeGatewayServing(names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", keys, "http://host.docker.internal:4588"))
+	desired, err := run.ServiceOf(servingOf(t, names, googletest.ProductionRef(t), "gateway.run.app", "ocel-realtime:abc", keys, "http://host.docker.internal:4588"))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}

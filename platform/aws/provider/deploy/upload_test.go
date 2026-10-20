@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 )
 
 const bucketObjectType = "aws:s3/bucketObjectv2:BucketObjectv2"
@@ -48,10 +48,10 @@ func TestAFunctionTheReleaseShipsIsAnEngineResourceInThePlan(t *testing.T) {
 		t.Fatalf("Plan() of a release shipping a function = %v", err)
 	}
 
-	want := naming.ResourceID(functioncode.Kind, "fn--web--entry")
+	want := string(naming.ObjectFunction) + naming.PathSeparator
 	for _, group := range planned.Groups {
 		for _, change := range group.Changes {
-			if change.Kind == bucketObjectType && change.Name == want {
+			if change.Kind == bucketObjectType && strings.HasPrefix(change.Name, want) {
 				return
 			}
 		}
@@ -68,8 +68,8 @@ func TestAFunctionTheReleaseShipsIsAnEngineResourceInTheApply(t *testing.T) {
 		t.Fatalf("Provision() of a release shipping a function = %v", err)
 	}
 
-	want := bucketObjectType + "::" + naming.ResourceID(functioncode.Kind, "fn--web--entry")
-	if !slices.Contains(watcher.names(), want) {
+	want := bucketObjectType + "::" + string(naming.ObjectFunction) + naming.PathSeparator
+	if !slices.ContainsFunc(watcher.names(), func(name string) bool { return strings.HasPrefix(name, want) }) {
 		t.Errorf("the apply declared %v, want %q: the engine ships the function package, never the deploy behind its back", watcher.names(), want)
 	}
 }

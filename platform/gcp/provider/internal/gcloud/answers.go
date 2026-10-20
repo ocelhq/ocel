@@ -14,3 +14,5 @@ func Absent(err error) bool {
 }
 
 func Taken(err error) bool { return googleretry.AnsweredCode(err) == http.StatusConflict }
+
+func Forbidden(err error) bool { return googleretry.AnsweredCode(err) == http.StatusForbidden }

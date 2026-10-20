@@ -8,7 +8,6 @@ import (
 
 	"google.golang.org/api/iam/v1"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
@@ -21,7 +20,7 @@ var roleKind = KindOps{
 	noun:          "custom role",
 	terraform:     cost.ProjectCustomRoleType,
 	emulatorSkips: true,
-	survey: func(ctx context.Context, b Engine, _ environment.Tier, target Resource) (Presence, error) {
+	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		role, ok := FindCustomRole(b.Clients.Names, target.Name)
 		if !ok {
 			return Presence{}, fmt.Errorf("no custom role is named %s", target.Name)

@@ -152,6 +152,38 @@ func TestABucketIsNotFoundInTheBucketOfADeclaredNameItStartsWith(t *testing.T) {
 	}
 }
 
+func uploadsIn(env string) resources.ProvisionRequest {
+	return resources.ProvisionRequest{
+		Ref:      provider.StackRef{Project: "acme-storefront-web", Tier: environment.TierPreview, Name: naming.InfraStack(env)},
+		Resource: provider.Resource{Name: "uploads", Declared: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
+	}
+}
+
+func TestTwoEnvsWhoseNamesAreCutToTheSameTextEachGetABucketOfTheirOwn(t *testing.T) {
+	p, server := servingStorage(t)
+	first, err := p.bucketHooks().Provision(context.Background(), uploadsIn("feature-login-page-v1"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if action, _, err := p.bucketHooks().Plan(context.Background(), uploadsIn("feature-login-page-v2"), nil); err != nil || action != provider.ActionCreate {
+		t.Errorf("PlanBucket() of v2 = %s, %v, want %s: v2 has no bucket yet", action, err, provider.ActionCreate)
+	}
+	second, err := p.bucketHooks().Provision(context.Background(), uploadsIn("feature-login-page-v2"), nil)
+	if err != nil {
+		t.Fatalf("ProvisionBucket() = %v", err)
+	}
+	if first.Properties[provider.PropertyBucket] == second.Properties[provider.PropertyBucket] || len(server.created) != 2 {
+		t.Errorf("v1 bound %s and v2 bound %s, with %d buckets created, want a bucket each: destroying v2 would empty v1's",
+			first.Properties[provider.PropertyBucket], second.Properties[provider.PropertyBucket], len(server.created))
+	}
+
+	again, err := p.bucketHooks().Provision(context.Background(), uploadsIn("feature-login-page-v1"), nil)
+	if err != nil || again.Properties[provider.PropertyBucket] != first.Properties[provider.PropertyBucket] {
+		t.Errorf("redeploying v1 bound %v, %v, want the bucket it made first, %s", again.Properties, err, first.Properties[provider.PropertyBucket])
+	}
+}
+
 func TestABucketNameAnotherAccountHoldsIsRefusedWithWhatToRename(t *testing.T) {
 	p, server := servingStorage(t)
 	server.takenElsewhere = true
@@ -160,6 +192,11 @@ func TestABucketNameAnotherAccountHoldsIsRefusedWithWhatToRename(t *testing.T) {
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), "uploads") {
 		t.Fatalf("ProvisionBucket() over a name taken elsewhere = %v, want an %s refusal naming the bucket to rename", err, refusal.CodeInvalid)
+	}
+
+	server.takenElsewhere = false
+	if _, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil); err != nil || len(server.created) != 1 {
+		t.Errorf("the next deploy's ProvisionBucket() = %v with %d buckets created, want one bucket made under a new name", err, len(server.created))
 	}
 }
 

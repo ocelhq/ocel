@@ -48,7 +48,7 @@ func TestLiveACronTaskIsACloudSchedulerJobPublishingToItsTopic(t *testing.T) {
 	if err := topology.Ensure(context.Background(), clients); err != nil {
 		t.Fatalf("Ensure() over the schedule it made = %v, want it kept", err)
 	}
-	path := "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + names.ScheduleJob("digest")
+	path := "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + topicOf(t, names, "digest")
 	job, status := readJob(t, endpoint, path)
 	if status != http.StatusOK {
 		t.Fatalf("the schedule of digest answered %d, want it made", status)
@@ -56,7 +56,7 @@ func TestLiveACronTaskIsACloudSchedulerJobPublishingToItsTopic(t *testing.T) {
 	if job.Schedule != "*/5 * * * *" || job.TimeZone != "Etc/UTC" {
 		t.Errorf("the schedule fires at %q in %q, want the task's cron in UTC", job.Schedule, job.TimeZone)
 	}
-	if job.PubsubTarget.TopicName != "projects/"+clients.Project+"/topics/"+names.Topic("digest") || job.PubsubTarget.Attributes[topics.ScheduleAttribute] == "" {
+	if job.PubsubTarget.TopicName != "projects/"+clients.Project+"/topics/"+topicOf(t, names, "digest") || job.PubsubTarget.Attributes[topics.ScheduleAttribute] == "" {
 		t.Errorf("the schedule publishes to %s with %v, want the digest topic marked as scheduled", job.PubsubTarget.TopicName, job.PubsubTarget.Attributes)
 	}
 
@@ -87,11 +87,11 @@ func TestLiveATaskThatStopsRunningOnAScheduleLosesItsJob(t *testing.T) {
 	if err := unscheduled.RemoveDropped(context.Background(), clients, scheduled); err != nil {
 		t.Fatalf("RemoveDropped() after digest dropped its cron = %v", err)
 	}
-	path := "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + names.ScheduleJob("digest")
+	path := "projects/" + clients.Project + "/locations/" + clients.Region + "/jobs/" + topicOf(t, names, "digest")
 	if _, status := readJob(t, endpoint, path); status != http.StatusNotFound {
 		t.Errorf("the schedule of digest answered %d after its cron was dropped, want it gone", status)
 	}
-	if status := readTopicStatus(t, endpoint, clients.Project, names.Topic("digest")); status != http.StatusOK {
+	if status := readTopicStatus(t, endpoint, clients.Project, topicOf(t, names, "digest")); status != http.StatusOK {
 		t.Errorf("the digest topic answered %d, want it kept: the task is still declared", status)
 	}
 }

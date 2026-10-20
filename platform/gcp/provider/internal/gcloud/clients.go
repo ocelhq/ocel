@@ -28,6 +28,7 @@ import (
 	"google.golang.org/api/serviceusage/v1"
 	sqladmin "google.golang.org/api/sqladmin/v1"
 
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -50,6 +51,7 @@ type Clients struct {
 	Region      string
 	Endpoint    string
 	TagEndpoint string
+	Records     records.Store
 
 	workload      Memo[*ports.Clients]
 	storage       Memo[*storage.Client]
@@ -72,7 +74,7 @@ type Clients struct {
 	logs          Memo[*logging.Client]
 	numberLock    sync.Mutex
 	projectNumber int64
-	tierBuckets   tierBucketsFound
+	tierBuckets   tierBucketsRead
 }
 
 func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, error)) (T, error) {

@@ -93,7 +93,7 @@ func TestTwoAppsInOneProjectRunAsDifferentAccounts(t *testing.T) {
 		t.Fatalf("ensureAppAccount(api) = %v", err)
 	}
 
-	if web == api || web != c.AppAccountEmail(environment.TierProduction, "shop", "production", "web") || api != c.AppAccountEmail(environment.TierProduction, "shop", "production", "api") {
+	if web == api || web != c.AppAccountEmail("shop", "production", "web") || api != c.AppAccountEmail("shop", "production", "api") {
 		t.Errorf("web runs as %q and api as %q, want an account each named for its own app", web, api)
 	}
 	if len(server.Created) != 2 {
@@ -133,7 +133,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			if err := deploy(p, function); err != nil {
 				t.Fatalf("deploying %s = %v", name, err)
 			}
-			want := p.resolved.AppAccountEmail(environment.TierProduction, "shop", "production", "api")
+			want := p.resolved.AppAccountEmail("shop", "production", "api")
 			if len(server.Created) == 0 {
 				t.Fatalf("%s created no service", name)
 			}
@@ -274,7 +274,7 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	if _, touched := server.AccountPolicies[tierAccount]; touched {
 		t.Errorf("the policy of %s was written, and no account but the app's own is acted as", tierAccount)
 	}
-	topic := "/v1/projects/acme-prod/topics/" + topic.Names(c.Names, spec.Ref).Topic("resize")
+	topic := "/v1/projects/acme-prod/topics/" + topicNamed(t, topic.Names(c.Names, spec.Ref), "resize")
 	published := false
 	for _, binding := range topicBindingsOf(server.TopicPolicies[topic]) {
 		published = published || binding.Role == "roles/pubsub.publisher" && slices.Contains(binding.Members, member)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
@@ -35,7 +34,7 @@ type KindOps struct {
 	emulatorKeeps string
 	parameter     bool
 
-	survey  func(ctx context.Context, b Engine, tier environment.Tier, target Resource) (Presence, error)
+	survey  func(ctx context.Context, b Engine, read Survey, target Resource) (Presence, error)
 	Make    func(ctx context.Context, b Engine, read Survey, target Resource) error
 	mend    func(ctx context.Context, b Engine, read Survey, target Resource) error
 	removal func(read Survey, target Resource) Removal

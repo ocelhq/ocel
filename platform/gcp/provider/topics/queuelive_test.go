@@ -74,7 +74,7 @@ func TestLiveAMessageDueLaterWaitsInCloudTasksAsAPublishOfItselfAtItsDueTime(t *
 	if !delay.GetScheduleTime().AsTime().Equal(due) {
 		t.Errorf("the delay task is scheduled for %v, want %v", delay.GetScheduleTime().AsTime(), due)
 	}
-	if want := topics.PublishURL + "/v1/" + topics.TopicPath(queue.Clients.Project, queue.Names.Topic("resize")) + ":publish"; delay.GetHttpRequest().GetUrl() != want {
+	if want := topics.PublishURL + "/v1/" + topics.TopicPath(queue.Clients.Project, topicOf(t, queue.Names, "resize")) + ":publish"; delay.GetHttpRequest().GetUrl() != want {
 		t.Errorf("the delay task posts to %s, want %s", delay.GetHttpRequest().GetUrl(), want)
 	}
 	var body pubsub.PublishRequest

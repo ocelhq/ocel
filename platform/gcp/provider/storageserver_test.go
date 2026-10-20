@@ -28,6 +28,8 @@ type storageServer struct {
 	removed  []string
 	writes   []string
 
+	listed int
+
 	takenElsewhere bool
 	staleSets      int
 }
@@ -54,6 +56,7 @@ func (s *storageServer) serve() http.HandlerFunc {
 		case r.Method == http.MethodPost && path == "b":
 			s.create(w, r)
 		case r.Method == http.MethodGet && path == "b":
+			s.listed++
 			s.listBuckets(w, r.URL.Query().Get("prefix"))
 		case len(parts) == 2 && parts[0] == "b":
 			s.bucket(w, r, parts[1])
@@ -77,7 +80,7 @@ func (s *storageServer) create(w http.ResponseWriter, r *http.Request) {
 	if bucket == nil {
 		return
 	}
-	if s.takenElsewhere {
+	if _, held := s.buckets[bucket.Name]; s.takenElsewhere || held {
 		googletest.Conflicted(w, "Your previous request to create the named bucket succeeded and you already own it.")
 		return
 	}
@@ -88,6 +91,10 @@ func (s *storageServer) create(w http.ResponseWriter, r *http.Request) {
 
 func (s *storageServer) bucket(w http.ResponseWriter, r *http.Request, name string) {
 	current, found := s.buckets[name]
+	if !found && s.takenElsewhere {
+		forbidden(w)
+		return
+	}
 	if !found {
 		missingObject(w)
 		return
@@ -182,6 +189,11 @@ func missingObject(w http.ResponseWriter) {
 	w.Write([]byte(`{"error":{"code":404,"message":"The specified bucket does not exist."}}`))
 }
 
+func forbidden(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusForbidden)
+	w.Write([]byte(`{"error":{"code":403,"message":"The caller does not have storage.buckets.get access to the Google Cloud Storage bucket."}}`))
+}
+
 func (s *storageServer) holding(bucket *raw.Bucket, objects ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -190,6 +202,12 @@ func (s *storageServer) holding(bucket *raw.Bucket, objects ...string) {
 	_ = json.Unmarshal(encoded, &kept)
 	s.buckets[bucket.Name] = &kept
 	s.objects[bucket.Name] = objects
+}
+
+func (s *storageServer) listings() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listed
 }
 
 func (s *storageServer) granted(bucket string) *raw.Policy {

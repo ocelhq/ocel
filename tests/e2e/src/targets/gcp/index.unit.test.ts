@@ -31,7 +31,7 @@ describe("cellOfSlug", () => {
 describe("gcpSweepOverlay", () => {
   const env = { OCEL_NAMESPACE: "ocel-nightly" } as NodeJS.ProcessEnv;
 
-  it("names the deploy the slug it was deployed under, not the one the run id spells", () => {
+  it("names the deploy the slug the run id spells, which it was deployed under", () => {
     for (const cell of cells) {
       const runId = "18746093211";
       const slug = projectSlug(cell.name, runId);
@@ -47,7 +47,7 @@ describe("gcpSweepOverlay", () => {
       };
       const overlay = gcpSweepOverlay(cell, slug, env);
       expect(overlay).toEqual(overlayFor(deployed, "gcp", env));
-      expect(overlay.slug).not.toBe(slug);
+      expect(overlay.slug).toBe(slug);
     }
   });
 });

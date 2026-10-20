@@ -8,20 +8,19 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 const bucketResourcePrefix = "projects/_/buckets/"
 
-func ObjectKindsCondition(title string, buckets names.TierBuckets, scope naming.StorageScope, kinds ...naming.ObjectKind) (*policy.Condition, error) {
+func ObjectKindsCondition(title string, buckets naming.Buckets, scope naming.StorageScope, kinds ...naming.ObjectKind) (*policy.Condition, error) {
 	starts := make([]string, len(kinds))
 	for i, kind := range kinds {
 		prefix, err := scope.Prefix(kind)
 		if err != nil {
 			return nil, err
 		}
-		objects := bucketResourcePrefix + buckets.Of(kind.Class()) + "/objects/" + prefix
+		objects := bucketResourcePrefix + buckets.Holding(kind) + "/objects/" + prefix
 		starts[i] = fmt.Sprintf("resource.name.startsWith(%q)", objects)
 	}
 	return &policy.Condition{Title: title, Expression: strings.Join(starts, " || ")}, nil
@@ -32,6 +31,14 @@ func BucketCondition(title, bucket string) *policy.Condition {
 	return &policy.Condition{
 		Title:      title,
 		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)", name, name+"/objects/"),
+	}
+}
+
+func ListedKindCondition(title, bucket string, kind naming.ObjectKind) *policy.Condition {
+	name := bucketResourcePrefix + bucket
+	return &policy.Condition{
+		Title:      title,
+		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)", name, name+"/objects/"+string(kind)+"/"),
 	}
 }
 

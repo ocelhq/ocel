@@ -14,7 +14,7 @@ import (
 func (p *Provider) components() component.Registry {
 	return component.Registry{
 		postgres.New(p.openClients, p.KeyValues(), p.Cipher()).Component(),
-		bucket.New(p.openClients).Component(),
+		bucket.New(p.openClients, p.KeyValues()).Component(),
 		kv.New(p.openClients, gcloud.NewMemorystore(p.endpoint, p.tokens)).Component(),
 		p.topicHooks().Component(),
 		p.realtimeHooks().Component(),

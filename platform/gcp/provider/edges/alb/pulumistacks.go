@@ -80,11 +80,11 @@ func (s PulumiStacks) opened(ctx context.Context, target Target) (*pulumi.Automa
 	if err != nil {
 		return nil, provider.StackRef{}, err
 	}
-	buckets, err := clients.TierBuckets(ctx, target.Tier)
+	buckets, err := clients.TierBuckets(ctx, target.Tier, naming.StorageState)
 	if err != nil {
 		return nil, provider.StackRef{}, err
 	}
-	config, ref := s.config(clients, buckets.State, target, passphrase)
+	config, ref := s.config(clients, buckets[naming.StorageState], target, passphrase)
 	return pulumi.New(config), ref, nil
 }
 

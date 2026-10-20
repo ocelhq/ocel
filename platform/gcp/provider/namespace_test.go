@@ -160,6 +160,15 @@ func longNames(t *testing.T) names.Names {
 	return namesOf(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
 }
 
+func gatewayOf(t *testing.T, named names.Names, project, env string) string {
+	t.Helper()
+	gateway, err := named.RealtimeGateway(project, env)
+	if err != nil {
+		t.Fatalf("RealtimeGateway(%q, %q) = %v", project, env, err)
+	}
+	return gateway
+}
+
 func TestAGatewayServiceFitsCloudRunWhateverItsProjectAndEnvironmentAreCalled(t *testing.T) {
 	names := longNames(t)
 
@@ -167,7 +176,7 @@ func TestAGatewayServiceFitsCloudRunWhateverItsProjectAndEnvironmentAreCalled(t 
 		{"shop", "prod"},
 		{"a-project-slug-that-runs-on-and-on", "feature-branch-with-a-very-long-name"},
 	} {
-		service := names.RealtimeGateway(scope[0], scope[1])
+		service := gatewayOf(t, names, scope[0], scope[1])
 		if len(service) > 49 || !cloudRunName.MatchString(service) {
 			t.Errorf("RealtimeGateway(%q, %q) = %q (%d characters), which Cloud Run will not take as a service name of at most 49", scope[0], scope[1], service, len(service))
 		}
@@ -180,10 +189,10 @@ func TestAGatewayServiceFitsCloudRunWhateverItsProjectAndEnvironmentAreCalled(t 
 func TestEachEnvironmentHasAGatewayAndKeysOfItsOwn(t *testing.T) {
 	names := longNames(t)
 
-	if names.RealtimeGateway("shop", "prod") == names.RealtimeGateway("shop", "pr-7") {
+	if gatewayOf(t, names, "shop", "prod") == gatewayOf(t, names, "shop", "pr-7") {
 		t.Error("two environments share one gateway, and a preview's keys would be trusted in production")
 	}
-	if names.RealtimeGateway("shop-prod", "x") == names.RealtimeGateway("shop", "prod-x") {
+	if gatewayOf(t, names, "shop-prod", "x") == gatewayOf(t, names, "shop", "prod-x") {
 		t.Error("two scopes whose dashes fall differently share one gateway")
 	}
 	if names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod") == names.RealtimeKeysSecret(environment.TierProduction, "shop", "pr-7") {
@@ -193,7 +202,7 @@ func TestEachEnvironmentHasAGatewayAndKeysOfItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if names.RealtimeGateway("shop", "prod") == app {
+	if gatewayOf(t, names, "shop", "prod") == app {
 		t.Error("the gateway is named as an app called realtime would be, and one would replace the other")
 	}
 }
@@ -263,22 +272,25 @@ func TestEachTierRunsItsGatewaysAsAnAccountOfItsOwn(t *testing.T) {
 	}
 }
 
-func TestAnAppsAccountIsNamedForItsNamespacesAppFenceAndAHashOfItsTierProjectEnvironmentAndApp(t *testing.T) {
+func TestAnAppsAccountIsNamedForItsNamespacesAppFenceAndAHashOfItsProjectEnvironmentAndApp(t *testing.T) {
+	if account := namesOf(t, testProvider(t)).AppAccount("shop", stackrecords.ProductionEnv, "web"); account != "ocel-app-550f4d4c26" {
+		t.Errorf("AppAccount() = %q, want ocel-app- and the first ten hex digits of the digest over ocel--shop--prod--web", account)
+	}
+
 	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
 	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
-	account := names.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
+	account := names.AppAccount("shop", stackrecords.ProductionEnv, "web")
 	if !regexp.MustCompile(`^aaaaa-[0-9a-f]{6}-app-[0-9a-f]{10}$`).MatchString(account) || !accountID.MatchString(account) {
 		t.Errorf("AppAccount() = %q, want the namespace's app fence and ten hex characters in the 30 IAM takes", account)
 	}
-	if email := names.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web"); email != account+"@acme-prod.iam.gserviceaccount.com" {
+	if email := names.AppAccountEmail("shop", stackrecords.ProductionEnv, "web"); email != account+"@acme-prod.iam.gserviceaccount.com" {
 		t.Errorf("AppAccountEmail() = %q, want the account in the project's own domain", email)
 	}
 	others := map[string]string{
-		"another tier":        names.AppAccount(environment.TierPreview, "shop", stackrecords.ProductionEnv, "web"),
-		"another project":     names.AppAccount(environment.TierProduction, "blog", stackrecords.ProductionEnv, "web"),
-		"another environment": names.AppAccount(environment.TierProduction, "shop", "pr-7", "web"),
-		"another app":         names.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "api"),
+		"another project":     names.AppAccount("blog", stackrecords.ProductionEnv, "web"),
+		"another environment": names.AppAccount("shop", "pr-7", "web"),
+		"another app":         names.AppAccount("shop", stackrecords.ProductionEnv, "api"),
 		"the realtime":        names.RealtimeAccount(environment.TierProduction),
 		"the push":            names.PushAccount(environment.TierProduction),
 		"the env source sync": names.EnvSourceSyncAccount(environment.TierProduction),

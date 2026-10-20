@@ -20,8 +20,8 @@ const reasonUngranted = "it exists, and the credential bootstrapping here may no
 var accountKind = KindOps{
 	noun:      "service account",
 	terraform: cost.ServiceAccountType,
-	survey: func(ctx context.Context, b Engine, tier environment.Tier, target Resource) (Presence, error) {
-		return b.AccountPresence(ctx, tier, target.Name)
+	survey: func(ctx context.Context, b Engine, read Survey, target Resource) (Presence, error) {
+		return b.AccountPresence(ctx, read.Tier, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
 		return b.MakeAccount(ctx, read, target.Name)

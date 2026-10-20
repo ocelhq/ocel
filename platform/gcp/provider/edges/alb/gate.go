@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const (
@@ -47,7 +48,7 @@ type gateSpec struct {
 }
 
 func GateStack(tier environment.Tier) string {
-	return dashed(string(Kind), "gate", string(tier))
+	return dashed(string(Kind), "gate", naming.TierWord(tier))
 }
 
 func gateProgram(spec gateSpec) Program {

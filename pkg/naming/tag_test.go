@@ -12,6 +12,12 @@ func TestHashTagIsTheHeadOfTheDigestOverTheJoinedFields(t *testing.T) {
 	}
 }
 
+func TestHashDigitsAreAsManyHexDigitsOfTheSameDigestAsTheHashTagHeads(t *testing.T) {
+	if got, want := naming.HashDigits(10, "ocel", "acme", "prod", "", "db", "main"), "a65fdeceb0"; got != want {
+		t.Errorf("HashDigits(10) = %q, want %q", got, want)
+	}
+}
+
 func TestCoordinateHashTagCoversNamespaceProjectEnvAppKindAndName(t *testing.T) {
 	c := naming.Coordinate{Project: "acme", Env: "prod", App: "web", Kind: naming.KindFunction, Name: "api", Release: naming.NewReleaseToken("b1", "")}
 	if got, want := c.HashTag("ocel"), "e0a849"; got != want {

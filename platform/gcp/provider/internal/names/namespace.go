@@ -1,8 +1,6 @@
 package names
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"regexp"
 	"strings"
 
@@ -39,7 +37,7 @@ const (
 
 	maxAppServiceNameLength = maxTaggedLabelLength - revisionTagLength
 	serviceHashLength       = 6
-	AccountHashLen          = 10
+	AccountHashDigits       = 10
 )
 
 var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
@@ -54,7 +52,7 @@ func (n Names) Namespace() provider.Namespace { return n.namespace }
 func (n Names) Project() string { return n.project }
 
 func (n Names) Repository(tier environment.Tier) string {
-	return n.mustOcelName(naming.TierWord(tier), repositoryWord)
+	return n.ocelName(tier, repositoryWord)
 }
 
 func (n Names) RepositoryPath(region string, tier environment.Tier) string {
@@ -82,26 +80,26 @@ func (n Names) CDNPurgeRolePath() string {
 	return "projects/" + n.project + "/roles/" + n.CDNPurgeRole()
 }
 
-func (n Names) AppAccount(tier environment.Tier, project, env, app string) string {
-	return n.AppFence() + truncatedHash(AccountHashLen, string(n.namespace), string(tier), project, env, app)
+func (n Names) AppAccount(project, env, app string) string {
+	return n.AppFence() + naming.HashDigits(AccountHashDigits, string(n.namespace), project, env, app)
 }
 
-func (n Names) AppAccountEmail(tier environment.Tier, project, env, app string) string {
-	return n.AppAccount(tier, project, env, app) + "@" + n.project + AccountDomain
+func (n Names) AppAccountEmail(project, env, app string) string {
+	return n.AppAccount(project, env, app) + "@" + n.project + AccountDomain
 }
 
 func (n Names) Service(project, env, app, function string) (string, error) {
 	tag := naming.Coordinate{Project: project, Env: env, App: app, Kind: naming.KindFunction, Name: function}.HashTag(string(n.namespace))
-	name := naming.PhysicalName{Project: project, Env: env, Declared: app, Tag: tag}
+	name := naming.PhysicalName{Fence: n.AppFence(), Project: project, Env: env, App: app, Tag: tag}
 	if function != app {
-		name.App, name.Declared = app, images.FunctionRoute(app, function)
+		name.Declared = images.FunctionRoute(app, function)
 	}
-	return n.fitApp(name, maxAppServiceNameLength, "app "+app+"'s function", "Cloud Run service a tagged revision's url is built from")
+	return name.Fit(maxAppServiceNameLength)
 }
 
 func (n Names) WorkerService(project, env, app, worker string) (string, error) {
 	tag := naming.Coordinate{Project: project, Env: env, App: app, Kind: naming.KindWorker, Name: worker}.HashTag(string(n.namespace))
-	return n.fitApp(naming.PhysicalName{Project: project, Env: env, App: app, Declared: worker, Tag: tag}, MaxServiceNameLength, "worker", "Cloud Run service")
+	return naming.PhysicalName{Fence: n.AppFence(), Project: project, Env: env, App: app, Declared: worker, Tag: tag}.Fit(MaxServiceNameLength)
 }
 
 const (
@@ -109,16 +107,19 @@ const (
 	realtimeKeysInfix    = "keys"
 	realtimeSigningInfix = "signing"
 	namespaceSecretSep   = "_"
-	maxReadableSecretID  = 200
+	maxSecretID          = 255
 )
 
-func (n Names) RealtimeGateway(project, env string) string {
-	tag := naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: naming.KindRealtime, Name: realtimeInfix}.HashTag(string(n.namespace))
-	gateway, err := naming.PhysicalName{Fence: n.AppFence(), Project: project, Env: env, Declared: realtimeInfix, Tag: tag}.Fit(MaxServiceNameLength)
-	if err != nil {
-		panic(err)
-	}
-	return gateway
+func (n Names) RealtimeGateway(project, env string) (string, error) {
+	return n.hashTagged(envCoordinate(project, env, naming.KindRealtime, realtimeInfix)).Fit(MaxServiceNameLength)
+}
+
+func envCoordinate(project, env string, kind naming.Kind, declared string) naming.Coordinate {
+	return naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: kind, Name: declared}
+}
+
+func (n Names) hashTagged(c naming.Coordinate) naming.PhysicalName {
+	return c.AppResourceName(string(n.namespace), c.HashTag(string(n.namespace)))
 }
 
 const gateInfix = "gate"
@@ -154,17 +155,15 @@ func (n Names) RealtimeSigningSecret(project, env, resource string) string {
 }
 
 func hashedSecretID(prefix string, readableParts []string, hashed ...string) string {
-	readable := prefix + naming.Join(naming.WordSeparator, readableParts...)
-	readable = strings.TrimRight(readable[:min(len(readable), maxReadableSecretID)], naming.WordSeparator)
-	return readable + naming.WordSeparator + naming.HashTag(hashed...)
-}
-
-func (n Names) tierAccount(tier environment.Tier, word string) string {
-	return n.mustOcelName(naming.TierWord(tier), word)
+	return naming.TaggedName{
+		Head:     strings.TrimSuffix(prefix, naming.WordSeparator),
+		Readable: naming.Join(naming.WordSeparator, readableParts...),
+		Tag:      naming.HashTag(hashed...),
+	}.Fit(maxSecretID)
 }
 
 func (n Names) RealtimeAccount(tier environment.Tier) string {
-	return n.tierAccount(tier, realtimeInfix)
+	return n.ocelName(tier, realtimeInfix)
 }
 
 func (n Names) RealtimeAccountEmail(tier environment.Tier) string {
@@ -174,7 +173,7 @@ func (n Names) RealtimeAccountEmail(tier environment.Tier) string {
 const assetReaderInfix = "assets"
 
 func (n Names) AssetReaderAccount(tier environment.Tier) string {
-	return n.tierAccount(tier, assetReaderInfix)
+	return n.ocelName(tier, assetReaderInfix)
 }
 
 func (n Names) AssetReaderAccountEmail(tier environment.Tier) string {
@@ -183,11 +182,6 @@ func (n Names) AssetReaderAccountEmail(tier environment.Tier) string {
 
 var CloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 
-func truncatedHash(length int, parts ...string) string {
-	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(sum[:])[:length]
-}
-
 const (
 	maxInstanceNameLength = 63
 	MemorystorePolicy     = "memorystore"
@@ -195,48 +189,29 @@ const (
 )
 
 func (n Names) KVInstance(project, env, store string) (string, error) {
-	tag := naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: naming.KindKV, Name: store}.HashTag(string(n.namespace))
-	return n.fitApp(naming.PhysicalName{Project: project, Env: env, Declared: store, Tag: tag}, maxInstanceNameLength, "kv", "Memorystore instance")
+	return n.hashTagged(envCoordinate(project, env, naming.KindKV, store)).Fit(maxInstanceNameLength)
 }
 
 func (n Names) AppFence() string { return naming.AppFence(string(n.namespace)) }
 
 func (n Names) AppBucket(project, env, bucket, tag string) (string, error) {
-	return n.fitApp(naming.PhysicalName{Project: project, Env: env, Declared: bucket, Tag: tag}, maxBucketName, "bucket", "Cloud Storage bucket")
+	return envCoordinate(project, env, naming.KindBucket, bucket).AppResourceName(string(n.namespace), tag).Fit(maxBucketName)
 }
 
 func (n Names) UntaggedAppBucket(project, env, bucket string) (string, error) {
-	return untagged(func(tag string) (string, error) { return n.AppBucket(project, env, bucket, tag) })
+	return envCoordinate(project, env, naming.KindBucket, bucket).AppResourceName(string(n.namespace), "").FitUntagged(maxBucketName)
 }
 
 func (n Names) PostgresInstance(project, env, database, tag string) (string, error) {
-	return n.fitApp(naming.PhysicalName{Project: project, Env: env, Declared: database, Tag: tag}, maxInstanceNameLength, "postgres", "Cloud SQL instance")
+	return envCoordinate(project, env, naming.KindDatabase, database).AppResourceName(string(n.namespace), tag).Fit(maxInstanceNameLength)
 }
 
 func (n Names) UntaggedPostgresInstance(project, env, database string) (string, error) {
-	return untagged(func(tag string) (string, error) { return n.PostgresInstance(project, env, database, tag) })
-}
-
-func untagged(named func(tag string) (string, error)) (string, error) {
-	placeholder := naming.HashTag()
-	name, err := named(placeholder)
-	return strings.TrimSuffix(name, naming.WordSeparator+placeholder), err
-}
-
-func (n Names) fitApp(name naming.PhysicalName, limit int, primitive, service string) (string, error) {
-	name.Fence = n.AppFence()
-	fitted, err := name.Fit(limit)
-	if err != nil {
-		return "", refusal.Refuse(refusal.CodeInvalid,
-			"%s %s would be a %s, and %s takes at most %d characters: %v.\n"+
-				"Name a shorter %s, or a shorter namespace in %s",
-			primitive, name.Declared, service, service, limit, err, primitive, provider.NamespaceEnvVar)
-	}
-	return fitted, nil
+	return envCoordinate(project, env, naming.KindDatabase, database).AppResourceName(string(n.namespace), "").FitUntagged(maxInstanceNameLength)
 }
 
 func (n Names) Network(tier environment.Tier) string {
-	return n.mustOcelName(naming.TierWord(tier), networkWord)
+	return n.ocelName(tier, networkWord)
 }
 
 func (n Names) NetworkPath(tier environment.Tier) string {
@@ -256,11 +231,11 @@ func (n Names) ConnectionPolicy(tier environment.Tier, service string) string {
 const envSourceSyncName = "env-sync"
 
 func (n Names) EnvSourceSync(tier environment.Tier) string {
-	return n.mustOcelName(naming.TierWord(tier), envSourceSyncName)
+	return n.ocelName(tier, envSourceSyncName)
 }
 
 func (n Names) EnvSourceSyncAccount(tier environment.Tier) string {
-	return n.tierAccount(tier, envSourceSyncName)
+	return n.ocelName(tier, envSourceSyncName)
 }
 
 func (n Names) EnvSourceSyncAccountEmail(tier environment.Tier) string {
@@ -270,11 +245,11 @@ func (n Names) EnvSourceSyncAccountEmail(tier environment.Tier) string {
 const bastionName = "bastion"
 
 func (n Names) Bastion(tier environment.Tier) string {
-	return n.mustOcelName(naming.TierWord(tier), bastionName)
+	return n.ocelName(tier, bastionName)
 }
 
 func (n Names) BastionAccount(tier environment.Tier) string {
-	return n.tierAccount(tier, bastionName)
+	return n.ocelName(tier, bastionName)
 }
 
 func (n Names) BastionAccountEmail(tier environment.Tier) string {
@@ -283,7 +258,9 @@ func (n Names) BastionAccountEmail(tier environment.Tier) string {
 
 const connectorWord = "connector"
 
-func (n Names) Connector() string { return n.mustOcelName(connectorWord) }
+func (n Names) Connector() string {
+	return naming.MustUntieredOcelName(string(n.namespace), connectorWord)
+}
 
 func (n Names) ConnectorAccountEmail() string {
 	return n.Connector() + "@" + n.project + AccountDomain
@@ -301,7 +278,7 @@ const (
 )
 
 func (n Names) DelayQueue(tier environment.Tier) string {
-	return n.mustOcelName(naming.TierWord(tier), delayQueueWord)
+	return n.ocelName(tier, delayQueueWord)
 }
 
 func (n Names) DelayQueuePath(region string, tier environment.Tier) string {
@@ -309,7 +286,7 @@ func (n Names) DelayQueuePath(region string, tier environment.Tier) string {
 }
 
 func (n Names) PushAccount(tier environment.Tier) string {
-	return n.tierAccount(tier, pushAccountName)
+	return n.ocelName(tier, pushAccountName)
 }
 
 func (n Names) PushAccountEmail(tier environment.Tier) string {
@@ -317,15 +294,15 @@ func (n Names) PushAccountEmail(tier environment.Tier) string {
 }
 
 func (n Names) PassphraseSecret(tier environment.Tier) string {
-	return n.mustOcelName(naming.TierWord(tier), passphraseWords)
+	return n.ocelName(tier, passphraseWords)
 }
 
 func (n Names) EdgeCredentialsSecret(tier environment.Tier, kind edge.Kind) string {
-	return n.mustOcelName(naming.TierWord(tier), string(kind), edgeCredentialsWord)
+	return n.ocelName(tier, string(kind), edgeCredentialsWord)
 }
 
 func (n Names) PurgeSeedSecret(tier environment.Tier, kind edge.Kind) string {
-	return n.mustOcelName(naming.TierWord(tier), string(kind), purgeSeedWord)
+	return n.ocelName(tier, string(kind), purgeSeedWord)
 }
 
 func (n Names) Fit() error {
@@ -394,6 +371,6 @@ func New(namespace provider.Namespace, project string) Names {
 	return Names{namespace: namespace, project: project}
 }
 
-func (n Names) mustOcelName(words ...string) string {
-	return naming.MustUntieredOcelName(string(n.namespace), words...)
+func (n Names) ocelName(tier environment.Tier, words ...string) string {
+	return naming.OcelName(string(n.namespace), tier, words...)
 }

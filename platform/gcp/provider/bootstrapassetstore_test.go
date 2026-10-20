@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
@@ -249,6 +250,23 @@ func TestTakingTheAssetStoreDownDeletesItsKeyItsGrantAndItsAccount(t *testing.T)
 	}
 	if len(h.iam.DeletedAccounts) != 1 || !strings.HasSuffix(h.iam.DeletedAccounts[0], h.clients.AssetReaderAccountEmail(environment.TierProduction)) {
 		t.Errorf("the deleted accounts = %v, want the asset reader", h.iam.DeletedAccounts)
+	}
+}
+
+func TestTakingTheAssetStoreDownAfterTheEdgeBucketIsGoneStillRevokesItsGrant(t *testing.T) {
+	t.Parallel()
+	h := newAssetStoreHarness(t)
+	h.raise(t)
+	edge := googletest.TierBuckets(environment.TierProduction)[naming.StorageEdge]
+	if err := h.clients.ForgetTierBucket(t.Context(), environment.TierProduction, naming.StorageEdge, edge); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cloudflareorigin.TakeAssetStore(t.Context(), h.clients, environment.TierProduction); err != nil {
+		t.Fatalf("takeAssetStore() with no edge bucket recorded = %v, want the store taken down all the same", err)
+	}
+	if got := h.assetBindings(); len(got) != 0 {
+		t.Errorf("the project's asset bindings = %q, want none", got)
 	}
 }
 

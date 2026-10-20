@@ -48,6 +48,33 @@ func TestAHostnameTooLongToNameIsShortenedRatherThanRefusedByCompute(t *testing.
 	}
 }
 
+func TestAnOriginHostsStackIsNamedForItsTierAndHostnameCutAheadOfItsHashTag(t *testing.T) {
+	t.Parallel()
+
+	got := OriginHostStack("checkout-eu-west-staging.a-very-long-customer-subdomain.example.com", environment.TierProduction)
+	if want := "alb-origin-prod-checkout-eu-west-staging-a-very-long-cus-5e1b31"; got != want {
+		t.Errorf("OriginHostStack() = %q, want %q", got, want)
+	}
+}
+
+func TestEveryStackOfTheLoadBalancerNamesItsTierByItsWord(t *testing.T) {
+	t.Parallel()
+
+	for _, named := range []struct {
+		target Target
+		want   string
+	}{
+		{Target{Tier: environment.TierProduction}, "alb-front-prod"},
+		{Target{Tier: environment.TierPreview, Shielded: true}, "alb-front-shielded-preview"},
+		{Target{Tier: environment.TierProduction, Gate: true}, "alb-gate-prod"},
+		{Target{Tier: environment.TierProduction, Slug: "shop"}, "alb-prod-shop"},
+	} {
+		if got := named.target.Name(); got != named.want {
+			t.Errorf("%+v.Name() = %q, want %q", named.target, got, named.want)
+		}
+	}
+}
+
 func TestAHostsBackendIsNamedUnderTheNamespaceAndTierAndItsEntryAndNEGAppendToIt(t *testing.T) {
 	t.Parallel()
 
