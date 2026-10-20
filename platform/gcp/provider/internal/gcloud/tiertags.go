@@ -130,7 +130,7 @@ func (c *Clients) EnsureTierTag(ctx context.Context, tier environment.Tier, targ
 	if !bound || err != nil {
 		return err
 	}
-	return c.awaitTierAdmits(ctx, tier, target)
+	return c.awaitAdmitted(ctx, tier, target, tierAdmission)
 }
 
 func (c *Clients) EnsureOutsideTag(ctx context.Context, target TaggedResource) error {

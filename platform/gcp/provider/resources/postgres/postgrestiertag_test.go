@@ -74,3 +74,18 @@ func TestADatabaseFoundWithoutItsTiersTagIsTouchedOnlyOnceTheTagAdmitsTheCredent
 		t.Errorf("the instance holds the databases %v once its tag admitted the credential, want ocel", h.server.Databases[instance])
 	}
 }
+
+func TestAFreshlyCreatedInstanceIsTouchedOnlyOnceItsInlineTagAdmitsTheCredential(t *testing.T) {
+	h := servingPostgres(t)
+	tags := googletest.NewTieredTags(t)
+	tags.Tagged(h.instances.clients)
+	h.server.TierTags = tags
+	h.server.Unadmitted = 2
+
+	h.provision(t, "17")
+
+	instance := h.server.Created[0].Name
+	if !slices.Contains(h.server.Databases[instance], "ocel") || h.server.Unadmitted != 0 {
+		t.Errorf("the new instance holds the databases %v with %d denials left, want ocel made once its tag admitted the credential", h.server.Databases[instance], h.server.Unadmitted)
+	}
+}
