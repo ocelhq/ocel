@@ -75,7 +75,7 @@ func (c *Clients) makeAccount(ctx context.Context, tier environment.Tier, accoun
 			"project %s has as many service accounts as its Service Account Count quota allows, and every app ocel deploys runs as one of its own.\n"+
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.Project())
 	}
-	return nil, ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.DeployCredential(tier).ProjectPermissions().String())
+	return nil, ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.DeployCredential(tier).Tiered(credential.AccountsRole).String())
 }
 
 func (c *Clients) readTakenAccount(ctx context.Context, account string) (*iam.ServiceAccount, error) {

@@ -307,3 +307,28 @@ func TestAPreviewDeployCredentialIsGrantedNothingOnProductionsRecords(t *testing
 		}
 	}
 }
+
+func TestTheProjectPermissionsRoleHoldsOnlyWhatNoTieredRoleHoldsOnTheUntaggedProject(t *testing.T) {
+	t.Parallel()
+
+	predefined := predefinedRoles(t)
+	project := checkedResource{name: "projects/acme-prod"}
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		deploy := deployOf(tier)
+		held := map[string]string{}
+		for _, role := range credential.TieredRoles {
+			grant := deploy.Tiered(role)
+			if !grantReaches(t, grant, project) {
+				continue
+			}
+			for _, permission := range grantPermissions(t, predefined, grant) {
+				held[permission] = role
+			}
+		}
+		for _, permission := range deploy.ProjectPermissions().Permissions {
+			if via, holds := held[permission]; holds {
+				t.Errorf("the %s deploy credential's custom project role holds %s, which %s on the tier condition already holds on the untagged project", tier, permission, via)
+			}
+		}
+	}
+}

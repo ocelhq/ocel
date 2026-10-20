@@ -143,30 +143,34 @@ func TestTheRetiredCustomRolesAreNeitherGrantedNorMade(t *testing.T) {
 func TestADeployMayCreateWhatItMakesAgainstTheUntaggedProject(t *testing.T) {
 	t.Parallel()
 
-	created := deployOf(environment.TierProduction).ProjectPermissions()
-	for _, permission := range []string{
-		"run.services.create",
-		"iam.serviceAccounts.create",
-		"pubsub.topics.create",
-		"pubsub.subscriptions.create",
-		"storage.buckets.create",
-		"secretmanager.secrets.create",
-		"artifactregistry.repositories.create",
-		"datastore.databases.create",
-		"cloudsql.instances.create",
-		"cloudsql.instances.list",
-		"cloudkms.cryptoKeys.create",
-	} {
-		if !slices.Contains(created.Permissions, permission) {
-			t.Errorf("a deploy is granted %s, want %s: Google checks it against the project, which carries no tier tag", created, permission)
+	project := checkedResource{name: "projects/acme-prod"}
+	ring := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel"}
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		deploy := deployOf(tier)
+		onProject := grantedOver(t, deploy, project)
+		for _, permission := range []string{
+			"run.services.create",
+			"iam.serviceAccounts.create",
+			"pubsub.topics.create",
+			"pubsub.subscriptions.create",
+			"storage.buckets.create",
+			"secretmanager.secrets.create",
+			"artifactregistry.repositories.create",
+			"datastore.databases.create",
+			"cloudsql.instances.create",
+			"cloudsql.instances.list",
+		} {
+			if _, holds := onProject[permission]; !holds {
+				t.Errorf("the %s deploy credential holds no %s on projects/acme-prod: Google checks it against the project, which carries no tier tag", tier, permission)
+			}
 		}
-	}
-	if created.Condition != nil {
-		t.Errorf("a deploy is granted %s, and no condition admits a check against the untagged project but none", created)
-	}
-	for _, permission := range created.Permissions {
-		if strings.HasSuffix(permission, "TagBinding") || permission == "storage.buckets.list" || strings.HasPrefix(permission, "datastore.entities.") || strings.HasPrefix(permission, "storage.objects.") {
-			t.Errorf("a deploy is granted %s on the whole project, which reaches the other tier's resources", permission)
+		if _, holds := grantedOver(t, deploy, ring)["cloudkms.cryptoKeys.create"]; !holds {
+			t.Errorf("the %s deploy credential holds no cloudkms.cryptoKeys.create on %s: a deploy makes each project's key on the ring both tiers share", tier, ring.name)
+		}
+		for _, permission := range deploy.ProjectPermissions().Permissions {
+			if strings.HasSuffix(permission, "TagBinding") || permission == "storage.buckets.list" || strings.HasPrefix(permission, "datastore.entities.") || strings.HasPrefix(permission, "storage.objects.") {
+				t.Errorf("the %s deploy credential is granted %s on the whole project, which reaches the other tier's resources", tier, permission)
+			}
 		}
 	}
 }

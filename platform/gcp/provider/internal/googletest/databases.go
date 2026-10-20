@@ -19,6 +19,7 @@ type Databases struct {
 	Deleted       []string
 	DeletedTagged []string
 	TierTags      *TierTags
+	CreateDenied  bool
 }
 
 func DatabaseTagParent(id string) string {
@@ -47,6 +48,11 @@ func (s *Databases) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		id := r.URL.Query().Get("databaseId")
+		if s.CreateDenied {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"The caller does not have permission"}}`))
+			return
+		}
 		if s.Held[id] != nil {
 			w.WriteHeader(http.StatusConflict)
 			_, _ = w.Write([]byte(`{"error":{"code":409,"status":"ALREADY_EXISTS","message":"database already exists"}}`))

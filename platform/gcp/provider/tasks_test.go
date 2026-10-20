@@ -49,9 +49,10 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 		}
 	}
 	deploy := deployOf(environment.TierProduction)
+	onProject := grantedOver(t, deploy, checkedResource{name: "projects/acme-prod"})
 	for _, permission := range []string{"datastore.databases.create", "datastore.databases.list"} {
-		if !slices.Contains(deploy.ProjectPermissions().Permissions, permission) {
-			t.Errorf("a deploy is granted %s, want %s among them: a deploy makes a project's database of runs, and Firestore checks that against the project", deploy.ProjectPermissions(), permission)
+		if _, holds := onProject[permission]; !holds {
+			t.Errorf("a deploy credential holds no %s on projects/acme-prod: a deploy makes a project's database of runs, and Firestore checks that against the project", permission)
 		}
 	}
 	lines := credential.Lines(deploy.Grants())
