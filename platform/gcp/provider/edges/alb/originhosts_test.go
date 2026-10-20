@@ -40,7 +40,7 @@ func TestAnOriginHostnameIsRoutedToTheRevisionTaggedWithItsRelease(t *testing.T)
 		t.Fatalf("RouteOriginHost = %v", err)
 	}
 
-	routed := routedTo(w, "ocel-alb-shielded-production-routes", originHostname)
+	routed := routedTo(w, "ocel-prod-alb-shielded-routes", originHostname)
 	if routed == "" {
 		t.Fatalf("the shielded url map routes nothing for %s", originHostname)
 	}
@@ -109,7 +109,7 @@ func TestUnroutingAnOriginHostnameTakesItsRuleBackendAndRecordAway(t *testing.T)
 	if err := shielded.UnrouteOriginHost(ctx, environment.TierProduction, originHostname); err != nil {
 		t.Fatalf("UnrouteOriginHost = %v", err)
 	}
-	if routed := routedTo(w, "ocel-alb-shielded-production-routes", originHostname); routed != "" {
+	if routed := routedTo(w, "ocel-prod-alb-shielded-routes", originHostname); routed != "" {
 		t.Errorf("the url map still routes the host to %q", routed)
 	}
 	destroyed := false
@@ -163,10 +163,10 @@ func TestUnroutingARevisionsOriginHostnamesTakesAwayOnlyThatRevisions(t *testing
 		t.Fatalf("UnrouteOriginHosts = %v", err)
 	}
 
-	if routedTo(w, "ocel-alb-shielded-production-routes", first.Hostname) != "" {
+	if routedTo(w, "ocel-prod-alb-shielded-routes", first.Hostname) != "" {
 		t.Errorf("the url map still routes %s", first.Hostname)
 	}
-	if routedTo(w, "ocel-alb-shielded-production-routes", second.Hostname) == "" {
+	if routedTo(w, "ocel-prod-alb-shielded-routes", second.Hostname) == "" {
 		t.Errorf("the url map lost the rule of %s, which another revision of the service still answers on", second.Hostname)
 	}
 	if err := shielded.RouteOriginHost(ctx, first); err != nil || len(w.raised()) != 3 {
@@ -191,7 +191,7 @@ func TestUnroutingARevisionLeavesAHostnameThatALaterRevisionOfTheSameReleaseNowA
 		t.Fatalf("UnrouteOriginHosts = %v", err)
 	}
 
-	if routedTo(w, "ocel-alb-shielded-production-routes", older.Hostname) == "" {
+	if routedTo(w, "ocel-prod-alb-shielded-routes", older.Hostname) == "" {
 		t.Errorf("the url map lost %s, which the newer revision of the same release answers on", older.Hostname)
 	}
 }
@@ -213,7 +213,7 @@ func TestUnroutingAServicesOriginHostnamesWithNoRevisionTakesAwayEveryOne(t *tes
 	}
 
 	for _, host := range []OriginHost{first, second} {
-		if routedTo(w, "ocel-alb-shielded-production-routes", host.Hostname) != "" {
+		if routedTo(w, "ocel-prod-alb-shielded-routes", host.Hostname) != "" {
 			t.Errorf("the url map still routes %s", host.Hostname)
 		}
 	}
@@ -238,7 +238,7 @@ func TestAnOriginHostnameIsRefusedWhenTheURLMapIsFull(t *testing.T) {
 	for i := range maxHostRules {
 		full[fmt.Sprintf("h%d.example.com", i)] = "backend"
 	}
-	w.routed["ocel-alb-shielded-production-routes"] = full
+	w.routed["ocel-prod-alb-shielded-routes"] = full
 
 	err := balancer.Shielded().RouteOriginHost(context.Background(), originHost())
 

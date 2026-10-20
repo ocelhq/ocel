@@ -84,7 +84,7 @@ func TestAStoreIsOneMemorystoreNodeWithAppendOnlyPersistenceAndTokenAuthOverTLS(
 	if sent.DeletionProtectionEnabled == nil || *sent.DeletionProtectionEnabled {
 		t.Errorf("created deletion protection %v, want it off so a destroy can take the store down", sent.DeletionProtectionEnabled)
 	}
-	want := gcloud.PSCAutoConnection{ProjectID: "acme-prod", Network: "projects/acme-prod/global/networks/ocel-production"}
+	want := gcloud.PSCAutoConnection{ProjectID: "acme-prod", Network: "projects/acme-prod/global/networks/ocel-prod-network"}
 	if len(sent.Endpoints) != 1 || len(sent.Endpoints[0].Connections) != 1 || sent.Endpoints[0].Connections[0].PSCAutoConnection == nil ||
 		*sent.Endpoints[0].Connections[0].PSCAutoConnection != want {
 		t.Errorf("created endpoints %s, want one automatic connection into the tier's network", googletest.JSON(t, sent.Endpoints))

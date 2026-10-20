@@ -381,7 +381,7 @@ func TestADeployMayCreateAccountsAndGrantThemOnlyTheRolesAnAppRuns(t *testing.T)
 		"projects/acme-prod/roles/ocel_app_accounts",
 		"roles/resourcemanager.projectIamAdmin, on the condition api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])." +
 			"hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'roles/storage.objectViewer', 'projects/acme-prod/roles/ocel_cdn_purge'])",
-		"roles/cloudtasks.queueAdmin on the queue projects/acme-prod/locations/europe-west1/queues/ocel-production-delays",
+		"roles/cloudtasks.queueAdmin on the queue projects/acme-prod/locations/europe-west1/queues/ocel-prod-delays",
 		"roles/cloudtasks.queueAdmin on the queue projects/acme-prod/locations/europe-west1/queues/ocel-preview-delays",
 	} {
 		if !slices.Contains(lines, want) {
@@ -428,8 +428,8 @@ func TestADeployMayUntagImagesInItsOwnRepositoriesAndNoOther(t *testing.T) {
 		}
 	}
 	for _, repository := range []string{
-		"projects/acme-prod/locations/europe-west1/repositories/ocel-acme-prod-preview",
-		"projects/acme-prod/locations/europe-west1/repositories/ocel-acme-prod-production",
+		"projects/acme-prod/locations/europe-west1/repositories/ocel-preview-containers",
+		"projects/acme-prod/locations/europe-west1/repositories/ocel-prod-containers",
 	} {
 		if want := "roles/artifactregistry.repoAdmin, on the repository " + repository; !strings.Contains(document.Document, want) {
 			t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a prune untags the images no revision runs any more", document.Document, want)
@@ -444,7 +444,7 @@ func TestADeployAdministersTheBucketsOfItsNamespaceAndNoOtherBucket(t *testing.T
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	const buckets = `roles/storage.admin, on the condition resource.name.startsWith("projects/_/buckets/ocel--")`
+	const buckets = `roles/storage.admin, on the condition resource.name.startsWith("projects/_/buckets/ocel-app-")`
 	if !strings.Contains(document.Document, buckets) {
 		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy creates, grants and deletes the buckets an app declares, all named under its namespace, and no others", document.Document, buckets)
 	}
@@ -463,7 +463,7 @@ func TestADeployAdministersTheDatabasesOfItsNamespaceAndNoOtherInstance(t *testi
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	const databases = `roles/cloudsql.admin, on the condition resource.name.startsWith("projects/acme-prod/instances/ocel--")`
+	const databases = `roles/cloudsql.admin, on the condition resource.name.startsWith("projects/acme-prod/instances/ocel-app-")`
 	if !strings.Contains(document.Document, databases) {
 		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy creates, changes and deletes the instances its namespace's databases run on, and no others", document.Document, databases)
 	}

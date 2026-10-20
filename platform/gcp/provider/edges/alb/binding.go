@@ -12,6 +12,7 @@ import (
 )
 
 type bindingSpec struct {
+	Namespace      string
 	Region         string
 	Slug           string
 	Tier           environment.Tier
@@ -26,7 +27,7 @@ func bindingProgram(spec bindingSpec) Program {
 		for _, hostname := range slices.Sorted(maps.Keys(spec.Hosts)) {
 			host := spec.Hosts[hostname]
 			if host.Certificate != "" {
-				entry := entryName(spec.Slug, spec.Tier, hostname)
+				entry := entryName(spec.Namespace, spec.Slug, spec.Tier, hostname)
 				if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry,
 					&certificatemanager.CertificateMapEntryArgs{
 						Name:         pulumi.String(entry),
@@ -41,7 +42,7 @@ func bindingProgram(spec bindingSpec) Program {
 			if host.Service == "" {
 				continue
 			}
-			neg := negName(spec.Slug, spec.Tier, hostname)
+			neg := negName(spec.Namespace, spec.Slug, spec.Tier, hostname)
 			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(spec.Shielded), responseHeadersOf(spec.Tier)); err != nil {
 				return err
 			}

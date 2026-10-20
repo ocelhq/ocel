@@ -57,11 +57,11 @@ func TestADeploymentHostnameIsRoutedToTheRevisionItsDeployTagged(t *testing.T) {
 		t.Fatalf("MovePointer(deployment) = %v", err)
 	}
 
-	backend := backendName("shop", environment.TierPreview, deploymentHost)
+	backend := backendName("ocel", "shop", environment.TierPreview, deploymentHost)
 	if got := w.hosts(tierRoutes)[deploymentHost]; got != backend {
 		t.Errorf("%s is routed to %q, want its own backend %q: a deployment hostname is an exact host rule", deploymentHost, got, backend)
 	}
-	neg, declaredNEG := w.declarations(BindingStack("shop", environment.TierPreview))[negName("shop", environment.TierPreview, deploymentHost)]
+	neg, declaredNEG := w.declarations(BindingStack("shop", environment.TierPreview))[negName("ocel", "shop", environment.TierPreview, deploymentHost)]
 	if !declaredNEG {
 		t.Fatalf("the binding declares no serverless neg for %s", deploymentHost)
 	}
@@ -86,7 +86,7 @@ func TestADeploymentHostnameOfAFunctionAppIsRoutedToItsEntryFunctionsTaggedRevis
 		t.Fatalf("MovePointer(deployment) = %v", err)
 	}
 
-	backend := backendName("shop", environment.TierPreview, deploymentHost)
+	backend := backendName("ocel", "shop", environment.TierPreview, deploymentHost)
 	if got := w.hosts(tierRoutes)[deploymentHost]; got != backend {
 		t.Errorf("%s is routed to %q, want %q", deploymentHost, got, backend)
 	}
@@ -122,7 +122,7 @@ func TestADeploymentHostnameTheUrlMapHasNoHostRuleLeftForIsRefusedBeforeAnything
 	if !errors.As(err, &refused) {
 		t.Fatalf("MovePointer onto a url map with %d host rules = %v, want a refusal", maxHostRules, err)
 	}
-	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[negName("shop", environment.TierPreview, deploymentHost)]; declared {
+	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[negName("ocel", "shop", environment.TierPreview, deploymentHost)]; declared {
 		t.Errorf("the binding declares a neg for %s, want nothing raised: Compute refuses the host rule only after the neg and backend service exist", deploymentHost)
 	}
 }
@@ -137,7 +137,7 @@ func TestADeploymentHostnameTheProjectHasNoBackendServiceQuotaLeftForIsRefusedBe
 	if !errors.As(err, &refused) {
 		t.Fatalf("MovePointer with every backend service the project's quota allows in use = %v, want a refusal", err)
 	}
-	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[negName("shop", environment.TierPreview, deploymentHost)]; declared {
+	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[negName("ocel", "shop", environment.TierPreview, deploymentHost)]; declared {
 		t.Errorf("the binding declares a neg for %s, want nothing raised: Compute refuses the backend service only after the neg exists", deploymentHost)
 	}
 }
@@ -405,7 +405,7 @@ func rotatedMove(promotionID string, record router.ReleaseRecord, superseded ...
 
 func wantAliasRouted(t *testing.T, w *world, hostname string) {
 	t.Helper()
-	if got, want := w.hosts(tierRoutes)[hostname], backendName("shop", environment.TierPreview, hostname); got != want {
+	if got, want := w.hosts(tierRoutes)[hostname], backendName("ocel", "shop", environment.TierPreview, hostname); got != want {
 		t.Errorf("the tier url map routes %s to %q, want %q: the move failed, so it keeps serving", hostname, got, want)
 	}
 }

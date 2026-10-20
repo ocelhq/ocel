@@ -104,7 +104,7 @@ func TestAServiceNameTooLongToSpellOutIsCutToLeaveItsRevisionTagRoomInTheRunAppL
 		t.Errorf("Service() = %q (%d characters), and with the %d-character revision tag %s it is more than the %d Cloud Run takes "+
 			"in the label of a tagged revision's url", long, len(long), len(tag), tag, longestRunAppLabel)
 	}
-	if long == longer || !cloudRunName.MatchString(long) || !strings.HasPrefix(long, "ocel-shop") || !strings.Contains(long, "-checkout-") {
+	if long == longer || !cloudRunName.MatchString(long) || !strings.HasPrefix(long, "ocel-app-shop") || !strings.Contains(long, "-web-checkout-") {
 		t.Errorf("Service() of projects too long to spell out = %q and %q, want the project cut before the app and its route, and each kept apart by its hash", long, longer)
 	}
 }

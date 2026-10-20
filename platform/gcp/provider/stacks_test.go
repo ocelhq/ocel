@@ -295,7 +295,7 @@ func boundToAStore(spec provider.StackSpec) provider.StackSpec {
 }
 
 func TestAnAppBoundToADatabaseReachesPrivateRangesOverTheTiersSubnetwork(t *testing.T) {
-	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview"
+	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview-network projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview-network"
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	spec := previewSpec()
@@ -318,7 +318,7 @@ func egressOf(service *runv2.GoogleCloudRunV2Service) string {
 }
 
 func TestAnAppBoundToAStoreReachesPrivateRangesOverTheTiersSubnetwork(t *testing.T) {
-	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview"
+	want := "PRIVATE_RANGES_ONLY projects/acme-prod/global/networks/ocel-preview-network projects/acme-prod/regions/europe-west1/subnetworks/ocel-preview-network"
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 

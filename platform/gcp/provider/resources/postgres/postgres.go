@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -383,11 +384,10 @@ func (i postgresInstances) desiredInstance(name string, spec postgresSpec, datab
 }
 
 func (i postgresInstances) create(ctx context.Context, database string, spec postgresSpec, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
-	suffix := make([]byte, names.InstanceSuffixBytes)
-	if _, err := rand.Read(suffix); err != nil {
-		return nil, fmt.Errorf("mint the suffix a new Cloud SQL instance is named with: %w", err)
+	name, err := i.clients.PostgresInstance(i.ref.Project, i.ref.Name.Env, database, naming.NewRandomTag())
+	if err != nil {
+		return nil, err
 	}
-	name := i.clients.PostgresInstance(i.ref.Project, i.ref.Name.Env, database) + "-" + hex.EncodeToString(suffix)
 	gcloud.EnsureProgress(progress).Say("Creating postgres " + database + " as Cloud SQL instance " + name + " in " + i.clients.Region +
 		": a new instance takes several minutes")
 	started, err := googleretry.Attempted(ctx, i.sql.Instances.Insert(i.clients.Project(), i.desiredInstance(name, spec, database)).Context(ctx).Do)
@@ -705,7 +705,10 @@ func shapePostgres(shape component.Shape, declared []provider.Resource) error {
 		if err != nil {
 			return err
 		}
-		instance := shape.Names.PostgresInstance(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		instance, err := shape.Names.UntaggedPostgresInstance(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		if err != nil {
+			return err
+		}
 		shape.Tree.Add(shape.Environment, shape.Vendor, cost.SQLInstanceType, instance, shape.Region, spec.shapeProperties(shape.Region, shape.Request.Deploy.Tier))
 	}
 	return nil

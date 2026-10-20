@@ -38,21 +38,28 @@ type deployedWorker struct {
 	revision string
 }
 
-func NameWorkers(names names.Names, spec provider.StackSpec) []deployedWorker {
+func NameWorkers(names names.Names, spec provider.StackSpec) ([]deployedWorker, error) {
 	if !topic.HostsWorkers(spec.App) {
-		return nil
+		return nil, nil
 	}
 	named := make([]deployedWorker, 0, len(spec.App.Workers))
 	for _, worker := range spec.App.Workers {
-		named = append(named, deployedWorker{name: worker.Name, service: names.WorkerService(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, worker.Name)})
+		service, err := names.WorkerService(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, worker.Name)
+		if err != nil {
+			return nil, err
+		}
+		named = append(named, deployedWorker{name: worker.Name, service: service})
 	}
-	return named
+	return named, nil
 }
 
 func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, image, account string, env map[string]string,
 	declared map[string]*provider.TopicSpec, instances provider.Instances, progress progress.Log,
 ) ([]deployedWorker, error) {
-	named := NameWorkers(c.Names, spec)
+	named, err := NameWorkers(c.Names, spec)
+	if err != nil {
+		return nil, err
+	}
 	if len(named) == 0 {
 		return nil, nil
 	}

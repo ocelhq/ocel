@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -136,7 +137,7 @@ func TestEachTiersPluginLivesInARepositoryOfItsOwn(t *testing.T) {
 	if err := images.Delete(context.Background(), environment.TierProduction); err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.deleted) != 1 || !strings.Contains(registry.deleted[0], string(environment.TierProduction)) {
+	if len(registry.deleted) != 1 || !strings.Contains(registry.deleted[0], naming.TierWord(environment.TierProduction)) {
 		t.Errorf("deleting production's plugin deleted %v, want the production repository alone: the preview tier's plugin still runs from its own", registry.deleted)
 	}
 }

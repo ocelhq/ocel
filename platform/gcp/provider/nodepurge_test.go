@@ -27,7 +27,7 @@ func TestANodeServiceThatRevalidatesBehindTheALBIsToldWhichCloudCDNToClear(t *te
 	}
 
 	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
-	if got, want := env["OCEL_CDN_URL_MAP"], "projects/acme-prod/global/urlMaps/ocel-alb-production-routes"; got != want {
+	if got, want := env["OCEL_CDN_URL_MAP"], "projects/acme-prod/global/urlMaps/ocel-prod-alb-routes"; got != want {
 		t.Errorf("the node service reads OCEL_CDN_URL_MAP=%q, want %q", got, want)
 	}
 	if got, want := env["OCEL_ISR_PREFIX"], spec.App.ISR.Prefix; got != want {

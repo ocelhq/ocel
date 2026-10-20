@@ -35,14 +35,25 @@ var issuance = gcloud.Patience{Attempts: 100, Ceiling: 15 * time.Second}
 
 const maxCertificateName = 63
 
-func authorizationID(hostname string) string { return certificateName(hostname, "auth") }
+const (
+	certificateWord   = "cert"
+	authorizationRole = "auth"
+)
 
-func certificateName(hostname string, role ...string) string {
-	segments := []naming.Segment{naming.Fixed("ocel"), naming.Compressible(naming.SanitizeHost(hostname))}
-	for _, each := range role {
-		segments = append(segments, naming.Fixed(each))
+func authorizationID(namespace, hostname string) string {
+	return certificateName(namespace, hostname, authorizationRole)
+}
+
+func certificateName(namespace, hostname string, role ...string) string {
+	head, err := naming.OcelName(namespace, certificateWord)
+	if err != nil {
+		panic(err)
 	}
-	return naming.Fit(maxCertificateName, naming.WordSeparator, segments...)
+	tag := naming.HashTag(namespace, hostname)
+	room := maxCertificateName - len(head) - len(tag) - 2*len(naming.WordSeparator) - len(naming.WordSeparator+authorizationRole)
+	readable := naming.SanitizeHost(hostname)
+	readable = strings.TrimRight(readable[:min(len(readable), room)], naming.WordSeparator)
+	return naming.Join(naming.WordSeparator, append([]string{head, readable, tag}, role...)...)
 }
 
 func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostname, "*.") }
@@ -60,7 +71,7 @@ func (p Certificates) Issue(ctx context.Context, req provider.CertificateRequest
 	if err != nil {
 		return provider.Certificate{}, err
 	}
-	name := clients.CertificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
+	name := clients.CertificatesGlobal() + "/certificates/" + certificateName(string(clients.Namespace()), req.Hostname)
 	cert := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Manual: req.Current.Manual}
 
 	authorization, err := p.authorized(ctx, clients, req)
@@ -90,7 +101,7 @@ func (p Certificates) authorized(
 	if err != nil {
 		return nil, err
 	}
-	id := authorizationID(req.Hostname)
+	id := authorizationID(string(clients.Namespace()), req.Hostname)
 	name := clients.CertificatesGlobal() + "/dnsAuthorizations/" + id
 	authorization, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
@@ -169,7 +180,7 @@ func (p Certificates) certified(
 							DnsAuthorizations: []string{authorization},
 						},
 					}).
-					CertificateId(certificateName(req.Hostname)).Context(ctx).Do(call...)
+					CertificateId(certificateName(string(clients.Namespace()), req.Hostname)).Context(ctx).Do(call...)
 			})
 		if err != nil {
 			return err

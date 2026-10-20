@@ -16,8 +16,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
-const maxDNSLabel = 63
-
 type OriginHosts struct {
 	KeyValues records.Store
 	Routing   OriginRouting
@@ -29,8 +27,7 @@ type OriginRouting interface {
 }
 
 func OriginHostname(release, service, base string) string {
-	label := naming.Fit(maxDNSLabel, naming.WordSeparator, naming.Fixed(release), naming.Compressible(service))
-	return label + "." + base
+	return release + naming.WordSeparator + service + "." + base
 }
 
 func (p *OriginHosts) ReadBase(ctx context.Context, spec provider.StackSpec) (string, error) {

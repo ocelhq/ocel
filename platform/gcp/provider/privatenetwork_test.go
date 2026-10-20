@@ -98,26 +98,26 @@ func TestMakingThePrivateNetworkRaisesTheTiersNetworkSubnetworkAndPolicies(t *te
 		t.Fatalf("makeNetwork() = %v", err)
 	}
 
-	want := []string{"create network ocel-production", "create subnetwork ocel-production", "create policy ocel-production-memorystore", "create policy ocel-production-cloudsql"}
+	want := []string{"create network ocel-prod-network", "create subnetwork ocel-prod-network", "create policy ocel-prod-network-memorystore", "create policy ocel-prod-network-cloudsql"}
 	if got := server.wrote(); !slices.Equal(got, want) {
 		t.Errorf("installing the network wrote %v, want %v", got, want)
 	}
-	net := server.networks["ocel-production"]
+	net := server.networks["ocel-prod-network"]
 	if net.AutoCreateSubnetworks || !slices.Contains(net.ForceSendFields, "AutoCreateSubnetworks") {
 		t.Errorf("the network is %+v, want it created in custom mode, with no subnetwork in every region", net)
 	}
-	subnet := server.subnets["ocel-production"]
-	if subnet.IpCidrRange != network.SubnetRange || subnet.Region != "europe-west1" || !strings.HasSuffix(subnet.Network, "/global/networks/ocel-production") {
+	subnet := server.subnets["ocel-prod-network"]
+	if subnet.IpCidrRange != network.SubnetRange || subnet.Region != "europe-west1" || !strings.HasSuffix(subnet.Network, "/global/networks/ocel-prod-network") {
 		t.Errorf("the subnetwork is %+v, want %s in europe-west1 on the tier's network", subnet, network.SubnetRange)
 	}
-	policy := server.policies["ocel-production-memorystore"]
-	if policy.ServiceClass != network.MemorystoreServiceClass || policy.Network != "projects/acme-prod/global/networks/ocel-production" ||
-		policy.PscConfig == nil || !slices.Equal(policy.PscConfig.Subnetworks, []string{"projects/acme-prod/regions/europe-west1/subnetworks/ocel-production"}) {
+	policy := server.policies["ocel-prod-network-memorystore"]
+	if policy.ServiceClass != network.MemorystoreServiceClass || policy.Network != "projects/acme-prod/global/networks/ocel-prod-network" ||
+		policy.PscConfig == nil || !slices.Equal(policy.PscConfig.Subnetworks, []string{"projects/acme-prod/regions/europe-west1/subnetworks/ocel-prod-network"}) {
 		t.Errorf("the connection policy is %+v, want Memorystore connected through the tier's subnetwork", policy)
 	}
-	databases := server.policies["ocel-production-cloudsql"]
-	if databases.ServiceClass != "google-cloud-sql" || databases.Network != "projects/acme-prod/global/networks/ocel-production" ||
-		databases.PscConfig == nil || !slices.Equal(databases.PscConfig.Subnetworks, []string{"projects/acme-prod/regions/europe-west1/subnetworks/ocel-production"}) {
+	databases := server.policies["ocel-prod-network-cloudsql"]
+	if databases.ServiceClass != "google-cloud-sql" || databases.Network != "projects/acme-prod/global/networks/ocel-prod-network" ||
+		databases.PscConfig == nil || !slices.Equal(databases.PscConfig.Subnetworks, []string{"projects/acme-prod/regions/europe-west1/subnetworks/ocel-prod-network"}) {
 		t.Errorf("the connection policy is %+v, want Cloud SQL connected through the tier's subnetwork", databases)
 	}
 }
@@ -141,7 +141,7 @@ func TestRemovingThePrivateNetworkTakesDownThePoliciesThenTheSubnetworkThenTheNe
 	if err := network.Remove(context.Background(), b, environment.TierProduction); err != nil {
 		t.Fatalf("removeNetwork() = %v", err)
 	}
-	want := []string{"delete policy ocel-production-memorystore", "delete policy ocel-production-cloudsql", "delete subnetwork ocel-production", "delete network ocel-production"}
+	want := []string{"delete policy ocel-prod-network-memorystore", "delete policy ocel-prod-network-cloudsql", "delete subnetwork ocel-prod-network", "delete network ocel-prod-network"}
 	if got := server.wrote(); !slices.Equal(got, want) {
 		t.Errorf("removing the network wrote %v, want %v", got, want)
 	}
@@ -261,7 +261,7 @@ func TestRemovingThePrivateNetworkIsAnErrorWhenEveryPageReadIsEmptyAndNamesAnoth
 	}
 }
 
-const connectedDatabase = "ocel--shop-prod-orders-5e6f7a"
+const connectedDatabase = "ocel-app-shop-prod-orders-k3x9q2"
 
 func TestRemovingThePrivateNetworkWhileADatabaseIsOnItIsRefusedNamingTheDatabase(t *testing.T) {
 	b, networks, _ := servingNetworksAndStores(t)
@@ -309,7 +309,7 @@ func TestABootstrapMakesARecordedPrivateNetworkAgainWhenItWasTakenDownByHand(t *
 	if err != nil {
 		t.Fatalf("repairParts() = %v", err)
 	}
-	if !slices.Contains(repaired, network.PartName) || server.networks["ocel-production"] == nil || len(server.policies) != 2 {
+	if !slices.Contains(repaired, network.PartName) || server.networks["ocel-prod-network"] == nil || len(server.policies) != 2 {
 		t.Errorf("repairParts() = %v leaving %v and %v, want the recorded network made again", repaired, server.networks, server.policies)
 	}
 }

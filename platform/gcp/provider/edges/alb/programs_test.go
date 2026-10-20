@@ -12,11 +12,12 @@ func binding(hosts map[string]Host) Program {
 
 func shieldedBinding(hosts map[string]Host, shielded bool) Program {
 	return bindingProgram(bindingSpec{
+		Namespace:      "ocel",
 		Shielded:       shielded,
 		Region:         "europe-west1",
 		Slug:           "shop",
 		Tier:           environment.TierProduction,
-		CertificateMap: "ocel-alb-production-certs",
+		CertificateMap: "ocel-prod-alb-certs",
 		Hosts:          hosts,
 	})
 }
@@ -30,14 +31,14 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	}
 
 	for name, token := range map[string]string{
-		"ocel-alb-production-address":  "gcp:compute/globalAddress:GlobalAddress",
-		"ocel-alb-production-notfound": "gcp:compute/backendService:BackendService",
-		"ocel-alb-production-certs":    "gcp:certificatemanager/certificateMap:CertificateMap",
-		"ocel-alb-production-routes":   "gcp:compute/uRLMap:URLMap",
-		"ocel-alb-production-https":    "gcp:compute/targetHttpsProxy:TargetHttpsProxy",
-		"ocel-alb-production-forward":  "gcp:compute/globalForwardingRule:GlobalForwardingRule",
-		"ocel-alb-production-assets":   "gcp:compute/backendBucket:BackendBucket",
-		"ocel-alb-production-reader":   "gcp:projects/iAMMember:IAMMember",
+		"ocel-prod-alb-address":  "gcp:compute/globalAddress:GlobalAddress",
+		"ocel-prod-alb-notfound": "gcp:compute/backendService:BackendService",
+		"ocel-prod-alb-certs":    "gcp:certificatemanager/certificateMap:CertificateMap",
+		"ocel-prod-alb-routes":   "gcp:compute/uRLMap:URLMap",
+		"ocel-prod-alb-https":    "gcp:compute/targetHttpsProxy:TargetHttpsProxy",
+		"ocel-prod-alb-forward":  "gcp:compute/globalForwardingRule:GlobalForwardingRule",
+		"ocel-prod-alb-assets":   "gcp:compute/backendBucket:BackendBucket",
+		"ocel-prod-alb-reader":   "gcp:projects/iAMMember:IAMMember",
 	} {
 		resource, declared := seen[name]
 		if !declared {
@@ -52,7 +53,7 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 		t.Errorf("the frontend declares %d resources, want the six one load balancer is and the backend bucket with the grant that lets it read: %v", len(seen), seen)
 	}
 
-	routes := seen["ocel-alb-production-routes"]
+	routes := seen["ocel-prod-alb-routes"]
 	if got := routes.Args["defaultService"]; got == nil {
 		t.Error("the url map names no default service, and a hostname no project claimed would reach whichever backend answered first")
 	}
@@ -63,14 +64,14 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	if got := routes.Args["hostRules"]; got != nil {
 		t.Errorf("the url map declares host rules %v, and a bind writes them: the stack that owns the map must leave them alone", got)
 	}
-	rule := seen["ocel-alb-production-forward"]
+	rule := seen["ocel-prod-alb-forward"]
 	if got := rule.Args["portRange"]; got != "443" {
 		t.Errorf("the forwarding rule listens on %v, want 443: the balancer terminates TLS", got)
 	}
 	if got := rule.Args["loadBalancingScheme"]; got != "EXTERNAL_MANAGED" {
 		t.Errorf("the forwarding rule is %v, want EXTERNAL_MANAGED, which is the global external Application Load Balancer", got)
 	}
-	proxy := seen["ocel-alb-production-https"]
+	proxy := seen["ocel-prod-alb-https"]
 	if got := proxy.Args["certificateMap"]; got == nil {
 		t.Error("the https proxy names no certificate map, and every hostname's certificate is served through one")
 	}
@@ -78,8 +79,9 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 
 func frontSpec() loadBalancerSpec {
 	return loadBalancerSpec{
-		Names:  loadBalancerNames(environment.TierProduction, false),
-		Assets: &tierAssets,
+		Namespace: "ocel",
+		Names:     loadBalancerNames("ocel", environment.TierProduction, false),
+		Assets:    &tierAssets,
 	}
 }
 
@@ -91,7 +93,7 @@ func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
 		t.Fatalf("the frontend program = %v", err)
 	}
 
-	bucket := seen["ocel-alb-production-assets"]
+	bucket := seen["ocel-prod-alb-assets"]
 	if got := bucket.Args["bucketName"]; got != "ocel-acme-prod-production" {
 		t.Errorf("the backend bucket reads %v, want the tier's own bucket", got)
 	}
@@ -115,7 +117,7 @@ func TestTheLoadBalancersServiceAgentListsTheTiersBucketAndReadsOnlyTheStaticFil
 		t.Fatalf("the frontend program = %v", err)
 	}
 
-	grant := seen["ocel-alb-production-reader"]
+	grant := seen["ocel-prod-alb-reader"]
 	if got := grant.Args["member"]; got != "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com" {
 		t.Errorf("the grant goes to %v, want the load balancer's service agent of project number 4242", got)
 	}
@@ -137,7 +139,7 @@ func TestTheLoadBalancersServiceAgentListsTheTiersBucketAndReadsOnlyTheStaticFil
 func TestTheFrontendOfAShieldedLoadBalancerDeclaresNoBackendBucket(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true)}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, true)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -173,25 +175,25 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 				App:         "web",
 				Certificate: "projects/acme-prod/locations/global/certificates/shop",
 				Service:     "ocel-shop-prod-web",
-				Backend:     "ocel-alb-shop-production-shop-example-com",
+				Backend:     backendName("ocel", "shop", environment.TierProduction, "shop.example.com"),
 			},
 		}))
 	if err != nil {
 		t.Fatalf("the binding program = %v", err)
 	}
 
-	entry, declaredEntry := seen["ocel-alb-shop-production-shop-example-com-cert"]
+	entry, declaredEntry := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")+"-cert"]
 	if !declaredEntry {
 		t.Fatalf("the binding declares no certificate map entry; the balancer would serve shop.example.com no certificate. Declared: %v", seen)
 	}
 	if got := entry.Args["hostname"]; got != "shop.example.com" {
 		t.Errorf("the certificate map entry answers for %v, want shop.example.com", got)
 	}
-	if got := entry.Args["map"]; got != "ocel-alb-production-certs" {
+	if got := entry.Args["map"]; got != "ocel-prod-alb-certs" {
 		t.Errorf("the certificate map entry lands in %v, want the tier's own map", got)
 	}
 
-	neg, declaredNEG := seen["ocel-alb-shop-production-shop-example-com-neg"]
+	neg, declaredNEG := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")+"-neg"]
 	if !declaredNEG {
 		t.Fatalf("the binding declares no serverless neg; nothing would route a request from the load balancer to Cloud Run")
 	}
@@ -203,7 +205,7 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 		t.Errorf("the neg points at %v, want the Cloud Run service the pointer's active record named", neg.Args["cloudRun"])
 	}
 
-	backend, declaredBackend := seen["ocel-alb-shop-production-shop-example-com"]
+	backend, declaredBackend := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")]
 	if !declaredBackend {
 		t.Fatalf("the binding declares no backend service; Cloud CDN is a backend-service setting and there is nothing to set it on")
 	}
@@ -226,10 +228,10 @@ func TestAHostnameBoundBeforeAnythingWasDeployedDeclaresNoBackendToRouteNowhere(
 	if err != nil {
 		t.Fatalf("the binding program = %v", err)
 	}
-	if _, backed := seen["ocel-alb-shop-production-shop-example-com"]; backed {
+	if _, backed := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")]; backed {
 		t.Error("the binding declares a backend for a hostname whose app has released no service, and a neg needs one to point at")
 	}
-	if _, certified := seen["ocel-alb-shop-production-shop-example-com-cert"]; !certified {
+	if _, certified := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")+"-cert"]; !certified {
 		t.Error("the binding declares no certificate for a hostname it can already certify: the certificate outlives the release the backend waits on")
 	}
 }

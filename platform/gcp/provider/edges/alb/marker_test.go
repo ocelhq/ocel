@@ -11,11 +11,11 @@ import (
 func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, false)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
-	action, _ := seen["ocel-alb-production-routes"].Args["headerAction"].(map[string]any)
+	action, _ := seen["ocel-prod-alb-routes"].Args["headerAction"].(map[string]any)
 	added, _ := action["responseHeadersToAdds"].([]any)
 	for _, header := range added {
 		fields, _ := header.(map[string]any)

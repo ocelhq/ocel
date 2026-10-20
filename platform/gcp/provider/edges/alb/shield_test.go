@@ -55,9 +55,9 @@ func mintTestCertificate(name string, authority bool) string {
 func shieldedLoadBalancer() map[string]string {
 	return map[string]string{
 		"address":        shieldedAddress,
-		"certificateMap": "ocel-alb-shielded-production-certs",
-		"urlMap":         "ocel-alb-shielded-production-routes",
-		"notFound":       "ocel-alb-shielded-production-notfound",
+		"certificateMap": "ocel-prod-alb-shielded-certs",
+		"urlMap":         "ocel-prod-alb-shielded-routes",
+		"notFound":       "ocel-prod-alb-shielded-notfound",
 	}
 }
 
@@ -79,7 +79,7 @@ func unreconciledRouter(t *testing.T, balancer *Edge) router.Stack {
 
 func trustedBy(t *testing.T, w *world) []string {
 	t.Helper()
-	trust, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))["ocel-alb-shielded-production-trust"]
+	trust, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))["ocel-prod-alb-shielded-trust"]
 	if !declared {
 		t.Fatal("the shielded balancer declares no trust config, so nothing checks the client certificate a request arrives with")
 	}
@@ -107,11 +107,11 @@ func asList(value any) []any {
 func TestTheShieldedLoadBalancerTrustsAClientCAAsATrustAnchorAndASelfSignedCertificateByAllowlistingIt(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCAs: []string{zonePull, selfSigned}}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, true), ClientCAs: []string{zonePull, selfSigned}}))
 	if err != nil {
 		t.Fatalf("the shielded balancer program = %v", err)
 	}
-	anchors, allowlisted := readTrustConfig(seen["ocel-alb-shielded-production-trust"])
+	anchors, allowlisted := readTrustConfig(seen["ocel-prod-alb-shielded-trust"])
 	if !slices.Equal(anchors, []string{zonePull}) {
 		t.Errorf("the trust config anchors %d certificates, want the client CA alone: a certificate chaining to it verifies only against a trust anchor", len(anchors))
 	}
@@ -123,15 +123,15 @@ func TestTheShieldedLoadBalancerTrustsAClientCAAsATrustAnchorAndASelfSignedCerti
 func TestTheShieldedLoadBalancerRefusesEveryConnectionThatPresentsNoCertificateItTrusts(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCAs: []string{zonePull}}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, true), ClientCAs: []string{zonePull}}))
 	if err != nil {
 		t.Fatalf("the shielded balancer program = %v", err)
 	}
-	trust := seen["ocel-alb-shielded-production-trust"]
+	trust := seen["ocel-prod-alb-shielded-trust"]
 	if trust.Token != "gcp:certificatemanager/trustConfig:TrustConfig" || trust.Args["location"] != "global" {
 		t.Fatalf("the trust config is %+v, want a global certificate manager trust config", trust)
 	}
-	policy := seen["ocel-alb-shielded-production-mtls"]
+	policy := seen["ocel-prod-alb-shielded-mtls"]
 	if policy.Token != "gcp:networksecurity/serverTlsPolicy:ServerTlsPolicy" || policy.Args["location"] != "global" {
 		t.Fatalf("the server tls policy is %+v, want a global network security server tls policy", policy)
 	}
@@ -139,19 +139,19 @@ func TestTheShieldedLoadBalancerRefusesEveryConnectionThatPresentsNoCertificateI
 	if mtls["clientValidationMode"] != "REJECT_INVALID" {
 		t.Errorf("the policy validates clients in mode %v, want REJECT_INVALID: a connection with no certificate or one it does not trust is refused", mtls["clientValidationMode"])
 	}
-	if got := mtls["clientValidationTrustConfig"]; got == nil || !strings.Contains(got.(string), "ocel-alb-shielded-production-trust") {
+	if got := mtls["clientValidationTrustConfig"]; got == nil || !strings.Contains(got.(string), "ocel-prod-alb-shielded-trust") {
 		t.Errorf("the policy validates clients against %v, want the shielded balancer's trust config", got)
 	}
-	proxy := seen["ocel-alb-shielded-production-https"]
-	if got := proxy.Args["serverTlsPolicy"]; got == nil || !strings.Contains(got.(string), "ocel-alb-shielded-production-mtls") {
+	proxy := seen["ocel-prod-alb-shielded-https"]
+	if got := proxy.Args["serverTlsPolicy"]; got == nil || !strings.Contains(got.(string), "ocel-prod-alb-shielded-mtls") {
 		t.Errorf("the https proxy carries server tls policy %v, want the shielded balancer's, or it answers any client", got)
 	}
 
-	plain, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
+	plain, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, false)}))
 	if err != nil {
 		t.Fatalf("the balancer program = %v", err)
 	}
-	if got := plain["ocel-alb-production-https"].Args["serverTlsPolicy"]; got != nil {
+	if got := plain["ocel-prod-alb-https"].Args["serverTlsPolicy"]; got != nil {
 		t.Errorf("the balancer no edge proxies carries server tls policy %v, want none: its clients are browsers", got)
 	}
 }
@@ -172,14 +172,14 @@ func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedLoadBalancer
 	if got := trustedBy(t, w); !slices.Equal(got, []string{zonePull}) {
 		t.Errorf("the shielded balancer trusts %v, want the client certificate the claim carried", got)
 	}
-	if _, routedThere := w.hosts("ocel-alb-shielded-production-routes")["shop.example.com"]; !routedThere {
-		t.Errorf("the shielded balancer's url map routes %v, want shop.example.com", w.hosts("ocel-alb-shielded-production-routes"))
+	if _, routedThere := w.hosts("ocel-prod-alb-shielded-routes")["shop.example.com"]; !routedThere {
+		t.Errorf("the shielded balancer's url map routes %v, want shop.example.com", w.hosts("ocel-prod-alb-shielded-routes"))
 	}
-	if _, routedPlain := w.hosts("ocel-alb-production-routes")["shop.example.com"]; routedPlain {
+	if _, routedPlain := w.hosts("ocel-prod-alb-routes")["shop.example.com"]; routedPlain {
 		t.Error("shop.example.com is routed on the balancer browsers reach directly, so a request that skips the edge would be answered")
 	}
-	entry := w.declarations(BindingStack("shop", environment.TierProduction))[entryName("shop", environment.TierProduction, "shop.example.com")]
-	if entry.Args["map"] != "ocel-alb-shielded-production-certs" {
+	entry := w.declarations(BindingStack("shop", environment.TierProduction))[entryName("ocel", "shop", environment.TierProduction, "shop.example.com")]
+	if entry.Args["map"] != "ocel-prod-alb-shielded-certs" {
 		t.Errorf("the hostname's certificate is entered in map %v, want the shielded balancer's", entry.Args["map"])
 	}
 }
@@ -321,7 +321,7 @@ func TestTheShieldedLoadBalancerLeavesThePreviewWildcardToTheLoadBalancerItWasBo
 	if _, err := balancer.Shielded().Bootstrap(context.Background(), environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; declared {
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; declared {
 		t.Error("the shielded balancer declares the preview wildcard's certificate map entry, which the balancer it was bound on already owns under that name")
 	}
 }
@@ -337,7 +337,7 @@ func TestDestroyingTheALBRouterTakesDownWhatItsClaimsBound(t *testing.T) {
 	if err := routed.Destroy(context.Background()); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
-	if hosts := w.hosts("ocel-alb-shielded-production-routes"); len(hosts) != 0 {
+	if hosts := w.hosts("ocel-prod-alb-shielded-routes"); len(hosts) != 0 {
 		t.Errorf("the shielded balancer still routes %v", hosts)
 	}
 	if !slices.Contains(w.torn(), BindingStack("shop", environment.TierProduction)) {
@@ -367,9 +367,9 @@ func TestTheALBRoutersRemovalPlanNamesTheHostRuleOfEveryHostnameAnEdgeForwardsTo
 func shieldedPreviewLoadBalancer() map[string]string {
 	return map[string]string{
 		"address":        shieldedAddress,
-		"certificateMap": "ocel-alb-shielded-preview-certs",
-		"urlMap":         "ocel-alb-shielded-preview-routes",
-		"notFound":       "ocel-alb-shielded-preview-notfound",
+		"certificateMap": "ocel-preview-alb-shielded-certs",
+		"urlMap":         "ocel-preview-alb-shielded-routes",
+		"notFound":       "ocel-preview-alb-shielded-notfound",
 	}
 }
 
@@ -387,20 +387,20 @@ func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedLoadBalancerAlone(t *
 	if origin != (edge.Origin{Address: shieldedAddress, Certified: true}) {
 		t.Errorf("ClaimPreviewEntry named origin %+v, want the shielded preview balancer at %s", origin, shieldedAddress)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; !declared {
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; !declared {
 		t.Error("the shielded preview balancer enters no certificate for the wildcard, so no preview is answered through the edge")
 	}
 	if _, err := balancer.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap of the balancer browsers reach: %v", err)
 	}
-	if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; declared {
+	if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; declared {
 		t.Error("the balancer browsers reach declares the wildcard too, so a preview that skips the edge is answered")
 	}
 
 	if err := NewRouter(balancer).Hooks().Origin.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
 		t.Fatalf("DisclaimPreviewEntry: %v", err)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("preview.example.com")]; declared {
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; declared {
 		t.Error("the shielded balancer still enters *.preview.example.com once the entry was given back")
 	}
 }
@@ -487,11 +487,11 @@ func TestAClaimWhoseRaiseOverlapsAnotherLeavesTheLoadBalancerTrustingBoth(t *tes
 func TestTheShieldedLoadBalancerRedirectsPlainHTTPToHTTPSAndForwardsItNowhere(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, true), ClientCAs: []string{zonePull}}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, true), ClientCAs: []string{zonePull}}))
 	if err != nil {
 		t.Fatalf("the shielded balancer program = %v", err)
 	}
-	redirect := seen["ocel-alb-shielded-production-redirect"]
+	redirect := seen["ocel-prod-alb-shielded-redirect"]
 	if redirect.Token != "gcp:compute/uRLMap:URLMap" || redirect.Args["defaultService"] != nil || redirect.Args["hostRules"] != nil {
 		t.Fatalf("the redirect url map is %+v, want a url map that names no backend: plain http carries no client certificate", redirect)
 	}
@@ -499,17 +499,17 @@ func TestTheShieldedLoadBalancerRedirectsPlainHTTPToHTTPSAndForwardsItNowhere(t 
 	if answer["httpsRedirect"] != true || answer["redirectResponseCode"] != "PERMANENT_REDIRECT" || answer["stripQuery"] != false {
 		t.Errorf("the redirect url map answers %v, want a 308 to the same URL over https: Cloudflare reaches the origin over plain http when the visitor did", answer)
 	}
-	proxy := seen["ocel-alb-shielded-production-http"]
-	if proxy.Token != "gcp:compute/targetHttpProxy:TargetHttpProxy" || !strings.Contains(fmt.Sprint(proxy.Args["urlMap"]), "ocel-alb-shielded-production-redirect") {
+	proxy := seen["ocel-prod-alb-shielded-http"]
+	if proxy.Token != "gcp:compute/targetHttpProxy:TargetHttpProxy" || !strings.Contains(fmt.Sprint(proxy.Args["urlMap"]), "ocel-prod-alb-shielded-redirect") {
 		t.Errorf("the http proxy is %+v, want a target http proxy onto the redirect url map", proxy)
 	}
-	rule := seen["ocel-alb-shielded-production-forward-http"]
-	https := seen["ocel-alb-shielded-production-forward"]
-	if rule.Args["portRange"] != "80" || !strings.Contains(fmt.Sprint(rule.Args["target"]), "ocel-alb-shielded-production-http") || rule.Args["ipAddress"] != https.Args["ipAddress"] {
+	rule := seen["ocel-prod-alb-shielded-forward-http"]
+	https := seen["ocel-prod-alb-shielded-forward"]
+	if rule.Args["portRange"] != "80" || !strings.Contains(fmt.Sprint(rule.Args["target"]), "ocel-prod-alb-shielded-http") || rule.Args["ipAddress"] != https.Args["ipAddress"] {
 		t.Errorf("the http forwarding rule is %+v, want port 80 onto the http proxy, on the address the https rule answers", rule.Args)
 	}
 
-	plain, err := declared(loadBalancerProgram(loadBalancerSpec{Names: loadBalancerNames(environment.TierProduction, false)}))
+	plain, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, false)}))
 	if err != nil {
 		t.Fatalf("the balancer program = %v", err)
 	}

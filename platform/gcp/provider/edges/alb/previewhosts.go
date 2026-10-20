@@ -120,7 +120,7 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 	served := Host{
 		App:          record.App,
 		Service:      service,
-		Backend:      backendName(s.state.Slug, s.state.Tier, host.Hostname),
+		Backend:      backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, host.Hostname),
 		Pointer:      move.Pointer,
 		StaticRoutes: routes,
 	}

@@ -167,7 +167,7 @@ func TestTheFirstDeployDeclaringADatabaseAddsThePrivateNetworkAsAPartItRecords(t
 		t.Fatalf("ApplyPreflight() = %v", err)
 	}
 
-	want := []string{"create network ocel-production", "create subnetwork ocel-production", "create policy ocel-production-memorystore", "create policy ocel-production-cloudsql"}
+	want := []string{"create network ocel-prod-network", "create subnetwork ocel-prod-network", "create policy ocel-prod-network-memorystore", "create policy ocel-prod-network-cloudsql"}
 	if got := server.wrote(); !slices.Equal(got, want) {
 		t.Errorf("the first deploy declaring a database wrote %v, want %v", got, want)
 	}

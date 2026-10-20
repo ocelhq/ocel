@@ -238,6 +238,24 @@ func TestDiscardingACertificateSaysWhichHostnameItCovered(t *testing.T) {
 	}
 }
 
+func TestACertificateIsNamedUnderItsNamespaceAndItsAuthorizationAppendsToIt(t *testing.T) {
+	t.Parallel()
+
+	name := certificateName("ocel", "shop.example.com")
+	if !strings.HasPrefix(name, "ocel-cert-shop-example-com-") {
+		t.Errorf("certificateName() = %q, want the namespace, cert and the hostname readable at its start", name)
+	}
+	if auth := authorizationID("ocel", "shop.example.com"); auth != name+"-auth" {
+		t.Errorf("authorizationID() = %q, want the certificate %q and -auth", auth, name)
+	}
+	if other := certificateName("ocel-dev", "shop.example.com"); other == name {
+		t.Errorf("namespaces ocel and ocel-dev both name the certificate of shop.example.com %q, and either one's discard would delete the other's", name)
+	}
+	if long := authorizationID("northwind-traders-europe-west", "checkout-eu-west-staging.a-very-long-customer-subdomain.example.com"); len(long) > 63 {
+		t.Errorf("authorizationID() = %q, %d characters: Certificate Manager refuses an id over 63", long, len(long))
+	}
+}
+
 func TestACertificateNothingRequestedIsNotThisProvidersToDelete(t *testing.T) {
 	t.Parallel()
 

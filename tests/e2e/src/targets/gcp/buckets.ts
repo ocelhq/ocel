@@ -11,7 +11,7 @@ type Listing = {
 };
 
 export function appBucketPrefix(namespace: string): string {
-  return `${namespace}--`;
+  return `${namespace}-app-`;
 }
 
 export function bucketsIn(body: unknown): AppBucket[] {

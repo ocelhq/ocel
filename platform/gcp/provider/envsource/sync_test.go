@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -23,10 +24,10 @@ import (
 )
 
 func longestNames() names.Names {
-	return names.New(provider.Namespace(strings.Repeat("a", names.MaxAccountID-len("-")-names.AccountHashLen)), "acme-prod")
+	return names.New(provider.Namespace(strings.Repeat("a", 30)), "acme-prod")
 }
 
-func TestTheSyncAccountFitsTheLongestNamespaceAnAccountLeavesRoomFor(t *testing.T) {
+func TestTheSyncAccountFitsALongNamespaceByItsCompactedField(t *testing.T) {
 	t.Parallel()
 	named := longestNames()
 	if err := named.Fit(); err != nil {
@@ -38,7 +39,7 @@ func TestTheSyncAccountFitsTheLongestNamespaceAnAccountLeavesRoomFor(t *testing.
 		if len(account) < 6 || len(account) > names.MaxAccountID || !accountID.MatchString(account) {
 			t.Errorf("%s is %d characters, and IAM takes an id of 6 to 30 lowercase letters, digits and dashes", account, len(account))
 		}
-		if !strings.HasPrefix(account, string(named.Namespace())+"-") {
+		if !strings.HasPrefix(account, naming.NamespaceField(string(named.Namespace()))+"-") {
 			t.Errorf("%s does not start with the namespace, so two namespaces in one project would share it", account)
 		}
 		if service := named.EnvSourceSync(tier); len(service) > names.MaxServiceNameLength {
@@ -62,7 +63,7 @@ func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T)
 			t.Errorf("the %s sync runs as an app's account, and an app would then write every value", tier)
 		}
 	}
-	if got, want := named.EnvSourceSync(environment.TierPreview), "ocel-preview-envsourcesync"; got != want {
+	if got, want := named.EnvSourceSync(environment.TierPreview), "ocel-preview-env-sync"; got != want {
 		t.Errorf("EnvSourceSync(preview) = %q, want %q", got, want)
 	}
 	if got, want := named.EnvSourceSyncAccountEmail(environment.TierPreview), preview+"@acme-prod.iam.gserviceaccount.com"; got != want {

@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -66,12 +67,12 @@ func TestBootstrappingEachTierAttachesAFailClosedGateExtensionToItsForwardingRul
 			_, w := gatedEdgeOn(t, tier)
 
 			declared := w.declarations(GateStack(tier))
-			extension, found := declared["ocel-alb-"+string(tier)+"-gate-edge"]
+			extension, found := declared["ocel-"+naming.TierWord(tier)+"-alb-gate-edge"]
 			if !found || extension.Token != lbEdgeExtensionToken {
 				t.Fatalf("the gate stack declares %v, want a load balancer edge extension: it runs before the url map and before Cloud CDN, on every request", keys(declared))
 			}
 			rules, _ := extension.Args["forwardingRules"].([]any)
-			if len(rules) != 1 || !strings.HasSuffix(rules[0].(string), "/global/forwardingRules/ocel-alb-"+string(tier)+"-forward") {
+			if len(rules) != 1 || !strings.HasSuffix(rules[0].(string), "/global/forwardingRules/ocel-"+naming.TierWord(tier)+"-alb-forward") {
 				t.Errorf("the extension attaches to %v, want the tier's https forwarding rule", rules)
 			}
 			chains, _ := extension.Args["extensionChains"].([]any)
@@ -100,7 +101,7 @@ func TestEveryForwardingRuleThatServesContentRunsTheGateBeforeCloudCDN(t *testin
 			_, w := gatedEdgeOn(t, tier)
 
 			front := w.declarations(LoadBalancerStack(tier))
-			extension := w.declarations(GateStack(tier))["ocel-alb-"+string(tier)+"-gate-edge"]
+			extension := w.declarations(GateStack(tier))["ocel-"+naming.TierWord(tier)+"-alb-gate-edge"]
 			attached, _ := extension.Args["forwardingRules"].([]any)
 			rules := 0
 			for name, declared := range front {
@@ -131,7 +132,7 @@ func TestThePluginIsUploadedOnceToTheTiersRegistryAndTheTierRunsThatImage(t *tes
 				t.Errorf("the bootstrap ensured the plugin images %v, want once in the %s tier's repository", w.gate.uploads, tier)
 			}
 			declared := w.declarations(GateStack(tier))
-			versions, _ := declared["ocel-alb-"+string(tier)+"-gate"].Args["versions"].([]any)
+			versions, _ := declared["ocel-"+naming.TierWord(tier)+"-alb-gate"].Args["versions"].([]any)
 			version, _ := versions[0].(map[string]any)
 			if image, _ := version["imageUri"].(string); !strings.HasPrefix(image, pluginRepository(tier)) {
 				t.Errorf("the plugin runs image %q, want the generic artifact in the tier's own repository, in resource-name form", image)
@@ -419,7 +420,7 @@ func TestChangingAGateAddsAVersionAndKeepsTheOneItReplacedForTheSwitch(t *testin
 
 	reconcileGated(t, balancer, "shop", &rotated)
 
-	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-alb-preview-gate"].Args["versions"].([]any)
+	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
 	if len(versions) != 2 {
 		t.Errorf("the plugin lists %d versions, want the new one and the one it replaces: Google will not delete the main version, and older ones are pruned", len(versions))
 	}
@@ -430,7 +431,7 @@ func TestARaiseThatFailedKeepsEveryVersionThePluginMayStillRun(t *testing.T) {
 
 	balancer, w := gatedEdge(t)
 	reconcileGated(t, balancer, "shop", &shopGate)
-	running := w.declarations(GateStack(environment.TierPreview))["ocel-alb-preview-gate"].Args["mainVersionId"]
+	running := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["mainVersionId"]
 	failed := shopGate
 	failed.BypassSecrets = []string{"failed"}
 	w.failUps(GateStack(environment.TierPreview), errors.New("the update was interrupted"))
@@ -443,7 +444,7 @@ func TestARaiseThatFailedKeepsEveryVersionThePluginMayStillRun(t *testing.T) {
 
 	reconcileGated(t, balancer, "shop", &next)
 
-	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-alb-preview-gate"].Args["versions"].([]any)
+	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
 	var names []any
 	for _, each := range versions {
 		names = append(names, each.(map[string]any)["versionName"])
@@ -463,7 +464,7 @@ func TestPublishingManyTimesNeverKeepsMoreThanTwoVersions(t *testing.T) {
 		reconcileGated(t, balancer, "shop", &rotated)
 	}
 
-	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-alb-preview-gate"].Args["versions"].([]any)
+	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
 	if len(versions) != 2 {
 		t.Errorf("the plugin lists %d versions after six publishes, want 2", len(versions))
 	}
@@ -714,25 +715,27 @@ func TestEveryPreviewBackendAndTheAssetsBucketMarkTheirResponsesNoindex(t *testi
 	t.Parallel()
 
 	preview := bindingProgram(bindingSpec{
-		Region: "europe-west1", Slug: "shop", Tier: environment.TierPreview, CertificateMap: "certs",
-		Hosts: map[string]Host{aliasHost: {Service: previewService, Backend: backendName("shop", environment.TierPreview, aliasHost)}},
+		Namespace: "ocel",
+		Region:    "europe-west1", Slug: "shop", Tier: environment.TierPreview, CertificateMap: "certs",
+		Hosts: map[string]Host{aliasHost: {Service: previewService, Backend: backendName("ocel", "shop", environment.TierPreview, aliasHost)}},
 	})
 	seen, err := declared(preview)
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend := seen[backendName("shop", environment.TierPreview, aliasHost)]
+	backend := seen[backendName("ocel", "shop", environment.TierPreview, aliasHost)]
 	if headers, _ := backend.Args["customResponseHeaders"].([]any); len(headers) != 1 || headers[0] != "X-Robots-Tag: noindex" {
 		t.Errorf("a preview backend adds %v to its responses, want X-Robots-Tag: noindex: the plugin cannot add a header to a response", headers)
 	}
 
 	front, err := declared(loadBalancerProgram(loadBalancerSpec{
-		Names: loadBalancerNames(environment.TierPreview, false), Tier: environment.TierPreview, Assets: &tierAssets,
+		Namespace: "ocel",
+		Names:     loadBalancerNames("ocel", environment.TierPreview, false), Tier: environment.TierPreview, Assets: &tierAssets,
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	bucket := front["ocel-alb-preview-assets"]
+	bucket := front["ocel-preview-alb-assets"]
 	if headers, _ := bucket.Args["customResponseHeaders"].([]any); len(headers) != 1 || headers[0] != "X-Robots-Tag: noindex" {
 		t.Errorf("the preview assets bucket adds %v, want X-Robots-Tag: noindex", headers)
 	}
@@ -761,7 +764,7 @@ func TestThePluginConfigIsMarkedSecretInThePulumiState(t *testing.T) {
 	t.Parallel()
 
 	secret, err := pluginConfigIsSecret(gateProgram(gateSpec{
-		Names: loadBalancerNames(environment.TierPreview, false),
+		Names: loadBalancerNames("ocel", environment.TierPreview, false),
 		Main:  gateVersion{ID: "v1", Image: "projects/p/locations/r/repositories/x/genericArtifacts/y:z", Config: "ocel-gate 1\n"},
 	}))
 	if err != nil {

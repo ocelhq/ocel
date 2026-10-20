@@ -13,7 +13,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -171,23 +170,12 @@ func (e *Edge) DestroyOriginWildcard(ctx context.Context, tier environment.Tier)
 	return nil
 }
 
-func originEntryName(tier environment.Tier, baseDomain string) string {
-	return naming.Fit(maxResourceName, naming.WordSeparator,
-		naming.Fixed("ocel"),
-		naming.Fixed(string(Kind)),
-		naming.Fixed("origin"),
-		naming.Fixed(string(tier)),
-		naming.Compressible(naming.SanitizeHost(baseDomain)),
-		naming.Fixed("cert"),
-	)
-}
-
 func originWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, project string) error {
 	base := spec.Origin.BaseDomain
 	if base == "" {
 		return nil
 	}
-	entry := originEntryName(spec.Tier, base)
+	entry := originEntryName(spec.Namespace, spec.Tier, base)
 	_, err := certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
 		Name:         pulumi.String(entry),
 		Project:      pulumi.String(project),

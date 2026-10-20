@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -149,7 +147,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		App:          binding.App,
 		Certificate:  binding.Certificate,
 		Service:      served.Service,
-		Backend:      backendName(s.state.Slug, s.state.Tier, binding.Hostname),
+		Backend:      backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, binding.Hostname),
 		StaticRoutes: served.StaticRoutes,
 	}
 	claimed, err := s.claim(ctx, binding.Hostname)
@@ -218,6 +216,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		return s.e.deps.Stacks.Destroy(ctx, target, progress.Discard())
 	}
 	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
+		Namespace:      s.e.deps.Namespace,
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
 		Tier:           s.state.Tier,
@@ -257,7 +256,7 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
-	owner := Surface(s.state.Slug, s.state.Tier)
+	owner := Surface(s.e.deps.Namespace, s.state.Slug, s.state.Tier)
 	if len(entry.Value) > 0 {
 		var existing claim
 		if err := json.Unmarshal(entry.Value, &existing); err != nil {
@@ -334,34 +333,6 @@ func (s *stack) Destroy(ctx context.Context) error {
 	}
 	s.state.Bound = nil
 	return s.e.releaseFront(ctx, s.state.Tier, s.state.Slug)
-}
-
-const maxResourceName = 63
-
-func resourceName(slug string, tier environment.Tier, hostname string, role ...string) string {
-	segments := []naming.Segment{
-		naming.Fixed("ocel"),
-		naming.Fixed(string(Kind)),
-		naming.Compressible(slug),
-		naming.Fixed(string(tier)),
-		naming.Compressible(naming.SanitizeHost(hostname)),
-	}
-	for _, each := range role {
-		segments = append(segments, naming.Fixed(each))
-	}
-	return naming.Fit(maxResourceName, naming.WordSeparator, segments...)
-}
-
-func backendName(slug string, tier environment.Tier, hostname string) string {
-	return resourceName(slug, tier, hostname)
-}
-
-func entryName(slug string, tier environment.Tier, hostname string) string {
-	return resourceName(slug, tier, hostname, "cert")
-}
-
-func negName(slug string, tier environment.Tier, hostname string) string {
-	return resourceName(slug, tier, hostname, "neg")
 }
 
 func isWildcard(hostname string) bool { return strings.HasPrefix(hostname, "*.") }

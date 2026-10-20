@@ -58,6 +58,18 @@ func TestParseNamespaceRefusesASegmentThatWouldStartAnotherNamespacesFence(t *te
 	}
 }
 
+func TestParseNamespaceRefusesTheFieldALongerNamespaceIsCompactedTo(t *testing.T) {
+	compacted := naming.NamespaceField("northwind-traders")
+	for _, given := range []string{compacted, "north-fe0905", "a-000000"} {
+		if _, err := provider.ParseNamespace(given); err == nil {
+			t.Errorf("ParseNamespace(%q) was accepted, want a refusal: a longer namespace is compacted to that shape, so both would share every name", given)
+		}
+	}
+	if _, err := provider.ParseNamespace("northwind-traders"); err != nil {
+		t.Errorf("ParseNamespace(%q): %v", "northwind-traders", err)
+	}
+}
+
 func TestParseNamespaceAcceptsAWordThatOnlyContainsApp(t *testing.T) {
 	for _, given := range []string{"apps", "myapp", "ocel-apple", "happy-path"} {
 		if _, err := provider.ParseNamespace(given); err != nil {
@@ -79,13 +91,13 @@ func TestEveryAcceptedNamespaceIsTheFieldANameMintsFromIt(t *testing.T) {
 }
 
 func TestNamespaceFromEnvReadsTheVariableEveryProviderShares(t *testing.T) {
-	t.Setenv(provider.NamespaceEnvVar, "j-a1b2c3")
+	t.Setenv(provider.NamespaceEnvVar, "j-a1b2c3-cache")
 
 	ns, err := provider.NamespaceFromEnv()
 	if err != nil {
 		t.Fatalf("NamespaceFromEnv() = %v", err)
 	}
-	if ns.String() != "j-a1b2c3" {
+	if ns.String() != "j-a1b2c3-cache" {
 		t.Errorf("NamespaceFromEnv() = %q, want the namespace the environment names", ns)
 	}
 }

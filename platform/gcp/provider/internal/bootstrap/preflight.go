@@ -181,12 +181,12 @@ var projectPermissions = []string{
 
 func AppBucketsGrant(names names.Names) string {
 	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
-		bucketsRole, "projects/_/buckets/"+names.AppBucketPrefix())
+		bucketsRole, "projects/_/buckets/"+names.AppFence())
 }
 
 func DatabasesGrant(names names.Names) string {
 	return fmt.Sprintf("%s, on the condition resource.name.startsWith(%q)",
-		databasesRole, "projects/"+names.Project()+"/instances/"+names.PostgresInstancePrefix())
+		databasesRole, "projects/"+names.Project()+"/instances/"+names.AppFence())
 }
 
 func PartsGrant(names names.Names) string {

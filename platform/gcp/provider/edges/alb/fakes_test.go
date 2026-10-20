@@ -405,7 +405,7 @@ func (w *world) servedRevision(slug string, tier environment.Tier, hostnames []s
 		if !ok || backend == notFoundBackend {
 			continue
 		}
-		run, _ := declared[negName(slug, tier, hostname)].Args["cloudRun"].(map[string]any)
+		run, _ := declared[negName("ocel", slug, tier, hostname)].Args["cloudRun"].(map[string]any)
 		service, _ := run["service"].(string)
 		tag, _ := run["tag"].(string)
 		if tag == "" {

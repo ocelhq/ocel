@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -38,18 +39,22 @@ var (
 )
 
 type appBucket struct {
-	name     string
+	untagged string
 	attrs    storage.BucketAttrs
 	emulated bool
 }
 
-func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionRequest) appBucket {
+func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionRequest) (appBucket, error) {
 	spec := provider.BucketSpec{}
 	if in.Resource.Bucket != nil {
 		spec = *in.Resource.Bucket
 	}
+	untagged, err := clients.UntaggedAppBucket(in.Ref.Project, in.Ref.Name.Env, in.Resource.Name)
+	if err != nil {
+		return appBucket{}, err
+	}
 	return appBucket{
-		name:     clients.AppBucket(in.Ref.Project, in.Ref.Name.Env, in.Resource.Name),
+		untagged: untagged,
 		emulated: clients.Emulated(),
 		attrs: storage.BucketAttrs{
 			Location:                 clients.Region,
@@ -59,7 +64,7 @@ func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionR
 			CORS:                     uploadCORS(spec.AllowedOrigins),
 			Lifecycle:                bucketLifecycle(),
 		},
-	}
+	}, nil
 }
 
 func uploadCORS(origins []string) []storage.CORS {
@@ -168,11 +173,15 @@ func (p *Bucket) Provision(ctx context.Context, in resources.ProvisionRequest, p
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	declared := p.declaredBucket(clients, in)
-	if err := declared.ensure(ctx, client, clients.Project(), in.Resource.Name, progress); err != nil {
+	declared, err := p.declaredBucket(clients, in)
+	if err != nil {
 		return provider.Binding{}, err
 	}
-	return declared.binding(in.Resource), nil
+	name, err := declared.ensure(ctx, client, clients.Project(), in.Resource.Name, progress)
+	if err != nil {
+		return provider.Binding{}, err
+	}
+	return bucketBinding(in.Resource, name), nil
 }
 
 func (p *Bucket) Plan(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
@@ -184,11 +193,15 @@ func (p *Bucket) Plan(ctx context.Context, in resources.ProvisionRequest, _ *pro
 	if err != nil {
 		return "", "", err
 	}
-	return p.declaredBucket(clients, in).plan(ctx, client, in.Resource.Name)
+	declared, err := p.declaredBucket(clients, in)
+	if err != nil {
+		return "", "", err
+	}
+	return declared.plan(ctx, client, clients.Project(), in.Resource.Name)
 }
 
-func (b appBucket) plan(ctx context.Context, client *storage.Client, declared string) (provider.ChangeAction, string, error) {
-	current, err := b.read(ctx, client, declared)
+func (b appBucket) plan(ctx context.Context, client *storage.Client, project, declared string) (provider.ChangeAction, string, error) {
+	current, err := b.find(ctx, client, project, declared)
 	if err != nil {
 		return "", "", err
 	}
@@ -201,60 +214,82 @@ func (b appBucket) plan(ctx context.Context, client *storage.Client, declared st
 	return provider.ActionKeep, provider.ReasonCurrent, nil
 }
 
-func (b appBucket) read(ctx context.Context, client *storage.Client, declared string) (*storage.BucketAttrs, error) {
-	current, err := client.Bucket(b.name).Attrs(ctx)
-	if errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
+func (b appBucket) find(ctx context.Context, client *storage.Client, project, declared string) (*storage.BucketAttrs, error) {
+	listed := client.Buckets(ctx, project)
+	listed.Prefix = b.untagged + naming.WordSeparator
+	var found []*storage.BucketAttrs
+	for {
+		attrs, err := listed.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("find the Cloud Storage bucket that bucket %s stores into: %w", declared, err)
+		}
+		if naming.IsRandomTag(strings.TrimPrefix(attrs.Name, listed.Prefix)) {
+			found = append(found, attrs)
+		}
+	}
+	switch len(found) {
+	case 0:
 		return nil, nil
+	case 1:
+		return found[0], nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("read the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
+	named := make([]string, 0, len(found))
+	for _, attrs := range found {
+		named = append(named, attrs.Name)
 	}
-	return current, nil
+	return nil, refusal.Refuse(refusal.CodeInvalid,
+		"bucket %s is stored in %d Cloud Storage buckets, %s, and a bucket stores into one.\n"+
+			"Delete the ones that hold nothing you need with `gcloud storage rm --recursive gs://<bucket>`, and deploy again",
+		declared, len(named), strings.Join(named, ", "))
 }
 
-func (b appBucket) ensure(ctx context.Context, client *storage.Client, project, declared string, progress progress.Log) error {
-	current, err := b.read(ctx, client, declared)
+func (b appBucket) ensure(ctx context.Context, client *storage.Client, project, declared string, progress progress.Log) (string, error) {
+	current, err := b.find(ctx, client, project, declared)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if current == nil {
 		return b.create(ctx, client, project, declared, progress)
 	}
 	update, differences := b.drift(current)
 	if len(differences) == 0 {
-		return nil
+		return current.Name, nil
 	}
-	gcloud.EnsureProgress(progress).Say("Updating bucket " + declared + " on Cloud Storage bucket " + b.name + ": " + strings.Join(differences, "; "))
-	if _, err := client.Bucket(b.name).Update(ctx, update); err != nil {
-		return fmt.Errorf("update the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
+	gcloud.EnsureProgress(progress).Say("Updating bucket " + declared + " on Cloud Storage bucket " + current.Name + ": " + strings.Join(differences, "; "))
+	if _, err := client.Bucket(current.Name).Update(ctx, update); err != nil {
+		return "", fmt.Errorf("update the Cloud Storage bucket %s that bucket %s stores into: %w", current.Name, declared, err)
 	}
-	return nil
+	return current.Name, nil
 }
 
-func (b appBucket) create(ctx context.Context, client *storage.Client, project, declared string, progress progress.Log) error {
-	gcloud.EnsureProgress(progress).Say("Creating bucket " + declared + " as Cloud Storage bucket " + b.name + " in " + b.attrs.Location)
+func (b appBucket) create(ctx context.Context, client *storage.Client, project, declared string, progress progress.Log) (string, error) {
+	name := b.untagged + naming.WordSeparator + naming.NewRandomTag()
+	gcloud.EnsureProgress(progress).Say("Creating bucket " + declared + " as Cloud Storage bucket " + name + " in " + b.attrs.Location)
 	attrs := b.attrs
-	err := client.Bucket(b.name).Create(ctx, project, &attrs)
+	err := client.Bucket(name).Create(ctx, project, &attrs)
 	if err == nil {
-		return nil
+		return name, nil
 	}
 	if !gcloud.Taken(err) {
-		return fmt.Errorf("create the Cloud Storage bucket %s that bucket %s stores into: %w", b.name, declared, err)
+		return "", fmt.Errorf("create the Cloud Storage bucket %s that bucket %s stores into: %w", name, declared, err)
 	}
-	if _, read := client.Bucket(b.name).Attrs(ctx); read == nil {
-		return nil
+	if _, read := client.Bucket(name).Attrs(ctx); read == nil {
+		return name, nil
 	}
-	return refusal.Refuse(refusal.CodeInvalid,
+	return "", refusal.Refuse(refusal.CodeInvalid,
 		"bucket %s would be the Cloud Storage bucket %s, and another Google Cloud project already holds that name: bucket names are global.\n"+
-			"Rename the bucket, or the project, and deploy again", declared, b.name)
+			"Deploy again, which names the bucket with a new random tag", declared, name)
 }
 
-func (b appBucket) binding(resource provider.Resource) provider.Binding {
+func bucketBinding(resource provider.Resource, name string) provider.Binding {
 	return provider.Binding{
 		Type:       provider.BindingBucket,
 		Name:       resource.Name,
 		Resource:   resource.Declared,
-		Properties: map[string]string{provider.PropertyBucket: b.name},
+		Properties: map[string]string{provider.PropertyBucket: name},
 	}
 }
 
@@ -338,7 +373,10 @@ func refusePublicBucket(resource provider.Resource) error {
 
 func shapeBuckets(shape component.Shape, declared []provider.Resource) error {
 	for _, resource := range declared {
-		bucket := shape.Names.AppBucket(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		bucket, err := shape.Names.UntaggedAppBucket(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		if err != nil {
+			return err
+		}
 		shape.Tree.Add(shape.Environment, shape.Vendor, cost.StorageBucketType, bucket, shape.Region,
 			map[string]any{"location": shape.Region, "storage_class": "STANDARD", "versioning": map[string]any{"enabled": false}})
 	}

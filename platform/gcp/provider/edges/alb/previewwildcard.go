@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -108,18 +107,3 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	}
 	return e.releaseFront(ctx, environment.TierPreview, wildcard)
 }
-
-func previewResourceName(baseDomain string, role ...string) string {
-	segments := []naming.Segment{
-		naming.Fixed("ocel"),
-		naming.Fixed(string(Kind)),
-		naming.Fixed(string(environment.TierPreview)),
-		naming.Compressible(naming.SanitizeHost(baseDomain)),
-	}
-	for _, each := range role {
-		segments = append(segments, naming.Fixed(each))
-	}
-	return naming.Fit(maxResourceName, naming.WordSeparator, segments...)
-}
-
-func previewEntryName(baseDomain string) string { return previewResourceName(baseDomain, "cert") }

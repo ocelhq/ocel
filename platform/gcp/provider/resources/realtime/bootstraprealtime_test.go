@@ -27,7 +27,7 @@ func TestATiersRealtimeAccountMayReadThatTiersRealtimeKeysAndNoOtherSecret(t *te
 		t.Errorf("the project binds %v to %s, want %s: the gateway mounts its environment's keys", members, realtimeKeysReaderRole, member)
 	}
 	const want = `resource.type == "secretmanager.googleapis.com/SecretVersion" && ` +
-		`resource.name.startsWith("projects/123456789/secrets/ocel_realtime-keys-production-")`
+		`resource.name.startsWith("projects/123456789/secrets/ocel_realtime-keys-prod-")`
 	if condition == nil || condition.Expression != want {
 		t.Errorf("the read is conditioned on %+v, want %s: unconditioned, the gateway reads every secret in the project", condition, want)
 	}

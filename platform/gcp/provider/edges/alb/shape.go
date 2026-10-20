@@ -10,7 +10,7 @@ const (
 	previewBaseShaped = "preview"
 )
 
-func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
+func Shape(namespace string, site pricing.EdgeSite) (pricing.EdgeShape, error) {
 	previewBase := ""
 	if site.Tier == environment.TierPreview {
 		previewBase = previewBaseShaped
@@ -19,11 +19,11 @@ func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
 		Vendor:      costVendor,
 		Region:      site.Region,
 		BillsEgress: true,
-		Shared:      ShapeLoadBalancer(site.Tier, previewBase),
+		Shared:      ShapeLoadBalancer(namespace, site.Tier, previewBase),
 		Apps:        make(map[string][]pricing.Shaped, len(site.Apps)),
 	}
 	for _, app := range site.Apps {
-		if hosts := ShapeHosts(site.Slug, site.Tier, app.Hostnames); len(hosts) > 0 {
+		if hosts := ShapeHosts(namespace, site.Slug, site.Tier, app.Hostnames); len(hosts) > 0 {
 			shape.Apps[app.Name] = hosts
 		}
 	}
@@ -45,8 +45,8 @@ const (
 	tfLBEdgeExtension      = "google_network_services_lb_edge_extension"
 )
 
-func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricing.Shaped {
-	balancer := loadBalancerNames(tier, false)
+func ShapeLoadBalancer(namespace string, tier environment.Tier, previewBaseDomain string) []pricing.Shaped {
+	balancer := loadBalancerNames(namespace, tier, false)
 	shaped := []pricing.Shaped{
 		{Name: balancer.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
 		{Name: balancer.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
@@ -65,19 +65,19 @@ func ShapeLoadBalancer(tier environment.Tier, previewBaseDomain string) []pricin
 	}
 	if previewBaseDomain != "" {
 		shaped = append(shaped,
-			pricing.Shaped{Name: previewEntryName(previewBaseDomain), Type: tfCertificateMapEntry, Properties: map[string]any{}},
+			pricing.Shaped{Name: previewEntryName(namespace, previewBaseDomain), Type: tfCertificateMapEntry, Properties: map[string]any{}},
 		)
 	}
 	return shaped
 }
 
-func ShapeHosts(slug string, tier environment.Tier, hostnames []string) []pricing.Shaped {
+func ShapeHosts(namespace, slug string, tier environment.Tier, hostnames []string) []pricing.Shaped {
 	var shaped []pricing.Shaped
 	for _, hostname := range hostnames {
 		shaped = append(shaped,
-			pricing.Shaped{Name: entryName(slug, tier, hostname), Type: tfCertificateMapEntry, Properties: map[string]any{}},
-			pricing.Shaped{Name: negName(slug, tier, hostname), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
-			pricing.Shaped{Name: backendName(slug, tier, hostname), Type: tfBackendService, Properties: backendProperties(true)},
+			pricing.Shaped{Name: entryName(namespace, slug, tier, hostname), Type: tfCertificateMapEntry, Properties: map[string]any{}},
+			pricing.Shaped{Name: negName(namespace, slug, tier, hostname), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
+			pricing.Shaped{Name: backendName(namespace, slug, tier, hostname), Type: tfBackendService, Properties: backendProperties(true)},
 		)
 	}
 	return shaped

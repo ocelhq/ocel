@@ -32,6 +32,9 @@ func ParseNamespace(given string) (Namespace, error) {
 	if slices.Contains(strings.Split(given, naming.WordSeparator), naming.AppWord) {
 		return "", fmt.Errorf("namespace %q has the word %q between dashes; every app resource is named under the fence <namespace>-%s-, so another namespace's fence would cover its names", given, naming.AppWord, naming.AppWord)
 	}
+	if naming.IsCompactedNamespaceField(given) {
+		return "", fmt.Errorf("namespace %q has the shape a namespace longer than %d characters is compacted to in names, so the two could share every name; pick another", given, naming.MaxNamespaceField)
+	}
 	return Namespace(given), nil
 }
 

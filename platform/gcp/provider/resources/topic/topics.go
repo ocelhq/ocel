@@ -76,6 +76,9 @@ func (p *Topic) Provision(ctx context.Context, in resources.ProvisionRequest, pr
 	}
 	topic := declaredTopicOf(in.Resource)
 	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
+	if err := topology.Names.RefuseUnfit(topology.Topics); err != nil {
+		return provider.Binding{}, err
+	}
 	path := topics.TopicPath(c.Project(), topology.Names.Topic(topic.declared))
 	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
@@ -110,6 +113,9 @@ func (p *Topic) Plan(ctx context.Context, in resources.ProvisionRequest, recorde
 	}
 	topic := declaredTopicOf(in.Resource)
 	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
+	if err := topology.Names.RefuseUnfit(topology.Topics); err != nil {
+		return "", "", err
+	}
 	var previous map[string]*provider.TopicSpec
 	if recorded != nil {
 		was, found, err := readDeclaredTopic(*recorded)
@@ -242,6 +248,9 @@ func shapeTopics(shape component.Shape, declared []provider.Resource) error {
 	shape.Tree.AddShaped(shape.Shared, shape.Vendor, shape.Region, []pricing.Shaped{task.DelayQueueShape(shape.Names, req.Deploy.Tier, shape.Region)})
 	for _, resource := range declared {
 		topic := declaredTopicOf(resource)
+		if err := scope.RefuseUnfit(map[string]*provider.TopicSpec{topic.declared: topic.spec}); err != nil {
+			return err
+		}
 		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, scope.Topic(topic.declared), shape.Region, map[string]any{})
 		for _, consumer := range topic.spec.Consumers {
 			shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubSubscriptionType, scope.Subscription(topic.declared, consumer.Name), shape.Region,
