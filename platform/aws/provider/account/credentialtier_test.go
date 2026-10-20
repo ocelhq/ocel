@@ -89,18 +89,18 @@ func witnessesOf(t *testing.T, tier environment.Tier) []witness {
 	var witnesses []witness
 	for _, document := range credentialsOfTier(t, tier) {
 		for _, statement := range parsePolicy(t, document).Statement {
-			if tagsOnlyInsideACreate(statement.Condition) {
-				continue
-			}
 			request := requestSatisfying(t, tier, statement.Condition)
 			for _, action := range stringsOf(t, statement.Action, "Action") {
 				for _, resource := range stringsOf(t, statement.Resource, "Resource") {
-					witnesses = append(witnesses, witness{
+					w := witness{
 						action:   filledIn(t, action, request),
 						resource: resource,
 						arn:      filledIn(t, resource, request),
 						request:  maps.Clone(request),
-					})
+					}
+					if !isOfNoTier(w) {
+						witnesses = append(witnesses, w)
+					}
 				}
 			}
 		}
@@ -134,19 +134,17 @@ func TestACredentialReachesNoResourceTheOtherTiersCredentialsReach(t *testing.T)
 
 	for _, tier := range bothTiers {
 		own := statementsOfTier(t, tier)
-		var witnesses []witness
-		for _, w := range witnessesOf(t, tier) {
-			if isOfNoTier(w) {
-				continue
-			}
+		witnesses := witnessesOf(t, tier)
+		for _, w := range witnesses {
 			if !anyStatementAllows(t, own, w.action, w.arn, w.request) {
 				t.Fatalf("no %s credential can %s on %s, the request its own grant on %s was built to satisfy", tier, w.action, w.arn, w.resource)
 			}
-			witnesses = append(witnesses, w)
 		}
 		sibling := tier.Sibling()
 		for purpose, document := range credentialsOfTier(t, sibling) {
-			statements := parsePolicy(t, document).Statement
+			statements := slices.DeleteFunc(parsePolicy(t, document).Statement, func(statement parsedStatement) bool {
+				return tagsOnlyInsideACreate(statement.Condition)
+			})
 			for _, w := range witnesses {
 				if anyStatementAllows(t, statements, w.action, w.arn, w.request) {
 					t.Errorf("the %s %s credential can %s on %s, which the %s credentials reach as %s", sibling, purpose, w.action, w.arn, tier, w.resource)
