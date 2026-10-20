@@ -542,12 +542,27 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 	if prepared.infra != nil && prepared.infra.networkPending {
 		previewed.Groups = append([]provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, spec.Ref.Tier)}, previewed.Groups...)
 	}
+	repatched, err := r.planRepatchesOf(ctx, spec.Ref.Tier, prepared)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	previewed.Groups = append(repatched, previewed.Groups...)
 	workerGroups, err := r.previewWorkers(ctx, spec, work, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	previewed.Groups = append(previewed.Groups, workerGroups...)
 	return previewed, nil
+}
+
+func (r *release) planRepatchesOf(ctx context.Context, tier environment.Tier, prepared preparedStack) ([]provider.ChangeGroup, error) {
+	switch {
+	case prepared.app != nil && prepared.app.network != nil && !prepared.app.networkPending:
+		return r.planRepatches(ctx, tier, true)
+	case prepared.infra != nil && prepared.infra.network != nil && !prepared.infra.networkPending:
+		return r.planRepatches(ctx, tier, false)
+	}
+	return nil, nil
 }
 
 type preparedStack struct {

@@ -155,6 +155,11 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err := transformed.refuseUnclaimed(); err != nil {
 		return provider.Plan{}, err
 	}
+	repatched, err := r.planRepatches(ctx, spec.Ref.Tier, false)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	previewed.Groups = append(repatched, previewed.Groups...)
 	workerGroups, err := r.previewContainerWorkers(ctx, spec, work, progress)
 	if err != nil {
 		return provider.Plan{}, err

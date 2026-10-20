@@ -17,6 +17,27 @@ func (r *release) planNetwork(ctx context.Context, tier environment.Tier) ([]pro
 	return []provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, tier)}, nil
 }
 
+func (r *release) planRepatches(ctx context.Context, tier environment.Tier, functionNetwork bool) ([]provider.ChangeGroup, error) {
+	var groups []provider.ChangeGroup
+	repatched, err := r.network.PlanRepatch(ctx, tier)
+	if err != nil {
+		return nil, err
+	}
+	if repatched != nil {
+		groups = append(groups, *repatched)
+	}
+	if !functionNetwork {
+		return groups, nil
+	}
+	if repatched, err = r.functionNetwork.PlanRepatch(ctx, tier); err != nil {
+		return nil, err
+	}
+	if repatched != nil {
+		groups = append(groups, *repatched)
+	}
+	return groups, nil
+}
+
 func (r *release) placeInVPC(ctx context.Context, spec provider.StackSpec, work *infraWork, progress progress.Log) error {
 	if len(r.registry.PlacesInVPC(spec.Resources)) == 0 {
 		return nil
