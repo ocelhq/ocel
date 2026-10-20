@@ -211,13 +211,9 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	name := aws.ToString(in.StackName)
-	if trimmed, preview := strings.CutSuffix(name, "-"+string(environment.TierPreview)); preview {
-		name = trimmed
-	}
 	var outputs map[string]string
-	switch name {
-	case coreStackName:
+	switch aws.ToString(in.StackName) {
+	case coreStackName, previewCoreStackName:
 		outputs = map[string]string{
 			"StateTableName": fakeStateTable,
 			"EdgeBucketName": fakeEdgeBucket,

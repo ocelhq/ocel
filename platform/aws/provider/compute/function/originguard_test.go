@@ -87,7 +87,7 @@ func registerGuarded(t *testing.T, cfg testConfig, spec provider.StackSpec, func
 
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: spec.App.App, Boundary: componenttest.BoundaryARN, Dispatch: host})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}

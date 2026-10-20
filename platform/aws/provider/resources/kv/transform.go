@@ -19,15 +19,47 @@ func checkKVNodeCount(logicalName string, patch map[string]any) error {
 		logicalName, nodes)
 }
 
-func resourceNames(at component.Stack, logicalName, family string) (map[string][]component.ResourceRef, error) {
-	group, err := groupID(at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindKV))
+type Names struct {
+	Group         string
+	Subnets       string
+	Parameters    string
+	SecurityGroup string
+}
+
+func NamesFor(at component.Stack, logicalName, family string) (Names, error) {
+	group, err := component.PhysicalName(at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindKV), maxReplicationGroupIDLen)
 	if err != nil {
-		return nil, err
+		return Names{}, err
 	}
-	return map[string][]component.ResourceRef{
-		"securityGroup":    {{Token: component.TokenEC2SecurityGroup, Name: component.SecurityGroupName(group)}},
-		"subnetGroup":      {{Token: component.TokenElastiCacheSubnetGroup, Name: group + naming.WordSeparator + subnetsSuffix}},
-		"parameterGroup":   {{Token: component.TokenElastiCacheParameterGroup, Name: group + naming.WordSeparator + family}},
-		"replicationGroup": {{Token: component.TokenElastiCacheReplicationGroup, Name: group}},
+	return Names{
+		Group:         group,
+		Subnets:       group + naming.WordSeparator + subnetsSuffix,
+		Parameters:    group + naming.WordSeparator + family,
+		SecurityGroup: component.SecurityGroupName(group),
 	}, nil
+}
+
+func (n Names) Surfaces() map[string][]component.ResourceRef {
+	return map[string][]component.ResourceRef{
+		"securityGroup":    {n.securityGroup()},
+		"subnetGroup":      {n.subnetGroup()},
+		"parameterGroup":   {n.parameterGroup()},
+		"replicationGroup": {n.replicationGroup()},
+	}
+}
+
+func (n Names) securityGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenEC2SecurityGroup, Name: n.SecurityGroup}
+}
+
+func (n Names) subnetGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenElastiCacheSubnetGroup, Name: n.Subnets}
+}
+
+func (n Names) parameterGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenElastiCacheParameterGroup, Name: n.Parameters}
+}
+
+func (n Names) replicationGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenElastiCacheReplicationGroup, Name: n.Group}
 }

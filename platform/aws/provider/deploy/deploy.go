@@ -66,11 +66,9 @@ type Config struct {
 	BytecodeCache bool
 	BytecodeEmbed bool
 
-	ArtifactRoot   string
-	ArtifactBucket string
-	EdgeBucket     string
-	CacheBucket    string
-	Objects        payloads.ObjectStore
+	ArtifactRoot string
+	Buckets      naming.Buckets
+	Objects      payloads.ObjectStore
 
 	Invoker function.InvokeAPI
 
@@ -142,16 +140,10 @@ func (c Config) workerTarget() worker.Target {
 	return worker.Target{Namespace: c.Namespace, Tier: c.Tier, StateTable: c.stateTable()}
 }
 
-func (c Config) storageBuckets() naming.Buckets {
-	return naming.Buckets{naming.StorageArtifacts: c.ArtifactBucket, naming.StorageEdge: c.EdgeBucket, naming.StorageCache: c.CacheBucket}
-}
-
 func (c Config) buckets() site.Buckets {
 	return site.Buckets{
+		Buckets:      c.Buckets,
 		Objects:      c.Objects,
-		Artifacts:    c.ArtifactBucket,
-		Edge:         c.EdgeBucket,
-		Cache:        c.CacheBucket,
 		Tier:         c.Tier,
 		EdgeHoldsKey: c.EdgeAccessKeyID != "" && c.EdgeSecretKey != "",
 	}

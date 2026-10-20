@@ -181,7 +181,7 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	}, function.AppStack{
 		Functions: []function.AppFunction{{Logical: "web", HasWorkerEntry: true}},
 		Args:      func(function.AppFunction) function.Args { return workerArgs },
-	}, function.ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath}, nil,
+	}, function.ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath}, nil,
 		worker.Target{Namespace: testNamespace, StateTable: topic.StateTable{Region: "us-east-1", ARN: testStateTableARN}})
 	if err != nil {
 		t.Fatal(err)

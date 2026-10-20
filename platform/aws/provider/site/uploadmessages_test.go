@@ -45,7 +45,7 @@ func TestAnUploadSaysWhichAppAndHowManyFilesOrWhere(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := publication{root: tc.tree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: &fakeArtifactStore{exists: map[string]bool{}}, EdgeHoldsKey: true}}
+			cfg := publication{root: tc.tree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: &fakeArtifactStore{exists: map[string]bool{}}, EdgeHoldsKey: true}}
 			set, err := tc.set(cfg, appBuildsFor(t, cfg, twoAppManifest()))
 			if err != nil {
 				t.Fatalf("the %s set: %v", tc.name, err)

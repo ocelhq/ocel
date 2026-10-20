@@ -105,19 +105,20 @@ func translate(spec *provider.BucketSpec) bucketArgs {
 	}
 }
 
-func Name(ctx *pulumi.Context, at component.Stack, logicalName string) (component.Name, error) {
-	return component.RandomTaggedName(ctx, at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindBucket), component.MaxLambdaNameLen, uploadCompleterSuffix)
-}
-
 func register(ctx *pulumi.Context, stack component.Stack, logicalName string, args bucketArgs, sessions Sessions, completerCode payloads.Placement) error {
 	at := component.ResourceCoordinate(stack.Project, stack.Env, logicalName, naming.KindBucket)
 	if stack.AppBoundaryARN == "" {
 		return fmt.Errorf("bucket %s: this deploy resolved no app boundary, and its upload completer's role made without one is capped by nothing", at.Name)
 	}
-	name, err := Name(ctx, stack, logicalName)
+	names, err := NamesFor(stack, logicalName)
 	if err != nil {
 		return err
 	}
+	names, err = names.WithRandomTag(ctx)
+	if err != nil {
+		return err
+	}
+	name, completerName := names.Bucket, names.Completer
 	tags := component.Tags(at.Kind, "", args.Tags)
 	tags[naming.ManagedByTagKey] = pulumi.String(stack.Namespace)
 	tags[naming.EnvTierTagKey] = pulumi.String(string(stack.Tier()))
@@ -168,22 +169,20 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 		}
 	}
 
-	completerName := name.Child(uploadCompleterSuffix)
-	completerRole, err := component.NewServiceRole(ctx,
-		completerName,
-		at.Description("execution role for the "+at.Name+" bucket's upload completer"),
-		"lambda.amazonaws.com",
-		stack.AppBoundaryARN,
-		stack.AppRolePath,
-		args.Tags,
-		map[string]component.PolicyStatement{
-			completerS3Policy:       {Actions: args.UploadCompleterS3Actions, Resources: []pulumi.StringInput{component.JoinARN(bucket.Arn, "/*")}},
-			completerSessionsPolicy: sessionStatement(args.UploadCompleterSessionActions, sessions),
-		})
+	completerRole, _, err := component.NewAppRole(ctx, component.AppRole{
+		Name:        completerName,
+		Description: component.CapDescription(at.Description("execution role for the "+at.Name+" bucket's upload completer"), component.MaxDescriptionLen),
+		Principal:   iam.LambdaPrincipal,
+		Boundary:    stack.AppBoundaryARN,
+		Path:        stack.AppRolePath,
+		Tags:        args.Tags,
+		Managed:     []string{iam.LambdaBasicExecutionPolicyARN},
+		Policies: map[string]pulumi.StringInput{
+			completerS3Policy:       component.PolicyStatement{Actions: args.UploadCompleterS3Actions, Resources: []pulumi.StringInput{component.JoinARN(bucket.Arn, "/*")}}.Document(),
+			completerSessionsPolicy: sessionStatement(args.UploadCompleterSessionActions, sessions).Document(),
+		},
+	})
 	if err != nil {
-		return err
-	}
-	if _, err := component.AttachManagedPolicy(ctx, completerName, completerRole, iam.LambdaBasicExecutionPolicyARN); err != nil {
 		return err
 	}
 

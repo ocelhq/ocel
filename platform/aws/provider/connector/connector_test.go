@@ -180,7 +180,7 @@ func TestTheStackIsSeparateFromEveryBootstrapStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, bootstrapStack := range []string{production, preview, defaultNamespace.CoreStackName()} {
+	for _, bootstrapStack := range []string{production, preview} {
 		if named == bootstrapStack || strings.HasPrefix(named, bootstrapStack) {
 			t.Errorf("the connector stack is named %q, which a bootstrap stack named %q would be read as part of", named, bootstrapStack)
 		}

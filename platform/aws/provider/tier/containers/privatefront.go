@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 const (
@@ -56,7 +57,7 @@ func (w *work) runPrivateFront(ctx *pulumi.Context, front *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	listener, err := lb.NewListener(ctx, nameFor(w.namespace, w.tier)+partSeparator+httpWord, &lb.ListenerArgs{
+	listener, err := lb.NewListener(ctx, component.NameOf(nameFor(w.namespace, w.tier)).Part(httpWord), &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
 		Port:            pulumi.Int(originListenerPort),
 		Protocol:        pulumi.String("HTTP"),

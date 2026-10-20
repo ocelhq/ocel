@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -121,8 +122,9 @@ func TestTheTagInvalidatorIsRefusedAsNotReadyOnABootstrapThatPredatesItsRole(t *
 	p := NewProvider(Options{Region: "us-east-1"}, nil, cfg, defaultNamespace)
 	p.identity.remember(struct{}{}, &sts.GetCallerIdentityOutput{Account: aws.String("111122223333")})
 	p.deployed.remember(preview, account.Reading{Deployed: account.Deployed{
-		Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", EdgeBucket: "edge", CacheBucket: "cache",
+		Present: true, StateTable: "state-table", VariablesTable: "variables",
 		StateTableStreamARN: "arn:aws:dynamodb:us-east-1:111122223333:table/state-table/stream/2026-10-16T00:00:00.000",
+		Buckets:             naming.Buckets{naming.StorageState: "state", naming.StorageArtifacts: "artifacts", naming.StorageEdge: "edge", naming.StorageCache: "cache"},
 	}})
 
 	spec, err := p.tagInvalidatorSpec(ctx, preview)

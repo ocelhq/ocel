@@ -5,11 +5,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
-	sharedStoreScriptName  = "ocel-releases-store"
-	previewStoreScriptName = "ocel-releases-store-preview"
+	sharedStoreScriptName  = "ocel-prod-releases-store"
+	previewStoreScriptName = "ocel-preview-releases-store"
 )
 
 func TestAccountNames(t *testing.T) {
@@ -27,7 +29,7 @@ func TestAccountNames(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("the default namespace names the account-wide workers and buckets plainly", func(t *testing.T) {
+			t.Run("the default namespace names the account-wide workers and buckets under its tier word", func(t *testing.T) {
 				t.Parallel()
 
 				prod, err := tc.nameFor("ocel", environment.TierProduction)
@@ -54,8 +56,9 @@ func TestAccountNames(t *testing.T) {
 				if err != nil {
 					t.Fatalf("preview: %v", err)
 				}
-				if !strings.HasPrefix(prod, "j-1874-deploy-next-") || !strings.HasPrefix(preview, "j-1874-deploy-next-") {
-					t.Errorf("names = (%q, %q), want both under j-1874-deploy-next-", prod, preview)
+				field := naming.NamespaceField("j-1874-deploy-next")
+				if !strings.HasPrefix(prod, field+"-prod-") || !strings.HasPrefix(preview, field+"-preview-") {
+					t.Errorf("names = (%q, %q), want them under %s- and the tier word", prod, preview, field)
 				}
 				if prod == tc.prod || preview == tc.preview || prod == preview {
 					t.Errorf("names = (%q, %q) collide with the default namespace or each other", prod, preview)
@@ -78,12 +81,16 @@ func TestAccountNames(t *testing.T) {
 				}
 			})
 
-			t.Run("a name longer than Cloudflare allows is refused", func(t *testing.T) {
+			t.Run("the longest namespace is named by its field within Cloudflare's limit", func(t *testing.T) {
 				t.Parallel()
 
-				long := strings.Repeat("a", maxWorkerNameLength)
-				if _, err := tc.nameFor(long, environment.TierPreview); err == nil || !strings.Contains(err.Error(), long) {
-					t.Errorf("nameFor(%d-character namespace) err = %v, want one naming it", len(long), err)
+				long := strings.Repeat("a", provider.MaxNamespaceLength)
+				name, err := tc.nameFor(long, environment.TierPreview)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(name) > maxWorkerNameLength || !strings.HasPrefix(name, naming.NamespaceField(long)+"-preview-") {
+					t.Errorf("nameFor(%d-character namespace) = %q, want it under the namespace field within %d characters", len(long), name, maxWorkerNameLength)
 				}
 			})
 		})

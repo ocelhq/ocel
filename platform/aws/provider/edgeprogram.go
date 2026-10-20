@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
@@ -29,7 +30,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	return edge.Program{
 		Origin: deploy.OriginReach(deploy.OriginAccess{
 			Region:            p.aws.Region,
-			EdgeBucket:        deployed.EdgeBucket,
+			EdgeBucket:        deployed.Buckets[naming.StorageEdge],
 			AccessKeyID:       params.EdgeCredentials.AccessKeyID,
 			SecretAccessKey:   params.EdgeCredentials.SecretAccessKey,
 			ImageOptimizerURL: optimizer,

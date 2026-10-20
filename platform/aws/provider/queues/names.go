@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const (
@@ -31,21 +30,19 @@ type QueueNames struct {
 	DeadLetter string
 }
 
+func (n Names) fit(kind naming.Kind, name string, limit int, childSuffixes ...string) (string, error) {
+	at := naming.Coordinate{Project: n.Project, Env: n.Env, App: naming.InfraApp, Kind: kind, Name: name}
+	return at.AppResourceName(n.Namespace, at.HashTag(n.Namespace)).Fit(limit, childSuffixes...)
+}
+
 func (n Names) Queues(topic, consumer string, fifo bool) (QueueNames, error) {
 	limit := maxQueueNameLen
 	if fifo {
 		limit -= len(fifoSuffix)
 	}
-	name := naming.PhysicalName{
-		Fence:    naming.AppFence(n.Namespace),
-		Project:  n.Project,
-		Env:      n.Env,
-		Declared: naming.Join(naming.WordSeparator, topic, consumer),
-		Tag:      naming.HashTag(n.Namespace, n.Project, n.Env, "", string(naming.KindTopic), topic, consumer),
-	}
-	queue, err := name.Fit(limit, deadLetterSuffix)
+	queue, err := n.fit(naming.KindTopic, topic+naming.FieldSeparator+consumer, limit, deadLetterSuffix)
 	if err != nil {
-		return QueueNames{}, refused("topic "+topic+"'s consumer "+consumer+"'s queue", limit, err)
+		return QueueNames{}, err
 	}
 	deadLetter := queue + naming.WordSeparator + deadLetterSuffix
 	if fifo {
@@ -59,10 +56,9 @@ func (n Names) Topic(topic string, fifo bool) (string, error) {
 	if fifo {
 		limit -= len(fifoSuffix)
 	}
-	at := naming.Coordinate{Project: n.Project, Env: n.Env, App: naming.InfraApp, Kind: naming.KindTopic, Name: topic}
-	name, err := at.AppResourceName(n.Namespace, at.HashTag(n.Namespace)).Fit(limit)
+	name, err := n.fit(naming.KindTopic, topic, limit)
 	if err != nil {
-		return "", refused("topic "+topic, limit, err)
+		return "", err
 	}
 	if fifo {
 		return name + fifoSuffix, nil
@@ -71,27 +67,20 @@ func (n Names) Topic(topic string, fifo bool) (string, error) {
 }
 
 func (n Names) ScheduleGroup() (string, error) {
-	at := naming.Coordinate{Project: n.Project, Env: n.Env, App: naming.InfraApp, Kind: naming.KindWorker, Name: scheduleGroupWord}
-	name, err := at.AppResourceName(n.Namespace, at.HashTag(n.Namespace)).Fit(maxScheduleGroupNameLen)
-	if err != nil {
-		return "", refused("cron schedule group", maxScheduleGroupNameLen, err)
-	}
-	return name, nil
+	return n.fit(naming.KindWorker, scheduleGroupWord, maxScheduleGroupNameLen)
 }
 
 func (n Names) Schedules(task string, expressions int) ([]string, error) {
-	at := naming.Coordinate{Project: n.Project, Env: n.Env, App: naming.InfraApp, Kind: naming.KindTopic, Name: task}
-	physical := at.AppResourceName(n.Namespace, at.HashTag(n.Namespace))
 	if expressions <= 1 {
-		name, err := physical.Fit(maxScheduleNameLen)
+		name, err := n.fit(naming.KindTopic, task, maxScheduleNameLen)
 		if err != nil {
-			return nil, refused("task "+task+"'s schedule", maxScheduleNameLen, err)
+			return nil, err
 		}
 		return []string{name}, nil
 	}
-	name, err := physical.Fit(maxScheduleNameLen, strconv.Itoa(expressions))
+	name, err := n.fit(naming.KindTopic, task, maxScheduleNameLen, strconv.Itoa(expressions))
 	if err != nil {
-		return nil, refused("task "+task+"'s schedules", maxScheduleNameLen, err)
+		return nil, err
 	}
 	names := make([]string, 0, expressions)
 	for i := range expressions {
@@ -102,8 +91,4 @@ func (n Names) Schedules(task string, expressions int) ([]string, error) {
 
 func IsFIFO(name string) bool {
 	return len(name) > len(fifoSuffix) && strings.HasSuffix(name, fifoSuffix)
-}
-
-func refused(what string, limit int, err error) error {
-	return refusal.Refuse(refusal.CodeInvalid, "the %s takes no AWS name within %d characters: %v", what, limit, err)
 }

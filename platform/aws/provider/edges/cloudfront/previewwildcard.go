@@ -26,11 +26,11 @@ const previewSweepPage = 50
 const previewWildcardAddedWith = "ocel domain use --preview"
 
 func previewWildcardName(baseDomain string) string {
-	return naming.Fit(maxDistributionNameLen, naming.FieldSeparator,
-		naming.Fixed(sharedNamespace),
-		naming.Fixed(string(environment.TierPreview)),
-		naming.Compressible(baseDomain),
-	)
+	return naming.TaggedName{
+		Head:     naming.OcelName(sharedNamespace, environment.TierPreview, naming.WildcardSuffix),
+		Readable: naming.Sanitize(baseDomain),
+		Tag:      naming.HashTag(sharedNamespace, string(environment.TierPreview), baseDomain),
+	}.Fit(maxDistributionNameLen)
 }
 
 func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
@@ -138,7 +138,7 @@ func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDom
 		name:          previewWildcardName(baseDomain),
 		managedBy:     string(p.ns),
 		tier:          environment.TierPreview,
-		assetOrigin:   assetOriginDomain(deployed.EdgeBucket, c.Region),
+		assetOrigin:   assetOriginDomain(deployed.Buckets[naming.StorageEdge], c.Region),
 		function:      set.functionARN,
 		emptyBody:     set.emptyBodyFunctionARN,
 		cachePolicy:   set.cachePolicy,
@@ -187,7 +187,7 @@ func (p *cloudFront) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, 
 		return err
 	}
 	serving := resolverNamespaceOf(config)
-	if serving == "" || serving == string(p.ns) {
+	if serving == "" || serving == naming.NamespaceField(string(p.ns)) {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,

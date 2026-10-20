@@ -9,24 +9,31 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
-func Name(ns account.Namespace, slug string, tier environment.Tier, tail ...string) string {
-	return naming.Join(naming.FieldSeparator, append([]string{string(ns), slug, naming.TierWord(tier)}, tail...)...)
-}
+const MaxNameLen = 128
 
-func Fitted(max int, ns account.Namespace, slug string, tier environment.Tier, tail ...string) string {
-	budget := max - len(Name(ns, "", tier, tail...)) - len(naming.FieldSeparator)
-	return Name(ns, naming.Fit(budget, naming.WordSeparator, naming.Compressible(slug)), tier, tail...)
+func Name(ns account.Namespace, slug string, tier environment.Tier, tail ...string) string {
+	return naming.TaggedName{
+		Head:     naming.OcelName(string(ns), tier),
+		Readable: naming.Join(naming.WordSeparator, append([]string{slug}, tail...)...),
+		Tag:      naming.HashTag(append([]string{string(ns), string(tier), slug}, tail...)...),
+	}.Fit(MaxNameLen)
 }
 
 func ProjectsNamed(ns account.Namespace, names []string, tier environment.Tier) []string {
+	head := naming.OcelName(string(ns), tier) + naming.WordSeparator
 	var slugs []string
 	for _, name := range names {
-		fields := strings.Split(name, naming.FieldSeparator)
-		if len(fields) < 3 || fields[0] != string(ns) || fields[2] != naming.TierWord(tier) {
+		rest, under := strings.CutPrefix(name, head)
+		cut := strings.LastIndex(rest, naming.WordSeparator)
+		if !under || cut < 0 {
 			continue
 		}
-		if !slices.Contains(slugs, fields[1]) {
-			slugs = append(slugs, fields[1])
+		slug := rest[:cut]
+		if Name(ns, slug, tier) != name && len(name) < MaxNameLen-len(naming.WordSeparator) {
+			continue
+		}
+		if !slices.Contains(slugs, slug) {
+			slugs = append(slugs, slug)
 		}
 	}
 	return slugs

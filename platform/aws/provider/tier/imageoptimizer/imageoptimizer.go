@@ -39,6 +39,7 @@ const (
 	threadpoolSize   = 4
 	retentionDays    = 14
 	threadpoolEnvVar = "UV_THREADPOOL_SIZE"
+	optimizerWord    = "optimizer"
 	policyName       = "image-optimizer-read"
 
 	lambdaPrincipal = "lambda.amazonaws.com"
@@ -68,10 +69,7 @@ type Names struct {
 }
 
 func NamesFor(namespace string, tier environment.Tier) Names {
-	function := namespace + "-optimizer"
-	if tier == environment.TierPreview {
-		function += "-preview"
-	}
+	function := naming.OcelName(namespace, tier, optimizerWord)
 	return Names{Function: function, Role: function, LogGroup: "/aws/lambda/" + function}
 }
 

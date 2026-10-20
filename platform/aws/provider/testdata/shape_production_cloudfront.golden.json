@@ -147,38 +147,38 @@
       }
     },
     {
-      "id": "project:shop/shared:production/aws_cloudfront_key_value_store:ocel-routes",
+      "id": "project:shop/shared:production/aws_cloudfront_key_value_store:ocel-prod-routes",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_cloudfront_key_value_store",
-      "name": "ocel-routes",
+      "name": "ocel-prod-routes",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_cloudfront_function:ocel-resolver",
+      "id": "project:shop/shared:production/aws_cloudfront_function:ocel-prod-resolver",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_cloudfront_function",
-      "name": "ocel-resolver",
+      "name": "ocel-prod-resolver",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_cloudfront_function:ocel-empty-body",
+      "id": "project:shop/shared:production/aws_cloudfront_function:ocel-prod-empty-body",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_cloudfront_function",
-      "name": "ocel-empty-body",
+      "name": "ocel-prod-empty-body",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_lambda_function:ocel-optimizer",
+      "id": "project:shop/shared:production/aws_lambda_function:ocel-prod-optimizer",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "ocel-optimizer",
+      "name": "ocel-prod-optimizer",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -190,20 +190,20 @@
       }
     },
     {
-      "id": "project:shop/shared:production/aws_lambda_function_url:ocel-optimizer-url",
+      "id": "project:shop/shared:production/aws_lambda_function_url:ocel-prod-optimizer-url",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_lambda_function_url",
-      "name": "ocel-optimizer-url",
+      "name": "ocel-prod-optimizer-url",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-optimizer",
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-optimizer",
       "scope": "project:shop/shared:production",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "/aws/lambda/ocel-optimizer",
+      "name": "/aws/lambda/ocel-prod-optimizer",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14

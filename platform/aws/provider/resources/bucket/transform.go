@@ -1,29 +1,62 @@
 package bucket
 
 import (
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
-func resourceNames(at component.Stack, logicalName string) (map[string][]component.ResourceRef, error) {
-	head, err := component.RandomTaggedHead(at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindBucket), component.MaxLambdaNameLen, uploadCompleterSuffix)
+type Names struct {
+	Bucket    component.Name
+	Completer component.Name
+}
+
+func NamesFor(at component.Stack, logicalName string) (Names, error) {
+	untagged, err := component.UntaggedName(at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindBucket), component.MaxLambdaNameLen, uploadCompleterSuffix)
 	if err != nil {
-		return nil, err
+		return Names{}, err
 	}
-	bucket := component.NameOf(head)
-	completer := bucket.Child(uploadCompleterSuffix)
+	return namesOf(component.Name{Pulumi: untagged}), nil
+}
+
+func (n Names) WithRandomTag(ctx *pulumi.Context) (Names, error) {
+	bucket, err := component.RandomTaggedName(ctx, n.Bucket.Pulumi)
+	if err != nil {
+		return Names{}, err
+	}
+	return namesOf(bucket), nil
+}
+
+func namesOf(bucket component.Name) Names {
+	return Names{Bucket: bucket, Completer: bucket.Child(uploadCompleterSuffix)}
+}
+
+func (n Names) Surfaces() map[string][]component.ResourceRef {
 	return map[string][]component.ResourceRef{
-		"bucket":                        {{Token: component.TokenS3Bucket, Name: bucket.Pulumi}},
-		"publicAccessBlock":             {{Token: component.TokenS3PublicAccess, Name: bucket.Part(publicAccessBlockPart)}},
-		"cors":                          {{Token: component.TokenS3CORS, Name: bucket.Part(corsPart)}},
-		"uploadCompleterRole":           {{Token: component.TokenIAMRole, Name: completer.Pulumi}},
-		"uploadCompleterS3Policy":       {{Token: component.TokenIAMRolePolicy, Name: completer.Part(completerS3Policy)}},
-		"uploadCompleterSessionsPolicy": {{Token: component.TokenIAMRolePolicy, Name: completer.Part(completerSessionsPolicy)}},
-		"uploadCompleterLogsPolicy":     {{Token: component.TokenIAMRoleAttachment, Name: completer.Attachment(iam.LambdaBasicExecutionPolicyARN)}},
-		"uploadCompleterLogGroup":       {{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(completer).Pulumi}},
-		"uploadCompleter":               {{Token: component.TokenLambdaFunction, Name: completer.Pulumi}},
-		"uploadCompleterPermission":     {{Token: component.TokenLambdaPermission, Name: completer.Part(completerInvokePermission)}},
-		"notification":                  {{Token: component.TokenS3Notification, Name: bucket.Part(notificationPart)}},
-	}, nil
+		"bucket":                        {n.bucket()},
+		"publicAccessBlock":             {{Token: component.TokenS3PublicAccess, Name: n.Bucket.Part(publicAccessBlockPart)}},
+		"cors":                          {{Token: component.TokenS3CORS, Name: n.Bucket.Part(corsPart)}},
+		"uploadCompleterRole":           {{Token: component.TokenIAMRole, Name: n.Completer.Pulumi}},
+		"uploadCompleterS3Policy":       {{Token: component.TokenIAMRolePolicy, Name: n.Completer.Part(completerS3Policy)}},
+		"uploadCompleterSessionsPolicy": {{Token: component.TokenIAMRolePolicy, Name: n.Completer.Part(completerSessionsPolicy)}},
+		"uploadCompleterLogsPolicy":     {{Token: component.TokenIAMRoleAttachment, Name: n.Completer.Attachment(iam.LambdaBasicExecutionPolicyARN)}},
+		"uploadCompleterLogGroup":       {n.completerLogGroup()},
+		"uploadCompleter":               {n.completer()},
+		"uploadCompleterPermission":     {{Token: component.TokenLambdaPermission, Name: n.Completer.Part(completerInvokePermission)}},
+		"notification":                  {{Token: component.TokenS3Notification, Name: n.Bucket.Part(notificationPart)}},
+	}
+}
+
+func (n Names) bucket() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenS3Bucket, Name: n.Bucket.Pulumi}
+}
+
+func (n Names) completer() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenLambdaFunction, Name: n.Completer.Pulumi}
+}
+
+func (n Names) completerLogGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(n.Completer).Pulumi}
 }

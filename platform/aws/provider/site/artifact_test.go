@@ -48,7 +48,6 @@ type fakeArtifactStore struct {
 	putBodies     map[string]string
 	contentTypes  map[string]string
 	cacheControls map[string]string
-	taggings      map[string]string
 }
 
 func (f *fakeArtifactStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
@@ -83,12 +82,6 @@ func (f *fakeArtifactStore) PutObject(_ context.Context, in *s3.PutObjectInput, 
 			f.contentTypes = map[string]string{}
 		}
 		f.contentTypes[key] = aws.ToString(in.ContentType)
-	}
-	if in.Tagging != nil {
-		if f.taggings == nil {
-			f.taggings = map[string]string{}
-		}
-		f.taggings[key] = aws.ToString(in.Tagging)
 	}
 	if in.CacheControl != nil {
 		if f.cacheControls == nil {

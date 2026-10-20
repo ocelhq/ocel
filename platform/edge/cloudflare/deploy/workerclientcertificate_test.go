@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const productionCertificateBase = "ocel-origin-client"
+const productionCertificateBase = "ocel-prod-origin-client"
 
 func parseCertificate(t *testing.T, certificatePEM string) *x509.Certificate {
 	t.Helper()
@@ -280,7 +280,7 @@ func TestABootstrapRefusesAHeldClientCertificateWhoseCAItCannotRead(t *testing.T
 func TestTheProductionClientCertificateIgnoresThePreviewTiersCertificates(t *testing.T) {
 	m := bootstrapMock(t)
 	expires := time.Now().Add(5 * 365 * 24 * time.Hour)
-	m.holdWorkerClientCertificate(t, "ocel-origin-client-preview-"+expires.UTC().Format("20060102"), expires)
+	m.holdWorkerClientCertificate(t, "ocel-preview-origin-client-"+expires.UTC().Format("20060102"), expires)
 	p := mutualTLSEdge(t, m)
 
 	out, err := p.Bootstrap(t.Context(), environment.TierProduction)
@@ -301,7 +301,7 @@ func TestTearingABootstrapDownDeletesItsWorkerClientCertificates(t *testing.T) {
 	expires := time.Now().Add(5 * 365 * 24 * time.Hour)
 	m.holdWorkerClientCertificate(t, certificateName(expires), expires)
 	m.holdWorkerClientCertificate(t, certificateName(expires.Add(-48*time.Hour)), expires.Add(-48*time.Hour))
-	m.holdWorkerClientCertificate(t, "ocel-origin-client-preview-"+expires.UTC().Format("20060102"), expires)
+	m.holdWorkerClientCertificate(t, "ocel-preview-origin-client-"+expires.UTC().Format("20060102"), expires)
 	p := mutualTLSEdge(t, m)
 
 	if err := p.Teardown(t.Context(), environment.TierProduction); err != nil {

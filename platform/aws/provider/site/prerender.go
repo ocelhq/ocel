@@ -43,6 +43,7 @@ func prerenderAssetSet(b Buckets, root, app string, cache *ISR) (*AssetSet, erro
 
 	var uploads []prerenderUpload
 	manifest := newSetManifest()
+	manifest.add(b.Holding(naming.ObjectTagClock), prerender.TagSnapshotKey(cache.Coord), 0)
 	targets := map[naming.ObjectKind]uploadTarget{
 		naming.ObjectPages:      b.target(naming.ObjectPages),
 		naming.ObjectFetchCache: b.target(naming.ObjectFetchCache),

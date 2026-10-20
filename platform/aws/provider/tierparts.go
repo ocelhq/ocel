@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -65,8 +66,8 @@ func (p *Provider) imageOptimizerSpec(ctx context.Context, tier environment.Tier
 		Region:        p.aws.Region,
 		Boundary:      deployed.AppBoundaryARN,
 		RolePath:      p.namespace.AppRolePathFor(tier),
-		EdgeBucket:    deployed.EdgeBucket,
-		EdgeBucketARN: "arn:aws:s3:::" + deployed.EdgeBucket,
+		EdgeBucket:    deployed.Buckets[naming.StorageEdge],
+		EdgeBucketARN: "arn:aws:s3:::" + deployed.Buckets[naming.StorageEdge],
 	}, nil
 }
 

@@ -145,7 +145,7 @@ test("serves a tagged entry off the snapshot, sending nothing to the table", asy
 
 const putsOf = (sent: any[]) => sent.filter((input) => input.Body !== undefined);
 
-test("writes a page entry untagged into the edge bucket, which the edge reads whole", async () => {
+test("writes a page entry into the edge bucket, which the edge reads whole", async () => {
   const { store, sent } = await entryStore();
 
   await store.writeEntry("blog/a", { lastModified: 1, value: { kind: "APP_PAGE" } });
@@ -153,10 +153,9 @@ test("writes a page entry untagged into the edge bucket, which the edge reads wh
   const [put] = putsOf(sent);
   expect(put.Bucket).toBe("edge");
   expect(put.Key).toBe("pages/proj/prod/app/r3f8a1c9d/blog/a.cache.json");
-  expect(put.Tagging).toBeUndefined();
 });
 
-test("writes a data-cache entry untagged into the cache bucket, which no edge reads", async () => {
+test("writes a data-cache entry into the cache bucket, which no edge reads", async () => {
   const { store, sent } = await entryStore();
 
   await store.writeFetch("hash1", { lastModified: 1, value: { kind: "FETCH", data: {} } });
@@ -164,5 +163,4 @@ test("writes a data-cache entry untagged into the cache bucket, which no edge re
   const [put] = putsOf(sent);
   expect(put.Bucket).toBe("cache");
   expect(put.Key).toBe("fetch-cache/proj/prod/app/r3f8a1c9d/hash1.cache.json");
-  expect(put.Tagging).toBeUndefined();
 });

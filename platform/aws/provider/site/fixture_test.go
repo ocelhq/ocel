@@ -18,6 +18,8 @@ import (
 
 const testBuildID = "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
 
+var edgeAndCache = naming.Buckets{naming.StorageEdge: "edge", naming.StorageCache: "cache"}
+
 func buildIDFor(label string) string {
 	if naming.ValidateBuildID(label) == nil {
 		return label
@@ -79,7 +81,7 @@ func assetShippingConfig(t *testing.T, app string) publication {
 	t.Helper()
 	return publication{
 		root:    siblingAppRoot(t, app),
-		buckets: Buckets{Artifacts: "artifacts-bucket", Edge: "edge-bucket", Cache: "cache-bucket", EdgeHoldsKey: true},
+		buckets: Buckets{Buckets: naming.Buckets{naming.StorageArtifacts: "artifacts-bucket", naming.StorageEdge: "edge-bucket", naming.StorageCache: "cache-bucket"}, EdgeHoldsKey: true},
 	}
 }
 

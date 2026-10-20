@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func namesFor(tier environment.Tier, kind edge.Kind) edgeNames {
@@ -75,10 +76,13 @@ func writtenCoreBody(stacks *fakeCFN, ns Namespace, tier environment.Tier, broug
 	if err != nil {
 		panic(err)
 	}
+	buckets := naming.Buckets{}
 	stacks.mu.Lock()
-	tag := stacks.outputs[core][outputBucketTag]
+	for output, class := range bucketOutputs {
+		buckets[class] = stacks.outputs[core][output]
+	}
 	stacks.mu.Unlock()
-	return coreBodyTagged(ns, tier, broughtKey, tag)
+	return coreBodyTagged(ns, tier, broughtKey, ns.bootstrapBucketTag(tier, buckets))
 }
 
 func coreBodyTagged(ns Namespace, tier environment.Tier, broughtKey, bucketTag string) string {

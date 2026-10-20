@@ -322,7 +322,7 @@
       "monthlyUsage": "0.52"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_function:ocel-optimizer",
+      "resource": "project:shop/shared:production/aws_lambda_function:ocel-prod-optimizer",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -350,11 +350,11 @@
       "monthlyUsage": "4.81"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_function_url:ocel-optimizer-url",
+      "resource": "project:shop/shared:production/aws_lambda_function_url:ocel-prod-optimizer-url",
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-optimizer",
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-optimizer",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -702,7 +702,7 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/shared:production/cloudflare_workers_script:ocel-releases-store",
+      "resource": "project:shop/shared:production/cloudflare_workers_script:ocel-prod-releases-store",
       "status": "STATUS_PRICED",
       "components": [
         {

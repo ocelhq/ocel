@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
@@ -30,19 +31,10 @@ func accountNameFor(what, namespace string, tier environment.Tier, stem string) 
 	if namespace == "" {
 		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this tier depends on", what)
 	}
-	var name string
-	switch tier {
-	case environment.TierProduction:
-		name = namespace + "-" + stem
-	case environment.TierPreview:
-		name = namespace + "-" + stem + "-preview"
-	default:
+	if tier != environment.TierProduction && tier != environment.TierPreview {
 		return "", fmt.Errorf("%s: unknown tier %q", what, tier)
 	}
-	if len(name) > maxWorkerNameLength {
-		return "", fmt.Errorf("%s: %q is %d characters, and a Cloudflare worker or bucket name allows at most %d; shorten the bootstrap namespace %q", what, name, len(name), maxWorkerNameLength, namespace)
-	}
-	return name, nil
+	return naming.OcelName(namespace, tier, stem), nil
 }
 
 type durableObjectClass struct {

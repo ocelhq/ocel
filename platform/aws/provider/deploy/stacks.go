@@ -186,7 +186,7 @@ func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 
 func registryOf(cfg Config) component.Registry {
 	return awsresources.Registry(awsresources.Clients{
-		Artifacts:   component.Artifacts{Objects: cfg.Objects, Bucket: cfg.ArtifactBucket},
+		Artifacts:   component.Artifacts{Objects: cfg.Objects, Bucket: cfg.Buckets[naming.StorageArtifacts]},
 		Clusters:    cfg.Clusters,
 		KVTokens:    kv.Tokens{Parameters: cfg.Parameters, Root: cfg.KVTokenRoot},
 		SigningKeys: realtime.Keys{SigningKeys: cfg.SigningKeys, Root: cfg.SigningKeyRoot, ManagedBy: cfg.Namespace},

@@ -41,12 +41,12 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 		}
 		return target.Names
 	}
-	functionNames, err := function.ResourceNames(testNamespace, "proj", naming.AppStack("prod", "api", fixedRelease(t)), "api")
+	functionNames, err := function.NamesFor(testNamespace, "proj", naming.AppStack("prod", "api", fixedRelease(t)), "api")
 	if err != nil {
 		t.Fatal(err)
 	}
 	rendered := map[string]map[string][]component.ResourceRef{
-		transformTypeFunction: functionNames,
+		transformTypeFunction: functionNames.Surfaces(),
 		"bucket":              transformed(bucket.New(component.Artifacts{}), provider.Resource{Name: "uploads", Type: provider.BindingBucket}),
 		"postgres":            transformed(postgres.New(nil), provider.Resource{Name: "main", Type: provider.BindingPostgres}),
 		"kv":                  transformed(kv.New(kv.Tokens{}), provider.Resource{Name: "cache", Type: provider.BindingKV}),

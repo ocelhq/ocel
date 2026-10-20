@@ -35,36 +35,16 @@ type Artifacts struct {
 }
 
 type Stores interface {
-	Buckets(ctx context.Context, tier environment.Tier) (Buckets, error)
+	Buckets(ctx context.Context, tier environment.Tier) (naming.Buckets, error)
 }
 
-type Buckets struct {
-	Artifacts string
-	Edge      string
-	Cache     string
-}
-
-func (b Buckets) Buckets(context.Context, environment.Tier) (Buckets, error) { return b, nil }
-
-func (b Buckets) Holding(kind naming.ObjectKind) string {
-	switch kind.Class() {
-	case naming.StorageArtifacts:
-		return b.Artifacts
-	case naming.StorageEdge:
-		return b.Edge
-	case naming.StorageCache:
-		return b.Cache
-	}
-	return ""
-}
-
-func (a Artifacts) buckets(ctx context.Context, tier environment.Tier) (Buckets, error) {
+func (a Artifacts) buckets(ctx context.Context, tier environment.Tier) (naming.Buckets, error) {
 	if tier == "" {
-		return Buckets{}, refusal.Refuse(refusal.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"an artifact names no tier, and this account keeps each tier's artifacts in the bootstrap that owns them")
 	}
 	if a.Stores == nil {
-		return Buckets{}, nil
+		return nil, nil
 	}
 	return a.Stores.Buckets(ctx, tier)
 }

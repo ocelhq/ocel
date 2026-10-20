@@ -70,21 +70,21 @@ func TestDeployedClasses(t *testing.T) {
 			name:   "reads the class off the live settings response",
 			status: http.StatusOK,
 			body:   liveReleasesStoreSettings,
-			script: "ocel-releases-store-preview",
+			script: "ocel-preview-releases-store",
 			want:   []string{"ReleasesStore"},
 		},
 		{
 			name:   "a script that does not exist has no classes",
 			status: http.StatusNotFound,
 			body:   absentScriptSettings,
-			script: "ocel-releases-store-preview",
+			script: "ocel-preview-releases-store",
 			want:   nil,
 		},
 		{
 			name:   "a class owned by another script is not ours",
 			status: http.StatusOK,
 			body:   foreignClassSettings,
-			script: "ocel-releases-store-preview",
+			script: "ocel-preview-releases-store",
 			want:   nil,
 		},
 	} {
@@ -104,7 +104,7 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	t.Run("a class the script already declares is not redeclared", func(t *testing.T) {
-		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveReleasesStoreSettings), "ocel-releases-store-preview")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveReleasesStoreSettings), "ocel-preview-releases-store")
 		if err != nil {
 			t.Fatalf("read settings: %v", err)
 		}
@@ -117,7 +117,7 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	})
 
 	t.Run("a class another script owns is still created locally", func(t *testing.T) {
-		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, foreignClassSettings), "ocel-releases-store-preview")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, foreignClassSettings), "ocel-preview-releases-store")
 		if err != nil {
 			t.Fatalf("read settings: %v", err)
 		}

@@ -40,8 +40,29 @@ export function namespaceOf(env: NodeJS.ProcessEnv): string {
   return env[NAMESPACE_ENV]?.trim() || DEFAULT_NAMESPACE;
 }
 
+const LONGEST_NAMESPACE_FIELD = 12;
+
+const NAMESPACE_FIELD_DIGEST_CHARS = 6;
+
+export function namespaceField(namespace: string): string {
+  if (namespace.length <= LONGEST_NAMESPACE_FIELD) {
+    return namespace;
+  }
+  let head = namespace
+    .slice(0, LONGEST_NAMESPACE_FIELD - NAMESPACE_FIELD_DIGEST_CHARS - 1)
+    .replace(/-+$/, "");
+  if (`-${head}`.endsWith("-app")) {
+    head = head.slice(0, -1).replace(/-+$/, "");
+  }
+  const digest = createHash("sha256")
+    .update(namespace)
+    .digest("hex")
+    .slice(0, NAMESPACE_FIELD_DIGEST_CHARS);
+  return `${head}-${digest}`;
+}
+
 export function bootstrapStackOf(namespace: string): string {
-  return `${namespace}-bootstrap`;
+  return `${namespaceField(namespace)}-prod-bootstrap`;
 }
 
 export function strayNamespaces(found: string[], mine: Iterable<string>): string[] {

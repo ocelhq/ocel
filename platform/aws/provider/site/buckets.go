@@ -7,16 +7,14 @@ import (
 )
 
 type Buckets struct {
+	naming.Buckets
 	Objects      payloads.ObjectStore
-	Artifacts    string
-	Edge         string
-	Cache        string
 	Tier         environment.Tier
 	EdgeHoldsKey bool
 }
 
 func (b Buckets) CanStoreAssets() bool {
-	return b.Edge != "" && b.Objects != nil
+	return b.Holding(naming.ObjectAssets) != "" && b.Objects != nil
 }
 
 func (b Buckets) CanEdgeRead() bool {
@@ -28,21 +26,9 @@ func (b Buckets) Find(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return b.holding(kind.Class()), nil
-}
-
-func (b Buckets) holding(class naming.StorageClass) string {
-	switch class {
-	case naming.StorageArtifacts:
-		return b.Artifacts
-	case naming.StorageEdge:
-		return b.Edge
-	case naming.StorageCache:
-		return b.Cache
-	}
-	return ""
+	return b.Holding(kind), nil
 }
 
 func (b Buckets) target(kind naming.ObjectKind) uploadTarget {
-	return uploadTarget{up: b.Objects, bucket: b.holding(kind.Class()), kind: kind, tier: b.Tier}
+	return uploadTarget{up: b.Objects, bucket: b.Holding(kind), kind: kind, tier: b.Tier}
 }

@@ -75,7 +75,7 @@ func TestBucketUploadCompleterDescriptionFitsLambda(t *testing.T) {
 		return register(ctx, testStack(long), "bucket--uploads", translate(&provider.BucketSpec{}), testSessions(long), testUploadCompleter())
 	})
 
-	head, err := component.RandomTaggedHead("ocel", component.ResourceCoordinate(long, "prod", "bucket--uploads", naming.KindBucket), component.MaxLambdaNameLen, uploadCompleterSuffix)
+	head, err := component.UntaggedName("ocel", component.ResourceCoordinate(long, "prod", "bucket--uploads", naming.KindBucket), component.MaxLambdaNameLen, uploadCompleterSuffix)
 	if err != nil {
 		t.Fatal(err)
 	}

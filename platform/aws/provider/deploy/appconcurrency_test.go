@@ -96,7 +96,7 @@ func siblingAppConfig(t *testing.T, apps ...string) Config {
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
 	cfg.Env = "prod"
-	cfg.ArtifactBucket = "artifacts-bucket"
+	cfg.Buckets[naming.StorageArtifacts] = "artifacts-bucket"
 	cfg.BytecodeCache = true
 	cfg.StateTable = "ocel-state"
 	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"

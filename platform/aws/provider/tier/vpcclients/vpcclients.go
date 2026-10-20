@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -36,7 +35,7 @@ type API interface {
 }
 
 func NameFor(namespace string, tier environment.Tier) string {
-	return awsports.TieredName(namespace, tier, clientsWord)
+	return naming.OcelName(namespace, tier, clientsWord)
 }
 
 func Digest(namespace string, tier environment.Tier) string {

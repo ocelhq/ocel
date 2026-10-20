@@ -20,7 +20,7 @@ const (
 )
 
 type VPCSecurityGroup struct {
-	Owner   string
+	Name    string
 	Subject string
 	Engine  string
 	Port    int
@@ -34,11 +34,10 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 	if group.Clients == "" {
 		return nil, fmt.Errorf("%s admits the tier's vpc-clients security group alone, and this deploy resolved none", group.Subject)
 	}
-	name := SecurityGroupName(group.Owner)
-	tags := pulumi.StringMap{nameTag: pulumi.String(name)}
+	tags := pulumi.StringMap{nameTag: pulumi.String(group.Name)}
 	maps.Copy(tags, group.Tags)
-	return ec2.NewSecurityGroup(ctx, name, &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(name),
+	return ec2.NewSecurityGroup(ctx, group.Name, &ec2.SecurityGroupArgs{
+		Name:        pulumi.String(group.Name),
 		Description: CapDescription(at.Description("security group for "+group.Subject), MaxSecurityGroupDescriptionLen),
 		VpcId:       pulumi.String(group.VPCID),
 		Ingress: ec2.SecurityGroupIngressArray{

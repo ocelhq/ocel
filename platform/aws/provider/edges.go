@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -29,7 +30,7 @@ func (p *Provider) edgeDeps() edges.Deps {
 			if !deployed.Present {
 				return "", refusal.Refuse(refusal.CodeNotReady, "the %s tier is not bootstrapped: run `%s`", tier, provider.BootstrapCommand(tier))
 			}
-			return deployed.StateBucket, nil
+			return deployed.Buckets[naming.StorageState], nil
 		},
 	}
 }

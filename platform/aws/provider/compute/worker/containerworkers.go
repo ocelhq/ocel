@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
-	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
@@ -195,40 +194,30 @@ func (w *ContainerStack) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.R
 	if err != nil {
 		return nil, nil, err
 	}
-	name := component.NameOf(physical)
-	role, err := awsiam.NewRole(ctx, name.Pulumi, &awsiam.RoleArgs{
-		Name:                name.AWS,
-		Description:         component.CapDescription(at.Description("task role for this app's workers"), component.MaxDescriptionLen),
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
-		PermissionsBoundary: pulumi.String(w.web.Boundary),
-		Path:                pulumi.String(w.web.RolePath),
-		Tags:                component.Tags(naming.KindRole, "", w.web.Tags),
-	})
-	if err != nil {
-		return nil, nil, err
-	}
 	consumption, err := consumptionPolicy(w.workers, w.topics, w.web.Region, w.account, w.table, w.prefix)
 	if err != nil {
 		return nil, nil, err
 	}
-	documents := map[string]string{queuesPolicyName: consumption, function.TasksPolicyName: w.tasksPolicy}
+	documents := map[string]pulumi.StringInput{queuesPolicyName: pulumi.String(consumption), component.TasksPolicyName: pulumi.String(w.tasksPolicy)}
 	for _, binding := range w.web.Policies {
-		documents[function.BindingPolicyName(binding.Binding)] = binding.Policy
+		documents[component.BindingPolicyName(binding.Binding)] = pulumi.String(binding.Policy)
 	}
 	if w.web.Variables.TableARN != "" {
-		if documents[function.VariablesPolicyName], err = variables.ReadPolicy(w.web.Variables); err != nil {
-			return nil, nil, err
-		}
-	}
-	granted := make([]pulumi.Resource, 0, len(documents))
-	for _, policy := range slices.Sorted(maps.Keys(documents)) {
-		created, err := component.NewRolePolicy(ctx, name, role, policy, pulumi.String(documents[policy]))
+		document, err := variables.ReadPolicy(w.web.Variables)
 		if err != nil {
 			return nil, nil, err
 		}
-		granted = append(granted, created)
+		documents[component.VariablesPolicyName] = pulumi.String(document)
 	}
-	return role, granted, nil
+	return component.NewAppRole(ctx, component.AppRole{
+		Name:        component.NameOf(physical),
+		Description: component.CapDescription(at.Description("task role for this app's workers"), component.MaxDescriptionLen),
+		Principal:   iam.ECSTasksPrincipal,
+		Boundary:    w.web.Boundary,
+		Path:        w.web.RolePath,
+		Tags:        w.web.Tags,
+		Policies:    documents,
+	})
 }
 
 func (w *ContainerStack) definition(worker provider.WorkerSpec, service string) (string, error) {

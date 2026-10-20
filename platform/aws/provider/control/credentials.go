@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -176,7 +178,7 @@ func BootstrapCredentialPermissions(ns account.Namespace, tier environment.Tier,
 }
 
 func credentialPolicies(ns account.Namespace, purpose string, tier environment.Tier, grants []iam.Statement) (string, error) {
-	policies, err := iam.Split(purpose, func(i int) string { return ns.PolicyName(fmt.Sprintf("%s-%s-%d", purpose, tier, i)) }, grants)
+	policies, err := iam.Split(purpose, func(i int) string { return naming.OcelName(string(ns), tier, purpose, strconv.Itoa(i)) }, grants)
 	if err != nil {
 		return "", err
 	}

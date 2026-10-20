@@ -115,7 +115,7 @@ func TestEveryCredentialMayCreateElastiCachesLinkedRole(t *testing.T) {
 
 func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatWay(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
-		tokens := iam.ParameterARNPrefix + defaultNamespace.KVTokenRoot() + "/" + string(tierOf(purpose)) + "/*"
+		tokens := iam.ParameterARNPrefix + defaultNamespace.KVTokenRoot() + "/" + naming.TierWord(tierOf(purpose)) + "/*"
 		granted := grantsOf(t, document)
 		for _, action := range []string{"ssm:GetParameter", "ssm:GetParametersByPath", "ssm:PutParameter", "ssm:DeleteParameter"} {
 			if !granted[grant{action: action, resource: tokens, condition: conditionJSON(t, nil)}] {
@@ -166,7 +166,7 @@ func TestEveryCredentialKeepsRealtimeSigningKeysUnderTheirRootAlone(t *testing.T
 	for purpose, document := range bothCredentials(t) {
 		tier := tierOf(purpose)
 		s := defaultNamespace.Scope(tier)
-		keys := "arn:aws:secretsmanager:*:*:secret:" + defaultNamespace.SigningKeyRoot() + "/" + string(tier) + "/*"
+		keys := "arn:aws:secretsmanager:*:*:secret:" + defaultNamespace.SigningKeyRoot() + "/" + naming.TierWord(tier) + "/*"
 		want := map[grant]bool{
 			{action: "secretsmanager:CreateSecret", resource: keys, condition: conditionJSON(t, s.TaggedOnCreateOnlyForItsTier())}: true,
 			{action: "secretsmanager:TagResource", resource: keys, condition: conditionJSON(t, s.TaggedOnCreateOnlyForItsTier())}:  true,

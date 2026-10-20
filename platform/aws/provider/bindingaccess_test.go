@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
@@ -165,7 +166,7 @@ func servedGrants(t *testing.T, grants ...provider.BindingGrant) (provider.Bindi
 	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", ""), BaseEndpoint: aws.String(store.serve(t))}
 	p := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace)
 	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
-		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", EdgeBucket: "edge", CacheBucket: "cache", StateTable: "state-table", VariablesTable: "variables"}}, nil
+		return account.Reading{Deployed: account.Deployed{Present: true, StateTable: "state-table", VariablesTable: "variables", Buckets: naming.Buckets{naming.StorageState: "state", naming.StorageArtifacts: "artifacts", naming.StorageEdge: "edge", naming.StorageCache: "cache"}}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}

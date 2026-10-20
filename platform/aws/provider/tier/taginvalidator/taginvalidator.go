@@ -71,7 +71,7 @@ type Names struct {
 }
 
 func NamesFor(namespace string, tier environment.Tier) Names {
-	function := awsports.TieredName(namespace, tier, invalidatorWord)
+	function := naming.OcelName(namespace, tier, invalidatorWord)
 	return Names{
 		Function: function,
 		Role:     function,

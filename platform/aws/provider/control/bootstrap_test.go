@@ -24,6 +24,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -56,12 +57,9 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	}
 	deployed := account.Deployed{
 		Present:        true,
-		StateBucket:    "ocel-state",
-		ArtifactBucket: "ocel-artifacts",
-		EdgeBucket:     "ocel-edge",
-		CacheBucket:    "ocel-cache",
 		StateTable:     "ocel-state-table",
 		VariablesTable: "ocel-variables",
+		Buckets:        naming.Buckets{naming.StorageState: "ocel-state", naming.StorageArtifacts: "ocel-artifacts", naming.StorageEdge: "ocel-edge", naming.StorageCache: "ocel-cache"},
 	}
 	front := &teardownEdge{}
 	return Bootstrap{
@@ -166,7 +164,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if got := plan.Groups[0].Name; got != "aws/"+coreStackName {
 		t.Errorf("the core group is %q, want %q", got, "aws/"+coreStackName)
 	}
-	if got, want := plan.Groups[2].Name, "aws/"+string(defaultNamespace)+"-runtime"; got != want {
+	if got, want := plan.Groups[2].Name, "aws/"+string(defaultNamespace)+"-prod-runtime"; got != want {
 		t.Errorf("the runtime group is %q, want %q", got, want)
 	}
 	params := plan.Groups[3]
@@ -490,10 +488,10 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 		return nil, &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack with id " + name + " does not exist"}
 	}
 	outputs := []cfntypes.Output{
-		{OutputKey: aws.String("StateBucketName"), OutputValue: aws.String(deployed.StateBucket)},
-		{OutputKey: aws.String("ArtifactBucketName"), OutputValue: aws.String(deployed.ArtifactBucket)},
-		{OutputKey: aws.String("EdgeBucketName"), OutputValue: aws.String(deployed.EdgeBucket)},
-		{OutputKey: aws.String("CacheBucketName"), OutputValue: aws.String(deployed.CacheBucket)},
+		{OutputKey: aws.String("StateBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageState])},
+		{OutputKey: aws.String("ArtifactBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageArtifacts])},
+		{OutputKey: aws.String("EdgeBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageEdge])},
+		{OutputKey: aws.String("CacheBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageCache])},
 		{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(deployed.StateTable)},
 		{OutputKey: aws.String("VariablesTableName"), OutputValue: aws.String(deployed.VariablesTable)},
 	}

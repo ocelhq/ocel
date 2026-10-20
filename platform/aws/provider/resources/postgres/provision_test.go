@@ -3,6 +3,7 @@ package postgres
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -146,7 +147,24 @@ func TestAProtectedClustersFinalSnapshotIsNamedAfterIt(t *testing.T) {
 
 	got := rec.InputsOf(t, component.TokenRDSCluster, testCluster)["finalSnapshotIdentifier"]
 	if !got.IsString() || !strings.HasPrefix(got.StringValue(), testCluster+"-final-") {
-		t.Errorf("final snapshot = %v, want the cluster plus -final- and the time it was taken", got)
+		t.Errorf("final snapshot = %v, want the cluster plus -final- and the time it was named", got)
+	}
+}
+
+func TestAProtectedClustersFinalSnapshotFitsTheIdentifierLimitOfAClusterSnapshot(t *testing.T) {
+	t.Parallel()
+
+	long := component.ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "db--"+strings.Repeat("m", 20), naming.KindDatabase)
+	cluster, err := ClusterName("ocel", environment.TierProduction, long)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := finalSnapshotName(cluster, time.Date(2026, 10, 20, 9, 30, 0, 0, time.UTC))
+	if want := cluster + "-final-0tn7920"; snapshot != want {
+		t.Errorf("final snapshot = %q, want %q", snapshot, want)
+	}
+	if len(snapshot) > maxRDSIdentifierLen {
+		t.Errorf("final snapshot %q is %d characters, over the %d a DB cluster snapshot identifier takes", snapshot, len(snapshot), maxRDSIdentifierLen)
 	}
 }
 

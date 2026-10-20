@@ -52,7 +52,7 @@ func TestEnsureMakesAnOptimizerTheDeployCredentialMayMakeUnderTheAppBoundary(t *
 		t.Fatalf("Ensure() = %v", err)
 	}
 
-	if names.Function != "acme-optimizer-preview" {
+	if names.Function != "acme-preview-optimizer" {
 		t.Errorf("function name = %q, want the namespace's preview optimizer", names.Function)
 	}
 	role, ok := account.Roles[names.Role]

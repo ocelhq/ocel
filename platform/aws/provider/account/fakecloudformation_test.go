@@ -335,6 +335,12 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, ta
 	f.events = append(f.events, "wrote "+stackName)
 
 	var tmpl struct {
+		Resources map[string]struct {
+			Type       string `json:"Type"`
+			Properties struct {
+				BucketName string `json:"BucketName"`
+			} `json:"Properties"`
+		} `json:"Resources"`
 		Outputs map[string]struct {
 			Value templateText `json:"Value"`
 		} `json:"Outputs"`
@@ -348,22 +354,18 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, ta
 		f.outputs[stackName] = out
 	}
 	for key, o := range tmpl.Outputs {
+		if bucket, ok := tmpl.Resources[string(o.Value)]; ok && bucket.Type == "AWS::S3::Bucket" {
+			out[key] = bucket.Properties.BucketName
+			continue
+		}
 		out[key] = syntheticOutput(stackName, key, string(o.Value))
 	}
 }
 
 func syntheticOutput(stackName, key, declared string) string {
 	switch key {
-	case outputInfraTier, outputBucketTag:
+	case outputInfraTier:
 		return declared
-	case outputStateBucket:
-		return "ocel-state-test"
-	case outputArtifactBucket:
-		return "ocel-artifacts-test"
-	case outputEdgeBucket:
-		return "ocel-edge-test"
-	case outputCacheBucket:
-		return "ocel-cache-test"
 	case outputStateTable:
 		return "ocel-statetable-test"
 	case outputVariablesKeyBrought:

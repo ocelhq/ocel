@@ -337,8 +337,8 @@ func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate
 	}
 }
 
-func (d *Definition) names() (containerNames, error) {
-	return newContainerNames(d.namespace, d.service)
+func (d *Definition) names() (Names, error) {
+	return namesAt(d.namespace, d.service)
 }
 
 func (d *Definition) definition(service string) (string, error) {
@@ -436,7 +436,7 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	rule, err := lb.NewListenerRule(ctx, names.TargetGroup+component.PartSeparator+rulePart, &lb.ListenerRuleArgs{
+	rule, err := lb.NewListenerRule(ctx, names.Rule, &lb.ListenerRuleArgs{
 		ListenerArn: pulumi.String(d.readListenerArn()),
 		Priority:    pulumi.Int(d.priority),
 		Conditions: lb.ListenerRuleConditionArray{
@@ -560,38 +560,29 @@ func (d *Definition) taggedWith(extra map[string]string) map[string]string {
 }
 
 func (d *Definition) taskRole(ctx *pulumi.Context, name component.Name) (*awsiam.Role, []pulumi.Resource, error) {
-	role, err := awsiam.NewRole(ctx, name.Pulumi, &awsiam.RoleArgs{
-		Name:                name.AWS,
-		Description:         component.Describe(d.role, "task role for this app's container"),
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
-		PermissionsBoundary: pulumi.String(d.Boundary),
-		Path:                pulumi.String(d.RolePath),
-		Tags:                component.Tags(naming.KindRole, "", d.taggedWith(d.TransformTags)),
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	documents := map[string]string{}
+	documents := map[string]pulumi.StringInput{}
 	for _, binding := range d.Policies {
-		documents[bindingPolicyName(binding.Binding)] = binding.Policy
+		documents[component.BindingPolicyName(binding.Binding)] = pulumi.String(binding.Policy)
 	}
 	if d.tasksPolicy != "" {
-		documents[tasksPolicyName] = d.tasksPolicy
+		documents[component.TasksPolicyName] = pulumi.String(d.tasksPolicy)
 	}
 	if d.readsLive() {
-		if documents[variablesPolicyName], err = variables.ReadPolicy(d.Variables); err != nil {
-			return nil, nil, err
-		}
-	}
-	granted := make([]pulumi.Resource, 0, len(documents))
-	for _, policy := range slices.Sorted(maps.Keys(documents)) {
-		created, err := component.NewRolePolicy(ctx, name, role, policy, pulumi.String(documents[policy]))
+		document, err := variables.ReadPolicy(d.Variables)
 		if err != nil {
 			return nil, nil, err
 		}
-		granted = append(granted, created)
+		documents[component.VariablesPolicyName] = pulumi.String(document)
 	}
-	return role, granted, nil
+	return component.NewAppRole(ctx, component.AppRole{
+		Name:        name,
+		Description: component.Describe(d.role, "task role for this app's container"),
+		Principal:   iam.ECSTasksPrincipal,
+		Boundary:    d.Boundary,
+		Path:        d.RolePath,
+		Tags:        d.taggedWith(d.TransformTags),
+		Policies:    documents,
+	})
 }
 
 func (d *Definition) Decode(outputs auto.OutputMap) (provider.StackResult, error) {
@@ -616,18 +607,4 @@ func (d *Definition) Decode(outputs auto.OutputMap) (provider.StackResult, error
 		URL:      url,
 		Image:    d.Image,
 	}}}, nil
-}
-
-func ResourceNames(namespace, project string, stack naming.StackName) (map[string][]component.ResourceRef, error) {
-	names, err := newContainerNames(namespace, serviceCoordinate(project, stack))
-	if err != nil {
-		return nil, err
-	}
-	return map[string][]component.ResourceRef{
-		"task":        {{Token: component.TokenECSTaskDefinition, Name: names.Service}},
-		"service":     {{Token: component.TokenECSService, Name: names.Service}},
-		"targetGroup": {{Token: component.TokenLBTargetGroup, Name: names.TargetGroup}},
-		"rule":        {{Token: component.TokenLBListenerRule, Name: names.TargetGroup + component.PartSeparator + rulePart}},
-		"role":        {{Token: component.TokenIAMRole, Name: names.Role.Pulumi}},
-	}, nil
 }

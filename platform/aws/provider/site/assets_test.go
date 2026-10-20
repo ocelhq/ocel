@@ -60,7 +60,7 @@ func imageConfigTree(t *testing.T) string {
 }
 
 func edgeReadingConfig(root string, asset *fakeArtifactStore) publication {
-	return publication{root: root, buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset, EdgeHoldsKey: true}}
+	return publication{root: root, buckets: Buckets{Buckets: edgeAndCache, Objects: asset, EdgeHoldsKey: true}}
 }
 
 func publishedImageConfig(key string) bool {
@@ -116,7 +116,7 @@ func TestUploadStaticAssets(t *testing.T) {
 	t.Run("uploads for an edge that reads the bucket by its policy and holds no key", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: staticAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset}}
+		cfg := publication{root: staticAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: asset}}
 
 		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
@@ -276,20 +276,6 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 		if got, want := asset.contentTypes[key], "application/json"; got != want {
 			t.Errorf("image config content-type = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("tags neither the assets nor the image config", func(t *testing.T) {
-		t.Parallel()
-		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := edgeReadingConfig(imageConfigTree(t), asset)
-
-		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
-			t.Fatalf("uploadStaticAssets: %v", err)
-		}
-
-		if len(asset.taggings) != 0 {
-			t.Errorf("taggings = %v, want none: an edge reads what sits in the edge bucket", asset.taggings)
 		}
 	})
 

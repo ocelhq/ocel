@@ -31,15 +31,15 @@ func TestFunctionCoordinate(t *testing.T) {
 		t.Parallel()
 
 		route := strings.Repeat("very-long-route-segment-", 6)
-		if _, err := Name(testNamespace, "shop", testStack(t, "prod", "web"), "fn--web--"+route); err == nil || !strings.Contains(err.Error(), "64") {
-			t.Fatalf("Name = %v, want a refusal naming Lambda's 64 characters", err)
+		if _, err := NamesFor(testNamespace, "shop", testStack(t, "prod", "web"), "fn--web--"+route); err == nil || !strings.Contains(err.Error(), "64") {
+			t.Fatalf("NamesFor = %v, want a refusal naming Lambda's 64 characters", err)
 		}
 	})
 
 	t.Run("its URL and the URL's permissions are named under it", func(t *testing.T) {
 		t.Parallel()
 
-		names := mustResourceNames(t, testStack(t, "prod", "web"), "fn--web--index")
+		names := mustSurfaces(t, testStack(t, "prod", "web"), "fn--web--index")
 		if got, want := names["url"][0].Name, "ocel-app-shop-prod-web-index-r3f8a1c90/url"; got != want {
 			t.Errorf("url = %q, want %q", got, want)
 		}
@@ -149,7 +149,7 @@ func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "web")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -261,7 +261,7 @@ func TestEveryTransformKeyOfAPublicFunctionNamesAResourceItsProgramRegisters(t *
 	rec := &inputRecorder{}
 	stack := testStack(t, "prod", "web")
 	program := func(pctx *pulumi.Context) error {
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -278,14 +278,14 @@ func TestEveryTransformKeyOfAPublicFunctionNamesAResourceItsProgramRegisters(t *
 		t.Fatalf("run program: %v", err)
 	}
 
-	for key, refs := range mustResourceNames(t, stack, "fn--web--index") {
+	for key, refs := range mustSurfaces(t, stack, "fn--web--index") {
 		for _, ref := range refs {
 			if !slices.Contains(rec.registered(ref.Token), ref.Name) {
 				t.Errorf("transform key %s names %s %q, and the program registers %v", key, ref.Token, ref.Name, rec.registered(ref.Token))
 			}
 		}
 	}
-	if permissions := mustResourceNames(t, stack, "fn--web--index")["urlPermission"]; len(permissions) != len(functionurl.Public()) {
+	if permissions := mustSurfaces(t, stack, "fn--web--index")["urlPermission"]; len(permissions) != len(functionurl.Public()) {
 		t.Errorf("urlPermission names %v, want every permission a public URL is granted through: a patch to one alone leaves the URL answering 403", permissions)
 	}
 }

@@ -128,7 +128,7 @@ func (s costShape) functions(scope string, at component.Stack, app provider.AppE
 		if err != nil {
 			return err
 		}
-		names, err := function.ResourceNames(at.Namespace, at.Project, app.Stack, spec.Name)
+		names, err := function.NamesFor(at.Namespace, at.Project, app.Stack, spec.Name)
 		if err != nil {
 			return err
 		}
@@ -138,9 +138,9 @@ func (s costShape) functions(scope string, at component.Stack, app provider.AppE
 			"timeout":           args.TimeoutSeconds,
 			"architectures":     []any{args.Arch},
 			"ephemeral_storage": map[string]any{"size": component.LambdaDefaultEphemeralMB},
-		}, names["lambda"][0])
-		s.Add(scope, component.TerraformLogGroup, spec.Name, map[string]any{"retention_in_days": component.LambdaLogRetentionDays}, names["logGroup"][0])
-		s.Add(scope, component.TerraformLambdaFunctionURL, spec.Name, map[string]any{"invoke_mode": args.InvokeMode}, names["url"][0])
+		}, names.Lambda())
+		s.Add(scope, component.TerraformLogGroup, spec.Name, map[string]any{"retention_in_days": component.LambdaLogRetentionDays}, names.LogGroup())
+		s.Add(scope, component.TerraformLambdaFunctionURL, spec.Name, map[string]any{"invoke_mode": args.InvokeMode}, names.URL())
 	}
 	return nil
 }
@@ -320,12 +320,12 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, registry componen
 			specs = []provider.FunctionSpec{{Name: app.App}}
 		}
 		for _, spec := range specs {
-			names, err := function.ResourceNames(at.Namespace, at.Project, app.Stack, spec.Name)
+			names, err := function.NamesFor(at.Namespace, at.Project, app.Stack, spec.Name)
 			if err != nil {
 				return collected, err
 			}
 			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeFunction, Name: spec.Name, App: app.App})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeFunction, Name: spec.Name}, names: names})
+			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeFunction, Name: spec.Name}, names: names.Surfaces()})
 		}
 	}
 	if len(candidates) == 0 {

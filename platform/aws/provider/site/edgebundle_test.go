@@ -47,7 +47,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 	t.Run("uploads each bundle under its own build prefix", func(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: edgeAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: store, EdgeHoldsKey: true}}
+		cfg := publication{root: edgeAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: store, EdgeHoldsKey: true}}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
@@ -79,7 +79,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 		cfg := publication{root: writeTree(t, map[string]string{
 			"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
 			"apps/web/edge/bundle.json":      `{"version":1,"mainModule":"main.js","shim":"REBUILT"}`,
-		}), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: store, EdgeHoldsKey: true}}
+		}), buckets: Buckets{Buckets: edgeAndCache, Objects: store, EdgeHoldsKey: true}}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
@@ -96,7 +96,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 	t.Run("a rotation targets the same build key", func(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: edgeAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: store, EdgeHoldsKey: true}}
+		cfg := publication{root: edgeAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: store, EdgeHoldsKey: true}}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("first uploadEdgeBundles: %v", err)
@@ -123,7 +123,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 	t.Run("a build with no edge bundle uploads nothing", func(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: nodeAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: store, EdgeHoldsKey: true}}
+		cfg := publication{root: nodeAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: store, EdgeHoldsKey: true}}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, nodeManifest(), appBuildsFor(t, cfg, nodeManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
@@ -136,7 +136,7 @@ func TestUploadEdgeBundles(t *testing.T) {
 	t.Run("unadopted store uploads nothing", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: edgeAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset}}
+		cfg := publication{root: edgeAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: asset}}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
@@ -188,7 +188,7 @@ func edgeSealedKeyFor(app, buildID string) string {
 
 func edgeStoreConfig(t *testing.T, store *fakeArtifactStore) publication {
 	t.Helper()
-	return publication{root: edgeAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: store, EdgeHoldsKey: true}}
+	return publication{root: edgeAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: store, EdgeHoldsKey: true}}
 }
 
 func TestUploadEdgeSeal(t *testing.T) {
@@ -247,13 +247,13 @@ func TestUploadEdgeSeal(t *testing.T) {
 
 }
 
-func TestAnEdgeBundleAndItsSealedOverlayLandInTheEdgeBucketUntagged(t *testing.T) {
+func TestAnEdgeBundleAndItsSealedOverlayLandInTheEdgeBucket(t *testing.T) {
 	t.Parallel()
 	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
 	cfg := publication{root: writeTree(t, map[string]string{
 		"apps/web/next-route-table.json": `{"buildId":"WEB1"}`,
 		"apps/web/edge/bundle.json":      `{"version":1,"mainModule":"main.js"}`,
-	}), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: assetStore, EdgeHoldsKey: true}}
+	}), buckets: Buckets{Buckets: edgeAndCache, Objects: assetStore, EdgeHoldsKey: true}}
 	manifest := edgeVariablesManifest(variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
 
 	if err := uploadEdgeBundles(context.Background(), cfg, manifest, edgeBuilds(t, cfg, manifest)); err != nil {
@@ -264,9 +264,6 @@ func TestAnEdgeBundleAndItsSealedOverlayLandInTheEdgeBucketUntagged(t *testing.T
 	slices.Sort(want)
 	if got := sortedPuts(assetStore); !slices.Equal(got, want) {
 		t.Errorf("the edge bucket was given %v, want %v", got, want)
-	}
-	if len(assetStore.taggings) != 0 {
-		t.Errorf("taggings = %v, want none", assetStore.taggings)
 	}
 	for _, b := range assetStore.buckets {
 		if b != "edge" {

@@ -76,7 +76,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	fallback, err := acm.NewCertificate(ctx, name+partSeparator+certificateWord, &acm.CertificateArgs{
+	fallback, err := acm.NewCertificate(ctx, component.NameOf(name).Part(certificateWord), &acm.CertificateArgs{
 		CertificateBody: pulumi.String(certificate),
 		PrivateKey:      pulumi.ToSecret(pulumi.String(key)).(pulumi.StringOutput),
 		Tags:            tags,
@@ -95,7 +95,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	listener, err := lb.NewListener(ctx, name+partSeparator+httpsWord, &lb.ListenerArgs{
+	listener, err := lb.NewListener(ctx, component.NameOf(name).Part(httpsWord), &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
 		Port:            pulumi.Int(awsports.PublicListenerPort),
 		Protocol:        pulumi.String("HTTPS"),
@@ -114,7 +114,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	if _, err := lb.NewListener(ctx, name+partSeparator+httpWord, &lb.ListenerArgs{
+	if _, err := lb.NewListener(ctx, component.NameOf(name).Part(httpWord), &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
 		Port:            pulumi.Int(originListenerPort),
 		Protocol:        pulumi.String("HTTP"),
@@ -173,7 +173,7 @@ func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Li
 	if err != nil {
 		return err
 	}
-	invoke, err := lambda.NewPermission(ctx, liveness+partSeparator+invokeWord, &lambda.PermissionArgs{
+	invoke, err := lambda.NewPermission(ctx, component.NameOf(liveness).Part(invokeWord), &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  function.Name,
 		Principal: pulumi.String(balancerPrincipal),
@@ -182,14 +182,14 @@ func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Li
 	if err != nil {
 		return err
 	}
-	if _, err := lb.NewTargetGroupAttachment(ctx, targets+partSeparator+liveness, &lb.TargetGroupAttachmentArgs{
+	if _, err := lb.NewTargetGroupAttachment(ctx, component.NameOf(targets).Part(liveness), &lb.TargetGroupAttachmentArgs{
 		TargetGroupArn: group.Arn,
 		TargetId:       function.Arn,
 	}, pulumi.DependsOn([]pulumi.Resource{invoke})); err != nil {
 		return err
 	}
 	ctx.Export(outputKeyLivenessRole, role.Arn)
-	_, err = lb.NewListenerRule(ctx, naming.Join(partSeparator, balancer, httpsWord, livenessWord), &lb.ListenerRuleArgs{
+	_, err = lb.NewListenerRule(ctx, component.NameOf(component.NameOf(balancer).Part(httpsWord)).Part(livenessWord), &lb.ListenerRuleArgs{
 		ListenerArn: listener.Arn,
 		Priority:    pulumi.Int(livenessRulePriority),
 		Conditions: lb.ListenerRuleConditionArray{&lb.ListenerRuleConditionArgs{

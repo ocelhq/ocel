@@ -3,7 +3,6 @@ package function
 import (
 	"fmt"
 
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -130,11 +129,7 @@ func (a AppStack) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) er
 	if err != nil {
 		return err
 	}
-	_, err = awsiam.NewRolePolicy(ctx, role.Part(dispatchPolicyName), &awsiam.RolePolicyArgs{
-		Name:   pulumi.String(dispatchPolicyName),
-		Role:   a.RoleName,
-		Policy: policy,
-	})
+	_, err = component.NewRolePolicy(ctx, role, a.RoleName, dispatchPolicyName, policy)
 	return err
 }
 
@@ -147,11 +142,11 @@ func (a AppStack) declare(
 ) (functionRef, error) {
 	logical := fn.Logical
 	args := a.Args(fn)
-	name, err := Name(a.Namespace, a.Project, a.Stack, logical)
+	names, err := NamesFor(a.Namespace, a.Project, a.Stack, logical)
 	if err != nil {
 		return functionRef{}, err
 	}
-	ref, err := registerFunction(ctx, logical, Coordinate(a.Project, a.Stack, logical), name,
+	ref, err := registerFunction(ctx, logical, Coordinate(a.Project, a.Stack, logical), names.Function,
 		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn,
 		RuntimeLayerInput(a.Layers[args.Arch]), urlAuth, a.KmsKeyARN,
 		a.shippedTo(logical)...)

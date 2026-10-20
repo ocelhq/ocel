@@ -2,13 +2,14 @@ package account
 
 import (
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...ShapeOption) (map[string][]pricing.Shaped, error) {
-	in := partInputs{ns: ns, tier: tier, alongside: PartSet{}}
+	in := partInputs{ns: ns, tier: tier, alongside: PartSet{}, refs: stackRefs{bucketTag: naming.NewRandomTag()}}
 	for _, option := range options {
 		option(&in)
 	}

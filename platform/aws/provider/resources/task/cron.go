@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/scheduler"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -24,6 +23,7 @@ const (
 	maxScheduleExpressionLen  = 256
 	maxScheduleDescriptionLen = 512
 	CronMessageGroup          = "cron"
+	invokePolicyName          = "invoke"
 )
 
 var schedulerWeekdays = []string{"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"}
@@ -101,18 +101,15 @@ func Allowing(action string, resources []string) (string, error) {
 
 func DeclareCrons(ctx *pulumi.Context, role SchedulerRole, names queues.Names, group string, policy pulumi.StringInput, crons []CronTarget) error {
 	roleName := component.NameOf(role.Name)
-	created, err := awsiam.NewRole(ctx, roleName.Pulumi, &awsiam.RoleArgs{
-		Name:                roleName.AWS,
-		Description:         component.CapDescription(role.At.Description("role EventBridge Scheduler takes to start this app's cron tasks on their workers"), component.MaxDescriptionLen),
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.SchedulerPrincipal)),
-		PermissionsBoundary: pulumi.String(role.Boundary),
-		Path:                pulumi.String(role.Path),
-		Tags:                component.Tags(role.At.Kind, "", role.Tags),
+	created, granted, err := component.NewAppRole(ctx, component.AppRole{
+		Name:        roleName,
+		Description: component.CapDescription(role.At.Description("role EventBridge Scheduler takes to start this app's cron tasks on their workers"), component.MaxDescriptionLen),
+		Principal:   iam.SchedulerPrincipal,
+		Boundary:    role.Boundary,
+		Path:        role.Path,
+		Tags:        role.Tags,
+		Policies:    map[string]pulumi.StringInput{invokePolicyName: policy},
 	})
-	if err != nil {
-		return err
-	}
-	invoking, err := component.NewRolePolicy(ctx, roleName, created, "invoke", policy)
 	if err != nil {
 		return err
 	}
@@ -142,7 +139,7 @@ func DeclareCrons(ctx *pulumi.Context, role SchedulerRole, names queues.Names, g
 				ScheduleExpression: pulumi.String(expression),
 				FlexibleTimeWindow: &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 				Target:             target,
-			}, pulumi.DependsOn([]pulumi.Resource{invoking})); err != nil {
+			}, pulumi.DependsOn(granted)); err != nil {
 				return err
 			}
 		}

@@ -133,26 +133,20 @@ func (w *Stack) coordinate(kind naming.Kind, name string) naming.Coordinate {
 
 func (w *Stack) Declare(ctx *pulumi.Context) error {
 	roleAt := w.coordinate(naming.KindRole, workerRoleWord)
-	role, err := function.NewRole(ctx, roleAt, w.role)
-	if err != nil {
-		return err
-	}
-	roleName, err := function.RoleName(w.names.Namespace, roleAt)
-	if err != nil {
-		return err
-	}
 	consumption, err := w.consumptionPolicy()
 	if err != nil {
 		return err
 	}
-	consuming, err := component.NewRolePolicy(ctx, roleName, role, queuesPolicyName, pulumi.String(consumption))
+	executes := w.role
+	executes.Policies = map[string]string{queuesPolicyName: consumption}
+	role, granted, err := function.NewRole(ctx, roleAt, executes)
 	if err != nil {
 		return err
 	}
 	var functions []*lambda.Function
 	var crons []task.CronTarget
 	for _, worker := range w.workers {
-		fn, err := w.declareWorker(ctx, worker, role.Arn, consuming)
+		fn, err := w.declareWorker(ctx, worker, role.Arn, granted)
 		if err != nil {
 			return err
 		}
@@ -218,7 +212,7 @@ func consumptionPolicy(workers []provider.WorkerSpec, topics topic.Topics, regio
 	return string(encoded), err
 }
 
-func (w *Stack) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, roleARN pulumi.StringInput, consuming pulumi.Resource) (*lambda.Function, error) {
+func (w *Stack) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, roleARN pulumi.StringInput, granted []pulumi.Resource) (*lambda.Function, error) {
 	at := w.coordinate(naming.KindWorker, worker.Name)
 	physical, err := component.PhysicalName(w.names.Namespace, at, component.MaxLambdaNameLen)
 	if err != nil {
@@ -263,7 +257,7 @@ func (w *Stack) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, r
 	}
 	for _, queue := range w.topics.Served(worker.Name) {
 		if _, err := lambda.NewEventSourceMapping(ctx, name.Part(queue.Name),
-			eventSourceMapping(queue, worker, fn, w.region, w.account, component.Tags(at.Kind, "", args.Tags)), pulumi.DependsOn([]pulumi.Resource{consuming})); err != nil {
+			eventSourceMapping(queue, worker, fn, w.region, w.account, component.Tags(at.Kind, "", args.Tags)), pulumi.DependsOn(granted)); err != nil {
 			return nil, err
 		}
 	}

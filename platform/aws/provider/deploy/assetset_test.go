@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/site"
@@ -20,7 +21,7 @@ func assetShippingConfig(t *testing.T, app string) Config {
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = siblingAppRoot(t, app)
 	cfg.Env = "prod"
-	cfg.ArtifactBucket = "artifacts-bucket"
+	cfg.Buckets[naming.StorageArtifacts] = "artifacts-bucket"
 	cfg.StateTable = "ocel-state"
 	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
 	cfg.BackendURL = "s3://ocel-state/shop"

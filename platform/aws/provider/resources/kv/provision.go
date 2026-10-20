@@ -110,14 +110,10 @@ func translateKV(name string, spec *provider.KVSpec) (kvArgs, error) {
 	}, nil
 }
 
-func groupID(namespace string, at naming.Coordinate) (string, error) {
-	return component.PhysicalName(namespace, at, maxReplicationGroupIDLen)
-}
-
 func registerKV(ctx *pulumi.Context, stack component.Stack, logicalName string, args kvArgs) error {
 	at := component.ResourceCoordinate(stack.Project, stack.Env, logicalName, naming.KindKV)
 	network := stack.Network
-	group, err := groupID(stack.Namespace, at)
+	names, err := NamesFor(stack, logicalName, args.Family)
 	if err != nil {
 		return err
 	}
@@ -125,7 +121,7 @@ func registerKV(ctx *pulumi.Context, stack component.Stack, logicalName string, 
 	tags[component.TagResource] = pulumi.String(at.Name)
 
 	securityGroup, err := component.NewVPCSecurityGroup(ctx, at, component.VPCSecurityGroup{
-		Owner:   group,
+		Name:    names.SecurityGroup,
 		Subject: "the " + at.Name + " kv store",
 		Engine:  "Valkey",
 		Port:    args.Port,
@@ -138,9 +134,8 @@ func registerKV(ctx *pulumi.Context, stack component.Stack, logicalName string, 
 		return err
 	}
 
-	subnets := group + naming.WordSeparator + subnetsSuffix
-	subnetGroup, err := elasticache.NewSubnetGroup(ctx, subnets, &elasticache.SubnetGroupArgs{
-		Name:        pulumi.String(subnets),
+	subnetGroup, err := elasticache.NewSubnetGroup(ctx, names.Subnets, &elasticache.SubnetGroupArgs{
+		Name:        pulumi.String(names.Subnets),
 		Description: component.CapDescription(at.Description("subnet group placing the "+at.Name+" kv store in the VPC's subnets"), component.MaxSubnetGroupDescriptionLen),
 		SubnetIds:   pulumi.ToStringArray(network.SubnetIDs),
 		Tags:        tags,
@@ -149,9 +144,8 @@ func registerKV(ctx *pulumi.Context, stack component.Stack, logicalName string, 
 		return err
 	}
 
-	parameterGroup := group + naming.WordSeparator + args.Family
-	parameters, err := elasticache.NewParameterGroup(ctx, parameterGroup, &elasticache.ParameterGroupArgs{
-		Name:        pulumi.String(parameterGroup),
+	parameters, err := elasticache.NewParameterGroup(ctx, names.Parameters, &elasticache.ParameterGroupArgs{
+		Name:        pulumi.String(names.Parameters),
 		Family:      pulumi.String(args.Family),
 		Description: component.CapDescription(at.Description("eviction and reserved memory for the "+at.Name+" kv store"), maxParameterGroupDescriptionLen),
 		Parameters: elasticache.ParameterGroupParameterArray{
@@ -164,8 +158,8 @@ func registerKV(ctx *pulumi.Context, stack component.Stack, logicalName string, 
 		return err
 	}
 
-	replicationGroup, err := elasticache.NewReplicationGroup(ctx, group, &elasticache.ReplicationGroupArgs{
-		ReplicationGroupId:       pulumi.String(group),
+	replicationGroup, err := elasticache.NewReplicationGroup(ctx, names.Group, &elasticache.ReplicationGroupArgs{
+		ReplicationGroupId:       pulumi.String(names.Group),
 		Description:              component.CapDescription(at.Description("the "+at.Name+" kv store"), maxReplicationGroupDescriptionLen),
 		Engine:                   pulumi.String(args.Engine),
 		EngineVersion:            pulumi.String(args.EngineVersion),

@@ -199,8 +199,8 @@ func TestTheEdgeUserInvokesTheImageOptimizerOfItsOwnTierByNameAndNoOtherFunction
 		tier      environment.Tier
 		optimizer string
 	}{
-		{environment.TierProduction, "ocel-optimizer"},
-		{environment.TierPreview, "ocel-optimizer-preview"},
+		{environment.TierProduction, "ocel-prod-optimizer"},
+		{environment.TierPreview, "ocel-preview-optimizer"},
 	} {
 		t.Run(string(tc.tier), func(t *testing.T) {
 			var tmpl edgeUserTemplate

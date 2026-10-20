@@ -322,11 +322,11 @@
       "monthlyUsage": "0.52"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudfront_key_value_store:ocel-routes",
+      "resource": "project:shop/shared:production/aws_cloudfront_key_value_store:ocel-prod-routes",
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudfront_function:ocel-resolver",
+      "resource": "project:shop/shared:production/aws_cloudfront_function:ocel-prod-resolver",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -344,7 +344,7 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudfront_function:ocel-empty-body",
+      "resource": "project:shop/shared:production/aws_cloudfront_function:ocel-prod-empty-body",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -362,7 +362,7 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_function:ocel-optimizer",
+      "resource": "project:shop/shared:production/aws_lambda_function:ocel-prod-optimizer",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -390,11 +390,11 @@
       "monthlyUsage": "4.81"
     },
     {
-      "resource": "project:shop/shared:production/aws_lambda_function_url:ocel-optimizer-url",
+      "resource": "project:shop/shared:production/aws_lambda_function_url:ocel-prod-optimizer-url",
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-optimizer",
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-optimizer",
       "status": "STATUS_PRICED",
       "components": [
         {

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
@@ -16,8 +15,6 @@ const (
 	AppRoleWord = "role"
 
 	PartSeparator = "/"
-
-	randomTagPlaceholder = "000000"
 )
 
 type Name struct {
@@ -57,35 +54,19 @@ func PhysicalName(namespace string, at naming.Coordinate, limit int, childSuffix
 	if at.Release.IsZero() {
 		tag = at.HashTag(namespace)
 	}
-	return Fit(at.AppResourceName(namespace, tag), at.Kind.Component()+" "+at.Name, limit, childSuffixes...)
+	return at.AppResourceName(namespace, tag).Fit(limit, childSuffixes...)
 }
 
-func Fit(name naming.PhysicalName, what string, limit int, childSuffixes ...string) (string, error) {
-	fitted, err := name.Fit(limit, childSuffixes...)
-	if err != nil {
-		return "", refusal.Refuse(refusal.CodeInvalid, "the %s takes no AWS name within %d characters: %v", what, limit, err)
-	}
-	return fitted, nil
+func UntaggedName(namespace string, at naming.Coordinate, limit int, childSuffixes ...string) (string, error) {
+	return at.AppResourceName(namespace, "").FitUntagged(limit, childSuffixes...)
 }
 
-func RandomTaggedHead(namespace string, at naming.Coordinate, limit int, childSuffixes ...string) (string, error) {
-	fitted, err := Fit(at.AppResourceName(namespace, randomTagPlaceholder), at.Kind.Component()+" "+at.Name, limit, childSuffixes...)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSuffix(fitted, naming.WordSeparator+randomTagPlaceholder), nil
-}
-
-func RandomTaggedName(ctx *pulumi.Context, namespace string, at naming.Coordinate, limit int, childSuffixes ...string) (Name, error) {
-	head, err := RandomTaggedHead(namespace, at, limit, childSuffixes...)
+func RandomTaggedName(ctx *pulumi.Context, untagged string) (Name, error) {
+	tag, err := NewRandomTag(ctx, untagged+PartSeparator+"tag")
 	if err != nil {
 		return Name{}, err
 	}
-	tag, err := NewRandomTag(ctx, head+PartSeparator+"tag")
-	if err != nil {
-		return Name{}, err
-	}
-	return Name{Pulumi: head, AWS: pulumi.Sprintf("%s%s%s", head, naming.WordSeparator, tag)}, nil
+	return Name{Pulumi: untagged, AWS: pulumi.Sprintf("%s%s%s", untagged, naming.WordSeparator, tag)}, nil
 }
 
 func AccountOfARN(arn string) string {

@@ -147,38 +147,38 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/aws_cloudfront_key_value_store:ocel-routes-preview",
+      "id": "project:shop/shared:preview/aws_cloudfront_key_value_store:ocel-preview-routes",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_cloudfront_key_value_store",
-      "name": "ocel-routes-preview",
+      "name": "ocel-preview-routes",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_cloudfront_function:ocel-resolver-preview",
+      "id": "project:shop/shared:preview/aws_cloudfront_function:ocel-preview-resolver",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_cloudfront_function",
-      "name": "ocel-resolver-preview",
+      "name": "ocel-preview-resolver",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_cloudfront_function:ocel-empty-body-preview",
+      "id": "project:shop/shared:preview/aws_cloudfront_function:ocel-preview-empty-body",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_cloudfront_function",
-      "name": "ocel-empty-body-preview",
+      "name": "ocel-preview-empty-body",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_lambda_function:ocel-optimizer-preview",
+      "id": "project:shop/shared:preview/aws_lambda_function:ocel-preview-optimizer",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "ocel-optimizer-preview",
+      "name": "ocel-preview-optimizer",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -190,20 +190,20 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/aws_lambda_function_url:ocel-optimizer-preview-url",
+      "id": "project:shop/shared:preview/aws_lambda_function_url:ocel-preview-optimizer-url",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_lambda_function_url",
-      "name": "ocel-optimizer-preview-url",
+      "name": "ocel-preview-optimizer-url",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-optimizer-preview",
+      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-preview-optimizer",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "/aws/lambda/ocel-optimizer-preview",
+      "name": "/aws/lambda/ocel-preview-optimizer",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14

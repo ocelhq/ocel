@@ -5,15 +5,47 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
-func resourceNames(at component.Stack, logicalName string) (map[string][]component.ResourceRef, error) {
+type Names struct {
+	Cluster       string
+	Instance      string
+	Subnets       string
+	SecurityGroup string
+}
+
+func NamesFor(at component.Stack, logicalName string) (Names, error) {
 	cluster, err := ClusterName(at.Namespace, at.Tier(), component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindDatabase))
 	if err != nil {
-		return nil, err
+		return Names{}, err
 	}
-	return map[string][]component.ResourceRef{
-		"securityGroup": {{Token: component.TokenEC2SecurityGroup, Name: component.SecurityGroupName(cluster)}},
-		"subnetGroup":   {{Token: component.TokenRDSSubnetGroup, Name: cluster + naming.WordSeparator + subnetsSuffix}},
-		"cluster":       {{Token: component.TokenRDSCluster, Name: cluster}},
-		"instance":      {{Token: component.TokenRDSClusterMember, Name: cluster + naming.WordSeparator + instanceSuffix}},
+	return Names{
+		Cluster:       cluster,
+		Instance:      cluster + naming.WordSeparator + instanceSuffix,
+		Subnets:       cluster + naming.WordSeparator + subnetsSuffix,
+		SecurityGroup: component.SecurityGroupName(cluster),
 	}, nil
+}
+
+func (n Names) Surfaces() map[string][]component.ResourceRef {
+	return map[string][]component.ResourceRef{
+		"securityGroup": {n.securityGroup()},
+		"subnetGroup":   {n.subnetGroup()},
+		"cluster":       {n.cluster()},
+		"instance":      {n.instance()},
+	}
+}
+
+func (n Names) securityGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenEC2SecurityGroup, Name: n.SecurityGroup}
+}
+
+func (n Names) subnetGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenRDSSubnetGroup, Name: n.Subnets}
+}
+
+func (n Names) cluster() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenRDSCluster, Name: n.Cluster}
+}
+
+func (n Names) instance() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenRDSClusterMember, Name: n.Instance}
 }

@@ -3,7 +3,7 @@ import {
   deleteEdgePolicy,
   type EdgePolicy,
   listEdgePolicies,
-  namespaceOfPolicy,
+  namespaceFieldOfPolicy,
   orphanedPolicies,
 } from "./policies";
 import type { Cli } from "./store";
@@ -16,46 +16,42 @@ function headers(name: string): EdgePolicy {
   return { kind: "response-headers-policy", id: `id-${name}`, name };
 }
 
-describe("namespaceOfPolicy", () => {
-  it("reads the namespace a bootstrap named its cache policy after", () => {
-    expect(namespaceOfPolicy(cache("j-1799-deploy-next-cloudflare-cache"))).toBe(
-      "j-1799-deploy-next-cloudflare",
-    );
+describe("namespaceFieldOfPolicy", () => {
+  it("reads the namespace field a bootstrap named its cache policy after", () => {
+    expect(namespaceFieldOfPolicy(cache("j-179-c00ae4-prod-cache"))).toBe("j-179-c00ae4");
   });
 
-  it("reads the namespace off a preview tier's policies", () => {
-    expect(namespaceOfPolicy(cache("j-1799-deploy-node-cache-preview"))).toBe("j-1799-deploy-node");
-    expect(namespaceOfPolicy(headers("j-1799-deploy-node-headers-preview"))).toBe(
-      "j-1799-deploy-node",
-    );
+  it("reads the namespace field off a preview tier's policies", () => {
+    expect(namespaceFieldOfPolicy(cache("j-187-e5b227-preview-cache"))).toBe("j-187-e5b227");
+    expect(namespaceFieldOfPolicy(headers("j-187-e5b227-preview-headers"))).toBe("j-187-e5b227");
   });
 
   it("claims no policy a harness run did not name", () => {
-    expect(namespaceOfPolicy(cache("ocel-cache"))).toBeUndefined();
-    expect(namespaceOfPolicy(cache("j-1799-deploy-node-images"))).toBeUndefined();
+    expect(namespaceFieldOfPolicy(cache("ocel-prod-cache"))).toBeUndefined();
+    expect(namespaceFieldOfPolicy(cache("j-187-e5b227-prod-images"))).toBeUndefined();
   });
 
   it("claims no cache policy by a headers policy's name", () => {
-    expect(namespaceOfPolicy(cache("j-1799-deploy-node-headers"))).toBeUndefined();
+    expect(namespaceFieldOfPolicy(cache("j-187-e5b227-prod-headers"))).toBeUndefined();
   });
 });
 
 describe("orphanedPolicies", () => {
   it("keeps the policies a stack in the account still names, and takes the rest", () => {
     const policies = [
-      cache("j-1799-deploy-node-cache"),
-      headers("j-1799-deploy-node-headers"),
-      cache("j-1800-deploy-next-cloudflare-cache"),
-      cache("ocel-cache"),
+      cache("j-187-e5b227-prod-cache"),
+      headers("j-187-e5b227-prod-headers"),
+      cache("j-179-c00ae4-prod-cache"),
+      cache("ocel-prod-cache"),
     ];
 
-    expect(orphanedPolicies(policies, new Set(["j-1799-deploy-node"]))).toEqual([
-      cache("j-1800-deploy-next-cloudflare-cache"),
+    expect(orphanedPolicies(policies, new Set(["j-1874-deploy-node"]))).toEqual([
+      cache("j-179-c00ae4-prod-cache"),
     ]);
   });
 
   it("keeps a local run's policy, since nothing can tell whether that run is still going", () => {
-    expect(orphanedPolicies([cache("j-local-victor-deploy-node-cache")], new Set())).toEqual([]);
+    expect(orphanedPolicies([cache("j-loc-3f13ed-prod-cache")], new Set())).toEqual([]);
   });
 });
 
@@ -77,7 +73,7 @@ describe("listEdgePolicies", () => {
       {
         "cloudfront list-cache-policies": JSON.stringify({
           CachePolicyList: {
-            Items: [{ CachePolicy: { Id: "c1", CachePolicyConfig: { Name: "j-1-a-cache" } } }],
+            Items: [{ CachePolicy: { Id: "c1", CachePolicyConfig: { Name: "j-1-a-prod-cache" } } }],
           },
         }),
         "cloudfront list-response-headers-policies": JSON.stringify({
@@ -86,7 +82,7 @@ describe("listEdgePolicies", () => {
               {
                 ResponseHeadersPolicy: {
                   Id: "h1",
-                  ResponseHeadersPolicyConfig: { Name: "j-1-a-headers" },
+                  ResponseHeadersPolicyConfig: { Name: "j-1-a-prod-headers" },
                 },
               },
             ],
@@ -97,8 +93,8 @@ describe("listEdgePolicies", () => {
     );
 
     expect(await listEdgePolicies(cli)).toEqual([
-      { kind: "cache-policy", id: "c1", name: "j-1-a-cache" },
-      { kind: "response-headers-policy", id: "h1", name: "j-1-a-headers" },
+      { kind: "cache-policy", id: "c1", name: "j-1-a-prod-cache" },
+      { kind: "response-headers-policy", id: "h1", name: "j-1-a-prod-headers" },
     ]);
     expect(calls.every((args) => args.includes("custom"))).toBe(true);
   });
@@ -119,7 +115,7 @@ describe("listEdgePolicies across pages", () => {
             {
               CachePolicy: {
                 Id: second ? "c2" : "c1",
-                CachePolicyConfig: { Name: second ? "j-1-b-cache" : "j-1-a-cache" },
+                CachePolicyConfig: { Name: second ? "j-1-b-prod-cache" : "j-1-a-prod-cache" },
               },
             },
           ],
@@ -141,13 +137,13 @@ describe("deleteEdgePolicy", () => {
       calls,
     );
 
-    await deleteEdgePolicy(cli, cache("j-1-a-cache"));
+    await deleteEdgePolicy(cli, cache("j-1-a-prod-cache"));
 
     expect(calls.at(-1)).toEqual([
       "cloudfront",
       "delete-cache-policy",
       "--id",
-      "id-j-1-a-cache",
+      "id-j-1-a-prod-cache",
       "--if-match",
       "E2ETAG",
     ]);

@@ -259,7 +259,7 @@ func conformingConfig(uploader *fakeArtifactStore) Config {
 		StateTable:     "ocel-state",
 		StateTableARN:  "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state",
 		AppBoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
-		ArtifactBucket: conformanceArtifactBucket,
+		Buckets:        naming.Buckets{naming.StorageArtifacts: conformanceArtifactBucket},
 		Objects:        uploader,
 		Parameters:     params,
 		KVTokenRoot:    conformanceKVTokenRoot,
