@@ -47,6 +47,7 @@ func realtimeGatewayServing(named names.Names, ref provider.StackRef, service, h
 	}
 	gateway := run.Serving{
 		Service:     service,
+		Tier:        ref.Tier,
 		Labels:      labels,
 		Image:       image,
 		Account:     named.RealtimeAccountEmail(ref.Tier),

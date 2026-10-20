@@ -19,6 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -48,6 +49,7 @@ const MaxRequestTimeout = 3600 * time.Second
 
 type Serving struct {
 	Service        string
+	Tier           environment.Tier
 	Image          string
 	Env            map[string]string
 	Account        string
@@ -279,6 +281,11 @@ func (p *Services) DeployService(ctx context.Context, s Serving, progress progre
 	}
 	if err != nil {
 		return Release{}, err
+	}
+	if s.Tier != "" {
+		if err := clients.EnsureTierTag(ctx, s.Tier, clients.RunServiceTagged(s.Service)); err != nil {
+			return Release{}, err
+		}
 	}
 	deployed, err := p.Read(ctx, services, path, s.Service)
 	if err != nil {

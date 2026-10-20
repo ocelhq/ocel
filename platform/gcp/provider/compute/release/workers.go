@@ -73,6 +73,7 @@ func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec 
 	for at, worker := range named {
 		ran, err := p.Services.DeployService(ctx, WorkerServing(spec.App.Workers[at], run.Serving{
 			Service:   worker.service,
+			Tier:      spec.Ref.Tier,
 			Image:     image,
 			Env:       env,
 			Account:   account,

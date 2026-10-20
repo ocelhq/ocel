@@ -66,6 +66,7 @@ func bastionDestinations() []relay.Destination {
 func (b Bastion) serving(tier environment.Tier, image string) run.Serving {
 	return run.Serving{
 		Service:     b.clients.Bastion(tier),
+		Tier:        tier,
 		Image:       image,
 		Account:     b.clients.BastionAccountEmail(tier),
 		Compute:     provider.ComputeServerless,
