@@ -34,6 +34,10 @@ func projectHoldingAccounts(t *testing.T) (*googletest.IAM, *gcloud.Clients, *go
 	t.Helper()
 	server := googletest.GrantedIAM()
 	server.Listed = slices.Concat(outsideAccounts, []string{realtimeAccount, appAccount})
+	server.Described = map[string]string{}
+	for _, email := range []string{realtimeAccount, appAccount} {
+		server.Described[email] = names.MarkedAccountDescription("an account ocel makes")
+	}
 	c := server.Open(t)
 	tags := googletest.NewTieredTags(t)
 	tags.Tagged(c)
@@ -206,6 +210,9 @@ func TestABootstrapLeavesAnotherNamespacesAccountsForThatNamespaceToBindToItsTie
 	}
 	const lookalike = "billing-prod-runner@acme-prod.iam.gserviceaccount.com"
 	server.Listed = slices.Concat(server.Listed, another, []string{lookalike})
+	for _, email := range another {
+		server.Described[email] = names.MarkedAccountDescription("an account another namespace makes")
+	}
 	p := pushing(t, c.Endpoint)
 	tags.Tagged(p.resolved)
 	b := bootstrap.Engine{Clients: p.resolved}
@@ -234,5 +241,29 @@ func TestABootstrapLeavesAnotherNamespacesAccountsForThatNamespaceToBindToItsTie
 	}
 	if _, err := p.PlanPreflight(ctx, preflightOf(environment.TierPreview)); err != nil {
 		t.Errorf("PlanPreflight() beside another namespace's untagged accounts = %v, want no refusal", err)
+	}
+}
+
+func TestAnAccountNamedAsOcelNamesItsOwnButNotMadeByOcelIsBoundToOutside(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	server, c, tags := projectHoldingAccounts(t)
+	customers := []string{"data-prod-assets@acme-prod.iam.gserviceaccount.com", "ci-prod-bastion@acme-prod.iam.gserviceaccount.com"}
+	server.Listed = slices.Concat(server.Listed, customers)
+	server.Described[customers[0]] = "the data team's asset pipeline"
+	b := bootstrap.Engine{Clients: c}
+	read := bootstrap.Survey{Tier: environment.TierPreview, Names: c.Names, Held: map[string]bool{}, Mending: map[string]string{}}
+	target := outsideTag(c)
+	read.Held[target.ID()], read.Mending[target.ID()] = true, "untagged"
+
+	if err := b.Provision(ctx, read, target, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	outside := tags.Values[c.OutsideTagValuePath()].Name
+	for _, email := range customers {
+		if got := tags.Bound(accountParent(email)); !slices.Equal(got, []string{outside}) {
+			t.Errorf("%s carries %v, want the outside value: its name fits ocel's, but ocel did not make it, and untagged a deploy could bind it to its tier and act as it", email, got)
+		}
 	}
 }

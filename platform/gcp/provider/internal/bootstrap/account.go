@@ -71,7 +71,7 @@ func (b Engine) MakeAccount(ctx context.Context, read Survey, name string) error
 		AccountId: name,
 		ServiceAccount: &iam.ServiceAccount{
 			DisplayName: purpose.DisplayName,
-			Description: purpose.Description,
+			Description: names.MarkedAccountDescription(purpose.Description),
 		},
 	}).Context(ctx).Do)
 	if err != nil && !gcloud.Taken(err) {
