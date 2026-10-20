@@ -82,7 +82,7 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 }
 
 func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
-	cfg, err := dependencies.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadTargetProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 	policy := consent.NewPolicy("ocel preview rm", yes, dependencies.CanAsk(stdin), stdout, stdin)
 
 	var removed *consolev1.EnvironmentEvent
-	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
 		recorded, err := readPreview(ctx, provider, cfg.Slug, env)
 		if err != nil {
@@ -162,7 +162,7 @@ func composeTeardownQuestion(recorded *contractv1.PreviewEnvironment) string {
 }
 
 func ListPreviews(ctx context.Context, dependencies Dependencies, cwd string, stdout io.Writer) error {
-	cfg, err := dependencies.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadTargetProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func previewListResult(previews []*contractv1.PreviewEnvironment) *resultv1.Prev
 }
 
 func listPreviews(ctx context.Context, dependencies Dependencies, cfg *project.Project) (previews []*contractv1.PreviewEnvironment, err error) {
-	err = dependencies.WithProvider(ctx, cfg, "ocel preview ls", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview ls", commands.OpenOptions{RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 			listed, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: cfg.Slug})
@@ -209,7 +209,7 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 		return err
 	}
 
-	cfg, err := dependencies.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadTargetProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 		return err
 	}
 
-	return dependencies.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW}, func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		plan := p.Run.Phase(progressv1.Phase_PHASE_PLAN)
 		plan.Say(fmt.Sprintf("This will delete every deployment of preview %s but the newest %d and the live one; none of them can be rolled back to afterwards", env.GetIdentity(), keep))

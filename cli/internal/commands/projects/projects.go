@@ -53,11 +53,11 @@ func loadProject(ctx context.Context, invocation commands.Invocation) (*project.
 	if err != nil {
 		return nil, err
 	}
-	return invocation.LoadProject(ctx, cwd)
+	return invocation.LoadTargetProject(ctx, cwd)
 }
 
 func accountOptions() commands.OpenOptions {
-	return commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION}
+	return commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION, RunsOnCloud: true}
 }
 
 func identityHeader(identity *contractv1.Identity, before []string, after ...string) string {

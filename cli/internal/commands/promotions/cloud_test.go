@@ -1,0 +1,68 @@
+package promotions
+
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/router"
+)
+
+func onOcelCloud(t *testing.T) (clitest.CloudProject, *bytes.Buffer) {
+	t.Helper()
+	project := clitest.SetUpCloudProject(t)
+	recordPromotions(t, project.FakeProject, append(firstTwoPromotions(),
+		router.Promotion{PromotionID: "promo-3", Ts: 3, Releases: map[string]string{"web": "build-3~fp4"}})...)
+	return project, &bytes.Buffer{}
+}
+
+func TestPromotionsAndRollbackRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
+	t.Run("promotions ls lists what Ocel Cloud promoted", func(t *testing.T) {
+		project, stdout := onOcelCloud(t)
+		invocation := clitest.NewInvocation()
+		project.LogIn(&invocation)
+		clitest.AttachTerminalSink(invocation, stdout)
+
+		var stderr bytes.Buffer
+		if err := runPromotionsList(context.Background(), invocation, project.Root, stdout, &stderr); err != nil {
+			t.Fatalf("err = %v; stdout=%s", err, stdout)
+		}
+		if !strings.Contains(stdout.String(), "promo-2") || len(project.Remote.Calls()) == 0 {
+			t.Fatalf("stdout = %q, want the promotions read from Ocel Cloud", stdout)
+		}
+	})
+
+	t.Run("promotions prune reclaims on Ocel Cloud", func(t *testing.T) {
+		project, stdout := onOcelCloud(t)
+		invocation := clitest.NewInvocation()
+		project.LogIn(&invocation)
+		clitest.AttachTerminalSink(invocation, stdout)
+
+		if err := runPromotionsPrune(context.Background(), invocation, project.Root, pruneOptions{keep: 1, yes: true}, stdout, strings.NewReader("")); err != nil {
+			t.Fatalf("err = %v; stdout=%s", err, stdout)
+		}
+		history, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).History(context.Background(), "")
+		if err != nil || len(history) != 2 || history[1].PromotionID != "promo-2" {
+			t.Fatalf("history = %+v, err = %v, want promo-1 reclaimed", history, err)
+		}
+	})
+
+	t.Run("rollback moves Ocel Cloud's production back", func(t *testing.T) {
+		project, stdout := onOcelCloud(t)
+		invocation := clitest.NewInvocation()
+		project.LogIn(&invocation)
+		clitest.AttachTerminalSink(invocation, stdout)
+
+		var stderr bytes.Buffer
+		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("err = %v; stdout=%s stderr=%s", err, stdout, stderr.String())
+		}
+		active, _, err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).ReadActive(context.Background(), "")
+		if err != nil || active.Releases["web"] != "build-2~fp2" {
+			t.Fatalf("production serves %+v, err = %v, want promo-2's builds again", active, err)
+		}
+	})
+}

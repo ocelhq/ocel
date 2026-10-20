@@ -79,14 +79,39 @@ func (i Invocation) ResolveTarget(ctx context.Context, cwd string) (Target, erro
 	return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, named after this directory", base, slug)}, nil
 }
 
+func (i Invocation) LoadTargetProject(ctx context.Context, cwd string) (*project.Project, error) {
+	target, err := i.ResolveTarget(ctx, cwd)
+	if err != nil {
+		return nil, err
+	}
+	if target.IsCloud() || target.Project != nil && target.Project.HasProvider() {
+		return target.Project, nil
+	}
+	return i.LoadProject(ctx, cwd)
+}
+
 func (i Invocation) RequireProvider(ctx context.Context, cfg *project.Project, command string) (*project.Provider, error) {
+	if _, err := i.ResolveProvider(ctx, cfg, command, OpenOptions{}); err != nil {
+		return nil, err
+	}
+	return cfg.Provider, nil
+}
+
+func (i Invocation) ResolveProvider(ctx context.Context, cfg *project.Project, command string, opts OpenOptions) (*CloudTarget, error) {
 	if cfg.HasProvider() {
-		return cfg.Provider, nil
+		return nil, nil
 	}
-	if cloud, err := i.cloudTarget(ctx); err == nil && cloud != nil {
+	cloud, err := i.cloudTarget(ctx)
+	switch {
+	case cloud != nil && !opts.RunsOnCloud:
 		return nil, NotOnCloud(command)
+	case cloud != nil:
+		return cloud, nil
+	case err != nil && opts.RunsOnCloud:
+		return nil, err
 	}
-	return cfg.RequireProvider()
+	_, err = cfg.RequireProvider()
+	return nil, err
 }
 
 func NotOnCloud(command string) error {
