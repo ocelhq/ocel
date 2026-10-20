@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -19,7 +20,7 @@ import (
 type certificates struct{ *Provider }
 
 func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
-	certificates, err := p.certificatesFor(req.Kind, req.Router, req.Hostname, req.Progress)
+	certificates, err := p.certificatesFor(req.Tier, req.Kind, req.Router, req.Hostname, req.Progress)
 	if err != nil || !certificates.Issues() {
 		return provider.Certificate{}, err
 	}
@@ -150,13 +151,13 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws, Namespace: string(p.namespace)}).Discard(ctx, discarded, progress)
 }
 
-func (p *Provider) certificatesFor(kind edge.Kind, answering router.Kind, hostname string, progress progress.Log) (certs.Certificates, error) {
+func (p *Provider) certificatesFor(tier environment.Tier, kind edge.Kind, answering router.Kind, hostname string, progress progress.Log) (certs.Certificates, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind, nil)
 	if err != nil {
 		return certs.Certificates{}, err
 	}
-	certificates := registry.Certificates(front, answering, certs.Deps{AWS: p.aws, Namespace: string(p.namespace)})
+	certificates := registry.Certificates(front, answering, certs.Deps{AWS: p.aws, Namespace: string(p.namespace), Tier: tier})
 	if note := edges.IgnoredPinNote(front, certificates, hostname); note != "" {
 		progress.Warn(note)
 	}

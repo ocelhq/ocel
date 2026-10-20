@@ -149,16 +149,16 @@ func publicGroupName(namespace string, tier environment.Tier) string {
 	return naming.Join(naming.WordSeparator, awsports.PublicBalancerName(namespace, tier), securityGroupWord)
 }
 
-func livenessName(namespace string, tier environment.Tier) string {
+func LivenessName(namespace string, tier environment.Tier) string {
 	return naming.Join(naming.WordSeparator, awsports.PublicBalancerName(namespace, tier), livenessWord)
 }
 
 func stackTags(namespace string, tier environment.Tier) map[string]string {
 	return map[string]string{
-		"ocel:managed-by":    namespace,
-		"ocel:project":       Slug,
-		naming.EnvTierTagKey: string(tier),
-		"ocel:stack":         StackRef(tier).Name.String(),
+		naming.ManagedByTagKey: namespace,
+		"ocel:project":         Slug,
+		naming.EnvTierTagKey:   string(tier),
+		"ocel:stack":           StackRef(tier).Name.String(),
 	}
 }
 
@@ -372,7 +372,7 @@ func listResources(namespace string, tier environment.Tier, infra Infrastructure
 			provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(namespace, tier)},
 			provider.PartResource{Kind: kindSecurityGroup, ID: publicGroupName(namespace, tier)},
 			provider.PartResource{Kind: kindCertificate, ID: nameCertificateHost(awsports.PublicBalancerName(namespace, tier))},
-			provider.PartResource{Kind: kindFunction, ID: livenessName(namespace, tier)})
+			provider.PartResource{Kind: kindFunction, ID: LivenessName(namespace, tier)})
 		if infra.LivenessRole != "" {
 			resources = append(resources, provider.PartResource{Kind: kindRole, ID: parseRoleName(infra.LivenessRole)})
 		}

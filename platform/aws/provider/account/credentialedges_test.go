@@ -16,11 +16,11 @@ import (
 func TestTheDeployCredentialAnswersAndShieldsThePublicFrontOnlyOnWhatItTagged(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	want := []grant{
-		{action: "elasticloadbalancing:AddListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedByOcel())},
-		{action: "elasticloadbalancing:RemoveListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedByOcel())},
-		{action: "elasticloadbalancing:CreateTrustStore", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedOnCreate())},
-		{action: "elasticloadbalancing:ModifyTrustStore", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedByOcel())},
-		{action: "elasticloadbalancing:AddTags", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedByOcel())},
+		{action: "elasticloadbalancing:AddListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
+		{action: "elasticloadbalancing:RemoveListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
+		{action: "elasticloadbalancing:CreateTrustStore", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedOnCreateForItsTier())},
+		{action: "elasticloadbalancing:ModifyTrustStore", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
+		{action: "elasticloadbalancing:AddTags", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
 	}
 	for _, wanted := range want {
 		if !grants[wanted] {
@@ -30,21 +30,25 @@ func TestTheDeployCredentialAnswersAndShieldsThePublicFrontOnlyOnWhatItTagged(t 
 }
 
 func TestEveryCredentialChangesOnlyTheCertificatesItTagged(t *testing.T) {
-	want := map[grant]bool{
-		{action: "acm:ImportCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, productionScope.TaggedOnCreate())}: true,
-		{action: "acm:RequestCertificate", resource: iam.AnyResource, condition: conditionJSON(t, productionScope.TaggedOnCreate())}:      true,
-		{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, map[string]any{
-			"StringEquals":         map[string]any{"aws:RequestTag/ocel:managed-by": "ocel"},
-			"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
-		})}: true,
-		{action: "acm:ListTagsForCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, productionScope.TaggedByOcel())}:    true,
-		{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, productionScope.TaggedByOcel())}:      true,
-		{action: "acm:RemoveTagsFromCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, productionScope.TaggedByOcel())}: true,
-		{action: "acm:DeleteCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, productionScope.TaggedByOcel())}:         true,
-		{action: "acm:DescribeCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, nil)}:                                  true,
-		{action: "acm:ListCertificates", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                                           true,
-	}
 	for purpose, document := range bothCredentials(t) {
+		scope := defaultNamespace.Scope(tierOf(purpose))
+		want := map[grant]bool{
+			{action: "acm:ImportCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedOnCreateForItsTier())}: true,
+			{action: "acm:RequestCertificate", resource: iam.AnyResource, condition: conditionJSON(t, scope.TaggedOnCreateForItsTier())}:      true,
+			{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, map[string]any{
+				"StringEquals": map[string]any{
+					"aws:RequestTag/ocel:managed-by": "ocel",
+					"aws:RequestTag/ocel:env-tier":   string(scope.Tier),
+				},
+				"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
+			})}: true,
+			{action: "acm:ListTagsForCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:    true,
+			{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:      true,
+			{action: "acm:RemoveTagsFromCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}: true,
+			{action: "acm:DeleteCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:         true,
+			{action: "acm:DescribeCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, nil)}:                                  true,
+			{action: "acm:ListCertificates", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                                           true,
+		}
 		granted := map[grant]bool{}
 		for g := range grantsOf(t, document) {
 			if strings.HasPrefix(g.action, "acm:") {
@@ -81,32 +85,47 @@ func TestEveryCredentialGrantsEveryACMCallACustomHostnameCertificateMakes(t *tes
 
 func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesOcelTagged(t *testing.T) {
 	const certificate = "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234"
-	requestedByOcel := requestContext{"aws:RequestTag/ocel:managed-by": "ocel", "acm:CertificateKeyPairOrigin": "AWS_MANAGED"}
-	cases := []struct {
-		name     string
-		action   string
-		resource string
-		request  requestContext
-		allowed  bool
-	}{
-		{"requests a certificate tagged as Ocel's", "acm:RequestCertificate", iam.AnyResource, requestedByOcel, true},
-		{"requests a certificate with no Ocel tag", "acm:RequestCertificate", iam.AnyResource, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
-		{"tags the certificate it requests with Ocel's tag", "acm:AddTagsToCertificate", certificate, requestContext{
-			"aws:RequestTag/ocel:managed-by":  "ocel",
-			"aws:ResourceTag/ocel:managed-by": "ocel",
-			"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
-		}, true},
-		{"tags an ACM-issued certificate Ocel never requested", "acm:AddTagsToCertificate", certificate, requestedByOcel, false},
-		{"describes a certificate the account made itself", "acm:DescribeCertificate", certificate, requestContext{}, true},
-		{"lists the account's issued certificates", "acm:ListCertificates", iam.AnyResource, requestContext{}, true},
-		{"deletes an ACM-issued certificate Ocel requested", "acm:DeleteCertificate", certificate, requestContext{
-			"aws:ResourceTag/ocel:managed-by": "ocel",
-			"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
-		}, true},
-		{"deletes an ACM-issued certificate Ocel never requested", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
-		{"deletes a certificate the account imported itself", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}, false},
-	}
 	for purpose, document := range bothCredentials(t) {
+		tier := string(tierOf(purpose))
+		sibling := string(tierOf(purpose).Sibling())
+		requestedByOcel := requestContext{"aws:RequestTag/ocel:managed-by": "ocel", "aws:RequestTag/ocel:env-tier": tier, "acm:CertificateKeyPairOrigin": "AWS_MANAGED"}
+		cases := []struct {
+			name     string
+			action   string
+			resource string
+			request  requestContext
+			allowed  bool
+		}{
+			{"requests a certificate tagged as Ocel's", "acm:RequestCertificate", iam.AnyResource, requestedByOcel, true},
+			{"requests a certificate with no Ocel tag", "acm:RequestCertificate", iam.AnyResource, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
+			{"requests a certificate tagged for the other tier", "acm:RequestCertificate", iam.AnyResource, requestContext{
+				"aws:RequestTag/ocel:managed-by": "ocel",
+				"aws:RequestTag/ocel:env-tier":   sibling,
+				"acm:CertificateKeyPairOrigin":   "AWS_MANAGED",
+			}, false},
+			{"tags the certificate it requests with Ocel's tag", "acm:AddTagsToCertificate", certificate, requestContext{
+				"aws:RequestTag/ocel:managed-by":  "ocel",
+				"aws:RequestTag/ocel:env-tier":    tier,
+				"aws:ResourceTag/ocel:managed-by": "ocel",
+				"aws:ResourceTag/ocel:env-tier":   tier,
+				"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+			}, true},
+			{"tags an ACM-issued certificate Ocel never requested", "acm:AddTagsToCertificate", certificate, requestedByOcel, false},
+			{"describes a certificate the account made itself", "acm:DescribeCertificate", certificate, requestContext{}, true},
+			{"lists the account's issued certificates", "acm:ListCertificates", iam.AnyResource, requestContext{}, true},
+			{"deletes an ACM-issued certificate Ocel requested", "acm:DeleteCertificate", certificate, requestContext{
+				"aws:ResourceTag/ocel:managed-by": "ocel",
+				"aws:ResourceTag/ocel:env-tier":   tier,
+				"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+			}, true},
+			{"deletes an ACM-issued certificate the other tier requested", "acm:DeleteCertificate", certificate, requestContext{
+				"aws:ResourceTag/ocel:managed-by": "ocel",
+				"aws:ResourceTag/ocel:env-tier":   sibling,
+				"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+			}, false},
+			{"deletes an ACM-issued certificate Ocel never requested", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
+			{"deletes a certificate the account imported itself", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}, false},
+		}
 		for _, c := range cases {
 			if got := allows(t, document, c.action, c.resource, c.request); got != c.allowed {
 				t.Errorf("the %s credential %s: allowed = %t, want %t", purpose, c.name, got, c.allowed)
@@ -190,7 +209,7 @@ func TestTheDeployCredentialCreatesARestAPIOnlyTaggedAsOcelsAndItsOwnTiers(t *te
 	tagging := func(managedBy, tier string) requestContext {
 		request := requestContext{}
 		if managedBy != "" {
-			request["aws:RequestTag/"+iam.ManagedByTagKey] = managedBy
+			request["aws:RequestTag/"+naming.ManagedByTagKey] = managedBy
 		}
 		if tier != "" {
 			request["aws:RequestTag/"+naming.EnvTierTagKey] = tier
@@ -220,7 +239,7 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *tes
 	tags := func(prefix, managedBy, tier string) requestContext {
 		request := requestContext{}
 		if managedBy != "" {
-			request[prefix+iam.ManagedByTagKey] = managedBy
+			request[prefix+naming.ManagedByTagKey] = managedBy
 		}
 		if tier != "" {
 			request[prefix+naming.EnvTierTagKey] = tier
@@ -283,24 +302,26 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *tes
 
 func TestEveryCredentialCreatesTheContainerFrontsVPCOriginOnlyTaggedAsOcels(t *testing.T) {
 	const vpcOrigin = "arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"
-	tagged := func(managedBy string) requestContext {
+	tagged := func(managedBy string, tier environment.Tier) requestContext {
 		if managedBy == "" {
 			return requestContext{}
 		}
-		return requestContext{"aws:RequestTag/" + iam.ManagedByTagKey: managedBy}
+		return requestContext{"aws:RequestTag/" + naming.ManagedByTagKey: managedBy, "aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
 	}
 	onCreate := map[string]string{
 		"cloudfront:CreateVpcOrigin": iam.AnyResource,
 		"cloudfront:TagResource":     vpcOrigin,
 	}
 	for purpose, document := range bothCredentials(t) {
+		tier := tierOf(purpose)
 		for action, resource := range onCreate {
-			if !allows(t, document, action, resource, tagged(string(defaultNamespace))) {
+			if !allows(t, document, action, resource, tagged(string(defaultNamespace), tier)) {
 				t.Errorf("the %s credential cannot call %s on %q for a VPC origin it creates tagged as Ocel's", purpose, action, resource)
 			}
 			for name, request := range map[string]requestContext{
-				"untagged":                 tagged(""),
-				"tagged as someone else's": tagged("someone-else"),
+				"untagged":                  tagged("", tier),
+				"tagged as someone else's":  tagged("someone-else", tier),
+				"tagged for the other tier": tagged(string(defaultNamespace), tier.Sibling()),
 			} {
 				if allows(t, document, action, resource, request) {
 					t.Errorf("the %s credential can call %s on %q for a VPC origin %s", purpose, action, resource, name)
@@ -318,19 +339,30 @@ func TestEveryCredentialReadsTheAvailabilityZonesTheContainerFrontsVPCOriginReac
 	}
 }
 
-func TestEveryCredentialFindsAndRemovesOnlyOcelsFailedVPCOrigins(t *testing.T) {
+func TestEveryCredentialFindsAndRemovesOnlyItsOwnTiersFailedVPCOrigins(t *testing.T) {
 	const vpcOrigin = "arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"
-	ocels := requestContext{"aws:ResourceTag/" + iam.ManagedByTagKey: string(defaultNamespace)}
-	for purpose, document := range bothCredentials(t) {
-		if !allows(t, document, "cloudfront:ListVpcOrigins", iam.AnyResource, requestContext{}) {
-			t.Errorf("the %s credential cannot call cloudfront:ListVpcOrigins, so a retried deploy cannot find the VPC origin a failed one left behind", purpose)
-		}
-		for _, action := range []string{"cloudfront:GetVpcOrigin", "cloudfront:DeleteVpcOrigin", "cloudfront:ListTagsForResource"} {
-			if !allows(t, document, action, vpcOrigin, ocels) {
-				t.Errorf("the %s credential cannot call %s on a VPC origin tagged as Ocel's", purpose, action)
+	tagged := func(managedBy string, tier environment.Tier) requestContext {
+		return requestContext{"aws:ResourceTag/" + naming.ManagedByTagKey: managedBy, "aws:ResourceTag/" + naming.EnvTierTagKey: string(tier)}
+	}
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		bootstrapDoc, deployDoc := renderedCredentialsOf(t, tier)
+		for purpose, document := range map[string]string{"bootstrap": bootstrapDoc, "deploy": deployDoc} {
+			if !allows(t, document, "cloudfront:ListVpcOrigins", iam.AnyResource, requestContext{}) {
+				t.Errorf("the %s %s credential cannot call cloudfront:ListVpcOrigins, so a retried deploy cannot find the VPC origin a failed one left behind", tier, purpose)
 			}
-			if action != "cloudfront:ListTagsForResource" && allows(t, document, action, vpcOrigin, requestContext{}) {
-				t.Errorf("the %s credential can call %s on a VPC origin not tagged as Ocel's", purpose, action)
+			for _, action := range []string{"cloudfront:GetVpcOrigin", "cloudfront:DeleteVpcOrigin", "cloudfront:ListTagsForResource"} {
+				if !allows(t, document, action, vpcOrigin, tagged(string(defaultNamespace), tier)) {
+					t.Errorf("the %s %s credential cannot call %s on a VPC origin Ocel tagged for its tier", tier, purpose, action)
+				}
+				for name, request := range map[string]requestContext{
+					"untagged":                     {},
+					"tagged as another install's":  tagged("someone-else", tier),
+					"tagged as the sibling tier's": tagged(string(defaultNamespace), tier.Sibling()),
+				} {
+					if allows(t, document, action, vpcOrigin, request) {
+						t.Errorf("the %s %s credential can call %s on a VPC origin %s", tier, purpose, action, name)
+					}
+				}
 			}
 		}
 	}
@@ -340,8 +372,8 @@ func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 	const restAPITags = "arn:aws:apigateway:eu-west-1::/tags/arn%3Aaws%3Aapigateway%3Aeu-west-1%3A%3A%2Frestapis%2Fabc123"
 	creating := func(tier environment.Tier) requestContext {
 		return requestContext{
-			"aws:RequestTag/" + iam.ManagedByTagKey:  string(defaultNamespace),
-			"aws:RequestTag/" + naming.EnvTierTagKey: string(tier),
+			"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace),
+			"aws:RequestTag/" + naming.EnvTierTagKey:   string(tier),
 		}
 	}
 	for _, tier := range bothTiers {
@@ -356,7 +388,7 @@ func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 				t.Errorf("the %s %s credential can tag a REST API as the %s tier's", tier, purpose, tier.Sibling())
 			}
 			siblings := creating(tier)
-			siblings["aws:ResourceTag/"+iam.ManagedByTagKey] = string(defaultNamespace)
+			siblings["aws:ResourceTag/"+naming.ManagedByTagKey] = string(defaultNamespace)
 			siblings["aws:ResourceTag/"+naming.EnvTierTagKey] = string(tier.Sibling())
 			if allows(t, document, "apigateway:PUT", restAPITags, siblings) {
 				t.Errorf("the %s %s credential can retag the %s tier's REST API as its own", tier, purpose, tier.Sibling())

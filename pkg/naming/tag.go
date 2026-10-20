@@ -40,12 +40,5 @@ func HashTag(fields ...string) string {
 }
 
 func (c Coordinate) HashTag(namespace string) string {
-	return HashTag(namespace, c.Project, c.Env, c.appField(), string(c.Kind), c.Name)
-}
-
-func (c Coordinate) appField() string {
-	if c.App == InfraApp {
-		return ""
-	}
-	return c.App
+	return HashTag(namespace, c.Project, c.Env, appField(c.App), string(c.Kind), c.Name)
 }

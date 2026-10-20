@@ -119,6 +119,7 @@ func isSameJSON(a, b any) bool {
 
 type edgeSession struct {
 	*sharedStack
+	tier     environment.Tier
 	provider provider.Provider
 	store    edgeStateStore
 	state    stackrecords.EdgeState
@@ -211,7 +212,7 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 	}
 	shared.setEdgeStack(stack)
 	shared.restoreRouterStates(state)
-	session := &edgeSession{sharedStack: shared, provider: vendor, store: store, state: state, tunnel: readTunnelToOrigin(front)}
+	session := &edgeSession{sharedStack: shared, tier: tier, provider: vendor, store: store, state: state, tunnel: readTunnelToOrigin(front)}
 	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
 }

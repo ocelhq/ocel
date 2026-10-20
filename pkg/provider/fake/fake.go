@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -15,6 +16,7 @@ const Vendor provider.Vendor = "fake"
 type Provider struct {
 	mu                    sync.Mutex
 	pins                  map[string]string
+	certificateTiers      map[string]environment.Tier
 	certRefusal           error
 	issue                 []edge.Record
 	discarded             []string

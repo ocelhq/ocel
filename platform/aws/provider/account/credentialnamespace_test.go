@@ -5,7 +5,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 type installResource struct {
@@ -19,7 +18,7 @@ func resourcesOfInstall(ns Namespace, tier environment.Tier) []installResource {
 	return []installResource{
 		{"lambda:UpdateFunctionCode", "arn:aws:lambda:" + region + ":function:" + fence + "shop-prod-web-api-r1a2b3c4d"},
 		{"lambda:DeleteFunction", "arn:aws:lambda:" + region + ":function:" + fence + "shop-prod-web-api-r1a2b3c4d"},
-		{"iam:DeleteRole", "arn:aws:iam::111122223333:role" + ns.AppRolePathFor(environment.TierProduction) + fence + "shop-prod-web-r1a2b3c4d"},
+		{"iam:DeleteRole", "arn:aws:iam::111122223333:role" + ns.AppRolePathFor(tier) + fence + "shop-prod-web-r1a2b3c4d"},
 		{"sqs:DeleteQueue", "arn:aws:sqs:" + region + ":" + fence + "shop-prod-orders-1a2b3c"},
 		{"sns:DeleteTopic", "arn:aws:sns:" + region + ":" + fence + "shop-prod-orders-1a2b3c"},
 		{"scheduler:DeleteScheduleGroup", "arn:aws:scheduler:" + region + ":schedule-group/" + fence + "shop-prod-heartbeat-1a2b3c"},
@@ -34,10 +33,10 @@ func resourcesOfInstall(ns Namespace, tier environment.Tier) []installResource {
 
 func taggedByInstall(ns Namespace, tier environment.Tier) requestContext {
 	return requestContext{
-		"aws:ResourceTag/" + iam.ManagedByTagKey:  string(ns),
-		"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier),
-		"aws:ResourceAccount":                     "111122223333",
-		"aws:PrincipalAccount":                    "111122223333",
+		"aws:ResourceTag/" + naming.ManagedByTagKey: string(ns),
+		"aws:ResourceTag/" + naming.EnvTierTagKey:   string(tier),
+		"aws:ResourceAccount":                       "111122223333",
+		"aws:PrincipalAccount":                      "111122223333",
 	}
 }
 

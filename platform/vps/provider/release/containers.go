@@ -74,7 +74,7 @@ func ContainerName(project string, stack naming.StackName, worker, image string)
 	if stack.Release.IsZero() {
 		tag = naming.HashTag(project, stack.Env, stack.App, worker, image)
 	}
-	return docker.Name{Project: project, Env: stack.Env, App: stack.App, Declared: worker, Tag: tag}.Fit()
+	return naming.PhysicalName{Project: project, Env: stack.Env, App: stack.App, Declared: worker, Tag: tag}.Fit(docker.NameMax)
 }
 
 func RunContainerScript(spec Container, env envfile.Delivery) string {

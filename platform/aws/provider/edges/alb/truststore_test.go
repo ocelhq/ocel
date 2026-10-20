@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -201,5 +202,27 @@ func TestTheTrustRecordAndItsBundleLiveUnderTrust(t *testing.T) {
 	}
 	if got, want := f.listKeys(), []string{"trust/client-cas.json", "trust/client-cas.pem"}; !slices.Equal(got, want) {
 		t.Errorf("the bucket holds %v, want %v", got, want)
+	}
+}
+
+func TestTheRuleAndTrustStoreAClaimMakesCarryTheTierTheyServe(t *testing.T) {
+	f := newFakeAWS()
+	stack, err := newTestRouter(f).Reconcile(context.Background(), router.StackSpec{Tier: environment.TierPreview, Slug: "shop"}, router.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if _, err := stack.Claim(context.Background(), router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}}); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if len(f.rules) == 0 {
+		t.Fatal("the claim made no rule")
+	}
+	for arn, rule := range f.rules {
+		if rule.tags["ocel:managed-by"] != "ocel" || rule.tags["ocel:env-tier"] != "preview" {
+			t.Errorf("rule %s is tagged %v, want ocel:managed-by=ocel and ocel:env-tier=preview: only the preview credential may change what the preview tier made", arn, rule.tags)
+		}
+	}
+	if f.trustTags["ocel:managed-by"] != "ocel" || f.trustTags["ocel:env-tier"] != "preview" {
+		t.Errorf("the trust store is tagged %v, want ocel:managed-by=ocel and ocel:env-tier=preview", f.trustTags)
 	}
 }

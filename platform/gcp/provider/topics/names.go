@@ -19,7 +19,7 @@ type Names struct {
 
 func (n Names) topicName(topic string) naming.PhysicalName {
 	tag := naming.Coordinate{Project: n.Scope.Slug, Env: n.Scope.Environment, App: naming.InfraApp, Kind: naming.KindTopic, Name: topic}.HashTag(string(n.Namespace))
-	return naming.PhysicalName{Namespace: string(n.Namespace), Project: n.Scope.Slug, Env: n.Scope.Environment, Declared: topic, Tag: tag}
+	return naming.PhysicalName{Fence: naming.AppFence(string(n.Namespace)), Project: n.Scope.Slug, Env: n.Scope.Environment, Declared: topic, Tag: tag}
 }
 
 func (n Names) Topic(topic string) string {

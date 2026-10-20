@@ -6,7 +6,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 const appBucketARN = "arn:aws:s3:::ocel-app-shop-prod-uploads-k3x9q0"
@@ -21,15 +20,15 @@ func bucketRequest(also ...requestContext) requestContext {
 
 func bucketTaggedFor(tier environment.Tier) requestContext {
 	return requestContext{
-		"aws:ResourceTag/" + iam.ManagedByTagKey:  string(defaultNamespace),
-		"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier),
+		"aws:ResourceTag/" + naming.ManagedByTagKey: string(defaultNamespace),
+		"aws:ResourceTag/" + naming.EnvTierTagKey:   string(tier),
 	}
 }
 
 func bucketCreatedFor(tier environment.Tier) requestContext {
 	return requestContext{
-		"aws:RequestTag/" + iam.ManagedByTagKey:  string(defaultNamespace),
-		"aws:RequestTag/" + naming.EnvTierTagKey: string(tier),
+		"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace),
+		"aws:RequestTag/" + naming.EnvTierTagKey:   string(tier),
 	}
 }
 

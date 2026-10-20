@@ -31,6 +31,13 @@ func ContainerWorkersStack(env, app string) StackName {
 	return StackName{Env: env, App: app, containerWorkers: true}
 }
 
+func appField(app string) string {
+	if app == InfraApp {
+		return ""
+	}
+	return app
+}
+
 func (s StackName) IsInfra() bool { return s.App == InfraApp }
 
 func (s StackName) HoldsContainerWorkers() bool { return s.containerWorkers }

@@ -42,6 +42,17 @@ func TestNamespaceFieldCompactsALongNamespaceToItsHeadAndAHash(t *testing.T) {
 	}
 }
 
+func TestAppFenceIsTheNamespaceFieldThenApp(t *testing.T) {
+	for namespace, want := range map[string]string{
+		"ocel":                           "ocel-app-",
+		"acme-staging-eu-west-blue-team": "acme-20ddf6-app-",
+	} {
+		if got := naming.AppFence(namespace); got != want {
+			t.Errorf("AppFence(%q) = %q, want %q", namespace, got, want)
+		}
+	}
+}
+
 func TestNamespaceFieldNeverCutsANamespaceIntoAnotherNamespacesFence(t *testing.T) {
 	field := naming.NamespaceField("x-apple-orchard-namespace")
 	if got, want := field, "x-ap-7e71aa"; got != want {

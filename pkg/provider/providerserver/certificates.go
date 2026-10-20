@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -33,6 +34,7 @@ func discardCertificateAndRecords(ctx context.Context, p provider.Provider, cuto
 }
 
 type hostCertificates struct {
+	tier      environment.Tier
 	provider  provider.Provider
 	cutover   dnsCutover
 	router    router.Kind
@@ -44,6 +46,7 @@ type hostCertificates struct {
 
 func (c hostCertificates) certify(ctx context.Context, hostname string, progress progress.Log) error {
 	cert, err := c.provider.Certificates().Issue(ctx, provider.CertificateRequest{
+		Tier:     c.tier,
 		Kind:     c.cutover.kind,
 		Router:   c.router,
 		Hostname: hostname,

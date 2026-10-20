@@ -438,9 +438,24 @@ func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
 					if !conditionAdmits(operator, fmt.Sprint(pattern), writtenByOcel) {
 						t.Errorf(
 							"the %s credential grants %s only where %s %s %v, which the %s=%s tag every Ocel resource carries never satisfies",
-							purpose, strings.Join(stringsOf(t, statement.Action, "Action"), ", "), key, operator, pattern, iam.ManagedByTagKey, writtenByOcel,
+							purpose, strings.Join(stringsOf(t, statement.Action, "Action"), ", "), key, operator, pattern, naming.ManagedByTagKey, writtenByOcel,
 						)
 					}
+				}
+			}
+		}
+	}
+}
+
+func TestEveryGrantHeldToOcelsTagIsAlsoHeldToItsTier(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
+		for _, statement := range parsePolicy(t, document).Statement {
+			for _, scope := range []string{"aws:RequestTag/", "aws:ResourceTag/"} {
+				if conditionNames(statement.Condition, scope+naming.ManagedByTagKey) && !conditionNames(statement.Condition, scope+naming.EnvTierTagKey) {
+					t.Errorf(
+						"the %s credential grants %s on %s under %s%s alone, which every tier's resources of the namespace carry",
+						purpose, strings.Join(stringsOf(t, statement.Action, "Action"), ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "), scope, naming.ManagedByTagKey,
+					)
 				}
 			}
 		}

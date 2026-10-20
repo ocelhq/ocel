@@ -41,8 +41,7 @@ const (
 )
 
 const (
-	managedByTagKey = "ocel:managed-by"
-	envTagKey       = "ocel:env"
+	envTagKey = "ocel:env"
 
 	restAPIResourceType    = "apigateway:restapis"
 	restAPIPathPrefix      = "/restapis/"
@@ -60,9 +59,9 @@ type apiSpec struct {
 
 func namespaceTags(ns account.Namespace, tier environment.Tier) map[string]string {
 	return map[string]string{
-		managedByTagKey:      string(ns),
-		cfn.TagNamespace:     string(ns),
-		naming.EnvTierTagKey: string(tier),
+		naming.ManagedByTagKey: string(ns),
+		cfn.TagNamespace:       string(ns),
+		naming.EnvTierTagKey:   string(tier),
 	}
 }
 

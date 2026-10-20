@@ -41,6 +41,7 @@ type fakeRule struct {
 	priority int32
 	host     string
 	actions  []elbv2types.Action
+	tags     map[string]string
 }
 
 type fakeAWS struct {
@@ -179,7 +180,11 @@ func (f *fakeAWS) CreateRule(_ context.Context, in *elbv2.CreateRuleInput, _ ...
 	}
 	f.nextRule++
 	arn := fmt.Sprintf("%s/rule-%d", testListener, f.nextRule)
-	f.rules[arn] = &fakeRule{priority: aws.ToInt32(in.Priority), host: in.Conditions[0].HostHeaderConfig.Values[0], actions: slices.Clone(in.Actions)}
+	tags := map[string]string{}
+	for _, tag := range in.Tags {
+		tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+	}
+	f.rules[arn] = &fakeRule{priority: aws.ToInt32(in.Priority), host: in.Conditions[0].HostHeaderConfig.Values[0], actions: slices.Clone(in.Actions), tags: tags}
 	return &elbv2.CreateRuleOutput{Rules: []elbv2types.Rule{{RuleArn: aws.String(arn)}}}, nil
 }
 

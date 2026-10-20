@@ -13,6 +13,7 @@ import (
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
@@ -130,6 +131,7 @@ func testIssuer(api ACMAPI, attempts int) ACM {
 	return ACM{
 		API:       api,
 		ManagedBy: "acme",
+		Tier:      environment.TierPreview,
 		Region:    CloudFrontRegion,
 		Wait:      func(context.Context, time.Duration) error { return nil },
 		Attempts:  attempts,
@@ -185,7 +187,7 @@ func TestIssuerRequest(t *testing.T) {
 		}
 	})
 
-	t.Run("tags the certificate as Ocel's when it is requested", func(t *testing.T) {
+	t.Run("tags the certificate as Ocel's and its tier's when it is requested", func(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
@@ -196,8 +198,8 @@ func TestIssuerRequest(t *testing.T) {
 		for _, tag := range api.requested[0].Tags {
 			tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 		}
-		if tags["ocel:managed-by"] != "acme" {
-			t.Errorf("request tags = %v, want ocel:managed-by=acme: the deploy credential of namespace acme requests, deletes and tags only certificates carrying it", tags)
+		if tags["ocel:managed-by"] != "acme" || tags["ocel:env-tier"] != "preview" {
+			t.Errorf("request tags = %v, want ocel:managed-by=acme and ocel:env-tier=preview: only the preview deploy credential of namespace acme requests, deletes and tags certificates carrying both", tags)
 		}
 	})
 

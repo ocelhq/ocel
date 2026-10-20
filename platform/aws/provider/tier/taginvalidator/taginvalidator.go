@@ -17,6 +17,7 @@ import (
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -42,9 +43,6 @@ const (
 	seedParamEnvVar  = "OCEL_PURGE_SEED_PARAM"
 
 	StreamFilter = `{"dynamodb":{"Keys":{"pk":{"S":[{"prefix":"PROJECT#"}]},"sk":{"S":["#META"]}}}}`
-
-	managedByTagKey = "ocel:managed-by"
-	tierTagKey      = "ocel:env-tier"
 
 	invalidatorWord = "invalidator"
 
@@ -118,10 +116,6 @@ func Digest(spec Spec) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func tags(namespace string, tier environment.Tier) map[string]string {
-	return map[string]string{managedByTagKey: namespace, tierTagKey: string(tier)}
-}
-
 func QueueARN(region, account, namespace string, tier environment.Tier) string {
 	return "arn:aws:sqs:" + region + ":" + account + ":" + NamesFor(namespace, tier).Queue
 }
@@ -148,7 +142,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		},
 		LogGroup:      names.LogGroup,
 		RetentionDays: retentionDays,
-		Tags:          tags(spec.Namespace, spec.Tier),
+		Tags:          naming.OcelTags(spec.Namespace, spec.Tier),
 	}); err != nil {
 		return nil, err
 	}
@@ -169,7 +163,7 @@ func ensureQueue(ctx context.Context, c SQSAPI, name, namespace string, tier env
 		string(sqstypes.QueueAttributeNameMessageRetentionPeriod): strconv.Itoa(dlqRetentionSec),
 		string(sqstypes.QueueAttributeNameSqsManagedSseEnabled):   "true",
 	}
-	_, err := c.CreateQueue(ctx, &sqs.CreateQueueInput{QueueName: aws.String(name), Attributes: attributes, Tags: tags(namespace, tier)})
+	_, err := c.CreateQueue(ctx, &sqs.CreateQueueInput{QueueName: aws.String(name), Attributes: attributes, Tags: naming.OcelTags(namespace, tier)})
 	var exists *sqstypes.QueueNameExists
 	if !errors.As(err, &exists) {
 		if err != nil {

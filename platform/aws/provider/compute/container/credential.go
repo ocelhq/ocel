@@ -7,7 +7,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"ecs:RegisterTaskDefinition"},
 			Resources: []string{iam.AppTaskDefinitionARN},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"},
@@ -16,7 +16,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"ecs:CreateService"},
 			Resources: []string{s.ContainerServiceARN()},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -28,12 +28,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"ecs:UpdateService",
 			},
 			Resources: []string{s.ContainerServiceARN()},
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"application-autoscaling:RegisterScalableTarget"},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: iam.ScalesECSServices(s.TaggedOnCreate()),
+			Condition: iam.ScalesECSServices(s.TaggedOnCreateForItsTier()),
 		},
 		{
 			Actions: []string{
@@ -43,17 +43,17 @@ func Credential(s iam.Scope) []iam.Statement {
 				"application-autoscaling:RegisterScalableTarget",
 			},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: iam.ScalesECSServices(s.TaggedByOcel()),
+			Condition: iam.ScalesECSServices(s.TaggedByOcelForItsTier()),
 		},
 		{
 			Actions:   []string{"application-autoscaling:TagResource"},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions:   []string{"application-autoscaling:TagResource", "application-autoscaling:UntagResource"},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions: []string{

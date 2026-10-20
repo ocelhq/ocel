@@ -1,57 +1,14 @@
 package naming_test
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
-
-func TestTierWordIsProdForProductionAndPreviewForPreview(t *testing.T) {
-	for tier, want := range map[environment.Tier]string{
-		environment.TierProduction: "prod",
-		environment.TierPreview:    "preview",
-	} {
-		if got := naming.TierWord(tier); got != want {
-			t.Errorf("TierWord(%q) = %q, want %q", tier, got, want)
-		}
-	}
-}
-
-func TestAppFenceIsTheNamespaceFieldThenApp(t *testing.T) {
-	for namespace, want := range map[string]string{
-		"ocel":                           "ocel-app-",
-		"acme-staging-eu-west-blue-team": "acme-20ddf6-app-",
-	} {
-		if got := naming.AppFence(namespace); got != want {
-			t.Errorf("AppFence(%q) = %q, want %q", namespace, got, want)
-		}
-	}
-}
-
-func TestOcelNameJoinsTheNamespaceFieldAndOcelsWords(t *testing.T) {
-	for _, tc := range []struct {
-		namespace string
-		words     []string
-		want      string
-	}{
-		{"ocel", []string{naming.TierWord(environment.TierProduction), "edge", "k3x9q2"}, "ocel-prod-edge-k3x9q2"},
-		{"ocel", []string{naming.TierWord(environment.TierProduction), "env-sync"}, "ocel-prod-env-sync"},
-		{"ocel", []string{naming.TierWord(environment.TierPreview), "containers"}, "ocel-preview-containers"},
-		{"acme-staging-eu-west-blue-team", []string{"prod", "state", "a1b2c3"}, "acme-20ddf6-prod-state-a1b2c3"},
-	} {
-		got, err := naming.OcelName(tc.namespace, tc.words...)
-		if err != nil {
-			t.Errorf("OcelName(%q, %q): %v", tc.namespace, tc.words, err)
-			continue
-		}
-		if got != tc.want {
-			t.Errorf("OcelName(%q, %q) = %q, want %q", tc.namespace, tc.words, got, tc.want)
-		}
-	}
-}
 
 func mustRelease(t *testing.T, value string) naming.ReleaseToken {
 	t.Helper()
@@ -100,7 +57,17 @@ func TestAppResourceNameFitsTheNamesEveryVendorGivesAnAppResource(t *testing.T) 
 }
 
 func TestPhysicalNameOmitsAnEmptyApp(t *testing.T) {
-	got, err := naming.PhysicalName{Namespace: "ocel", Project: "acme", Env: "prod", Declared: "main", Tag: "a65fde"}.Fit(63)
+	got, err := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "acme", Env: "prod", Declared: "main", Tag: "a65fde"}.Fit(63)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-acme-prod-main-a65fde"; got != want {
+		t.Errorf("Fit = %q, want %q", got, want)
+	}
+}
+
+func TestPhysicalNameOmitsTheInfraApp(t *testing.T) {
+	got, err := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "acme", Env: "prod", App: naming.InfraApp, Declared: "main", Tag: "a65fde"}.Fit(63)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +77,7 @@ func TestPhysicalNameOmitsAnEmptyApp(t *testing.T) {
 }
 
 func TestPhysicalNameLowercasesEveryFieldIntoKebabCase(t *testing.T) {
-	got, err := naming.PhysicalName{Namespace: "ocel", Project: "Acme", Env: "prod", App: "Web_Shop", Declared: "orders/ship", Tag: "d013ca"}.Fit(80)
+	got, err := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "Acme", Env: "prod", App: "Web_Shop", Declared: "orders/ship", Tag: "d013ca"}.Fit(80)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,25 +86,88 @@ func TestPhysicalNameLowercasesEveryFieldIntoKebabCase(t *testing.T) {
 	}
 }
 
-func TestPhysicalNameRefusesAMissingField(t *testing.T) {
-	full := naming.PhysicalName{Namespace: "ocel", Project: "acme", Env: "prod", App: "web", Declared: "api", Tag: "e0a849"}
-	for field, blank := range map[string]func(*naming.PhysicalName){
-		"namespace": func(p *naming.PhysicalName) { p.Namespace = "" },
-		"project":   func(p *naming.PhysicalName) { p.Project = "" },
-		"env":       func(p *naming.PhysicalName) { p.Env = "" },
-		"declared":  func(p *naming.PhysicalName) { p.Declared = "" },
-		"tag":       func(p *naming.PhysicalName) { p.Tag = "" },
+func TestPhysicalNameWithoutAFenceStartsAtTheProjectAndEndsWithItsKind(t *testing.T) {
+	for _, tc := range []struct {
+		name naming.PhysicalName
+		want string
+	}{
+		{naming.PhysicalName{Project: "acme", Env: "prod", Declared: "main", Kind: "pg", Tag: "a1b2c3"}, "acme-prod-main-pg-a1b2c3"},
+		{naming.PhysicalName{Project: "acme", Env: "prod", App: "web", Declared: "main", Kind: "pg", Tag: "a1b2c3"}, "acme-prod-web-main-pg-a1b2c3"},
+		{naming.PhysicalName{Project: "acme", Env: "prod", App: "web", Declared: "mailer", Tag: "r1a2b3c4d"}, "acme-prod-web-mailer-r1a2b3c4d"},
+	} {
+		got, err := tc.name.Fit(63)
+		if err != nil {
+			t.Errorf("%+v: %v", tc.name, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%+v.Fit = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestPhysicalNameOfTheAppItselfEndsWithTheAppAndCutsItLikeAnyApp(t *testing.T) {
+	short, err := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "acme", Env: "prod", App: "web", Tag: "r1a2b3c4d"}.Fit(64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-acme-prod-web-r1a2b3c4d"; short != want {
+		t.Errorf("Fit = %q, want %q", short, want)
+	}
+	long, err := naming.PhysicalName{Fence: naming.AppFence("acme-staging"), Project: "acme", Env: "prod", App: "storefront", Tag: "e0a849"}.Fit(37)
+	if err != nil {
+		t.Fatalf("an app resource that fits once its app is cut was refused: %v", err)
+	}
+	if want := "acme-staging-app-acm-pro-store-e0a849"; long != want {
+		t.Errorf("Fit = %q, want %q", long, want)
+	}
+}
+
+func TestPhysicalNameQualifierFollowsTheFenceAndIsNeverCut(t *testing.T) {
+	cluster := naming.PhysicalName{Fence: naming.AppFence("ocel"), Qualifier: "prod", Project: "acme", Env: "prod", Declared: "main", Tag: "a65fde"}
+	got, err := cluster.Fit(63)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-prod-acme-prod-main-a65fde"; got != want {
+		t.Errorf("Fit = %q, want %q", got, want)
+	}
+	long := naming.PhysicalName{Fence: naming.AppFence("ocel"), Qualifier: "preview", Project: "northwind-traders", Env: "feature-checkout-redesign", Declared: "orders", Tag: "3f9a1c"}
+	got, err = long.Fit(63, "1", "subnets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-preview-northwind-traders-featur-orders-3f9a1c"; got != want {
+		t.Errorf("Fit = %q, want %q", got, want)
+	}
+}
+
+func TestPhysicalNameRefusesAMissingFieldNamingTheFirstInOrder(t *testing.T) {
+	full := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "acme", Env: "prod", App: "web", Declared: "api", Tag: "e0a849"}
+	for _, tc := range []struct {
+		field string
+		blank func(*naming.PhysicalName)
+	}{
+		{"project", func(p *naming.PhysicalName) { p.Project, p.Env, p.Tag = "", "", "" }},
+		{"env", func(p *naming.PhysicalName) { p.Env, p.Tag = "", "" }},
+		{"tag", func(p *naming.PhysicalName) { p.Tag = "" }},
+		{"declared name or an app", func(p *naming.PhysicalName) { p.App, p.Declared = "", "" }},
 	} {
 		p := full
-		blank(&p)
-		if got, err := p.Fit(64); err == nil {
-			t.Errorf("Fit without a %s = %q, want a refusal", field, got)
+		tc.blank(&p)
+		got, err := p.Fit(64)
+		if err == nil {
+			t.Errorf("Fit without a %s = %q, want a refusal", tc.field, got)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.field) {
+			t.Errorf("Fit refused with %q, want it to name the missing %s", err, tc.field)
 		}
 	}
 }
 
 func TestPhysicalNameCutsEnvThenProjectThenApp(t *testing.T) {
-	long := naming.PhysicalName{Namespace: "ocel", Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront"}
+	long := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront"}
 	for _, tc := range []struct {
 		resource string
 		declared string
@@ -163,8 +193,27 @@ func TestPhysicalNameCutsEnvThenProjectThenApp(t *testing.T) {
 	}
 }
 
+func TestPhysicalNameWithoutAFenceCutsEnvThenProjectThenApp(t *testing.T) {
+	long := naming.PhysicalName{Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront", Kind: "pg", Tag: "a1b2c3"}
+	for declared, want := range map[string]string{
+		"customer-uploads":        "northwind-traders-feature-storefront-customer-uploads-pg-a1b2c3",
+		"orders-ledger-snapshots": "northwind-trad-fea-storefront-orders-ledger-snapshots-pg-a1b2c3",
+	} {
+		name := long
+		name.Declared = declared
+		got, err := name.Fit(63)
+		if err != nil {
+			t.Errorf("%s: %v", declared, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s: Fit = %q, want %q", declared, got, want)
+		}
+	}
+}
+
 func TestPhysicalNameKeepsTheDeclaredNameAndTagWithinEveryLimit(t *testing.T) {
-	long := naming.PhysicalName{Namespace: "ocel", Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront"}
+	long := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront"}
 	for _, tc := range []struct {
 		resource string
 		declared string
@@ -197,15 +246,19 @@ func TestPhysicalNameKeepsTheDeclaredNameAndTagWithinEveryLimit(t *testing.T) {
 	}
 }
 
-func TestPhysicalNameRefusesANameThatCannotFitNamingItAndTheLimit(t *testing.T) {
-	long := naming.PhysicalName{Namespace: "ocel", Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront", Declared: "checkout", Tag: "7c2a9b"}
+func TestPhysicalNameThatCannotFitIsRefusedAsInvalidNamingTheDeclaredNameAndTheLimit(t *testing.T) {
+	long := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront", Declared: "checkout", Tag: "7c2a9b"}
 	for resource, max := range map[string]int{"target group": 32, "GCP service account": 30} {
 		got, err := long.Fit(max)
 		if err == nil {
 			t.Errorf("%s: Fit(%d) = %q, want a refusal", resource, max, got)
 			continue
 		}
-		for _, want := range []string{"ocel-app-northwind-traders-feature-checkout-redesign-storefront-checkout-7c2a9b", strconv.Itoa(max)} {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+			t.Errorf("%s: Fit(%d) failed with %#v, want a refusal coded %q", resource, max, err, refusal.CodeInvalid)
+		}
+		for _, want := range []string{"ocel-app-northwind-traders-feature-checkout-redesign-storefront-checkout-7c2a9b", strconv.Itoa(max), "Shorten checkout"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("%s: Fit(%d) refused with %q, want it to name %q", resource, max, err, want)
 			}
@@ -230,15 +283,15 @@ func TestTwoEnvsCutToTheSameHeadStillGetDistinctNames(t *testing.T) {
 	}
 }
 
-func TestFitWithChildrenLeavesRoomForTheLongestChildSuffix(t *testing.T) {
-	cluster := naming.PhysicalName{Namespace: "ocel", Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront", Declared: "orders", Tag: "3f9a1c"}
+func TestPhysicalNameLeavesRoomForTheLongestChildSuffix(t *testing.T) {
+	cluster := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront", Declared: "orders", Tag: "3f9a1c"}
 	suffixes := []string{"1", "subnets", "final-20261019120000"}
-	parent, err := cluster.FitWithChildren(63, suffixes...)
+	parent, err := cluster.Fit(63, suffixes...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := "ocel-app-nort-fea-storefront-orders-3f9a1c"; parent != want {
-		t.Errorf("FitWithChildren = %q, want %q", parent, want)
+		t.Errorf("Fit = %q, want %q", parent, want)
 	}
 	for _, suffix := range suffixes {
 		if child := parent + "-" + suffix; len(child) > 63 {
@@ -247,10 +300,24 @@ func TestFitWithChildrenLeavesRoomForTheLongestChildSuffix(t *testing.T) {
 	}
 }
 
-func TestOcelNameRefusesANameInsideTheAppFence(t *testing.T) {
-	for _, words := range [][]string{{"app", "env-sync"}, {"App", "invalidator"}, {"app-env-sync"}, {}} {
-		if got, err := naming.OcelName("ocel", words...); err == nil {
-			t.Errorf("OcelName(%q, %q) = %q, want a refusal: its name would sit inside the fence %q", "ocel", words, got, naming.AppFence("ocel"))
-		}
+func TestFitUntaggedLeavesRoomForARandomTagMintedLater(t *testing.T) {
+	bucket := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "northwind-traders", Env: "feature-checkout-redesign", App: "storefront", Declared: "customer-uploads"}
+	head, err := bucket.FitUntagged(63)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-northwind-trade-fea-storefront-customer-uploads"; head != want {
+		t.Errorf("FitUntagged = %q, want %q", head, want)
+	}
+	if name := head + "-" + naming.NewRandomTag(); len(name) > 63 {
+		t.Errorf("%q is %d characters once tagged, over the limit of 63", name, len(name))
+	}
+	cluster := naming.PhysicalName{Fence: naming.AppFence("ocel"), Project: "northwind-traders", Env: "feature-checkout-redesign", Declared: "orders"}
+	head, err = cluster.FitUntagged(63, "subnets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child := head + "-" + naming.NewRandomTag() + "-subnets"; len(child) > 63 {
+		t.Errorf("child %q is %d characters, over the limit of 63", child, len(child))
 	}
 }

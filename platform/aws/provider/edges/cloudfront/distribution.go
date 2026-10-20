@@ -25,8 +25,6 @@ const (
 	containerOriginKeepaliveTimeoutSeconds = 5
 
 	maxDistributionNameLen = 128
-
-	managedByTagKey = "ocel:managed-by"
 )
 
 type front struct {
@@ -353,7 +351,7 @@ func createDistribution(ctx context.Context, c Clients, spec distributionSpec, a
 		DistributionConfigWithTags: &cftypes.DistributionConfigWithTags{
 			DistributionConfig: spec.config(aliases, certificate),
 			Tags: &cftypes.Tags{Items: []cftypes.Tag{
-				{Key: aws.String(managedByTagKey), Value: aws.String(spec.managedBy)},
+				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(spec.managedBy)},
 				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(spec.tier))},
 			}},
 		},

@@ -37,13 +37,13 @@ func (n Names) Queues(topic, consumer string, fifo bool) (QueueNames, error) {
 		limit -= len(fifoSuffix)
 	}
 	name := naming.PhysicalName{
-		Namespace: n.Namespace,
-		Project:   n.Project,
-		Env:       n.Env,
-		Declared:  naming.Join(naming.WordSeparator, topic, consumer),
-		Tag:       naming.HashTag(n.Namespace, n.Project, n.Env, "", string(naming.KindTopic), topic, consumer),
+		Fence:    naming.AppFence(n.Namespace),
+		Project:  n.Project,
+		Env:      n.Env,
+		Declared: naming.Join(naming.WordSeparator, topic, consumer),
+		Tag:      naming.HashTag(n.Namespace, n.Project, n.Env, "", string(naming.KindTopic), topic, consumer),
 	}
-	queue, err := name.FitWithChildren(limit, deadLetterSuffix)
+	queue, err := name.Fit(limit, deadLetterSuffix)
 	if err != nil {
 		return QueueNames{}, refused("topic "+topic+"'s consumer "+consumer+"'s queue", limit, err)
 	}
@@ -89,7 +89,7 @@ func (n Names) Schedules(task string, expressions int) ([]string, error) {
 		}
 		return []string{name}, nil
 	}
-	name, err := physical.FitWithChildren(maxScheduleNameLen, strconv.Itoa(expressions))
+	name, err := physical.Fit(maxScheduleNameLen, strconv.Itoa(expressions))
 	if err != nil {
 		return nil, refused("task "+task+"'s schedules", maxScheduleNameLen, err)
 	}

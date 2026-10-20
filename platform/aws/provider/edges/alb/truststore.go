@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -333,7 +334,11 @@ func (s *stack) writeTrustStore(ctx context.Context, c Clients, store string, tr
 			Name:                         aws.String(name),
 			CaCertificatesBundleS3Bucket: aws.String(c.Bucket),
 			CaCertificatesBundleS3Key:    aws.String(key),
-			Tags:                         []elbv2types.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String(s.namespace)}, digestTag},
+			Tags: []elbv2types.Tag{
+				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(s.namespace)},
+				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(s.state.Tier))},
+				digestTag,
+			},
 		})
 		if err != nil {
 			return "", refuseOverTrustQuota(fmt.Errorf("create the trust store %s: %w", name, err), len(trusted))

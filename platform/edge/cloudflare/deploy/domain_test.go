@@ -72,7 +72,7 @@ func TestBindDomain(t *testing.T) {
 	t.Run("a host another worker of this project routes is repointed", func(t *testing.T) {
 		m := zoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel--acme-web--prod--root"},
+			{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-prod-entry-acme-web-d328f8"},
 		}
 		s := domainStack(t, m)
 

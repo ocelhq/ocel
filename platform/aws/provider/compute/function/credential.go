@@ -6,7 +6,7 @@ func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"lambda:CreateFunction"},
-			Resources: []string{iam.AppFunctionARN},
+			Resources: s.FunctionARNs(),
 			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
@@ -28,17 +28,17 @@ func Credential(s iam.Scope) []iam.Statement {
 				"lambda:UpdateFunctionConfiguration",
 				"lambda:UpdateFunctionUrlConfig",
 			},
-			Resources: []string{iam.AppFunctionARN},
+			Resources: s.FunctionARNs(),
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"lambda:TagResource"},
-			Resources: []string{iam.AppFunctionARN},
+			Resources: s.FunctionARNs(),
 			Condition: s.RetaggedByOcelOnlyAsItsTier(),
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
-			Resources: []string{iam.AppRoleARN},
+			Resources: s.AppBoundaryRoles(),
 			Condition: iam.MergeConditions(s.TaggedOnCreateForItsTier(), s.WithinAppBoundary()),
 		},
 		{
@@ -53,12 +53,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"iam:UntagRole",
 				"iam:UpdateRole",
 			},
-			Resources: []string{iam.AppRoleARN},
+			Resources: s.AppBoundaryRoles(),
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:TagRole"},
-			Resources: []string{iam.AppRoleARN},
+			Resources: s.AppBoundaryRoles(),
 			Condition: s.RetaggedByOcelOnlyAsItsTier(),
 		},
 		{
@@ -67,13 +67,13 @@ func Credential(s iam.Scope) []iam.Statement {
 				"iam:PutRolePermissionsBoundary",
 				"iam:PutRolePolicy",
 			},
-			Resources: []string{iam.AppRoleARN},
+			Resources: s.AppBoundaryRoles(),
 			Condition: iam.MergeConditions(s.TaggedByOcelForItsTier(), s.WithinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
-			Resources: []string{iam.AppRoleARN},
-			Condition: iam.MergeConditions(s.AttachedPolicyIsAServiceRole(true), s.WithinAppBoundary(), s.MadeByItsStacks()),
+			Resources: s.AppBoundaryRoles(),
+			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.WithinAppBoundary(), s.TaggedByOcelForItsTier()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
@@ -92,8 +92,8 @@ func Credential(s iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"logs:CreateLogGroup"},
-			Resources: append(s.ContainerLogGroupARNs(), iam.FunctionLogGroupARN),
-			Condition: s.TaggedOnCreate(),
+			Resources: append(s.ContainerLogGroupARNs(), s.FunctionLogGroupARNs()...),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -105,8 +105,8 @@ func Credential(s iam.Scope) []iam.Statement {
 				"logs:TagResource",
 				"logs:UntagResource",
 			},
-			Resources: append(s.ContainerLogGroupARNs(), iam.FunctionLogGroupARN),
-			Condition: s.TaggedByOcel(),
+			Resources: append(s.ContainerLogGroupARNs(), s.FunctionLogGroupARNs()...),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"logs:DescribeLogGroups"},

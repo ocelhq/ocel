@@ -60,12 +60,8 @@ func FindPublishURL(bindings []provider.Binding) string {
 	return "http://" + bindings[at].Properties[provider.PropertyHost] + gatewayenv.PublishPath
 }
 
-func newGateway(ref provider.StackRef, keys map[string]string) (container.Spec, error) {
+func newGateway(ref provider.StackRef, name string, keys map[string]string) (container.Spec, error) {
 	encoded, err := json.Marshal(keys)
-	if err != nil {
-		return container.Spec{}, err
-	}
-	name, err := gatewayName(ref)
 	if err != nil {
 		return container.Spec{}, err
 	}
@@ -138,11 +134,7 @@ func newNamespaceRecord(in resources.ProvisionRequest, seed []byte) (namespaceRe
 	}, nil
 }
 
-func newBinding(in resources.ProvisionRequest, seed []byte, verifyKey string) (provider.Binding, error) {
-	gateway, err := gatewayName(in.Ref)
-	if err != nil {
-		return provider.Binding{}, err
-	}
+func newBinding(in resources.ProvisionRequest, gateway string, seed []byte, verifyKey string) provider.Binding {
 	return provider.Binding{
 		Type:     provider.BindingRealtime,
 		Name:     in.Resource.Name,
@@ -153,7 +145,7 @@ func newBinding(in resources.ProvisionRequest, seed []byte, verifyKey string) (p
 			provider.PropertySigningKey: base64.StdEncoding.EncodeToString(seed),
 			provider.PropertyVerifyKey:  verifyKey,
 		},
-	}, nil
+	}
 }
 
 func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
@@ -165,6 +157,10 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 		return "", "", err
 	}
 	signingKey, err := nameSigningKey(in.Ref, in.Resource.Name)
+	if err != nil {
+		return "", "", err
+	}
+	gateway, err := gatewayName(in.Ref)
 	if err != nil {
 		return "", "", err
 	}
@@ -180,10 +176,6 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 	if len(sealed) == 0 {
 		if len(held.Value) == 0 {
 			return provider.ActionCreate, "", nil
-		}
-		gateway, err := gatewayName(in.Ref)
-		if err != nil {
-			return "", "", err
 		}
 		return provider.ActionUpdate, "the box keeps no signing key for it, so a new one is minted and its gateway " + gateway + " restarted to verify it", nil
 	}
@@ -207,31 +199,31 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 		return "", "", err
 	}
 	keys[record.namespace] = record.verifyKey
-	gateway, err := newGateway(in.Ref, keys)
+	spec, err := newGateway(in.Ref, gateway, keys)
 	if err != nil {
 		return "", "", err
 	}
-	action, reason, err := r.box.Containers.Plan(ctx, gateway)
+	action, reason, err := r.box.Containers.Plan(ctx, spec)
 	if err != nil {
 		return "", "", err
 	}
 	switch action {
 	case provider.ActionKeep:
 	case provider.ActionCreate:
-		change.Add(provider.ActionUpdate, "its gateway "+gateway.Name+" is started")
+		change.Add(provider.ActionUpdate, "its gateway "+gateway+" is started")
 	default:
-		change.Add(provider.ActionUpdate, "its gateway "+gateway.Name+" is replaced: "+reason)
+		change.Add(provider.ActionUpdate, "its gateway "+gateway+" is replaced: "+reason)
 	}
-	binding, err := newBinding(in, seed, record.verifyKey)
-	if err != nil {
-		return "", "", err
-	}
-	change.AddRecorded(recorded, binding)
+	change.AddRecorded(recorded, newBinding(in, gateway, seed, record.verifyKey))
 	return change.Report()
 }
 
 func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
 	if err := refuseUnconfigured(in); err != nil {
+		return provider.Binding{}, err
+	}
+	gateway, err := gatewayName(in.Ref)
+	if err != nil {
 		return provider.Binding{}, err
 	}
 	seed, err := r.signingSeed(ctx, in)
@@ -247,10 +239,10 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 	}); err != nil {
 		return provider.Binding{}, err
 	}
-	if err := r.runGateway(ctx, in.Ref, progress); err != nil {
+	if err := r.runGateway(ctx, in.Ref, gateway, progress); err != nil {
 		return provider.Binding{}, err
 	}
-	return newBinding(in, seed, record.verifyKey)
+	return newBinding(in, gateway, seed, record.verifyKey), nil
 }
 
 func newSigningAssociatedData(in resources.ProvisionRequest) (seal.AssociatedData, error) {
@@ -303,13 +295,13 @@ func (r Resource) readKeys(ctx context.Context, ref provider.StackRef) (map[stri
 	return keys, nil
 }
 
-func (r Resource) runGateway(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
+func (r Resource) runGateway(ctx context.Context, ref provider.StackRef, gateway string, progress progress.Log) error {
 	keys, err := r.readKeys(ctx, ref)
 	if err != nil {
 		return err
 	}
 	for range gatewayRuns {
-		if err := r.placeGateway(ctx, ref, keys, progress); err != nil {
+		if err := r.placeGateway(ctx, ref, gateway, keys, progress); err != nil {
 			return err
 		}
 		placed := keys
@@ -320,38 +312,34 @@ func (r Resource) runGateway(ctx context.Context, ref provider.StackRef, progres
 			return nil
 		}
 	}
-	gateway, err := gatewayName(ref)
-	if err != nil {
-		return err
-	}
 	return refusal.Refuse(refusal.CodeBusy,
 		"the realtime of %s changed each of the %d times its gateway %s was restarted to match, so another deploy is changing it\nDeploy again once that deploy is done",
 		ref.Name.Env, gatewayRuns, gateway)
 }
 
-func (r Resource) placeGateway(ctx context.Context, ref provider.StackRef, keys map[string]string, progress progress.Log) error {
+func (r Resource) placeGateway(ctx context.Context, ref provider.StackRef, gateway string, keys map[string]string, progress progress.Log) error {
 	if len(keys) == 0 {
-		gateway, err := gatewayName(ref)
-		if err != nil {
-			return err
-		}
 		progress.Say("Removing the realtime gateway " + gateway + ": " + ref.Name.Env + " declares no realtime any more")
 		return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: gatewayResource, Name: gateway})
 	}
-	gateway, err := newGateway(ref, keys)
+	spec, err := newGateway(ref, gateway, keys)
 	if err != nil {
 		return err
 	}
-	progress.Say("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway in container " + gateway.Name)
-	return r.box.Containers.Run(ctx, gateway, "")
+	progress.Say("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway in container " + gateway)
+	return r.box.Containers.Run(ctx, spec, "")
 }
 
 func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
 	namespace := component.ChooseDeclaredName(binding.Resource, binding.Name)
+	gateway, err := gatewayName(ref)
+	if err != nil {
+		return err
+	}
 	if err := records.Forget(ctx, r.box.KeyValues, boxapi.RealtimeNamespaceKey(ref.Tier, ref.Project, ref.Name.Env, namespace)); err != nil {
 		return err
 	}
-	if err := r.runGateway(ctx, ref, progress); err != nil {
+	if err := r.runGateway(ctx, ref, gateway, progress); err != nil {
 		return err
 	}
 	signingKey, err := nameSigningKey(ref, binding.Name)

@@ -61,7 +61,7 @@ func PhysicalName(namespace string, at naming.Coordinate, limit int, childSuffix
 }
 
 func Fit(name naming.PhysicalName, what string, limit int, childSuffixes ...string) (string, error) {
-	fitted, err := name.FitWithChildren(limit, childSuffixes...)
+	fitted, err := name.Fit(limit, childSuffixes...)
 	if err != nil {
 		return "", refusal.Refuse(refusal.CodeInvalid, "the %s takes no AWS name within %d characters: %v", what, limit, err)
 	}

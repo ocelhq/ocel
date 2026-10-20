@@ -13,6 +13,7 @@ import (
 	schedulertypes "github.com/aws/aws-sdk-go-v2/service/scheduler/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -92,7 +93,7 @@ func ensureRoles(ctx context.Context, c Clients, at placed) error {
 		Service:      lambdaPrincipal,
 		PolicyName:   syncPolicyName,
 		Policy:       syncPolicy,
-		Tags:         tags(at),
+		Tags:         naming.OcelTags(at.spec.Namespace, at.spec.Tier),
 		UpdatesTrust: at.spec.UpdatesTrust,
 	})
 	if behind != nil && !errors.Is(behind, stackrecords.ErrPartBehind) {
@@ -114,17 +115,13 @@ func ensureRoles(ctx context.Context, c Clients, at placed) error {
 		},
 		PolicyName:   invokePolicyName,
 		Policy:       invokePolicy,
-		Tags:         tags(at),
+		Tags:         naming.OcelTags(at.spec.Namespace, at.spec.Tier),
 		UpdatesTrust: at.spec.UpdatesTrust,
 	})
 	if err != nil && !errors.Is(err, stackrecords.ErrPartBehind) {
 		return err
 	}
 	return errors.Join(behind, err)
-}
-
-func tags(at placed) map[string]string {
-	return map[string]string{managedByTagKey: at.spec.Namespace, tierTagKey: string(at.spec.Tier)}
 }
 
 func ensureFunction(ctx context.Context, c Clients, at placed) error {
@@ -145,7 +142,7 @@ func ensureFunction(ctx context.Context, c Clients, at placed) error {
 		},
 		LogGroup:      at.names.LogGroup,
 		RetentionDays: retentionDays,
-		Tags:          tags(at),
+		Tags:          naming.OcelTags(at.spec.Namespace, at.spec.Tier),
 	}); err != nil {
 		return err
 	}
@@ -167,8 +164,8 @@ func ensureSchedule(ctx context.Context, c Clients, at placed) error {
 	_, err := c.Scheduler.CreateScheduleGroup(ctx, &scheduler.CreateScheduleGroupInput{
 		Name: aws.String(at.names.ScheduleGroup),
 		Tags: []schedulertypes.Tag{
-			{Key: aws.String(managedByTagKey), Value: aws.String(at.spec.Namespace)},
-			{Key: aws.String(tierTagKey), Value: aws.String(string(at.spec.Tier))},
+			{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(at.spec.Namespace)},
+			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(at.spec.Tier))},
 		},
 	})
 	var conflict *schedulertypes.ConflictException

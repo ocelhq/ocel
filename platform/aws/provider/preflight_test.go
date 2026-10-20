@@ -176,7 +176,7 @@ func TestACertificatePinTheEdgeIgnoresIsAWarning(t *testing.T) {
 	p := NewProvider(Options{Certificates: map[string]string{host: "arn:aws:acm:us-east-1:111122223333:certificate/pinned"}}, nil, aws.Config{}, defaultNamespace)
 	var progress fake.Log
 
-	if _, err := p.certificatesFor(cloudflare.Kind, router.Kind(cloudflare.Kind), host, &progress); err != nil {
+	if _, err := p.certificatesFor(environment.TierProduction, cloudflare.Kind, router.Kind(cloudflare.Kind), host, &progress); err != nil {
 		t.Fatalf("certificatesFor() = %v", err)
 	}
 	lines := progress.Lines()

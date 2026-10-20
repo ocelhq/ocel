@@ -1,19 +1,13 @@
 package iam
 
-const (
-	CallerAccount = "${aws:PrincipalAccount}"
-
-	ManagedByTagKey = "ocel:managed-by"
-)
+const CallerAccount = "${aws:PrincipalAccount}"
 
 const (
 	AnyKeyARN = "arn:aws:kms:*:*:key/*"
 
 	ParameterARNPrefix = "arn:aws:ssm:*:*:parameter"
 
-	AppFunctionARN = "arn:aws:lambda:*:*:function:*"
-	AppRoleARN     = "arn:aws:iam::*:role/*"
-	AppSecretARN   = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
+	AppSecretARN = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
 
 	AnyCacheClusterARN       = "arn:aws:elasticache:*:*:cluster:*"
 	ElastiCacheLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/*"
@@ -28,7 +22,6 @@ const (
 	AppNATGatewayARN     = "arn:aws:ec2:*:*:natgateway/*"
 	AppRouteTableARN     = "arn:aws:ec2:*:*:route-table/*"
 	AppVPCEndpointARN    = "arn:aws:ec2:*:*:vpc-endpoint/*"
-	FunctionLogGroupARN  = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
 	AppTargetGroupARN    = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
 	AppTaskDefinitionARN = "arn:aws:ecs:*:*:task-definition/*:*"
 	AppCertificateARN    = "arn:aws:acm:*:*:certificate/*"

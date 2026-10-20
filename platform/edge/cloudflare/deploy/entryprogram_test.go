@@ -148,7 +148,7 @@ func TestEntryProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing
 func TestAPreviewProjectEntryProgramNamesItsWorkerAndReadsTheStoreOverItsEndpoint(t *testing.T) {
 	built := buildEntry(t, environment.TierPreview, "proj", previewProgrammed())
 
-	if built.name != "ocel--proj--preview--root" {
+	if built.name != "ocel-preview-entry-proj-b3703d" {
 		t.Errorf("name = %q, want the project's preview worker", built.name)
 	}
 	if built.worker.Variables[envPreview] != "1" || built.worker.Variables[envPreviewBaseDomain] != "preview.acme.com" {
@@ -179,8 +179,8 @@ func TestEntryProgramForAPreviewProjectOnTheSharedWildcardCarriesNoBaseDomain(t 
 func TestAProductionProjectEntryProgramCarriesNoPreviewConfig(t *testing.T) {
 	built := buildEntry(t, environment.TierProduction, "proj", programmed())
 
-	if built.name != "ocel--proj--prod--root" {
-		t.Errorf("name = %q, want ocel--proj--prod--root", built.name)
+	if built.name != "ocel-prod-entry-proj-034dc7" {
+		t.Errorf("name = %q, want ocel-prod-entry-proj-034dc7", built.name)
 	}
 	for _, unwanted := range []string{envPreview, envPreviewGlobal, envPreviewBaseDomain} {
 		if _, set := built.worker.Variables[unwanted]; set {

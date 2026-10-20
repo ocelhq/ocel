@@ -15,6 +15,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
@@ -107,7 +108,7 @@ func describeVPCSubnets(ctx context.Context, client awsec2.DescribeSubnetsAPICli
 				switch aws.ToString(tag.Key) {
 				case stackTagKey:
 					described.Stack = aws.ToString(tag.Value)
-				case managedByTagKey:
+				case naming.ManagedByTagKey:
 					described.Owner = aws.ToString(tag.Value)
 				}
 			}

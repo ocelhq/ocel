@@ -282,6 +282,7 @@ func (w *wildcards) refreshEntryClaim(ctx context.Context, front edge.Edge, runP
 
 func (w *wildcards) hostCertificates(cutover dnsCutover, answering router.Kind, notes ...string) hostCertificates {
 	return hostCertificates{
+		tier:      environment.TierPreview,
 		provider:  w.provider,
 		cutover:   cutover,
 		router:    answering,
