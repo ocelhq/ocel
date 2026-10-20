@@ -50,6 +50,7 @@ const MaxRequestTimeout = 3600 * time.Second
 type Serving struct {
 	Service        string
 	Tier           environment.Tier
+	Shared         bool
 	Image          string
 	Env            map[string]string
 	Account        string
@@ -257,6 +258,10 @@ func (p *Services) OpenRun(ctx context.Context) (*gcloud.Clients, *run.Service, 
 }
 
 func (p *Services) DeployService(ctx context.Context, s Serving, progress progress.Log) (Release, error) {
+	if !s.Shared && s.Tier.Sibling() == "" {
+		return Release{}, refusal.Refuse(refusal.CodeInvalid,
+			"the Cloud Run service %s names no tier and is shared by none, and a service of a tier carries its tier's tag", s.Service)
+	}
 	clients, services, err := p.OpenRun(ctx)
 	if err != nil {
 		return Release{}, err
@@ -282,7 +287,7 @@ func (p *Services) DeployService(ctx context.Context, s Serving, progress progre
 	if err != nil {
 		return Release{}, err
 	}
-	if s.Tier != "" {
+	if !s.Shared {
 		if err := clients.EnsureTierTag(ctx, s.Tier, clients.RunServiceTagged(s.Service)); err != nil {
 			return Release{}, err
 		}
