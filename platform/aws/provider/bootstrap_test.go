@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
 type partsRemoved struct{ names []string }
@@ -108,6 +110,39 @@ func TestRemovingAPartADeployAddedTakesItDownAndForgetsItsRecord(t *testing.T) {
 	}
 	if _, present, err := stackrecords.ReadBootstrapPart(context.Background(), b.keyValues, environment.TierProduction, imageoptimizer.Part); err != nil || present {
 		t.Errorf("ReadBootstrapPart(%s) = %v, %v, want the record gone, so the run's repair does not make it again", imageoptimizer.Part, present, err)
+	}
+}
+
+func TestRemovingTheNetworkWithEveryPartThatRunsInItTakesItDownWithThemInsteadOfRefusing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	b, _, removed := removingParts(t)
+	inUse := removed.removable(network.Part)
+	inUse.Removal.Plan = func(context.Context, environment.Tier) (*provider.ChangeGroup, error) {
+		return nil, errors.New("the containers part still runs in the network")
+	}
+	b.parts = tier.Parts{inUse, removed.removable(containers.Part)}
+	b.retiredWith = func(_ context.Context, _ environment.Tier, leaving []string) (*provider.ChangeGroup, error) {
+		if slices.Contains(leaving, containers.Part) {
+			return tier.Deletion(network.Part, "its last part leaves in this run", nil), nil
+		}
+		return nil, nil
+	}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{network.Part, containers.Part}}
+
+	plan, err := b.Plan(ctx, req)
+	if err != nil {
+		t.Fatalf("Plan() = %v, want the network's deletion planned: the one part in it leaves in the same run", err)
+	}
+	if deleting := slices.IndexFunc(plan.Groups, func(group provider.ChangeGroup) bool { return group.Part == network.Part }); deleting < 0 {
+		t.Errorf("Plan() = %+v, want a group deleting the network", plan.Groups)
+	}
+	if err := b.Apply(ctx, req, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	if !slices.Equal(removed.names, []string{containers.Part}) {
+		t.Errorf("removed %v, want only the containers part taken down by name: its leaving takes the network down", removed.names)
 	}
 }
 

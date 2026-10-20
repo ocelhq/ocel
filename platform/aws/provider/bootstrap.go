@@ -53,9 +53,24 @@ func (s tierBootstrap) splitTierParts(req provider.BootstrapRequest) (tier.Parts
 	return removed, req
 }
 
+func (s tierBootstrap) retiring(ctx context.Context, at environment.Tier, removed tier.Parts) (tier.Parts, *provider.ChangeGroup, error) {
+	if s.retiredWith == nil || len(removed) == 0 {
+		return removed, nil, nil
+	}
+	group, err := s.retiredWith(ctx, at, removed.Names())
+	if err != nil || group == nil {
+		return removed, nil, err
+	}
+	return slices.DeleteFunc(slices.Clone(removed), func(part tier.Part) bool { return part.Name == group.Part }), group, nil
+}
+
 func (s tierBootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	removed, req := s.splitTierParts(req)
 	plan, err := s.Bootstrap.Plan(ctx, req)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	removed, retired, err := s.retiring(ctx, req.Tier, removed)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -68,14 +83,8 @@ func (s tierBootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) 
 			plan.Groups = append(plan.Groups, *group)
 		}
 	}
-	if s.retiredWith != nil && len(removed) > 0 {
-		group, err := s.retiredWith(ctx, req.Tier, removed.Names())
-		if err != nil {
-			return provider.Plan{}, err
-		}
-		if group != nil {
-			plan.Groups = append(plan.Groups, *group)
-		}
+	if retired != nil {
+		plan.Groups = append(plan.Groups, *retired)
 	}
 	return plan, nil
 }
@@ -110,6 +119,10 @@ func (s tierBootstrap) Apply(ctx context.Context, req provider.BootstrapRequest,
 		return err
 	}
 	s.forget()
+	removed, _, err = s.retiring(ctx, req.Tier, removed)
+	if err != nil {
+		return err
+	}
 	for _, part := range removed {
 		if err := part.Removal.Remove(ctx, req.Tier, progress); err != nil {
 			return fmt.Errorf("remove the %s tier's %s bootstrap part: %w", req.Tier, part.Name, err)
