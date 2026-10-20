@@ -108,6 +108,8 @@ var BootstrapPermissions = []string{
 	"secretmanager.secrets.deleteTagBinding",
 	"run.services.createTagBinding",
 	"run.services.listTagBindings",
+	"datastore.databases.listTagBindings",
+	"datastore.databases.deleteTagBinding",
 }
 
 var AssetStorePermissions = []string{
