@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	apigatewaysdk "github.com/aws/aws-sdk-go-v2/service/apigateway"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
@@ -131,6 +133,26 @@ func (p *Provider) planDeployParts(ctx context.Context, pre provider.DeployPrefl
 		}
 	}
 	return groups, nil
+}
+
+func (p *Provider) planNetworkRetiredWith(ctx context.Context, at environment.Tier, removed []string) (*provider.ChangeGroup, error) {
+	return planNetworkRetiredWith(ctx, p.KeyValues(), p.aws.Region, p.stacks.Network().PartsByConsumer, at, removed)
+}
+
+func planNetworkRetiredWith(ctx context.Context, store records.Store, region string, partsByConsumer map[string]string, at environment.Tier, removed []string) (*provider.ChangeGroup, error) {
+	if slices.Contains(removed, network.Part) {
+		return nil, nil
+	}
+	part, present, err := network.ReadPart(ctx, store, region, at)
+	if err != nil || !present || len(part.UsedBy) == 0 {
+		return nil, err
+	}
+	for _, user := range part.UsedBy {
+		if leaving, isPart := partsByConsumer[user]; !isPart || !slices.Contains(removed, leaving) {
+			return nil, nil
+		}
+	}
+	return tier.Deletion(network.Part, "the last part that runs in it is removed by this run, and the network goes with it", part.Resources), nil
 }
 
 func (p *Provider) releaseBastionNetwork(ctx context.Context, tier environment.Tier, progress progress.Log) error {
