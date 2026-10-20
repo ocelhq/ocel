@@ -91,6 +91,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		Network:   ec2.NewFromConfig(p.aws),
 		Quotas:    servicequotas.NewFromConfig(p.aws),
 
+		AccountID:   accountID,
 		NetworkCIDR: p.options.Network.CIDRFor(scope.Tier),
 
 		VPCOrigins: cloudfront.NewFromConfig(p.aws, func(o *cloudfront.Options) { o.Region = certs.CloudFrontRegion }),

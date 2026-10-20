@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
+const testAccount = "111122223333"
+
 type fakeRegion struct {
 	zones  []ec2types.AvailabilityZone
 	vpcs   []ec2types.Vpc
@@ -46,7 +48,7 @@ func zone(id string) ec2types.AvailabilityZone {
 }
 
 func vpc(id string, blocks ...string) ec2types.Vpc {
-	described := ec2types.Vpc{VpcId: aws.String(id), CidrBlock: aws.String(blocks[0])}
+	described := ec2types.Vpc{VpcId: aws.String(id), OwnerId: aws.String(testAccount), CidrBlock: aws.String(blocks[0])}
 	for _, block := range blocks {
 		described.CidrBlockAssociationSet = append(described.CidrBlockAssociationSet, ec2types.VpcCidrBlockAssociation{
 			CidrBlock:      aws.String(block),
@@ -88,7 +90,7 @@ func TestARegionWithFewerThanTwoReachableZonesIsRefused(t *testing.T) {
 }
 
 func placing(configured string) Placement {
-	return Placement{Region: "us-east-1", Namespace: "ocel", Tier: "production", Configured: configured}
+	return Placement{Region: "us-east-1", AccountID: testAccount, Namespace: "ocel", Tier: "production", Configured: configured}
 }
 
 func TestANetworkWhoseConfiguredBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNamingItAndTheOption(t *testing.T) {
@@ -178,5 +180,16 @@ func TestANetworkInARegionAtItsVPCQuotaIsRefusedNamingTheQuota(t *testing.T) {
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "L-F678F1CE") {
 		t.Fatalf("Place() = %v, want a refusal naming quota L-F678F1CE", err)
+	}
+}
+
+func TestAVPCAnotherAccountSharesIntoTheRegionIsNotCountedAgainstTheVPCQuota(t *testing.T) {
+	t.Parallel()
+
+	shared := vpc("vpc-shared", "192.168.0.0/16")
+	shared.OwnerId = aws.String("444455556666")
+	region := &fakeRegion{quota: 2, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), shared}}
+	if _, err := Place(context.Background(), region, region, placing("10.20.0.0/16")); err != nil {
+		t.Errorf("Place() = %v, want it accepted: the account owns one VPC of its quota of two, and the one shared into it counts against its owner's", err)
 	}
 }

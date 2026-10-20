@@ -147,6 +147,7 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 	}
 	layout, err := Place(ctx, owner.EC2, owner.Quotas, Placement{
 		Region:     owner.Region,
+		AccountID:  owner.AccountID,
 		Namespace:  owner.Namespace,
 		Tier:       tier,
 		Configured: owner.NetworkCIDR,

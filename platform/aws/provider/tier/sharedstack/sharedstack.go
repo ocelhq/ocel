@@ -37,6 +37,7 @@ type Owner struct {
 	Region         string
 	EC2            component.NetworkAPI
 	Quotas         component.QuotasAPI
+	AccountID      string
 	NetworkCIDR    string
 	VPCOrigins     awsports.VPCOriginsAPI
 	AppBoundaryARN string

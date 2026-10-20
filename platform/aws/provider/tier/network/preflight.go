@@ -58,6 +58,7 @@ func PickZones(ctx context.Context, api ZonesAPI) ([]string, error) {
 
 type Placement struct {
 	Region     string
+	AccountID  string
 	Namespace  string
 	Tier       environment.Tier
 	Configured string
@@ -100,7 +101,9 @@ func readOtherVPCs(ctx context.Context, region RegionAPI, at Placement) (otherVP
 			if isNetworkOf(vpc, at.Namespace, at.Tier) {
 				continue
 			}
-			others.owned++
+			if aws.ToString(vpc.OwnerId) == at.AccountID {
+				others.owned++
+			}
 			for _, block := range blocksOf(vpc) {
 				if parsed, err := netip.ParsePrefix(block); err == nil {
 					others.blocks = append(others.blocks, heldBlock{vpc: aws.ToString(vpc.VpcId), block: parsed})

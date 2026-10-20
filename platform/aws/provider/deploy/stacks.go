@@ -137,6 +137,7 @@ func (r *Stacks) openShared(ctx context.Context, ref provider.StackRef) (shareds
 		Region:         owner.cfg.Region,
 		EC2:            owner.cfg.Network,
 		Quotas:         owner.cfg.Quotas,
+		AccountID:      owner.cfg.AccountID,
 		NetworkCIDR:    owner.cfg.NetworkCIDR,
 		VPCOrigins:     owner.cfg.VPCOrigins,
 		AppBoundaryARN: owner.cfg.AppBoundaryARN,
