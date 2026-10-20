@@ -75,7 +75,7 @@ func callRefusingIn(t *testing.T, mode string, questions Questions, call func() 
 
 	ctx, span, _ := deploySpan(t)
 	p := startFake(t, ctx, mode, span, questions)
-	return p.callAnswering(ctx, func(*Process) error { return call() })
+	return p.callAnswering(ctx, func(transport) error { return call() })
 }
 
 func (f questionFake) env() []string {
