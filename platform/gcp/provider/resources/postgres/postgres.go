@@ -305,26 +305,9 @@ func (i postgresInstances) findInstance(ctx context.Context, database string) (*
 }
 
 func (i postgresInstances) provision(ctx context.Context, resource provider.Resource, spec postgresSpec, progress progress.Log) (provider.Binding, error) {
-	current, err := i.findInstance(ctx, resource.Name)
+	current, err := i.ensureInstance(ctx, resource.Name, spec, progress)
 	if err != nil {
 		return provider.Binding{}, err
-	}
-	found := current != nil
-	if found {
-		current, err = i.awaitSettled(ctx, resource.Name, current)
-	} else {
-		current, err = i.create(ctx, resource.Name, spec, progress)
-	}
-	if err != nil {
-		return provider.Binding{}, err
-	}
-	if err := refuseVersionChange(resource.Name, spec, current); err != nil {
-		return provider.Binding{}, err
-	}
-	if found {
-		if err := i.clients.EnsureTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name)); err != nil {
-			return provider.Binding{}, err
-		}
 	}
 	if current, err = i.resize(ctx, resource.Name, current, progress); err != nil {
 		return provider.Binding{}, err
@@ -360,6 +343,26 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 			provider.PropertyTLSMode:  bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_REQUIRE.String(),
 		},
 	}, nil
+}
+
+func (i postgresInstances) ensureInstance(ctx context.Context, database string, spec postgresSpec, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
+	current, err := i.findInstance(ctx, database)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		if current, err = i.create(ctx, database, spec, progress); err != nil {
+			return nil, err
+		}
+		return current, i.clients.AwaitTierAdmits(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name))
+	}
+	if current, err = i.awaitSettled(ctx, database, current); err != nil {
+		return nil, err
+	}
+	if err := refuseVersionChange(database, spec, current); err != nil {
+		return nil, err
+	}
+	return current, i.clients.EnsureTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name))
 }
 
 func (i postgresInstances) desiredInstance(name string, spec postgresSpec, database string) (*sqladmin.DatabaseInstance, error) {
