@@ -132,6 +132,30 @@ func TestAMissingErrorIsOneLinePerCell(t *testing.T) {
 				"  Fill them in: ocel env ui --preview",
 			}, "\n"),
 		},
+		{
+			name:     "inside an Ocel Cloud job the job's page is where values go",
+			problems: []*resourcesv1.VariableProblem{missing("STRIPE_KEY", "/web")},
+			scope:    variables.Scope{Apps: apps, Job: true},
+			want: strings.Join([]string{
+				"✗ 1 variable is not ready — nothing has been built.",
+				"",
+				"  ✗ STRIPE_KEY  /web  no value",
+				"",
+				"  Fill them in: run `ocel deploy` again and enter them on its job page in the console when Ocel Cloud asks",
+			}, "\n"),
+		},
+		{
+			name:     "inside an Ocel Cloud job for a preview the preview is run again",
+			problems: []*resourcesv1.VariableProblem{missing("STRIPE_KEY", "")},
+			scope:    variables.Scope{Apps: apps, Job: true, Tier: environmentv1.Tier_TIER_PREVIEW, Environment: "staging"},
+			want: strings.Join([]string{
+				"✗ 1 variable is not ready — nothing has been built.",
+				"",
+				"  ✗ STRIPE_KEY  root  no value",
+				"",
+				"  Fill them in: run `ocel preview up staging` again and enter them on its job page in the console when Ocel Cloud asks",
+			}, "\n"),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

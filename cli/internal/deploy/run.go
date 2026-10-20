@@ -55,7 +55,7 @@ type deployRun struct {
 
 func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project, process *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, infra *infraProvisioning, opts Options, browser bool) *deployRun {
 	scope := variables.ScopeOf(cfg, env.GetTier(), env.GetIdentity())
-	scope.Browser = browser
+	scope.Browser, scope.Job = browser, dependencies.JobAnswers != nil
 	return &deployRun{
 		dependencies:   dependencies,
 		cfg:            cfg,
