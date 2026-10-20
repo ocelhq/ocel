@@ -90,7 +90,7 @@ func promote(ctx context.Context, l projectLedger, releases *provider.ContainerR
 		}
 		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, moved))
 	}
-	scaleDownDemoted(ctx, releases, l, pointer, promoted, req.replaces, kept, progress)
+	scaleDownDemoted(ctx, releases, l, req, kept, progress)
 	return dropped, nil
 }
 

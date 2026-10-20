@@ -28,42 +28,37 @@ func scaleUpPromoted(ctx context.Context, hooks *provider.ContainerReleaseHooks,
 	return hooks.ScaleUp(ctx, provider.PromotedReleases{Slug: l.slug, Tier: l.tier, Env: envFor(l.tier, req.pointer), Releases: releases}, progress)
 }
 
-func scaleDownDemoted(ctx context.Context, hooks *provider.ContainerReleaseHooks, l projectLedger, pointer string, promoted router.Promotion, replaces string, kept []router.Promotion, progress progress.Log) {
+func scaleDownDemoted(ctx context.Context, hooks *provider.ContainerReleaseHooks, l projectLedger, req promoteRequest, kept []router.Promotion, progress progress.Log) {
 	if hooks == nil {
 		return
 	}
-	demoted, err := readDemoted(l, pointer, promoted, replaces, kept)
+	demoted, err := readDemoted(l, req, kept)
 	if err == nil && (len(demoted.Previous) > 0 || len(demoted.Older) > 0) {
 		err = hooks.ScaleDown(ctx, demoted, progress)
 	}
 	if err != nil {
-		progress.Warn(fmt.Sprintf("Promotion %s serves, but scaling down the releases it demoted failed, and they keep running until the next promotion retries: %v", promoted.PromotionID, err))
+		progress.Warn(fmt.Sprintf("Promotion %s serves, but scaling down the releases it demoted failed, and they keep running until the next promotion retries: %v", req.promotion.PromotionID, err))
 	}
 }
 
-func readDemoted(l projectLedger, pointer string, promoted router.Promotion, replaces string, kept []router.Promotion) (provider.DemotedReleases, error) {
+func readDemoted(l projectLedger, req promoteRequest, kept []router.Promotion) (provider.DemotedReleases, error) {
 	previous, older := map[appRelease]bool{}, map[appRelease]bool{}
 	for _, recorded := range kept {
-		if recorded.PromotionID == replaces {
-			maps.Copy(previous, listDemoted(promoted, recorded))
+		switch recorded.PromotionID {
+		case req.promotion.PromotionID:
+		case req.replaces:
+			maps.Copy(previous, listDemoted(req.promotion, recorded))
+		default:
+			maps.Copy(older, listDemoted(req.promotion, recorded))
 		}
 	}
-	for _, recorded := range kept {
-		if recorded.PromotionID == replaces || recorded.PromotionID == promoted.PromotionID {
-			continue
-		}
-		for demoted := range listDemoted(promoted, recorded) {
-			if !previous[demoted] {
-				older[demoted] = true
-			}
-		}
-	}
+	maps.DeleteFunc(older, func(demoted appRelease, _ bool) bool { return previous[demoted] })
 	listedPrevious, previousErr := listAppReleases(previous)
 	listedOlder, olderErr := listAppReleases(older)
 	return provider.DemotedReleases{
 		Slug:     l.slug,
 		Tier:     l.tier,
-		Env:      envFor(l.tier, pointer),
+		Env:      envFor(l.tier, req.pointer),
 		Previous: listedPrevious,
 		Older:    listedOlder,
 	}, errors.Join(previousErr, olderErr)
