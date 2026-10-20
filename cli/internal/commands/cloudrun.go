@@ -33,6 +33,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const (
@@ -73,11 +74,12 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 		check.End(err)
 		return err
 	}
+	identity := cloudIdentity(org, t.Cloud)
 	check.Identity(&streamv1.IdentityEvent{Project: cfg.Slug, Tier: job.Tier, Origin: &streamv1.Party{
-		Vendor:    cloudVendor,
-		Account:   org.Name,
-		Principal: t.Cloud.Credentials.Email,
-		Location:  hostOf(t.Cloud.ConsoleURL),
+		Vendor:    identity.GetProvider(),
+		Account:   identity.GetAccount(),
+		Principal: identity.GetPrincipal(),
+		Location:  identity.GetLocation(),
 	}})
 	if t.Derived != "" {
 		check.Say(t.Derived)
@@ -434,6 +436,10 @@ func findOrCreateProject(ctx context.Context, check *run.Span, client *console.C
 	}
 	creating.End(err)
 	return created, err
+}
+
+func cloudIdentity(org *console.Organization, cloud *CloudTarget) *contractv1.Identity {
+	return &contractv1.Identity{Provider: cloudVendor, Account: org.Name, Principal: cloud.Credentials.Email, Location: hostOf(cloud.ConsoleURL)}
 }
 
 func hostOf(consoleURL string) string {

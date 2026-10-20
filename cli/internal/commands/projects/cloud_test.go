@@ -27,6 +27,28 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		}
 	})
 
+	t.Run("a run names the organization, the console and the person, as a deploy does", func(t *testing.T) {
+		project := onOcelCloud(t)
+		project.Cloud.Organizations = append(project.Cloud.Organizations, console.Organization{ID: "org_2", Name: "Globex", Slug: "globex"})
+		project.Cloud.ActiveOrg = "org_2"
+		project.Cloud.Link(t, project.Root)
+		invocation := clitest.NewInvocation()
+		project.LogIn(&invocation)
+		got := runProjects(t, invocation, project.Root, strings.NewReader(""), "ls")
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		host := strings.TrimPrefix(project.Cloud.ConsoleURL, "http://")
+		for _, want := range []string{"Ocel Cloud", "Acme Inc", host, "as dev@acme.test"} {
+			if !strings.Contains(got.run, want) || !strings.Contains(got.stdout, "Ocel Cloud Acme Inc") {
+				t.Fatalf("run = %q, stdout = %q, want %q named as a deploy names it", got.run, got.stdout, want)
+			}
+		}
+		if activated := project.Cloud.ActivatedOrgs; len(activated) != 1 || activated[0] != "org_1" {
+			t.Fatalf("activated %v, want the linked project's organization made active before a token is issued", activated)
+		}
+	})
+
 	t.Run("show reads the project's environments", func(t *testing.T) {
 		project := onOcelCloud(t)
 		invocation := clitest.NewInvocation()
