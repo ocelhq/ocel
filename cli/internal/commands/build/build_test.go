@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -151,8 +152,12 @@ export default {
 
 		root := t.TempDir()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app" };
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: ".", framework: "node", compute: "serverless" }],
+};
 `)
+		clitest.WriteFile(t, filepath.Join(root, "index.ts"), "export {}\n")
 
 		dependencies := newTestDependencies()
 		dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
@@ -199,6 +204,31 @@ func TestBuildRefusesAFunctionAppWhoseDirectorySaysNothingAboutWhatItIsBuiltWith
 	for _, want := range []string{`app "web"`, "framework"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output = %q, missing %q", out.String(), want)
+		}
+	}
+}
+
+func TestBuildOfAProjectWithNoAppFailsSayingWhyNoneIsDetectedAtTheRoot(t *testing.T) {
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop", "provider": {"fake": {}}}`)
+	clitest.WriteFile(t, filepath.Join(root, "Dockerfile"), "FROM node:22\n")
+	clitest.WriteFile(t, filepath.Join(root, "server.js"), "\n")
+
+	dependencies := newTestDependencies()
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		t.Fatal("built a project with no app")
+		return build.Output{}, nil
+	}
+	clitest.AttachTerminalSink(dependencies.Invocation, &bytes.Buffer{})
+
+	err := runBuild(context.Background(), dependencies, root, options{}, nil)
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeProjectInvalidConfig {
+		t.Fatalf("runBuild = %v, want %s", err, clierror.CodeProjectInvalidConfig)
+	}
+	for _, want := range []string{"Nothing to build", "shop declares no apps", "the project root holds none of package.json", `"apps"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %q, missing %q", err, want)
 		}
 	}
 }

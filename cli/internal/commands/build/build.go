@@ -2,6 +2,7 @@ package build
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
@@ -101,6 +103,9 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 		return err
 	}
 	defer building.End(&err)
+	if len(declared.Apps) == 0 {
+		return nothingToBuild(declared)
+	}
 	cfg, host, err := resolveBuild(ctx, dependencies, building, declared)
 	if err != nil {
 		return err
@@ -132,6 +137,14 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 	}
 	building.Succeed(builtHeadline(built))
 	return nil
+}
+
+func nothingToBuild(cfg *project.Project) error {
+	cause := errors.New("Nothing to build: " + cfg.Slug + ` declares no apps: name the app to build under "apps"`)
+	if cfg.RootAppUndetected != nil {
+		cause = errors.New("Nothing to build: " + cfg.Slug + " declares no apps, and " + cfg.RootAppUndetected.Error() + `: name the app to build under "apps"`)
+	}
+	return &clierror.Error{Code: clierror.CodeProjectInvalidConfig, Hint: "apps", Cause: cause}
 }
 
 func collectDeclarations(ctx context.Context, dependencies Dependencies, cfg *project.Project, phase *run.Span) (*variables.Declarations, build.HostedWorkers, error) {
