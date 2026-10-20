@@ -32,11 +32,13 @@ const (
 )
 
 type FakeOcelCloud struct {
-	ConsoleURL string
-	APIURL     string
+	ConsoleURL  string
+	APIURL      string
+	ProviderURL string
 
 	consolev1connect.UnimplementedProjectServiceHandler
 	consolev1connect.UnimplementedConsoleServiceHandler
+	consolev1connect.UnimplementedDeploymentServiceHandler
 	cloudv1connect.UnimplementedUploadServiceHandler
 	cloudv1connect.UnimplementedJobServiceHandler
 
@@ -53,6 +55,7 @@ type FakeOcelCloud struct {
 	JobReads      []*cloudv1.Job
 	OnJobRead     func(*cloudv1.Job)
 	Canceled      []string
+	Events        []*consolev1.RecordEnvironmentEventRequest
 }
 
 func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
@@ -87,6 +90,7 @@ func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
 	for _, mount := range []func() (string, http.Handler){
 		func() (string, http.Handler) { return consolev1connect.NewProjectServiceHandler(fake, validate) },
 		func() (string, http.Handler) { return consolev1connect.NewConsoleServiceHandler(fake, validate) },
+		func() (string, http.Handler) { return consolev1connect.NewDeploymentServiceHandler(fake, validate) },
 	} {
 		path, handler := mount()
 		consoleMux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
@@ -115,7 +119,7 @@ func (f *FakeOcelCloud) LogIn(invocation *commands.Invocation) {
 		return console.Credentials{AccessToken: "device-session", APIURL: f.ConsoleURL, Email: "dev@acme.test"}, nil
 	}
 	invocation.CloudOffer = func(context.Context, console.Credentials) (*console.CloudOffer, error) {
-		return &console.CloudOffer{APIURL: f.APIURL, Audience: "ocel-cloud"}, nil
+		return &console.CloudOffer{APIURL: f.APIURL, ProviderURL: f.ProviderURL, Audience: "ocel-cloud"}, nil
 	}
 }
 
@@ -132,6 +136,19 @@ func (f *FakeOcelCloud) Create(_ context.Context, req *consolev1.CreateProjectRe
 	created := &consolev1.Project{Id: "0199c3a2-5b7e-7c4d-8a1f-000000000001", OrganizationId: "org_1", Name: req.GetName(), Slug: req.GetSlug()}
 	f.Projects = append(f.Projects, created)
 	return &consolev1.CreateProjectResponse{Project: created}, nil
+}
+
+func (f *FakeOcelCloud) RecordEnvironmentEvent(_ context.Context, req *consolev1.RecordEnvironmentEventRequest) (*consolev1.RecordEnvironmentEventResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Events = append(f.Events, req)
+	return &consolev1.RecordEnvironmentEventResponse{}, nil
+}
+
+func (f *FakeOcelCloud) RecordedEvents() []*consolev1.RecordEnvironmentEventRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*consolev1.RecordEnvironmentEventRequest(nil), f.Events...)
 }
 
 func (f *FakeOcelCloud) IssueCloudToken(context.Context, *consolev1.IssueCloudTokenRequest) (*consolev1.IssueCloudTokenResponse, error) {

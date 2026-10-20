@@ -38,11 +38,11 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
-	cfg, err := dependencies.LoadProject(ctx, cwd)
+	cfg, err := dependencies.LoadTargetProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
-	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier()}
+	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier(), RunsOnCloud: true}
 	if keyOffer != nil {
 		open.Intent = commands.UseVariablesKey
 		open.Policy = consent.NewPolicy(command, false, dependencies.CanAsk(keyOffer.stdin), stderr, keyOffer.stdin)

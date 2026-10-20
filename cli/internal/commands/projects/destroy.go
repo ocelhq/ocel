@@ -131,7 +131,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, opts destro
 }
 
 func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *project.Project, slug string, tiers []environmentv1.Tier, policy consent.Policy, bypassNotice string) (destroyed []*consolev1.EnvironmentEvent, err error) {
-	if _, err := invocation.RequireProvider(ctx, cfg, policy.Command); err != nil {
+	if _, err := invocation.ResolveProvider(ctx, cfg, policy.Command, accountOptions()); err != nil {
 		return nil, err
 	}
 	if err := policy.Refuse(); err != nil {
@@ -171,7 +171,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 			check.Say(fmt.Sprintf("nothing of %s in %s", slug, readiness.TierName(tier)))
 			continue
 		}
-		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun})
+		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, RunsOnCloud: true})
 		if err != nil {
 			check.End(err)
 			return nil, err

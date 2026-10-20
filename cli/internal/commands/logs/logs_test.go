@@ -62,6 +62,12 @@ func liveEntry(message string) provider.LogEntry {
 func deployedWithLogs(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	project := clitest.SetUpProject(t)
+	recordLogs(t, project)
+	return project
+}
+
+func recordLogs(t *testing.T, project clitest.FakeProject) {
+	t.Helper()
 	clitest.RecordEdgeStack(t, project, environment.TierProduction, fake.KindRelay)
 	recordApp(t, project, environment.TierProduction, stackrecords.ProductionEnv, "web", 0, "web-server", "web-old")
 	recordApp(t, project, environment.TierProduction, stackrecords.ProductionEnv, "web", 1, "web-server", "web-live")
@@ -74,7 +80,6 @@ func deployedWithLogs(t *testing.T) clitest.FakeProject {
 	logs.Append("web-old", line(1*time.Minute, "old release"))
 	logs.Append("web-live", line(2*time.Minute, "web is listening"))
 	logs.Append("api-live", line(3*time.Minute, "api is listening"))
-	return project
 }
 
 type logsRun struct {

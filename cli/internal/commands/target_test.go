@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 func loggedIn(t *testing.T) (commands.Invocation, *clitest.FakeOcelCloud) {
@@ -141,12 +143,12 @@ func TestACommandOcelCloudCannotRunYetRefusesItAndOneWithNoTargetOffersLogin(t *
 		t.Fatal(err)
 	}
 
-	_, err = invocation.RequireProvider(t.Context(), cfg, "ocel logs")
+	_, err = invocation.RequireProvider(t.Context(), cfg, "ocel bindings")
 	var coded *clierror.Error
-	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), "`ocel logs` does not run on Ocel Cloud yet") {
-		t.Fatalf("err = %v, want ocel logs refused on Ocel Cloud", err)
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), "`ocel bindings` does not run on Ocel Cloud yet") {
+		t.Fatalf("err = %v, want ocel bindings refused on Ocel Cloud", err)
 	}
-	err = invocation.WithProvider(t.Context(), cfg, "ocel logs", commands.OpenOptions{}, func(context.Context, commands.ProviderRun) error {
+	err = invocation.WithProvider(t.Context(), cfg, "ocel bindings", commands.OpenOptions{}, func(context.Context, commands.ProviderRun) error {
 		t.Fatal("opened a provider for a project that deploys to Ocel Cloud")
 		return nil
 	})
@@ -155,14 +157,86 @@ func TestACommandOcelCloudCannotRunYetRefusesItAndOneWithNoTargetOffersLogin(t *
 	}
 
 	loggedOut(&invocation)
-	_, err = invocation.RequireProvider(t.Context(), cfg, "ocel logs")
+	_, err = invocation.RequireProvider(t.Context(), cfg, "ocel bindings")
 	if err == nil || !strings.Contains(err.Error(), "no provider configured") || !strings.Contains(err.Error(), "`ocel login`") {
 		t.Fatalf("err = %v, want the missing provider with ocel login offered", err)
 	}
 
 	named := *cfg
 	named.Provider = &project.Provider{ID: "fake"}
-	if provider, err := invocation.RequireProvider(t.Context(), &named, "ocel logs"); err != nil || provider.ID != "fake" {
+	if provider, err := invocation.RequireProvider(t.Context(), &named, "ocel bindings"); err != nil || provider.ID != "fake" {
 		t.Fatalf("provider = %v, err = %v, want the configured one", provider, err)
+	}
+}
+
+func TestACommandThatRunsOnOcelCloudOpensASessionOnTheProviderOcelCloudServes(t *testing.T) {
+	project := clitest.SetUpCloudProject(t)
+	invocation := clitest.NewInvocation()
+	project.LogIn(&invocation)
+
+	cfg, err := invocation.LoadTargetProject(t.Context(), project.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Slug != clitest.FixtureSlug || cfg.HasProvider() {
+		t.Fatalf("project = %+v, want the unconfigured directory named after itself", cfg)
+	}
+	err = invocation.WithProvider(t.Context(), cfg, "ocel preview ls", commands.OpenOptions{RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) error {
+		if p.Provider.Name() != commands.CloudProviderID {
+			t.Errorf("provider = %q, want %q", p.Provider.Name(), commands.CloudProviderID)
+		}
+		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+			_, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: cfg.Slug})
+			return err
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := project.Remote.Calls()
+	if len(calls) != 2 || !strings.HasSuffix(calls[0].Procedure, "/Configure") || calls[0].Authorization != "Bearer "+clitest.FakeCloudToken {
+		t.Fatalf("calls = %+v, want Configure and the call, with the token the console issued", calls)
+	}
+}
+
+func TestACommandThatDoesNotRunOnOcelCloudRefusesItWithoutOpeningASession(t *testing.T) {
+	project := clitest.SetUpCloudProject(t)
+	invocation := clitest.NewInvocation()
+	project.LogIn(&invocation)
+	cfg, err := invocation.LoadTargetProject(t.Context(), project.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = invocation.WithProvider(t.Context(), cfg, "ocel bindings ls", commands.OpenOptions{}, func(context.Context, commands.ProviderRun) error {
+		t.Fatal("opened a provider")
+		return nil
+	})
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported {
+		t.Fatalf("err = %v, want cloud.unsupported", err)
+	}
+	if calls := project.Remote.Calls(); len(calls) != 0 {
+		t.Fatalf("calls = %+v, want none", calls)
+	}
+}
+
+func TestAConsoleOfferingOcelCloudWithNoProviderURLRefusesACommandThatRunsOnIt(t *testing.T) {
+	project := clitest.SetUpCloudProject(t)
+	project.Cloud.ProviderURL = ""
+	invocation := clitest.NewInvocation()
+	project.LogIn(&invocation)
+	cfg, err := invocation.LoadTargetProject(t.Context(), project.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = invocation.WithProvider(t.Context(), cfg, "ocel preview ls", commands.OpenOptions{RunsOnCloud: true}, func(context.Context, commands.ProviderRun) error {
+		t.Fatal("opened a provider")
+		return nil
+	})
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), "no provider URL") {
+		t.Fatalf("err = %v, want cloud.unsupported naming the missing provider URL", err)
 	}
 }

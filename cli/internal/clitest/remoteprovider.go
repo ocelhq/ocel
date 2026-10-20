@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -13,8 +15,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -147,4 +151,28 @@ func (f *FakeRemoteProvider) admit(call RemoteCall) (http.Handler, error) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this session belongs to another organization"))
 	}
 	return session.handler, nil
+}
+
+type CloudProject struct {
+	FakeProject
+	Cloud  *FakeOcelCloud
+	Remote *FakeRemoteProvider
+}
+
+func SetUpCloudProject(t *testing.T) CloudProject {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), FixtureSlug)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := fake.NewForProject(fake.Options{})
+	Bootstrap(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
+	cloud := ServeOcelCloud(t)
+	remote := ServeRemoteProvider(t, p)
+	cloud.ProviderURL = remote.URL
+	return CloudProject{FakeProject: FakeProject{Root: root, Provider: p, Requests: remote.Requests}, Cloud: cloud, Remote: remote}
+}
+
+func (c CloudProject) LogIn(invocation *commands.Invocation) {
+	c.Cloud.LogIn(invocation)
 }

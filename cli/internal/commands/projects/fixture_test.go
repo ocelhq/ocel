@@ -39,6 +39,12 @@ const (
 func deployedToBothTiers(t *testing.T) clitest.FakeProject {
 	t.Helper()
 	project := clitest.SetUpProject(t)
+	recordBothTiers(t, project)
+	return project
+}
+
+func recordBothTiers(t *testing.T, project clitest.FakeProject) {
+	t.Helper()
 	clitest.Bootstrap(t, project.Provider, environment.TierPreview, fake.PartCache, fake.PartImages)
 	relay := &stackrecords.ProjectEdge{Kind: fake.KindRelay}
 	clitest.RecordProject(t, project, environment.TierProduction, clitest.FixtureSlug, stackrecords.Project{Edge: relay, UpdatedAt: productionDeployedAt.Unix()})
@@ -49,7 +55,6 @@ func deployedToBothTiers(t *testing.T) clitest.FakeProject {
 	clitest.RecordStacks(t, project, environment.TierPreview,
 		naming.InfraStack("pr-1"), naming.InfraStack("pr-2"), naming.AppStack("pr-1", "web", naming.NewReleaseToken("b1", "")))
 	clitest.RecordEdgeStack(t, project, environment.TierPreview, fake.KindRelay)
-	return project
 }
 
 func deployedToProductionOnly(t *testing.T) clitest.FakeProject {

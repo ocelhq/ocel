@@ -25,7 +25,7 @@ import (
 )
 
 func runDomainList(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout io.Writer) error {
-	cfg, err := invocation.LoadProject(ctx, cwd)
+	cfg, err := invocation.LoadTargetProject(ctx, cwd)
 	if err != nil {
 		return err
 	}
