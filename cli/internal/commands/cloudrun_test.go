@@ -260,6 +260,23 @@ func TestAnOcelCloudJobThatEndsWithNoDeploymentReportsNothing(t *testing.T) {
 	}
 }
 
+func TestAnOcelCloudDeployThatDeployedNothingEndsWithTheJobsNoticeNotDeployed(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	notice := `Nothing to deploy: shop declares no apps or resources, and no app is detected at the project root: name the app to deploy under "apps"`
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED, Step: notice}}
+
+	out, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Deployed shop") {
+		t.Fatalf("output = %q, want no claim of a deployment from a job that deployed nothing", out)
+	}
+	if !strings.Contains(out, notice+" · job "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
+		t.Fatalf("output = %q, want the job's notice and its link", out)
+	}
+}
+
 func TestAnOcelCloudJobThatIsCanceledFailsTheRun(t *testing.T) {
 	invocation, fake := loggedIn(t)
 	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_CANCELED}}
