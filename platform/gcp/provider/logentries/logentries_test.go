@@ -67,13 +67,15 @@ func entry(at time.Time, text string) map[string]any {
 
 func empty(int, logging.ListLogEntriesRequest) (int, any) { return http.StatusOK, map[string]any{} }
 
+const view = "projects/acme-prod/locations/global/buckets/_Default/views/ocel-prod-logs"
+
 var since = time.Date(2026, 10, 3, 9, 0, 0, 0, time.UTC)
 
 func TestReadAsksForTheRevisionsOfEachSource(t *testing.T) {
 	t.Parallel()
 	logs, listed := serve(t, empty)
 
-	_, err := Read(context.Background(), logs, "acme-prod", Query{
+	_, err := Read(context.Background(), logs, view, Query{
 		Sources: []Source{
 			{Service: "web", Revision: "web-00001"},
 			{Service: "web", Revision: "web-00002"},
@@ -90,8 +92,8 @@ func TestReadAsksForTheRevisionsOfEachSource(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("asked %d times, want 1", len(got))
 	}
-	if !slices.Equal(got[0].ResourceNames, []string{"projects/acme-prod"}) {
-		t.Errorf("ResourceNames = %v, want [projects/acme-prod]", got[0].ResourceNames)
+	if !slices.Equal(got[0].ResourceNames, []string{view}) {
+		t.Errorf("ResourceNames = %v, want [%s]", got[0].ResourceNames, view)
 	}
 	want := `resource.type="cloud_run_revision"` +
 		` AND ((resource.labels.service_name="web" AND resource.labels.revision_name="web-00001")` +
@@ -108,7 +110,7 @@ func TestReadLeavesTheRevisionOutWhenNoneIsGiven(t *testing.T) {
 	t.Parallel()
 	logs, listed := serve(t, empty)
 
-	_, err := Read(context.Background(), logs, "acme-prod", Query{
+	_, err := Read(context.Background(), logs, view, Query{
 		Sources: []Source{{Service: "web"}},
 		Since:   since,
 		Limit:   10,
@@ -130,7 +132,7 @@ func TestReadQuotesContainsAndUntilIntoTheFilter(t *testing.T) {
 	t.Parallel()
 	logs, listed := serve(t, empty)
 
-	_, err := Read(context.Background(), logs, "acme-prod", Query{
+	_, err := Read(context.Background(), logs, view, Query{
 		Sources:  []Source{{Service: "web"}},
 		Since:    since,
 		Until:    since.Add(time.Hour),
@@ -170,7 +172,7 @@ func TestReadReturnsTheNewestLimitEntriesOldestFirst(t *testing.T) {
 		return http.StatusOK, pages[req.PageToken]
 	})
 
-	got, err := Read(context.Background(), logs, "acme-prod", Query{
+	got, err := Read(context.Background(), logs, view, Query{
 		Sources: []Source{{Service: "web", Revision: "web-00001", Label: "web"}},
 		Since:   since,
 		Limit:   3,
@@ -205,7 +207,7 @@ func TestReadAsksForNoMoreThanAThousandEntriesAPage(t *testing.T) {
 	t.Parallel()
 	logs, listed := serve(t, empty)
 
-	_, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 5000})
+	_, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 5000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +226,7 @@ func TestReadEchoesTheLabelOfTheSourceAnEntryCameFrom(t *testing.T) {
 		return http.StatusOK, map[string]any{"entries": []any{entry(since.Add(2*time.Minute), "from web"), other}}
 	})
 
-	got, err := Read(context.Background(), logs, "acme-prod", Query{
+	got, err := Read(context.Background(), logs, view, Query{
 		Sources: []Source{
 			{Service: "web", Label: "web"},
 			{Service: "jobs", Revision: "jobs-00007", Label: "jobs"},
@@ -252,7 +254,7 @@ func TestReadPassesAJSONPayloadThroughAsText(t *testing.T) {
 		return http.StatusOK, map[string]any{"entries": []any{structured}}
 	})
 
-	got, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	got, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +275,7 @@ func TestReadKeepsTheVendorsSeverity(t *testing.T) {
 		return http.StatusOK, map[string]any{"entries": []any{unset, plain, warning}}
 	})
 
-	got, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	got, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +298,7 @@ func TestReadAsksAgainAfterAThrottledAnswer(t *testing.T) {
 		return http.StatusOK, map[string]any{"entries": []any{entry(since.Add(time.Minute), "kept")}}
 	})
 
-	got, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	got, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +314,7 @@ func TestReadDoesNotAskAgainAfterARefusal(t *testing.T) {
 		return http.StatusForbidden, map[string]any{"error": map[string]any{"code": 403, "message": "no logging.logEntries.list"}}
 	})
 
-	_, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	_, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
 	if err == nil {
 		t.Fatal("Read succeeded on a refused list")
 	}
@@ -338,7 +340,7 @@ func TestReadDoesNotAskAgainWhenTheEndpointCannotSpeakTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	_, err = Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
 	if err == nil {
 		t.Fatal("Read succeeded against an endpoint that speaks no TLS")
 	}
@@ -367,7 +369,7 @@ func TestReadAsksAgainWhenTheConnectionDropsMidAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	got, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +404,7 @@ func TestReadAsksAgainWhenTheConnectionClosesWhileTheRequestIsWritten(t *testing
 		t.Fatal(err)
 	}
 
-	got, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
+	got, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Since: since, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +417,7 @@ func TestReadRefusesAQueryWithNoStartRatherThanScanAllRetention(t *testing.T) {
 	t.Parallel()
 	logs, listed := serve(t, empty)
 
-	_, err := Read(context.Background(), logs, "acme-prod", Query{Sources: []Source{{Service: "web"}}, Limit: 10})
+	_, err := Read(context.Background(), logs, view, Query{Sources: []Source{{Service: "web"}}, Limit: 10})
 	if err == nil {
 		t.Fatal("Read succeeded with no Since")
 	}
@@ -432,7 +434,7 @@ func TestReadAsksForNothingWhenThereIsNothingToRead(t *testing.T) {
 		{Since: since, Limit: 10},
 		{Sources: []Source{{Service: "web"}}, Since: since},
 	} {
-		got, err := Read(context.Background(), logs, "acme-prod", q)
+		got, err := Read(context.Background(), logs, view, q)
 		if err != nil || len(got) != 0 {
 			t.Errorf("Read(%+v) = %v, %v, want nothing", q, got, err)
 		}

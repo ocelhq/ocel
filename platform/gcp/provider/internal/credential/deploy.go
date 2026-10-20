@@ -25,7 +25,7 @@ const (
 	ProjectKeysRole      = "roles/cloudkms.admin"
 	StoresRole           = "roles/memorystore.admin"
 	SchedulesRole        = "roles/cloudscheduler.admin"
-	LogsRole             = "roles/logging.viewer"
+	LogsRole             = "roles/logging.viewAccessor"
 	QueueRole            = "roles/cloudtasks.queueAdmin"
 	TagUserRole          = "roles/resourcemanager.tagUser"
 	ProjectGrantsRole    = "roles/resourcemanager.projectIamAdmin"
@@ -118,7 +118,10 @@ func (d Deploy) Schedules() Grant {
 }
 
 func (d Deploy) Logs() Grant {
-	return Grant{Role: LogsRole, Why: "no log view selects one tier's entries: a Cloud Run entry names its service and revision and no tier"}
+	return Grant{Role: LogsRole, Condition: &policy.Condition{
+		Title:      "ocel " + string(d.tier) + " logs",
+		Expression: fmt.Sprintf("resource.name == %q", d.names.LogViewPath(d.tier)),
+	}}
 }
 
 func (d Deploy) Parts() Grant {

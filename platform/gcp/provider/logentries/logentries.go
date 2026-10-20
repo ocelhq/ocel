@@ -36,7 +36,7 @@ type Event struct {
 	Severity string
 }
 
-func Read(ctx context.Context, logs *logging.Service, project string, q Query) ([]Event, error) {
+func Read(ctx context.Context, logs *logging.Service, view string, q Query) ([]Event, error) {
 	if len(q.Sources) == 0 || q.Limit <= 0 {
 		return nil, nil
 	}
@@ -44,7 +44,7 @@ func Read(ctx context.Context, logs *logging.Service, project string, q Query) (
 		return nil, errors.New("read log entries: no Since given, and without one the read would scan the project's whole log retention")
 	}
 	req := &logging.ListLogEntriesRequest{
-		ResourceNames: []string{"projects/" + project},
+		ResourceNames: []string{view},
 		Filter:        filter(q),
 		OrderBy:       "timestamp desc",
 		PageSize:      int64(min(q.Limit, maxPageSize)),
@@ -53,7 +53,7 @@ func Read(ctx context.Context, logs *logging.Service, project string, q Query) (
 	for len(events) < q.Limit {
 		page, err := googleretry.Attempted(ctx, logs.Entries.List(req).Context(ctx).Do)
 		if err != nil {
-			return nil, fmt.Errorf("read log entries of project %s: %w", project, err)
+			return nil, fmt.Errorf("read log entries through the log view %s: %w", view, err)
 		}
 		for _, entry := range page.Entries {
 			event, ok, err := eventOf(entry, q.Sources)

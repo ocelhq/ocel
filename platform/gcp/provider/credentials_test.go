@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -208,12 +209,22 @@ func TestADeployMayAddTheBootstrapPartsGoogleNamesNoConditionForThroughOneCustom
 }
 
 func TestADeployCredentialReadsOnlyItsOwnTiersLogs(t *testing.T) {
-	t.Skip("Needs a ruling: a log view filters on resource labels and log labels, a Cloud Run log entry names its service and revision and no tier, and an app service's name holds no tier word, so no view holds one tier's logs and roles/logging.viewer stays on the project")
 	t.Parallel()
 
-	for _, line := range renderedDeploy(t, environment.TierPreview) {
-		if strings.HasPrefix(line, credential.LogsRole+", unconditioned") {
-			t.Errorf("Permissions(deploy, preview) grants %s on the project, which reads production's logs too", line)
+	named := names.New("ocel", "acme-prod")
+	for _, tier := range googletest.BothTiers {
+		lines := renderedDeploy(t, tier)
+		want := credential.LogsRole + `, on the condition resource.name == "` + named.LogViewPath(tier) + `"`
+		if !slices.Contains(lines, want) {
+			t.Errorf("Permissions(deploy, %s) =\n%s\nwant the line %s: a deploy reads its tier's logs through its tier's view", tier, strings.Join(lines, "\n"), want)
+		}
+		for _, line := range lines {
+			if strings.HasPrefix(line, "roles/logging.") && line != want {
+				t.Errorf("Permissions(deploy, %s) grants %s, which reads logs beyond its tier's view", tier, line)
+			}
+			if strings.Contains(line, named.LogView(tier.Sibling())) {
+				t.Errorf("Permissions(deploy, %s) grants %s, naming the %s tier's log view", tier, line, tier.Sibling())
+			}
 		}
 	}
 }

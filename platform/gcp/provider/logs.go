@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/logentries"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type logs struct{ *Provider }
@@ -14,6 +15,9 @@ type logs struct{ *Provider }
 func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
 	if len(q.Targets) == 0 || !q.Tail && q.Limit < 1 {
 		return nil
+	}
+	if q.Tier.Sibling() == "" {
+		return ports.Tierless("a log read")
 	}
 	resolved, err := p.openClients(ctx)
 	if q.Tail && ctx.Err() != nil {
@@ -57,7 +61,7 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 		if err != nil {
 			return err
 		}
-		return logentries.Tail(ctx, stream, resolved.Project(), query, emitEvents, func(suppressed logentries.Notice) error {
+		return logentries.Tail(ctx, stream, resolved.LogViewPath(q.Tier), query, emitEvents, func(suppressed logentries.Notice) error {
 			return notice(noticeOf(suppressed))
 		})
 	}
@@ -65,7 +69,7 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 	if err != nil {
 		return err
 	}
-	events, err := logentries.Read(ctx, service, resolved.Project(), query)
+	events, err := logentries.Read(ctx, service, resolved.LogViewPath(q.Tier), query)
 	if err != nil {
 		return err
 	}

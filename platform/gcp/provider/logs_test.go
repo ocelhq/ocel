@@ -3,6 +3,7 @@ package gcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -65,6 +67,7 @@ func TestLogsReadsEachTargetFromItsServiceAndRevision(t *testing.T) {
 
 	var entries []provider.LogEntry
 	err = p.Logs().Read(context.Background(), provider.LogQuery{
+		Tier: environment.TierPreview,
 		Targets: []provider.LogTarget{
 			{App: "web", Release: "r1", Source: "http", Function: &provider.Function{Name: "web-server", Physical: "web-svc", Revision: "web-svc-00002"}},
 			{App: "web", Release: "r1", Source: "mailer", Container: &provider.AppContainer{Name: "worker:mailer", Physical: "mailer-svc", Revision: "mailer-svc-00001"}},
@@ -82,6 +85,9 @@ func TestLogsReadsEachTargetFromItsServiceAndRevision(t *testing.T) {
 
 	if len(stub.requests) != 1 {
 		t.Fatalf("Read() made %d list requests, want 1", len(stub.requests))
+	}
+	if view := "projects/acme-prod/locations/global/buckets/_Default/views/ocel-preview-logs"; !slices.Equal(stub.requests[0].ResourceNames, []string{view}) {
+		t.Errorf("Read() listed entries of %v, want them read through the preview tier's view %s alone", stub.requests[0].ResourceNames, view)
 	}
 	filter := stub.requests[0].Filter
 	for _, want := range []string{
@@ -134,21 +140,21 @@ func TestLogsReadsNothingFromAnEmptyTargetList(t *testing.T) {
 	}
 }
 
-func TestTheDeployCredentialIsGrantedTheRoleThatReadsLogEntries(t *testing.T) {
+func TestEachCredentialIsGrantedTheRoleThatReadsLogEntries(t *testing.T) {
 	p, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatalf("NewProvider() = %v", err)
 	}
 
-	for _, purpose := range []edge.CredentialPurpose{edge.PurposeDeploy, edge.PurposeBootstrap} {
+	for purpose, role := range map[edge.CredentialPurpose]string{edge.PurposeDeploy: "roles/logging.viewAccessor", edge.PurposeBootstrap: "roles/logging.viewer"} {
 		document, err := p.Credentials().Permissions(purpose, environment.TierProduction)
 		if err != nil {
 			t.Fatalf("Permissions(%s) error = %v", purpose, err)
 		}
 		if !slices.ContainsFunc(strings.Split(document.Document, "\n"), func(line string) bool {
-			return line == "roles/logging.viewer" || strings.HasPrefix(line, "roles/logging.viewer, ")
+			return line == role || strings.HasPrefix(line, role+", ")
 		}) {
-			t.Errorf("the %s credential is granted %q, want roles/logging.viewer among them: a log read lists Cloud Logging entries", purpose, document.Document)
+			t.Errorf("the %s credential is granted %q, want %s among them: a log read lists Cloud Logging entries", purpose, document.Document, role)
 		}
 	}
 }
@@ -233,7 +239,7 @@ func TestLogsTailsEachTargetFromItsServiceAndRevision(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var entries []provider.LogEntry
-	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: tailSince, Contains: "boom", Tail: true}, func(batch []provider.LogEntry) error {
+	err := p.Logs().Read(ctx, provider.LogQuery{Tier: environment.TierProduction, Targets: webAndMailer(), Since: tailSince, Contains: "boom", Tail: true}, func(batch []provider.LogEntry) error {
 		entries = append(entries, batch...)
 		cancel()
 		return nil
@@ -284,7 +290,7 @@ func TestLogsTailTurnsEverySuppressionIntoASampledNotice(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var notices []provider.LogNotice
-	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: tailSince, Tail: true}, func([]provider.LogEntry) error { return nil }, func(notice provider.LogNotice) error {
+	err := p.Logs().Read(ctx, provider.LogQuery{Tier: environment.TierProduction, Targets: webAndMailer(), Since: tailSince, Tail: true}, func([]provider.LogEntry) error { return nil }, func(notice provider.LogNotice) error {
 		notices = append(notices, notice)
 		if len(notices) == 2 {
 			cancel()
@@ -308,7 +314,7 @@ func TestLogsTailTellsTheCallerWhenTheStreamReconnected(t *testing.T) {
 	defer cancel()
 	var notices []provider.LogNotice
 	var read int
-	err := p.Logs().Read(ctx, provider.LogQuery{Targets: webAndMailer(), Since: tailSince, Tail: true}, func(batch []provider.LogEntry) error {
+	err := p.Logs().Read(ctx, provider.LogQuery{Tier: environment.TierProduction, Targets: webAndMailer(), Since: tailSince, Tail: true}, func(batch []provider.LogEntry) error {
 		read += len(batch)
 		if read == 2 {
 			cancel()
@@ -323,6 +329,49 @@ func TestLogsTailTellsTheCallerWhenTheStreamReconnected(t *testing.T) {
 	}
 	if want := []provider.LogNotice{{Kind: provider.LogReconnected, Message: "the log stream dropped and reconnected, so entries written meanwhile may be missing"}}; !slices.Equal(notices, want) {
 		t.Errorf("the tail sent the notices %+v, want %+v", notices, want)
+	}
+}
+
+func TestLogsTailsThroughTheTiersLogView(t *testing.T) {
+	stub := &tailedGCP{response: &loggingpb.TailLogEntriesResponse{Entries: []*loggingpb.LogEntry{tailedEntry("web-svc", "web-svc-00002", "served")}}}
+	p := tailingGCP(t, stub)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := p.Logs().Read(ctx, provider.LogQuery{Tier: environment.TierProduction, Targets: webAndMailer(), Since: tailSince, Tail: true}, func([]provider.LogEntry) error {
+		cancel()
+		return nil
+	}, func(provider.LogNotice) error { return nil })
+	if err != nil {
+		t.Fatalf("Read() of a tail error = %v", err)
+	}
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+	if len(stub.requests) == 0 {
+		t.Fatal("Read() of a tail opened no stream")
+	}
+	if view := "projects/acme-prod/locations/global/buckets/_Default/views/ocel-prod-logs"; !slices.Equal(stub.requests[0].GetResourceNames(), []string{view}) {
+		t.Errorf("Read() tailed %v, want the production tier's view %s alone", stub.requests[0].GetResourceNames(), view)
+	}
+}
+
+func TestLogsRefuseAQueryOfNoTier(t *testing.T) {
+	stub := &loggedGCP{}
+	server := httptest.NewServer(stub)
+	t.Cleanup(server.Close)
+	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", server.URL)
+	p, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	if err != nil {
+		t.Fatalf("NewProvider() = %v", err)
+	}
+
+	err = p.Logs().Read(context.Background(), provider.LogQuery{Targets: webAndMailer(), Since: tailSince, Limit: 10}, func([]provider.LogEntry) error { return nil }, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("Read() of no tier = %v, want an %s refusal: each tier's logs are read through that tier's view", err, refusal.CodeInvalid)
+	}
+	if len(stub.requests) != 0 {
+		t.Errorf("Read() of no tier made %d list requests", len(stub.requests))
 	}
 }
 
