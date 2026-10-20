@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
@@ -21,7 +21,19 @@ func taggedPubSub(t *testing.T) (*googletest.PubSub, *ports.Clients, topics.Tier
 	server := httptest.NewServer(fake.Serve(t))
 	t.Cleanup(server.Close)
 	clients := tags.Tagged(googletest.Clients(server.URL))
-	return fake, clients.Workload(), topic.TierTagsOf(clients, environment.TierProduction)
+	tier := environment.TierProduction
+	return fake, clients.Workload(), topics.TierTags{
+		Inline: clients.InlineTierTags(tier),
+		Ensure: func(ctx context.Context, path string) error {
+			return clients.EnsureTierTag(ctx, tier, clients.PubSubTagged(path))
+		},
+		Remove: func(ctx context.Context, path string, exists func(context.Context) (bool, error)) error {
+			return clients.RemoveTierTagIfFound(ctx, tier, func(ctx context.Context) (gcloud.TaggedResource, bool, error) {
+				found, err := exists(ctx)
+				return clients.PubSubTagged(path), found, err
+			})
+		},
+	}
 }
 
 func TestEveryTopicAndSubscriptionOfATierCarriesItsTiersTagFromItsCreation(t *testing.T) {
