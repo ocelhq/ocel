@@ -12,16 +12,15 @@ import (
 func TestTheRecordsOfOneTierAndOfBothTiersAreNamedByOneCondition(t *testing.T) {
 	t.Parallel()
 	c := &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1"}
-	ns := `resource.name == "projects/acme-prod/databases/ocel"`
-	production := `resource.name.startsWith("projects/acme-prod/databases/` + c.ProjectDatabasePrefix(environment.TierProduction) + `")`
-	preview := `resource.name.startsWith("projects/acme-prod/databases/` + c.ProjectDatabasePrefix(environment.TierPreview) + `")`
+	production := `resource.name == "projects/acme-prod/databases/ocel-prod-records" || resource.name.startsWith("projects/acme-prod/databases/` + c.ProjectDatabasePrefix(environment.TierProduction) + `")`
+	preview := `resource.name == "projects/acme-prod/databases/ocel-preview-records" || resource.name.startsWith("projects/acme-prod/databases/` + c.ProjectDatabasePrefix(environment.TierPreview) + `")`
 
 	tier := RecordsCondition(c, environment.TierProduction)
-	if tier.Title != "ocel ocel production records" || tier.Expression != ns+" || "+production {
-		t.Errorf("the production records condition is %+v, want the namespace database and production's project databases", tier)
+	if tier.Title != "ocel ocel production records" || tier.Expression != production {
+		t.Errorf("the production records condition is %+v, want production's records database and project databases", tier)
 	}
 	both := RecordsCondition(c, environment.TierProduction, environment.TierPreview)
-	if both.Title != "ocel ocel records" || both.Expression != ns+" || "+production+" || "+preview {
-		t.Errorf("the records condition of both tiers is %+v, want the namespace database and both tiers' project databases", both)
+	if both.Title != "ocel ocel records" || both.Expression != production+" || "+preview {
+		t.Errorf("the records condition of both tiers is %+v, want each tier's records database and project databases", both)
 	}
 }

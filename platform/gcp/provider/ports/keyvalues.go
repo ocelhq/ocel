@@ -46,7 +46,7 @@ func (s KeyValues) client(in records.Partition) (*firestore.Client, error) {
 	if project, owned := ProjectOfRecords(in); owned {
 		return s.Clients.ProjectFirestore(in.Tier, project)
 	}
-	return s.Clients.Firestore()
+	return s.Clients.TierFirestore(in.Tier)
 }
 
 func OpenTierCollection(client *firestore.Client, tier environment.Tier) *firestore.CollectionRef {
@@ -294,7 +294,7 @@ func (s KeyValues) refuseFailedWrite(key records.Key, err error) error {
 func (s KeyValues) refuseUnbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to store an entry.\nRun `%s` to create it, then try again",
-		s.Clients.Database(), provider.BootstrapCommand(tier))
+		s.Clients.RecordsDatabase(tier), provider.BootstrapCommand(tier))
 }
 
 func entryOf(key records.Key, snapshot *firestore.DocumentSnapshot) (records.Entry, error) {

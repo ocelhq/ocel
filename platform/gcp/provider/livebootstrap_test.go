@@ -204,7 +204,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 		}
 	}
 	rows := map[string]string{
-		"firestore:database/" + liveNames(t).Database():                            provider.StackGroupKind,
+		"firestore:database/" + liveNames(t).RecordsDatabase(tier):                 provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageState): provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageEdge):  provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageCache): provider.StackGroupKind,
@@ -434,9 +434,9 @@ func TestLiveASharedResourceStaysWhileTheSiblingTierIsInstalled(t *testing.T) {
 	if ring.Action != provider.ActionKeep || ring.Reason == "" {
 		t.Errorf("PlanRemove() shows the key ring as %q (%q), want it kept with a reason: Google never deletes a key ring", ring.Action, ring.Reason)
 	}
-	database := kept["firestore:database/"+liveNames(t).Database()]
-	if database.Action != provider.ActionKeep || !strings.Contains(database.Reason, string(environment.TierProduction)) {
-		t.Errorf("PlanRemove() shows the database as %q (%q), want it kept with a reason naming the sibling tier still installed",
+	database := kept["firestore:database/"+liveNames(t).RecordsDatabase(environment.TierPreview)]
+	if database.Action != provider.ActionDisableThenDelete {
+		t.Errorf("PlanRemove() shows the tier's records database as %q (%q), want it deleted: the sibling tier keeps its records in its own",
 			database.Action, database.Reason)
 	}
 }
@@ -887,9 +887,9 @@ func TestLiveASharedRowNamesTheSiblingTierInEveryPlanItAppearsIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	database := rowsOf(t, plan)["firestore:database/"+liveNames(t).Database()]
-	if database.Action != provider.ActionKeep || !strings.Contains(database.Reason, string(environment.TierProduction)) {
-		t.Errorf("Plan() shows the database as %q (%q), want it kept for a reason naming the sibling tier that shares it, as the removal plan does",
+	database := rowsOf(t, plan)["firestore:database/"+liveNames(t).RecordsDatabase(tier)]
+	if database.Action != provider.ActionKeep || strings.Contains(database.Reason, string(environment.TierProduction)) {
+		t.Errorf("Plan() shows the tier's records database as %q (%q), want it kept as its own tier's, naming no sibling",
 			database.Action, database.Reason)
 	}
 }

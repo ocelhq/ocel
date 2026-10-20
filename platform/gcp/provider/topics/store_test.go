@@ -87,7 +87,7 @@ func TestTheRunsOfTwoProjectsAreWrittenToDatabasesOfTheirOwnApartFromEveryProjec
 		t.Errorf("the runs of shop and blog are both written to %s, which an app of either may then read and rewrite", shop)
 	}
 	for project, database := range map[string]string{"shop": shop, "blog": blog} {
-		for _, kept := range []string{ports.Database("ocel"), ports.ProjectDatabase("ocel", environment.TierProduction, "shop"), ports.ProjectDatabase("ocel", environment.TierProduction, "blog")} {
+		for _, kept := range []string{ports.RecordsDatabase("ocel", environment.TierProduction), ports.ProjectDatabase("ocel", environment.TierProduction, "shop"), ports.ProjectDatabase("ocel", environment.TierProduction, "blog")} {
 			if database == "projects/acme-prod/databases/"+kept {
 				t.Errorf("a run of %s is written to %s, which keeps records an app may only read", project, database)
 			}

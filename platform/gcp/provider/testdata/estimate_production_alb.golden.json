@@ -8,7 +8,7 @@
       "status": "STATUS_FREE"
     },
     {
-      "resource": "project:shop/shared:production/google_firestore_database:ocel",
+      "resource": "project:shop/shared:production/google_firestore_database:ocel-prod-records",
       "status": "STATUS_PRICED",
       "components": [
         {

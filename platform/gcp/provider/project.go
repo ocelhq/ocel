@@ -120,9 +120,6 @@ func (p *Provider) resolveClients(ctx context.Context) (*gcloud.Clients, error) 
 		project = ambient
 	}
 	names := names.New(p.namespace, project)
-	if err := names.Fit(); err != nil {
-		return nil, err
-	}
 	p.resolved = &gcloud.Clients{Names: names, Region: p.options.Region, Endpoint: p.endpoint, TagEndpoint: p.tagEndpoint, Records: p.KeyValues()}
 	return p.resolved, nil
 }

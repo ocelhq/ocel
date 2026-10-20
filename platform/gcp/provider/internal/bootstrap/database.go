@@ -22,7 +22,6 @@ import (
 
 const (
 	reasonEmulated    = "emulator serves one implicit database"
-	reasonSharedDB    = "the %s bootstrap is still installed and shares it, so only the records this tier keeps in it are deleted"
 	reasonUnprotected = "it exists with delete protection off, and one call would take every record it stores with it"
 )
 
@@ -40,25 +39,23 @@ var databaseKind = KindOps{
 		return b.databasePresence(ctx, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
-		return b.MakeDatabase(ctx, read, target.Name)
+		_, err := b.ensureDatabase(ctx, read, target.Name, b.Clients.InlineTierTags(read.Tier))
+		return err
 	},
 	mend: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
 		return b.protectDatabase(ctx, target.Name)
 	},
 	removal: func(read Survey, target Resource) Removal {
-		switch {
-		case target.Shared && read.Sibling:
-			return kept(target, fmt.Sprintf(reasonSharedDB, read.Tier.Sibling()))
-		case read.Emulated:
+		if read.Emulated {
 			return kept(target, reasonEmulated)
 		}
 		return Removal{Resource: target, Action: provider.ActionDisableThenDelete}
 	},
+	tagged: func(_ context.Context, b Engine, _ Survey, target Resource) (gcloud.TaggedResource, bool, error) {
+		return b.Clients.DatabaseTagged(target.Name), true, nil
+	},
 	leave: func(ctx context.Context, b Engine, read Survey, taking Removal) error {
-		if !taking.Resource.Shared {
-			return nil
-		}
-		if taking.Action == provider.ActionKeep {
+		if taking.Action == provider.ActionKeep && taking.Reason != ReasonAbsent {
 			if err := b.takeKeyValues(ctx, read.Tier); err != nil {
 				return err
 			}
@@ -87,11 +84,6 @@ func (b Engine) TakeTierDatabase(ctx context.Context, tier environment.Tier, id 
 		return err
 	}
 	return b.TakeDatabase(ctx, id)
-}
-
-func (b Engine) MakeDatabase(ctx context.Context, read Survey, id string) error {
-	_, err := b.ensureDatabase(ctx, read, id, nil)
-	return err
 }
 
 func (b Engine) ensureDatabase(ctx context.Context, read Survey, id string, tags map[string]string) (bool, error) {
@@ -202,7 +194,7 @@ func (b Engine) TakeDatabase(ctx context.Context, id string) error {
 }
 
 func (b Engine) takeKeyValues(ctx context.Context, tier environment.Tier) error {
-	client, err := b.Clients.Firestore()
+	client, err := b.Clients.TierFirestore(tier)
 	if err != nil {
 		return err
 	}

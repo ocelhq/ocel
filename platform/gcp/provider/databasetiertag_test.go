@@ -39,17 +39,20 @@ func TestAProjectsDatabaseOfATierCarriesItsTiersTagFromItsCreation(t *testing.T)
 	}
 }
 
-func TestTheDatabaseBothTiersShareCarriesNoTierTag(t *testing.T) {
+func TestEachTiersRecordsDatabaseCarriesItsTiersTagFromItsCreation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	b, databases, tags := taggedDatabases(t)
-	read := bootstrap.Survey{Tier: environment.TierProduction, Names: b.Clients.Names, Project: googletest.Project, Region: googletest.Region}
+	for _, tier := range googletest.BothTiers {
+		b, databases, _ := taggedDatabases(t)
+		read := bootstrap.Survey{Tier: tier, Names: b.Clients.Names, Project: googletest.Project, Region: googletest.Region}
+		target := bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: b.Clients.RecordsDatabase(tier)}
 
-	if err := b.MakeDatabase(ctx, read, b.Clients.Database()); err != nil {
-		t.Fatal(err)
-	}
-	if len(databases.InlineTags) != 0 || len(tags.BindingsMade) != 0 {
-		t.Errorf("the shared database carries %v and %v, and either tier's value fences it from the other", databases.InlineTags, tags.BindingsMade)
+		if err := target.KindOps().Make(ctx, b, read, target); err != nil {
+			t.Fatal(err)
+		}
+		if got := databases.InlineTags[target.Name]; got[googletest.Project+"/ocel-tier"] != string(tier) {
+			t.Errorf("the %s records database was made carrying %v, want the %s value: the tier tag is what fences the other tier's credential from its records", tier, got, tier)
+		}
 	}
 }
 

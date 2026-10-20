@@ -52,8 +52,8 @@ func TestNoTierKeepsADatabaseOfRunsOrTagRecordsAndADeployMayMakeEachProjectsOwn(
 	names := names.New("ocel", "acme-prod")
 	for _, tier := range googletest.BothTiers {
 		for _, item := range bootstrap.Resources(names, tier, false) {
-			if item.Kind == bootstrap.KindDatabase && item.Name != names.Database() {
-				t.Errorf("a %s bootstrap provisions database %s, and every database but the namespace's is a project's own", tier, item.Name)
+			if item.Kind == bootstrap.KindDatabase && item.Name != names.RecordsDatabase(tier) {
+				t.Errorf("a %s bootstrap provisions database %s, and every database but the tier's records is a project's own", tier, item.Name)
 			}
 		}
 	}

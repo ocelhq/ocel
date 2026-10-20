@@ -40,9 +40,11 @@ func ProjectDatabaseCondition(c *gcloud.Clients, tier environment.Tier, project 
 }
 
 func RecordsCondition(c *gcloud.Clients, tiers ...environment.Tier) *policy.Condition {
-	clauses := []string{fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.Database()))}
+	var clauses []string
 	for _, tier := range tiers {
-		clauses = append(clauses, fmt.Sprintf("resource.name.startsWith(%q)", bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))))
+		clauses = append(clauses,
+			fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.RecordsDatabase(tier))),
+			fmt.Sprintf("resource.name.startsWith(%q)", bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))))
 	}
 	title := "ocel " + string(c.Namespace()) + " records"
 	if len(tiers) == 1 {
