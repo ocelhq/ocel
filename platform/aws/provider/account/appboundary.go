@@ -131,9 +131,6 @@ func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string)
 				{
 					Actions:   []string{"ecs:DescribeServices", "ecs:UpdateService"},
 					Resources: []string{appWorkerServiceARN(ns, tier)},
-					Condition: map[string]any{
-						"StringEquals": map[string]any{"aws:ResourceTag/" + naming.ManagedByTagKey: string(ns)},
-					},
 				},
 				{Actions: []string{"ecr:GetAuthorizationToken"}, Resources: []string{iam.AnyResource}},
 				{

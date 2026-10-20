@@ -165,14 +165,6 @@ func (s Scope) ContainerTrustStoreARN() string {
 	return "arn:aws:elasticloadbalancing:*:*:truststore/" + s.publicBalancer() + "/*"
 }
 
-func (s Scope) MadeByItsStacks() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
-}
-
-func (s Scope) MadeForItsTier() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(s.Tier)}}
-}
-
 func (s Scope) TaggedOnlyAsItsTier() map[string]any {
 	return map[string]any{"StringEqualsIfExists": map[string]any{
 		"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier),
@@ -185,17 +177,11 @@ func (s Scope) RetaggedOnlyAsItsTier() map[string]any {
 }
 
 func (s Scope) TaggedOnCreateForItsTier() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{
-		"aws:RequestTag/" + naming.ManagedByTagKey: s.Namespace,
-		"aws:RequestTag/" + naming.EnvTierTagKey:   string(s.Tier),
-	}}
+	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 
 func (s Scope) TaggedByOcelForItsTier() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{
-		"aws:ResourceTag/" + naming.ManagedByTagKey: s.Namespace,
-		"aws:ResourceTag/" + naming.EnvTierTagKey:   string(s.Tier),
-	}}
+	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 
 func (s Scope) RetaggedByOcelOnlyAsItsTier() map[string]any {
@@ -222,7 +208,7 @@ func (s Scope) ManagedByItsClusters() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + ManagedSecretClusterTagKey: s.AppClusterARN()}}
 }
 
-func (s Scope) UnevaluatedOrMadeByItsStacks() map[string]any {
+func (s Scope) UnevaluatedOrTaggedForItsTier() map[string]any {
 	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 

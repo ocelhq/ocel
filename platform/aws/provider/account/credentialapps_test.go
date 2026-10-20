@@ -266,11 +266,11 @@ func TestEveryCredentialTouchesOnlyEventSourceMappingsOfItsTagInvalidatorOrOcelT
 		allowed := map[string]bool{
 			conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": []string{invalidator, invalidator + ":*"}}}): true,
 			conditionJSON(t, map[string]any{
-				"StringEquals": map[string]any{"aws:RequestTag/ocel:managed-by": "ocel", "aws:RequestTag/ocel:env-tier": string(tier)},
+				"StringEquals": map[string]any{"aws:RequestTag/ocel:env-tier": string(tier)},
 				"ArnLike":      ofAppWorkers,
 			}): true,
 			conditionJSON(t, map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/ocel:managed-by": "ocel", "aws:ResourceTag/ocel:env-tier": string(tier)},
+				"StringEquals": map[string]any{"aws:ResourceTag/ocel:env-tier": string(tier)},
 				"ArnLike":      ofAppWorkers,
 			}): true,
 		}

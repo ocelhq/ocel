@@ -22,27 +22,6 @@ func appBoundaryDocument(t *testing.T, ns Namespace, tier environment.Tier) stri
 	return string(encoded)
 }
 
-func TestACredentialReachesTheImageRepositoriesOfOnlyItsOwnNamespace(t *testing.T) {
-	for _, pair := range [][2]Namespace{{"ocel", "other"}, {"other", "ocel"}} {
-		own, other := pair[0], pair[1]
-		document, err := DeployCredentialPermissions(own, environment.TierProduction, "")
-		if err != nil {
-			t.Fatalf("render the deploy credential of namespace %s: %v", own, err)
-		}
-		for _, action := range []string{"ecr:PutImage", "ecr:BatchDeleteImage", "ecr:DeleteRepository"} {
-			if !reaches(t, document, action, repositoryARNOf(own, environment.TierProduction)) {
-				t.Errorf("the deploy credential of namespace %s cannot %s on its own repository %s", own, action, repositoryARNOf(own, environment.TierProduction))
-			}
-			if reaches(t, document, action, repositoryARNOf(other, environment.TierProduction)) {
-				t.Errorf("the deploy credential of namespace %s can %s on %s, namespace %s's repository", own, action, repositoryARNOf(other, environment.TierProduction), other)
-			}
-		}
-		if got := appBoundaryDocument(t, own, environment.TierProduction); !strings.Contains(got, "repository/"+string(own)+"/") || strings.Contains(got, "repository/"+string(other)+"/") {
-			t.Errorf("the %s app boundary admits ECR pulls on %s, want its own namespace's repositories alone", own, got)
-		}
-	}
-}
-
 func TestACredentialAndTheAppBoundaryReachTheImageRepositoriesOfOnlyTheirOwnTier(t *testing.T) {
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()

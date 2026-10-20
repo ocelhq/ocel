@@ -21,7 +21,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"acm:DescribeCertificate", "acm:ListTagsForCertificate"},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: s.UnevaluatedOrMadeByItsStacks(),
+			Condition: s.UnevaluatedOrTaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"acm:ListCertificates"},

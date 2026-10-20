@@ -7,7 +7,7 @@ func credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"s3:CreateBucket", "s3:TagResource"},
 			Resources: []string{s.AppBucketARN()},
-			Condition: iam.MergeConditions(iam.InCallerAccount(), s.TaggedOnCreateForItsTier(), s.UnevaluatedOrMadeByItsStacks()),
+			Condition: iam.MergeConditions(iam.InCallerAccount(), s.TaggedOnCreateForItsTier(), s.UnevaluatedOrTaggedForItsTier()),
 		},
 		{
 			Actions: []string{
@@ -21,7 +21,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"s3:PutBucketAbac",
 			},
 			Resources: []string{s.AppBucketARN()},
-			Condition: iam.MergeConditions(iam.InCallerAccount(), s.UnevaluatedOrMadeByItsStacks()),
+			Condition: iam.MergeConditions(iam.InCallerAccount(), s.UnevaluatedOrTaggedForItsTier()),
 		},
 		{
 			Actions: []string{

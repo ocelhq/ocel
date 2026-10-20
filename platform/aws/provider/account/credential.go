@@ -243,7 +243,7 @@ func ProvisionCredential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"iam:CreateRole"},
 			Resources: s.BootstrapRoles,
-			Condition: s.MadeForItsTier(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:TagRole"},
@@ -270,12 +270,12 @@ func ProvisionCredential(s iam.Scope) []iam.Statement {
 				"iam:UpdateRole",
 			},
 			Resources: s.BootstrapRoles,
-			Condition: s.MadeByItsStacks(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: s.BootstrapRoles,
-			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.MadeByItsStacks()),
+			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.TaggedByOcelForItsTier()),
 		},
 		{
 			Actions:   []string{"ssm:AddTagsToResource", "ssm:PutParameter"},

@@ -3,7 +3,6 @@ package account
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -416,40 +415,13 @@ func conditionAdmits(operator, pattern, value string) bool {
 	return false
 }
 
-func TestEveryManagedByConditionAdmitsTheTagOcelWrites(t *testing.T) {
-	writtenByOcel := string(defaultNamespace)
-	keys := []string{"aws:RequestTag/ocel:managed-by", "aws:ResourceTag/ocel:managed-by"}
-	for purpose, document := range bothCredentials(t) {
-		for _, statement := range parsePolicy(t, document).Statement {
-			for operator, operands := range statement.Condition {
-				keyed, ok := operands.(map[string]any)
-				if !ok {
-					continue
-				}
-				for _, key := range keys {
-					pattern, named := keyed[key]
-					if !named {
-						continue
-					}
-					if !conditionAdmits(operator, fmt.Sprint(pattern), writtenByOcel) {
-						t.Errorf(
-							"the %s credential grants %s only where %s %s %v, which the %s=%s tag every Ocel resource carries never satisfies",
-							purpose, strings.Join(stringsOf(t, statement.Action, "Action"), ", "), key, operator, pattern, naming.ManagedByTagKey, writtenByOcel,
-						)
-					}
-				}
-			}
-		}
-	}
-}
-
-func TestEveryGrantHeldToOcelsTagIsAlsoHeldToItsTier(t *testing.T) {
+func TestNoGrantIsConditionedOnTheNamespacesTag(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
 			for _, scope := range []string{"aws:RequestTag/", "aws:ResourceTag/"} {
-				if conditionNames(statement.Condition, scope+naming.ManagedByTagKey) && !conditionNames(statement.Condition, scope+naming.EnvTierTagKey) {
+				if conditionNames(statement.Condition, scope+naming.ManagedByTagKey) {
 					t.Errorf(
-						"the %s credential grants %s on %s under %s%s alone, which every tier's resources of the namespace carry",
+						"the %s credential grants %s on %s under %s%s: a namespace keeps names apart and is never a credential boundary, so a grant is held to its tier alone",
 						purpose, strings.Join(stringsOf(t, statement.Action, "Action"), ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "), scope, naming.ManagedByTagKey,
 					)
 				}
