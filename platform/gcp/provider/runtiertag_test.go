@@ -55,10 +55,25 @@ func TestACloudRunServiceBothTiersShareCarriesNoTierTag(t *testing.T) {
 	tags := googletest.NewTieredTags(t)
 	tags.Tagged(p.resolved)
 
-	if _, err := p.services().DeployService(ctx, serves("ocel-connector"), nil); err != nil {
+	shared := serves("ocel-connector")
+	shared.Tier, shared.Shared = "", true
+
+	if _, err := p.services().DeployService(ctx, shared, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(tags.BindingsMade) != 0 {
 		t.Errorf("a service no tier owns was bound to %v, and either tier's value fences it from the other", tags.BindingsMade)
+	}
+}
+
+func TestACloudRunServiceOfNoTierThatNothingSharesIsRefusedRatherThanReleasedUntagged(t *testing.T) {
+	ctx := context.Background()
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	s := serves("ocel-shop-prod-app")
+	s.Tier = ""
+
+	if _, err := p.services().DeployService(ctx, s, nil); err == nil {
+		t.Errorf("a service of no tier was released, want a refusal: it would carry no tier tag, and the deploy credential is fenced to its tier by that tag")
 	}
 }
