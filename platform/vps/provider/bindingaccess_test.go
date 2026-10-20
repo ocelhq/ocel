@@ -26,9 +26,9 @@ func TestAPostgresOrKVBindingIsForwardedFromLoopbackToItsContainersAddressOnTheB
 
 	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-orders-postgres"):
+		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-prod-orders-pg-3524e1"):
 			return ssh.Result{Stdout: "172.18.0.5 \n"}, true
-		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-cache-kv"):
+		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-prod-cache-kv-0478e1"):
 			return ssh.Result{Stdout: "172.18.0.6 \n"}, true
 		}
 		return ssh.Result{}, false
@@ -36,8 +36,8 @@ func TestAPostgresOrKVBindingIsForwardedFromLoopbackToItsContainersAddressOnTheB
 
 	forwards, err := over(machine).Hooks().BindingAccess.ForwardPorts(context.Background(), provider.PortForwardRequest{
 		Bindings: []provider.Binding{
-			{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "shop-infra-orders-postgres", provider.PropertyPort: "5432"}},
-			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "shop-infra-cache-kv", provider.PropertyPort: "6379"}},
+			{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "shop-prod-orders-pg-3524e1", provider.PropertyPort: "5432"}},
+			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "shop-prod-cache-kv-0478e1", provider.PropertyPort: "6379"}},
 		},
 	}, progress.Discard())
 	if err != nil {
@@ -64,9 +64,9 @@ func TestAForwardThatFailsPartWayStopsTheForwardsItAlreadyOpened(t *testing.T) {
 
 	machine := &box{refuses: func(command string) (ssh.Result, bool) {
 		switch {
-		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-orders-postgres"):
+		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-prod-orders-pg-3524e1"):
 			return ssh.Result{Stdout: "172.18.0.5 \n"}, true
-		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-infra-cache-kv"):
+		case strings.Contains(command, "docker inspect") && strings.Contains(command, "shop-prod-cache-kv-0478e1"):
 			return ssh.Result{Stdout: " \n"}, true
 		}
 		return ssh.Result{}, false
@@ -74,8 +74,8 @@ func TestAForwardThatFailsPartWayStopsTheForwardsItAlreadyOpened(t *testing.T) {
 
 	_, err := over(machine).Hooks().BindingAccess.ForwardPorts(context.Background(), provider.PortForwardRequest{
 		Bindings: []provider.Binding{
-			{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "shop-infra-orders-postgres", provider.PropertyPort: "5432"}},
-			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "shop-infra-cache-kv", provider.PropertyPort: "6379"}},
+			{Type: provider.BindingPostgres, Name: "orders", Properties: map[string]string{provider.PropertyHost: "shop-prod-orders-pg-3524e1", provider.PropertyPort: "5432"}},
+			{Type: provider.BindingKV, Name: "cache", Properties: map[string]string{provider.PropertyHost: "shop-prod-cache-kv-0478e1", provider.PropertyPort: "6379"}},
 		},
 	}, progress.Discard())
 	if err == nil {

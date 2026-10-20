@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	realtimeGateway  = "shop-prod-infra-ocel-realtime"
-	realtimeKeyKept  = "shop-prod-infra-realtime-app-signing-key"
+	realtimeGateway  = "shop-prod-ocel-realtime-2630bf"
+	realtimeKeyKept  = "shop-prod-realtime-app-signing-key-124da0"
 	recordedRealtime = "cmVjb3JkZWQgc2lnbmluZyBrZXkgb2YgMzIgYnl0ZXM="
 )
 
@@ -137,7 +137,7 @@ func TestTheGatewayRunsAsOneConfinedContainerOnlyItsProjectReaches(t *testing.T)
 	runCommand := machine.commands()[run]
 	for _, want := range []string{
 		"'--name' '" + realtimeGateway + "'",
-		"'--network' 'ocel-production-shop'",
+		"'--network' 'ocel-prod-shop'",
 		"'--cap-drop' 'ALL'",
 		"'--read-only'",
 		"'--user' '65532:65532'",
@@ -265,7 +265,7 @@ func TestARemovedRealtimeIsDroppedFromTheGatewayAndTheLastTakesTheGatewayWithIt(
 	if keys := gatewayKeys(t, machine); len(keys) != 1 || keys["app"] == "" {
 		t.Errorf("after chat is removed the gateway verifies %v, want app alone", keys)
 	}
-	if machine.at("rm -f '"+container.KeptPath(environment.TierProduction, "shop-prod-infra-realtime-chat-signing-key")+"'") < 0 {
+	if machine.at("rm -f '"+container.KeptPath(environment.TierProduction, "shop-prod-realtime-chat-signing-key-b83b60")+"'") < 0 {
 		t.Errorf("chat's signing key is still kept:\n%s", strings.Join(machine.commands(), "\n"))
 	}
 	if machine.at("docker rm --force '"+realtimeGateway+"'") >= 0 {

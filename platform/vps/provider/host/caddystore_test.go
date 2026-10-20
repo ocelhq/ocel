@@ -14,7 +14,7 @@ func storing() boxapi.RoutingTable {
 		Grace: routing.DrainWindow,
 		Routes: []boxapi.Route{
 			{RouteKey: keyed("web"), Upstream: "shop-web-1:" + containerimage.PortText},
-			{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
+			{RouteKey: keyed(boxapi.StoreLabel), Upstream: "shop-prod-store-s3-bd55b6:9000"},
 		},
 		Claims: []boxapi.Claim{
 			{Hostname: "shop.example.com", Owner: surface, Pointer: pointed},

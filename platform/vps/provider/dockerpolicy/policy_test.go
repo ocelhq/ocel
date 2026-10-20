@@ -92,7 +92,7 @@ func TestEveryWayADockerCommandReachesRootIsRefused(t *testing.T) {
 		"the home directory bound in":             {"run", "--network", "ocel", "--volume", "~:/h", "alpine"},
 		"a network named only to the image":       {"run", "-d", "alpine", "sleep", "--network"},
 		"a network given only to the image":       {"run", "alpine", "--network=ocel"},
-		"a foreign container joined to ocel":      {"network", "connect", "ocel-production-shop", "coolify-db"},
+		"a foreign container joined to ocel":      {"network", "connect", "ocel-prod-shop", "coolify-db"},
 		"a foreign container cut from a network":  {"network", "disconnect", "coolify", "coolify-db"},
 	} {
 		inv, err := policy.Open(context.Background(), argv)
@@ -116,7 +116,7 @@ func TestTheCommandsADeployRunsAreLetThrough(t *testing.T) {
 	}
 	for _, argv := range [][]string{
 		{"version"},
-		{"run", "--detach", "--name", "shop-web-abc", "--restart", "unless-stopped", "--init=false", "--network", "ocel-production-shop",
+		{"run", "--detach", "--name", "shop-web-abc", "--restart", "unless-stopped", "--init=false", "--network", "ocel-prod-shop",
 			"--label", "ocel.tier=production", "--pids-limit", "4096", "--security-opt", "no-new-privileges", "--cap-drop", "ALL",
 			"--cap-add", "CHOWN", "--memory", "4294967296", "--env-file", env, "--mount", "type=bind,source=" + granted + ",target=/run/x,readonly",
 			"--tmpfs", "/run/ocel:rw", "--env", "PORT=8080", "registry/shop:web", "serve"},
@@ -125,10 +125,10 @@ func TestTheCommandsADeployRunsAreLetThrough(t *testing.T) {
 		{"run", "--detach", "--network", "ocel", "--publish", "127.0.0.1:8480:8480", "static"},
 		{"exec", "--interactive", "shop-web-abc", "pg_isready"},
 		{"exec", "coolify-proxy", "caddy", "reload"},
-		{"network", "create", "--label", "ocel.tier=production", "ocel-production-shop"},
-		{"network", "connect", "ocel-production-shop", "ocel-switchboard"},
-		{"network", "disconnect", "--force", "ocel-production-shop", "ocel-switchboard"},
-		{"network", "connect", "ocel-production-shop", "shop-web-abc"},
+		{"network", "create", "--label", "ocel.tier=production", "ocel-prod-shop"},
+		{"network", "connect", "ocel-prod-shop", "ocel-switchboard"},
+		{"network", "disconnect", "--force", "ocel-prod-shop", "ocel-switchboard"},
+		{"network", "connect", "ocel-prod-shop", "shop-web-abc"},
 		{"volume", "create", "--label", "ocel.tier=production", "--driver", "local", "--opt", "type=tmpfs", "shop-cache-kv"},
 		{"image", "ls", "-q", "registry/shop:web"},
 		{"logs", "--follow", "--timestamps", "shop-web-abc"},

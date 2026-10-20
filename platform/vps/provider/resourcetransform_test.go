@@ -77,7 +77,7 @@ func TestATransformReshapesTheStackAPostgresRunsAs(t *testing.T) {
 		"'" + patchedImage + "' '-c' 'max_connections=200'",
 		"'--memory' '2g'", "'--cpus' '1.5'", "'--shm-size' '256m'",
 		"'--label' 'team=core'",
-		"'--network' 'ocel-production-shop'",
+		"'--network' 'ocel-prod-shop'",
 	} {
 		if !strings.Contains(runCommand, want) {
 			t.Errorf("the container was started without %s:\n%s", want, runCommand)

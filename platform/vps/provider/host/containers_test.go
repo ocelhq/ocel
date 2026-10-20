@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
@@ -270,15 +271,28 @@ func TestTheLabelsRetentionReadsRenderAgainstWhatADaemonAnswersRatherThanFailing
 func TestAContainerNameIsDerivableAndDiffersBetweenReleases(t *testing.T) {
 	t.Parallel()
 
-	first := release.ContainerName("shop-prod", "web", "0123456789abcdef0123456789abcdef", appImage)
-	if release.ContainerName("shop-prod", "web", "0123456789abcdef0123456789abcdef", appImage) != first {
+	stack := func(release naming.ReleaseToken) naming.StackName { return naming.AppStack("prod", "web", release) }
+	named := func(stack naming.StackName, image string) string {
+		t.Helper()
+		name, err := release.ContainerName("shop", stack, "", image)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return name
+	}
+	first := named(stack(naming.NewReleaseToken("0123456789abcdef0123456789abcdef", "")), appImage)
+	if named(stack(naming.NewReleaseToken("0123456789abcdef0123456789abcdef", "")), appImage) != first {
 		t.Error("two renders of one release name two containers, and nothing could then find the one it just started")
 	}
-	if second := release.ContainerName("shop-prod", "web", "fedcba9876543210fedcba9876543210", appImage); second == first {
+	if second := named(stack(naming.NewReleaseToken("fedcba9876543210fedcba9876543210", "")), appImage); second == first {
 		t.Errorf("two releases share the container name %q, and the drain's per-address count then attributes one release's requests to the other", second)
 	}
-	if unbuilt := release.ContainerName("shop-prod", "web", "", appImage); unbuilt == first || unbuilt == "" {
-		t.Errorf("a release with no build id names its container %q", unbuilt)
+	unreleased := named(stack(naming.ReleaseToken{}), appImage)
+	if unreleased == first || unreleased == "" {
+		t.Errorf("a stack with no release names its container %q", unreleased)
+	}
+	if other := named(stack(naming.ReleaseToken{}), appImage+"-next"); other == unreleased {
+		t.Errorf("two images run with no release share the container name %q", other)
 	}
 }
 

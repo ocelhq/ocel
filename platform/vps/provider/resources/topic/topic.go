@@ -50,9 +50,12 @@ func New(box component.Box, queues *QueueDatabases) Resource {
 	return Resource{box: box, queues: queues}
 }
 
-func newQueueContainer(ref provider.StackRef) container.Spec {
-	spec := postgres.NewContainer(ref, boxapi.QueueDatabaseName, queueKind, images.QueueDatabase(),
+func newQueueContainer(ref provider.StackRef) (container.Spec, error) {
+	spec, err := postgres.NewContainer(ref, boxapi.QueueDatabaseName, queueKind, images.QueueDatabase(),
 		container.Volume{Path: queueData, Generation: images.QueueDatabaseMajor()})
+	if err != nil {
+		return container.Spec{}, err
+	}
 	spec.Args = []string{"postgres", "-c", "listen_addresses="}
 	spec.Sockets = boxapi.QueueSocketsPath
 	spec.Ready = []string{"sh", "-c", `[ "$(cat /proc/1/comm)" = postgres ] && exec pg_isready -U ` + postgres.Superuser}
@@ -62,7 +65,7 @@ func newQueueContainer(ref provider.StackRef) container.Spec {
 		argv, stdin := superuser(secret)
 		return argv, boxapi.QueueRoleSQL() + stdin
 	}
-	return spec
+	return spec, nil
 }
 
 func newRecord(in resources.ProvisionRequest) (records.Key, []byte, error) {
@@ -190,7 +193,10 @@ func newQueueDatabaseRecord(ref provider.StackRef, spec container.Spec, delivery
 }
 
 func (r Resource) planQueue(ctx context.Context, ref provider.StackRef, change *component.Change) error {
-	spec := newQueueContainer(ref)
+	spec, err := newQueueContainer(ref)
+	if err != nil {
+		return err
+	}
 	action, reason, err := r.box.Containers.Plan(ctx, spec)
 	if err != nil {
 		return err
@@ -232,7 +238,10 @@ func (r Resource) planQueue(ctx context.Context, ref provider.StackRef, change *
 }
 
 func (r Resource) ensureQueue(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	spec := newQueueContainer(ref)
+	spec, err := newQueueContainer(ref)
+	if err != nil {
+		return err
+	}
 	r.queues.Lock()
 	defer r.queues.Unlock()
 	if r.queues.ensured[spec.Name] {
@@ -292,7 +301,10 @@ func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding pro
 	if len(remaining) > 0 {
 		return nil
 	}
-	spec := newQueueContainer(ref)
+	spec, err := newQueueContainer(ref)
+	if err != nil {
+		return err
+	}
 	progress.Say("Removing the queue database " + spec.Name + " and its data: " + ref.Name.Env + " declares no topic or task any more")
 	if err := r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: spec.Resource, Name: spec.Name}); err != nil {
 		return err

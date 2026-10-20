@@ -72,7 +72,10 @@ func (w Workers) Run(ctx context.Context, spec provider.StackSpec, manifest []by
 		}
 	}
 	for _, worker := range app.Workers {
-		name := release.ContainerName(ref.Name.String(), app.App+"-"+worker.Name, app.BuildID, app.Image)
+		name, err := release.ContainerName(ref.Project, ref.Name, worker.Name, app.Image)
+		if err != nil {
+			return err
+		}
 		progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name)
 		if _, err := w.box.Apps.Run(ctx, release.Container{
 			Name: name, Project: ref.Project, App: app.App, Image: app.Image, Tier: ref.Tier,

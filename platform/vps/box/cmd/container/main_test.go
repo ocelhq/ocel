@@ -90,8 +90,8 @@ func bucketManifest(t *testing.T, store *boxapi.Store) (boxapi.Manifest, string)
 
 func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *testing.T) {
 	manifest, record := bucketManifest(t, &boxapi.Store{
-		Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
-		AccessKeyID: "ocel", PathStyle: true, Sessions: "shop-prod-uploads", Volume: "shop-prod-store-s3",
+		Env: "shop-prod", Endpoint: "http://shop-prod-store-s3-bd55b6:9000", Region: "us-east-1",
+		AccessKeyID: "ocel", PathStyle: true, Sessions: "shop-prod-uploads", Volume: "shop-prod-store-s3-bd55b6",
 	})
 	socket := answering(t, map[string]string{
 		"OCEL_RESOURCE_BUCKET_uploads": record,

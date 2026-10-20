@@ -66,7 +66,7 @@ func TestEachWorkerJoiningAnAppRunsAsASecondContainerFromItsImage(t *testing.T) 
 		if !found {
 			t.Fatalf("worker %s is not recorded, so the engine never delivers to it", name)
 		}
-		if worker.App != "web" || worker.Stack != "prod--web--r0a1b2c3d" || worker.Container == "" || worker.Container == started[0].Physical {
+		if worker.App != "web" || worker.Stack != "prod--web--r0a1b2c3d" || worker.Container != "shop-prod-web-"+name+"-r0a1b2c3d" {
 			t.Errorf("worker %s is recorded as %+v, want a container of its own in web's release", name, worker)
 		}
 		run := runOf(machine, worker.Container)
@@ -76,7 +76,7 @@ func TestEachWorkerJoiningAnAppRunsAsASecondContainerFromItsImage(t *testing.T) 
 		if !strings.Contains(run, " '"+loadedImageRef+"' >/dev/null") {
 			t.Errorf("worker %s runs %q, want the app's own image: its runtime runs the worker entry OCEL_WORKER asks for", name, run)
 		}
-		if !strings.Contains(run, "'--network' 'ocel-production-shop'") || strings.Contains(run, "--publish") {
+		if !strings.Contains(run, "'--network' 'ocel-prod-shop'") || strings.Contains(run, "--publish") {
 			t.Errorf("worker %s runs %q, want it on the project network and published nowhere", name, run)
 		}
 	}
@@ -140,8 +140,10 @@ func TestANewReleaseTakesDownTheWorkersItReplacesAndLeavesTheOnesNoLongerDeclare
 	next := aWorkerApp()
 	next.BuildID = "fedcba9876543210fedcba9876543210"
 	next.Workers = next.Workers[:1]
+	nextStack := aStack(t, next)
+	nextStack.Ref.Name.Release = naming.NewReleaseToken(next.BuildID, "")
 	before := len(machine.commands())
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, next), progress.Discard()); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), nextStack, progress.Discard()); err != nil {
 		t.Fatal(err)
 	}
 	current, _ := recordedWorker(t, store, "worker")

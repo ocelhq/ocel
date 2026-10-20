@@ -87,9 +87,13 @@ func storeBucketSpec(ref provider.StackRef, store, secret string, spec Spec) Spe
 	return spec
 }
 
-func storeContainer(in resources.ProvisionRequest) container.Spec {
+func storeContainer(in resources.ProvisionRequest) (container.Spec, error) {
+	name, err := StoreName(in.Ref)
+	if err != nil {
+		return container.Spec{}, err
+	}
 	return container.Spec{
-		Name:     StoreName(in.Ref),
+		Name:     name,
 		Project:  in.Ref.Project,
 		Resource: storeResource,
 		Tier:     in.Ref.Tier,
@@ -107,15 +111,15 @@ func storeContainer(in resources.ProvisionRequest) container.Spec {
 		Credential: container.Credential{Env: storeSecretEnv},
 		Ready:      []string{"curl", "-fsS", "http://127.0.0.1:" + storePort + storeHealthPath},
 		Backup:     boxapi.BackupStore,
-	}
+	}, nil
 }
 
 func storeRef(ref provider.StackRef) provider.StackRef {
 	return provider.StackRef{Project: ref.Project, Tier: ref.Tier, Name: naming.InfraStack(ref.Name.Env)}
 }
 
-func StoreName(ref provider.StackRef) string {
-	return container.Name(ref.Project, storeRef(ref).Name.String(), storeResource, storeKind)
+func StoreName(ref provider.StackRef) (string, error) {
+	return container.Name(storeRef(ref), storeResource, storeKind)
 }
 
 var unsafeInBucketName = regexp.MustCompile(`[^a-z0-9]+`)
@@ -183,7 +187,11 @@ func (r Resource) storeCredential(ctx context.Context, ref provider.StackRef, na
 }
 
 func (r Resource) shapeStore(ctx context.Context, in resources.ProvisionRequest) (container.Spec, error) {
-	return r.box.Reshaped(ctx, in, storeShape, storeContainer(in))
+	spec, err := storeContainer(in)
+	if err != nil {
+		return container.Spec{}, err
+	}
+	return r.box.Reshaped(ctx, in, storeShape, spec)
 }
 
 func newSessionsBucketSpec(ref provider.StackRef, store, secret string) Spec {
@@ -338,7 +346,10 @@ func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding pro
 }
 
 func (r Resource) dropBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
-	store := StoreName(ref)
+	store, err := StoreName(ref)
+	if err != nil {
+		return err
+	}
 	root, err := r.storeRoot(ctx, ref, store)
 	if err != nil {
 		return err
@@ -383,7 +394,10 @@ func (r Resource) lastBucket(ctx context.Context, ref provider.StackRef) (bool, 
 }
 
 func (r Resource) removeStore(ctx context.Context, ref provider.StackRef, progress progress.Log) error {
-	store := StoreName(ref)
+	store, err := StoreName(ref)
+	if err != nil {
+		return err
+	}
 	progress.Say("Removing object store " + store + ": no bucket in this environment uses it any more")
 	if err := r.box.Routing.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
 		return err

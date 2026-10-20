@@ -30,7 +30,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 )
 
-const queueContainer = "shop-prod-infra-ocel-queue"
+const queueContainer = "shop-prod-ocel-queue-a12aaa"
 
 func aTask(t *testing.T, name string) resources.ProvisionRequest {
 	t.Helper()
@@ -97,7 +97,7 @@ func TestADeclaredTaskRunsTheEnvironmentsQueueDatabaseAsAConfinedContainerOnlyIt
 	runCommand := machine.commands()[run]
 	for _, want := range []string{
 		"'--name' '" + queueContainer + "'",
-		"'--network' 'ocel-production-shop'",
+		"'--network' 'ocel-prod-shop'",
 		"ocel.resource=ocel",
 		"'ocel.backup=pg'",
 		"'--cap-drop' 'ALL'",

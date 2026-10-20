@@ -31,8 +31,6 @@ const (
 
 	ResourceStopSeconds = 60
 	keptDir             = "kept"
-
-	resourceNameMax = 63
 )
 
 type Containers struct {
@@ -183,9 +181,15 @@ func socketsCreating(spec Spec) string {
 	return shell.Words(append(append([]string{"docker", "volume", "create"}, spec.labels()...), spec.socketsVolume())) + " >/dev/null\n"
 }
 
-func Name(project, stack, resource, kind string) string {
-	return naming.Fit(resourceNameMax, naming.WordSeparator,
-		naming.Compressible(project), naming.Fixed(stack), naming.Fixed(resource), naming.Fixed(kind))
+func Name(ref provider.StackRef, resource, kind string) (string, error) {
+	app := ""
+	if !ref.Name.IsInfra() {
+		app = ref.Name.App
+	}
+	return docker.Name{
+		Project: ref.Project, Env: ref.Name.Env, App: app, Declared: resource, Kind: kind,
+		Tag: naming.HashTag(ref.Project, ref.Name.Env, app, kind, resource),
+	}.Fit()
 }
 
 func (r Spec) Digest() (string, error) {

@@ -44,12 +44,12 @@ type Resource struct{ box component.Box }
 
 func New(box component.Box) Resource { return Resource{box: box} }
 
-func gatewayName(ref provider.StackRef) string {
-	return container.Name(ref.Project, ref.Name.String(), gatewayOwner, gatewayKind)
+func gatewayName(ref provider.StackRef) (string, error) {
+	return container.Name(ref, gatewayOwner, gatewayKind)
 }
 
-func gatewayAddress(ref provider.StackRef) string {
-	return gatewayName(ref) + ":" + gatewayenv.ListenPort
+func gatewayAddress(name string) string {
+	return name + ":" + gatewayenv.ListenPort
 }
 
 func FindPublishURL(bindings []provider.Binding) string {
@@ -65,8 +65,12 @@ func newGateway(ref provider.StackRef, keys map[string]string) (container.Spec, 
 	if err != nil {
 		return container.Spec{}, err
 	}
+	name, err := gatewayName(ref)
+	if err != nil {
+		return container.Spec{}, err
+	}
 	return container.Spec{
-		Name:     gatewayName(ref),
+		Name:     name,
 		Project:  ref.Project,
 		Resource: gatewayResource,
 		Tier:     ref.Tier,
@@ -79,7 +83,7 @@ func newGateway(ref provider.StackRef, keys map[string]string) (container.Spec, 
 		Mounts:   []container.Mount{{Source: host.RealtimeDir, Target: host.RealtimeMount}},
 		Labels:   map[string]string{labelBinary: host.RealtimeBinarySum()},
 		Env: map[string]string{
-			gatewayenv.HostVar:       gatewayAddress(ref),
+			gatewayenv.HostVar:       gatewayAddress(name),
 			gatewayenv.KeysVar:       string(encoded),
 			gatewayenv.MaxSocketsVar: strconv.Itoa(GatewayMemoryBytes / SocketBytes),
 		},
@@ -95,8 +99,8 @@ func mintSigningSeed() (string, error) {
 	return base64.StdEncoding.EncodeToString(seed), nil
 }
 
-func nameSigningKey(ref provider.StackRef, binding string) string {
-	return container.Name(ref.Project, ref.Name.String(), binding, signingKind)
+func nameSigningKey(ref provider.StackRef, binding string) (string, error) {
+	return container.Name(ref, binding, signingKind)
 }
 
 func refuseUnconfigured(in resources.ProvisionRequest) error {
@@ -134,18 +138,22 @@ func newNamespaceRecord(in resources.ProvisionRequest, seed []byte) (namespaceRe
 	}, nil
 }
 
-func newBinding(in resources.ProvisionRequest, seed []byte, verifyKey string) provider.Binding {
+func newBinding(in resources.ProvisionRequest, seed []byte, verifyKey string) (provider.Binding, error) {
+	gateway, err := gatewayName(in.Ref)
+	if err != nil {
+		return provider.Binding{}, err
+	}
 	return provider.Binding{
 		Type:     provider.BindingRealtime,
 		Name:     in.Resource.Name,
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
 			provider.PropertyURL:        boxapi.RealtimeSocketPath,
-			provider.PropertyHost:       gatewayAddress(in.Ref),
+			provider.PropertyHost:       gatewayAddress(gateway),
 			provider.PropertySigningKey: base64.StdEncoding.EncodeToString(seed),
 			provider.PropertyVerifyKey:  verifyKey,
 		},
-	}
+	}, nil
 }
 
 func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
@@ -156,7 +164,11 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 	if err != nil {
 		return "", "", err
 	}
-	sealed, opened, err := r.box.ReadKeptSealed(ctx, in.Ref.Tier, nameSigningKey(in.Ref, in.Resource.Name), in.Resource.Name, bound)
+	signingKey, err := nameSigningKey(in.Ref, in.Resource.Name)
+	if err != nil {
+		return "", "", err
+	}
+	sealed, opened, err := r.box.ReadKeptSealed(ctx, in.Ref.Tier, signingKey, in.Resource.Name, bound)
 	if err != nil {
 		return "", "", err
 	}
@@ -169,9 +181,13 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 		if len(held.Value) == 0 {
 			return provider.ActionCreate, "", nil
 		}
-		return provider.ActionUpdate, "the box keeps no signing key for it, so a new one is minted and its gateway " + gatewayName(in.Ref) + " restarted to verify it", nil
+		gateway, err := gatewayName(in.Ref)
+		if err != nil {
+			return "", "", err
+		}
+		return provider.ActionUpdate, "the box keeps no signing key for it, so a new one is minted and its gateway " + gateway + " restarted to verify it", nil
 	}
-	seed, err := decodeSigningSeed(in, opened)
+	seed, err := decodeSigningSeed(in, signingKey, opened)
 	if err != nil {
 		return "", "", err
 	}
@@ -206,7 +222,11 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 	default:
 		change.Add(provider.ActionUpdate, "its gateway "+gateway.Name+" is replaced: "+reason)
 	}
-	change.AddRecorded(recorded, newBinding(in, seed, record.verifyKey))
+	binding, err := newBinding(in, seed, record.verifyKey)
+	if err != nil {
+		return "", "", err
+	}
+	change.AddRecorded(recorded, binding)
 	return change.Report()
 }
 
@@ -230,7 +250,7 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 	if err := r.runGateway(ctx, in.Ref, progress); err != nil {
 		return provider.Binding{}, err
 	}
-	return newBinding(in, seed, record.verifyKey), nil
+	return newBinding(in, seed, record.verifyKey)
 }
 
 func newSigningAssociatedData(in resources.ProvisionRequest) (seal.AssociatedData, error) {
@@ -242,19 +262,23 @@ func (r Resource) signingSeed(ctx context.Context, in resources.ProvisionRequest
 	if err != nil {
 		return nil, err
 	}
-	_, opened, err := r.box.KeptSealed(ctx, in.Ref.Tier, nameSigningKey(in.Ref, in.Resource.Name), in.Resource.Name, bound, mintSigningSeed)
+	signingKey, err := nameSigningKey(in.Ref, in.Resource.Name)
 	if err != nil {
 		return nil, err
 	}
-	return decodeSigningSeed(in, opened)
+	_, opened, err := r.box.KeptSealed(ctx, in.Ref.Tier, signingKey, in.Resource.Name, bound, mintSigningSeed)
+	if err != nil {
+		return nil, err
+	}
+	return decodeSigningSeed(in, signingKey, opened)
 }
 
-func decodeSigningSeed(in resources.ProvisionRequest, opened string) ([]byte, error) {
+func decodeSigningSeed(in resources.ProvisionRequest, signingKey, opened string) ([]byte, error) {
 	seed, err := base64.StdEncoding.DecodeString(opened)
 	if err != nil || len(seed) != ed25519.SeedSize {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"the signing key kept for realtime %s is no Ed25519 seed\nRemove %s on the box",
-			in.Resource.Declared, container.KeptPath(in.Ref.Tier, nameSigningKey(in.Ref, in.Resource.Name)))
+			in.Resource.Declared, container.KeptPath(in.Ref.Tier, signingKey))
 	}
 	return seed, nil
 }
@@ -296,15 +320,23 @@ func (r Resource) runGateway(ctx context.Context, ref provider.StackRef, progres
 			return nil
 		}
 	}
+	gateway, err := gatewayName(ref)
+	if err != nil {
+		return err
+	}
 	return refusal.Refuse(refusal.CodeBusy,
 		"the realtime of %s changed each of the %d times its gateway %s was restarted to match, so another deploy is changing it\nDeploy again once that deploy is done",
-		ref.Name.Env, gatewayRuns, gatewayName(ref))
+		ref.Name.Env, gatewayRuns, gateway)
 }
 
 func (r Resource) placeGateway(ctx context.Context, ref provider.StackRef, keys map[string]string, progress progress.Log) error {
 	if len(keys) == 0 {
-		progress.Say("Removing the realtime gateway " + gatewayName(ref) + ": " + ref.Name.Env + " declares no realtime any more")
-		return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: gatewayResource, Name: gatewayName(ref)})
+		gateway, err := gatewayName(ref)
+		if err != nil {
+			return err
+		}
+		progress.Say("Removing the realtime gateway " + gateway + ": " + ref.Name.Env + " declares no realtime any more")
+		return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: gatewayResource, Name: gateway})
 	}
 	gateway, err := newGateway(ref, keys)
 	if err != nil {
@@ -322,5 +354,9 @@ func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding pro
 	if err := r.runGateway(ctx, ref, progress); err != nil {
 		return err
 	}
-	return r.box.Containers.ForgetKept(ctx, ref.Tier, []string{nameSigningKey(ref, binding.Name)})
+	signingKey, err := nameSigningKey(ref, binding.Name)
+	if err != nil {
+		return err
+	}
+	return r.box.Containers.ForgetKept(ctx, ref.Tier, []string{signingKey})
 }

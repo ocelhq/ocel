@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -105,7 +106,14 @@ func (p *Provider) RemoveBucket(ctx context.Context, ref provider.StackRef, bind
 	return p.buckets().Remove(ctx, ref, binding, log)
 }
 
-func StoreName(ref provider.StackRef) string { return bucket.StoreName(ref) }
+func StoreName(t testing.TB, ref provider.StackRef) string {
+	t.Helper()
+	name, err := bucket.StoreName(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return name
+}
 
 func Whoami(ctx context.Context, live hostSurvey) (provider.Principal, error) {
 	return whoami(ctx, live)

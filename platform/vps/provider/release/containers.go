@@ -2,8 +2,6 @@ package release
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"maps"
 	"slices"
@@ -27,7 +25,6 @@ import (
 
 const (
 	liveDirTmpfs = "rw,noexec,nosuid,size=8m"
-	nameShort    = 12
 )
 
 var AppCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "NET_BIND_SERVICE", "SETGID", "SETUID", "SETPCAP"}
@@ -72,13 +69,12 @@ func (c Container) delivered() map[string]string {
 	return env
 }
 
-func ContainerName(stack, app, deployment, image string) string {
-	identity := deployment
-	if identity == "" {
-		sum := sha256.Sum256([]byte(image))
-		identity = hex.EncodeToString(sum[:])
+func ContainerName(project string, stack naming.StackName, worker, image string) (string, error) {
+	tag := stack.Release.String()
+	if stack.Release.IsZero() {
+		tag = naming.HashTag(project, stack.Env, stack.App, worker, image)
 	}
-	return naming.Sanitize(stack) + "-" + naming.Sanitize(app) + "-" + naming.Sanitize(identity[:min(len(identity), nameShort)])
+	return docker.Name{Project: project, Env: stack.Env, App: stack.App, Declared: worker, Tag: tag}.Fit()
 }
 
 func RunContainerScript(spec Container, env envfile.Delivery) string {

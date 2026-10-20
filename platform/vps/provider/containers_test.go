@@ -72,6 +72,18 @@ func TestStartingAnAppEndsAtARunningLabelledContainerAndCutsOverNothing(t *testi
 	}
 }
 
+func TestAnAppContainerIsNamedForItsProjectEnvAppAndRelease(t *testing.T) {
+	t.Parallel()
+
+	started, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, anApp()), progress.Discard())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "shop-prod-web-r0a1b2c3d"; started[0].Physical != want {
+		t.Errorf("web's container is %q, want %q", started[0].Physical, want)
+	}
+}
+
 func TestTwoReleasesOfOneAppNeverShareAContainerName(t *testing.T) {
 	t.Parallel()
 
@@ -81,7 +93,9 @@ func TestTwoReleasesOfOneAppNeverShareAContainerName(t *testing.T) {
 	}
 	next := anApp()
 	next.BuildID = "fedcba9876543210fedcba9876543210"
-	second, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, next), progress.Discard())
+	nextStack := aStack(t, next)
+	nextStack.Ref.Name.Release = naming.NewReleaseToken(next.BuildID, "")
+	second, err := over(&box{}).ProvisionContainers(context.Background(), nextStack, progress.Discard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,12 +195,12 @@ func TestARemovedStackTakesItsContainersWithIt(t *testing.T) {
 
 	machine := &box{}
 	err := over(machine).RemoveContainers(context.Background(), provider.StackRef{},
-		[]provider.AppContainer{{Name: "web", Physical: "shop-prod-web-01234567"}}, nil, progress.Discard())
+		[]provider.AppContainer{{Name: "web", Physical: "shop-prod-web-r0a1b2c3d"}}, nil, progress.Discard())
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, "docker rm") || !strings.Contains(joined, "shop-prod-web-01234567") {
+	if !strings.Contains(joined, "docker rm") || !strings.Contains(joined, "shop-prod-web-r0a1b2c3d") {
 		t.Errorf("a destroy ran %q and left the container running", joined)
 	}
 }

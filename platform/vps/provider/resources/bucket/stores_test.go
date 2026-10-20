@@ -20,7 +20,10 @@ func TestBucketsOfTwoEnvironmentsEachShapeTheirOwnStore(t *testing.T) {
 		storeOf("shop", environment.TierPreview, "pr-1"),
 		storeOf("blog", environment.TierProduction, "production"),
 	} {
-		spec := storeContainer(in)
+		spec, err := storeContainer(in)
+		if err != nil {
+			t.Fatal(err)
+		}
 		shaped, err := stores.shaped("uploads", spec)
 		if err != nil {
 			t.Fatalf("shaped(%s) = %v, want each store shaped by its own buckets", spec.Name, err)
@@ -37,10 +40,14 @@ func TestBucketsOfTwoEnvironmentsEachShapeTheirOwnStore(t *testing.T) {
 func TestTwoBucketsShapingOneStoreDifferentlyAreRefused(t *testing.T) {
 	var stores Stores
 	in := storeOf("shop", environment.TierProduction, "production")
-	if _, err := stores.shaped("uploads", storeContainer(in)); err != nil {
+	spec, err := storeContainer(in)
+	if err != nil {
 		t.Fatal(err)
 	}
-	patched := storeContainer(in)
+	if _, err := stores.shaped("uploads", spec); err != nil {
+		t.Fatal(err)
+	}
+	patched := spec
 	patched.Env = map[string]string{"RUSTFS_REGION": "elsewhere"}
 	if _, err := stores.shaped("avatars", patched); err == nil {
 		t.Error("shaped() of a second bucket shaping the same store differently = nil, want it refused")
