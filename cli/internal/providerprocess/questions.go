@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -23,6 +24,7 @@ type Questions struct {
 	Prompt Prompt
 	Out    io.Writer
 	IsJSON func() bool
+	Job    *jobinput.Answers
 	run    *run.Run
 }
 
@@ -42,7 +44,7 @@ func (q Questions) answer(ctx context.Context, process *Process, refused error) 
 	if !asked {
 		return false, refused
 	}
-	if !q.attended() {
+	if !q.attended() && q.Job == nil {
 		return false, clierror.NewInputRequired(refused, printable(question.GetRemedy()))
 	}
 	client, err := process.Client()
@@ -70,6 +72,9 @@ func (q Questions) answer(ctx context.Context, process *Process, refused error) 
 }
 
 func (q Questions) ask(ctx context.Context, question *contractv1.Question) (bool, error) {
+	if q.Job != nil {
+		return q.Job.Confirm(ctx, q.run, printable(question.GetFinding()), printable(question.GetPrompt()))
+	}
 	var confirmed bool
 	err := q.holding(func() (err error) {
 		fmt.Fprintln(q.Out, printable(question.GetFinding()))
