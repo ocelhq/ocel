@@ -84,6 +84,9 @@ func TestLoadCredentials(t *testing.T) {
 		if creds.APIURL != "http://localhost:3000" {
 			t.Errorf("APIURL = %q, want %q", creds.APIURL, "http://localhost:3000")
 		}
+		if creds.Store != EnvironmentStore {
+			t.Errorf("Store = %q, want %q", creds.Store, EnvironmentStore)
+		}
 	})
 
 	t.Run("an env token without an API URL", func(t *testing.T) {

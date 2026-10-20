@@ -36,7 +36,9 @@ func New(baseURL string) *Client {
 func (c *Client) withSessionHeaders(accessToken string) connect.ClientOption {
 	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", "Bearer "+accessToken)
+			if accessToken != "" {
+				req.Header().Set("Authorization", "Bearer "+accessToken)
+			}
 			req.Header().Set("User-Agent", c.userAgent)
 			return next(ctx, req)
 		}

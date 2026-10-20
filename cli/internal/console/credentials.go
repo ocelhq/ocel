@@ -27,17 +27,21 @@ const (
 type CredentialStore string
 
 const (
-	KeyringStore CredentialStore = "keyring"
-	FileStore    CredentialStore = "file"
+	KeyringStore     CredentialStore = "keyring"
+	FileStore        CredentialStore = "file"
+	EnvironmentStore CredentialStore = "environment"
 )
 
 var ErrNotLoggedIn = errors.New("not logged in")
 
 type Credentials struct {
-	AccessToken string    `json:"access_token"`
-	APIURL      string    `json:"api_url"`
-	Email       string    `json:"email,omitempty"`
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
+	AccessToken    string          `json:"access_token"`
+	APIURL         string          `json:"api_url"`
+	Email          string          `json:"email,omitempty"`
+	ExpiresAt      time.Time       `json:"expires_at,omitempty"`
+	Cloud          *CloudOffer     `json:"cloud,omitempty"`
+	CloudFetchedAt time.Time       `json:"cloud_fetched_at,omitzero"`
+	Store          CredentialStore `json:"-"`
 }
 
 func ensureCredentialsFilePath() (string, error) {
@@ -78,6 +82,7 @@ func LoadCredentials() (Credentials, error) {
 		return Credentials{
 			AccessToken: token,
 			APIURL:      os.Getenv(URLEnvVar),
+			Store:       EnvironmentStore,
 		}, nil
 	}
 
@@ -85,6 +90,7 @@ func LoadCredentials() (Credentials, error) {
 		if err := json.Unmarshal([]byte(secret), &creds); err != nil {
 			return Credentials{}, fmt.Errorf("decode stored credentials: %w", err)
 		}
+		creds.Store = KeyringStore
 		return creds, nil
 	}
 
@@ -102,6 +108,7 @@ func LoadCredentials() (Credentials, error) {
 	if err := json.Unmarshal(data, &creds); err != nil {
 		return Credentials{}, fmt.Errorf("decode stored credentials: %w", err)
 	}
+	creds.Store = FileStore
 	return creds, nil
 }
 

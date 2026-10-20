@@ -1,0 +1,21 @@
+{
+  "name": "cloud-token-without-session",
+  "request": {
+    "method": "POST",
+    "path": "/api/connect/console.v1.ConsoleService/IssueCloudToken",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "unauthenticated",
+      "message": "sign in to the console first"
+    }
+  },
+  "dynamic": [
+    "$.message"
+  ]
+}
