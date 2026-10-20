@@ -75,7 +75,10 @@ ElastiCache replaces the node.
 On AWS, `network` patches the tier's [VPC](/docs/providers/aws#the-network) and the function
 network's NAT gateways. A subnet or route table key reaches that kind in every zone, so
 `privateSubnet` patches both private subnets. Its block, zones, routes, endpoints' route tables
-and the NAT gateways' placement stay ocel's.
+and the NAT gateways' placement stay ocel's, and so do the VPC's DNS settings and tenancy, a
+subnet's IPv4 addressing and a NAT gateway's public connectivity: the databases, caches and
+functions of every project in the tier depend on them, and changing some would replace the VPC
+or its subnets under them.
 
 ```ts title="transforms/network.transform.ts"
 import { defineTransform } from "@ocel/transforms";

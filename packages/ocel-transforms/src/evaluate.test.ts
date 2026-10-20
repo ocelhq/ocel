@@ -170,6 +170,11 @@ describe("evaluate", () => {
     ["isolatedRouteTable", "routes"],
     ["s3Endpoint", "routeTableIds"],
     ["natGateway", "subnetId"],
+    ["vpc", "enableDnsSupport"],
+    ["vpc", "enableDnsHostnames"],
+    ["vpc", "instanceTenancy"],
+    ["isolatedSubnet", "ipv6Native"],
+    ["natGateway", "connectivityType"],
   ])("refuses %s.%s on the tier's network, whose layout ocel keeps", (key, field) => {
     const modules = [
       module(
