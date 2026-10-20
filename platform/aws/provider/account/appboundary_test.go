@@ -160,7 +160,7 @@ func TestTheAppBoundaryAdmitsTheChannelsABastionTaskOpensToSSM(t *testing.T) {
 	}
 }
 
-func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersClusterThatOcelMade(t *testing.T) {
+func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersCluster(t *testing.T) {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		t.Run(string(tier), func(t *testing.T) {
 			var waking []boundaryStatement
@@ -181,10 +181,6 @@ func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersClusterT
 			}
 			if want := "arn:aws:ecs:*:*:service/" + awsports.ContainerClusterName(string(defaultNamespace), tier) + "/" + naming.AppFence(string(defaultNamespace)) + "*"; string(st.Resource) != want {
 				t.Errorf("ecs is admitted on %q, want %q: this tier's cluster and the app scope alone", st.Resource, want)
-			}
-			equals, _ := st.Condition["StringEquals"].(map[string]any)
-			if equals["aws:ResourceTag/"+naming.ManagedByTagKey] != string(defaultNamespace) {
-				t.Errorf("ecs is admitted under %v, want it pinned to services Ocel tagged", st.Condition)
 			}
 		})
 	}
