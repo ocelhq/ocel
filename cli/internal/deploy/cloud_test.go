@@ -5,15 +5,22 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func TestADeployOfAProjectNamingNoProviderStartsAnOcelCloudJobBeforeAnythingRunsLocally(t *testing.T) {
@@ -94,4 +101,144 @@ func TestADeployToOcelCloudRefusesWhatOnlyALocalDeployDoes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func gitCheckout(t *testing.T, branch string, detached bool) string {
+	t.Helper()
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop"}`)
+	clitest.WriteFile(t, filepath.Join(root, "index.js"), "")
+	steps := [][]string{
+		{"init", "--quiet", "--initial-branch", branch},
+		{"add", "."},
+		{"-c", "user.name=ocel", "-c", "user.email=ocel@example.com", "commit", "--quiet", "--message", "root"},
+	}
+	if detached {
+		steps = append(steps, []string{"checkout", "--quiet", "--detach"})
+	}
+	for _, args := range steps {
+		if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	return root
+}
+
+func builderEnv(t *testing.T, started *cloudv1.StartJobRequest) func(string) string {
+	t.Helper()
+	env := map[string]string{
+		commands.CloudJobEnvVar:  clitest.FakeCloudJobID,
+		commands.CloudSlugEnvVar: started.GetSlug(),
+	}
+	if label := started.GetPreview().GetLabel(); label != "" {
+		env[commands.CloudPreviewLabelEnvVar] = label
+	}
+	if git := started.GetGit(); git != nil {
+		env[commands.CloudGitCommitEnvVar] = git.GetCommit()
+		env[commands.CloudGitBranchEnvVar] = git.GetBranch()
+		env[commands.CloudGitDirtyEnvVar] = strconv.FormatBool(git.GetDirty())
+		if pr := git.GetPullRequest(); pr != 0 {
+			env[commands.CloudGitPullRequestEnvVar] = strconv.FormatUint(uint64(pr), 10)
+		}
+	}
+	return func(name string) string { return env[name] }
+}
+
+func TestAPreviewOnOcelCloudIsTheSameEnvironmentInTheJobAsOnTheMachineThatStartedIt(t *testing.T) {
+	for name, tc := range map[string]struct {
+		branch    string
+		detached  bool
+		env       map[string]string
+		target    Target
+		identity  string
+		label     string
+		lifecycle environmentv1.Lifecycle
+		pr        uint32
+		gitBranch string
+	}{
+		"named": {
+			branch: "main", target: Preview("staging", false),
+			identity: "staging", lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, gitBranch: "main",
+		},
+		"named on a pull request": {
+			branch: "feature/login", env: map[string]string{previewid.PRNumberEnvVar: "12"}, target: Preview("staging", true),
+			identity: "staging", lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, pr: 12, gitBranch: "feature/login",
+		},
+		"the branch's": {
+			branch: "feature/login", target: Preview("", false),
+			identity: mustResolvePreview(t, "feature/login", "").Key, lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, gitBranch: "feature/login",
+		},
+		"a pull request's": {
+			branch: "feature/login", env: map[string]string{previewid.PRNumberEnvVar: "12"}, target: Preview("", false),
+			identity: mustResolvePreview(t, "feature/login", "12").Key, label: "pr-12", lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, pr: 12, gitBranch: "feature/login",
+		},
+		"a persistent one of the branch's": {
+			branch: "feature/login", target: Preview("", true),
+			identity: mustResolvePreview(t, "feature/login", "").Key, lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, gitBranch: "feature/login",
+		},
+		"a pull request's in GitHub Actions": {
+			branch: "main", detached: true, env: map[string]string{"GITHUB_HEAD_REF": "feature/login", "GITHUB_REF": "refs/pull/34/merge"}, target: Preview("", false),
+			identity: mustResolvePreview(t, "feature/login", "34").Key, label: "pr-34", lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, pr: 34, gitBranch: "feature/login",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, unset := range []string{previewid.PRNumberEnvVar, "GITHUB_REF", "GITHUB_HEAD_REF"} {
+				t.Setenv(unset, "")
+			}
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			root := gitCheckout(t, tc.branch, tc.detached)
+			fake := clitest.ServeOcelCloud(t)
+			laptop := newTestDependencies()
+			laptop.ReadGitBranch, laptop.DiscoverPRNumber = previewid.ReadGitBranch, previewid.DiscoverPRNumber
+			fake.LogIn(&laptop.Invocation)
+			clitest.AttachTerminalSink(laptop.Invocation, io.Discard)
+			if err := To(t.Context(), laptop, root, tc.target, Options{}, io.Discard, io.Discard, strings.NewReader("")); err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.Started) != 1 {
+				t.Fatalf("started %d jobs, want one", len(fake.Started))
+			}
+			started := fake.Started[0]
+			want := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: tc.lifecycle, Identity: tc.identity, Label: tc.label}
+			onLaptop, err := tc.target.environment(laptop, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(onLaptop, want) {
+				t.Fatalf("on the laptop the preview is %v, want %v", onLaptop, want)
+			}
+			sent := &cloudv1.PreviewTarget{Name: tc.identity, Label: tc.label, Persistent: tc.lifecycle == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT}
+			if !proto.Equal(started.GetPreview(), sent) {
+				t.Fatalf("the job was started for the preview %v, want %v", started.GetPreview(), sent)
+			}
+			if started.GetGit().GetBranch() != tc.gitBranch || started.GetGit().GetPullRequest() != tc.pr || started.GetGit().GetCommit() == "" {
+				t.Fatalf("the job was started with git %v, want branch %s, pull request %d and the commit", started.GetGit(), tc.gitBranch, tc.pr)
+			}
+
+			builder := newTestDependencies()
+			builder.BuilderJob = commands.ReadBuilderJob(builderEnv(t, started))
+			builder.ReadGitBranch, builder.DiscoverPRNumber = builder.BuilderJob.ReadGitBranch, builder.BuilderJob.DiscoverPRNumber
+			inJob, err := Preview(started.GetPreview().GetName(), started.GetPreview().GetPersistent()).environment(builder, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(inJob, onLaptop) {
+				t.Fatalf("in the job the preview is %v, want the laptop's %v", inJob, onLaptop)
+			}
+			if source := builder.BuilderJob.Source(); source.GetBranch() != tc.gitBranch || source.GetCommit() != started.GetGit().GetCommit() {
+				t.Fatalf("in the job the source is %v, want the laptop's git %v", source, started.GetGit())
+			}
+		})
+	}
+}
+
+func mustResolvePreview(t *testing.T, branch, pr string) previewid.Identity {
+	t.Helper()
+	id, err := previewid.Resolve(branch, pr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
