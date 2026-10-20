@@ -157,12 +157,13 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 		if err := refuseNewBlock(tier, current, owner.NetworkCIDR); err != nil {
 			return Network{}, err
 		}
-		if !patches.IsEmpty() && patches.Digest != current.PatchDigest {
-			if current, err = s.repatch(ctx, owner, tier, current, patches, progress); err != nil {
-				return Network{}, err
-			}
+		if err := Shared.Claim(ctx, owner, consumer); err != nil {
+			return Network{}, err
 		}
-		return current, Shared.Claim(ctx, owner, consumer)
+		if patches.IsEmpty() || patches.Digest == current.PatchDigest {
+			return current, nil
+		}
+		return s.repatch(ctx, owner, tier, current, patches, progress)
 	}
 	zones, err := PickZones(ctx, owner.EC2)
 	if err != nil {

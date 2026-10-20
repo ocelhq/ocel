@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -28,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
 type networkRegion struct {
@@ -483,5 +485,39 @@ func TestTheFunctionNetworkIsProvisionedAgainWhenTheTransformsThatPatchItsNATGat
 	}
 	if runs != 2 {
 		t.Errorf("ran the function network %d times, want it provisioned again: the patch it records is not this deploy's", runs)
+	}
+}
+
+func repatchingNetwork(t *testing.T) (*Stacks, *mockedEngine, records.Store) {
+	t.Helper()
+	cfg := routedConfig(t, cloudfront.Kind)
+	cfg.Transform = &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"enableNetworkAddressUsageMetrics": true}}}}
+	stacks, engine, store := networkStacks(t, cfg)
+	engine.outputs = patchedNetworkOutputs(network.DefaultCIDR("ocel", environment.TierProduction), "patched-by-another-project")
+	if _, err := stacks.Network().Claim(context.Background(), consumerRef("shop"), progress.Discard()); err != nil {
+		t.Fatalf("Claim(shop) = %v", err)
+	}
+	return stacks, engine, store
+}
+
+func TestANetworkBeingTakenDownIsNotProvisionedAgainByAClaimWhosePatchesDiffer(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stacks, engine, store := repatchingNetwork(t)
+	leased, err := records.ReadOrEmpty(ctx, store, network.Shared.LeaseAt(environment.TierProduction))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := network.Shared.WriteLease(ctx, store, leased, sharedstack.Lease{Destroying: true, DestroyingSince: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = stacks.Network().Claim(ctx, consumerRef("admin"), progress.Discard())
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeBusy {
+		t.Fatalf("Claim(admin) = %v, want it refused as busy: another deploy is taking the network down", err)
+	}
+	if ups, _ := engine.networkRuns(); ups != 1 {
+		t.Errorf("the network ran %d times, want only its raise: a claim the lease refuses provisions nothing under the takedown", ups)
 	}
 }

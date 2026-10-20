@@ -178,14 +178,13 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 		return network, s.claim(ctx, ref)
 	}
 	if present {
+		if err := s.claim(ctx, ref); err != nil {
+			return Network{}, err
+		}
 		if progress != nil {
 			progress.Say("Applying the transforms that patch the function network of the " + string(tier) + " tier: they differ from the ones it was provisioned with")
 		}
-		repatched, err := s.provision(ctx, owner, StackRef(tier), patches, progress)
-		if err != nil {
-			return Network{}, err
-		}
-		return repatched, s.claim(ctx, ref)
+		return s.provision(ctx, owner, StackRef(tier), patches, progress)
 	}
 	if err := refuseFullAddresses(ctx, owner, tier); err != nil {
 		return Network{}, err
