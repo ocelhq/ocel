@@ -35,6 +35,7 @@ type TierTags struct {
 
 	BindingsUnseen int
 	BindingsDenied bool
+	ListsDenied    []string
 	ValuesAbsent   bool
 	Denied         []string
 
@@ -205,6 +206,10 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "tagBindings":
 		s.BindingLists++
 		parent := r.URL.Query().Get("parent")
+		if slices.Contains(s.ListsDenied, parent) {
+			writeDenied(w)
+			return
+		}
 		listed := &crm.ListTagBindingsResponse{}
 		for _, value := range s.Bindings[parent] {
 			listed.TagBindings = append(listed.TagBindings, &crm.TagBinding{Name: bindingName(parent, value), Parent: parent, TagValue: value, TagValueNamespacedName: s.namespacedName(value)})

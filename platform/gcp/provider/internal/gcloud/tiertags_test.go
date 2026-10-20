@@ -96,8 +96,8 @@ func TestAResourceCarryingTheOtherTiersTagIsRefusedRatherThanRetagged(t *testing
 	}
 
 	err := clients.EnsureTierTag(ctx, environment.TierPreview, topic)
-	if err == nil || !strings.Contains(err.Error(), "another value") {
-		t.Fatalf("binding preview onto a production topic answered %v, want a refusal naming the other value", err)
+	if err == nil || !strings.Contains(err.Error(), "acme-prod/ocel-tier/production") {
+		t.Fatalf("binding preview onto a production topic answered %v, want a refusal naming the production value it carries", err)
 	}
 	if got := tags.Bound(topic.Name); !slices.Equal(got, []string{tags.ValueOf(environment.TierProduction)}) {
 		t.Errorf("the production topic carries %v after the refusal, want its production value alone", got)

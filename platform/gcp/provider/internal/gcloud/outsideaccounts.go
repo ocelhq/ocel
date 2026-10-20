@@ -82,6 +82,9 @@ func (c *Clients) ReadOutsideAccounts(ctx context.Context, known []string) (Outs
 			continue
 		}
 		tagged, err := c.CarriesTierTag(ctx, c.AccountTagged(account.UniqueId))
+		if Forbidden(err) {
+			tagged, err = true, nil
+		}
 		if err != nil {
 			return OutsideAccounts{}, err
 		}
