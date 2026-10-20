@@ -320,10 +320,17 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 	if err := refuseVersionChange(resource.Name, spec, current); err != nil {
 		return provider.Binding{}, err
 	}
-	if err := i.clients.EnsureTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name)); err != nil {
+	tagged := i.clients.SQLInstanceTagged(current.Name)
+	if err := i.clients.EnsureTierTag(ctx, i.ref.Tier, tagged); err != nil {
 		return provider.Binding{}, err
 	}
-	if current, err = i.resize(ctx, resource.Name, current, progress); err != nil {
+	if err := i.clients.RetriedUntilTierAdmits(ctx, i.ref.Tier, tagged, func() error {
+		resized, err := i.resize(ctx, resource.Name, current, progress)
+		if err == nil {
+			current = resized
+		}
+		return err
+	}); err != nil {
 		return provider.Binding{}, err
 	}
 	if current, err = i.awaitAddress(ctx, resource.Name, current); err != nil {

@@ -2,6 +2,7 @@ package gcloud_test
 
 import (
 	"context"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -13,8 +14,57 @@ import (
 
 func taggedClients(t *testing.T) (*gcloud.Clients, *googletest.TierTags) {
 	t.Helper()
+	clients, tags, _ := admittingClients(t)
+	return clients, tags
+}
+
+func admittingClients(t *testing.T) (*gcloud.Clients, *googletest.TierTags, *googletest.IAM) {
+	t.Helper()
 	tags := googletest.NewTieredTags(t)
-	return tags.Tagged(googletest.Clients("http://127.0.0.1:1")), tags
+	server := &googletest.IAM{}
+	clients := server.Serve(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("the fake was asked %s %s, which it does not serve", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotImplemented)
+	})
+	return tags.Tagged(clients), tags, server
+}
+
+func TestADeployWaitsForItsTiersTagToAdmitAResourceItHasJustBound(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clients, _, server := admittingClients(t)
+	server.Admitted.Withheld = 2
+	service := clients.RunServiceTagged("shop-web")
+
+	if err := clients.EnsureTierTag(ctx, environment.TierPreview, service); err != nil {
+		t.Fatalf("EnsureTierTag() = %v, want the binding awaited until the tier's grants reach the service", err)
+	}
+	if got := len(server.Admitted.Asked); got != 3 {
+		t.Errorf("the service was asked what this credential may do on it %d times, want 3: twice withheld, then admitted", got)
+	}
+	for _, asked := range server.Admitted.Asked {
+		if asked != "/v2/projects/acme-prod/locations/europe-west1/services/shop-web:testIamPermissions" {
+			t.Errorf("the wait asked %s, want the service it bound", asked)
+		}
+	}
+}
+
+func TestAResourceAlreadyCarryingItsTiersTagIsNotAwaited(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clients, _, server := admittingClients(t)
+	account := clients.AccountTagged("104857600000000000001")
+	if err := clients.EnsureTierTag(ctx, environment.TierProduction, account); err != nil {
+		t.Fatal(err)
+	}
+	asked := len(server.Admitted.Asked)
+
+	if err := clients.EnsureTierTag(ctx, environment.TierProduction, account); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(server.Admitted.Asked); got != asked {
+		t.Errorf("ensuring a binding already made asked %d more times whether the tier admits the account, want none", got-asked)
+	}
 }
 
 func TestATierTagBindsAResourceToItsTiersValueOnceHoweverOftenItIsEnsured(t *testing.T) {

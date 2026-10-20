@@ -31,6 +31,8 @@ type CloudSQL struct {
 	Addressed  bool
 	Primary    string
 	RefusedSet int
+
+	PatchesDenied int
 }
 
 func NewCloudSQL() *CloudSQL {
@@ -120,6 +122,12 @@ func (s *CloudSQL) instance(w http.ResponseWriter, r *http.Request, name string)
 	case http.MethodGet:
 		WriteBody(w, instance)
 	case http.MethodPatch:
+		if s.PatchesDenied > 0 {
+			s.PatchesDenied--
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"The client is not authorized to make this request."}}`))
+			return
+		}
 		s.patch(w, r, instance)
 	case http.MethodDelete:
 		if instance.Settings != nil && instance.Settings.DeletionProtectionEnabled {
