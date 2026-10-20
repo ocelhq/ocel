@@ -21,7 +21,7 @@ import (
 const (
 	TierTagKey          = "ocel-tier"
 	TierTagUserRole     = "roles/resourcemanager.tagUser"
-	globalTagLocation   = ""
+	GlobalTagLocation   = ""
 	tierTagSeenAttempts = 10
 )
 
@@ -47,40 +47,29 @@ func (c *Clients) InlineTierTags(tier environment.Tier) map[string]string {
 }
 
 func TierTagEndpointAt(location string) string {
-	if location == globalTagLocation {
+	if location == GlobalTagLocation {
 		return "https://cloudresourcemanager.googleapis.com/"
 	}
 	return "https://" + location + "-cloudresourcemanager.googleapis.com/"
 }
 
 type tierTagsRead struct {
-	mu       sync.Mutex
-	services map[string]*crm.Service
-	values   map[environment.Tier]string
+	mu     sync.Mutex
+	values map[environment.Tier]string
 }
 
 func (c *Clients) TagService(location string) (*crm.Service, error) {
-	c.tierTags.mu.Lock()
-	defer c.tierTags.mu.Unlock()
-	if service := c.tierTags.services[location]; service != nil {
-		return service, nil
+	cache := &c.globalTags
+	if location != GlobalTagLocation {
+		cache = &c.regionalTags
 	}
 	options := ports.EmulatorREST(c.TierTagEndpoint)
 	if !c.Emulated() {
 		options = []option.ClientOption{option.WithEndpoint(TierTagEndpointAt(location))}
 	}
-	var nothing Memo[*crm.Service]
-	service, err := opened(c, &nothing, "Resource Manager tags", func() (*crm.Service, error) {
+	return opened(c, cache, "Resource Manager tags", func() (*crm.Service, error) {
 		return crm.NewService(context.Background(), options...)
 	})
-	if err != nil {
-		return nil, err
-	}
-	if c.tierTags.services == nil {
-		c.tierTags.services = map[string]*crm.Service{}
-	}
-	c.tierTags.services[location] = service
-	return service, nil
 }
 
 func (c *Clients) ReadTierTagValue(ctx context.Context, tier environment.Tier) (string, error) {
@@ -90,7 +79,7 @@ func (c *Clients) ReadTierTagValue(ctx context.Context, tier environment.Tier) (
 	if known != "" {
 		return known, nil
 	}
-	service, err := c.TagService(globalTagLocation)
+	service, err := c.TagService(GlobalTagLocation)
 	if err != nil {
 		return "", err
 	}
