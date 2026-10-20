@@ -340,12 +340,12 @@ func TestTheIdentityBannerPrintsBeforeTheBuildAndTheDeploy(t *testing.T) {
 		fixture.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "abcd1234"}, nil)
 
 		out := ansi.Strip(deployOutput(t, fixture, dependencies, deployOptions{yes: true}, ""))
-		for _, want := range []string{"ocel", "test-app › production", "fake", "000000000000", "fake/reference", "edge", "abcd1234"} {
+		for _, want := range []string{"ocel", "test-app › prod", "fake", "000000000000", "fake/reference", "edge", "abcd1234"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
 		}
-		banner := strings.Index(out, "test-app › production")
+		banner := strings.Index(out, "test-app › prod")
 		built := strings.Index(out, "[build]")
 		deployed := strings.Index(out, "[provision]")
 		if banner < 0 || built < 0 || deployed < 0 {
@@ -363,7 +363,7 @@ func TestTheIdentityBannerPrintsBeforeTheBuildAndTheDeploy(t *testing.T) {
 		fixture.Provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "abcd1234"}, nil)
 
 		out := deployOutput(t, fixture, dependencies, deployOptions{yes: true}, "")
-		for _, want := range []string{"ocel  dev  test-app › production", "  fake  000000000000 · as fake/reference\n  edge  abcd1234"} {
+		for _, want := range []string{"ocel  dev  test-app › prod", "  fake  000000000000 · as fake/reference\n  edge  abcd1234"} {
 			if !strings.Contains(out, want+"\n") {
 				t.Errorf("stdout missing %q with no terminal attached:\n%s", want, out)
 			}

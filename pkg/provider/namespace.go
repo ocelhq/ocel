@@ -3,6 +3,8 @@ package provider
 import (
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -26,6 +28,9 @@ func ParseNamespace(given string) (Namespace, error) {
 	}
 	if err := naming.Validate("namespace", given); err != nil || given[0] < 'a' || given[0] > 'z' {
 		return "", fmt.Errorf("namespace %q is not the field every name derived from it contains: start with a lowercase letter, use only lowercase letters, digits and single dashes, and end with a letter or digit", given)
+	}
+	if slices.Contains(strings.Split(given, naming.WordSeparator), naming.AppWord) {
+		return "", fmt.Errorf("namespace %q has the word %q between dashes; every app resource is named under the fence <namespace>-%s-, so another namespace's fence would cover its names", given, naming.AppWord, naming.AppWord)
 	}
 	return Namespace(given), nil
 }

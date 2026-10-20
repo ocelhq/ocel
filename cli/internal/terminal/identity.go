@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const (
@@ -82,11 +83,11 @@ func identityHeadline(present Presentation, ev *streamv1.IdentityEvent) string {
 	if project := ev.GetProject(); project != "" {
 		named = append(named, present.Palette().Bold(project))
 	}
-	if tier := tierName(ev.GetTier()); tier != "" {
+	if env := envName(ev.GetTier()); env != "" {
 		if ev.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
-			tier = present.Palette().WarningBold(tier)
+			env = present.Palette().WarningBold(env)
 		}
-		named = append(named, tier)
+		named = append(named, env)
 	}
 	if len(named) == 0 {
 		return ""
@@ -104,12 +105,12 @@ func nonEmpty(values ...string) []string {
 	return kept
 }
 
-func tierName(tier environmentv1.Tier) string {
+func envName(tier environmentv1.Tier) string {
 	switch tier {
 	case environmentv1.Tier_TIER_PREVIEW:
 		return "preview"
 	case environmentv1.Tier_TIER_PRODUCTION:
-		return "production"
+		return stackrecords.ProductionEnv
 	default:
 		return ""
 	}

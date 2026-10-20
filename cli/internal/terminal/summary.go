@@ -14,6 +14,7 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const (
@@ -125,7 +126,7 @@ func (s summary) unpromoted() []string {
 func servedPlace(tier environmentv1.Tier) string {
 	switch tier {
 	case environmentv1.Tier_TIER_PRODUCTION:
-		return "production"
+		return stackrecords.ProductionEnv
 	case environmentv1.Tier_TIER_PREVIEW:
 		return "the preview"
 	}

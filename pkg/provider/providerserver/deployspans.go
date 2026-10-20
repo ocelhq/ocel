@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type deploySpans struct {
@@ -69,14 +70,14 @@ func environmentSubject(tier environment.Tier, env string) string {
 	if tier == environment.TierPreview {
 		return env
 	}
-	return string(environment.TierProduction)
+	return stackrecords.ProductionEnv
 }
 
 func environmentPhrase(tier environment.Tier, env string) string {
 	if tier == environment.TierPreview {
 		return "preview " + env
 	}
-	return string(environment.TierProduction)
+	return stackrecords.ProductionEnv
 }
 
 func namedList(one, many string, names []string) string {

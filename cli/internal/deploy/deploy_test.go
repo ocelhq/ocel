@@ -89,7 +89,7 @@ func TestADeployStreamsTheProvidersProgressAndPromotesProduction(t *testing.T) {
 		}
 	})
 	t.Run("ends on a terminal success message", func(t *testing.T) {
-		if !strings.Contains(out, "Deployed test-app to production") {
+		if !strings.Contains(out, "Deployed test-app to prod in ") {
 			t.Errorf("stdout = %q, want a terminal success message", out)
 		}
 	})
@@ -145,7 +145,7 @@ func TestADeployWhoseStdinIsNotATerminalProceedsWithoutPrompting(t *testing.T) {
 	}
 }
 
-func TestADeploysResultNamesTheProjectAndProduction(t *testing.T) {
+func TestADeploysResultNamesTheProjectAndItsProdEnv(t *testing.T) {
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
 	useJSONFormat(t, &dependencies)
@@ -158,8 +158,8 @@ func TestADeploysResultNamesTheProjectAndProduction(t *testing.T) {
 	}
 
 	evs := envelopes(t, stream.String())
-	if headline := evs[len(evs)-1].GetSummary().GetHeadline(); headline != "Deployed test-app to production" {
-		t.Fatalf("result headline = %q, want it to name the project and production", headline)
+	if headline := evs[len(evs)-1].GetSummary().GetHeadline(); headline != "Deployed test-app to prod" {
+		t.Fatalf("result headline = %q, want it to name the project and its prod env", headline)
 	}
 }
 

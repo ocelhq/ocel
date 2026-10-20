@@ -18,5 +18,5 @@ INFO  [build] ✓ web: Built app web in 2s
     ▲ Next.js 15.4.2
      ✓ Compiled successfully
 
-✓ Deployed acme to production in 12s
+✓ Deployed acme to prod in 12s
   web  https://acme.example.com

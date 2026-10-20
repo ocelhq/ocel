@@ -5,6 +5,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type Target struct {
@@ -62,7 +63,7 @@ func place(env *environmentv1.Environment) string {
 	if env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		return "preview " + env.GetIdentity()
 	}
-	return "production"
+	return stackrecords.ProductionEnv
 }
 
 func resolvePreviewEnvironment(dependencies Dependencies, cwd, name string, lifecycle environmentv1.Lifecycle) (*environmentv1.Environment, error) {

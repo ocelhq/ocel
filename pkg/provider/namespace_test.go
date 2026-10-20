@@ -45,6 +45,27 @@ func TestParseNamespaceRefusesASpellingNamingWouldNotMint(t *testing.T) {
 	}
 }
 
+func TestParseNamespaceRefusesASegmentThatWouldStartAnotherNamespacesFence(t *testing.T) {
+	for _, given := range []string{"app", "ocel-app", "app-ocel", "acme-app-two"} {
+		_, err := provider.ParseNamespace(given)
+		if err == nil {
+			t.Errorf("ParseNamespace(%q) was accepted, want a refusal: its names would start with another namespace's fence", given)
+			continue
+		}
+		if !strings.Contains(err.Error(), "-app-") {
+			t.Errorf("ParseNamespace(%q) refused with %q, want it to name the fence <ns>-app-", given, err)
+		}
+	}
+}
+
+func TestParseNamespaceAcceptsAWordThatOnlyContainsApp(t *testing.T) {
+	for _, given := range []string{"apps", "myapp", "ocel-apple", "happy-path"} {
+		if _, err := provider.ParseNamespace(given); err != nil {
+			t.Errorf("ParseNamespace(%q): %v", given, err)
+		}
+	}
+}
+
 func TestEveryAcceptedNamespaceIsTheFieldANameMintsFromIt(t *testing.T) {
 	for _, given := range []string{"ocel", "j-a1b2c3-cache", "a", "a1"} {
 		ns, err := provider.ParseNamespace(given)
