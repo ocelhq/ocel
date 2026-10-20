@@ -204,6 +204,24 @@ func TestTheTiersPassphraseSecretCarriesItsTiersTagFromItsCreation(t *testing.T)
 	}
 }
 
+func TestMendingTheTiersPassphraseSecretBindsItsTagAtMostOnce(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	b, read, _, tags := passphraseEngine(t)
+	target := bootstrap.ParameterResources(read.Names, read.Tier)[0]
+	if err := b.Provision(ctx, read, target, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	read.Held, read.Mending = map[string]bool{target.ID(): true}, map[string]string{target.ID(): "it was found wanting"}
+	if err := b.Provision(ctx, read, target, nil); err != nil {
+		t.Fatal(err)
+	}
+	if tags.BindingsAsked > 1 {
+		t.Errorf("mending the passphrase secret asked Resource Manager for %d bindings, want at most one: the secret already exists", tags.BindingsAsked)
+	}
+}
+
 func TestRemovingATiersPassphraseSecretRemovesItsTagBeforeTheSecret(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

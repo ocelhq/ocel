@@ -330,10 +330,8 @@ func (b Engine) Provision(ctx context.Context, read Survey, target Resource, pro
 	if err := target.KindOps().Make(ctx, b, read, target); err != nil {
 		return err
 	}
-	if !target.KindOps().taggedAtCreation {
-		if err := b.ensureTierTag(ctx, read, target); err != nil {
-			return err
-		}
+	if err := b.ensureTierTag(ctx, read, target); err != nil {
+		return err
 	}
 	gcloud.EnsureProgress(progress).Say("Created " + target.phrase())
 	return nil
