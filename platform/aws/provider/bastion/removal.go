@@ -38,10 +38,14 @@ func removeCluster(ctx context.Context, c Clients, namespace string, tier enviro
 	if err != nil || !found {
 		return err
 	}
-	if err := c.stopTasks(ctx, name); err != nil {
-		return err
+	err = c.stopTasks(ctx, name)
+	if err == nil {
+		err = c.deleteCluster(ctx, name)
 	}
-	return c.deleteCluster(ctx, name)
+	if gone := new(ecstypes.ClusterNotFoundException); errors.As(err, &gone) {
+		return nil
+	}
+	return err
 }
 
 func (c Clients) deleteCluster(ctx context.Context, name string) error {

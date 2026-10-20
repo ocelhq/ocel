@@ -77,6 +77,7 @@ type account struct {
 	groupBusy     int
 	nextID        int
 	stopLag       int
+	goneOnLookup  bool
 
 	beforeAuthorize func(*securityGroup, []ec2types.IpPermission)
 }
@@ -181,6 +182,9 @@ func (a *account) DescribeClusters(_ context.Context, in *ecs.DescribeClustersIn
 			}
 		}
 		out.Clusters = append(out.Clusters, cluster)
+		if a.goneOnLookup {
+			delete(a.clusters, name)
+		}
 	}
 	return out, nil
 }
@@ -190,6 +194,9 @@ func (a *account) DeleteCluster(_ context.Context, in *ecs.DeleteClusterInput, _
 	defer a.mu.Unlock()
 	name := aws.ToString(in.Cluster)
 	a.record("DeleteCluster " + name)
+	if _, ok := a.clusters[name]; !ok {
+		return nil, &ecstypes.ClusterNotFoundException{Message: aws.String("Cluster not found.")}
+	}
 	for _, t := range a.tasks {
 		if t.cluster == name && t.stopping > 0 {
 			t.stopping--
@@ -373,6 +380,9 @@ func (a *account) StopTask(_ context.Context, in *ecs.StopTaskInput, _ ...func(*
 func (a *account) ListTasks(_ context.Context, in *ecs.ListTasksInput, _ ...func(*ecs.Options)) (*ecs.ListTasksOutput, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if _, ok := a.clusters[aws.ToString(in.Cluster)]; !ok {
+		return nil, &ecstypes.ClusterNotFoundException{Message: aws.String("Cluster not found.")}
+	}
 	out := &ecs.ListTasksOutput{}
 	for arn, t := range a.tasks {
 		if t.cluster == aws.ToString(in.Cluster) && !t.stopped && t.stopping == 0 {
