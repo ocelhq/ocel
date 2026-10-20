@@ -322,7 +322,7 @@ func (c *Clients) BucketTagged(bucket string) TaggedResource {
 }
 
 func (c *Clients) SQLInstanceTagged(instance string) TaggedResource {
-	return TaggedResource{Name: "//sqladmin.googleapis.com/projects/" + c.Project() + "/instances/" + instance, Regional: true, PermissionPrefix: "cloudsql.instances"}
+	return TaggedResource{Name: "//sqladmin.googleapis.com/projects/" + c.Project() + "/instances/" + instance, Regional: true, PermissionPrefix: "cloudsql.instances", Admits: c.instanceAdmits(instance)}
 }
 
 func (c *Clients) DatabaseTagged(database string) TaggedResource {
