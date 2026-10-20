@@ -194,43 +194,43 @@ func (s Stack) Claim(ctx context.Context, owner Owner, ref provider.StackRef) er
 		"the shared %s for the %s tier changed hands %d times while %s was claiming it; re-run this deploy", s.Subject, ref.Tier, leaseAttempts, ref.Name)
 }
 
-func (s Stack) Release(ctx context.Context, open func(context.Context, provider.StackRef) (Owner, error), store records.Store, ref provider.StackRef, progress progress.Log) error {
+func (s Stack) Release(ctx context.Context, open func(context.Context, provider.StackRef) (Owner, error), store records.Store, ref provider.StackRef, progress progress.Log) (bool, error) {
 	consumer, err := records.ReadOrEmpty(ctx, store, s.ConsumerAt(ref))
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(consumer.Value) == 0 {
-		return nil
+		return false, nil
 	}
 	leased, err := records.ReadOrEmpty(ctx, store, s.LeaseAt(ref.Tier))
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := records.Forget(ctx, store, s.ConsumerAt(ref)); err != nil {
-		return err
+		return false, err
 	}
 	owner, err := open(ctx, s.Ref(ref.Tier))
 	if err != nil {
-		return err
+		return false, err
 	}
 	consumers := s.ConsumersPrefix(ref.Tier)
 	remaining, err := store.List(ctx, consumers.Partition, consumers.Path...)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(remaining) > 0 {
-		return nil
+		return false, nil
 	}
 	if err := s.WriteLease(ctx, store, leased, goingDownFrom(time.Now())); err != nil {
 		if errors.Is(err, records.ErrStale) {
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("mark the shared %s for the %s tier as going down: %w", s.Subject, ref.Tier, err)
+		return false, fmt.Errorf("mark the shared %s for the %s tier as going down: %w", s.Subject, ref.Tier, err)
 	}
 	if progress != nil {
 		progress.Say("Taking down the shared " + s.Subject + " for the " + string(ref.Tier) + " tier: the last " + s.Consumer + " in it is gone")
 	}
-	return s.retire(ctx, owner, store, ref.Tier, progress)
+	return true, s.retire(ctx, owner, store, ref.Tier, progress)
 }
 
 func (s Stack) ForgetConsumer(ctx context.Context, store records.Store, ref provider.StackRef) error {

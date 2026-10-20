@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/vpcclients"
 )
 
 func namesOf(t *testing.T, n Namespace) map[string]string {
@@ -89,7 +88,6 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"preview schedules":      syncPreview.ScheduleGroup,
 		"schedule":               sync.Schedule,
 		"preview schedule":       syncPreview.Schedule,
-		"vpc clients":            vpcclients.NameFor(string(n), environment.TierProduction),
 		"bastion":                bastion.NameFor(string(n), environment.TierProduction),
 		"container cluster":      awsports.ContainerClusterName(string(n), environment.TierPreview),
 		"public balancer":        awsports.PublicBalancerName(string(n), environment.TierPreview),
@@ -134,7 +132,6 @@ func TestEveryOcelOwnedNameIsTheNamespaceFieldThenTheTierWord(t *testing.T) {
 		"preview schedules":      "ocel-preview-env-sync",
 		"schedule":               "ocel-prod-env-sync",
 		"preview schedule":       "ocel-preview-env-sync",
-		"vpc clients":            "ocel-prod-vpc-clients",
 		"bastion":                "ocel-prod-bastion",
 		"container cluster":      "ocel-preview-containers",
 		"public balancer":        "ocel-preview-public",
@@ -216,7 +213,6 @@ func TestEveryNameFitsAWSAtTheLongestNamespace(t *testing.T) {
 		"preview schedules":      64,
 		"schedule":               64,
 		"preview schedule":       64,
-		"vpc clients":            255,
 		"bastion":                64,
 		"container cluster":      32,
 		"public balancer":        32,

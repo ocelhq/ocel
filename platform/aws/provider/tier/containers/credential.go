@@ -36,7 +36,7 @@ func Credential(s iam.Scope) []iam.Statement {
 			Condition: iam.LinkedRoleFor("vpcorigin.cloudfront.amazonaws.com"),
 		},
 		{
-			Actions:   []string{"cloudfront:ListVpcOrigins", "ec2:DescribeAvailabilityZones"},
+			Actions:   []string{"cloudfront:ListVpcOrigins"},
 			Resources: []string{iam.AnyResource},
 		},
 		{

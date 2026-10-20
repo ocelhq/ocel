@@ -4,16 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/vpcclients"
-
 	apigatewaysdk "github.com/aws/aws-sdk-go-v2/service/apigateway"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -41,8 +38,7 @@ func (p *Provider) tierParts(records tier.Records) tier.Parts {
 	region := p.aws.Region
 	return tier.Parts{
 		control.RuntimeLayersPart(lambda.NewFromConfig(p.aws), account.DynamoRecords(dynamodb.NewFromConfig(p.aws)), p.namespace, region, p.readBootstrap),
-		bastion.NewPart(bastion.NewClients(p.aws), namespace, region),
-		vpcclients.NewPart(records, ec2.NewFromConfig(p.aws), namespace),
+		bastion.NewPart(bastion.NewClients(p.aws), namespace, region, p.releaseBastionNetwork),
 		containers.NewPart(p.stacks.Containers(), records.KeyValues, namespace, region),
 		functionnetwork.NewPart(p.stacks.FunctionNetwork(), records.KeyValues, region),
 		network.NewPart(p.stacks.Network(), records.KeyValues, region),
@@ -124,13 +120,6 @@ func (p *Provider) planDeployParts(ctx context.Context, pre provider.DeployPrefl
 	}
 	parts := p.tierParts(p.partRecords())
 	used := parts.AddedFor(pre.Uses, pre.Edge)
-	if len(awsresources.Registry(awsresources.Clients{}).PlacesInVPC(pre.Resources)) > 0 {
-		clients, found := parts.Named(vpcclients.Part)
-		if !found || clients.Added == nil {
-			return nil, fmt.Errorf("this provider adds no bootstrap part named %q", vpcclients.Part)
-		}
-		used = append(used, clients)
-	}
 	var groups []provider.ChangeGroup
 	for _, part := range used {
 		group, err := part.Added.Plan(ctx, tier)
@@ -144,10 +133,6 @@ func (p *Provider) planDeployParts(ctx context.Context, pre provider.DeployPrefl
 	return groups, nil
 }
 
-func (p *Provider) vpcClients(ctx context.Context, tier environment.Tier) (string, error) {
-	recorded, present, err := p.partRecords().Read(ctx, tier, vpcclients.Part)
-	if err != nil || !present {
-		return "", err
-	}
-	return vpcclients.GroupOf(recorded.Resources), nil
+func (p *Provider) releaseBastionNetwork(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	return p.stacks.Network().Release(ctx, p.KeyValues(), bastion.ConsumerRef(tier), progress)
 }

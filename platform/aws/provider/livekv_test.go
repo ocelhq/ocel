@@ -8,19 +8,20 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/servicequotas"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
@@ -74,46 +75,26 @@ func (a liveAccount) commandStore(t *testing.T, binding provider.Binding, token 
 	return strings.TrimSpace(said)
 }
 
-func (a liveAccount) clientsGroup(t *testing.T, name string) string {
-	t.Helper()
-	ctx := context.Background()
-	network := ec2.NewFromConfig(a.aws)
-	vpcs, err := network.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
-		Filters: []ec2types.Filter{{Name: awssdk.String("is-default"), Values: []string{"true"}}},
-	})
-	if err != nil || len(vpcs.Vpcs) == 0 {
-		t.Fatalf("DescribeVpcs() of the default VPC = %v, %v", vpcs, err)
-	}
-	made, err := network.CreateSecurityGroup(ctx, &ec2.CreateSecurityGroupInput{
-		GroupName:   awssdk.String(name),
-		Description: awssdk.String("the clients a live test's store admits"),
-		VpcId:       vpcs.Vpcs[0].VpcId,
-	})
-	if err != nil {
-		t.Fatalf("CreateSecurityGroup(%s) = %v", name, err)
-	}
-	t.Cleanup(func() {
-		if _, err := network.DeleteSecurityGroup(context.WithoutCancel(ctx), &ec2.DeleteSecurityGroupInput{GroupId: made.GroupId}); err != nil {
-			t.Errorf("DeleteSecurityGroup(%s) = %v", name, err)
-		}
-	})
-	return awssdk.ToString(made.GroupId)
-}
+const liveNetworkCIDR = "10.199.0.0/16"
 
 func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 	a := live(t)
 	ctx := context.Background()
 	params := ssm.NewFromConfig(a.aws)
-	clients := a.clientsGroup(t, "ocel-live-kv-clients")
-	backend := "file://" + t.TempDir()
-	stacks := deploy.NewStacks(func(context.Context, deploy.Scope) (deploy.Config, error) {
+	backend := t.TempDir()
+	store := fake.NewKeyValues()
+	stacks := deploy.NewStacks(func(_ context.Context, scope deploy.Scope) (deploy.Config, error) {
 		return deploy.Config{
+			Namespace:      "ocellive",
+			Tier:           scope.Tier,
 			Region:         liveRegion,
 			Network:        ec2.NewFromConfig(a.aws),
-			VPCClients:     clients,
-			BackendURL:     backend,
+			Quotas:         servicequotas.NewFromConfig(a.aws),
+			NetworkCIDR:    liveNetworkCIDR,
+			KeyValues:      store,
+			BackendURL:     "file://" + filepath.Join(backend, scope.Slug),
 			Passphrase:     "live-suite",
-			PulumiProject:  naming.PulumiProject("kvlive"),
+			PulumiProject:  naming.PulumiProject(scope.Slug),
 			Parameters:     params,
 			KVTokenRoot:    liveKVTokenRoot,
 			SigningKeys:    secretsmanager.NewFromConfig(a.aws),

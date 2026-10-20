@@ -17,8 +17,13 @@ func NetworkCredential(s iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"ec2:CreateSecurityGroup"},
-			Resources: []string{iam.AppSecurityGroupARN, iam.AppVPCARN},
+			Resources: []string{iam.AppSecurityGroupARN},
 			Condition: s.TaggedOnCreateForItsTier(),
+		},
+		{
+			Actions:   []string{"ec2:CreateSecurityGroup"},
+			Resources: []string{iam.AppVPCARN},
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"ec2:CreateTags"},

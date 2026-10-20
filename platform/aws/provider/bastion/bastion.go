@@ -5,11 +5,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
-	Part    = "bastion"
-	Summary = "the task a port forward runs inside the tier's network"
+	Part         = "bastion"
+	ConsumerSlug = "ocel-bastion"
+	Summary      = "the task a port forward runs inside the tier's network"
 
 	word                   = "bastion"
 	PortForwardingDocument = "AWS-StartPortForwardingSessionToRemoteHost"
@@ -41,7 +43,18 @@ type Spec struct {
 	Tier      environment.Tier
 	Boundary  string
 	Ports     []int
-	Clients   string
+	Network   Network
+}
+
+type Network struct {
+	VPC     string
+	CIDR    string
+	Subnets []string
+	Clients string
+}
+
+func ConsumerRef(tier environment.Tier) provider.StackRef {
+	return provider.StackRef{Project: ConsumerSlug, Tier: tier, Name: naming.InfraStack(string(tier))}
 }
 
 type Bastion struct {

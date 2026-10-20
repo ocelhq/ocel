@@ -67,16 +67,16 @@ rest is added by the first deploy that needs it, with the deploy credential, and
 | `image-optimizer` | the first deploy of an app whose build optimizes images |
 | `tag-invalidator` | the first deploy of an app that revalidates |
 | `apigateway-preview` | the first `ocel domain use --preview` behind API Gateway: the REST API that answers 404 for a preview host no preview claims |
-| `vpc-clients` | the first deploy that declares a `postgres` or `kv`: the security group every [database and cache](#the-default-vpc) of the tier admits, and nothing else. It costs nothing |
-| `function-network` | the first deploy of a serverless app that uses a `postgres` or `kv` ocel provisions: the [private subnets and NAT gateways](#serverless-apps-and-the-vpc) its functions run in, about $73 a month idle in production and $36.50 in preview. The last app out takes it down |
+| `network` | the first container app, VPC-attached serverless app, `postgres`, `kv` or port forward of the tier: the [VPC](#the-network) they all run in. It costs nothing. The last part or database out takes it down |
+| `function-network` | the first deploy of a serverless app that uses a `postgres` or `kv` ocel provisions: the [NAT gateways](#serverless-apps-and-the-vpc) the network's private subnets route through, about $73 a month idle in production and $36.50 in preview. The last app out takes it down |
 
 A dry deploy lists the parts it would add. `ocel bootstrap production` makes each recorded part
 again, and `ocel bootstrap destroy production` removes them with the rest.
 `ocel bootstrap production --remove <part>` takes one part down, whichever added it, and refuses
 while a project here uses it unless you pass `--force`; the next deploy that needs a part a deploy
-adds adds it back. `--force` never takes `containers` or `function-network` down while an app still
-runs in it: remove those apps or destroy their environments, and the last one to leave takes it
-down.
+adds adds it back. `--force` never takes `containers`, `function-network` or `network` down while
+anything still runs in it: remove those apps, parts and databases or destroy their environments,
+and the last one to leave takes it down.
 
 Two parts only the bootstrap credential may make, so no deploy adds them:
 
@@ -103,6 +103,7 @@ and it may create, tag and delete images only in that project's repositories.
 | `region` | The region to deploy into, such as `us-east-1`: a region, never an availability zone such as `us-east-1a`. Omit it and ocel reads `AWS_REGION`, `AWS_DEFAULT_REGION`, then the profile. |
 | `variablesKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap` makes a key ocel owns, once a project here first seals a value. |
 | `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
+| `network.production.cidr`, `network.preview.cidr` | The private block of the tier's [VPC](#the-network), a `/16` to a `/24`. Omit it and production takes `10.20.0.0/16`, preview `10.21.0.0/16`. Fixed once the VPC exists. |
 | `logs.liveTail` | Tail through CloudWatch Live Tail: lower latency and no gaps between polls, billed per session-minute past the free tier, at most 15 sessions per account. Off, `ocel logs --tail` polls `FilterLogEvents`. |
 | `edge` | `cloudfront` (default), `api-gateway` or [`cloudflare`](/docs/providers/cloudflare). See [Edge](#edge). |
 | `dns` | `route53` or [`cloudflare`](/docs/providers/cloudflare). A Cloudflare edge needs `cloudflare`. |
@@ -144,31 +145,68 @@ export default defineConfig({
 }
 ```
 
-## The default VPC
+## The network
 
-Databases and caches live in the account's default VPC, in its default subnets, as do the
-container cluster, the bastion port forwards go through and the function network. A
-deploy that declares a `postgres` or `kv`, or the first container or VPC-attached serverless app
-of a tier, reads the default VPC before any stack runs, and refuses when the region has none,
-naming what goes there:
+Each tier has a VPC of its own, the `network` part: its databases and caches, the container
+cluster and its load balancers, the function network and the bastion port forwards go through
+all run in it. The first of them in a tier raises it, and the last to go takes it down after
+itself. The VPC costs nothing; the NAT gateways a function needs belong to the
+[function network](#serverless-apps-and-the-vpc).
 
-```bash
-aws ec2 create-default-vpc --region eu-west-1
+It spans two availability zones, chosen by zone ID among those a CloudFront VPC origin reaches,
+with three subnets in each:
+
+| Subnet | Holds | Route out |
+| --- | --- | --- |
+| public | the load balancers, container tasks, the function network's NAT gateways and the bastion | the internet gateway. Nothing gets a public address by landing there; a task asks for one |
+| private | the functions of serverless apps that reach a database or cache | the function network's NAT gateway |
+| isolated | Aurora and ElastiCache | none |
+
+S3 and DynamoDB gateway endpoints serve the public and private subnets at no charge.
+
+The VPC takes `10.20.0.0/16` in production and `10.21.0.0/16` in preview, split into eight
+equal blocks, of which the subnets take the first six. Name another private block, a `/16` to a
+`/24`, before the tier's network exists:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider({ network: { production: { cidr: "10.64.0.0/16" } } }),
+  apps: [{ name: "web", path: "." }],
+});
 ```
 
-A project of buckets, topics, tasks and realtime needs no VPC and never looks for one.
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "aws": { "network": { "production": { "cidr": "10.64.0.0/16" } } } },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+The block is fixed once the VPC exists: a deploy whose config names another is refused, since a
+new block means a new VPC and everything in it. Before it creates the VPC, a deploy refuses a
+block that overlaps a VPC already in the region, naming that VPC, and refuses an account at its
+VPCs per Region quota (`L-F678F1CE`), with the command that raises it. A second namespace in the
+same account and region gets a network of its own, so it needs a block of its own.
+
+A project of buckets, topics, tasks and realtime needs no VPC and raises none.
 
 Nothing in the VPC reaches a database or cache by being there. Each admits its port from the
-tier's `vpc-clients` security group alone, which ocel adds the first time a deploy declares a
-`postgres` or `kv`, and which every function in the function network, every Lambda worker,
-every container service and worker task, and the bastion's task join. A function you
-[place in your own VPC](/docs/transforms#placing-a-function-in-your-own-vpc) reaches them only
-if you add that group, listed by `ocel bootstrap status`, to its `securityGroupIds`.
+network's clients security group alone, which every function in the function network, every
+Lambda worker, every container service and worker task, and the bastion's task join. A function
+you [place in subnets of your own](/docs/transforms#placing-a-function-in-your-own-vpc) reaches
+them only from the network's subnets, with that group, both listed by `ocel bootstrap status`,
+in its `vpcConfig`.
 
 ## Postgres
 
 `postgres("db")` is an Aurora PostgreSQL Serverless v2 cluster with one writer, encrypted at
-rest, in the default subnets.
+rest, in the isolated subnets of the [tier's network](#the-network).
 
 - **Capacity follows the tier.** Production runs 0.5 to 8 ACU and never pauses, so the first
   query after a quiet spell is not a resume; at 8 ACU it holds about 1,800 connections. Its floor
@@ -195,8 +233,8 @@ rest, in the default subnets.
 replica in another availability zone that takes over if the primary fails. Two
 `cache.t4g.micro` nodes cost about $18.69 a month in us-east-1.
 
-- **In the VPC.** The group sits in the default VPC's subnets and admits port 6379 from the
-  tier's [`vpc-clients`](#the-default-vpc) group alone. A container app's tasks join it; a
+- **In the VPC.** The group sits in the isolated subnets of the [tier's network](#the-network)
+  and admits port 6379 from the network's clients group alone. A container app's tasks join it; a
   serverless app joins it through the [function network](#serverless-apps-and-the-vpc).
 - **Auth.** TLS, encrypted at rest, and an AUTH token ocel generates, kept in SSM Parameter Store
   under `/<namespace>/kv/`.
@@ -232,27 +270,25 @@ security group and token.
 
 ## Serverless apps and the VPC
 
-Aurora and ElastiCache answer inside the default VPC only, and a Lambda function runs outside
-any VPC. A serverless app that uses a `postgres` or `kv` ocel provisions is attached to the VPC
-with no transform: every function and worker of the app runs in the tier's `function-network`
-part, and the app's role gets `AWSLambdaVPCAccessExecutionRole`. An app that uses neither, or
+Aurora and ElastiCache answer inside the [tier's network](#the-network) only, and a Lambda
+function runs outside any VPC. A serverless app that uses a `postgres` or `kv` ocel provisions is attached to the VPC
+with no transform: every function and worker of the app runs in the network's private subnets,
+behind the tier's `function-network` part, and the app's role gets
+`AWSLambdaVPCAccessExecutionRole`. An app that uses neither, or
 only a binding another project or your own infrastructure provisioned, stays outside the VPC.
 
 A function in a VPC has no internet access of its own, so the part holds:
 
-- **Two private subnets** in two availability zones, the first free `/20` blocks counting down
-  from the top of the default VPC's address range, so they never overlap a subnet already there.
-  A deploy refuses a VPC with no free block. No database, cache, cluster or load balancer is
-  placed in them.
-- **NAT gateways** with their elastic IPs, in default subnets. Production has one per zone, so
-  losing a zone leaves the other subnet its own way out; a preview shares one between both
-  subnets. Each costs about $32.85 a month (730 hours at $0.045), $3.65 for its public IPv4
-  address, and $0.045 per GB it processes, in us-east-1, priced by `ocel cost scan` and
-  `ocel bootstrap status`.
-- **Gateway endpoints** for S3 and DynamoDB, at no charge, so ocel's own runtime traffic stays off
-  the NAT gateways.
+- **NAT gateways** with their elastic IPs, in the network's public subnets. Production has one
+  per zone, so losing a zone leaves the other private subnet its own way out; a preview shares
+  one between both. Each costs about $32.85 a month (730 hours at $0.045), $3.65 for its public
+  IPv4 address, and $0.045 per GB it processes, in us-east-1, priced by `ocel cost scan` and
+  `ocel bootstrap status`. Before it creates them, a deploy refuses an account without the
+  elastic IPs they need under its EC2-VPC Elastic IPs quota (`L-0263D0A3`).
+- **A default route** in each private route table of the network, through the NAT gateway of its
+  zone. The network's gateway endpoints keep ocel's own S3 and DynamoDB traffic off them.
 - **A security group** that lets functions call out and admits nothing. Functions also join the
-  tier's [`vpc-clients`](#the-default-vpc) group, the one its databases and caches admit.
+  network's clients group, the one its databases and caches admit.
 
 The first deploy that attaches can take several minutes longer while Lambda builds its network
 interfaces, and a dry deploy lists the part as a slow create. Lambda reclaims an attachment

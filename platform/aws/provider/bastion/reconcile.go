@@ -7,27 +7,19 @@ import (
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-type network struct {
-	vpc     string
-	cidr    string
-	subnets []string
-}
-
 func Reconcile(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
 	if spec.Boundary == "" {
 		return Bastion{}, errors.New("the bastion's task role needs the app boundary of its tier, and none is named")
 	}
-	net, err := c.findDefaultNetwork(ctx)
-	if err != nil {
-		return Bastion{}, err
+	net := spec.Network
+	if net.VPC == "" || net.CIDR == "" || len(net.Subnets) == 0 {
+		return Bastion{}, errors.New("the bastion runs in a public subnet of its tier's network, and none is named")
 	}
 	roleARN, err := c.ensureTaskRole(ctx, spec)
 	if err != nil {
@@ -48,41 +40,11 @@ func Reconcile(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
 		Tier:           spec.Tier,
 		Cluster:        NameFor(spec.Namespace, spec.Tier),
 		TaskDefinition: definition,
-		Clients:        spec.Clients,
+		Clients:        net.Clients,
 		SecurityGroup:  group,
-		Subnets:        net.subnets,
+		Subnets:        net.Subnets,
 		Ports:          spec.Ports,
 	}, nil
-}
-
-func (c Clients) findDefaultNetwork(ctx context.Context) (network, error) {
-	vpcs, err := c.EC2.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
-		Filters: []ec2types.Filter{{Name: aws.String("is-default"), Values: []string{"true"}}},
-	})
-	if err != nil {
-		return network{}, fmt.Errorf("look up the default VPC: %w", err)
-	}
-	if len(vpcs.Vpcs) == 0 {
-		return network{}, errors.New("this account has no default VPC in this region, and the bastion runs in it beside the databases and caches deploys put there")
-	}
-	found := network{vpc: aws.ToString(vpcs.Vpcs[0].VpcId), cidr: aws.ToString(vpcs.Vpcs[0].CidrBlock)}
-	subnets, err := c.EC2.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{
-		Filters: []ec2types.Filter{
-			{Name: aws.String("vpc-id"), Values: []string{found.vpc}},
-			{Name: aws.String("default-for-az"), Values: []string{"true"}},
-		},
-	})
-	if err != nil {
-		return network{}, fmt.Errorf("look up the default VPC's subnets: %w", err)
-	}
-	for _, subnet := range subnets.Subnets {
-		found.subnets = append(found.subnets, aws.ToString(subnet.SubnetId))
-	}
-	slices.Sort(found.subnets)
-	if len(found.subnets) == 0 {
-		return network{}, fmt.Errorf("the default VPC %s has no default subnet to place the bastion in", found.vpc)
-	}
-	return found, nil
 }
 
 func (c Clients) ensureCluster(ctx context.Context, namespace string, tier environment.Tier) error {

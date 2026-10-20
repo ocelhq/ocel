@@ -4,9 +4,6 @@ import (
 	"context"
 	"time"
 
-	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/vpcclients"
-
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -77,11 +74,6 @@ func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPre
 	var say func(string)
 	if pre.Progress != nil {
 		say = pre.Progress.Say
-	}
-	if len(awsresources.Registry(awsresources.Clients{}).PlacesInVPC(pre.Resources)) > 0 {
-		if clients, found := p.tierParts(records).Named(vpcclients.Part); found {
-			used = append(used, clients)
-		}
 	}
 	for _, part := range used {
 		if _, err := part.Added.Ensure(ctx, tier, pre.Deploy.Slug, "", say); err != nil {

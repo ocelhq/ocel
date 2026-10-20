@@ -64,8 +64,6 @@ type Network struct {
 	Clients   string
 }
 
-const PendingClients = "sg-pending-vpc-clients"
-
 type Transforms interface {
 	TagsFor(kind, name string) map[string]string
 	Patches(kind, name, surface string) bool

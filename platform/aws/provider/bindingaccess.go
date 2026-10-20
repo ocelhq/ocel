@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket/dataplane"
 )
 
-func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest, _ progress.Log) ([]provider.PortForward, error) {
+func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardRequest, progress progress.Log) ([]provider.PortForward, error) {
 	if len(req.Bindings) == 0 {
 		return nil, nil
 	}
@@ -35,14 +35,14 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 		return nil, err
 	}
 	clients := bastion.NewClients(p.aws)
-	vpcClients, err := p.vpcClients(ctx, req.Tier)
+	placed, err := p.stacks.Network().Claim(ctx, bastion.ConsumerRef(req.Tier), progress)
 	if err != nil {
 		return nil, err
 	}
 	reconciled, err := bastion.Reconcile(ctx, clients, bastion.Spec{
 		Namespace: string(p.namespace),
 		Tier:      req.Tier,
-		Clients:   vpcClients,
+		Network:   bastion.Network{VPC: placed.VPC, CIDR: placed.CIDR, Subnets: placed.Public, Clients: placed.Clients},
 		Boundary:  deployed.AppBoundaryARN,
 		Ports:     []int{postgres.Port, valkey.Port},
 	})

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
@@ -33,6 +32,7 @@ const (
 	outputKeyOriginHost    = "originHost"
 	outputKeyVPCOrigin     = "vpcOrigin"
 	outputKeyTaskSecurity  = "taskSecurityGroup"
+	outputKeyClients       = "clientsSecurityGroup"
 	outputKeyCluster       = "cluster"
 	outputKeyExecutionRole = "executionRoleArn"
 	outputKeyLogGroup      = "logGroup"
@@ -55,25 +55,18 @@ type work struct {
 	rolePath  string
 	tags      map[string]string
 	fronts    Fronts
+	network   network.Network
 }
 
-func NewProgram(namespace string, tier environment.Tier, boundary, rolePath string, fronts Fronts) component.Program {
-	w := &work{namespace: namespace, tier: tier, boundary: boundary, rolePath: rolePath, tags: stackTags(namespace, tier), fronts: fronts}
+func NewProgram(namespace string, tier environment.Tier, boundary, rolePath string, fronts Fronts, placed network.Network) component.Program {
+	w := &work{namespace: namespace, tier: tier, boundary: boundary, rolePath: rolePath, tags: stackTags(namespace, tier), fronts: fronts, network: placed}
 	return component.Program{Run: w.run, Tags: w.tags}
 }
 
 func (w *work) run(ctx *pulumi.Context) error {
-	vpc, err := ec2.LookupVpc(ctx, &ec2.LookupVpcArgs{Default: pulumi.BoolRef(true)})
-	if err != nil {
-		return fmt.Errorf("look up default VPC: %w", err)
-	}
-	zones, err := aws.GetAvailabilityZones(ctx, &aws.GetAvailabilityZonesArgs{ExcludeZoneIds: network.VPCOriginUnsupportedZones})
-	if err != nil {
-		return fmt.Errorf("look up the availability zones a VPC origin reaches: %w", err)
-	}
-	subnetIDs, err := component.LookupDefaultSubnetsIn(ctx, vpc.Id, zones.ZoneIds)
-	if err != nil {
-		return err
+	vpcID, subnetIDs := w.network.VPC, w.network.Public
+	if vpcID == "" || len(subnetIDs) == 0 {
+		return fmt.Errorf("the container infrastructure of the %s tier runs in the tier's network, and this run names no VPC or public subnet of it", w.tier)
 	}
 	tags := pulumi.StringMap{}
 	for key, value := range w.tags {
@@ -92,14 +85,14 @@ func (w *work) run(ctx *pulumi.Context) error {
 	var sources pulumi.StringArray
 	var front *ec2.SecurityGroup
 	if w.fronts.Private {
-		if front, err = w.createFrontSecurityGroup(ctx, vpc.Id, tags); err != nil {
+		if front, err = w.createFrontSecurityGroup(ctx, vpcID, tags); err != nil {
 			return err
 		}
 		sources = append(sources, front.ID())
 	}
 	var public *ec2.SecurityGroup
 	if len(w.fronts.Public) > 0 {
-		if public, err = w.createPublicSecurityGroup(ctx, vpc.Id, tags); err != nil {
+		if public, err = w.createPublicSecurityGroup(ctx, vpcID, tags); err != nil {
 			return err
 		}
 		sources = append(sources, public.ID())
@@ -107,7 +100,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	tasks, err := ec2.NewSecurityGroup(ctx, tasksGroupName(w.namespace, tier), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(tasksGroupName(w.namespace, tier)),
 		Description: pulumi.String("Ocel: the tasks every container app in the " + string(tier) + " class runs as"),
-		VpcId:       pulumi.String(vpc.Id),
+		VpcId:       pulumi.String(vpcID),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
 			Protocol:       pulumi.String("tcp"),
 			FromPort:       pulumi.Int(TaskPort),
@@ -156,7 +149,8 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	ctx.Export(outputKeyVPC, pulumi.String(vpc.Id))
+	ctx.Export(outputKeyVPC, pulumi.String(vpcID))
+	ctx.Export(outputKeyClients, pulumi.String(w.network.Clients))
 	ctx.Export(outputKeySubnets, pulumi.String(encoded))
 	ctx.Export(outputKeyTaskSecurity, tasks.ID().ToStringOutput())
 	ctx.Export(outputKeyCluster, cluster.Arn)
@@ -181,6 +175,7 @@ func decode(outputs auto.OutputMap, private bool) (Infrastructure, error) {
 	required := map[string]*string{
 		outputKeyVPC:           &infra.VPC,
 		outputKeyTaskSecurity:  &infra.TaskSecurity,
+		outputKeyClients:       &infra.Clients,
 		outputKeyCluster:       &infra.Cluster,
 		outputKeyExecutionRole: &infra.ExecutionRole,
 		outputKeyLogGroup:      &infra.LogGroup,

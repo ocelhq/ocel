@@ -16,6 +16,7 @@ import (
 
 func publicInfraWork() *work {
 	return &work{
+		network:   testNetwork,
 		namespace: "ocel",
 		tier:      environment.TierProduction,
 		boundary:  "arn:aws:iam::123456789012:policy/ocel-app-boundary",

@@ -106,9 +106,9 @@ func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) 
 		pending:    site.NewPendingSets(),
 		opened:     map[Scope]*release{},
 	}
-	r.containers = &containers.Stacks{Open: r.openShared}
-	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared}
 	r.network = &network.Stacks{Open: r.openShared}
+	r.containers = &containers.Stacks{Open: r.openShared, Network: r.network}
+	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared, Network: r.network}
 	return r
 }
 
@@ -214,10 +214,10 @@ func (r *Stacks) refreshPolicy() func(provider.StackRef, pulumi.Operation) bool 
 }
 
 type infraWork struct {
-	transformed *transformPatches
-	previewing  bool
-	vpc         *component.DefaultVPC
-	clients     string
+	transformed    *transformPatches
+	previewing     bool
+	network        *network.Network
+	networkPending bool
 }
 
 func (r *release) infraProgram(spec provider.StackSpec, work *infraWork) component.Program {
@@ -251,12 +251,8 @@ func (r *release) appProgram(spec provider.StackSpec, work *appWork) component.P
 
 func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraWork) error {
 	at := r.stackOf(spec.Ref, spec.Resources, work.transformed, work.previewing)
-	if work.vpc != nil {
-		subnetIDs, err := component.LookupDefaultSubnets(pctx, work.vpc.ID)
-		if err != nil {
-			return err
-		}
-		at.Network = component.Network{VPCID: work.vpc.ID, SubnetIDs: subnetIDs, Clients: work.clients}
+	if placed := work.network; placed != nil {
+		at.Network = component.Network{VPCID: placed.VPC, SubnetIDs: placed.Isolated, Clients: placed.Clients}
 	}
 	for _, declaring := range r.registry.Components() {
 		if err := declaring.Declare(pctx, at, declaring.Declared(spec.Resources)); err != nil {
@@ -477,6 +473,11 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 			return provider.StackResult{}, err
 		}
 	}
+	if prepared.infra != nil && prepared.infra.network == nil {
+		if err := r.network.Release(ctx, r.cfg.KeyValues, spec.Ref, progress); err != nil {
+			return provider.StackResult{}, err
+		}
+	}
 	if spec.App == nil {
 		if err := r.sweep(ctx, spec.Ref, spec.Resources); err != nil {
 			return provider.StackResult{}, err
@@ -522,7 +523,14 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 		return provider.Plan{}, err
 	}
 	if work != nil && work.networkPending {
-		previewed.Groups = append([]provider.ChangeGroup{functionnetwork.NewChangeGroup(spec.Ref.Tier)}, previewed.Groups...)
+		raised, err := r.planNetwork(ctx, spec.Ref.Tier)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		previewed.Groups = append(append(raised, functionnetwork.NewChangeGroup(spec.Ref.Tier)), previewed.Groups...)
+	}
+	if prepared.infra != nil && prepared.infra.networkPending {
+		previewed.Groups = append([]provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, spec.Ref.Tier)}, previewed.Groups...)
 	}
 	workerGroups, err := r.previewWorkers(ctx, spec, work, progress)
 	if err != nil {
@@ -536,6 +544,7 @@ type preparedStack struct {
 	program     component.Program
 	transformed *transformPatches
 	app         *appWork
+	infra       *infraWork
 }
 
 func (p preparedStack) discard() {
@@ -579,10 +588,10 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 			return preparedStack{}, err
 		}
 		work := &infraWork{transformed: transformed, previewing: kind == runPreview}
-		if err := r.placeInVPC(ctx, spec, work); err != nil {
+		if err := r.placeInVPC(ctx, spec, work, progress); err != nil {
 			return preparedStack{}, err
 		}
-		return preparedStack{program: r.infraProgram(spec, work), transformed: transformed}, nil
+		return preparedStack{program: r.infraProgram(spec, work), transformed: transformed, infra: work}, nil
 	}
 	var network *functionnetwork.Network
 	var pending, functionsAttach bool
@@ -666,6 +675,9 @@ func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progres
 		return err
 	}
 	if err := releasePart(ctx, r.functionNetwork, opened.cfg.KeyValues, req, progress); err != nil {
+		return err
+	}
+	if err := releasePart(ctx, r.network, opened.cfg.KeyValues, req, progress); err != nil {
 		return err
 	}
 	if ref.Name.IsInfra() {

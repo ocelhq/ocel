@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -103,7 +104,7 @@ func (a *absentBastion) GetRole(context.Context, *iam.GetRoleInput, ...func(*iam
 }
 
 func bastionPart(looking *absentBastion) tier.Part {
-	return bastion.NewPart(bastion.Clients{ECS: looking, IAM: looking, EC2: looking}, "ocel", "eu-west-2")
+	return bastion.NewPart(bastion.Clients{ECS: looking, IAM: looking, EC2: looking}, string(defaultNamespace), "eu-west-2", func(context.Context, environment.Tier, progress.Log) error { return nil })
 }
 
 func registryOf(fronts ...edge.Edge) edgeRegistry {

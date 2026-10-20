@@ -89,7 +89,6 @@ type Definition struct {
 	Infra         containers.Infrastructure
 
 	tier        environment.Tier
-	vpcClients  string
 	priority    int
 	healthPath  string
 	secrets     []string
@@ -113,17 +112,12 @@ type Target struct {
 	AppRolePath          string
 	OriginSecret         string
 	PreviousOriginSecret string
-	VPCClients           string
 }
 
 func (d *Definition) Priority() int { return d.priority }
 
 func (d *Definition) TaskSecurityGroups() pulumi.StringArray {
-	groups := pulumi.StringArray{pulumi.String(d.Infra.TaskSecurity)}
-	if d.vpcClients != "" {
-		groups = append(groups, pulumi.String(d.vpcClients))
-	}
-	return groups
+	return pulumi.StringArray{pulumi.String(d.Infra.TaskSecurity), pulumi.String(d.Infra.Clients)}
 }
 
 func (d *Definition) readListenerArn() string {
@@ -274,7 +268,6 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 		RolePath:    at.AppRolePath,
 		Region:      at.Region,
 		tier:        at.Tier,
-		vpcClients:  at.VPCClients,
 		secrets:     presentedSecrets(at.OriginSecret, at.PreviousOriginSecret),
 		Policies:    policies,
 		tasksPolicy: tasksPolicyDoc,

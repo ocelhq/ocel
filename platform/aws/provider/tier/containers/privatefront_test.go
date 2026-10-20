@@ -12,7 +12,7 @@ import (
 func TestTheContainerInfraRaisesNoPrivateFrontWhenEveryAppIsRoutedPublicly(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Public: fixtureRanges}}
+	infra := &work{network: testNetwork, namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Public: fixtureRanges}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
@@ -36,7 +36,7 @@ func TestTheContainerInfraRaisesNoPrivateFrontWhenEveryAppIsRoutedPublicly(t *te
 func TestTheContainerInfraRaisesThePrivateFrontAloneForAnAppRoutedThroughCloudFront(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
+	infra := &work{network: testNetwork, namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)

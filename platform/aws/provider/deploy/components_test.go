@@ -53,6 +53,6 @@ func (defaultVPCNetwork) DescribeAvailabilityZones(context.Context, *awsec2.Desc
 	return &awsec2.DescribeAvailabilityZonesOutput{AvailabilityZones: []ec2types.AvailabilityZone{{ZoneId: aws.String("use1-az1")}, {ZoneId: aws.String("use1-az2")}}}, nil
 }
 
-func (defaultVPCNetwork) DescribeSubnets(context.Context, *awsec2.DescribeSubnetsInput, ...func(*awsec2.Options)) (*awsec2.DescribeSubnetsOutput, error) {
-	return &awsec2.DescribeSubnetsOutput{}, nil
+func (defaultVPCNetwork) DescribeAddresses(context.Context, *awsec2.DescribeAddressesInput, ...func(*awsec2.Options)) (*awsec2.DescribeAddressesOutput, error) {
+	return &awsec2.DescribeAddressesOutput{}, nil
 }

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
@@ -29,13 +31,13 @@ const (
 	Slug = "ocel-function-network"
 
 	Part    = "function-network"
-	Summary = "two private subnets of the default VPC, a NAT gateway and elastic IP for each (one shared in preview), and S3 and DynamoDB gateway endpoints, " +
-		"which every serverless app in the tier that reaches a postgres or kv Ocel provisions runs its functions in"
+	Summary = "a NAT gateway and elastic IP for each zone of the tier's network (one shared in preview) and the routes its private subnets take through them, " +
+		"which every serverless app in the tier that reaches a postgres or kv Ocel provisions runs its functions behind"
 
 	outputKeyPrivateSubnets   = "privateSubnets"
 	outputKeyFunctionSecurity = "functionSecurityGroup"
+	outputKeyClients          = "clientsSecurityGroup"
 
-	zones       = 2
 	deleteWait  = "40m"
 	anyIPv4     = "0.0.0.0/0"
 	stackTagKey = "ocel:stack"
@@ -44,10 +46,7 @@ const (
 	privateWord   = "private"
 	eipPart       = "eip"
 	natPart       = "nat"
-	endpointType  = "Gateway"
 )
-
-var endpointServices = []string{"s3", "dynamodb"}
 
 var Shared = sharedstack.Stack{
 	Slug:        Slug,
@@ -65,8 +64,9 @@ type Network struct {
 }
 
 var Pending = Network{
-	Subnets:       []string{"subnet-pending-a", "subnet-pending-b"},
+	Subnets:       network.Pending.Private,
 	SecurityGroup: "sg-pending",
+	Clients:       network.Pending.Clients,
 }
 
 func (n *Network) VPCConfig() lambda.FunctionVpcConfigPtrInput {
@@ -80,11 +80,7 @@ func (n *Network) VPCConfig() lambda.FunctionVpcConfigPtrInput {
 }
 
 func (n *Network) securityGroups() pulumi.StringArray {
-	groups := pulumi.StringArray{pulumi.String(n.SecurityGroup)}
-	if n.Clients != "" {
-		groups = append(groups, pulumi.String(n.Clients))
-	}
-	return groups
+	return pulumi.StringArray{pulumi.String(n.SecurityGroup), pulumi.String(n.Clients)}
 }
 
 func IsNeededFor(typ provider.BindingType, source string) bool {
@@ -113,8 +109,9 @@ func stackTags(namespace string, tier environment.Tier) map[string]string {
 }
 
 type Stacks struct {
-	Open func(context.Context, provider.StackRef) (sharedstack.Owner, error)
-	lock sync.Mutex
+	Open    func(context.Context, provider.StackRef) (sharedstack.Owner, error)
+	Network *network.Stacks
+	lock    sync.Mutex
 }
 
 func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Network, bool, error) {
@@ -156,16 +153,16 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 	if err != nil {
 		return Network{}, err
 	}
-	if _, err := component.ReadDefaultVPC(ctx, owner.EC2, owner.Region, "the function network serverless apps reach their databases and caches through"); err != nil {
+	if err := refuseFullAddresses(ctx, owner, tier); err != nil {
 		return Network{}, err
 	}
 	if progress != nil {
-		progress.Say("Provisioning the shared function network for the " + string(tier) + " tier: private subnets, a NAT gateway and gateway endpoints every serverless app that reaches a VPC-only resource attaches to; the first attach can take several minutes")
+		progress.Say("Provisioning the shared function network for the " + string(tier) + " tier: NAT gateways the private subnets every serverless app that reaches a VPC-only resource attaches to route through; the first attach can take several minutes")
 	}
 	var decoded Network
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
-		if decoded, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, owner.EC2), progress); err != nil {
+		if decoded, err = s.provision(ctx, owner, StackRef(tier), progress); err != nil {
 			return nil, err
 		}
 		return listResources(owner.Namespace, tier, decoded), nil
@@ -174,6 +171,15 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 		return Network{}, err
 	}
 	return decoded, s.claim(ctx, ref)
+}
+
+func refuseFullAddresses(ctx context.Context, owner sharedstack.Owner, tier environment.Tier) error {
+	held, err := owner.EC2.DescribeAddresses(ctx, &awsec2.DescribeAddressesInput{})
+	if err != nil {
+		return fmt.Errorf("count the elastic IPs this account holds in %s: %w", owner.Region, err)
+	}
+	return component.RefuseFullQuota(ctx, owner.Quotas, component.ElasticIPQuota, owner.Region, len(held.Addresses), natGateways(tier),
+		"the "+string(tier)+" tier's function network, one elastic IP for each NAT gateway,")
 }
 
 func (s *Stacks) RecordConsumer(ctx context.Context, ref provider.StackRef) error {
@@ -196,7 +202,11 @@ func (s *Stacks) Release(ctx context.Context, store records.Store, ref provider.
 	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return Shared.Release(ctx, s.Open, store, ref, progress)
+	retired, err := Shared.Release(ctx, s.Open, store, ref, progress)
+	if err != nil || !retired {
+		return err
+	}
+	return s.Network.Release(ctx, store, StackRef(ref.Tier), progress)
 }
 
 func (s *Stacks) ForgetConsumer(ctx context.Context, store records.Store, ref provider.StackRef) error {
@@ -215,10 +225,13 @@ func (s *Stacks) Remove(ctx context.Context, tier environment.Tier, progress pro
 	if err != nil {
 		return err
 	}
-	return Shared.Remove(ctx, owner, tier, progress)
+	if err := Shared.Remove(ctx, owner, tier, progress); err != nil {
+		return err
+	}
+	return s.Network.Release(ctx, owner.KeyValues, StackRef(tier), progress)
 }
 
-func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, program component.Program, progress progress.Log) (Network, error) {
+func (s *Stacks) provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, progress progress.Log) (Network, error) {
 	tier := ref.Tier
 	if err := stackrecords.Write(ctx, owner.KeyValues, tier, Slug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
@@ -226,7 +239,11 @@ func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackR
 	}); err != nil {
 		return Network{}, err
 	}
-	outputs, err := owner.Automation.Run(ctx, ref, program, provider.Lease{}, progress)
+	placed, err := s.Network.Claim(ctx, ref, progress)
+	if err != nil {
+		return Network{}, err
+	}
+	outputs, err := owner.Automation.Run(ctx, ref, NewProgram(owner.Namespace, tier, placed), provider.Lease{}, progress)
 	if err != nil {
 		return Network{}, fmt.Errorf("provision the shared function network for the %s tier: %w", tier, err)
 	}
@@ -235,7 +252,7 @@ func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackR
 
 func natGateways(tier environment.Tier) int {
 	if tier == environment.TierProduction {
-		return zones
+		return network.Zones
 	}
 	return 1
 }
@@ -250,14 +267,6 @@ func listResources(namespace string, tier environment.Tier, network Network) []p
 		resources = append(resources,
 			provider.PhysicalResource{Kind: "AWS::EC2::NatGateway", ID: natName(namespace, tier, n)},
 			provider.PhysicalResource{Kind: "AWS::EC2::EIP", ID: natName(namespace, tier, n)})
-	}
-	for i, subnet := range network.Subnets {
-		resources = append(resources,
-			provider.PhysicalResource{Kind: "AWS::EC2::RouteTable", ID: nameFor(namespace, tier, privateWord, strconv.Itoa(i+1))},
-			provider.PhysicalResource{Kind: "AWS::EC2::Subnet", ID: subnet})
-	}
-	for _, service := range endpointServices {
-		resources = append(resources, provider.PhysicalResource{Kind: "AWS::EC2::VPCEndpoint", ID: nameFor(namespace, tier, service)})
 	}
 	return append(resources, provider.PhysicalResource{Kind: "AWS::EC2::SecurityGroup", ID: network.SecurityGroup})
 }
