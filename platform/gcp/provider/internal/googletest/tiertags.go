@@ -31,6 +31,7 @@ type TierTags struct {
 	ValueLookups    int
 
 	BindingsUnseen int
+	BindingsDenied bool
 	ValuesAbsent   bool
 
 	next int
@@ -159,6 +160,10 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && path == "tagBindings":
 		asked := ReadBody[crm.TagBinding](w, r)
 		if asked == nil {
+			return
+		}
+		if s.BindingsDenied {
+			writeDenied(w)
 			return
 		}
 		if s.BindingsUnseen > 0 {

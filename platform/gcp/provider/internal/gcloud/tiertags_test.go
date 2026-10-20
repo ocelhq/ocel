@@ -141,3 +141,21 @@ func TestAResourceMadeOnGoogleCarriesItsTiersTagInlineByTheProjectNamespacedKey(
 		t.Errorf("an inline tier tag reads %v, want acme-prod/ocel-tier: production", got)
 	}
 }
+
+func TestABindingTheCredentialMayNotMakeNamesBothTheValueAndTheResourcePermissionItNeeds(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clients, tags := taggedClients(t)
+	tags.BindingsDenied = true
+	repository := clients.RepositoryTagged("ocel-acme-prod-preview-gate")
+
+	err := clients.EnsureTierTag(ctx, environment.TierPreview, repository)
+	for _, want := range []string{
+		"roles/resourcemanager.tagUser on acme-prod/ocel-tier/preview",
+		"artifactregistry.repositories.createTagBinding on " + repository.Name,
+	} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("a binding Google refused answered %v, want it to name %q", err, want)
+		}
+	}
+}
