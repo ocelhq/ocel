@@ -23,7 +23,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -32,22 +31,6 @@ const (
 	databaseQuotaMessage   = "maximum number of databases"
 	projectDatabasesFilter = "databases/"
 )
-
-func projectRecordsCondition(names names.Names, region string) string {
-	ring := "projects/" + names.Project() + "/locations/" + region + "/keyRings/" + names.KeyRing()
-	clauses := []string{fmt.Sprintf("resource.name == %q", ring)}
-	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		clauses = append(clauses,
-			fmt.Sprintf("resource.name.startsWith(%q)", "projects/"+names.Project()+"/databases/"+names.ProjectDatabasePrefix(tier)),
-			fmt.Sprintf("resource.name.startsWith(%q)", "projects/"+names.Project()+"/databases/"+names.ProjectWritableDatabasePrefix(tier)),
-			fmt.Sprintf("resource.name.startsWith(%q)", ring+"/cryptoKeys/"+ports.ProjectKeyPrefix(tier)))
-	}
-	return strings.Join(clauses, " || ")
-}
-
-func ProjectRecordsGrant(names names.Names, region string) string {
-	return names.ProjectRecordsRolePath() + ", on the condition " + projectRecordsCondition(names, region)
-}
 
 func ProjectDatabaseCondition(c *gcloud.Clients, tier environment.Tier, project string) *policy.Condition {
 	return &policy.Condition{
@@ -92,7 +75,7 @@ func EnsureProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environm
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project keeps its values in one of its own per tier.\n"+
 				"Ask Google support to raise the limit of databases per project, or remove projects this tier no longer runs, then try again", c.Project())
 	}
-	return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(c.Names, c.Region))
+	return gcloud.ExplainMissingGrant(err, c.DeployCredential(tier).ProjectPermissions().String())
 }
 
 func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.Tier, project string) error {
@@ -115,7 +98,7 @@ func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.T
 			"this project has no %s key ring to make project %s's %s key on, and no value of %s can be sealed without that key.\nRun `%s` to add the ring, then try again",
 			c.KeyRing(), project, tier, project, provider.BootstrapCommand(tier))
 	}
-	return gcloud.ExplainMissingGrant(fmt.Errorf("create the key project %s seals its %s values under: %w", project, tier, err), ProjectRecordsGrant(c.Names, c.Region))
+	return gcloud.ExplainMissingGrant(fmt.Errorf("create the key project %s seals its %s values under: %w", project, tier, err), c.DeployCredential(tier).ProjectPermissions().String())
 }
 
 func keyRingPolicy(c *gcloud.Clients) policy.Resource {

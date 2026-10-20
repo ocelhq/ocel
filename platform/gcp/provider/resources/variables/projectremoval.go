@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -116,7 +117,7 @@ func removeProject(ctx context.Context, b bootstrap.Engine, stores projectStores
 	values := b.Clients.ProjectDatabase(tier, project)
 	gcloud.EnsureProgress(log).Say(fmt.Sprintf("Deleting Firestore database %s, which kept the values of %s in %s", values, project, tier))
 	if err := stores.takeDatabase(ctx, tier, values); err != nil {
-		return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(b.Clients.Names, b.Clients.Region))
+		return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 	}
 	key := ports.ProjectKey(tier, project)
 	gcloud.EnsureProgress(log).Say(fmt.Sprintf("Scheduling every version of the %s key, which sealed the values of %s in %s, for destruction", key, project, tier))

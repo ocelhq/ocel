@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
@@ -79,15 +79,16 @@ func TestThePrivateNetworkChecksItsServicesAndADeployCredentialMayAddIt(t *testi
 		}
 	}
 	for _, role := range []string{"roles/compute.networkAdmin", "roles/cloudsql.viewer"} {
-		if !slices.Contains(bootstrap.RolesFor(edge.PurposeBootstrap), role) {
-			t.Errorf("a bootstrap credential is granted %v, want %s: removing a bootstrap takes its network down once nothing is on it", bootstrap.RolesFor(edge.PurposeBootstrap), role)
+		if !slices.Contains(bootstrap.BootstrapRoles(), role) {
+			t.Errorf("a bootstrap credential is granted %v, want %s: removing a bootstrap takes its network down once nothing is on it", bootstrap.BootstrapRoles(), role)
 		}
 	}
-	if !slices.Contains(bootstrap.RolesFor(edge.PurposeDeploy), "roles/memorystore.admin") {
-		t.Errorf("a deploy credential is granted %v, want roles/memorystore.admin: a deploy creates, reshapes and deletes stores", bootstrap.RolesFor(edge.PurposeDeploy))
+	lines := credential.Lines(deployOf(environment.TierProduction).Grants())
+	if !slices.Contains(lines, "roles/memorystore.admin") {
+		t.Errorf("a deploy credential is granted\n%s\nwant roles/memorystore.admin: a deploy creates, reshapes and deletes stores, and Memorystore takes no tag", strings.Join(lines, "\n"))
 	}
-	if slices.Contains(bootstrap.RolesFor(edge.PurposeDeploy), "roles/cloudsql.admin") {
-		t.Errorf("a deploy credential is granted %v, with roles/cloudsql.admin over every Cloud SQL instance in the project", bootstrap.RolesFor(edge.PurposeDeploy))
+	if slices.Contains(lines, "roles/cloudsql.admin") {
+		t.Errorf("a deploy credential is granted\n%s\nwith roles/cloudsql.admin over every Cloud SQL instance in the project", strings.Join(lines, "\n"))
 	}
 }
 

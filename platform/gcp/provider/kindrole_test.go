@@ -3,9 +3,7 @@ package gcp
 import (
 	"cmp"
 	"encoding/json"
-	"errors"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -16,13 +14,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-const appAccountsRoleEndpoint = "/v1/projects/acme-prod/roles/ocel_app_accounts"
+const partsRoleEndpoint = "/v1/projects/acme-prod/roles/ocel_parts"
 
 type roleServer struct {
 	endpoint     string
@@ -37,7 +34,7 @@ type roleServer struct {
 }
 
 func (s *roleServer) handler(t *testing.T) http.HandlerFunc {
-	endpoint := cmp.Or(s.endpoint, appAccountsRoleEndpoint)
+	endpoint := cmp.Or(s.endpoint, partsRoleEndpoint)
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -104,176 +101,11 @@ func (s *roleServer) bootstrap(t *testing.T) bootstrap.Engine {
 	return composed(bootstrap.Engine{Clients: (&googletest.IAM{}).Serve(t, s.handler(t))})
 }
 
-func currentRole() *iam.Role {
-	return &iam.Role{
-		Name:                "projects/acme-prod/roles/ocel_app_accounts",
-		IncludedPermissions: slices.Clone(bootstrap.AppAccountsPermissions),
-		Stage:               "GA",
-		Etag:                "BwXhoLA=",
-	}
-}
-
-func TestTheAppAccountsRoleHoldsOnlyWhatADeployDoesToAnAppsAccount(t *testing.T) {
-	t.Parallel()
-
-	want := []string{
-		"iam.serviceAccounts.create",
-		"iam.serviceAccounts.get",
-		"iam.serviceAccounts.getIamPolicy",
-		"iam.serviceAccounts.setIamPolicy",
-		"iam.serviceAccounts.createTagBinding",
-		"iam.serviceAccounts.listTagBindings",
-	}
-	if !slices.Equal(bootstrap.AppAccountsPermissions, want) {
-		t.Errorf("appAccountsPermissions = %v, want %v: a delete, disable, update or key permission lets a stolen deploy credential take accounts down", bootstrap.AppAccountsPermissions, want)
-	}
-}
-
-func TestABootstrapCreatesTheAppAccountsRoleOnceAndReusesIt(t *testing.T) {
-	t.Parallel()
-	server := &roleServer{}
-	b := server.bootstrap(t)
-	ctx := t.Context()
-	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_app_accounts"}
-
-	found, err := b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
-	if err != nil || found.Present {
-		t.Fatalf("presenceOf() = %+v, %v, want an absent role", found, err)
-	}
-	if err := b.MakeRole(ctx, bootstrap.NewAppAccountsRole(b.Clients.Names)); err != nil {
-		t.Fatalf("makeRole() = %v", err)
-	}
-	if !slices.Equal(server.writes, []string{"create"}) {
-		t.Fatalf("the first run wrote %v, want one create", server.writes)
-	}
-	asked := server.created
-	if asked.RoleId != "ocel_app_accounts" || asked.Role.Stage != "GA" || !slices.Equal(asked.Role.IncludedPermissions, bootstrap.AppAccountsPermissions) {
-		t.Errorf("the role was created as %+v %+v, want id ocel_app_accounts, stage GA and the four permissions", asked, asked.Role)
-	}
-	if asked.Role.Title != "ocel app accounts (ocel)" {
-		t.Errorf("the role is titled %q, want %q", asked.Role.Title, "ocel app accounts (ocel)")
-	}
-
-	found, err = b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
-	if err != nil || !found.Present || found.Mends != "" {
-		t.Fatalf("presenceOf() = %+v, %v, want a present role with nothing to mend", found, err)
-	}
-	if err := b.MakeRole(ctx, bootstrap.NewAppAccountsRole(b.Clients.Names)); err != nil {
-		t.Fatalf("makeRole() again = %v", err)
-	}
-	if !slices.Equal(server.writes, []string{"create"}) {
-		t.Errorf("the second run wrote %v, want no write beyond the first create", server.writes)
-	}
-}
-
-func TestADeletedAppAccountsRoleIsUndeleted(t *testing.T) {
-	t.Parallel()
-	server := &roleServer{role: currentRole()}
-	server.role.Deleted = true
-	b := server.bootstrap(t)
-	ctx := t.Context()
-	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_app_accounts"}
-
-	found, err := b.PresenceOf(ctx, bootstrap.Survey{Tier: environment.TierProduction}, target)
-	if err != nil || !found.Present || found.Mends != bootstrap.ReasonRoleDeleted {
-		t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, bootstrap.ReasonRoleDeleted)
-	}
-	if err := b.MakeRole(ctx, bootstrap.NewAppAccountsRole(b.Clients.Names)); err != nil {
-		t.Fatalf("makeRole() = %v", err)
-	}
-	if !slices.Equal(server.writes, []string{"undelete"}) {
-		t.Errorf("makeRole() wrote %v, want one undelete", server.writes)
-	}
-}
-
-func TestAnAppAccountsRoleWithOtherPermissionsIsPutBack(t *testing.T) {
-	t.Parallel()
-	for name, drift := range map[string]func(*iam.Role){
-		"an extra permission": func(role *iam.Role) {
-			role.IncludedPermissions = append(role.IncludedPermissions, "iam.serviceAccounts.delete")
-		},
-		"a missing permission": func(role *iam.Role) { role.IncludedPermissions = role.IncludedPermissions[:3] },
-		"a disabled stage":     func(role *iam.Role) { role.Stage = "DISABLED" },
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			server := &roleServer{role: currentRole()}
-			drift(server.role)
-			b := server.bootstrap(t)
-			target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: "ocel_app_accounts"}
-
-			found, err := b.PresenceOf(t.Context(), bootstrap.Survey{Tier: environment.TierProduction}, target)
-			if err != nil || !found.Present || found.Mends != bootstrap.ReasonRoleDrifted {
-				t.Fatalf("presenceOf() = %+v, %v, want a present role to mend for %q", found, err, bootstrap.ReasonRoleDrifted)
-			}
-			if err := b.MakeRole(t.Context(), bootstrap.NewAppAccountsRole(b.Clients.Names)); err != nil {
-				t.Fatalf("makeRole() = %v", err)
-			}
-			if !slices.Equal(server.writes, []string{"patch"}) {
-				t.Fatalf("makeRole() wrote %v, want one patch", server.writes)
-			}
-			if server.patchedMask != "includedPermissions,stage" {
-				t.Errorf("the patch masked %q, want %q", server.patchedMask, "includedPermissions,stage")
-			}
-			if !slices.Equal(server.patched.IncludedPermissions, bootstrap.AppAccountsPermissions) || server.patched.Stage != "GA" || server.patched.Etag != "BwXhoLA=" {
-				t.Errorf("the patch sent %+v, want the four permissions, stage GA and the etag the get returned", server.patched)
-			}
-		})
-	}
-}
-
-func TestAnAppAccountsRoleDeletedTooLongAgoIsRefusedNamingTheWait(t *testing.T) {
-	t.Parallel()
-	deleted := currentRole()
-	deleted.Deleted = true
-	for name, server := range map[string]*roleServer{
-		"the undelete is refused":   {role: deleted, undeleteCode: http.StatusBadRequest},
-		"the id is held by a purge": {createAnswer: http.StatusConflict},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			b := server.bootstrap(t)
-
-			err := b.MakeRole(t.Context(), bootstrap.NewAppAccountsRole(b.Clients.Names))
-
-			var refused refusal.Refusal
-			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-				t.Fatalf("makeRole() = %v, want a %s refusal", err, refusal.CodeNotReady)
-			}
-			for _, want := range []string{"projects/acme-prod/roles/ocel_app_accounts", "44 days", "OCEL_NAMESPACE"} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("the refusal %q does not contain %q", err, want)
-				}
-			}
-		})
-	}
-}
-
-func TestTheAppAccountsRoleIDFitsTheLongestNamespaceAnAccountAllows(t *testing.T) {
-	t.Parallel()
-
-	width := names.MaxAccountID - 1 - names.AccountHashDigits
-	namespace := strings.Repeat("a-", width/2) + strings.Repeat("b", width%2)
-	if len(namespace) != width || !strings.Contains(namespace, "-") {
-		t.Fatalf("the test namespace %q is %d characters, want %d with dashes", namespace, len(namespace), width)
-	}
-	names := names.New(provider.Namespace(namespace), "acme-prod")
-
-	id := names.AppAccountsRole()
-
-	if !regexp.MustCompile(`^[a-zA-Z0-9_.]{3,64}$`).MatchString(id) {
-		t.Errorf("AppAccountsRole() = %q, want 3 to 64 letters, digits, underscores and periods", id)
-	}
-	if got := names.AppAccountsRolePath(); got != "projects/acme-prod/roles/"+id {
-		t.Errorf("AppAccountsRolePath() = %q, want it under the project", got)
-	}
-}
-
-func TestRemovingABootstrapKeepsTheAppAccountsRole(t *testing.T) {
+func TestRemovingABootstrapKeepsItsCustomRoles(t *testing.T) {
 	t.Parallel()
 
 	names := names.New("ocel", "acme-prod")
-	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: names.AppAccountsRole(), Shared: true}
+	target := bootstrap.Resource{Kind: bootstrap.KindRole, Name: names.PartsRole(), Shared: true}
 	for _, sibling := range []bool{false, true} {
 		read := bootstrap.Survey{Tier: environment.TierProduction, Names: names, Sibling: sibling, Held: map[string]bool{target.ID(): true}}
 
@@ -295,8 +127,8 @@ func TestAnEmulatedBootstrapMakesNoCustomRole(t *testing.T) {
 	if got := count(true); got != 0 {
 		t.Errorf("an emulated bootstrap names %d custom roles, want none: floci answers 404 to every roles call", got)
 	}
-	if got := count(false); got != 5 {
-		t.Errorf("a bootstrap against Google names %d custom roles, want the app accounts, CDN purge, parts, project records and realtime subscriptions roles", got)
+	if got := count(false); got != 3 {
+		t.Errorf("a bootstrap against Google names %d custom roles, want the CDN purge, parts and realtime subscriptions roles", got)
 	}
 }
 

@@ -60,18 +60,11 @@ func (n Names) RepositoryPath(region string, tier environment.Tier) string {
 }
 
 const (
-	appAccountsSuffix = "app_accounts"
-	cdnPurgeSuffix    = "cdn_purge"
+	cdnPurgeSuffix = "cdn_purge"
 )
 
 func customRoleID(ns provider.Namespace, suffix string) string {
 	return strings.ReplaceAll(naming.NamespaceField(string(ns)), "-", "_") + "_" + suffix
-}
-
-func (n Names) AppAccountsRole() string { return customRoleID(n.namespace, appAccountsSuffix) }
-
-func (n Names) AppAccountsRolePath() string {
-	return "projects/" + n.project + "/roles/" + n.AppAccountsRole()
 }
 
 func (n Names) CDNPurgeRole() string { return customRoleID(n.namespace, cdnPurgeSuffix) }
@@ -323,7 +316,6 @@ func (n Names) Fit() error {
 
 const (
 	partsSuffix                 = "parts"
-	projectRecordsSuffix        = "project_records"
 	realtimeSubscriptionsSuffix = "realtime_subscriptions"
 )
 
@@ -355,12 +347,6 @@ func (n Names) ProjectWritableDatabase(tier environment.Tier, project string) st
 
 func (n Names) ProjectWritableDatabasePrefix(tier environment.Tier) string {
 	return ports.ProjectWritableDatabasePrefix(n.namespace, tier)
-}
-
-func (n Names) ProjectRecordsRole() string { return customRoleID(n.namespace, projectRecordsSuffix) }
-
-func (n Names) ProjectRecordsRolePath() string {
-	return "projects/" + n.project + "/roles/" + n.ProjectRecordsRole()
 }
 
 func (n Names) AccountID(account *iam.ServiceAccount) (string, bool) {

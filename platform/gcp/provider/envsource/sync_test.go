@@ -11,7 +11,6 @@ import (
 	"google.golang.org/api/cloudscheduler/v1"
 	runv2 "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -625,10 +624,10 @@ func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeeds(t *testing.T) {
 			t.Errorf("a bootstrap does not check %s, and the apply would fail at the env source sync", permission)
 		}
 	}
-	if !slices.Contains(bootstrap.RolesFor(edge.PurposeBootstrap), "roles/cloudscheduler.admin") {
-		t.Errorf("bootstrap credentials are granted %v, want roles/cloudscheduler.admin among them", bootstrap.RolesFor(edge.PurposeBootstrap))
+	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/cloudscheduler.admin") {
+		t.Errorf("bootstrap credentials are granted %v, want roles/cloudscheduler.admin among them", bootstrap.BootstrapRoles())
 	}
-	for _, role := range []string{"roles/cloudscheduler.admin", "roles/run.admin", "roles/iam.serviceAccountUser", "roles/artifactregistry.writer"} {
+	for _, role := range []string{"roles/cloudscheduler.admin", "roles/run.admin", "roles/iam.serviceAccountUser", "roles/artifactregistry.admin"} {
 		if !slices.Contains(bootstrap.RolesCovering(nil), role) {
 			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", bootstrap.RolesCovering(nil), role)
 		}

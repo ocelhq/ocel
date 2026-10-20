@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	TierTagKey          = "ocel-tier"
 	TierTagUserRole     = "roles/resourcemanager.tagUser"
 	globalTagEndpoint   = "https://cloudresourcemanager.googleapis.com/"
 	tierTagSeenAttempts = 10
@@ -29,12 +28,6 @@ type TaggedResource struct {
 	Name             string
 	Regional         bool
 	PermissionPrefix string
-}
-
-func (c *Clients) TierTagKeyPath() string { return c.Project() + "/" + TierTagKey }
-
-func (c *Clients) TierTagValuePath(tier environment.Tier) string {
-	return c.TierTagKeyPath() + "/" + string(tier)
 }
 
 func (c *Clients) TierTagged() bool { return !c.Emulated() || c.TierTagEndpoint != "" }

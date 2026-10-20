@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
@@ -52,11 +53,6 @@ var appGrantedRoles = []string{RecordsRole, TaskRecordsRole, OpeningRole, Object
 func ListGrantedRoles(names names.Names) []string {
 	return append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
 }
-
-const (
-	appGrantsRole       = "roles/resourcemanager.projectIamAdmin"
-	modifiedGrantsLimit = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])"
-)
 
 type grantTarget struct {
 	Kind targetKind `json:"kind"`
@@ -177,18 +173,24 @@ func policyOf(c *gcloud.Clients, target grantTarget) policy.Resource {
 		return topics.TopicPolicy(service, target.Name).Read(ctx)
 	}}
 }
+func DeployCredential(c *gcloud.Clients, tier environment.Tier) credential.Deploy {
+	deploy := c.DeployCredential(tier)
+	deploy.GrantableRoles = ListGrantedRoles(c.Names)
+	return deploy
+}
 
 func explainRefusedGrant(c *gcloud.Clients, tier environment.Tier, target grantTarget, err error) error {
+	deploy := DeployCredential(c, tier)
 	switch target.Kind {
 	case Project:
 		if isMissingRole(err, c.CDNPurgeRolePath()) {
 			return refuseMissingCDNPurgeRole(c, tier)
 		}
-		return gcloud.ExplainMissingGrant(err, AppGrantsGrant(c.Names))
+		return gcloud.ExplainMissingGrant(err, deploy.AppGrants().String())
 	case Account:
-		return gcloud.WrapAccountGrantError(err, c.AppAccountsRolePath())
+		return gcloud.WrapAccountGrantError(err, deploy.Tiered(credential.AccountsRole).String())
 	case Queue:
-		return gcloud.ExplainMissingGrant(err, QueueAdminGrant(target.Name))
+		return gcloud.ExplainMissingGrant(err, deploy.Queue().String())
 	}
 	return err
 }
@@ -265,17 +267,4 @@ func refuseMissingCDNPurgeRole(c *gcloud.Clients, tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"the custom role %s that lets an app that revalidates behind the alb clear Cloud CDN is not in project %s: the %s bootstrap predates it.\n"+
 			"Run `%s`, then deploy again", c.CDNPurgeRolePath(), c.Project(), tier, provider.BootstrapCommand(tier))
-}
-
-func AppGrantsGrant(names names.Names) string {
-	granted := ListGrantedRoles(names)
-	quoted := make([]string, len(granted))
-	for i, role := range granted {
-		quoted[i] = "'" + role + "'"
-	}
-	return fmt.Sprintf("%s, on the condition %s.hasOnly([%s])", appGrantsRole, modifiedGrantsLimit, strings.Join(quoted, ", "))
-}
-
-func QueueAdminGrant(queue string) string {
-	return "roles/cloudtasks.queueAdmin on the queue " + queue
 }

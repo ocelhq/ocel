@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/bastion/relay"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
@@ -165,7 +166,7 @@ func (b Bastion) ensureAccount(ctx context.Context, tier environment.Tier) error
 		return err
 	}
 	return gcloud.UntilVisible(ctx, func() error {
-		return gcloud.WrapAccountGrantError(gcloud.BindAccountRole(ctx, b.clients, account, bootstrap.RunAsRole, gcloud.MemberOf(principal), true), b.clients.AppAccountsRolePath())
+		return gcloud.WrapAccountGrantError(gcloud.BindAccountRole(ctx, b.clients, account, bootstrap.RunAsRole, gcloud.MemberOf(principal), true), b.clients.DeployCredential(tier).Tiered(credential.AccountsRole).String())
 	})
 }
 

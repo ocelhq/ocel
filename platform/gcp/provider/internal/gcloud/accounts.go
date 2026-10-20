@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -45,7 +46,7 @@ func (c *Clients) ReadAccount(ctx context.Context, account string) (*iam.Service
 func (c *Clients) CreateAccount(ctx context.Context, tier environment.Tier, account, displayName, description string) error {
 	found, err := c.ReadAccount(ctx, account)
 	if err != nil {
-		return ExplainMissingGrant(err, c.AppAccountsRolePath())
+		return ExplainMissingGrant(err, c.DeployCredential(tier).Tiered(credential.AccountsRole).String())
 	}
 	if found == nil {
 		if found, err = c.makeAccount(ctx, account, displayName, description); err != nil {
@@ -74,7 +75,7 @@ func (c *Clients) makeAccount(ctx context.Context, account, displayName, descrip
 			"project %s has as many service accounts as its Service Account Count quota allows, and every app ocel deploys runs as one of its own.\n"+
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.Project())
 	}
-	return nil, ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.AppAccountsRolePath())
+	return nil, ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), credential.Deploy{}.ProjectPermissions().String())
 }
 
 func (c *Clients) readTakenAccount(ctx context.Context, account string) (*iam.ServiceAccount, error) {

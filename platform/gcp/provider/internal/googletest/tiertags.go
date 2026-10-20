@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 type TierTags struct {
@@ -51,7 +52,7 @@ func NewTierTags(t *testing.T) *TierTags {
 func NewTieredTags(t *testing.T) *TierTags {
 	t.Helper()
 	tags := NewTierTags(t)
-	key := &crm.TagKey{Name: "tagKeys/1", Parent: "projects/123456789", ShortName: gcloud.TierTagKey, NamespacedName: Project + "/" + gcloud.TierTagKey}
+	key := &crm.TagKey{Name: "tagKeys/1", Parent: "projects/123456789", ShortName: names.TierTagKey, NamespacedName: Project + "/" + names.TierTagKey}
 	tags.Keys[key.NamespacedName] = key
 	for _, tier := range BothTiers {
 		tags.addValue(key, string(tier))
@@ -67,7 +68,7 @@ func (s *TierTags) Tagged(c *gcloud.Clients) *gcloud.Clients {
 func (s *TierTags) ValueOf(tier environment.Tier) string {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	if value := s.Values[Project+"/"+gcloud.TierTagKey+"/"+string(tier)]; value != nil {
+	if value := s.Values[Project+"/"+names.TierTagKey+"/"+string(tier)]; value != nil {
 		return value.Name
 	}
 	return ""

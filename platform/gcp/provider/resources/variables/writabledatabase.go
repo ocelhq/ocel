@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
@@ -86,7 +87,7 @@ func EnsureProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, pre 
 		}
 		for _, layout := range layouts {
 			if err := makeLayout(ctx, b, database, layout); err != nil {
-				return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(b.Clients.Names, b.Clients.Region))
+				return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 			}
 		}
 	}
@@ -106,7 +107,7 @@ func makeWritableDatabase(ctx context.Context, b bootstrap.Engine, tier environm
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project that runs topics, tasks or a revalidating Next app keeps its runs and tag records in one of its own per tier.\n"+
 				"Ask Google support to raise the limit of databases per project, or remove projects this tier no longer runs, then try again", b.Clients.Project())
 	}
-	return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(b.Clients.Names, b.Clients.Region))
+	return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).ProjectPermissions().String())
 }
 
 func makeLayout(ctx context.Context, b bootstrap.Engine, database string, layout Layout) error {
@@ -167,7 +168,7 @@ func takeWritableDatabase(ctx context.Context, b bootstrap.Engine, stores projec
 	if !b.Clients.Emulated() {
 		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Deleting Firestore database %s, which kept the runs and tag records of %s in %s", database, project, tier))
 		if err := stores.takeDatabase(ctx, tier, database); err != nil {
-			return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(b.Clients.Names, b.Clients.Region))
+			return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 		}
 	}
 	return records.Forget(ctx, b.Records, writableDatabaseKey(tier, project))

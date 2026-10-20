@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -52,7 +51,7 @@ func provisioned(target Resource, emulated bool) bool {
 func StackResources(names names.Names, tier environment.Tier, emulated bool) []Resource {
 	items := []Resource{
 		{
-			Kind: KindTierTag, Name: gcloud.TierTagKey, Shared: true,
+			Kind: KindTierTag, Name: tierTagOf().Name, Shared: true,
 			Note: "the tag every resource of a tier carries its tier's value of, production or preview, which fences a tier's deploy credential to that tier's resources",
 		},
 		{
@@ -78,10 +77,6 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 		{
 			Kind: KindKey, Name: string(tier),
 			Note: "the key every value this tier stores is sealed under",
-		},
-		{
-			Kind: KindRole, Name: names.AppAccountsRole(), Shared: true,
-			Note: "the role a deploy credential is granted to create the service accounts its apps run as and to set who may act as them, and no more",
 		},
 		{
 			Kind: KindRole, Name: names.CDNPurgeRole(), Shared: true,
@@ -114,10 +109,6 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 		{
 			Kind: KindQueue, Name: names.DelayQueue(tier),
 			Note: "the queue a delayed message of this tier waits in, which a deploy grants each app that publishes the right to enqueue on, and may only grant on a queue that already exists",
-		},
-		{
-			Kind: KindRole, Name: names.ProjectRecordsRole(), Shared: true,
-			Note: "the role a deploy credential is granted, on the condition it names them, to make the Firestore databases each project's values, runs and tag records are kept in and the key its values are sealed under, and no more",
 		},
 		{
 			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),
