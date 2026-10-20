@@ -1,0 +1,52 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+message CloudOffer {
+  string api_url = 1;
+
+  string provider_url = 2;
+
+  string audience = 3;
+}
+
+message DescribeRequest {
+}
+
+message DescribeResponse {
+  string console_version = 1;
+
+  repeated string capabilities = 2;
+
+  CloudOffer cloud = 3;
+}
+
+message IssueCloudTokenRequest {
+  repeated string scopes = 1 [(buf.validate.field).repeated = {
+    max_items: 32
+    unique: true
+    items: {
+      string: {
+        min_len: 1
+        max_len: 64
+        pattern: "^[a-z0-9._:-]+$"
+      }
+    }
+  }];
+}
+
+message IssueCloudTokenResponse {
+  string token = 1;
+
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+service ConsoleService {
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+
+  rpc IssueCloudToken(IssueCloudTokenRequest) returns (IssueCloudTokenResponse);
+}
