@@ -39,18 +39,38 @@ func TestRemovingADatabaseRemovesItsInstancesTierTagBeforeTheInstance(t *testing
 	}
 }
 
-func TestADatabaseWhoseTierTagHasNotYetReachedTheCredentialIsResizedOnceItHas(t *testing.T) {
+func TestADatabasesCloudSQLInstanceIsCreatedCarryingItsTiersTagAndIsNotBoundAfter(t *testing.T) {
 	h := servingPostgres(t)
 	tags := googletest.NewTieredTags(t)
 	tags.Tagged(h.instances.clients)
+	h.server.TierTags = tags
+
+	h.provision(t, "16")
+
+	sent, _ := h.server.Sent[0]["tags"].(map[string]any)
+	if sent["acme-prod/ocel-tier"] != "production" {
+		t.Errorf("the Cloud SQL instance was created with the tags %v, want acme-prod/ocel-tier: production", sent)
+	}
+	if tags.BindingsAsked != 0 {
+		t.Errorf("a binding was asked for %d times after the instance was created carrying its tag, want none", tags.BindingsAsked)
+	}
+}
+
+func TestADatabaseFoundWithoutItsTiersTagIsTouchedOnlyOnceTheTagAdmitsTheCredential(t *testing.T) {
+	h := servingPostgres(t)
 	h.provision(t, "17")
 	instance := h.server.Created[0].Name
-	h.server.Instances[instance].Settings.Tier = "db-f1-micro"
-	h.server.PatchesDenied = 2
+	h.server.Databases[instance] = nil
+	tags := googletest.NewTieredTags(t)
+	tags.Tagged(h.instances.clients)
+	h.server.Unadmitted = 2
 
 	h.provision(t, "17")
 
-	if len(h.server.Patched) != 1 || h.server.Instances[instance].Settings.Tier != "db-custom-1-3840" {
-		t.Errorf("Cloud SQL was patched %d times to %s, want one resize once the tier's grants reached the instance", len(h.server.Patched), h.server.Instances[instance].Settings.Tier)
+	if got := tags.Bound(h.instances.clients.SQLInstanceTagged(instance).Name); !slices.Equal(got, []string{tags.ValueOf(environment.TierProduction)}) {
+		t.Errorf("Cloud SQL instance %s carries %v, want the production value", instance, got)
+	}
+	if !slices.Contains(h.server.Databases[instance], "ocel") {
+		t.Errorf("the instance holds the databases %v once its tag admitted the credential, want ocel", h.server.Databases[instance])
 	}
 }

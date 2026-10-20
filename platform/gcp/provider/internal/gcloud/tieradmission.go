@@ -44,18 +44,6 @@ func (c *Clients) awaitTierAdmits(ctx context.Context, tier environment.Tier, ta
 	return refuseUnadmitted(c, tier, target)
 }
 
-func (c *Clients) RetriedUntilTierAdmits(ctx context.Context, tier environment.Tier, target TaggedResource, call func() error) error {
-	for attempt := range tierAdmittedAttempts {
-		if attempt > 0 && !googleretry.WaitedFor(ctx, attempt, WaitCeiling) {
-			return ctx.Err()
-		}
-		if err := call(); !c.TierTagged() || !Forbidden(err) {
-			return err
-		}
-	}
-	return refuseUnadmitted(c, tier, target)
-}
-
 func refuseUnadmitted(c *Clients, tier environment.Tier, target TaggedResource) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s carries the %s tag, and Google still does not let this credential reach it through that tag a couple of minutes later.\n"+
@@ -123,5 +111,22 @@ func (c *Clients) bucketAdmits(bucket string) Admission {
 			return false, err
 		}
 		return holds(granted, bucketAdmitPermission), nil
+	}
+}
+
+func (c *Clients) instanceAdmits(instance string) Admission {
+	return func(ctx context.Context) (bool, error) {
+		service, err := c.SQL()
+		if err != nil {
+			return false, err
+		}
+		_, err = googleretry.Attempted(ctx, service.Databases.List(c.Project(), instance).Context(ctx).Do)
+		switch {
+		case err == nil:
+			return true, nil
+		case Forbidden(err):
+			return false, nil
+		}
+		return false, err
 	}
 }

@@ -31,8 +31,12 @@ type CloudSQL struct {
 	Addressed  bool
 	Primary    string
 	RefusedSet int
+	TierTags   *TierTags
+	Unadmitted int
+}
 
-	PatchesDenied int
+func SQLInstanceTagParent(instance string) string {
+	return "//sqladmin.googleapis.com/projects/" + Project + "/instances/" + instance
 }
 
 func NewCloudSQL() *CloudSQL {
@@ -75,9 +79,16 @@ func (s *CloudSQL) Serve(w http.ResponseWriter, r *http.Request) {
 			stored.IpAddresses = []*sqladmin.IpMapping{{Type: "PRIMARY", IpAddress: s.Primary}}
 		}
 		s.Instances[created.Name] = &stored
+		if s.TierTags != nil && len(created.Tags) > 0 {
+			s.TierTags.BindInline(SQLInstanceTagParent(created.Name), created.Tags)
+		}
 		s.operation(w)
 	case len(parts) == 2:
 		s.instance(w, r, parts[1])
+	case len(parts) >= 3 && s.Unadmitted > 0:
+		s.Unadmitted--
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"The client is not authorized to make this request."}}`))
 	case len(parts) >= 3 && parts[2] == "databases":
 		s.database(w, r, parts)
 	case len(parts) >= 3 && parts[2] == "users":
@@ -122,12 +133,6 @@ func (s *CloudSQL) instance(w http.ResponseWriter, r *http.Request, name string)
 	case http.MethodGet:
 		WriteBody(w, instance)
 	case http.MethodPatch:
-		if s.PatchesDenied > 0 {
-			s.PatchesDenied--
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"The client is not authorized to make this request."}}`))
-			return
-		}
 		s.patch(w, r, instance)
 	case http.MethodDelete:
 		if instance.Settings != nil && instance.Settings.DeletionProtectionEnabled {
@@ -173,6 +178,12 @@ func (s *CloudSQL) patch(w http.ResponseWriter, r *http.Request, instance *sqlad
 func (s *CloudSQL) database(w http.ResponseWriter, r *http.Request, parts []string) {
 	instance := parts[1]
 	switch {
+	case r.Method == http.MethodGet && len(parts) == 3:
+		listed := &sqladmin.DatabasesListResponse{}
+		for _, name := range s.Databases[instance] {
+			listed.Items = append(listed.Items, &sqladmin.Database{Name: name, Instance: instance})
+		}
+		WriteBody(w, listed)
 	case r.Method == http.MethodGet && len(parts) == 4:
 		if !slices.Contains(s.Databases[instance], parts[3]) {
 			w.WriteHeader(http.StatusNotFound)
