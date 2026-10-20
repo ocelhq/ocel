@@ -25,7 +25,7 @@ func (h *heldStores) stores() projectStores {
 	return projectStores{
 		databaseExists: func(_ context.Context, id string) (bool, error) { return h.databases[id], nil },
 		keyExists:      func(_ context.Context, name string) (bool, error) { return h.keys[name], nil },
-		takeDatabase: func(_ context.Context, id string) error {
+		takeDatabase: func(_ context.Context, _ environment.Tier, id string) error {
 			delete(h.databases, id)
 			h.taken = append(h.taken, "database "+id)
 			return nil

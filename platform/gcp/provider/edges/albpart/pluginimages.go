@@ -41,6 +41,9 @@ func (i PluginImages) Ensure(ctx context.Context, tier environment.Tier, plugin 
 	if err := ensurePluginRepository(ctx, c, service, repository, path); err != nil {
 		return "", err
 	}
+	if err := c.EnsureTierTag(ctx, tier, c.RepositoryTagged(repository)); err != nil {
+		return "", err
+	}
 	digest := sha256.Sum256(plugin)
 	version := hex.EncodeToString(digest[:])[:pluginVersionLen]
 	_, err = googleretry.Attempted(ctx, service.Projects.Locations.Repositories.Packages.Versions.Get(path+"/packages/"+pluginPackage+"/versions/"+version).Context(ctx).Do)

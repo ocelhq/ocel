@@ -40,7 +40,7 @@ var databaseKind = KindOps{
 		return b.databasePresence(ctx, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
-		return b.MakeDatabase(ctx, read, target.Name)
+		return b.MakeDatabase(ctx, read, target.Name, nil)
 	},
 	mend: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
 		return b.protectDatabase(ctx, target.Name)
@@ -70,7 +70,28 @@ var databaseKind = KindOps{
 	},
 }
 
-func (b Engine) MakeDatabase(ctx context.Context, read Survey, id string) error {
+func (b Engine) MakeTierDatabase(ctx context.Context, tier environment.Tier, id string) error {
+	read := Survey{Project: b.Clients.Project(), Region: b.Clients.Region}
+	if err := b.MakeDatabase(ctx, read, id, b.Clients.InlineTierTags(tier)); err != nil {
+		return err
+	}
+	return b.Clients.EnsureTierTag(ctx, tier, b.Clients.DatabaseTagged(id))
+}
+
+func (b Engine) TakeTierDatabase(ctx context.Context, tier environment.Tier, id string) error {
+	if b.Clients.TierTagged() {
+		present, err := b.databasePresence(ctx, id)
+		if err != nil || !present.Present {
+			return err
+		}
+		if err := b.Clients.RemoveTierTag(ctx, tier, b.Clients.DatabaseTagged(id)); err != nil {
+			return err
+		}
+	}
+	return b.TakeDatabase(ctx, id)
+}
+
+func (b Engine) MakeDatabase(ctx context.Context, read Survey, id string, tags map[string]string) error {
 	service, err := b.Clients.Databases()
 	if err != nil {
 		return err
@@ -79,6 +100,7 @@ func (b Engine) MakeDatabase(ctx context.Context, read Survey, id string) error 
 		LocationId:            read.Region,
 		Type:                  NativeFirestore,
 		DeleteProtectionState: protectionOn,
+		Tags:                  tags,
 	}).DatabaseId(id).Context(ctx).Do)
 	if gcloud.Taken(err) {
 		return b.databaseServesThisRegion(ctx, read, id)
