@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -58,7 +59,12 @@ func (roomyQuotas) GetAWSDefaultServiceQuota(context.Context, *servicequotas.Get
 }
 
 func tierNetworkOutputs(cidr string) auto.OutputMap {
+	return patchedNetworkOutputs(cidr, "")
+}
+
+func patchedNetworkOutputs(cidr, digest string) auto.OutputMap {
 	encoded, _ := json.Marshal(network.Network{
+		PatchDigest:   digest,
 		VPC:           "vpc-ocel",
 		CIDR:          cidr,
 		Zones:         []string{"use1-az1", "use1-az2"},
@@ -350,7 +356,7 @@ func (a addressesHeld) DescribeAddresses(context.Context, *awsec2.DescribeAddres
 func TestAFunctionNetworkRaisedAgainCountsNoneOfTheElasticIPsItsFailedRaiseHoldsAgainstTheQuota(t *testing.T) {
 	t.Parallel()
 
-	stacks, engine, _ := functionNetworkStacksOver(t, addressesHeld{held: 3, own: 2}, "web")
+	stacks, engine, _ := functionNetworkStacksOver(t, addressesHeld{held: 3, own: 2}, nil, "web")
 	if _, err := stacks.Provision(context.Background(), usingPostgres(t, "web"), progress.Discard()); err != nil {
 		t.Fatalf("Provision() = %v, want the function network raised: its own two addresses are the two it needs, beside three others of five", err)
 	}
@@ -362,7 +368,7 @@ func TestAFunctionNetworkRaisedAgainCountsNoneOfTheElasticIPsItsFailedRaiseHolds
 func TestAFunctionNetworkTheAccountHasNoElasticIPsLeftForIsRefusedNamingTheQuota(t *testing.T) {
 	t.Parallel()
 
-	stacks, engine, _ := functionNetworkStacksOver(t, addressesHeld{held: 4}, "web")
+	stacks, engine, _ := functionNetworkStacksOver(t, addressesHeld{held: 4}, nil, "web")
 	_, err := stacks.Provision(context.Background(), usingPostgres(t, "web"), progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "L-0263D0A3") {
@@ -384,5 +390,68 @@ func TestThePlanOfTheFirstContainerAppInATierShowsTheNetworkBeforeTheContainerIn
 	}
 	if len(plan.Groups) < 2 || plan.Groups[0].Part != network.Part || plan.Groups[1].Name != containers.StackRef(environment.TierProduction).Name.String() {
 		t.Fatalf("plan groups = %+v, want the network part and then the container infrastructure it runs in", plan.Groups)
+	}
+}
+
+func TestTheNetworkIsProvisionedAgainOnlyWhenTheTransformsThatPatchItDiffer(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pass := &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"enableNetworkAddressUsageMetrics": true}}}}
+	cfg := routedConfig(t, cloudfront.Kind)
+	cfg.Transform = pass
+	stacks, engine, _ := networkStacks(t, cfg)
+	engine.outputs = patchedNetworkOutputs(network.DefaultCIDR("ocel", environment.TierProduction), "patched-by-another-project")
+
+	if _, err := stacks.Network().Claim(ctx, consumerRef("shop"), progress.Discard()); err != nil {
+		t.Fatalf("Claim(shop) = %v", err)
+	}
+	said := &recordingProgress{}
+	if _, err := stacks.Network().Claim(ctx, consumerRef("admin"), said); err != nil {
+		t.Fatalf("Claim(admin) = %v", err)
+	}
+	if ups, _ := engine.networkRuns(); ups != 2 {
+		t.Fatalf("ran the network %d times, want it raised and then provisioned again with this project's patches", ups)
+	}
+	if !strings.Contains(strings.Join(said.reported(), "\n"), "transforms") {
+		t.Errorf("progress = %v, want it to say the transforms changed the network", said.reported())
+	}
+
+	evaluated, err := evaluateTierPatches(ctx, &fixedPass{result: pass.result}, testNamespace, environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine.outputs = patchedNetworkOutputs(network.DefaultCIDR("ocel", environment.TierProduction), evaluated.network.Digest)
+	if _, err := stacks.Network().Claim(ctx, consumerRef("blog"), progress.Discard()); err != nil {
+		t.Fatalf("Claim(blog) = %v", err)
+	}
+	if ups, _ := engine.networkRuns(); ups != 2 {
+		t.Errorf("ran the network %d times, want no run for patches it already carries", ups)
+	}
+	if len(pass.asked) != 1 {
+		t.Errorf("evaluated the transforms %d times, want once for the tier", len(pass.asked))
+	}
+}
+
+func TestTheFunctionNetworkIsProvisionedAgainWhenTheTransformsThatPatchItsNATGatewaysDiffer(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pass := &fixedPass{result: transform.Result{Patches: transform.Patches{"natGateway": {"secondaryPrivateIpAddressCount": float64(2)}}}}
+	stacks, engine, _ := functionNetworkStacksOver(t, defaultVPCNetwork{}, pass, "web", "admin")
+	if _, err := stacks.Provision(ctx, usingPostgres(t, "web"), progress.Discard()); err != nil {
+		t.Fatalf("Provision(web) = %v", err)
+	}
+	if _, err := stacks.Provision(ctx, usingPostgres(t, "admin"), progress.Discard()); err != nil {
+		t.Fatalf("Provision(admin) = %v", err)
+	}
+	runs := 0
+	for _, ran := range engine.stacks() {
+		if ran == functionnetwork.StackRef(environment.TierProduction).Name.String() {
+			runs++
+		}
+	}
+	if runs != 2 {
+		t.Errorf("ran the function network %d times, want it provisioned again: the patch it records is not this deploy's", runs)
 	}
 }

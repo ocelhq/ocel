@@ -176,8 +176,8 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run("network", network.NewProgram(testNamespace, environment.TierProduction, "us-east-1", layout, []string{"use1-az1", "use1-az2"}).Run)
-	run("function-network", functionnetwork.NewProgram(testNamespace, environment.TierProduction, network.Pending).Run)
+	run("network", network.NewProgram(testNamespace, environment.TierProduction, "us-east-1", layout, []string{"use1-az1", "use1-az2"}, component.Patches{}).Run)
+	run("function-network", functionnetwork.NewProgram(testNamespace, environment.TierProduction, network.Pending, component.Patches{}).Run)
 	run("container-infra", containers.NewProgram(testNamespace, environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, containers.Fronts{Private: true}, network.Pending).Run)
 	topicsRelease := &release{cfg: Config{Namespace: testNamespace, Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)

@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
 
@@ -57,7 +58,7 @@ func runNetwork(t *testing.T, namespace string, tier environment.Tier) *recorded
 	if err != nil {
 		t.Fatal(err)
 	}
-	program := NewProgram(namespace, tier, "us-east-1", layout, []string{"use1-az1", "use1-az2"})
+	program := NewProgram(namespace, tier, "us-east-1", layout, []string{"use1-az1", "use1-az2"}, component.Patches{})
 	cloud := &recorded{}
 	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(Slug, string(tier)+"--infra", cloud)); err != nil {
 		t.Fatalf("run the network program: %v", err)

@@ -54,6 +54,7 @@ for it. Under it go `aws.lambda.Function`'s own args, typed from `@pulumi/aws`.
 | `bucket` | `bucket`, `publicAccessBlock`, `cors`, `uploadCompleterRole`, `uploadCompleterS3Policy`, `uploadCompleterSessionsPolicy`, `uploadCompleterLogsPolicy`, `uploadCompleterLogGroup`, `uploadCompleter`, `uploadCompleterPermission`, `notification` |
 | `postgres` | `securityGroup`, `subnetGroup`, `cluster`, `instance` |
 | `kv` | `securityGroup`, `subnetGroup`, `parameterGroup`, `replicationGroup` |
+| `network` | `vpc`, `internetGateway`, `publicSubnet`, `privateSubnet`, `isolatedSubnet`, `publicRouteTable`, `privateRouteTable`, `isolatedRouteTable`, `s3Endpoint`, `dynamodbEndpoint`, `natGateway`, `natAddress` |
 
 The deploy is refused when:
 
@@ -68,6 +69,36 @@ The deploy is refused when:
 A kv store's token, port, TLS, engine version, parameters and node type (picked by `memory`)
 stay ocel's. Its node count is yours: one node halves the cost and loses the data when
 ElastiCache replaces the node.
+
+## The network
+
+On AWS, `network` patches the tier's [VPC](/docs/providers/aws#the-network) and the function
+network's NAT gateways. A subnet or route table key reaches that kind in every zone, so
+`privateSubnet` patches both private subnets. Its block, zones, routes, endpoints' route tables
+and the NAT gateways' placement stay ocel's.
+
+```ts title="transforms/network.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform({
+  tags: { "acme:cost-center": "platform" },
+  aws: {
+    network: {
+      vpc: { enableNetworkAddressUsageMetrics: true },
+      s3Endpoint: { policy: JSON.stringify({ Statement: [/* … */] }) },
+    },
+  },
+});
+```
+
+The network belongs to the tier, not to a project:
+
+- A rule's `if` sees the tier and no `env` or `app` for it.
+- Every project deployed to the tier should list the same network patches: a deploy whose patches
+  differ from the ones the network carries provisions it again with its own. A deploy whose
+  transforms patch nothing in it leaves it as it is.
+- A changed patch takes effect at the next deploy of anything that runs in the network.
+- A patch cannot be filled from `bindings`: no project's records reach a tier's network.
 
 ## On a VPS
 

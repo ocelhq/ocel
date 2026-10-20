@@ -209,6 +209,9 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 		return Infrastructure{}, err
 	}
 	if present && infra.hasFronts(fronts) {
+		if _, err := s.Network.Claim(ctx, StackRef(tier), progress); err != nil {
+			return Infrastructure{}, err
+		}
 		if err := recordFront(ctx, owner.KeyValues, tier, infra); err != nil {
 			return Infrastructure{}, err
 		}

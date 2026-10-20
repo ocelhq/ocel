@@ -9,6 +9,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -50,7 +52,9 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 		"bucket":              transformed(bucket.New(component.Artifacts{}), provider.Resource{Name: "uploads", Type: provider.BindingBucket}),
 		"postgres":            transformed(postgres.New(nil), provider.Resource{Name: "main", Type: provider.BindingPostgres}),
 		"kv":                  transformed(kv.New(kv.Tokens{}), provider.Resource{Name: "cache", Type: provider.BindingKV}),
+		transformTypeNetwork:  network.ResourceNames(testNamespace, environment.TierProduction),
 	}
+	maps.Copy(rendered[transformTypeNetwork], functionnetwork.ResourceNames(testNamespace, environment.TierProduction))
 
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
 

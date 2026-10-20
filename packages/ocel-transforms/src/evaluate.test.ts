@@ -163,6 +163,40 @@ describe("evaluate", () => {
     },
   );
 
+  it.each([
+    ["vpc", "cidrBlock"],
+    ["privateSubnet", "cidrBlock"],
+    ["publicSubnet", "mapPublicIpOnLaunch"],
+    ["isolatedRouteTable", "routes"],
+    ["s3Endpoint", "routeTableIds"],
+    ["natGateway", "subnetId"],
+  ])("refuses %s.%s on the tier's network, whose layout ocel keeps", (key, field) => {
+    const modules = [
+      module(
+        "./network.transform.ts",
+        defineTransform({ aws: { network: { [key]: { [field]: "whatever" } } } } as never),
+      ),
+    ];
+
+    expect(() =>
+      evaluate(request({ env: "", resources: [{ type: "network", name: "production" }] }), modules),
+    ).toThrow(new RegExp(`aws\\.network\\.${key}\\.${field}`));
+  });
+
+  it("patches the tier's network with what ocel leaves open", () => {
+    const modules = [
+      module(
+        "./network.transform.ts",
+        defineTransform({ aws: { network: { vpc: { enableNetworkAddressUsageMetrics: true } } } }),
+      ),
+    ];
+
+    expect(
+      evaluate(request({ env: "", resources: [{ type: "network", name: "production" }] }), modules)
+        .resources[0]?.patches,
+    ).toEqual({ vpc: { enableNetworkAddressUsageMetrics: true } });
+  });
+
   it("returns a patch for every resource the aws provider constructs", () => {
     const modules = [
       module(

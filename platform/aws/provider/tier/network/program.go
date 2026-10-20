@@ -40,18 +40,20 @@ type work struct {
 	layout    Layout
 	zones     []string
 	tags      map[string]string
+	patches   component.Patches
 }
 
-func NewProgram(namespace string, tier environment.Tier, region string, layout Layout, zones []string) component.Program {
-	w := &work{namespace: namespace, tier: tier, region: region, layout: layout, zones: zones, tags: stackTags(namespace, tier)}
+func NewProgram(namespace string, tier environment.Tier, region string, layout Layout, zones []string, patches component.Patches) component.Program {
+	w := &work{namespace: namespace, tier: tier, region: region, layout: layout, zones: zones, tags: stackTags(namespace, tier), patches: patches}
 	return component.Program{Run: w.run, Tags: w.tags}
 }
 
 func (w *work) tagsFor(name string) pulumi.StringMap {
-	tags := pulumi.StringMap{"Name": pulumi.String(name)}
-	for key, value := range w.tags {
+	tags := pulumi.StringMap{}
+	for key, value := range w.patches.TagsOver(w.tags) {
 		tags[key] = pulumi.String(value)
 	}
+	tags["Name"] = pulumi.String(name)
 	return tags
 }
 
@@ -62,6 +64,9 @@ func (w *work) name(words ...string) string {
 func (w *work) run(ctx *pulumi.Context) error {
 	if len(w.zones) != Zones {
 		return fmt.Errorf("the network spreads across %d zones, and this run names %d", Zones, len(w.zones))
+	}
+	if err := w.patches.Apply(ctx); err != nil {
+		return err
 	}
 	slowDelete := pulumi.Timeouts(&pulumi.CustomTimeouts{Delete: deleteWait})
 	vpc, err := ec2.NewVpc(ctx, w.name(), &ec2.VpcArgs{
@@ -166,7 +171,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	zones := w.zones
 	encoded := pulumi.All(vpc.ID(), publicIDs.ToStringArrayOutput(), privateIDs.ToStringArrayOutput(), isolatedIDs.ToStringArrayOutput(), privateRoutes.ToStringArrayOutput(), clients.ID()).
 		ApplyT(func(resolved []any) (string, error) {
-			network := Network{CIDR: w.layout.CIDR, Zones: zones}
+			network := Network{CIDR: w.layout.CIDR, Zones: zones, PatchDigest: w.patches.Digest}
 			network.VPC = string(resolved[0].(pulumi.ID))
 			network.Public, _ = resolved[1].([]string)
 			network.Private, _ = resolved[2].([]string)
@@ -178,6 +183,26 @@ func (w *work) run(ctx *pulumi.Context) error {
 		}).(pulumi.StringOutput)
 	ctx.Export(outputKeyNetwork, encoded)
 	return nil
+}
+
+func ResourceNames(namespace string, tier environment.Tier) map[string][]component.ResourceRef {
+	name := func(words ...string) string { return nameFor(namespace, tier, words...) }
+	names := map[string][]component.ResourceRef{
+		"vpc":                {{Token: tokenVPC, Name: name()}},
+		"internetGateway":    {{Token: tokenInternetGateway, Name: component.NameOf(name()).Part(gatewayPart)}},
+		"publicRouteTable":   {{Token: tokenRouteTable, Name: name(publicWord)}},
+		"isolatedRouteTable": {{Token: tokenRouteTable, Name: name(isolatedWord)}},
+		"s3Endpoint":         {{Token: tokenVPCEndpoint, Name: name("s3")}},
+		"dynamodbEndpoint":   {{Token: tokenVPCEndpoint, Name: name("dynamodb")}},
+	}
+	for i := range Zones {
+		n := strconv.Itoa(i + 1)
+		for _, role := range []string{publicWord, privateWord, isolatedWord} {
+			names[role+"Subnet"] = append(names[role+"Subnet"], component.ResourceRef{Token: tokenSubnet, Name: name(role, n)})
+		}
+		names["privateRouteTable"] = append(names["privateRouteTable"], component.ResourceRef{Token: tokenRouteTable, Name: name(privateWord, n)})
+	}
+	return names
 }
 
 func (w *work) subnet(ctx *pulumi.Context, vpc *ec2.Vpc, role, n, zone, cidr string, routes *ec2.RouteTable, opts ...pulumi.ResourceOption) (*ec2.Subnet, error) {
