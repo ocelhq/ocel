@@ -232,6 +232,10 @@
       "status": "STATUS_FREE"
     },
     {
+      "resource": "project:shop/shared:production/google_logging_log_view:ocel-prod-logs",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_service_account:ocel-prod-env-sync",
       "status": "STATUS_FREE"
     },
@@ -595,7 +599,7 @@
   ],
   "coverage": {
     "supported": 16,
-    "free": 20,
+    "free": 21,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
@@ -612,6 +616,7 @@
       "google_firestore_database",
       "google_kms_crypto_key",
       "google_kms_key_ring",
+      "google_logging_log_view",
       "google_network_services_lb_edge_extension",
       "google_network_services_wasm_plugin",
       "google_project_iam_custom_role",

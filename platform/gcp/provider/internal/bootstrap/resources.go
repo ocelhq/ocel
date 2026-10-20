@@ -27,6 +27,7 @@ var BootstrapAPIs = []string{
 	"pubsub.googleapis.com",
 	"cloudtasks.googleapis.com",
 	"cloudresourcemanager.googleapis.com",
+	"logging.googleapis.com",
 }
 
 type Resource struct {
@@ -109,6 +110,10 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 		{
 			Kind: KindQueue, Name: names.DelayQueue(tier),
 			Note: "the queue a delayed message of this tier waits in, which a deploy grants each app that publishes the right to enqueue on, and may only grant on a queue that already exists",
+		},
+		{
+			Kind: KindLogView, Name: names.LogView(tier),
+			Note: "the view of this tier's Cloud Run entries on the project's _Default log bucket, the only logs this tier's deploy credential may read",
 		},
 		{
 			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),
