@@ -58,7 +58,7 @@ func (b Engine) tierTagPresence(ctx context.Context) (Presence, error) {
 }
 
 func (b Engine) readTierTagKey(ctx context.Context) (*crm.TagKey, error) {
-	service, err := b.Clients.TagService("")
+	service, err := b.Clients.TagService(gcloud.GlobalTagLocation)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (b Engine) tagAbsent(ctx context.Context, service *crm.Service, err error, 
 }
 
 func (b Engine) missingTierValues(ctx context.Context) ([]environment.Tier, error) {
-	service, err := b.Clients.TagService("")
+	service, err := b.Clients.TagService(gcloud.GlobalTagLocation)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (b Engine) makeTierTag(ctx context.Context) error {
 	if !b.Clients.TierTagged() {
 		return nil
 	}
-	service, err := b.Clients.TagService("")
+	service, err := b.Clients.TagService(gcloud.GlobalTagLocation)
 	if err != nil {
 		return err
 	}
