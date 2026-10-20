@@ -71,11 +71,13 @@ describe("the config the edge validated against", () => {
     expect((await optimize(payload(config), { store })).status).toBe(502);
   });
 
-  test("an asset prefix that is not plain path segments is a 502", async () => {
+  test("a storage coordinate that is not plain path segments is a 502", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
     const response = await optimize(
-      payload(config, { assetPrefix: "assets/proj1/prod/../rbbbbbbbb" }),
+      payload(config, {
+        storage: { project: "proj1", env: "prod", app: "..", release: "rbbbbbbbb" },
+      }),
       { store },
     );
     expect(response.status).toBe(502);

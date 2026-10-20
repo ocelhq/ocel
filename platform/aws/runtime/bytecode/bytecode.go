@@ -18,13 +18,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/processenv"
+
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
@@ -120,7 +121,7 @@ const rehydrateBudget = 2 * time.Second
 const resolveBudget = 2 * time.Second
 
 func cachesBytecode() bool {
-	return os.Getenv(awsports.CompileCacheEnvVar) == "1"
+	return os.Getenv(processenv.CompileCacheEnvVar) == "1"
 }
 
 func Env() []string {
@@ -577,12 +578,12 @@ func loadEmbeddedInto(ctx context.Context, c *Cache) bool {
 }
 
 func resolve(ctx context.Context, nodeVersion func(context.Context) (string, error)) *Cache {
-	bucket := os.Getenv(naming.StorageArtifacts.BucketVar())
+	bucket := os.Getenv(processenv.BucketEnvVar(naming.StorageArtifacts))
 	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
 	if !cachesBytecode() || bucket == "" || function == "" {
 		return nil
 	}
-	storage, err := naming.ParseStorageCoordinate(os.Getenv(naming.StorageCoordinateVar))
+	storage, err := naming.ParseStorageCoordinate(os.Getenv(processenv.StorageCoordinateEnvVar))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: %v, compile cache disabled\n", err)
 		return nil

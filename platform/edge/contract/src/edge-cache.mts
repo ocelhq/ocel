@@ -1,5 +1,16 @@
 export const releaseTokenVar = "OCEL_RELEASE_TOKEN";
 
+const RELEASE_TOKEN = /^r[0-9a-f]{8}$/;
+
+export function readReleaseToken(env: NodeJS.ProcessEnv): string | undefined {
+  const release = env[releaseTokenVar];
+  if (!release) return undefined;
+  if (!RELEASE_TOKEN.test(release)) {
+    throw new Error(`ocel: ${releaseTokenVar} is ${release}, which is not a release token`);
+  }
+  return release;
+}
+
 export const edgeCacheVar = "OCEL_EDGE_CACHE";
 
 export const edgeCacheControlHeaderVar = "OCEL_EDGE_CACHE_CONTROL_HEADER";

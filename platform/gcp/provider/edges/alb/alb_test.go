@@ -102,7 +102,7 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 		PreviewBase: "preview.example.com",
 		Record: func(app, build string) router.ReleaseRecord {
 			return router.ReleaseRecord{
-				App: app, Release: build, Physical: conformanceService,
+				App: app, Release: build, StorageCoordinate: storageCoordinateOf(app, build), Physical: conformanceService,
 				Revisions: map[string]string{conformanceService: "rev-" + build},
 			}
 		},
@@ -297,7 +297,7 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 	_, w, stack := reconciled(t)
 	for _, build := range []struct{ identity, revision string }{{"b1", "web-00001-abc"}, {"b2", "web-00002-def"}} {
 		if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-			App: "web", Release: build.identity, Physical: "ocel-shop-prod-web",
+			App: "web", Release: build.identity, StorageCoordinate: storageCoordinateOf("web", build.identity), Physical: "ocel-shop-prod-web",
 			Revisions: map[string]string{"ocel-shop-prod-web": build.revision},
 		}); err != nil {
 			t.Fatalf("PutStaged(%s) = %v", build.identity, err)
@@ -714,7 +714,7 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 		t.Fatalf("BindDomain = %v", err)
 	}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-		App: "web", Release: "b1", Physical: "ocel-shop-prod-web",
+		App: "web", Release: "b1", StorageCoordinate: storageCoordinateOf("web", "b1"), Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -739,7 +739,7 @@ func TestTheReleaseThatTakesAHostnameLiveSaysWhichServiceItRoutesTo(t *testing.T
 		t.Fatalf("BindDomain = %v", err)
 	}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-		App: "web", Release: "b1", Physical: "ocel-shop-prod-web",
+		App: "web", Release: "b1", StorageCoordinate: storageCoordinateOf("web", "b1"), Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -761,7 +761,7 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 	ctx := context.Background()
 	_, w, stack := reconciled(t)
 	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-		App: "web", Release: "b1", Physical: "ocel-shop-prod-web",
+		App: "web", Release: "b1", StorageCoordinate: storageCoordinateOf("web", "b1"), Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -789,7 +789,7 @@ func TestAPromotionOfAnotherAppLeavesAHostnameServingNotFound(t *testing.T) {
 		t.Fatalf("BindDomain = %v", err)
 	}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-		App: "admin", Release: "b1", Physical: "ocel-shop-prod-admin",
+		App: "admin", Release: "b1", StorageCoordinate: storageCoordinateOf("admin", "b1"), Physical: "ocel-shop-prod-admin",
 		Revisions: map[string]string{"ocel-shop-prod-admin": "ocel-shop-prod-admin-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -856,7 +856,7 @@ func promotedWithHealthPath(t *testing.T, stack edge.EdgeStack) {
 	t.Helper()
 	ctx := context.Background()
 	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-		App: "web", Release: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
+		App: "web", Release: "b1", StorageCoordinate: storageCoordinateOf("web", "b1"), Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -930,7 +930,7 @@ func TestAWarmThatFailsThroughTheLoadBalancerNamesTheRevisionItWarmed(t *testing
 	}
 	w.warmFails = errors.New("connection refused")
 	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-		App: "web", Release: "b1", Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
+		App: "web", Release: "b1", StorageCoordinate: storageCoordinateOf("web", "b1"), Physical: "ocel-shop-prod-web", HealthPath: "/healthz",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)

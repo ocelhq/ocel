@@ -1,14 +1,10 @@
 import type { ImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { describe, expect, it } from "vitest";
 import { IMAGE_CALL_HEADER, parseRenderCall, RENDER_RELEASE_HEADER } from "../src/serve-key";
 import { countingLoader, edgeBundle } from "./edge-bundle";
-import {
-  type NextRelease,
-  STORAGE_COORDINATE,
-  servedNextRelease,
-  UNTOKENED_STORAGE_COORDINATE,
-} from "./next-release";
+import { type NextRelease, STORAGE_COORDINATE, servedNextRelease } from "./next-release";
 import { fakeServing } from "./serving-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
@@ -26,7 +22,7 @@ function imageRelease(over: NextRelease = {}) {
       },
       ...over.table,
     },
-    record: { storageCoordinate: UNTOKENED_STORAGE_COORDINATE, ...over.record },
+    record: { storageCoordinate: STORAGE_COORDINATE, ...over.record },
     assets: { "/404.html": "<h1>not found</h1>" },
   });
 }
@@ -87,7 +83,7 @@ describe("the /_next/image route", () => {
 
     expect(response.status).toBe(200);
     expect(seen[0]).toMatchObject({
-      assetPrefix: "assets/p1/prod/web/r3f8a1c9d",
+      storage: { project: "p1", env: "prod", app: "web", release: "r3f8a1c9d" },
       url: "/a.png",
       w: 640,
       q: 75,
@@ -183,7 +179,7 @@ describe("the /_next/image route through Workers Cache", () => {
     });
     expect(JSON.parse(request.headers.get(IMAGE_CALL_HEADER)!)).toEqual({
       payload: {
-        assetPrefix: `assets/${STORAGE_COORDINATE}`,
+        storage: parseStorageCoordinate(STORAGE_COORDINATE),
         url: "/a.png",
         w: 640,
         q: 75,

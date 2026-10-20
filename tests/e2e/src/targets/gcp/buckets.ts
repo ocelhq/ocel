@@ -1,5 +1,5 @@
+import { namespaceField } from "@ocel-tests/shared/naming";
 import { HARNESS_PREFIX } from "../../identity";
-import { namespaceField } from "./names";
 import { bearer, type Where } from "./store";
 
 const STORAGE = "https://storage.googleapis.com/storage/v1";

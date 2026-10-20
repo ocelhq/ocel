@@ -288,8 +288,8 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	if app == nil {
 		t.Fatal("the last spec the stacks port saw provisions no app")
 	}
-	if _, err := naming.ParseStorageCoordinate(app.Storage.StorageCoordinate()); err != nil {
-		t.Errorf("Storage = %+v (%v), want the coordinate every object of the release is keyed by", app.Storage, err)
+	if _, err := naming.ParseStorageCoordinate(app.StorageCoordinate.StorageCoordinate()); err != nil {
+		t.Errorf("Storage = %+v (%v), want the coordinate every object of the release is keyed by", app.StorageCoordinate, err)
 	}
 	if app.ISR == nil || app.ISR.TagNamespace == "" {
 		t.Errorf("ISR = %+v, want the ledger a build declaring ISR revalidates through", app.ISR)

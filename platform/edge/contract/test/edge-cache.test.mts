@@ -3,6 +3,7 @@ import {
   cachesOnlyMarked,
   readEdgeCacheControlHeader,
   readEdgeCacheMode,
+  readReleaseToken,
 } from "../src/edge-cache.mjs";
 
 test("an origin with no edge cache variable has no edge that caches its responses", () => {
@@ -35,4 +36,18 @@ test("an origin is told the cache-control header its edge reads, or none when th
   ).toBe("cloudflare-cdn-cache-control");
   expect(readEdgeCacheControlHeader({ OCEL_EDGE_CACHE_CONTROL_HEADER: "" })).toBeUndefined();
   expect(readEdgeCacheControlHeader({})).toBeUndefined();
+});
+
+test("an origin reads the release token a caching edge named", () => {
+  expect(readReleaseToken({ OCEL_RELEASE_TOKEN: "r0a1b2c3d" })).toBe("r0a1b2c3d");
+  expect(readReleaseToken({})).toBeUndefined();
+  expect(readReleaseToken({ OCEL_RELEASE_TOKEN: "" })).toBeUndefined();
+});
+
+test("a release token no origin could have set stops it at boot", () => {
+  for (const value of ["shop/prod/web/r0a1b2c3d", "deadbeef", "rZZZZZZZZ"]) {
+    expect(() => readReleaseToken({ OCEL_RELEASE_TOKEN: value }), value).toThrow(
+      "OCEL_RELEASE_TOKEN",
+    );
+  }
 });

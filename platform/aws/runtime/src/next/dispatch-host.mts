@@ -4,7 +4,7 @@ import {
   readDispatchHost,
 } from "@framework/next-runtime/dispatch-host";
 import type { Invoke } from "@framework/node-runtime/host";
-import { bucketVars } from "@platform/edge-contract/storage-key";
+import { bucketVars } from "@platform/edge-contract/runtime-env";
 import { s3AssetBucket } from "./dispatch-assets.mjs";
 import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./dispatch-signing.mjs";
 import { isLambdaThrottle } from "./lambda-throttle.mjs";

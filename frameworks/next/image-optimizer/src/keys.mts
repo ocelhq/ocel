@@ -1,21 +1,17 @@
 import {
+  isStorageCoordinate,
   objectKey,
-  parseAssetPrefix,
   type StorageCoordinate,
 } from "@platform/edge-contract/storage-key";
 import { BootstrapError } from "./errors.mjs";
 
 const IMAGE_CONFIG = "image-config.json";
 
-export function releaseOfAssetPrefix(value: unknown): StorageCoordinate {
-  if (typeof value !== "string" || value === "") {
-    throw new BootstrapError("request has no asset prefix", value);
+export function readRequestStorage(value: unknown): StorageCoordinate {
+  if (!isStorageCoordinate(value)) {
+    throw new BootstrapError("request names no release's storage coordinate", value);
   }
-  const release = parseAssetPrefix(value);
-  if (release === undefined) {
-    throw new BootstrapError("asset prefix names no release's assets", value);
-  }
-  return release;
+  return value;
 }
 
 export function imageConfigKey(release: StorageCoordinate): string {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
@@ -72,13 +73,13 @@ type Args struct {
 }
 
 type Bytecode struct {
-	Bucket  string
-	Storage naming.Coordinate
+	Bucket            string
+	StorageCoordinate naming.Coordinate
 }
 
 func (c Bytecode) env() map[string]string {
-	env := naming.StorageEnv(c.Storage, naming.Buckets{naming.StorageArtifacts: c.Bucket})
-	env[awsports.CompileCacheEnvVar] = "1"
+	env := processenv.StorageEnv(c.StorageCoordinate, naming.Buckets{naming.StorageArtifacts: c.Bucket})
+	env[processenv.CompileCacheEnvVar] = "1"
 	return env
 }
 
@@ -89,7 +90,7 @@ func bytecodePolicy(c Bytecode) (string, error) {
 			map[string]any{
 				"Effect":   "Allow",
 				"Action":   []string{"s3:GetObject", "s3:PutObject"},
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s*", c.Bucket, c.Storage.StoragePrefix(naming.ObjectBytecode)),
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s*", c.Bucket, c.StorageCoordinate.StoragePrefix(naming.ObjectBytecode)),
 			},
 		},
 	}
@@ -107,7 +108,7 @@ func assetReadPolicy(h *DispatchHost) (string, error) {
 			map[string]any{
 				"Effect":   "Allow",
 				"Action":   []string{"s3:GetObject"},
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s*", h.EdgeBucket, h.Storage.StoragePrefix(naming.ObjectAssets)),
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s*", h.EdgeBucket, h.StorageCoordinate.StoragePrefix(naming.ObjectAssets)),
 			},
 		},
 	}

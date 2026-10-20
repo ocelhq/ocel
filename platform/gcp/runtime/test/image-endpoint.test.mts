@@ -57,7 +57,7 @@ afterAll(async () => {
 
 function payload(over: Record<string, unknown> = {}) {
   return {
-    assetPrefix,
+    storage: { project: "shop", env: "prod", app: "web", release: "r1a2b3c4d" },
     url: "/logo.png",
     w: 64,
     q: 75,

@@ -25,26 +25,24 @@ export interface ParsedObjectKey extends StorageCoordinate {
   rest: string;
 }
 
-export const storageCoordinateVar = "OCEL_STORAGE_COORDINATE";
-
-export const bucketVars = {
-  artifacts: "OCEL_ARTIFACTS_BUCKET",
-  edge: "OCEL_EDGE_BUCKET",
-  cache: "OCEL_CACHE_BUCKET",
-} as const;
-
 const SEPARATOR = "/";
-const FIELD_SEPARATOR = "--";
+export const fieldSeparator = "--";
 const SLUG = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const RELEASE = /^r[0-9a-f]{8}$/;
 const COORDINATE_FIELDS = 4;
 
 function isSlug(value: string): boolean {
-  return SLUG.test(value) && !value.includes(FIELD_SEPARATOR);
+  return SLUG.test(value) && !value.includes(fieldSeparator);
 }
 
-export function isStorageCoordinate({ project, env, app, release }: StorageCoordinate): boolean {
-  return [project, env, app].every(isSlug) && RELEASE.test(release);
+export function isStorageCoordinate(value: unknown): value is StorageCoordinate {
+  if (typeof value !== "object" || value === null) return false;
+  const { project, env, app, release } = value as Record<string, unknown>;
+  return (
+    [project, env, app].every((field) => typeof field === "string" && isSlug(field)) &&
+    typeof release === "string" &&
+    RELEASE.test(release)
+  );
 }
 
 export function formatStorageCoordinate({ project, env, app, release }: StorageCoordinate): string {
@@ -59,10 +57,6 @@ export function objectKey(kind: ObjectKind, coordinate: StorageCoordinate, rest:
   return storagePrefix(kind, coordinate) + rest.replace(/^\//, "");
 }
 
-export function assetPrefix(coordinate: StorageCoordinate): string {
-  return `assets${SEPARATOR}${formatStorageCoordinate(coordinate)}`;
-}
-
 function readCoordinate(fields: readonly string[]): StorageCoordinate | undefined {
   if (fields.length !== COORDINATE_FIELDS) return undefined;
   const [project, env, app, release] = fields as [string, string, string, string];
@@ -72,25 +66,6 @@ function readCoordinate(fields: readonly string[]): StorageCoordinate | undefine
 
 export function parseStorageCoordinate(value: string): StorageCoordinate | undefined {
   return readCoordinate(value.split(SEPARATOR));
-}
-
-export function parseAssetPrefix(value: string): StorageCoordinate | undefined {
-  const [kind, ...fields] = value.split(SEPARATOR);
-  return kind === "assets" ? readCoordinate(fields) : undefined;
-}
-
-export function readStorageCoordinate(
-  env: Readonly<Record<string, string | undefined>>,
-): StorageCoordinate | undefined {
-  const value = env[storageCoordinateVar];
-  if (!value) return undefined;
-  const coordinate = parseStorageCoordinate(value);
-  if (coordinate === undefined) {
-    throw new Error(
-      `ocel: ${storageCoordinateVar} ${JSON.stringify(value)} is not <project>/<env>/<app>/<release token>`,
-    );
-  }
-  return coordinate;
 }
 
 function isObjectKind(value: string): value is ObjectKind {

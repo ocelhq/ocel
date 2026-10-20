@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
@@ -14,10 +15,10 @@ import (
 )
 
 var storageVars = []string{
-	naming.StorageCoordinateVar,
-	naming.StorageArtifacts.BucketVar(),
-	naming.StorageEdge.BucketVar(),
-	naming.StorageCache.BucketVar(),
+	processenv.StorageCoordinateEnvVar,
+	processenv.BucketEnvVar(naming.StorageArtifacts),
+	processenv.BucketEnvVar(naming.StorageEdge),
+	processenv.BucketEnvVar(naming.StorageCache),
 }
 
 var everyBucket = naming.Buckets{
@@ -33,7 +34,7 @@ func storedApp(t *testing.T, front edge.Edge) provider.StackSpec {
 		Kind:     provider.StackApp,
 		Recorded: true,
 		Edge:     front,
-		App:      &provider.AppSpec{App: "web", Storage: routedCoordinate(t)},
+		App:      &provider.AppSpec{App: "web", StorageCoordinate: routedCoordinate(t)},
 	}
 }
 
@@ -74,21 +75,21 @@ func TestAnISRFunctionIsToldItsStorageCoordinateAndThePagesAndCacheBuckets(t *te
 	env := Env(AppEnv(storedApp(t, fakeEdgeOf(cloudfront.Kind)), variables.Bundle{}, bucket.Sessions{}, ""), Args{Handler: "index.handler"}, cache, nil)
 
 	assertStorageEnv(t, "an ISR function", env, map[string]string{
-		naming.StorageCoordinateVar:     "shop/prod/web/r3f8a1c90",
-		naming.StorageEdge.BucketVar():  "edge-1",
-		naming.StorageCache.BucketVar(): "cache-1",
+		processenv.StorageCoordinateEnvVar:           "shop/prod/web/r3f8a1c90",
+		processenv.BucketEnvVar(naming.StorageEdge):  "edge-1",
+		processenv.BucketEnvVar(naming.StorageCache): "cache-1",
 	})
 }
 
 func TestACompileCachingFunctionIsToldItsStorageCoordinateAndTheArtifactsBucket(t *testing.T) {
 	t.Parallel()
 
-	bytecode := &Bytecode{Bucket: "artifacts-1", Storage: routedCoordinate(t)}
+	bytecode := &Bytecode{Bucket: "artifacts-1", StorageCoordinate: routedCoordinate(t)}
 	env := Env(AppEnv(storedApp(t, fakeEdgeOf(cloudfront.Kind)), variables.Bundle{}, bucket.Sessions{}, ""), Args{Handler: "index.handler"}, nil, bytecode)
 
 	assertStorageEnv(t, "a compile-caching function", env, map[string]string{
-		naming.StorageCoordinateVar:         "shop/prod/web/r3f8a1c90",
-		naming.StorageArtifacts.BucketVar(): "artifacts-1",
+		processenv.StorageCoordinateEnvVar:               "shop/prod/web/r3f8a1c90",
+		processenv.BucketEnvVar(naming.StorageArtifacts): "artifacts-1",
 	})
 }
 
@@ -99,17 +100,23 @@ func TestTheDispatchHostIsToldItsStorageCoordinateAndTheEdgeBucketItReadsAssetsF
 	env := host.rootFunctionEnv(AppEnv(storedApp(t, fakeEdgeOf(cloudfront.Kind)), variables.Bundle{}, bucket.Sessions{}, ""))
 
 	assertStorageEnv(t, "the dispatch host", env, map[string]string{
-		naming.StorageCoordinateVar:    "shop/prod/web/r3f8a1c90",
-		naming.StorageEdge.BucketVar(): "edge-bucket",
+		processenv.StorageCoordinateEnvVar:          "shop/prod/web/r3f8a1c90",
+		processenv.BucketEnvVar(naming.StorageEdge): "edge-bucket",
 	})
 }
 
-func TestAFunctionBehindAnEdgeThatPurgesByCacheTagIsToldItsStorageCoordinateAlone(t *testing.T) {
+func TestAFunctionBehindAnEdgeThatPurgesByCacheTagIsToldItsReleaseTokenAndNoStorage(t *testing.T) {
 	t.Parallel()
 
-	env := Env(AppEnv(storedApp(t, fakeEdgeOf(cloudflare.Kind)), variables.Bundle{}, bucket.Sessions{}, ""), Args{Handler: "index.handler"}, nil, nil)
+	spec := storedApp(t, fakeEdgeOf(cloudflare.Kind))
+	release := spec.App.StorageCoordinate.Release
+	spec.Ref = provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", release)}
+	env := Env(AppEnv(spec, variables.Bundle{}, bucket.Sessions{}, ""), Args{Handler: "index.handler"}, nil, nil)
 
-	assertStorageEnv(t, "a function behind Cloudflare", env, map[string]string{
-		naming.StorageCoordinateVar: "shop/prod/web/r3f8a1c90",
-	})
+	if told := storageEnvOf(env); len(told) != 0 {
+		t.Errorf("a function behind Cloudflare is told %v, want no storage variable: the release it tags responses with is its release token", told)
+	}
+	if got := env[edge.ReleaseTokenVar]; got != release.String() {
+		t.Errorf("%s = %q, want the release token %q", edge.ReleaseTokenVar, got, release)
+	}
 }

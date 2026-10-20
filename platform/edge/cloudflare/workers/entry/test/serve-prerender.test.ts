@@ -7,12 +7,7 @@ import {
   SERVE_REFUSED_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
-import {
-  EMPTY_ROUTES,
-  heldPurgeQueue,
-  servedNextRelease,
-  UNTOKENED_STORAGE_COORDINATE,
-} from "./next-release";
+import { EMPTY_ROUTES, heldPurgeQueue, servedNextRelease } from "./next-release";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 type Target = Record<string, unknown>;
@@ -743,22 +738,6 @@ describe("an edge-runtime prerender", () => {
 
     expect(served.calls.map(({ coordinates }) => coordinates.variant)).toEqual(["", ".rsc"]);
     expect(served.calls[0].request.url).not.toBe(served.calls[1].request.url);
-  });
-});
-
-describe("a prerender of a release whose storage coordinate names no release token", () => {
-  it("renders at the origin and stores nothing", async () => {
-    const origin = recorder();
-    const served = fakeServing();
-
-    const res = await get(
-      "/blog",
-      blogRelease(served, { origin, storageCoordinate: UNTOKENED_STORAGE_COORDINATE }),
-    );
-
-    expect(served.calls).toHaveLength(0);
-    expect(await res.text()).toBe("from-origin");
-    expect(origin.requests).toHaveLength(1);
   });
 });
 

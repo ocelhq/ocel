@@ -63,7 +63,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	sessions := bucket.NewSessions(project, stack.Env, r.cfg.StateTableARN)
 	staged := functioncode.Refs(uploads)
 
-	dispatch := function.NewDispatchHost(spec.App, r.cfg.Slug, r.cfg.Buckets[naming.StorageEdge], r.cfg.ImageOptimizerURL)
+	dispatch := function.NewDispatchHost(spec.App, r.cfg.Buckets[naming.StorageEdge], r.cfg.ImageOptimizerURL)
 	guard, err := function.NewOriginGuard(spec.App, r.cfg.Tier, r.cfg.OriginSecret, r.cfg.PreviousOriginSecret)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 
 	r.served.Record(r.cfg.functionClients(), app.App, logical, bytecode)
 
-	sets, delivery, err := site.ReadAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, spec.App.Storage, app, bundle, cache)
+	sets, delivery, err := site.ReadAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, spec.App.StorageCoordinate, app, bundle, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -207,14 +207,14 @@ func (r *release) isrCache(spec provider.StackSpec) *site.ISR {
 		return nil
 	}
 	cache := &site.ISR{
-		Coord:     spec.App.Storage,
+		Coord:     spec.App.StorageCoordinate,
 		Namespace: isr.TagNamespace,
 		Buckets:   r.cfg.Buckets,
 		Table:     r.cfg.StateTable,
 		TableARN:  r.cfg.StateTableARN,
 	}
 	if r.cfg.buckets().CanEdgeRead() && r.cfg.PurgeSeed != "" {
-		cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.Storage.StorageCoordinate())
+		cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.StorageCoordinate.StorageCoordinate())
 	}
 	return cache
 }
@@ -223,7 +223,7 @@ func (r *release) bytecodeCache(spec provider.StackSpec) *function.Bytecode {
 	if !r.cfg.BytecodeCache {
 		return nil
 	}
-	return &function.Bytecode{Bucket: r.cfg.Buckets[naming.StorageArtifacts], Storage: spec.App.Storage}
+	return &function.Bytecode{Bucket: r.cfg.Buckets[naming.StorageArtifacts], StorageCoordinate: spec.App.StorageCoordinate}
 }
 
 func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.StackResult, error) {

@@ -28,7 +28,7 @@ var errDropped = errors.New("a prune dropped this promotion")
 
 func previewRecord(build string) router.ReleaseRecord {
 	return router.ReleaseRecord{
-		App: "web", Release: build, Physical: previewService,
+		App: "web", Release: build, StorageCoordinate: storageCoordinateOf("web", build), Physical: previewService,
 		Revisions: map[string]string{previewService: previewService + "-" + build},
 	}
 }

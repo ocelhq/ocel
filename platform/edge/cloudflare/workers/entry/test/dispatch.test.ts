@@ -1,27 +1,11 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
-import { EMPTY_ROUTES, servedNextRelease, UNTOKENED_STORAGE_COORDINATE } from "./next-release";
+import { EMPTY_ROUTES, servedNextRelease } from "./next-release";
 import { fakeServing } from "./serving-deps";
 
 type Dispatch = NextRouteTable["dispatch"];
 
 describe("a routed prerender", () => {
-  it("invokes the parent function for a prerender route until ISR lands", async () => {
-    const serve = servedNextRelease({
-      table: { dispatch: { "/": { kind: "prerender", id: "/" } } },
-      record: {
-        functionUrls: { "/": "https://fn.example.com" },
-        storageCoordinate: UNTOKENED_STORAGE_COORDINATE,
-      },
-      fetch: (async () => new Response("rendered", { status: 200 })) as unknown as typeof fetch,
-    });
-
-    const res = await serve(new Request("https://app.example/"));
-
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("rendered");
-  });
-
   function bypassRelease(bypassKey: string) {
     return servedNextRelease({
       table: {

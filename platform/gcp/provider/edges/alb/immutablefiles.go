@@ -43,7 +43,10 @@ func (s *stack) listImmutableSwitches(move router.PointerMove) ([]immutableSwitc
 		if err != nil {
 			return nil, err
 		}
-		next := staticRoutesOf(record, s.recorded.LoadBalancer)
+		next, err := staticRoutesOf(record, s.recorded.LoadBalancer)
+		if err != nil {
+			return nil, err
+		}
 		if live == nil || next == nil || live.Objects == next.Objects {
 			continue
 		}

@@ -1,8 +1,8 @@
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
+import { bucketVars } from "@platform/edge-contract/runtime-env";
 import {
-  bucketVars,
   formatStorageCoordinate,
   objectKey as storageKey,
 } from "@platform/edge-contract/storage-key";

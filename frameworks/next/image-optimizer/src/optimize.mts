@@ -10,7 +10,7 @@ import {
 import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { loadImageConfig } from "./config.mjs";
 import { BOOTSTRAP_MESSAGE, ImageError, upstreamFailure } from "./errors.mjs";
-import { assetKey, releaseOfAssetPrefix } from "./keys.mjs";
+import { assetKey, readRequestStorage } from "./keys.mjs";
 import { extensionFor } from "./sniff.mjs";
 import type { ObjectStore } from "./store.mjs";
 import { type Transformed, transform } from "./transform.mjs";
@@ -46,7 +46,7 @@ export async function optimize(
 }
 
 async function run(payload: ImageOriginRequest, deps: OptimizeDeps): Promise<OriginResponse> {
-  const release = releaseOfAssetPrefix(payload.assetPrefix);
+  const release = readRequestStorage(payload.storage);
   const config = await loadImageConfig(deps.store, release, payload.configHash);
 
   const result = validateImage(payload, config);

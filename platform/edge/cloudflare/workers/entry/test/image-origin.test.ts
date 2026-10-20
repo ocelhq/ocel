@@ -11,10 +11,10 @@ const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig
 
 const OPTIMIZER_URL = "https://opt123.lambda-url.us-east-1.on.aws/";
 
-const ASSET_PREFIX = "assets/acme/prod/web/r3f8a1c9d";
+const STORAGE = { project: "acme", env: "prod", app: "web", release: "r3f8a1c9d" };
 
 const PAYLOAD: ImageOriginRequest = {
-  assetPrefix: ASSET_PREFIX,
+  storage: STORAGE,
   url: "/a.png",
   w: 640,
   q: 75,
@@ -44,7 +44,7 @@ function serveThrough(
   return serveImage(new Request(url, { headers: { accept: "image/webp" } }), url, {
     config,
     basePath: "",
-    assetPrefix: ASSET_PREFIX,
+    storage: STORAGE,
     slug,
     app: "web",
     appBuildId: "b1",
@@ -243,7 +243,7 @@ describe("the image route without an optimizer", () => {
     expect(recorded.calls).toHaveLength(1);
     const sent = JSON.parse(String(recorded.calls[0].init?.body));
     expect(sent).toMatchObject({
-      assetPrefix: ASSET_PREFIX,
+      storage: STORAGE,
       url: "/a.png",
       w: 640,
       q: 75,

@@ -1,0 +1,10 @@
+{
+  "storageCoordinate": "OCEL_STORAGE_COORDINATE",
+  "artifactsBucket": "OCEL_ARTIFACTS_BUCKET",
+  "edgeBucket": "OCEL_EDGE_BUCKET",
+  "cacheBucket": "OCEL_CACHE_BUCKET",
+  "isr": "OCEL_ISR",
+  "routerKind": "OCEL_ROUTER_KIND",
+  "routeTable": "OCEL_NEXT_ROUTE_TABLE",
+  "buildId": "OCEL_BUILD_ID"
+}

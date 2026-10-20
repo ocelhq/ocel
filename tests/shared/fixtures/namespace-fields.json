@@ -1,0 +1,38 @@
+[
+  {
+    "namespace": "ocel",
+    "field": "ocel"
+  },
+  {
+    "namespace": "aaaaaaaaaaaa",
+    "field": "aaaaaaaaaaaa"
+  },
+  {
+    "namespace": "aaaaaaaaaaaaa",
+    "field": "aaaaa-a689d7"
+  },
+  {
+    "namespace": "j-1874-deploy-next-cloudflare",
+    "field": "j-187-da21fb"
+  },
+  {
+    "namespace": "j-1874-deploy-next-cloudfront",
+    "field": "j-187-23756e"
+  },
+  {
+    "namespace": "ab-app-cdefghij",
+    "field": "ab-ap-e6b6c0"
+  },
+  {
+    "namespace": "x-app-namespaces",
+    "field": "x-ap-8b7044"
+  },
+  {
+    "namespace": "abc--defghijklm",
+    "field": "abc-f8d910"
+  },
+  {
+    "namespace": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+    "field": "nnnnn-64b0c2"
+  }
+]

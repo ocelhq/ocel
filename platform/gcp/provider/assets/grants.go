@@ -13,7 +13,7 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, mem
 	if !servesStaticFiles(spec) {
 		return nil, nil
 	}
-	storage := spec.App.Storage
+	storage := spec.App.StorageCoordinate
 	app, err := naming.AppScope(storage)
 	if err != nil {
 		return nil, err

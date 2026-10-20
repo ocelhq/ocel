@@ -3,7 +3,7 @@ import { areTagsExpired, mergeRecord } from "@framework/next-cache";
 import { keptUntilSettled } from "@framework/node-runtime/background";
 import { runTagWrites } from "@framework/node-runtime/tag-records";
 import type { TagRecord } from "@platform/edge-contract/purge";
-import { storageCoordinateVar } from "@platform/edge-contract/storage-key";
+import { storageCoordinateVar } from "@platform/edge-contract/runtime-env";
 import { getNextHost } from "./host.mjs";
 import { notePurge } from "./purge-signal.mjs";
 import { mirrorTag } from "./tags-manifest.mjs";

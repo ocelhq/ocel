@@ -3,7 +3,7 @@ import { BOOTSTRAP_MESSAGE } from "@framework/next-image-optimizer/errors";
 import type { OriginResponse } from "@framework/next-image-optimizer/optimize";
 import { type OptimizeDeps, optimize } from "@framework/next-image-optimizer/optimize";
 import type { ImageOriginRequest } from "@framework/next-protocol/image";
-import { bucketVars } from "@platform/edge-contract/storage-key";
+import { bucketVars } from "@platform/edge-contract/runtime-env";
 import { s3Store } from "./store.mjs";
 
 interface FunctionUrlEvent {

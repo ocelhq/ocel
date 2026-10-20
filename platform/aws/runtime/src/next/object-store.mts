@@ -1,9 +1,6 @@
 import type { S3Client } from "@aws-sdk/client-s3";
-import {
-  readStorageCoordinate,
-  type StorageCoordinate,
-  storageCoordinateVar,
-} from "@platform/edge-contract/storage-key";
+import { readStorageCoordinate, storageCoordinateVar } from "@platform/edge-contract/runtime-env";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 
 export interface ObjectStore {
   client: S3Client;

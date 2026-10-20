@@ -80,11 +80,11 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, teardown pro
 }
 
 type ReclaimTarget struct {
-	App     string
-	Release provider.Release
-	Stack   naming.StackName
-	Storage naming.Coordinate
-	Kinds   []naming.ObjectKind
+	App               string
+	Release           provider.Release
+	Stack             naming.StackName
+	StorageCoordinate naming.Coordinate
+	Kinds             []naming.ObjectKind
 }
 
 func ReclaimTargets(slug, env string, removed []router.ReleaseRecord, surviving, servingHere []string, containersRetained bool) ([]ReclaimTarget, []string, error) {
@@ -110,11 +110,11 @@ func ReclaimTargets(slug, env string, removed []router.ReleaseRecord, surviving,
 		token := release.Token()
 		storage := releaseStorage(slug, env, record.App, token)
 		targets = append(targets, ReclaimTarget{
-			App:     record.App,
-			Release: release,
-			Stack:   naming.AppStack(env, record.App, token),
-			Storage: storage,
-			Kinds:   reclaimedKinds(storage, elsewhere, here),
+			App:               record.App,
+			Release:           release,
+			Stack:             naming.AppStack(env, record.App, token),
+			StorageCoordinate: storage,
+			Kinds:             reclaimedKinds(storage, elsewhere, here),
 		})
 	}
 	return targets, refused, errors.Join(errs...)
@@ -232,7 +232,7 @@ func destroyReclaimTarget(ctx context.Context, p provider.Provider, teardown pro
 	if err := stackrecords.Forget(ctx, p.KeyValues(), tier, slug, target.Stack); err != nil {
 		errs = append(errs, err)
 	}
-	if err := removeReleaseObjects(ctx, p, tier, target.Storage, target.Kinds, progress); err != nil {
+	if err := removeReleaseObjects(ctx, p, tier, target.StorageCoordinate, target.Kinds, progress); err != nil {
 		errs = append(errs, fmt.Errorf("remove the objects of %s release %s: %w", target.App, target.Release, err))
 	}
 	return errors.Join(errs...)
@@ -283,11 +283,11 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 			continue
 		}
 		targets = append(targets, ReclaimTarget{
-			App:     entry.App,
-			Release: entry.Release,
-			Stack:   entry.Stack,
-			Storage: appCoordinate(r.spec, entry.App, entry.Release.Token()),
-			Kinds:   naming.CoordinateObjectKinds,
+			App:               entry.App,
+			Release:           entry.Release,
+			Stack:             entry.Stack,
+			StorageCoordinate: appCoordinate(r.spec, entry.App, entry.Release.Token()),
+			Kinds:             naming.CoordinateObjectKinds,
 		})
 	}
 	teardown := r.teardown()

@@ -8,7 +8,8 @@ import {
   type TagSnapshotStore,
   tagSnapshotKey,
 } from "@framework/next-cache";
-import { bucketVars, type StorageCoordinate } from "@platform/edge-contract/storage-key";
+import { bucketVars } from "@platform/edge-contract/runtime-env";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { newS3Client } from "../cache/sdk-clients.mjs";
 import { isNotFound, requireEnv, requireStorageCoordinate } from "./object-store.mjs";
 

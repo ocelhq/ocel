@@ -14,8 +14,8 @@ import { chunkFor, countingLoader, edgeBundle } from "./edge-bundle";
 import {
   EMPTY_ROUTES,
   type NextRelease,
+  STORAGE_COORDINATE,
   servedNextRelease,
-  UNTOKENED_STORAGE_COORDINATE,
 } from "./next-release";
 
 function nodeRequireChunkFor(entryKey: string): string {
@@ -574,38 +574,10 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 });
 
 describe("edge-parented prerenders", () => {
-  const renderer = edgeBundle({
-    "middleware_app/edge-blog": `async () =>
-       new Response("<html>rendered-on-edge</html>", {
-         status: 200,
-         headers: { "cache-control": "s-maxage=60" },
-       })`,
-  });
-
-  it("invokes the edge entry with no Function URL bound when its release names no token to cache it under", async () => {
-    const res = await servedNextRelease({
-      table: {
-        dispatch: {
-          "/edge-blog": {
-            kind: "prerender",
-            id: "/edge-blog",
-            edgeEntryKey: "middleware_app/edge-blog",
-            config: {},
-            fallback: { initialRevalidate: 60 },
-          },
-        },
-      },
-      record: { storageCoordinate: UNTOKENED_STORAGE_COORDINATE },
-      edgeBundle: renderer,
-    })(new Request("https://app.example/edge-blog"));
-
-    expect(await res.text()).toBe("<html>rendered-on-edge</html>");
-  });
-
   it("still 502s a prerender with neither a Function URL nor an edge entry", async () => {
     const res = await servedNextRelease({
       table: { dispatch: { "/blog": { kind: "prerender", id: "/blog", config: {} } } },
-      record: { storageCoordinate: UNTOKENED_STORAGE_COORDINATE },
+      record: { storageCoordinate: STORAGE_COORDINATE },
     })(new Request("https://app.example/blog"));
 
     expect(res.status).toBe(502);

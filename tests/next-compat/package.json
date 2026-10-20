@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ocel-tests/shared": "workspace:*",
     "@platform/edge-contract": "workspace:*"
   },
   "devDependencies": {

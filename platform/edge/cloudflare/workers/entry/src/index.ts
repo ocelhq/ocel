@@ -4,8 +4,8 @@ import type { AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin, originImagePath } from "@framework/next-router/image";
 import type { CompiledRouteTable } from "@platform/edge-contract/ocel-route-table";
 import type { OriginImages } from "@platform/edge-contract/origin-reach";
-import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
-import { readAssetPrefix, recordAssetPrefix } from "./build-assets";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
+import { readAssetStorage } from "./build-assets";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import {
@@ -65,7 +65,7 @@ export type ResolveBase = Pick<
 > & {
   images?: OriginImages;
   serving: ServingPorts;
-  assetStore: Omit<AssetStoreDeps, "assetPrefix">;
+  assetStore: Omit<AssetStoreDeps, "storage">;
   routeTableStore?: EdgeObjectStore;
   edgeRuntime: EdgeRuntime;
 };
@@ -75,12 +75,14 @@ export type ServeFetch = (request: Request) => Promise<Response>;
 interface OriginRelease {
   kind: "origin";
   record: StoredRecord;
+  storage: StorageCoordinate;
   routes?: CompiledRouteTable;
 }
 
 interface RoutedRelease {
   kind: "routed";
   record: StoredRecord;
+  storage: StorageCoordinate;
   routeTable: NextRouteTable;
   store: EdgeObjectStore;
 }
@@ -88,7 +90,7 @@ interface RoutedRelease {
 type ServedRelease = OriginRelease | RoutedRelease;
 
 function serveOrigin(
-  { record, routes }: OriginRelease,
+  { record, storage, routes }: OriginRelease,
   releases: ReleaseLookup,
   base: ResolveBase,
 ): ServeFetch {
@@ -98,9 +100,9 @@ function serveOrigin(
     functionUrls: record.functionUrls,
     originFetch: base.originFetch,
   });
-  const serving = newReleaseServing(base.serving, record, releases, app);
+  const serving = newReleaseServing(base.serving, record, storage, releases, app);
   const urls = Object.values(record.functionUrls);
-  if (!serving || urls.length !== 1) return forward;
+  if (urls.length !== 1) return forward;
   return serveNodeOrigin({ serving, app, origin: urls[0], routes, forward });
 }
 
@@ -112,12 +114,12 @@ function serveRelease(
   if (served.kind === "origin") return serveOrigin(served, releases, base);
   const deps = routedDeps(served, releases, base);
   return (request) => {
-    const assetPrefix = readAssetPrefix(request, served.record);
+    const storage = readAssetStorage(request, served.record, served.storage);
     return dispatch(
       request,
-      assetPrefix === deps.assetStore.assetPrefix
+      storage === deps.assetStore.storage
         ? deps
-        : { ...deps, assetStore: { ...deps.assetStore, assetPrefix } },
+        : { ...deps, assetStore: { ...deps.assetStore, storage } },
     );
   };
 }
@@ -129,8 +131,8 @@ async function resolveServedRelease(
   const resolution = await resolveRelease(releases);
   if (resolution.kind === "not-found") return deploymentNotFoundResponse();
   if (resolution.kind === "unavailable") return unavailableResponse();
-  const { record } = resolution;
-  if (!record.routeTable) return { kind: "origin", record };
+  const { record, storage } = resolution;
+  if (!record.routeTable) return { kind: "origin", record, storage };
 
   const { key } = record.routeTable;
   const refuse = (reason: unknown) => {
@@ -147,8 +149,8 @@ async function resolveServedRelease(
   }
   try {
     return record.routeTable.format === "ocel"
-      ? { kind: "origin", record, routes: await readStoredOcelRouteTable(store, key) }
-      : { kind: "routed", record, routeTable: await readRouteTable(store, key), store };
+      ? { kind: "origin", record, storage, routes: await readStoredOcelRouteTable(store, key) }
+      : { kind: "routed", record, storage, routeTable: await readRouteTable(store, key), store };
   } catch (error) {
     return refuse(error);
   }
@@ -168,15 +170,14 @@ export async function resolveServe(
 function newReleaseServing(
   base: ServingPorts,
   record: StoredRecord,
+  storage: StorageCoordinate,
   releases: ReleaseLookup,
   app: string,
-): Serving | undefined {
-  const release = parseStorageCoordinate(record.storageCoordinate)?.release;
-  if (release === undefined) return undefined;
+): Serving {
   return newServing(base, {
     host: releases.host.toLowerCase(),
     app,
-    release,
+    release: storage.release,
     slug: releases.slug,
     storageCoordinate: record.storageCoordinate,
   });
@@ -197,7 +198,7 @@ function readImageOptimizerUrl(
 }
 
 function routedDeps(
-  { record, routeTable: manifest, store }: RoutedRelease,
+  { record, storage, routeTable: manifest, store }: RoutedRelease,
   releases: ReleaseLookup,
   base: ResolveBase,
 ): RouteDeps {
@@ -209,7 +210,7 @@ function routedDeps(
     );
   }
   const rootUrl = record.functionUrls[manifest.rootFunction];
-  const serving = newReleaseServing(base.serving, record, releases, app);
+  const serving = newReleaseServing(base.serving, record, storage, releases, app);
   const optimizerUrl = readImageOptimizerUrl(base.images, rootUrl);
   return {
     fetch: base.fetch,
@@ -219,10 +220,9 @@ function routedDeps(
       base.imageOrigin ??
       functionUrlImageOrigin(optimizerUrl, base.originFetch ?? base.fetch ?? fetch),
     maxImageRequestBytes: base.images?.maxRequestBytes,
-    imageCache:
-      serving && optimizerUrl ? workersCacheImage({ serving, app, optimizerUrl }) : undefined,
-    prerender: serving ? servePrerender({ serving, app }) : undefined,
-    onPurge: serving?.purge,
+    imageCache: optimizerUrl ? workersCacheImage({ serving, app, optimizerUrl }) : undefined,
+    prerender: servePrerender({ serving, app }),
+    onPurge: serving.purge,
     slug: releases.slug,
     app,
     appBuildId: record.buildId,
@@ -231,7 +231,7 @@ function routedDeps(
     functionUrls: record.functionUrls,
     assetStore: {
       ...base.assetStore,
-      assetPrefix: recordAssetPrefix(record),
+      storage,
       basePath: manifest.basePath,
       ...(record.static ? { static: record.static } : {}),
     },

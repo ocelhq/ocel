@@ -15,7 +15,7 @@ func TestAPointerMoveWhosePromotionIsNoLongerActiveCreatesNoAPIForItsPointer(t *
 	ctx := context.Background()
 	w := newWorld()
 	_, stack := previewing(t, w)
-	record := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: previewEntry}
+	record := router.ReleaseRecord{App: "web", Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: previewEntry, StorageCoordinate: "shop/prod/web/r1111aaaa"}
 	if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
@@ -108,6 +108,7 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 		Release:              "d1.f1",
 		RootFunction:         "/",
 		RootFunctionPhysical: entryFunction,
+		StorageCoordinate:    "shop/prod/web/r1111aaaa",
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -122,8 +123,8 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 	if api.variables[entryVariable] != entryFunction {
 		t.Errorf("stage variable %s = %q, want the Lambda the deploy created, not the route it serves", entryVariable, api.variables[entryVariable])
 	}
-	if api.variables[assetsVariable] != unsetVariable {
-		t.Errorf("stage variable %s = %q, want it cleared where the release built no static prefix; the previous release's objects must not survive the promotion", assetsVariable, api.variables[assetsVariable])
+	if want := "assets/shop/prod/web/r1111aaaa/"; api.variables[assetsVariable] != want {
+		t.Errorf("stage variable %s = %q, want the release's assets prefix %q", assetsVariable, api.variables[assetsVariable], want)
 	}
 }
 
@@ -163,13 +164,27 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		assertStageUnmoved(t, w)
 	})
 
+	t.Run("a record that locates none of its objects", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld()
+		stack := reconciled(t, w)
+		record := staged(t, stack, entryFunction, "shop/prod/web")
+
+		err := openRouter(stack).MovePointer(ctx, router.PointerMove{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Releases: map[string]string{"web": record.Release}}}, progress.Discard())
+		if err == nil || !strings.Contains(err.Error(), "locates none of its objects") {
+			t.Fatalf("Promote = %v, want a refusal: a stage serving no assets prefix answers every static file with a 404", err)
+		}
+		assertStageUnmoved(t, w)
+	})
+
 	t.Run("more apps than one stage can serve", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
 		stack := reconciled(t, w)
 		for _, app := range []string{"api", "web"} {
-			record := router.ReleaseRecord{App: app, Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-" + app + "-r1234abcd"}
+			record := router.ReleaseRecord{App: app, Release: "d1.f1", RootFunction: "/", RootFunctionPhysical: "conformance-prod-" + app + "-r1234abcd", StorageCoordinate: "shop/prod/" + app + "/r1234abcd"}
 			if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 				t.Fatalf("PutStaged(%s): %v", app, err)
 			}

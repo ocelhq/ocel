@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ServeFetch } from "../src/index";
 import { parseRenderCall } from "../src/serve-key";
 import { countingLoader, edgeBundle } from "./edge-bundle";
-import { servedNextRelease, UNTOKENED_STORAGE_COORDINATE } from "./next-release";
+import { servedNextRelease } from "./next-release";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 const ENTRY_HEADER = "x-ocel-entry";
@@ -299,17 +299,12 @@ describe("a prerender whose parent renders on the edge", () => {
        })`,
   });
 
-  function edgeRelease(
-    over: { target?: Target; functionUrls?: Record<string, string>; throughServe?: boolean } = {},
-  ) {
+  function edgeRelease(over: { target?: Target; functionUrls?: Record<string, string> } = {}) {
     const serving = fakeServing();
     const { loader, invocations } = countingLoader();
     const serve = servedNextRelease({
       table: { dispatch: { "/edge-blog": over.target ?? edgeTarget } },
-      record: {
-        functionUrls: over.functionUrls ?? {},
-        ...(over.throughServe === false && { storageCoordinate: UNTOKENED_STORAGE_COORDINATE }),
-      },
+      record: { functionUrls: over.functionUrls ?? {} },
       edgeBundle: renderer,
       loader,
       fetch: (async () => {
@@ -325,46 +320,12 @@ describe("a prerender whose parent renders on the edge", () => {
     };
   }
 
-  it("renders through the edge entry when its release names no token to store it under", async () => {
-    const { serve, invocations } = edgeRelease({ throughServe: false });
-
-    const res = await dispatchTo("/edge-blog", serve);
-
-    expect(await res.text()).toBe("<html>rendered-on-edge</html>");
-    expect(invocations()).toEqual(["middleware_app/edge-blog"]);
-  });
-
-  it("renders through the edge entry with no id to name a parent at all", async () => {
-    const { serve, invocations } = edgeRelease({
-      target: unnamedTarget as Target,
-      throughServe: false,
-    });
-
-    const res = await dispatchTo("/edge-blog", serve);
-
-    expect(await res.text()).toBe("<html>rendered-on-edge</html>");
-    expect(invocations()).toEqual(["middleware_app/edge-blog"]);
-  });
-
   it("502s when neither a Function URL nor an edge entry resolves", async () => {
     const { edgeEntryKey: _none, ...orphan } = unnamedTarget as Target & { edgeEntryKey: string };
     const { serve, invocations } = edgeRelease({ target: orphan as Target });
 
     expect((await dispatchTo("/edge-blog", serve)).status).toBe(502);
     expect(invocations()).toEqual([]);
-  });
-
-  it("ignores a Function URL that its id happens to name", async () => {
-    const { serve, invocations, urls } = edgeRelease({
-      functionUrls: { "/edge-blog": "https://fn.example.com" },
-      throughServe: false,
-    });
-
-    const res = await dispatchTo("/edge-blog", serve);
-
-    expect(await res.text()).toBe("<html>rendered-on-edge</html>");
-    expect(invocations()).toEqual(["middleware_app/edge-blog"]);
-    expect(urls()).toEqual(["https://app.example/edge-blog"]);
   });
 
   it("is rendered by Serve from its edge entry at the host it serves, and never by the gateway", async () => {

@@ -144,6 +144,7 @@ beforeAll(async () => {
   await writeFile(manifestPath, JSON.stringify(routeTable));
 
   process.env.OCEL_STORAGE_COORDINATE = "shop/prod/web/r0a1b2c3d";
+  process.env.OCEL_RELEASE_TOKEN = "r0a1b2c3d";
   process.env.OCEL_ROUTER_KIND = "cloudfront";
   process.env.OCEL_ORIGIN_DISPATCH = "1";
   process.env.OCEL_CACHE_TAG_PURGE = "1";

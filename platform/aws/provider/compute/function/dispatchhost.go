@@ -10,16 +10,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
-	routerKindEnv        = "OCEL_ROUTER_KIND"
-	routeTableEnv        = "OCEL_NEXT_ROUTE_TABLE"
 	functionURLsEnv      = "OCEL_FUNCTION_URLS"
-	slugEnv              = "OCEL_SLUG"
-	appNameEnv           = "OCEL_APP"
-	buildIDEnv           = "OCEL_BUILD_ID"
 	routeTableInTask     = "/var/task/" + edge.NextRouteTableFile
 	ocelRouteTableInTask = "/var/task/" + edge.OcelRouteTableFile
 
@@ -29,7 +25,7 @@ const (
 type DispatchHost struct {
 	RootFunction      string
 	EdgeBucket        string
-	Storage           naming.Coordinate
+	StorageCoordinate naming.Coordinate
 	ImageOptimizerURL string
 	Env               map[string]string
 }
@@ -71,7 +67,7 @@ func siblingFunctionURLs(urls pulumi.StringMap) pulumi.StringOutput {
 	}).(pulumi.StringOutput)
 }
 
-func NewDispatchHost(app *provider.AppSpec, slug, edgeBucket, imageOptimizerURL string) *DispatchHost {
+func NewDispatchHost(app *provider.AppSpec, edgeBucket, imageOptimizerURL string) *DispatchHost {
 	routing := app.Routing
 	if routing == nil {
 		return nil
@@ -79,16 +75,14 @@ func NewDispatchHost(app *provider.AppSpec, slug, edgeBucket, imageOptimizerURL 
 	host := &DispatchHost{
 		RootFunction:      routing.RootFunction,
 		EdgeBucket:        edgeBucket,
-		Storage:           app.Storage,
+		StorageCoordinate: app.StorageCoordinate,
 		ImageOptimizerURL: imageOptimizerURL,
 		Env: map[string]string{
-			routeTableEnv: routeTableInTask,
-			slugEnv:       slug,
-			appNameEnv:    app.App,
-			buildIDEnv:    app.BuildID,
+			processenv.RouteTableEnvVar: routeTableInTask,
+			processenv.BuildIDEnvVar:    app.BuildID,
 		},
 	}
-	maps.Copy(host.Env, naming.StorageEnv(app.Storage, naming.Buckets{naming.StorageEdge: edgeBucket}))
+	maps.Copy(host.Env, processenv.StorageEnv(app.StorageCoordinate, naming.Buckets{naming.StorageEdge: edgeBucket}))
 	if imageOptimizerURL != "" {
 		host.Env[edge.ImageOptimizerURLVar] = imageOptimizerURL
 	}

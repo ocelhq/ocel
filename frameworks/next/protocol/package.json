@@ -15,7 +15,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@next/routing": "^16.2.10"
+    "@next/routing": "^16.2.10",
+    "@platform/edge-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",

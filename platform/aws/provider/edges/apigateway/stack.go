@@ -220,13 +220,13 @@ func stagePatch(promotionID string, records map[string]router.ReleaseRecord) ([]
 		return nil, fmt.Errorf("promote %s: the release record for %s/%s names no root function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release, stageName)
 	}
 
-	assets := unsetVariable
-	if storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate); err == nil {
-		assets = storage.StoragePrefix(naming.ObjectAssets)
+	storage, err := record.ParseStorageCoordinate()
+	if err != nil {
+		return nil, fmt.Errorf("promote %s: %w", promotionID, err)
 	}
 	return variablePatch(map[string]string{
 		entryVariable:  record.RootFunctionPhysical,
-		assetsVariable: assets,
+		assetsVariable: storage.StoragePrefix(naming.ObjectAssets),
 	}), nil
 }
 

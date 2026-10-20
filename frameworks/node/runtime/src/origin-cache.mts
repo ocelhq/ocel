@@ -12,7 +12,7 @@ import {
   edgeCacheTagHeader,
   readEdgeCacheControlHeader,
   readEdgeCacheMode,
-  releaseTokenVar,
+  readReleaseToken,
 } from "@platform/edge-contract/edge-cache";
 import { formatCacheControl } from "@platform/edge-contract/ocel-route-table";
 import {
@@ -26,8 +26,6 @@ import type { RoutedRequest } from "./origin-route-table.mjs";
 import { findTagRecordWriter, type TagRecordWriter } from "./tag-records.mjs";
 
 const cacheHostKey = Symbol.for("ocel.cache.host");
-
-const releasePattern = /^r[0-9a-f]{8}$/;
 
 const cacheTagHeader = "cache-tag";
 
@@ -47,11 +45,8 @@ export interface RequestCache {
 }
 
 export function readOriginCache(env: NodeJS.ProcessEnv): OriginCache | null {
-  const release = env[releaseTokenVar];
+  const release = readReleaseToken(env);
   if (!release) return null;
-  if (!releasePattern.test(release)) {
-    throw new Error(`ocel: ${releaseTokenVar} is ${release}, which is not a release token`);
-  }
   return {
     release,
     edgeCachesOnlyMarked: cachesOnlyMarked(readEdgeCacheMode(env)),

@@ -211,6 +211,7 @@ test("the GCP host's cache store and the cache the default use-cache handler fil
 const purgeEnv = {
   ...tagEnv,
   OCEL_CACHE_TAG_PURGE: "1",
+  OCEL_RELEASE_TOKEN: "r1a2b3c4d",
 };
 
 async function withCloudCdnStub(

@@ -54,10 +54,10 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 				{Name: "fn--web--entry", ArtifactDir: writeTree(t, map[string]string{"index.js": "the entry"})},
 				{Name: "fn--web--admin", Route: "/admin", ArtifactDir: writeTree(t, map[string]string{"index.js": "the admin"})},
 			},
-			Routing: &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
-			ISR:     &provider.ISRSpec{TagNamespace: "tag:shop"},
-			Storage: coord,
-			Static:  nextStatic,
+			Routing:           &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
+			ISR:               &provider.ISRSpec{TagNamespace: "tag:shop"},
+			StorageCoordinate: coord,
+			Static:            nextStatic,
 		},
 	}
 	return cfg, spec
@@ -268,7 +268,7 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 	if fn.App != "web" || fn.Logical != "fn--web--entry" {
 		t.Errorf("realized %+v, want the app and logical name the spec named", fn)
 	}
-	if fn.Bytecode == nil || fn.Bytecode.Bucket != "artifacts-bucket" || fn.Bytecode.Storage != spec.App.Storage {
+	if fn.Bytecode == nil || fn.Bytecode.Bucket != "artifacts-bucket" || fn.Bytecode.StorageCoordinate != spec.App.StorageCoordinate {
 		t.Errorf("bytecode = %+v, want the cache the config turns on, in the artifacts bucket under the release's coordinate", fn.Bytecode)
 	}
 	if err := release.served.Warm(context.Background(), []string{"shop-prod-web-entry"}, progress.Discard()); err != nil {

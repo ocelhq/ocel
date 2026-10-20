@@ -1,5 +1,5 @@
+import { namespaceField } from "@ocel-tests/shared/naming";
 import { HARNESS_PREFIX } from "../../identity";
-import { namespaceField } from "./namespace";
 import { runIdOf } from "./runs";
 import type { Cli } from "./store";
 

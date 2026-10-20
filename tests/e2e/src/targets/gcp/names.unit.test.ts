@@ -7,29 +7,12 @@ import {
   ENVIRONMENT_LABEL,
   labelValue,
   NAMESPACE_LABEL,
-  namespaceField,
   namespaceOf,
   PRODUCTION_ENVIRONMENT,
   PRODUCTION_TIER,
   PROJECT_LABEL,
   TIER_LABEL,
 } from "./names";
-
-describe("namespaceField", () => {
-  it("is a namespace of twelve characters or fewer as it is", () => {
-    expect(namespaceField("ocel")).toBe("ocel");
-    expect(namespaceField("ocel-nightly")).toBe("ocel-nightly");
-  });
-
-  it("compacts a longer one to its head and six hex of its digest, as the provider names it", () => {
-    expect(namespaceField("acme-staging-eu-west-blue-team")).toBe("acme-20ddf6");
-    expect(namespaceField("j-1874-deploy-next-cloudflare")).toBe("j-187-da21fb");
-  });
-
-  it("never leaves a head ending in the word app", () => {
-    expect(namespaceField("x-apple-orchard-namespace")).toBe("x-ap-7e71aa");
-  });
-});
 
 describe("labelValue", () => {
   it("keeps a value that fits a label", () => {

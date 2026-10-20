@@ -3,7 +3,10 @@ import {
   type AssetStoreDeps,
   serveStaticAsset,
 } from "@framework/next-router/assets";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { describe, expect, it } from "vitest";
+
+const STORAGE: StorageCoordinate = { project: "p", env: "prod", app: "app", release: "r00000b01" };
 
 function bucketServing(
   files: Record<string, { body: string; etag?: string; contentType?: string }>,
@@ -23,13 +26,13 @@ function bucketServing(
 
 function countingDeps(
   store: AssetBucket | undefined,
-  prefix: string,
+  storage: StorageCoordinate | undefined,
 ): AssetStoreDeps & { puts: number; flush: () => Promise<void> } {
   const real = caches.default;
   const pending: Promise<unknown>[] = [];
   const deps = {
     store,
-    assetPrefix: prefix,
+    storage,
     static: {
       immutablePrefixes: ["/_next/static/"],
       mustRevalidatePrefixes: ["/_next/static/service-worker/"],
@@ -56,8 +59,8 @@ describe("serveStaticAsset", () => {
   it("reads the object at <prefix><pathname> and serves it", async () => {
     const url = new URL("https://serve-1.example/next.svg");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/next.svg": { body: "<svg/>", etag: "abc" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/next.svg": { body: "<svg/>", etag: "abc" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -72,8 +75,8 @@ describe("serveStaticAsset", () => {
   it("serves a content-hashed chunk with immutable headers", async () => {
     const url = new URL("https://serve-1b.example/_next/static/chunks/main.js");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/_next/static/chunks/main.js": { body: "1" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/_next/static/chunks/main.js": { body: "1" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -86,12 +89,12 @@ describe("serveStaticAsset", () => {
     const url = new URL("https://serve-ct-1.example/favicon.ico");
     const deps = countingDeps(
       bucketServing({
-        "assets/p/app/b1/favicon.ico": {
+        "assets/p/prod/app/r00000b01/favicon.ico": {
           body: "icon",
           contentType: "image/vnd.microsoft.icon",
         },
       }),
-      "assets/p/app/b1",
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -103,8 +106,8 @@ describe("serveStaticAsset", () => {
   it("infers the content-type from the name the object is stored under", async () => {
     const url = new URL("https://serve-ct-2.example/styles.css");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/styles.css": { body: "body{}" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/styles.css": { body: "body{}" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -117,9 +120,9 @@ describe("serveStaticAsset", () => {
     const url = new URL("https://serve-2.example/blog/timm");
     const deps = countingDeps(
       bucketServing({
-        "assets/p/app/b1/404.html": { body: "<h1>This page could not be found</h1>" },
+        "assets/p/prod/app/r00000b01/404.html": { body: "<h1>This page could not be found</h1>" },
       }),
-      "assets/p/app/b1",
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -132,8 +135,10 @@ describe("serveStaticAsset", () => {
   it("serves the locale's own 404 page when the request resolved to one", async () => {
     const url = new URL("https://serve-2i.example/blog/timm");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/fr/404.html": { body: "<h1>introuvable</h1>" } }),
-      "assets/p/app/b1",
+      bucketServing({
+        "assets/p/prod/app/r00000b01/fr/404.html": { body: "<h1>introuvable</h1>" },
+      }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps, "fr");
@@ -145,8 +150,8 @@ describe("serveStaticAsset", () => {
   it("falls back to the bare 404 page when the locale emitted none", async () => {
     const url = new URL("https://serve-2j.example/blog/timm");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/404.html": { body: "<h1>gone</h1>" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps, "fr");
@@ -157,7 +162,7 @@ describe("serveStaticAsset", () => {
 
   it("returns a plain 404 when the build emitted no 404 page", async () => {
     const url = new URL("https://serve-2b.example/missing.txt");
-    const deps = countingDeps(bucketServing({}), "assets/p/app/b1");
+    const deps = countingDeps(bucketServing({}), STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
@@ -168,8 +173,8 @@ describe("serveStaticAsset", () => {
   it("answers a _next/static miss in plain text, not with the 404 page", async () => {
     const url = new URL("https://serve-2c.example/_next/static/chunks/gone.js");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/404.html": { body: "<h1>gone</h1>" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -182,8 +187,8 @@ describe("serveStaticAsset", () => {
   it("answers a _next/static miss in plain text under a basePath", async () => {
     const url = new URL("https://serve-2d.example/docs/_next/static/chunks/gone.js");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/404.html": { body: "<h1>gone</h1>" } }),
+      STORAGE,
     );
     deps.static = { immutablePrefixes: ["/docs/_next/static/"] };
 
@@ -195,7 +200,7 @@ describe("serveStaticAsset", () => {
 
   it("answers a _next/static miss in plain text when no store is bound", async () => {
     const url = new URL("https://serve-2e.example/_next/static/chunks/gone.js");
-    const deps = countingDeps(undefined, "assets/p/app/b1");
+    const deps = countingDeps(undefined, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
@@ -205,7 +210,7 @@ describe("serveStaticAsset", () => {
 
   it("returns 404 when no store is bound", async () => {
     const url = new URL("https://serve-3.example/next.svg");
-    const deps = countingDeps(undefined, "assets/p/app/b1");
+    const deps = countingDeps(undefined, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
@@ -215,8 +220,8 @@ describe("serveStaticAsset", () => {
   it("resolves a route to the .html document the build stored it as", async () => {
     const url = new URL("https://serve-html-1.example/some");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/some.html": { body: "<html>some</html>" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/some.html": { body: "<html>some</html>" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -229,8 +234,8 @@ describe("serveStaticAsset", () => {
   it("resolves a directly requested error page to its document", async () => {
     const url = new URL("https://serve-html-2.example/404");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/404.html": { body: "<h1>gone</h1>" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -242,8 +247,8 @@ describe("serveStaticAsset", () => {
   it("still serves an extensionless file stored under its own name", async () => {
     const url = new URL("https://serve-html-3.example/LICENSE");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/LICENSE": { body: "MIT" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/LICENSE": { body: "MIT" } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
@@ -259,16 +264,18 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         keys.push(key);
-        return key === "assets/p/app/b1/some.rsc" ? { body: new Blob(["RSC"]).stream() } : null;
+        return key === "assets/p/prod/app/r00000b01/some.rsc"
+          ? { body: new Blob(["RSC"]).stream() }
+          : null;
       },
     };
-    const deps = countingDeps(store, "assets/p/app/b1");
+    const deps = countingDeps(store, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("RSC");
-    expect(keys).toEqual(["assets/p/app/b1/some.rsc"]);
+    expect(keys).toEqual(["assets/p/prod/app/r00000b01/some.rsc"]);
   });
 
   it("resolves a dotted route to its document once its own name misses", async () => {
@@ -277,19 +284,22 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         keys.push(key);
-        return key === "assets/p/app/b1/v1.0.html"
+        return key === "assets/p/prod/app/r00000b01/v1.0.html"
           ? { body: new Blob(["<html>v1</html>"]).stream() }
           : null;
       },
     };
-    const deps = countingDeps(store, "assets/p/app/b1");
+    const deps = countingDeps(store, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<html>v1</html>");
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    expect(keys).toEqual(["assets/p/app/b1/v1.0", "assets/p/app/b1/v1.0.html"]);
+    expect(keys).toEqual([
+      "assets/p/prod/app/r00000b01/v1.0",
+      "assets/p/prod/app/r00000b01/v1.0.html",
+    ]);
   });
 
   it("resolves the root request to the index.html document", async () => {
@@ -298,19 +308,19 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         keys.push(key);
-        return key === "assets/p/app/b1/index.html"
+        return key === "assets/p/prod/app/r00000b01/index.html"
           ? { body: new Blob(["<html>root</html>"]).stream() }
           : null;
       },
     };
-    const deps = countingDeps(store, "assets/p/app/b1");
+    const deps = countingDeps(store, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<html>root</html>");
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    expect(keys).toEqual(["assets/p/app/b1/index.html"]);
+    expect(keys).toEqual(["assets/p/prod/app/r00000b01/index.html"]);
   });
 
   it("falls back to the bare root name when index.html is missing", async () => {
@@ -319,27 +329,30 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         keys.push(key);
-        return key === "assets/p/app/b1/"
+        return key === "assets/p/prod/app/r00000b01/"
           ? { body: new Blob(["<html>legacy root</html>"]).stream() }
           : null;
       },
     };
-    const deps = countingDeps(store, "assets/p/app/b1");
+    const deps = countingDeps(store, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<html>legacy root</html>");
-    expect(keys).toEqual(["assets/p/app/b1/index.html", "assets/p/app/b1/"]);
+    expect(keys).toEqual([
+      "assets/p/prod/app/r00000b01/index.html",
+      "assets/p/prod/app/r00000b01/",
+    ]);
   });
 
   it("resolves a basePath root request to <basePath>/index.html", async () => {
     const url = new URL("https://serve-root-2.example/docs");
     const deps = countingDeps(
       bucketServing({
-        "assets/p/app/b1/docs/index.html": { body: "<html>docs root</html>" },
+        "assets/p/prod/app/r00000b01/docs/index.html": { body: "<html>docs root</html>" },
       }),
-      "assets/p/app/b1",
+      STORAGE,
     );
 
     const res = await serveStaticAsset(new Request(url), url, {
@@ -357,18 +370,18 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         keys.push(key);
-        return key === "assets/p/app/b1/docs.html"
+        return key === "assets/p/prod/app/r00000b01/docs.html"
           ? { body: new Blob(["<html>docs page</html>"]).stream() }
           : null;
       },
     };
-    const deps = countingDeps(store, "assets/p/app/b1");
+    const deps = countingDeps(store, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<html>docs page</html>");
-    expect(keys).toEqual(["assets/p/app/b1/docs.html"]);
+    expect(keys).toEqual(["assets/p/prod/app/r00000b01/docs.html"]);
   });
 
   it("reads only the document for an extensionless page", async () => {
@@ -377,26 +390,29 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         keys.push(key);
-        return key === "assets/p/app/b1/some.html"
+        return key === "assets/p/prod/app/r00000b01/some.html"
           ? { body: new Blob(["<html>some</html>"]).stream() }
           : null;
       },
     };
-    const deps = countingDeps(store, "assets/p/app/b1");
+    const deps = countingDeps(store, STORAGE);
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(200);
-    expect(keys).toEqual(["assets/p/app/b1/some.html"]);
+    expect(keys).toEqual(["assets/p/prod/app/r00000b01/some.html"]);
   });
 
   it("answers 304 when the client already has the object's etag", async () => {
     const url = new URL("https://serve-304-1.example/_next/static/service-worker/sw.js");
     const deps = countingDeps(
       bucketServing({
-        "assets/p/app/b1/_next/static/service-worker/sw.js": { body: "sw", etag: '"v1"' },
+        "assets/p/prod/app/r00000b01/_next/static/service-worker/sw.js": {
+          body: "sw",
+          etag: '"v1"',
+        },
       }),
-      "assets/p/app/b1",
+      STORAGE,
     );
 
     const res = await serveStaticAsset(
@@ -412,7 +428,7 @@ describe("serveStaticAsset", () => {
   });
 
   it("answers 304 for a weak or listed etag, and for *", async () => {
-    const files = { "assets/p/app/b1/robots.txt": { body: "ok", etag: '"v1"' } };
+    const files = { "assets/p/prod/app/r00000b01/robots.txt": { body: "ok", etag: '"v1"' } };
     const cases = ['W/"v1"', '"v0", "v1"', "*"];
 
     for (const [i, header] of cases.entries()) {
@@ -420,7 +436,7 @@ describe("serveStaticAsset", () => {
       const res = await serveStaticAsset(
         new Request(url, { headers: { "if-none-match": header } }),
         url,
-        countingDeps(bucketServing(files), "assets/p/app/b1"),
+        countingDeps(bucketServing(files), STORAGE),
       );
       expect(res.status, header).toBe(304);
     }
@@ -429,8 +445,8 @@ describe("serveStaticAsset", () => {
   it("serves the body when the client has a different etag", async () => {
     const url = new URL("https://serve-304-3.example/robots.txt");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/robots.txt": { body: "ok", etag: '"v2"' } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/robots.txt": { body: "ok", etag: '"v2"' } }),
+      STORAGE,
     );
 
     const res = await serveStaticAsset(
@@ -446,8 +462,8 @@ describe("serveStaticAsset", () => {
   it("writes only the immutable assets to the colo cache", async () => {
     const url = new URL("https://serve-put-1.example/favicon.ico");
     const deps = countingDeps(
-      bucketServing({ "assets/p/app/b1/favicon.ico": { body: "icon" } }),
-      "assets/p/app/b1",
+      bucketServing({ "assets/p/prod/app/r00000b01/favicon.ico": { body: "icon" } }),
+      STORAGE,
     );
 
     expect((await serveStaticAsset(new Request(url), url, deps)).status).toBe(200);
@@ -462,12 +478,12 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         reads++;
-        return key === "assets/p/app/b1/_next/static/chunks/main.js"
+        return key === "assets/p/prod/app/r00000b01/_next/static/chunks/main.js"
           ? { body: new Blob(["<svg/>"]).stream() }
           : null;
       },
     };
-    const deps = countingDeps(store, "assets/p/app/b1");
+    const deps = countingDeps(store, STORAGE);
 
     const first = await serveStaticAsset(new Request(url), url, deps);
     expect(first.status).toBe(200);

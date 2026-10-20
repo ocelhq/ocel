@@ -125,7 +125,7 @@ function imageResponse(request: Request, deps: RouteDeps): Promise<Response> | u
   return serveImage(request, url, {
     config: manifest.images,
     basePath: manifest.basePath,
-    assetPrefix: deps.assetStore.assetPrefix,
+    storage: deps.assetStore.storage,
     slug: deps.slug,
     app: deps.app,
     appBuildId: deps.appBuildId,

@@ -1,5 +1,5 @@
+import { objectKey, storagePrefix } from "@platform/edge-contract/storage-key";
 import { describe, expect, it } from "vitest";
-
 import { type AssetStoreDeps, contentTypeFor, serveStaticAsset } from "../src/assets.mjs";
 
 describe("contentTypeFor", () => {
@@ -49,7 +49,7 @@ function basePathStoreServing(files: Record<string, string>): AssetStoreDeps {
         return body === undefined ? null : { body: new Blob([body]).stream() };
       },
     },
-    assetPrefix: "assets/p/app/b1",
+    storage: { project: "p", env: "prod", app: "app", release: "r00000b01" },
     basePath: "/docs",
     static: { immutablePrefixes: ["/docs/_next/static/"] },
     cache: { match: async () => undefined, put: async () => {} },
@@ -60,7 +60,9 @@ function basePathStoreServing(files: Record<string, string>): AssetStoreDeps {
 describe("serveStaticAsset under a basePath", () => {
   it("serves the 404 page the build stored under the basePath when a page misses", async () => {
     const url = new URL("https://app.example/docs/missing");
-    const deps = basePathStoreServing({ "assets/p/app/b1/docs/404.html": "<h1>gone</h1>" });
+    const deps = basePathStoreServing({
+      "assets/p/prod/app/r00000b01/docs/404.html": "<h1>gone</h1>",
+    });
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
@@ -72,8 +74,8 @@ describe("serveStaticAsset under a basePath", () => {
   it("serves the locale's 404 page the build stored under the basePath", async () => {
     const url = new URL("https://app.example/docs/fr/missing");
     const deps = basePathStoreServing({
-      "assets/p/app/b1/docs/fr/404.html": "<h1>introuvable</h1>",
-      "assets/p/app/b1/docs/404.html": "<h1>gone</h1>",
+      "assets/p/prod/app/r00000b01/docs/fr/404.html": "<h1>introuvable</h1>",
+      "assets/p/prod/app/r00000b01/docs/404.html": "<h1>gone</h1>",
     });
 
     const res = await serveStaticAsset(new Request(url), url, deps, "fr");
@@ -84,7 +86,7 @@ describe("serveStaticAsset under a basePath", () => {
 });
 
 describe("serveStaticAsset beside a release's route table", () => {
-  const release = "prod/shop/web/r0a1b2c3d";
+  const storage = { project: "shop", env: "prod", app: "web", release: "r0a1b2c3d" };
   const table = `${"a".repeat(64)}.json`;
 
   it("reads no key outside the asset prefix, however the path climbs out of it", async () => {
@@ -93,12 +95,12 @@ describe("serveStaticAsset beside a release's route table", () => {
       store: {
         async get(key) {
           asked.push(key);
-          return key === `${release}/route-table/${table}`
+          return key === objectKey("route-tables", storage, table)
             ? { body: new Blob(['{"bypassToken":"secret"}']).stream() }
             : null;
         },
       },
-      assetPrefix: `${release}/assets`,
+      storage,
       cache: { match: async () => undefined, put: async () => {} },
       waitUntil: () => {},
     };
@@ -114,6 +116,6 @@ describe("serveStaticAsset beside a release's route table", () => {
       expect(res.status, path).toBe(404);
       expect(await res.text(), path).not.toContain("secret");
     }
-    expect(asked.every((key) => key.startsWith(`${release}/assets/`))).toBe(true);
+    expect(asked.every((key) => key.startsWith(storagePrefix("assets", storage)))).toBe(true);
   });
 });

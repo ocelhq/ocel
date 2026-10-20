@@ -1,4 +1,4 @@
-import { readStorageCoordinate } from "@platform/edge-contract/storage-key";
+import { readStorageCoordinate } from "@platform/edge-contract/runtime-env";
 import { newCdnPurge, type PurgeTags } from "./cdn-purge.mjs";
 import { cloudCdnRelease } from "./cloud-cdn-tags.mjs";
 import { newCloudflarePurge } from "./cloudflare-purge.mjs";

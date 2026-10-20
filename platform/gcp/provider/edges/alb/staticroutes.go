@@ -16,21 +16,21 @@ type StaticRoutes struct {
 	Revalidate []string `json:"revalidate,omitempty"`
 }
 
-func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) *StaticRoutes {
+func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) (*StaticRoutes, error) {
 	if balancer.Shielded || balancer.AssetsBackend == "" || !hasUploadedStaticFiles(record) ||
 		record.Static == nil || len(record.Static.ImmutablePrefixes) == 0 {
-		return nil
+		return nil, nil
 	}
-	storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate)
+	storage, err := record.ParseStorageCoordinate()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	return &StaticRoutes{
 		Backend:    balancer.AssetsBackend,
 		Objects:    naming.PathSeparator + storage.StoragePrefix(naming.ObjectAssets),
 		Immutable:  record.Static.ImmutablePrefixes,
 		Revalidate: record.Static.MustRevalidatePrefixes,
-	}
+	}, nil
 }
 
 func hasUploadedStaticFiles(record router.ReleaseRecord) bool {
@@ -38,9 +38,9 @@ func hasUploadedStaticFiles(record router.ReleaseRecord) bool {
 }
 
 func encodeStaticRoutes(record router.ReleaseRecord, balancer LoadBalancer) (string, error) {
-	routes := staticRoutesOf(record, balancer)
-	if routes == nil {
-		return "", nil
+	routes, err := staticRoutesOf(record, balancer)
+	if err != nil || routes == nil {
+		return "", err
 	}
 	encoded, err := json.Marshal(routes)
 	if err != nil {

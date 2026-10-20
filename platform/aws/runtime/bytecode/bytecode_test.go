@@ -16,8 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/processenv"
+
 	"github.com/ocelhq/ocel/pkg/naming"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 func TestBytecodeCacheKey(t *testing.T) {
@@ -388,14 +389,14 @@ func TestCompileCacheSize(t *testing.T) {
 
 func TestCompileCacheEnv(t *testing.T) {
 	t.Run("gate closed", func(t *testing.T) {
-		t.Setenv(awsports.CompileCacheEnvVar, "")
-		t.Setenv(naming.StorageCoordinateVar, "proj/prod/web/r1a2b3c4d")
+		t.Setenv(processenv.CompileCacheEnvVar, "")
+		t.Setenv(processenv.StorageCoordinateEnvVar, "proj/prod/web/r1a2b3c4d")
 		if got := Env(); got != nil {
 			t.Errorf("Env() = %v, want nil when the release caches no bytecode, whatever coordinate it names", got)
 		}
 	})
 	t.Run("gate open", func(t *testing.T) {
-		t.Setenv(awsports.CompileCacheEnvVar, "1")
+		t.Setenv(processenv.CompileCacheEnvVar, "1")
 		want := []string{"NODE_COMPILE_CACHE=" + compileCacheDir}
 		got := Env()
 		if len(got) != 1 || got[0] != want[0] {
@@ -422,9 +423,9 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				t.Setenv(awsports.CompileCacheEnvVar, tc.gate)
-				t.Setenv(naming.StorageCoordinateVar, tc.storage)
-				t.Setenv(naming.StorageArtifacts.BucketVar(), tc.bucket)
+				t.Setenv(processenv.CompileCacheEnvVar, tc.gate)
+				t.Setenv(processenv.StorageCoordinateEnvVar, tc.storage)
+				t.Setenv(processenv.BucketEnvVar(naming.StorageArtifacts), tc.bucket)
 				t.Setenv("AWS_LAMBDA_FUNCTION_NAME", tc.function)
 				if got := resolve(context.Background(), nodeVersion); got != nil {
 					t.Errorf("resolve() = %+v, want nil", got)
@@ -480,8 +481,8 @@ func TestResolveBytecodeResolution(t *testing.T) {
 
 	t.Run("resolves for a function with no ISR cache", func(t *testing.T) {
 		compileCacheConfigured(t, "proj/stg/api/r1a2b3c4d", "artifacts-xyz")
-		t.Setenv(naming.StorageEdge.BucketVar(), "")
-		t.Setenv(naming.StorageCache.BucketVar(), "")
+		t.Setenv(processenv.BucketEnvVar(naming.StorageEdge), "")
+		t.Setenv(processenv.BucketEnvVar(naming.StorageCache), "")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-express-app")
 		t.Setenv("AWS_REGION", "us-east-1")
 
@@ -532,12 +533,12 @@ func storageAt(t *testing.T, value string) naming.Coordinate {
 
 func compileCacheOn(t *testing.T) {
 	t.Helper()
-	t.Setenv(awsports.CompileCacheEnvVar, "1")
+	t.Setenv(processenv.CompileCacheEnvVar, "1")
 }
 
 func compileCacheConfigured(t *testing.T, storage, bucket string) {
 	t.Helper()
 	compileCacheOn(t)
-	t.Setenv(naming.StorageCoordinateVar, storage)
-	t.Setenv(naming.StorageArtifacts.BucketVar(), bucket)
+	t.Setenv(processenv.StorageCoordinateEnvVar, storage)
+	t.Setenv(processenv.BucketEnvVar(naming.StorageArtifacts), bucket)
 }

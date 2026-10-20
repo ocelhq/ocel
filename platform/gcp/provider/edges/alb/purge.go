@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -18,12 +17,24 @@ type servedRelease struct {
 	Tagged  bool   `json:"tagged,omitempty"`
 }
 
-func readReleaseTag(record router.ReleaseRecord) string {
-	storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate)
+func readReleaseTag(record router.ReleaseRecord) (string, error) {
+	storage, err := record.ParseStorageCoordinate()
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return storage.Release.String()
+	return storage.Release.String(), nil
+}
+
+func readReleaseTags(records map[string]router.ReleaseRecord) (map[string]string, error) {
+	tags := make(map[string]string, len(records))
+	for app, record := range records {
+		tag, err := readReleaseTag(record)
+		if err != nil {
+			return nil, err
+		}
+		tags[app] = tag
+	}
+	return tags, nil
 }
 
 func isReleaseTagged(record router.ReleaseRecord) bool {
@@ -51,7 +62,7 @@ func (s *stack) servedHostnames(move router.PointerMove, app string, record rout
 	return slices.Compact(hostnames)
 }
 
-func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, log progress.Log) {
+func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, releases map[string]string, log progress.Log) {
 	if _, _, deployment := router.ParseDeploymentPointer(move.Pointer); deployment {
 		return
 	}
@@ -59,25 +70,21 @@ func (s *stack) purgeReplaced(ctx context.Context, move router.PointerMove, log 
 	var tags, hostnames []string
 	for _, app := range slices.Sorted(maps.Keys(move.Records)) {
 		record := move.Records[app]
-		release := readReleaseTag(record)
-		now := servedRelease{Release: release, Tagged: isReleaseTagged(record) && release != ""}
+		release := releases[app]
+		now := servedRelease{Release: release, Tagged: isReleaseTagged(record)}
 		key := newServedKey(pointer, app)
 		prior, known := s.recorded.Served[key]
 		if known && prior.Tagged && prior.Release != now.Release {
 			tags = append(tags, prior.Release)
 		}
-		sameRelease := known && prior.Release == now.Release && now.Release != ""
+		sameRelease := known && prior.Release == now.Release
 		if !sameRelease && (!known || !prior.Tagged || !now.Tagged) {
 			hostnames = append(hostnames, s.servedHostnames(move, app, record)...)
 		}
-		switch {
-		case release == "":
-			delete(s.recorded.Served, key)
-		case s.recorded.Served == nil:
-			s.recorded.Served = map[string]servedRelease{key: now}
-		default:
-			s.recorded.Served[key] = now
+		if s.recorded.Served == nil {
+			s.recorded.Served = map[string]servedRelease{}
 		}
+		s.recorded.Served[key] = now
 	}
 	s.keep()
 	urlMap := s.recorded.LoadBalancer.URLMap

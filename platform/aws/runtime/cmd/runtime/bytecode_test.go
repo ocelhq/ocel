@@ -12,7 +12,8 @@ import (
 	"testing"
 	"time"
 
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/pkg/processenv"
+
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
@@ -297,7 +298,7 @@ func TestDrainControl(t *testing.T) {
 func TestNodeChildEnv(t *testing.T) {
 	t.Run("passes the compile cache only when gated", func(t *testing.T) {
 		t.Run("gate open", func(t *testing.T) {
-			t.Setenv(awsports.CompileCacheEnvVar, "1")
+			t.Setenv(processenv.CompileCacheEnvVar, "1")
 			want := bytecode.Env()
 			if len(want) != 1 {
 				t.Fatalf("bytecode.Env() = %v, want exactly one entry with the gate open", want)
@@ -316,7 +317,7 @@ func TestNodeChildEnv(t *testing.T) {
 		})
 
 		t.Run("gate closed", func(t *testing.T) {
-			t.Setenv(awsports.CompileCacheEnvVar, "")
+			t.Setenv(processenv.CompileCacheEnvVar, "")
 			for _, e := range nodeChildEnv("/tmp/ocel-control.sock", nil) {
 				if strings.HasPrefix(e, "NODE_COMPILE_CACHE=") {
 					t.Errorf("child env has %q with the gate closed", e)

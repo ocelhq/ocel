@@ -1,5 +1,9 @@
 import type { TagRecord } from "@platform/edge-contract/purge";
-import { isStorageCoordinate, type StorageCoordinate } from "@platform/edge-contract/storage-key";
+import {
+  fieldSeparator,
+  isStorageCoordinate,
+  type StorageCoordinate,
+} from "@platform/edge-contract/storage-key";
 
 export type TagAttribute = { S: string } | { N: string };
 
@@ -49,12 +53,11 @@ export function isGuardRejection(err: any): boolean {
 }
 
 const KEY = "#";
-const FIELD = "--";
 
 export function tagNamespace(coordinate: StorageCoordinate): string | null {
   if (!isStorageCoordinate(coordinate)) return null;
   const { project, env, app, release } = coordinate;
-  const stack = [env, app, release].join(FIELD);
+  const stack = [env, app, release].join(fieldSeparator);
   return `PROJECT${KEY}${project}${KEY}STACK${KEY}${stack}${KEY}TAG${KEY}`;
 }
 
@@ -64,7 +67,7 @@ export function parseTagNamespace(namespace: string): StorageCoordinate | null {
   if (tokens[0] !== "PROJECT" || tokens[2] !== "STACK" || tokens[4] !== "TAG" || tokens[5] !== "") {
     return null;
   }
-  const fields = tokens[3]!.split(FIELD);
+  const fields = tokens[3]!.split(fieldSeparator);
   if (fields.length !== 3) return null;
   const coordinate = { project: tokens[1]!, env: fields[0]!, app: fields[1]!, release: fields[2]! };
   return isStorageCoordinate(coordinate) ? coordinate : null;

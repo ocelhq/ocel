@@ -1,6 +1,10 @@
 package naming_test
 
 import (
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,5 +64,56 @@ func TestNamespaceFieldNeverCutsANamespaceIntoAnotherNamespacesFence(t *testing.
 	}
 	if strings.HasPrefix(field+naming.WordSeparator, naming.AppFence("x")) {
 		t.Errorf("NamespaceField = %q, so every name it mints starts with namespace %q's fence %q", field, "x", naming.AppFence("x"))
+	}
+}
+
+var updateNamespaceFields = flag.Bool("update", false, "rewrite the namespace field fixture the TypeScript harnesses read")
+
+type namespaceFieldCase struct {
+	Namespace string `json:"namespace"`
+	Field     string `json:"field"`
+}
+
+func TestTheHarnessesNamespaceFieldIsTheOneGoFits(t *testing.T) {
+	path := filepath.Join("..", "..", "tests", "shared", "fixtures", "namespace-fields.json")
+	namespaces := []string{
+		"ocel",
+		strings.Repeat("a", naming.MaxNamespaceField),
+		strings.Repeat("a", naming.MaxNamespaceField+1),
+		"j-1874-deploy-next-cloudflare",
+		"j-1874-deploy-next-cloudfront",
+		"ab-app-cdefghij",
+		"x-app-namespaces",
+		"abc--defghijklm",
+		strings.Repeat("n", 44),
+	}
+	if *updateNamespaceFields {
+		cases := make([]namespaceFieldCase, 0, len(namespaces))
+		for _, namespace := range namespaces {
+			cases = append(cases, namespaceFieldCase{Namespace: namespace, Field: naming.NamespaceField(namespace)})
+		}
+		encoded, err := json.MarshalIndent(cases, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []namespaceFieldCase
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) != len(namespaces) {
+		t.Fatalf("the fixture holds %d namespaces, want %d: rewrite it with go test ./pkg/naming -run TestTheHarnessesNamespaceFieldIsTheOneGoFits -update", len(cases), len(namespaces))
+	}
+	for _, c := range cases {
+		if got := naming.NamespaceField(c.Namespace); got != c.Field {
+			t.Errorf("NamespaceField(%q) = %q, but the harnesses read %q", c.Namespace, got, c.Field)
+		}
 	}
 }

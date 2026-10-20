@@ -16,7 +16,7 @@ import {
 import { serve } from "../src/index.mjs";
 import { baseDeps } from "../test-support/dispatch-scenario.mjs";
 
-const ASSET_PREFIX = "prod/p1/web/r3f8a1c9d/assets";
+const STORAGE = { project: "p1", env: "prod", app: "web", release: "r3f8a1c9d" };
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]!.config;
 
@@ -89,7 +89,7 @@ describe("a url no runtime can parse", () => {
       const response = await serveImage(new Request(url), url, {
         config: BASE_CONFIG,
         basePath: "",
-        assetPrefix: ASSET_PREFIX,
+        storage: STORAGE,
         slug: "p1",
         appBuildId: "d1",
         app: "web",
@@ -107,7 +107,7 @@ describe("a url no runtime can parse", () => {
       await serveImage(new Request(url), url, {
         config: BASE_CONFIG,
         basePath: "",
-        assetPrefix: ASSET_PREFIX,
+        storage: STORAGE,
         slug: "p1",
         appBuildId: "d1",
         app: "web",
@@ -252,7 +252,7 @@ describe("serveImage", () => {
       {
         config: BASE_CONFIG,
         basePath: "",
-        assetPrefix: ASSET_PREFIX,
+        storage: STORAGE,
         slug: "p1",
         appBuildId: "d1",
         app: "web",
@@ -266,7 +266,7 @@ describe("serveImage", () => {
     expect(await response.text()).toBe("optimized");
     expect(seen).toEqual([
       {
-        assetPrefix: ASSET_PREFIX,
+        storage: STORAGE,
         url: "/a.png",
         w: 640,
         q: 75,
@@ -285,7 +285,7 @@ describe("serveImage", () => {
     await serveImage(new Request(url), url, {
       config: BASE_CONFIG,
       basePath: "",
-      assetPrefix: ASSET_PREFIX,
+      storage: STORAGE,
       slug: "p1",
       appBuildId: "d1",
       app: "web",
@@ -304,7 +304,7 @@ describe("serveImage", () => {
     const response = await serveImage(new Request(url), url, {
       config: BASE_CONFIG,
       basePath: "",
-      assetPrefix: ASSET_PREFIX,
+      storage: STORAGE,
       slug: "p1",
       appBuildId: "d1",
       app: "web",
@@ -324,7 +324,7 @@ describe("serveImage", () => {
     const response = await serveImage(new Request(url), url, {
       config: BASE_CONFIG,
       basePath: "",
-      assetPrefix: ASSET_PREFIX,
+      storage: STORAGE,
       slug: "p1",
       appBuildId: "d1",
       app: "web",
@@ -341,7 +341,7 @@ describe("serveImage", () => {
       serveImage(new Request(url, { method }), url, {
         config: configWith({ localPatterns: undefined }),
         basePath: "",
-        assetPrefix: ASSET_PREFIX,
+        storage: STORAGE,
         slug: "p1",
         appBuildId: "d1",
         app: "web",
@@ -377,7 +377,7 @@ describe("serveImage", () => {
 
 describe("deploymentImageOrigin", () => {
   const payload: ImageOriginRequest = {
-    assetPrefix: ASSET_PREFIX,
+    storage: STORAGE,
     url: "/a.png",
     w: 640,
     q: 75,
@@ -478,7 +478,7 @@ describe("a local route source", () => {
     const deps: Parameters<typeof serveImage>[2] = {
       config: BASE_CONFIG,
       basePath: "",
-      assetPrefix: ASSET_PREFIX,
+      storage: STORAGE,
       slug: "p1",
       appBuildId: "d1",
       app: "web",

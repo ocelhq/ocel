@@ -1,5 +1,5 @@
 import { invalidatesByCacheTag } from "@framework/node-runtime/host";
-import { readStorageCoordinate } from "@platform/edge-contract/storage-key";
+import { readReleaseToken } from "@platform/edge-contract/edge-cache";
 
 export const cloudCdnTagLimits = { perObject: 50, bytesPerTag: 120, bytesPerObject: 4096 } as const;
 
@@ -44,5 +44,5 @@ export function cacheTagsForCloudCdn(
 
 export function cloudCdnRelease(env: NodeJS.ProcessEnv): string | null {
   if (!invalidatesByCacheTag(env)) return null;
-  return readStorageCoordinate(env)?.release ?? null;
+  return readReleaseToken(env) ?? null;
 }

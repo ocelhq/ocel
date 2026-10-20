@@ -24,11 +24,6 @@ const (
 
 const (
 	MemoryEnvVar            = "OCEL_FUNCTION_MEMORY_MB"
-	RouterKindEnvVar        = "OCEL_ROUTER_KIND"
-	RouteTableEnvVar        = "OCEL_NEXT_ROUTE_TABLE"
-	slugEnvVar              = "OCEL_SLUG"
-	appNameEnvVar           = "OCEL_APP"
-	buildIDEnvVar           = "OCEL_BUILD_ID"
 	isrTagNamespaceEnvVar   = "OCEL_ISR_TAG_NAMESPACE"
 	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
 	TagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
@@ -79,10 +74,10 @@ func SignsEdgePurges(spec provider.StackSpec) bool {
 
 func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, cache nextCache) map[string]string {
 	app := spec.App
-	env := naming.StorageEnv(app.Storage, cache.buckets)
+	env := processenv.StorageEnv(app.StorageCoordinate, cache.buckets)
 	env[MemoryEnvVar] = strconv.Itoa(s.Memory)
 	if app.Router != "" {
-		env[RouterKindEnvVar] = string(app.Router)
+		env[processenv.RouterKindEnvVar] = string(app.Router)
 	}
 	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.RootFunction {
 		if run.FactsOf(spec.Edge).RunsCode {
@@ -91,16 +86,14 @@ func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, ca
 			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
 		}
-		env[RouteTableEnvVar] = routeTableInImage
+		env[processenv.RouteTableEnvVar] = routeTableInImage
 		if cache.storageEndpoint != "" {
 			env[storageEndpointEnvVar] = cache.storageEndpoint
 		}
 		if rules := app.Static.Variable(); rules != "" {
 			env[edge.StaticRulesVar] = rules
 		}
-		env[slugEnvVar] = spec.Ref.Project
-		env[appNameEnvVar] = app.App
-		env[buildIDEnvVar] = app.BuildID
+		env[processenv.BuildIDEnvVar] = app.BuildID
 	}
 	maps.Copy(env, newNextCacheEnv(app.ISR, cache))
 	return env
@@ -130,7 +123,7 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 }
 
 func NewContainerEnv(spec provider.StackSpec, memory int, cache nextCache) map[string]string {
-	env := naming.StorageEnv(spec.App.Storage, cache.buckets)
+	env := processenv.StorageEnv(spec.App.StorageCoordinate, cache.buckets)
 	maps.Copy(env, newNextCacheEnv(spec.App.ISR, cache))
 	env[MemoryEnvVar] = strconv.Itoa(memory)
 	return env

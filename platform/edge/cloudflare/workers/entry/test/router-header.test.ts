@@ -13,7 +13,7 @@ const originRecord: StoredRecord = {
   buildId: "0123456789abcdef",
   rootFunction: "api",
   functionUrls: { api: FN_URL },
-  storageCoordinate: "",
+  storageCoordinate: "p1/prod/api/r00000001",
   createdAt: 1_000,
   edge: {},
 };
