@@ -119,6 +119,7 @@ func syncWritesGranted(ctx context.Context, b bootstrap.Engine, tier environment
 func SyncServing(b bootstrap.Engine, tier environment.Tier) run.Serving {
 	return run.Serving{
 		Service:     b.Clients.EnvSourceSync(tier),
+		Tier:        tier,
 		Image:       syncImageRef(b.Clients, tier),
 		Account:     b.Clients.EnvSourceSyncAccountEmail(tier),
 		Compute:     provider.ComputeServerless,
