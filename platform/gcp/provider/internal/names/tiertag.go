@@ -1,6 +1,8 @@
 package names
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -20,15 +22,9 @@ func (n Names) TierTagValuePath(tier environment.Tier) string {
 
 func (n Names) OutsideTagValuePath() string { return n.TierTagKeyPath() + "/" + OutsideValue }
 
-func (n Names) IsTierAccount(id string) bool {
-	for _, prefix := range []string{
-		n.AppFence(),
-		naming.OcelName(string(n.namespace), environment.TierProduction) + naming.WordSeparator,
-		naming.OcelName(string(n.namespace), environment.TierPreview) + naming.WordSeparator,
-	} {
-		if strings.HasPrefix(id, prefix) {
-			return true
-		}
-	}
-	return false
-}
+var ocelAccount = regexp.MustCompile("^[a-z][a-z0-9-]{0," + strconv.Itoa(naming.MaxNamespaceField-1) + "}-(" +
+	naming.AppWord + "-[0-9a-f]{" + strconv.Itoa(AccountHashDigits) + "}|(" +
+	naming.TierWord(environment.TierProduction) + "|" + naming.TierWord(environment.TierPreview) + ")-(" +
+	strings.Join([]string{realtimeInfix, assetReaderInfix, envSourceSyncName, bastionName, pushAccountName}, "|") + "))$")
+
+func IsOcelAccount(id string) bool { return ocelAccount.MatchString(id) }

@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const RootOutsideAccounts records.Root = "outsideaccounts"
@@ -51,7 +52,7 @@ func (c *Clients) ListAccounts(ctx context.Context) ([]*iam.ServiceAccount, erro
 
 func (c *Clients) isOutsideAccount(account *iam.ServiceAccount) bool {
 	id, inProject := c.AccountID(account)
-	return !inProject || !c.IsTierAccount(id)
+	return !inProject || !names.IsOcelAccount(id)
 }
 
 type OutsideAccounts struct {
