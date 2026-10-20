@@ -31,6 +31,23 @@ A preview never reads production's values or touches production's resources:
 
 A hostname nobody can guess is not access control, so keep production secrets out of previews.
 
+## Tiers and namespaces
+
+A **tier** is a credential boundary: each tier is deployed with a credential of its own, which
+reaches that tier's resources and not the other's.
+
+- **On AWS**, every grant a deploy holds is conditioned on the `ocel:env-tier` tag of the
+  resource, each tier pushes to ECR repositories of its own, and a deploy adopts only a
+  certificate its own tier requested or one you brought.
+- **On Google Cloud**, every resource carries the `ocel-tier` Resource Manager tag, and a tier's
+  deploy credential holds its roles on its own tier's value. Within one project that is best
+  effort; see [sharing one project between tiers](/docs/providers/gcp#sharing-one-project-between-tiers).
+
+A **namespace** is lighter: every name ocel gives a resource starts with it, so two namespaces in
+one account never collide, and tearing one down never touches another's. It is `ocel` unless you
+set `OCEL_NAMESPACE`, and is meant for CI and advanced setups that run several installations side
+by side. It is never a credential boundary: a deploy credential reaches every namespace of its tier.
+
 ## Variables
 
 Your app declares the variables it reads, and the declaration is where each one's class is set:
