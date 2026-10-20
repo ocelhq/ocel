@@ -43,6 +43,24 @@ message WaitingEvent {
   string url = 2;
 
   MissingVariables missing = 3;
+
+  cloud.v1.JobInput input = 4;
+}
+
+message InputAnswer {
+  string input_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  oneof answer {
+    option (buf.validate.oneof).required = true;
+
+    bool resolved = 2;
+
+    bool confirmed = 3;
+  }
 }
 
 message MissingVariables {

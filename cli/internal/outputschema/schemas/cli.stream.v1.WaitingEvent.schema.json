@@ -76,6 +76,9 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
+        "input": {
+          "$ref": "#/$defs/cloud.v1.JobInput.jsonschema.json"
+        },
         "missing": {
           "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.json"
         },
@@ -85,6 +88,169 @@
         }
       },
       "title": "Waiting Event",
+      "type": "object"
+    },
+    "cloud.v1.Confirmation.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "finding": {
+          "default": "",
+          "type": "string"
+        },
+        "question": {
+          "default": "",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "title": "Confirmation",
+      "type": "object"
+    },
+    "cloud.v1.JobInput.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "confirmation": {
+          "$ref": "#/$defs/cloud.v1.Confirmation.jsonschema.json"
+        },
+        "id": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string"
+        },
+        "variables": {
+          "$ref": "#/$defs/cloud.v1.VariablesNeeded.jsonschema.json"
+        }
+      },
+      "title": "Job Input",
+      "type": "object",
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "variables"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "confirmation"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "required": [
+                "variables"
+              ]
+            },
+            {
+              "required": [
+                "confirmation"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "cloud.v1.NeededGroup.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "minLength": 1,
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        }
+      },
+      "title": "Needed Group",
+      "type": "object"
+    },
+    "cloud.v1.NeededVariable.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "pattern": "^(/[^/#\\x00-\\x1f\\x7f]+)*$",
+          "type": "string"
+        },
+        "group": {
+          "default": "",
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "minLength": 1,
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "type": "string"
+        },
+        "secret": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Needed Variable",
+      "type": "object"
+    },
+    "cloud.v1.VariablesNeeded.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/cloud.v1.NeededGroup.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        },
+        "variables": {
+          "items": {
+            "$ref": "#/$defs/cloud.v1.NeededVariable.jsonschema.json"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "title": "Variables Needed",
       "type": "object"
     }
   },

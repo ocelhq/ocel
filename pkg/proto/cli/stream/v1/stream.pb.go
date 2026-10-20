@@ -287,6 +287,7 @@ type WaitingEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
 	Missing       *MissingVariables      `protobuf:"bytes,3,opt,name=missing,proto3" json:"missing,omitempty"`
+	Input         *v12.JobInput          `protobuf:"bytes,4,opt,name=input,proto3" json:"input,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -335,6 +336,103 @@ func (x *WaitingEvent) GetMissing() *MissingVariables {
 	return nil
 }
 
+func (x *WaitingEvent) GetInput() *v12.JobInput {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+type InputAnswer struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	InputId string                 `protobuf:"bytes,1,opt,name=input_id,json=inputId,proto3" json:"input_id,omitempty"`
+	// Types that are valid to be assigned to Answer:
+	//
+	//	*InputAnswer_Resolved
+	//	*InputAnswer_Confirmed
+	Answer        isInputAnswer_Answer `protobuf_oneof:"answer"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InputAnswer) Reset() {
+	*x = InputAnswer{}
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InputAnswer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InputAnswer) ProtoMessage() {}
+
+func (x *InputAnswer) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InputAnswer.ProtoReflect.Descriptor instead.
+func (*InputAnswer) Descriptor() ([]byte, []int) {
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *InputAnswer) GetInputId() string {
+	if x != nil {
+		return x.InputId
+	}
+	return ""
+}
+
+func (x *InputAnswer) GetAnswer() isInputAnswer_Answer {
+	if x != nil {
+		return x.Answer
+	}
+	return nil
+}
+
+func (x *InputAnswer) GetResolved() bool {
+	if x != nil {
+		if x, ok := x.Answer.(*InputAnswer_Resolved); ok {
+			return x.Resolved
+		}
+	}
+	return false
+}
+
+func (x *InputAnswer) GetConfirmed() bool {
+	if x != nil {
+		if x, ok := x.Answer.(*InputAnswer_Confirmed); ok {
+			return x.Confirmed
+		}
+	}
+	return false
+}
+
+type isInputAnswer_Answer interface {
+	isInputAnswer_Answer()
+}
+
+type InputAnswer_Resolved struct {
+	Resolved bool `protobuf:"varint,2,opt,name=resolved,proto3,oneof"`
+}
+
+type InputAnswer_Confirmed struct {
+	Confirmed bool `protobuf:"varint,3,opt,name=confirmed,proto3,oneof"`
+}
+
+func (*InputAnswer_Resolved) isInputAnswer_Answer() {}
+
+func (*InputAnswer_Confirmed) isInputAnswer_Answer() {}
+
 type MissingVariables struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Cells         []*MissingVariable     `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
@@ -346,7 +444,7 @@ type MissingVariables struct {
 
 func (x *MissingVariables) Reset() {
 	*x = MissingVariables{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -358,7 +456,7 @@ func (x *MissingVariables) String() string {
 func (*MissingVariables) ProtoMessage() {}
 
 func (x *MissingVariables) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -371,7 +469,7 @@ func (x *MissingVariables) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MissingVariables.ProtoReflect.Descriptor instead.
 func (*MissingVariables) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{4}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *MissingVariables) GetCells() []*MissingVariable {
@@ -408,7 +506,7 @@ type MissingVariable struct {
 
 func (x *MissingVariable) Reset() {
 	*x = MissingVariable{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -420,7 +518,7 @@ func (x *MissingVariable) String() string {
 func (*MissingVariable) ProtoMessage() {}
 
 func (x *MissingVariable) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -433,7 +531,7 @@ func (x *MissingVariable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MissingVariable.ProtoReflect.Descriptor instead.
 func (*MissingVariable) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{5}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MissingVariable) GetKey() string {
@@ -481,7 +579,7 @@ type MissingGroup struct {
 
 func (x *MissingGroup) Reset() {
 	*x = MissingGroup{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +591,7 @@ func (x *MissingGroup) String() string {
 func (*MissingGroup) ProtoMessage() {}
 
 func (x *MissingGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +604,7 @@ func (x *MissingGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MissingGroup.ProtoReflect.Descriptor instead.
 func (*MissingGroup) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{6}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MissingGroup) GetKey() string {
@@ -532,7 +630,7 @@ type ResumedEvent struct {
 
 func (x *ResumedEvent) Reset() {
 	*x = ResumedEvent{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[7]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +642,7 @@ func (x *ResumedEvent) String() string {
 func (*ResumedEvent) ProtoMessage() {}
 
 func (x *ResumedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[7]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +655,7 @@ func (x *ResumedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumedEvent.ProtoReflect.Descriptor instead.
 func (*ResumedEvent) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{7}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResumedEvent) GetReason() string {
@@ -592,7 +690,7 @@ type RunSummary struct {
 
 func (x *RunSummary) Reset() {
 	*x = RunSummary{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[8]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -604,7 +702,7 @@ func (x *RunSummary) String() string {
 func (*RunSummary) ProtoMessage() {}
 
 func (x *RunSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[8]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -617,7 +715,7 @@ func (x *RunSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunSummary.ProtoReflect.Descriptor instead.
 func (*RunSummary) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{8}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RunSummary) GetSuccess() bool {
@@ -752,7 +850,7 @@ type CloudJob struct {
 
 func (x *CloudJob) Reset() {
 	*x = CloudJob{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[9]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -764,7 +862,7 @@ func (x *CloudJob) String() string {
 func (*CloudJob) ProtoMessage() {}
 
 func (x *CloudJob) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[9]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -777,7 +875,7 @@ func (x *CloudJob) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloudJob.ProtoReflect.Descriptor instead.
 func (*CloudJob) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{9}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CloudJob) GetId() string {
@@ -828,7 +926,7 @@ type RunError struct {
 
 func (x *RunError) Reset() {
 	*x = RunError{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +938,7 @@ func (x *RunError) String() string {
 func (*RunError) ProtoMessage() {}
 
 func (x *RunError) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +951,7 @@ func (x *RunError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunError.ProtoReflect.Descriptor instead.
 func (*RunError) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{10}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RunError) GetCode() string {
@@ -901,7 +999,7 @@ type Assumption struct {
 
 func (x *Assumption) Reset() {
 	*x = Assumption{}
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[11]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -913,7 +1011,7 @@ func (x *Assumption) String() string {
 func (*Assumption) ProtoMessage() {}
 
 func (x *Assumption) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_stream_v1_stream_proto_msgTypes[11]
+	mi := &file_cli_stream_v1_stream_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -926,7 +1024,7 @@ func (x *Assumption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Assumption.ProtoReflect.Descriptor instead.
 func (*Assumption) Descriptor() ([]byte, []int) {
-	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{11}
+	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Assumption) GetId() string {
@@ -964,10 +1062,16 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06vendor\x18\x01 \x01(\tR\x06vendor\x12\x18\n" +
 	"\aaccount\x18\x02 \x01(\tR\aaccount\x12\x1c\n" +
 	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x1a\n" +
-	"\blocation\x18\x04 \x01(\tR\blocation\"[\n" +
+	"\blocation\x18\x04 \x01(\tR\blocation\"\x85\x01\n" +
 	"\fWaitingEvent\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x129\n" +
-	"\amissing\x18\x03 \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissing\"\x95\x01\n" +
+	"\amissing\x18\x03 \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissing\x12(\n" +
+	"\x05input\x18\x04 \x01(\v2\x12.cloud.v1.JobInputR\x05input\"\x95\x01\n" +
+	"\vInputAnswer\x127\n" +
+	"\binput_id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\ainputId\x12\x1c\n" +
+	"\bresolved\x18\x02 \x01(\bH\x00R\bresolved\x12\x1e\n" +
+	"\tconfirmed\x18\x03 \x01(\bH\x00R\tconfirmedB\x0f\n" +
+	"\x06answer\x12\x05\xbaH\x02\b\x01\"\x95\x01\n" +
 	"\x10MissingVariables\x124\n" +
 	"\x05cells\x18\x01 \x03(\v2\x1e.cli.stream.v1.MissingVariableR\x05cells\x12\x16\n" +
 	"\x06remedy\x18\x02 \x01(\tR\x06remedy\x123\n" +
@@ -1035,56 +1139,59 @@ func file_cli_stream_v1_stream_proto_rawDescGZIP() []byte {
 	return file_cli_stream_v1_stream_proto_rawDescData
 }
 
-var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*RunEvent)(nil),          // 0: cli.stream.v1.RunEvent
 	(*IdentityEvent)(nil),     // 1: cli.stream.v1.IdentityEvent
 	(*Party)(nil),             // 2: cli.stream.v1.Party
 	(*WaitingEvent)(nil),      // 3: cli.stream.v1.WaitingEvent
-	(*MissingVariables)(nil),  // 4: cli.stream.v1.MissingVariables
-	(*MissingVariable)(nil),   // 5: cli.stream.v1.MissingVariable
-	(*MissingGroup)(nil),      // 6: cli.stream.v1.MissingGroup
-	(*ResumedEvent)(nil),      // 7: cli.stream.v1.ResumedEvent
-	(*RunSummary)(nil),        // 8: cli.stream.v1.RunSummary
-	(*CloudJob)(nil),          // 9: cli.stream.v1.CloudJob
-	(*RunError)(nil),          // 10: cli.stream.v1.RunError
-	(*Assumption)(nil),        // 11: cli.stream.v1.Assumption
-	(*v1.OperationEvent)(nil), // 12: common.progress.v1.OperationEvent
-	(v11.Tier)(0),             // 13: common.environment.v1.Tier
-	(*v1.Propagation)(nil),    // 14: common.progress.v1.Propagation
-	(*v1.AppResult)(nil),      // 15: common.progress.v1.AppResult
-	(v12.JobState)(0),         // 16: cloud.v1.JobState
-	(*v12.JobResult)(nil),     // 17: cloud.v1.JobResult
-	(*v12.JobError)(nil),      // 18: cloud.v1.JobError
+	(*InputAnswer)(nil),       // 4: cli.stream.v1.InputAnswer
+	(*MissingVariables)(nil),  // 5: cli.stream.v1.MissingVariables
+	(*MissingVariable)(nil),   // 6: cli.stream.v1.MissingVariable
+	(*MissingGroup)(nil),      // 7: cli.stream.v1.MissingGroup
+	(*ResumedEvent)(nil),      // 8: cli.stream.v1.ResumedEvent
+	(*RunSummary)(nil),        // 9: cli.stream.v1.RunSummary
+	(*CloudJob)(nil),          // 10: cli.stream.v1.CloudJob
+	(*RunError)(nil),          // 11: cli.stream.v1.RunError
+	(*Assumption)(nil),        // 12: cli.stream.v1.Assumption
+	(*v1.OperationEvent)(nil), // 13: common.progress.v1.OperationEvent
+	(v11.Tier)(0),             // 14: common.environment.v1.Tier
+	(*v12.JobInput)(nil),      // 15: cloud.v1.JobInput
+	(*v1.Propagation)(nil),    // 16: common.progress.v1.Propagation
+	(*v1.AppResult)(nil),      // 17: common.progress.v1.AppResult
+	(v12.JobState)(0),         // 18: cloud.v1.JobState
+	(*v12.JobResult)(nil),     // 19: cloud.v1.JobResult
+	(*v12.JobError)(nil),      // 20: cloud.v1.JobError
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
-	12, // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
+	13, // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
 	3,  // 1: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
-	7,  // 2: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
-	8,  // 3: cli.stream.v1.RunEvent.summary:type_name -> cli.stream.v1.RunSummary
+	8,  // 2: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
+	9,  // 3: cli.stream.v1.RunEvent.summary:type_name -> cli.stream.v1.RunSummary
 	1,  // 4: cli.stream.v1.RunEvent.identity:type_name -> cli.stream.v1.IdentityEvent
-	13, // 5: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
+	14, // 5: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
 	2,  // 6: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
 	2,  // 7: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
-	4,  // 8: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
-	5,  // 9: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
-	6,  // 10: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
-	14, // 11: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
-	15, // 12: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
-	4,  // 13: cli.stream.v1.RunSummary.missing:type_name -> cli.stream.v1.MissingVariables
-	13, // 14: cli.stream.v1.RunSummary.tier:type_name -> common.environment.v1.Tier
-	2,  // 15: cli.stream.v1.RunSummary.origin:type_name -> cli.stream.v1.Party
-	10, // 16: cli.stream.v1.RunSummary.error:type_name -> cli.stream.v1.RunError
-	11, // 17: cli.stream.v1.RunSummary.assumed:type_name -> cli.stream.v1.Assumption
-	9,  // 18: cli.stream.v1.RunSummary.cloud_job:type_name -> cli.stream.v1.CloudJob
-	16, // 19: cli.stream.v1.CloudJob.state:type_name -> cloud.v1.JobState
-	17, // 20: cli.stream.v1.CloudJob.result:type_name -> cloud.v1.JobResult
-	18, // 21: cli.stream.v1.CloudJob.error:type_name -> cloud.v1.JobError
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	5,  // 8: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
+	15, // 9: cli.stream.v1.WaitingEvent.input:type_name -> cloud.v1.JobInput
+	6,  // 10: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
+	7,  // 11: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
+	16, // 12: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
+	17, // 13: cli.stream.v1.RunSummary.apps:type_name -> common.progress.v1.AppResult
+	5,  // 14: cli.stream.v1.RunSummary.missing:type_name -> cli.stream.v1.MissingVariables
+	14, // 15: cli.stream.v1.RunSummary.tier:type_name -> common.environment.v1.Tier
+	2,  // 16: cli.stream.v1.RunSummary.origin:type_name -> cli.stream.v1.Party
+	11, // 17: cli.stream.v1.RunSummary.error:type_name -> cli.stream.v1.RunError
+	12, // 18: cli.stream.v1.RunSummary.assumed:type_name -> cli.stream.v1.Assumption
+	10, // 19: cli.stream.v1.RunSummary.cloud_job:type_name -> cli.stream.v1.CloudJob
+	18, // 20: cli.stream.v1.CloudJob.state:type_name -> cloud.v1.JobState
+	19, // 21: cli.stream.v1.CloudJob.result:type_name -> cloud.v1.JobResult
+	20, // 22: cli.stream.v1.CloudJob.error:type_name -> cloud.v1.JobError
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }
@@ -1098,14 +1205,18 @@ func file_cli_stream_v1_stream_proto_init() {
 		(*RunEvent_Summary)(nil),
 		(*RunEvent_Identity)(nil),
 	}
-	file_cli_stream_v1_stream_proto_msgTypes[10].OneofWrappers = []any{}
+	file_cli_stream_v1_stream_proto_msgTypes[4].OneofWrappers = []any{
+		(*InputAnswer_Resolved)(nil),
+		(*InputAnswer_Confirmed)(nil),
+	}
+	file_cli_stream_v1_stream_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_stream_v1_stream_proto_rawDesc), len(file_cli_stream_v1_stream_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

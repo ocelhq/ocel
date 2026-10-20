@@ -42,6 +42,8 @@ const (
 	// JobServiceListJobEventsProcedure is the fully-qualified name of the JobService's ListJobEvents
 	// RPC.
 	JobServiceListJobEventsProcedure = "/cloud.v1.JobService/ListJobEvents"
+	// JobServiceRespondJobProcedure is the fully-qualified name of the JobService's RespondJob RPC.
+	JobServiceRespondJobProcedure = "/cloud.v1.JobService/RespondJob"
 )
 
 // JobServiceClient is a client for the cloud.v1.JobService service.
@@ -50,6 +52,7 @@ type JobServiceClient interface {
 	GetJob(context.Context, *v1.GetJobRequest) (*v1.GetJobResponse, error)
 	CancelJob(context.Context, *v1.CancelJobRequest) (*v1.CancelJobResponse, error)
 	ListJobEvents(context.Context, *v1.ListJobEventsRequest) (*v1.ListJobEventsResponse, error)
+	RespondJob(context.Context, *v1.RespondJobRequest) (*v1.RespondJobResponse, error)
 }
 
 // NewJobServiceClient constructs a client for the cloud.v1.JobService service. By default, it uses
@@ -87,6 +90,12 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(jobServiceMethods.ByName("ListJobEvents")),
 			connect.WithClientOptions(opts...),
 		),
+		respondJob: connect.NewClient[v1.RespondJobRequest, v1.RespondJobResponse](
+			httpClient,
+			baseURL+JobServiceRespondJobProcedure,
+			connect.WithSchema(jobServiceMethods.ByName("RespondJob")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -96,6 +105,7 @@ type jobServiceClient struct {
 	getJob        *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 	cancelJob     *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
 	listJobEvents *connect.Client[v1.ListJobEventsRequest, v1.ListJobEventsResponse]
+	respondJob    *connect.Client[v1.RespondJobRequest, v1.RespondJobResponse]
 }
 
 // StartJob calls cloud.v1.JobService.StartJob.
@@ -134,12 +144,22 @@ func (c *jobServiceClient) ListJobEvents(ctx context.Context, req *v1.ListJobEve
 	return nil, err
 }
 
+// RespondJob calls cloud.v1.JobService.RespondJob.
+func (c *jobServiceClient) RespondJob(ctx context.Context, req *v1.RespondJobRequest) (*v1.RespondJobResponse, error) {
+	response, err := c.respondJob.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // JobServiceHandler is an implementation of the cloud.v1.JobService service.
 type JobServiceHandler interface {
 	StartJob(context.Context, *v1.StartJobRequest) (*v1.StartJobResponse, error)
 	GetJob(context.Context, *v1.GetJobRequest) (*v1.GetJobResponse, error)
 	CancelJob(context.Context, *v1.CancelJobRequest) (*v1.CancelJobResponse, error)
 	ListJobEvents(context.Context, *v1.ListJobEventsRequest) (*v1.ListJobEventsResponse, error)
+	RespondJob(context.Context, *v1.RespondJobRequest) (*v1.RespondJobResponse, error)
 }
 
 // NewJobServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -173,6 +193,12 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(jobServiceMethods.ByName("ListJobEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
+	jobServiceRespondJobHandler := connect.NewUnaryHandlerSimple(
+		JobServiceRespondJobProcedure,
+		svc.RespondJob,
+		connect.WithSchema(jobServiceMethods.ByName("RespondJob")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/cloud.v1.JobService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case JobServiceStartJobProcedure:
@@ -183,6 +209,8 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 			jobServiceCancelJobHandler.ServeHTTP(w, r)
 		case JobServiceListJobEventsProcedure:
 			jobServiceListJobEventsHandler.ServeHTTP(w, r)
+		case JobServiceRespondJobProcedure:
+			jobServiceRespondJobHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -206,4 +234,8 @@ func (UnimplementedJobServiceHandler) CancelJob(context.Context, *v1.CancelJobRe
 
 func (UnimplementedJobServiceHandler) ListJobEvents(context.Context, *v1.ListJobEventsRequest) (*v1.ListJobEventsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("cloud.v1.JobService.ListJobEvents is not implemented"))
+}
+
+func (UnimplementedJobServiceHandler) RespondJob(context.Context, *v1.RespondJobRequest) (*v1.RespondJobResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("cloud.v1.JobService.RespondJob is not implemented"))
 }

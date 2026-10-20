@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "cli.stream.v1.InputAnswer.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(input_id)$": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "confirmed": {
+          "type": "boolean"
+        },
+        "inputId": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string"
+        },
+        "resolved": {
+          "type": "boolean"
+        }
+      },
+      "title": "Input Answer",
+      "type": "object",
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "resolved"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "confirmed"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "required": [
+                "resolved"
+              ]
+            },
+            {
+              "required": [
+                "confirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "$id": "https://ocel.dev/schema/cli/cli.stream.v1.InputAnswer.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.InputAnswer.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
