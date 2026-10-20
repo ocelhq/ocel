@@ -33,8 +33,8 @@ func (q Quota) ARN() string {
 }
 
 func RefuseFullQuota(ctx context.Context, api QuotasAPI, quota Quota, region string, held, adding int, needs string) error {
-	limit, err := readQuota(ctx, api, quota)
-	if err != nil {
+	limit, listed, err := readQuota(ctx, api, quota)
+	if err != nil || !listed {
 		return err
 	}
 	if held+adding <= limit {
@@ -46,27 +46,29 @@ func RefuseFullQuota(ctx context.Context, api QuotasAPI, quota Quota, region str
 		needs, adding, quota.Name, quota.Code, held, limit, region, region, quota.Service, quota.Code, held+adding)
 }
 
-func readQuota(ctx context.Context, api QuotasAPI, quota Quota) (int, error) {
+func readQuota(ctx context.Context, api QuotasAPI, quota Quota) (int, bool, error) {
 	applied, err := api.GetServiceQuota(ctx, &servicequotas.GetServiceQuotaInput{
 		ServiceCode: aws.String(quota.Service),
 		QuotaCode:   aws.String(quota.Code),
 	})
-	var unchanged *sqtypes.NoSuchResourceException
+	var unlisted *sqtypes.NoSuchResourceException
 	switch {
 	case err == nil && applied.Quota != nil && applied.Quota.Value != nil:
-		return int(math.Floor(*applied.Quota.Value)), nil
-	case err != nil && !errors.As(err, &unchanged):
-		return 0, fmt.Errorf("read the %q quota (%s): %w", quota.Name, quota.Code, err)
+		return int(math.Floor(*applied.Quota.Value)), true, nil
+	case err != nil && !errors.As(err, &unlisted):
+		return 0, false, fmt.Errorf("read the %q quota (%s): %w", quota.Name, quota.Code, err)
 	}
 	fallback, err := api.GetAWSDefaultServiceQuota(ctx, &servicequotas.GetAWSDefaultServiceQuotaInput{
 		ServiceCode: aws.String(quota.Service),
 		QuotaCode:   aws.String(quota.Code),
 	})
-	if err != nil {
-		return 0, fmt.Errorf("read the AWS default of the %q quota (%s): %w", quota.Name, quota.Code, err)
+	switch {
+	case errors.As(err, &unlisted):
+		return 0, false, nil
+	case err != nil:
+		return 0, false, fmt.Errorf("read the AWS default of the %q quota (%s): %w", quota.Name, quota.Code, err)
+	case fallback.Quota == nil || fallback.Quota.Value == nil:
+		return 0, false, fmt.Errorf("AWS gave no value for the %q quota (%s)", quota.Name, quota.Code)
 	}
-	if fallback.Quota == nil || fallback.Quota.Value == nil {
-		return 0, fmt.Errorf("AWS gave no value for the %q quota (%s)", quota.Name, quota.Code)
-	}
-	return int(math.Floor(*fallback.Quota.Value)), nil
+	return int(math.Floor(*fallback.Quota.Value)), true, nil
 }
