@@ -30,7 +30,7 @@ var tierTagKind = KindOps{
 	removal: func(_ Survey, target Resource) Removal { return kept(target, ReasonTierTagKept) },
 }
 
-func TierTagValues() []environment.Tier {
+func tierTagValues() []environment.Tier {
 	return []environment.Tier{environment.TierProduction, environment.TierPreview}
 }
 
@@ -73,7 +73,7 @@ func (b Engine) missingTierValues(ctx context.Context) ([]environment.Tier, erro
 		return nil, err
 	}
 	var missing []environment.Tier
-	for _, tier := range TierTagValues() {
+	for _, tier := range tierTagValues() {
 		_, err := googleretry.Attempted(ctx, service.TagValues.GetNamespaced().Name(b.Clients.TierTagValuePath(tier)).Context(ctx).Do)
 		switch {
 		case gcloud.Absent(err) || gcloud.Forbidden(err):

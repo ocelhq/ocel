@@ -82,9 +82,13 @@ func (c Credentials) principal(ctx context.Context, token string) (string, error
 	return gcloud.PrincipalNamed(ctx, endpoint, token)
 }
 
-func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.Tier) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environment.Tier) (edge.CredentialDocument, error) {
 	switch purpose {
 	case edge.PurposeBootstrap, edge.PurposeDeploy:
+		if purpose == edge.PurposeDeploy && tier.Sibling() == "" {
+			return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
+				"a deploy credential is fenced to one tier, production or preview, and this request named %q", tier)
+		}
 		project, err := c.Project.Project(context.Background())
 		if err != nil {
 			return edge.CredentialDocument{}, err
@@ -92,12 +96,16 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, _ environment.T
 		names := names.New(c.Namespace, project)
 		roles := slices.Clone(bootstrap.RolesFor(purpose))
 		if purpose == edge.PurposeDeploy {
-			roles = append(roles, bootstrap.RealtimeSecretsGrant(names), bootstrap.GateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), bootstrap.AppBucketsGrant(names), bootstrap.DatabasesGrant(names), bootstrap.ProjectPermissionsGrant(), bootstrap.PartsGrant(names), variables.ProjectRecordsGrant(names, c.Region), bootstrap.TierTagsGrant(names))
+			roles = append(roles, bootstrap.RealtimeSecretsGrant(names), bootstrap.GateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), bootstrap.AppBucketsGrant(names), bootstrap.DatabasesGrant(names), bootstrap.ProjectPermissionsGrant(), bootstrap.PartsGrant(names), variables.ProjectRecordsGrant(names, c.Region), bootstrap.TierTagsGrant(names, tier))
 			roles = append(roles, bootstrap.QueueGrants(names, c.Region)...)
 			roles = append(roles, bootstrap.UntaggingGrants(names, c.Region)...)
 		}
-		heading := fmt.Sprintf("the roles a %s credential is granted on project %s, where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints",
-			purpose, project, bootstrap.ProjectNumberHole, project)
+		credential := string(purpose) + " credential"
+		if purpose == edge.PurposeDeploy {
+			credential += " for the " + string(tier) + " tier"
+		}
+		heading := fmt.Sprintf("the roles a %s is granted on project %s, where %s is the number `gcloud projects describe %s --format='value(projectNumber)'` prints",
+			credential, project, bootstrap.ProjectNumberHole, project)
 		return edge.CredentialDocument{
 			Heading:  heading,
 			Document: strings.Join(roles, "\n"),

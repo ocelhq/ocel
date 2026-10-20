@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
@@ -49,19 +50,35 @@ func TestABootstrapChecksItMayMakeTheTierTagAndBindEveryKindItTags(t *testing.T)
 	}
 }
 
-func TestADeployCredentialMayBindBothTierValuesAndNoOtherTag(t *testing.T) {
+func TestADeployCredentialMayBindItsOwnTiersValueAndNoOtherTag(t *testing.T) {
 	t.Parallel()
 
 	if slices.Contains(bootstrap.RolesFor(edge.PurposeDeploy), "roles/resourcemanager.tagUser") {
 		t.Errorf("a deploy credential is granted roles/resourcemanager.tagUser on the whole project, and with it every tag value in it")
 	}
-	document, err := (Credentials{Project: Named("acme-prod")}).Permissions(edge.PurposeDeploy, "")
-	if err != nil {
-		t.Fatal(err)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		document, err := (Credentials{Project: Named("acme-prod")}).Permissions(edge.PurposeDeploy, tier)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := strings.Split(document.Document, "\n")
+		if want := "roles/resourcemanager.tagUser, on the tag value acme-prod/ocel-tier/" + string(tier); !slices.Contains(lines, want) {
+			t.Errorf("a %s deploy credential is granted\n%s\nwant the line %q", tier, document.Document, want)
+		}
+		if other := "acme-prod/ocel-tier/" + string(tier.Sibling()); strings.Contains(document.Document, other) {
+			t.Errorf("a %s deploy credential is granted\n%s\nwhich reaches %s, and with it the other tier's resources", tier, document.Document, other)
+		}
+		if !strings.Contains(document.Heading, string(tier)) {
+			t.Errorf("the %s deploy credential's roles are printed under %q, which does not say which tier they are for", tier, document.Heading)
+		}
 	}
-	want := "roles/resourcemanager.tagUser, on the tag values acme-prod/ocel-tier/production and acme-prod/ocel-tier/preview"
-	if !slices.Contains(strings.Split(document.Document, "\n"), want) {
-		t.Errorf("a deploy credential is granted\n%s\nwant the line %q", document.Document, want)
+}
+
+func TestADeployCredentialForNoTierIsRefused(t *testing.T) {
+	t.Parallel()
+
+	if _, err := (Credentials{Project: Named("acme-prod")}).Permissions(edge.PurposeDeploy, ""); err == nil {
+		t.Errorf("a deploy credential for no tier rendered its roles, want a refusal: every deploy credential is fenced to one tier")
 	}
 }
 
