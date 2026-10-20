@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -204,8 +205,21 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 		}
 		service.Labels[OpensOnPromotionLabel] = opensToEveryone
 	}
+	labelTier(service, s)
 	stampServing(service)
 	return service, nil
+}
+
+func labelTier(service *run.GoogleCloudRunV2Service, s Serving) {
+	if s.Shared {
+		delete(service.Labels, names.TierLabel)
+		return
+	}
+	if service.Labels == nil {
+		service.Labels = map[string]string{}
+	}
+	service.Labels[names.TierLabel] = string(s.Tier)
+	service.Template.Labels[names.TierLabel] = string(s.Tier)
 }
 
 func isOpen(service *run.GoogleCloudRunV2Service) bool {

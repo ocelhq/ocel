@@ -11,6 +11,8 @@ import (
 	"time"
 
 	run "google.golang.org/api/run/v2"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 const (
@@ -39,6 +41,7 @@ type servingPrint struct {
 	Egress               string
 	Networks             [][2]string
 	Containers           int
+	Tier                 string
 }
 
 func Drifted(current, desired *run.GoogleCloudRunV2Service) bool {
@@ -93,6 +96,7 @@ func printOf(service *run.GoogleCloudRunV2Service) servingPrint {
 		return p
 	}
 	p.ServiceAccount = template.ServiceAccount
+	p.Tier = template.Labels[names.TierLabel]
 	p.Timeout = durationOf(template.Timeout)
 	p.ExecutionEnvironment = template.ExecutionEnvironment
 	p.Concurrency = template.MaxInstanceRequestConcurrency
