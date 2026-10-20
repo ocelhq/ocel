@@ -90,7 +90,7 @@ func TestANetworkWhoseBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNamingItAndThe
 	t.Parallel()
 
 	region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), vpc("vpc-theirs", "192.168.0.0/16", "10.20.128.0/17")}}
-	err := RefusePlacement(context.Background(), region, region, "us-east-1", "production", "10.20.0.0/16")
+	err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16")
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
 		t.Fatalf("RefusePlacement() = %v, want a refusal", err)
@@ -100,8 +100,37 @@ func TestANetworkWhoseBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNamingItAndThe
 			t.Errorf("refusal %q does not name %q", refused.Message, named)
 		}
 	}
-	if err := RefusePlacement(context.Background(), region, region, "us-east-1", "production", "10.30.0.0/16"); err != nil {
+	if err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.30.0.0/16"); err != nil {
 		t.Errorf("RefusePlacement() = %v, want a block clear of every VPC accepted", err)
+	}
+}
+
+func taggedAs(described ec2types.Vpc, tags map[string]string) ec2types.Vpc {
+	for key, value := range tags {
+		described.Tags = append(described.Tags, ec2types.Tag{Key: aws.String(key), Value: aws.String(value)})
+	}
+	return described
+}
+
+func TestARetriedNetworkIsNotRefusedForTheVPCItsOwnFailedRaiseLeftBehind(t *testing.T) {
+	t.Parallel()
+
+	leftover := taggedAs(vpc("vpc-leftover", "10.20.0.0/16"), stackTags("ocel", "production"))
+	region := &fakeRegion{quota: 2, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), leftover}}
+	if err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16"); err != nil {
+		t.Errorf("RefusePlacement() = %v, want the network's own VPC neither in the way nor counted against the quota: the retry takes it over", err)
+	}
+
+	for _, theirs := range []ec2types.Vpc{
+		taggedAs(vpc("vpc-other-namespace", "10.20.0.0/16"), stackTags("acme", "production")),
+		taggedAs(vpc("vpc-other-tier", "10.20.0.0/16"), stackTags("ocel", "preview")),
+	} {
+		region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{theirs}}
+		err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16")
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || !strings.Contains(refused.Message, aws.ToString(theirs.VpcId)) {
+			t.Errorf("RefusePlacement() = %v, want a refusal naming %s, a network of another namespace or tier", err, aws.ToString(theirs.VpcId))
+		}
 	}
 }
 
@@ -109,7 +138,7 @@ func TestANetworkInARegionAtItsVPCQuotaIsRefusedNamingTheQuota(t *testing.T) {
 	t.Parallel()
 
 	region := &fakeRegion{quota: 2, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), vpc("vpc-theirs", "192.168.0.0/16")}}
-	err := RefusePlacement(context.Background(), region, region, "us-east-1", "production", "10.20.0.0/16")
+	err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16")
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "L-F678F1CE") {
 		t.Fatalf("RefusePlacement() = %v, want a refusal naming quota L-F678F1CE", err)

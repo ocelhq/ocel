@@ -12,6 +12,7 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
@@ -55,7 +56,7 @@ func PickZones(ctx context.Context, api ZonesAPI) ([]string, error) {
 	return reachable[:Zones], nil
 }
 
-func RefusePlacement(ctx context.Context, region RegionAPI, quotas component.QuotasAPI, regionName string, tier environment.Tier, cidr string) error {
+func RefusePlacement(ctx context.Context, region RegionAPI, quotas component.QuotasAPI, regionName, namespace string, tier environment.Tier, cidr string) error {
 	ours, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		return fmt.Errorf("read the network's block %q: %w", cidr, err)
@@ -68,6 +69,9 @@ func RefusePlacement(ctx context.Context, region RegionAPI, quotas component.Quo
 			return fmt.Errorf("list the VPCs in %s: %w", regionName, err)
 		}
 		for _, vpc := range page.Vpcs {
+			if isNetworkOf(vpc, namespace, tier) {
+				continue
+			}
 			held++
 			for _, block := range blocksOf(vpc) {
 				theirs, err := netip.ParsePrefix(block)
@@ -81,6 +85,21 @@ func RefusePlacement(ctx context.Context, region RegionAPI, quotas component.Quo
 		}
 	}
 	return component.RefuseFullQuota(ctx, quotas, component.VPCQuota, regionName, held, 1, "the "+string(tier)+" tier's network")
+}
+
+func isNetworkOf(vpc ec2types.Vpc, namespace string, tier environment.Tier) bool {
+	want := stackTags(namespace, tier)
+	matched := 0
+	for _, tag := range vpc.Tags {
+		key := aws.ToString(tag.Key)
+		if key == projectTagKey || key == naming.ManagedByTagKey || key == naming.EnvTierTagKey {
+			if aws.ToString(tag.Value) != want[key] {
+				return false
+			}
+			matched++
+		}
+	}
+	return matched == 3
 }
 
 func blocksOf(vpc ec2types.Vpc) []string {

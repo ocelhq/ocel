@@ -149,7 +149,7 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 	if err != nil {
 		return Network{}, err
 	}
-	if err := RefusePlacement(ctx, owner.EC2, owner.Quotas, owner.Region, tier, layout.CIDR); err != nil {
+	if err := RefusePlacement(ctx, owner.EC2, owner.Quotas, owner.Region, owner.Namespace, tier, layout.CIDR); err != nil {
 		return Network{}, err
 	}
 	if progress != nil {
