@@ -54,6 +54,9 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 			_, found, err := bastion.Describe(ctx, clients, string(p.namespace), req.Tier)
 			return found, err
 		},
+		remove: func(ctx context.Context) error {
+			return bastion.Remove(ctx, clients, string(p.namespace), req.Tier)
+		},
 		release: func(ctx context.Context) error {
 			return p.releaseBastionNetwork(ctx, req.Tier, progress)
 		},
@@ -75,6 +78,7 @@ type bastionPlacement struct {
 	claim     func(context.Context) (network.Network, error)
 	reconcile func(context.Context, network.Network) (bastion.Bastion, error)
 	isBuilt   func(context.Context) (bool, error)
+	remove    func(context.Context) error
 	release   func(context.Context) error
 }
 
@@ -90,6 +94,9 @@ func (b bastionPlacement) place(ctx context.Context) (bastion.Bastion, error) {
 	built, readErr := b.isBuilt(ctx)
 	if readErr != nil || built {
 		return bastion.Bastion{}, errors.Join(err, readErr)
+	}
+	if removeErr := b.remove(ctx); removeErr != nil {
+		return bastion.Bastion{}, errors.Join(err, removeErr)
 	}
 	return bastion.Bastion{}, errors.Join(err, b.release(ctx))
 }
