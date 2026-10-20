@@ -100,8 +100,7 @@ func (s ReleaseScaling) ScaleUp(ctx context.Context, promoted provider.PromotedR
 	if err != nil {
 		return err
 	}
-	var raised raisedReleases
-	if err := s.raise(ctx, services, targets, &raised, progress); err != nil {
+	if raised, err := s.raise(ctx, services, targets, progress); err != nil {
 		return errors.Join(err, s.lower(ctx, raised))
 	}
 	return nil
@@ -112,7 +111,8 @@ type raisedReleases struct {
 	started   []startedRelease
 }
 
-func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, targets map[string]scalingtypes.ScalableTarget, raised *raisedReleases, progress progress.Log) error {
+func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, targets map[string]scalingtypes.ScalableTarget, progress progress.Log) (raisedReleases, error) {
+	var raised raisedReleases
 	var scaled []releaseService
 	for _, service := range services {
 		if _, found := targets[service.resource]; !found {
@@ -120,7 +120,7 @@ func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, ta
 		}
 		cancelled, err := s.cancelScaleToZero(ctx, service)
 		if err != nil {
-			return err
+			return raised, err
 		}
 		if cancelled {
 			raised.cancelled = append(raised.cancelled, service)
@@ -129,7 +129,7 @@ func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, ta
 	}
 	targets, err := s.readTargets(ctx, scaled)
 	if err != nil {
-		return err
+		return raised, err
 	}
 	for _, service := range scaled {
 		target := targets[service.resource]
@@ -138,15 +138,15 @@ func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, ta
 		}
 		least, most, err := s.readInstanceCounts(ctx, service, target)
 		if err != nil {
-			return err
+			return raised, err
 		}
 		raised.started = append(raised.started, startedRelease{releaseService: service, tasks: least})
 		if err := s.scale(ctx, service, least, most); err != nil {
-			return err
+			return raised, err
 		}
 		progress.Say(fmt.Sprintf("Scaling %s release %s back up to %d tasks before it serves", service.release.App, service.release.Release, least))
 	}
-	return s.waitHealthy(ctx, raised.started)
+	return raised, s.waitHealthy(ctx, raised.started)
 }
 
 func (s ReleaseScaling) lower(ctx context.Context, raised raisedReleases) error {
