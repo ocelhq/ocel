@@ -86,7 +86,7 @@ func EnsureProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environm
 	if c.Emulated() {
 		return nil
 	}
-	err := bootstrap.Engine{Clients: c}.MakeDatabase(ctx, bootstrap.Survey{Project: c.Project(), Region: c.Region}, c.ProjectDatabase(tier, project))
+	err := bootstrap.Engine{Clients: c}.MakeTierDatabase(ctx, tier, c.ProjectDatabase(tier, project))
 	if googleretry.AnsweredCode(err) == http.StatusTooManyRequests || err != nil && strings.Contains(strings.ToLower(err.Error()), databaseQuotaMessage) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project keeps its values in one of its own per tier.\n"+
@@ -193,7 +193,7 @@ func TakeProjectRecords(ctx context.Context, b bootstrap.Engine, tier environmen
 		if !slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(id, prefix) }) {
 			continue
 		}
-		if err := b.TakeDatabase(ctx, id); err != nil {
+		if err := b.TakeTierDatabase(ctx, tier, id); err != nil {
 			return err
 		}
 	}

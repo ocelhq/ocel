@@ -27,7 +27,7 @@ const (
 type projectStores struct {
 	databaseExists func(ctx context.Context, id string) (bool, error)
 	keyExists      func(ctx context.Context, name string) (bool, error)
-	takeDatabase   func(ctx context.Context, id string) error
+	takeDatabase   func(ctx context.Context, tier environment.Tier, id string) error
 	takeKey        func(ctx context.Context, name string) error
 }
 
@@ -63,7 +63,7 @@ func storesOf(b bootstrap.Engine) projectStores {
 			}
 			return true, nil
 		},
-		takeDatabase: b.TakeDatabase,
+		takeDatabase: b.TakeTierDatabase,
 		takeKey: func(ctx context.Context, name string) error {
 			_, err := b.TakeKey(ctx, name)
 			return err
@@ -115,7 +115,7 @@ func removeProject(ctx context.Context, b bootstrap.Engine, stores projectStores
 	}
 	values := b.Clients.ProjectDatabase(tier, project)
 	gcloud.EnsureProgress(log).Say(fmt.Sprintf("Deleting Firestore database %s, which kept the values of %s in %s", values, project, tier))
-	if err := stores.takeDatabase(ctx, values); err != nil {
+	if err := stores.takeDatabase(ctx, tier, values); err != nil {
 		return gcloud.ExplainMissingGrant(err, ProjectRecordsGrant(b.Clients.Names, b.Clients.Region))
 	}
 	key := ports.ProjectKey(tier, project)
