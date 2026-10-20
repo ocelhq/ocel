@@ -112,6 +112,7 @@ export const BOOTSTRAP_APIS = [
   "iamcredentials.googleapis.com",
   "pubsub.googleapis.com",
   "cloudtasks.googleapis.com",
+  "cloudresourcemanager.googleapis.com",
 ];
 
 export async function switchOn(endpoint: string, project: string): Promise<void> {
