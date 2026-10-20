@@ -257,10 +257,13 @@ func TestAnOcelCloudJobThatNeedsInputOpensItsPageOncePerInputAndKeepsWaiting(t *
 	if !slices.Equal(opened, []string{jobURL, jobURL}) {
 		t.Fatalf("opened %q, want the job page once for the values and once for the question", opened)
 	}
-	for _, want := range []string{"Ocel Cloud needs values for DATABASE_URL and STRIPE_KEY — enter them at " + jobURL, "Ocel Cloud asks: Continue? — answer at " + jobURL} {
-		if strings.Count(out, want) != 1 {
-			t.Errorf("output = %q, want %q said once", out, want)
+	for _, want := range []string{"2 variables are not ready", "Ocel Cloud asks: Continue?"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output = %q, want %q said", out, want)
 		}
+	}
+	if resumed := strings.Count(out, "Resumed — answered on Ocel Cloud"); resumed != 3 {
+		t.Errorf("output = %q, want the run resumed each time the job stopped waiting, 3 times, not %d", out, resumed)
 	}
 }
 
@@ -272,8 +275,44 @@ func TestAnOcelCloudJobThatNeedsInputWithNoBrowserSaysWhereAndKeepsWaiting(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "Ocel Cloud needs values for DATABASE_URL — enter them at "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
-		t.Fatalf("output = %q, want the values needed and where to enter them", out)
+	asked := strings.Index(out, "✗ DATABASE_URL")
+	page := strings.Index(out, "Fill them in on Ocel Cloud at:\n\n    "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID+"\n")
+	waited := strings.Index(out, "Waited for the job")
+	if asked < 0 || page < asked || waited < page {
+		t.Fatalf("output = %q, want the values needed and where to enter them, before the wait ends", out)
+	}
+}
+
+func TestAnOcelCloudJobWaitingForInputHoldsTheRunOnItsPageUntilTheInputIsAnswered(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	invocation.Presentation = clitest.ResolveJSONPresentation
+	values := needingValues("in_1", "DATABASE_URL")
+	fake.JobReads = []*cloudv1.Job{values, {Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+
+	out, err := runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{Command: "ocel deploy", Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var waiting *streamv1.WaitingEvent
+	var resumed *streamv1.ResumedEvent
+	for _, ev := range clitest.RunEvents(t, out) {
+		if ev.GetWaiting() != nil {
+			waiting = ev.GetWaiting()
+		}
+		if ev.GetResumed() != nil && waiting != nil {
+			resumed = ev.GetResumed()
+		}
+	}
+	want := &streamv1.WaitingEvent{
+		Url:     fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID,
+		Missing: &streamv1.MissingVariables{Cells: []*streamv1.MissingVariable{{Key: "DATABASE_URL"}}},
+		Input:   values.GetInput(),
+	}
+	if !proto.Equal(waiting, want) {
+		t.Fatalf("waiting = %v, want %v", waiting, want)
+	}
+	if resumed.GetReason() != "answered on Ocel Cloud" {
+		t.Fatalf("resumed = %v, want the run resumed once the input is answered", resumed)
 	}
 }
 
