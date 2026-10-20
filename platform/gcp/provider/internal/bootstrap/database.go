@@ -40,7 +40,7 @@ var databaseKind = KindOps{
 		return b.databasePresence(ctx, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
-		return b.MakeDatabase(ctx, read, target.Name, nil)
+		return b.MakeDatabase(ctx, read, target.Name)
 	},
 	mend: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
 		return b.protectDatabase(ctx, target.Name)
@@ -72,7 +72,8 @@ var databaseKind = KindOps{
 
 func (b Engine) MakeTierDatabase(ctx context.Context, tier environment.Tier, id string) error {
 	read := Survey{Project: b.Clients.Project(), Region: b.Clients.Region}
-	if err := b.MakeDatabase(ctx, read, id, b.Clients.InlineTierTags(tier)); err != nil {
+	found, err := b.ensureDatabase(ctx, read, id, b.Clients.InlineTierTags(tier))
+	if !found || err != nil {
 		return err
 	}
 	return b.Clients.EnsureTierTag(ctx, tier, b.Clients.DatabaseTagged(id))
@@ -88,10 +89,15 @@ func (b Engine) TakeTierDatabase(ctx context.Context, tier environment.Tier, id 
 	return b.TakeDatabase(ctx, id)
 }
 
-func (b Engine) MakeDatabase(ctx context.Context, read Survey, id string, tags map[string]string) error {
+func (b Engine) MakeDatabase(ctx context.Context, read Survey, id string) error {
+	_, err := b.ensureDatabase(ctx, read, id, nil)
+	return err
+}
+
+func (b Engine) ensureDatabase(ctx context.Context, read Survey, id string, tags map[string]string) (bool, error) {
 	service, err := b.Clients.Databases()
 	if err != nil {
-		return err
+		return false, err
 	}
 	operation, err := googleretry.Attempted(ctx, service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		LocationId:            read.Region,
@@ -100,12 +106,12 @@ func (b Engine) MakeDatabase(ctx context.Context, read Survey, id string, tags m
 		Tags:                  tags,
 	}).DatabaseId(id).Context(ctx).Do)
 	if gcloud.Taken(err) {
-		return b.databaseServesThisRegion(ctx, read, id)
+		return true, b.databaseServesThisRegion(ctx, read, id)
 	}
 	if err != nil {
-		return fmt.Errorf("create the %q Firestore database: %w", id, err)
+		return false, fmt.Errorf("create the %q Firestore database: %w", id, err)
 	}
-	return b.Awaited(ctx, fmt.Sprintf("creating the %q Firestore database", id), operation)
+	return false, b.Awaited(ctx, fmt.Sprintf("creating the %q Firestore database", id), operation)
 }
 
 func (b Engine) databaseServesThisRegion(ctx context.Context, read Survey, id string) error {

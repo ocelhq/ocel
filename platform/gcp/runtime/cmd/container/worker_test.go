@@ -119,6 +119,7 @@ func TestLiveAnAppPinnedTasksTriggersThemThroughItsBindingProxy(t *testing.T) {
 	manifest, store := pinned(t, endpoint)
 	deployment := deploymentOf(manifest)
 	topology := topics.Topology{Names: deployment.Names, Topics: deployment.Declared, Tags: topics.TierTags{
+		Ensure: func(context.Context, string) error { return nil },
 		Remove: func(context.Context, string, func(context.Context) (bool, error)) error { return nil },
 	}}
 	if err := topology.Ensure(context.Background(), deployment.Clients); err != nil {

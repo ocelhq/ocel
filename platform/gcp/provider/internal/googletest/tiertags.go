@@ -25,6 +25,7 @@ type TierTags struct {
 	Bindings map[string][]string
 
 	BindingsMade    []string
+	BindingsAsked   int
 	BindingsRemoved []string
 	KeysMade        int
 	ValuesMade      int
@@ -175,6 +176,7 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		if asked == nil {
 			return
 		}
+		s.BindingsAsked++
 		if s.BindingsDenied {
 			writeDenied(w)
 			return

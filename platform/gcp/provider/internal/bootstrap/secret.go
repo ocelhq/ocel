@@ -16,10 +16,11 @@ import (
 const reasonPassphraseReplaced = "its latest version is disabled or destroyed, and a new passphrase replaces it: what was written under the old one opens again only if that version is enabled"
 
 var secretKind = KindOps{
-	tagged:    secretTagged,
-	noun:      "secret",
-	terraform: cost.SecretManagerSecretType,
-	parameter: true,
+	tagged:           secretTagged,
+	taggedAtCreation: true,
+	noun:             "secret",
+	terraform:        cost.SecretManagerSecretType,
+	parameter:        true,
 	properties: func(string, Resource) map[string]any {
 		return map[string]any{"replication": map[string]any{"auto": map[string]any{}}}
 	},
@@ -41,13 +42,8 @@ func (b Engine) makeSecret(ctx context.Context, read Survey, name string) error 
 	if err != nil {
 		return err
 	}
-	parent := "projects/" + b.Clients.Project()
-	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Create(parent, &secretmanager.Secret{
-		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
-		Tags:        b.Clients.InlineTierTags(read.Tier),
-	}).SecretId(name).Context(ctx).Do)
-	if err != nil && !gcloud.Taken(err) {
-		return fmt.Errorf("create the %s secret: %w", name, err)
+	if err := b.Clients.EnsureSecret(ctx, service, read.Tier, name); err != nil {
+		return err
 	}
 
 	latest, err := b.readPassphrase(ctx, name)

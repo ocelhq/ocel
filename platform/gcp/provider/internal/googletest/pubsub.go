@@ -210,6 +210,13 @@ func (p *PubSub) serveSubscription(t *testing.T, w http.ResponseWriter, r *http.
 			return
 		}
 		_ = json.NewEncoder(w).Encode(p.Subscriptions[name])
+	case r.Method == http.MethodPatch && verb == "":
+		defer p.Mu.Unlock()
+		if !exists {
+			answerPubSub(w, http.StatusNotFound, "NOT_FOUND")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(p.Subscriptions[name])
 	case verb == "pull":
 		p.pull(w, r, name, exists)
 	case verb == "acknowledge":

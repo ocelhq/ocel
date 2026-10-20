@@ -181,7 +181,11 @@ func (p *pullReceiver) Hide(ctx context.Context, topic, consumer, handle string,
 func pulledTopology(t *testing.T, clients *ports.Clients, names Names, declared map[string]*provider.TopicSpec) {
 	t.Helper()
 	ctx := context.Background()
-	topology := Topology{Names: names, Topics: declared, Tags: TierTags{Remove: func(context.Context, string, func(context.Context) (bool, error)) error { return nil }}}
+	untagged := TierTags{
+		Ensure: func(context.Context, string) error { return nil },
+		Remove: func(context.Context, string, func(context.Context) (bool, error)) error { return nil },
+	}
+	topology := Topology{Names: names, Topics: declared, Tags: untagged}
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 	if err := topology.Ensure(ctx, clients); err != nil {
 		t.Fatalf("Topology.Ensure() = %v", err)
@@ -202,7 +206,7 @@ func pulledTopology(t *testing.T, clients *ports.Clients, names Names, declared 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := ensureSubscription(ctx, service, path, subscription); err != nil {
+			if err := ensureSubscription(ctx, service, path, subscription, untagged); err != nil {
 				t.Fatalf("make the pull subscription of %s/%s: %v", name, consumer.Name, err)
 			}
 		}
