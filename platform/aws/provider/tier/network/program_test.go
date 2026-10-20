@@ -2,6 +2,7 @@ package network
 
 import (
 	"encoding/json"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -205,5 +206,31 @@ func TestANetworkIsReadBackFromItsOutputAndRefusedWhenItLacksASubnet(t *testing.
 	encoded, _ = json.Marshal(whole)
 	if _, err := decode(auto.OutputMap{outputKeyNetwork: {Value: string(encoded)}}); err == nil {
 		t.Error("decode() = nil, want a network with one isolated subnet refused")
+	}
+}
+
+func TestTheNetworksSecurityGroupDescribesItselfInTheCharactersAWSAccepts(t *testing.T) {
+	t.Parallel()
+
+	accepted := regexp.MustCompile(`^[0-9A-Za-z_ .:/()#,@\[\]+=&;{}!$*-]*$`)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for name, group := range runNetwork(t, "ocel", tier).of("aws:ec2/securityGroup:SecurityGroup") {
+			descriptions := []string{group["description"].StringValue()}
+			for _, direction := range []resource.PropertyKey{"ingress", "egress"} {
+				if !group[direction].IsArray() {
+					continue
+				}
+				for _, rule := range group[direction].ArrayValue() {
+					if description := rule.ObjectValue()["description"]; description.IsString() {
+						descriptions = append(descriptions, description.StringValue())
+					}
+				}
+			}
+			for _, description := range descriptions {
+				if !accepted.MatchString(description) {
+					t.Errorf("%s is described %q, which AWS refuses: a security group and its rules take only %s", name, description, accepted)
+				}
+			}
+		}
 	}
 }
