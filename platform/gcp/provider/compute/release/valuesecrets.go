@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
@@ -213,13 +214,17 @@ func (p *Release) destroyUnpinnedVersions(ctx context.Context, ref provider.Stac
 	if err != nil {
 		return err
 	}
-	stacks, err := stackrecords.List(ctx, p.Records, ref.Tier, ref.Project)
-	if err != nil {
-		return err
-	}
 	kept, pending, gone := map[string][]string{}, map[string]bool{}, map[string]releasePins{}
 	for release, pins := range recorded.Releases {
-		if !slices.ContainsFunc(stacks, func(stack stackrecords.NamedStack) bool { return stack.Name.String() == release }) {
+		stack, err := naming.ParseStackName(release)
+		if err != nil {
+			return fmt.Errorf("read the releases that pin the values of %s: %w", account, err)
+		}
+		_, found, err := stackrecords.Read(ctx, p.Records, ref.Tier, ref.Project, stack)
+		if err != nil {
+			return err
+		}
+		if !found {
 			gone[release] = pins
 			continue
 		}
