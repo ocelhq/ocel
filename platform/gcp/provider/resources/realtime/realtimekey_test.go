@@ -20,7 +20,7 @@ func TestASigningKeyIsMintedOnceAndKeptInItsOwnSecret(t *testing.T) {
 	if first.Properties[provider.PropertySigningKey] != again.Properties[provider.PropertySigningKey] {
 		t.Error("a second deploy handed the app another signing key, and every token the first minted would stop verifying")
 	}
-	if !h.secrets.Has(h.env.clients.RealtimeSigningSecret("shop", "prod", "app")) {
+	if !h.secrets.Has(must(h.env.clients.RealtimeSigningSecret("shop", "prod", "app"))) {
 		t.Error("the signing key is kept in no secret of its own")
 	}
 }
@@ -51,7 +51,7 @@ func TestTheKeysSecretKeepsOnlyTheVersionTheGatewayReads(t *testing.T) {
 	h.provision(t, "app")
 	h.remove(t, h.provision(t, "chat"))
 
-	if got := h.secrets.EnabledVersions(h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")); len(got) != 1 {
+	if got := h.secrets.EnabledVersions(must(h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"))); len(got) != 1 {
 		t.Errorf("the keys secret holds versions %v readable, want its latest alone: each one superseded is billed and read by nothing", got)
 	}
 }
@@ -61,7 +61,7 @@ func TestASigningSecretWhoseFirstVersionWasDestroyedIsRefusedNamingTheSecretToDe
 
 	h := newRealtimeHarness(t)
 	h.provision(t, "app")
-	secret := h.env.clients.RealtimeSigningSecret("shop", "prod", "app")
+	secret := must(h.env.clients.RealtimeSigningSecret("shop", "prod", "app"))
 	h.secrets.Destroy(secret, 1)
 
 	_, err := h.env.provision(context.Background(), aRealtime("app"), nil)

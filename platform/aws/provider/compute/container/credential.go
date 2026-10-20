@@ -6,7 +6,7 @@ func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"ecs:RegisterTaskDefinition"},
-			Resources: []string{iam.AppTaskDefinitionARN},
+			Resources: []string{s.AppTaskDefinitionARN()},
 			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{

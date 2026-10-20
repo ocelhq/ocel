@@ -27,6 +27,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -40,7 +41,9 @@ import (
 
 const (
 	fakeStateTable        = "ocel-state"
-	fakeEdgeBucket        = "ocel-prod-edge-k3x9q2"
+	fakeBucketTag         = "k3x9q2"
+	fakeEdgeBucket        = "ocel-prod-edge-" + fakeBucketTag
+	fakePreviewEdgeBucket = "ocel-preview-edge-" + fakeBucketTag
 	fakeRegion            = "eu-west-1"
 	fakeSecret            = "3f7a9c1e5b2d84600f1a2b3c4d5e6f70"
 	fakeEntryURL          = "https://abcdef0123456789.lambda-url.eu-west-1.on.aws/"
@@ -203,6 +206,15 @@ func (w *world) edge() *cloudFront {
 	}
 }
 
+func fakeBucketOutputs(tier environment.Tier) map[string]string {
+	return map[string]string{
+		"StateBucketName":    defaultNamespace.BootstrapBucketName(tier, naming.StorageState, fakeBucketTag),
+		"ArtifactBucketName": defaultNamespace.BootstrapBucketName(tier, naming.StorageArtifacts, fakeBucketTag),
+		"EdgeBucketName":     defaultNamespace.BootstrapBucketName(tier, naming.StorageEdge, fakeBucketTag),
+		"CacheBucketName":    defaultNamespace.BootstrapBucketName(tier, naming.StorageCache, fakeBucketTag),
+	}
+}
+
 type fakeCFN struct {
 	absent bool
 }
@@ -211,13 +223,12 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	var outputs map[string]string
+	outputs := map[string]string{"StateTableName": fakeStateTable}
 	switch aws.ToString(in.StackName) {
-	case coreStackName, previewCoreStackName:
-		outputs = map[string]string{
-			"StateTableName": fakeStateTable,
-			"EdgeBucketName": fakeEdgeBucket,
-		}
+	case coreStackName:
+		maps.Copy(outputs, fakeBucketOutputs(environment.TierProduction))
+	case previewCoreStackName:
+		maps.Copy(outputs, fakeBucketOutputs(environment.TierPreview))
 	default:
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}

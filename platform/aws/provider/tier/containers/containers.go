@@ -46,7 +46,6 @@ const (
 	httpWord        = "http"
 	httpsWord       = "https"
 	invokeWord      = "invoke"
-	targetGroupWord = "tg"
 	tasksWord       = "tasks"
 	livenessWord    = "liveness"
 )
@@ -152,12 +151,10 @@ func LivenessName(namespace string, tier environment.Tier) string {
 }
 
 func stackTags(namespace string, tier environment.Tier) map[string]string {
-	return map[string]string{
-		naming.ManagedByTagKey: namespace,
-		"ocel:project":         Slug,
-		naming.EnvTierTagKey:   string(tier),
-		"ocel:stack":           StackRef(tier).Name.String(),
-	}
+	tags := naming.OcelTags(namespace, tier)
+	tags["ocel:project"] = Slug
+	tags["ocel:stack"] = StackRef(tier).Name.String()
+	return tags
 }
 
 func joinRanges(ranges []string) string {

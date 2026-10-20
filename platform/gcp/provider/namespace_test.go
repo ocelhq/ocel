@@ -195,7 +195,7 @@ func TestEachEnvironmentHasAGatewayAndKeysOfItsOwn(t *testing.T) {
 	if gatewayOf(t, names, "shop-prod", "x") == gatewayOf(t, names, "shop", "prod-x") {
 		t.Error("two scopes whose dashes fall differently share one gateway")
 	}
-	if names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod") == names.RealtimeKeysSecret(environment.TierProduction, "shop", "pr-7") {
+	if must(names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")) == must(names.RealtimeKeysSecret(environment.TierProduction, "shop", "pr-7")) {
 		t.Error("two environments share one keys secret")
 	}
 	app, err := names.Service("shop", "prod", "realtime", "realtime")
@@ -211,8 +211,8 @@ func TestEveryRealtimeSecretIsOneSecretManagerTakesAndEachResourceHasItsOwn(t *t
 	names := longNames(t)
 	project, env := "a-project-slug-that-runs-on-and-on", "feature-branch-with-a-very-long-name"
 
-	keys := names.RealtimeKeysSecret(environment.TierPreview, project, env)
-	app, chat := names.RealtimeSigningSecret(project, env, "app"), names.RealtimeSigningSecret(project, env, "chat")
+	keys := must(names.RealtimeKeysSecret(environment.TierPreview, project, env))
+	app, chat := must(names.RealtimeSigningSecret(project, env, "app")), must(names.RealtimeSigningSecret(project, env, "chat"))
 	for _, secret := range []string{keys, app, chat} {
 		if !secretID.MatchString(secret) {
 			t.Errorf("%q is no secret id Secret Manager takes", secret)
@@ -226,10 +226,10 @@ func TestEveryRealtimeSecretIsOneSecretManagerTakesAndEachResourceHasItsOwn(t *t
 func TestEveryRealtimeSecretSharesAPrefixNoOtherSecretOfAnyNamespaceStartsWith(t *testing.T) {
 	ours := longNames(t)
 	production, preview := environment.TierProduction, environment.TierPreview
-	keys := ours.RealtimeKeysSecret(production, "shop", "prod")
-	signing := ours.RealtimeSigningSecret("shop", "prod", "app")
+	keys := must(ours.RealtimeKeysSecret(production, "shop", "prod"))
+	signing := must(ours.RealtimeSigningSecret("shop", "prod", "app"))
 
-	for _, secret := range []string{keys, signing, ours.RealtimeKeysSecret(preview, "shop", "pr-7")} {
+	for _, secret := range []string{keys, signing, must(ours.RealtimeKeysSecret(preview, "shop", "pr-7"))} {
 		if !strings.HasPrefix(secret, ours.RealtimeSecretPrefix()) {
 			t.Errorf("%q is not under %q, so a deploy granted the realtime secrets alone could not keep it", secret, ours.RealtimeSecretPrefix())
 		}
@@ -239,7 +239,7 @@ func TestEveryRealtimeSecretSharesAPrefixNoOtherSecretOfAnyNamespaceStartsWith(t
 	}
 	for secret, why := range map[string]string{
 		signing: "a gateway would read the seeds tokens are signed with",
-		ours.RealtimeKeysSecret(preview, "shop", "pr-7"): "the production gateway would read the preview tier's keys",
+		must(ours.RealtimeKeysSecret(preview, "shop", "pr-7")): "the production gateway would read the preview tier's keys",
 	} {
 		if strings.HasPrefix(secret, ours.RealtimeKeysSecretPrefix(production)) {
 			t.Errorf("%q is under the production keys prefix %q: %s", secret, ours.RealtimeKeysSecretPrefix(production), why)
@@ -250,7 +250,7 @@ func TestEveryRealtimeSecretSharesAPrefixNoOtherSecretOfAnyNamespaceStartsWith(t
 	other := namesOf(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
 	for _, secret := range []string{
 		ours.PassphraseSecret(production), ours.ConnectorKeySecret(),
-		other.PassphraseSecret(production), other.ConnectorKeySecret(), other.RealtimeSigningSecret("shop", "prod", "app"),
+		other.PassphraseSecret(production), other.ConnectorKeySecret(), must(other.RealtimeSigningSecret("shop", "prod", "app")),
 	} {
 		if strings.HasPrefix(secret, ours.RealtimeSecretPrefix()) {
 			t.Errorf("%q is under %q, and a deploy granted the realtime secrets of %s would reach it", secret, ours.RealtimeSecretPrefix(), ours.Namespace())
@@ -318,4 +318,11 @@ func TestEachProjectOfEachTierKeepsItsRunsAndTagRecordsInADatabaseOfItsOwn(t *te
 			databases[database] = project + " of " + string(tier)
 		}
 	}
+}
+
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
 }

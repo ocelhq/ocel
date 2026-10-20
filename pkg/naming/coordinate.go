@@ -40,11 +40,6 @@ var components = map[Kind]string{
 	KindService:            "service",
 }
 
-func (k Kind) Valid() bool {
-	_, ok := components[k]
-	return ok
-}
-
 func (k Kind) Component() string {
 	return components[k]
 }
@@ -80,21 +75,6 @@ type Coordinate struct {
 	Kind    Kind
 	Name    string
 	Release ReleaseToken
-}
-
-func (c Coordinate) Validate() error {
-	for field, value := range map[string]string{"project": c.Project, "env": c.Env, "app": c.App} {
-		if err := Validate(field, value); err != nil {
-			return err
-		}
-	}
-	if !c.Kind.Valid() {
-		return fmt.Errorf("kind %q is not one of the deploy path's roles", c.Kind)
-	}
-	if c.Release.IsZero() {
-		return fmt.Errorf("coordinate %s/%s/%s has no release", c.Project, c.Env, c.App)
-	}
-	return nil
 }
 
 func (c Coordinate) Stack() StackName {

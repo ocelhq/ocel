@@ -3,10 +3,8 @@ package bucket
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -122,17 +120,12 @@ func StoreName(ref provider.StackRef) (string, error) {
 	return container.Name(storeRef(ref), storeResource, storeKind)
 }
 
-var unsafeInBucketName = regexp.MustCompile(`[^a-z0-9]+`)
-
-func storeBucketName(ref provider.StackRef, resource string) string {
-	readable := strings.Trim(unsafeInBucketName.ReplaceAllString(
-		strings.ToLower(ref.Name.String()+"-"+resource), "-"), "-")
-	if len(readable) <= storeBucketNameMax {
-		return readable
-	}
-	sum := sha256.Sum256([]byte(readable))
-	suffix := "-" + hex.EncodeToString(sum[:4])
-	return strings.Trim(readable[:storeBucketNameMax-len(suffix)], "-") + suffix
+func storeBucketName(ref provider.StackRef, resource string) (string, error) {
+	stack := ref.Name.String()
+	return naming.TaggedName{
+		Readable: naming.Sanitize(stack + naming.WordSeparator + resource),
+		Tag:      naming.HashTag(stack, resource),
+	}.Fit(storeBucketNameMax)
 }
 
 func MintSecret() (string, error) {
@@ -203,8 +196,12 @@ func (r Resource) readDeclaredBucketSpec(ctx context.Context, in resources.Provi
 	if err != nil {
 		return Spec{}, err
 	}
+	bucket, err := storeBucketName(in.Ref, in.Resource.Name)
+	if err != nil {
+		return Spec{}, err
+	}
 	return storeBucketSpec(in.Ref, store, secret, Spec{
-		Bucket:         storeBucketName(in.Ref, in.Resource.Name),
+		Bucket:         bucket,
 		AllowedOrigins: origins,
 		Public:         declaredPublic(in.Resource.Bucket),
 	}), nil
@@ -360,7 +357,9 @@ func (r Resource) dropBucket(ctx context.Context, ref provider.StackRef, binding
 	}
 	bucket := binding.Properties[provider.PropertyBucket]
 	if bucket == "" {
-		bucket = storeBucketName(ref, binding.Name)
+		if bucket, err = storeBucketName(ref, binding.Name); err != nil {
+			return err
+		}
 	}
 	progress.Say("Removing bucket " + binding.Name + " and its objects from object store " + store)
 	return r.objects.removeBucket(ctx, storeBucketSpec(ref, store, root.secret, Spec{Bucket: bucket}))

@@ -261,9 +261,13 @@ func runOrigin(t *testing.T, suite Suite) {
 		if again != first {
 			t.Errorf("Claim(%q) again with no origin certificate names %+v, want the %+v it named: the origin keeps answering with the certificate it holds", suite.Hostname, again, first)
 		}
-		requirePlan(t, "PlanProjectRemoval", origin.PlanProjectRemoval(edge.ProjectScope{
+		planned, err := origin.PlanProjectRemoval(edge.ProjectScope{
 			Slug: fixture.Spec.Slug, Tier: fixture.Spec.Tier, Hostnames: []string{suite.Hostname},
-		}))
+		})
+		if err != nil {
+			t.Fatalf("PlanProjectRemoval: %v", err)
+		}
+		requirePlan(t, "PlanProjectRemoval", planned)
 		for range 2 {
 			if err := stack.Disclaim(ctx, suite.Hostname); err != nil {
 				t.Fatalf("Disclaim(%q): %v", suite.Hostname, err)
@@ -332,7 +336,11 @@ func runOrigin(t *testing.T, suite Suite) {
 		if again != first {
 			t.Errorf("ClaimPreviewEntry(%q) again names %+v, want the %+v it named", wildcard, again, first)
 		}
-		requirePlan(t, "PlanPreviewEntryRemoval", origin.PlanPreviewEntryRemoval(wildcard))
+		planned, err := origin.PlanPreviewEntryRemoval(wildcard)
+		if err != nil {
+			t.Fatalf("PlanPreviewEntryRemoval: %v", err)
+		}
+		requirePlan(t, "PlanPreviewEntryRemoval", planned)
 		for range 2 {
 			if err := origin.DisclaimPreviewEntry(ctx, suite.PreviewBase); err != nil {
 				t.Fatalf("DisclaimPreviewEntry(%q): %v", suite.PreviewBase, err)

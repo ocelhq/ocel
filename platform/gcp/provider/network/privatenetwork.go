@@ -240,7 +240,10 @@ func refuseNetworkInUse(ctx context.Context, b bootstrap.Engine, tier environmen
 }
 
 func listStoresOn(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]connectedResource, error) {
-	filter := StoresFilter(b.Clients.Namespace(), tier)
+	filter, err := StoresFilter(b.Clients.Namespace(), tier)
+	if err != nil {
+		return nil, err
+	}
 	connected, next, err := b.Stores.ListInstances(ctx, b.Clients.Location(), filter, resourcesNamedOnNetwork, "")
 	for page := 1; err == nil && len(connected) == 0 && next != ""; page++ {
 		if page == StorePagesRead {
@@ -270,7 +273,11 @@ func listDatabasesOn(ctx context.Context, b bootstrap.Engine, tier environment.T
 	if err != nil {
 		return nil, err
 	}
-	listed, err := googleretry.Attempted(ctx, service.Instances.List(b.Clients.Project()).Filter(DatabasesFilter(b.Clients.Namespace(), tier)).
+	filter, err := DatabasesFilter(b.Clients.Namespace(), tier)
+	if err != nil {
+		return nil, err
+	}
+	listed, err := googleretry.Attempted(ctx, service.Instances.List(b.Clients.Project()).Filter(filter).
 		MaxResults(resourcesNamedOnNetwork).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("read which databases are on the %s network: %w", b.Clients.Network(tier), err)
@@ -293,12 +300,24 @@ func listDatabasesOn(ctx context.Context, b bootstrap.Engine, tier environment.T
 	return named, nil
 }
 
-func StoresFilter(namespace provider.Namespace, tier environment.Tier) string {
-	return fmt.Sprintf("labels.%s=%q AND labels.%s=%q", names.NamespaceLabel, names.LabelValue(string(namespace)), names.TierLabel, names.LabelValue(string(tier)))
+func StoresFilter(namespace provider.Namespace, tier environment.Tier) (string, error) {
+	namespaceLabel, err := names.LabelValue(string(namespace))
+	if err != nil {
+		return "", err
+	}
+	tierLabel, err := names.LabelValue(string(tier))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("labels.%s=%q AND labels.%s=%q", names.NamespaceLabel, namespaceLabel, names.TierLabel, tierLabel), nil
 }
 
-func DatabasesFilter(namespace provider.Namespace, tier environment.Tier) string {
-	return fmt.Sprintf("settings.userLabels.ocel-namespace:%s settings.userLabels.ocel-tier:%s", names.LabelValue(string(namespace)), tier)
+func DatabasesFilter(namespace provider.Namespace, tier environment.Tier) (string, error) {
+	namespaceLabel, err := names.LabelValue(string(namespace))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("settings.userLabels.ocel-namespace:%s settings.userLabels.ocel-tier:%s", namespaceLabel, tier), nil
 }
 
 func Remove(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {

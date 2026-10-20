@@ -60,7 +60,11 @@ func (r realtimeEnvironment) ensureTopic(ctx context.Context) error {
 	if !policy.IsAbsent(err) {
 		return err
 	}
-	topic := &pubsub.Topic{Labels: names.StackLabels(r.clients.Names, r.ref)}
+	labels, err := names.StackLabels(r.clients.Names, r.ref)
+	if err != nil {
+		return err
+	}
+	topic := &pubsub.Topic{Labels: labels}
 	_, err = googleretry.Attempted(ctx, service.Projects.Topics.Create(r.topic(), topic).Context(ctx).Do)
 	if err != nil && googleretry.AnsweredCode(err) != http.StatusConflict {
 		return fmt.Errorf("create the realtime topic %s: %w", r.topic(), err)

@@ -15,12 +15,12 @@ func TestAnAppsExecutionRoleIsNamedForItsReleaseUnderTheAppFence(t *testing.T) {
 
 	coord := AppRoleCoordinate("shop", testStack(t, "prod", "web"))
 
-	got, err := PhysicalName("ocel", coord, MaxRoleNameLen)
+	got, err := RoleName("ocel", coord)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "ocel-app-shop-prod-web-role-r3f8a1c90"; got != want {
-		t.Errorf("PhysicalName = %q, want %q", got, want)
+	if want := "ocel-app-shop-prod-web-role-r3f8a1c90"; got.Pulumi != want {
+		t.Errorf("RoleName = %q, want %q", got.Pulumi, want)
 	}
 	if got, want := string(Describe(coord, "execution role for this app's functions")),
 		"shop / prod / web - execution role for this app's functions - release r3f8a1c90"; got != want {

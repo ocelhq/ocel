@@ -29,7 +29,7 @@ func secondOriginHost() OriginHost {
 }
 
 func originStack() string {
-	return Target{Tier: environment.TierProduction, Slug: "shop", Origin: originHostname}.Name()
+	return must(Target{Tier: environment.TierProduction, Slug: "shop", Origin: originHostname}.Name())
 }
 
 func TestAnOriginHostnameIsRoutedToTheRevisionTaggedWithItsRelease(t *testing.T) {

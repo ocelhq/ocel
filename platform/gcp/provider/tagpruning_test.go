@@ -173,11 +173,11 @@ func TestPruningAReleaseDeletesTheTagRecordsOfItsPagesPrefixAndNoOther(t *testin
 	}
 }
 
-func TestRemovingAProjectsEnvironmentDeletesOnlyThatEnvironmentsTagRecords(t *testing.T) {
+func TestRemovingAnAppsObjectsDeletesOnlyThatAppsTagRecords(t *testing.T) {
 	fake := &taggedFirestore{listed: []string{tagDocument("aaa")}}
 	p := tagRecordsServedBy(t, fake)
 
-	scope, err := naming.EnvScope("shop", "pr-7")
+	scope, err := naming.AppScope(naming.Coordinate{Project: "shop", Env: "pr-7", App: "web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,9 +185,9 @@ func TestRemovingAProjectsEnvironmentDeletesOnlyThatEnvironmentsTagRecords(t *te
 		t.Fatalf("removeTagRecords() = %v", err)
 	}
 
-	want := map[string]string{"GREATER_THAN_OR_EQUAL": "pages/shop/pr-7/", "LESS_THAN": "pages/shop/pr-7/"}
+	want := map[string]string{"GREATER_THAN_OR_EQUAL": "pages/shop/pr-7/web/", "LESS_THAN": "pages/shop/pr-7/web/"}
 	if got := prefixBounds(t, fake.queries[0]); !maps.Equal(got, want) {
-		t.Errorf("the prune ranged over %q, want %q: pages/shop/pr-70/ and pages/shop/prod/ fall outside it", got, want)
+		t.Errorf("the prune ranged over %q, want %q: pages/shop/pr-7/webshop/ and pages/shop/prod/web/ fall outside it", got, want)
 	}
 }
 

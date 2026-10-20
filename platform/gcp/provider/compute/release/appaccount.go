@@ -66,7 +66,11 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 	}
 	granted = append(granted, assets...)
 	granted = append(granted, next.CDNPurgeGrants(c, spec, member)...)
-	return append(granted, cloudrun.GateGrants(c, spec, member)...), nil
+	gated, err := cloudrun.GateGrants(c, spec, member)
+	if err != nil {
+		return nil, err
+	}
+	return append(granted, gated...), nil
 }
 
 func CreateAppAccount(ctx context.Context, c *gcloud.Clients, ref provider.StackRef, app string) error {

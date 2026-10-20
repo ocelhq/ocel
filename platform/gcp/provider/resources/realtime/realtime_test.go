@@ -134,7 +134,7 @@ func (h *realtimeHarness) remove(t *testing.T, binding provider.Binding) {
 
 func (h *realtimeHarness) keys(t *testing.T) map[string]string {
 	t.Helper()
-	raw, found := h.secrets.Latest(t, h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"))
+	raw, found := h.secrets.Latest(t, must(h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")))
 	if !found {
 		t.Fatal("the keys secret holds no version")
 	}
@@ -251,7 +251,7 @@ func TestRemovingARealtimeStopsTrustingItAndDeletesItsSigningKey(t *testing.T) {
 	if got := h.keys(t); len(got) != 1 || got["app"] != app.Properties[provider.PropertyVerifyKey] {
 		t.Errorf("the keys are %v once chat is removed, want app's alone", got)
 	}
-	if h.secrets.Has(h.env.clients.RealtimeSigningSecret("shop", "prod", "chat")) {
+	if h.secrets.Has(must(h.env.clients.RealtimeSigningSecret("shop", "prod", "chat"))) {
 		t.Error("chat's signing key outlived it")
 	}
 	if h.run.Serving() == nil {
@@ -271,7 +271,7 @@ func TestRemovingTheLastRealtimeTakesTheGatewayAndItsKeysAway(t *testing.T) {
 	if h.pubsub.HasTopic(h.topic()) {
 		t.Errorf("the topic %s outlived the gateway it carried publishes between", h.topic())
 	}
-	for _, secret := range []string{h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"), h.env.clients.RealtimeSigningSecret("shop", "prod", "app")} {
+	for _, secret := range []string{must(h.env.clients.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")), must(h.env.clients.RealtimeSigningSecret("shop", "prod", "app"))} {
 		if h.secrets.Has(secret) {
 			t.Errorf("secret %s outlived the last realtime", secret)
 		}
@@ -326,7 +326,7 @@ func TestAMissingRealtimePlansACreate(t *testing.T) {
 	if err != nil || action != provider.ActionCreate {
 		t.Errorf("plan() = %s, %v, want %s", action, err, provider.ActionCreate)
 	}
-	if h.secrets.Has(h.env.clients.RealtimeSigningSecret("shop", "prod", "app")) {
+	if h.secrets.Has(must(h.env.clients.RealtimeSigningSecret("shop", "prod", "app"))) {
 		t.Error("plan() minted a signing key, want a plan that only reads")
 	}
 }

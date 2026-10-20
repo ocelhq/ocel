@@ -16,11 +16,7 @@ func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...
 	for _, name := range parts {
 		in.alongside[name] = true
 	}
-	template, err := coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey), in.refs.bucketTag)
-	if err != nil {
-		return nil, err
-	}
-	core, err := shapeTemplate(template)
+	core, err := shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey), in.refs.bucketTag))
 	if err != nil {
 		return nil, err
 	}

@@ -59,7 +59,7 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		Present:        true,
 		StateTable:     "ocel-state-table",
 		VariablesTable: "ocel-variables",
-		Buckets:        naming.Buckets{naming.StorageState: "ocel-state", naming.StorageArtifacts: "ocel-artifacts", naming.StorageEdge: "ocel-edge", naming.StorageCache: "ocel-cache"},
+		Buckets:        fixtureBuckets(tier),
 	}
 	front := &teardownEdge{}
 	return Bootstrap{
@@ -405,7 +405,7 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 	if !slices.Equal(cfn.deleted, []string{coreStackName}) {
 		t.Errorf("deleted stacks = %v, want [%s]", cfn.deleted, coreStackName)
 	}
-	if !slices.Equal(buckets.emptied, []string{"ocel-state", "ocel-artifacts", "ocel-edge", "ocel-cache"}) {
+	if want := fixtureBuckets(environment.TierProduction); !slices.Equal(buckets.emptied, []string{want[naming.StorageState], want[naming.StorageArtifacts], want[naming.StorageEdge], want[naming.StorageCache]}) {
 		t.Errorf("emptied buckets = %v, want state, artifacts, edge and cache", buckets.emptied)
 	}
 	if !slices.Contains(buckets.deleted, "gone.json@v2") {
@@ -467,6 +467,14 @@ func (e *teardownEdge) Teardown(_ context.Context, tier environment.Tier) error 
 	return nil
 }
 
+func fixtureBuckets(tier environment.Tier) naming.Buckets {
+	buckets := naming.Buckets{}
+	for _, class := range account.BootstrapStorageClasses {
+		buckets[class] = defaultNamespace.BootstrapBucketName(tier, class, "k3x9q2")
+	}
+	return buckets
+}
+
 type teardownCFN struct {
 	cfn.API
 
@@ -487,13 +495,24 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 	if !ok {
 		return nil, &smithy.GenericAPIError{Code: "ValidationError", Message: "Stack with id " + name + " does not exist"}
 	}
-	outputs := []cfntypes.Output{
-		{OutputKey: aws.String("StateBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageState])},
-		{OutputKey: aws.String("ArtifactBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageArtifacts])},
-		{OutputKey: aws.String("EdgeBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageEdge])},
-		{OutputKey: aws.String("CacheBucketName"), OutputValue: aws.String(deployed.Buckets[naming.StorageCache])},
-		{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(deployed.StateTable)},
-		{OutputKey: aws.String("VariablesTableName"), OutputValue: aws.String(deployed.VariablesTable)},
+	buckets := deployed.Buckets
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if core, _ := defaultNamespace.StackNameFor(tier); core == name && buckets == nil {
+			buckets = fixtureBuckets(tier)
+		}
+	}
+	var outputs []cfntypes.Output
+	for key, value := range map[string]string{
+		"StateBucketName":    buckets[naming.StorageState],
+		"ArtifactBucketName": buckets[naming.StorageArtifacts],
+		"EdgeBucketName":     buckets[naming.StorageEdge],
+		"CacheBucketName":    buckets[naming.StorageCache],
+		"StateTableName":     deployed.StateTable,
+		"VariablesTableName": deployed.VariablesTable,
+	} {
+		if value != "" {
+			outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(key), OutputValue: aws.String(value)})
+		}
 	}
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
 		StackName:   in.StackName,

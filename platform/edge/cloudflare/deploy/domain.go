@@ -35,7 +35,10 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return err
 	}
 	forwarded := s.isForwarded(binding.Hostname)
-	owns := projectOwnsScript(s.p.namespace, s.state.Slug)
+	owns, err := projectOwnsScript(s.p.namespace, s.state.Slug)
+	if err != nil {
+		return err
+	}
 	if forwarded {
 		ownsProjectScript := owns
 		owns = func(script string) bool { return script == "" || ownsProjectScript(script) }

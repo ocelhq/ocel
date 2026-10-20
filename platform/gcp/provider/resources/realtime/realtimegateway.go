@@ -40,10 +40,14 @@ const (
 
 var realtimeImageTag = run.BinaryImageTag(payloads.RealtimeGateway)
 
-func realtimeGatewayServing(named names.Names, ref provider.StackRef, service, host, image, inlineKeys, pubsubEndpoint string) run.Serving {
+func realtimeGatewayServing(named names.Names, ref provider.StackRef, service, host, image, inlineKeys, pubsubEndpoint string) (run.Serving, error) {
+	labels, err := names.StackLabels(named, ref)
+	if err != nil {
+		return run.Serving{}, err
+	}
 	gateway := run.Serving{
 		Service:     service,
-		Labels:      names.StackLabels(named, ref),
+		Labels:      labels,
 		Image:       image,
 		Account:     named.RealtimeAccountEmail(ref.Tier),
 		Compute:     provider.ComputeServerless,
@@ -66,12 +70,16 @@ func realtimeGatewayServing(named names.Names, ref provider.StackRef, service, h
 	}
 	if inlineKeys != "" {
 		gateway.Env[gatewayenv.KeysVar] = inlineKeys
-		return gateway
+		return gateway, nil
 	}
-	keys := run.SecretMount{Name: realtimeKeysVolume, Secret: named.RealtimeKeysSecret(ref.Tier, ref.Project, ref.Name.Env), Dir: realtimeKeysDir, File: realtimeKeysFile}
+	keysSecret, err := named.RealtimeKeysSecret(ref.Tier, ref.Project, ref.Name.Env)
+	if err != nil {
+		return run.Serving{}, err
+	}
+	keys := run.SecretMount{Name: realtimeKeysVolume, Secret: keysSecret, Dir: realtimeKeysDir, File: realtimeKeysFile}
 	gateway.Mounts = []run.SecretMount{keys}
 	gateway.Env[gatewayenv.KeysFileVar] = keys.Dir + "/" + keys.File
-	return gateway
+	return gateway, nil
 }
 
 func (r realtimeEnvironment) gatewayImage() string {
@@ -115,7 +123,10 @@ func (r realtimeEnvironment) findGatewayHost(current *runv2.GoogleCloudRunV2Serv
 }
 
 func (r realtimeEnvironment) compareGateway(current *runv2.GoogleCloudRunV2Service, host, image, inlineKeys string) (run.Serving, string, error) {
-	desired := realtimeGatewayServing(r.clients.Names, r.ref, r.gateway, host, image, inlineKeys, r.pubsubEndpoint)
+	desired, err := realtimeGatewayServing(r.clients.Names, r.ref, r.gateway, host, image, inlineKeys, r.pubsubEndpoint)
+	if err != nil {
+		return run.Serving{}, "", err
+	}
 	wanted, err := run.ServiceOf(desired)
 	if err != nil {
 		return run.Serving{}, "", err

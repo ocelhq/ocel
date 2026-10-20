@@ -25,7 +25,11 @@ func servingOf(t *testing.T, named names.Names, ref provider.StackRef, host, ima
 	if err != nil {
 		t.Fatalf("RealtimeGateway() = %v", err)
 	}
-	return realtimeGatewayServing(named, ref, service, host, image, inlineKeys, pubsubEndpoint)
+	serving, err := realtimeGatewayServing(named, ref, service, host, image, inlineKeys, pubsubEndpoint)
+	if err != nil {
+		t.Fatalf("realtimeGatewayServing() = %v", err)
+	}
+	return serving
 }
 
 func gatewayService(t *testing.T, host string) *runv2.GoogleCloudRunV2Service {
@@ -82,8 +86,8 @@ func TestTheGatewayReadsItsKeysFromTheLatestVersionOfItsEnvironmentsKeysSecret(t
 		t.Fatalf("volumes = %d, want the keys secret alone", len(desired.Template.Volumes))
 	}
 	volume := desired.Template.Volumes[0]
-	if volume.Secret == nil || volume.Secret.Secret != names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod") {
-		t.Fatalf("the volume mounts %+v, want secret %s", volume.Secret, names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"))
+	if volume.Secret == nil || volume.Secret.Secret != must(names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")) {
+		t.Fatalf("the volume mounts %+v, want secret %s", volume.Secret, must(names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")))
 	}
 	if items := volume.Secret.Items; len(items) != 1 || items[0].Version != "latest" {
 		t.Errorf("the keys secret is mounted at %+v, want version latest so a new version is read without a new revision", items)
@@ -239,4 +243,11 @@ func TestARealtimeGatewayIsLabelledWithTheProjectItServes(t *testing.T) {
 	if got := service.Labels[names.ProjectLabel]; got != "shop" {
 		t.Errorf("the gateway of project shop is labelled %s=%q, want shop", names.ProjectLabel, got)
 	}
+}
+
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
 }

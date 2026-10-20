@@ -114,7 +114,7 @@ func TestTeardownLeavesTheRestAPIsAnotherNamespaceFronts(t *testing.T) {
 	w := newWorld()
 	e := bootstrapped(t, w)
 	if _, err := w.gateway.CreateRestApi(ctx, &apigateway.CreateRestApiInput{
-		Name: aws.String(apiName("other", "shop", environment.TierProduction, "")),
+		Name: aws.String(must(apiName("other", "shop", environment.TierProduction, ""))),
 		Tags: map[string]string{
 			"ocel:managed-by": "ocel",
 			"ocel:namespace":  "other",
@@ -136,7 +136,7 @@ func seedOtherProjectsAPIs(t *testing.T, w *world, tier environment.Tier, count 
 	for i := range count {
 		slug := "other" + strconv.Itoa(i)
 		created, err := w.gateway.CreateRestApi(context.Background(), &apigateway.CreateRestApiInput{
-			Name: aws.String(apiName(defaultNamespace, slug, tier, previewPoint)),
+			Name: aws.String(must(apiName(defaultNamespace, slug, tier, previewPoint))),
 			Tags: map[string]string{
 				"ocel:managed-by": "ocel",
 				"ocel:namespace":  string(defaultNamespace),

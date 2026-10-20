@@ -46,7 +46,7 @@ func testSpec() edge.StackSpec {
 }
 
 func productionDistributionName() string {
-	return distributionName(defaultNamespace, conformanceSlug, environment.TierProduction)
+	return must(distributionName(defaultNamespace, conformanceSlug, environment.TierProduction))
 }
 
 func bootstrapped(t *testing.T, w *world) *cloudFront {

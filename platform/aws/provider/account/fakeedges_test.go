@@ -93,9 +93,11 @@ func (f *fakeEdge) DestroyPreviewWildcard(context.Context, string) error {
 	return errors.New("bootstrap never destroys the preview wildcard")
 }
 
-func (f *fakeEdge) PlanProjectRemoval(edge.ProjectScope) []edge.PlanGroup { return nil }
+func (f *fakeEdge) PlanProjectRemoval(edge.ProjectScope) ([]edge.PlanGroup, error) {
+	return nil, nil
+}
 
-func (f *fakeEdge) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (f *fakeEdge) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup, error) {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(f.kind),
@@ -105,7 +107,7 @@ func (f *fakeEdge) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, 
 			Name:   wildcard,
 			Action: edge.PlanDelete,
 		}},
-	}, f.PlanSharedPreviewRemoval()
+	}, f.PlanSharedPreviewRemoval(), nil
 }
 
 func (f *fakeEdge) PlanSharedPreviewRemoval() edge.PlanGroup {
@@ -121,8 +123,8 @@ func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
 	return "", errors.New("bootstrap never reads a domain owner")
 }
 
-func (f *fakeEdge) ProjectOwner(slug string, tier environment.Tier) string {
-	return slug + "-" + string(tier)
+func (f *fakeEdge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+	return slug + "-" + string(tier), nil
 }
 
 var currentEdge = func() edge.Edge { return &fakeEdge{kind: "default"} }

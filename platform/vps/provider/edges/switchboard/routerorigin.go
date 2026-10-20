@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 )
 
-func (r Router) planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (r Router) planProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	return r.e.PlanProjectRemoval(scope)
 }
 
@@ -63,7 +63,10 @@ func (r Router) disclaimPreviewEntry(ctx context.Context, baseDomain string) err
 	return r.e.releaseTunnel(ctx)
 }
 
-func (r Router) planPreviewEntryRemoval(wildcard string) []edge.PlanGroup {
-	removed, _ := r.e.PlanPreviewWildcardRemoval(wildcard)
-	return []edge.PlanGroup{removed}
+func (r Router) planPreviewEntryRemoval(wildcard string) ([]edge.PlanGroup, error) {
+	removed, _, err := r.e.PlanPreviewWildcardRemoval(wildcard)
+	if err != nil {
+		return nil, err
+	}
+	return []edge.PlanGroup{removed}, nil
 }

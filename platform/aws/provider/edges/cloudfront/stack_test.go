@@ -199,7 +199,7 @@ func TestADistributionOfAProjectWithALongSlugIsFoundByTheNameItWasMintedUnder(t 
 	t.Parallel()
 
 	w := newWorld()
-	name := distributionName(defaultNamespace, strings.Repeat("storefront-", 20), environment.TierProduction)
+	name := must(distributionName(defaultNamespace, longestSlugNamed(defaultNamespace), environment.TierProduction))
 	spec := distributionSpec{
 		tier:          environment.TierProduction,
 		name:          name,
@@ -634,7 +634,7 @@ func TestEveryDistributionTheEdgeRaisesIsTaggedOcelsForItsTierSoTheTagInvalidato
 				t.Fatalf("Reconcile: %v", err)
 			}
 		}},
-		{environment.TierPreview, previewWildcardName(previewBase), func(t *testing.T, w *world) {
+		{environment.TierPreview, must(previewWildcardName(previewBase)), func(t *testing.T, w *world) {
 			if _, err := previewBootstrapped(t, w).ReconcilePreviewWildcard(context.Background(), previewWildcardSpec()); err != nil {
 				t.Fatalf("ReconcilePreviewWildcard: %v", err)
 			}

@@ -20,7 +20,7 @@ type Target struct {
 	Gate     bool
 }
 
-func OriginHostStack(hostname string, tier environment.Tier) string {
+func OriginHostStack(hostname string, tier environment.Tier) (string, error) {
 	return naming.TaggedName{
 		Head:     dashed(string(Kind), originScope, naming.TierWord(tier)),
 		Readable: naming.SanitizeHost(hostname),
@@ -28,25 +28,25 @@ func OriginHostStack(hostname string, tier environment.Tier) string {
 	}.Fit(maxResourceName)
 }
 
-func (t Target) Name() string {
+func (t Target) Name() (string, error) {
 	switch {
 	case t.Origin != "":
 		return OriginHostStack(t.Origin, t.Tier)
 	case t.Gate:
-		return GateStack(t.Tier)
+		return GateStack(t.Tier), nil
 	case t.Slug != "":
-		return BindingStack(t.Slug, t.Tier)
+		return BindingStack(t.Slug, t.Tier), nil
 	case t.Shielded:
-		return ShieldedLoadBalancerStack(t.Tier)
+		return ShieldedLoadBalancerStack(t.Tier), nil
 	}
-	return LoadBalancerStack(t.Tier)
+	return LoadBalancerStack(t.Tier), nil
 }
 
-func (t Target) Prefix() string {
+func (t Target) Prefix() (string, error) {
 	if t.Slug == "" {
 		return t.Name()
 	}
-	return dashed(string(Kind), "project", naming.Sanitize(t.Slug))
+	return dashed(string(Kind), "project", naming.Sanitize(t.Slug)), nil
 }
 
 type Stacks interface {

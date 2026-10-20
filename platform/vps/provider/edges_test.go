@@ -79,8 +79,15 @@ func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *te
 	if err != nil {
 		t.Fatalf("Edges().Open(%q): %v", cloudflare.Kind, err)
 	}
-	got := front.ProjectOwner("shop", environment.TierProduction)
-	if want := cloudflare.NewProxy("staging", cloudflare.Options{}).ProjectOwner("shop", environment.TierProduction); got != want {
+	got, err := front.ProjectOwner("shop", environment.TierProduction)
+	if err != nil {
+		t.Fatalf("ProjectOwner: %v", err)
+	}
+	want, err := cloudflare.NewProxy("staging", cloudflare.Options{}).ProjectOwner("shop", environment.TierProduction)
+	if err != nil {
+		t.Fatalf("ProjectOwner: %v", err)
+	}
+	if got != want {
 		t.Errorf("the proxy in front of a box owns shop's records as %q, want %q: it records ownership in the namespace ocel runs in, as it does in front of Google Cloud, not under the box's ssh destination", got, want)
 	}
 }

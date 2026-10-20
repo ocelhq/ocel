@@ -161,7 +161,10 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 		Hostnames: r.state.Hostnames(),
 		Address:   r.state.Edge.Address,
 	}
-	groups := r.front.PlanProjectRemoval(scope)
+	groups, err := r.front.PlanProjectRemoval(scope)
+	if err != nil {
+		return nil, err
+	}
 	for _, kind := range r.listRouterKinds() {
 		origin, err := r.findRouterOrigin(kind)
 		if err != nil {
@@ -172,7 +175,11 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 		}
 		routed := scope
 		routed.Hostnames = slices.DeleteFunc(slices.Clone(scope.Hostnames), func(hostname string) bool { return r.state.Host(hostname).Router != kind })
-		groups = append(groups, origin.PlanProjectRemoval(routed)...)
+		routedGroups, err := origin.PlanProjectRemoval(routed)
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, routedGroups...)
 	}
 	for _, group := range groups {
 		converted, err := edgeGroupProto(group)

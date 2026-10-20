@@ -6,17 +6,28 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
 const MaxNameLen = 128
 
-func Name(ns account.Namespace, slug string, tier environment.Tier, tail ...string) string {
-	return naming.TaggedName{
+func Name(ns account.Namespace, slug string, tier environment.Tier, tail ...string) (string, error) {
+	named := naming.TaggedName{
 		Head:     naming.OcelName(string(ns), tier),
 		Readable: naming.Join(naming.WordSeparator, append([]string{slug}, tail...)...),
 		Tag:      naming.HashTag(append([]string{string(ns), string(tier), slug}, tail...)...),
-	}.Fit(MaxNameLen)
+	}
+	name, err := named.Fit(MaxNameLen)
+	if err != nil {
+		return "", err
+	}
+	if name != naming.Join(naming.WordSeparator, named.Head, named.Readable, named.Tag) {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"%s does not fit the %d characters an edge names a project's surface in, and a surface cut short cannot be read back to the project that owns it\nShorten the project slug",
+			named.Readable, MaxNameLen)
+	}
+	return name, nil
 }
 
 func ProjectsNamed(ns account.Namespace, names []string, tier environment.Tier) []string {
@@ -29,7 +40,7 @@ func ProjectsNamed(ns account.Namespace, names []string, tier environment.Tier) 
 			continue
 		}
 		slug := rest[:cut]
-		if Name(ns, slug, tier) != name && len(name) < MaxNameLen-len(naming.WordSeparator) {
+		if named, err := Name(ns, slug, tier); err != nil || named != name {
 			continue
 		}
 		if !slices.Contains(slugs, slug) {

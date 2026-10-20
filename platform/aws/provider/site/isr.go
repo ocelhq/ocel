@@ -30,11 +30,14 @@ func (c ISR) TagNamespace() string {
 }
 
 func (c ISR) Env() map[string]string {
-	return map[string]string{
-		processenv.ISREnvVar:     "1",
-		"OCEL_STATE_TABLE":       c.Table,
-		"OCEL_ISR_TAG_NAMESPACE": c.TagNamespace(),
-	}
+	env := naming.StorageEnv(c.Coord, naming.Buckets{
+		naming.StorageEdge:  c.Buckets[naming.StorageEdge],
+		naming.StorageCache: c.Buckets[naming.StorageCache],
+	})
+	env[processenv.ISREnvVar] = "1"
+	env["OCEL_STATE_TABLE"] = c.Table
+	env["OCEL_ISR_TAG_NAMESPACE"] = c.TagNamespace()
+	return env
 }
 
 func (c ISR) Policy() (string, error) {

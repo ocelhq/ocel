@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
 const (
@@ -165,10 +166,9 @@ func (i ACM) Request(ctx context.Context, hostnames []string) (Certificate, erro
 		SubjectAlternativeNames: alternates,
 		ValidationMethod:        acmtypes.ValidationMethodDns,
 		IdempotencyToken:        aws.String(idempotencyToken(strings.Join(hostnames, ","))),
-		Tags: []acmtypes.Tag{
-			{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(i.ManagedBy)},
-			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(i.Tier))},
-		},
+		Tags: tags.Sorted(naming.OcelTags(i.ManagedBy, i.Tier), func(key, value *string) acmtypes.Tag {
+			return acmtypes.Tag{Key: key, Value: value}
+		}),
 	})
 	if err != nil {
 		return Certificate{}, fmt.Errorf("request a certificate for %s in %s: %w", strings.Join(hostnames, ", "), i.Region, err)

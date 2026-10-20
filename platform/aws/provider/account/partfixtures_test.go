@@ -67,6 +67,18 @@ func declaredResources(body string) []templateResource {
 
 const fixtureBucketTag = "k3x9q2"
 
+func fixtureBucketName(tier environment.Tier, class naming.StorageClass) string {
+	return defaultNamespace.BootstrapBucketName(tier, class, fixtureBucketTag)
+}
+
+func fixtureBucketOutputs(tier environment.Tier) map[string]string {
+	outputs := make(map[string]string, len(bucketOutputs))
+	for output, class := range bucketOutputs {
+		outputs[output] = fixtureBucketName(tier, class)
+	}
+	return outputs
+}
+
 func coreBody(ns Namespace, tier environment.Tier, broughtKey string) string {
 	return coreBodyTagged(ns, tier, broughtKey, fixtureBucketTag)
 }
@@ -82,15 +94,15 @@ func writtenCoreBody(stacks *fakeCFN, ns Namespace, tier environment.Tier, broug
 		buckets[class] = stacks.outputs[core][output]
 	}
 	stacks.mu.Unlock()
-	return coreBodyTagged(ns, tier, broughtKey, ns.bootstrapBucketTag(tier, buckets))
-}
-
-func coreBodyTagged(ns Namespace, tier environment.Tier, broughtKey, bucketTag string) string {
-	template, err := coreStackTemplate(ns, tier, broughtKey, bucketTag)
+	tag, err := ns.bootstrapBucketTag(tier, buckets)
 	if err != nil {
 		panic(err)
 	}
-	body, err := template.Body()
+	return coreBodyTagged(ns, tier, broughtKey, tag)
+}
+
+func coreBodyTagged(ns Namespace, tier environment.Tier, broughtKey, bucketTag string) string {
+	body, err := coreStackTemplate(ns, tier, broughtKey, bucketTag).Body()
 	if err != nil {
 		panic(err)
 	}

@@ -18,12 +18,15 @@ import (
 
 func (r realtimeEnvironment) secrets() (*secretmanager.Service, error) { return r.clients.Secrets() }
 
-func (r realtimeEnvironment) signingSecret(resource string) string {
+func (r realtimeEnvironment) signingSecret(resource string) (string, error) {
 	return r.clients.RealtimeSigningSecret(r.ref.Project, r.ref.Name.Env, resource)
 }
 
 func (r realtimeEnvironment) readSigningSeed(ctx context.Context, service *secretmanager.Service, resource string) ([]byte, bool, error) {
-	name := r.signingSecret(resource)
+	name, err := r.signingSecret(resource)
+	if err != nil {
+		return nil, false, err
+	}
 	seed, found, err := r.clients.ReadSecretVersion(ctx, service, name, gcloud.FirstSecretVersion)
 	if err != nil || !found {
 		return nil, false, err
@@ -50,7 +53,10 @@ func (r realtimeEnvironment) ensureSigningSeed(ctx context.Context, resource str
 	if err != nil || found {
 		return seed, err
 	}
-	name := r.signingSecret(resource)
+	name, err := r.signingSecret(resource)
+	if err != nil {
+		return nil, err
+	}
 	if err := r.clients.EnsureSecret(ctx, service, name); err != nil {
 		return nil, err
 	}
@@ -76,7 +82,11 @@ func (r realtimeEnvironment) removeSigningKey(ctx context.Context, resource stri
 	if err != nil {
 		return err
 	}
-	return r.clients.DeleteSecret(ctx, service, r.signingSecret(resource))
+	name, err := r.signingSecret(resource)
+	if err != nil {
+		return err
+	}
+	return r.clients.DeleteSecret(ctx, service, name)
 }
 
 type keysSecret struct {
@@ -87,7 +97,11 @@ type keysSecret struct {
 }
 
 func (r realtimeEnvironment) readKeysSecret(ctx context.Context, service *secretmanager.Service, keys map[string]string) (keysSecret, error) {
-	secret := keysSecret{name: r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env)}
+	name, err := r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env)
+	if err != nil {
+		return keysSecret{}, err
+	}
+	secret := keysSecret{name: name}
 	written, err := json.Marshal(keys)
 	if err != nil {
 		return keysSecret{}, err
@@ -137,5 +151,9 @@ func (r realtimeEnvironment) removeKeys(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.clients.DeleteSecret(ctx, service, r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env))
+	name, err := r.clients.RealtimeKeysSecret(r.ref.Tier, r.ref.Project, r.ref.Name.Env)
+	if err != nil {
+		return err
+	}
+	return r.clients.DeleteSecret(ctx, service, name)
 }

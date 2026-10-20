@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
 const (
@@ -70,17 +71,15 @@ func Ensure(ctx context.Context, api API, namespace string, tier environment.Tie
 	if len(found.SecurityGroups) > 0 {
 		return []provider.PartResource{{Kind: KindSecurityGroup, ID: aws.ToString(found.SecurityGroups[0].GroupId)}}, nil
 	}
+	groupTags := naming.OcelTags(namespace, tier)
+	groupTags["Name"] = name
 	created, err := api.CreateSecurityGroup(ctx, &ec2.CreateSecurityGroupInput{
 		GroupName:   aws.String(name),
 		Description: aws.String("Ocel " + string(tier) + ": what joins it may reach the tier's databases and caches; it admits nothing itself"),
 		VpcId:       aws.String(vpc.ID),
 		TagSpecifications: []ec2types.TagSpecification{{
 			ResourceType: ec2types.ResourceTypeSecurityGroup,
-			Tags: []ec2types.Tag{
-				{Key: aws.String("Name"), Value: aws.String(name)},
-				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(namespace)},
-				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))},
-			},
+			Tags:         tags.Sorted(groupTags, func(key, value *string) ec2types.Tag { return ec2types.Tag{Key: key, Value: value} }),
 		}},
 	})
 	if err != nil {

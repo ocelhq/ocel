@@ -106,12 +106,10 @@ func nameFor(namespace string, tier environment.Tier, parts ...string) string {
 }
 
 func stackTags(namespace string, tier environment.Tier) map[string]string {
-	return map[string]string{
-		naming.ManagedByTagKey: namespace,
-		"ocel:project":         Slug,
-		naming.EnvTierTagKey:   string(tier),
-		stackTagKey:            StackRef(tier).Name.String(),
-	}
+	tags := naming.OcelTags(namespace, tier)
+	tags["ocel:project"] = Slug
+	tags[stackTagKey] = StackRef(tier).Name.String()
+	return tags
 }
 
 type Stacks struct {

@@ -178,7 +178,7 @@ func TestAClaimWithAClientCertificateAnswersTheHostnameOnTheShieldedLoadBalancer
 	if _, routedPlain := w.hosts("ocel-prod-alb-routes")["shop.example.com"]; routedPlain {
 		t.Error("shop.example.com is routed on the balancer browsers reach directly, so a request that skips the edge would be answered")
 	}
-	entry := w.declarations(BindingStack("shop", environment.TierProduction))[entryName("ocel", "shop", environment.TierProduction, "shop.example.com")]
+	entry := w.declarations(BindingStack("shop", environment.TierProduction))[must(entryName("ocel", "shop", environment.TierProduction, "shop.example.com"))]
 	if entry.Args["map"] != "ocel-prod-alb-shielded-certs" {
 		t.Errorf("the hostname's certificate is entered in map %v, want the shielded balancer's", entry.Args["map"])
 	}
@@ -321,7 +321,7 @@ func TestTheShieldedLoadBalancerLeavesThePreviewWildcardToTheLoadBalancerItWasBo
 	if _, err := balancer.Shielded().Bootstrap(context.Background(), environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; declared {
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[must(previewEntryName("ocel", "preview.example.com"))]; declared {
 		t.Error("the shielded balancer declares the preview wildcard's certificate map entry, which the balancer it was bound on already owns under that name")
 	}
 }
@@ -350,9 +350,9 @@ func TestTheALBRoutersRemovalPlanNamesTheHostRuleOfEveryHostnameAnEdgeForwardsTo
 
 	balancer, _ := shielding(t)
 	var rules []string
-	for _, group := range NewRouter(balancer).Hooks().Origin.PlanProjectRemoval(edge.ProjectScope{
+	for _, group := range must(NewRouter(balancer).Hooks().Origin.PlanProjectRemoval(edge.ProjectScope{
 		Slug: "shop", Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"},
-	}) {
+	})) {
 		for _, change := range group.Changes {
 			if change.Kind == "compute.URLMap host rule" && change.Action == edge.PlanDelete {
 				rules = append(rules, change.Name)
@@ -387,20 +387,20 @@ func TestThePreviewEntryAnEdgeForwardsIsServedByTheShieldedLoadBalancerAlone(t *
 	if origin != (edge.Origin{Address: shieldedAddress, Certified: true}) {
 		t.Errorf("ClaimPreviewEntry named origin %+v, want the shielded preview balancer at %s", origin, shieldedAddress)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; !declared {
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[must(previewEntryName("ocel", "preview.example.com"))]; !declared {
 		t.Error("the shielded preview balancer enters no certificate for the wildcard, so no preview is answered through the edge")
 	}
 	if _, err := balancer.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap of the balancer browsers reach: %v", err)
 	}
-	if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; declared {
+	if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[must(previewEntryName("ocel", "preview.example.com"))]; declared {
 		t.Error("the balancer browsers reach declares the wildcard too, so a preview that skips the edge is answered")
 	}
 
 	if err := NewRouter(balancer).Hooks().Origin.DisclaimPreviewEntry(ctx, "preview.example.com"); err != nil {
 		t.Fatalf("DisclaimPreviewEntry: %v", err)
 	}
-	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[previewEntryName("ocel", "preview.example.com")]; declared {
+	if _, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierPreview))[must(previewEntryName("ocel", "preview.example.com"))]; declared {
 		t.Error("the shielded balancer still enters *.preview.example.com once the entry was given back")
 	}
 }

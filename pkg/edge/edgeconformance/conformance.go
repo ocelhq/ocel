@@ -127,12 +127,15 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("teardown plans are named, typed and honestly actioned", func(t *testing.T) {
 		e, spec := suite.New(t)
 
-		groups := e.PlanProjectRemoval(edge.ProjectScope{
+		groups, err := e.PlanProjectRemoval(edge.ProjectScope{
 			Slug:      spec.Slug,
 			Tier:      spec.Tier,
 			Hostnames: []string{suite.Hostname},
 			Address:   "front.example.net",
 		})
+		if err != nil {
+			t.Fatalf("PlanProjectRemoval: %v", err)
+		}
 		if len(groups) == 0 {
 			t.Fatal("PlanProjectRemoval = none, want what a project with a bound hostname depends on")
 		}
@@ -140,7 +143,10 @@ func Run(t *testing.T, suite Suite) {
 			checkRemoval(t, "PlanProjectRemoval", group)
 		}
 
-		removed, kept := e.PlanPreviewWildcardRemoval("*.preview.example.com")
+		removed, kept, err := e.PlanPreviewWildcardRemoval("*.preview.example.com")
+		if err != nil {
+			t.Fatalf("PlanPreviewWildcardRemoval: %v", err)
+		}
 		checkRemoval(t, "PlanPreviewWildcardRemoval removed", removed)
 		checkRemoval(t, "PlanPreviewWildcardRemoval kept", kept)
 		if removed.Action == edge.PlanKeep {
@@ -190,7 +196,10 @@ func Run(t *testing.T, suite Suite) {
 		}
 		suite.binds(t, stack)
 
-		mine := e.ProjectOwner(spec.Slug, spec.Tier)
+		mine, err := e.ProjectOwner(spec.Slug, spec.Tier)
+		if err != nil {
+			t.Fatalf("ProjectOwner: %v", err)
+		}
 		if mine == "" {
 			t.Skip("this edge names no project-wide surface, so a hostname it serves is owned by something finer than the project")
 		}

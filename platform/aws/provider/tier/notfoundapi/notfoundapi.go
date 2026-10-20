@@ -129,7 +129,7 @@ func Ensure(ctx context.Context, c API, namespace string, tier environment.Tier,
 			Name:                  aws.String(name),
 			Description:           aws.String("Ocel answers 404 from here for every host pointed at this account that no deployment claims."),
 			EndpointConfiguration: &agtypes.EndpointConfiguration{Types: []agtypes.EndpointType{agtypes.EndpointTypeRegional}},
-			Tags:                  map[string]string{naming.ManagedByTagKey: namespace, naming.EnvTierTagKey: string(tier)},
+			Tags:                  naming.OcelTags(namespace, tier),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create REST API %s: %w", name, err)

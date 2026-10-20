@@ -27,7 +27,10 @@ func bindingProgram(spec bindingSpec) Program {
 		for _, hostname := range slices.Sorted(maps.Keys(spec.Hosts)) {
 			host := spec.Hosts[hostname]
 			if host.Certificate != "" {
-				entry := entryName(spec.Namespace, spec.Slug, spec.Tier, hostname)
+				entry, err := entryName(spec.Namespace, spec.Slug, spec.Tier, hostname)
+				if err != nil {
+					return err
+				}
 				if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry,
 					&certificatemanager.CertificateMapEntryArgs{
 						Name:         pulumi.String(entry),
@@ -42,7 +45,10 @@ func bindingProgram(spec bindingSpec) Program {
 			if host.Service == "" {
 				continue
 			}
-			neg := negName(spec.Namespace, spec.Slug, spec.Tier, hostname)
+			neg, err := negName(spec.Namespace, spec.Slug, spec.Tier, hostname)
+			if err != nil {
+				return err
+			}
 			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(spec.Shielded), responseHeadersOf(spec.Tier)); err != nil {
 				return err
 			}

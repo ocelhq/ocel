@@ -33,30 +33,27 @@ var bucketOutputs = map[string]naming.StorageClass{
 	outputCacheBucket:    naming.StorageCache,
 }
 
-func (n Namespace) bootstrapBucketTag(tier environment.Tier, buckets naming.Buckets) string {
+func (n Namespace) bootstrapBucketTag(tier environment.Tier, buckets naming.Buckets) (string, error) {
 	tag := ""
 	for _, class := range BootstrapStorageClasses {
 		suffix, named := strings.CutPrefix(buckets[class], n.BootstrapBucketStem(tier, class)+naming.WordSeparator)
 		if !named || !naming.IsRandomTag(suffix) || (tag != "" && suffix != tag) {
-			return ""
+			core, _ := n.StackNameFor(tier)
+			return "", refusal.Refuse(refusal.CodeInvalid,
+				"stack %s names buckets that do not all end in the one random tag its bootstrap minted, and a new tag would rename and so replace every one of them; delete stack %s in CloudFormation and run the %s bootstrap again",
+				core, core, tier)
 		}
 		tag = suffix
 	}
-	return tag
+	return tag, nil
 }
 
-func (n Namespace) bootstrapBuckets(tier environment.Tier, tag string) (naming.Buckets, error) {
-	if !naming.IsRandomTag(tag) {
-		core, _ := n.StackNameFor(tier)
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"stack %s names buckets that do not all end in the one random tag its bootstrap minted, and a new tag would rename and so replace every one of them; remove the %s bootstrap and run it again",
-			core, tier)
-	}
+func (n Namespace) bootstrapBuckets(tier environment.Tier, tag string) naming.Buckets {
 	buckets := make(naming.Buckets, len(BootstrapStorageClasses))
 	for _, class := range BootstrapStorageClasses {
 		buckets[class] = n.BootstrapBucketName(tier, class, tag)
 	}
-	return buckets, nil
+	return buckets
 }
 
 func bucketProperties(name string, lifecycle ...any) map[string]any {

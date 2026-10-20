@@ -338,7 +338,7 @@ func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate
 }
 
 func (d *Definition) names() (Names, error) {
-	return namesAt(d.namespace, d.service)
+	return namesAt(d.namespace, d.service, d.role)
 }
 
 func (d *Definition) definition(service string) (string, error) {

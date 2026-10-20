@@ -179,14 +179,14 @@ func TestADigestBecomesATagUnderOneRule(t *testing.T) {
 
 func TestAWorkerAndATopicAreComponentsOfTheirOwn(t *testing.T) {
 	for kind, component := range map[Kind]string{KindWorker: "worker", KindTopic: "topic"} {
-		if !kind.Valid() || kind.Component() != component {
-			t.Errorf("%q: valid = %v, component = %q, want %q", kind, kind.Valid(), kind.Component(), component)
+		if kind.Component() != component {
+			t.Errorf("%q: component = %q, want %q", kind, kind.Component(), component)
 		}
 	}
 }
 
 func TestTheRealtimeAuthorizerIsAComponentOfItsOwn(t *testing.T) {
-	if !KindRealtimeAuthorizer.Valid() || KindRealtimeAuthorizer.Component() != "realtime-authorizer" {
-		t.Errorf("%q: valid = %v, component = %q, want \"realtime-authorizer\"", KindRealtimeAuthorizer, KindRealtimeAuthorizer.Valid(), KindRealtimeAuthorizer.Component())
+	if KindRealtimeAuthorizer.Component() != "realtime-authorizer" {
+		t.Errorf("%q: component = %q, want \"realtime-authorizer\"", KindRealtimeAuthorizer, KindRealtimeAuthorizer.Component())
 	}
 }

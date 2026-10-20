@@ -73,7 +73,7 @@ describe("storeFilter", () => {
       path.join(repoRoot, "platform", "gcp", "provider", "internal", "names", "labels.go"),
       "utf8",
     );
-    expect(go).toContain("labels := StackLabels(names, ref)");
+    expect(go).toContain("labels, err := StackLabels(names, ref)");
   });
 });
 

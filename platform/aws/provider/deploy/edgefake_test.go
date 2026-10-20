@@ -73,11 +73,11 @@ func (f *recordingEdge) Facts() edge.Facts {
 	}
 }
 
-func (f *recordingEdge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (f *recordingEdge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	return f.declared().PlanProjectRemoval(scope)
 }
 
-func (f *recordingEdge) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (f *recordingEdge) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup, error) {
 	return f.declared().PlanPreviewWildcardRemoval(wildcard)
 }
 
@@ -99,7 +99,9 @@ func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string,
 	return f.bound[hostname], nil
 }
 
-func (f *recordingEdge) ProjectOwner(slug string, _ environment.Tier) string { return slug }
+func (f *recordingEdge) ProjectOwner(slug string, _ environment.Tier) (string, error) {
+	return slug, nil
+}
 
 func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
 	return "", nil

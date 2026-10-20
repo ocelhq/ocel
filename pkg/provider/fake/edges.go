@@ -855,11 +855,11 @@ func (e *Edge) OwnersUnreadable(err error) {
 	e.unreadable = err
 }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
-	return "ocel-" + slug + "-" + string(tier)
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+	return "ocel-" + slug + "-" + string(tier), nil
 }
 
-func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	changes := []edge.PlanChange{{
 		Kind:   "Fake::EdgeStack",
 		Name:   scope.Slug + "-" + string(scope.Tier),
@@ -878,10 +878,10 @@ func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 		Name:    edge.EdgeGroupName(e.kind),
 		Action:  edge.PlanDelete,
 		Changes: changes,
-	}}
+	}}, nil
 }
 
-func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup) {
+func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup, err error) {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(e.kind),
@@ -892,7 +892,7 @@ func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.P
 			Action: edge.PlanDelete,
 			Reason: "the shared entry every preview on this wildcard is served through",
 		}},
-	}, e.PlanSharedPreviewRemoval()
+	}, e.PlanSharedPreviewRemoval(), nil
 }
 
 func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {

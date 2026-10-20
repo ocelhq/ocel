@@ -10,9 +10,9 @@ import (
 
 const kindHostRule = "AWS::ElasticLoadBalancingV2::ListenerRule"
 
-func planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func planProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	if len(scope.Hostnames) == 0 {
-		return nil
+		return nil, nil
 	}
 	group := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
@@ -23,7 +23,7 @@ func planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	for _, hostname := range scope.Hostnames {
 		group.Changes = append(group.Changes, edge.PlanChange{Kind: kindHostRule, Name: hostname, Action: edge.PlanDelete})
 	}
-	return []edge.PlanGroup{group}
+	return []edge.PlanGroup{group}, nil
 }
 
 func refusePreviewEntry(_ context.Context, claim router.Claim) (edge.Origin, error) {

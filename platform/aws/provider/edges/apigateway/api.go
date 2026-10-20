@@ -58,11 +58,9 @@ type apiSpec struct {
 }
 
 func namespaceTags(ns account.Namespace, tier environment.Tier) map[string]string {
-	return map[string]string{
-		naming.ManagedByTagKey: string(ns),
-		cfn.TagNamespace:       string(ns),
-		naming.EnvTierTagKey:   string(tier),
-	}
+	tags := naming.OcelTags(string(ns), tier)
+	tags[cfn.TagNamespace] = string(ns)
+	return tags
 }
 
 func taggedAPIs(ctx context.Context, c Clients, tags map[string]string) (map[string]map[string]string, error) {

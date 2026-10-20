@@ -38,7 +38,7 @@ func (r Router) Hooks() router.Hooks {
 		PlanProjectRemoval:      planProjectRemoval,
 		ClaimPreviewEntry:       refusePreviewEntry,
 		DisclaimPreviewEntry:    func(context.Context, string) error { return nil },
-		PlanPreviewEntryRemoval: func(string) []edge.PlanGroup { return nil },
+		PlanPreviewEntryRemoval: func(string) ([]edge.PlanGroup, error) { return nil, nil },
 	}}
 }
 

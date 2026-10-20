@@ -143,11 +143,15 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if hosts == nil {
 		hosts = map[string]Host{}
 	}
+	backend, err := backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, binding.Hostname)
+	if err != nil {
+		return err
+	}
 	hosts[binding.Hostname] = Host{
 		App:          binding.App,
 		Certificate:  binding.Certificate,
 		Service:      served.Service,
-		Backend:      backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, binding.Hostname),
+		Backend:      backend,
 		StaticRoutes: served.StaticRoutes,
 	}
 	claimed, err := s.claim(ctx, binding.Hostname)

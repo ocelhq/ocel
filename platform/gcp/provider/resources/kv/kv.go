@@ -199,10 +199,14 @@ func (p *KV) Provision(ctx context.Context, in resources.ProvisionRequest, progr
 	if err != nil {
 		return provider.Binding{}, err
 	}
+	labels, err := names.LabelsFor(clients.Names, in.Ref, names.KVLabel, in.Resource.Name)
+	if err != nil {
+		return provider.Binding{}, err
+	}
 	current, err := instance.service.ReadInstance(ctx, instance.path)
 	switch {
 	case gcloud.Absent(err):
-		desired := store.instance(clients.Project(), clients.NetworkPath(in.Ref.Tier), names.LabelsFor(clients.Names, in.Ref, names.KVLabel, in.Resource.Name))
+		desired := store.instance(clients.Project(), clients.NetworkPath(in.Ref.Tier), labels)
 		current, err = instance.create(ctx, clients, desired, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)

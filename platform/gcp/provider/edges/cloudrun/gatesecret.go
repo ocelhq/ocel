@@ -36,7 +36,10 @@ func WriteGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, sl
 	if err != nil {
 		return err
 	}
-	name := c.GateSecret(tier, slug)
+	name, err := c.GateSecret(tier, slug)
+	if err != nil {
+		return err
+	}
 	written, err := gate.EncodeMounted(held)
 	if err != nil {
 		return err
@@ -68,7 +71,11 @@ func ReadGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, slu
 	if err != nil {
 		return nil, false, err
 	}
-	current, found, err := c.ReadSecretVersion(ctx, service, c.GateSecret(tier, slug), latestSecretVersion)
+	name, err := c.GateSecret(tier, slug)
+	if err != nil {
+		return nil, false, err
+	}
+	current, found, err := c.ReadSecretVersion(ctx, service, name, latestSecretVersion)
 	if err != nil || !found {
 		return nil, false, err
 	}
@@ -81,14 +88,22 @@ func DeleteGate(ctx context.Context, c *gcloud.Clients, tier environment.Tier, s
 	if err != nil {
 		return err
 	}
-	return c.DeleteSecret(ctx, service, c.GateSecret(tier, slug))
+	name, err := c.GateSecret(tier, slug)
+	if err != nil {
+		return err
+	}
+	return c.DeleteSecret(ctx, service, name)
 }
 
-func GateGrants(c *gcloud.Clients, spec provider.StackSpec, member string) []grants.Grant {
+func GateGrants(c *gcloud.Clients, spec provider.StackSpec, member string) ([]grants.Grant, error) {
 	if !mountsGateOnAnyService(spec) {
-		return nil
+		return nil, nil
 	}
-	return []grants.Grant{grants.On(grants.Secret, c.GateSecret(spec.Ref.Tier, spec.Ref.Project), GateReaderRole, member)}
+	name, err := c.GateSecret(spec.Ref.Tier, spec.Ref.Project)
+	if err != nil {
+		return nil, err
+	}
+	return []grants.Grant{grants.On(grants.Secret, name, GateReaderRole, member)}, nil
 }
 
 func mountsGateOnAnyService(spec provider.StackSpec) bool {
@@ -130,7 +145,11 @@ func ProvisionGate(ctx context.Context, c *gcloud.Clients, spec provider.StackSp
 		}
 		return GatedServing{env: map[string]string{gate.MountedInlineVar: string(encoded)}}, nil
 	}
-	mount := gateMount(c.GateSecret(tier, slug))
+	name, err := c.GateSecret(tier, slug)
+	if err != nil {
+		return GatedServing{}, err
+	}
+	mount := gateMount(name)
 	return GatedServing{
 		env:    map[string]string{gate.MountedFileVar: mount.Dir + "/" + mount.File},
 		mounts: []run.SecretMount{mount},

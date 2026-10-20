@@ -149,27 +149,17 @@ func ProjectScope(project string) (StorageScope, error) {
 	return StorageScope{project: project}, nil
 }
 
-func EnvScope(project, env string) (StorageScope, error) {
-	scope, err := ProjectScope(project)
-	if err != nil {
-		return StorageScope{}, err
-	}
-	if err := Validate("env", env); err != nil {
-		return StorageScope{}, err
-	}
-	scope.env = env
-	return scope, nil
-}
-
 func AppScope(c Coordinate) (StorageScope, error) {
-	scope, err := EnvScope(c.Project, c.Env)
+	scope, err := ProjectScope(c.Project)
 	if err != nil {
 		return StorageScope{}, err
 	}
-	if err := Validate("app", c.App); err != nil {
-		return StorageScope{}, err
+	for _, field := range []struct{ name, value string }{{"env", c.Env}, {"app", c.App}} {
+		if err := Validate(field.name, field.value); err != nil {
+			return StorageScope{}, err
+		}
 	}
-	scope.app = c.App
+	scope.env, scope.app = c.Env, c.App
 	return scope, nil
 }
 
@@ -200,12 +190,6 @@ func (s StorageScope) Prefix(kind ObjectKind) (string, error) {
 	return prefix, nil
 }
 
-type ParsedObjectKey struct {
-	Kind       ObjectKind
-	Coordinate Coordinate
-	Rest       string
-}
-
 const coordinateSegments = 4
 
 func ParseObjectKind(key string) (ObjectKind, error) {
@@ -214,28 +198,6 @@ func ParseObjectKind(key string) (ObjectKind, error) {
 		return "", fmt.Errorf("object key %q starts with %q, which is no kind of object Ocel stores", key, kind)
 	}
 	return kind, nil
-}
-
-func ParseObjectKey(key string) (ParsedObjectKey, error) {
-	segments := strings.SplitN(key, PathSeparator, coordinateSegments+2)
-	if len(segments) < coordinateSegments+2 {
-		return ParsedObjectKey{}, fmt.Errorf("object key %q names no kind, project, env, app, release and object", key)
-	}
-	kind := ObjectKind(segments[0])
-	if kind.Class() == "" || kind == ObjectPayloads {
-		return ParsedObjectKey{}, fmt.Errorf("object key %q starts with %q, which is no kind keyed by a coordinate", key, kind)
-	}
-	coordinate, err := ParseStorageCoordinate(strings.Join(segments[1:coordinateSegments+1], PathSeparator))
-	if err != nil {
-		return ParsedObjectKey{}, fmt.Errorf("object key %q: %w", key, err)
-	}
-	rest := segments[coordinateSegments+1]
-	for _, segment := range strings.Split(rest, PathSeparator) {
-		if segment == "" || segment == "." || segment == ".." {
-			return ParsedObjectKey{}, fmt.Errorf("object key %q has an empty, %q or %q segment after its release", key, ".", "..")
-		}
-	}
-	return ParsedObjectKey{Kind: kind, Coordinate: coordinate, Rest: rest}, nil
 }
 
 func ParseStorageCoordinate(value string) (Coordinate, error) {

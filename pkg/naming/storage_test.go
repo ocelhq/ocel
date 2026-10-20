@@ -37,7 +37,6 @@ type storageKeysFixture struct {
 		Coordinate fixtureCoordinate `json:"coordinate"`
 	} `json:"coordinates"`
 	InvalidCoordinates []string `json:"invalidCoordinates"`
-	Invalid            []string `json:"invalid"`
 }
 
 func readStorageKeys(t *testing.T) storageKeysFixture {
@@ -66,19 +65,6 @@ func coordinateOf(t *testing.T, c fixtureCoordinate) naming.Coordinate {
 	return coordinate
 }
 
-func TestAnObjectKeyParsesToTheKindAndCoordinateTheEdgeContractReadsFromIt(t *testing.T) {
-	for _, want := range readStorageKeys(t).Keys {
-		got, err := naming.ParseObjectKey(want.Key)
-		if err != nil {
-			t.Errorf("ParseObjectKey(%q) = %v", want.Key, err)
-			continue
-		}
-		if got.Kind != naming.ObjectKind(want.Kind) || got.Coordinate != coordinateOf(t, want.fixtureCoordinate) || got.Rest != want.Rest {
-			t.Errorf("ParseObjectKey(%q) = %+v, want %+v", want.Key, got, want)
-		}
-	}
-}
-
 func TestAnObjectKeyIsTheKindThenTheCoordinateThenTheRest(t *testing.T) {
 	for _, want := range readStorageKeys(t).Keys {
 		coordinate := coordinateOf(t, want.fixtureCoordinate)
@@ -103,10 +89,6 @@ func TestAStorageScopeNamesTheObjectsOfAProjectAnAppOrARelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env, err := naming.EnvScope("shop", "pr-7")
-	if err != nil {
-		t.Fatal(err)
-	}
 	app, err := naming.AppScope(release)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +102,6 @@ func TestAStorageScopeNamesTheObjectsOfAProjectAnAppOrARelease(t *testing.T) {
 		want  string
 	}{
 		{project, "use-cache/shop/"},
-		{env, "use-cache/shop/pr-7/"},
 		{app, "use-cache/shop/pr-7/web/"},
 		{released, "use-cache/shop/pr-7/web/" + release.Release.String() + "/"},
 	} {
@@ -137,10 +118,11 @@ func TestAStorageScopeNamesTheObjectsOfAProjectAnAppOrARelease(t *testing.T) {
 func TestAStorageScopeWithAMissingOrMalformedFieldIsRefused(t *testing.T) {
 	release := naming.NewReleaseToken("b1", "f1")
 	for name, build := range map[string]func() (naming.StorageScope, error){
-		"an empty project":       func() (naming.StorageScope, error) { return naming.ProjectScope("") },
-		"an uppercase project":   func() (naming.StorageScope, error) { return naming.ProjectScope("Shop") },
-		"an env with no project": func() (naming.StorageScope, error) { return naming.EnvScope("", "pr-7") },
-		"an env with no env":     func() (naming.StorageScope, error) { return naming.EnvScope("shop", "") },
+		"an empty project":     func() (naming.StorageScope, error) { return naming.ProjectScope("") },
+		"an uppercase project": func() (naming.StorageScope, error) { return naming.ProjectScope("Shop") },
+		"an app with no project": func() (naming.StorageScope, error) {
+			return naming.AppScope(naming.Coordinate{Env: "pr-7", App: "web"})
+		},
 		"an app with no env": func() (naming.StorageScope, error) {
 			return naming.AppScope(naming.Coordinate{Project: "shop", App: "web"})
 		},
@@ -219,14 +201,6 @@ func TestTheRuntimeLearnsTheStorageCoordinateAndEveryBucketButState(t *testing.T
 		"OCEL_EDGE_BUCKET":        "e",
 	}) {
 		t.Errorf("StorageEnv() of an origin with only an edge bucket = %v, want the coordinate and that bucket", got)
-	}
-}
-
-func TestAKeyOutsideEveryCoordinateKeyedKindIsRefused(t *testing.T) {
-	for _, key := range readStorageKeys(t).Invalid {
-		if got, err := naming.ParseObjectKey(key); err == nil {
-			t.Errorf("ParseObjectKey(%q) = %+v, want an error", key, got)
-		}
 	}
 }
 

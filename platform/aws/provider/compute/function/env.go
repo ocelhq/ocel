@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
-func AppEnv(spec provider.StackSpec, buckets naming.Buckets, bundle variables.Bundle, sessions bucket.Sessions, stateTable string) map[string]string {
+func AppEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Sessions, stateTable string) map[string]string {
 	app := spec.App
-	env := naming.StorageEnv(app.Storage, buckets)
+	env := map[string]string{}
 	if app.Router != "" {
 		env[routerKindEnv] = string(app.Router)
 	}
@@ -26,6 +26,9 @@ func AppEnv(spec provider.StackSpec, buckets naming.Buckets, bundle variables.Bu
 		}
 		if !isForwardedPastEdge(spec) {
 			maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
+			if facts.InvalidatesByCacheTag {
+				maps.Copy(env, naming.StorageEnv(app.Storage, nil))
+			}
 		}
 	}
 	if app.OcelRouteTable != nil {

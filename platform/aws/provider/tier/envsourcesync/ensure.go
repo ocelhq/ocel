@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/lambdapart"
 )
 
@@ -163,10 +164,9 @@ func ensureFunction(ctx context.Context, c Clients, at placed) error {
 func ensureSchedule(ctx context.Context, c Clients, at placed) error {
 	_, err := c.Scheduler.CreateScheduleGroup(ctx, &scheduler.CreateScheduleGroupInput{
 		Name: aws.String(at.names.ScheduleGroup),
-		Tags: []schedulertypes.Tag{
-			{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(at.spec.Namespace)},
-			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(at.spec.Tier))},
-		},
+		Tags: tags.Sorted(naming.OcelTags(at.spec.Namespace, at.spec.Tier), func(key, value *string) schedulertypes.Tag {
+			return schedulertypes.Tag{Key: key, Value: value}
+		}),
 	})
 	var conflict *schedulertypes.ConflictException
 	if err != nil && !errors.As(err, &conflict) {

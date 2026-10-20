@@ -295,7 +295,7 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
 	spec := provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}
 
-	env := function.AppEnv(spec, nil, variables.Bundle{}, bucket.Sessions{}, "")
+	env := function.AppEnv(spec, variables.Bundle{}, bucket.Sessions{}, "")
 
 	if got, set := env[processenv.PhaseEnvVar]; set {
 		t.Errorf("%s = %q, want a release that provisions to name no phase at all", processenv.PhaseEnvVar, got)

@@ -141,7 +141,7 @@ func namedFunction(stack naming.StackName, logical string) component.Name {
 }
 
 func namedRole(stack naming.StackName) component.Name {
-	name, err := RoleName(testNamespace, component.AppRoleCoordinate("shop", stack))
+	name, err := component.RoleName(testNamespace, component.AppRoleCoordinate("shop", stack))
 	if err != nil {
 		panic(err)
 	}

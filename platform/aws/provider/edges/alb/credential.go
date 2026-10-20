@@ -26,7 +26,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:CreateTrustStore"},
-			Resources: slices.Concat(s.ContainerBalancerARNs(), []string{iam.AppTargetGroupARN, s.ContainerTrustStoreARN()}),
+			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerTargetGroupARNs(), []string{s.ContainerTrustStoreARN()}),
 			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
@@ -61,12 +61,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"elasticloadbalancing:SetSecurityGroups",
 				"elasticloadbalancing:SetSubnets",
 			},
-			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), []string{iam.AppTargetGroupARN}),
+			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), s.ContainerTargetGroupARNs()),
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags"},
-			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), []string{iam.AppTargetGroupARN, s.ContainerTrustStoreARN()}),
+			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), s.ContainerTargetGroupARNs(), []string{s.ContainerTrustStoreARN()}),
 			Condition: s.TaggedOnCreateForItsTier(),
 		},
 	}

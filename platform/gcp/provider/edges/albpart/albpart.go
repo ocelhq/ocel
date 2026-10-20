@@ -58,7 +58,7 @@ var Part = bootstrap.RemovablePart{Part: provider.Part{Name: PartName, Summary: 
 
 func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 	var resources []provider.PartResource
-	for _, shaped := range alb.ShapeLoadBalancer(string(b.Clients.Namespace()), tier, "") {
+	for _, shaped := range alb.ShapeLoadBalancer(string(b.Clients.Namespace()), tier) {
 		resources = append(resources, provider.PartResource{Kind: shaped.Type, ID: shaped.Name})
 	}
 	resources = append(resources, provider.PartResource{Kind: string(bootstrap.KindRepository), ID: b.Clients.Repository(tier) + PluginRepository})

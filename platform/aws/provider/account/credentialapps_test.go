@@ -10,7 +10,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
@@ -133,12 +135,78 @@ func TestEveryCredentialListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) 
 	}
 }
 
+func TestACredentialManagesOnlyTheTargetGroupsAndTaskFamiliesOcelNames(t *testing.T) {
+	const (
+		targetGroupARN    = "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/"
+		taskDefinitionARN = "arn:aws:ecs:us-east-1:111122223333:task-definition/"
+		stranger          = "payroll"
+	)
+	ns := string(defaultNamespace)
+	release, err := naming.ParseReleaseToken("r1a2b3c4d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stack := naming.AppStack("prod", "web", release)
+	service, err := container.NamesFor(ns, "shop", stack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker, err := container.WorkerServiceName(ns, "shop", "prod", "web", "mailer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tier := range bothTiers {
+		targetGroups := []string{service.TargetGroup, awsports.PublicTargetGroupName(ns, tier)}
+		families := []string{service.Service, worker, bastion.NameFor(ns, tier)}
+		owned := appResourceOf(tier, nil)
+		creating := requestContext{
+			"aws:RequestTag/" + naming.ManagedByTagKey: ns,
+			"aws:RequestTag/" + naming.EnvTierTagKey:   string(tier),
+		}
+		_, document := renderedCredentialsOf(t, tier)
+		for _, group := range targetGroups {
+			arn := targetGroupARN + group + "/0123456789abcdef"
+			if !allows(t, document, "elasticloadbalancing:CreateTargetGroup", arn, creating) {
+				t.Errorf("the %s deploy credential cannot create %s, a target group Ocel makes", tier, group)
+			}
+			for _, action := range []string{"elasticloadbalancing:ModifyTargetGroup", "elasticloadbalancing:DeleteTargetGroup"} {
+				if !allows(t, document, action, arn, owned) {
+					t.Errorf("the %s deploy credential cannot %s on %s, a target group Ocel makes", tier, action, group)
+				}
+			}
+		}
+		for _, family := range families {
+			if !allows(t, document, "ecs:RegisterTaskDefinition", taskDefinitionARN+family+":1", creating) {
+				t.Errorf("the %s deploy credential cannot register %s, a task family Ocel makes", tier, family)
+			}
+		}
+		for _, c := range []struct {
+			action, arn string
+			request     requestContext
+		}{
+			{"elasticloadbalancing:CreateTargetGroup", targetGroupARN + stranger + "/0123456789abcdef", creating},
+			{"elasticloadbalancing:ModifyTargetGroup", targetGroupARN + stranger + "/0123456789abcdef", owned},
+			{"elasticloadbalancing:DeleteTargetGroup", targetGroupARN + stranger + "/0123456789abcdef", owned},
+			{"elasticloadbalancing:AddTags", targetGroupARN + stranger + "/0123456789abcdef", creating},
+			{"ecs:RegisterTaskDefinition", taskDefinitionARN + stranger + ":1", creating},
+		} {
+			if allows(t, document, c.action, c.arn, c.request) {
+				t.Errorf("the %s deploy credential can %s on %s, which carries Ocel's tags under a name Ocel never gives", tier, c.action, c.arn)
+			}
+		}
+	}
+}
+
 func TestEveryCredentialScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
 	unscopable := []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"}
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
-		if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: iam.AppTaskDefinitionARN, condition: conditionJSON(t, defaultNamespace.Scope(tierOf(purpose)).TaggedOnCreateForItsTier())}] {
-			t.Errorf("the %s credential does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", purpose, iam.AppTaskDefinitionARN)
+		scope := defaultNamespace.Scope(tierOf(purpose))
+		registered := []string{scope.AppTaskDefinitionARN(), bastion.TaskDefinitionARN(scope.Namespace, scope.Tier)}
+		for _, family := range registered {
+			if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: family, condition: conditionJSON(t, scope.TaggedOnCreateForItsTier())}] {
+				t.Errorf("the %s credential does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", purpose, family)
+			}
 		}
 		for _, action := range unscopable {
 			if !grants[grant{action: action, resource: iam.AnyResource, condition: conditionJSON(t, nil)}] {
@@ -146,7 +214,7 @@ func TestEveryCredentialScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
 			}
 		}
 		for g := range grants {
-			if g.action == "ecs:RegisterTaskDefinition" && g.resource != iam.AppTaskDefinitionARN {
+			if g.action == "ecs:RegisterTaskDefinition" && !slices.Contains(registered, g.resource) {
 				t.Errorf("the %s credential grants ecs:RegisterTaskDefinition on %s, which reaches past the task definitions a deploy registers", purpose, g.resource)
 			}
 			if slices.Contains(unscopable, g.action) && g.resource != iam.AnyResource {

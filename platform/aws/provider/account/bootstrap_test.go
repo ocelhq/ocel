@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"path"
 	"reflect"
 	"slices"
@@ -213,6 +214,12 @@ func outputs(pairs map[string]string) stubStack {
 	return out
 }
 
+func coreOutputs(pairs map[string]string) stubStack {
+	all := fixtureBucketOutputs(environment.TierProduction)
+	maps.Copy(all, pairs)
+	return outputs(all)
+}
+
 func TestCheckDeployed(t *testing.T) {
 	t.Run("parses outputs", func(t *testing.T) {
 		core := map[string]string{
@@ -259,7 +266,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("reads preview tier marker", func(t *testing.T) {
-		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierPreview)})}
+		api := stubStacksAPI{coreStackName: coreOutputs(map[string]string{outputInfraTier: string(environment.TierPreview)})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -272,7 +279,7 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a part stack is what says the part is on", func(t *testing.T) {
 		api := stubStacksAPI{
-			coreStackName:                            outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).stamped(Stamp{}),
+			coreStackName:                            coreOutputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).stamped(Stamp{}),
 			coreStackName + "-" + CloudflareEdgePart: outputs(nil).stamped(Stamp{}),
 		}
 
@@ -286,7 +293,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("the base roles the parts run as reach the flat fields a deploy reads", func(t *testing.T) {
-		api := stubStacksAPI{coreStackName: outputs(map[string]string{
+		api := stubStacksAPI{coreStackName: coreOutputs(map[string]string{
 			outputInfraTier:             string(environment.TierProduction),
 			outputTagInvalidatorRoleARN: "arn:aws:iam::111122223333:role/ocel/production/bootstrap/ocel-invalidator",
 			OutputEdgeInvokeRoleARN:     "arn:aws:iam::111122223333:role/ocel-edge-invoke",
@@ -303,7 +310,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("a stack whose digest moved reads as stale", func(t *testing.T) {
-		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).
+		api := stubStacksAPI{coreStackName: coreOutputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).
 			stamped(Stamp{Digest: "stale"})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)

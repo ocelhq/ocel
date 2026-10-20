@@ -113,7 +113,10 @@ func balancer() map[string]string {
 }
 
 func (w *world) Up(_ context.Context, target Target, program Program, _ progress.Log) (map[string]string, error) {
-	stack := target.Name()
+	stack, err := target.Name()
+	if err != nil {
+		return nil, err
+	}
 	if program == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
 	}
@@ -184,18 +187,26 @@ func trustConfigOf(seen map[string]declaration) ([]string, bool) {
 }
 
 func (w *world) Destroy(_ context.Context, target Target, _ progress.Log) error {
+	stack, err := target.Name()
+	if err != nil {
+		return err
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.destroys = append(w.destroys, target.Name())
-	delete(w.backends, target.Name())
-	delete(w.declared, target.Name())
+	w.destroys = append(w.destroys, stack)
+	delete(w.backends, stack)
+	delete(w.declared, stack)
 	return nil
 }
 
 func (w *world) Outputs(_ context.Context, target Target) (map[string]string, error) {
+	stack, err := target.Name()
+	if err != nil {
+		return nil, err
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return maps.Clone(w.outputs[target.Name()]), nil
+	return maps.Clone(w.outputs[stack]), nil
 }
 
 func (w *world) Route(_ context.Context, urlMap, hostname, backend string, routes *StaticRoutes) error {
@@ -405,7 +416,7 @@ func (w *world) servedRevision(slug string, tier environment.Tier, hostnames []s
 		if !ok || backend == notFoundBackend {
 			continue
 		}
-		run, _ := declared[negName("ocel", slug, tier, hostname)].Args["cloudRun"].(map[string]any)
+		run, _ := declared[must(negName("ocel", slug, tier, hostname))].Args["cloudRun"].(map[string]any)
 		service, _ := run["service"].(string)
 		tag, _ := run["tag"].(string)
 		if tag == "" {

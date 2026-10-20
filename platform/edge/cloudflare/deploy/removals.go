@@ -2,7 +2,7 @@ package cloudflare
 
 import "github.com/ocelhq/ocel/pkg/edge"
 
-func (p *cloudflare) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *cloudflare) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	changes := []edge.PlanChange{{
 		Kind:   kindWorker,
 		Name:   scope.Slug,
@@ -27,10 +27,10 @@ func (p *cloudflare) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGrou
 		Name:    edge.EdgeGroupName(Kind),
 		Action:  edge.PlanDelete,
 		Changes: changes,
-	}}
+	}}, nil
 }
 
-func (p *cloudflare) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *cloudflare) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup, error) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -47,7 +47,7 @@ func (p *cloudflare) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup
 		Action: edge.PlanKeep,
 		Reason: "bootstrap-scoped: `ocel bootstrap destroy preview` removes what bootstrap provisioned",
 	}
-	return removed, kept
+	return removed, kept, nil
 }
 
 func (p *cloudflare) PlanSharedPreviewRemoval() edge.PlanGroup {

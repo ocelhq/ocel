@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
 )
 
@@ -350,10 +351,9 @@ func createDistribution(ctx context.Context, c Clients, spec distributionSpec, a
 	out, err := c.CloudFront.CreateDistributionWithTags(ctx, &cloudfront.CreateDistributionWithTagsInput{
 		DistributionConfigWithTags: &cftypes.DistributionConfigWithTags{
 			DistributionConfig: spec.config(aliases, certificate),
-			Tags: &cftypes.Tags{Items: []cftypes.Tag{
-				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(spec.managedBy)},
-				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(spec.tier))},
-			}},
+			Tags: &cftypes.Tags{Items: tags.Sorted(naming.OcelTags(spec.managedBy, spec.tier), func(key, value *string) cftypes.Tag {
+				return cftypes.Tag{Key: key, Value: value}
+			})},
 		},
 	})
 	if err != nil {

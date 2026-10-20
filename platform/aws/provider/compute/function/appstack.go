@@ -125,7 +125,7 @@ func (a AppStack) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) er
 		return renderDispatchInvokePolicy(siblings, account, optimizer)
 	}).(pulumi.StringOutput)
 
-	role, err := RoleName(a.Namespace, component.AppRoleCoordinate(a.Project, a.Stack))
+	role, err := component.RoleName(a.Namespace, component.AppRoleCoordinate(a.Project, a.Stack))
 	if err != nil {
 		return err
 	}

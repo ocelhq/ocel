@@ -120,8 +120,9 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 	}
 	name, completerName := names.Bucket, names.Completer
 	tags := component.Tags(at.Kind, "", args.Tags)
-	tags[naming.ManagedByTagKey] = pulumi.String(stack.Namespace)
-	tags[naming.EnvTierTagKey] = pulumi.String(string(stack.Tier()))
+	for key, value := range naming.OcelTags(stack.Namespace, stack.Tier()) {
+		tags[key] = pulumi.String(value)
+	}
 
 	bucket, err := s3.NewBucketV2(ctx, name.Pulumi, &s3.BucketV2Args{
 		Bucket:       name.AWS,

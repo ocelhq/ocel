@@ -717,13 +717,13 @@ func TestEveryPreviewBackendAndTheAssetsBucketMarkTheirResponsesNoindex(t *testi
 	preview := bindingProgram(bindingSpec{
 		Namespace: "ocel",
 		Region:    "europe-west1", Slug: "shop", Tier: environment.TierPreview, CertificateMap: "certs",
-		Hosts: map[string]Host{aliasHost: {Service: previewService, Backend: backendName("ocel", "shop", environment.TierPreview, aliasHost)}},
+		Hosts: map[string]Host{aliasHost: {Service: previewService, Backend: must(backendName("ocel", "shop", environment.TierPreview, aliasHost))}},
 	})
 	seen, err := declared(preview)
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend := seen[backendName("ocel", "shop", environment.TierPreview, aliasHost)]
+	backend := seen[must(backendName("ocel", "shop", environment.TierPreview, aliasHost))]
 	if headers, _ := backend.Args["customResponseHeaders"].([]any); len(headers) != 1 || headers[0] != "X-Robots-Tag: noindex" {
 		t.Errorf("a preview backend adds %v to its responses, want X-Robots-Tag: noindex: the plugin cannot add a header to a response", headers)
 	}

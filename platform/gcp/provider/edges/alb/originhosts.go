@@ -69,7 +69,11 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 	if err != nil {
 		return err
 	}
-	record := originHostRecord{Slug: host.Slug, Service: host.Service, Tag: host.Tag, Revision: host.Revision, Backend: backendName(e.deps.Namespace, host.Slug, host.Tier, host.Hostname)}
+	backend, err := backendName(e.deps.Namespace, host.Slug, host.Tier, host.Hostname)
+	if err != nil {
+		return err
+	}
+	record := originHostRecord{Slug: host.Slug, Service: host.Service, Tag: host.Tag, Revision: host.Revision, Backend: backend}
 	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.originHostKey(host.Tier, host.Hostname))
 	if err != nil {
 		return fmt.Errorf("read whether %s is routed on the %s edge: %w", host.Hostname, Kind, err)
@@ -214,8 +218,11 @@ func (e *Edge) UnrouteOriginHost(ctx context.Context, tier environment.Tier, hos
 
 func originHostProgram(namespace, region string, host OriginHost, record originHostRecord) Program {
 	return func(ctx *pulumi.Context, project string) error {
-		return servingBackend(ctx, pulumi.String(project), region,
-			negName(namespace, host.Slug, host.Tier, host.Hostname),
+		neg, err := negName(namespace, host.Slug, host.Tier, host.Hostname)
+		if err != nil {
+			return err
+		}
+		return servingBackend(ctx, pulumi.String(project), region, neg,
 			Host{Service: host.Service, Tag: host.Tag, Backend: record.Backend}, nil, nil)
 	}
 }

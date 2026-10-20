@@ -17,7 +17,8 @@ import (
 
 const (
 	fakeStateTable  = "ocel-state"
-	fakeEdgeBucket  = "ocel-prod-edge-k3x9q2"
+	fakeBucketTag   = "k3x9q2"
+	fakeEdgeBucket  = "ocel-prod-edge-" + fakeBucketTag
 	fakeRegion      = "eu-west-1"
 	fakeAccount     = "123456789012"
 	fakeInvokeRole  = "arn:aws:iam::" + fakeAccount + ":role/ocel-edge-invoke"

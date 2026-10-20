@@ -117,9 +117,8 @@ func routePattern(hostname string) string {
 	return hostname + "/*"
 }
 
-func (p *cloudflare) ProjectOwner(slug string, tier environment.Tier) string {
-	name, _ := entryWorkerName(p.namespace, slug, tier)
-	return name
+func (p *cloudflare) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+	return entryWorkerName(p.namespace, slug, tier)
 }
 
 func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, error) {

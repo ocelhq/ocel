@@ -31,10 +31,17 @@ func accountNameFor(what, namespace string, tier environment.Tier, stem string) 
 	if namespace == "" {
 		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this tier depends on", what)
 	}
-	if tier != environment.TierProduction && tier != environment.TierPreview {
-		return "", fmt.Errorf("%s: unknown tier %q", what, tier)
+	if err := refuseUnknownTier(what, tier); err != nil {
+		return "", err
 	}
 	return naming.OcelName(namespace, tier, stem), nil
+}
+
+func refuseUnknownTier(what string, tier environment.Tier) error {
+	if !slices.Contains(workerTiers, tier) {
+		return fmt.Errorf("%s: unknown tier %q", what, tier)
+	}
+	return nil
 }
 
 type durableObjectClass struct {
@@ -200,12 +207,16 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 	}
 
+	owns, err := projectOwnsScript(p.namespace, slug)
+	if err != nil {
+		return nil, err
+	}
 	if err := p.reconcileWorkerRoutes(ctx, genericUp, routeSpec{
 		desired:         spec.Domains,
 		bound:           prior.Bound,
 		servedElsewhere: spec.ServedElsewhere,
 		routed:          recorded.Routed,
-		owns:            projectOwnsScript(p.namespace, slug),
+		owns:            owns,
 	}, spec.Warn); err != nil {
 		return nil, err
 	}

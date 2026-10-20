@@ -93,7 +93,7 @@ describe("deployedSlugs", () => {
   it("reports nothing when no bootstrap stack exists", async () => {
     const { cli } = cliOver(() => {
       throw Object.assign(new Error("Command failed"), {
-        stderr: "ValidationError: Stack with id ocel-bootstrap does not exist",
+        stderr: "ValidationError: Stack with id ocel-prod-bootstrap does not exist",
       });
     });
     assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), []);
@@ -173,9 +173,9 @@ describe("exists", () => {
 describe("releaseLocks", () => {
   it("removes only the locks under the slug's own backend in the namespace's state bucket", async () => {
     const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : ""));
-    await awsStore(undefined, cli, "j-9-deploy-next").releaseLocks("j-9-deploy-next");
+    await awsStore(undefined, cli, "j-9-next").releaseLocks("j-9-deploy-next");
     assert.ok(
-      calls.filter(describeStacks).every((args) => args.includes("j-9-deploy-next-bootstrap")),
+      calls.filter(describeStacks).every((args) => args.includes("j-9-next-prod-bootstrap")),
     );
     assert.deepEqual(
       calls.filter((args) => args[0] === "s3"),
@@ -366,14 +366,14 @@ describe("the namespace a store reads under", () => {
   it("reads the default bootstrap stack when no namespace is named", async () => {
     const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
     await awsStore(undefined, cli).deployedSlugs();
-    const named = calls.find(describeStacks)?.includes("ocel-bootstrap");
-    assert.ok(named, "the store read a stack other than ocel-bootstrap");
+    const named = calls.find(describeStacks)?.includes("ocel-prod-bootstrap");
+    assert.ok(named, "the store read a stack other than ocel-prod-bootstrap");
   });
 
   it("reads the bootstrap of the namespace it was given", async () => {
     const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
-    await awsStore(undefined, cli, "j-1874-deploy-node").deployedSlugs();
-    const named = calls.find(describeStacks)?.includes("j-1874-deploy-node-bootstrap");
+    await awsStore(undefined, cli, "j-1874-node").deployedSlugs();
+    const named = calls.find(describeStacks)?.includes("j-1874-node-prod-bootstrap");
     assert.ok(named, "the store did not read the namespaced bootstrap stack");
   });
 });
