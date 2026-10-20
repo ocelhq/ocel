@@ -219,3 +219,21 @@ func TestUntaggingAgainstAnEmulatorThatServesNoTagsLooksForNothing(t *testing.T)
 		t.Errorf("untagging against an emulator that serves no tags answered %v, want nothing asked of it", err)
 	}
 }
+
+func TestABindingListedUnderTheProjectNumberIsKnownByItsValue(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clients, tags := taggedClients(t)
+	topic := clients.PubSubTagged("projects/acme-prod/topics/shop-orders")
+	if err := clients.EnsureTierTag(ctx, environment.TierProduction, topic); err != nil {
+		t.Fatal(err)
+	}
+	tags.Mu.Lock()
+	tags.NumberedNames = true
+	tags.Mu.Unlock()
+
+	bound, err := clients.HasTierTag(ctx, environment.TierProduction, topic)
+	if err != nil || !bound {
+		t.Errorf("HasTierTag() over a binding named 123456789/ocel-tier/production = %v, %v, want true: Google may name a value by the project number", bound, err)
+	}
+}

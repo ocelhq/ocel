@@ -275,10 +275,7 @@ func (c *Clients) boundValue(ctx context.Context, target TaggedResource) (boundT
 		return boundTag{}, fmt.Errorf("read the tags bound to %s: %w", target.Name, err)
 	}
 	for _, binding := range listed.TagBindings {
-		path := binding.TagValueNamespacedName
-		if path == "" {
-			path = c.knownValuePath(binding.TagValue)
-		}
+		path := cmp.Or(c.knownValuePath(binding.TagValue), binding.TagValueNamespacedName)
 		if strings.HasPrefix(path, c.TierTagKeyPath()+"/") {
 			return boundTag{binding: binding.Name, value: binding.TagValue, path: path}, nil
 		}
