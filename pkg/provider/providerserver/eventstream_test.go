@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type recordingStream struct {
@@ -198,6 +199,36 @@ func TestEventStreamFailPassesARefusalBackToTheCaller(t *testing.T) {
 	}
 	if result := events[1].GetResult(); result.GetSuccess() || result.GetRefused() || result.GetError() != "the engine gave up" {
 		t.Fatalf("result success=%t refused=%t error=%q, want the failure reported as an unsuccessful result", result.GetSuccess(), result.GetRefused(), result.GetError())
+	}
+}
+
+func TestEventStreamFailNamesTheConnectCodeARefusalCarriesAndNoneForAFailure(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+
+	if err := sender.fail(provider.RefusalError(refusal.Refuse(refusal.CodeUnsupported, "this provider runs no serverless app"))); err != nil {
+		t.Fatalf("fail(unsupported) = %v, want nil so the refusal travels as a result event", err)
+	}
+	if err := sender.fail(provider.RefusalError(errors.New("the engine gave up"))); err != nil {
+		t.Fatalf("fail(failure) = %v, want nil", err)
+	}
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+
+	events := stream.recorded()
+	if got := events[0].GetResult().GetConnectCode(); got != "unimplemented" {
+		t.Errorf("an unsupported refusal's result names connect code %q, want %q", got, "unimplemented")
+	}
+	if got := events[1].GetResult().GetConnectCode(); got != "" {
+		t.Errorf("a plain failure's result names connect code %q, want none", got)
+	}
+	for _, event := range events {
+		if err := protovalidate.Validate(event); err != nil {
+			t.Errorf("result %v breaks the wire contract: %v", event.GetResult(), err)
+		}
 	}
 }
 

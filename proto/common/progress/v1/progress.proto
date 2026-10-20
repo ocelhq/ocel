@@ -160,6 +160,8 @@ message OperationResult {
   int64 promoted_at_seconds = 12;
 
   ProtectionPublished protection = 13;
+
+  string connect_code = 14 [(buf.validate.field).string.pattern = "^[a-z_]*$"];
 }
 
 message ProtectionPublished {

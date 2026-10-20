@@ -1165,6 +1165,11 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
+        "^(connect_code)$": {
+          "default": "",
+          "pattern": "^[a-z_]*$",
+          "type": "string"
+        },
         "^(promoted_at_seconds)$": {
           "anyOf": [
             {
@@ -1194,6 +1199,11 @@
             "$ref": "#/$defs/common.progress.v1.AppResult.jsonschema.json"
           },
           "type": "array"
+        },
+        "connectCode": {
+          "default": "",
+          "pattern": "^[a-z_]*$",
+          "type": "string"
         },
         "connector": {
           "$ref": "#/$defs/common.progress.v1.ConnectorInstalled.jsonschema.json"

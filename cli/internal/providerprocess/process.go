@@ -96,7 +96,8 @@ func (e *VersionMismatchError) Error() string {
 }
 
 type OperationFailedError struct {
-	Message string
+	Message     string
+	ConnectCode string
 }
 
 func (e *OperationFailedError) Error() string {
@@ -399,7 +400,7 @@ func (r *Process) driveStream(rpc string, stream *connect.ServerStreamForClient[
 			if result.GetSuccess() {
 				return result, nil
 			}
-			return result, &OperationFailedError{Message: result.GetError()}
+			return result, &OperationFailedError{Message: result.GetError(), ConnectCode: result.GetConnectCode()}
 		}
 	}
 
