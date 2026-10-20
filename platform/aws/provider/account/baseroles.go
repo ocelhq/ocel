@@ -46,7 +46,7 @@ func tagInvalidatorRoleResource(ns Namespace, tier environment.Tier) cfn.Resourc
 						Actions:        []string{"cloudfront:CreateInvalidation"},
 						ResourceValues: []any{cfn.Sub("arn:aws:cloudfront::${AWS::AccountId}:distribution/*")},
 						Condition: map[string]any{"StringEquals": map[string]any{
-							"aws:ResourceTag/" + iam.ManagedByTagKey:  iam.ManagedByTagValue,
+							"aws:ResourceTag/" + iam.ManagedByTagKey:  string(ns),
 							"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier),
 						}},
 					},
@@ -74,7 +74,7 @@ func edgeInvokeRoleResource(ns Namespace, tier environment.Tier) cfn.Resource {
 		ID:   "EdgeInvokeRole",
 		Type: "AWS::IAM::Role",
 		Metadata: cfn.Metadata{
-			Description: "The role API Gateway assumes to invoke this account's root functions and to read a release's static assets out of the asset bucket. Every REST API Ocel raises in the " + string(tier) + " tier names it, so deleting it blanks every deployment API Gateway fronts.",
+			Description: "The role API Gateway assumes to invoke this account's root functions and to read a release's static assets out of the edge bucket. Every REST API Ocel raises in the " + string(tier) + " tier names it, so deleting it blanks every deployment API Gateway fronts.",
 		},
 		Properties: map[string]any{
 			"RoleName":                 ns.EdgeInvokeRoleName(tier),
@@ -91,7 +91,7 @@ func edgeInvokeRoleResource(ns Namespace, tier environment.Tier) cfn.Resource {
 							"aws:ResourceTag/" + naming.EnvTierTagKey: string(tier),
 						}},
 					},
-					{Actions: []string{"s3:GetObject"}, ResourceValues: []any{cfn.Sub("${AssetBucket.Arn}/*")}},
+					{Actions: []string{"s3:GetObject"}, ResourceValues: []any{cfn.Sub("${EdgeBucket.Arn}/" + string(naming.ObjectAssets) + "/*")}},
 				}),
 			}},
 		},

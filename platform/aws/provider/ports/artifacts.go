@@ -39,17 +39,23 @@ type Stores interface {
 }
 
 type Buckets struct {
-	Functions string
-	Assets    string
+	Artifacts string
+	Edge      string
+	Cache     string
 }
 
 func (b Buckets) Buckets(context.Context, environment.Tier) (Buckets, error) { return b, nil }
 
 func (b Buckets) Holding(kind naming.ObjectKind) string {
-	if kind == naming.ObjectFunction || kind == naming.ObjectPayloads {
-		return b.Functions
+	switch kind.Class() {
+	case naming.StorageArtifacts:
+		return b.Artifacts
+	case naming.StorageEdge:
+		return b.Edge
+	case naming.StorageCache:
+		return b.Cache
 	}
-	return b.Assets
+	return ""
 }
 
 func (a Artifacts) buckets(ctx context.Context, tier environment.Tier) (Buckets, error) {

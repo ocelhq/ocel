@@ -354,14 +354,16 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, ta
 
 func syntheticOutput(stackName, key, declared string) string {
 	switch key {
-	case outputInfraTier:
+	case outputInfraTier, outputBucketTag:
 		return declared
 	case outputStateBucket:
 		return "ocel-state-test"
 	case outputArtifactBucket:
 		return "ocel-artifacts-test"
-	case outputAssetBucket:
-		return "ocel-assets-test"
+	case outputEdgeBucket:
+		return "ocel-edge-test"
+	case outputCacheBucket:
+		return "ocel-cache-test"
 	case outputStateTable:
 		return "ocel-statetable-test"
 	case outputVariablesKeyBrought:

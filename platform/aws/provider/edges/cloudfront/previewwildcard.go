@@ -138,7 +138,7 @@ func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDom
 		name:          previewWildcardName(baseDomain),
 		managedBy:     string(p.ns),
 		tier:          environment.TierPreview,
-		assetOrigin:   assetOriginDomain(deployed.AssetBucket, c.Region),
+		assetOrigin:   assetOriginDomain(deployed.EdgeBucket, c.Region),
 		function:      set.functionARN,
 		emptyBody:     set.emptyBodyFunctionARN,
 		cachePolicy:   set.cachePolicy,

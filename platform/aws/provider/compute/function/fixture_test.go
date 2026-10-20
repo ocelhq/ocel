@@ -25,7 +25,7 @@ const (
 
 type testConfig struct {
 	ArtifactRoot         string
-	AssetBucket          string
+	EdgeBucket           string
 	ImageOptimizerURL    string
 	Slug                 string
 	Tier                 environment.Tier

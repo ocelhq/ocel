@@ -23,7 +23,7 @@ func pageOf(release naming.Coordinate) provider.ArtifactRef {
 	return provider.ArtifactRef{Tier: environment.TierProduction, Key: release.ObjectKey(naming.ObjectPages, "blog.cache.json")}
 }
 
-func TestPruningAReleaseRemovesItsPagesFromTheAssetBucket(t *testing.T) {
+func TestPruningAReleaseRemovesItsPagesFromTheEdgeBucket(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := ports.Artifacts{S3: newFakeS3(), Stores: tierBuckets{}}

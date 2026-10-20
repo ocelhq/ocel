@@ -21,7 +21,7 @@ func (p *Provider) edgeDeps() edges.Deps {
 		Certificates: p.options.Certificates,
 		Namespace:    p.namespace,
 		EnsurePart:   p.ensurePartNamed,
-		ArtifactBucket: func(ctx context.Context, tier environment.Tier) (string, error) {
+		StateBucket: func(ctx context.Context, tier environment.Tier) (string, error) {
 			deployed, err := p.bootstrapped(ctx, tier)
 			if err != nil {
 				return "", err
@@ -29,7 +29,7 @@ func (p *Provider) edgeDeps() edges.Deps {
 			if !deployed.Present {
 				return "", refusal.Refuse(refusal.CodeNotReady, "the %s tier is not bootstrapped: run `%s`", tier, provider.BootstrapCommand(tier))
 			}
-			return deployed.ArtifactBucket, nil
+			return deployed.StateBucket, nil
 		},
 	}
 }

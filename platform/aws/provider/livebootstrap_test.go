@@ -41,7 +41,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if core.Action != provider.ActionCreate {
 		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", core.Name, core.Action, provider.ActionCreate)
 	}
-	for _, want := range []string{"StateBucket", "StateTable", "ArtifactBucket", "AssetBucket", "VariablesTable", "AppBoundary"} {
+	for _, want := range []string{"StateBucket", "StateTable", "ArtifactBucket", "EdgeBucket", "CacheBucket", "VariablesTable", "AppBoundary"} {
 		if planned := changeFor(core, want); planned.Action != provider.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
@@ -86,7 +86,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.EdgeBucket, deployed.CacheBucket} {
 		if bucket == "" {
 			t.Fatalf("the stack names no bucket for one of its outputs: %+v", deployed)
 		}

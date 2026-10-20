@@ -17,7 +17,7 @@ const lambdaThrottleHeader = "x-amzn-errortype"
 
 type OriginAccess struct {
 	Region            string
-	AssetBucket       string
+	EdgeBucket        string
 	AccessKeyID       string
 	SecretAccessKey   string
 	ImageOptimizerURL string
@@ -34,9 +34,9 @@ func OriginReach(access OriginAccess) edge.OriginReach {
 		},
 		Throttle: edge.Throttle{Status: 429, Header: lambdaThrottleHeader},
 	}
-	if access.AssetBucket != "" {
+	if access.EdgeBucket != "" {
 		reach.Store = &edge.OriginStore{
-			URL:             fmt.Sprintf("https://%s.s3.%s.amazonaws.com", access.AssetBucket, access.Region),
+			URL:             fmt.Sprintf("https://%s.s3.%s.amazonaws.com", access.EdgeBucket, access.Region),
 			Region:          access.Region,
 			HoldsEntries:    true,
 			AccessKeyID:     access.AccessKeyID,

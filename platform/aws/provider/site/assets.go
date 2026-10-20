@@ -41,8 +41,8 @@ func staticAssetSet(b Buckets, root, app string, static *edge.Static, coord nami
 		return nil, nil
 	}
 
-	assetBucket := uploadTarget{up: b.Objects, bucket: b.Assets, tier: b.Tier}
-	plane := []uploadTarget{{up: b.Objects, bucket: b.Assets, tier: b.Tier, edgeReadable: b.CanEdgeRead()}}
+	imageConfigTarget := b.target(naming.ObjectImageConfig)
+	plane := []uploadTarget{b.target(naming.ObjectAssets)}
 	var uploads []assetUpload
 	manifest := newSetManifest()
 	appRoot := appArtifactRoot(root, app)
@@ -69,18 +69,18 @@ func staticAssetSet(b Buckets, root, app string, static *edge.Static, coord nami
 		uploads = append(uploads, assetUpload{
 			key:     coord.ImageConfigKey(),
 			src:     imageConfig,
-			to:      []uploadTarget{assetBucket},
+			to:      []uploadTarget{imageConfigTarget},
 			replace: true,
 			headers: objectHeaders{contentType: "application/json"},
 		})
-		manifest.add(assetBucket.bucket, coord.ImageConfigKey(), info.Size())
+		manifest.add(imageConfigTarget.bucket, coord.ImageConfigKey(), info.Size())
 	case !errors.Is(err, fs.ErrNotExist):
 		return nil, fmt.Errorf("stat image config for %s: %w", app, err)
 	}
 	if len(uploads) == 0 {
 		return nil, nil
 	}
-	if err := assetBucket.validate(); err != nil {
+	if err := imageConfigTarget.validate(); err != nil {
 		return nil, err
 	}
 
@@ -114,9 +114,9 @@ func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, pr
 						stats.record(uploadOutcome{Start: now, End: now, Failed: true, Err: readErr})
 						return readErr
 					}
-					return tracedPut(ctx, to.up, to.bucket, u.key, u.headers.taggedFor(to), data, stats)
+					return tracedPut(ctx, to.up, to.bucket, u.key, u.headers, data, stats)
 				}
-				return tracedUpload(ctx, to.up, to.bucket, u.key, u.headers.taggedFor(to), read, stats)
+				return tracedUpload(ctx, to.up, to.bucket, u.key, u.headers, read, stats)
 			})
 		}
 	}

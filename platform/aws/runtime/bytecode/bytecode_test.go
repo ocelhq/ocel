@@ -450,7 +450,7 @@ func TestResolveBytecodeResolution(t *testing.T) {
 
 	t.Run("includes the environment and version in the key", func(t *testing.T) {
 		t.Setenv(prefixEnvVar, "stg/proj/web/r1a2b3c4d/bytecode")
-		t.Setenv(bucketEnvVar, "assets-xyz")
+		t.Setenv(bucketEnvVar, "artifacts-xyz")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 		t.Setenv("AWS_REGION", "us-east-1")
 
@@ -460,8 +460,8 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		if r == nil {
 			t.Fatal("resolve() = nil, want a resolution for a fully configured function")
 		}
-		if r.bucket != "assets-xyz" {
-			t.Errorf("bucket = %q, want %q", r.bucket, "assets-xyz")
+		if r.bucket != "artifacts-xyz" {
+			t.Errorf("bucket = %q, want %q", r.bucket, "artifacts-xyz")
 		}
 		if r.store == nil {
 			t.Error("store = nil, want an S3-backed store")
@@ -472,10 +472,11 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves for a function with no isr bucket", func(t *testing.T) {
+	t.Run("resolves for a function with no ISR cache", func(t *testing.T) {
 		t.Setenv(prefixEnvVar, "ocel/stg")
-		t.Setenv(bucketEnvVar, "assets-xyz")
-		t.Setenv("OCEL_ISR_BUCKET", "")
+		t.Setenv(bucketEnvVar, "artifacts-xyz")
+		t.Setenv("OCEL_EDGE_BUCKET", "")
+		t.Setenv("OCEL_CACHE_BUCKET", "")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-express-app")
 		t.Setenv("AWS_REGION", "us-east-1")
 
@@ -485,8 +486,8 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		if r == nil {
 			t.Fatal("resolve() = nil, want a resolution for a node runtime function")
 		}
-		if r.bucket != "assets-xyz" {
-			t.Errorf("bucket = %q, want %q", r.bucket, "assets-xyz")
+		if r.bucket != "artifacts-xyz" {
+			t.Errorf("bucket = %q, want %q", r.bucket, "artifacts-xyz")
 		}
 	})
 }

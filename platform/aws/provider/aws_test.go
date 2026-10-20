@@ -374,12 +374,30 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	}
 }
 
-func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *testing.T) {
+func TestTheALBKeepsItsTrustRecordInTheStateBucketWhichExpiresNoCurrentObject(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts"}}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	bucket, err := p.edgeDeps().StateBucket(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("StateBucket error = %v", err)
+	}
+	if bucket != "state" {
+		t.Errorf("the ALB keeps its trust record and leases in %q, want the state bucket: the artifact bucket expires every object after 30 days, and a trust record read back as absent drops every CA the balancer trusts", bucket)
+	}
+}
+
+func TestBucketsAreTheTiersArtifactEdgeAndCacheBucketsWhateverEdgesAreInstalled(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
 		return account.Reading{Deployed: account.Deployed{
 			ArtifactBucket: "functions",
-			AssetBucket:    "assets",
+			EdgeBucket:     "edge",
+			CacheBucket:    "cache",
 			Parts: account.PartSet{
 				account.CloudflareEdgePart: true,
 			},
@@ -392,8 +410,8 @@ func TestBucketsAreTheTiersArtifactAndAssetBucketsWhateverEdgesAreInstalled(t *t
 	if err != nil {
 		t.Fatalf("Buckets error = %v", err)
 	}
-	if want := (awsports.Buckets{Functions: "functions", Assets: "assets"}); buckets != want {
-		t.Fatalf("Buckets() = %+v, want %+v: the ISR entries an edge reads live in the asset bucket, and no edge keeps a store of its own", buckets, want)
+	if want := (awsports.Buckets{Artifacts: "functions", Edge: "edge", Cache: "cache"}); buckets != want {
+		t.Fatalf("Buckets() = %+v, want %+v: the ISR entries an edge reads live in the edge bucket, and no edge keeps a store of its own", buckets, want)
 	}
 }
 
@@ -413,7 +431,8 @@ func TestBootstrapReadyWithoutAVariablesKey(t *testing.T) {
 		Present:        true,
 		StateBucket:    "state",
 		ArtifactBucket: "artifacts",
-		AssetBucket:    "assets",
+		EdgeBucket:     "edge",
+		CacheBucket:    "cache",
 		StateTable:     "state-table",
 		VariablesTable: "variables-table",
 	}

@@ -73,7 +73,7 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 		t.Fatalf("Provision() of the app whose plan showed the asset sets = %v", err)
 	}
 	if !slices.ContainsFunc(assets.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
-		t.Errorf("the asset bucket has %v, want the static asset the plan's row promised", assets.puts)
+		t.Errorf("the edge bucket has %v, want the static asset the plan's row promised", assets.puts)
 	}
 }
 

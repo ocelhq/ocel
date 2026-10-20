@@ -61,7 +61,7 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 	p := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace)
 	p.writtenBy = "1.0.0"
 	if _, err := p.deployed.resolve(production, func() (account.Reading, error) {
-		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", AssetBucket: "assets", AppBoundaryARN: "arn:aws:iam::111122223333:policy/boundary"}}, nil
+		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", EdgeBucket: "edge", CacheBucket: "cache", AppBoundaryARN: "arn:aws:iam::111122223333:policy/boundary"}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}

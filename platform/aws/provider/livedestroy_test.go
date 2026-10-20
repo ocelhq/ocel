@@ -35,7 +35,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	if leaving.Action != provider.ActionDelete {
 		t.Errorf("PlanRemove() plans %s as %q, want %q", leaving.Name, leaving.Action, provider.ActionDelete)
 	}
-	for _, unrecoverable := range []string{"StateBucket", "ArtifactBucket", "AssetBucket", "VariablesTable"} {
+	for _, unrecoverable := range []string{"StateBucket", "ArtifactBucket", "EdgeBucket", "CacheBucket", "VariablesTable"} {
 		if reason := changeFor(leaving, unrecoverable).Reason; reason == "" {
 			t.Errorf("PlanRemove() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", unrecoverable)
 		}
@@ -66,7 +66,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	if status := a.stackStatus(t, coreStackName); status != "" && status != "DELETE_COMPLETE" {
 		t.Errorf("%s is in state %q after Remove(), want it gone", coreStackName, status)
 	}
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.EdgeBucket, deployed.CacheBucket} {
 		if a.bucketExists(t, bucket) {
 			t.Errorf("%s still answers after Remove(), and a destroy leaves no bytes behind", bucket)
 		}

@@ -17,8 +17,8 @@ import (
 const CloudflareEdgePart = "cloudflare-edge"
 
 type stackRefs struct {
-	assetBucket         string
-	assetBucketARN      string
+	edgeBucketARN       string
+	bucketTag           string
 	stateTable          string
 	stateTableARN       string
 	stateTableStreamARN string
@@ -153,8 +153,7 @@ func (s PartSet) Names() []string {
 }
 
 const (
-	paramAssetBucketName     = "AssetBucketName"
-	paramAssetBucketARN      = "AssetBucketArn"
+	paramEdgeBucketARN       = "EdgeBucketArn"
 	paramStateTableName      = "StateTableName"
 	paramStateTableARN       = "StateTableArn"
 	paramStateTableStreamARN = "StateTableStreamArn"

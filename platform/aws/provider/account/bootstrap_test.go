@@ -52,6 +52,8 @@ type parsedTemplate struct {
 			StreamSpecification struct {
 				StreamViewType string `json:"StreamViewType"`
 			} `json:"StreamSpecification"`
+			BucketName     string       `json:"BucketName"`
+			AbacStatus     string       `json:"AbacStatus"`
 			Bucket         templateText `json:"Bucket"`
 			PolicyDocument struct {
 				Version   string `json:"Version"`
@@ -240,95 +242,126 @@ func TestStateBucket(t *testing.T) {
 	}
 }
 
-func TestArtifactBucket(t *testing.T) {
+func TestTheBootstrapKeepsABucketPerDataClassNamedForItsTierAndClass(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		template string
+		tier environment.Tier
+		want map[string]string
 	}{
-		{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
-		{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
+		{environment.TierProduction, map[string]string{
+			"StateBucket":    "ocel-prod-state-" + fixtureBucketTag,
+			"ArtifactBucket": "ocel-prod-artifacts-" + fixtureBucketTag,
+			"EdgeBucket":     "ocel-prod-edge-" + fixtureBucketTag,
+			"CacheBucket":    "ocel-prod-cache-" + fixtureBucketTag,
+		}},
+		{environment.TierPreview, map[string]string{
+			"StateBucket":    "ocel-preview-state-" + fixtureBucketTag,
+			"ArtifactBucket": "ocel-preview-artifacts-" + fixtureBucketTag,
+			"EdgeBucket":     "ocel-preview-edge-" + fixtureBucketTag,
+			"CacheBucket":    "ocel-preview-cache-" + fixtureBucketTag,
+		}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseTemplateStr(t, tc.template)
+		t.Run(string(tc.tier), func(t *testing.T) {
+			tmpl := parseTemplateStr(t, coreBody(defaultNamespace, tc.tier, ""))
 
-			bucket, ok := tmpl.Resources["ArtifactBucket"]
-			if !ok {
-				t.Fatal("template is missing the ArtifactBucket resource")
+			got := map[string]string{}
+			for id, resource := range tmpl.Resources {
+				if resource.Type == "AWS::S3::Bucket" {
+					got[id] = resource.Properties.BucketName
+				}
 			}
-			if bucket.Type != "AWS::S3::Bucket" {
-				t.Errorf("ArtifactBucket Type = %q, want AWS::S3::Bucket", bucket.Type)
+			if !maps.Equal(got, tc.want) {
+				t.Errorf("buckets = %v, want %v", got, tc.want)
 			}
-
-			pab := bucket.Properties.PublicAccessBlockConfiguration
-			if !pab.BlockPublicAcls || !pab.BlockPublicPolicy || !pab.IgnorePublicAcls || !pab.RestrictPublicBuckets {
-				t.Errorf("ArtifactBucket PublicAccessBlockConfiguration = %+v, want all four blocks true", pab)
+			for id := range tc.want {
+				bucket := tmpl.Resources[id].Properties
+				if bucket.AbacStatus != "Enabled" {
+					t.Errorf("%s AbacStatus = %q, want Enabled", id, bucket.AbacStatus)
+				}
+				pab := bucket.PublicAccessBlockConfiguration
+				if !pab.BlockPublicAcls || !pab.BlockPublicPolicy || !pab.IgnorePublicAcls || !pab.RestrictPublicBuckets {
+					t.Errorf("%s PublicAccessBlockConfiguration = %+v, want all four blocks true", id, pab)
+				}
 			}
-
-			rules := bucket.Properties.LifecycleConfiguration.Rules
-			if len(rules) != 1 {
-				t.Fatalf("ArtifactBucket lifecycle rules = %d, want exactly 1", len(rules))
-			}
-			rule := rules[0]
-			if rule.Status != "Enabled" {
-				t.Errorf("lifecycle rule Status = %q, want Enabled", rule.Status)
-			}
-			if rule.ExpirationInDays != artifactExpirationDays {
-				t.Errorf("lifecycle rule ExpirationInDays = %d, want %d", rule.ExpirationInDays, artifactExpirationDays)
-			}
-			if rule.AbortIncompleteMultipartUpload.DaysAfterInitiation != artifactAbortMultipartDays {
-				t.Errorf("lifecycle rule AbortIncompleteMultipartUpload = %d, want %d", rule.AbortIncompleteMultipartUpload.DaysAfterInitiation, artifactAbortMultipartDays)
-			}
-
-			if _, ok := tmpl.Outputs[outputArtifactBucket]; !ok {
-				t.Errorf("template is missing the %s output", outputArtifactBucket)
+			if got := tmpl.Outputs[outputBucketTag].Value; got != fixtureBucketTag {
+				t.Errorf("the %s output = %q, want the tag the buckets are named with, so the next bootstrap keeps them", outputBucketTag, got)
 			}
 		})
 	}
 }
 
-func TestAssetBucket(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		template string
-	}{
-		{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
-		{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseTemplateStr(t, tc.template)
+func lifecycleOf(t *testing.T, tier environment.Tier, id string) (expires, abortsAfter int) {
+	t.Helper()
+	bucket, ok := parseTemplateStr(t, coreBody(defaultNamespace, tier, "")).Resources[id]
+	if !ok {
+		t.Fatalf("the core declares no %s", id)
+	}
+	rules := bucket.Properties.LifecycleConfiguration.Rules
+	if len(rules) != 1 {
+		t.Fatalf("%s lifecycle rules = %d, want exactly 1", id, len(rules))
+	}
+	if rules[0].Status != "Enabled" {
+		t.Errorf("%s lifecycle rule Status = %q, want Enabled", id, rules[0].Status)
+	}
+	return rules[0].ExpirationInDays, rules[0].AbortIncompleteMultipartUpload.DaysAfterInitiation
+}
 
-			bucket, ok := tmpl.Resources["AssetBucket"]
-			if !ok {
-				t.Fatal("template is missing the AssetBucket resource")
-			}
-			if bucket.Type != "AWS::S3::Bucket" {
-				t.Errorf("AssetBucket Type = %q, want AWS::S3::Bucket", bucket.Type)
-			}
-
-			pab := bucket.Properties.PublicAccessBlockConfiguration
-			if !pab.BlockPublicAcls || !pab.BlockPublicPolicy || !pab.IgnorePublicAcls || !pab.RestrictPublicBuckets {
-				t.Errorf("AssetBucket PublicAccessBlockConfiguration = %+v, want all four blocks true", pab)
-			}
-
-			rules := bucket.Properties.LifecycleConfiguration.Rules
-			if len(rules) != 1 {
-				t.Fatalf("AssetBucket lifecycle rules = %d, want exactly 1", len(rules))
-			}
-			rule := rules[0]
-			if rule.Status != "Enabled" {
-				t.Errorf("lifecycle rule Status = %q, want Enabled", rule.Status)
-			}
-			if rule.ExpirationInDays != 0 {
-				t.Errorf("lifecycle rule ExpirationInDays = %d, want 0 (no object expiry)", rule.ExpirationInDays)
-			}
-			if rule.AbortIncompleteMultipartUpload.DaysAfterInitiation != artifactAbortMultipartDays {
-				t.Errorf("lifecycle rule AbortIncompleteMultipartUpload = %d, want %d", rule.AbortIncompleteMultipartUpload.DaysAfterInitiation, artifactAbortMultipartDays)
-			}
-
-			if _, ok := tmpl.Outputs[outputAssetBucket]; !ok {
-				t.Errorf("template is missing the %s output", outputAssetBucket)
+func TestEachBootstrapBucketAgesOutWhatItsDataClassOutlives(t *testing.T) {
+	for _, tier := range bothTiers {
+		t.Run(string(tier), func(t *testing.T) {
+			for _, tc := range []struct {
+				id      string
+				expires int
+				why     string
+			}{
+				{"ArtifactBucket", 30, "a deployed function keeps its own copy of the code staged for it"},
+				{"EdgeBucket", 0, "what an edge serves goes with the release that wrote it, never on a timer"},
+				{"CacheBucket", CacheObjectLifetimeDays, "an entry no release rewrote in that long is one nothing reads"},
+			} {
+				expires, abortsAfter := lifecycleOf(t, tier, tc.id)
+				if expires != tc.expires {
+					t.Errorf("%s expires objects after %d days, want %d: %s", tc.id, expires, tc.expires, tc.why)
+				}
+				if abortsAfter != artifactAbortMultipartDays {
+					t.Errorf("%s aborts incomplete uploads after %d days, want %d", tc.id, abortsAfter, artifactAbortMultipartDays)
+				}
 			}
 		})
+	}
+}
+
+func TestARebootstrapKeepsTheBucketsTheFirstOneNamed(t *testing.T) {
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	frontedBy(t, &fakeEdge{})
+	bucketNames := func() []string {
+		var names []string
+		for _, resource := range parseTemplateStr(t, stacks.template(coreStackName)).Resources {
+			if resource.Type == "AWS::S3::Bucket" {
+				names = append(names, resource.Properties.BucketName)
+			}
+		}
+		slices.Sort(names)
+		return names
+	}
+
+	if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, Request{}, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	first := bucketNames()
+	if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, Request{}, nil); err != nil {
+		t.Fatalf("Run again: %v", err)
+	}
+
+	if len(first) != 4 {
+		t.Fatalf("the first bootstrap named buckets %v, want four", first)
+	}
+	for _, name := range first {
+		tag := name[strings.LastIndex(name, "-")+1:]
+		if !naming.IsRandomTag(tag) {
+			t.Errorf("bucket %s ends in %q, want a random tag minted for it", name, tag)
+		}
+	}
+	if again := bucketNames(); !slices.Equal(again, first) {
+		t.Errorf("the second bootstrap names buckets %v, want the first one's %v: a new name replaces the bucket and strands what it holds", again, first)
 	}
 }
 
@@ -366,7 +399,9 @@ func TestCheckDeployed(t *testing.T) {
 			outputStateBucket:    "bucket-123",
 			outputStateTable:     "state-abc",
 			outputArtifactBucket: "artifacts-xyz",
-			outputAssetBucket:    "assets-xyz",
+			outputEdgeBucket:     "edge-xyz",
+			outputCacheBucket:    "cache-xyz",
+			outputBucketTag:      fixtureBucketTag,
 			outputInfraTier:      string(environment.TierProduction),
 		}
 		api := stubStacksAPI{coreStackName: outputs(core).stamped(Stamp{Digest: "written-digest", WrittenBy: "1.4.0"})}
@@ -381,7 +416,8 @@ func TestCheckDeployed(t *testing.T) {
 			StateBucket:    "bucket-123",
 			StateTable:     "state-abc",
 			ArtifactBucket: "artifacts-xyz",
-			AssetBucket:    "assets-xyz",
+			EdgeBucket:     "edge-xyz",
+			CacheBucket:    "cache-xyz",
 			Tier:           environment.TierProduction,
 			Outputs:        core,
 			Stacks: []StackStamp{
@@ -459,7 +495,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("a stack written from this build reads as current", func(t *testing.T) {
-		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).
+		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraTier: string(environment.TierProduction), outputBucketTag: fixtureBucketTag}).
 			stamped(Stamp{Digest: cfn.TemplateDigest(coreBody(defaultNamespace, environment.TierProduction, ""))})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
@@ -561,28 +597,25 @@ func stringLike(t *testing.T, pattern, value string) bool {
 	return ok
 }
 
-func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		template string
-	}{
-		{"production", coreBody(defaultNamespace, environment.TierProduction, "")},
-		{"preview", coreBody(defaultNamespace, environment.TierPreview, "")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseTemplateStr(t, tc.template)
+func TestOnlyTheEdgeBucketAdmitsCloudFrontAndOnlyToItsAssets(t *testing.T) {
+	for _, tier := range bothTiers {
+		t.Run(string(tier), func(t *testing.T) {
+			tmpl := parseTemplateStr(t, coreBody(defaultNamespace, tier, ""))
 
-			policy, ok := tmpl.Resources["AssetBucketPolicy"]
-			if !ok {
-				t.Fatalf("the template contains %v, want a bucket policy: nothing else lets a CloudFront distribution read a static asset out of the bucket", slices.Sorted(maps.Keys(tmpl.Resources)))
+			var policies []string
+			for id, resource := range tmpl.Resources {
+				if resource.Type == "AWS::S3::BucketPolicy" {
+					policies = append(policies, id)
+				}
 			}
-			if policy.Type != "AWS::S3::BucketPolicy" {
-				t.Errorf("AssetBucketPolicy type = %q, want AWS::S3::BucketPolicy", policy.Type)
+			if !slices.Equal(policies, []string{"EdgeBucketPolicy"}) {
+				t.Fatalf("bucket policies = %v, want only EdgeBucketPolicy: CloudFront's read is account-wide, so it may reach only what an edge serves", policies)
 			}
-			if got := policy.Properties.Bucket; got != "AssetBucket" {
-				t.Errorf("the policy is attached to %q, want the asset bucket", got)
+			policy := tmpl.Resources["EdgeBucketPolicy"].Properties
+			if got := policy.Bucket; got != "EdgeBucket" {
+				t.Errorf("the policy is attached to %q, want the edge bucket", got)
 			}
-			statements := policy.Properties.PolicyDocument.Statement
+			statements := policy.PolicyDocument.Statement
 			if len(statements) != 1 {
 				t.Fatalf("the policy has %d statements, want exactly one: it is written once by the bootstrap and never rewritten per deploy", len(statements))
 			}
@@ -593,8 +626,8 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 			if grant.Principal.Service != "cloudfront.amazonaws.com" {
 				t.Errorf("principal = %q, want the CloudFront service principal and nothing wider", grant.Principal.Service)
 			}
-			if got := grant.Resource; got != "${AssetBucket.Arn}/*" {
-				t.Errorf("resource = %q, want every object in the asset bucket and nothing outside it", got)
+			if got := grant.Resource; got != "${EdgeBucket.Arn}/assets/*" {
+				t.Errorf("resource = %q, want the edge bucket's assets and nothing else: CloudFront serves only a release's static assets out of it", got)
 			}
 			if got := grant.Condition.StringEquals["AWS:SourceAccount"]; got != "AWS::AccountId" {
 				t.Errorf("source account condition = %q, want this account, so no other account's distribution can read the bucket", got)

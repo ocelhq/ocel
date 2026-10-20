@@ -179,9 +179,13 @@ var stranded = map[string]provider.Change{
 		Reason: "the Pulumi state of every stack this bootstrap deployed; nothing can describe or remove those resources afterwards",
 		Slow:   true,
 	},
-	"ArtifactBucket": {Reason: "the function code staged for this bootstrap", Slow: true},
-	"AssetBucket": {
-		Reason: "every build's static assets, prerender fallbacks and edge fetch cache",
+	"ArtifactBucket": {Reason: "the function code and bytecode staged for this bootstrap", Slow: true},
+	"EdgeBucket": {
+		Reason: "every release's static assets, page entries, route tables and edge bundles",
+		Slow:   true,
+	},
+	"CacheBucket": {
+		Reason: "every release's fetch cache, use-cache entries and tag clock",
 		Slow:   true,
 	},
 	"VariablesTable": {Reason: "every variable value this tier stores, and their history"},
@@ -201,7 +205,7 @@ func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {
 
 func renderGroup(target spec, part string, in partInputs) (partStack, bool, error) {
 	if part == "" {
-		core, err := target.core(coreVariablesKey(in.alongside, in.variablesKey))
+		core, err := target.core(coreVariablesKey(in.alongside, in.variablesKey), in.refs.bucketTag)
 		return core, true, err
 	}
 	f, ok := partNamed(part)

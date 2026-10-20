@@ -12,5 +12,5 @@ func (p *Provider) Buckets(ctx context.Context, tier environment.Tier) (awsports
 	if err != nil {
 		return awsports.Buckets{}, err
 	}
-	return awsports.Buckets{Functions: deployed.ArtifactBucket, Assets: deployed.AssetBucket}, nil
+	return awsports.Buckets{Artifacts: deployed.ArtifactBucket, Edge: deployed.EdgeBucket, Cache: deployed.CacheBucket}, nil
 }

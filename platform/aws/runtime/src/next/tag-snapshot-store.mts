@@ -10,7 +10,12 @@ import {
 } from "@framework/next-cache";
 import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { newS3Client } from "../cache/sdk-clients.mjs";
-import { isNotFound, requireEnv, requireStorageCoordinate } from "./object-store.mjs";
+import {
+  cacheBucketVar,
+  isNotFound,
+  requireEnv,
+  requireStorageCoordinate,
+} from "./object-store.mjs";
 
 export interface S3Like {
   send(command: any): Promise<any>;
@@ -85,7 +90,7 @@ export function newAwsTagPublisher(): PublishTag {
     new S3TagSnapshotStore(
       newS3Client(),
       { GetObjectCommand, PutObjectCommand },
-      requireEnv("OCEL_ISR_BUCKET"),
+      requireEnv(cacheBucketVar),
       requireStorageCoordinate(),
     ),
   );

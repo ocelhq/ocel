@@ -110,7 +110,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		ArtifactRoot:      scope.OutputRoot,
 		ArtifactBucket:    deployed.ArtifactBucket,
-		AssetBucket:       deployed.AssetBucket,
+		EdgeBucket:        deployed.EdgeBucket,
+		CacheBucket:       deployed.CacheBucket,
 		ImageOptimizerURL: optimizer,
 
 		Objects:     s3.NewFromConfig(p.aws),
@@ -152,7 +153,8 @@ func (p *Provider) requireBootstrapped(deployed account.Deployed, tier environme
 	}{
 		{deployed.StateBucket, "state bucket"},
 		{deployed.ArtifactBucket, "artifact bucket"},
-		{deployed.AssetBucket, "asset bucket"},
+		{deployed.EdgeBucket, "edge bucket"},
+		{deployed.CacheBucket, "cache bucket"},
 		{deployed.StateTable, "state table"},
 		{deployed.VariablesTable, "variable store"},
 	} {

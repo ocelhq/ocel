@@ -12,6 +12,5 @@
   },
   "purgeHeader": "x-ocel-purge",
   "edgeCacheHeader": "x-ocel-edge-cache",
-  "edgeCacheTagHeader": "x-ocel-cache-tag",
-  "edgeReadableTagging": "ocel%3Aedge=readable"
+  "edgeCacheTagHeader": "x-ocel-cache-tag"
 }

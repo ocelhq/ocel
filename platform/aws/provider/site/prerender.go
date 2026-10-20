@@ -44,8 +44,8 @@ func prerenderAssetSet(b Buckets, root, app string, cache *ISR) (*AssetSet, erro
 	var uploads []prerenderUpload
 	manifest := newSetManifest()
 	targets := map[naming.ObjectKind]uploadTarget{
-		naming.ObjectPages:      entryTarget(b),
-		naming.ObjectFetchCache: {up: b.Objects, bucket: b.Assets, tier: b.Tier},
+		naming.ObjectPages:      b.target(naming.ObjectPages),
+		naming.ObjectFetchCache: b.target(naming.ObjectFetchCache),
 	}
 	for _, seed := range seeds {
 		to := targets[seed.Kind]
@@ -87,7 +87,7 @@ func pushPrerenderAssets(ctx context.Context, b Buckets, app string, cache *ISR,
 	for _, u := range uploads {
 		g.Go(func() error {
 			defer takeUploadSlot()()
-			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, objectHeaders{}.taggedFor(u.to), func() ([]byte, error) {
+			return tracedUpload(ctx, u.to.up, u.to.bucket, u.key, objectHeaders{}, func() ([]byte, error) {
 				return os.ReadFile(u.src)
 			}, stats)
 		})
@@ -98,18 +98,18 @@ func pushPrerenderAssets(ctx context.Context, b Buckets, app string, cache *ISR,
 }
 
 type uploadTarget struct {
-	up           payloads.ObjectStore
-	bucket       string
-	tier         environment.Tier
-	edgeReadable bool
+	up     payloads.ObjectStore
+	bucket string
+	kind   naming.ObjectKind
+	tier   environment.Tier
 }
 
 func (t uploadTarget) validate() error {
 	if t.bucket == "" {
-		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `%s`", provider.BootstrapCommand(t.tier))
+		return fmt.Errorf("this project has %s objects to publish but no %s bucket is configured; re-run `%s`", t.kind, t.kind.Class(), provider.BootstrapCommand(t.tier))
 	}
 	if t.up == nil {
-		return fmt.Errorf("no asset uploader configured")
+		return fmt.Errorf("no object uploader configured")
 	}
 	return nil
 }
@@ -137,7 +137,7 @@ func seedTagSnapshot(ctx context.Context, b Buckets, cache *ISR, at time.Time) e
 }
 
 func snapshotTargets(b Buckets) []uploadTarget {
-	target := uploadTarget{up: b.Objects, bucket: b.Assets, tier: b.Tier}
+	target := b.target(naming.ObjectTagClock)
 	if target.validate() != nil {
 		return nil
 	}
@@ -151,10 +151,6 @@ func isPreconditionFailed(err error) bool {
 	}
 	var respErr *awshttp.ResponseError
 	return errors.As(err, &respErr) && respErr.HTTPStatusCode() == http.StatusPreconditionFailed
-}
-
-func entryTarget(b Buckets) uploadTarget {
-	return uploadTarget{up: b.Objects, bucket: b.Assets, tier: b.Tier, edgeReadable: b.CanEdgeRead()}
 }
 
 type collectedFile struct {

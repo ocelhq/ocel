@@ -204,7 +204,7 @@ func TestFunctionEnv(t *testing.T) {
 	})
 
 	t.Run("a node runtime function with no isr still takes the bytecode cache", func(t *testing.T) {
-		cache := Bytecode{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"}
+		cache := Bytecode{Bucket: "artifacts-xyz", Prefix: "bytecode/proj/prod/api/API1"}
 
 		env := Env(map[string]string{}, Args{Handler: "index.mjs"}, nil, &cache)
 

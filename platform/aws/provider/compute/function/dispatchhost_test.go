@@ -43,7 +43,7 @@ func routedConfig(t *testing.T, kind edge.Kind) testConfig {
 	t.Helper()
 	return testConfig{
 		ArtifactRoot:      routedArtifactRoot(t),
-		AssetBucket:       "assets-bucket",
+		EdgeBucket:        "edge-bucket",
 		ImageOptimizerURL: "https://optimizer.lambda-url.us-east-1.on.aws/",
 		Slug:              "shop",
 		Edge:              fakeEdgeOf(kind),
@@ -125,7 +125,7 @@ func routedSpec(t *testing.T, cfg testConfig) provider.StackSpec {
 
 func newDispatchHostFor(t *testing.T, cfg testConfig) *DispatchHost {
 	t.Helper()
-	return NewDispatchHost(routedSpec(t, cfg).App, cfg.Slug, cfg.AssetBucket, cfg.ImageOptimizerURL)
+	return NewDispatchHost(routedSpec(t, cfg).App, cfg.Slug, cfg.EdgeBucket, cfg.ImageOptimizerURL)
 }
 
 func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
@@ -142,7 +142,7 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 	}
 	want := map[string]string{
 		routeTableEnv:             routeTableInTask,
-		assetBucketEnv:            "assets-bucket",
+		edgeBucketEnv:             "edge-bucket",
 		assetPrefixEnv:            appAssetPrefix(coord),
 		slugEnv:                   "shop",
 		appNameEnv:                "web",
@@ -153,6 +153,27 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 		if host.Env[key] != value {
 			t.Errorf("entry env %s = %q, want %q", key, host.Env[key], value)
 		}
+	}
+}
+
+func TestTheRootFunctionReadsOnlyItsOwnReleasesAssetsOutOfTheEdgeBucket(t *testing.T) {
+	t.Parallel()
+
+	host := newDispatchHostFor(t, routedConfig(t, cloudfront.Kind))
+	raw, err := assetReadPolicy(host)
+	if err != nil {
+		t.Fatalf("assetReadPolicy: %v", err)
+	}
+	var doc policyDoc
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatalf("policy is not valid JSON: %v", err)
+	}
+	want := []string{"arn:aws:s3:::edge-bucket/" + appAssetPrefix(routedCoordinate(t)) + "/*"}
+	if len(doc.Statement) != 1 || !slices.Equal(doc.Statement[0].Resource, want) || !slices.Equal(doc.Statement[0].Action, []string{"s3:GetObject"}) {
+		t.Errorf("asset read policy = %s, want s3:GetObject on %v alone", raw, want)
+	}
+	if !strings.HasPrefix(appAssetPrefix(routedCoordinate(t)), "assets/") {
+		t.Errorf("the asset prefix %q is not under assets/, the one kind the root function serves", appAssetPrefix(routedCoordinate(t)))
 	}
 }
 
@@ -377,7 +398,7 @@ func TestADispatchHostIsMadeOfANextRouteTableAlone(t *testing.T) {
 		App:      &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
 	}
 	cfg := routedConfig(t, cloudfront.Kind)
-	if host := NewDispatchHost(spec.App, cfg.Slug, cfg.AssetBucket, cfg.ImageOptimizerURL); host != nil {
+	if host := NewDispatchHost(spec.App, cfg.Slug, cfg.EdgeBucket, cfg.ImageOptimizerURL); host != nil {
 		t.Errorf("newDispatchHost = %+v, want none: an ocel route table dispatches between no functions", host)
 	}
 }
@@ -535,7 +556,7 @@ func TestDispatchHostIsToldTheStaticRulesTheBuildStates(t *testing.T) {
 	cfg := routedConfig(t, cloudfront.Kind)
 	spec := routedSpec(t, cfg)
 	spec.App.Static = &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}}
-	host := NewDispatchHost(spec.App, cfg.Slug, cfg.AssetBucket, cfg.ImageOptimizerURL)
+	host := NewDispatchHost(spec.App, cfg.Slug, cfg.EdgeBucket, cfg.ImageOptimizerURL)
 	if got, want := host.Env[edge.StaticRulesVar], `{"immutablePrefixes":["/docs/_next/static/"]}`; got != want {
 		t.Errorf("entry env %s = %q, want %q", edge.StaticRulesVar, got, want)
 	}

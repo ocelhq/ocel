@@ -102,7 +102,6 @@ export function storeOrigin(store: Partial<OriginStore> = {}): CertificateOrigin
     reach: { kind: "client-certificate", certificate: "certificate-id" },
     store: {
       url: "https://objects.example.com/ocel-acme-production",
-      prefix: "assets/",
       region: "auto",
       holdsEntries: false,
       accessKeyId: "GOOG1EXAMPLEACCESSID",

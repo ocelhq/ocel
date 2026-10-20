@@ -45,14 +45,14 @@ const RELEASE = fixture.release;
 
 const DRAFT_KEY_OF_TOKEN_1 = ".draft-6b86b273ff34fce1";
 
-const ASSET_PREFIX = "production/proj1/web/r3f8a1c9d/assets";
+const ASSET_PREFIX = "assets/proj1/prod/web/r3f8a1c9d";
 
 const ROUTE = {
   stack: "ocel.proj1.production",
   slug: "proj1",
   origin: "abcdef.lambda-url.eu-west-1.on.aws",
   release: RELEASE,
-  assets: "ocel-assets.s3.eu-west-1.amazonaws.com",
+  assets: "ocel-prod-edge-k3x9q2.s3.eu-west-1.amazonaws.com",
   assetPrefix: ASSET_PREFIX,
   immutable: ["/_next/static/"],
   secret: "5e884898da28047151d0e56f8dc6292773603d0d",
@@ -164,7 +164,7 @@ describe("the resolver", () => {
     expect(origins[0].domainName).toBe(ROUTE.origin);
   });
 
-  it("sends a static asset to the origin itself when the release names no asset bucket", async () => {
+  it("sends a static asset to the origin itself when the release names no edge bucket", async () => {
     const { origins } = await resolve(request("/_next/static/chunks/main.js"), {
       "shop.example.com": { ...ROUTE, assets: "", assetPrefix: "" },
     });

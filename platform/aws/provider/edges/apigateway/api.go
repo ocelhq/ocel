@@ -50,12 +50,12 @@ const (
 )
 
 type apiSpec struct {
-	name        string
-	tags        map[string]string
-	region      string
-	account     string
-	role        string
-	assetBucket string
+	name       string
+	tags       map[string]string
+	region     string
+	account    string
+	role       string
+	edgeBucket string
 }
 
 func namespaceTags(ns account.Namespace, tier environment.Tier) map[string]string {
@@ -202,7 +202,7 @@ func routeStatic(ctx context.Context, c Clients, spec apiSpec, id string, prefix
 		rootPath + probeParent + rootPath + probePathPart: true,
 	}
 	var served []string
-	if spec.assetBucket != "" {
+	if spec.edgeBucket != "" {
 		for _, segments := range selectOutermostPrefixes(prefixes) {
 			parent := rootPath
 			for i, segment := range segments {
@@ -614,7 +614,7 @@ func entryURI(spec apiSpec) string {
 func staticURI(spec apiSpec, prefix string) string {
 	return fmt.Sprintf(
 		"arn:aws:apigateway:%s:s3:path/%s/${stageVariables.%s}%s{proxy}",
-		spec.region, spec.assetBucket, assetsVariable, prefix,
+		spec.region, spec.edgeBucket, assetsVariable, prefix,
 	)
 }
 

@@ -3,8 +3,6 @@ package site
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -17,34 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatalf("resolve working directory: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("no go.work found above the working directory")
-		}
-		dir = parent
-	}
-}
-
-func nextCacheFixture(t *testing.T, name string) []byte {
-	t.Helper()
-	path := filepath.Join(repoRoot(t), "frameworks", "next", "cache", "fixtures", name)
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", name, err)
-	}
-	return body
-}
 
 const testBuildID = "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
 
@@ -109,7 +79,7 @@ func assetShippingConfig(t *testing.T, app string) publication {
 	t.Helper()
 	return publication{
 		root:    siblingAppRoot(t, app),
-		buckets: Buckets{Assets: "assets-bucket", Artifacts: "artifacts-bucket", EdgeHoldsKey: true},
+		buckets: Buckets{Artifacts: "artifacts-bucket", Edge: "edge-bucket", Cache: "cache-bucket", EdgeHoldsKey: true},
 	}
 }
 

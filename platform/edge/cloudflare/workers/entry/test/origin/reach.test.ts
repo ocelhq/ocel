@@ -183,14 +183,16 @@ describe("the origin's store", () => {
     expect(origin.entries).toBeUndefined();
   });
 
-  it("reads an object under the store's prefix", async () => {
+  it("reads an object at its own key in the store's bucket", async () => {
     const wire = capturing();
     const { objects } = openOrigin(storeOrigin());
 
-    await withGlobalFetch(wire.fetch, async () => objects?.readObject("prod/a.js"));
+    await withGlobalFetch(wire.fetch, async () =>
+      objects?.readObject("assets/shop/prod/web/r1a2b3c4d/a.js"),
+    );
 
     expect(wire.calls.map((call) => call.url)).toEqual([
-      "https://objects.example.com/ocel-acme-production/assets/prod/a.js",
+      "https://objects.example.com/ocel-acme-production/assets/shop/prod/web/r1a2b3c4d/a.js",
     ]);
   });
 

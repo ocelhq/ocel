@@ -21,6 +21,10 @@ func suffixed(tier environment.Tier, base string) string {
 
 func (n Namespace) CoreStackName() string { return string(n) + "-bootstrap" }
 
+func (n Namespace) BootstrapBucketName(tier environment.Tier, class naming.StorageClass, tag string) (string, error) {
+	return naming.OcelName(string(n), naming.TierWord(tier), string(class), tag)
+}
+
 func (n Namespace) StackNameFor(tier environment.Tier) (string, error) {
 	switch tier {
 	case environment.TierProduction, environment.TierPreview:

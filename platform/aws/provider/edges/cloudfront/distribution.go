@@ -108,7 +108,7 @@ type distributionSummary struct {
 func (p distributionSpec) ready() error {
 	missing := []string{}
 	for name, value := range map[string]string{
-		"asset bucket":            p.assetOrigin,
+		"edge bucket":             p.assetOrigin,
 		"resolver function":       p.function,
 		"empty-body function":     p.emptyBody,
 		"cache policy":            p.cachePolicy,

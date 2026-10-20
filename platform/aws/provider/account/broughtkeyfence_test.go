@@ -18,14 +18,14 @@ func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsPartIsRequested(t *te
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, Request{VariablesKey: broughtKeyARN}, nil); err != nil {
 		t.Fatalf("Run without the part: %v", err)
 	}
-	if got, want := stacks.template(coreStackName), coreBody(defaultNamespace, environment.TierProduction, ""); got != want {
+	if got, want := stacks.template(coreStackName), writtenCoreBody(stacks, defaultNamespace, environment.TierProduction, ""); got != want {
 		t.Error("a run that never asked for the variables-key part wrote the brought key into the core boundary")
 	}
 
 	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, Request{Parts: []string{provider.VariablesKeyPart}, VariablesKey: broughtKeyARN}, nil); err != nil {
 		t.Fatalf("Run with the part: %v", err)
 	}
-	if got, want := stacks.template(coreStackName), coreBody(defaultNamespace, environment.TierProduction, broughtKeyARN); got != want {
+	if got, want := stacks.template(coreStackName), writtenCoreBody(stacks, defaultNamespace, environment.TierProduction, broughtKeyARN); got != want {
 		t.Error("adding the variables-key part over a brought key left the core boundary fenced to an alias the key never has")
 	}
 	if !strings.Contains(stacks.template(coreStackName), broughtKeyARN) {

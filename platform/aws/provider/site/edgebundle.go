@@ -58,7 +58,7 @@ func edgeBundleSet(b Buckets, root, app string, coord naming.Coordinate, sealed 
 	}
 	delivery := EdgeDelivery{BundleKey: appEdgeBundleKey(coord)}
 	manifest := newSetManifest()
-	to := selectEdgeObjectTarget(b)
+	to := b.target(naming.ObjectBundles)
 	manifest.add(to.bucket, appEdgeBundleKey(coord), int64(len(bundle)))
 	if edgeSealedDelivered(b, sealed) {
 		manifest.add(to.bucket, appEdgeSealedKey(coord), int64(len(sealed.Ciphertext)))
@@ -81,15 +81,15 @@ func edgeBundleSet(b Buckets, root, app string, coord naming.Coordinate, sealed 
 }
 
 func putEdgeBundle(ctx context.Context, b Buckets, app string, coord naming.Coordinate, bundle []byte, sealed variables.Bundle, stats *uploadBatchStats, progress progress.Log) error {
-	to := selectEdgeObjectTarget(b)
+	to := b.target(naming.ObjectBundles)
 	say(progress, "Uploading "+app+"'s edge bundle to bucket "+to.bucket)
-	if err := tracedPut(ctx, to.up, to.bucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}.taggedFor(to), bundle, stats); err != nil {
+	if err := tracedPut(ctx, to.up, to.bucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}, bundle, stats); err != nil {
 		return err
 	}
 	if !edgeSealedDelivered(b, sealed) {
 		return nil
 	}
-	return tracedPut(ctx, to.up, to.bucket, appEdgeSealedKey(coord), objectHeaders{contentType: "application/octet-stream"}.taggedFor(to), sealed.Ciphertext, stats)
+	return tracedPut(ctx, to.up, to.bucket, appEdgeSealedKey(coord), objectHeaders{contentType: "application/octet-stream"}, sealed.Ciphertext, stats)
 }
 
 func CheckEdgeVariables(root, app string, values provider.AppValues, bundle variables.Bundle) error {

@@ -17,7 +17,6 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -28,6 +27,7 @@ const (
 	leaseWaitBase     = 250 * time.Millisecond
 	leaseWaitCeiling  = 5 * time.Second
 	conflictErrorCode = "ConditionalRequestConflict"
+	trustLeaseKey     = "leases/trust/client-cas.lease"
 )
 
 type lease struct {
@@ -42,12 +42,8 @@ type leaseRecord struct {
 	Until  int64  `json:"until"`
 }
 
-func formatTrustLeaseKey(tier environment.Tier) string {
-	return "ocel/trust/" + string(tier) + "/client-cas.lease"
-}
-
-func formatPointerLeaseKey(tier environment.Tier, slug, pointer string) string {
-	return "ocel/routes/" + string(tier) + "/" + slug + "/" + pointer + ".lease"
+func formatPointerLeaseKey(slug, pointer string) string {
+	return "leases/routes/" + slug + "/" + pointer + ".lease"
 }
 
 func (s *stack) newLease(c Clients, key, activity string) lease {

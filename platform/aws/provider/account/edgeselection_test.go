@@ -21,7 +21,6 @@ var everyEdgeKind = []edge.Kind{KindCloudflare, kindCloudFront, kindAPIGateway}
 func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		t.Run(string(tier), func(t *testing.T) {
-			want := cfn.TemplateDigest(coreBody(defaultNamespace, tier, ""))
 			core, err := defaultNamespace.StackNameFor(tier)
 			if err != nil {
 				t.Fatalf("StackNameFor: %v", err)
@@ -32,6 +31,7 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 				if err := Run(context.Background(), apis, defaultNamespace, tier, Request{}, nil); err != nil {
 					t.Fatalf("bootstrapping behind the %s edge: %v", kind, err)
 				}
+				want := cfn.TemplateDigest(writtenCoreBody(stacks, defaultNamespace, tier, ""))
 				if got := cfn.TemplateDigest(stacks.template(core)); got != want {
 					t.Errorf("the %s edge wrote a core whose digest is %q, want %q: the core is what every edge is installed beside, not part of one", kind, got, want)
 				}
@@ -47,8 +47,8 @@ func TestReadingABootstrapSeesTheEdgePartInstalledBesideTheCore(t *testing.T) {
 	stamp := Stamp{}
 	api := stubStacksAPI{
 		coreStackName: outputs(map[string]string{
-			outputInfraTier:   string(environment.TierProduction),
-			outputAssetBucket: "assets-1",
+			outputInfraTier:  string(environment.TierProduction),
+			outputEdgeBucket: "edge-1",
 		}).stamped(stamp),
 		defaultNamespace.PartStackName(CloudflareEdgePart, environment.TierProduction): outputs(nil).stamped(stamp),
 	}
@@ -60,8 +60,8 @@ func TestReadingABootstrapSeesTheEdgePartInstalledBesideTheCore(t *testing.T) {
 	if want := []string{CloudflareEdgePart}; !slices.Equal(got.Parts.Names(), want) {
 		t.Errorf("Parts = %v, want %v", got.Parts.Names(), want)
 	}
-	if got.Outputs[outputAssetBucket] != "assets-1" {
-		t.Errorf("Outputs[%s] = %q, want the core's asset bucket", outputAssetBucket, got.Outputs[outputAssetBucket])
+	if got.Outputs[outputEdgeBucket] != "edge-1" {
+		t.Errorf("Outputs[%s] = %q, want the core's edge bucket", outputEdgeBucket, got.Outputs[outputEdgeBucket])
 	}
 }
 

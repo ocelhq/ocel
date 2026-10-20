@@ -153,7 +153,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.EdgeBucket, deployed.CacheBucket} {
 		if !run.account.bucketExists(t, bucket) {
 			t.Errorf("%s is named by the stack the CLI applied but no bucket answers for it", bucket)
 		}
@@ -185,7 +185,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	if status := run.account.stackStatus(t, coreStackName); status != "" && status != "DELETE_COMPLETE" {
 		t.Errorf("%s is in state %q after a destroy, so the account was not given back", coreStackName, status)
 	}
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.EdgeBucket, deployed.CacheBucket} {
 		if run.account.bucketExists(t, bucket) {
 			t.Errorf("%s still answers after a destroy, so the account was not given back", bucket)
 		}

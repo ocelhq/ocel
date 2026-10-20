@@ -11,13 +11,12 @@ type ISR struct {
 	Coord     naming.Coordinate
 	Namespace string
 
-	Bucket   string
-	Table    string
-	TableARN string
+	EdgeBucket  string
+	CacheBucket string
+	Table       string
+	TableARN    string
 
 	PurgeSecret string
-
-	EdgeReadable bool
 }
 
 func (c ISR) TagNamespace() string {
@@ -32,13 +31,11 @@ func (c ISR) TagNamespace() string {
 
 func (c ISR) Env() map[string]string {
 	env := map[string]string{
-		"OCEL_ISR_BUCKET":         c.Bucket,
+		"OCEL_EDGE_BUCKET":        c.EdgeBucket,
+		"OCEL_CACHE_BUCKET":       c.CacheBucket,
 		"OCEL_STORAGE_COORDINATE": c.Coord.StorageCoordinate(),
 		"OCEL_STATE_TABLE":        c.Table,
 		"OCEL_ISR_TAG_NAMESPACE":  c.TagNamespace(),
-	}
-	if c.EdgeReadable {
-		env["OCEL_ISR_EDGE_READABLE"] = "1"
 	}
 	return env
 }
@@ -46,11 +43,11 @@ func (c ISR) Env() map[string]string {
 func (c ISR) Policy() (string, error) {
 	namespace := c.TagNamespace()
 	if namespace == "" {
-		return "", fmt.Errorf("the isr cache in %s has no coordinate, so neither its objects nor its tag items can be scoped to this app", c.Bucket)
+		return "", fmt.Errorf("the isr cache in %s and %s has no coordinate, so neither its objects nor its tag items can be scoped to this app", c.EdgeBucket, c.CacheBucket)
 	}
 	objects := make([]string, len(naming.ISRObjectKinds))
 	for i, kind := range naming.ISRObjectKinds {
-		objects[i] = c.objectARN(c.Coord.StoragePrefix(kind))
+		objects[i] = c.objectARN(kind)
 	}
 	statements := []any{
 		map[string]any{
@@ -70,14 +67,6 @@ func (c ISR) Policy() (string, error) {
 		},
 	}
 
-	if c.EdgeReadable {
-		statements = append(statements, map[string]any{
-			"Effect":   "Allow",
-			"Action":   []string{"s3:PutObjectTagging"},
-			"Resource": c.objectARN(c.Coord.StoragePrefix(naming.ObjectPages)),
-		})
-	}
-
 	doc := map[string]any{"Version": "2012-10-17", "Statement": statements}
 	out, err := json.Marshal(doc)
 	if err != nil {
@@ -86,6 +75,13 @@ func (c ISR) Policy() (string, error) {
 	return string(out), nil
 }
 
-func (c ISR) objectARN(prefix string) string {
-	return fmt.Sprintf("arn:aws:s3:::%s/%s*", c.Bucket, prefix)
+func (c ISR) bucketOf(kind naming.ObjectKind) string {
+	if kind.Class() == naming.StorageEdge {
+		return c.EdgeBucket
+	}
+	return c.CacheBucket
+}
+
+func (c ISR) objectARN(kind naming.ObjectKind) string {
+	return fmt.Sprintf("arn:aws:s3:::%s/%s*", c.bucketOf(kind), c.Coord.StoragePrefix(kind))
 }

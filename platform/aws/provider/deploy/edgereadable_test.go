@@ -12,7 +12,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-func TestAnAppBehindAnEdgeHoldingAKeyToTheAssetBucketTagsItsPagesEdgeReadableAndGetsAPurgeSecret(t *testing.T) {
+func TestAnAppBehindAnEdgeHoldingAKeyToTheEdgeBucketGetsAPurgeSecret(t *testing.T) {
 	t.Parallel()
 	cfg, spec := appStackSpec(t)
 	cfg.Objects = &fakeArtifactStore{}
@@ -21,24 +21,18 @@ func TestAnAppBehindAnEdgeHoldingAKeyToTheAssetBucketTagsItsPagesEdgeReadableAnd
 
 	cache := releasing(t, cfg).isrCache(spec)
 
-	if !cache.EdgeReadable {
-		t.Error("EdgeReadable = false, want the origin to tag its page entries for an edge that reads them")
-	}
 	if want := edge.DerivePurgeSecret("a-seed", spec.App.ISR.Coordinate.PagesPrefix()); cache.PurgeSecret != want {
 		t.Errorf("PurgeSecret = %q, want %q", cache.PurgeSecret, want)
 	}
 	env := cache.Env()
-	if env["OCEL_ISR_EDGE_READABLE"] != "1" {
-		t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want 1", env["OCEL_ISR_EDGE_READABLE"])
-	}
-	for _, name := range []string{"OCEL_ISR_WRITER_URL", "OCEL_PURGE_SECRET", "OCEL_ISR_STORE_BUCKET"} {
+	for _, name := range []string{"OCEL_ISR_WRITER_URL", "OCEL_PURGE_SECRET", "OCEL_ISR_STORE_BUCKET", "OCEL_ISR_EDGE_READABLE"} {
 		if got, told := env[name]; told {
-			t.Errorf("%s = %q, want none: the origin keeps its pages in the asset bucket and holds no writer", name, got)
+			t.Errorf("%s = %q, want none: the origin keeps its pages in the edge bucket and holds no writer", name, got)
 		}
 	}
 }
 
-func TestAnAppBehindAnEdgeHoldingNoKeyToTheAssetBucketTagsNothing(t *testing.T) {
+func TestAnAppBehindAnEdgeHoldingNoKeyToTheEdgeBucketGetsNoPurgeSecret(t *testing.T) {
 	t.Parallel()
 	cfg, spec := appStackSpec(t)
 	cfg.Objects = &fakeArtifactStore{}
@@ -46,17 +40,14 @@ func TestAnAppBehindAnEdgeHoldingNoKeyToTheAssetBucketTagsNothing(t *testing.T) 
 
 	cache := releasing(t, cfg).isrCache(spec)
 
-	if cache.EdgeReadable || cache.PurgeSecret != "" {
-		t.Errorf("cache = %+v, want no tagging and no purge secret where no edge reads the bucket", cache)
-	}
-	if _, told := cache.Env()["OCEL_ISR_EDGE_READABLE"]; told {
-		t.Error("OCEL_ISR_EDGE_READABLE is set, want it absent")
+	if cache.PurgeSecret != "" {
+		t.Errorf("cache = %+v, want no purge secret where no edge reads the bucket", cache)
 	}
 }
 
 func TestADeployBehindCloudflareNeedsTheEdgeReaderKeyAndThePurgeSeedBootstrapMints(t *testing.T) {
 	t.Parallel()
-	complete := Config{Namespace: testNamespace, AssetBucket: "assets", Objects: &fakeArtifactStore{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "s", PurgeSeed: "seed", Tier: environment.TierProduction, Edge: fakeEdgeOf(cloudflare.Kind)}
+	complete := Config{Namespace: testNamespace, EdgeBucket: "edge", Objects: &fakeArtifactStore{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "s", PurgeSeed: "seed", Tier: environment.TierProduction, Edge: fakeEdgeOf(cloudflare.Kind)}
 
 	for name, tc := range map[string]struct {
 		cfg   func(Config) Config
@@ -67,12 +58,12 @@ func TestADeployBehindCloudflareNeedsTheEdgeReaderKeyAndThePurgeSeedBootstrapMin
 		"no edge reader key": {
 			cfg:   func(c Config) Config { c.EdgeAccessKeyID, c.EdgeSecretKey = "", ""; return c },
 			front: string(cloudflare.Kind),
-			want:  "credential for the cloudflare edge to read the asset bucket",
+			want:  "credential for the cloudflare edge to read the edge bucket",
 		},
-		"no asset bucket": {
-			cfg:   func(c Config) Config { c.AssetBucket = ""; return c },
+		"no edge bucket": {
+			cfg:   func(c Config) Config { c.EdgeBucket = ""; return c },
 			front: string(cloudflare.Kind),
-			want:  "credential for the cloudflare edge to read the asset bucket",
+			want:  "credential for the cloudflare edge to read the edge bucket",
 		},
 		"no purge seed": {
 			cfg:   func(c Config) Config { c.PurgeSeed = ""; return c },
@@ -112,7 +103,7 @@ func TestADeployBehindCloudflareNeedsTheEdgeReaderKeyAndThePurgeSeedBootstrapMin
 func TestADeployBehindCloudflareReportsAnEdgeReaderKeyItCouldNotReadRatherThanAskingForABootstrap(t *testing.T) {
 	t.Parallel()
 	unreadable := errors.New("parse edge credentials: invalid character 'n'")
-	cfg := Config{Namespace: testNamespace, AssetBucket: "assets", Objects: &fakeArtifactStore{}, PurgeSeed: "seed", Tier: environment.TierProduction, EdgeCredentialsErr: unreadable, Edge: fakeEdgeOf(cloudflare.Kind)}
+	cfg := Config{Namespace: testNamespace, EdgeBucket: "edge", Objects: &fakeArtifactStore{}, PurgeSeed: "seed", Tier: environment.TierProduction, EdgeCredentialsErr: unreadable, Edge: fakeEdgeOf(cloudflare.Kind)}
 
 	err := checkEdgeReaderBootstrapped(cfg, cloudflare.Kind)
 

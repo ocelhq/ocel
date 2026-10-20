@@ -2,23 +2,24 @@ import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
 import { pagesPrefix, objectKey as storageKey } from "@platform/edge-contract/storage-key";
+import { newS3Client } from "../cache/sdk-clients.mjs";
 import {
-  edgeReadable,
-  edgeReadableTagging,
+  cacheBucketVar,
+  edgeBucketVar,
   isNotFound,
   type ObjectStore,
-  providerObjectStore,
   readBodyText,
+  requireEnv,
   requireStorageCoordinate,
 } from "./object-store.mjs";
-
-const EDGE_SERVED_KINDS = new Set(["APP_PAGE", "PAGES", "APP_ROUTE"]);
 
 export function newAwsCacheStore(): CacheStore {
   const coordinate = requireStorageCoordinate();
   const prefix = pagesPrefix(coordinate);
 
-  const provider = providerObjectStore();
+  const client = newS3Client();
+  const pages: ObjectStore = { bucket: requireEnv(edgeBucketVar), client };
+  const fetches: ObjectStore = { bucket: requireEnv(cacheBucketVar), client };
 
   const objectKey = (key: string) => {
     const addressed = entryObjectKey(prefix, key);
@@ -41,31 +42,21 @@ export function newAwsCacheStore(): CacheStore {
     }
   }
 
-  async function write(
-    to: ObjectStore,
-    key: string,
-    entry: CacheEntryFile,
-    tagging?: string,
-  ): Promise<void> {
+  async function write(to: ObjectStore, key: string, entry: CacheEntryFile): Promise<void> {
     await to.client.send(
       new PutObjectCommand({
         Bucket: to.bucket,
         Key: key,
         Body: JSON.stringify(entry),
         ContentType: "application/json",
-        ...(tagging !== undefined && { Tagging: tagging }),
       }),
     );
   }
 
-  const tagsPages = edgeReadable();
-  const taggingOf = (entry: CacheEntryFile) =>
-    tagsPages && EDGE_SERVED_KINDS.has(entry.value?.kind) ? edgeReadableTagging : undefined;
-
   return {
-    readEntry: async (key) => read(provider, objectKey(key)),
-    writeEntry: async (key, entry) => write(provider, objectKey(key), entry, taggingOf(entry)),
-    readFetch: (hash) => read(provider, fetchKey(hash)),
-    writeFetch: (hash, entry) => write(provider, fetchKey(hash), entry),
+    readEntry: async (key) => read(pages, objectKey(key)),
+    writeEntry: async (key, entry) => write(pages, objectKey(key), entry),
+    readFetch: (hash) => read(fetches, fetchKey(hash)),
+    writeFetch: (hash, entry) => write(fetches, fetchKey(hash), entry),
   };
 }

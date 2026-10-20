@@ -30,8 +30,13 @@ type baseRoleTemplate struct {
 
 func coreRoles(t *testing.T, tier environment.Tier) baseRoleTemplate {
 	t.Helper()
+	return coreRolesOf(t, defaultNamespace, tier)
+}
+
+func coreRolesOf(t *testing.T, ns Namespace, tier environment.Tier) baseRoleTemplate {
+	t.Helper()
 	var tmpl baseRoleTemplate
-	if err := json.Unmarshal([]byte(coreBody(defaultNamespace, tier, "")), &tmpl); err != nil {
+	if err := json.Unmarshal([]byte(coreBody(ns, tier, "")), &tmpl); err != nil {
 		t.Fatalf("the core template is not valid JSON: %v", err)
 	}
 	return tmpl
@@ -113,8 +118,25 @@ func TestTheTagInvalidatorRoleReadsTheStateTableAndItsStreamOffTheCore(t *testin
 }
 
 func onlyWhatOcelTaggedFor(condition map[string]any, tier environment.Tier) bool {
+	return onlyWhatTheNamespaceTaggedFor(condition, defaultNamespace, tier)
+}
+
+func onlyWhatTheNamespaceTaggedFor(condition map[string]any, ns Namespace, tier environment.Tier) bool {
 	equals, _ := condition["StringEquals"].(map[string]any)
-	return equals["aws:ResourceTag/ocel:managed-by"] == "ocel" && equals["aws:ResourceTag/ocel:env-tier"] == string(tier)
+	return equals["aws:ResourceTag/ocel:managed-by"] == string(ns) && equals["aws:ResourceTag/ocel:env-tier"] == string(tier)
+}
+
+func TestTheTagInvalidatorRoleInvalidatesTheDistributionsItsOwnNamespaceTagged(t *testing.T) {
+	ns := Namespace("acme")
+	for _, tier := range bothTiers {
+		t.Run(string(tier), func(t *testing.T) {
+			for _, st := range roleStatements(t, coreRolesOf(t, ns, tier), "TagInvalidatorRole") {
+				if slices.Contains(st.actions(), "cloudfront:CreateInvalidation") && !onlyWhatTheNamespaceTaggedFor(st.Condition, ns, tier) {
+					t.Errorf("invalidation condition = %v, want ocel:managed-by %s: a distribution is tagged with the namespace that raised it, so any other value invalidates nothing", st.Condition, ns)
+				}
+			}
+		})
+	}
 }
 
 func TestTheTagInvalidatorRoleInvalidatesOnlyTheDistributionsOcelTaggedForItsTier(t *testing.T) {
@@ -130,7 +152,7 @@ func TestTheTagInvalidatorRoleInvalidatesOnlyTheDistributionsOcelTaggedForItsTie
 					continue
 				}
 				if !onlyWhatOcelTaggedFor(st.Condition, tier) {
-					t.Errorf("invalidation condition = %v, want it gated on ocel:managed-by being ocel and ocel:env-tier being %s, or the invalidator flushes distributions Ocel never made", st.Condition, tier)
+					t.Errorf("invalidation condition = %v, want it gated on ocel:managed-by being its namespace and ocel:env-tier being %s, or the invalidator flushes distributions Ocel never made", st.Condition, tier)
 				}
 			}
 		})

@@ -63,7 +63,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	sessions := bucket.NewSessions(project, stack.Env, r.cfg.StateTableARN)
 	staged := functioncode.Refs(uploads)
 
-	dispatch := function.NewDispatchHost(spec.App, r.cfg.Slug, r.cfg.AssetBucket, r.cfg.ImageOptimizerURL)
+	dispatch := function.NewDispatchHost(spec.App, r.cfg.Slug, r.cfg.EdgeBucket, r.cfg.ImageOptimizerURL)
 	guard, err := function.NewOriginGuard(spec.App, r.cfg.Tier, r.cfg.OriginSecret, r.cfg.PreviousOriginSecret)
 	if err != nil {
 		return nil, err
@@ -207,17 +207,15 @@ func (r *release) isrCache(spec provider.StackSpec) *site.ISR {
 		return nil
 	}
 	cache := &site.ISR{
-		Coord:     appCoordinate(spec),
-		Namespace: isr.TagNamespace,
-		Bucket:    r.cfg.AssetBucket,
-		Table:     r.cfg.StateTable,
-		TableARN:  r.cfg.StateTableARN,
+		Coord:       appCoordinate(spec),
+		Namespace:   isr.TagNamespace,
+		EdgeBucket:  r.cfg.EdgeBucket,
+		CacheBucket: r.cfg.CacheBucket,
+		Table:       r.cfg.StateTable,
+		TableARN:    r.cfg.StateTableARN,
 	}
-	if r.cfg.buckets().CanEdgeRead() {
-		cache.EdgeReadable = true
-		if r.cfg.PurgeSeed != "" {
-			cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Coordinate.PagesPrefix())
-		}
+	if r.cfg.buckets().CanEdgeRead() && r.cfg.PurgeSeed != "" {
+		cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Coordinate.PagesPrefix())
 	}
 	return cache
 }
@@ -237,7 +235,7 @@ func (r *release) bytecodeCache(spec provider.StackSpec) *function.Bytecode {
 	if bytecode == nil {
 		return nil
 	}
-	return &function.Bytecode{Bucket: r.cfg.AssetBucket, Prefix: bytecode.Prefix}
+	return &function.Bytecode{Bucket: r.cfg.ArtifactBucket, Prefix: bytecode.Prefix}
 }
 
 func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.StackResult, error) {

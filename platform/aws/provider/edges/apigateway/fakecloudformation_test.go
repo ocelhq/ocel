@@ -27,7 +27,7 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	case coreStackName:
 		outputs = []cfntypes.Output{
 			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
-			{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
+			{OutputKey: aws.String("EdgeBucketName"), OutputValue: aws.String(fakeEdgeBucket)},
 		}
 		if !f.noInvokeRole {
 			outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(account.OutputEdgeInvokeRoleARN), OutputValue: aws.String(fakeInvokeRole)})

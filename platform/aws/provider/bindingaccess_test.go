@@ -165,7 +165,7 @@ func servedGrants(t *testing.T, grants ...provider.BindingGrant) (provider.Bindi
 	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", ""), BaseEndpoint: aws.String(store.serve(t))}
 	p := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace)
 	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
-		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", AssetBucket: "assets", StateTable: "state-table", VariablesTable: "variables"}}, nil
+		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", EdgeBucket: "edge", CacheBucket: "cache", StateTable: "state-table", VariablesTable: "variables"}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}

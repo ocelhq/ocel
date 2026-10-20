@@ -37,8 +37,8 @@ let store: ReturnType<typeof s3Store> | undefined;
 
 function assetStore(): ReturnType<typeof s3Store> {
   if (store) return store;
-  const bucket = process.env.OCEL_IMAGE_ASSET_BUCKET;
-  if (!bucket) throw new Error("OCEL_IMAGE_ASSET_BUCKET is not set");
+  const bucket = process.env.OCEL_EDGE_BUCKET;
+  if (!bucket) throw new Error("OCEL_EDGE_BUCKET is not set");
   return (store = s3Store(new S3Client({}), bucket));
 }
 

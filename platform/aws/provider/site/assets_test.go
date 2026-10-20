@@ -60,7 +60,7 @@ func imageConfigTree(t *testing.T) string {
 }
 
 func edgeReadingConfig(root string, asset *fakeArtifactStore) publication {
-	return publication{root: root, buckets: Buckets{Assets: "assets", Objects: asset, EdgeHoldsKey: true}}
+	return publication{root: root, buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset, EdgeHoldsKey: true}}
 }
 
 func publishedImageConfig(key string) bool {
@@ -116,8 +116,8 @@ func TestUploadStaticAssets(t *testing.T) {
 			}
 		}
 		for _, b := range asset.buckets {
-			if b != "assets" {
-				t.Errorf("uploaded into bucket %q, want the account's asset bucket %q", b, "assets")
+			if b != "edge" {
+				t.Errorf("uploaded into bucket %q, want the account's edge bucket %q", b, "edge")
 			}
 		}
 	})
@@ -125,7 +125,7 @@ func TestUploadStaticAssets(t *testing.T) {
 	t.Run("uploads for an edge that reads the bucket by its policy and holds no key", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: staticAppTree(t), buckets: Buckets{Assets: "assets", Objects: asset}}
+		cfg := publication{root: staticAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset}}
 
 		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
@@ -204,7 +204,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 		if got := sortedPuts(asset); len(got) != 0 {
-			t.Errorf("asset bucket put %v, want the HEAD hit to skip the upload", got)
+			t.Errorf("edge bucket put %v, want the HEAD hit to skip the upload", got)
 		}
 	})
 
@@ -249,7 +249,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("publishes the assets and the image config into the asset bucket alone", func(t *testing.T) {
+	t.Run("publishes the assets and the image config into the edge bucket alone", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := edgeReadingConfig(imageConfigTree(t), asset)
@@ -261,11 +261,11 @@ func TestUploadStaticAssets(t *testing.T) {
 		want := []string{assetKeyFor("web", testBuildID, "logo.png"), imageConfigKeyFor("web", testBuildID)}
 		slices.Sort(want)
 		if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
-			t.Errorf("asset bucket keys = %v, want %v", got, want)
+			t.Errorf("edge bucket keys = %v, want %v", got, want)
 		}
 		for _, b := range asset.buckets {
-			if b != "assets" {
-				t.Errorf("uploaded into bucket %q, want the account's own %q", b, "assets")
+			if b != "edge" {
+				t.Errorf("uploaded into bucket %q, want the account's own %q", b, "edge")
 			}
 		}
 	})
@@ -288,7 +288,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("tags the assets edge-readable, and not the image config", func(t *testing.T) {
+	t.Run("tags neither the assets nor the image config", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := edgeReadingConfig(imageConfigTree(t), asset)
@@ -297,12 +297,8 @@ func TestUploadStaticAssets(t *testing.T) {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
 
-		logo := assetKeyFor("web", testBuildID, "logo.png")
-		if got := asset.taggings[logo]; got != wantEdgeReadableTagging {
-			t.Errorf("asset bucket %s tagging = %q, want %q", logo, got, wantEdgeReadableTagging)
-		}
-		if got, tagged := asset.taggings[imageConfigKeyFor("web", testBuildID)]; tagged {
-			t.Errorf("image config tagging = %q, want none: the edge never reads it", got)
+		if len(asset.taggings) != 0 {
+			t.Errorf("taggings = %v, want none: an edge reads what sits in the edge bucket", asset.taggings)
 		}
 	})
 
@@ -358,11 +354,11 @@ func TestUploadStaticAssets(t *testing.T) {
 
 		want := []string{imageConfigKeyFor("web", testBuildID)}
 		if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
-			t.Errorf("asset bucket keys = %v, want %v", got, want)
+			t.Errorf("edge bucket keys = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("the asset bucket failing fails the deploy", func(t *testing.T) {
+	t.Run("the edge bucket failing fails the deploy", func(t *testing.T) {
 		t.Parallel()
 		boom := errors.New("bucket is on fire")
 		for _, tc := range []struct {

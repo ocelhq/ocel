@@ -7,8 +7,7 @@ import type { Invoke } from "@framework/node-runtime/host";
 import { s3AssetBucket } from "./dispatch-assets.mjs";
 import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./dispatch-signing.mjs";
 import { isLambdaThrottle } from "./lambda-throttle.mjs";
-
-const assetBucketVar = "OCEL_ASSET_BUCKET";
+import { edgeBucketVar } from "./object-store.mjs";
 
 const lambdaInvokePayloadBytes = 6 * 1024 * 1024;
 
@@ -16,10 +15,10 @@ const functionUrlEventEnvelopeBytes = 64 * 1024;
 
 export function awsDispatchAccess(env: NodeJS.ProcessEnv): DispatchAccess {
   const region = env.AWS_REGION;
-  const bucket = env[assetBucketVar];
+  const bucket = env[edgeBucketVar];
   if (bucket && !(region && credentialsOf(env))) {
     throw new Error(
-      `ocel: ${assetBucketVar} names ${bucket} but this function has no credentials to read it with`,
+      `ocel: ${edgeBucketVar} names ${bucket} but this function has no credentials to read it with`,
     );
   }
   return {

@@ -18,7 +18,6 @@ export interface Reach {
 
 export interface OriginStore {
   url: string;
-  prefix?: string;
   region: string;
   holdsEntries: boolean;
   entriesPrefix?: string;

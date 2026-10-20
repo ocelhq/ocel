@@ -19,19 +19,19 @@ import (
 
 const (
 	testBoundary  = "arn:aws:iam::" + functiontest.AccountID + ":policy/ocel-app-boundary"
-	testBucket    = "ocel-bootstrap-assetbucket-abc"
+	testBucket    = "ocel-prod-edge-k3x9q2"
 	testBucketARN = "arn:aws:s3:::" + testBucket
 )
 
 func spec(tier environment.Tier) imageoptimizer.Spec {
 	return imageoptimizer.Spec{
-		Namespace:      "ocel",
-		Tier:           tier,
-		Region:         functiontest.Region,
-		Boundary:       testBoundary,
-		RolePath:       "/ocel/" + string(tier) + "/app/",
-		AssetBucket:    testBucket,
-		AssetBucketARN: testBucketARN,
+		Namespace:     "ocel",
+		Tier:          tier,
+		Region:        functiontest.Region,
+		Boundary:      testBoundary,
+		RolePath:      "/ocel/" + string(tier) + "/app/",
+		EdgeBucket:    testBucket,
+		EdgeBucketARN: testBucketARN,
 	}
 }
 
@@ -43,22 +43,24 @@ func clients(account *functiontest.Account) imageoptimizer.Clients {
 func TestEnsureMakesAnOptimizerTheDeployCredentialMayMakeUnderTheAppBoundary(t *testing.T) {
 	t.Parallel()
 	account := functiontest.New()
-	names := imageoptimizer.NamesFor("ocel", environment.TierPreview)
+	names := imageoptimizer.NamesFor("acme", environment.TierPreview)
 
-	resources, err := imageoptimizer.Ensure(context.Background(), clients(account), spec(environment.TierPreview))
+	acme := spec(environment.TierPreview)
+	acme.Namespace = "acme"
+	resources, err := imageoptimizer.Ensure(context.Background(), clients(account), acme)
 	if err != nil {
 		t.Fatalf("Ensure() = %v", err)
 	}
 
-	if names.Function != "ocel-optimizer-preview" {
+	if names.Function != "acme-optimizer-preview" {
 		t.Errorf("function name = %q, want the namespace's preview optimizer", names.Function)
 	}
 	role, ok := account.Roles[names.Role]
 	if !ok {
 		t.Fatalf("no role %s", names.Role)
 	}
-	if role.Path != "/ocel/preview/app/" || role.Boundary != testBoundary || role.Tags["ocel:env-tier"] != "preview" || role.Tags["ocel:managed-by"] != "ocel" {
-		t.Errorf("role = %+v, want it at the app role path under the app boundary, tagged as ocel's of preview", role)
+	if role.Path != "/ocel/preview/app/" || role.Boundary != testBoundary || role.Tags["ocel:env-tier"] != "preview" || role.Tags["ocel:managed-by"] != "acme" {
+		t.Errorf("role = %+v, want it at the app role path under the app boundary, tagged as acme's of preview", role)
 	}
 	var policy struct {
 		Statement []struct{ Action, Resource any }
@@ -87,8 +89,8 @@ func TestEnsureMakesAnOptimizerTheDeployCredentialMayMakeUnderTheAppBoundary(t *
 	if fn.Tags["ocel:component"] != "image-optimizer" || fn.Tags["ocel:env-tier"] != "preview" {
 		t.Errorf("function tags = %v, want the image-optimizer component of preview, the tag app roles invoke it by", fn.Tags)
 	}
-	if fn.Input.Environment.Variables["OCEL_IMAGE_ASSET_BUCKET"] != testBucket {
-		t.Errorf("function environment = %v, want the asset bucket it reads", fn.Input.Environment.Variables)
+	if fn.Input.Environment.Variables["OCEL_EDGE_BUCKET"] != testBucket {
+		t.Errorf("function environment = %v, want the edge bucket it reads", fn.Input.Environment.Variables)
 	}
 	if fn.URL == nil || fn.URL.AuthType != lambdatypes.FunctionUrlAuthTypeAwsIam || fn.URL.InvokeMode != lambdatypes.InvokeModeResponseStream {
 		t.Errorf("function url = %+v, want an IAM-authenticated, response-streaming url", fn.URL)
@@ -150,10 +152,10 @@ func TestEnsuringAnOptimizerWhoseRoleTrustDriftedMovesTheRestForwardAndSaysItIsB
 func TestDigestChangesWithWhatTheOptimizerReads(t *testing.T) {
 	t.Parallel()
 	moved := spec(environment.TierProduction)
-	moved.AssetBucket = "another"
+	moved.EdgeBucket = "another"
 
 	if imageoptimizer.Digest(spec(environment.TierProduction)) == imageoptimizer.Digest(moved) {
-		t.Errorf("Digest() is the same for two asset buckets, so a moved bucket would leave the optimizer reading the old one")
+		t.Errorf("Digest() is the same for two edge buckets, so a moved bucket would leave the optimizer reading the old one")
 	}
 }
 

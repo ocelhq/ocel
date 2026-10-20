@@ -31,6 +31,12 @@ func newFakeS3() *fakeS3 { return &fakeS3{objects: map[string][]byte{}} }
 
 func (f *fakeS3) at(bucket, key string) string { return bucket + "/" + key }
 
+func (f *fakeS3) keys() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Sorted(maps.Keys(f.objects))
+}
+
 func (f *fakeS3) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	blob, err := io.ReadAll(in.Body)
 	if err != nil {
@@ -92,8 +98,9 @@ type tierBuckets struct{}
 
 func (tierBuckets) Buckets(_ context.Context, tier environment.Tier) (ports.Buckets, error) {
 	return ports.Buckets{
-		Functions: "ocel-artifacts-" + string(tier),
-		Assets:    "ocel-assets-" + string(tier),
+		Artifacts: "ocel-artifacts-" + string(tier),
+		Edge:      "ocel-edge-" + string(tier),
+		Cache:     "ocel-cache-" + string(tier),
 	}, nil
 }
 
@@ -103,6 +110,7 @@ func everyBucketRef() []provider.ArtifactRef {
 	return []provider.ArtifactRef{
 		{Tier: environment.TierProduction, Key: release.FunctionArtifactKey("bundle")},
 		{Tier: environment.TierProduction, Key: release.AssetKey("static/app.js")},
+		{Tier: environment.TierProduction, Key: release.ObjectKey(naming.ObjectUseCache, "entry.json")},
 	}
 }
 
@@ -119,21 +127,44 @@ func TestAKeyOfNoKindOcelStoresIsRefusedRatherThanWrittenNowhere(t *testing.T) {
 	}
 }
 
-func TestAFunctionArtifactLandsInTheArtifactBucketAndEveryOtherKindInTheAssetBucket(t *testing.T) {
+func TestEachKindLandsInTheBucketOfItsDataClass(t *testing.T) {
 	t.Parallel()
 
-	s3 := newFakeS3()
-	store := ports.Artifacts{S3: s3, Stores: tierBuckets{}}
-	refs := everyBucketRef()
-	for _, ref := range refs {
+	release := releaseOf("r1a2b3c4d")
+	release.Name = "api"
+	for _, tc := range []struct {
+		kind   naming.ObjectKind
+		bucket string
+	}{
+		{naming.ObjectFunction, "ocel-artifacts-production"},
+		{naming.ObjectBytecode, "ocel-artifacts-production"},
+		{naming.ObjectAssets, "ocel-edge-production"},
+		{naming.ObjectPages, "ocel-edge-production"},
+		{naming.ObjectRouteTables, "ocel-edge-production"},
+		{naming.ObjectBundles, "ocel-edge-production"},
+		{naming.ObjectImageConfig, "ocel-edge-production"},
+		{naming.ObjectFetchCache, "ocel-cache-production"},
+		{naming.ObjectUseCache, "ocel-cache-production"},
+		{naming.ObjectTagClock, "ocel-cache-production"},
+	} {
+		s3 := newFakeS3()
+		store := ports.Artifacts{S3: s3, Stores: tierBuckets{}}
+		ref := provider.ArtifactRef{Tier: environment.TierProduction, Key: release.ObjectKey(tc.kind, "object")}
 		if err := store.Put(context.Background(), ref, bytes.NewReader([]byte("x"))); err != nil {
 			t.Fatal(err)
 		}
-	}
-	for _, at := range []string{"ocel-artifacts-production/" + refs[0].Key, "ocel-assets-production/" + refs[1].Key} {
-		if _, stored := s3.objects[at]; !stored {
-			t.Errorf("nothing stored at %s, want each kind in the bucket it is served from", at)
+		if _, stored := s3.objects[tc.bucket+"/"+ref.Key]; !stored {
+			t.Errorf("%s objects are stored at %v, want %s", tc.kind, s3.keys(), tc.bucket)
 		}
+	}
+	s3 := newFakeS3()
+	store := ports.Artifacts{S3: s3, Stores: tierBuckets{}}
+	payload := provider.ArtifactRef{Tier: environment.TierProduction, Key: naming.PayloadKey("runtime", "abc")}
+	if err := store.Put(context.Background(), payload, bytes.NewReader([]byte("x"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, stored := s3.objects["ocel-artifacts-production/"+payload.Key]; !stored {
+		t.Errorf("payloads are stored at %v, want the artifacts bucket", s3.keys())
 	}
 }
 
@@ -149,10 +180,10 @@ func TestASweepReachesEveryBucketTheAccountKeeps(t *testing.T) {
 	}
 	var progress fake.Log
 	scope := naming.Coordinate{Project: "shop", Env: "prod"}
-	if err := store.RemoveObjects(ctx, environment.TierProduction, scope, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets}, &progress); err != nil {
+	if err := store.RemoveObjects(ctx, environment.TierProduction, scope, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets, naming.ObjectUseCache}, &progress); err != nil {
 		t.Fatalf("RemoveObjects() = %v", err)
 	}
-	if want := []string{"INFO Removed the production objects under fn/shop/prod/, assets/shop/prod/"}; !slices.Equal(progress.Lines(), want) {
+	if want := []string{"INFO Removed the production objects under fn/shop/prod/, assets/shop/prod/, use-cache/shop/prod/"}; !slices.Equal(progress.Lines(), want) {
 		t.Errorf("RemoveObjects() said %q, want %q", progress.Lines(), want)
 	}
 	for _, ref := range everyBucketRef() {

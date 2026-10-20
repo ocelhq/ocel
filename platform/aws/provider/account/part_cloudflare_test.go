@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type edgeUserTemplate struct {
@@ -71,7 +70,7 @@ func TestEdgeUser(t *testing.T) {
 					}
 				}
 				if hasAction(st.Action, "s3:ListBucket") {
-					listBucket = len(listPolicyActions(st.Action)) == 1 && slices.Equal(templateStrings(st.Resource), []string{paramAssetBucketARN})
+					listBucket = len(listPolicyActions(st.Action)) == 1 && slices.Equal(templateStrings(st.Resource), []string{paramEdgeBucketARN})
 				}
 				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
 					invoke = true
@@ -85,11 +84,11 @@ func TestEdgeUser(t *testing.T) {
 					}
 				}
 			}
-			if !readsOnlyEdgeReadableObjects(stmts) {
-				t.Error("the edge user must read every object the deploy tags edge-readable in the asset bucket, and no other object in it")
+			if !readsTheEdgeBucketAlone(stmts) {
+				t.Error("the edge user must read every object in the edge bucket, whatever its tags, and no object in any other bucket")
 			}
 			if !listBucket {
-				t.Error("missing s3:ListBucket, alone, on the asset bucket itself, so an absent object answers 404 rather than 403")
+				t.Error("missing s3:ListBucket, alone, on the edge bucket itself, so an absent object answers 404 rather than 403")
 			}
 			if !invoke {
 				t.Error("missing the lambda:Invoke* grant")
@@ -104,68 +103,39 @@ func TestEdgeUser(t *testing.T) {
 	}
 }
 
-var edgeReadable = map[string]string{naming.EdgeReadableTagKey: naming.EdgeReadableTagValue}
-
-func readsOnlyEdgeReadableObjects(stmts []policyStatement) bool {
-	const release = "arn:aws:s3:::assets/prod/shop/web/r1a2b3c4d/"
-	return edgeUserReads(stmts, release+"assets/_next/static/app.js", edgeReadable) &&
-		edgeUserReads(stmts, release+"route-table/"+strings.Repeat("a", 64)+".json", edgeReadable) &&
-		edgeUserReads(stmts, release+"edge/bundle.json", edgeReadable) &&
-		!edgeUserReads(stmts, release+"image-config.json", nil) &&
-		!edgeUserReads(stmts, release+"isr/assets/page.json", nil) &&
-		!edgeUserReads(stmts, release+"image-config.json", map[string]string{naming.EdgeReadableTagKey: "other"})
-}
-
-func edgeUserReads(stmts []policyStatement, object string, tags map[string]string) bool {
-	for _, st := range stmts {
-		if st.Effect != "Allow" || !slices.Contains(st.actions(), "s3:GetObject") {
-			continue
-		}
-		if !iamResourceMatchesAny(st.resources(), object) {
-			continue
-		}
-		if existingTagsSatisfy(st.Condition, tags) {
-			return true
-		}
-	}
-	return false
-}
-
-func existingTagsSatisfy(condition map[string]any, tags map[string]string) bool {
-	for operator, clauses := range condition {
-		if operator != "StringEquals" {
+func readsTheEdgeBucketAlone(stmts []policyStatement) bool {
+	const release = "shop/prod/web/r1a2b3c4d/"
+	for _, object := range []string{
+		"assets/" + release + "_next/static/app.js",
+		"pages/" + release + "index.cache.json",
+		"route-tables/" + release + strings.Repeat("a", 64) + ".json",
+		"bundles/" + release + "bundle.json",
+		"image-config/" + release + "image-config.json",
+	} {
+		if !edgeUserReads(stmts, "arn:aws:s3:::edge/"+object) {
 			return false
 		}
-		for key, want := range clauses.(map[string]any) {
-			tag, ok := strings.CutPrefix(key, "s3:ExistingObjectTag/")
-			if !ok {
-				return false
-			}
-			value, tagged := tags[tag]
-			if !tagged || value != want {
-				return false
-			}
+	}
+	for _, other := range []string{"arn:aws:s3:::cache/use-cache/" + release + "entry.json", "arn:aws:s3:::state/trust/client-cas.json", "arn:aws:s3:::artifacts/fn/" + release + "api/h.zip"} {
+		if edgeUserReads(stmts, other) {
+			return false
+		}
+	}
+	for _, st := range stmts {
+		if slices.Contains(st.actions(), "s3:GetObject") && len(st.Condition) > 0 {
+			return false
 		}
 	}
 	return true
 }
 
-func TestTheEdgeUserCannotReadAnUntaggedObjectOfAProjectNamedEdgeOrAnAppNamedAssets(t *testing.T) {
-	var tmpl edgeUserTemplate
-	if err := json.Unmarshal([]byte(partTemplate(CloudflareEdgePart, environment.TierProduction)), &tmpl); err != nil {
-		t.Fatalf("template is not valid JSON: %v", err)
-	}
-	stmts := tmpl.Resources["EdgeUser"].Properties.Policies[0].PolicyDocument.Statement
-	for _, object := range []string{
-		"arn:aws:s3:::assets/prod/edge/web/r1a2b3c4d/image-config.json",
-		"arn:aws:s3:::assets/edge/assets/route-table/r1a2b3c4d/image-config.json",
-		"arn:aws:s3:::assets/prod/shop/assets/r1a2b3c4d/image-config.json",
-		"arn:aws:s3:::assets/prod/shop/web/r1a2b3c4d/isr/blog/assets/edge/page.json",
-	} {
-		if edgeUserReads(stmts, object, nil) {
-			t.Errorf("the edge user reads %s, an object the deploy never tags edge-readable", object)
+func edgeUserReads(stmts []policyStatement, object string) bool {
+	for _, st := range stmts {
+		if st.Effect == "Allow" && slices.Contains(st.actions(), "s3:GetObject") && iamResourceMatchesAny(st.resources(), object) {
+			return true
 		}
 	}
+	return false
 }
 
 type mintingEdge struct {

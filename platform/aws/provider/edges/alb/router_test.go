@@ -253,7 +253,7 @@ func TestAPointerMoveWhileAnotherPromoteHoldsThePointerMovesNothingAndIsUnserved
 		t.Fatalf("MovePointer: %v", err)
 	}
 
-	f.hold("ocel/routes/production/shop/@production.lease")
+	f.hold("leases/routes/shop/@production.lease")
 	err := moveOnto(t, stack, router.DefaultPointer, containerRecord(f)("admin", "b2"))
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {

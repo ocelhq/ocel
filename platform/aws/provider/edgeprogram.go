@@ -29,7 +29,7 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 	return edge.Program{
 		Origin: deploy.OriginReach(deploy.OriginAccess{
 			Region:            p.aws.Region,
-			AssetBucket:       deployed.AssetBucket,
+			EdgeBucket:        deployed.EdgeBucket,
 			AccessKeyID:       params.EdgeCredentials.AccessKeyID,
 			SecretAccessKey:   params.EdgeCredentials.SecretAccessKey,
 			ImageOptimizerURL: optimizer,

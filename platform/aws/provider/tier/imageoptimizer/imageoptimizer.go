@@ -38,14 +38,13 @@ const (
 	timeoutSeconds   = 20
 	threadpoolSize   = 4
 	retentionDays    = 14
-	bucketEnvVar     = "OCEL_IMAGE_ASSET_BUCKET"
+	bucketEnvVar     = "OCEL_EDGE_BUCKET"
 	threadpoolEnvVar = "UV_THREADPOOL_SIZE"
 	policyName       = "image-optimizer-read"
 
-	lambdaPrincipal   = "lambda.amazonaws.com"
-	managedByTagKey   = "ocel:managed-by"
-	managedByTagValue = "ocel"
-	tierTagKey        = "ocel:env-tier"
+	lambdaPrincipal = "lambda.amazonaws.com"
+	managedByTagKey = "ocel:managed-by"
+	tierTagKey      = "ocel:env-tier"
 
 	kindRole     = "AWS::IAM::Role"
 	kindLogGroup = "AWS::Logs::LogGroup"
@@ -54,13 +53,13 @@ const (
 )
 
 type Spec struct {
-	Namespace      string
-	Tier           environment.Tier
-	Region         string
-	Boundary       string
-	RolePath       string
-	AssetBucket    string
-	AssetBucketARN string
+	Namespace     string
+	Tier          environment.Tier
+	Region        string
+	Boundary      string
+	RolePath      string
+	EdgeBucket    string
+	EdgeBucketARN string
 
 	UpdatesTrust bool
 }
@@ -105,13 +104,13 @@ func (c Clients) functions() lambdapart.Clients {
 
 func Digest(spec Spec) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		payloads.ImageOptimizer().SHA256, spec.Namespace, string(spec.Tier), spec.Region, spec.Boundary, spec.RolePath, spec.AssetBucket, spec.AssetBucketARN,
+		payloads.ImageOptimizer().SHA256, spec.Namespace, string(spec.Tier), spec.Region, spec.Boundary, spec.RolePath, spec.EdgeBucket, spec.EdgeBucketARN,
 	}, "\n")))
 	return hex.EncodeToString(sum[:])
 }
 
-func tags(tier environment.Tier) map[string]string {
-	return map[string]string{managedByTagKey: managedByTagValue, tierTagKey: string(tier)}
+func tags(spec Spec) map[string]string {
+	return map[string]string{managedByTagKey: spec.Namespace, tierTagKey: string(spec.Tier)}
 }
 
 func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource, error) {
@@ -122,8 +121,8 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	}
 	policy, err := lambdapart.Document(
 		map[string]any{"Effect": "Allow", "Action": "s3:GetObject", "Resource": []string{
-			spec.AssetBucketARN + "/" + string(naming.ObjectAssets) + "/*",
-			spec.AssetBucketARN + "/" + string(naming.ObjectImageConfig) + "/*",
+			spec.EdgeBucketARN + "/" + string(naming.ObjectAssets) + "/*",
+			spec.EdgeBucketARN + "/" + string(naming.ObjectImageConfig) + "/*",
 		}},
 		map[string]any{"Effect": "Allow", "Action": []string{"logs:CreateLogStream", "logs:PutLogEvents"},
 			"Resource": "arn:aws:logs:" + spec.Region + ":" + account + ":log-group:" + names.LogGroup + ":*"},
@@ -135,17 +134,17 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		Name:         names.Role,
 		Path:         spec.RolePath,
 		Boundary:     spec.Boundary,
-		Description:  "Ocel: the role the " + string(spec.Tier) + " image optimizer runs as, reading the asset bucket's assets and image config",
+		Description:  "Ocel: the role the " + string(spec.Tier) + " image optimizer runs as, reading the edge bucket's assets and image config",
 		Service:      lambdaPrincipal,
 		PolicyName:   policyName,
 		Policy:       policy,
-		Tags:         tags(spec.Tier),
+		Tags:         tags(spec),
 		UpdatesTrust: spec.UpdatesTrust,
 	})
 	if behind != nil && !errors.Is(behind, stackrecords.ErrPartBehind) {
 		return nil, behind
 	}
-	functionTags := tags(spec.Tier)
+	functionTags := tags(spec)
 	functionTags[ComponentTagKey] = ComponentTagValue
 	if err := lambdapart.Ensure(ctx, c.functions(), lambdapart.Function{
 		Name:           names.Function,
@@ -157,7 +156,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		TimeoutSeconds: timeoutSeconds,
 		Role:           "arn:aws:iam::" + account + ":role" + spec.RolePath + names.Role,
 		Code:           payloads.ImageOptimizer().Bytes,
-		Variables:      map[string]string{bucketEnvVar: spec.AssetBucket, threadpoolEnvVar: strconv.Itoa(threadpoolSize)},
+		Variables:      map[string]string{bucketEnvVar: spec.EdgeBucket, threadpoolEnvVar: strconv.Itoa(threadpoolSize)},
 		LogGroup:       names.LogGroup,
 		RetentionDays:  retentionDays,
 		Tags:           functionTags,

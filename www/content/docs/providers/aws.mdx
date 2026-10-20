@@ -44,8 +44,20 @@ ocel bootstrap production
 ocel deploy
 ```
 
-The bootstrap holds what every deploy needs: the state, artifact and asset buckets, the state and
-variables tables, the app boundary, and the roles the tag invalidator and API Gateway run as. The
+The bootstrap holds what every deploy needs: a bucket for each class of data, the state and
+variables tables, the app boundary, and the roles the tag invalidator and API Gateway run as. Each
+bucket is named `<namespace>-<prod|preview>-<class>-<tag>`, and the tag stays the same for every
+later bootstrap:
+
+| Bucket | Holds | Kept |
+| --- | --- | --- |
+| `state` | Pulumi state, and the client CAs the load balancer trusts | versioned; a replaced version expires after 7 days |
+| `artifacts` | function code, payloads and compiled bytecode | 30 days |
+| `edge` | what an edge may serve: static assets, page entries, route tables, edge bundles and image config | until the release that wrote it is removed |
+| `cache` | what only the app reads: the fetch cache, `use cache` entries and the tag clock | 30 days after the last write |
+
+CloudFront reads only the static assets in the `edge` bucket, and no edge can read any other
+bucket. The
 rest is added by the first deploy that needs it, with the deploy credential, and listed by
 `ocel bootstrap status`:
 

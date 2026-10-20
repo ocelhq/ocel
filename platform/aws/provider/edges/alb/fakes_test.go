@@ -34,7 +34,7 @@ import (
 const (
 	testAddress  = "ocel-cloudflare-production-1234.us-east-1.elb.amazonaws.com"
 	testListener = "arn:aws:elasticloadbalancing:us-east-1:111122223333:listener/app/ocel-cloudflare-production/abc/def"
-	testBucket   = "ocel-artifacts"
+	testBucket   = "ocel-prod-state-k3x9q2"
 )
 
 type fakeRule struct {

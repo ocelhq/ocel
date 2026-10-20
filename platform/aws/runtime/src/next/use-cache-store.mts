@@ -12,7 +12,13 @@ import type { TagSnapshotRead, UseCacheStore } from "@framework/next-runtime/use
 import { objectKey as storageKey } from "@platform/edge-contract/storage-key";
 import { newDynamoDBClient, newS3Client } from "../cache/sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
-import { isNotFound, readBodyText, requireEnv, requireStorageCoordinate } from "./object-store.mjs";
+import {
+  cacheBucketVar,
+  isNotFound,
+  readBodyText,
+  requireEnv,
+  requireStorageCoordinate,
+} from "./object-store.mjs";
 
 function objectName(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -25,7 +31,7 @@ function isNotModified(err: any): boolean {
 export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
   const table = requireEnv("OCEL_STATE_TABLE");
   const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
-  const bucket = requireEnv("OCEL_ISR_BUCKET");
+  const bucket = requireEnv(cacheBucketVar);
   const coordinate = requireStorageCoordinate();
 
   const ddb = newDynamoDBClient();

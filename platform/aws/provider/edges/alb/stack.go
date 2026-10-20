@@ -228,7 +228,7 @@ func (s *stack) MovePointer(ctx context.Context, move router.PointerMove, _ prog
 		return router.Unserved{Err: err}
 	}
 	pointer := router.ResolvePointer(move.Pointer)
-	moving := s.newLease(c, formatPointerLeaseKey(s.state.Tier, s.state.Slug, pointer), "moving "+pointer+" of "+s.state.Slug)
+	moving := s.newLease(c, formatPointerLeaseKey(s.state.Slug, pointer), "moving "+pointer+" of "+s.state.Slug)
 	worked := false
 	err = moving.hold(ctx, func(ctx context.Context) error {
 		worked = true

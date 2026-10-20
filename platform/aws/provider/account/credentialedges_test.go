@@ -320,7 +320,7 @@ func TestEveryCredentialReadsTheAvailabilityZonesTheContainerFrontsVPCOriginReac
 
 func TestEveryCredentialFindsAndRemovesOnlyOcelsFailedVPCOrigins(t *testing.T) {
 	const vpcOrigin = "arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"
-	ocels := requestContext{"aws:ResourceTag/" + iam.ManagedByTagKey: iam.ManagedByTagValue}
+	ocels := requestContext{"aws:ResourceTag/" + iam.ManagedByTagKey: string(defaultNamespace)}
 	for purpose, document := range bothCredentials(t) {
 		if !allows(t, document, "cloudfront:ListVpcOrigins", iam.AnyResource, requestContext{}) {
 			t.Errorf("the %s credential cannot call cloudfront:ListVpcOrigins, so a retried deploy cannot find the VPC origin a failed one left behind", purpose)

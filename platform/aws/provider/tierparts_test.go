@@ -121,7 +121,7 @@ func TestTheTagInvalidatorIsRefusedAsNotReadyOnABootstrapThatPredatesItsRole(t *
 	p := NewProvider(Options{Region: "us-east-1"}, nil, cfg, defaultNamespace)
 	p.identity.remember(struct{}{}, &sts.GetCallerIdentityOutput{Account: aws.String("111122223333")})
 	p.deployed.remember(preview, account.Reading{Deployed: account.Deployed{
-		Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", AssetBucket: "assets",
+		Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", EdgeBucket: "edge", CacheBucket: "cache",
 		StateTableStreamARN: "arn:aws:dynamodb:us-east-1:111122223333:table/state-table/stream/2026-10-16T00:00:00.000",
 	}})
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -11,22 +12,18 @@ import (
 
 const RouteTableSetName = "route-table"
 
-func selectEdgeObjectTarget(b Buckets) uploadTarget {
-	return uploadTarget{up: b.Objects, bucket: b.Assets, tier: b.Tier, edgeReadable: true}
-}
-
 func routeTableSet(b Buckets, app string, table *provider.EdgeRouteTable) (*AssetSet, error) {
 	if table == nil {
 		return nil, nil
 	}
 	if !b.CanEdgeRead() {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"%s is routed at the edge by its route table, and this account holds no credential for that edge to read the asset bucket with. Re-run `%s`",
+			"%s is routed at the edge by its route table, and this account holds no credential for that edge to read the edge bucket with. Re-run `%s`",
 			app, provider.BootstrapCommand(b.Tier))
 	}
 	key := table.Location.Key
 	manifest := newSetManifest()
-	to := selectEdgeObjectTarget(b)
+	to := b.target(naming.ObjectRouteTables)
 	manifest.add(to.bucket, key, int64(len(table.Table)))
 	return &AssetSet{
 		name:   RouteTableSetName,
@@ -37,7 +34,7 @@ func routeTableSet(b Buckets, app string, table *provider.EdgeRouteTable) (*Asse
 			phaseStart := time.Now()
 			stats := newUploadBatchStats()
 			say(progress, "Uploading "+app+"'s route table to bucket "+to.bucket)
-			err := tracedPut(ctx, to.up, to.bucket, key, objectHeaders{contentType: "application/json"}.taggedFor(to), table.Table, stats)
+			err := tracedPut(ctx, to.up, to.bucket, key, objectHeaders{contentType: "application/json"}, table.Table, stats)
 			emitUploadBatch(progress, uploadKindRouteTable, stats, err, phaseStart)
 			return err
 		},

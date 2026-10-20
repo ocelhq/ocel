@@ -82,7 +82,7 @@ afterEach(async () => {
   for (const v of [
     "OCEL_STATE_TABLE",
     "OCEL_ISR_TAG_NAMESPACE",
-    "OCEL_ISR_BUCKET",
+    "OCEL_CACHE_BUCKET",
     "OCEL_STORAGE_COORDINATE",
   ]) {
     delete process.env[v];
