@@ -28,6 +28,7 @@ type TaggedResource struct {
 	Name             string
 	Regional         bool
 	PermissionPrefix string
+	Admits           Admission
 }
 
 func (c *Clients) TierTagged() bool { return !c.Emulated() || c.TierTagEndpoint != "" }
@@ -127,7 +128,10 @@ func (c *Clients) EnsureTierTag(ctx context.Context, tier environment.Tier, targ
 	}
 	switch {
 	case err == nil:
-		return TagOperationDone(ctx, service, "binding "+c.TierTagValuePath(tier)+" to "+target.Name, started)
+		if err := TagOperationDone(ctx, service, "binding "+c.TierTagValuePath(tier)+" to "+target.Name, started); err != nil {
+			return err
+		}
+		return c.awaitTierAdmits(ctx, tier, target)
 	case Taken(err):
 		return nil
 	case googleretry.AnsweredCode(err) == http.StatusBadRequest:
@@ -238,11 +242,13 @@ func TagOperationDone(ctx context.Context, service *crm.Service, doing string, s
 }
 
 func (c *Clients) RunServiceTagged(service string) TaggedResource {
-	return TaggedResource{Name: "//run.googleapis.com/" + c.ServicePath(service), Regional: true, PermissionPrefix: "run.services"}
+	path := c.ServicePath(service)
+	return TaggedResource{Name: "//run.googleapis.com/" + path, Regional: true, PermissionPrefix: "run.services", Admits: c.serviceAdmits(path)}
 }
 
 func (c *Clients) AccountTagged(uniqueID string) TaggedResource {
-	return TaggedResource{Name: "//iam.googleapis.com/projects/" + c.Project() + "/serviceAccounts/" + uniqueID, PermissionPrefix: "iam.serviceAccounts"}
+	path := "projects/" + c.Project() + "/serviceAccounts/" + uniqueID
+	return TaggedResource{Name: "//iam.googleapis.com/" + path, PermissionPrefix: "iam.serviceAccounts", Admits: c.accountAdmits(path)}
 }
 
 func (c *Clients) PubSubTagged(path string) TaggedResource {
@@ -254,11 +260,12 @@ func (c *Clients) PubSubTagged(path string) TaggedResource {
 }
 
 func (c *Clients) RepositoryTagged(repository string) TaggedResource {
-	return TaggedResource{Name: "//artifactregistry.googleapis.com/" + RepositoryPath(c, repository), Regional: true, PermissionPrefix: "artifactregistry.repositories"}
+	path := RepositoryPath(c, repository)
+	return TaggedResource{Name: "//artifactregistry.googleapis.com/" + path, Regional: true, PermissionPrefix: "artifactregistry.repositories", Admits: c.repositoryAdmits(path)}
 }
 
 func (c *Clients) BucketTagged(bucket string) TaggedResource {
-	return TaggedResource{Name: "//storage.googleapis.com/projects/_/buckets/" + bucket, Regional: true, PermissionPrefix: "storage.buckets"}
+	return TaggedResource{Name: "//storage.googleapis.com/projects/_/buckets/" + bucket, Regional: true, PermissionPrefix: "storage.buckets", Admits: c.bucketAdmits(bucket)}
 }
 
 func (c *Clients) SQLInstanceTagged(instance string) TaggedResource {

@@ -38,3 +38,19 @@ func TestRemovingADatabaseRemovesItsInstancesTierTagBeforeTheInstance(t *testing
 		t.Errorf("the removed instance %s left %v bound", instance, got)
 	}
 }
+
+func TestADatabaseWhoseTierTagHasNotYetReachedTheCredentialIsResizedOnceItHas(t *testing.T) {
+	h := servingPostgres(t)
+	tags := googletest.NewTieredTags(t)
+	tags.Tagged(h.instances.clients)
+	h.provision(t, "17")
+	instance := h.server.Created[0].Name
+	h.server.Instances[instance].Settings.Tier = "db-f1-micro"
+	h.server.PatchesDenied = 2
+
+	h.provision(t, "17")
+
+	if len(h.server.Patched) != 1 || h.server.Instances[instance].Settings.Tier != "db-custom-1-3840" {
+		t.Errorf("Cloud SQL was patched %d times to %s, want one resize once the tier's grants reached the instance", len(h.server.Patched), h.server.Instances[instance].Settings.Tier)
+	}
+}
