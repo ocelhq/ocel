@@ -288,7 +288,7 @@ func deleteObject(ctx context.Context, c Clients, key, etag string) error {
 }
 
 func (s *stack) readTrustStore(ctx context.Context, c Clients) (store, digest string, err error) {
-	name := awsports.PublicBalancerName(s.state.Tier)
+	name := awsports.PublicBalancerName(s.namespace, s.state.Tier)
 	for attempt := range trustStoreReads {
 		read, err := c.Balancers.DescribeTrustStores(ctx, &elbv2.DescribeTrustStoresInput{Names: []string{name}})
 		var absent *elbv2types.TrustStoreNotFoundException
@@ -325,7 +325,7 @@ func readBundleDigest(ctx context.Context, c Clients, store string) (string, err
 }
 
 func (s *stack) writeTrustStore(ctx context.Context, c Clients, store string, trusted []string, digest string) (string, error) {
-	name := awsports.PublicBalancerName(s.state.Tier)
+	name := awsports.PublicBalancerName(s.namespace, s.state.Tier)
 	key := formatBundleKey(s.state.Tier)
 	if _, err := c.Objects.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(c.Bucket),
@@ -340,7 +340,7 @@ func (s *stack) writeTrustStore(ctx context.Context, c Clients, store string, tr
 			Name:                         aws.String(name),
 			CaCertificatesBundleS3Bucket: aws.String(c.Bucket),
 			CaCertificatesBundleS3Key:    aws.String(key),
-			Tags:                         []elbv2types.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")}, digestTag},
+			Tags:                         []elbv2types.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String(s.namespace)}, digestTag},
 		})
 		if err != nil {
 			return "", refuseOverTrustQuota(fmt.Errorf("create the trust store %s: %w", name, err), len(trusted))

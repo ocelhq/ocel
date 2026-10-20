@@ -22,8 +22,8 @@ var sessionChannelActions = []string{
 }
 
 func (c Clients) ensureTaskRole(ctx context.Context, spec Spec) (string, error) {
-	name := NameFor(spec.Tier)
-	arn, err := c.findTaskRole(ctx, name)
+	name := NameFor(spec.Namespace, spec.Tier)
+	arn, err := c.findTaskRole(ctx, spec.Namespace, name)
 	if err != nil {
 		return "", err
 	}
@@ -38,7 +38,7 @@ func (c Clients) ensureTaskRole(ctx context.Context, spec Spec) (string, error) 
 	return arn, nil
 }
 
-func (c Clients) findTaskRole(ctx context.Context, name string) (string, error) {
+func (c Clients) findTaskRole(ctx context.Context, namespace, name string) (string, error) {
 	got, err := c.IAM.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(name)})
 	var missing *iamtypes.NoSuchEntityException
 	if errors.As(err, &missing) {
@@ -47,8 +47,8 @@ func (c Clients) findTaskRole(ctx context.Context, name string) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("look up role %s: %w", name, err)
 	}
-	if !isManagedByOcel(got.Role.Tags, func(tag iamtypes.Tag) (*string, *string) { return tag.Key, tag.Value }) {
-		return "", refuseUnowned("role", name)
+	if !isManagedByOcel(namespace, got.Role.Tags, func(tag iamtypes.Tag) (*string, *string) { return tag.Key, tag.Value }) {
+		return "", refuseUnowned(namespace, "role", name)
 	}
 	return aws.ToString(got.Role.Arn), nil
 }
@@ -78,11 +78,11 @@ func (c Clients) createTaskRole(ctx context.Context, spec Spec, name string) (st
 		Description:              aws.String("Ocel: the role a bastion task opens its Session Manager channels as, for the " + string(spec.Tier) + " tier"),
 		AssumeRolePolicyDocument: aws.String(string(trust)),
 		PermissionsBoundary:      aws.String(spec.Boundary),
-		Tags:                     iamTagsFor(spec.Tier),
+		Tags:                     iamTagsFor(spec.Namespace, spec.Tier),
 	})
 	var exists *iamtypes.EntityAlreadyExistsException
 	if errors.As(err, &exists) {
-		return c.findTaskRole(ctx, name)
+		return c.findTaskRole(ctx, spec.Namespace, name)
 	}
 	if err != nil {
 		return "", fmt.Errorf("create role %s: %w", name, err)

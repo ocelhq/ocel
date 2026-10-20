@@ -78,14 +78,14 @@ func egressRules(net network, ports []int) []rule {
 	return rules
 }
 
-func (c Clients) reconcileSecurityGroup(ctx context.Context, tier environment.Tier, net network, ports []int) (string, error) {
-	name := NameFor(tier)
-	group, err := c.findSecurityGroup(ctx, name, net.vpc)
+func (c Clients) reconcileSecurityGroup(ctx context.Context, namespace string, tier environment.Tier, net network, ports []int) (string, error) {
+	name := NameFor(namespace, tier)
+	group, err := c.findSecurityGroup(ctx, namespace, name, net.vpc)
 	if err != nil {
 		return "", err
 	}
 	if group == nil {
-		if group, err = c.createSecurityGroup(ctx, tier, net.vpc); err != nil {
+		if group, err = c.createSecurityGroup(ctx, namespace, tier, net.vpc); err != nil {
 			return "", err
 		}
 	}
@@ -96,7 +96,7 @@ func (c Clients) reconcileSecurityGroup(ctx context.Context, tier environment.Ti
 	return id, c.limitEgress(ctx, id, group, egressRules(net, ports))
 }
 
-func (c Clients) findSecurityGroup(ctx context.Context, name, vpc string) (*ec2types.SecurityGroup, error) {
+func (c Clients) findSecurityGroup(ctx context.Context, namespace, name, vpc string) (*ec2types.SecurityGroup, error) {
 	filters := []ec2types.Filter{{Name: aws.String("group-name"), Values: []string{name}}}
 	if vpc != "" {
 		filters = append(filters, ec2types.Filter{Name: aws.String("vpc-id"), Values: []string{vpc}})
@@ -109,26 +109,26 @@ func (c Clients) findSecurityGroup(ctx context.Context, name, vpc string) (*ec2t
 		return nil, nil
 	}
 	group := described.SecurityGroups[0]
-	if !isManagedByOcel(group.Tags, func(tag ec2types.Tag) (*string, *string) { return tag.Key, tag.Value }) {
-		return nil, refuseUnowned("security group", name)
+	if !isManagedByOcel(namespace, group.Tags, func(tag ec2types.Tag) (*string, *string) { return tag.Key, tag.Value }) {
+		return nil, refuseUnowned(namespace, "security group", name)
 	}
 	return &group, nil
 }
 
-func (c Clients) createSecurityGroup(ctx context.Context, tier environment.Tier, vpc string) (*ec2types.SecurityGroup, error) {
-	name := NameFor(tier)
+func (c Clients) createSecurityGroup(ctx context.Context, namespace string, tier environment.Tier, vpc string) (*ec2types.SecurityGroup, error) {
+	name := NameFor(namespace, tier)
 	_, err := c.EC2.CreateSecurityGroup(ctx, &ec2.CreateSecurityGroupInput{
 		GroupName:         aws.String(name),
 		Description:       aws.String("Ocel: the " + string(tier) + " tier's bastion, which nothing reaches and which reaches only HTTPS and the ports of its databases and caches"),
 		VpcId:             aws.String(vpc),
-		TagSpecifications: []ec2types.TagSpecification{{ResourceType: ec2types.ResourceTypeSecurityGroup, Tags: ec2TagsFor(tier)}},
+		TagSpecifications: []ec2types.TagSpecification{{ResourceType: ec2types.ResourceTypeSecurityGroup, Tags: ec2TagsFor(namespace, tier)}},
 	})
 	var api smithy.APIError
 	duplicate := errors.As(err, &api) && api.ErrorCode() == "InvalidGroup.Duplicate"
 	if err != nil && !duplicate {
 		return nil, fmt.Errorf("create security group %s: %w", name, err)
 	}
-	created, err := c.findSecurityGroup(ctx, name, vpc)
+	created, err := c.findSecurityGroup(ctx, namespace, name, vpc)
 	if err != nil {
 		return nil, err
 	}

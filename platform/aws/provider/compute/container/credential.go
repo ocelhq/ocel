@@ -2,12 +2,12 @@ package container
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func Credential(iam.Scope) []iam.Statement {
+func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"ecs:RegisterTaskDefinition"},
 			Resources: []string{iam.AppTaskDefinitionARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"},
@@ -15,8 +15,8 @@ func Credential(iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"ecs:CreateService"},
-			Resources: []string{iam.ContainerServiceARN},
-			Condition: iam.TaggedOnCreate(),
+			Resources: []string{s.ContainerServiceARN()},
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions: []string{
@@ -27,13 +27,13 @@ func Credential(iam.Scope) []iam.Statement {
 				"ecs:UntagResource",
 				"ecs:UpdateService",
 			},
-			Resources: []string{iam.ContainerServiceARN},
-			Condition: iam.TaggedByOcel(),
+			Resources: []string{s.ContainerServiceARN()},
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"application-autoscaling:RegisterScalableTarget"},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: iam.ScalesECSServices(iam.TaggedOnCreate()),
+			Condition: iam.ScalesECSServices(s.TaggedOnCreate()),
 		},
 		{
 			Actions: []string{
@@ -43,17 +43,17 @@ func Credential(iam.Scope) []iam.Statement {
 				"application-autoscaling:RegisterScalableTarget",
 			},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: iam.ScalesECSServices(iam.TaggedByOcel()),
+			Condition: iam.ScalesECSServices(s.TaggedByOcel()),
 		},
 		{
 			Actions:   []string{"application-autoscaling:TagResource"},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"application-autoscaling:TagResource", "application-autoscaling:UntagResource"},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions: []string{
@@ -67,7 +67,7 @@ func Credential(iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"cloudwatch:DeleteAlarms", "cloudwatch:PutMetricAlarm"},
-			Resources: []string{iam.ScalingAlarmARN},
+			Resources: []string{s.ScalingAlarmARN()},
 		},
 		{
 			Actions:   []string{"iam:CreateServiceLinkedRole"},

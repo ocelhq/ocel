@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,6 +12,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -21,8 +23,8 @@ const (
 	vpcOriginGoneWithin = 15 * time.Minute
 )
 
-func reclaimFailedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, tier environment.Tier, progress progress.Log) error {
-	failed, err := failedVPCOrigins(ctx, api, tier)
+func reclaimFailedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, namespace string, tier environment.Tier, progress progress.Log) error {
+	failed, err := failedVPCOrigins(ctx, api, namespace, tier)
 	if err != nil {
 		return err
 	}
@@ -37,7 +39,7 @@ func reclaimFailedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, ti
 	return nil
 }
 
-func failedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, tier environment.Tier) ([]string, error) {
+func failedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, namespace string, tier environment.Tier) ([]string, error) {
 	var failed []string
 	var marker *string
 	for {
@@ -49,10 +51,10 @@ func failedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, tier envi
 			return failed, nil
 		}
 		for _, origin := range page.VpcOriginList.Items {
-			if aws.ToString(origin.Status) != vpcOriginFailed {
+			if aws.ToString(origin.Status) != vpcOriginFailed || !strings.HasPrefix(aws.ToString(origin.Name), nameFor(namespace, tier)+naming.WordSeparator) {
 				continue
 			}
-			ours, err := taggedAsStack(ctx, api, aws.ToString(origin.Arn), tier)
+			ours, err := taggedAsStack(ctx, api, aws.ToString(origin.Arn), namespace, tier)
 			if err != nil {
 				return nil, err
 			}
@@ -67,7 +69,7 @@ func failedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, tier envi
 	}
 }
 
-func taggedAsStack(ctx context.Context, api awsports.VPCOriginsAPI, arn string, tier environment.Tier) (bool, error) {
+func taggedAsStack(ctx context.Context, api awsports.VPCOriginsAPI, arn, namespace string, tier environment.Tier) (bool, error) {
 	out, err := api.ListTagsForResource(ctx, &cloudfront.ListTagsForResourceInput{Resource: aws.String(arn)})
 	if err != nil {
 		return false, fmt.Errorf("read the tags of VPC origin %s: %w", arn, err)
@@ -78,7 +80,7 @@ func taggedAsStack(ctx context.Context, api awsports.VPCOriginsAPI, arn string, 
 			tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 		}
 	}
-	for key, value := range stackTags(tier) {
+	for key, value := range stackTags(namespace, tier) {
 		if tags[key] != value {
 			return false, nil
 		}

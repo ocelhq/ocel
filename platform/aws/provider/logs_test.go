@@ -135,7 +135,7 @@ func TestLogsReadsEachFunctionFromItsLogGroupAndEachContainerFromTheTiersSharedG
 	}
 
 	slices.Sort(stub.groups)
-	if want := []string{"/aws/lambda/media-fn", "/aws/lambda/web-fn", "/ocel/containers/production"}; !slices.Equal(stub.groups, want) {
+	if want := []string{"/aws/lambda/media-fn", "/aws/lambda/web-fn", "/ecs/ocel-prod-containers"}; !slices.Equal(stub.groups, want) {
 		t.Errorf("Read() read the log groups %v, want %v", stub.groups, want)
 	}
 	if !slices.Contains(stub.prefix, "api-box/") {
@@ -152,9 +152,9 @@ func TestLogsReadsEachFunctionFromItsLogGroupAndEachContainerFromTheTiersSharedG
 		byGroup[strings.TrimPrefix(entry.Message, "from ")] = entry
 	}
 	for group, want := range map[string]provider.LogEntry{
-		"/aws/lambda/web-fn":          {App: "web", Release: "r1", Source: "http"},
-		"/aws/lambda/media-fn":        {App: "web", Release: "r1", Source: "media"},
-		"/ocel/containers/production": {App: "api", Release: "r2", Source: "http"},
+		"/aws/lambda/web-fn":        {App: "web", Release: "r1", Source: "http"},
+		"/aws/lambda/media-fn":      {App: "web", Release: "r1", Source: "media"},
+		"/ecs/ocel-prod-containers": {App: "api", Release: "r2", Source: "http"},
 	} {
 		got := byGroup[group]
 		if got.App != want.App || got.Release != want.Release || got.Source != want.Source {
@@ -258,7 +258,7 @@ func TestLogsTailsEachTargetFromItsLogGroupFromSince(t *testing.T) {
 	defer stub.mutex.Unlock()
 	groups := slices.Clone(stub.groups)
 	slices.Sort(groups)
-	if want := []string{"/aws/lambda/web-fn", "/ocel/containers/production"}; !slices.Equal(groups, want) {
+	if want := []string{"/aws/lambda/web-fn", "/ecs/ocel-prod-containers"}; !slices.Equal(groups, want) {
 		t.Errorf("the tail read the log groups %v, want %v", groups, want)
 	}
 	if !slices.Contains(stub.prefix, "api-box/") {

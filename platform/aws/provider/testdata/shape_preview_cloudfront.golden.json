@@ -111,11 +111,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_lambda_function:ocel-env-sync-preview",
+      "id": "project:shop/shared:preview/aws_lambda_function:ocel-preview-env-sync",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "ocel-env-sync-preview",
+      "name": "ocel-preview-env-sync",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -127,11 +127,11 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-env-sync-preview",
+      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-preview-env-sync",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "/aws/lambda/ocel-env-sync-preview",
+      "name": "/aws/lambda/ocel-preview-env-sync",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14
@@ -201,22 +201,22 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/aws_sqs_queue:ocel-app-ocel-invalidator-preview",
+      "id": "project:shop/shared:preview/aws_sqs_queue:ocel-preview-invalidator",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_sqs_queue",
-      "name": "ocel-app-ocel-invalidator-preview",
+      "name": "ocel-preview-invalidator",
       "region": "us-east-1",
       "properties": {
         "fifo_queue": false
       }
     },
     {
-      "id": "project:shop/shared:preview/aws_lambda_function:ocel-invalidator-preview",
+      "id": "project:shop/shared:preview/aws_lambda_function:ocel-preview-invalidator",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "ocel-invalidator-preview",
+      "name": "ocel-preview-invalidator",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -228,20 +228,20 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/aws_lambda_event_source_mapping:ocel-invalidator-preview-stream",
+      "id": "project:shop/shared:preview/aws_lambda_event_source_mapping:ocel-preview-invalidator-stream",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_lambda_event_source_mapping",
-      "name": "ocel-invalidator-preview-stream",
+      "name": "ocel-preview-invalidator-stream",
       "region": "us-east-1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-invalidator-preview",
+      "id": "project:shop/shared:preview/aws_cloudwatch_log_group:/aws/lambda/ocel-preview-invalidator",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "/aws/lambda/ocel-invalidator-preview",
+      "name": "/aws/lambda/ocel-preview-invalidator",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14
@@ -449,7 +449,6 @@
       "name": "ocel-containers",
       "region": "us-east-1",
       "properties": {
-        "name": "/ocel/containers/preview",
         "retention_in_days": 14
       }
     },

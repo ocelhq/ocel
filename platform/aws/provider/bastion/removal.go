@@ -20,21 +20,21 @@ import (
 
 const deleteTaskDefinitionsBatch = 10
 
-func Remove(ctx context.Context, c Clients, tier environment.Tier) error {
-	steps := []func(context.Context, Clients, environment.Tier) error{
+func Remove(ctx context.Context, c Clients, namespace string, tier environment.Tier) error {
+	steps := []func(context.Context, Clients, string, environment.Tier) error{
 		removeCluster, removeSecurityGroup, removeTaskDefinitions, removeTaskRole,
 	}
 	for _, step := range steps {
-		if err := step(ctx, c, tier); err != nil {
+		if err := step(ctx, c, namespace, tier); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func removeCluster(ctx context.Context, c Clients, tier environment.Tier) error {
-	name := NameFor(tier)
-	found, err := c.findCluster(ctx, name)
+func removeCluster(ctx context.Context, c Clients, namespace string, tier environment.Tier) error {
+	name := NameFor(namespace, tier)
+	found, err := c.findCluster(ctx, namespace, name)
 	if err != nil || !found {
 		return err
 	}
@@ -84,9 +84,9 @@ func (c Clients) stopTasks(ctx context.Context, cluster string) error {
 	}
 }
 
-func removeSecurityGroup(ctx context.Context, c Clients, tier environment.Tier) error {
-	name := NameFor(tier)
-	group, err := c.findSecurityGroup(ctx, name, "")
+func removeSecurityGroup(ctx context.Context, c Clients, namespace string, tier environment.Tier) error {
+	name := NameFor(namespace, tier)
+	group, err := c.findSecurityGroup(ctx, namespace, name, "")
 	if err != nil || group == nil {
 		return err
 	}
@@ -107,8 +107,8 @@ func removeSecurityGroup(ctx context.Context, c Clients, tier environment.Tier) 
 	}
 }
 
-func removeTaskDefinitions(ctx context.Context, c Clients, tier environment.Tier) error {
-	family := NameFor(tier)
+func removeTaskDefinitions(ctx context.Context, c Clients, namespace string, tier environment.Tier) error {
+	family := NameFor(namespace, tier)
 	var owned []string
 	for _, status := range []ecstypes.TaskDefinitionStatus{ecstypes.TaskDefinitionStatusInactive, ecstypes.TaskDefinitionStatusActive} {
 		revisions, err := c.listRevisions(ctx, family, status)
@@ -116,7 +116,7 @@ func removeTaskDefinitions(ctx context.Context, c Clients, tier environment.Tier
 			return err
 		}
 		for _, arn := range revisions {
-			isOwned, err := c.isOwnedRevision(ctx, arn)
+			isOwned, err := c.isOwnedRevision(ctx, namespace, arn)
 			if err != nil {
 				return err
 			}
@@ -143,7 +143,7 @@ func removeTaskDefinitions(ctx context.Context, c Clients, tier environment.Tier
 	return nil
 }
 
-func (c Clients) isOwnedRevision(ctx context.Context, arn string) (bool, error) {
+func (c Clients) isOwnedRevision(ctx context.Context, namespace, arn string) (bool, error) {
 	described, err := c.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(arn),
 		Include:        []ecstypes.TaskDefinitionField{ecstypes.TaskDefinitionFieldTags},
@@ -151,7 +151,7 @@ func (c Clients) isOwnedRevision(ctx context.Context, arn string) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("look up the tags of task definition %s: %w", arn, err)
 	}
-	return isManagedByOcel(described.Tags, func(tag ecstypes.Tag) (*string, *string) { return tag.Key, tag.Value }), nil
+	return isManagedByOcel(namespace, described.Tags, func(tag ecstypes.Tag) (*string, *string) { return tag.Key, tag.Value }), nil
 }
 
 func (c Clients) listRevisions(ctx context.Context, family string, status ecstypes.TaskDefinitionStatus) ([]string, error) {
@@ -173,9 +173,9 @@ func (c Clients) listRevisions(ctx context.Context, family string, status ecstyp
 	}
 }
 
-func removeTaskRole(ctx context.Context, c Clients, tier environment.Tier) error {
-	name := NameFor(tier)
-	arn, err := c.findTaskRole(ctx, name)
+func removeTaskRole(ctx context.Context, c Clients, namespace string, tier environment.Tier) error {
+	name := NameFor(namespace, tier)
+	arn, err := c.findTaskRole(ctx, namespace, name)
 	if err != nil || arn == "" {
 		return err
 	}

@@ -124,7 +124,7 @@ func ensureRoles(ctx context.Context, c Clients, at placed) error {
 }
 
 func tags(at placed) map[string]string {
-	return map[string]string{managedByTagKey: managedByTagValue, tierTagKey: string(at.spec.Tier)}
+	return map[string]string{managedByTagKey: at.spec.Namespace, tierTagKey: string(at.spec.Tier)}
 }
 
 func ensureFunction(ctx context.Context, c Clients, at placed) error {
@@ -167,7 +167,7 @@ func ensureSchedule(ctx context.Context, c Clients, at placed) error {
 	_, err := c.Scheduler.CreateScheduleGroup(ctx, &scheduler.CreateScheduleGroupInput{
 		Name: aws.String(at.names.ScheduleGroup),
 		Tags: []schedulertypes.Tag{
-			{Key: aws.String(managedByTagKey), Value: aws.String(managedByTagValue)},
+			{Key: aws.String(managedByTagKey), Value: aws.String(at.spec.Namespace)},
 			{Key: aws.String(tierTagKey), Value: aws.String(string(at.spec.Tier))},
 		},
 	})

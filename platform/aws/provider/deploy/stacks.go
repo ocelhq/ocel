@@ -126,6 +126,7 @@ func (r *Stacks) openShared(ctx context.Context, ref provider.StackRef) (shareds
 		Automation:     owner.automation,
 		KeyValues:      owner.cfg.KeyValues,
 		WrittenBy:      owner.cfg.WrittenBy,
+		Namespace:      owner.cfg.Namespace,
 		Region:         owner.cfg.Region,
 		Subnets:        owner.cfg.Network,
 		VPCOrigins:     owner.cfg.VPCOrigins,
@@ -361,7 +362,7 @@ func (r *release) packApp(spec provider.StackSpec) (variables.Bundle, error) {
 		return variables.Bundle{}, err
 	}
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
-	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topic.Of(project, env, spec.App.Topics), container.WorkerServices(r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
+	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topic.Of(project, env, spec.App.Topics), container.WorkerServices(r.cfg.Namespace, r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
 	if err != nil {
 		return variables.Bundle{}, err
 	}

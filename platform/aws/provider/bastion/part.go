@@ -12,50 +12,50 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
-func NewPart(c Clients, region string) tier.Part {
+func NewPart(c Clients, namespace, region string) tier.Part {
 	return tier.Part{
 		Name:    Part,
 		Summary: Summary,
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-			return describe(ctx, c, region, tier)
+			return describe(ctx, c, namespace, region, tier)
 		},
-		Shape: shape,
+		Shape: func(at environment.Tier) []pricing.Shaped { return shape(namespace, at) },
 		Removal: &tier.Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-				return planDeletion(ctx, c, tier, "this run removes it; the next port forward adds it again")
+				return planDeletion(ctx, c, namespace, tier, "this run removes it; the next port forward adds it again")
 			},
 			Remove: func(ctx context.Context, tier environment.Tier, _ progress.Log) error {
-				return Remove(ctx, c, tier)
+				return Remove(ctx, c, namespace, tier)
 			},
 		},
 		Teardown: &tier.Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-				return planDeletion(ctx, c, tier, "the bootstrap it belongs to is being removed")
+				return planDeletion(ctx, c, namespace, tier, "the bootstrap it belongs to is being removed")
 			},
 			Remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 				if progress != nil {
 					progress.Say(fmt.Sprintf("Removing the %s tier's bastion (ECS, IAM, EC2)", tier))
 				}
-				return Remove(ctx, c, tier)
+				return Remove(ctx, c, namespace, tier)
 			},
 		},
 	}
 }
 
-func planDeletion(ctx context.Context, c Clients, at environment.Tier, why string) (*provider.ChangeGroup, error) {
-	resources, found, err := Describe(ctx, c, at)
+func planDeletion(ctx context.Context, c Clients, namespace string, at environment.Tier, why string) (*provider.ChangeGroup, error) {
+	resources, found, err := Describe(ctx, c, namespace, at)
 	if err != nil || !found {
 		return nil, err
 	}
 	return tier.Deletion(Part, why, resources), nil
 }
 
-func shape(at environment.Tier) []pricing.Shaped {
-	return []pricing.Shaped{{Name: NameFor(at), Type: "aws_ecs_cluster", Properties: map[string]any{}}}
+func shape(namespace string, at environment.Tier) []pricing.Shaped {
+	return []pricing.Shaped{{Name: NameFor(namespace, at), Type: "aws_ecs_cluster", Properties: map[string]any{}}}
 }
 
-func describe(ctx context.Context, c Clients, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-	resources, found, err := Describe(ctx, c, tier)
+func describe(ctx context.Context, c Clients, namespace, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+	resources, found, err := Describe(ctx, c, namespace, tier)
 	if err != nil || !found {
 		return provider.BootstrapPart{}, false, err
 	}
@@ -64,6 +64,6 @@ func describe(ctx context.Context, c Clients, region string, tier environment.Ti
 		Summary:   Summary,
 		Current:   true,
 		Resources: resources,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: shape(tier)},
+		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: shape(namespace, tier)},
 	}, true, nil
 }

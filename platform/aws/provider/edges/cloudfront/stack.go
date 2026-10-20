@@ -56,6 +56,7 @@ func (s *stack) tier() environment.Tier { return s.state.Tier }
 func (s *stack) spec() distributionSpec {
 	return distributionSpec{
 		name:          distributionName(s.p.ns, s.slug(), s.tier()),
+		managedBy:     string(s.p.ns),
 		tier:          s.tier(),
 		assetOrigin:   assetOriginDomain(s.own.AssetBucket, s.own.Region),
 		function:      s.own.Function,

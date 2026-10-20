@@ -49,8 +49,14 @@ func declaresKind(declared []string, typeToken string) bool {
 	return slices.ContainsFunc(declared, func(key string) bool { return strings.HasPrefix(key, typeToken+"::") })
 }
 
+func declaresBalancer(declared []string, word string) bool {
+	return slices.ContainsFunc(declared, func(urn string) bool {
+		return strings.HasPrefix(urn, "aws:lb/loadBalancer:LoadBalancer::") && strings.HasSuffix(urn, "-"+word)
+	})
+}
+
 func declaresPublicFront(declared []string) bool {
-	return slices.Contains(declared, "aws:lb/loadBalancer:LoadBalancer::svc-public")
+	return declaresBalancer(declared, "public")
 }
 
 func publicOnlyInfraOutputs() auto.OutputMap {
@@ -151,7 +157,7 @@ func TestAContainerBehindAnEdgeThatForwardsPubliclyRaisesNoPrivateFrontAndRecord
 		t.Fatalf("the container infrastructure ran %d times, want once", runs.count())
 	}
 	declared := runs.at(0)
-	if declaresKind(declared, vpcOriginToken) || slices.Contains(declared, "aws:lb/loadBalancer:LoadBalancer::svc-front") {
+	if declaresKind(declared, vpcOriginToken) || declaresBalancer(declared, "containers") {
 		t.Errorf("the container infrastructure declared %v, want no internal load balancer and no VPC origin: no app in the tier is routed through CloudFront", declared)
 	}
 	if !declaresPublicFront(declared) {

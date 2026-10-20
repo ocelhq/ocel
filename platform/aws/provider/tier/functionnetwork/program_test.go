@@ -30,6 +30,7 @@ type networkSubnet struct {
 	cidr    string
 	primary bool
 	stack   string
+	owner   string
 }
 
 type functionNetworkCloud struct {
@@ -55,6 +56,9 @@ func (c *functionNetworkCloud) DescribeSubnets(_ context.Context, in *awsec2.Des
 		}
 		if subnet.stack != "" {
 			described.Tags = []ec2types.Tag{{Key: aws.String("ocel:stack"), Value: aws.String(subnet.stack)}}
+		}
+		if subnet.owner != "" {
+			described.Tags = append(described.Tags, ec2types.Tag{Key: aws.String("ocel:managed-by"), Value: aws.String(subnet.owner)})
 		}
 		out.Subnets = append(out.Subnets, described)
 	}
@@ -98,7 +102,7 @@ func runFunctionNetwork(t *testing.T, tier environment.Tier, cloud *functionNetw
 	if cloud.subnets == nil {
 		cloud.subnets = defaultVPCSubnets()
 	}
-	network := &work{tier: tier, region: "us-east-1", tags: stackTags(tier), subnets: cloud}
+	network := &work{namespace: "ocel", tier: tier, region: "us-east-1", tags: stackTags("ocel", tier), subnets: cloud}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return network.run(pctx) }, pulumi.WithMocks("ocel-function-network", "production--infra", cloud)); err != nil {
 		t.Fatalf("run the function network program: %v", err)
 	}
@@ -144,10 +148,10 @@ func TestTheFunctionNetworkReadsTheVPCsSubnetsInOneRequestHoweverManyThereAre(t 
 func TestTheFunctionNetworkKeepsItsSubnetsWhenItRunsAgain(t *testing.T) {
 	t.Parallel()
 
-	own := stackTags(environment.TierProduction)["ocel:stack"]
+	own := stackTags("ocel", environment.TierProduction)["ocel:stack"]
 	cloud := runFunctionNetwork(t, environment.TierProduction, &functionNetworkCloud{subnets: append(defaultVPCSubnets(),
-		networkSubnet{id: "subnet-own-a", zone: "us-east-1a", cidr: "172.31.240.0/20", stack: own},
-		networkSubnet{id: "subnet-own-b", zone: "us-east-1b", cidr: "172.31.224.0/20", stack: own},
+		networkSubnet{id: "subnet-own-a", zone: "us-east-1a", cidr: "172.31.240.0/20", stack: own, owner: "ocel"},
+		networkSubnet{id: "subnet-own-b", zone: "us-east-1b", cidr: "172.31.224.0/20", stack: own, owner: "ocel"},
 	)})
 
 	var got []string
@@ -157,6 +161,22 @@ func TestTheFunctionNetworkKeepsItsSubnetsWhenItRunsAgain(t *testing.T) {
 	slices.Sort(got)
 	if want := []string{"172.31.224.0/20", "172.31.240.0/20"}; !slices.Equal(got, want) {
 		t.Errorf("subnets = %v, want %v: its own subnets are not taken space, or every run would move them", got, want)
+	}
+}
+
+func TestTheFunctionNetworkCarvesAroundTheSubnetsOfAnotherNamespacesNetworkInTheSameVPC(t *testing.T) {
+	t.Parallel()
+
+	sameStack := stackTags("ocel", environment.TierProduction)["ocel:stack"]
+	cloud := runFunctionNetwork(t, environment.TierProduction, &functionNetworkCloud{subnets: append(defaultVPCSubnets(),
+		networkSubnet{id: "subnet-other-a", zone: "us-east-1a", cidr: "172.31.240.0/20", stack: sameStack, owner: "other"},
+		networkSubnet{id: "subnet-other-b", zone: "us-east-1b", cidr: "172.31.224.0/20", stack: sameStack, owner: "other"},
+	)})
+
+	for _, name := range cloud.registered("aws:ec2/subnet:Subnet") {
+		if cidr := cloud.inputs("aws:ec2/subnet:Subnet", name)["cidrBlock"].StringValue(); cidr == "172.31.240.0/20" || cidr == "172.31.224.0/20" {
+			t.Errorf("subnet %s takes %s, which namespace other's function network already holds in the same VPC", name, cidr)
+		}
 	}
 }
 
@@ -281,7 +301,7 @@ func TestTheFunctionNetworkProgramRefusesAVPCWithNoDefaultSubnet(t *testing.T) {
 	t.Parallel()
 
 	cloud := &functionNetworkCloud{inputRecorder: &inputRecorder{}, vpcCIDR: "172.31.0.0/16", subnets: []networkSubnet{{id: "subnet-x", zone: "us-east-1a", cidr: "172.31.0.0/20"}}}
-	network := &work{tier: environment.TierProduction, region: "us-east-1", tags: stackTags(environment.TierProduction), subnets: cloud}
+	network := &work{namespace: "ocel", tier: environment.TierProduction, region: "us-east-1", tags: stackTags("ocel", environment.TierProduction), subnets: cloud}
 	err := pulumi.RunErr(func(pctx *pulumi.Context) error { return network.run(pctx) }, pulumi.WithMocks("ocel-function-network", "production--infra", cloud))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {

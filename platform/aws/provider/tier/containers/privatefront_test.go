@@ -12,22 +12,22 @@ import (
 func TestTheContainerInfraRaisesNoPrivateFrontWhenEveryAppIsRoutedPublicly(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierProduction), fronts: Fronts{Public: fixtureRanges}}
+	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Public: fixtureRanges}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
 	}
 
-	if balancers := rec.registered("aws:lb/loadBalancer:LoadBalancer"); !slices.Equal(balancers, []string{"svc-public"}) {
+	if balancers := rec.registered("aws:lb/loadBalancer:LoadBalancer"); !slices.Equal(balancers, []string{"ocel-prod-public"}) {
 		t.Errorf("declared load balancers %v, want the public one alone: nothing routes through CloudFront, and an internal one costs by the hour whether anything answers behind it or not", balancers)
 	}
 	if origins := rec.registered("aws:cloudfront/vpcOrigin:VpcOrigin"); len(origins) != 0 {
 		t.Errorf("declared VPC origins %v, want none: no CloudFront distribution reaches this tier's containers", origins)
 	}
-	if groups := rec.registered("aws:ec2/securityGroup:SecurityGroup"); slices.Contains(groups, "svc-front-security-group") {
+	if groups := rec.registered("aws:ec2/securityGroup:SecurityGroup"); slices.Contains(groups, "ocel-prod-containers-sg") {
 		t.Errorf("declared security groups %v, want no group for a private front that does not exist", groups)
 	}
-	tasks := recordedNamed(t, rec, "aws:ec2/securityGroup:SecurityGroup", "tasks-security-group")
+	tasks := recordedNamed(t, rec, "aws:ec2/securityGroup:SecurityGroup", "::ocel-prod-containers-tasks-sg")
 	if sources := tasks["ingress"].ArrayValue()[0].ObjectValue()["securityGroups"].ArrayValue(); len(sources) != 1 {
 		t.Errorf("the tasks admit %v, want the public front alone", sources)
 	}
@@ -36,13 +36,13 @@ func TestTheContainerInfraRaisesNoPrivateFrontWhenEveryAppIsRoutedPublicly(t *te
 func TestTheContainerInfraRaisesThePrivateFrontAloneForAnAppRoutedThroughCloudFront(t *testing.T) {
 	t.Parallel()
 
-	infra := &work{tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags(environment.TierProduction), fronts: Fronts{Private: true}}
+	infra := &work{namespace: "ocel", tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: stackTags("ocel", environment.TierProduction), fronts: Fronts{Private: true}}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return infra.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
 	}
 
-	if balancers := rec.registered("aws:lb/loadBalancer:LoadBalancer"); !slices.Equal(balancers, []string{"svc-front"}) {
+	if balancers := rec.registered("aws:lb/loadBalancer:LoadBalancer"); !slices.Equal(balancers, []string{"ocel-prod-containers"}) {
 		t.Errorf("declared load balancers %v, want the internal one alone", balancers)
 	}
 	if origins := rec.registered("aws:cloudfront/vpcOrigin:VpcOrigin"); len(origins) != 1 {

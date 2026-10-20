@@ -1,8 +1,6 @@
 package containers
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
@@ -14,11 +12,10 @@ import (
 )
 
 const (
-	originTLSPort            = 443
-	vpcOriginProtocolPolicy  = "http-only"
-	vpcOriginTLSFloor        = "TLSv1.2"
-	vpcOriginDeployTimeout   = "20m"
-	vpcOriginNameSuffixBytes = 4
+	originTLSPort           = 443
+	vpcOriginProtocolPolicy = "http-only"
+	vpcOriginTLSFloor       = "TLSv1.2"
+	vpcOriginDeployTimeout  = "20m"
 
 	cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
 )
@@ -28,8 +25,8 @@ func (w *work) createFrontSecurityGroup(ctx *pulumi.Context, vpc string, tags pu
 	if err != nil {
 		return nil, fmt.Errorf("look up the addresses CloudFront reaches an origin from: %w", err)
 	}
-	return ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "front", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(nameFor(w.tier, "front")),
+	return ec2.NewSecurityGroup(ctx, frontGroupName(w.namespace, w.tier), &ec2.SecurityGroupArgs{
+		Name:        pulumi.String(frontGroupName(w.namespace, w.tier)),
 		Description: pulumi.String("Ocel: the load balancer every container app in the " + string(w.tier) + " class answers behind"),
 		VpcId:       pulumi.String(vpc),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
@@ -43,13 +40,13 @@ func (w *work) createFrontSecurityGroup(ctx *pulumi.Context, vpc string, tags pu
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),
 			CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
 		}},
-		Tags: tags,
+		Tags: namedTags(tags, frontGroupName(w.namespace, w.tier)),
 	})
 }
 
 func (w *work) runPrivateFront(ctx *pulumi.Context, front *ec2.SecurityGroup, subnets []string, tags pulumi.StringMap) error {
-	balancer, err := lb.NewLoadBalancer(ctx, naming.ResourceID(naming.KindService, "front"), &lb.LoadBalancerArgs{
-		Name:             pulumi.String(nameFor(w.tier)),
+	balancer, err := lb.NewLoadBalancer(ctx, nameFor(w.namespace, w.tier), &lb.LoadBalancerArgs{
+		Name:             pulumi.String(nameFor(w.namespace, w.tier)),
 		LoadBalancerType: pulumi.String("application"),
 		Internal:         pulumi.Bool(true),
 		SecurityGroups:   pulumi.StringArray{front.ID()},
@@ -59,7 +56,7 @@ func (w *work) runPrivateFront(ctx *pulumi.Context, front *ec2.SecurityGroup, su
 	if err != nil {
 		return err
 	}
-	listener, err := lb.NewListener(ctx, naming.ResourceID(naming.KindService, "front", "listener"), &lb.ListenerArgs{
+	listener, err := lb.NewListener(ctx, nameFor(w.namespace, w.tier)+partSeparator+httpWord, &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
 		Port:            pulumi.Int(originListenerPort),
 		Protocol:        pulumi.String("HTTP"),
@@ -77,13 +74,9 @@ func (w *work) runPrivateFront(ctx *pulumi.Context, front *ec2.SecurityGroup, su
 		return err
 	}
 
-	suffix := make([]byte, vpcOriginNameSuffixBytes)
-	if _, err := rand.Read(suffix); err != nil {
-		return fmt.Errorf("name the VPC origin: %w", err)
-	}
-	vpcOrigin, err := cloudfront.NewVpcOrigin(ctx, naming.ResourceID(naming.KindService, "front", "vpc-origin"), &cloudfront.VpcOriginArgs{
+	vpcOrigin, err := cloudfront.NewVpcOrigin(ctx, nameFor(w.namespace, w.tier), &cloudfront.VpcOriginArgs{
 		VpcOriginEndpointConfig: &cloudfront.VpcOriginVpcOriginEndpointConfigArgs{
-			Name:                 pulumi.String(nameFor(w.tier, hex.EncodeToString(suffix))),
+			Name:                 pulumi.String(nameFor(w.namespace, w.tier, naming.NewRandomTag())),
 			Arn:                  balancer.Arn,
 			HttpPort:             pulumi.Int(originListenerPort),
 			HttpsPort:            pulumi.Int(originTLSPort),

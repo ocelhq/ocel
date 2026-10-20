@@ -2,7 +2,7 @@ package component
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func NetworkCredential(iam.Scope) []iam.Statement {
+func NetworkCredential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions: []string{
@@ -18,7 +18,7 @@ func NetworkCredential(iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"ec2:CreateSecurityGroup"},
 			Resources: []string{iam.AppSecurityGroupARN, iam.AppVPCARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"ec2:CreateTags"},
@@ -37,7 +37,7 @@ func NetworkCredential(iam.Scope) []iam.Statement {
 				"ec2:RevokeSecurityGroupIngress",
 			},
 			Resources: []string{iam.AppSecurityGroupARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 	}
 }

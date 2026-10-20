@@ -191,7 +191,7 @@ func TestAFailedTakedownLeavesTheContainersPartForItsRemovalToTakeDown(t *testin
 	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap production --remove containers") {
 		t.Fatalf("Destroy(shop) = %v, want the failed takedown to name the command that takes it down again", err)
 	}
-	part, present, err := containers.ReadPart(ctx, shared, "us-east-1", environment.TierProduction)
+	part, present, err := containers.ReadPart(ctx, shared, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present || len(part.UsedBy) != 0 {
 		t.Fatalf("containers part = %+v, %v, %v, want it still recorded and used by nobody", part, present, err)
 	}

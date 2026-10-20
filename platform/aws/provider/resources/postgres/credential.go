@@ -11,7 +11,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"rds:CreateDBInstance",
 				"rds:CreateDBSubnetGroup",
 			},
-			Resources: []string{s.Clusters(), iam.AppInstanceARN, iam.AppSubnetGroupARN},
+			Resources: []string{s.AppClusterARN(), s.AppInstanceARN(), s.AppSubnetGroupARN()},
 			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
@@ -28,12 +28,12 @@ func credential(s iam.Scope) []iam.Statement {
 				"rds:ModifyDBSubnetGroup",
 				"rds:RemoveTagsFromResource",
 			},
-			Resources: []string{iam.AppClusterARN, iam.AppInstanceARN, iam.AppSubnetGroupARN},
+			Resources: []string{s.AppClusterARN(), s.AppInstanceARN(), s.AppSubnetGroupARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"rds:DeleteDBCluster"},
-			Resources: []string{s.ClusterSnapshots()},
+			Resources: []string{s.AppClusterSnapshotARN()},
 		},
 		{
 			Actions:   []string{"rds:DescribeDBEngineVersions", "rds:DescribeOrderableDBInstanceOptions"},
@@ -41,7 +41,7 @@ func credential(s iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"rds-data:ExecuteStatement"},
-			Resources: []string{iam.AppClusterARN},
+			Resources: []string{s.AppClusterARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{

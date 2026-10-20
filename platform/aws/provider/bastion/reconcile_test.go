@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 )
 
-var testSpec = bastion.Spec{Tier: environment.TierProduction, Boundary: testBoundary, Ports: []int{5432, 6379}}
+var testSpec = bastion.Spec{Namespace: "ocel", Tier: environment.TierProduction, Boundary: testBoundary, Ports: []int{5432, 6379}}
 
 func TestReconcileCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTaggedAsOcels(t *testing.T) {
 	t.Parallel()
@@ -28,16 +28,16 @@ func TestReconcileCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTagg
 		t.Fatalf("Reconcile() = %v", err)
 	}
 
-	if got.Cluster != "ocel-bastion-production" {
-		t.Errorf("Reconcile().Cluster = %q, want ocel-bastion-production", got.Cluster)
+	if got.Cluster != "ocel-prod-bastion" {
+		t.Errorf("Reconcile().Cluster = %q, want ocel-prod-bastion", got.Cluster)
 	}
 	if want := []string{"subnet-a", "subnet-b"}; !slices.Equal(got.Subnets, want) {
 		t.Errorf("Reconcile().Subnets = %v, want the default VPC's subnets %v", got.Subnets, want)
 	}
-	if tags := account.clusters["ocel-bastion-production"]; tags["ocel:managed-by"] != "ocel" {
+	if tags := account.clusters["ocel-prod-bastion"]; tags["ocel:managed-by"] != "ocel" {
 		t.Errorf("the cluster is tagged %v, want ocel:managed-by=ocel so the deploy credential may delete it", tags)
 	}
-	made := account.roles["ocel-bastion-production"]
+	made := account.roles["ocel-prod-bastion"]
 	if made == nil || made.boundary != testBoundary || made.tags["ocel:managed-by"] != "ocel" {
 		t.Fatalf("the task role = %+v, want one under the app boundary %s tagged ocel:managed-by=ocel", made, testBoundary)
 	}
@@ -50,7 +50,7 @@ func TestReconcileCreatesTheClusterTaskDefinitionRoleAndSecurityGroupOfATierTagg
 			t.Errorf("the task role policy %s lacks %s, which the ECS Exec agent needs", document, action)
 		}
 	}
-	definitions := account.definition["ocel-bastion-production"]
+	definitions := account.definition["ocel-prod-bastion"]
 	if len(definitions) != 1 || aws.ToString(definitions[0].TaskRoleArn) != made.arn || definitions[0].ExecutionRoleArn != nil {
 		t.Errorf("the task definitions = %+v, want one that runs as the task role and needs no execution role", definitions)
 	}
@@ -149,8 +149,8 @@ func TestReconcileLetsOnlyTheECSTasksOfTheBoundarysAccountAssumeTheTaskRole(t *t
 			Condition map[string]map[string]string
 		}
 	}
-	if err := json.Unmarshal([]byte(account.roles["ocel-bastion-production"].trust), &trust); err != nil || len(trust.Statement) != 1 {
-		t.Fatalf("the task role trust %s = %v, want one statement", account.roles["ocel-bastion-production"].trust, err)
+	if err := json.Unmarshal([]byte(account.roles["ocel-prod-bastion"].trust), &trust); err != nil || len(trust.Statement) != 1 {
+		t.Fatalf("the task role trust %s = %v, want one statement", account.roles["ocel-prod-bastion"].trust, err)
 	}
 	condition := trust.Statement[0].Condition
 	if condition["StringEquals"]["aws:SourceAccount"] != "123456789012" || condition["ArnLike"]["aws:SourceArn"] != "arn:aws:ecs:*:123456789012:*" {
@@ -162,7 +162,7 @@ func TestReconcileRefusesARoleOfTheBastionsNameThatOcelDoesNotOwn(t *testing.T) 
 	t.Parallel()
 
 	account := newAccount()
-	account.roles["ocel-bastion-production"] = &role{arn: "arn:aws:iam::123456789012:role/ocel-bastion-production", tags: map[string]string{}, policies: map[string]string{}}
+	account.roles["ocel-prod-bastion"] = &role{arn: "arn:aws:iam::123456789012:role/ocel-prod-bastion", tags: map[string]string{}, policies: map[string]string{}}
 
 	_, err := bastion.Reconcile(context.Background(), account.clients(), testSpec)
 	if err == nil {
@@ -177,13 +177,13 @@ func TestReconcileRepairsARoleWhoseSessionPolicyWasNeverWritten(t *testing.T) {
 	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
-	clear(account.roles["ocel-bastion-production"].policies)
+	clear(account.roles["ocel-prod-bastion"].policies)
 
 	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
 
-	if decoded, _ := url.QueryUnescape(account.roles["ocel-bastion-production"].policies["session-channels"]); decoded == "" {
+	if decoded, _ := url.QueryUnescape(account.roles["ocel-prod-bastion"].policies["session-channels"]); decoded == "" {
 		t.Error("the task role holds no session policy after Reconcile(), so the ECS Exec agent could never open its channels")
 	}
 }
@@ -214,13 +214,13 @@ func TestReconcileRestoresASessionPolicyThatLostAnActionTheExecAgentNeeds(t *tes
 	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
-	account.roles["ocel-bastion-production"].policies["session-channels"] = `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ssmmessages:CreateControlChannel"],"Resource":"*"}]}`
+	account.roles["ocel-prod-bastion"].policies["session-channels"] = `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ssmmessages:CreateControlChannel"],"Resource":"*"}]}`
 
 	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
 
-	document := account.roles["ocel-bastion-production"].policies["session-channels"]
+	document := account.roles["ocel-prod-bastion"].policies["session-channels"]
 	for _, action := range []string{"ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"} {
 		if !strings.Contains(document, action) {
 			t.Errorf("the session policy after Reconcile() is %s, which lacks %s, so the ECS Exec agent could never open its channels", document, action)
@@ -246,11 +246,11 @@ func TestReconcileRegistersAFreshTaskDefinitionOverALaterRevisionFargateCannotRu
 			if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
 				t.Fatalf("Reconcile() = %v", err)
 			}
-			changed := *account.definition["ocel-bastion-production"][0]
+			changed := *account.definition["ocel-prod-bastion"][0]
 			changed.Revision = 2
-			changed.TaskDefinitionArn = aws.String("arn:aws:ecs:us-east-1:123456789012:task-definition/ocel-bastion-production:2")
+			changed.TaskDefinitionArn = aws.String("arn:aws:ecs:us-east-1:123456789012:task-definition/ocel-prod-bastion:2")
 			change(&changed)
-			account.definition["ocel-bastion-production"] = append(account.definition["ocel-bastion-production"], &changed)
+			account.definition["ocel-prod-bastion"] = append(account.definition["ocel-prod-bastion"], &changed)
 
 			got, err := bastion.Reconcile(context.Background(), account.clients(), testSpec)
 			if err != nil {

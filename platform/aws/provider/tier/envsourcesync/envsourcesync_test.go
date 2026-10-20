@@ -7,7 +7,6 @@ import (
 	"errors"
 	"maps"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -95,8 +94,8 @@ func TestEnsureMakesAnEnvSourceSyncTheDeployCredentialMayMakeUnderTheAppBoundary
 	if aws.ToString(fn.input.LoggingConfig.LogGroup) != names.LogGroup || account.retention[names.LogGroup] != 14 {
 		t.Errorf("logs to %s kept %d days, want %s kept 14", aws.ToString(fn.input.LoggingConfig.LogGroup), account.retention[names.LogGroup], names.LogGroup)
 	}
-	if !strings.HasPrefix(names.ScheduleGroup, "ocel-app-") {
-		t.Errorf("schedule group %s is not one the deploy credential reaches by name", names.ScheduleGroup)
+	if names.ScheduleGroup != "ocel-prod-env-sync" {
+		t.Errorf("schedule group %s is not the tier's own ocel-prod-env-sync, the one group the deploy credential reaches by name", names.ScheduleGroup)
 	}
 	scheduled, ok := account.schedules[names.ScheduleGroup+"/"+names.Schedule]
 	if !ok {

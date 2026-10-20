@@ -19,7 +19,7 @@ var routerConstructors = map[router.Kind]func(Deps) router.Router{
 		return apigateway.NewRouter(deps.Namespace, apigateway.FromConfig(deps.AWS))
 	},
 	alb.Kind: func(deps Deps) router.Router {
-		return alb.NewRouter(alb.FromConfig(deps.AWS, deps.ArtifactBucket))
+		return alb.NewRouter(string(deps.Namespace), alb.FromConfig(deps.AWS, deps.ArtifactBucket))
 	},
 }
 

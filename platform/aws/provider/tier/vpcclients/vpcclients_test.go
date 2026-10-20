@@ -69,14 +69,14 @@ func TestTheClientsGroupIsMadeOnceInTheDefaultVPCTaggedForItsTier(t *testing.T) 
 		t.Fatalf("created %d groups, want one: a second ensure finds the first", len(api.created))
 	}
 	created := api.created[0]
-	if aws.ToString(created.VpcId) != "vpc-default" || aws.ToString(created.GroupName) != "ocel-production-vpc-clients" {
-		t.Errorf("created %s in %s, want ocel-production-vpc-clients in the default VPC", aws.ToString(created.GroupName), aws.ToString(created.VpcId))
+	if aws.ToString(created.VpcId) != "vpc-default" || aws.ToString(created.GroupName) != "ocel-prod-vpc-clients" {
+		t.Errorf("created %s in %s, want ocel-prod-vpc-clients in the default VPC", aws.ToString(created.GroupName), aws.ToString(created.VpcId))
 	}
 	tags := map[string]string{}
 	for _, tag := range created.TagSpecifications[0].Tags {
 		tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 	}
-	if tags[managedByTagKey] != managedByTagValue || tags[naming.EnvTierTagKey] != string(environment.TierProduction) {
+	if tags[managedByTagKey] != "ocel" || tags[naming.EnvTierTagKey] != string(environment.TierProduction) {
 		t.Errorf("tags = %v, want the ocel and tier tags the deploy credential may delete it by", tags)
 	}
 }

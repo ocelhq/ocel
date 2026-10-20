@@ -336,6 +336,6 @@ on the new compute and takes the old ones down once the promotion serves.
 ## Logs
 
 Each Lambda function and worker logs to a CloudWatch log group of its own, deleted with it by
-`ocel destroy`. Containers log to `/ocel/containers/<tier>`, one group per tier. Both keep 14
+`ocel destroy`. Containers log to `/ecs/<namespace>-<prod|preview>-containers`, one group per tier. Both keep 14
 days. Read them with [`ocel logs`](/docs/cli/logs), which lists the CloudWatch rate limits a read
 shares.

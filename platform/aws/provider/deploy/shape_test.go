@@ -167,8 +167,8 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 		t.Fatal(err)
 	}
 	run("container", containerWork.Declare)
-	run("function-network", functionnetwork.NewProgram(environment.TierProduction, "us-east-1", &functionNetworkCloud{subnets: defaultVPCSubnets()}).Run)
-	run("container-infra", containers.NewProgram(environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, containers.Fronts{Private: true}).Run)
+	run("function-network", functionnetwork.NewProgram("ocel", environment.TierProduction, "us-east-1", &functionNetworkCloud{subnets: defaultVPCSubnets()}).Run)
+	run("container-infra", containers.NewProgram("ocel", environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, containers.Fronts{Private: true}).Run)
 	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)
 	run("topics", func(pctx *pulumi.Context) error {

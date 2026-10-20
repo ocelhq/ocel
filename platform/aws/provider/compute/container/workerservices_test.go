@@ -17,7 +17,7 @@ const testStateTableARN = "arn:aws:dynamodb:us-east-1:" + mockAccount + ":table/
 func TestOnlyAWorkerOnContainerComputeNamesTheServiceASenderWakes(t *testing.T) {
 	t.Parallel()
 
-	got := WorkerServices(environment.TierProduction, "shop", "prod", []provider.WorkerSpec{
+	got := WorkerServices("ocel", environment.TierProduction, "shop", "prod", []provider.WorkerSpec{
 		{Name: "media", Concurrency: 4, App: "jobs", Compute: provider.ComputeContainer},
 		{Name: "worker", App: "web", Compute: provider.ComputeServerless},
 	})
@@ -28,7 +28,7 @@ func TestOnlyAWorkerOnContainerComputeNamesTheServiceASenderWakes(t *testing.T) 
 	if media.Concurrency != 4 {
 		t.Errorf("media concurrency = %d, want 4: the engine holds a worker's cap in slots", media.Concurrency)
 	}
-	want := &queues.Service{Cluster: awsports.ContainerClusterName(environment.TierProduction), Name: WorkerServiceName("shop", "prod", "jobs", "media")}
+	want := &queues.Service{Cluster: awsports.ContainerClusterName("ocel", environment.TierProduction), Name: WorkerServiceName("shop", "prod", "jobs", "media")}
 	if media.Service == nil || *media.Service != *want {
 		t.Errorf("media service = %+v, want %+v", media.Service, want)
 	}
@@ -61,7 +61,7 @@ func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNo
 		{Name: "worker", App: "web", Compute: provider.ComputeServerless},
 	}
 	table := topic.StateTable{Region: "us-east-1", ARN: testStateTableARN}
-	policy, err := topic.TasksPolicy(table, "shop", "prod", topics, WorkerServiceARNs(table, environment.TierProduction, "shop", "prod", workers))
+	policy, err := topic.TasksPolicy(table, "shop", "prod", topics, WorkerServiceARNs(table, "ocel", environment.TierProduction, "shop", "prod", workers))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNo
 	if err := json.Unmarshal([]byte(policy), &document); err != nil {
 		t.Fatalf("the policy %s is not JSON: %v", policy, err)
 	}
-	service := "arn:aws:ecs:us-east-1:" + mockAccount + ":service/ocel-containers-production/" + WorkerServiceName("shop", "prod", "jobs", "media")
+	service := "arn:aws:ecs:us-east-1:" + mockAccount + ":service/ocel-prod-containers/" + WorkerServiceName("shop", "prod", "jobs", "media")
 	var found bool
 	for _, statement := range document.Statement {
 		actions, _ := json.Marshal(statement.Action)

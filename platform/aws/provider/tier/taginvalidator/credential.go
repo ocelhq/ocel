@@ -27,5 +27,15 @@ func Credential(s iam.Scope) []iam.Statement {
 			Actions:   []string{"lambda:ListEventSourceMappings"},
 			Resources: []string{iam.AnyResource},
 		},
+		{
+			Actions:   []string{"sqs:CreateQueue", "sqs:TagQueue"},
+			Resources: []string{s.TagInvalidatorQueue},
+			Condition: s.TaggedOnCreateOnlyForItsTier(),
+		},
+		{
+			Actions:   []string{"sqs:DeleteQueue", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:SetQueueAttributes"},
+			Resources: []string{s.TagInvalidatorQueue},
+			Condition: s.TaggedByOcelForItsTier(),
+		},
 	}
 }

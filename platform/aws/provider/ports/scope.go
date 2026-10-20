@@ -22,6 +22,8 @@ const (
 	PublicListenerPort = 443
 
 	containerFrontSegment = "front"
+	containersWord        = "containers"
+	publicWord            = "public"
 
 	RuntimeLayerToPublish = "ocel:runtime-layer-to-publish"
 )
@@ -31,12 +33,20 @@ type ContainerFront struct {
 	Host      string `json:"host"`
 }
 
-func ContainerClusterName(tier environment.Tier) string {
-	return naming.Join(naming.WordSeparator, ContainersSlug, string(tier))
+func TieredName(namespace string, tier environment.Tier, words ...string) string {
+	return naming.Join(naming.WordSeparator, append([]string{naming.NamespaceField(namespace), naming.TierWord(tier)}, words...)...)
 }
 
-func PublicBalancerName(tier environment.Tier) string {
-	return naming.Join(naming.WordSeparator, "ocel", "public", string(tier))
+func ContainerClusterName(namespace string, tier environment.Tier) string {
+	return TieredName(namespace, tier, containersWord)
+}
+
+func ContainerLogGroupName(namespace string, tier environment.Tier) string {
+	return "/ecs/" + ContainerClusterName(namespace, tier)
+}
+
+func PublicBalancerName(namespace string, tier environment.Tier) string {
+	return TieredName(namespace, tier, publicWord)
 }
 
 func ContainerFrontKey(tier environment.Tier) records.Key {

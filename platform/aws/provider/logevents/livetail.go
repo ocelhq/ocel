@@ -98,7 +98,7 @@ func LiveTail(ctx context.Context, logs *cloudwatchlogs.Client, lambdas *lambda.
 func findLiveGroups(ctx context.Context, lambdas *lambda.Client, region, account string, query Query) ([]liveGroup, error) {
 	groups := make([]liveGroup, 0, len(query.Sources))
 	for _, source := range query.Sources {
-		group, err := findGroup(ctx, lambdas, source, query.Tier)
+		group, err := findGroup(ctx, lambdas, source, query.ContainerGroup)
 		if err != nil {
 			return nil, err
 		}

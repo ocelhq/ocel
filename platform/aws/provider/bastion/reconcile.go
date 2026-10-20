@@ -33,20 +33,20 @@ func Reconcile(ctx context.Context, c Clients, spec Spec) (Bastion, error) {
 	if err != nil {
 		return Bastion{}, err
 	}
-	group, err := c.reconcileSecurityGroup(ctx, spec.Tier, net, spec.Ports)
+	group, err := c.reconcileSecurityGroup(ctx, spec.Namespace, spec.Tier, net, spec.Ports)
 	if err != nil {
 		return Bastion{}, err
 	}
-	if err := c.ensureCluster(ctx, spec.Tier); err != nil {
+	if err := c.ensureCluster(ctx, spec.Namespace, spec.Tier); err != nil {
 		return Bastion{}, err
 	}
-	definition, err := c.reconcileTaskDefinition(ctx, spec.Tier, roleARN)
+	definition, err := c.reconcileTaskDefinition(ctx, spec.Namespace, spec.Tier, roleARN)
 	if err != nil {
 		return Bastion{}, err
 	}
 	return Bastion{
 		Tier:           spec.Tier,
-		Cluster:        NameFor(spec.Tier),
+		Cluster:        NameFor(spec.Namespace, spec.Tier),
 		TaskDefinition: definition,
 		Clients:        spec.Clients,
 		SecurityGroup:  group,
@@ -85,19 +85,19 @@ func (c Clients) findDefaultNetwork(ctx context.Context) (network, error) {
 	return found, nil
 }
 
-func (c Clients) ensureCluster(ctx context.Context, tier environment.Tier) error {
-	name := NameFor(tier)
-	found, err := c.findCluster(ctx, name)
+func (c Clients) ensureCluster(ctx context.Context, namespace string, tier environment.Tier) error {
+	name := NameFor(namespace, tier)
+	found, err := c.findCluster(ctx, namespace, name)
 	if err != nil || found {
 		return err
 	}
-	if _, err := c.ECS.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: aws.String(name), Tags: ecsTagsFor(tier)}); err != nil {
+	if _, err := c.ECS.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: aws.String(name), Tags: ecsTagsFor(namespace, tier)}); err != nil {
 		return fmt.Errorf("create cluster %s: %w", name, err)
 	}
 	return nil
 }
 
-func (c Clients) findCluster(ctx context.Context, name string) (bool, error) {
+func (c Clients) findCluster(ctx context.Context, namespace, name string) (bool, error) {
 	described, err := c.ECS.DescribeClusters(ctx, &ecs.DescribeClustersInput{
 		Clusters: []string{name},
 		Include:  []ecstypes.ClusterField{ecstypes.ClusterFieldTags},
@@ -109,16 +109,16 @@ func (c Clients) findCluster(ctx context.Context, name string) (bool, error) {
 		if aws.ToString(cluster.Status) != "ACTIVE" {
 			continue
 		}
-		if !isManagedByOcel(cluster.Tags, func(tag ecstypes.Tag) (*string, *string) { return tag.Key, tag.Value }) {
-			return false, refuseUnowned("cluster", name)
+		if !isManagedByOcel(namespace, cluster.Tags, func(tag ecstypes.Tag) (*string, *string) { return tag.Key, tag.Value }) {
+			return false, refuseUnowned(namespace, "cluster", name)
 		}
 		return true, nil
 	}
 	return false, nil
 }
 
-func (c Clients) reconcileTaskDefinition(ctx context.Context, tier environment.Tier, roleARN string) (string, error) {
-	family := NameFor(tier)
+func (c Clients) reconcileTaskDefinition(ctx context.Context, namespace string, tier environment.Tier, roleARN string) (string, error) {
+	family := NameFor(namespace, tier)
 	described, err := c.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(family)})
 	var missing *ecstypes.ClientException
 	switch {
@@ -143,7 +143,7 @@ func (c Clients) reconcileTaskDefinition(ctx context.Context, tier environment.T
 			LinuxParameters:  &ecstypes.LinuxParameters{InitProcessEnabled: aws.Bool(true)},
 			WorkingDirectory: aws.String("/"),
 		}},
-		Tags: ecsTagsFor(tier),
+		Tags: ecsTagsFor(namespace, tier),
 	})
 	if err != nil {
 		return "", fmt.Errorf("register task definition %s: %w", family, err)

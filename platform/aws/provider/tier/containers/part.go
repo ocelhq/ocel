@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
-func NewPart(stacks *Stacks, store records.Store, region string) tier.Part {
+func NewPart(stacks *Stacks, store records.Store, namespace, region string) tier.Part {
 	return tier.Shared(tier.SharedSpec{
 		Part:          Shared.Part,
 		RefuseInUse:   Shared.RefuseInUse,
@@ -18,7 +18,7 @@ func NewPart(stacks *Stacks, store records.Store, region string) tier.Part {
 		Shape:         func(tier environment.Tier) []pricing.Shaped { return Shape(tier, Raised{}) },
 		RemovalReason: "this run removes it; the next container deploy adds it again",
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-			return ReadPart(ctx, store, region, tier)
+			return ReadPart(ctx, store, namespace, region, tier)
 		},
 		Remove: stacks.Remove,
 	})

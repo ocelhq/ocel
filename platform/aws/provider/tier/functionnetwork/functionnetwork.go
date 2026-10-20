@@ -35,11 +35,17 @@ const (
 	outputKeyPrivateSubnets   = "privateSubnets"
 	outputKeyFunctionSecurity = "functionSecurityGroup"
 
-	zones        = 2
-	deleteWait   = "40m"
-	anyIPv4      = "0.0.0.0/0"
-	stackTagKey  = "ocel:stack"
-	endpointType = "Gateway"
+	zones       = 2
+	deleteWait  = "40m"
+	anyIPv4     = "0.0.0.0/0"
+	stackTagKey = "ocel:stack"
+
+	managedByTagKey   = "ocel:managed-by"
+	functionsWord     = "functions"
+	securityGroupWord = "sg"
+	privateWord       = "private"
+	partSeparator     = "/"
+	endpointType      = "Gateway"
 )
 
 var endpointServices = []string{"s3", "dynamodb"}
@@ -96,13 +102,13 @@ func StackRef(tier environment.Tier) provider.StackRef {
 	return provider.StackRef{Project: Slug, Tier: tier, Name: naming.InfraStack(string(tier))}
 }
 
-func nameFor(tier environment.Tier, parts ...string) string {
-	return naming.Join(naming.WordSeparator, append([]string{Slug, string(tier)}, parts...)...)
+func nameFor(namespace string, tier environment.Tier, parts ...string) string {
+	return awsports.TieredName(namespace, tier, append([]string{functionsWord}, parts...)...)
 }
 
-func stackTags(tier environment.Tier) map[string]string {
+func stackTags(namespace string, tier environment.Tier) map[string]string {
 	return map[string]string{
-		"ocel:managed-by":    "ocel",
+		managedByTagKey:      namespace,
 		"ocel:project":       Slug,
 		naming.EnvTierTagKey: string(tier),
 		stackTagKey:          StackRef(tier).Name.String(),
@@ -162,10 +168,10 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 	var decoded Network
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PartResource, error) {
 		var err error
-		if decoded, err = provision(ctx, owner, StackRef(tier), NewProgram(tier, owner.Region, owner.Subnets), progress); err != nil {
+		if decoded, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, owner.Subnets), progress); err != nil {
 			return nil, err
 		}
-		return listResources(tier, decoded), nil
+		return listResources(owner.Namespace, tier, decoded), nil
 	})
 	if err != nil {
 		return Network{}, err
@@ -237,24 +243,24 @@ func natGateways(tier environment.Tier) int {
 	return 1
 }
 
-func natName(tier environment.Tier, n int) string {
-	return nameFor(tier, "nat", strconv.Itoa(n+1))
+func natName(namespace string, tier environment.Tier, n int) string {
+	return nameFor(namespace, tier, "nat", strconv.Itoa(n+1))
 }
 
-func listResources(tier environment.Tier, network Network) []provider.PartResource {
+func listResources(namespace string, tier environment.Tier, network Network) []provider.PartResource {
 	var resources []provider.PartResource
 	for n := range natGateways(tier) {
 		resources = append(resources,
-			provider.PartResource{Kind: "AWS::EC2::NatGateway", ID: natName(tier, n)},
-			provider.PartResource{Kind: "AWS::EC2::EIP", ID: natName(tier, n)})
+			provider.PartResource{Kind: "AWS::EC2::NatGateway", ID: natName(namespace, tier, n)},
+			provider.PartResource{Kind: "AWS::EC2::EIP", ID: natName(namespace, tier, n)})
 	}
 	for i, subnet := range network.Subnets {
 		resources = append(resources,
-			provider.PartResource{Kind: "AWS::EC2::RouteTable", ID: nameFor(tier, "private", strconv.Itoa(i+1))},
+			provider.PartResource{Kind: "AWS::EC2::RouteTable", ID: nameFor(namespace, tier, privateWord, strconv.Itoa(i+1))},
 			provider.PartResource{Kind: "AWS::EC2::Subnet", ID: subnet})
 	}
 	for _, service := range endpointServices {
-		resources = append(resources, provider.PartResource{Kind: "AWS::EC2::VPCEndpoint", ID: nameFor(tier, service)})
+		resources = append(resources, provider.PartResource{Kind: "AWS::EC2::VPCEndpoint", ID: nameFor(namespace, tier, service)})
 	}
 	return append(resources, provider.PartResource{Kind: "AWS::EC2::SecurityGroup", ID: network.SecurityGroup})
 }

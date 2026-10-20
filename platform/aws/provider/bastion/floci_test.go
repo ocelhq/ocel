@@ -36,8 +36,8 @@ func flociClients(t *testing.T) bastion.Clients {
 func TestABastionIsReconciledRunAndRemovedAgainstTheEmulator(t *testing.T) {
 	ctx := context.Background()
 	clients := flociClients(t)
-	spec := bastion.Spec{Tier: environment.TierPreview, Boundary: "arn:aws:iam::000000000000:policy/ocel-app-boundary-preview", Ports: []int{5432, 6379}}
-	t.Cleanup(func() { _ = bastion.Remove(context.WithoutCancel(ctx), clients, spec.Tier) })
+	spec := bastion.Spec{Namespace: "ocel", Tier: environment.TierPreview, Boundary: "arn:aws:iam::000000000000:policy/ocel-app-boundary-preview", Ports: []int{5432, 6379}}
+	t.Cleanup(func() { _ = bastion.Remove(context.WithoutCancel(ctx), clients, "ocel", spec.Tier) })
 
 	reconciled, err := bastion.Reconcile(ctx, clients, spec)
 	if err != nil {
@@ -63,7 +63,7 @@ func TestABastionIsReconciledRunAndRemovedAgainstTheEmulator(t *testing.T) {
 		t.Error("Run().ManagedNode is empty")
 	}
 
-	if err := bastion.Remove(ctx, clients, spec.Tier); err != nil {
+	if err := bastion.Remove(ctx, clients, "ocel", spec.Tier); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	described, err := clients.ECS.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: []string{reconciled.Cluster}})
@@ -75,7 +75,7 @@ func TestABastionIsReconciledRunAndRemovedAgainstTheEmulator(t *testing.T) {
 			t.Errorf("cluster %s is still active after Remove()", reconciled.Cluster)
 		}
 	}
-	if _, err := clients.IAM.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(bastion.NameFor(spec.Tier))}); err == nil {
+	if _, err := clients.IAM.GetRole(ctx, &iam.GetRoleInput{RoleName: aws.String(bastion.NameFor("ocel", spec.Tier))}); err == nil {
 		t.Error("the task role is still there after Remove()")
 	}
 }

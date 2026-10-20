@@ -2,7 +2,7 @@ package functionnetwork
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func Credential(iam.Scope) []iam.Statement {
+func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions: []string{
@@ -18,27 +18,27 @@ func Credential(iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"ec2:CreateSubnet"},
 			Resources: []string{iam.AppSubnetARN, iam.AppVPCARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"ec2:AllocateAddress"},
 			Resources: []string{iam.AppElasticIPARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"ec2:CreateNatGateway"},
 			Resources: []string{iam.AppNATGatewayARN, iam.AppSubnetARN, iam.AppElasticIPARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"ec2:CreateRouteTable"},
 			Resources: []string{iam.AppRouteTableARN, iam.AppVPCARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"ec2:CreateVpcEndpoint"},
 			Resources: []string{iam.AppVPCEndpointARN, iam.AppVPCARN, iam.AppRouteTableARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"ec2:CreateTags"},
@@ -55,7 +55,7 @@ func Credential(iam.Scope) []iam.Statement {
 				"ec2:DisassociateRouteTable",
 			},
 			Resources: []string{iam.AppRouteTableARN, iam.AppSubnetARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions: []string{
@@ -65,27 +65,27 @@ func Credential(iam.Scope) []iam.Statement {
 				"ec2:ReplaceRoute",
 			},
 			Resources: []string{iam.AppRouteTableARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"ec2:DeleteSubnet", "ec2:ModifySubnetAttribute"},
 			Resources: []string{iam.AppSubnetARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"ec2:DisassociateAddress", "ec2:ReleaseAddress"},
 			Resources: []string{iam.AppElasticIPARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"ec2:DeleteNatGateway"},
 			Resources: []string{iam.AppNATGatewayARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"ec2:DeleteVpcEndpoints", "ec2:ModifyVpcEndpoint"},
 			Resources: []string{iam.AppVPCEndpointARN, iam.AppRouteTableARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 	}
 }

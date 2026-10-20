@@ -6,7 +6,7 @@ func credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"scheduler:CreateScheduleGroup", "scheduler:TagResource"},
-			Resources: []string{iam.AppScheduleGroupARN},
+			Resources: []string{s.AppScheduleGroupARN()},
 			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
@@ -16,7 +16,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"scheduler:ListTagsForResource",
 				"scheduler:UntagResource",
 			},
-			Resources: []string{iam.AppScheduleGroupARN},
+			Resources: []string{s.AppScheduleGroupARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
@@ -26,7 +26,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"scheduler:GetSchedule",
 				"scheduler:UpdateSchedule",
 			},
-			Resources: []string{iam.AppScheduleARN},
+			Resources: []string{s.AppScheduleARN()},
 			Condition: s.TaggedOnlyAsItsTier(),
 		},
 	}

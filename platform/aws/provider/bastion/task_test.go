@@ -42,7 +42,7 @@ func TestRunStartsATaskInAPublicSubnetBehindTheBastionsSecurityGroupAndWaitsForT
 		t.Errorf("the task runs %s in %v, want the bastion's task definition in the default subnets", launched.definition, launched.subnets)
 	}
 	id := running[0][strings.LastIndex(running[0], "/")+1:]
-	if want := "ecs:ocel-bastion-production_" + id + "_runtime-" + id; started.ManagedNode != want {
+	if want := "ecs:ocel-prod-bastion_" + id + "_runtime-" + id; started.ManagedNode != want {
 		t.Errorf("Run().ManagedNode = %q, want %q, the ECS target Session Manager resolves", started.ManagedNode, want)
 	}
 	if account.describeCalls <= 2 {
@@ -91,7 +91,7 @@ func TestRunStartsAgainWhenECSCannotAssumeARoleIAMHasJustCreated(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	account.runFails = []string{"ECS was unable to assume the role 'arn:aws:iam::123456789012:role/ocel-bastion-production' that was provided for this task."}
+	account.runFails = []string{"ECS was unable to assume the role 'arn:aws:iam::123456789012:role/ocel-prod-bastion' that was provided for this task."}
 	clients, reconciled := readyBastion(t, account)
 
 	if _, err := reconciled.Run(context.Background(), clients); err != nil {

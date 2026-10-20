@@ -337,7 +337,7 @@ func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	if slugged == pointed {
 		t.Errorf("apiName is %q for both a slug and a pointer that end the same; two projects would share one API", slugged)
 	}
-	if got := apiName(defaultNamespace, "shop", environment.TierProduction, ""); got != "ocel--shop--production" {
+	if got := apiName(defaultNamespace, "shop", environment.TierProduction, ""); got != "ocel--shop--prod" {
 		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
 	}
 	if name := notfoundapi.NameFor(string(defaultNamespace), environment.TierProduction); cloudflare.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {

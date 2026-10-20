@@ -15,20 +15,20 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 type work struct {
-	tier    environment.Tier
-	region  string
-	tags    map[string]string
-	subnets awsec2.DescribeSubnetsAPIClient
+	namespace string
+	tier      environment.Tier
+	region    string
+	tags      map[string]string
+	subnets   awsec2.DescribeSubnetsAPIClient
 }
 
-func NewProgram(tier environment.Tier, region string, subnets awsec2.DescribeSubnetsAPIClient) component.Program {
-	w := &work{tier: tier, region: region, tags: stackTags(tier), subnets: subnets}
+func NewProgram(namespace string, tier environment.Tier, region string, subnets awsec2.DescribeSubnetsAPIClient) component.Program {
+	w := &work{namespace: namespace, tier: tier, region: region, tags: stackTags(namespace, tier), subnets: subnets}
 	return component.Program{Run: w.run, Tags: w.tags}
 }
 
@@ -38,6 +38,7 @@ type vpcSubnet struct {
 	Zone    string
 	Default bool
 	Stack   string
+	Owner   string
 }
 
 type functionSubnets struct {
@@ -46,14 +47,14 @@ type functionSubnets struct {
 	Blocks []string
 }
 
-func planFunctionSubnets(primary string, existing []vpcSubnet, own string) (functionSubnets, error) {
+func planFunctionSubnets(primary string, existing []vpcSubnet, owner, own string) (functionSubnets, error) {
 	var defaults []vpcSubnet
 	var taken []string
 	for _, subnet := range existing {
 		if subnet.Default {
 			defaults = append(defaults, subnet)
 		}
-		if own == "" || subnet.Stack != own {
+		if own == "" || subnet.Stack != own || subnet.Owner != owner {
 			taken = append(taken, subnet.CIDR)
 		}
 	}
@@ -103,8 +104,11 @@ func describeVPCSubnets(ctx context.Context, client awsec2.DescribeSubnetsAPICli
 				Default: aws.ToBool(subnet.DefaultForAz),
 			}
 			for _, tag := range subnet.Tags {
-				if aws.ToString(tag.Key) == stackTagKey {
+				switch aws.ToString(tag.Key) {
+				case stackTagKey:
 					described.Stack = aws.ToString(tag.Value)
+				case managedByTagKey:
+					described.Owner = aws.ToString(tag.Value)
 				}
 			}
 			subnets = append(subnets, described)
@@ -122,7 +126,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	placed, err := planFunctionSubnets(vpc.CidrBlock, existing, w.tags[stackTagKey])
+	placed, err := planFunctionSubnets(vpc.CidrBlock, existing, w.namespace, w.tags[stackTagKey])
 	if err != nil {
 		return err
 	}
@@ -138,17 +142,18 @@ func (w *work) run(ctx *pulumi.Context) error {
 
 	gateways := make([]*ec2.NatGateway, 0, natGateways(tier))
 	for n := range min(natGateways(tier), len(placed.Public)) {
-		address, err := ec2.NewEip(ctx, naming.ResourceID(naming.KindService, "nat", strconv.Itoa(n+1), "eip"), &ec2.EipArgs{
+		nat := natName(w.namespace, tier, n)
+		address, err := ec2.NewEip(ctx, nat+partSeparator+"eip", &ec2.EipArgs{
 			Domain: pulumi.String("vpc"),
-			Tags:   tagsFor(natName(tier, n)),
+			Tags:   tagsFor(nat),
 		})
 		if err != nil {
 			return err
 		}
-		gateway, err := ec2.NewNatGateway(ctx, naming.ResourceID(naming.KindService, "nat", strconv.Itoa(n+1)), &ec2.NatGatewayArgs{
+		gateway, err := ec2.NewNatGateway(ctx, nat, &ec2.NatGatewayArgs{
 			AllocationId: address.ID(),
 			SubnetId:     pulumi.String(placed.Public[n]),
-			Tags:         tagsFor(natName(tier, n)),
+			Tags:         tagsFor(nat),
 		})
 		if err != nil {
 			return err
@@ -159,14 +164,15 @@ func (w *work) run(ctx *pulumi.Context) error {
 	subnetIDs := make(pulumi.StringArray, 0, len(placed.Zones))
 	routeTables := make(pulumi.StringArray, 0, len(placed.Zones))
 	for i, zone := range placed.Zones {
-		routes, err := ec2.NewRouteTable(ctx, naming.ResourceID(naming.KindService, "private", zone, "routes"), &ec2.RouteTableArgs{
+		routesName, subnetName := nameFor(w.namespace, tier, privateWord, strconv.Itoa(i+1)), nameFor(w.namespace, tier, privateWord, zone)
+		routes, err := ec2.NewRouteTable(ctx, routesName, &ec2.RouteTableArgs{
 			VpcId: pulumi.String(vpc.Id),
-			Tags:  tagsFor(nameFor(tier, "private", strconv.Itoa(i+1))),
+			Tags:  tagsFor(routesName),
 		})
 		if err != nil {
 			return err
 		}
-		if _, err := ec2.NewRoute(ctx, naming.ResourceID(naming.KindService, "private", zone, "route"), &ec2.RouteArgs{
+		if _, err := ec2.NewRoute(ctx, routesName+partSeparator+"nat", &ec2.RouteArgs{
 			RouteTableId:         routes.ID(),
 			DestinationCidrBlock: pulumi.String(anyIPv4),
 			NatGatewayId:         gateways[min(i, len(gateways)-1)].ID(),
@@ -174,17 +180,17 @@ func (w *work) run(ctx *pulumi.Context) error {
 			return err
 		}
 		routeTables = append(routeTables, routes.ID())
-		subnet, err := ec2.NewSubnet(ctx, naming.ResourceID(naming.KindService, "private", zone, "subnet"), &ec2.SubnetArgs{
+		subnet, err := ec2.NewSubnet(ctx, subnetName, &ec2.SubnetArgs{
 			VpcId:               pulumi.String(vpc.Id),
 			CidrBlock:           pulumi.String(placed.Blocks[i]),
 			AvailabilityZone:    pulumi.String(zone),
 			MapPublicIpOnLaunch: pulumi.Bool(false),
-			Tags:                tagsFor(nameFor(tier, "private", zone)),
+			Tags:                tagsFor(subnetName),
 		}, slowDelete)
 		if err != nil {
 			return err
 		}
-		if _, err := ec2.NewRouteTableAssociation(ctx, naming.ResourceID(naming.KindService, "private", zone, "association"), &ec2.RouteTableAssociationArgs{
+		if _, err := ec2.NewRouteTableAssociation(ctx, routesName+partSeparator+subnetName, &ec2.RouteTableAssociationArgs{
 			RouteTableId: routes.ID(),
 			SubnetId:     subnet.ID(),
 		}); err != nil {
@@ -194,19 +200,21 @@ func (w *work) run(ctx *pulumi.Context) error {
 	}
 
 	for _, service := range endpointServices {
-		if _, err := ec2.NewVpcEndpoint(ctx, naming.ResourceID(naming.KindService, "endpoint", service), &ec2.VpcEndpointArgs{
+		endpoint := nameFor(w.namespace, tier, service)
+		if _, err := ec2.NewVpcEndpoint(ctx, endpoint, &ec2.VpcEndpointArgs{
 			VpcId:           pulumi.String(vpc.Id),
 			ServiceName:     pulumi.String("com.amazonaws." + w.region + "." + service),
 			VpcEndpointType: pulumi.String(endpointType),
 			RouteTableIds:   routeTables,
-			Tags:            tagsFor(nameFor(tier, service)),
+			Tags:            tagsFor(endpoint),
 		}); err != nil {
 			return err
 		}
 	}
 
-	functions, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "functions", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(nameFor(tier, "functions")),
+	group := nameFor(w.namespace, tier, securityGroupWord)
+	functions, err := ec2.NewSecurityGroup(ctx, group, &ec2.SecurityGroupArgs{
+		Name:        pulumi.String(group),
 		Description: pulumi.String("Ocel: the functions in the " + string(tier) + " class that reach a VPC-only resource run as"),
 		VpcId:       pulumi.String(vpc.Id),
 		Ingress:     ec2.SecurityGroupIngressArray{},
@@ -215,7 +223,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 			CidrBlocks:  pulumi.StringArray{pulumi.String(anyIPv4)},
 			Description: pulumi.String("Ocel: a function calls out to its resources and the internet; nothing connects to it"),
 		}},
-		Tags: tagsFor(nameFor(tier, "functions")),
+		Tags: tagsFor(group),
 	}, slowDelete)
 	if err != nil {
 		return err

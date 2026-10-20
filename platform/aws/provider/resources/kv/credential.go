@@ -11,17 +11,17 @@ func credential(s iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"elasticache:AddTagsToResource", "elasticache:CreateReplicationGroup"},
-			Resources: []string{iam.AppReplicationGroupARN, iam.AppCacheClusterARN, iam.AppCacheParameterARN, iam.AppCacheSubnetGroupARN},
+			Resources: []string{s.AppReplicationGroupARN(), s.AppCacheClusterARN(), s.AppCacheParameterARN(), s.AppCacheSubnetGroupARN()},
 			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticache:CreateCacheParameterGroup"},
-			Resources: []string{iam.AppCacheParameterARN},
+			Resources: []string{s.AppCacheParameterARN()},
 			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticache:CreateCacheSubnetGroup"},
-			Resources: []string{iam.AppCacheSubnetGroupARN},
+			Resources: []string{s.AppCacheSubnetGroupARN()},
 			Condition: s.TaggedOnCreateOnlyForItsTier(),
 		},
 		{
@@ -29,12 +29,12 @@ func credential(s iam.Scope) []iam.Statement {
 				"elasticache:ListTagsForResource",
 				"elasticache:RemoveTagsFromResource",
 			},
-			Resources: []string{iam.AppReplicationGroupARN, iam.AppCacheClusterARN, iam.AppCacheParameterARN, iam.AppCacheSubnetGroupARN},
+			Resources: []string{s.AppReplicationGroupARN(), s.AppCacheClusterARN(), s.AppCacheParameterARN(), s.AppCacheSubnetGroupARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticache:ModifyReplicationGroup"},
-			Resources: []string{iam.AppReplicationGroupARN, iam.AppCacheParameterARN},
+			Resources: []string{s.AppReplicationGroupARN(), s.AppCacheParameterARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
@@ -44,7 +44,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"elasticache:DescribeReplicationGroups",
 				"elasticache:IncreaseReplicaCount",
 			},
-			Resources: []string{iam.AppReplicationGroupARN},
+			Resources: []string{s.AppReplicationGroupARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
@@ -59,7 +59,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"elasticache:DescribeCacheParameters",
 				"elasticache:ModifyCacheParameterGroup",
 			},
-			Resources: []string{iam.AppCacheParameterARN},
+			Resources: []string{s.AppCacheParameterARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
@@ -68,7 +68,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"elasticache:DescribeCacheSubnetGroups",
 				"elasticache:ModifyCacheSubnetGroup",
 			},
-			Resources: []string{iam.AppCacheSubnetGroupARN},
+			Resources: []string{s.AppCacheSubnetGroupARN()},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{

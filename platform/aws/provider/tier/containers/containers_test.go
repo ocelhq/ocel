@@ -92,17 +92,17 @@ func TestTheContainersPartListsThePublicFrontItRaisedAndNoPrivateFrontItDidNot(t
 	t.Parallel()
 
 	tier := environment.TierProduction
-	listed := listResources(tier, fixturePublicOnlyInfrastructure())
+	listed := listResources("ocel", tier, fixturePublicOnlyInfrastructure())
 
 	for _, want := range []provider.PartResource{
-		{Kind: "AWS::ECS::Cluster", ID: "ocel-containers-production"},
-		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-containers-production-tasks"},
-		{Kind: "AWS::Logs::LogGroup", ID: "/ocel/containers/production"},
+		{Kind: "AWS::ECS::Cluster", ID: "ocel-prod-containers"},
+		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-prod-containers-tasks-sg"},
+		{Kind: "AWS::Logs::LogGroup", ID: "/ecs/ocel-prod-containers"},
 		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-exec-abc"},
-		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-public-production"},
-		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-containers-production-public"},
-		{Kind: "AWS::CertificateManager::Certificate", ID: "ocel-public-production.invalid"},
-		{Kind: "AWS::Lambda::Function", ID: "ocel-containers-production-liveness"},
+		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-public"},
+		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-prod-public-sg"},
+		{Kind: "AWS::CertificateManager::Certificate", ID: "ocel-prod-public.invalid"},
+		{Kind: "AWS::Lambda::Function", ID: "ocel-prod-public-liveness"},
 		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-live-abc"},
 	} {
 		if !slices.Contains(listed, want) {
@@ -110,8 +110,8 @@ func TestTheContainersPartListsThePublicFrontItRaisedAndNoPrivateFrontItDidNot(t
 		}
 	}
 	for _, unwanted := range []provider.PartResource{
-		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-containers-production"},
-		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-containers-production-front"},
+		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-containers"},
+		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-prod-containers-sg"},
 	} {
 		if slices.Contains(listed, unwanted) {
 			t.Errorf("listed %v, the private front this raise never raised", unwanted)
@@ -125,11 +125,11 @@ func TestTheContainersPartListsThePublicFrontItRaisedAndNoPrivateFrontItDidNot(t
 func TestTheContainersPartListsThePrivateFrontAndNoPublicFrontBehindCloudFront(t *testing.T) {
 	t.Parallel()
 
-	listed := listResources(environment.TierProduction, fixtureInfrastructure())
+	listed := listResources("ocel", environment.TierProduction, fixtureInfrastructure())
 
 	for _, want := range []provider.PartResource{
-		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-containers-production"},
-		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-containers-production-front"},
+		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-containers"},
+		{Kind: "AWS::EC2::SecurityGroup", ID: "ocel-prod-containers-sg"},
 		{Kind: "AWS::CloudFront::VpcOrigin", ID: fixtureFront},
 		{Kind: "AWS::IAM::Role", ID: "ocel-containers-production-exec-abc"},
 	} {
@@ -137,7 +137,7 @@ func TestTheContainersPartListsThePrivateFrontAndNoPublicFrontBehindCloudFront(t
 			t.Errorf("listed %v, want %v among them", listed, want)
 		}
 	}
-	if slices.Contains(listed, provider.PartResource{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-public-production"}) {
+	if slices.Contains(listed, provider.PartResource{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-public"}) {
 		t.Errorf("listed %v, want no public front nothing forwarded to", listed)
 	}
 }
@@ -151,12 +151,12 @@ func TestTheContainersPartDescribesWhatItsLastRaiseRecordedAndPricesThoseFronts(
 	if err := stackrecords.Write(ctx, store, tier, Slug, StackRef(tier).Name, stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: "v1.0.0"}); err != nil {
 		t.Fatal(err)
 	}
-	raised := listResources(tier, fixturePublicOnlyInfrastructure())
+	raised := listResources("ocel", tier, fixturePublicOnlyInfrastructure())
 	if err := stackrecords.MarkBootstrapPartReady(ctx, store, tier, Part, stackrecords.BootstrapPart{WrittenBy: "v1.0.0", AddedBy: "shop", Resources: raised}); err != nil {
 		t.Fatal(err)
 	}
 
-	part, present, err := ReadPart(ctx, store, "us-east-1", tier)
+	part, present, err := ReadPart(ctx, store, "ocel", "us-east-1", tier)
 	if err != nil || !present {
 		t.Fatalf("ReadPart() = %v, %v, want the containers part", present, err)
 	}

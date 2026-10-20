@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 type logs struct{ *Provider }
@@ -19,12 +20,12 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 	}
 	cloudwatch, functions := cloudwatchlogs.NewFromConfig(p.aws), lambda.NewFromConfig(p.aws)
 	query := logevents.Query{
-		Sources:  logSourcesOf(q.Targets),
-		Tier:     q.Tier,
-		Since:    q.Since,
-		Until:    q.Until,
-		Limit:    q.Limit,
-		Contains: q.Contains,
+		Sources:        logSourcesOf(q.Targets),
+		ContainerGroup: awsports.ContainerLogGroupName(string(p.namespace), q.Tier),
+		Since:          q.Since,
+		Until:          q.Until,
+		Limit:          q.Limit,
+		Contains:       q.Contains,
 	}
 	emitEvents := func(events []logevents.Event) error {
 		entries := make([]provider.LogEntry, 0, len(events))

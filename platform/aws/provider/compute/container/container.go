@@ -101,6 +101,7 @@ type Definition struct {
 }
 
 type Target struct {
+	Namespace            string
 	Tier                 environment.Tier
 	Region               string
 	Slug                 string
@@ -227,7 +228,7 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 	tasksPolicyDoc := ""
 	if topic.ReachesTasks(app) {
 		topics := topic.Of(project, stack.Env, app.Topics)
-		topology, err := topic.QueueTopology(at.StateTable, project, stack.Env, topics, WorkerServices(at.Tier, project, stack.Env, app.DeploymentWorkers))
+		topology, err := topic.QueueTopology(at.StateTable, project, stack.Env, topics, WorkerServices(at.Namespace, at.Tier, project, stack.Env, app.DeploymentWorkers))
 		if err != nil {
 			return nil, err
 		}
@@ -238,7 +239,7 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 		if len(rendered) > 0 {
 			env[queues.EnvVar] = string(rendered)
 		}
-		if tasksPolicyDoc, err = topic.TasksPolicy(at.StateTable, project, stack.Env, topics, WorkerServiceARNs(at.StateTable, at.Tier, project, stack.Env, app.DeploymentWorkers)); err != nil {
+		if tasksPolicyDoc, err = topic.TasksPolicy(at.StateTable, project, stack.Env, topics, WorkerServiceARNs(at.StateTable, at.Namespace, at.Tier, project, stack.Env, app.DeploymentWorkers)); err != nil {
 			return nil, err
 		}
 	}

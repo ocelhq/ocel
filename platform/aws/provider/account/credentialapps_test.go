@@ -17,16 +17,16 @@ import (
 func TestTheDeployCredentialOwnsTheLogGroupsItCreates(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	want := map[string]string{
-		"logs:CreateLogGroup":      conditionJSON(t, iam.TaggedOnCreate()),
-		"logs:DeleteLogGroup":      conditionJSON(t, iam.TaggedByOcel()),
-		"logs:FilterLogEvents":     conditionJSON(t, iam.TaggedByOcel()),
-		"logs:ListTagsForResource": conditionJSON(t, iam.TaggedByOcel()),
-		"logs:PutRetentionPolicy":  conditionJSON(t, iam.TaggedByOcel()),
-		"logs:StartLiveTail":       conditionJSON(t, iam.TaggedByOcel()),
-		"logs:TagResource":         conditionJSON(t, iam.TaggedByOcel()),
-		"logs:UntagResource":       conditionJSON(t, iam.TaggedByOcel()),
+		"logs:CreateLogGroup":      conditionJSON(t, productionScope.TaggedOnCreate()),
+		"logs:DeleteLogGroup":      conditionJSON(t, productionScope.TaggedByOcel()),
+		"logs:FilterLogEvents":     conditionJSON(t, productionScope.TaggedByOcel()),
+		"logs:ListTagsForResource": conditionJSON(t, productionScope.TaggedByOcel()),
+		"logs:PutRetentionPolicy":  conditionJSON(t, productionScope.TaggedByOcel()),
+		"logs:StartLiveTail":       conditionJSON(t, productionScope.TaggedByOcel()),
+		"logs:TagResource":         conditionJSON(t, productionScope.TaggedByOcel()),
+		"logs:UntagResource":       conditionJSON(t, productionScope.TaggedByOcel()),
 	}
-	for _, resource := range []string{iam.AppLogGroupARN, iam.FunctionLogGroupARN} {
+	for _, resource := range append(productionScope.ContainerLogGroupARNs(), iam.FunctionLogGroupARN) {
 		got := logsGrantsOn(grants, resource)
 		if !maps.Equal(got, want) {
 			t.Errorf("the deploy credential grants %v on %s, want exactly %v, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", got, resource, want)
@@ -62,7 +62,7 @@ func TestEveryCredentialScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
 	unscopable := []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"}
 	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
-		if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: iam.AppTaskDefinitionARN, condition: conditionJSON(t, iam.TaggedOnCreate())}] {
+		if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: iam.AppTaskDefinitionARN, condition: conditionJSON(t, productionScope.TaggedOnCreate())}] {
 			t.Errorf("the %s credential does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", purpose, iam.AppTaskDefinitionARN)
 		}
 		for _, action := range unscopable {
@@ -94,7 +94,8 @@ func logsGrantsOn(grants map[grant]bool, resource string) map[string]string {
 func TestTheBootstrapCredentialReachesNoLogGroupBeyondWhatADeployMay(t *testing.T) {
 	bootstrapDoc, deployDoc := renderedCredentials(t)
 	bootstrapGrants, deployGrants := grantsOf(t, bootstrapDoc), grantsOf(t, deployDoc)
-	for _, resource := range []string{iam.AppLogGroupARN, iam.FunctionLogGroupARN} {
+	owned := append(productionScope.ContainerLogGroupARNs(), iam.FunctionLogGroupARN)
+	for _, resource := range owned {
 		if got, deploy := logsGrantsOn(bootstrapGrants, resource), logsGrantsOn(deployGrants, resource); !maps.Equal(got, deploy) {
 			t.Errorf("the bootstrap credential grants %v on %s, want the deploy credential's %v, so bootstrapping widens what a deploy may do to a log group", got, resource, deploy)
 		}
@@ -103,9 +104,9 @@ func TestTheBootstrapCredentialReachesNoLogGroupBeyondWhatADeployMay(t *testing.
 		if !strings.HasPrefix(g.action, "logs:") {
 			continue
 		}
-		switch g.resource {
-		case iam.AppLogGroupARN, iam.FunctionLogGroupARN:
-		case iam.AnyResource:
+		switch {
+		case slices.Contains(owned, g.resource):
+		case g.resource == iam.AnyResource:
 			if g.action != "logs:DescribeLogGroups" {
 				t.Errorf("the bootstrap credential grants %s on %q, which reaches every log group in the account", g.action, g.resource)
 			}
@@ -116,7 +117,7 @@ func TestTheBootstrapCredentialReachesNoLogGroupBeyondWhatADeployMay(t *testing.
 }
 
 func TestEveryCredentialTouchesOnlyEventSourceMappingsOfItsTagInvalidatorOrOcelTaggedOnesOfAppWorkers(t *testing.T) {
-	ofAppWorkers := map[string]any{"lambda:FunctionArn": "arn:aws:lambda:*:*:function:ocel-app-*"}
+	ofAppWorkers := map[string]any{"lambda:FunctionArn": productionScope.AppWorkerFunctionARN()}
 	for _, tier := range bothTiers {
 		invalidator := "arn:aws:lambda:*:*:function:" + taginvalidator.NamesFor(string(defaultNamespace), tier).Function
 		allowed := map[string]bool{
@@ -145,14 +146,14 @@ func TestEveryCredentialTouchesOnlyEventSourceMappingsOfItsTagInvalidatorOrOcelT
 
 func TestTheDeployCredentialMakesAndRemovesOnlyTheQueuesTopicsAndSchedulesOfApps(t *testing.T) {
 	scoped := map[string][]string{
-		"sqs:CreateQueue":               {iam.AppQueueARN},
-		"sqs:DeleteQueue":               {iam.AppQueueARN},
-		"sns:CreateTopic":               {iam.AppTopicARN, iam.AppSubscriptionARN},
-		"sns:DeleteTopic":               {iam.AppTopicARN, iam.AppSubscriptionARN},
-		"scheduler:CreateSchedule":      {iam.AppScheduleARN},
-		"scheduler:DeleteSchedule":      {iam.AppScheduleARN},
-		"scheduler:CreateScheduleGroup": {iam.AppScheduleGroupARN},
-		"scheduler:DeleteScheduleGroup": {iam.AppScheduleGroupARN},
+		"sqs:CreateQueue":               {productionScope.AppQueueARN(), productionScope.TagInvalidatorQueue},
+		"sqs:DeleteQueue":               {productionScope.AppQueueARN(), productionScope.TagInvalidatorQueue},
+		"sns:CreateTopic":               {productionScope.AppTopicARN(), productionScope.AppSubscriptionARN()},
+		"sns:DeleteTopic":               {productionScope.AppTopicARN(), productionScope.AppSubscriptionARN()},
+		"scheduler:CreateSchedule":      {productionScope.AppScheduleARN(), productionScope.EnvSourceSyncSchedule},
+		"scheduler:DeleteSchedule":      {productionScope.AppScheduleARN(), productionScope.EnvSourceSyncSchedule},
+		"scheduler:CreateScheduleGroup": {productionScope.AppScheduleGroupARN(), productionScope.EnvSourceSyncScheduleGroup},
+		"scheduler:DeleteScheduleGroup": {productionScope.AppScheduleGroupARN(), productionScope.EnvSourceSyncScheduleGroup},
 	}
 	granted := map[string]bool{}
 	for g := range grantsOf(t, mustRender(t, DeployCredentialPermissions)) {
@@ -174,19 +175,19 @@ func TestTheDeployCredentialMakesAndRemovesOnlyTheQueuesTopicsAndSchedulesOfApps
 
 func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
-	onCreate := conditionJSON(t, iam.ScalesECSServices(iam.TaggedOnCreate()))
-	tagged := conditionJSON(t, iam.ScalesECSServices(iam.TaggedByOcel()))
+	onCreate := conditionJSON(t, iam.ScalesECSServices(productionScope.TaggedOnCreate()))
+	tagged := conditionJSON(t, iam.ScalesECSServices(productionScope.TaggedByOcel()))
 	want := []grant{
 		{action: "application-autoscaling:RegisterScalableTarget", resource: iam.ScalableTargetARN, condition: onCreate},
 		{action: "application-autoscaling:RegisterScalableTarget", resource: iam.ScalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:DeregisterScalableTarget", resource: iam.ScalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:PutScalingPolicy", resource: iam.ScalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:DeleteScalingPolicy", resource: iam.ScalableTargetARN, condition: tagged},
-		{action: "application-autoscaling:TagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, iam.TaggedOnCreate())},
-		{action: "application-autoscaling:TagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, iam.TaggedByOcel())},
-		{action: "application-autoscaling:UntagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, iam.TaggedByOcel())},
-		{action: "cloudwatch:PutMetricAlarm", resource: iam.ScalingAlarmARN, condition: "null"},
-		{action: "cloudwatch:DeleteAlarms", resource: iam.ScalingAlarmARN, condition: "null"},
+		{action: "application-autoscaling:TagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedOnCreate())},
+		{action: "application-autoscaling:TagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedByOcel())},
+		{action: "application-autoscaling:UntagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedByOcel())},
+		{action: "cloudwatch:PutMetricAlarm", resource: productionScope.ScalingAlarmARN(), condition: "null"},
+		{action: "cloudwatch:DeleteAlarms", resource: productionScope.ScalingAlarmARN(), condition: "null"},
 		{action: "iam:CreateServiceLinkedRole", resource: iam.ECSScalingLinkedRoleARN, condition: conditionJSON(t, iam.LinkedRoleFor("ecs.application-autoscaling.amazonaws.com"))},
 	}
 	for _, wanted := range want {
@@ -294,21 +295,32 @@ func TestEveryCredentialReachesImageRepositoriesOnlyOfTheProjectItsPrincipalIsTa
 	}
 }
 
-func TestEveryCredentialRunsAndReachesOnlyTheTasksOfABastionCluster(t *testing.T) {
-	onBastion := conditionJSON(t, map[string]any{"ArnEquals": map[string]any{"ecs:cluster": bastion.ClusterARN}})
-	want := []grant{
-		{action: "ecs:RunTask", resource: bastion.TaskDefinitionARN, condition: onBastion},
-		{action: "ecs:DescribeTasks", resource: bastion.TaskARN, condition: "null"},
-		{action: "ecs:StopTask", resource: bastion.TaskARN, condition: "null"},
-		{action: "ecs:ExecuteCommand", resource: bastion.ClusterARN, condition: "null"},
-		{action: "ecs:ExecuteCommand", resource: bastion.TaskARN, condition: "null"},
-		{action: "ecs:ListTasks", resource: iam.AnyResource, condition: onBastion},
-		{action: "ecs:DescribeClusters", resource: bastion.ClusterARN, condition: "null"},
-		{action: "ecs:DeleteTaskDefinitions", resource: bastion.TaskDefinitionARN, condition: "null"},
-		{action: "ssm:StartSession", resource: bastion.TaskARN, condition: "null"},
-		{action: "ssm:StartSession", resource: bastion.PortForwardingDocumentARN, condition: "null"},
-	}
+func bastionScopesOf(tier environment.Tier) (cluster, tasks, definitions string) {
+	ns := string(defaultNamespace)
+	return bastion.ClusterARN(ns, tier), bastion.TaskARN(ns, tier), bastion.TaskDefinitionARN(ns, tier)
+}
+
+func onBastionOf(t *testing.T, tier environment.Tier) string {
+	cluster, _, _ := bastionScopesOf(tier)
+	return conditionJSON(t, map[string]any{"ArnEquals": map[string]any{"ecs:cluster": cluster}})
+}
+
+func TestEveryCredentialRunsAndReachesOnlyTheTasksOfItsTiersBastionCluster(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
+		cluster, tasks, definitions := bastionScopesOf(tierOf(purpose))
+		onBastion := onBastionOf(t, tierOf(purpose))
+		want := []grant{
+			{action: "ecs:RunTask", resource: definitions, condition: onBastion},
+			{action: "ecs:DescribeTasks", resource: tasks, condition: "null"},
+			{action: "ecs:StopTask", resource: tasks, condition: "null"},
+			{action: "ecs:ExecuteCommand", resource: cluster, condition: "null"},
+			{action: "ecs:ExecuteCommand", resource: tasks, condition: "null"},
+			{action: "ecs:ListTasks", resource: iam.AnyResource, condition: onBastion},
+			{action: "ecs:DescribeClusters", resource: cluster, condition: "null"},
+			{action: "ecs:DeleteTaskDefinitions", resource: definitions, condition: "null"},
+			{action: "ssm:StartSession", resource: tasks, condition: "null"},
+			{action: "ssm:StartSession", resource: bastion.PortForwardingDocumentARN, condition: "null"},
+		}
 		grants := grantsOf(t, document)
 		for _, wanted := range want {
 			if !grants[wanted] {
@@ -320,8 +332,9 @@ func TestEveryCredentialRunsAndReachesOnlyTheTasksOfABastionCluster(t *testing.T
 
 func TestNoCredentialRunsOrReachesAnythingBeyondTheBastionScopes(t *testing.T) {
 	reachable := []string{"ecs:RunTask", "ecs:StopTask", "ecs:ExecuteCommand", "ssm:StartSession", "ssm:TerminateSession"}
-	scopes := []string{bastion.ClusterARN, bastion.TaskARN, bastion.TaskDefinitionARN, bastion.PortForwardingDocumentARN}
 	for purpose, document := range bothCredentials(t) {
+		cluster, tasks, definitions := bastionScopesOf(tierOf(purpose))
+		scopes := []string{cluster, tasks, definitions, bastion.PortForwardingDocumentARN}
 		for g := range grantsOf(t, document) {
 			if slices.Contains(reachable, g.action) && !slices.Contains(scopes, g.resource) {
 				t.Errorf("the %s credential grants %s on %s, which reaches past the bastion cluster's tasks and the one port forwarding document", purpose, g.action, g.resource)
@@ -331,8 +344,8 @@ func TestNoCredentialRunsOrReachesAnythingBeyondTheBastionScopes(t *testing.T) {
 }
 
 func TestEveryCredentialListsTasksOnlyOfABastionClusterAndAgainstTheResourceAWSEvaluates(t *testing.T) {
-	onBastion := conditionJSON(t, map[string]any{"ArnEquals": map[string]any{"ecs:cluster": bastion.ClusterARN}})
 	for purpose, document := range bothCredentials(t) {
+		onBastion := onBastionOf(t, tierOf(purpose))
 		for g := range grantsOf(t, document) {
 			if g.action != "ecs:ListTasks" {
 				continue
@@ -374,7 +387,7 @@ func TestEveryCredentialMintsAppRolesUnderOnlyTheBoundaryOfItsOwnTier(t *testing
 }
 
 func appResourceOf(tier environment.Tier, also requestContext) requestContext {
-	request := taggedWithTier(tier, requestContext{"aws:ResourceTag/" + iam.ManagedByTagKey: iam.ManagedByTagValue})
+	request := taggedWithTier(tier, requestContext{"aws:ResourceTag/" + iam.ManagedByTagKey: string(defaultNamespace)})
 	maps.Copy(request, also)
 	return request
 }
@@ -421,7 +434,7 @@ func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T)
 			}
 			creating := func(of environment.Tier, also requestContext) requestContext {
 				request := requestContext{
-					"aws:RequestTag/" + iam.ManagedByTagKey:  iam.ManagedByTagValue,
+					"aws:RequestTag/" + iam.ManagedByTagKey:  string(defaultNamespace),
 					"aws:RequestTag/" + naming.EnvTierTagKey: string(of),
 				}
 				maps.Copy(request, also)
@@ -465,7 +478,7 @@ func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T)
 func TestACredentialPassesTheBastionTaskRoleOfOnlyItsOwnTierToECS(t *testing.T) {
 	toTasks := requestContext{"iam:PassedToService": iam.ECSTasksPrincipal}
 	roleOf := func(tier environment.Tier) string {
-		return "arn:aws:iam::111122223333:role/" + bastion.NameFor(tier)
+		return "arn:aws:iam::111122223333:role/" + bastion.NameFor(string(defaultNamespace), tier)
 	}
 	for _, tier := range bothTiers {
 		for purpose, document := range credentialsOfTier(t, tier) {
@@ -488,12 +501,12 @@ func TestTheDeployCredentialRaisesAndRemovesBacklogAlarmsOnlyUnderTheAppScope(t 
 		"cloudwatch:UntagResource",
 		"cloudwatch:ListTagsForResource",
 	} {
-		if wanted := (grant{action: action, resource: iam.AppAlarmARN, condition: "null"}); !grants[wanted] {
-			t.Errorf("the deploy credential does not grant %s on %s: a container worker at no tasks is started by an alarm on its queues", action, iam.AppAlarmARN)
+		if wanted := (grant{action: action, resource: productionScope.AppAlarmARN(), condition: "null"}); !grants[wanted] {
+			t.Errorf("the deploy credential does not grant %s on %s: a container worker at no tasks is started by an alarm on its queues", action, productionScope.AppAlarmARN())
 		}
 	}
 	for g := range grants {
-		if g.action == "cloudwatch:PutMetricAlarm" && g.resource != iam.AppAlarmARN && g.resource != iam.ScalingAlarmARN {
+		if g.action == "cloudwatch:PutMetricAlarm" && g.resource != productionScope.AppAlarmARN() && g.resource != productionScope.ScalingAlarmARN() {
 			t.Errorf("the deploy credential grants cloudwatch:PutMetricAlarm on %s, want only the alarms Ocel names and the ones target tracking makes", g.resource)
 		}
 	}
@@ -501,8 +514,8 @@ func TestTheDeployCredentialRaisesAndRemovesBacklogAlarmsOnlyUnderTheAppScope(t 
 
 func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTaggedIt(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
-	onCreate := conditionJSON(t, iam.TaggedOnCreate())
-	byOcel := conditionJSON(t, iam.TaggedByOcel())
+	onCreate := conditionJSON(t, productionScope.TaggedOnCreate())
+	byOcel := conditionJSON(t, productionScope.TaggedByOcel())
 	unscoped := conditionJSON(t, nil)
 
 	creates := map[string][]string{

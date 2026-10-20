@@ -1,8 +1,12 @@
 package alb
 
-import "github.com/ocelhq/ocel/platform/aws/provider/iam"
+import (
+	"slices"
 
-func Credential(iam.Scope) []iam.Statement {
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+)
+
+func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions: []string{
@@ -22,21 +26,21 @@ func Credential(iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:CreateTrustStore"},
-			Resources: []string{iam.ContainerBalancerARN, iam.AppTargetGroupARN, iam.ContainerTrustStoreARN},
-			Condition: iam.TaggedOnCreate(),
+			Resources: slices.Concat(s.ContainerBalancerARNs(), []string{iam.AppTargetGroupARN, s.ContainerTrustStoreARN()}),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions: []string{
 				"elasticloadbalancing:AddListenerCertificates",
 				"elasticloadbalancing:RemoveListenerCertificates",
 			},
-			Resources: []string{iam.ContainerListenerARN},
-			Condition: iam.TaggedByOcel(),
+			Resources: s.ContainerListenerARNs(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags", "elasticloadbalancing:ModifyTrustStore", "elasticloadbalancing:DeleteTrustStore"},
-			Resources: []string{iam.ContainerTrustStoreARN},
-			Condition: iam.TaggedByOcel(),
+			Resources: []string{s.ContainerTrustStoreARN()},
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions: []string{
@@ -57,13 +61,13 @@ func Credential(iam.Scope) []iam.Statement {
 				"elasticloadbalancing:SetSecurityGroups",
 				"elasticloadbalancing:SetSubnets",
 			},
-			Resources: []string{iam.ContainerBalancerARN, iam.ContainerListenerARN, iam.ContainerRuleARN, iam.AppTargetGroupARN},
-			Condition: iam.TaggedByOcel(),
+			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), []string{iam.AppTargetGroupARN}),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags"},
-			Resources: []string{iam.ContainerBalancerARN, iam.ContainerListenerARN, iam.ContainerRuleARN, iam.AppTargetGroupARN, iam.ContainerTrustStoreARN},
-			Condition: iam.TaggedOnCreate(),
+			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), []string{iam.AppTargetGroupARN, s.ContainerTrustStoreARN()}),
+			Condition: s.TaggedOnCreate(),
 		},
 	}
 }

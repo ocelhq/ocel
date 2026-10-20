@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
@@ -111,10 +112,10 @@ func TestPermissionsRenderTheTierTheyAreAskedForAndNameIt(t *testing.T) {
 		if !strings.Contains(document.Heading, string(tier)) {
 			t.Errorf("Permissions(%s, %s).Heading = %q, want it to name the tier", purpose, tier, document.Heading)
 		}
-		if want := "alias/acme-variables-" + string(tier); !strings.Contains(document.Document, want) {
+		if want := "alias/acme-variables-" + naming.TierWord(tier); !strings.Contains(document.Document, want) {
 			t.Errorf("Permissions(%s, %s) does not fence the variables key to %s", purpose, tier, want)
 		}
-		if other := "alias/acme-variables-" + string(tier.Sibling()); strings.Contains(document.Document, other) {
+		if other := "alias/acme-variables-" + naming.TierWord(tier.Sibling()); strings.Contains(document.Document, other) {
 			t.Errorf("Permissions(%s, %s) names %s, the other tier's variables key", purpose, tier, other)
 		}
 	}

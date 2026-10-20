@@ -26,7 +26,7 @@ func TestRemoveLeavesNothingOfATiersBastionBehindNotEvenARunningTask(t *testing.
 		t.Fatalf("second Run() = %v", err)
 	}
 
-	if err := bastion.Remove(context.Background(), clients, environment.TierProduction); err != nil {
+	if err := bastion.Remove(context.Background(), clients, "ocel", environment.TierProduction); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
@@ -49,7 +49,7 @@ func TestRemoveOfATierThatNeverForwardedAPortChangesNothing(t *testing.T) {
 	account := newAccount()
 	clients := account.clients()
 
-	if err := bastion.Remove(context.Background(), clients, environment.TierPreview); err != nil {
+	if err := bastion.Remove(context.Background(), clients, "ocel", environment.TierPreview); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
@@ -70,7 +70,7 @@ func TestRemoveWaitsOutTheNetworkInterfacesAStoppedTaskStillHoldsOnItsSecurityGr
 	}
 	account.groupBusy = 2
 
-	if err := bastion.Remove(context.Background(), clients, environment.TierProduction); err != nil {
+	if err := bastion.Remove(context.Background(), clients, "ocel", environment.TierProduction); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
@@ -89,7 +89,7 @@ func TestRemoveDeletesTheClusterOnceTheTasksItStoppedHaveStopped(t *testing.T) {
 	}
 	account.stopLag = 3
 
-	if err := bastion.Remove(context.Background(), clients, environment.TierProduction); err != nil {
+	if err := bastion.Remove(context.Background(), clients, "ocel", environment.TierProduction); err != nil {
 		t.Fatalf("Remove() while its task is still stopping = %v, want it to wait the task out", err)
 	}
 
@@ -102,14 +102,14 @@ func TestRemoveLeavesAClusterOcelDidNotTagAlone(t *testing.T) {
 	t.Parallel()
 
 	account := newAccount()
-	account.clusters["ocel-bastion-production"] = map[string]string{}
+	account.clusters["ocel-prod-bastion"] = map[string]string{}
 
-	err := bastion.Remove(context.Background(), account.clients(), environment.TierProduction)
+	err := bastion.Remove(context.Background(), account.clients(), "ocel", environment.TierProduction)
 
 	if err == nil {
 		t.Fatal("Remove() of a cluster Ocel did not tag = nil error, want it refused")
 	}
-	if _, kept := account.clusters["ocel-bastion-production"]; !kept {
+	if _, kept := account.clusters["ocel-prod-bastion"]; !kept {
 		t.Error("Remove() deleted a cluster Ocel did not tag")
 	}
 }
@@ -121,20 +121,20 @@ func TestRemoveLeavesTheTaskDefinitionRevisionsOcelDidNotTagAlone(t *testing.T) 
 	clients, _ := readyBastion(t, account)
 	untagged := map[int32]ecstypes.TaskDefinitionStatus{2: ecstypes.TaskDefinitionStatusActive, 3: ecstypes.TaskDefinitionStatusInactive}
 	for revision, status := range untagged {
-		account.definition["ocel-bastion-production"] = append(account.definition["ocel-bastion-production"], &ecstypes.TaskDefinition{
-			Family:            aws.String("ocel-bastion-production"),
+		account.definition["ocel-prod-bastion"] = append(account.definition["ocel-prod-bastion"], &ecstypes.TaskDefinition{
+			Family:            aws.String("ocel-prod-bastion"),
 			Revision:          revision,
 			Status:            status,
-			TaskDefinitionArn: aws.String(fmt.Sprintf("arn:aws:ecs:us-east-1:123456789012:task-definition/ocel-bastion-production:%d", revision)),
+			TaskDefinitionArn: aws.String(fmt.Sprintf("arn:aws:ecs:us-east-1:123456789012:task-definition/ocel-prod-bastion:%d", revision)),
 		})
 	}
 
-	if err := bastion.Remove(context.Background(), clients, environment.TierProduction); err != nil {
+	if err := bastion.Remove(context.Background(), clients, "ocel", environment.TierProduction); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
 	kept := map[int32]ecstypes.TaskDefinitionStatus{}
-	for _, revision := range account.definition["ocel-bastion-production"] {
+	for _, revision := range account.definition["ocel-prod-bastion"] {
 		kept[revision.Revision] = revision.Status
 	}
 	if !maps.Equal(kept, untagged) {

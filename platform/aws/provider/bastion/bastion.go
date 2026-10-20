@@ -4,14 +4,14 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
 	Part    = "bastion"
 	Summary = "the task a port forward runs inside the tier's network"
 
-	Prefix                 = "ocel-bastion"
+	word                   = "bastion"
 	PortForwardingDocument = "AWS-StartPortForwardingSessionToRemoteHost"
 
 	containerName       = "bastion"
@@ -24,8 +24,7 @@ const (
 	httpsPort           = 443
 	anywhere            = "0.0.0.0/0"
 
-	managedByTagKey   = "ocel:managed-by"
-	managedByTagValue = "ocel"
+	managedByTagKey = "ocel:managed-by"
 
 	pollJitter        = 0.5
 	pollCeiling       = 10 * time.Second
@@ -35,15 +34,16 @@ const (
 	maxRoleAttempts   = 12
 )
 
-func NameFor(tier environment.Tier) string {
-	return naming.Join(naming.WordSeparator, Prefix, string(tier))
+func NameFor(namespace string, tier environment.Tier) string {
+	return awsports.TieredName(namespace, tier, word)
 }
 
 type Spec struct {
-	Tier     environment.Tier
-	Boundary string
-	Ports    []int
-	Clients  string
+	Namespace string
+	Tier      environment.Tier
+	Boundary  string
+	Ports     []int
+	Clients   string
 }
 
 type Bastion struct {

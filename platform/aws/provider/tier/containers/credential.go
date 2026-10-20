@@ -2,12 +2,12 @@ package containers
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func Credential(iam.Scope) []iam.Statement {
+func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"ecs:CreateCluster"},
-			Resources: []string{iam.ContainerClusterARN},
-			Condition: iam.TaggedOnCreate(),
+			Resources: []string{s.ContainerClusterARN()},
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions: []string{
@@ -17,8 +17,8 @@ func Credential(iam.Scope) []iam.Statement {
 				"ecs:TagResource",
 				"ecs:UntagResource",
 			},
-			Resources: []string{iam.ContainerClusterARN},
-			Condition: iam.TaggedByOcel(),
+			Resources: []string{s.ContainerClusterARN()},
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"iam:CreateServiceLinkedRole"},
@@ -42,12 +42,12 @@ func Credential(iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"cloudfront:CreateVpcOrigin"},
 			Resources: []string{iam.AnyResource},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"cloudfront:TagResource"},
 			Resources: []string{iam.ContainerVPCOriginARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions: []string{
@@ -59,17 +59,17 @@ func Credential(iam.Scope) []iam.Statement {
 				"cloudfront:UpdateVpcOrigin",
 			},
 			Resources: []string{iam.ContainerVPCOriginARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"acm:ImportCertificate"},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions:   []string{"acm:AddTagsToCertificate"},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: iam.MergeConditions(iam.TaggedOnCreate(), iam.KeyPairSuppliedByCaller()),
+			Condition: iam.MergeConditions(s.TaggedOnCreate(), iam.KeyPairSuppliedByCaller()),
 		},
 	}
 }

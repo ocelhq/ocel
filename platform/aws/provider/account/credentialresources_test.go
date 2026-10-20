@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 )
@@ -24,12 +25,12 @@ func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppSc
 				if slices.Contains(bootstrapStores, g.resource) {
 					continue
 				}
-				if !strings.HasPrefix(g.resource, "arn:aws:s3:::"+iam.AppScopePrefix) {
+				if !strings.HasPrefix(g.resource, "arn:aws:s3:::"+naming.AppFence(string(defaultNamespace))) {
 					t.Errorf("the %s credential grants %s on %s, a bucket name a deploy never creates: S3 evaluates no Ocel tag on a bucket, so the name prefix is the only scope", purpose, g.action, g.resource)
 				}
 			case strings.HasPrefix(g.action, "rds:") && !readOnly(g.action):
 				for _, kind := range []string{"cluster:", "cluster-snapshot:", "db:", "subgrp:"} {
-					if strings.Contains(g.resource, ":"+kind) && !strings.Contains(g.resource, ":"+kind+iam.AppScopePrefix) {
+					if strings.Contains(g.resource, ":"+kind) && !strings.Contains(g.resource, ":"+kind+naming.AppFence(string(defaultNamespace))) {
 						t.Errorf("the %s credential grants %s on %s, an identifier a deploy never mints", purpose, g.action, g.resource)
 					}
 				}
@@ -46,7 +47,7 @@ func TestEveryCredentialMayDeleteAClusterIntoAFinalSnapshotUnderTheAppScope(t *t
 	for purpose, document := range bothCredentials(t) {
 		want := grant{
 			action:    "rds:DeleteDBCluster",
-			resource:  "arn:aws:rds:*:*:cluster-snapshot:" + iam.TierScopePrefix(tierOf(purpose)) + "*",
+			resource:  defaultNamespace.Scope(tierOf(purpose)).AppClusterSnapshotARN(),
 			condition: conditionJSON(t, nil),
 		}
 		if !grantsOf(t, document)[want] {
@@ -200,7 +201,7 @@ func TestTheDeployCredentialCreatesTheAppRoleThroughTheDataAPIAndAnOperatorSigns
 				connect = append(connect, g.resource)
 			}
 		}
-		if !slices.Equal(execute, []string{iam.AppClusterARN}) {
+		if !slices.Equal(execute, []string{productionScope.AppClusterARN()}) {
 			t.Errorf("%s grants rds-data:ExecuteStatement on %v, want the clusters in the app scope alone: the deploy creates each cluster's app role through the Data API", name, execute)
 		}
 		if want := []string{"arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRoleFor(environment.TierProduction), "arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRoleFor(environment.TierPreview)}; len(connect) != 1 || !slices.Contains(want, connect[0]) {

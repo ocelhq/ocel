@@ -18,41 +18,41 @@ type tag struct {
 	value string
 }
 
-func tagsFor(tier environment.Tier) []tag {
-	return []tag{{managedByTagKey, managedByTagValue}, {naming.EnvTierTagKey, string(tier)}}
+func tagsFor(namespace string, tier environment.Tier) []tag {
+	return []tag{{managedByTagKey, namespace}, {naming.EnvTierTagKey, string(tier)}}
 }
 
-func ecsTagsFor(tier environment.Tier) []ecstypes.Tag {
+func ecsTagsFor(namespace string, tier environment.Tier) []ecstypes.Tag {
 	var out []ecstypes.Tag
-	for _, pair := range tagsFor(tier) {
+	for _, pair := range tagsFor(namespace, tier) {
 		out = append(out, ecstypes.Tag{Key: aws.String(pair.key), Value: aws.String(pair.value)})
 	}
 	return out
 }
 
-func iamTagsFor(tier environment.Tier) []iamtypes.Tag {
+func iamTagsFor(namespace string, tier environment.Tier) []iamtypes.Tag {
 	var out []iamtypes.Tag
-	for _, pair := range tagsFor(tier) {
+	for _, pair := range tagsFor(namespace, tier) {
 		out = append(out, iamtypes.Tag{Key: aws.String(pair.key), Value: aws.String(pair.value)})
 	}
 	return out
 }
 
-func ec2TagsFor(tier environment.Tier) []ec2types.Tag {
+func ec2TagsFor(namespace string, tier environment.Tier) []ec2types.Tag {
 	var out []ec2types.Tag
-	for _, pair := range tagsFor(tier) {
+	for _, pair := range tagsFor(namespace, tier) {
 		out = append(out, ec2types.Tag{Key: aws.String(pair.key), Value: aws.String(pair.value)})
 	}
 	return out
 }
 
-func isManagedByOcel[T any](tags []T, keyValue func(T) (*string, *string)) bool {
+func isManagedByOcel[T any](namespace string, tags []T, keyValue func(T) (*string, *string)) bool {
 	return slices.ContainsFunc(tags, func(entry T) bool {
 		key, value := keyValue(entry)
-		return aws.ToString(key) == managedByTagKey && aws.ToString(value) == managedByTagValue
+		return aws.ToString(key) == managedByTagKey && aws.ToString(value) == namespace
 	})
 }
 
-func refuseUnowned(kind, name string) error {
-	return fmt.Errorf("%s %s exists and is not tagged %s=%s, so Ocel leaves it alone", kind, name, managedByTagKey, managedByTagValue)
+func refuseUnowned(namespace, kind, name string) error {
+	return fmt.Errorf("%s %s exists and is not tagged %s=%s, so Ocel leaves it alone", kind, name, managedByTagKey, namespace)
 }

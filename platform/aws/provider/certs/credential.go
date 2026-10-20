@@ -2,12 +2,12 @@ package certs
 
 import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 
-func Credential(iam.Scope) []iam.Statement {
+func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"acm:RequestCertificate"},
 			Resources: []string{iam.AnyResource},
-			Condition: iam.TaggedOnCreate(),
+			Condition: s.TaggedOnCreate(),
 		},
 		{
 			Actions: []string{
@@ -17,7 +17,7 @@ func Credential(iam.Scope) []iam.Statement {
 				"acm:RemoveTagsFromCertificate",
 			},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: iam.TaggedByOcel(),
+			Condition: s.TaggedByOcel(),
 		},
 		{
 			Actions:   []string{"acm:DescribeCertificate"},

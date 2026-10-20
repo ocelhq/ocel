@@ -29,9 +29,11 @@ const (
 	syncPolicyName     = "env-source-sync"
 	invokePolicyName   = "invoke-env-source-sync"
 
-	managedByTagKey   = "ocel:managed-by"
-	managedByTagValue = "ocel"
-	tierTagKey        = "ocel:env-tier"
+	managedByTagKey = "ocel:managed-by"
+	tierTagKey      = "ocel:env-tier"
+
+	syncWord     = "env-sync"
+	scheduleWord = "schedule"
 )
 
 type Spec struct {
@@ -56,21 +58,14 @@ type Names struct {
 	Schedule      string
 }
 
-func suffixed(tier environment.Tier, name string) string {
-	if tier == environment.TierPreview {
-		return name + "-preview"
-	}
-	return name
-}
-
 func NamesFor(namespace string, tier environment.Tier) Names {
-	function := suffixed(tier, namespace+"-env-sync")
+	function := awsports.TieredName(namespace, tier, syncWord)
 	return Names{
 		Function:      function,
 		Role:          function,
-		ScheduleRole:  suffixed(tier, namespace+"-env-sync-schedule"),
+		ScheduleRole:  awsports.TieredName(namespace, tier, syncWord, scheduleWord),
 		LogGroup:      "/aws/lambda/" + function,
-		ScheduleGroup: suffixed(tier, awsports.AppScope+"-"+namespace+"-env-sync"),
+		ScheduleGroup: function,
 		Schedule:      function,
 	}
 }

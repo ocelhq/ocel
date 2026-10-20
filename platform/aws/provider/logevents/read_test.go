@@ -19,8 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type storedEvent struct {
@@ -202,7 +200,7 @@ func TestReadAsksForContainerStreamsByThePhysicalPrefix(t *testing.T) {
 		{Stream: "web-c10/app/aaaa", Time: addToEpoch(2), Message: "a sibling whose name starts the same\n"},
 	}
 
-	events, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{{Container: "web-c1", Label: "web"}}, Tier: environment.TierProduction, Limit: 10})
+	events, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{{Container: "web-c1", Label: "web"}}, ContainerGroup: "/ocel/containers/production", Limit: 10})
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
@@ -231,10 +229,10 @@ func TestReadMergesEventsFromSeveralLogGroupsByTime(t *testing.T) {
 	fake.groups["/ocel/containers/production"] = []storedEvent{{Stream: "svc-c/app/t1", Time: addToEpoch(5), Message: "svc 5\n"}}
 
 	events, err := Read(context.Background(), logs, lambdas, Query{
-		Since:   epoch,
-		Sources: []Source{{Function: "web-fn", Label: "web"}, {Function: "api-fn", Label: "api"}, {Container: "svc-c", Label: "svc"}},
-		Tier:    environment.TierProduction,
-		Limit:   10,
+		Since:          epoch,
+		Sources:        []Source{{Function: "web-fn", Label: "web"}, {Function: "api-fn", Label: "api"}, {Container: "svc-c", Label: "svc"}},
+		ContainerGroup: "/ocel/containers/production",
+		Limit:          10,
 	})
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
@@ -369,7 +367,7 @@ func TestReadKeepsLambdaLookingLinesOfAContainer(t *testing.T) {
 	t.Parallel()
 	fake, logs, lambdas := newFakeAWS(t)
 	fake.groups["/ocel/containers/production"] = []storedEvent{{Stream: "svc-c/app/t1", Time: addToEpoch(1), Message: "START RequestId: not lambda\n"}}
-	events, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{{Container: "svc-c"}}, Tier: environment.TierProduction, Limit: 10})
+	events, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{{Container: "svc-c"}}, ContainerGroup: "/ocel/containers/production", Limit: 10})
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
@@ -495,7 +493,7 @@ func TestReadRefusesASourceNamingBothOrNeitherOfAFunctionAndAContainer(t *testin
 	fake, logs, lambdas := newFakeAWS(t)
 	fake.lambdas["web-fn"] = "/aws/lambda/web-fn-1"
 	for _, source := range []Source{{Function: "web-fn", Container: "web-c1"}, {Label: "web"}} {
-		if _, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{source}, Tier: environment.TierProduction, Limit: 10}); err == nil {
+		if _, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{source}, ContainerGroup: "/ocel/containers/production", Limit: 10}); err == nil {
 			t.Errorf("Read(Sources: %+v) error = nil, want the source refused", source)
 		}
 	}
@@ -562,7 +560,7 @@ func TestReadRefusesALimitBelowOne(t *testing.T) {
 	t.Parallel()
 	_, logs, lambdas := newFakeAWS(t)
 	for _, limit := range []int{0, -1} {
-		if _, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{{Container: "svc-c"}}, Tier: environment.TierProduction, Limit: limit}); err == nil {
+		if _, err := Read(context.Background(), logs, lambdas, Query{Since: epoch, Sources: []Source{{Container: "svc-c"}}, ContainerGroup: "/ocel/containers/production", Limit: limit}); err == nil {
 			t.Errorf("Read(Limit: %d) error = nil, want the limit refused", limit)
 		}
 	}
