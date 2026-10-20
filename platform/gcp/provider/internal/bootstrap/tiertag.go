@@ -36,16 +36,8 @@ var tierTagKind = KindOps{
 	removal: func(_ Survey, target Resource) Removal { return kept(target, ReasonTierTagKept) },
 }
 
-type tierTagValue struct {
-	short       string
-	description string
-}
-
-func tierTagValues() []tierTagValue {
-	return []tierTagValue{
-		{short: string(environment.TierProduction), description: "carried by every resource ocel makes for the production tier"},
-		{short: string(environment.TierPreview), description: "carried by every resource ocel makes for the preview tier"},
-	}
+func tierTagValues() []environment.Tier {
+	return []environment.Tier{environment.TierProduction, environment.TierPreview}
 }
 
 func (b Engine) tierTagPresence(ctx context.Context) (Presence, error) {
@@ -95,14 +87,14 @@ func (b Engine) refuseUnreadableTag(ctx context.Context, err error, path, permis
 		permission, b.Clients.Project(), path)
 }
 
-func (b Engine) missingTierValues(ctx context.Context) ([]tierTagValue, error) {
+func (b Engine) missingTierValues(ctx context.Context) ([]environment.Tier, error) {
 	service, err := b.Clients.GlobalTagService()
 	if err != nil {
 		return nil, err
 	}
-	var missing []tierTagValue
-	for _, value := range tierTagValues() {
-		path := b.Clients.TierTagKeyPath() + "/" + value.short
+	var missing []environment.Tier
+	for _, tier := range tierTagValues() {
+		path := b.Clients.TierTagValuePath(tier)
 		_, err := googleretry.Attempted(ctx, service.TagValues.GetNamespaced().Name(path).Context(ctx).Do)
 		if err == nil {
 			continue
@@ -110,7 +102,7 @@ func (b Engine) missingTierValues(ctx context.Context) ([]tierTagValue, error) {
 		if err := b.refuseUnreadableTag(ctx, err, path, tagValueReadPermission); err != nil {
 			return nil, err
 		}
-		missing = append(missing, value)
+		missing = append(missing, tier)
 	}
 	return missing, nil
 }
@@ -136,12 +128,12 @@ func (b Engine) makeTierTag(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, value := range missing {
-		path := b.Clients.TierTagKeyPath() + "/" + value.short
+	for _, tier := range missing {
+		path := b.Clients.TierTagValuePath(tier)
 		started, err := googleretry.Attempted(ctx, service.TagValues.Create(&crm.TagValue{
 			Parent:      key.Name,
-			ShortName:   value.short,
-			Description: value.description,
+			ShortName:   string(tier),
+			Description: "carried by every resource ocel makes for the " + string(tier) + " tier",
 		}).Context(ctx).Do)
 		if gcloud.Taken(err) {
 			continue

@@ -50,7 +50,7 @@ func (c *Clients) TagEndpointOf(target TaggedResource) string {
 
 type tierTagsRead struct {
 	mu     sync.Mutex
-	values map[string]string
+	values map[environment.Tier]string
 }
 
 func (c *Clients) GlobalTagService() (*crm.Service, error) {
@@ -74,25 +74,9 @@ func (c *Clients) openTagService(cache *Memo[*crm.Service], endpoint string) (*c
 	})
 }
 
-type tagValue struct {
-	short   string
-	marks   string
-	command string
-}
-
-func tierValue(tier environment.Tier) tagValue {
-	return tagValue{short: string(tier), marks: "every resource of the " + string(tier) + " tier", command: provider.BootstrapCommand(tier)}
-}
-
-func (c *Clients) valuePath(value tagValue) string { return c.TierTagKeyPath() + "/" + value.short }
-
 func (c *Clients) ReadTierTagValue(ctx context.Context, tier environment.Tier) (string, error) {
-	return c.readTagValue(ctx, tierValue(tier))
-}
-
-func (c *Clients) readTagValue(ctx context.Context, asked tagValue) (string, error) {
 	c.tierTags.mu.Lock()
-	known := c.tierTags.values[asked.short]
+	known := c.tierTags.values[tier]
 	c.tierTags.mu.Unlock()
 	if known != "" {
 		return known, nil
@@ -101,13 +85,13 @@ func (c *Clients) readTagValue(ctx context.Context, asked tagValue) (string, err
 	if err != nil {
 		return "", err
 	}
-	path := c.valuePath(asked)
+	path := c.TierTagValuePath(tier)
 	value, err := googleretry.Attempted(ctx, service.TagValues.GetNamespaced().Name(path).Context(ctx).Do)
 	if Absent(err) || Forbidden(err) {
 		return "", refusal.Refuse(refusal.CodeNotReady,
-			"project %s has no tag value %s that these credentials may read, and %s carries it.\n"+
+			"project %s has no tag value %s that these credentials may read, and every resource of the %s tier carries it.\n"+
 				"Run `%s`, which makes it, and grant this credential %s on it",
-			c.Project(), path, asked.marks, asked.command, TierTagUserRole)
+			c.Project(), path, tier, provider.BootstrapCommand(tier), TierTagUserRole)
 	}
 	if err != nil {
 		return "", fmt.Errorf("read the tag value %s: %w", path, err)
@@ -115,21 +99,17 @@ func (c *Clients) readTagValue(ctx context.Context, asked tagValue) (string, err
 	c.tierTags.mu.Lock()
 	defer c.tierTags.mu.Unlock()
 	if c.tierTags.values == nil {
-		c.tierTags.values = map[string]string{}
+		c.tierTags.values = map[environment.Tier]string{}
 	}
-	c.tierTags.values[asked.short] = value.Name
+	c.tierTags.values[tier] = value.Name
 	return value.Name, nil
 }
 
 func (c *Clients) EnsureTierTag(ctx context.Context, tier environment.Tier, target TaggedResource) error {
-	return c.ensureTag(ctx, tierValue(tier), target)
-}
-
-func (c *Clients) ensureTag(ctx context.Context, asked tagValue, target TaggedResource) error {
 	if !c.TierTagged() {
 		return nil
 	}
-	value, err := c.readTagValue(ctx, asked)
+	value, err := c.ReadTierTagValue(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -149,7 +129,7 @@ func (c *Clients) ensureTag(ctx context.Context, asked tagValue, target TaggedRe
 	}
 	switch {
 	case err == nil:
-		return TagOperationDone(ctx, service, "binding "+c.valuePath(asked)+" to "+target.Name, started)
+		return TagOperationDone(ctx, service, "binding "+c.TierTagValuePath(tier)+" to "+target.Name, started)
 	case Taken(err):
 		return nil
 	case googleretry.AnsweredCode(err) == http.StatusBadRequest:
@@ -157,24 +137,24 @@ func (c *Clients) ensureTag(ctx context.Context, asked tagValue, target TaggedRe
 		switch {
 		case readErr != nil:
 			return readErr
-		case bound.is(value, c.valuePath(asked)):
+		case bound.is(value, c.TierTagValuePath(tier)):
 			return nil
 		case bound.binding != "":
 			return refusal.Refuse(refusal.CodeInvalid,
-				"%s carries %s, another value of the %s tag than %s, and %s carries %s alone.\n"+
+				"%s carries %s, another value of the %s tag than %s, and every resource of the %s tier carries %s alone.\n"+
 					"Remove that binding with `gcloud resource-manager tags bindings delete`, then try again",
-				target.Name, bound.named(), c.TierTagKeyPath(), asked.short, asked.marks, c.valuePath(asked))
+				target.Name, bound.named(), c.TierTagKeyPath(), tier, tier, c.TierTagValuePath(tier))
 		}
 	}
-	return ExplainMissingGrant(fmt.Errorf("bind %s to %s: %w", c.valuePath(asked), target.Name, err),
-		c.tagGrant(asked, target, "createTagBinding"))
+	return ExplainMissingGrant(fmt.Errorf("bind %s to %s: %w", c.TierTagValuePath(tier), target.Name, err),
+		c.tagGrant(tier, target, "createTagBinding"))
 }
 
 func (c *Clients) HasTierTag(ctx context.Context, tier environment.Tier, target TaggedResource) (bool, error) {
 	if !c.TierTagged() {
 		return true, nil
 	}
-	binding, err := c.tagBinding(ctx, tierValue(tier), target)
+	binding, err := c.tagBinding(ctx, tier, target)
 	return binding != "", err
 }
 
@@ -182,8 +162,7 @@ func (c *Clients) RemoveTierTag(ctx context.Context, tier environment.Tier, targ
 	if !c.TierTagged() {
 		return nil
 	}
-	asked := tierValue(tier)
-	binding, err := c.tagBinding(ctx, asked, target)
+	binding, err := c.tagBinding(ctx, tier, target)
 	if binding == "" || err != nil {
 		return err
 	}
@@ -196,10 +175,10 @@ func (c *Clients) RemoveTierTag(ctx context.Context, tier environment.Tier, targ
 		return nil
 	}
 	if err != nil {
-		return ExplainMissingGrant(fmt.Errorf("remove %s from %s: %w", c.valuePath(asked), target.Name, err),
-			c.tagGrant(asked, target, "deleteTagBinding"))
+		return ExplainMissingGrant(fmt.Errorf("remove %s from %s: %w", c.TierTagValuePath(tier), target.Name, err),
+			c.tagGrant(tier, target, "deleteTagBinding"))
 	}
-	return TagOperationDone(ctx, service, "removing "+c.valuePath(asked)+" from "+target.Name, started)
+	return TagOperationDone(ctx, service, "removing "+c.TierTagValuePath(tier)+" from "+target.Name, started)
 }
 
 func (c *Clients) RemoveTierTagIfFound(ctx context.Context, tier environment.Tier, find func(context.Context) (TaggedResource, bool, error)) error {
@@ -213,17 +192,17 @@ func (c *Clients) RemoveTierTagIfFound(ctx context.Context, tier environment.Tie
 	return c.RemoveTierTag(ctx, tier, target)
 }
 
-func (c *Clients) tagGrant(asked tagValue, target TaggedResource, verb string) string {
-	return TierTagUserRole + " on " + c.valuePath(asked) + " and " + target.PermissionPrefix + "." + verb + " on " + target.Name
+func (c *Clients) tagGrant(tier environment.Tier, target TaggedResource, verb string) string {
+	return TierTagUserRole + " on " + c.TierTagValuePath(tier) + " and " + target.PermissionPrefix + "." + verb + " on " + target.Name
 }
 
-func (c *Clients) tagBinding(ctx context.Context, asked tagValue, target TaggedResource) (string, error) {
-	value, err := c.readTagValue(ctx, asked)
+func (c *Clients) tagBinding(ctx context.Context, tier environment.Tier, target TaggedResource) (string, error) {
+	value, err := c.ReadTierTagValue(ctx, tier)
 	if err != nil {
 		return "", err
 	}
 	bound, err := c.boundValue(ctx, target)
-	if err != nil || !bound.is(value, c.valuePath(asked)) {
+	if err != nil || !bound.is(value, c.TierTagValuePath(tier)) {
 		return "", err
 	}
 	return bound.binding, nil
@@ -265,9 +244,9 @@ func (c *Clients) boundValue(ctx context.Context, target TaggedResource) (boundT
 func (c *Clients) knownValuePath(value string) string {
 	c.tierTags.mu.Lock()
 	defer c.tierTags.mu.Unlock()
-	for short, known := range c.tierTags.values {
+	for tier, known := range c.tierTags.values {
 		if known == value {
-			return c.TierTagKeyPath() + "/" + short
+			return c.TierTagValuePath(tier)
 		}
 	}
 	return ""
