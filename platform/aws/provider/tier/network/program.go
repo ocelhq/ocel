@@ -192,8 +192,9 @@ func ResourceNames(namespace string, tier environment.Tier) map[string][]compone
 		"internetGateway":    {{Token: tokenInternetGateway, Name: component.NameOf(name()).Part(gatewayPart)}},
 		"publicRouteTable":   {{Token: tokenRouteTable, Name: name(publicWord)}},
 		"isolatedRouteTable": {{Token: tokenRouteTable, Name: name(isolatedWord)}},
-		"s3Endpoint":         {{Token: tokenVPCEndpoint, Name: name("s3")}},
-		"dynamodbEndpoint":   {{Token: tokenVPCEndpoint, Name: name("dynamodb")}},
+	}
+	for _, service := range endpointServices {
+		names[service+"Endpoint"] = []component.ResourceRef{{Token: tokenVPCEndpoint, Name: name(service)}}
 	}
 	for i := range Zones {
 		n := strconv.Itoa(i + 1)

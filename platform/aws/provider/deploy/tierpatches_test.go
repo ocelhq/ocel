@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 
@@ -73,9 +74,15 @@ func TestATransformPatchesTheTiersNetworkAndEveryZoneOfASubnetKindItNames(t *tes
 	if patches.network.IsEmpty() || patches.functionNetwork.IsEmpty() {
 		t.Fatalf("patches = %+v, want both the network and the function network patched", patches)
 	}
-	patches.claims.claimed = map[component.ResourceRef]bool{}
+	every := network.ResourceNames(testNamespace, environment.TierProduction)
+	maps.Copy(every, functionnetwork.ResourceNames(testNamespace, environment.TierProduction))
+	indexed, err := indexPatches([]transformCandidate{{key: resourceKey{Type: transformTypeNetwork, Name: "production"}, names: every}}, []transform.Result{pass.result})
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexed.claimed = map[component.ResourceRef]bool{}
 	claimed := func(ref component.ResourceRef, field string) bool {
-		merged, ok := patches.claims.claim(ref, pulumi.Map{})
+		merged, ok := indexed.claim(ref, pulumi.Map{})
 		_, set := merged[field]
 		return ok && set
 	}
