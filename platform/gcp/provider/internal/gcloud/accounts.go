@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -64,7 +63,7 @@ func (c *Clients) makeAccount(ctx context.Context, tier environment.Tier, accoun
 	}
 	made, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+c.Project(), &iam.CreateServiceAccountRequest{
 		AccountId:      account,
-		ServiceAccount: &iam.ServiceAccount{DisplayName: displayName, Description: names.MarkedAccountDescription(description)},
+		ServiceAccount: &iam.ServiceAccount{DisplayName: displayName, Description: description},
 	}).Context(ctx).Do)
 	switch {
 	case err == nil:

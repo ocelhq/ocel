@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
@@ -223,7 +222,7 @@ func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothin
 	}
 	if got := server.Created[0]; got.AccountId != strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com") ||
 		got.ServiceAccount.DisplayName != "ocel shop/api@production (production)" ||
-		got.ServiceAccount.Description != names.MarkedAccountDescription("the identity app api of project shop runs as in environment production of the production tier") {
+		got.ServiceAccount.Description != "the identity app api of project shop runs as in environment production of the production tier" {
 		t.Errorf("the account was created as %+v, want one named for its app, project, environment and tier", got.ServiceAccount)
 	}
 }

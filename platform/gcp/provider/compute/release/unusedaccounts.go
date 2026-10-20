@@ -34,7 +34,7 @@ func ReadAppAccount(n names.Names, account *iam.ServiceAccount) (AppAccount, boo
 	if !here {
 		return AppAccount{}, false
 	}
-	rest, found := strings.CutPrefix(names.UnmarkedAccountDescription(account.Description), appDescriptionPrefix)
+	rest, found := strings.CutPrefix(account.Description, appDescriptionPrefix)
 	if !found {
 		return AppAccount{}, false
 	}

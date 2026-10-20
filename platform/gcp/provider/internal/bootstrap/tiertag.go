@@ -45,7 +45,6 @@ func tierTagValues() []tierTagValue {
 	return []tierTagValue{
 		{short: string(environment.TierProduction), description: "carried by every resource ocel makes for the production tier"},
 		{short: string(environment.TierPreview), description: "carried by every resource ocel makes for the preview tier"},
-		{short: names.OutsideValue, description: "carried by every service account of the project that ocel does not make, which no tier's deploy credential reaches"},
 	}
 }
 

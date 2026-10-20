@@ -111,8 +111,8 @@ func TestATierTagKeyLackingATiersValueIsMendedWithIt(t *testing.T) {
 	if err := b.Provision(ctx, read, tierTagKey, nil); err != nil {
 		t.Fatal(err)
 	}
-	if tags.KeysMade != 0 || tags.ValuesMade != 3 {
-		t.Errorf("mending made %d keys and %d values, want no key and both tiers' values and the outside value", tags.KeysMade, tags.ValuesMade)
+	if tags.KeysMade != 0 || tags.ValuesMade != 2 {
+		t.Errorf("mending made %d keys and %d values, want no key and both tiers' values", tags.KeysMade, tags.ValuesMade)
 	}
 }
 
@@ -238,5 +238,33 @@ func TestRemovingATiersPassphraseSecretRemovesItsTagBeforeTheSecret(t *testing.T
 	}
 	if got := tags.Bound(googletest.SecretTagParent(target.Name)); len(got) != 0 {
 		t.Errorf("the removed passphrase secret left %v bound", got)
+	}
+}
+
+func TestABootstrapAccountCarriesItsTiersTagBeforeItIsGrantedAnything(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	server := googletest.GrantedIAM()
+	server.Accounts = map[string]bool{}
+	c := server.Open(t)
+	tags := googletest.NewTieredTags(t)
+	tags.Tagged(c)
+	const probe = "ocel-prod-probe"
+	var boundWhenGranted []string
+	b := bootstrap.Engine{Clients: c, Accounts: []bootstrap.Account{{
+		Name: func(names.Names, environment.Tier) string { return probe },
+		Purpose: func(bootstrap.Engine, environment.Tier) bootstrap.AccountPurpose {
+			return bootstrap.AccountPurpose{Grant: func(context.Context, bootstrap.Engine, environment.Tier) error {
+				boundWhenGranted = tags.Bound(googletest.AccountTagParent(probe))
+				return nil
+			}}
+		},
+	}}}
+
+	if err := b.MakeAccount(ctx, bootstrap.Survey{Tier: environment.TierProduction, Names: c.Names}, probe); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{tags.ValueOf(environment.TierProduction)}; !slices.Equal(boundWhenGranted, want) {
+		t.Errorf("the account carried %v when its grants were made, want the production value already: an account granted before it is tagged can be bound to the other tier first", boundWhenGranted)
 	}
 }

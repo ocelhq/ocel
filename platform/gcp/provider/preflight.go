@@ -5,9 +5,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
@@ -17,9 +15,6 @@ import (
 )
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
-	if err := p.refuseUntaggedAccounts(ctx, pre.Deploy.Tier); err != nil {
-		return provider.Plan{}, err
-	}
 	parts, err := p.partsUsedBy(pre)
 	if err != nil {
 		return provider.Plan{}, err
@@ -51,9 +46,6 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 }
 
 func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPreflight) error {
-	if err := p.refuseUntaggedAccounts(ctx, pre.Deploy.Tier); err != nil {
-		return err
-	}
 	parts, err := p.partsUsedBy(pre)
 	if err != nil {
 		return err
@@ -123,24 +115,4 @@ func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, n
 		return err
 	}
 	return b.AddParts(ctx, pre, names)
-}
-
-func (p *Provider) refuseUntaggedAccounts(ctx context.Context, tier environment.Tier) error {
-	c, err := p.openClients(ctx)
-	if err != nil || !c.TierTagged() {
-		return err
-	}
-	recorded, err := c.RecordedOutsideAccounts(ctx, tier)
-	if err != nil {
-		return err
-	}
-	found, err := c.ReadOutsideAccounts(ctx, recorded)
-	if err != nil || len(found.Untagged) == 0 {
-		return err
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"project %s holds service accounts ocel does not make that carry no ocel-tier tag: %s.\n"+
-			"A deploy credential of either tier may bind an untagged account to its own tier and then act as it, so nothing deploys beside one.\n"+
-			"Run `%s`, which binds each to the %s value",
-		c.Project(), found.UntaggedNamed(), provider.BootstrapCommand(tier), c.OutsideTagValuePath())
 }
