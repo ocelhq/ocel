@@ -78,8 +78,10 @@ runs:
       env:
         CACHES: ${{ inputs.caches }}
         SCOPE: ${{ inputs.build-scope }}
+        GO_VERSION_FILE: ${{ inputs.go-version-file }}
       run: |
         set -euo pipefail
+        cd "$(dirname "$GO_VERSION_FILE")"
         sums=$(find . \( -name node_modules -o -name .git \) -prune -o \( -name go.sum -o -name go.work -o -name go.work.sum \) -print | sort | xargs sha256sum | sha256sum)
         base="$RUNNER_OS-$RUNNER_ARCH-$(go env GOVERSION)-"
         wants() { [[ ",${CACHES// /}," == *",$1,"* ]]; }
@@ -88,6 +90,7 @@ runs:
           exit 1
         fi
         {
+          echo "workspace=$PWD"
           for name in modules build lint; do
             if wants "$name"; then echo "$name=true"; else echo "$name=false"; fi
           done
@@ -114,11 +117,9 @@ runs:
     - name: Every module the workspace and each of its modules alone resolve, fetched with retries
       if: steps.names.outputs.modules == 'true' && steps.modules.outputs.cache-hit != 'true'
       shell: bash
-      env:
-        GO_VERSION_FILE: ${{ inputs.go-version-file }}
+      working-directory: ${{ steps.names.outputs.workspace }}
       run: |
         set -euo pipefail
-        cd "$(dirname "$GO_VERSION_FILE")"
         fetch() {
           local attempt=1 delay
           until "$@"; do
