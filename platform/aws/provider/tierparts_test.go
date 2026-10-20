@@ -19,19 +19,56 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
+
+func TestRemovingTheLastPartInTheNetworkPlansTheNetworksTakedownToo(t *testing.T) {
+	ctx := context.Background()
+	store := fake.NewKeyValues()
+	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, network.Part, stackrecords.BootstrapPart{
+		WrittenBy: "1.0.0",
+		Resources: []provider.PhysicalResource{{Kind: "AWS::EC2::VPC", ID: "vpc-ocel"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, consumer := range []provider.StackRef{containers.StackRef(environment.TierProduction), bastion.ConsumerRef(environment.TierProduction)} {
+		if _, err := store.Write(ctx, records.Entry{Key: network.Shared.ConsumerAt(consumer), Value: json.RawMessage(`{}`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	consumers := map[string]string{containers.Slug: containers.Part, functionnetwork.Slug: functionnetwork.Part, bastion.ConsumerSlug: bastion.Part}
+
+	group, err := planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part})
+	if err != nil || group != nil {
+		t.Errorf("planNetworkRetiredWith(bastion) = %+v, %v, want nothing: the containers part still runs in the network", group, err)
+	}
+	group, err = planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part, containers.Part})
+	if err != nil || group == nil || group.Part != network.Part || group.Action != provider.ActionDelete || len(group.Changes) != 1 {
+		t.Errorf("planNetworkRetiredWith(bastion, containers) = %+v, %v, want the network's deletion: its last parts leave in this run", group, err)
+	}
+	if _, err := store.Write(ctx, records.Entry{Key: network.Shared.ConsumerAt(provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack("shop")}), Value: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if group, err := planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part, containers.Part}); err != nil || group != nil {
+		t.Errorf("planNetworkRetiredWith() = %+v, %v, want nothing while shop's database sits in the network", group, err)
+	}
+}
 
 func partsOver(store records.Store) tier.Parts {
 	p := NewProvider(Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)

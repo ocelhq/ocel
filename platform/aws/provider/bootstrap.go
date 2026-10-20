@@ -27,6 +27,8 @@ type tierBootstrap struct {
 	key       func(context.Context, environment.Tier) (string, error)
 	keyValues records.Store
 	parts     tier.Parts
+
+	retiredWith func(ctx context.Context, tier environment.Tier, removed []string) (*provider.ChangeGroup, error)
 }
 
 func (s tierBootstrap) Parts() []provider.Part {
@@ -59,6 +61,15 @@ func (s tierBootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) 
 	}
 	for _, part := range removed {
 		group, err := part.Removal.Plan(ctx, req.Tier)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		if group != nil {
+			plan.Groups = append(plan.Groups, *group)
+		}
+	}
+	if s.retiredWith != nil && len(removed) > 0 {
+		group, err := s.retiredWith(ctx, req.Tier, removed.Names())
 		if err != nil {
 			return provider.Plan{}, err
 		}

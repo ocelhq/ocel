@@ -131,7 +131,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	b := control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VariablesKey, p.namespace, p.readBootstrap)
 	records := p.partRecords()
 	b.TierParts = p.tierParts(records)
-	return tierBootstrap{Bootstrap: b, forget: p.forget, key: p.Key, keyValues: records.KeyValues, parts: b.TierParts}, nil
+	return tierBootstrap{Bootstrap: b, forget: p.forget, key: p.Key, keyValues: records.KeyValues, parts: b.TierParts, retiredWith: p.planNetworkRetiredWith}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks { return p.stacks }
