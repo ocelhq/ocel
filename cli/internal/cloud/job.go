@@ -56,7 +56,7 @@ func (c *Client) WaitForJob(ctx context.Context, jobID string, changed func(*clo
 		switch {
 		case err == nil:
 			unreachable, failures = 0, 0
-			if last == nil || job.GetState() != last.GetState() || job.GetPhase() != last.GetPhase() || job.GetStep() != last.GetStep() {
+			if last == nil || job.GetState() != last.GetState() || job.GetPhase() != last.GetPhase() || job.GetStep() != last.GetStep() || job.GetInput().GetId() != last.GetInput().GetId() {
 				changed(job)
 			}
 			last = job

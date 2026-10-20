@@ -120,21 +120,23 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 
 func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cloud.Client, started *cloudv1.Job, jobURL, slug string, job CloudJob) error {
 	watching := phase.Child(slug, progress.Title{Started: "Waiting for the job on Ocel Cloud", Ended: "Waited for the job on Ocel Cloud"})
-	askedForInput := false
+	var asked *cloudv1.JobInput
 	ended, err := jobs.WaitForJob(ctx, started.GetId(), func(read *cloudv1.Job) {
 		running.SetCloudJob(summarizeJob(read, jobURL))
 		if read.GetState() != cloudv1.JobState_JOB_STATE_INPUT_REQUIRED {
-			askedForInput = false
 			if !cloud.IsJobEnded(read.GetState()) {
 				watching.Say(describeJob(read))
 			}
 			return
 		}
-		if askedForInput {
+		if asked != nil && asked.GetId() == read.GetInput().GetId() {
 			return
 		}
-		askedForInput = true
-		watching.Warn("The job needs your input: open " + jobURL)
+		asked = read.GetInput()
+		if asked == nil {
+			asked = &cloudv1.JobInput{}
+		}
+		watching.Warn(describeInput(asked, jobURL))
 		if job.OpenBrowser != nil {
 			_ = job.OpenBrowser(jobURL)
 		}
@@ -211,6 +213,25 @@ func describeJob(job *cloudv1.Job) string {
 		return "Running: " + strings.ToLower(strings.TrimPrefix(job.GetPhase().String(), "JOB_PHASE_"))
 	}
 	return "Running"
+}
+
+func describeInput(input *cloudv1.JobInput, jobURL string) string {
+	if confirmation := input.GetConfirmation(); confirmation != nil {
+		return fmt.Sprintf("Ocel Cloud asks: %s — answer at %s", confirmation.GetQuestion(), jobURL)
+	}
+	needed := input.GetVariables().GetVariables()
+	if len(needed) == 0 {
+		return "The job needs your input: open " + jobURL
+	}
+	keys := make([]string, 0, len(needed))
+	for _, variable := range needed {
+		key := variable.GetKey()
+		if folder := variable.GetFolder(); folder != "" {
+			key += " (" + folder + ")"
+		}
+		keys = append(keys, key)
+	}
+	return fmt.Sprintf("Ocel Cloud needs values for %s — enter them at %s", english.And(keys), jobURL)
 }
 
 func jobResultLines(result *cloudv1.JobResult) []string {
