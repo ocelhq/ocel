@@ -73,7 +73,7 @@ func networkStacks(t *testing.T, cfg Config) (*Stacks, *mockedEngine, records.St
 		cfg.Network = networkRegion{}
 	}
 	cfg.Quotas = roomyQuotas{}
-	engine := &mockedEngine{outputs: tierNetworkOutputs(network.ProductionCIDR)}
+	engine := &mockedEngine{outputs: tierNetworkOutputs(network.DefaultCIDR("ocel", environment.TierProduction))}
 	return stacksWith(cfg, engine), engine, store
 }
 
@@ -96,7 +96,7 @@ func TestTheFirstConsumerOfATiersNetworkProvisionsItAndTheLastToLeaveTakesItDown
 	if claimed.VPC != "vpc-ocel" || claimed.Clients != "sg-clients" {
 		t.Errorf("Claim() = %+v, want the network the stack exported", claimed)
 	}
-	if !strings.Contains(strings.Join(said.reported(), "\n"), network.ProductionCIDR) {
+	if !strings.Contains(strings.Join(said.reported(), "\n"), network.DefaultCIDR("ocel", environment.TierProduction)) {
 		t.Errorf("progress = %v, want it to name the block the VPC takes", said.reported())
 	}
 	if _, err := stacks.Network().Claim(ctx, shop, progress.Discard()); err != nil {
@@ -140,7 +140,7 @@ func TestAClaimWhoseConfigAsksForAnotherBlockThanTheNetworkHoldsIsRefused(t *tes
 
 	_, err := stacks.Network().Claim(ctx, consumerRef("admin"), progress.Discard())
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(refused.Message, network.ProductionCIDR) || !strings.Contains(refused.Message, "network.production.cidr") {
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, network.DefaultCIDR("ocel", environment.TierProduction)) || !strings.Contains(refused.Message, "network.production.cidr") {
 		t.Fatalf("Claim() = %v, want a refusal naming the block the VPC holds and the option asking for another", err)
 	}
 }
@@ -149,6 +149,7 @@ func TestANetworkWhoseBlockOverlapsAVPCInTheRegionIsRefusedBeforeAnythingIsProvi
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
+	cfg.NetworkCIDR = "10.20.0.0/16"
 	cfg.Network = networkRegion{vpcs: []ec2types.Vpc{{VpcId: aws.String("vpc-peered"), CidrBlock: aws.String("10.20.4.0/24")}}}
 	stacks, engine, store := networkStacks(t, cfg)
 

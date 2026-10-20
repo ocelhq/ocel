@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
 
+const runCIDR = "10.20.0.0/16"
+
 type recorded struct {
 	mu        sync.Mutex
 	resources map[string]resource.PropertyMap
@@ -50,7 +52,7 @@ func (r *recorded) of(token string) map[string]resource.PropertyMap {
 
 func runNetwork(t *testing.T, namespace string, tier environment.Tier) *recorded {
 	t.Helper()
-	layout, err := NewLayout(CIDRFor(tier, ""))
+	layout, err := NewLayout(runCIDR)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +86,8 @@ func TestTheNetworkIsOneVPCOfTheTiersBlockWithAPublicAPrivateAndAnIsolatedSubnet
 		t.Fatalf("declared %d VPCs, want one per tier", len(vpcs))
 	}
 	for _, vpc := range vpcs {
-		if vpc["cidrBlock"].StringValue() != ProductionCIDR || !vpc["enableDnsHostnames"].BoolValue() || !vpc["enableDnsSupport"].BoolValue() {
-			t.Errorf("VPC = %v, want %s with DNS names on: RDS and ElastiCache endpoints resolve through them", vpc, ProductionCIDR)
+		if vpc["cidrBlock"].StringValue() != runCIDR || !vpc["enableDnsHostnames"].BoolValue() || !vpc["enableDnsSupport"].BoolValue() {
+			t.Errorf("VPC = %v, want %s with DNS names on: RDS and ElastiCache endpoints resolve through them", vpc, runCIDR)
 		}
 		if tagOf(vpc, "Name") != "ocel-prod-network" || tagOf(vpc, naming.EnvTierTagKey) != "production" || tagOf(vpc, naming.ManagedByTagKey) != "ocel" {
 			t.Errorf("VPC tags = %v, want it named and tagged for its namespace and tier", vpc["tags"])
@@ -196,7 +198,7 @@ func TestTwoNamespacesNameTheirNetworksApart(t *testing.T) {
 func TestANetworkIsReadBackFromItsOutputAndRefusedWhenItLacksASubnet(t *testing.T) {
 	t.Parallel()
 
-	whole := Network{VPC: "vpc-1", CIDR: ProductionCIDR, Zones: []string{"a", "b"}, Public: []string{"p1", "p2"}, Private: []string{"q1", "q2"}, Isolated: []string{"i1", "i2"}, PrivateRoutes: []string{"r1", "r2"}, Clients: "sg-1"}
+	whole := Network{VPC: "vpc-1", CIDR: runCIDR, Zones: []string{"a", "b"}, Public: []string{"p1", "p2"}, Private: []string{"q1", "q2"}, Isolated: []string{"i1", "i2"}, PrivateRoutes: []string{"r1", "r2"}, Clients: "sg-1"}
 	encoded, _ := json.Marshal(whole)
 	decoded, err := decode(auto.OutputMap{outputKeyNetwork: {Value: string(encoded)}})
 	if err != nil || decoded.VPC != "vpc-1" || decoded.Clients != "sg-1" || !slices.Equal(decoded.Isolated, whole.Isolated) {
