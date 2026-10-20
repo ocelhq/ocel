@@ -81,6 +81,7 @@ func (l Log) hideLiveValues(apps []project.App, variables map[string]AppVariable
 type Output struct {
 	Functions []Function
 	Images    map[string]string
+	BuildIDs  map[string]string
 }
 
 type nodeRun func(ctx context.Context, scriptPath string, request []byte, log Log) error
@@ -133,7 +134,13 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 	if err != nil {
 		return Output{}, err
 	}
-	return Output{Functions: functions, Images: images}, nil
+	buildIDs := make(map[string]string, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		if buildIDs[a.Name], err = BuildID(cfg.Dir, a.Name); err != nil {
+			return Output{}, err
+		}
+	}
+	return Output{Functions: functions, Images: images, BuildIDs: buildIDs}, nil
 }
 
 func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, host Host, log Log) (err error) {

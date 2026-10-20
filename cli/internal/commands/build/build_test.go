@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
@@ -205,6 +206,29 @@ func TestBuildRefusesAFunctionAppWhoseDirectorySaysNothingAboutWhatItIsBuiltWith
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output = %q, missing %q", out.String(), want)
 		}
+	}
+}
+
+func TestBuildSummarisesEachAppItBuiltWithItsBuildID(t *testing.T) {
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop", "apps": [{"name": "api", "path": ".", "framework": "node", "compute": "serverless"}]}`)
+	clitest.WriteFile(t, filepath.Join(root, "index.ts"), "export {}\n")
+
+	dependencies := newTestDependencies()
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		return build.Output{Functions: []build.Function{{Route: "index", App: "api"}}, BuildIDs: map[string]string{"api": "0123456789abcdef0123456789abcdef"}}, nil
+	}
+	dependencies.Presentation = clitest.ResolveJSONPresentation
+	var out bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &out)
+
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	events := clitest.RunEvents(t, out.String())
+	apps := events[len(events)-1].GetSummary().GetApps()
+	if len(apps) != 1 || apps[0].GetApp() != "api" || apps[0].GetOutcome() != progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED || apps[0].GetBuildId() != "0123456789abcdef0123456789abcdef" {
+		t.Errorf("summary apps = %v, want api succeeded with the build id it was built under", apps)
 	}
 }
 

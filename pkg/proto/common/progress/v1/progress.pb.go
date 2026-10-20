@@ -920,6 +920,7 @@ type AppResult struct {
 	DeploymentUrl     string                 `protobuf:"bytes,5,opt,name=deployment_url,json=deploymentUrl,proto3" json:"deployment_url,omitempty"`
 	StorageCoordinate string                 `protobuf:"bytes,6,opt,name=storage_coordinate,json=storageCoordinate,proto3" json:"storage_coordinate,omitempty"`
 	Release           string                 `protobuf:"bytes,7,opt,name=release,proto3" json:"release,omitempty"`
+	BuildId           string                 `protobuf:"bytes,8,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -999,6 +1000,13 @@ func (x *AppResult) GetStorageCoordinate() string {
 func (x *AppResult) GetRelease() string {
 	if x != nil {
 		return x.Release
+	}
+	return ""
+}
+
+func (x *AppResult) GetBuildId() string {
+	if x != nil {
+		return x.BuildId
 	}
 	return ""
 }
@@ -1379,7 +1387,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x15DnsManualRecordsEvent\x12\x1a\n" +
 	"\bheadline\x18\x01 \x01(\tR\bheadline\x127\n" +
 	"\arecords\x18\x02 \x03(\v2\x1d.common.progress.v1.DnsRecordR\arecords\x12\x14\n" +
-	"\x05notes\x18\x03 \x03(\tR\x05notes\"\xf1\x01\n" +
+	"\x05notes\x18\x03 \x03(\tR\x05notes\"\x8c\x02\n" +
 	"\tAppResult\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
@@ -1387,7 +1395,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04urls\x18\x04 \x03(\tR\x04urls\x12%\n" +
 	"\x0edeployment_url\x18\x05 \x01(\tR\rdeploymentUrl\x12-\n" +
 	"\x12storage_coordinate\x18\x06 \x01(\tR\x11storageCoordinate\x12\x18\n" +
-	"\arelease\x18\a \x01(\tR\arelease\"\xd0\x03\n" +
+	"\arelease\x18\a \x01(\tR\arelease\x12\x19\n" +
+	"\bbuild_id\x18\b \x01(\tR\abuildId\"\xd0\x03\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +

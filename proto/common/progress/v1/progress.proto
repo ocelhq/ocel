@@ -137,6 +137,8 @@ message AppResult {
   string storage_coordinate = 6;
 
   string release = 7;
+
+  string build_id = 8;
 }
 
 message OperationResult {

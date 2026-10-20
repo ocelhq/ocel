@@ -145,6 +145,12 @@ func (r *Run) SetCloudJob(job *streamv1.CloudJob) {
 	r.cloudJob = job
 }
 
+func (r *Run) SetApps(apps []*progressv1.AppResult) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.apps = apps
+}
+
 func resultLevel(result *streamv1.RunSummary) progressv1.Level {
 	switch {
 	case result.GetInterrupted():
