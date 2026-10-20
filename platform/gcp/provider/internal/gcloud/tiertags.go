@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	crm "google.golang.org/api/cloudresourcemanager/v3"
@@ -25,8 +26,9 @@ const (
 )
 
 type TaggedResource struct {
-	Name     string
-	Location string
+	Name             string
+	Location         string
+	PermissionPrefix string
 }
 
 func (c *Clients) TierTagKeyPath() string { return c.Project() + "/" + TierTagKey }
@@ -153,7 +155,7 @@ func (c *Clients) EnsureTierTag(ctx context.Context, tier environment.Tier, targ
 			target.Name, c.TierTagKeyPath(), string(tier), tier)
 	}
 	return ExplainMissingGrant(fmt.Errorf("bind %s to %s: %w", c.TierTagValuePath(tier), target.Name, err),
-		TierTagUserRole+" on "+c.TierTagValuePath(tier))
+		c.tierTagGrant(tier, target, "createTagBinding"))
 }
 
 func (c *Clients) HasTierTag(ctx context.Context, tier environment.Tier, target TaggedResource) (bool, error) {
@@ -182,9 +184,13 @@ func (c *Clients) RemoveTierTag(ctx context.Context, tier environment.Tier, targ
 	}
 	if err != nil {
 		return ExplainMissingGrant(fmt.Errorf("remove %s from %s: %w", c.TierTagValuePath(tier), target.Name, err),
-			TierTagUserRole+" on "+c.TierTagValuePath(tier))
+			c.tierTagGrant(tier, target, "deleteTagBinding"))
 	}
 	return TagOperationDone(ctx, service, "removing "+c.TierTagValuePath(tier)+" from "+target.Name, started)
+}
+
+func (c *Clients) tierTagGrant(tier environment.Tier, target TaggedResource, verb string) string {
+	return TierTagUserRole + " on " + c.TierTagValuePath(tier) + " and " + target.PermissionPrefix + "." + verb + " on " + target.Name
 }
 
 func (c *Clients) tierTagBinding(ctx context.Context, tier environment.Tier, target TaggedResource) (string, error) {
@@ -232,31 +238,35 @@ func TagOperationDone(ctx context.Context, service *crm.Service, doing string, s
 }
 
 func (c *Clients) RunServiceTagged(service string) TaggedResource {
-	return TaggedResource{Name: "//run.googleapis.com/" + c.ServicePath(service), Location: c.Region}
+	return TaggedResource{Name: "//run.googleapis.com/" + c.ServicePath(service), Location: c.Region, PermissionPrefix: "run.services"}
 }
 
 func (c *Clients) AccountTagged(uniqueID string) TaggedResource {
-	return TaggedResource{Name: "//iam.googleapis.com/projects/" + c.Project() + "/serviceAccounts/" + uniqueID}
+	return TaggedResource{Name: "//iam.googleapis.com/projects/" + c.Project() + "/serviceAccounts/" + uniqueID, PermissionPrefix: "iam.serviceAccounts"}
 }
 
 func (c *Clients) PubSubTagged(path string) TaggedResource {
-	return TaggedResource{Name: "//pubsub.googleapis.com/" + path}
+	prefix := "pubsub.topics"
+	if strings.Contains(path, "/subscriptions/") {
+		prefix = "pubsub.subscriptions"
+	}
+	return TaggedResource{Name: "//pubsub.googleapis.com/" + path, PermissionPrefix: prefix}
 }
 
 func (c *Clients) RepositoryTagged(repository string) TaggedResource {
-	return TaggedResource{Name: "//artifactregistry.googleapis.com/" + RepositoryPath(c, repository), Location: c.Region}
+	return TaggedResource{Name: "//artifactregistry.googleapis.com/" + RepositoryPath(c, repository), Location: c.Region, PermissionPrefix: "artifactregistry.repositories"}
 }
 
 func (c *Clients) BucketTagged(bucket string) TaggedResource {
-	return TaggedResource{Name: "//storage.googleapis.com/projects/_/buckets/" + bucket, Location: c.Region}
+	return TaggedResource{Name: "//storage.googleapis.com/projects/_/buckets/" + bucket, Location: c.Region, PermissionPrefix: "storage.buckets"}
 }
 
 func (c *Clients) SQLInstanceTagged(instance string) TaggedResource {
-	return TaggedResource{Name: "//sqladmin.googleapis.com/projects/" + c.Project() + "/instances/" + instance, Location: c.Region}
+	return TaggedResource{Name: "//sqladmin.googleapis.com/projects/" + c.Project() + "/instances/" + instance, Location: c.Region, PermissionPrefix: "cloudsql.instances"}
 }
 
 func (c *Clients) DatabaseTagged(database string) TaggedResource {
-	return TaggedResource{Name: "//firestore.googleapis.com/projects/" + c.Project() + "/databases/" + database, Location: c.Region}
+	return TaggedResource{Name: "//firestore.googleapis.com/projects/" + c.Project() + "/databases/" + database, Location: c.Region, PermissionPrefix: "datastore.databases"}
 }
 
 func (c *Clients) SecretTagged(ctx context.Context, secret string) (TaggedResource, error) {
@@ -264,5 +274,5 @@ func (c *Clients) SecretTagged(ctx context.Context, secret string) (TaggedResour
 	if err != nil {
 		return TaggedResource{}, err
 	}
-	return TaggedResource{Name: "//secretmanager.googleapis.com/projects/" + strconv.FormatInt(number, 10) + "/secrets/" + secret}, nil
+	return TaggedResource{Name: "//secretmanager.googleapis.com/projects/" + strconv.FormatInt(number, 10) + "/secrets/" + secret, PermissionPrefix: "secretmanager.secrets"}, nil
 }
