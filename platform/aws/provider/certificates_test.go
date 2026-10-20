@@ -67,6 +67,10 @@ func (s *stubACM) ListCertificates(context.Context, *acm.ListCertificatesInput, 
 	return &acm.ListCertificatesOutput{}, nil
 }
 
+func (s *stubACM) ListTagsForCertificate(context.Context, *acm.ListTagsForCertificateInput, ...func(*acm.Options)) (*acm.ListTagsForCertificateOutput, error) {
+	return &acm.ListTagsForCertificateOutput{}, nil
+}
+
 func issuerOver(api certs.ACMAPI) certs.ACM {
 	return certs.ACM{
 		API:      api,

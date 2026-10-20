@@ -13,15 +13,15 @@ func Credential(s iam.Scope) []iam.Statement {
 			Actions: []string{
 				"acm:AddTagsToCertificate",
 				"acm:DeleteCertificate",
-				"acm:ListTagsForCertificate",
 				"acm:RemoveTagsFromCertificate",
 			},
 			Resources: []string{iam.AppCertificateARN},
 			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
-			Actions:   []string{"acm:DescribeCertificate"},
+			Actions:   []string{"acm:DescribeCertificate", "acm:ListTagsForCertificate"},
 			Resources: []string{iam.AppCertificateARN},
+			Condition: s.UnevaluatedOrMadeByItsStacks(),
 		},
 		{
 			Actions:   []string{"acm:ListCertificates"},

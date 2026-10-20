@@ -6,6 +6,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func TestCertificateCovers(t *testing.T) {
@@ -84,6 +86,72 @@ func TestACMExisting(t *testing.T) {
 		}
 		if api.describes != 1 {
 			t.Errorf("describes = %d, want the hidden names read", api.describes)
+		}
+	})
+}
+
+func TestExistingAdoptsOnlyACertificateItsOwnTierRequestedOrTheUserBrought(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the other tier's certificate and one it may not read are passed over for one the user brought", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{
+			listed: [][]acmtypes.CertificateSummary{{
+				{CertificateArn: aws.String("arn-production"), DomainName: aws.String("*.app.com")},
+				{CertificateArn: aws.String("arn-unreadable"), DomainName: aws.String("pr-1.app.com")},
+				{CertificateArn: aws.String("arn-unreadable-hidden-names"), DomainName: aws.String("app.com"), HasAdditionalSubjectAlternativeNames: aws.Bool(true)},
+				{CertificateArn: aws.String("arn-brought"), DomainName: aws.String("*.app.com")},
+			}},
+			tagged:  map[string]environment.Tier{"arn-production": environment.TierProduction},
+			refused: map[string]bool{"arn-unreadable": true, "arn-unreadable-hidden-names": true},
+		}
+		cert, err := testIssuer(api, 1).Existing(t.Context(), []string{"pr-1.app.com"})
+		if err != nil {
+			t.Fatalf("Existing: %v", err)
+		}
+		if cert.ARN != "arn-brought" {
+			t.Errorf("a preview deploy adopted %q, want arn-brought: a certificate production requested is production's alone", cert.ARN)
+		}
+	})
+
+	t.Run("a certificate its own tier requested is adopted", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{
+			listed: [][]acmtypes.CertificateSummary{{
+				{CertificateArn: aws.String("arn-production"), DomainName: aws.String("*.app.com")},
+				{CertificateArn: aws.String("arn-preview"), DomainName: aws.String("*.app.com")},
+			}},
+			tagged: map[string]environment.Tier{
+				"arn-production": environment.TierProduction,
+				"arn-preview":    environment.TierPreview,
+			},
+		}
+		cert, err := testIssuer(api, 1).Existing(t.Context(), []string{"pr-1.app.com"})
+		if err != nil {
+			t.Fatalf("Existing: %v", err)
+		}
+		if cert.ARN != "arn-preview" {
+			t.Errorf("a preview deploy adopted %q, want arn-preview, the one preview requested", cert.ARN)
+		}
+	})
+
+	t.Run("only the other tier's certificate covering is nothing found", func(t *testing.T) {
+		t.Parallel()
+
+		api := &fakeACM{
+			listed: [][]acmtypes.CertificateSummary{{
+				{CertificateArn: aws.String("arn-production"), DomainName: aws.String("*.app.com")},
+			}},
+			tagged: map[string]environment.Tier{"arn-production": environment.TierProduction},
+		}
+		cert, err := testIssuer(api, 1).Existing(t.Context(), []string{"pr-1.app.com"})
+		if err != nil {
+			t.Fatalf("Existing: %v", err)
+		}
+		if cert.ARN != "" {
+			t.Errorf("a preview deploy adopted %q, want nothing found so it requests its own", cert.ARN)
 		}
 	})
 }

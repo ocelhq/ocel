@@ -36,10 +36,6 @@ var resourcesAWSNamesByIDAndScopesByNoTag = []string{
 	iam.EdgeAssetAccessARN,
 }
 
-var actionsOnCertificatesEitherTierMayAdopt = []string{
-	"acm:DescribeCertificate",
-}
-
 func requestTaggedFor(tier environment.Tier) requestContext {
 	return requestContext{
 		"aws:ResourceTag/" + naming.ManagedByTagKey: string(defaultNamespace),
@@ -113,8 +109,7 @@ func isOfNoTier(w witness) bool {
 	case w.resource == iam.AnyResource && readOnly(w.action):
 		return true
 	case slices.Contains(actionsAWSGivesNoScopingKey, w.action),
-		slices.Contains(actionsOnWhatBothTiersShare, w.action),
-		slices.Contains(actionsOnCertificatesEitherTierMayAdopt, w.action):
+		slices.Contains(actionsOnWhatBothTiersShare, w.action):
 		return true
 	}
 	return slices.Contains(resourcesAWSOwns, w.resource) || slices.Contains(resourcesAWSNamesByIDAndScopesByNoTag, w.resource)
