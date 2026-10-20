@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	heldProvisionTimeout = 10 * time.Second
+	heldProvisionTimeout = time.Minute
 	busyRefusalTimeout   = 5 * time.Second
 )
 
