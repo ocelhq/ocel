@@ -256,6 +256,14 @@ func appName(m manifest, dir string) string {
 	return filepath.Base(dir)
 }
 
+func Enclosing(dir string) (string, bool) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", false
+	}
+	return enclosing(abs)
+}
+
 func enclosing(appDir string) (string, bool) {
 	for dir := filepath.Dir(appDir); ; dir = filepath.Dir(dir) {
 		if globs, ok := declaredPackages(dir); ok {

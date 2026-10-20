@@ -24,6 +24,20 @@ func Number(n int, one, many string) string {
 	return many
 }
 
+func Bytes(n uint64) string {
+	if n < 1<<10 {
+		return fmt.Sprintf("%d B", n)
+	}
+	units := []string{"KiB", "MiB", "GiB", "TiB"}
+	value := float64(n) / (1 << 10)
+	unit := 0
+	for value >= 1<<10 && unit < len(units)-1 {
+		value /= 1 << 10
+		unit++
+	}
+	return fmt.Sprintf("%.1f %s", value, units[unit])
+}
+
 func Quoted(values []string) []string {
 	quoted := make([]string, 0, len(values))
 	for _, value := range values {
