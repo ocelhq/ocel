@@ -21,6 +21,13 @@ func (p ProviderRun) NewAttempt(ctx context.Context, kind consolev1.DeploymentKi
 		StartedAt:   p.Run.StartedAt(),
 		Trigger:     trigger,
 		CI:          ci,
-		Source:      deployreport.ReadSource(cfg.Dir, os.Getenv),
+		Source:      p.readSource(cfg.Dir),
 	}
+}
+
+func (p ProviderRun) readSource(dir string) *consolev1.Source {
+	if p.job != nil {
+		return p.job.Source()
+	}
+	return deployreport.ReadSource(dir, os.Getenv)
 }

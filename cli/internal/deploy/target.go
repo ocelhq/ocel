@@ -72,5 +72,9 @@ func resolvePreviewEnvironment(dependencies Dependencies, cwd, name string, life
 			return nil, err
 		}
 	}
-	return previewid.ResolveEnvironment(cwd, name, lifecycle, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
+	env, err := previewid.ResolveEnvironment(cwd, name, lifecycle, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
+	if err == nil && name != "" && dependencies.BuilderJob != nil {
+		env.Label = dependencies.BuilderJob.PreviewLabel
+	}
+	return env, err
 }

@@ -197,6 +197,10 @@ func newCommand() *command {
 	rootCmd.AddCommand(generate.NewCommand(generate.Dependencies{Invocation: invocation, CollectDeclarations: declaration.Collect}))
 	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps, CollectDeclarations: declaration.Collect, OpenBrowser: browser.OpenURL}))
 	rootCmd.AddCommand(lock.NewCommand(lock.Dependencies{Invocation: invocation, Pin: executables.Pin}))
+	readGitBranch, discoverPRNumber := previewid.ReadGitBranch, previewid.DiscoverPRNumber
+	if job := invocation.BuilderJob; job != nil {
+		readGitBranch, discoverPRNumber = job.ReadGitBranch, job.DiscoverPRNumber
+	}
 	deployDependencies := deploy.Dependencies{
 		Invocation:              invocation,
 		BuildApps:               build.Apps,
@@ -206,8 +210,8 @@ func newCommand() *command {
 		CollectDeclarations:     declaration.Collect,
 		OpenBrowser:             browser.OpenURL,
 		ServeVariableEditor:     env.ServeVariableEditor,
-		ReadGitBranch:           previewid.ReadGitBranch,
-		DiscoverPRNumber:        previewid.DiscoverPRNumber,
+		ReadGitBranch:           readGitBranch,
+		DiscoverPRNumber:        discoverPRNumber,
 	}
 	rootCmd.AddCommand(deploycommand.NewCommand(deployDependencies))
 	rootCmd.AddCommand(deploycommand.NewPreviewCommand(deployDependencies))
