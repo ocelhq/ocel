@@ -338,7 +338,7 @@ func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	}
 }
 
-func TestADeployMayKeepTheRealtimeSecretsOfItsNamespaceAndAdministersNoOtherSecret(t *testing.T) {
+func TestADeployMayKeepTheRealtimeGateAndValueSecretsOfItsNamespaceAndAdministersNoOtherSecret(t *testing.T) {
 	t.Parallel()
 
 	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
@@ -346,10 +346,14 @@ func TestADeployMayKeepTheRealtimeSecretsOfItsNamespaceAndAdministersNoOtherSecr
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
 	const gate = `roles/secretmanager.admin, on the condition resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_gate-")`
+	const values = `roles/secretmanager.admin, on the condition resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_values-")`
 	for _, line := range strings.Split(document.Document, "\n") {
-		if strings.Contains(line, "roles/secretmanager.admin") && line != gate {
-			t.Errorf("Permissions(deploy) names %q, and roles/secretmanager.admin beyond the gate secrets reads, rewrites and deletes every secret in the project and changes who may read each:\n%s", line, document.Document)
+		if strings.Contains(line, "roles/secretmanager.admin") && line != gate && line != values {
+			t.Errorf("Permissions(deploy) names %q, and roles/secretmanager.admin beyond the gate and value secrets reads, rewrites and deletes every secret in the project and changes who may read each:\n%s", line, document.Document)
 		}
+	}
+	if !slices.Contains(strings.Split(document.Document, "\n"), values) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s: a deploy writes, versions and deletes the secrets that hold its apps' sensitive values, and sets which app may read each", document.Document, values)
 	}
 	const realtime = `roles/secretmanager.editor, on the condition resource.name.startsWith("projects/PROJECT_NUMBER/secrets/ocel_realtime-")`
 	if !slices.Contains(strings.Split(document.Document, "\n"), realtime) {

@@ -55,6 +55,25 @@ func TestStackResourcesNameTheCloudRunServiceEachAppRuns(t *testing.T) {
 	}
 }
 
+func TestStackResourcesNameTheSecretsThatHoldAnAppsSensitiveValues(t *testing.T) {
+	p := providerServing(&googletest.Run{}, t)
+	spec := withValues(functionRelease("d1", "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"), map[string]string{"STRIPE_KEY": stripeKey})
+	functions, err := p.ProvisionFunctions(t.Context(), spec, &fake.Log{})
+	if err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+
+	listed, err := p.resourceHooks().ListResources(t.Context(), spec.Ref, provider.StackResult{Functions: functions})
+	if err != nil {
+		t.Fatalf("ListResources() = %v", err)
+	}
+
+	secret := valueSecretOf(t, p, spec, "STRIPE_KEY")
+	if !slices.Contains(listed, provider.PhysicalResource{Kind: "secretmanager:secret", ID: secret, Location: "global"}) {
+		t.Errorf("ListResources() = %+v, want the secret %s that holds STRIPE_KEY", listed, secret)
+	}
+}
+
 func TestStackResourcesNameTheDatabaseABindingProvisioned(t *testing.T) {
 	t.Parallel()
 	p := listingProvider()

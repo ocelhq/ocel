@@ -41,9 +41,12 @@ func readProbeToken(ctx context.Context, c *gcloud.Clients, service string) (str
 		return "", nil
 	}
 	for _, container := range current.Template.Containers {
-		for _, variable := range container.Env {
-			if variable.Name == originguard.ProbeTokenVar {
-				return variable.Value, nil
+		if container.StartupProbe == nil || container.StartupProbe.HttpGet == nil {
+			continue
+		}
+		for _, header := range container.StartupProbe.HttpGet.HttpHeaders {
+			if header.Name == originguard.ProbeTokenHeader {
+				return header.Value, nil
 			}
 		}
 	}

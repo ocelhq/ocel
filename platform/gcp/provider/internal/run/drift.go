@@ -33,6 +33,7 @@ type servingPrint struct {
 	MaxInstances         int64
 	Concurrency          int64
 	Env                  [][2]string
+	PinnedEnv            [][3]string `json:",omitempty"`
 	Volumes              [][4]string
 	Mounts               [][2]string
 	Audiences            []string
@@ -121,6 +122,10 @@ func printOf(service *run.GoogleCloudRunV2Service) servingPrint {
 	container := template.Containers[0]
 	p.Image = container.Image
 	for _, env := range container.Env {
+		if env.ValueSource != nil && env.ValueSource.SecretKeyRef != nil {
+			p.PinnedEnv = append(p.PinnedEnv, [3]string{env.Name, RevisionName(env.ValueSource.SecretKeyRef.Secret), env.ValueSource.SecretKeyRef.Version})
+			continue
+		}
 		p.Env = append(p.Env, [2]string{env.Name, env.Value})
 	}
 	for _, mount := range container.VolumeMounts {

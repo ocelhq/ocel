@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -159,6 +160,42 @@ func TestShapeOfADeclaredBucketIsOneStorageBucketInTheEnvironmentThatDeclaresIt(
 	}
 	if properties := declared[0].GetProperties().AsMap(); properties["location"] != "europe-west1" || properties["storage_class"] != "STANDARD" {
 		t.Errorf("the bucket is shaped as %v, want a standard bucket in the deploy's region", properties)
+	}
+}
+
+func secretsIn(set *costv1.ResourceSet, scope string) []string {
+	var named []string
+	for _, r := range set.GetResources() {
+		if r.GetType() == "google_secret_manager_secret" && r.GetScope() == scope {
+			named = append(named, r.GetName())
+		}
+	}
+	return named
+}
+
+func TestShapeHoldsEachSensitiveValueOfAnAppInASecretOfItsOwn(t *testing.T) {
+	client, _ := costServed(t)
+	manifest := shopManifest()
+	manifest.Apps[0].Variables = []*contractv1.ManifestVariable{
+		{Key: "STRIPE_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk_live"},
+		{Key: "MODE", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "live"},
+	}
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    manifest,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	web := secretsIn(set, "project:shop/environment:prod/app:web")
+	if len(web) != 1 || !strings.Contains(web[0], "web-stripe-key") {
+		t.Errorf("app web shapes secrets %v, want the one that holds STRIPE_KEY and none for its plain value", web)
+	}
+	api := secretsIn(set, "project:shop/environment:prod/app:api")
+	if len(api) != 1 || !strings.Contains(api[0], "api-ocel-probe-token") {
+		t.Errorf("app api shapes secrets %v, want the one that holds the probe token its gated container's startup probe sends", api)
 	}
 }
 

@@ -154,6 +154,7 @@ var deployRoles = []string{
 const (
 	realtimeSecretsRole = "roles/secretmanager.editor"
 	gateSecretsRole     = "roles/secretmanager.admin"
+	valueSecretsRole    = "roles/secretmanager.admin"
 	ProjectNumberHole   = "PROJECT_NUMBER"
 )
 
@@ -164,6 +165,10 @@ func prefixedSecretsGrant(role, prefix string) string {
 
 func GateSecretsGrant(names names.Names) string {
 	return prefixedSecretsGrant(gateSecretsRole, names.GateSecretPrefix())
+}
+
+func ValueSecretsGrant(names names.Names) string {
+	return prefixedSecretsGrant(valueSecretsRole, names.ValueSecretPrefix())
 }
 
 func RealtimeSecretsGrant(names names.Names) string {

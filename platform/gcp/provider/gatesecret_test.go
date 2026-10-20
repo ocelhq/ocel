@@ -107,7 +107,7 @@ func TestAGatedPreviewContainersStartupProbeCarriesTheTokenItsFrontExemptsAlone(
 	}
 
 	container := server.Service.Template.Containers[0]
-	token := googletest.EnvOf(container)[originguard.ProbeTokenVar]
+	token := probeTokenOf(t, server)
 	if len(token) < 32 {
 		t.Fatalf("%s = %q, want a token no visitor can guess", originguard.ProbeTokenVar, token)
 	}
@@ -121,6 +121,19 @@ func TestAGatedPreviewContainersStartupProbeCarriesTheTokenItsFrontExemptsAlone(
 	}
 }
 
+func probeTokenOf(t *testing.T, server *googletest.Run) string {
+	t.Helper()
+	entry := envEntry(server.Service.Template.Containers[0], originguard.ProbeTokenVar)
+	if entry == nil || entry.Value != "" || entry.ValueSource == nil || entry.ValueSource.SecretKeyRef == nil {
+		t.Fatalf("%s = %+v, want a reference to the secret that holds it and no value: any credential that may list the project's services reads a value", originguard.ProbeTokenVar, entry)
+	}
+	token, found := server.Secrets.Payload(t, entry.ValueSource.SecretKeyRef.Secret, entry.ValueSource.SecretKeyRef.Version)
+	if !found {
+		t.Fatalf("%s references version %s of %s, which holds nothing", originguard.ProbeTokenVar, entry.ValueSource.SecretKeyRef.Version, entry.ValueSource.SecretKeyRef.Secret)
+	}
+	return token
+}
+
 func TestAPreviewContainerKeepsItsProbeTokenAcrossDeploysAndGateRotations(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
@@ -128,7 +141,7 @@ func TestAPreviewContainerKeepsItsProbeTokenAcrossDeploysAndGateRotations(t *tes
 	if _, err := p.ProvisionContainers(context.Background(), gatedPreviewSpec(p, &shopGate), &fake.Log{}); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	token := googletest.EnvOf(server.Service.Template.Containers[0])[originguard.ProbeTokenVar]
+	token := probeTokenOf(t, server)
 	rotated := shopGate
 	rotated.Key = "rotated-key"
 	publishGate(t, p, &rotated)
@@ -137,8 +150,11 @@ func TestAPreviewContainerKeepsItsProbeTokenAcrossDeploysAndGateRotations(t *tes
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 
-	if got := googletest.EnvOf(server.Service.Template.Containers[0])[originguard.ProbeTokenVar]; got != token {
+	if got := probeTokenOf(t, server); got != token {
 		t.Errorf("the second deploy set %s = %q, want %q: a token that changes each deploy rolls a revision for nothing", originguard.ProbeTokenVar, got, token)
+	}
+	if version := envEntry(server.Service.Template.Containers[0], originguard.ProbeTokenVar).ValueSource.SecretKeyRef.Version; version != "1" {
+		t.Errorf("the second deploy pinned version %s of the token's secret, want 1: a new version each deploy rolls a revision for nothing", version)
 	}
 }
 
@@ -152,7 +168,7 @@ func TestAnOpenPreviewContainerOnCloudRunProbesWithATokenSoTurningProtectionOnLe
 	}
 
 	container := server.Service.Template.Containers[0]
-	token := googletest.EnvOf(container)[originguard.ProbeTokenVar]
+	token := probeTokenOf(t, server)
 	probe := container.StartupProbe.HttpGet
 	if len(token) < 32 || len(probe.HttpHeaders) != 1 || probe.HttpHeaders[0].Value != token {
 		t.Errorf("an open preview's probe sends %+v and its front holds %q, want the same token: once a gate is published, a probe without it gets the login page and no new instance starts", probe.HttpHeaders, token)
@@ -177,7 +193,7 @@ func TestAGatedProductionContainerMountsTheProductionGateSecretAndNeverThePrevie
 		t.Fatalf("volumes = %+v, want the production gate secret %s mounted at latest", volumes, secret)
 	}
 	container := server.Service.Template.Containers[0]
-	if token := googletest.EnvOf(container)[originguard.ProbeTokenVar]; len(token) < 32 || len(container.StartupProbe.HttpGet.HttpHeaders) != 1 {
+	if token := probeTokenOf(t, server); len(token) < 32 || len(container.StartupProbe.HttpGet.HttpHeaders) != 1 {
 		t.Errorf("a gated production container probes with %+v and holds %q, want the token its front exempts", container.StartupProbe.HttpGet.HttpHeaders, token)
 	}
 }

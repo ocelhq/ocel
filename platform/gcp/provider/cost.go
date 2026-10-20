@@ -7,9 +7,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
@@ -103,6 +105,14 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
 			}
 		}
+		for _, key := range valueKeysOf(app, run.FactsOf(front).GatesAtOrigin) {
+			secret, err := names.AppValueSecret(req.Deploy.Slug, req.Deploy.Env, app.App, key)
+			if err != nil {
+				return nil, err
+			}
+			shaped, _ := bootstrap.Resource{Kind: bootstrap.KindSecret}.Shape(region)
+			tree.Add(scope, string(gcloud.Vendor), cost.SecretManagerSecretType, secret, region, shaped.Properties)
+		}
 		for _, shape := range shapes {
 			tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 		}
@@ -120,6 +130,19 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	}
 
 	return tree.Set(provider.CostSource)
+}
+
+func valueKeysOf(app provider.AppEntry, gated bool) []string {
+	var keys []string
+	for _, variable := range app.Manifest.GetVariables() {
+		if variable.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE {
+			keys = append(keys, variable.GetKey())
+		}
+	}
+	if gated && app.Compute() == provider.ComputeContainer {
+		keys = append(keys, originguard.ProbeTokenVar)
+	}
+	return keys
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {

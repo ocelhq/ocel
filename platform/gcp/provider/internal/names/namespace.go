@@ -154,6 +154,15 @@ func (n Names) RealtimeSigningSecret(project, env, resource string) (string, err
 		string(n.namespace), project, env, realtimeInfix, realtimeSigningInfix, resource)
 }
 
+const valuesInfix = "values"
+
+func (n Names) ValueSecretPrefix() string { return n.secretPrefix(valuesInfix) }
+
+func (n Names) AppValueSecret(project, env, app, key string) (string, error) {
+	return hashedSecretID(n.ValueSecretPrefix(), []string{project, env, app, key},
+		string(n.namespace), project, env, app, valuesInfix, key)
+}
+
 func hashedSecretID(prefix string, readableParts []string, hashed ...string) (string, error) {
 	return naming.TaggedName{
 		Head:     strings.TrimSuffix(prefix, naming.WordSeparator),

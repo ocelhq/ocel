@@ -255,3 +255,30 @@ func TestATierBucketIsNamedForItsTierWordAndClassWithItsRandomTagLast(t *testing
 		t.Errorf("TierBucket() of a long namespace = %q, want it under the namespace's compacted field", got)
 	}
 }
+
+func TestAnAppsValueSecretIsNamedForItsEnvironmentAndKeyUnderTheValuesPrefix(t *testing.T) {
+	named := names.New("ocel", "acme-prod")
+	secret := valueSecret(t, named, "shop", "pr-7", "web", "STRIPE_KEY")
+	if !strings.HasPrefix(secret, named.ValueSecretPrefix()) || !strings.Contains(secret, "shop-pr-7-web-stripe-key") {
+		t.Errorf("AppValueSecret() = %q, want it under %s and reading as its project, environment, app and key", secret, named.ValueSecretPrefix())
+	}
+	for _, other := range []string{
+		valueSecret(t, named, "shop", "pr-7", "web", "stripe_key"),
+		valueSecret(t, named, "shop", "pr-7", "web-admin", "STRIPE_KEY"),
+		valueSecret(t, named, "shop", "prod", "web", "STRIPE_KEY"),
+		valueSecret(t, names.New("other", "acme-prod"), "shop", "pr-7", "web", "STRIPE_KEY"),
+	} {
+		if other == secret {
+			t.Errorf("AppValueSecret() names %q for two values, and each value is a secret of its own", secret)
+		}
+	}
+}
+
+func valueSecret(t *testing.T, named names.Names, project, env, app, key string) string {
+	t.Helper()
+	secret, err := named.AppValueSecret(project, env, app, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return secret
+}

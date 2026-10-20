@@ -156,23 +156,25 @@ func ProvisionGate(ctx context.Context, c *gcloud.Clients, spec provider.StackSp
 	}, nil
 }
 
-func ApplyGate(ctx context.Context, c *gcloud.Clients, g GatedServing, what string, served *run.Serving) error {
+func ProvisionProbeToken(ctx context.Context, c *gcloud.Clients, g GatedServing, service string) (string, error) {
+	if !g.hasGate() {
+		return "", nil
+	}
+	token, err := readProbeToken(ctx, c, service)
+	if err != nil || token != "" {
+		return token, err
+	}
+	return newProbeToken()
+}
+
+func ApplyGate(g GatedServing, what string, served *run.Serving, probeToken string) error {
 	if !g.hasGate() {
 		return nil
 	}
 	env := maps.Clone(g.env)
-	if served.Compute == provider.ComputeContainer {
-		token, err := readProbeToken(ctx, c, served.Service)
-		if err != nil {
-			return err
-		}
-		if token == "" {
-			if token, err = newProbeToken(); err != nil {
-				return err
-			}
-		}
-		served.ProbeToken = token
-		env[originguard.ProbeTokenVar] = token
+	if probeToken != "" {
+		served.ProbeToken = probeToken
+		env[originguard.ProbeTokenVar] = probeToken
 	}
 	values, err := run.MergeValues(what, gateValues, served.Env, env)
 	if err != nil {

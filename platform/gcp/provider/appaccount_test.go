@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
@@ -121,7 +122,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = p.release().ProvisionWorkers(context.Background(), p.resolved, worker, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, provider.Instances{}, nil)
+			_, err = p.release().ProvisionWorkers(context.Background(), p.resolved, worker, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, run.PinnedValues{}, nil, provider.Instances{}, nil)
 			return err
 		},
 	} {

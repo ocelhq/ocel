@@ -96,7 +96,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 		names := names.New(c.Namespace, project)
 		roles := slices.Clone(bootstrap.RolesFor(purpose))
 		if purpose == edge.PurposeDeploy {
-			roles = append(roles, bootstrap.RealtimeSecretsGrant(names), bootstrap.GateSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), bootstrap.AppBucketsGrant(names), bootstrap.DatabasesGrant(names), bootstrap.ProjectPermissionsGrant(), bootstrap.PartsGrant(names), variables.ProjectRecordsGrant(names, c.Region), bootstrap.TierTagsGrant(names, tier))
+			roles = append(roles, bootstrap.RealtimeSecretsGrant(names), bootstrap.GateSecretsGrant(names), bootstrap.ValueSecretsGrant(names), grants.AppGrantsGrant(names), names.AppAccountsRolePath(), bootstrap.AppBucketsGrant(names), bootstrap.DatabasesGrant(names), bootstrap.ProjectPermissionsGrant(), bootstrap.PartsGrant(names), variables.ProjectRecordsGrant(names, c.Region), bootstrap.TierTagsGrant(names, tier))
 			roles = append(roles, bootstrap.QueueGrants(names, c.Region)...)
 			roles = append(roles, bootstrap.UntaggingGrants(names, c.Region)...)
 		}

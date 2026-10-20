@@ -207,6 +207,22 @@ func (s *Secrets) Latest(t *testing.T, name string) (string, bool) {
 	return string(raw), true
 }
 
+func (s *Secrets) Payload(t *testing.T, name, version string) (string, bool) {
+	t.Helper()
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	secret := s.Secrets[name]
+	at, err := strconv.Atoi(version)
+	if secret == nil || err != nil || at < 1 || at > len(secret.versions) || secret.versions[at-1].destroyed {
+		return "", false
+	}
+	raw, err := base64.StdEncoding.DecodeString(secret.versions[at-1].payload)
+	if err != nil {
+		t.Fatalf("version %s of secret %s is no base64: %v", version, name, err)
+	}
+	return string(raw), true
+}
+
 func (s *Secrets) Has(name string) bool {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -53,6 +54,7 @@ type Serving struct {
 	Shared         bool
 	Image          string
 	Env            map[string]string
+	Pinned         PinnedValues
 	Account        string
 	Compute        provider.Compute
 	Health         string
@@ -141,7 +143,7 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 	container := &run.GoogleCloudRunV2Container{
 		Image: s.Image,
 		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: containerimage.Port}},
-		Env:   environmentOf(s.Env),
+		Env:   environmentOf(s.Env, s.Pinned),
 		Resources: &run.GoogleCloudRunV2ResourceRequirements{
 			CpuIdle:         s.billsPerRequest(),
 			Limits:          map[string]string{"cpu": cpu, "memory": memory},
@@ -170,6 +172,9 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 		MaxInstanceRequestConcurrency: int64(s.Concurrency),
 		ExecutionEnvironment:          s.Generation,
 		Labels:                        map[string]string{imageLabel: ImageLabelValue(s.Image)},
+	}
+	if s.Pinned.hasAnyOf(s.Env) {
+		template.Labels[names.ValueOwnerLabel] = s.Pinned.Owner
 	}
 	if s.Egress != nil {
 		template.VpcAccess = &run.GoogleCloudRunV2VpcAccess{
@@ -217,14 +222,6 @@ func openingOf(service *run.GoogleCloudRunV2Service) (*run.GoogleCloudRunV2Servi
 		return &run.GoogleCloudRunV2Service{InvokerIamDisabled: true}, invokerCheckField
 	}
 	return nil, ""
-}
-
-func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {
-	entries := make([]*run.GoogleCloudRunV2EnvVar, 0, len(values))
-	for _, name := range slices.Sorted(maps.Keys(values)) {
-		entries = append(entries, &run.GoogleCloudRunV2EnvVar{Name: name, Value: values[name]})
-	}
-	return entries
 }
 
 func TrafficTo(revision string, current []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {

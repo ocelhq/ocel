@@ -335,6 +335,19 @@
       }
     },
     {
+      "id": "project:shop/environment:prod/app:api/google_secret_manager_secret:ocel_values-shop-prod-api-ocel-probe-token-dda464",
+      "scope": "project:shop/environment:prod/app:api",
+      "vendor": "gcp",
+      "type": "google_secret_manager_secret",
+      "name": "ocel_values-shop-prod-api-ocel-probe-token-dda464",
+      "region": "europe-west1",
+      "properties": {
+        "replication": {
+          "auto": {}
+        }
+      }
+    },
+    {
       "id": "project:shop/environment:prod/google_storage_bucket:ocel-app-shop-prod-uploads",
       "scope": "project:shop/environment:prod",
       "vendor": "gcp",

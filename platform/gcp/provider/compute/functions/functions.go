@@ -59,6 +59,10 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			return nil, err
 		}
 	}
+	pinned, err := p.PinValues(ctx, c, spec.Ref, app.App, release.SensitiveValuesOf(app, ""))
+	if err != nil {
+		return nil, err
+	}
 	account, err := p.EnsureAccount(ctx, c, spec, declared)
 	if err != nil {
 		return nil, err
@@ -110,6 +114,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			Service:          service,
 			Tier:             spec.Ref.Tier,
 			Image:            image,
+			Pinned:           pinned,
 			Account:          account,
 			Compute:          provider.ComputeServerless,
 			Public:           true,
@@ -141,7 +146,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		served.Env = values
 		gateIgnored := cloudrun.IgnoresGate(spec, fn)
 		if !gateIgnored {
-			if err := cloudrun.ApplyGate(ctx, c, gated, fn.Name, &served); err != nil {
+			if err := cloudrun.ApplyGate(gated, fn.Name, &served, ""); err != nil {
 				return nil, err
 			}
 		}
@@ -174,7 +179,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 	if err != nil {
 		return nil, err
 	}
-	workers, err := p.ProvisionWorkers(ctx, c, spec, image, account, values, declared, instances, progress)
+	workers, err := p.ProvisionWorkers(ctx, c, spec, image, account, values, pinned, declared, instances, progress)
 	if err != nil {
 		return nil, err
 	}

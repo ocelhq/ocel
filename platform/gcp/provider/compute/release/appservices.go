@@ -58,6 +58,9 @@ func (p *Release) RevokeAfterRemoval(ctx context.Context, c *gcloud.Clients, ref
 	if err != nil {
 		return err
 	}
+	if err := removeValueSecrets(ctx, c, p.Records, ref.Tier, account); err != nil {
+		return err
+	}
 	if revoked {
 		gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Revoked what app %s of %s was granted in environment %s: nothing runs as the %s service account any more", ref.Name.App, ref.Project, ref.Name.Env, account))
 	}
@@ -118,6 +121,9 @@ func (p *Release) RemoveRevisions(ctx context.Context, ref provider.StackRef, go
 		if stays {
 			kept = append(kept, at)
 		}
+	}
+	if len(kept) < len(going) {
+		p.pruneValues(ctx, ref, progress)
 	}
 	return kept, nil
 }

@@ -48,6 +48,7 @@ type Run struct {
 
 	images    map[string]string
 	labels    map[string]map[string]string
+	envs      map[string][]*runv2.GoogleCloudRunV2EnvVar
 	Elsewhere map[string]string
 	untagged  []string
 	regional  int
@@ -270,6 +271,24 @@ func (s *Run) revised() {
 	if s.Service.Template != nil {
 		s.labels[run.RevisionName(s.Service.LatestReadyRevision)] = s.Service.Template.Labels
 	}
+	if s.envs == nil {
+		s.envs = map[string][]*runv2.GoogleCloudRunV2EnvVar{}
+	}
+	if s.Service.Template != nil && len(s.Service.Template.Containers) > 0 {
+		s.envs[run.RevisionName(s.Service.LatestReadyRevision)] = s.Service.Template.Containers[0].Env
+	}
+}
+
+func (s *Run) v1Revision(name string) *runv1.Revision {
+	var env []*runv1.EnvVar
+	for _, entry := range s.envs[name] {
+		converted := &runv1.EnvVar{Name: entry.Name, Value: entry.Value}
+		if entry.ValueSource != nil && entry.ValueSource.SecretKeyRef != nil {
+			converted.ValueFrom = &runv1.EnvVarSource{SecretKeyRef: &runv1.SecretKeySelector{Name: entry.ValueSource.SecretKeyRef.Secret, Key: entry.ValueSource.SecretKeyRef.Version}}
+		}
+		env = append(env, converted)
+	}
+	return &runv1.Revision{Metadata: &runv1.ObjectMeta{Name: name}, Spec: &runv1.RevisionSpec{Containers: []*runv1.Container{{Env: env}}}}
 }
 
 func (s *Run) listLabelled(w http.ResponseWriter, selector string) {
@@ -279,7 +298,7 @@ func (s *Run) listLabelled(w http.ResponseWriter, selector string) {
 	if s.Service != nil {
 		for _, name := range s.revisions {
 			if s.labels[name][key] == value {
-				listed.Items = append(listed.Items, &runv1.Revision{Metadata: &runv1.ObjectMeta{Name: name}})
+				listed.Items = append(listed.Items, s.v1Revision(name))
 			}
 		}
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
 
@@ -20,6 +21,15 @@ func (p *Provider) ListStackResources(ctx context.Context, ref provider.StackRef
 	}
 	for _, container := range recorded.Containers {
 		listed = append(listed, provider.PhysicalResource{Kind: string(bootstrap.KindService), ID: container.Physical, Location: clients.Region})
+	}
+	if !ref.Name.IsInfra() && len(recorded.Functions)+len(recorded.Containers) > 0 {
+		secrets, err := release.ReadValueSecrets(ctx, p.KeyValues(), ref.Tier, clients.AppAccount(ref.Project, ref.Name.Env, ref.Name.App))
+		if err != nil {
+			return nil, err
+		}
+		for _, secret := range secrets {
+			listed = append(listed, provider.PhysicalResource{Kind: string(bootstrap.KindSecret), ID: secret, Location: bootstrap.LocationGlobal})
+		}
 	}
 	registry := p.components()
 	for _, binding := range recorded.Bindings {

@@ -37,6 +37,11 @@ func (p *Release) EnsureAccount(ctx context.Context, c *gcloud.Clients, spec pro
 	if err != nil {
 		return "", err
 	}
+	values, err := p.valueGrants(ctx, ref.Tier, account, "serviceAccount:"+email)
+	if err != nil {
+		return "", err
+	}
+	want = append(want, values...)
 	if err := grants.Reconcile(ctx, c, p.Records, ref.Tier, account, want); err != nil {
 		return "", err
 	}

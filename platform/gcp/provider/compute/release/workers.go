@@ -53,7 +53,7 @@ func NameWorkers(names names.Names, spec provider.StackSpec) ([]deployedWorker, 
 	return named, nil
 }
 
-func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, image, account string, env map[string]string,
+func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, image, account string, env map[string]string, pinned run.PinnedValues,
 	declared map[string]*provider.TopicSpec, instances provider.Instances, progress progress.Log,
 ) ([]deployedWorker, error) {
 	named, err := NameWorkers(c.Names, spec)
@@ -76,6 +76,7 @@ func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec 
 			Tier:      spec.Ref.Tier,
 			Image:     image,
 			Env:       env,
+			Pinned:    pinned,
 			Account:   account,
 			Egress:    p.EgressFor(c.Names, spec),
 			Labels:    labels,

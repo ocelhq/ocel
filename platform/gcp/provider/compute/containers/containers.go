@@ -57,6 +57,14 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	if err != nil {
 		return nil, err
 	}
+	token, err := cloudrun.ProvisionProbeToken(ctx, c, gated, service)
+	if err != nil {
+		return nil, err
+	}
+	pinned, err := p.PinValues(ctx, c, spec.Ref, app.App, release.SensitiveValuesOf(app, token))
+	if err != nil {
+		return nil, err
+	}
 	account, err := p.EnsureAccount(ctx, c, spec, declared)
 	if err != nil {
 		return nil, err
@@ -78,6 +86,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		Tier:      spec.Ref.Tier,
 		Image:     app.Image,
 		Env:       values,
+		Pinned:    pinned,
 		Account:   account,
 		Compute:   provider.ComputeContainer,
 		Health:    app.HealthCheckPath,
@@ -100,7 +109,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 			return nil, err
 		}
 	}
-	if err := cloudrun.ApplyGate(ctx, c, gated, app.App, &served); err != nil {
+	if err := cloudrun.ApplyGate(gated, app.App, &served, token); err != nil {
 		return nil, err
 	}
 	ran, err := p.Services.DeployService(ctx, served, progress)
@@ -111,7 +120,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	deployed := []provider.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.Url, Image: app.Image, Revision: ran.Revision,
 	}}
-	workers, err := p.ProvisionWorkers(ctx, c, spec, app.Image, account, values, declared, provider.Instances{Max: budget.Ceiling()}, progress)
+	workers, err := p.ProvisionWorkers(ctx, c, spec, app.Image, account, values, pinned, declared, provider.Instances{Max: budget.Ceiling()}, progress)
 	if err != nil {
 		return nil, err
 	}

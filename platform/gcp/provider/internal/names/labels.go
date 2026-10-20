@@ -14,6 +14,7 @@ const (
 	KVLabel          = "ocel-kv"
 	BucketLabel      = "ocel-bucket"
 	PostgresLabel    = "ocel-postgres"
+	ValueOwnerLabel  = "ocel-value-owner"
 
 	maxLabelValue = 63
 )

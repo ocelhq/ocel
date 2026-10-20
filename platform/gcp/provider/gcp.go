@@ -37,8 +37,10 @@ type Provider struct {
 	endpoint    string
 	gateInEnv   bool
 	tagEndpoint string
-	namespace   provider.Namespace
-	warmRoots   *x509.CertPool
+
+	sensitiveInEnv bool
+	namespace      provider.Namespace
+	warmRoots      *x509.CertPool
 
 	writtenBy provider.WrittenBy
 
@@ -100,6 +102,8 @@ func NewProvider(options Options) (*Provider, error) {
 		tagEndpoint: tagEndpoint,
 		namespace:   namespace,
 		images:      &run.Images{Pull: run.PullBase},
+
+		sensitiveInEnv: endpoint != "",
 	}, nil
 }
 

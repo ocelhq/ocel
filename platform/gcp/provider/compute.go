@@ -25,6 +25,7 @@ func (p *Provider) release() *release.Release {
 
 		ContainerTagEndpoint: p.containerTagEndpoint(),
 		GateInEnv:            p.gateInEnv,
+		SensitiveInEnv:       p.sensitiveInEnv,
 	}
 }
 

@@ -35,4 +35,5 @@ type Release struct {
 
 	ContainerTagEndpoint string
 	GateInEnv            bool
+	SensitiveInEnv       bool
 }
