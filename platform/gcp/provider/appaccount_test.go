@@ -377,7 +377,7 @@ func TestADeployCredentialThatMayNotReadOrMakeAnAppsAccountIsToldWhichGrantItLac
 	t.Parallel()
 	for name, deniedAt := range map[string]string{"reading": http.MethodGet, "creating": http.MethodPost} {
 		lacking := map[string]string{
-			http.MethodGet:  "roles/iam.serviceAccountAdmin, on the condition resource.matchTag('acme-prod/ocel-tier', 'production')",
+			http.MethodGet:  "roles/iam.serviceAccountAdmin, on the condition !resource.hasTagKey('acme-prod/ocel-tier') || resource.matchTag('acme-prod/ocel-tier', 'production')",
 			http.MethodPost: "a custom role holding resourcemanager.projects.get, run.services.create",
 		}[deniedAt]
 		t.Run(name, func(t *testing.T) {
@@ -437,7 +437,7 @@ func TestAnAppsOwnAccountItMayNotActAsNamesTheTiersAccountsGrant(t *testing.T) {
 
 	_, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
 
-	const lacking = "roles/iam.serviceAccountAdmin, on the condition resource.matchTag('acme-prod/ocel-tier', 'production')"
+	const lacking = "roles/iam.serviceAccountAdmin, on the condition !resource.hasTagKey('acme-prod/ocel-tier') || resource.matchTag('acme-prod/ocel-tier', 'production')"
 	if err == nil || !strings.Contains(err.Error(), lacking) {
 		t.Errorf("ensureAppAccount() = %v, want an error naming %s", err, lacking)
 	}

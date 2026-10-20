@@ -130,7 +130,7 @@ func TestABootstrapChecksEveryPermissionItsFirestoreAdminCallsNeed(t *testing.T)
 func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing.T) {
 	t.Parallel()
 
-	for _, permission := range slices.Concat(bootstrap.PermissionsFor(nil), deployOf(environment.TierProduction).ProjectPermissions().Permissions, deployOf(environment.TierProduction).Untagged().Permissions) {
+	for _, permission := range slices.Concat(bootstrap.PermissionsFor(nil), deployOf(environment.TierProduction).ProjectPermissions().Permissions) {
 		if strings.HasPrefix(permission, "datastore.indexes.") {
 			t.Errorf("a bootstrap or a deploy is granted %s, want datastore.schemas.*: Google's role reference lists only the schemas names", permission)
 		}

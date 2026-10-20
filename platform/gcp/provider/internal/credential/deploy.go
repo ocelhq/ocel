@@ -34,18 +34,6 @@ const (
 
 var TieredRoles = []string{RunRole, TopicsRole, BucketsRole, SecretsRole, RepositoriesRole, DatabasesRole, InstancesRole, AccountsRole, RunAsRole}
 
-var UntaggedKinds = []string{
-	"run.services",
-	"iam.serviceAccounts",
-	"artifactregistry.repositories",
-	"storage.buckets",
-	"cloudsql.instances",
-	"pubsub.topics",
-	"pubsub.subscriptions",
-	"secretmanager.secrets",
-	"datastore.databases",
-}
-
 var projectPermissions = []string{
 	"resourcemanager.projects.get",
 	"run.services.create",
@@ -88,15 +76,8 @@ func New(names names.Names, region string, tier environment.Tier) Deploy {
 
 func (d Deploy) TierCondition() *policy.Condition {
 	return &policy.Condition{
-		Title:      "ocel " + string(d.tier) + " tier",
-		Expression: fmt.Sprintf("resource.matchTag('%s', '%s')", d.names.TierTagKeyPath(), d.tier),
-	}
-}
-
-func (d Deploy) UntaggedCondition() *policy.Condition {
-	return &policy.Condition{
-		Title:      "ocel untagged",
-		Expression: fmt.Sprintf("!resource.hasTagKey('%s')", d.names.TierTagKeyPath()),
+		Title:      "ocel " + string(d.tier) + " tier or untagged",
+		Expression: fmt.Sprintf("!resource.hasTagKey('%[1]s') || resource.matchTag('%[1]s', '%[2]s')", d.names.TierTagKeyPath(), d.tier),
 	}
 }
 
@@ -108,18 +89,6 @@ func (d Deploy) ProjectPermissions() Grant {
 	return Grant{
 		Permissions: projectPermissions,
 		Why:         "Google checks creating a resource, listing a kind and reading the project against the project, which carries no tier tag",
-	}
-}
-
-func (d Deploy) Untagged() Grant {
-	var permissions []string
-	for _, kind := range UntaggedKinds {
-		permissions = append(permissions, kind+".get", kind+".createTagBinding", kind+".listTagBindings")
-	}
-	return Grant{
-		Permissions: permissions,
-		Condition:   d.UntaggedCondition(),
-		Why:         "a resource a deploy has just made carries no tier tag until the deploy binds its tier's value, and this reads it and binds it and does nothing else",
 	}
 }
 
@@ -186,7 +155,7 @@ func (d Deploy) AppGrants() Grant {
 }
 
 func (d Deploy) Grants() []Grant {
-	grants := make([]Grant, 0, len(TieredRoles)+12)
+	grants := make([]Grant, 0, len(TieredRoles)+11)
 	for _, role := range TieredRoles {
 		grants = append(grants, d.Tiered(role))
 	}
@@ -201,6 +170,5 @@ func (d Deploy) Grants() []Grant {
 		d.AppGrants(),
 		d.Parts(),
 		d.ProjectPermissions(),
-		d.Untagged(),
 	)
 }

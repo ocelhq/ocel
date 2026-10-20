@@ -570,7 +570,9 @@ each tier's credential for your project and namespace. For the preview tier they
 - `roles/run.admin`, `roles/pubsub.admin`, `roles/storage.admin`, `roles/secretmanager.admin`,
   `roles/artifactregistry.admin`, `roles/datastore.owner`, `roles/cloudsql.admin`,
   `roles/iam.serviceAccountAdmin` and `roles/iam.serviceAccountUser`, each on the condition
-  `resource.matchTag('my-project/ocel-tier', 'preview')` and nothing else.
+  `!resource.hasTagKey('my-project/ocel-tier') || resource.matchTag('my-project/ocel-tier', 'preview')`:
+  a resource carrying the preview value, or no `ocel-tier` value at all. A resource carrying
+  `production` is out of its reach.
 - `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the tier's key and its projects' keys, and
   `roles/cloudkms.admin` on its projects' keys, by name: KMS keys take no tag.
 - `roles/memorystore.admin` and `roles/cloudscheduler.admin` on the project, since Memorystore
@@ -585,16 +587,13 @@ each tier's credential for your project and namespace. For the preview tier they
 - A custom role you make, unconditioned, holding what Google checks against the project itself:
   creating each kind of resource a deploy makes, listing services, accounts, topics, databases,
   instances and keys, and reading the project.
-- A custom role you make on the condition `!resource.hasTagKey('my-project/ocel-tier')`, holding
-  only `get`, `createTagBinding` and `listTagBindings` on each kind a deploy binds. A resource a
-  deploy has just made carries no tag until the deploy binds it, and this is what lets it.
 
 A condition holds a comma inside `matchTag`, so pass it from a file:
 
 ```bash
 cat > preview.yaml <<'EOF'
-title: ocel preview tier
-expression: resource.matchTag('my-project/ocel-tier', 'preview')
+title: ocel preview tier or untagged
+expression: "!resource.hasTagKey('my-project/ocel-tier') || resource.matchTag('my-project/ocel-tier', 'preview')"
 EOF
 gcloud projects add-iam-policy-binding my-project \
   --member=serviceAccount:deploy-preview@my-project.iam.gserviceaccount.com \
@@ -624,8 +623,13 @@ A prune or a destroy untags the images no Cloud Run revision runs any more, and 
 deletes an untagged image a week later. A deploy that finds its image already pushed tags it again
 if a prune untagged it since.
 
-What the tag does not fence yet:
+Within one project the tag keeps each tier's deploys to their own resources, and keeps a tier's
+credential off what carries the other tier's value. It is not a wall against someone who holds a
+tier's credential and sets out to misuse it: for that, give each tier a project of its own. What
+the tag does not fence:
 
+- A resource carrying no `ocel-tier` value, whoever made it, is in reach of both tiers' deploy
+  credentials, and so is a resource a deploy has just made until Google applies its tier's binding.
 - Lists are checked against the project, so a deploy credential can list the other tier's
   services, accounts, topics, buckets, secrets and databases, and a Cloud Run service's listing
   holds its environment variables.
