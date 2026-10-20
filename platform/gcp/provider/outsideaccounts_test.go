@@ -177,3 +177,45 @@ func TestABootstrapAccountCarriesItsTiersTagBeforeItIsGrantedAnything(t *testing
 		t.Errorf("the account carried %v when its grants were made, want the production value already: an account granted before it is tagged can be bound to the other tier first", boundWhenGranted)
 	}
 }
+
+func TestABootstrapLeavesAnotherNamespacesAccountsForThatNamespaceToBindToItsTier(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	server, c, tags := projectHoldingAccounts(t)
+	another := []string{
+		"shop-prod-realtime@acme-prod.iam.gserviceaccount.com",
+		"shop-preview-env-sync@acme-prod.iam.gserviceaccount.com",
+		"shop-app-89abcdef01@acme-prod.iam.gserviceaccount.com",
+	}
+	const lookalike = "billing-prod-runner@acme-prod.iam.gserviceaccount.com"
+	server.Listed = slices.Concat(server.Listed, another, []string{lookalike})
+	p := pushing(t, c.Endpoint)
+	tags.Tagged(p.resolved)
+	b := bootstrap.Engine{Clients: p.resolved}
+	read := bootstrap.Survey{Tier: environment.TierPreview, Names: c.Names, Held: map[string]bool{}, Mending: map[string]string{}}
+	target := outsideTag(c)
+
+	found, err := b.PresenceOf(ctx, read, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read.Held[target.ID()], read.Mending[target.ID()] = true, found.Mends
+	if err := b.Provision(ctx, read, target, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, email := range another {
+		if strings.Contains(found.Mends, email) {
+			t.Errorf("the plan names %s among the accounts ocel does not make: another namespace's deploy makes it and binds it to its tier", email)
+		}
+		if got := tags.Bound(accountParent(email)); len(got) != 0 {
+			t.Errorf("%s carries %v, want nothing: bound to outside before its own namespace binds its tier, it can never be bound to that tier", email, got)
+		}
+	}
+	if got := tags.Bound(accountParent(lookalike)); !slices.Equal(got, []string{tags.Values[c.OutsideTagValuePath()].Name}) {
+		t.Errorf("%s carries %v, want the outside value: no ocel namespace makes an account of that name", lookalike, got)
+	}
+	if _, err := p.PlanPreflight(ctx, preflightOf(environment.TierPreview)); err != nil {
+		t.Errorf("PlanPreflight() beside another namespace's untagged accounts = %v, want no refusal", err)
+	}
+}
