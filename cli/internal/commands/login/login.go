@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
 type Dependencies struct {
@@ -53,11 +54,11 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	apiURL := console.BaseURL(existing.APIURL)
 
 	if loadErr == nil && !force && sameConsole(existing.APIURL, apiURL) {
+		offer, err := console.NewCloudOffers(dependencies.LoadCredentials, dependencies.SaveCredentials).Resolve(ctx, existing)
 		if asJSON {
-			return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: existing.Email, ConsoleUrl: apiURL})
+			return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: existing.Email, ConsoleUrl: apiURL, Cloud: cloudOfferProto(offer)})
 		}
 		fmt.Fprintf(out, "Already logged in as %s at %s. Pass --force to log in again.\n", identity(existing), apiURL)
-		offer, err := console.NewCloudOffers(dependencies.LoadCredentials, dependencies.SaveCredentials).Resolve(ctx, existing)
 		printCloudOffer(out, apiURL, offer, err)
 		return nil
 	}
@@ -110,7 +111,7 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	}
 
 	if asJSON {
-		return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: creds.Email, ConsoleUrl: apiURL})
+		return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: creds.Email, ConsoleUrl: apiURL, Cloud: cloudOfferProto(offer)})
 	}
 	fmt.Fprintf(out, "%s Logged in as %s\n", p.PassMark(), identity(creds))
 	if store == console.FileStore {
@@ -118,6 +119,13 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	}
 	printCloudOffer(out, apiURL, offer, offerErr)
 	return nil
+}
+
+func cloudOfferProto(offer *console.CloudOffer) *consolev1.CloudOffer {
+	if offer == nil {
+		return nil
+	}
+	return &consolev1.CloudOffer{ApiUrl: offer.APIURL, ProviderUrl: offer.ProviderURL, Audience: offer.Audience}
 }
 
 func printCloudOffer(out io.Writer, apiURL string, offer *console.CloudOffer, err error) {

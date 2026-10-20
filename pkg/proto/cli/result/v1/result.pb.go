@@ -8,6 +8,7 @@ package resultv1
 
 import (
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	v12 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -3244,6 +3245,7 @@ type LoginResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
 	ConsoleUrl    string                 `protobuf:"bytes,2,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
+	Cloud         *v12.CloudOffer        `protobuf:"bytes,3,opt,name=cloud,proto3" json:"cloud,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3290,6 +3292,13 @@ func (x *LoginResult) GetConsoleUrl() string {
 		return x.ConsoleUrl
 	}
 	return ""
+}
+
+func (x *LoginResult) GetCloud() *v12.CloudOffer {
+	if x != nil {
+		return x.Cloud
+	}
+	return nil
 }
 
 type LogoutResult struct {
@@ -4488,7 +4497,7 @@ var File_cli_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/result/v1/result.proto\x12\rcli.result.v1\x1a'common/environment/v1/environment.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bprovider/cost/v1/cost.proto\"V\n" +
+	"\x1acli/result/v1/result.proto\x12\rcli.result.v1\x1a'common/environment/v1/environment.proto\x1a\x18console/v1/console.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bprovider/cost/v1/cost.proto\"V\n" +
 	"\x10BindingSetResult\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05owner\x18\x02 \x01(\tR\x05owner\x12\x18\n" +
@@ -4752,11 +4761,12 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x06groups\x18\x01 \x03(\v2\x1e.cli.result.v1.PermissionGroupR\x06groups\"_\n" +
 	"\x0fPermissionGroup\x12\x18\n" +
 	"\aheading\x18\x01 \x01(\tR\aheading\x122\n" +
-	"\bdocument\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\bdocument\"D\n" +
+	"\bdocument\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\bdocument\"r\n" +
 	"\vLoginResult\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1f\n" +
 	"\vconsole_url\x18\x02 \x01(\tR\n" +
-	"consoleUrl\"V\n" +
+	"consoleUrl\x12,\n" +
+	"\x05cloud\x18\x03 \x01(\v2\x16.console.v1.CloudOfferR\x05cloud\"V\n" +
 	"\fLogoutResult\x12\x1d\n" +
 	"\n" +
 	"logged_out\x18\x01 \x01(\bR\tloggedOut\x12'\n" +
@@ -4970,7 +4980,8 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*v11.Estimate)(nil),             // 74: provider.cost.v1.Estimate
 	(v1.Lifecycle)(0),                // 75: common.environment.v1.Lifecycle
 	(*structpb.Value)(nil),           // 76: google.protobuf.Value
-	(*structpb.Struct)(nil),          // 77: google.protobuf.Struct
+	(*v12.CloudOffer)(nil),           // 77: console.v1.CloudOffer
+	(*structpb.Struct)(nil),          // 78: google.protobuf.Struct
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
 	9,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
@@ -5024,32 +5035,33 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	45, // 48: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
 	47, // 49: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
 	76, // 50: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
-	51, // 51: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
-	52, // 52: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
-	55, // 53: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
-	55, // 54: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
-	70, // 55: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
-	3,  // 56: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
-	60, // 57: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
-	77, // 58: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
-	4,  // 59: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
-	62, // 60: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
-	64, // 61: cli.result.v1.ProjectListResult.projects:type_name -> cli.result.v1.ProjectSummary
-	72, // 62: cli.result.v1.ProjectSummary.tiers:type_name -> common.environment.v1.Tier
-	66, // 63: cli.result.v1.ProjectShowResult.environments:type_name -> cli.result.v1.ProjectEnvironmentStatus
-	67, // 64: cli.result.v1.ProjectShowResult.resources:type_name -> cli.result.v1.ProjectResourceGroup
-	68, // 65: cli.result.v1.ProjectShowResult.shared:type_name -> cli.result.v1.ProjectSharedPart
-	72, // 66: cli.result.v1.ProjectEnvironmentStatus.tier:type_name -> common.environment.v1.Tier
-	71, // 67: cli.result.v1.ProjectEnvironmentStatus.releases:type_name -> cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
-	72, // 68: cli.result.v1.ProjectResourceGroup.tier:type_name -> common.environment.v1.Tier
-	13, // 69: cli.result.v1.ProjectResourceGroup.resources:type_name -> cli.result.v1.PhysicalResource
-	72, // 70: cli.result.v1.ProjectSharedPart.tier:type_name -> common.environment.v1.Tier
-	13, // 71: cli.result.v1.ProjectSharedPart.resources:type_name -> cli.result.v1.PhysicalResource
-	72, // [72:72] is the sub-list for method output_type
-	72, // [72:72] is the sub-list for method input_type
-	72, // [72:72] is the sub-list for extension type_name
-	72, // [72:72] is the sub-list for extension extendee
-	0,  // [0:72] is the sub-list for field type_name
+	77, // 51: cli.result.v1.LoginResult.cloud:type_name -> console.v1.CloudOffer
+	51, // 52: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
+	52, // 53: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
+	55, // 54: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
+	55, // 55: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
+	70, // 56: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
+	3,  // 57: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
+	60, // 58: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
+	78, // 59: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
+	4,  // 60: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
+	62, // 61: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
+	64, // 62: cli.result.v1.ProjectListResult.projects:type_name -> cli.result.v1.ProjectSummary
+	72, // 63: cli.result.v1.ProjectSummary.tiers:type_name -> common.environment.v1.Tier
+	66, // 64: cli.result.v1.ProjectShowResult.environments:type_name -> cli.result.v1.ProjectEnvironmentStatus
+	67, // 65: cli.result.v1.ProjectShowResult.resources:type_name -> cli.result.v1.ProjectResourceGroup
+	68, // 66: cli.result.v1.ProjectShowResult.shared:type_name -> cli.result.v1.ProjectSharedPart
+	72, // 67: cli.result.v1.ProjectEnvironmentStatus.tier:type_name -> common.environment.v1.Tier
+	71, // 68: cli.result.v1.ProjectEnvironmentStatus.releases:type_name -> cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
+	72, // 69: cli.result.v1.ProjectResourceGroup.tier:type_name -> common.environment.v1.Tier
+	13, // 70: cli.result.v1.ProjectResourceGroup.resources:type_name -> cli.result.v1.PhysicalResource
+	72, // 71: cli.result.v1.ProjectSharedPart.tier:type_name -> common.environment.v1.Tier
+	13, // 72: cli.result.v1.ProjectSharedPart.resources:type_name -> cli.result.v1.PhysicalResource
+	73, // [73:73] is the sub-list for method output_type
+	73, // [73:73] is the sub-list for method input_type
+	73, // [73:73] is the sub-list for extension type_name
+	73, // [73:73] is the sub-list for extension extendee
+	0,  // [0:73] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }

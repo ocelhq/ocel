@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -100,7 +102,7 @@ func TestLoginAsJSONOfAnExistingLoginPrintsItsAccount(t *testing.T) {
 	dependencies := newTestDependencies()
 	dependencies.Presentation = clitest.ResolveJSONPresentation
 	dependencies.LoadCredentials = func() (console.Credentials, error) {
-		return console.Credentials{AccessToken: "secret-token", APIURL: "https://console.example.com/", Email: "ada@example.com"}, nil
+		return console.Credentials{AccessToken: "secret-token", APIURL: "https://console.example.com/", Email: "ada@example.com", CloudFetchedAt: time.Now()}, nil
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -201,6 +203,54 @@ func TestLoginSavesWhetherTheConsoleOffersOcelCloudAndSaysSo(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoginAsJSONSaysWhetherTheConsoleOffersOcelCloud(t *testing.T) {
+	offered := &consolev1.CloudOffer{ApiUrl: "https://cloud.example.test", ProviderUrl: "https://cloud.example.test/provider", Audience: "ocel-cloud"}
+
+	t.Run("a new login", func(t *testing.T) {
+		t.Setenv(console.URLEnvVar, serveDeviceLogin(t, &describedConsole{cloud: offered}))
+		dependencies := newTestDependencies()
+		dependencies.Presentation = clitest.ResolveJSONPresentation
+		dependencies.LoadCredentials = func() (console.Credentials, error) { return console.Credentials{}, console.ErrNotLoggedIn }
+		dependencies.SaveCredentials = func(console.Credentials) (console.CredentialStore, error) { return console.KeyringStore, nil }
+
+		var stdout bytes.Buffer
+		if err := run(context.Background(), dependencies, false, strings.NewReader(""), &stdout, &bytes.Buffer{}); err != nil {
+			t.Fatal(err)
+		}
+		var got resultv1.LoginResult
+		clitest.DecodeResultInto(t, stdout.String(), &got)
+		if !proto.Equal(got.GetCloud(), offered) {
+			t.Errorf("login result = %v, want the offer %v", &got, offered)
+		}
+	})
+
+	t.Run("an existing login", func(t *testing.T) {
+		t.Setenv(console.URLEnvVar, "https://console.example.com")
+		dependencies := newTestDependencies()
+		dependencies.Presentation = clitest.ResolveJSONPresentation
+		dependencies.LoadCredentials = func() (console.Credentials, error) {
+			return console.Credentials{
+				AccessToken:    "tok",
+				APIURL:         "https://console.example.com",
+				Email:          "ada@example.com",
+				Store:          console.KeyringStore,
+				Cloud:          &console.CloudOffer{APIURL: offered.GetApiUrl(), ProviderURL: offered.GetProviderUrl(), Audience: offered.GetAudience()},
+				CloudFetchedAt: time.Now(),
+			}, nil
+		}
+
+		var stdout bytes.Buffer
+		if err := run(context.Background(), dependencies, false, strings.NewReader(""), &stdout, &bytes.Buffer{}); err != nil {
+			t.Fatal(err)
+		}
+		var got resultv1.LoginResult
+		clitest.DecodeResultInto(t, stdout.String(), &got)
+		if !proto.Equal(got.GetCloud(), offered) {
+			t.Errorf("login result = %v, want the offer %v", &got, offered)
+		}
+	})
 }
 
 func TestLoginOfAnExistingLoginSaysWhetherTheConsoleOffersOcelCloud(t *testing.T) {
