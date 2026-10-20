@@ -52,9 +52,26 @@ ocel bootstrap production
 ocel deploy
 ```
 
-The bootstrap makes only what every deploy needs. The first deploy that needs something more adds
-it to the tier with the deploy credential and shows it in its plan: the network a database or kv
-store is reached over, and the load balancer of the `alb` edge. `ocel bootstrap status`
+The bootstrap makes only what every deploy needs and what only a bootstrap credential may make:
+the `ocel-tier` tag key and its values, the tier's records database, its state bucket, the
+passphrase its state is encrypted under, its image repository, its log view, and the custom roles
+a deploy credential is granted but may never make or change. It checks only the APIs those need.
+
+Everything else is a part that the first deploy needing it adds to the tier with the deploy
+credential, and shows in its plan as added on first use:
+
+| Part | Holds | Added by the first deploy that |
+| --- | --- | --- |
+| `keys` | the key ring and the tier's KMS key | seals a value: a preview, a secret or a binding, a database, or a deploy behind the `alb` or Cloudflare edge |
+| `edge-bucket` | the tier's [edge bucket](#buckets-of-a-tier) | ships a Next app, or deploys behind the `alb` or Cloudflare edge |
+| `cache-bucket` | the tier's [cache bucket](#buckets-of-a-tier) | ships a Next app, or a build that revalidates |
+| `private-network` | the tier's [network](#private-network) | declares a database or kv store |
+| `alb` | the [load balancer](#edge) of the `alb` edge | deploys behind it |
+| `realtime` | the account the tier's [realtime gateways](#realtime) run as | declares a realtime |
+| `topics` | the push account and delay queue of [topics and tasks](#topics-tasks-and-workers) | declares a topic or task |
+| `env-source-sync` | the [env source sync](/docs/env-sources), its schedule and its account | schedules an env source |
+
+Each part checks the APIs it needs when it is added. `ocel bootstrap status`
 lists each of these parts, who added it, which projects use it and what it costs idle, and
 `ocel bootstrap production` makes each recorded part again if it was changed or deleted by hand.
 `ocel bootstrap production --remove <part>` takes one part down, `cloudflare-origin` included, and
@@ -69,17 +86,20 @@ tag records. Only that project's apps may write it. The first deploy that needs 
 deploy plans it, and removing the project from the tier deletes it. It has no standing charge, only
 the reads, writes and storage its records use.
 
-The bootstrap gives each tier three Cloud Storage buckets in its region, named
+### Buckets of a tier
+
+A tier has up to three Cloud Storage buckets in its region, named
 `<namespace>-prod-state-<tag>`, `<namespace>-prod-edge-<tag>` and `<namespace>-prod-cache-<tag>`
-in production and `<namespace>-preview-…` in previews. Bucket names are global, so each `<tag>` is
+in production and `<namespace>-preview-…` in previews. The bootstrap makes the state bucket; the
+`edge-bucket` and `cache-bucket` parts add the other two. Bucket names are global, so each `<tag>` is
 six random lowercase letters and digits, picked once when the bucket is made. The state bucket
 holds the tier's Pulumi state; it keeps a replaced version for 7 days, and no app may read it. The edge
 bucket holds only what an edge or the load balancer may serve: static files, image config,
 prerendered pages and route tables. The cache bucket holds what only an app's own code
 reads, its fetch and `"use cache"` entries and its tag clock. It deletes a fetch or `"use cache"`
 entry 30 days after its last write, and never the tag clock, which a quiet app rewrites only when it
-revalidates. The bootstrap first makes a Firestore database named for the namespace, records
-each bucket's name in it before it makes the bucket, and a deploy reads the names from there:
+revalidates. The bootstrap first makes a Firestore database named for the namespace, each bucket's
+name is recorded in it before the bucket is made, and a deploy reads the names from there:
 nothing lists the project's buckets. An app's bucket is found the same way, from the name its first deploy recorded for its
 project, environment and bucket.
 
@@ -310,7 +330,8 @@ previews is an exact host rule under it.
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
 Name it and a hostname is forwarded through Cloudflare to a load balancer of its own, which
 `ocel bootstrap` provisions per tier at the same price as the `alb` one, as the
-`cloudflare-origin` part. Only the bootstrap credential may make it, so the first deploy through
+`cloudflare-origin` part, adding the `edge-bucket` and `keys` parts the worker reads with it. Only
+the bootstrap credential may make it, so the first deploy through
 Cloudflare records that its project wants it and stops: in a terminal Ocel offers to add it there
 and then, and a script or CI is refused with `ocel bootstrap <tier>`, which adds it. That load balancer
 refuses any client that does not present the certificate your Cloudflare zone presents to
@@ -402,7 +423,7 @@ not changed in place, so a deploy asking for another one is refused.
 The instance has no public address. It is reached at a private address on the tier's
 [private network](#private-network), made for it by a Private Service Connect endpoint that
 bills about $7.30 a month of its own, and refuses any connection that is not encrypted. Apps connect as the `ocel` user to the `ocel` database with a
-password ocel generates, keeps sealed under the tier key, and hands each app in its binding.
+password ocel generates, keeps sealed under the project's key, and hands each app in its binding.
 
 Creating an instance takes several minutes. `ocel projects destroy`, or dropping the database from the
 code, deletes the instance and its data; a database created again afterwards is
@@ -445,7 +466,7 @@ gcloud services enable compute.googleapis.com memorystore.googleapis.com sqladmi
 That is one VPC network with one subnetwork, `10.240.0.0/20`, in the bootstrap's region, and
 the service connection policies Memorystore and Cloud SQL connect each instance through. None of
 it bills. A deploy that finds a service switched off is refused, naming the command that switches
-it on. The bootstrap grants the Cloud Run service agent `roles/compute.networkUser` on the project,
+it on. The part grants the Cloud Run service agent `roles/compute.networkUser` on the subnetwork,
 so Cloud Run services and functions bound to a store or database reach private addresses over
 that subnetwork through direct VPC egress; the rest of their traffic leaves as before.
 
@@ -465,9 +486,10 @@ Each worker runs as a second Cloud Run service from its app's image, scaled from
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
 gets at most 600 seconds, the longest a push subscription waits for an answer.
 
-The bootstrap makes the tier's delay queue, `<namespace>-prod-delays` or `<namespace>-preview-delays`, and the push account
-Pub/Sub signs each push as, so it wants Cloud Tasks and Pub/Sub on. The first deploy declaring a
-topic or task makes the project's own database of runs.
+The first deploy declaring a topic or task adds the tier's `topics` part: its delay queue,
+`<namespace>-prod-delays` or `<namespace>-preview-delays`, and the push account Pub/Sub signs each
+push as, which Pub/Sub's service agent may sign as and nothing else may. The part wants Cloud Tasks
+and Pub/Sub on. That deploy also makes the project's own database of runs.
 
 None of it bills while idle. A Next app that declares neither uses no queue. `ocel bootstrap
 destroy` deletes every project's databases and purges the queue, keeping it, since Cloud Tasks will
@@ -480,23 +502,15 @@ is not atomic. A deploy that changes a topic's `ordered` is refused while any of
 kept, since Pub/Sub cannot change a subscription's ordering: rename the consumers to change it.
 
 A deploy also keeps the app's access to the tier's delay queue. Cloud Tasks queues take no tag and
-Google cannot narrow that grant by condition, so each tier's deploy credential holds the role on
-its own tier's queue alone:
-
-```bash
-gcloud tasks queues add-iam-policy-binding ocel-prod-delays \
-  --location=europe-west1 --project=my-project \
-  --member=serviceAccount:deploy-production@my-project.iam.gserviceaccount.com \
-  --role=roles/cloudtasks.queueAdmin
-```
-
-The preview tier's credential takes the same grant on `ocel-preview-delays`. A deploy that lacks
-it is refused, naming it.
+Google cannot narrow the grant to a queue that does not exist yet, so each tier's deploy credential
+holds `roles/cloudtasks.queueAdmin` on the project, which reaches the other tier's queue too. A deploy
+that lacks it is refused, naming it.
 
 ## Realtime
 
 Each environment's realtime resources share one Cloud Run service running the Ocel gateway,
-which runs as a service account of the tier's own that may read the tier's realtime keys
+which runs as a service account of the tier's own, added with the tier's `realtime` part by the
+first deploy declaring a realtime. The deploy grants it read access on each gateway's keys secret
 and no other secret. See [Realtime](/docs/sdk/realtime#on-google-cloud) for how sockets,
 publishes, keys, upgrades and cost work there.
 
@@ -505,10 +519,9 @@ publish to one instance, so each instance hears every publish through its own su
 environment's Pub/Sub topic: it makes the subscription when it starts and deletes it when it stops,
 and a subscription left by an instance that was killed expires a day after its last pull. Sockets
 on an older revision keep receiving while it drains. The tier's realtime account may publish on and
-subscribe to its environment's topic, and holds the `<namespace>_realtime_subscriptions` role on the
-project to make, pull and delete subscriptions; Pub/Sub honours no IAM condition, so that role
-reaches every subscription in the project. A tier bootstrapped before this needs `ocel bootstrap`
-again.
+subscribe to its environment's topic, and holds `roles/pubsub.editor` on the project, on its tier's
+condition, to make, pull and delete subscriptions. Its instances make their subscriptions untagged,
+so that role reaches every subscription in the project.
 
 ## Logs
 
@@ -528,17 +541,20 @@ the next deploy.
 
 ## What to grant
 
-Turn the services on once:
+Turn on the services the bootstrap checks, and Cloud Run, which every deploy runs on:
 
 ```bash
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
-  cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
-  iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com \
-  iamcredentials.googleapis.com pubsub.googleapis.com cloudtasks.googleapis.com \
-  cloudresourcemanager.googleapis.com logging.googleapis.com --project my-project
+  secretmanager.googleapis.com artifactregistry.googleapis.com iam.googleapis.com \
+  cloudresourcemanager.googleapis.com logging.googleapis.com run.googleapis.com \
+  --project my-project
 ```
 
-Apps sign their buckets' urls through `iamcredentials.googleapis.com`.
+Each part checks its own when a deploy adds it: `cloudkms.googleapis.com` for `keys`,
+`pubsub.googleapis.com` for `realtime`, `pubsub.googleapis.com` and `cloudtasks.googleapis.com`
+for `topics`, `cloudscheduler.googleapis.com` for `env-source-sync`, and those
+[the private network](#private-network) names. A deploy declaring a bucket checks
+`iamcredentials.googleapis.com`, which apps sign their buckets' urls through.
 
 ### The tier tag
 
@@ -580,23 +596,24 @@ each tier's credential for your project and namespace. For the preview tier they
   `production` is out of its reach. The project carries no `ocel-tier` value, so these roles
   also hold what Google checks against the project: creating each kind of resource a deploy
   makes, listing them, and reading the project.
-- `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the tier's key and its projects' keys, and
-  `roles/cloudkms.admin` on its projects' keys, by name: KMS keys take no tag.
+- `roles/cloudkms.cryptoKeyEncrypterDecrypter` and `roles/cloudkms.admin` on the tier's key and
+  its projects' keys, by name: KMS keys take no tag.
 - `roles/memorystore.admin` and `roles/cloudscheduler.admin` on the project, since Memorystore
   instances and Cloud Scheduler jobs take no tag.
 - `roles/logging.viewAccessor` on the tier's log view alone.
-- `roles/cloudtasks.queueAdmin` on the tier's delay queue, and
-  `roles/resourcemanager.tagUser` on the tier's tag value alone.
+- `roles/cloudtasks.queueAdmin` on the project, since Cloud Tasks queues take no tag.
+- `roles/resourcemanager.tagUser` on the tier's tag value alone.
 - `roles/resourcemanager.projectIamAdmin`, on a condition that lets it grant and revoke
-  `roles/datastore.viewer`, `roles/datastore.user` and the custom role that clears Cloud CDN and
-  no others.
+  `roles/datastore.viewer`, `roles/datastore.user`, `roles/pubsub.editor` and the custom role that
+  clears Cloud CDN and no others.
 - The `<namespace with _ for ->_parts` role `ocel bootstrap` makes, unconditioned: it creates the
-  tier's network, subnetwork and service connection policies, which carry no tag.
-- A custom role you make, holding `cloudkms.cryptoKeys.create` and `cloudkms.cryptoKeys.list`,
-  on the condition that the resource is Ocel's key ring by name: Cloud KMS checks both against
-  the ring, which both tiers share, so another key ring in the project is out of its reach.
-  `roles/cloudkms.admin` on that ring would hand over the ring's policy, which every key in it
-  inherits.
+  tier's network, subnetwork and service connection policies, which carry no tag, and grants
+  Cloud Run's agent on the subnetwork.
+- A custom role you make, unconditioned, holding `cloudkms.keyRings.create`,
+  `cloudkms.keyRings.get`, `cloudkms.cryptoKeys.create` and `cloudkms.cryptoKeys.list`: Cloud KMS
+  checks making and reading the key ring, and making and listing its keys, against the ring both
+  tiers share, and `roles/cloudkms.admin` on that ring would hand over the ring's policy, which
+  every key in it inherits.
 
 A condition holds a comma inside `matchTag`, so pass it from a file:
 
@@ -640,4 +657,6 @@ the tag does not fence:
   services, accounts, topics, buckets, secrets and databases, and a Cloud Run service's listing
   holds its environment variables.
 - Memorystore instances and Cloud Scheduler jobs take no tag, and the tier's network carries none.
-- A deploy credential may grant the Firestore roles above on the whole project, to any member.
+- A deploy credential may grant the Firestore roles and `roles/pubsub.editor` above on the whole
+  project, to any member, and the parts role may set the policy of any subnetwork in the project.
+- `roles/cloudtasks.queueAdmin` reaches the other tier's delay queue.

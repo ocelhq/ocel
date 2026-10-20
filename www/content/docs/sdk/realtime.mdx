@@ -205,4 +205,4 @@ A socket is opened with a connect token the handler mints, valid for the resourc
 - One instance (1 vCPU, 1 GiB) holds 950 sockets; the next gets 503 and retries.
 - A gateway upgrade rolls a revision: sockets on the old one get no events until they reconnect.
 - Billed per second a socket is open: about $70 a month for one always-connected browser, plus requests and egress.
-- The deploy credentials need `roles/secretmanager.editor` on their namespace's realtime secrets ([what to grant](/docs/providers/gcp#what-to-grant)). A project bootstrapped before realtime existed is refused until you bootstrap again.
+- The deploy credentials need `roles/secretmanager.editor` on their namespace's realtime secrets ([what to grant](/docs/providers/gcp#what-to-grant)). The first deploy declaring a realtime adds the account the tier's gateways run as, as the tier's `realtime` part.
