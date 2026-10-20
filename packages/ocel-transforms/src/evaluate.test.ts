@@ -175,6 +175,15 @@ describe("evaluate", () => {
     ["vpc", "instanceTenancy"],
     ["isolatedSubnet", "ipv6Native"],
     ["natGateway", "connectivityType"],
+    ["privateSubnet", "ipv6CidrBlock"],
+    ["publicSubnet", "outpostArn"],
+    ["natGateway", "privateIp"],
+    ["natGateway", "secondaryAllocationIds"],
+    ["natGateway", "secondaryPrivateIpAddresses"],
+    ["natAddress", "address"],
+    ["natAddress", "instance"],
+    ["natAddress", "networkInterface"],
+    ["natAddress", "associateWithPrivateIp"],
   ])("refuses %s.%s on the tier's network, whose layout ocel keeps", (key, field) => {
     const modules = [
       module(
