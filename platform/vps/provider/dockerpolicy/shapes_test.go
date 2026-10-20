@@ -93,12 +93,12 @@ func TestEveryNetworkVerbOnAContainerNeedsTheContainerToBeOcels(t *testing.T) {
 
 	policy, _ := aPolicy(t)
 	for _, argv := range [][]string{
-		{"network", "connect", "ocel-production-shop", "coolify-db"},
-		{"network", "connect", "--alias", "db", "ocel-production-shop", "coolify-db"},
-		{"network", "disconnect", "ocel-production-shop", "coolify-db"},
+		{"network", "connect", "ocel-prod-shop", "coolify-db"},
+		{"network", "connect", "--alias", "db", "ocel-prod-shop", "coolify-db"},
+		{"network", "disconnect", "ocel-prod-shop", "coolify-db"},
 		{"network", "disconnect", "--force", "coolify", "coolify-proxy"},
-		{"network", "disconnect", "ocel-production-shop"},
-		{"network", "disconnect", "--privileged", "ocel-production-shop", "shop-web-abc"},
+		{"network", "disconnect", "ocel-prod-shop"},
+		{"network", "disconnect", "--privileged", "ocel-prod-shop", "shop-web-abc"},
 	} {
 		inv, err := policy.Open(context.Background(), argv)
 		inv.Close()

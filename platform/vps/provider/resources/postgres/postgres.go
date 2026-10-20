@@ -54,16 +54,16 @@ func resolvePostgresContainer(in resources.ProvisionRequest) (container.Spec, er
 			in.Resource.Name, version, strings.Join(images.PostgresVersions(), ", "))
 	}
 	return NewContainer(in.Ref, in.Resource.Name, postgresKind, officialimages.QualifyImage(image),
-		container.Volume{Path: postgresData, Generation: version}), nil
+		container.Volume{Path: postgresData, Generation: version})
 }
 
-func namePostgres(ref provider.StackRef, database, kind string) string {
-	return container.Name(ref.Project, ref.Name.String(), database, kind)
-}
-
-func NewContainer(ref provider.StackRef, database, kind, image string, volume container.Volume) container.Spec {
+func NewContainer(ref provider.StackRef, database, kind, image string, volume container.Volume) (container.Spec, error) {
+	name, err := container.Name(ref, database, kind)
+	if err != nil {
+		return container.Spec{}, err
+	}
 	return container.Spec{
-		Name:     namePostgres(ref, database, kind),
+		Name:     name,
 		Project:  ref.Project,
 		Resource: database,
 		Tier:     ref.Tier,
@@ -82,7 +82,7 @@ func NewContainer(ref provider.StackRef, database, kind, image string, volume co
 		},
 		Ready:  []string{"pg_isready", "-h", "127.0.0.1", "-U", Superuser},
 		Backup: boxapi.BackupPostgres,
-	}
+	}, nil
 }
 
 func (r Resource) container(ctx context.Context, in resources.ProvisionRequest) (container.Spec, error) {
@@ -147,7 +147,10 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 }
 
 func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
-	name := namePostgres(ref, binding.Name, postgresKind)
+	name, err := container.Name(ref, binding.Name, postgresKind)
+	if err != nil {
+		return err
+	}
 	progress.Say("Removing postgres " + binding.Name + ", its container " + name + " and its data")
 	return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
 }

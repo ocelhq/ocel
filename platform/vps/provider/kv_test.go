@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	storeContainer = "shop-prod-web-r0a1b2c3d-cache-kv"
+	storeContainer = "shop-prod-web-cache-kv-c332d5"
 	recordedKV     = "9a8b7c6d5e4f30211203f4e5d6c7b8a9f0e1d2c3b4a59687"
 )
 
@@ -83,7 +83,7 @@ func TestADeclaredKVStoreRunsAsOneConfinedContainerOnlyItsProjectReaches(t *test
 	}
 	runCommand := machine.commands()[run]
 	for _, want := range []string{
-		"'--network' 'ocel-production-shop'",
+		"'--network' 'ocel-prod-shop'",
 		"ocel.resource=cache",
 		"'--cap-drop' 'ALL'",
 		"'--user' 'valkey:valkey'",

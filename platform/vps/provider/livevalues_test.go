@@ -193,7 +193,10 @@ func TestLiveTheEnvFileIsSixHundredForTheDeployLoginForAsLongAsItExists(t *testi
 	vm, p := onABoxServingContainers(t)
 
 	spec := liveValueSpec(t, "two", resolving(t, p).declared)
-	physical := release.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.BuildID, spec.App.Image)
+	physical, err := release.ContainerName(spec.Ref.Project, spec.Ref.Name, "", spec.App.Image)
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := envfile.Path(environment.TierProduction, physical)
 
 	watching := "until=$(( $(date +%s) + 180 ))\n" +
@@ -269,9 +272,12 @@ func TestLiveAContainerThatCannotBeStartedTakesItsEnvFileWithIt(t *testing.T) {
 	resolved := resolving(t, p)
 	spec := liveValueSpec(t, "one", resolved.declared)
 	spec.App.Image = fixtureRepo + ":no-such-tag"
-	physical := release.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.BuildID, spec.App.Image)
+	physical, err := release.ContainerName(spec.Ref.Project, spec.Ref.Name, "", spec.App.Image)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	_, err := p.ProvisionContainers(context.Background(), spec, progress.Discard())
+	_, err = p.ProvisionContainers(context.Background(), spec, progress.Discard())
 	if err == nil {
 		t.Fatal("ProvisionContainers() over an image this box does not have succeeded")
 	}

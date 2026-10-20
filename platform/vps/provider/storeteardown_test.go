@@ -135,7 +135,7 @@ func TestTheStoreGoesDownWithTheLastBucketTheProjectKeepsInIt(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	store := vps.StoreName(ref)
+	store := vps.StoreName(t, ref)
 	for _, want := range []string{
 		"docker rm --force '" + store + "'",
 		"docker volume rm",
@@ -165,7 +165,7 @@ func TestAStoreStillContainingABucketIsLeftRunning(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	if strings.Contains(joined, "docker rm --force '"+vps.StoreName(ref)+"'") {
+	if strings.Contains(joined, "docker rm --force '"+vps.StoreName(t, ref)+"'") {
 		t.Errorf("one bucket of two went and the store went with it, taking the other bucket's objects down:\n%s", joined)
 	}
 }
@@ -218,7 +218,7 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	store := vps.StoreName(ref)
+	store := vps.StoreName(t, ref)
 	for _, want := range []string{"docker rm --force '" + store + "'", "/kept/" + own} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("a teardown that stopped after the store's credential went is never finished, and %q never ran on the run after it:\n%s", want, joined)
@@ -256,7 +256,7 @@ func TestAnAppThatGoesTakesItsOwnStoreAccountWithIt(t *testing.T) {
 	if other := vps.StoreAccountKey(ref.Project, naming.InfraStack(ref.Name.Env).String(), "api"); strings.Contains(joined, other) {
 		t.Errorf("removing one app reached for another app's account:\n%s", joined)
 	}
-	if strings.Contains(joined, "docker rm --force '"+vps.StoreName(ref)+"'") {
+	if strings.Contains(joined, "docker rm --force '"+vps.StoreName(t, ref)+"'") {
 		t.Errorf("one app of a project went and the store every app shares went with it:\n%s", joined)
 	}
 }

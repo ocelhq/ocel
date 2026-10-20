@@ -82,7 +82,7 @@ func TestADeclaredPostgresRunsAsOneContainerOnlyItsProjectReaches(t *testing.T) 
 	}
 	runCommand := machine.commands()[run]
 	for _, want := range []string{
-		"'--network' 'ocel-production-shop'",
+		"'--network' 'ocel-prod-shop'",
 		"ocel.tier=production",
 		"ocel.project=shop",
 		"ocel.resource=main",
@@ -99,6 +99,41 @@ func TestADeclaredPostgresRunsAsOneContainerOnlyItsProjectReaches(t *testing.T) 
 		if strings.Contains(runCommand, published) {
 			t.Errorf("the container publishes a port on the box, and a database only its project's network reaches is the whole boundary:\n%s", runCommand)
 		}
+	}
+}
+
+func TestTwoProjectsWhoseNamesJoinToTheSameStringNeverShareAPostgresContainerOrVolume(t *testing.T) {
+	t.Parallel()
+
+	created := func(project, env string) (host, volume string) {
+		t.Helper()
+		machine := &box{}
+		in := aPostgres(t, "17")
+		in.Ref.Project, in.Ref.Name = project, naming.InfraStack(env)
+		binding, err := over(machine).ProvisionPostgres(context.Background(), in, progress.Discard())
+		if err != nil {
+			t.Fatalf("ProvisionPostgres(%s/%s) = %v", project, env, err)
+		}
+		creating := machine.at("'docker' 'volume' 'create'")
+		if creating < 0 {
+			t.Fatalf("no volume was created for %s/%s:\n%s", project, env, strings.Join(machine.commands(), "\n"))
+		}
+		_, created, _ := strings.Cut(machine.commands()[creating], "'docker' 'volume' 'create'")
+		for _, word := range strings.Fields(created) {
+			if strings.Contains(word, "-g17") {
+				volume = word
+				break
+			}
+		}
+		return binding.Properties[provider.PropertyHost], volume
+	}
+	firstHost, firstVolume := created("acme-prod", "eu")
+	secondHost, secondVolume := created("acme", "prod-eu")
+	if firstHost == secondHost {
+		t.Errorf("acme-prod/eu and acme/prod-eu both run postgres main as %q, so the second deploy replaces the first project's server", firstHost)
+	}
+	if firstVolume == "" || firstVolume == secondVolume {
+		t.Errorf("acme-prod/eu and acme/prod-eu both keep postgres main's data in %q", firstVolume)
 	}
 }
 
@@ -145,7 +180,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 		fed := machine.feeds()[at]
 		raw, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(fed))
 		if strings.Contains(fed, password) || strings.Contains(string(raw), password) {
-			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", container.KeptPath(environment.TierProduction, "shop-prod-web-r0a1b2c3d-main-pg"))
+			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", container.KeptPath(environment.TierProduction, "shop-prod-web-main-pg-f8a073"))
 		}
 	}
 	sealing := machine.at(shell.Words([]string{boxapi.LiveBinary, boxapi.SealCommand}))
@@ -198,7 +233,7 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 	withRecordedPostgres(machine)
 	machine.refuses = func(command string) (ssh.Result, bool) {
 		if strings.Contains(command, "'docker' 'run'") {
-			return ssh.Result{Code: 125, Stderr: `docker: Error response from daemon: Conflict. The container name "/shop-prod-web-r0a1b2c3d-main-pg" is already in use by container "9f2c"`}, true
+			return ssh.Result{Code: 125, Stderr: `docker: Error response from daemon: Conflict. The container name "/shop-prod-web-main-pg-f8a073" is already in use by container "9f2c"`}, true
 		}
 		return ssh.Result{}, false
 	}
@@ -263,12 +298,12 @@ func TestARemovalReachesOnlyTheServerItsOwnStackProvisioned(t *testing.T) {
 	if strings.Contains(joined, "someone-elses-container") {
 		t.Errorf("a removal took its target from the record it was handed and ran %q: the name is the stack's and the resource's, and a record naming another container removes that one", joined)
 	}
-	if !strings.Contains(joined, "shop-prod-web-r0a1b2c3d-main-pg") {
+	if !strings.Contains(joined, "shop-prod-web-main-pg-f8a073") {
 		t.Errorf("a removal ran %q and never reached the server this stack provisioned for main", joined)
 	}
 }
 
-const takenDump = "/var/lib/ocel/production/backups/shop-prod-web-r0a1b2c3d-main-pg/20260919T000000Z.dump"
+const takenDump = "/var/lib/ocel/production/backups/shop-prod-web-main-pg-f8a073/20260919T000000Z.dump"
 
 func volumeOfAnotherMajor(machine *box, state string) {
 	withRecordedPostgres(machine)
@@ -305,18 +340,18 @@ func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *tes
 	}
 	swap := machine.commands()[swapped]
 	for _, want := range []string{
-		"trap ", "docker stop --time 60 'shop-prod-web-r0a1b2c3d-main-pg'",
-		"'shop-prod-web-r0a1b2c3d-main-pg-retired'",
-		"src=shop-prod-web-r0a1b2c3d-main-pg-g17",
-		"'restore' 'shop-prod-web-r0a1b2c3d-main-pg' '" + takenDump + "'",
-		"docker volume rm 'shop-prod-web-r0a1b2c3d-main-pg-g16'",
-		"docker start 'shop-prod-web-r0a1b2c3d-main-pg'",
+		"trap ", "docker stop --time 60 'shop-prod-web-main-pg-f8a073'",
+		"'shop-prod-web-main-pg-f8a073-retired'",
+		"src=shop-prod-web-main-pg-f8a073-g17",
+		"'restore' 'shop-prod-web-main-pg-f8a073' '" + takenDump + "'",
+		"docker volume rm 'shop-prod-web-main-pg-f8a073-g16'",
+		"docker start 'shop-prod-web-main-pg-f8a073'",
 	} {
 		if !strings.Contains(swap, want) {
 			t.Errorf("the swap never runs %s:\n%s", want, swap)
 		}
 	}
-	if restored, removed := strings.Index(swap, "'restore'"), strings.LastIndex(swap, "docker volume rm 'shop-prod-web-r0a1b2c3d-main-pg-g16'"); removed < restored {
+	if restored, removed := strings.Index(swap, "'restore'"), strings.LastIndex(swap, "docker volume rm 'shop-prod-web-main-pg-f8a073-g16'"); removed < restored {
 		t.Errorf("the old data is removed before the new server has it back:\n%s", swap)
 	}
 	for at, command := range machine.commands() {

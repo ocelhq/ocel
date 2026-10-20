@@ -12,13 +12,13 @@ import (
 func TestAContainersAddressIsTheOneItHoldsOnItsNetwork(t *testing.T) {
 	rig := newBench(nil)
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote("shop-infra-orders-postgres")) {
+		if strings.Contains(command, "docker inspect") && strings.Contains(command, shell.Quote("shop-prod-orders-pg-3524e1")) {
 			return ssh.Result{Stdout: "172.18.0.5 \n"}, true
 		}
 		return ssh.Result{}, false
 	}
 
-	address, err := rig.host().containers.ReadAddress(context.Background(), "shop-infra-orders-postgres")
+	address, err := rig.host().containers.ReadAddress(context.Background(), "shop-prod-orders-pg-3524e1")
 	if err != nil || address != "172.18.0.5" {
 		t.Errorf("ReadContainerAddress() = %q, %v, want 172.18.0.5", address, err)
 	}
@@ -33,8 +33,8 @@ func TestAContainerWithNoAddressIsRefusedNamingIt(t *testing.T) {
 		return ssh.Result{}, false
 	}
 
-	_, err := rig.host().containers.ReadAddress(context.Background(), "shop-infra-orders-postgres")
-	if err == nil || !strings.Contains(err.Error(), "shop-infra-orders-postgres") || !strings.Contains(err.Error(), "not running") {
+	_, err := rig.host().containers.ReadAddress(context.Background(), "shop-prod-orders-pg-3524e1")
+	if err == nil || !strings.Contains(err.Error(), "shop-prod-orders-pg-3524e1") || !strings.Contains(err.Error(), "not running") {
 		t.Errorf("ReadContainerAddress() of a container on no network = %v, want a refusal naming it and saying it is not running", err)
 	}
 	if strings.Contains(err.Error(), "deploy again") {

@@ -18,8 +18,8 @@ case "$2" in
 ls)
   case " $* " in
   *" --quiet "*|*" -q "*) printf '370d5327ba7b\n' ;;
-  *"{{.Name}}"*) printf 'ocel-production-shop\n' ;;
-  *) printf 'NETWORK ID     NAME                   DRIVER    SCOPE\n370d5327ba7b   ocel-production-shop   bridge    local\n' ;;
+  *"{{.Name}}"*) printf 'ocel-prod-shop\n' ;;
+  *) printf 'NETWORK ID     NAME                   DRIVER    SCOPE\n370d5327ba7b   ocel-prod-shop   bridge    local\n' ;;
   esac
   ;;
 connect)

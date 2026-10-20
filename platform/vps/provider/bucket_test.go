@@ -76,7 +76,7 @@ func TestADeclaredBucketRunsAStoreOnlyItsProjectReaches(t *testing.T) {
 
 	runCommand := machine.commands()[machine.at("'docker' 'run'")]
 	for _, want := range []string{
-		"'--network' 'ocel-production-shop'",
+		"'--network' 'ocel-prod-shop'",
 		"ocel.tier=production",
 		"ocel.project=shop",
 		"'--cap-drop' 'ALL'",
@@ -99,9 +99,9 @@ func TestTwoProjectsDeclaringBucketsOnOneBoxEachRunAndKeepTheirOwnStore(t *testi
 	shop := aBucket(t, "uploads", false).Ref
 	blog := shop
 	blog.Project = "blog"
-	if vps.StoreName(shop) == vps.StoreName(blog) {
+	if vps.StoreName(t, shop) == vps.StoreName(t, blog) {
 		t.Errorf("shop and blog share the store %q, so one opens the other's kept credential and a teardown of one removes the other's objects",
-			vps.StoreName(shop))
+			vps.StoreName(t, shop))
 	}
 }
 
@@ -171,7 +171,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, container.KeptPath(environment.TierProduction, "shop-prod-infra-store-s3")) {
+	if !strings.Contains(joined, container.KeptPath(environment.TierProduction, "shop-prod-store-s3-bd55b6")) {
 		t.Fatalf("nothing about the store's credential was kept on the box:\n%s", joined)
 	}
 	for _, fed := range machine.feeds() {
@@ -179,7 +179,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 			t.Fatalf("the store's root credential was sent to the box outside the env file it is handed in:\n%s", fed)
 		}
 	}
-	handed := envfile.Path(environment.TierProduction, "shop-prod-infra-store-s3")
+	handed := envfile.Path(environment.TierProduction, "shop-prod-store-s3-bd55b6")
 	if !strings.Contains(joined, "rm -f "+quotedPath(handed)) {
 		t.Fatalf("the file the store's credential was handed over in is left on the box:\n%s", joined)
 	}
@@ -281,7 +281,7 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store.Pointer != router.DefaultPointer {
 		t.Errorf("the manifest names pointer %q, and the box answers the store's public address out of what that pointer claims", manifest.Store.Pointer)
 	}
-	if manifest.Store.Endpoint != "http://shop-prod-infra-store-s3:9000" || !manifest.Store.PathStyle {
+	if manifest.Store.Endpoint != "http://shop-prod-store-s3-bd55b6:9000" || !manifest.Store.PathStyle {
 		t.Errorf("the manifest points the runtime at %+v, want the store this project runs, addressed path-style", manifest.Store)
 	}
 	if manifest.Store.Sealed == "" {
@@ -375,7 +375,7 @@ func TestTheAssociatedDataTheRuntimeOpensTheStoreSecretUnderIsTheOneTheDeploySea
 			" a resource is provisioned on its environment's infra stack and an app runs on its own, so associated data"+
 			" naming the asking stack opens nothing", opened.Bytes(), want.Bytes())
 	}
-	if manifest.Store.Endpoint != "http://"+vps.StoreName(provisioned.Ref)+":9000" {
+	if manifest.Store.Endpoint != "http://"+vps.StoreName(t, provisioned.Ref)+":9000" {
 		t.Errorf("the runtime is pointed at %q, want the store this environment runs", manifest.Store.Endpoint)
 	}
 }

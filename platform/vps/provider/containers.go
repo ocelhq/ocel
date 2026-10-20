@@ -30,7 +30,10 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image", app.App)
 	}
-	physical := release.ContainerName(spec.Ref.Name.String(), app.App, app.BuildID, app.Image)
+	physical, err := release.ContainerName(spec.Ref.Project, spec.Ref.Name, "", app.Image)
+	if err != nil {
+		return nil, err
+	}
 	store, err := p.buckets().GrantApp(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)

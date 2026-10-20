@@ -45,6 +45,7 @@ type Resource struct{ box component.Box }
 func New(box component.Box) Resource { return Resource{box: box} }
 
 type kvStore struct {
+	name    string
 	version string
 	image   string
 	valkey  valkey.Server
@@ -65,16 +66,16 @@ func readKVStore(in resources.ProvisionRequest) (kvStore, error) {
 			"kv %s asks for version %q; supported: %s",
 			in.Resource.Name, version, strings.Join(images.ValkeyVersions(), ", "))
 	}
-	return kvStore{version: version, image: image, valkey: valkey.Server{MemoryBytes: spec.MemoryBytes, Eviction: spec.Eviction}}, nil
-}
-
-func nameKV(ref provider.StackRef, resource string) string {
-	return container.Name(ref.Project, ref.Name.String(), resource, kvKind)
+	name, err := container.Name(in.Ref, in.Resource.Name, kvKind)
+	if err != nil {
+		return kvStore{}, err
+	}
+	return kvStore{name: name, version: version, image: image, valkey: valkey.Server{MemoryBytes: spec.MemoryBytes, Eviction: spec.Eviction}}, nil
 }
 
 func kvContainer(in resources.ProvisionRequest, store kvStore) container.Spec {
 	return container.Spec{
-		Name:     nameKV(in.Ref, in.Resource.Name),
+		Name:     store.name,
 		Project:  in.Ref.Project,
 		Resource: in.Resource.Name,
 		Tier:     in.Ref.Tier,
@@ -118,7 +119,7 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 	if err != nil {
 		return "", "", err
 	}
-	sealed, password, err := r.box.ReadKeptSealed(ctx, in.Ref.Tier, nameKV(in.Ref, in.Resource.Name), in.Resource.Name, bound)
+	sealed, password, err := r.box.ReadKeptSealed(ctx, in.Ref.Tier, store.name, in.Resource.Name, bound)
 	if err != nil {
 		return "", "", err
 	}
@@ -145,7 +146,7 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if store.valkey.Password, err = r.secret(ctx, in, nameKV(in.Ref, in.Resource.Name)); err != nil {
+	if store.valkey.Password, err = r.secret(ctx, in, store.name); err != nil {
 		return provider.Binding{}, err
 	}
 	spec, err := r.box.Reshaped(ctx, in, shape, kvContainer(in, store))
@@ -160,7 +161,10 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 }
 
 func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
-	name := nameKV(ref, binding.Name)
+	name, err := container.Name(ref, binding.Name, kvKind)
+	if err != nil {
+		return err
+	}
 	progress.Say("Removing kv " + binding.Name + ", its container " + name + " and its data")
 	return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
 }

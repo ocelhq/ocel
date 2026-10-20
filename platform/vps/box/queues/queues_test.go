@@ -125,12 +125,12 @@ func record(t *testing.T, store records.Store, key records.Key, value any) {
 	}
 }
 
-const queueSockets = "/var/lib/docker/volumes/shop-prod-infra-ocel-queue-sockets/_data"
+const queueSockets = "/var/lib/docker/volumes/shop-prod-ocel-queue-a12aaa-sockets/_data"
 
 func aQueue(t *testing.T, store records.Store) {
 	t.Helper()
 	record(t, store, boxapi.QueueDatabaseKey(tier, "shop", "prod"), boxapi.QueueDatabase{
-		Container: "shop-prod-infra-ocel-queue", Stack: "prod--infra",
+		Container: "shop-prod-ocel-queue-a12aaa", Stack: "prod--infra",
 		DeliverySealed: base64.StdEncoding.EncodeToString([]byte("ds")),
 	})
 	record(t, store, boxapi.QueueTopicKey(tier, "shop", "prod", "send-email"),
@@ -146,7 +146,7 @@ func aHost(store records.Store, opened *engines) *queues.Engines {
 		Tiers:       []environment.Tier{tier},
 		Cipher:      cipher{},
 		Addresses:   located{"shop-worker": "10.0.0.3"},
-		Mounts:      mounted{"shop-prod-infra-ocel-queue": queueSockets},
+		Mounts:      mounted{"shop-prod-ocel-queue-a12aaa": queueSockets},
 		Open:        opened.open,
 	}
 }
@@ -387,7 +387,7 @@ func TestAHostThatNamesNoProbeAsksAWorkerOverHTTPWhetherItAnswersBeforeDeliverin
 	opened := &engines{}
 	host := aHost(store, opened)
 	host.IsAnswering = nil
-	host.Addresses = located{"shop-prod-infra-ocel-queue": "10.0.0.2", "shop-worker": address}
+	host.Addresses = located{"shop-prod-ocel-queue-a12aaa": "10.0.0.2", "shop-worker": address}
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	if err := host.Reconcile(ctx); err != nil {

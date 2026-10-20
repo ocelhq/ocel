@@ -205,7 +205,7 @@ func aStoreManifest(sealed string) boxapi.Manifest {
 		Slug: "shop", Tier: "production",
 		Keys: []live.Key{{Key: "DATABASE_URL"}},
 		Store: &boxapi.Store{
-			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
+			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3-bd55b6:9000", Region: "us-east-1",
 			AccessKeyID: "ocel", Pointer: "@production", Sealed: sealed,
 		},
 	}
@@ -369,7 +369,7 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 		Slug: "shop", Tier: "production",
 		Bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		Store: &boxapi.Store{
-			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
+			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3-bd55b6:9000", Region: "us-east-1",
 			AccessKeyID: "ocel", Sealed: base64.StdEncoding.EncodeToString(sealed),
 		},
 	})

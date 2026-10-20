@@ -27,5 +27,5 @@ type DockerGrants struct {
 }
 
 func AppNetwork(tier environment.Tier, project string) string {
-	return "ocel-" + string(tier) + "-" + naming.Sanitize(project)
+	return "ocel-" + naming.TierWord(tier) + "-" + naming.Sanitize(project)
 }

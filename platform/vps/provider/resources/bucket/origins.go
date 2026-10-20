@@ -60,12 +60,16 @@ func (r Resource) applyStackOrigins(ctx context.Context, ref provider.StackRef, 
 	if err != nil {
 		return err
 	}
-	root, err := r.storeRoot(ctx, ref, StoreName(ref))
+	store, err := StoreName(ref)
+	if err != nil {
+		return err
+	}
+	root, err := r.storeRoot(ctx, ref, store)
 	if err != nil || root.secret == "" {
 		return err
 	}
 	for _, binding := range buckets {
-		if err := r.objects.applyOrigins(ctx, storeBucketSpec(ref, StoreName(ref), root.secret, Spec{
+		if err := r.objects.applyOrigins(ctx, storeBucketSpec(ref, store, root.secret, Spec{
 			Bucket:         binding.Properties[provider.PropertyBucket],
 			AllowedOrigins: corsOrigins(ref, recordedOrigins(binding), claimed),
 		})); err != nil {

@@ -16,9 +16,16 @@ import (
 )
 
 func (r Resource) ensureRoot(ctx context.Context, ref provider.StackRef) (*container.Spec, storeCredential, error) {
-	container := r.stores.shape(StoreName(ref))
+	name, err := StoreName(ref)
+	if err != nil {
+		return nil, storeCredential{}, err
+	}
+	container := r.stores.shape(name)
 	if container == nil {
-		shaped := storeContainer(resources.ProvisionRequest{Ref: storeRef(ref)})
+		shaped, err := storeContainer(resources.ProvisionRequest{Ref: storeRef(ref)})
+		if err != nil {
+			return nil, storeCredential{}, err
+		}
 		container = &shaped
 	}
 	root, err := r.stores.once(container.Name, func() (storeCredential, error) {
@@ -155,10 +162,13 @@ func boundBuckets(app *provider.AppSpec) []string {
 }
 
 func (r Resource) RevokeApp(ctx context.Context, ref provider.StackRef, app string) error {
-	store := StoreName(ref)
 	key := AccountKey(ref.Project, storeRef(ref).Name.String(), app)
 	sealed, err := r.box.Containers.Kept(ctx, ref.Tier, key)
 	if err != nil || len(sealed) == 0 {
+		return err
+	}
+	store, err := StoreName(ref)
+	if err != nil {
 		return err
 	}
 	root, err := r.storeRoot(ctx, ref, store)

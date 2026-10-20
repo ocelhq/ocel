@@ -17,7 +17,7 @@ func storeRouted(m *fakeBox, slug string) {
 		Owner:   switchboard.Surface(slug, environment.TierProduction),
 		Pointer: router.DefaultPointer,
 		App:     boxapi.StoreLabel,
-	}] = "shop-prod-store-s3:9000"
+	}] = "shop-prod-store-s3-bd55b6:9000"
 }
 
 func claimedHosts(m *fakeBox, app string) []string {

@@ -23,7 +23,10 @@ func TestTheQueueDatabaseIsNotReadyWhileItsImageIsStillInitialisingIt(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := newQueueContainer(provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack})
+	spec, err := newQueueContainer(provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack})
+	if err != nil {
+		t.Fatal(err)
+	}
 	name := "ocel-queue-ready-" + strconv.Itoa(os.Getpid())
 
 	argv := append([]string{"run", "--detach", "--name", name, "--network", "none",
