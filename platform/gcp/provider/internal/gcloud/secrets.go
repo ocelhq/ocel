@@ -149,19 +149,15 @@ func (c *Clients) DeleteSecret(ctx context.Context, service *secretmanager.Servi
 }
 
 func (c *Clients) untagSecret(ctx context.Context, service *secretmanager.Service, tier environment.Tier, name string) error {
-	if !c.TierTagged() {
-		return nil
-	}
-	_, err := googleretry.Attempted(ctx, service.Projects.Secrets.Get(SecretPath(c.Project(), name)).Context(ctx).Do)
-	if Absent(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read the %s secret: %w", name, err)
-	}
-	tagged, err := c.SecretTagged(ctx, name)
-	if err != nil {
-		return err
-	}
-	return c.RemoveTierTag(ctx, tier, tagged)
+	return c.RemoveTierTagIfFound(ctx, tier, func(ctx context.Context) (TaggedResource, bool, error) {
+		_, err := googleretry.Attempted(ctx, service.Projects.Secrets.Get(SecretPath(c.Project(), name)).Context(ctx).Do)
+		if Absent(err) {
+			return TaggedResource{}, false, nil
+		}
+		if err != nil {
+			return TaggedResource{}, false, fmt.Errorf("read the %s secret: %w", name, err)
+		}
+		tagged, err := c.SecretTagged(ctx, name)
+		return tagged, err == nil, err
+	})
 }

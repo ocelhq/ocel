@@ -159,3 +159,16 @@ func TestABindingTheCredentialMayNotMakeNamesBothTheValueAndTheResourcePermissio
 		}
 	}
 }
+
+func TestUntaggingAgainstAnEmulatorThatServesNoTagsLooksForNothing(t *testing.T) {
+	t.Parallel()
+	clients := googletest.Clients("http://127.0.0.1:1")
+
+	err := clients.RemoveTierTagIfFound(context.Background(), environment.TierPreview, func(context.Context) (gcloud.TaggedResource, bool, error) {
+		t.Errorf("the resource was looked for against an emulator that serves no tags")
+		return gcloud.TaggedResource{}, false, nil
+	})
+	if err != nil {
+		t.Errorf("untagging against an emulator that serves no tags answered %v, want nothing asked of it", err)
+	}
+}

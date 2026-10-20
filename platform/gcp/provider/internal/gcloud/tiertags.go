@@ -178,6 +178,17 @@ func (c *Clients) RemoveTierTag(ctx context.Context, tier environment.Tier, targ
 	return TagOperationDone(ctx, service, "removing "+c.TierTagValuePath(tier)+" from "+target.Name, started)
 }
 
+func (c *Clients) RemoveTierTagIfFound(ctx context.Context, tier environment.Tier, find func(context.Context) (TaggedResource, bool, error)) error {
+	if !c.TierTagged() {
+		return nil
+	}
+	target, found, err := find(ctx)
+	if !found || err != nil {
+		return err
+	}
+	return c.RemoveTierTag(ctx, tier, target)
+}
+
 func (c *Clients) tierTagGrant(tier environment.Tier, target TaggedResource, verb string) string {
 	return TierTagUserRole + " on " + c.TierTagValuePath(tier) + " and " + target.PermissionPrefix + "." + verb + " on " + target.Name
 }

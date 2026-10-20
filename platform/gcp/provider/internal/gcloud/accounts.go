@@ -158,12 +158,11 @@ func ExplainMissingGrant(err error, grant string) error {
 }
 
 func (c *Clients) untagAccount(ctx context.Context, tier environment.Tier, id string) error {
-	if !c.TierTagged() {
-		return nil
-	}
-	found, err := c.ReadAccount(ctx, id)
-	if found == nil || err != nil {
-		return err
-	}
-	return c.RemoveTierTag(ctx, tier, c.AccountTagged(found.UniqueId))
+	return c.RemoveTierTagIfFound(ctx, tier, func(ctx context.Context) (TaggedResource, bool, error) {
+		found, err := c.ReadAccount(ctx, id)
+		if found == nil || err != nil {
+			return TaggedResource{}, false, err
+		}
+		return c.AccountTagged(found.UniqueId), true, nil
+	})
 }

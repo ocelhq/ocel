@@ -181,7 +181,7 @@ func (p *pullReceiver) Hide(ctx context.Context, topic, consumer, handle string,
 func pulledTopology(t *testing.T, clients *ports.Clients, names Names, declared map[string]*provider.TopicSpec) {
 	t.Helper()
 	ctx := context.Background()
-	topology := Topology{Names: names, Topics: declared}
+	topology := Topology{Names: names, Topics: declared, Tags: TierTags{Remove: func(context.Context, string, func(context.Context) (bool, error)) error { return nil }}}
 	t.Cleanup(func() { _ = topology.Remove(context.Background(), clients) })
 	if err := topology.Ensure(ctx, clients); err != nil {
 		t.Fatalf("Topology.Ensure() = %v", err)
