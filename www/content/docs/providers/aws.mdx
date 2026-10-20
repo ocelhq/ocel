@@ -103,7 +103,7 @@ and it may create, tag and delete images only in that project's repositories.
 | `region` | The region to deploy into, such as `us-east-1`: a region, never an availability zone such as `us-east-1a`. Omit it and ocel reads `AWS_REGION`, `AWS_DEFAULT_REGION`, then the profile. |
 | `variablesKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap` makes a key ocel owns, once a project here first seals a value. |
 | `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
-| `network.production.cidr`, `network.preview.cidr` | The private block of the tier's [VPC](#the-network), a `/16` to a `/24`. Omit it and production takes `10.20.0.0/16`, preview `10.21.0.0/16`. Fixed once the VPC exists. |
+| `network.production.cidr`, `network.preview.cidr` | The private block of the tier's [VPC](#the-network), a `/16` to a `/24`. Omit it and the tier takes the first `/16` between `10.16.0.0` and `10.255.0.0` that no VPC in the region overlaps, tried from one picked from the namespace. Fixed once the VPC exists. |
 | `logs.liveTail` | Tail through CloudWatch Live Tail: lower latency and no gaps between polls, billed per session-minute past the free tier, at most 15 sessions per account. Off, `ocel logs --tail` polls `FilterLogEvents`. |
 | `edge` | `cloudfront` (default), `api-gateway` or [`cloudflare`](/docs/providers/cloudflare). See [Edge](#edge). |
 | `dns` | `route53` or [`cloudflare`](/docs/providers/cloudflare). A Cloudflare edge needs `cloudflare`. |
@@ -164,9 +164,11 @@ with three subnets in each:
 
 S3 and DynamoDB gateway endpoints serve the public and private subnets at no charge.
 
-The VPC takes `10.20.0.0/16` in production and `10.21.0.0/16` in preview, split into eight
-equal blocks, of which the subnets take the first six. Name another private block, a `/16` to a
-`/24`, before the tier's network exists:
+The VPC takes a `/16` between `10.16.0.0` and `10.255.0.0`. The blocks are tried in an order
+that starts from one picked from the namespace, preview's right after production's, and the
+first that no VPC in the region overlaps is taken, so two namespaces in one region land apart.
+It is split into eight equal blocks, of which the subnets take the first six. Name another
+private block, a `/16` to a `/24`, before the tier's network exists:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -189,10 +191,11 @@ export default defineConfig({
 ```
 
 The block is fixed once the VPC exists: a deploy whose config names another is refused, since a
-new block means a new VPC and everything in it. Before it creates the VPC, a deploy refuses a
-block that overlaps a VPC already in the region, naming that VPC, and refuses an account at its
-VPCs per Region quota (`L-F678F1CE`), with the command that raises it. A second namespace in the
-same account and region gets a network of its own, so it needs a block of its own.
+new block means a new VPC and everything in it, and a VPC made later that overlaps it moves
+nothing. Before it creates the VPC, a deploy refuses a block the config names that overlaps a VPC
+already in the region, naming that VPC, and refuses an account at its VPCs per Region quota
+(`L-F678F1CE`), with the command that raises it. A VPC another account shares into the region
+counts against its owner's quota, not this account's.
 
 A project of buckets, topics, tasks and realtime needs no VPC and raises none.
 
