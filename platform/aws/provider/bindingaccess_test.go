@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
+	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
 func TestAnAWSTargetForwardsPortsAndForwardsNothingWhenNoBindingAsksWithoutReachingAWS(t *testing.T) {
@@ -35,6 +38,35 @@ func TestAnAWSTargetForwardsPortsAndForwardsNothingWhenNoBindingAsksWithoutReach
 
 	if err != nil || len(forwards) != 0 {
 		t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and no call to AWS", forwards, err)
+	}
+}
+
+func placementOf(built bool, released *int) bastionPlacement {
+	return bastionPlacement{
+		claim: func(context.Context) (network.Network, error) { return network.Network{VPC: "vpc-ocel"}, nil },
+		reconcile: func(context.Context, network.Network) (bastion.Bastion, error) {
+			return bastion.Bastion{}, errors.New("the bastion's task role needs the app boundary of its tier, and none is named")
+		},
+		isBuilt: func(context.Context) (bool, error) { return built, nil },
+		release: func(context.Context) error { *released++; return nil },
+	}
+}
+
+func TestAPortForwardWhoseBastionWasNeverBuiltLetsGoOfTheNetworkItClaimed(t *testing.T) {
+	released := 0
+	if _, err := placementOf(false, &released).place(context.Background()); err == nil {
+		t.Fatal("place() = nil, want the reconcile error")
+	}
+	if released != 1 {
+		t.Errorf("released the network %d times, want once: no bastion part exists whose removal would let go of it", released)
+	}
+
+	released = 0
+	if _, err := placementOf(true, &released).place(context.Background()); err == nil {
+		t.Fatal("place() = nil, want the reconcile error")
+	}
+	if released != 0 {
+		t.Errorf("released the network %d times, want never: the bastion stands in it, and removing the bastion part lets go of it", released)
 	}
 }
 
