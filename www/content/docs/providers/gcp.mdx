@@ -541,15 +541,15 @@ records in, the KMS key ring and the connector serve both tiers and carry no val
 instances, Cloud Tasks queues, Cloud Scheduler jobs and KMS keys take no tags.
 
 A deploy binds what it makes to its tier's value, which takes `roles/resourcemanager.tagUser`
-on the two values:
+on that value alone: a credential holding both values may move a resource from one tier to the
+other. `ocel permissions deploy` prints the grant for each tier.
 
 ```bash
-for tier in production preview; do
-  VALUE=$(gcloud resource-manager tags values describe my-project/ocel-tier/$tier --format='value(name)')
-  gcloud resource-manager tags values add-iam-policy-binding $VALUE \
-    --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-    --role=roles/resourcemanager.tagUser
-done
+TIER=production
+VALUE=$(gcloud resource-manager tags values describe my-project/ocel-tier/$TIER --format='value(name)')
+gcloud resource-manager tags values add-iam-policy-binding $VALUE \
+  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --role=roles/resourcemanager.tagUser
 ```
 
 A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,

@@ -224,12 +224,8 @@ func ProjectPermissionsGrant() string {
 		"where no name condition admits them, and the role a deploy holds on its realtime secrets may not bind their tier tag"
 }
 
-func TierTagsGrant(names names.Names) string {
-	values := make([]string, 0, 2)
-	for _, tier := range TierTagValues() {
-		values = append(values, names.Project()+"/"+gcloud.TierTagKey+"/"+string(tier))
-	}
-	return gcloud.TierTagUserRole + ", on the tag values " + strings.Join(values, " and ")
+func TierTagsGrant(names names.Names, tier environment.Tier) string {
+	return gcloud.TierTagUserRole + ", on the tag value " + names.Project() + "/" + gcloud.TierTagKey + "/" + string(tier)
 }
 
 func RolesFor(purpose edge.CredentialPurpose) []string {
