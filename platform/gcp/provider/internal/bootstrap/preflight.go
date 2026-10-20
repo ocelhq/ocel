@@ -106,6 +106,10 @@ var BootstrapPermissions = []string{
 	"run.services.listTagBindings",
 	"datastore.databases.listTagBindings",
 	"datastore.databases.deleteTagBinding",
+	"logging.views.create",
+	"logging.views.get",
+	"logging.views.update",
+	"logging.views.delete",
 }
 
 var AssetStorePermissions = []string{
@@ -135,6 +139,7 @@ var bootstrapRoles = []string{
 	"roles/cloudsql.viewer",
 	"roles/cloudtasks.admin",
 	"roles/logging.viewer",
+	"roles/logging.configWriter",
 	"roles/resourcemanager.tagAdmin",
 	gcloud.TierTagUserRole,
 }

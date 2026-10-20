@@ -180,6 +180,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/google_logging_log_view:ocel-preview-logs",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_logging_log_view",
+      "name": "ocel-preview-logs",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_service_account:ocel-preview-env-sync",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
