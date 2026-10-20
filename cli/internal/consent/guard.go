@@ -10,6 +10,7 @@ const (
 
 type Guard struct {
 	ID       GuardID
+	Finding  string
 	Question string
 	Action   string
 }

@@ -3,6 +3,7 @@ package providerprocess
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -13,8 +14,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -346,6 +349,54 @@ func TestAProviderAnsweringThatItDoesNotSupportACallFailsWithProviderUnsupported
 			}
 			if !strings.Contains(got.GetMessage(), tc.message) || strings.Contains(got.GetMessage(), "unimplemented") {
 				t.Errorf("run error message = %q, want the provider's %q without the RPC's code", got.GetMessage(), tc.message)
+			}
+		})
+	}
+}
+
+func answerFromTheJob(seen *recording, stdin *io.PipeWriter, confirmed bool) {
+	go func() {
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			for _, event := range seen.received() {
+				if input := event.GetWaiting().GetInput(); input != nil {
+					_, _ = fmt.Fprintf(stdin, "{\"inputId\":%q,\"confirmed\":%t}\n", input.GetId(), confirmed)
+					return
+				}
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+}
+
+func TestInsideAJobAProvidersQuestionIsPutToOcelCloudAndItsAnswerTakenAsTheTerminalsWouldBe(t *testing.T) {
+	t.Parallel()
+
+	for _, confirmed := range []bool{true, false} {
+		t.Run(fmt.Sprint(confirmed), func(t *testing.T) {
+			t.Parallel()
+
+			ctx, span, seen := deploySpan(t)
+			fake := newQuestionFake(t, "unknown-host-key")
+			stdin, write := io.Pipe()
+			answerFromTheJob(seen, write, confirmed)
+			p := startFake(t, ctx, "unknown-host-key", span, Questions{IsJSON: func() bool { return true }, Job: jobinput.New(stdin)}, fake.env()...)
+
+			_, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
+			switch {
+			case confirmed && err != nil:
+				t.Fatalf("Stream() error = %v, want the call retried once Ocel Cloud confirmed", err)
+			case !confirmed && clierror.NewRunError(err).GetCode() != clierror.CodeConfirmationRequired:
+				t.Fatalf("Stream() error = %v, want %s once Ocel Cloud declined", err, clierror.CodeConfirmationRequired)
+			}
+			var asked *cloudv1.Confirmation
+			for _, event := range seen.received() {
+				if c := event.GetWaiting().GetInput().GetConfirmation(); c != nil {
+					asked = c
+				}
+			}
+			if !strings.Contains(asked.GetFinding(), fakeHostFingerprint) || asked.GetQuestion() == "" {
+				t.Errorf("asked %v, want the provider's finding and prompt put to Ocel Cloud", asked)
 			}
 		})
 	}

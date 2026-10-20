@@ -45,6 +45,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/executables"
+	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -290,6 +291,8 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 	}
 	if invocation.BuilderJob != nil {
 		invocation.Console, invocation.CloudOffer = deployreport.Console{}, nil
+		invocation.JobAnswers = jobinput.New(os.Stdin)
+		invocation.Questions.Job = invocation.JobAnswers
 	}
 	return invocation
 }

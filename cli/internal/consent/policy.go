@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -20,6 +21,7 @@ type Policy struct {
 	UnattendedRemedy string
 	In               io.Reader
 	Out              io.Writer
+	Job              *jobinput.Answers
 }
 
 func NewPolicy(command string, yes, interactive bool, out io.Writer, in io.Reader) Policy {
@@ -42,7 +44,7 @@ func (p Policy) Refuse() error {
 }
 
 func (p Policy) RefuseQuestion(question, before string) error {
-	if p.Yes || p.Interactive {
+	if p.Yes || p.Interactive || p.Job != nil {
 		return nil
 	}
 	return p.refuseUnattended(fmt.Sprintf("ask %q %s", question, before))
@@ -66,6 +68,10 @@ func (p Policy) refuseUnattended(need string) error {
 func (p Policy) Confirm(ctx context.Context, span *run.Span, guard Guard) (bool, error) {
 	if p.DryRun || p.Yes {
 		return true, nil
+	}
+	if p.Job != nil {
+		granted, err := p.Job.Confirm(ctx, span, guard.Finding, guard.Question)
+		return sayIfDeclined(span, granted, err)
 	}
 	if !p.Interactive {
 		span.Assume(string(guard.ID), guard.assumption())
@@ -115,6 +121,10 @@ func (p Policy) ask(span *run.Span, ask func(prompt.Prompt) (bool, error)) (bool
 	granted, err := span.Confirm(func() (bool, error) {
 		return ask(prompt.New(p.Out, p.In))
 	})
+	return sayIfDeclined(span, granted, err)
+}
+
+func sayIfDeclined(span *run.Span, granted bool, err error) (bool, error) {
 	if err != nil || granted {
 		return granted, err
 	}

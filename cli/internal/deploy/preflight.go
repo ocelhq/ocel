@@ -139,10 +139,12 @@ func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span
 	if len(knownSlugs) == 0 {
 		return true, nil
 	}
-	check.Warn(fmt.Sprintf("No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s",
-		cfg.Slug, strings.Join(knownSlugs, ", ")))
+	finding := fmt.Sprintf("No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s",
+		cfg.Slug, strings.Join(knownSlugs, ", "))
+	check.Warn(finding)
 	return policy.Confirm(ctx, check, consent.Guard{
 		ID:       consent.GuardNewProject,
+		Finding:  finding,
 		Question: "Continue?",
 		Action:   fmt.Sprintf("creating new project %q", cfg.Slug),
 	})
