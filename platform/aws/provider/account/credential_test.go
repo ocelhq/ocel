@@ -416,15 +416,33 @@ func conditionAdmits(operator, pattern, value string) bool {
 }
 
 func TestNoGrantIsConditionedOnTheNamespacesTag(t *testing.T) {
+	report := func(owner string, condition map[string]any, actions, resources []string) {
+		t.Helper()
+		for _, scope := range []string{"aws:RequestTag/", "aws:ResourceTag/"} {
+			if conditionNames(condition, scope+naming.ManagedByTagKey) {
+				t.Errorf(
+					"%s grants %s on %s under %s%s: a namespace keeps names apart and is never a credential boundary, so a grant is held to its tier alone",
+					owner, strings.Join(actions, ", "), strings.Join(resources, ", "), scope, naming.ManagedByTagKey,
+				)
+			}
+		}
+	}
 	for purpose, document := range bothCredentials(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
-			for _, scope := range []string{"aws:RequestTag/", "aws:ResourceTag/"} {
-				if conditionNames(statement.Condition, scope+naming.ManagedByTagKey) {
-					t.Errorf(
-						"the %s credential grants %s on %s under %s%s: a namespace keeps names apart and is never a credential boundary, so a grant is held to its tier alone",
-						purpose, strings.Join(stringsOf(t, statement.Action, "Action"), ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "), scope, naming.ManagedByTagKey,
-					)
-				}
+			report("the "+purpose+" credential", statement.Condition, stringsOf(t, statement.Action, "Action"), stringsOf(t, statement.Resource, "Resource"))
+		}
+	}
+	for _, tier := range bothTiers {
+		for _, statement := range parsePolicy(t, appBoundaryDocument(t, defaultNamespace, tier)).Statement {
+			report("the "+string(tier)+" app boundary", statement.Condition, stringsOf(t, statement.Action, "Action"), stringsOf(t, statement.Resource, "Resource"))
+		}
+		core := coreRolesOf(t, defaultNamespace, tier)
+		for _, id := range slices.Sorted(maps.Keys(core.Resources)) {
+			if core.Resources[id].Type != "AWS::IAM::Role" {
+				continue
+			}
+			for _, statement := range roleStatements(t, core, id) {
+				report("the "+string(tier)+" "+id, statement.Condition, statement.actions(), statement.resources())
 			}
 		}
 	}
