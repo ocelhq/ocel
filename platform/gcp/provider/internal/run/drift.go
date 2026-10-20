@@ -33,7 +33,7 @@ type servingPrint struct {
 	MaxInstances         int64
 	Concurrency          int64
 	Env                  [][2]string
-	PinnedEnv            [][3]string `json:",omitempty"`
+	PinnedEnv            [][3]string
 	Volumes              [][4]string
 	Mounts               [][2]string
 	Audiences            []string
