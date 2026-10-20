@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	s3 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -22,13 +20,21 @@ import (
 const (
 	bucketCORSMaxAgeSeconds = 3600
 
-	maxS3BucketNameLen   = 63
-	s3AutonameSuffixLen  = 26
-	maxS3BucketPrefixLen = maxS3BucketNameLen - s3AutonameSuffixLen
+	maxS3BucketNameLen = 63
+
+	abacEnabled = "Enabled"
+
+	abacPart                  = "abac"
+	publicAccessBlockPart     = "public-access-block"
+	corsPart                  = "cors"
+	notificationPart          = "notification"
+	completerInvokePermission = "s3-invoke"
+	completerS3Policy         = "s3"
+	completerSessionsPolicy   = "sessions"
 
 	bucketNotificationEvent = "s3:ObjectCreated:*"
 
-	uploadCompleterLocalName      = "upload-completer"
+	uploadCompleterSuffix         = "completer"
 	uploadCompleterRuntime        = "provided.al2023"
 	uploadCompleterHandler        = "bootstrap"
 	uploadCompleterTimeoutSeconds = 30
@@ -51,8 +57,6 @@ type bucketArgs struct {
 	AllowedOrigins []string
 
 	ForceDestroy bool
-
-	Tier environment.Tier
 
 	Tags map[string]string
 
@@ -101,33 +105,47 @@ func translate(spec *provider.BucketSpec) bucketArgs {
 	}
 }
 
-func bucketPrefix(tier environment.Tier, at naming.Coordinate) string {
-	scope := iam.TierScopePrefix(tier)
-	return scope + at.PhysicalPrefix(maxS3BucketPrefixLen-len(scope))
+func Name(ctx *pulumi.Context, at component.Stack, logicalName string) (component.Name, error) {
+	return component.RandomTaggedName(ctx, at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindBucket), component.MaxLambdaNameLen, uploadCompleterSuffix)
 }
 
-func register(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, boundaryARN, rolePath string, sessions Sessions, completerCode payloads.Placement) error {
-	at := component.ResourceCoordinate(project, env, logicalName, naming.KindBucket)
-	if boundaryARN == "" {
+func register(ctx *pulumi.Context, stack component.Stack, logicalName string, args bucketArgs, sessions Sessions, completerCode payloads.Placement) error {
+	at := component.ResourceCoordinate(stack.Project, stack.Env, logicalName, naming.KindBucket)
+	if stack.AppBoundaryARN == "" {
 		return fmt.Errorf("bucket %s: this deploy resolved no app boundary, and its upload completer's role made without one is capped by nothing", at.Name)
 	}
+	name, err := Name(ctx, stack, logicalName)
+	if err != nil {
+		return err
+	}
+	tags := component.Tags(at.Kind, "", args.Tags)
+	tags[iam.ManagedByTagKey] = pulumi.String(stack.Namespace)
+	tags[naming.EnvTierTagKey] = pulumi.String(string(stack.Tier()))
 
-	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
-		BucketPrefix: pulumi.String(bucketPrefix(args.Tier, at)),
+	bucket, err := s3.NewBucketV2(ctx, name.Pulumi, &s3.BucketV2Args{
+		Bucket:       name.AWS,
 		ForceDestroy: pulumi.Bool(args.ForceDestroy),
-		Tags:         component.Tags(at.Kind, "", args.Tags),
+		Tags:         tags,
 	})
 	if err != nil {
 		return err
 	}
+	abac, err := s3.NewBucketAbac(ctx, name.Part(abacPart), &s3.BucketAbacArgs{
+		Bucket:     bucket.ID(),
+		AbacStatus: &s3.BucketAbacAbacStatusArgs{Status: pulumi.String(abacEnabled)},
+	}, pulumi.RetainOnDelete(true))
+	if err != nil {
+		return err
+	}
+	afterABAC := pulumi.DependsOn([]pulumi.Resource{abac})
 
-	if _, err := s3.NewBucketPublicAccessBlock(ctx, naming.ResourceID(at.Kind, at.Name, "public-access-block"), &s3.BucketPublicAccessBlockArgs{
+	if _, err := s3.NewBucketPublicAccessBlock(ctx, name.Part(publicAccessBlockPart), &s3.BucketPublicAccessBlockArgs{
 		Bucket:                bucket.ID(),
 		BlockPublicAcls:       pulumi.Bool(true),
 		BlockPublicPolicy:     pulumi.Bool(true),
 		IgnorePublicAcls:      pulumi.Bool(true),
 		RestrictPublicBuckets: pulumi.Bool(true),
-	}); err != nil {
+	}, afterABAC); err != nil {
 		return err
 	}
 
@@ -142,44 +160,40 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args bucket
 				MaxAgeSeconds:  pulumi.Int(args.CORS.MaxAgeSeconds),
 			})
 		}
-		if _, err := s3.NewBucketCorsConfigurationV2(ctx, naming.ResourceID(at.Kind, at.Name, "cors"), &s3.BucketCorsConfigurationV2Args{
+		if _, err := s3.NewBucketCorsConfigurationV2(ctx, name.Part(corsPart), &s3.BucketCorsConfigurationV2Args{
 			Bucket:    bucket.ID(),
 			CorsRules: rules,
-		}); err != nil {
+		}, afterABAC); err != nil {
 			return err
 		}
 	}
 
+	completerName := name.Child(uploadCompleterSuffix)
 	completerRole, err := component.NewServiceRole(ctx,
-		naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-role"),
+		completerName,
 		at.Description("execution role for the "+at.Name+" bucket's upload completer"),
 		"lambda.amazonaws.com",
-		boundaryARN,
-		rolePath,
+		stack.AppBoundaryARN,
+		stack.AppRolePath,
 		args.Tags,
 		map[string]component.PolicyStatement{
-			"s3":       {Actions: args.UploadCompleterS3Actions, Resources: []pulumi.StringInput{component.JoinARN(bucket.Arn, "/*")}},
-			"sessions": sessionStatement(args.UploadCompleterSessionActions, sessions),
+			completerS3Policy:       {Actions: args.UploadCompleterS3Actions, Resources: []pulumi.StringInput{component.JoinARN(bucket.Arn, "/*")}},
+			completerSessionsPolicy: sessionStatement(args.UploadCompleterSessionActions, sessions),
 		})
 	if err != nil {
 		return err
 	}
-	if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs-policy"), &awsiam.RolePolicyAttachmentArgs{
-		Role:      completerRole.Name,
-		PolicyArn: pulumi.String(iam.LambdaBasicExecutionPolicyARN),
-	}); err != nil {
+	if _, err := component.AttachManagedPolicy(ctx, completerName, completerRole, iam.LambdaBasicExecutionPolicyARN); err != nil {
 		return err
 	}
 
-	completerLogs, err := component.NewLambdaLogGroup(ctx,
-		naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs"),
-		at.PhysicalPrefix(component.MaxLambdaBaseNameLen-len(uploadCompleterLocalName))+uploadCompleterLocalName,
-		naming.KindUploadCompleter, "", args.Tags)
+	completerLogs, err := component.NewLambdaLogGroup(ctx, completerName, naming.KindUploadCompleter, "", args.Tags)
 	if err != nil {
 		return err
 	}
 
-	completer, err := lambda.NewFunction(ctx, naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName), &lambda.FunctionArgs{
+	completer, err := lambda.NewFunction(ctx, completerName.Pulumi, &lambda.FunctionArgs{
+		Name:          completerName.AWS,
 		Runtime:       pulumi.String(args.UploadCompleterRuntime),
 		Handler:       pulumi.String(args.UploadCompleterHandler),
 		Role:          completerRole.Arn,
@@ -191,7 +205,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args bucket
 		S3Key:         pulumi.String(completerCode.Key),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
-				EnvStateTable:     pulumi.String(stateTableName),
+				EnvStateTable:     pulumi.String(stack.StateTable),
 				EnvSessionPrefix:  pulumi.String(sessions.KeyPrefix),
 				envAllowedOrigins: pulumi.String(strings.Join(args.AllowedOrigins, ",")),
 			},
@@ -201,7 +215,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args bucket
 		return err
 	}
 
-	perm, err := lambda.NewPermission(ctx, naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-permission"), &lambda.PermissionArgs{
+	perm, err := lambda.NewPermission(ctx, completerName.Part(completerInvokePermission), &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  completer.Name,
 		Principal: pulumi.String("s3.amazonaws.com"),
@@ -211,7 +225,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args bucket
 		return err
 	}
 
-	if _, err := s3.NewBucketNotification(ctx, naming.ResourceID(at.Kind, at.Name, "notification"), &s3.BucketNotificationArgs{
+	if _, err := s3.NewBucketNotification(ctx, name.Part(notificationPart), &s3.BucketNotificationArgs{
 		Bucket: bucket.ID(),
 		LambdaFunctions: s3.BucketNotificationLambdaFunctionArray{
 			&s3.BucketNotificationLambdaFunctionArgs{
@@ -219,7 +233,7 @@ func register(ctx *pulumi.Context, project, env, logicalName string, args bucket
 				Events:            pulumi.ToStringArray(args.NotificationEvents),
 			},
 		},
-	}, pulumi.DependsOn([]pulumi.Resource{perm})); err != nil {
+	}, pulumi.DependsOn([]pulumi.Resource{perm, abac})); err != nil {
 		return err
 	}
 

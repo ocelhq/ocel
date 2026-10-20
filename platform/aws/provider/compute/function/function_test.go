@@ -19,50 +19,35 @@ import (
 func TestFunctionCoordinate(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the physical name includes project, env, app, route and release", func(t *testing.T) {
+	t.Run("the physical name is the app fence, project, env, app, route and release", func(t *testing.T) {
 		t.Parallel()
 
-		coord := Coordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
-
-		got := coord.PhysicalName(component.MaxLambdaBaseNameLen)
-		if want := "shop-prod-web-api-users-r3f8a1c90"; got != want {
-			t.Fatalf("PhysicalName = %q, want %q", got, want)
-		}
-		for _, fact := range []string{"shop", "prod", "web", "api-users", "r3f8a1c90"} {
-			if !strings.Contains(got, fact) {
-				t.Errorf("PhysicalName = %q, missing %q", got, fact)
-			}
+		if got, want := namedFunction(testStack(t, "prod", "web"), "fn--web--api-users").Pulumi, "ocel-app-shop-prod-web-api-users-r3f8a1c90"; got != want {
+			t.Fatalf("Name = %q, want %q", got, want)
 		}
 	})
 
-	t.Run("a long route erodes before the project, env, app or release", func(t *testing.T) {
+	t.Run("a route too long to name within Lambda's limit is refused", func(t *testing.T) {
 		t.Parallel()
 
 		route := strings.Repeat("very-long-route-segment-", 6)
-		coord := Coordinate("shop", testStack(t, "prod", "web"), "fn--web--"+route)
-
-		got := coord.PhysicalName(component.MaxLambdaBaseNameLen)
-		if len(got)+component.LambdaAutonameSuffixLen > component.MaxLambdaNameLen {
-			t.Fatalf("PhysicalName = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), component.LambdaAutonameSuffixLen, component.MaxLambdaNameLen)
-		}
-		if !strings.HasPrefix(got, "shop-prod-web-") {
-			t.Errorf("PhysicalName = %q, want the project, env and app kept intact", got)
-		}
-		if !strings.Contains(got, "very-long-route") {
-			t.Errorf("PhysicalName = %q, want what survives of the route", got)
+		if _, err := Name(testNamespace, "shop", testStack(t, "prod", "web"), "fn--web--"+route); err == nil || !strings.Contains(err.Error(), "64") {
+			t.Fatalf("Name = %v, want a refusal naming Lambda's 64 characters", err)
 		}
 	})
 
-	t.Run("the resource id reads as kind then local name", func(t *testing.T) {
+	t.Run("its URL and the URL's permissions are named under it", func(t *testing.T) {
 		t.Parallel()
 
-		coord := Coordinate("shop", testStack(t, "prod", "web"), "fn--web--index")
-
-		if got, want := coord.PhysicalName(component.MaxLambdaBaseNameLen), "shop-prod-web-index-r3f8a1c90"; got != want {
-			t.Errorf("function resource id = %q, want %q", got, want)
+		names := mustResourceNames(t, testStack(t, "prod", "web"), "fn--web--index")
+		if got, want := names["url"][0].Name, "ocel-app-shop-prod-web-index-r3f8a1c90/url"; got != want {
+			t.Errorf("url = %q, want %q", got, want)
 		}
-		if got, want := naming.ResourceID(naming.KindFunction, coord.Name, "url"), "fn-index-url"; got != want {
-			t.Errorf("url resource id = %q, want %q", got, want)
+		if got, want := names["logGroup"][0].Name, "/aws/lambda/ocel-app-shop-prod-web-index-r3f8a1c90"; got != want {
+			t.Errorf("log group = %q, want %q", got, want)
+		}
+		if got, want := names["role"][0].Name, "ocel-app-shop-prod-web-role-r3f8a1c90"; got != want {
+			t.Errorf("role = %q, want %q", got, want)
 		}
 	})
 
@@ -164,7 +149,7 @@ func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "web")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -172,7 +157,7 @@ func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = registerFunction(pctx, "fn--web--bundle-0", Coordinate("shop", stack, "fn--web--bundle-0"),
+		_, err = registerFunction(pctx, "fn--web--bundle-0", Coordinate("shop", stack, "fn--web--bundle-0"), namedFunction(stack, "fn--web--bundle-0"),
 			"bundle-0", args, Artifact{Bucket: "artifacts", Key: "fn.zip"},
 			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionurl.AuthIAM, "")
 		return err
@@ -181,7 +166,7 @@ func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	fn := rec.inputs("aws:lambda/function:Function", "shop-prod-web-bundle-0-r3f8a1c90")
+	fn := rec.inputs("aws:lambda/function:Function", "ocel-app-shop-prod-web-bundle-0-r3f8a1c90")
 	if len(fn) == 0 {
 		t.Fatal("no function was registered")
 	}
@@ -196,7 +181,7 @@ func TestAFunctionNamesTheBundleItWasBuiltFromNotARoute(t *testing.T) {
 		t.Errorf("description = %q, want %q", got, want)
 	}
 
-	logs := rec.inputs("aws:cloudwatch/logGroup:LogGroup", naming.ResourceID(naming.KindFunction, "bundle-0", "logs"))
+	logs := rec.inputs("aws:cloudwatch/logGroup:LogGroup", "/aws/lambda/"+namedFunction(testStack(t, "prod", "web"), "fn--web--bundle-0").Pulumi)
 	if got := logs["tags"].ObjectValue()["ocel:bundle"]; !got.IsString() || got.StringValue() != "bundle-0" {
 		t.Errorf("log group tags[ocel:bundle] = %v, want the bundle id %q", got, "bundle-0")
 	}
@@ -273,4 +258,39 @@ func TestAFunctionsEnvCountsResourcesVariablesAndTheRuntimeTogether(t *testing.T
 			t.Error("functionEnv mutated the shared base env")
 		}
 	})
+}
+
+func TestEveryTransformKeyOfAPublicFunctionNamesAResourceItsProgramRegisters(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	stack := testStack(t, "prod", "web")
+	program := func(pctx *pulumi.Context) error {
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN})
+		if err != nil {
+			return err
+		}
+		args, err := NewArgs("", provider.FunctionSpec{})
+		if err != nil {
+			return err
+		}
+		_, err = registerFunction(pctx, "fn--web--index", Coordinate("shop", stack, "fn--web--index"), namedFunction(stack, "fn--web--index"),
+			"index", args, Artifact{Bucket: "artifacts", Key: "fn.zip"},
+			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionurl.AuthNone, "")
+		return err
+	}
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
+		t.Fatalf("run program: %v", err)
+	}
+
+	for key, refs := range mustResourceNames(t, stack, "fn--web--index") {
+		for _, ref := range refs {
+			if !slices.Contains(rec.registered(ref.Token), ref.Name) {
+				t.Errorf("transform key %s names %s %q, and the program registers %v", key, ref.Token, ref.Name, rec.registered(ref.Token))
+			}
+		}
+	}
+	if permissions := mustResourceNames(t, stack, "fn--web--index")["urlPermission"]; len(permissions) != len(functionurl.Public()) {
+		t.Errorf("urlPermission names %v, want every permission a public URL is granted through: a patch to one alone leaves the URL answering 403", permissions)
+	}
 }

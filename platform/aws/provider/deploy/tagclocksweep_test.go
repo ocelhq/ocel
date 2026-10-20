@@ -54,6 +54,7 @@ func (s *sweepingClock) Sweep(_ context.Context, project string, stack naming.St
 func tearingDown(t *testing.T, clock TagClock, engine pulumi.Engine) *Stacks {
 	t.Helper()
 	cfg := Config{
+		Namespace:     testNamespace,
 		PulumiProject: "ocel",
 		Passphrase:    "teardown",
 		BackendURL:    "file://" + t.TempDir(),

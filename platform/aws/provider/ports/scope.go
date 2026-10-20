@@ -15,8 +15,6 @@ import (
 const (
 	Vendor = "aws"
 
-	AppScope = "ocel-app"
-
 	ContainersSlug = "ocel-containers"
 
 	PublicListenerPort = 443

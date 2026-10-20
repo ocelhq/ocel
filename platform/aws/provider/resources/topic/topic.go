@@ -11,6 +11,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 type StateTable struct {
@@ -30,16 +31,31 @@ func New() component.Component {
 		Collect:    Collect,
 		Credential: credential,
 		Shape: func(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
-			Shape(cost, scope, Of(at.Project, at.Env, declared))
+			topics, err := Of(NamesAt(at), declared)
+			if err != nil {
+				return err
+			}
+			Shape(cost, scope, topics)
 			return nil
 		},
 	}
 }
 
+func NamesAt(at component.Stack) queues.Names {
+	return queues.Names{Namespace: at.Namespace, Project: at.Project, Env: at.Env}
+}
+
 func Declare(ctx *pulumi.Context, at component.Stack, declared []provider.Resource) error {
-	everyTopic := Of(at.Project, at.Env, at.Resources)
+	everyTopic, err := Of(NamesAt(at), at.Resources)
+	if err != nil {
+		return err
+	}
 	visibility := func(queue Queue) int { return VisibilitySeconds(everyTopic, queue) }
-	for _, topic := range Of(at.Project, at.Env, declared) {
+	topics, err := Of(NamesAt(at), declared)
+	if err != nil {
+		return err
+	}
+	for _, topic := range topics {
 		if err := Register(ctx, topic, visibility, component.Tags(naming.KindTopic, "", map[string]string{component.TagResource: topic.Resource.Declared})); err != nil {
 			return fmt.Errorf("declare %s: %w", topic.Resource.Declared, err)
 		}
@@ -48,7 +64,7 @@ func Declare(ctx *pulumi.Context, at component.Stack, declared []provider.Resour
 }
 
 func Collect(_ context.Context, at component.Stack, declared provider.Resource, _ auto.OutputMap) (*variablestorev1.PublishedBinding, error) {
-	binding, err := CollectBinding(TableOf(at), at.Project, at.Env, declared)
+	binding, err := CollectBinding(TableOf(at), NamesAt(at), declared)
 	if err != nil {
 		return nil, err
 	}

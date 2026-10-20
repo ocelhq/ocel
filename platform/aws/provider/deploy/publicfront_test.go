@@ -126,7 +126,6 @@ func TestTheContainersPartListsAndPricesThePublicFrontAForwardedContainerAppRais
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
-	cfg.Namespace = "ocel"
 	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
 		container.OutputKeyURL:      "http://" + fixtureOrigin,

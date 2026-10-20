@@ -219,7 +219,7 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 			"multiAzEnabled":           false,
 		}
 	}}
-	transformed, err := transformStackSpec(context.Background(), pass, awsresources.Registry(awsresources.Clients{}), provider.StackSpec{
+	transformed, err := transformStackSpec(context.Background(), testNamespace, pass, awsresources.Registry(awsresources.Clients{}), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
 		Recorded:  true,
@@ -230,7 +230,7 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 	}
 
 	rendered := sdk.Map{}
-	for field, value := range registeredKV(t, "shop").InputsOf(t, component.TokenElastiCacheReplicationGroup, "kv-cache").Mappable() {
+	for field, value := range registeredKV(t, "shop").InputsOf(t, component.TokenElastiCacheReplicationGroup, "ocel-app-shop-prod-cache-8bf31e").Mappable() {
 		switch scalar := value.(type) {
 		case string:
 			rendered[field] = sdk.String(scalar)
@@ -241,7 +241,14 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 		}
 	}
 	transformed.claimed = map[component.ResourceRef]bool{}
-	merged, claimed := transformed.claim(component.ResourceRef{Token: component.TokenElastiCacheReplicationGroup, Name: "kv-c-kv"}, rendered)
+	var group component.ResourceRef
+	for ref := range transformed.patches {
+		group = ref
+	}
+	if group.Token != component.TokenElastiCacheReplicationGroup {
+		t.Fatalf("the transform patched %+v, want the store's replication group", group)
+	}
+	merged, claimed := transformed.claim(group, rendered)
 	if !claimed {
 		t.Fatal("the patch reached no replication group ocel constructs")
 	}

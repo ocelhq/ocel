@@ -10,7 +10,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -31,11 +33,23 @@ const conformanceModule = `
 func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	t.Parallel()
 
-	rendered := map[string]map[string]component.ResourceRef{
-		transformTypeFunction: function.ResourceNames("proj", naming.StackName{Env: "prod", App: "api"}, "api"),
-		"bucket":              bucket.New(component.Artifacts{}).Transform("proj", "prod", "uploads").Names,
-		"postgres":            postgres.New(nil).Transform("proj", "prod", "main").Names,
-		"kv":                  kv.New(kv.Tokens{}).Transform("proj", "prod", "cache").Names,
+	at := component.Stack{Ref: provider.StackRef{Tier: environment.TierProduction}, Namespace: testNamespace, Project: "proj", Env: "prod"}
+	transformed := func(c component.Component, declared provider.Resource) map[string][]component.ResourceRef {
+		target, err := c.Transform(at, declared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return target.Names
+	}
+	functionNames, err := function.ResourceNames(testNamespace, "proj", naming.AppStack("prod", "api", fixedRelease(t)), "api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := map[string]map[string][]component.ResourceRef{
+		transformTypeFunction: functionNames,
+		"bucket":              transformed(bucket.New(component.Artifacts{}), provider.Resource{Name: "uploads", Type: provider.BindingBucket}),
+		"postgres":            transformed(postgres.New(nil), provider.Resource{Name: "main", Type: provider.BindingPostgres}),
+		"kv":                  transformed(kv.New(kv.Tokens{}), provider.Resource{Name: "cache", Type: provider.BindingKV}),
 	}
 
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
@@ -69,7 +83,9 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 		patches := transform.Patches{}
 		for key := range result.Patches {
 			patches[key] = map[string]any{"description": candidates[i].key.Type + " " + key}
-			wanted[rendered[candidates[i].key.Type][key]] = true
+			for _, ref := range rendered[candidates[i].key.Type][key] {
+				wanted[ref] = true
+			}
 		}
 		filled[i] = transform.Result{Patches: patches}
 	}
@@ -84,6 +100,6 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 		}
 	}
 	if len(indexed.patches) != len(wanted) {
-		t.Errorf("indexPatches registered %d resources for %d keys", len(indexed.patches), len(wanted))
+		t.Errorf("indexPatches registered %d resources for the %d the keys name", len(indexed.patches), len(wanted))
 	}
 }

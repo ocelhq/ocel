@@ -51,6 +51,7 @@ type testTarget struct {
 func containerStackSpec(t *testing.T) (testTarget, provider.StackSpec) {
 	t.Helper()
 	cfg := testTarget{Target: Target{
+		Namespace:         "ocel",
 		Region:            "us-east-1",
 		AppBoundaryARN:    "arn:aws:iam::123456789012:policy/ocel-app-boundary",
 		AppRolePath:       componenttest.AppRolePath,
@@ -264,7 +265,7 @@ func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing
 	}
 
 	task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
-	if task["family"].StringValue() != "shop-prod-web-container-r3f8a1c90" {
+	if task["family"].StringValue() != "ocel-app-shop-prod-web-container-r3f8a1c90" {
 		t.Errorf("family = %v, want project, env, app and release", task["family"])
 	}
 	if task["executionRoleArn"].StringValue() != fixtureContainerInfra().ExecutionRole {
@@ -299,7 +300,7 @@ func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing
 	if rule["listenerArn"].StringValue() != fixtureListener {
 		t.Errorf("listenerArn = %v, want the shared container infrastructure's listener", rule["listenerArn"])
 	}
-	if priority := rule["priority"].NumberValue(); priority < 1 || priority > maxRulePriority || priority != float64(rulePriority("shop-prod-web-container-r3f8a1c90", nil)) {
+	if priority := rule["priority"].NumberValue(); priority < 1 || priority > maxRulePriority || priority != float64(rulePriority("ocel-app-shop-prod-web-container-r3f8a1c90", nil)) {
 		t.Errorf("priority = %v, want one derived from the service name: two releases deployed at once must not both take the next free slot", priority)
 	}
 	demanded := map[string]string{}
@@ -310,7 +311,7 @@ func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing
 	if demanded[edge.OriginSecretHeader] != fixtureSecret {
 		t.Errorf("the rule demands %v, want the tier's origin secret: without it every stranger reaches the container", demanded)
 	}
-	if demanded[edge.OriginContainerHeader] != "shop-prod-web-container-r3f8a1c90" {
+	if demanded[edge.OriginContainerHeader] != "ocel-app-shop-prod-web-container-r3f8a1c90" {
 		t.Errorf("the rule demands %v, want the container the edge names: every release shares one front", demanded)
 	}
 
@@ -362,7 +363,7 @@ func TestAContainerStackDecodesIntoTheContainerItDeployed(t *testing.T) {
 	}
 	outputs := auto.OutputMap{"web": auto.OutputValue{Value: map[string]any{
 		OutputKeyURL:      "http://" + fixtureOrigin,
-		OutputKeyPhysical: "shop-prod-web-container-r3f8a1c90",
+		OutputKeyPhysical: "ocel-app-shop-prod-web-container-r3f8a1c90",
 	}}}
 	result, err := work.Decode(outputs)
 	if err != nil {
@@ -375,7 +376,7 @@ func TestAContainerStackDecodesIntoTheContainerItDeployed(t *testing.T) {
 		t.Fatalf("Containers = %v, want the one service the stack provisioned", result.Containers)
 	}
 	deployed := result.Containers[0]
-	if deployed.Name != "web" || deployed.URL != "http://"+fixtureOrigin || deployed.Image != containerImage || deployed.Physical != "shop-prod-web-container-r3f8a1c90" {
+	if deployed.Name != "web" || deployed.URL != "http://"+fixtureOrigin || deployed.Image != containerImage || deployed.Physical != "ocel-app-shop-prod-web-container-r3f8a1c90" {
 		t.Errorf("container = %+v, want the app's name, the front the edge reaches, the image it runs and the service the rule names", deployed)
 	}
 
@@ -420,7 +421,7 @@ func ruleRouting(priority int, physical string) elbv2types.Rule {
 func TestARuleStepsPastThePrioritiesTheFrontAlreadyUses(t *testing.T) {
 	t.Parallel()
 
-	hashed := rulePriority("shop-prod-web-container-r3f8a1c90", nil)
+	hashed := rulePriority("ocel-app-shop-prod-web-container-r3f8a1c90", nil)
 	cfg, spec := containerStackSpec(t)
 	cfg.Rules = &fakeRules{taken: []string{strconv.Itoa(hashed), strconv.Itoa(hashed + 1), "default"}}
 	work, err := definitionOf(cfg, spec, fixtureContainerInfra())
@@ -575,7 +576,7 @@ func TestAContainerAppScalesOnRequestsBetweenItsFloorAndCeiling(t *testing.T) {
 	if target["minCapacity"].NumberValue() != 2 || target["maxCapacity"].NumberValue() != 6 {
 		t.Errorf("the scalable target spans %v to %v, want 2 to 6", target["minCapacity"], target["maxCapacity"])
 	}
-	if got, want := target["resourceId"].StringValue(), "service/ocel-containers-production/shop-prod-web-container-r3f8a1c90"; got != want {
+	if got, want := target["resourceId"].StringValue(), "service/ocel-containers-production/ocel-app-shop-prod-web-container-r3f8a1c90"; got != want {
 		t.Errorf("resourceId = %q, want %q, the service this release runs", got, want)
 	}
 	if target["serviceNamespace"].StringValue() != "ecs" || target["scalableDimension"].StringValue() != "ecs:service:DesiredCount" {
@@ -645,7 +646,7 @@ func TestAContainerThatSendsIsHandedTheQueueTopologyAndATasksPolicyOnItsTaskRole
 	if err != nil {
 		t.Fatalf("%s = %q, which the runtime cannot read: %v", queues.EnvVar, work.Env[queues.EnvVar], err)
 	}
-	queue := queues.QueueName("shop", "prod", "resize", "resize", false)
+	queue := queueName(t, "resize", "resize", false)
 	if topology.Table != "ocel-state" || topology.Topics["resize"].Queues["resize"] != queue {
 		t.Errorf("topology = %+v, want the state table and the queue %s behind resize", topology, queue)
 	}

@@ -199,10 +199,6 @@ func KeyPairSuppliedByCaller() map[string]any {
 	return map[string]any{"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}}
 }
 
-func TierScopePrefix(tier environment.Tier) string {
-	return awsports.AppScope + "-" + string(tier) + "-"
-}
-
 func (s Scope) ManagedByItsClusters() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + ManagedSecretClusterTagKey: s.AppClusterARN()}}
 }

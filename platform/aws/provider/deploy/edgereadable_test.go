@@ -56,7 +56,7 @@ func TestAnAppBehindAnEdgeHoldingNoKeyToTheAssetBucketTagsNothing(t *testing.T) 
 
 func TestADeployBehindCloudflareNeedsTheEdgeReaderKeyAndThePurgeSeedBootstrapMints(t *testing.T) {
 	t.Parallel()
-	complete := Config{AssetBucket: "assets", Objects: &fakeArtifactStore{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "s", PurgeSeed: "seed", Tier: environment.TierProduction, Edge: fakeEdgeOf(cloudflare.Kind)}
+	complete := Config{Namespace: testNamespace, AssetBucket: "assets", Objects: &fakeArtifactStore{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "s", PurgeSeed: "seed", Tier: environment.TierProduction, Edge: fakeEdgeOf(cloudflare.Kind)}
 
 	for name, tc := range map[string]struct {
 		cfg   func(Config) Config
@@ -112,7 +112,7 @@ func TestADeployBehindCloudflareNeedsTheEdgeReaderKeyAndThePurgeSeedBootstrapMin
 func TestADeployBehindCloudflareReportsAnEdgeReaderKeyItCouldNotReadRatherThanAskingForABootstrap(t *testing.T) {
 	t.Parallel()
 	unreadable := errors.New("parse edge credentials: invalid character 'n'")
-	cfg := Config{AssetBucket: "assets", Objects: &fakeArtifactStore{}, PurgeSeed: "seed", Tier: environment.TierProduction, EdgeCredentialsErr: unreadable, Edge: fakeEdgeOf(cloudflare.Kind)}
+	cfg := Config{Namespace: testNamespace, AssetBucket: "assets", Objects: &fakeArtifactStore{}, PurgeSeed: "seed", Tier: environment.TierProduction, EdgeCredentialsErr: unreadable, Edge: fakeEdgeOf(cloudflare.Kind)}
 
 	err := checkEdgeReaderBootstrapped(cfg, cloudflare.Kind)
 

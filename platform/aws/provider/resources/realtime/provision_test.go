@@ -11,7 +11,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -26,6 +28,10 @@ const (
 func testRealtimeAuthorizer() payloads.Placement {
 	return payloads.Placement{Bucket: "ocel-artifacts", Key: payloads.Key(AuthorizerPayload, "a0a0"), SHA256: "a0a0"}
 }
+
+const testAPI = "ocel-app-shop-prod-realtime-660706"
+
+var testStack = component.Stack{Ref: provider.StackRef{Tier: environment.TierProduction}, Namespace: "ocel", Project: "shop", Env: "prod"}
 
 func testRealtimeArgs() realtimeArgs {
 	return realtimeArgs{
@@ -42,7 +48,7 @@ func testRealtimeArgs() realtimeArgs {
 func registeredRealtime(t *testing.T) *componenttest.Recorder {
 	t.Helper()
 	return componenttest.Record(t, func(ctx *pulumi.Context) error {
-		return registerRealtime(ctx, "shop", "prod", testRealtimeArgs())
+		return registerRealtime(ctx, testStack, testRealtimeArgs())
 	}, func(args pulumi.MockResourceArgs) resource.PropertyMap {
 		if args.TypeToken != component.TokenAppSyncAPI {
 			return nil
@@ -70,9 +76,9 @@ func authTypes(t *testing.T, modes resource.PropertyValue) []string {
 func TestAStageServesRealtimeFromOneEventAPIThatConnectsAndSubscribesByTokenOrRoleAndPublishesByRoleAlone(t *testing.T) {
 	t.Parallel()
 
-	api := registeredRealtime(t).InputsOf(t, component.TokenAppSyncAPI, "realtime")
-	if got := api["name"].StringValue(); got != "ocel-app-shop-prod" {
-		t.Errorf("api name = %q, want ocel-app-shop-prod", got)
+	api := registeredRealtime(t).InputsOf(t, component.TokenAppSyncAPI, testAPI)
+	if got := api["name"].StringValue(); got != testAPI {
+		t.Errorf("api name = %q, want %s", got, testAPI)
 	}
 	config := api["eventConfig"].ObjectValue()
 	for field, want := range map[string][]string{
@@ -95,7 +101,7 @@ func TestEachRealtimeResourceIsAChannelNamespaceOfTheStagesAPI(t *testing.T) {
 	t.Parallel()
 
 	rec := registeredRealtime(t)
-	for logical, namespace := range map[string]string{"realtime-app": "app", "realtime-chat": "chat"} {
+	for logical, namespace := range map[string]string{testAPI + "/app": "app", testAPI + "/chat": "chat"} {
 		inputs := rec.InputsOf(t, component.TokenAppSyncChannelNamespace, logical)
 		if got := inputs["name"].StringValue(); got != namespace {
 			t.Errorf("namespace %s name = %q, want %q", logical, got, namespace)
@@ -109,7 +115,7 @@ func TestEachRealtimeResourceIsAChannelNamespaceOfTheStagesAPI(t *testing.T) {
 func TestTheAuthorizerIsASmallArmGoLambdaHoldingEveryNamespacesVerifyKeyAndNoSigningKey(t *testing.T) {
 	t.Parallel()
 
-	fn := registeredRealtime(t).InputsOf(t, component.TokenLambdaFunction, "realtime-authorizer")
+	fn := registeredRealtime(t).InputsOf(t, component.TokenLambdaFunction, testAPI+"-authorizer")
 	for field, want := range map[string]any{
 		"runtime":    "provided.al2023",
 		"handler":    "bootstrap",
@@ -142,7 +148,7 @@ func TestTheAuthorizerIsASmallArmGoLambdaHoldingEveryNamespacesVerifyKeyAndNoSig
 func TestOnlyTheStagesAPIMayInvokeTheAuthorizer(t *testing.T) {
 	t.Parallel()
 
-	permission := registeredRealtime(t).InputsOf(t, component.TokenLambdaPermission, "realtime-authorizer-permission")
+	permission := registeredRealtime(t).InputsOf(t, component.TokenLambdaPermission, testAPI+"-authorizer/appsync-invoke")
 	if got := permission["principal"].StringValue(); got != "appsync.amazonaws.com" {
 		t.Errorf("permission principal = %q, want appsync.amazonaws.com", got)
 	}
@@ -155,11 +161,11 @@ func TestTheAuthorizersRoleIsBoundedAndReadsItsOwnAPIAlone(t *testing.T) {
 	t.Parallel()
 
 	rec := registeredRealtime(t)
-	role := rec.InputsOf(t, component.TokenIAMRole, "realtime-authorizer-role")
+	role := rec.InputsOf(t, component.TokenIAMRole, testAPI+"-authorizer")
 	if got := role["permissionsBoundary"].StringValue(); got != testRealtimeArgs().BoundaryARN {
 		t.Errorf("role boundary = %q, want the app boundary", got)
 	}
-	policy := rec.InputsOf(t, component.TokenIAMRolePolicy, "realtime-authorizer-role-policy-api")["policy"].StringValue()
+	policy := rec.InputsOf(t, component.TokenIAMRolePolicy, testAPI+"-authorizer/api")["policy"].StringValue()
 	var doc struct {
 		Statement []struct {
 			Action   []string
@@ -179,10 +185,10 @@ func TestEveryRealtimeResourceIsTaggedAsRealtime(t *testing.T) {
 
 	rec := registeredRealtime(t)
 	for typeToken, cases := range map[string]map[string]naming.Kind{
-		component.TokenAppSyncAPI:              {"realtime": naming.KindRealtime},
-		component.TokenAppSyncChannelNamespace: {"realtime-app": naming.KindRealtime},
-		component.TokenLambdaFunction:          {"realtime-authorizer": naming.KindRealtimeAuthorizer},
-		component.TokenLogGroup:                {"realtime-authorizer-logs": naming.KindRealtimeAuthorizer},
+		component.TokenAppSyncAPI:              {testAPI: naming.KindRealtime},
+		component.TokenAppSyncChannelNamespace: {testAPI + "/app": naming.KindRealtime},
+		component.TokenLambdaFunction:          {testAPI + "-authorizer": naming.KindRealtimeAuthorizer},
+		component.TokenLogGroup:                {"/aws/lambda/" + testAPI + "-authorizer": naming.KindRealtimeAuthorizer},
 	} {
 		for name, kind := range cases {
 			if got := rec.Component(t, typeToken, name); got != kind.Component() {
@@ -198,7 +204,7 @@ func TestARealtimeStageWithoutABoundaryIsRefused(t *testing.T) {
 	args := testRealtimeArgs()
 	args.BoundaryARN = ""
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return registerRealtime(ctx, "shop", "prod", args)
+		return registerRealtime(ctx, testStack, args)
 	}, pulumi.WithMocks("shop", "prod--infra", &componenttest.Recorder{}))
 	if err == nil || !strings.Contains(err.Error(), "boundary") {
 		t.Errorf("registerRealtime() = %v, want the missing boundary refused", err)

@@ -71,11 +71,15 @@ func (d *Definition) PlaceRule(ctx context.Context, rules RulesAPI) error {
 	if d.workerApp {
 		return nil
 	}
-	taken, err := takenPriorities(ctx, rules, d.readListenerArn(), d.physical())
+	names, err := d.names()
 	if err != nil {
 		return err
 	}
-	if d.priority = rulePriority(d.physical(), taken); d.priority == 0 {
+	taken, err := takenPriorities(ctx, rules, d.readListenerArn(), names.Service)
+	if err != nil {
+		return err
+	}
+	if d.priority = rulePriority(names.Service, taken); d.priority == 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the container front for the %s tier has a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", d.tier, d.App)
 	}

@@ -20,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -81,7 +80,7 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 		t.Fatalf("run the app program: %v", err)
 	}
 
-	entry := functionEnvOf(t, rec, function.Coordinate("shop", stack, "fn--web--entry").PhysicalName(component.MaxLambdaBaseNameLen))
+	entry := functionEnvOf(t, rec, namedFunction(stack, "fn--web--entry"))
 	if entry["OCEL_ROUTER_KIND"] != string(cloudfront.Kind) {
 		t.Errorf("OCEL_ROUTER_KIND = %q, want the router the spec named", entry["OCEL_ROUTER_KIND"])
 	}
@@ -203,7 +202,7 @@ func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 func TestAnAppStackWhoseSpecHasNoAppIsRefusedRatherThanProvisionedEmpty(t *testing.T) {
 	t.Parallel()
 
-	release := releasing(t, Config{})
+	release := releasing(t, Config{Namespace: testNamespace})
 	spec := provider.StackSpec{
 		Ref:      provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewReleaseToken("d1", ""))},
 		Kind:     provider.StackApp,

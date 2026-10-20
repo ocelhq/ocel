@@ -22,7 +22,7 @@ func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
 	}
 
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
+		return register(ctx, testStack("shop", testNetwork), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
 	}, pulumi.WithMocks("shop", "prod--infra", componenttest.NewRecorder(noSecret)))
 
 	if err == nil {
@@ -35,7 +35,7 @@ func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
 
 func TestPostgresComponentTags(t *testing.T) {
 	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
-		err := register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
+		err := register(ctx, testStack("shop", testNetwork), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
 		return err
 	}, masterUserSecret)
 
@@ -43,10 +43,10 @@ func TestPostgresComponentTags(t *testing.T) {
 		typeToken string
 		name      string
 	}{
-		{"aws:ec2/securityGroup:SecurityGroup", "db-main-security-group"},
-		{"aws:rds/subnetGroup:SubnetGroup", "db-main-subnet-group"},
-		{"aws:rds/cluster:Cluster", "db-main"},
-		{"aws:rds/clusterInstance:ClusterInstance", "db-main-instance"},
+		{"aws:ec2/securityGroup:SecurityGroup", testCluster + "-sg"},
+		{"aws:rds/subnetGroup:SubnetGroup", testCluster + "-subnets"},
+		{"aws:rds/cluster:Cluster", testCluster},
+		{"aws:rds/clusterInstance:ClusterInstance", testCluster + "-1"},
 	}
 	for _, tc := range cases {
 		if got, want := rec.Component(t, tc.typeToken, tc.name), naming.KindDatabase.Component(); got != want {
@@ -58,10 +58,14 @@ func TestPostgresComponentTags(t *testing.T) {
 func TestPostgresDescriptionsFitAWSLimits(t *testing.T) {
 	long := strings.Repeat("storefront-", 40)
 	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
-		return register(ctx, long, "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
+		return register(ctx, testStack(long, testNetwork), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
 	}, masterUserSecret)
 
-	sg := rec.InputsOf(t, "aws:ec2/securityGroup:SecurityGroup", "db-main-security-group")
+	cluster, err := ClusterName("ocel", environment.TierProduction, component.ResourceCoordinate(long, "prod", "db--main", naming.KindDatabase))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sg := rec.InputsOf(t, "aws:ec2/securityGroup:SecurityGroup", cluster+"-sg")
 	if got := sg["description"].StringValue(); len(got) != component.MaxSecurityGroupDescriptionLen {
 		t.Errorf("security group description is %d chars, want it clamped to the %d EC2 accepts", len(got), component.MaxSecurityGroupDescriptionLen)
 	}
@@ -73,84 +77,77 @@ func TestPostgresDescriptionsFitAWSLimits(t *testing.T) {
 		}
 	}
 
-	subnets := rec.InputsOf(t, "aws:rds/subnetGroup:SubnetGroup", "db-main-subnet-group")
+	subnets := rec.InputsOf(t, "aws:rds/subnetGroup:SubnetGroup", cluster+"-subnets")
 	if got := subnets["description"].StringValue(); len(got) != component.MaxSubnetGroupDescriptionLen {
 		t.Errorf("subnet group description is %d chars, want it clamped to the %d RDS accepts", len(got), component.MaxSubnetGroupDescriptionLen)
 	}
 }
 
-func TestPostgresResourceIDs(t *testing.T) {
+func TestAClusterIsNamedUnderTheAppFenceAndItsTierWithItsMembersBesideIt(t *testing.T) {
 	t.Parallel()
 
-	at := component.ResourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, testStack("shop", testNetwork), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
+	}, masterUserSecret)
 
-	cases := map[string]string{
-		"db-main":                naming.ResourceID(at.Kind, at.Name),
-		"db-main-security-group": naming.ResourceID(at.Kind, at.Name, "security-group"),
-		"db-main-subnet-group":   naming.ResourceID(at.Kind, at.Name, "subnet-group"),
-		"db-main-instance":       naming.ResourceID(at.Kind, at.Name, "instance"),
+	for _, tc := range []struct {
+		token, name, key string
+	}{
+		{component.TokenRDSCluster, testCluster, "clusterIdentifier"},
+		{component.TokenRDSClusterMember, testCluster + "-1", "identifier"},
+		{component.TokenRDSSubnetGroup, testCluster + "-subnets", "name"},
+		{component.TokenEC2SecurityGroup, testCluster + "-sg", "name"},
+	} {
+		if got := rec.InputsOf(t, tc.token, tc.name)[resource.PropertyKey(tc.key)]; !got.IsString() || got.StringValue() != tc.name {
+			t.Errorf("%s %s = %v, want %q, the name it is registered under", tc.token, tc.key, got, tc.name)
+		}
 	}
-	for want, got := range cases {
-		if got != want {
-			t.Errorf("resource id = %q, want %q", got, want)
-		}
-		if strings.Contains(got, "_") {
-			t.Errorf("resource id %q mixes alphabets; the deploy log is kebab throughout", got)
-		}
+	if got := rec.Tags(t, component.TokenEC2SecurityGroup, testCluster+"-sg")["Name"]; got != testCluster+"-sg" {
+		t.Errorf("security group Name tag = %q, want its name, which the console lists it by", got)
 	}
 }
 
-func TestRDSIdentifierPrefix(t *testing.T) {
+func TestAClusterNamesItsTierAfterTheAppFence(t *testing.T) {
 	t.Parallel()
 
-	at := component.ResourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
+	got, err := ClusterName("ocel", environment.TierPreview, component.ResourceCoordinate("shop", "pr-42", "db--main", naming.KindDatabase))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-preview-shop-pr-42-main-f154dd"; got != want {
+		t.Errorf("ClusterName = %q, want %q", got, want)
+	}
+}
 
-	t.Run("names the app scope, tier, project, env and resource", func(t *testing.T) {
-		t.Parallel()
+func TestAClustersNameLeavesRoomForItsInstance(t *testing.T) {
+	t.Parallel()
 
-		cases := map[environment.Tier]string{
-			environment.TierProduction: "ocel-app-production-shop-prod-main-",
-			environment.TierPreview:    "ocel-app-preview-shop-prod-main-",
-		}
-		for tier, want := range cases {
-			if got := rdsIdentifierPrefix(tier, at, ""); got != want {
-				t.Errorf("rdsIdentifierPrefix(%s, %q) = %q, want %q", tier, "", got, want)
-			}
-		}
-	})
+	long := component.ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "db--"+strings.Repeat("m", 20), naming.KindDatabase)
+	got, err := ClusterName("ocel", environment.TierProduction, long)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got+"-1") > maxRDSIdentifierLen {
+		t.Errorf("ClusterName = %q leaves its instance %d characters, over RDS's %d", got, len(got+"-1"), maxRDSIdentifierLen)
+	}
+	if first := got[0]; first < 'a' || first > 'z' {
+		t.Errorf("ClusterName = %q, want a letter first: RDS rejects any other", got)
+	}
+}
 
-	t.Run("fits the identifier AWS appends to", func(t *testing.T) {
-		t.Parallel()
+func TestAProtectedClustersFinalSnapshotIsNamedAfterIt(t *testing.T) {
+	t.Parallel()
 
-		long := component.ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "db--"+strings.Repeat("m", 30), naming.KindDatabase)
-		got := rdsIdentifierPrefix(environment.TierProduction, long, "instance")
-		if len(got) > maxRDSIdentifierPrefixLen {
-			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) = %q, length %d, want <= %d", got, len(got), maxRDSIdentifierPrefixLen)
-		}
-		if len(got)+rdsAutonameSuffixLen > maxRDSIdentifierLen {
-			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) length %d leaves no room for the %d-character suffix within %d", len(got), rdsAutonameSuffixLen, maxRDSIdentifierLen)
-		}
-	})
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		protected := translate(&provider.PostgresSpec{}, environment.TierProduction)
+		protected.Protected = true
+		return register(ctx, testStack("shop", testNetwork), "db--main", protected)
+	}, masterUserSecret)
 
-	t.Run("starts with a letter even when the project does not", func(t *testing.T) {
-		t.Parallel()
-
-		got := rdsIdentifierPrefix(environment.TierProduction, component.ResourceCoordinate("7shop", "prod", "db--main", naming.KindDatabase), "")
-		if first := got[0]; first < 'a' || first > 'z' {
-			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) = %q, want a letter first — RDS rejects a leading digit", got)
-		}
-	})
-
-	t.Run("two long names sharing a prefix stay distinct", func(t *testing.T) {
-		t.Parallel()
-
-		shared := strings.Repeat("reporting-", 5)
-		a := rdsIdentifierPrefix(environment.TierProduction, component.ResourceCoordinate("shop", "prod", "db--"+shared+"alpha", naming.KindDatabase), "")
-		b := rdsIdentifierPrefix(environment.TierProduction, component.ResourceCoordinate("shop", "prod", "db--"+shared+"beta", naming.KindDatabase), "")
-		if a == b {
-			t.Errorf("rdsIdentifierPrefix(environment.TierProduction, ) collided: both %q", a)
-		}
-	})
+	got := rec.InputsOf(t, component.TokenRDSCluster, testCluster)["finalSnapshotIdentifier"]
+	if !got.IsString() || !strings.HasPrefix(got.StringValue(), testCluster+"-final-") {
+		t.Errorf("final snapshot = %v, want the cluster plus -final- and the time it was taken", got)
+	}
 }
 
 func TestEC2Description(t *testing.T) {
@@ -237,17 +234,17 @@ func TestAClusterLetsItsAppRoleSignInByIAMAndTheDeployCreateItThroughTheDataAPI(
 	t.Parallel()
 
 	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
-		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
+		return register(ctx, testStack("shop", testNetwork), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
 	}, masterUserSecret)
 
-	cluster := rec.InputsOf(t, component.TokenRDSCluster, "db-main")
+	cluster := rec.InputsOf(t, component.TokenRDSCluster, testCluster)
 	if !cluster["iamDatabaseAuthenticationEnabled"].BoolValue() {
 		t.Error("iamDatabaseAuthenticationEnabled = false, want true: the app connects with a token its role mints, never a password")
 	}
 	if !cluster["enableHttpEndpoint"].BoolValue() {
 		t.Error("enableHttpEndpoint = false, want true: the deploy creates the app role through the Data API, from outside the VPC")
 	}
-	role := rec.InputsOf(t, RoleToken, "db-main-app-role")
+	role := rec.InputsOf(t, RoleToken, testCluster+"/app-role")
 	if role["role"].StringValue() != AppRoleFor(environment.TierProduction) || role["database"].StringValue() != postgresDatabaseName {
 		t.Errorf("app role inputs = %v, want %s on the %s database", role, AppRoleFor(environment.TierProduction), postgresDatabaseName)
 	}
@@ -260,10 +257,10 @@ func TestADatabaseAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
 	t.Parallel()
 
 	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
-		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), testNetwork)
+		return register(ctx, testStack("shop", testNetwork), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
 	}, masterUserSecret)
 
-	ingress := rec.InputsOf(t, component.TokenEC2SecurityGroup, "db-main-security-group")["ingress"].ArrayValue()
+	ingress := rec.InputsOf(t, component.TokenEC2SecurityGroup, testCluster+"-sg")["ingress"].ArrayValue()
 	if len(ingress) != 1 {
 		t.Fatalf("security group has %d ingress rules, want the one admitting the database's port", len(ingress))
 	}
@@ -276,7 +273,7 @@ func TestADatabaseAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
 	}
 
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return register(ctx, "shop", "prod", "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction), component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-1"}})
+		return register(ctx, testStack("shop", component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-1"}}), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
 	}, pulumi.WithMocks("shop", "prod--infra", componenttest.NewRecorder(masterUserSecret)))
 	if err == nil || !strings.Contains(err.Error(), "vpc-clients") {
 		t.Errorf("register() with no clients group = %v, want it refused rather than admitting nothing or everything", err)

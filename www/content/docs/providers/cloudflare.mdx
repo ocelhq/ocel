@@ -117,8 +117,9 @@ export default defineConfig({
 Under the hood, these records are DNS-only (a Workers mutual TLS binding cannot reach a proxied
 hostname) and point at the tier's load balancer, which admits only the worker's client
 certificate. The edge serves a stale page while the app renders a fresh one, and purges a
-revalidated tag. The worker reads static files and route tables from the tier's bucket over
-its S3-compatible API, with an HMAC key that may read only those.
+revalidated tag. The worker reads static files and route tables from the tier's edge bucket, which
+holds only what an edge may serve, over its S3-compatible API, with an HMAC key that may read that
+bucket and nothing else.
 
 ## Container apps on AWS
 

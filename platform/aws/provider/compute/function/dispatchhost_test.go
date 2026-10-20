@@ -187,11 +187,12 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
 		return AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: manifestAppFunctions(routedFunctions()),
@@ -211,7 +212,7 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	entry := functionEnvOf(t, rec, Coordinate("shop", stack, "fn--web--entry").PhysicalName(component.MaxLambdaBaseNameLen))
+	entry := functionEnvOf(t, rec, namedFunction(stack, "fn--web--entry").Pulumi)
 	if entry[routerKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want the router kind the deploy chose", routerKindEnv, entry[routerKindEnv])
 	}
@@ -237,6 +238,7 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		return AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: manifestAppFunctions(routedFunctions()),
@@ -253,7 +255,7 @@ func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	sibling := functionEnvOf(t, rec, Coordinate("shop", stack, "fn--web--admin").PhysicalName(component.MaxLambdaBaseNameLen))
+	sibling := functionEnvOf(t, rec, namedFunction(stack, "fn--web--admin").Pulumi)
 	if sibling[routerKindEnv] != string(cloudfront.Kind) {
 		t.Errorf("%s = %q, want every function to learn the router kind", routerKindEnv, sibling[routerKindEnv])
 	}
@@ -427,7 +429,7 @@ type invokeStatement struct {
 
 func readDispatchInvokeGrant(t *testing.T, rec *inputRecorder) []invokeStatement {
 	t.Helper()
-	name := naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "dispatch", "invoke")
+	name := namedRole(testStack(t, "prod", "web")).Part(dispatchPolicyName)
 	raw, ok := rec.inputs(rolePolicyToken, name)["policy"]
 	if !ok || !raw.IsString() {
 		t.Fatalf("the entry role has no %s policy", name)
@@ -447,11 +449,12 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
 		return AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: manifestAppFunctions(routedFunctions()),
@@ -469,7 +472,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	}
 
 	statements := readDispatchInvokeGrant(t, rec)
-	sibling := mockAccountARN("lambda", "function:"+Coordinate("shop", stack, "fn--web--admin").PhysicalName(component.MaxLambdaBaseNameLen))
+	sibling := mockAccountARN("lambda", "function:"+namedFunction(stack, "fn--web--admin").Pulumi)
 
 	var reachesSibling, reachesOptimizer bool
 	for _, statement := range statements {
@@ -504,6 +507,7 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		return AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: manifestAppFunctions(routedFunctions()),
@@ -519,7 +523,7 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	name := naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "dispatch", "invoke")
+	name := namedRole(testStack(t, "prod", "web")).Part(dispatchPolicyName)
 	if _, granted := rec.inputs(rolePolicyToken, name)["policy"]; granted {
 		t.Error("an app whose edge dispatches has an invoke grant, want the grant only where the origin dispatches")
 	}

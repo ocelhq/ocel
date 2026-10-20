@@ -19,12 +19,15 @@ func checkKVNodeCount(logicalName string, patch map[string]any) error {
 		logicalName, nodes)
 }
 
-func resourceNames(project, env, logicalName string) map[string]component.ResourceRef {
-	at := component.ResourceCoordinate(project, env, logicalName, naming.KindKV)
-	return map[string]component.ResourceRef{
-		"securityGroup":    {Token: component.TokenEC2SecurityGroup, Name: naming.ResourceID(at.Kind, at.Name, "security-group")},
-		"subnetGroup":      {Token: component.TokenElastiCacheSubnetGroup, Name: naming.ResourceID(at.Kind, at.Name, "subnet-group")},
-		"parameterGroup":   {Token: component.TokenElastiCacheParameterGroup, Name: naming.ResourceID(at.Kind, at.Name, "parameters")},
-		"replicationGroup": {Token: component.TokenElastiCacheReplicationGroup, Name: naming.ResourceID(at.Kind, at.Name)},
+func resourceNames(at component.Stack, logicalName, family string) (map[string][]component.ResourceRef, error) {
+	group, err := groupID(at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindKV))
+	if err != nil {
+		return nil, err
 	}
+	return map[string][]component.ResourceRef{
+		"securityGroup":    {{Token: component.TokenEC2SecurityGroup, Name: component.SecurityGroupName(group)}},
+		"subnetGroup":      {{Token: component.TokenElastiCacheSubnetGroup, Name: group + naming.WordSeparator + subnetsSuffix}},
+		"parameterGroup":   {{Token: component.TokenElastiCacheParameterGroup, Name: group + naming.WordSeparator + family}},
+		"replicationGroup": {{Token: component.TokenElastiCacheReplicationGroup, Name: group}},
+	}, nil
 }

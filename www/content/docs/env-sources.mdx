@@ -219,9 +219,10 @@ Principal ARNs**, list:
 - The role or user you deploy as (`aws sts get-caller-identity`). It signs in for deploys and
   `ocel env sync`.
 - The sync's role, which reads the source once a minute: list
-  `arn:aws:iam::<account>:role/<namespace>-env-sync` (`-preview` suffix for preview). The
-  namespace is `ocel` unless you set `OCEL_NAMESPACE`. The first deploy that registers a
-  scheduled source makes the role, and its name is fixed, so you can list it before then.
+  `arn:aws:iam::<account>:role/<namespace>-prod-env-sync`, or `<namespace>-preview-env-sync` for
+  previews. The namespace is `ocel` unless you set `OCEL_NAMESPACE`. The first deploy that
+  registers a scheduled source makes the role, and its name is fixed, so you can list it before
+  then.
 - If the console writes into Infisical through a [connector](/docs/cli/connector), the
   `ConnectorRole` of the `<namespace>-connector` stack.
 
@@ -233,15 +234,11 @@ Create a **GCP ID Token Auth** identity in Infisical with access to the project.
 **Allowed Service Account Emails**, list:
 
 - The service account you deploy as. It signs in for deploys and `ocel env sync`.
-- The sync's service account, which reads the source once a minute. Its email is a hash, so
-  find it by its display name, `ocel env source sync (<namespace>, <tier>)` (command below).
+- The sync's service account, which reads the source once a minute:
+  `<namespace>-prod-env-sync@<project>.iam.gserviceaccount.com`, or
+  `<namespace>-preview-env-sync@<project>.iam.gserviceaccount.com` for previews.
 - If the console writes into Infisical through a [connector](/docs/cli/connector),
   `<namespace>-connector@<project>.iam.gserviceaccount.com`.
-
-```bash
-gcloud iam service-accounts list --project my-project \
-  --filter='displayName="ocel env source sync (ocel, production)"' --format='value(email)'
-```
 
 Leave **Allowed Projects** and **Allowed Zones** empty: they match only Compute Engine
 instances. A personal `gcloud auth application-default login` has no service account to

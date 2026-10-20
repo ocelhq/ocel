@@ -22,6 +22,7 @@ func registeredKV(t *testing.T, project string) *componenttest.Recorder {
 	t.Helper()
 	store := kv.New(kv.Tokens{Parameters: newFakeParameters(), Root: "/ocel/kv"})
 	at := component.Stack{
+		Namespace:  testNamespace,
 		Project:    project,
 		Env:        "prod",
 		Network:    component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-1", "subnet-2"}, Clients: "sg-vpc-clients"},
@@ -33,7 +34,7 @@ func registeredKV(t *testing.T, project string) *componenttest.Recorder {
 }
 
 func declareTopicsAndTasks(pctx *pulumi.Context, r *release, project, env string, resources []provider.Resource) error {
-	at := component.Stack{Project: project, Env: env, Region: r.cfg.Region, StateTable: r.cfg.StateTable, StateTableARN: r.cfg.StateTableARN, Resources: resources}
+	at := component.Stack{Namespace: r.cfg.Namespace, Project: project, Env: env, Region: r.cfg.Region, StateTable: r.cfg.StateTable, StateTableARN: r.cfg.StateTableARN, Resources: resources}
 	for _, declaring := range []component.Component{task.New(), topic.New()} {
 		if err := declaring.Declare(pctx, at, declaring.Declared(resources)); err != nil {
 			return err

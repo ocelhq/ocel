@@ -8,7 +8,10 @@ import (
 func shape(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
 	for _, resource := range declared {
 		args := translate(resource.Postgres, at.Tier())
-		names := resourceNames(at.Project, at.Env, resource.Name)
+		names, err := resourceNames(at, resource.Name)
+		if err != nil {
+			return err
+		}
 		cost.Add(scope, component.TerraformRDSCluster, resource.Name, map[string]any{
 			"engine":         args.Engine,
 			"engine_mode":    args.EngineMode,
@@ -18,7 +21,7 @@ func shape(cost component.CostTree, scope string, at component.Stack, declared [
 				"max_capacity": args.MaxCapacity,
 			},
 			"manage_master_user_password": args.ManageMasterPassword,
-		}, names["cluster"])
+		}, names["cluster"][0])
 		cost.Add(scope, component.TerraformRDSClusterInstance, resource.Name, map[string]any{
 			"engine":         args.Engine,
 			"instance_class": args.InstanceClass,
@@ -26,7 +29,7 @@ func shape(cost component.CostTree, scope string, at component.Stack, declared [
 				"min_capacity": args.MinCapacity,
 				"max_capacity": args.MaxCapacity,
 			},
-		}, names["instance"])
+		}, names["instance"][0])
 		cost.AddPlain(scope, component.TerraformSecret, resource.Name, map[string]any{"managed_by": "rds"})
 	}
 	return nil

@@ -8,6 +8,15 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
+func mustGroupID(t *testing.T, project, logicalName string) string {
+	t.Helper()
+	id, err := groupID("ocel", component.ResourceCoordinate(project, "prod", logicalName, naming.KindKV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func TestLongSlugsStayDistinct(t *testing.T) {
 	const shared = "my-very-long-project-name-that-runs-past-the-old-limit"
 
@@ -19,30 +28,32 @@ func TestLongSlugsStayDistinct(t *testing.T) {
 	if one, two := naming.StateBackendURL("s3", "state", a), naming.StateBackendURL("s3", "state", b); one == two {
 		t.Fatalf("two slugs share the state subpath %q", one)
 	}
-	one := kvGroupID(component.ResourceCoordinate(naming.Sanitize(a), "production", "kv--cache", naming.KindKV))
-	two := kvGroupID(component.ResourceCoordinate(naming.Sanitize(b), "production", "kv--cache", naming.KindKV))
-	if one == two {
+	if one, two := mustGroupID(t, naming.Sanitize(a), "kv--cache"), mustGroupID(t, naming.Sanitize(b), "kv--cache"); one == two {
 		t.Fatalf("two slugs' stores share the replication group %q", one)
 	}
 }
 
-func TestAStoresNamesFitTheReplicationGroupIDElastiCacheAccepts(t *testing.T) {
+func TestAStoreIsNamedUnderTheAppFenceWithinTheReplicationGroupIDElastiCacheAccepts(t *testing.T) {
 	t.Parallel()
 
-	long := component.ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "kv--"+strings.Repeat("c", 30), naming.KindKV)
-	if got := kvGroupID(long); len(got) > maxReplicationGroupIDLen {
-		t.Errorf("kvGroupID() = %q, length %d, want <= %d", got, len(got), maxReplicationGroupIDLen)
+	if got := mustGroupID(t, "shop", "kv--cache"); got != testGroup {
+		t.Errorf("groupID = %q, want %q", got, testGroup)
 	}
 
-	shared := strings.Repeat("sessions-", 5)
-	a := kvGroupID(component.ResourceCoordinate("shop", "prod", "kv--"+shared+"alpha", naming.KindKV))
-	b := kvGroupID(component.ResourceCoordinate("shop", "prod", "kv--"+shared+"beta", naming.KindKV))
-	if a == b {
-		t.Errorf("kvGroupID() collided: both %q", a)
+	long := mustGroupID(t, strings.Repeat("p", 30), "kv--"+strings.Repeat("c", 10))
+	if len(long) > maxReplicationGroupIDLen {
+		t.Errorf("groupID = %q, %d characters, want <= %d", long, len(long), maxReplicationGroupIDLen)
 	}
+	if strings.Contains(long, "--") || strings.HasSuffix(long, "-") {
+		t.Errorf("groupID = %q, want no doubled or trailing hyphen ElastiCache refuses", long)
+	}
+}
 
-	digit := kvGroupID(component.ResourceCoordinate("7shop", "prod", "kv--cache", naming.KindKV))
-	if !strings.HasPrefix(digit, "ocel-app-") || strings.Contains(digit, "--") || strings.HasSuffix(digit, "-") {
-		t.Errorf("kvGroupID() = %q, want it in the app scope, with no doubled or trailing hyphen ElastiCache refuses", digit)
+func TestAStoreWhoseNameCannotFitIsRefused(t *testing.T) {
+	t.Parallel()
+
+	_, err := groupID("ocel", component.ResourceCoordinate("shop", "prod", "kv--"+strings.Repeat("c", 30), naming.KindKV))
+	if err == nil || !strings.Contains(err.Error(), "40") {
+		t.Errorf("groupID = %v, want a refusal naming ElastiCache's 40 characters", err)
 	}
 }

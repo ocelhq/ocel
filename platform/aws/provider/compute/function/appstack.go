@@ -37,6 +37,7 @@ func manifestAppFunctions(functions []*contractv1.ManifestFunction) []AppFunctio
 }
 
 type AppStack struct {
+	Namespace string
 	Project   string
 	Stack     naming.StackName
 	Functions []AppFunction
@@ -125,7 +126,12 @@ func (a AppStack) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) er
 		return renderDispatchInvokePolicy(siblings, account, optimizer)
 	}).(pulumi.StringOutput)
 
-	_, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "dispatch", "invoke"), &awsiam.RolePolicyArgs{
+	role, err := RoleName(a.Namespace, component.AppRoleCoordinate(a.Project, a.Stack))
+	if err != nil {
+		return err
+	}
+	_, err = awsiam.NewRolePolicy(ctx, role.Part(dispatchPolicyName), &awsiam.RolePolicyArgs{
+		Name:   pulumi.String(dispatchPolicyName),
 		Role:   a.RoleName,
 		Policy: policy,
 	})
@@ -141,7 +147,11 @@ func (a AppStack) declare(
 ) (functionRef, error) {
 	logical := fn.Logical
 	args := a.Args(fn)
-	ref, err := registerFunction(ctx, logical, Coordinate(a.Project, a.Stack, logical),
+	name, err := Name(a.Namespace, a.Project, a.Stack, logical)
+	if err != nil {
+		return functionRef{}, err
+	}
+	ref, err := registerFunction(ctx, logical, Coordinate(a.Project, a.Stack, logical), name,
 		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn,
 		RuntimeLayerInput(a.Layers[args.Arch]), urlAuth, a.KmsKeyARN,
 		a.shippedTo(logical)...)

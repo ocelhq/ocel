@@ -102,7 +102,7 @@ func shaped(t *testing.T, pass transform.Pass, req provider.ShapeRequest) *costv
 		Shared:      tree.Scope(project, "shared", "production"),
 		Environment: tree.Scope(project, "environment", "prod"),
 	}
-	if err := Shape(context.Background(), pass, "us-east-1", req, tree, scopes); err != nil {
+	if err := Shape(context.Background(), pass, testNamespace, "us-east-1", req, tree, scopes); err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
 	set, err := tree.Set("ocel")
@@ -169,7 +169,7 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	run("container", containerWork.Declare)
 	run("function-network", functionnetwork.NewProgram("ocel", environment.TierProduction, "us-east-1", &functionNetworkCloud{subnets: defaultVPCSubnets()}).Run)
 	run("container-infra", containers.NewProgram("ocel", environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, containers.Fronts{Private: true}).Run)
-	topicsRelease := &release{cfg: Config{Region: "us-east-1", StateTableARN: testStateTableARN}}
+	topicsRelease := &release{cfg: Config{Namespace: testNamespace, Region: "us-east-1", StateTableARN: testStateTableARN}}
 	req := shapeRequest(t)
 	run("topics", func(pctx *pulumi.Context) error {
 		return declareTopicsAndTasks(pctx, topicsRelease, "shop", "prod", req.Resources)
@@ -181,8 +181,8 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 	}, function.AppStack{
 		Functions: []function.AppFunction{{Logical: "web", HasWorkerEntry: true}},
 		Args:      func(function.AppFunction) function.Args { return workerArgs },
-	}, function.ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath}, nil,
-		worker.Target{StateTable: topic.StateTable{Region: "us-east-1", ARN: testStateTableARN}})
+	}, function.ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath}, nil,
+		worker.Target{Namespace: testNamespace, StateTable: topic.StateTable{Region: "us-east-1", ARN: testStateTableARN}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,8 +209,9 @@ func everyProgramRecorded(t *testing.T) *inputRecorder {
 			SigningKeys: realtime.Keys{SigningKeys: newFakeSigningKeys(), Root: "/ocel/realtime"},
 		})
 		at := component.Stack{
-			Ref:     provider.StackRef{Tier: environment.TierProduction, Project: "shop"},
-			Project: "shop", Env: "prod", StateTable: "ocel-state", StateTableARN: testStateTableARN,
+			Ref:       provider.StackRef{Tier: environment.TierProduction, Project: "shop"},
+			Namespace: testNamespace,
+			Project:   "shop", Env: "prod", StateTable: "ocel-state", StateTableARN: testStateTableARN,
 			AppBoundaryARN: containerCfg.AppBoundaryARN, AppRolePath: containerCfg.AppRolePath,
 			Network:    component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-a"}, Clients: "sg-vpc-clients"},
 			Transforms: (*transformPatches)(nil),
@@ -253,7 +254,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 
 	entry := recordedOf(t, rec, "aws:lambda/function:Function")
 	for key := range rec.recorded {
-		if strings.HasPrefix(key, "aws:lambda/function:Function::shop-prod-web") {
+		if strings.HasPrefix(key, "aws:lambda/function:Function::ocel-app-shop-prod-web-entry") {
 			entry = rec.recorded[key]
 		}
 	}
@@ -283,7 +284,12 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	if token := shapedNamed(t, set, "aws_ssm_parameter", "cache"); token["type"] != "SecureString" {
 		t.Errorf("shaped token = %v, want the SecureString the store's AUTH token is kept in", token)
 	}
-	authorizer := rec.recorded["aws:lambda/function:Function::realtime-authorizer"]
+	var authorizer resource.PropertyMap
+	for key, inputs := range rec.recorded {
+		if strings.HasPrefix(key, "aws:lambda/function:Function::") && strings.HasSuffix(key, "-authorizer") {
+			authorizer = inputs
+		}
+	}
 	shapedAuthorizer := shapedNamed(t, set, "aws_lambda_function", "realtime-authorizer")
 	if shapedAuthorizer["memory_size"] != authorizer["memorySize"].NumberValue() || shapedAuthorizer["timeout"] != authorizer["timeout"].NumberValue() || shapedAuthorizer["architectures"].([]any)[0] != authorizer["architectures"].ArrayValue()[0].StringValue() {
 		t.Errorf("shaped authorizer = %v, program registered %v", shapedAuthorizer, authorizer)

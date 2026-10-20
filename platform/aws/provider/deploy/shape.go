@@ -43,15 +43,15 @@ type shapedPatches struct {
 	unknown map[component.ResourceRef][]string
 }
 
-func Shape(ctx context.Context, pass transform.Pass, region string, req provider.ShapeRequest, tree *pricing.Tree, scopes ShapeScopes) error {
+func Shape(ctx context.Context, pass transform.Pass, namespace, region string, req provider.ShapeRequest, tree *pricing.Tree, scopes ShapeScopes) error {
 	project := naming.Sanitize(req.Deploy.Slug)
 	registry := awsresources.Registry(awsresources.Clients{})
-	patched, err := shapeTransforms(ctx, pass, registry, project, req)
+	at := component.Stack{Ref: provider.StackRef{Tier: req.Deploy.Tier, Project: req.Deploy.Slug}, Namespace: namespace, Project: project, Env: req.Deploy.Env, Region: region, Resources: req.Resources}
+	patched, err := shapeTransforms(ctx, pass, registry, at, req)
 	if err != nil {
 		return err
 	}
 	shape := costShape{tree: tree, region: region, patched: patched}
-	at := component.Stack{Ref: provider.StackRef{Tier: req.Deploy.Tier, Project: req.Deploy.Slug}, Project: project, Env: req.Deploy.Env, Region: region, Resources: req.Resources}
 	for _, shaped := range registry.Components() {
 		if shaped.Shape == nil {
 			continue
@@ -60,7 +60,10 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 			return err
 		}
 	}
-	topics := topic.Of(project, req.Deploy.Env, req.Resources)
+	topics, err := topic.Of(topic.NamesAt(at), req.Resources)
+	if err != nil {
+		return err
+	}
 	if err := shape.workers(scopes.Environment, req, topics); err != nil {
 		return err
 	}
@@ -72,7 +75,7 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 			hasContainers = true
 			continue
 		}
-		if err := shape.functions(scope, project, app, req.Functions[app.App]); err != nil {
+		if err := shape.functions(scope, at, app, req.Functions[app.App]); err != nil {
 			return err
 		}
 	}
@@ -109,7 +112,7 @@ func (s costShape) AddPlain(scope, typ, name string, properties map[string]any) 
 	s.tree.Add(scope, awsports.Vendor, typ, name, s.region, properties)
 }
 
-func (s costShape) functions(scope, project string, app provider.AppEntry, specs []provider.FunctionSpec) error {
+func (s costShape) functions(scope string, at component.Stack, app provider.AppEntry, specs []provider.FunctionSpec) error {
 	framework := app.Manifest.GetFramework().GetName()
 	if len(specs) == 0 {
 		specs = []provider.FunctionSpec{{Name: app.App}}
@@ -125,16 +128,19 @@ func (s costShape) functions(scope, project string, app provider.AppEntry, specs
 		if err != nil {
 			return err
 		}
-		names := function.ResourceNames(project, app.Stack, spec.Name)
+		names, err := function.ResourceNames(at.Namespace, at.Project, app.Stack, spec.Name)
+		if err != nil {
+			return err
+		}
 		s.Add(scope, component.TerraformLambdaFunction, spec.Name, map[string]any{
 			"runtime":           args.Runtime,
 			"memory_size":       args.MemorySizeMB,
 			"timeout":           args.TimeoutSeconds,
 			"architectures":     []any{args.Arch},
 			"ephemeral_storage": map[string]any{"size": component.LambdaDefaultEphemeralMB},
-		}, names["lambda"])
-		s.Add(scope, component.TerraformLogGroup, spec.Name, map[string]any{"retention_in_days": component.LambdaLogRetentionDays}, names["logGroup"])
-		s.Add(scope, component.TerraformLambdaFunctionURL, spec.Name, map[string]any{"invoke_mode": args.InvokeMode}, names["url"])
+		}, names["lambda"][0])
+		s.Add(scope, component.TerraformLogGroup, spec.Name, map[string]any{"retention_in_days": component.LambdaLogRetentionDays}, names["logGroup"][0])
+		s.Add(scope, component.TerraformLambdaFunctionURL, spec.Name, map[string]any{"invoke_mode": args.InvokeMode}, names["url"][0])
 	}
 	return nil
 }
@@ -285,7 +291,7 @@ func reachesVPCFromFunctions(req provider.ShapeRequest) bool {
 	return false
 }
 
-func shapeTransforms(ctx context.Context, pass transform.Pass, registry component.Registry, project string, req provider.ShapeRequest) (shapedPatches, error) {
+func shapeTransforms(ctx context.Context, pass transform.Pass, registry component.Registry, at component.Stack, req provider.ShapeRequest) (shapedPatches, error) {
 	collected := shapedPatches{patches: map[component.ResourceRef]map[string]any{}, unknown: map[component.ResourceRef][]string{}}
 	if pass == nil {
 		return collected, nil
@@ -296,7 +302,11 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, registry componen
 		if resource.Binding != "" {
 			continue
 		}
-		if shown, candidate, patchable := newInfraTransformCandidate(registry, project, req.Deploy.Env, resource); patchable {
+		shown, candidate, patchable, err := newInfraTransformCandidate(registry, at, resource)
+		if err != nil {
+			return collected, err
+		}
+		if patchable {
 			request.Resources = append(request.Resources, shown)
 			candidates = append(candidates, candidate)
 		}
@@ -310,8 +320,12 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, registry componen
 			specs = []provider.FunctionSpec{{Name: app.App}}
 		}
 		for _, spec := range specs {
+			names, err := function.ResourceNames(at.Namespace, at.Project, app.Stack, spec.Name)
+			if err != nil {
+				return collected, err
+			}
 			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeFunction, Name: spec.Name, App: app.App})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeFunction, Name: spec.Name}, names: function.ResourceNames(project, app.Stack, spec.Name)})
+			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeFunction, Name: spec.Name}, names: names})
 		}
 	}
 	if len(candidates) == 0 {
@@ -336,20 +350,22 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, registry componen
 	}
 	for i, candidate := range candidates {
 		for _, key := range slices.Sorted(maps.Keys(results[i].Patches)) {
-			ref, constructed := candidate.names[key]
+			refs, constructed := candidate.names[key]
 			if !constructed {
 				return collected, refusal.Refuse(refusal.CodeInvalid,
 					"a transform patches %s's %s, and this deploy constructs no such resource for it", candidate.key.Name, key)
 			}
-			for field, value := range results[i].Patches[key] {
-				if unresolved[outputSite{Resource: candidate.key.Name, Surface: key, Field: field}] {
-					collected.unknown[ref] = append(collected.unknown[ref], snake(field))
-					continue
+			for _, ref := range refs {
+				for field, value := range results[i].Patches[key] {
+					if unresolved[outputSite{Resource: candidate.key.Name, Surface: key, Field: field}] {
+						collected.unknown[ref] = append(collected.unknown[ref], snake(field))
+						continue
+					}
+					if collected.patches[ref] == nil {
+						collected.patches[ref] = map[string]any{}
+					}
+					collected.patches[ref][field] = value
 				}
-				if collected.patches[ref] == nil {
-					collected.patches[ref] = map[string]any{}
-				}
-				collected.patches[ref][field] = value
 			}
 		}
 	}

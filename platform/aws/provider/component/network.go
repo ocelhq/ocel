@@ -2,6 +2,7 @@ package component
 
 import (
 	"fmt"
+	"maps"
 
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 
@@ -13,9 +14,13 @@ import (
 const (
 	MaxSecurityGroupDescriptionLen = 255
 	MaxSubnetGroupDescriptionLen   = 255
+
+	SecurityGroupSuffix = "sg"
+	nameTag             = "Name"
 )
 
 type VPCSecurityGroup struct {
+	Owner   string
 	Subject string
 	Engine  string
 	Port    int
@@ -29,7 +34,11 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 	if group.Clients == "" {
 		return nil, fmt.Errorf("%s admits the tier's vpc-clients security group alone, and this deploy resolved none", group.Subject)
 	}
-	return ec2.NewSecurityGroup(ctx, naming.ResourceID(at.Kind, at.Name, "security-group"), &ec2.SecurityGroupArgs{
+	name := SecurityGroupName(group.Owner)
+	tags := pulumi.StringMap{nameTag: pulumi.String(name)}
+	maps.Copy(tags, group.Tags)
+	return ec2.NewSecurityGroup(ctx, name, &ec2.SecurityGroupArgs{
+		Name:        pulumi.String(name),
 		Description: CapDescription(at.Description("security group for "+group.Subject), MaxSecurityGroupDescriptionLen),
 		VpcId:       pulumi.String(group.VPCID),
 		Ingress: ec2.SecurityGroupIngressArray{
@@ -42,8 +51,12 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 			},
 		},
 		Egress: group.Egress,
-		Tags:   group.Tags,
+		Tags:   tags,
 	})
+}
+
+func SecurityGroupName(owner string) string {
+	return owner + naming.WordSeparator + SecurityGroupSuffix
 }
 
 func LookupDefaultSubnets(ctx *pulumi.Context, vpcID string) ([]string, error) {

@@ -20,6 +20,7 @@ const (
 
 func liveConfig() Config {
 	return Config{
+		Namespace:         testNamespace,
 		VariablesKeyARN:   productionVariablesKeyARN,
 		StateTable:        stateTable,
 		StateTableARN:     stateTableARN,
@@ -72,7 +73,7 @@ func TestAppExecutionRole(t *testing.T) {
 
 		caches := map[string]*site.ISR{"web": {Bucket: "assets"}}
 
-		role := appExecutionRole(Config{VariablesKeyARN: productionVariablesKeyARN}, "web", caches, nil, variables.Bundle{}, nil, nil, false, nil)
+		role := appExecutionRole(Config{Namespace: testNamespace, VariablesKeyARN: productionVariablesKeyARN}, "web", caches, nil, variables.Bundle{}, nil, nil, false, nil)
 		if role.Variables.KeyARN != productionVariablesKeyARN {
 			t.Errorf("VariablesKeyARN = %q, want the bootstrap's own key", role.Variables.KeyARN)
 		}
@@ -80,7 +81,7 @@ func TestAppExecutionRole(t *testing.T) {
 			t.Errorf("Cache = %+v, want the app's own cache", role.Cache)
 		}
 
-		preview := appExecutionRole(Config{VariablesKeyARN: previewVariablesKeyARN}, "api", caches, nil, variables.Bundle{}, nil, nil, false, nil)
+		preview := appExecutionRole(Config{Namespace: testNamespace, VariablesKeyARN: previewVariablesKeyARN}, "api", caches, nil, variables.Bundle{}, nil, nil, false, nil)
 		if preview.Variables.KeyARN != previewVariablesKeyARN {
 			t.Errorf("VariablesKeyARN = %q, want the preview bootstrap's key", preview.Variables.KeyARN)
 		}

@@ -16,11 +16,16 @@ const (
 	AppRolePath    = "/ocel/production/app/"
 	Account        = "123456789012"
 	AutonameSuffix = "0a1b2c3d"
+	RandomTag      = "k3x9q2"
 	StateTableARN  = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
 )
 
 func Autonamed(args pulumi.MockResourceArgs) resource.PropertyMap {
 	state := args.Inputs.Copy()
+	if args.TypeToken == component.RandomTagToken {
+		state["tag"] = resource.NewStringProperty(RandomTag)
+		return state
+	}
 	if _, named := state["name"]; named {
 		return state
 	}
@@ -31,11 +36,12 @@ func Autonamed(args pulumi.MockResourceArgs) resource.PropertyMap {
 }
 
 type Recorder struct {
-	mu      sync.Mutex
-	tags    map[string]map[string]string
-	inputs  map[string]resource.PropertyMap
-	tokens  []string
-	outputs func(pulumi.MockResourceArgs) resource.PropertyMap
+	mu        sync.Mutex
+	tags      map[string]map[string]string
+	inputs    map[string]resource.PropertyMap
+	registers map[string]pulumi.MockResourceArgs
+	tokens    []string
+	outputs   func(pulumi.MockResourceArgs) resource.PropertyMap
 }
 
 func (r *Recorder) NewResource(args pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
@@ -44,8 +50,10 @@ func (r *Recorder) NewResource(args pulumi.MockResourceArgs) (string, resource.P
 	if r.tags == nil {
 		r.tags = map[string]map[string]string{}
 		r.inputs = map[string]resource.PropertyMap{}
+		r.registers = map[string]pulumi.MockResourceArgs{}
 	}
 	r.inputs[args.TypeToken+"::"+args.Name] = args.Inputs
+	r.registers[args.TypeToken+"::"+args.Name] = args
 	if !slices.Contains(r.tokens, args.TypeToken) {
 		r.tokens = append(r.tokens, args.TypeToken)
 	}
@@ -109,6 +117,29 @@ func (r *Recorder) IsRegistered(typeToken, name string) bool {
 	defer r.mu.Unlock()
 	_, ok := r.inputs[typeToken+"::"+name]
 	return ok
+}
+
+func (r *Recorder) RetainsOnDelete(typeToken, name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	registered := r.registers[typeToken+"::"+name].RegisterRPC
+	return registered != nil && registered.GetRetainOnDelete()
+}
+
+func (r *Recorder) DependenciesOf(typeToken, name string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	registered := r.registers[typeToken+"::"+name].RegisterRPC
+	if registered == nil {
+		return nil
+	}
+	return registered.GetDependencies()
+}
+
+func (r *Recorder) ProviderOf(typeToken, name string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.registers[typeToken+"::"+name].Provider
 }
 
 func (r *Recorder) Tokens() []string {

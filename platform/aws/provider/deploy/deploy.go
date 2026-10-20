@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
@@ -147,6 +148,10 @@ func (c Config) buckets() site.Buckets {
 		Tier:         c.Tier,
 		EdgeHoldsKey: c.EdgeAccessKeyID != "" && c.EdgeSecretKey != "",
 	}
+}
+
+func (c Config) queueNames(project, env string) queues.Names {
+	return queues.Names{Namespace: c.Namespace, Project: project, Env: env}
 }
 
 func (c Config) stateTable() topic.StateTable {

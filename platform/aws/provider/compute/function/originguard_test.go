@@ -27,7 +27,7 @@ const functionURLToken = "aws:lambda/functionUrl:FunctionUrl"
 const lambdaPermissionToken = "aws:lambda/permission:Permission"
 
 func publicPermissionID(stack naming.StackName, logical string, permission functionurl.Permission) string {
-	return naming.ResourceID(naming.KindFunction, Coordinate("shop", stack, logical).Name, "url", strings.ToLower(permission.Verb()))
+	return namedFunction(stack, logical).Part(strings.ToLower(permission.Verb()))
 }
 
 func hasPublicPermission(rec *inputRecorder, stack naming.StackName, logical string) bool {
@@ -69,7 +69,7 @@ func guardedConfig(t *testing.T, kind edge.Kind) testConfig {
 
 func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, stack naming.StackName) string {
 	t.Helper()
-	name := naming.ResourceID(naming.KindFunction, Coordinate("shop", stack, logicalName).Name, "url")
+	name := namedFunction(stack, logicalName).Part("url")
 	value, ok := rec.inputs(functionURLToken, name)["authorizationType"]
 	if !ok || !value.IsString() {
 		t.Fatalf("%s has no Function URL", logicalName)
@@ -87,11 +87,12 @@ func registerGuarded(t *testing.T, cfg testConfig, spec provider.StackSpec, func
 
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: spec.App.App, Boundary: componenttest.BoundaryARN, Dispatch: host})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: spec.App.App, Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
 		return AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: manifestAppFunctions(functions),
@@ -149,7 +150,7 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 		}
 	}
 
-	entry := functionEnvOf(t, rec, Coordinate("shop", stack, "fn--web--entry").PhysicalName(component.MaxLambdaBaseNameLen))
+	entry := functionEnvOf(t, rec, namedFunction(stack, "fn--web--entry").Pulumi)
 	if entry[edge.OriginSecretVar] != testOriginSecret {
 		t.Errorf("%s = %q, want the secret the bootstrap stored", edge.OriginSecretVar, entry[edge.OriginSecretVar])
 	}
@@ -175,7 +176,7 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 			t.Errorf("a sibling has a public %s permission, want the front door opened once", permission.Action)
 		}
 	}
-	sibling := functionEnvOf(t, rec, Coordinate("shop", stack, "fn--web--admin").PhysicalName(component.MaxLambdaBaseNameLen))
+	sibling := functionEnvOf(t, rec, namedFunction(stack, "fn--web--admin").Pulumi)
 	if _, wired := sibling[edge.OriginSecretVar]; wired {
 		t.Errorf("a sibling has %s, want the secret to reach the root function alone", edge.OriginSecretVar)
 	}
@@ -200,7 +201,7 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 		if hasPublicPermission(rec, stack, logical) {
 			t.Errorf("%s has a public invoke permission behind the Cloudflare worker", logical)
 		}
-		env := functionEnvOf(t, rec, Coordinate("shop", stack, logical).PhysicalName(component.MaxLambdaBaseNameLen))
+		env := functionEnvOf(t, rec, namedFunction(stack, logical).Pulumi)
 		if _, wired := env[edge.OriginSecretVar]; wired {
 			t.Errorf("%s has %s behind an edge that signs its requests", logical, edge.OriginSecretVar)
 		}
@@ -223,7 +224,7 @@ func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 		if hasPublicPermission(rec, stack, logical) {
 			t.Errorf("%s has a public invoke permission; none mode signs every integration", logical)
 		}
-		env := functionEnvOf(t, rec, Coordinate("shop", stack, logical).PhysicalName(component.MaxLambdaBaseNameLen))
+		env := functionEnvOf(t, rec, namedFunction(stack, logical).Pulumi)
 		if _, wired := env[edge.OriginSecretVar]; wired {
 			t.Errorf("%s has %s, which an AWS_PROXY integration never presents", logical, edge.OriginSecretVar)
 		}
@@ -249,12 +250,12 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	stack := testStack(t, "prod", "api")
 	rec := registerGuarded(t, cfg, spec, functions, stack)
 
-	name := naming.ResourceID(naming.KindFunction, Coordinate("shop", stack, "fn--api--entry").Name, "url")
+	name := namedFunction(stack, "fn--api--entry").Part("url")
 	value := rec.inputs(functionURLToken, name)["authorizationType"]
 	if !value.IsString() || value.StringValue() != functionurl.AuthNone {
 		t.Errorf("entry Function URL auth = %v, want %q for the sole function of an app whose origin dispatches no path", value, functionurl.AuthNone)
 	}
-	env := functionEnvOf(t, rec, Coordinate("shop", stack, "fn--api--entry").PhysicalName(component.MaxLambdaBaseNameLen))
+	env := functionEnvOf(t, rec, namedFunction(stack, "fn--api--entry").Pulumi)
 	if env[edge.OriginSecretVar] != testOriginSecret {
 		t.Errorf("%s = %q, want the secret on an entry nothing else guards", edge.OriginSecretVar, env[edge.OriginSecretVar])
 	}

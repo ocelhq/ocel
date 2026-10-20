@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
@@ -170,11 +171,48 @@ func recordedOf(t *testing.T, rec *inputRecorder, typeToken string) resource.Pro
 }
 
 func declareTopicsAndTasks(pctx *pulumi.Context, region, stateTableARN, project, env string, resources []provider.Resource) error {
-	at := component.Stack{Project: project, Env: env, Region: region, StateTableARN: stateTableARN, Resources: resources}
+	at := component.Stack{Namespace: shopNames.Namespace, Project: project, Env: env, Region: region, StateTableARN: stateTableARN, Resources: resources}
 	for _, declaring := range []component.Component{task.New(), topic.New()} {
 		if err := declaring.Declare(pctx, at, declaring.Declared(resources)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+var shopNames = queues.Names{Namespace: "ocel", Project: "shop", Env: "prod"}
+
+func mustTopics(t *testing.T, resources []provider.Resource) topic.Topics {
+	t.Helper()
+	topics, err := topic.Of(shopNames, resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return topics
+}
+
+func queueName(t *testing.T, topic, consumer string, fifo bool) string {
+	t.Helper()
+	named, err := shopNames.Queues(topic, consumer, fifo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return named.Queue
+}
+
+func scheduleGroup(t *testing.T) string {
+	t.Helper()
+	group, err := shopNames.ScheduleGroup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return group
+}
+
+func workerService(project, env, app, worker string) string {
+	name, err := container.WorkerServiceName(shopNames.Namespace, project, env, app, worker)
+	if err != nil {
+		panic(err)
+	}
+	return name
 }

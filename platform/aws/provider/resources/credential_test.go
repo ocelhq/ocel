@@ -45,6 +45,7 @@ var createActions = map[string]creation{
 	"ocel:index:PostgresRole":                                {"rds-data:ExecuteStatement", ownCredential},
 	"aws:s3/bucketV2:BucketV2":                               {"s3:CreateBucket", ownCredential},
 	"aws:s3/bucketNotification:BucketNotification":           {"s3:PutBucketNotification", ownCredential},
+	"aws:s3/bucketAbac:BucketAbac":                           {"s3:PutBucketAbac", ownCredential},
 	"aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock": {"s3:PutBucketPublicAccessBlock", ownCredential},
 	"aws:elasticache/replicationGroup:ReplicationGroup":      {"elasticache:CreateReplicationGroup", ownCredential},
 	"aws:elasticache/parameterGroup:ParameterGroup":          {"elasticache:CreateCacheParameterGroup", ownCredential},
@@ -128,6 +129,7 @@ func representativeResources() []provider.Resource {
 func representativeStack(resources []provider.Resource) component.Stack {
 	return component.Stack{
 		Ref:            provider.StackRef{Tier: environment.TierProduction, Project: "shop"},
+		Namespace:      string(provider.DefaultNamespace),
 		Project:        "shop",
 		Env:            "prod",
 		Region:         "us-east-1",
@@ -176,6 +178,9 @@ func TestEveryResourceAComponentDeclaresIsOneTheDeployCredentialMayCreate(t *tes
 			t.Fatalf("the %v component declared nothing for %v", kinds, declared)
 		}
 		for _, token := range tokens {
+			if token == component.RandomTagToken {
+				continue
+			}
 			declaredTokens[token] = true
 			created, listed := createActions[token]
 			if !listed {

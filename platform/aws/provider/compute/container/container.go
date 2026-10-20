@@ -94,6 +94,7 @@ type Definition struct {
 	healthPath  string
 	secrets     []string
 	tasksPolicy string
+	namespace   string
 	service     naming.Coordinate
 	role        naming.Coordinate
 	public      bool
@@ -227,8 +228,15 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 	}
 	tasksPolicyDoc := ""
 	if topic.ReachesTasks(app) {
-		topics := topic.Of(project, stack.Env, app.Topics)
-		topology, err := topic.QueueTopology(at.StateTable, project, stack.Env, topics, WorkerServices(at.Namespace, at.Tier, project, stack.Env, app.DeploymentWorkers))
+		topics, err := topic.Of(queues.Names{Namespace: at.Namespace, Project: project, Env: stack.Env}, app.Topics)
+		if err != nil {
+			return nil, err
+		}
+		served, err := WorkerServices(at.Namespace, at.Tier, project, stack.Env, app.DeploymentWorkers)
+		if err != nil {
+			return nil, err
+		}
+		topology, err := topic.QueueTopology(at.StateTable, project, stack.Env, topics, served)
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +247,11 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 		if len(rendered) > 0 {
 			env[queues.EnvVar] = string(rendered)
 		}
-		if tasksPolicyDoc, err = topic.TasksPolicy(at.StateTable, project, stack.Env, topics, WorkerServiceARNs(at.StateTable, at.Namespace, at.Tier, project, stack.Env, app.DeploymentWorkers)); err != nil {
+		wakes, err := WorkerServiceARNs(at.StateTable, at.Namespace, at.Tier, project, stack.Env, app.DeploymentWorkers)
+		if err != nil {
+			return nil, err
+		}
+		if tasksPolicyDoc, err = topic.TasksPolicy(at.StateTable, project, stack.Env, topics, wakes); err != nil {
 			return nil, err
 		}
 	}
@@ -266,6 +278,7 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 		secrets:     presentedSecrets(at.OriginSecret, at.PreviousOriginSecret),
 		Policies:    policies,
 		tasksPolicy: tasksPolicyDoc,
+		namespace:   at.Namespace,
 		Variables:   reader,
 		service:     serviceCoordinate(project, stack),
 		role:        component.AppRoleCoordinate(project, stack),
@@ -324,11 +337,11 @@ func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate
 	}
 }
 
-func (d *Definition) physical() string {
-	return d.service.PhysicalName(component.MaxLambdaNameLen)
+func (d *Definition) names() (containerNames, error) {
+	return newContainerNames(d.namespace, d.service)
 }
 
-func (d *Definition) definition() (string, error) {
+func (d *Definition) definition(service string) (string, error) {
 	env := d.definitionEnv()
 	pairs := make([]EnvironmentPair, 0, len(env))
 	for _, key := range slices.Sorted(maps.Keys(env)) {
@@ -345,7 +358,7 @@ func (d *Definition) definition() (string, error) {
 			Options: map[string]string{
 				"awslogs-group":         d.Infra.LogGroup,
 				"awslogs-region":        d.Region,
-				"awslogs-stream-prefix": d.physical(),
+				"awslogs-stream-prefix": service,
 			},
 		},
 	}})
@@ -356,17 +369,21 @@ func (d *Definition) definition() (string, error) {
 }
 
 func (d *Definition) Declare(ctx *pulumi.Context) error {
-	physical := d.physical()
 	tags := component.Tags(naming.KindService, "", d.taggedWith(d.TransformTags))
 
 	if d.workerApp {
 		return nil
 	}
+	names, err := d.names()
+	if err != nil {
+		return err
+	}
+	physical := names.Service
 
 	var taskRole pulumi.StringPtrInput
 	var before []pulumi.Resource
 	if len(d.Policies) > 0 || d.tasksPolicy != "" || d.readsLive() {
-		role, granted, err := d.taskRole(ctx)
+		role, granted, err := d.taskRole(ctx, names.Role)
 		if err != nil {
 			return err
 		}
@@ -374,11 +391,11 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 		before = granted
 	}
 
-	definition, err := d.definition()
+	definition, err := d.definition(physical)
 	if err != nil {
 		return err
 	}
-	task, err := ecs.NewTaskDefinition(ctx, naming.ResourceID(naming.KindService, containerLocalName, "task"), &ecs.TaskDefinitionArgs{
+	task, err := ecs.NewTaskDefinition(ctx, physical, &ecs.TaskDefinitionArgs{
 		Family:                  pulumi.String(physical),
 		Cpu:                     pulumi.String(CPU),
 		Memory:                  pulumi.String(Memory),
@@ -397,8 +414,8 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 		return err
 	}
 
-	group, err := lb.NewTargetGroup(ctx, naming.ResourceID(naming.KindService, containerLocalName, "targets"), &lb.TargetGroupArgs{
-		NamePrefix:          pulumi.String(containers.TargetGroupNamePrefix),
+	group, err := lb.NewTargetGroup(ctx, names.TargetGroup, &lb.TargetGroupArgs{
+		Name:                pulumi.String(names.TargetGroup),
 		Port:                pulumi.Int(containers.TaskPort),
 		Protocol:            pulumi.String("HTTP"),
 		TargetType:          pulumi.String("ip"),
@@ -419,7 +436,7 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
+	rule, err := lb.NewListenerRule(ctx, names.TargetGroup+component.PartSeparator+rulePart, &lb.ListenerRuleArgs{
 		ListenerArn: pulumi.String(d.readListenerArn()),
 		Priority:    pulumi.Int(d.priority),
 		Conditions: lb.ListenerRuleConditionArray{
@@ -446,7 +463,7 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 	if d.scales() {
 		serviceOptions = append(serviceOptions, pulumi.IgnoreChanges([]string{"desiredCount"}))
 	}
-	service, err := ecs.NewService(ctx, naming.ResourceID(naming.KindService, containerLocalName), &ecs.ServiceArgs{
+	service, err := ecs.NewService(ctx, physical, &ecs.ServiceArgs{
 		Name:                          pulumi.String(physical),
 		Cluster:                       pulumi.String(d.Infra.Cluster),
 		TaskDefinition:                task.Arn,
@@ -470,7 +487,7 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 		return err
 	}
 	if d.scales() {
-		if err := d.scaleOnRequests(ctx, service, group, tags); err != nil {
+		if err := d.scaleOnRequests(ctx, physical, service, group, tags); err != nil {
 			return err
 		}
 	}
@@ -483,7 +500,7 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 
 func (d *Definition) scales() bool { return d.Instances.Max > d.Instances.Min }
 
-func (d *Definition) scaleOnRequests(ctx *pulumi.Context, service *ecs.Service, group *lb.TargetGroup, tags pulumi.StringMap) error {
+func (d *Definition) scaleOnRequests(ctx *pulumi.Context, physical string, service *ecs.Service, group *lb.TargetGroup, tags pulumi.StringMap) error {
 	clusterARN, err := arn.Parse(d.Infra.Cluster)
 	cluster, found := strings.CutPrefix(clusterARN.Resource, "cluster/")
 	if err != nil || !found {
@@ -494,7 +511,7 @@ func (d *Definition) scaleOnRequests(ctx *pulumi.Context, service *ecs.Service, 
 		return err
 	}
 	resourceID := pulumi.Sprintf("service/%s/%s", cluster, service.Name)
-	target, err := appautoscaling.NewTarget(ctx, naming.ResourceID(naming.KindService, containerLocalName, "scaling"), &appautoscaling.TargetArgs{
+	target, err := appautoscaling.NewTarget(ctx, physical+component.PartSeparator+scalingPart, &appautoscaling.TargetArgs{
 		ServiceNamespace:  pulumi.String(ScalingNamespace),
 		ScalableDimension: pulumi.String(ScalingDimension),
 		ResourceId:        resourceID,
@@ -505,7 +522,7 @@ func (d *Definition) scaleOnRequests(ctx *pulumi.Context, service *ecs.Service, 
 	if err != nil {
 		return err
 	}
-	_, err = appautoscaling.NewPolicy(ctx, naming.ResourceID(naming.KindService, containerLocalName, "scaling", "requests"), &appautoscaling.PolicyArgs{
+	_, err = appautoscaling.NewPolicy(ctx, physical+component.PartSeparator+scalingPart+naming.WordSeparator+"requests", &appautoscaling.PolicyArgs{
 		PolicyType:        pulumi.String("TargetTrackingScaling"),
 		ServiceNamespace:  target.ServiceNamespace,
 		ScalableDimension: target.ScalableDimension,
@@ -542,9 +559,9 @@ func (d *Definition) taggedWith(extra map[string]string) map[string]string {
 	return tags
 }
 
-func (d *Definition) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.Resource, error) {
-	role, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName), &awsiam.RoleArgs{
-		NamePrefix:          pulumi.String(component.RolePrefix(d.role)),
+func (d *Definition) taskRole(ctx *pulumi.Context, name component.Name) (*awsiam.Role, []pulumi.Resource, error) {
+	role, err := awsiam.NewRole(ctx, name.Pulumi, &awsiam.RoleArgs{
+		Name:                name.AWS,
 		Description:         component.Describe(d.role, "task role for this app's container"),
 		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(d.Boundary),
@@ -554,40 +571,25 @@ func (d *Definition) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.Resou
 	if err != nil {
 		return nil, nil, err
 	}
-	granted := make([]pulumi.Resource, 0, len(d.Policies))
+	documents := map[string]string{}
 	for _, binding := range d.Policies {
-		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "binding", binding.Binding), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(binding.Policy),
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		granted = append(granted, policy)
+		documents[bindingPolicyName(binding.Binding)] = binding.Policy
 	}
 	if d.tasksPolicy != "" {
-		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "tasks"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(d.tasksPolicy),
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		granted = append(granted, policy)
+		documents[tasksPolicyName] = d.tasksPolicy
 	}
 	if d.readsLive() {
-		rendered, err := variables.ReadPolicy(d.Variables)
+		if documents[variablesPolicyName], err = variables.ReadPolicy(d.Variables); err != nil {
+			return nil, nil, err
+		}
+	}
+	granted := make([]pulumi.Resource, 0, len(documents))
+	for _, policy := range slices.Sorted(maps.Keys(documents)) {
+		created, err := component.NewRolePolicy(ctx, name, role, policy, pulumi.String(documents[policy]))
 		if err != nil {
 			return nil, nil, err
 		}
-		policy, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "variables", "read"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(rendered),
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		granted = append(granted, policy)
+		granted = append(granted, created)
 	}
 	return role, granted, nil
 }
@@ -616,12 +618,16 @@ func (d *Definition) Decode(outputs auto.OutputMap) (provider.StackResult, error
 	}}}, nil
 }
 
-func ResourceNames() map[string]component.ResourceRef {
-	return map[string]component.ResourceRef{
-		"task":        {Token: component.TokenECSTaskDefinition, Name: naming.ResourceID(naming.KindService, containerLocalName, "task")},
-		"service":     {Token: component.TokenECSService, Name: naming.ResourceID(naming.KindService, containerLocalName)},
-		"targetGroup": {Token: component.TokenLBTargetGroup, Name: naming.ResourceID(naming.KindService, containerLocalName, "targets")},
-		"rule":        {Token: component.TokenLBListenerRule, Name: naming.ResourceID(naming.KindService, containerLocalName, "rule")},
-		"role":        {Token: component.TokenIAMRole, Name: naming.ResourceID(naming.KindRole, component.AppRoleLocalName)},
+func ResourceNames(namespace, project string, stack naming.StackName) (map[string][]component.ResourceRef, error) {
+	names, err := newContainerNames(namespace, serviceCoordinate(project, stack))
+	if err != nil {
+		return nil, err
 	}
+	return map[string][]component.ResourceRef{
+		"task":        {{Token: component.TokenECSTaskDefinition, Name: names.Service}},
+		"service":     {{Token: component.TokenECSService, Name: names.Service}},
+		"targetGroup": {{Token: component.TokenLBTargetGroup, Name: names.TargetGroup}},
+		"rule":        {{Token: component.TokenLBListenerRule, Name: names.TargetGroup + component.PartSeparator + rulePart}},
+		"role":        {{Token: component.TokenIAMRole, Name: names.Role.Pulumi}},
+	}, nil
 }

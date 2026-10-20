@@ -101,24 +101,6 @@ func (c Coordinate) Stack() StackName {
 	return AppStack(c.Env, c.App, c.Release)
 }
 
-func (c Coordinate) PhysicalName(max int) string {
-	return Fit(max, WordSeparator,
-		Fixed(c.Project),
-		Fixed(c.Env),
-		Fixed(c.App),
-		Compressible(c.Name),
-		Fixed(c.Release.String()),
-	)
-}
-
-func (c Coordinate) PhysicalPrefix(max int) string {
-	return Fit(max-1, WordSeparator,
-		Fixed(c.Project),
-		Fixed(c.Env),
-		Compressible(c.Name),
-	) + WordSeparator
-}
-
 func ResourceID(kind Kind, name string, parts ...string) string {
 	return Join(WordSeparator, append([]string{string(kind), name}, parts...)...)
 }

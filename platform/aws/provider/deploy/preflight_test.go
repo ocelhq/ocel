@@ -15,6 +15,7 @@ import (
 
 func preflightConfig() Config {
 	return Config{
+		Namespace:     testNamespace,
 		Env:           "prod",
 		StateTable:    "ocel-state",
 		StateTableARN: "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state",

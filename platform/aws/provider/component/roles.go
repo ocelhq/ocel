@@ -1,6 +1,9 @@
 package component
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
@@ -13,8 +16,9 @@ type PolicyStatement struct {
 	Condition map[string]any
 }
 
-func NewServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, boundaryARN, rolePath string, tags map[string]string, statements map[string]PolicyStatement) (*awsiam.Role, error) {
-	role, err := awsiam.NewRole(ctx, name, &awsiam.RoleArgs{
+func NewServiceRole(ctx *pulumi.Context, name Name, description, servicePrincipal, boundaryARN, rolePath string, tags map[string]string, statements map[string]PolicyStatement) (*awsiam.Role, error) {
+	role, err := awsiam.NewRole(ctx, name.Pulumi, &awsiam.RoleArgs{
+		Name:                name.AWS,
 		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(servicePrincipal)),
 		Description:         pulumi.String(description),
 		PermissionsBoundary: pulumi.String(boundaryARN),
@@ -24,7 +28,8 @@ func NewServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, bo
 	if err != nil {
 		return nil, err
 	}
-	for stmtName, stmt := range statements {
+	for _, stmtName := range slices.Sorted(maps.Keys(statements)) {
+		stmt := statements[stmtName]
 		actions, condition := stmt.Actions, stmt.Condition
 		resourceInputs := make([]any, len(stmt.Resources))
 		for i, r := range stmt.Resources {
@@ -38,12 +43,24 @@ func NewServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, bo
 			return iam.InlinePolicy(actions, resources, condition)
 		}).(pulumi.StringOutput)
 
-		if _, err := awsiam.NewRolePolicy(ctx, name+"-policy-"+stmtName, &awsiam.RolePolicyArgs{
-			Role:   role.ID(),
-			Policy: policyJSON,
-		}); err != nil {
+		if _, err := NewRolePolicy(ctx, name, role, stmtName, policyJSON); err != nil {
 			return nil, err
 		}
 	}
 	return role, nil
+}
+
+func NewRolePolicy(ctx *pulumi.Context, roleName Name, role *awsiam.Role, policy string, document pulumi.StringInput, opts ...pulumi.ResourceOption) (*awsiam.RolePolicy, error) {
+	return awsiam.NewRolePolicy(ctx, roleName.Part(policy), &awsiam.RolePolicyArgs{
+		Name:   pulumi.String(policy),
+		Role:   role.Name,
+		Policy: document,
+	}, opts...)
+}
+
+func AttachManagedPolicy(ctx *pulumi.Context, roleName Name, role *awsiam.Role, policyARN string) (*awsiam.RolePolicyAttachment, error) {
+	return awsiam.NewRolePolicyAttachment(ctx, roleName.Attachment(policyARN), &awsiam.RolePolicyAttachmentArgs{
+		Role:      role.Name,
+		PolicyArn: pulumi.String(policyARN),
+	})
 }

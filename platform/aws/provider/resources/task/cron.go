@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	maxScheduleExpressionLen = 256
-	CronMessageGroup         = "cron"
+	maxScheduleExpressionLen  = 256
+	maxScheduleDescriptionLen = 512
+	CronMessageGroup          = "cron"
 )
 
 var schedulerWeekdays = []string{"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"}
@@ -84,6 +85,7 @@ type CronTarget struct {
 }
 
 type SchedulerRole struct {
+	Name     string
 	At       naming.Coordinate
 	Boundary string
 	Path     string
@@ -97,9 +99,10 @@ func Allowing(action string, resources []string) (string, error) {
 	return string(encoded), err
 }
 
-func DeclareCrons(ctx *pulumi.Context, role SchedulerRole, group string, policy pulumi.StringInput, crons []CronTarget) error {
-	created, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRole, "scheduler"), &awsiam.RoleArgs{
-		NamePrefix:          pulumi.String(component.RolePrefix(role.At)),
+func DeclareCrons(ctx *pulumi.Context, role SchedulerRole, names queues.Names, group string, policy pulumi.StringInput, crons []CronTarget) error {
+	roleName := component.NameOf(role.Name)
+	created, err := awsiam.NewRole(ctx, roleName.Pulumi, &awsiam.RoleArgs{
+		Name:                roleName.AWS,
 		Description:         component.CapDescription(role.At.Description("role EventBridge Scheduler takes to start this app's cron tasks on their workers"), component.MaxDescriptionLen),
 		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.SchedulerPrincipal)),
 		PermissionsBoundary: pulumi.String(role.Boundary),
@@ -109,7 +112,7 @@ func DeclareCrons(ctx *pulumi.Context, role SchedulerRole, group string, policy 
 	if err != nil {
 		return err
 	}
-	invoking, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, "scheduler", "invoke"), &awsiam.RolePolicyArgs{Role: created.Name, Policy: policy})
+	invoking, err := component.NewRolePolicy(ctx, roleName, created, "invoke", policy)
 	if err != nil {
 		return err
 	}
@@ -118,6 +121,10 @@ func DeclareCrons(ctx *pulumi.Context, role SchedulerRole, group string, policy 
 		expressions, err := SchedulerExpressions(scheduled.Task.Spec.Cron)
 		if err != nil {
 			return fmt.Errorf("task %s: %w", task, err)
+		}
+		schedules, err := names.Schedules(task, len(expressions))
+		if err != nil {
+			return err
 		}
 		target := &scheduler.ScheduleTargetArgs{
 			Arn:     scheduled.ARN,
@@ -128,13 +135,10 @@ func DeclareCrons(ctx *pulumi.Context, role SchedulerRole, group string, policy 
 			target.SqsParameters = &scheduler.ScheduleTargetSqsParametersArgs{MessageGroupId: pulumi.String(scheduled.MessageGroup)}
 		}
 		for i, expression := range expressions {
-			name := queues.CronScheduleName(task)
-			if len(expressions) > 1 {
-				name = queues.CronScheduleName(task + "-" + strconv.Itoa(i+1))
-			}
-			if _, err := scheduler.NewSchedule(ctx, naming.ResourceID(naming.KindWorker, "cron", name), &scheduler.ScheduleArgs{
-				Name:               pulumi.String(name),
+			if _, err := scheduler.NewSchedule(ctx, schedules[i], &scheduler.ScheduleArgs{
+				Name:               pulumi.String(schedules[i]),
 				GroupName:          pulumi.String(group),
+				Description:        component.CapDescription(role.At.Description("starts task "+task), maxScheduleDescriptionLen),
 				ScheduleExpression: pulumi.String(expression),
 				FlexibleTimeWindow: &scheduler.ScheduleFlexibleTimeWindowArgs{Mode: pulumi.String("OFF")},
 				Target:             target,
