@@ -9,11 +9,39 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type Namespace provider.Namespace
 
 const bootstrapWord = "bootstrap"
+
+type reservedPrefix struct {
+	prefix  string
+	names   string
+	service string
+}
+
+var reservedPrefixes = []reservedPrefix{
+	{"internal-", "load balancer", "Elastic Load Balancing"},
+	{"sg-", "security group", "EC2"},
+	{"sthree-", "bucket", "S3"},
+	{"amzn-s3-demo-", "bucket", "S3"},
+	{"aws", "parameter", "Systems Manager Parameter Store"},
+	{"ssm", "parameter", "Systems Manager Parameter Store"},
+}
+
+func (n Namespace) RefuseReservedPrefix() error {
+	led := naming.NamespaceField(string(n)) + naming.WordSeparator
+	for _, reserved := range reservedPrefixes {
+		if strings.HasPrefix(led, reserved.prefix) {
+			return refusal.Refuse(refusal.CodeInvalid,
+				"%s: namespace %q would start every %s name with %q, a prefix %s reserves; choose another namespace",
+				provider.NamespaceEnvVar, string(n), reserved.names, reserved.prefix, reserved.service)
+		}
+	}
+	return nil
+}
 
 func knownTier(what string, tier environment.Tier) error {
 	switch tier {
