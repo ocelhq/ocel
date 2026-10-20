@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -114,6 +116,24 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndRunsAJob(t *
 	}
 	if !strings.Contains(again, "already holds every file") {
 		t.Fatalf("second run = %q, want nothing uploaded again", again)
+	}
+}
+
+func TestAnOcelCloudJobsLinkIsALineOfItsOwnThatNoFoldedGroupHides(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	invocation.Presentation = func(io.Writer) terminal.Presentation {
+		return terminal.Resolve(terminal.Conditions{GitHubActions: true, ColorAsked: terminal.ColorNever})
+	}
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+
+	out, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := "INFO  [deploy] Job " + clitest.FakeCloudJobID + " · follow it at " + fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "\n"
+	at := strings.Index(out, link)
+	if at < 0 || strings.Count(out[:at], "::group::") != strings.Count(out[:at], "::endgroup::") {
+		t.Fatalf("output = %q, want %q outside every group", out, link)
 	}
 }
 

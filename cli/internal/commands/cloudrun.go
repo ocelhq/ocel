@@ -106,8 +106,8 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 		return err
 	}
 	jobURL := JobURL(t.Cloud.ConsoleURL, started.GetId())
-	starting.Say(fmt.Sprintf("Job %s · follow it at %s", started.GetId(), jobURL))
 	starting.End(nil)
+	phase.Say(fmt.Sprintf("Job %s · follow it at %s", started.GetId(), jobURL))
 	running.SetCloudJob(summarizeJob(started, jobURL))
 
 	if job.NoWait {
