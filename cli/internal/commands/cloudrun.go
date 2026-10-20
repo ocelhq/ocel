@@ -181,7 +181,7 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 		}
 		watching.End(nil)
 		phase.End(nil)
-		running.Succeed(jobHeadline(job.Kind, slug, jobURL))
+		running.Succeed(jobHeadline(ended, job.Kind, slug, jobURL))
 		return ended, nil
 	case cloudv1.JobState_JOB_STATE_CANCELED:
 		err = &clierror.Error{
@@ -210,7 +210,10 @@ func jobPhase(kind cloudv1.JobCommand) progressv1.Phase {
 	return progressv1.Phase_PHASE_DEPLOY
 }
 
-func jobHeadline(kind cloudv1.JobCommand, slug, jobURL string) string {
+func jobHeadline(ended *cloudv1.Job, kind cloudv1.JobCommand, slug, jobURL string) string {
+	if kind != cloudv1.JobCommand_JOB_COMMAND_BUILD && !deployedAnything(ended) {
+		return cmp.Or(ended.GetStep(), "Deployed nothing of "+slug+" on Ocel Cloud") + " · job " + jobURL
+	}
 	switch kind {
 	case cloudv1.JobCommand_JOB_COMMAND_BUILD:
 		return fmt.Sprintf("Built %s on Ocel Cloud: %s", slug, jobURL)
@@ -218,6 +221,11 @@ func jobHeadline(kind cloudv1.JobCommand, slug, jobURL string) string {
 		return fmt.Sprintf("Deployed a preview of %s on Ocel Cloud: %s", slug, jobURL)
 	}
 	return fmt.Sprintf("Deployed %s on Ocel Cloud: %s", slug, jobURL)
+}
+
+func deployedAnything(job *cloudv1.Job) bool {
+	result := job.GetResult()
+	return job.GetReport() != nil || len(result.GetUrls()) > 0 || result.GetDeploymentId() != ""
 }
 
 func describeJob(job *cloudv1.Job) string {
