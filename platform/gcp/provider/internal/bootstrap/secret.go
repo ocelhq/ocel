@@ -16,6 +16,7 @@ import (
 const reasonPassphraseReplaced = "its latest version is disabled or destroyed, and a new passphrase replaces it: what was written under the old one opens again only if that version is enabled"
 
 var secretKind = KindOps{
+	tagged:    secretTagged,
 	noun:      "secret",
 	terraform: cost.SecretManagerSecretType,
 	parameter: true,
@@ -25,8 +26,8 @@ var secretKind = KindOps{
 	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		return b.secretPresence(ctx, target.Name)
 	},
-	Make: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
-		return b.makeSecret(ctx, target.Name)
+	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
+		return b.makeSecret(ctx, read, target.Name)
 	},
 	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) (time.Duration, error) {
 		return 0, b.takeSecret(ctx, target.Name)
@@ -35,7 +36,7 @@ var secretKind = KindOps{
 
 const passphraseBytes = 32
 
-func (b Engine) makeSecret(ctx context.Context, name string) error {
+func (b Engine) makeSecret(ctx context.Context, read Survey, name string) error {
 	service, err := b.Clients.Secrets()
 	if err != nil {
 		return err
@@ -43,6 +44,7 @@ func (b Engine) makeSecret(ctx context.Context, name string) error {
 	parent := "projects/" + b.Clients.Project()
 	_, err = googleretry.Attempted(ctx, service.Projects.Secrets.Create(parent, &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
+		Tags:        b.Clients.InlineTierTags(read.Tier),
 	}).SecretId(name).Context(ctx).Do)
 	if err != nil && !gcloud.Taken(err) {
 		return fmt.Errorf("create the %s secret: %w", name, err)

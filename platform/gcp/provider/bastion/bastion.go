@@ -153,7 +153,7 @@ func (b Bastion) provisionService(ctx context.Context, tier environment.Tier, pr
 
 func (b Bastion) ensureAccount(ctx context.Context, tier environment.Tier) error {
 	account := b.clients.BastionAccount(tier)
-	err := b.clients.CreateAccount(ctx, account,
+	err := b.clients.CreateAccount(ctx, tier, account,
 		gcloud.Clipped("ocel bastion ("+b.clients.Namespace().String()+", "+string(tier)+")", gcloud.MaxDisplayNameBytes),
 		"the identity the ocel bastion of the "+string(tier)+" tier runs as, which holds no role")
 	if err != nil {
@@ -186,7 +186,7 @@ func (b Bastion) removeAccount(ctx context.Context, tier environment.Tier, progr
 	if err != nil || !found {
 		return err
 	}
-	deleted, err := b.clients.DeleteAccount(ctx, b.clients.BastionAccount(tier))
+	deleted, err := b.clients.DeleteAccount(ctx, tier, b.clients.BastionAccount(tier))
 	if deleted {
 		gcloud.EnsureProgress(progress).Say("Deleted the " + b.clients.BastionAccount(tier) + " service account the bastion ran as")
 	}

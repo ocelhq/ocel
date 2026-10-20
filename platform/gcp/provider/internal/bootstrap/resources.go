@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -26,6 +27,7 @@ var BootstrapAPIs = []string{
 	"iamcredentials.googleapis.com",
 	"pubsub.googleapis.com",
 	"cloudtasks.googleapis.com",
+	"cloudresourcemanager.googleapis.com",
 }
 
 type Resource struct {
@@ -49,6 +51,10 @@ func provisioned(target Resource, emulated bool) bool {
 
 func StackResources(names names.Names, tier environment.Tier, emulated bool) []Resource {
 	items := []Resource{
+		{
+			Kind: KindTierTag, Name: gcloud.TierTagKey, Shared: true,
+			Note: "the tag every resource of a tier carries its tier's value of, production or preview, which fences a tier's deploy credential to that tier's resources",
+		},
 		{
 			Kind: KindDatabase, Name: names.Database(), Shared: true, Slow: true,
 			Note: "every record this project stores, and both tiers keep theirs in it",

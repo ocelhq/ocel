@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 type Kind string
@@ -24,6 +25,7 @@ const (
 	KindSchedule       Kind = "cloudscheduler:job"
 	KindGrant          Kind = "resourcemanager:grant"
 	KindQueue          Kind = "cloudtasks:queue"
+	KindTierTag        Kind = "resourcemanager:tagkey"
 
 	KindSQLInstance          Kind = "sqladmin:instance"
 	KindMemorystoreInstance  Kind = "memorystore:instance"
@@ -52,6 +54,7 @@ type KindOps struct {
 	leave   func(ctx context.Context, b Engine, read Survey, taking Removal) error
 	Take    func(ctx context.Context, b Engine, read Survey, target Resource) (time.Duration, error)
 	taken   func(r Removal) string
+	tagged  func(ctx context.Context, b Engine, read Survey, target Resource) (gcloud.TaggedResource, bool, error)
 }
 
 var kinds map[Kind]KindOps
@@ -68,6 +71,7 @@ func init() {
 		KindRole:           roleKind,
 		KindGrant:          grantKind,
 		KindQueue:          queueKind,
+		KindTierTag:        tierTagKind,
 		KindService:        {noun: "Cloud Run service", terraform: cost.CloudRunServiceType},
 		KindSchedule:       {noun: "Cloud Scheduler job", terraform: cost.SchedulerJobType},
 	}

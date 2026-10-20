@@ -53,6 +53,8 @@ type Clients struct {
 	TagEndpoint string
 	Records     records.Store
 
+	TierTagEndpoint string
+
 	workload      Memo[*ports.Clients]
 	storage       Memo[*storage.Client]
 	databases     Memo[*firestoreadmin.Service]
@@ -75,6 +77,7 @@ type Clients struct {
 	numberLock    sync.Mutex
 	projectNumber int64
 	tierBuckets   tierBucketsRead
+	tierTags      tierTagsRead
 }
 
 func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, error)) (T, error) {

@@ -100,6 +100,7 @@ var formulas = pricing.Table{
 	"google_pubsub_topic":                                   pubSubThroughput("Publish throughput"),
 	"google_pubsub_subscription":                            pubSubThroughput("Delivery throughput"),
 	"google_cloud_tasks_queue":                              tasksQueue,
+	"google_tags_tag_key":                                   free,
 }
 
 func Price(req *costv1.PriceRequest, edges ...pricing.EdgeRates) (*costv1.Estimate, error) {

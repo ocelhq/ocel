@@ -121,6 +121,8 @@ func TestTheAppAccountsRoleHoldsOnlyWhatADeployDoesToAnAppsAccount(t *testing.T)
 		"iam.serviceAccounts.get",
 		"iam.serviceAccounts.getIamPolicy",
 		"iam.serviceAccounts.setIamPolicy",
+		"iam.serviceAccounts.createTagBinding",
+		"iam.serviceAccounts.listTagBindings",
 	}
 	if !slices.Equal(bootstrap.AppAccountsPermissions, want) {
 		t.Errorf("appAccountsPermissions = %v, want %v: a delete, disable, update or key permission lets a stolen deploy credential take accounts down", bootstrap.AppAccountsPermissions, want)

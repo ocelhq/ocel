@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/secretmanager/v1"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
@@ -23,14 +24,25 @@ const (
 	failedPrecondition = "FAILED_PRECONDITION"
 )
 
-func (c *Clients) EnsureSecret(ctx context.Context, service *secretmanager.Service, name string) error {
+func (c *Clients) EnsureSecret(ctx context.Context, service *secretmanager.Service, tier environment.Tier, name string) error {
 	_, err := googleretry.Attempted(ctx, service.Projects.Secrets.Create("projects/"+c.Project(), &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
+		Tags:        c.InlineTierTags(tier),
 	}).SecretId(name).Context(ctx).Do)
-	if err != nil && !Taken(err) {
+	if err == nil {
+		return nil
+	}
+	if !Taken(err) {
 		return fmt.Errorf("create the %s secret: %w", name, err)
 	}
-	return nil
+	if !c.TierTagged() {
+		return nil
+	}
+	tagged, err := c.SecretTagged(ctx, name)
+	if err != nil {
+		return err
+	}
+	return c.EnsureTierTag(ctx, tier, tagged)
 }
 
 func (c *Clients) ReadSecretVersion(ctx context.Context, service *secretmanager.Service, name, version string) ([]byte, bool, error) {
@@ -126,9 +138,30 @@ func versionNumber(name string) (int, error) {
 	return strconv.Atoi(number)
 }
 
-func (c *Clients) DeleteSecret(ctx context.Context, service *secretmanager.Service, name string) error {
+func (c *Clients) DeleteSecret(ctx context.Context, service *secretmanager.Service, tier environment.Tier, name string) error {
+	if err := c.untagSecret(ctx, service, tier, name); err != nil {
+		return err
+	}
 	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(SecretPath(c.Project(), name)).Context(ctx).Do); err != nil && !Absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
 	return nil
+}
+
+func (c *Clients) untagSecret(ctx context.Context, service *secretmanager.Service, tier environment.Tier, name string) error {
+	if !c.TierTagged() {
+		return nil
+	}
+	_, err := googleretry.Attempted(ctx, service.Projects.Secrets.Get(SecretPath(c.Project(), name)).Context(ctx).Do)
+	if Absent(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read the %s secret: %w", name, err)
+	}
+	tagged, err := c.SecretTagged(ctx, name)
+	if err != nil {
+		return err
+	}
+	return c.RemoveTierTag(ctx, tier, tagged)
 }

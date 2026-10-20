@@ -209,7 +209,11 @@ func (b Engine) PresenceOf(ctx context.Context, read Survey, target Resource) (P
 	if surveyed == nil {
 		return Presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 	}
-	return surveyed(ctx, b, read, target)
+	found, err := surveyed(ctx, b, read, target)
+	if err != nil {
+		return Presence{}, err
+	}
+	return b.untaggedPresence(ctx, read, target, found)
 }
 
 func presenceFrom(present bool, err error) (Presence, error) { return Presence{Present: present}, err }
