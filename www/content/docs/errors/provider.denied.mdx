@@ -1,0 +1,10 @@
+---
+title: provider.denied
+description: The provider refused what the command asked, as not permitted.
+---
+
+The provider answered that what the command asked is not permitted: the account's credentials may not do it, or a limit, such as how many previews a plan runs at once, refuses it. The message is the provider's own and names what it refused; a provider that names its own code puts it first, as in `cloud.preview_limit: …`.
+
+## Fix
+
+Do what the message names: grant the credentials what they lack, remove what holds the limit, or raise it.

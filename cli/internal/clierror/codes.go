@@ -16,6 +16,11 @@ const (
 	CodeProviderUnavailable        = "provider.unavailable"
 	CodeProviderVersionMismatch    = "provider.version_mismatch"
 	CodeProviderUnsupported        = "provider.unsupported"
+	CodeProviderDenied             = "provider.denied"
+	CodeProviderNotReady           = "provider.not_ready"
+	CodeProviderNotFound           = "provider.not_found"
+	CodeProviderInvalidRequest     = "provider.invalid_request"
+	CodeProviderBusy               = "provider.busy"
 	CodePrerequisiteMissing        = "prerequisite.missing"
 	CodeVariablesMissing           = "variables.missing"
 	CodeBootstrapMissing           = "bootstrap.missing"
@@ -45,6 +50,11 @@ func Codes() []string {
 		CodeProviderUnavailable,
 		CodeProviderVersionMismatch,
 		CodeProviderUnsupported,
+		CodeProviderDenied,
+		CodeProviderNotReady,
+		CodeProviderNotFound,
+		CodeProviderInvalidRequest,
+		CodeProviderBusy,
 		CodePrerequisiteMissing,
 		CodeVariablesMissing,
 		CodeBootstrapMissing,
