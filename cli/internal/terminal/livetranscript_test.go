@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -263,6 +264,34 @@ func TestAHoldLeavesNoLiveLineOnScreenAndNoTickDrawsOneWhileItLasts(t *testing.T
 		"\x1b[?2026h\r\x1b[K\x1b[?2026l" +
 		"\x1b[?2026h\r\x1b[KWARN  [build] web: Building web did not finish\n      Collected 12 routes\n\x1b[?2026l"
 	if got := rig.closed(t); got != want {
+		t.Fatalf("wrote\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestAnOcelCloudJobsInputShowsAtOnceAboveWhereTheLiveLineWasAndNoTickDrawsOverIt(t *testing.T) {
+	t.Parallel()
+
+	rig := newLineRig(t, Presentation{Width: 80})
+	rig.run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
+	before := rig.out.String()
+	rig.run.Hold(&streamv1.WaitingEvent{
+		Url:   "https://console.test/cloud/jobs/job_1",
+		Input: &cloudv1.JobInput{Id: "in_1", Need: &cloudv1.JobInput_Confirmation{Confirmation: &cloudv1.Confirmation{Question: "Continue?"}}},
+	})
+	rig.clock.pass(100 * time.Millisecond)
+	rig.tick()
+
+	want := before + "\x1b[?2026h\r\x1b[K" +
+		"Ocel Cloud asks: Continue?\n" +
+		"\n" +
+		"  Answer it on Ocel Cloud at:\n" +
+		"\n" +
+		"    https://console.test/cloud/jobs/job_1\n" +
+		"\n" +
+		"  Waiting for Ocel Cloud — press Ctrl-C to stop watching; the job waits there either way.\n" +
+		"\n" +
+		"\x1b[?2026l"
+	if got := rig.out.String(); got != want {
 		t.Fatalf("wrote\n%q\nwant\n%q", got, want)
 	}
 }
