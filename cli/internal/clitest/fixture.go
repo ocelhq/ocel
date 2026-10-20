@@ -43,6 +43,7 @@ func NewInvocation() commands.Invocation {
 		StdinIsTerminal: func(io.Reader) bool { return false },
 		ConfigPath:      func() string { return os.Getenv(commands.ConfigEnvVar) },
 		RecordEvent:     func(telemetry.Payload) bool { return false },
+		CloudSessions:   commands.NewCloudSessions(),
 	}
 }
 

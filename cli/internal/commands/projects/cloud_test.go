@@ -51,6 +51,13 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		if _, removed := removals(t, project.FakeProject); len(removed) != 2 {
 			t.Fatalf("removed %d tiers, want both", len(removed))
 		}
+		sessions := map[string]bool{}
+		for _, call := range project.Remote.Calls() {
+			sessions[call.Session] = true
+		}
+		if len(sessions) != 1 {
+			t.Fatalf("opened %d sessions on Ocel Cloud, want the one run open one", len(sessions))
+		}
 		events := project.Cloud.RecordedEvents()
 		if len(events) != 2 || events[0].GetEvent().GetKind() != consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED {
 			t.Fatalf("events = %v, want each tier's destroy recorded", events)

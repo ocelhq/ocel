@@ -113,10 +113,17 @@ func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Pro
 		loading.End(err)
 		return provider, err
 	}
+	if provider := i.CloudSessions.find(check.Run(), cfg); provider != nil {
+		return provider, nil
+	}
 	opening := check.Child(CloudProviderID, progress.Title{Started: "Opening a session on Ocel Cloud", Ended: "Opened a session on Ocel Cloud"})
 	provider, err := i.startOnCloud(ctx, check, cfg, cloud)
 	opening.End(err)
-	return provider, err
+	if err != nil {
+		return nil, err
+	}
+	i.CloudSessions.keep(check.Run(), cfg, provider)
+	return provider, nil
 }
 
 func (i Invocation) startOnCloud(ctx context.Context, check *run.Span, cfg *project.Project, cloud *CloudTarget) (*providerprocess.Provider, error) {

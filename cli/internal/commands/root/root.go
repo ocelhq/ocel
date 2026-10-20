@@ -285,9 +285,10 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 		Questions:       providerprocess.Questions{Prompt: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
 		ConfigPath:      set.explicitConfigPath,
 
-		Console:    deployreport.Console{LoadCredentials: console.LoadCredentials},
-		CloudOffer: console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
-		BuilderJob: commands.ReadBuilderJob(os.Getenv),
+		Console:       deployreport.Console{LoadCredentials: console.LoadCredentials},
+		CloudOffer:    console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
+		CloudSessions: commands.NewCloudSessions(),
+		BuilderJob:    commands.ReadBuilderJob(os.Getenv),
 	}
 	if invocation.BuilderJob != nil {
 		invocation.Console, invocation.CloudOffer = deployreport.Console{}, nil
