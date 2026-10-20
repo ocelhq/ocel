@@ -25,11 +25,18 @@ func (n Names) Topic(topic string) (string, error) {
 	return coordinate.AppResourceName(string(n.Namespace), coordinate.HashTag(string(n.Namespace))).Fit(maxPubSubName, longestConsumer)
 }
 
-func (n Names) Subscription(topic, consumer string) (string, error) {
+func CheckConsumer(topic, consumer string) error {
 	if len(consumer) > maxConsumerName {
-		return "", refusal.Refuse(refusal.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"consumer %s of %s is %d characters, and on Google Cloud a consumer takes %d: its Pub/Sub subscription is the topic's name and the consumer's, within the %d characters Pub/Sub takes.\nShorten %s",
 			consumer, topic, len(consumer), maxConsumerName, maxPubSubName, consumer)
+	}
+	return nil
+}
+
+func (n Names) Subscription(topic, consumer string) (string, error) {
+	if err := CheckConsumer(topic, consumer); err != nil {
+		return "", err
 	}
 	name, err := n.Topic(topic)
 	if err != nil {

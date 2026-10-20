@@ -136,7 +136,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 }
 
 func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Listener, tags pulumi.StringMap) error {
-	liveness, targets := LivenessName(w.namespace, w.tier), awsports.PublicTargetGroupName(w.namespace, w.tier)
+	liveness, targets := awsports.PublicLivenessName(w.namespace, w.tier), awsports.PublicTargetGroupName(w.namespace, w.tier)
 	role, _, err := component.NewAppRole(ctx, component.AppRole{
 		Name:        component.NameOf(liveness),
 		Description: pulumi.String("Ocel: the role the public front's liveness answer runs as in the " + string(w.tier) + " tier"),

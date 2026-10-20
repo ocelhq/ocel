@@ -122,7 +122,7 @@ func readCore(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environ
 	if err != nil {
 		return Deployed{}, stackRefs{}, nil, err
 	}
-	if core == nil || cfn.Unusable(core.StackStatus) {
+	if core == nil || cfn.Unusable(core.StackStatus) || !namesABucket(core) {
 		return Deployed{Present: false, Parts: PartSet{}}, stackRefs{bucketTag: naming.NewRandomTag()}, nil, nil
 	}
 	d := Deployed{Present: true, Parts: PartSet{}, Buckets: naming.Buckets{}, Outputs: cfn.OutputsOf(core)}

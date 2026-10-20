@@ -18,11 +18,8 @@ func Name(ns account.Namespace, slug string, tier environment.Tier, tail ...stri
 		Readable: naming.Join(naming.WordSeparator, append([]string{slug}, tail...)...),
 		Tag:      naming.HashTag(append([]string{string(ns), string(tier), slug}, tail...)...),
 	}
-	name, err := named.Fit(MaxNameLen)
+	name, err := named.FitWhole(MaxNameLen)
 	if err != nil {
-		return "", err
-	}
-	if name != naming.Join(naming.WordSeparator, named.Head, named.Readable, named.Tag) {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s does not fit the %d characters an edge names a project's surface in, and a surface cut short cannot be read back to the project that owns it\nShorten the project slug",
 			named.Readable, MaxNameLen)

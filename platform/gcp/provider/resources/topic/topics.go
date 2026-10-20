@@ -67,7 +67,7 @@ func Names(names names.Names, ref provider.StackRef) topics.Names {
 
 func nameTopic(names topics.Names, topic declaredTopic) (string, error) {
 	for _, consumer := range topic.spec.Consumers {
-		if _, err := names.Subscription(topic.declared, consumer.Name); err != nil {
+		if err := topics.CheckConsumer(topic.declared, consumer.Name); err != nil {
 			return "", err
 		}
 	}

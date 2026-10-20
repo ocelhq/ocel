@@ -253,26 +253,27 @@ func readRecordedBucket(entry records.Entry, declared string) (string, error) {
 	return recorded.Bucket, nil
 }
 
-func (b appBucket) claim(ctx context.Context, store records.Store, declared string) (string, error) {
+func (b appBucket) claim(ctx context.Context, store records.Store, declared string) (string, bool, error) {
 	var claimed string
+	var minted bool
 	err := records.Change(ctx, store, b.key, func(entry records.Entry) ([]byte, bool, error) {
 		if len(entry.Value) > 0 {
 			recorded, err := readRecordedBucket(entry, declared)
-			claimed = recorded
+			claimed, minted = recorded, false
 			return nil, false, err
 		}
 		name, err := b.mint(naming.NewRandomTag())
 		if err != nil {
 			return nil, false, err
 		}
-		claimed = name
+		claimed, minted = name, true
 		value, err := json.Marshal(recordedBucket{Bucket: name})
 		return value, err == nil, err
 	})
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return claimed, nil
+	return claimed, minted, nil
 }
 
 func (b appBucket) read(ctx context.Context, client *storage.Client, name, declared string) (*storage.BucketAttrs, error) {
@@ -287,11 +288,14 @@ func (b appBucket) read(ctx context.Context, client *storage.Client, name, decla
 }
 
 func (b appBucket) ensure(ctx context.Context, store records.Store, client *storage.Client, project, declared string, progress progress.Log) (string, error) {
-	name, err := b.claim(ctx, store, declared)
+	name, minted, err := b.claim(ctx, store, declared)
 	if err != nil {
 		return "", err
 	}
 	current, err := b.read(ctx, client, name, declared)
+	if gcloud.Forbidden(err) && !minted {
+		return "", refuseUnreadable(project, name, declared)
+	}
 	if gcloud.Forbidden(err) {
 		return "", refuseHeldElsewhere(ctx, store, b.key, name, declared)
 	}
@@ -322,10 +326,21 @@ func (b appBucket) create(ctx context.Context, store records.Store, client *stor
 	if !gcloud.Taken(err) {
 		return fmt.Errorf("create the Cloud Storage bucket %s that bucket %s stores into: %w", name, declared, err)
 	}
-	if _, read := client.Bucket(name).Attrs(ctx); read == nil {
+	_, err = client.Bucket(name).Attrs(ctx)
+	if err == nil {
 		return nil
 	}
+	if !gcloud.Forbidden(err) {
+		return fmt.Errorf("read the Cloud Storage bucket %s that bucket %s stores into, which Cloud Storage answered already exists: %w", name, declared, err)
+	}
 	return refuseHeldElsewhere(ctx, store, b.key, name, declared)
+}
+
+func refuseUnreadable(project, name, declared string) error {
+	return refusal.Refuse(refusal.CodeDenied,
+		"bucket %s stores into the Cloud Storage bucket %s, and Google Cloud answers that it exists but these credentials cannot read it.\n"+
+			"Check that they hold storage.buckets.get on %s in project %s, then deploy again: the name stays recorded, since forgetting it would leave the bucket's objects behind",
+		declared, name, name, project)
 }
 
 func refuseHeldElsewhere(ctx context.Context, store records.Store, key records.Key, name, declared string) error {

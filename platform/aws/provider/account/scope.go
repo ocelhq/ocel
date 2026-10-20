@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
@@ -54,7 +54,7 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 			functionARNPrefix + sync.Function,
 			functionARNPrefix + invalidator.Function,
 			functionARNPrefix + optimizer.Function,
-			functionARNPrefix + containers.LivenessName(string(n), tier),
+			functionARNPrefix + awsports.PublicLivenessName(string(n), tier),
 		},
 		TierFunctionLogGroups:      logGroupARNs(sync.LogGroup, invalidator.LogGroup, optimizer.LogGroup),
 		EnvSourceSyncFunction:      functionARNPrefix + sync.Function,

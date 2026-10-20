@@ -35,7 +35,7 @@ export interface ImageConfig extends CompiledImageConfig {
 }
 
 export interface ImageOriginRequest {
-  storage?: StorageCoordinate;
+  storage: StorageCoordinate;
   url: string;
   w: number;
   q: number;

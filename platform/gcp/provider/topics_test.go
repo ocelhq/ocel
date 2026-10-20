@@ -178,6 +178,19 @@ func TestATopicWithAConsumerItsSubscriptionCannotHoldIsRefusedAtPlan(t *testing.
 	}
 }
 
+func TestATopicWithAConsumerItsSubscriptionCannotHoldIsRefusedAtProvisionBeforeAnythingIsMade(t *testing.T) {
+	p, server := servingTopics(t)
+
+	_, err := p.topicHooks().Provision(context.Background(), aTopic(t, provider.BindingTopic, consumersNamed(false, "ship", strings.Repeat("c", 64))), nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("ProvisionTopic() = %v, want an %s refusal", err, refusal.CodeInvalid)
+	}
+	if wrote := server.wrote(); len(wrote) != 0 {
+		t.Errorf("ProvisionTopic() over a consumer too long to name wrote %q, want nothing made", wrote)
+	}
+}
+
 func topicNamed(t *testing.T, names topics.Names, topic string) string {
 	t.Helper()
 	name, err := names.Topic(topic)

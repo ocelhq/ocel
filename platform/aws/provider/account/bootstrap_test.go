@@ -189,6 +189,7 @@ func TestStackTemplate(t *testing.T) {
 type stubStack struct {
 	outputs []cfntypes.Output
 	tags    []cfntypes.Tag
+	status  cfntypes.StackStatus
 }
 
 func (s stubStack) stamped(stamp Stamp) stubStack {
@@ -203,7 +204,7 @@ func (s stubStacksAPI) DescribeStacks(_ context.Context, in *cloudformation.Desc
 	if !ok {
 		return nil, validationError{msg: "Stack with id " + aws.ToString(in.StackName) + " does not exist"}
 	}
-	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{Outputs: stack.outputs, Tags: stack.tags}}}, nil
+	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{Outputs: stack.outputs, Tags: stack.tags, StackStatus: stack.status}}}, nil
 }
 
 func outputs(pairs map[string]string) stubStack {
@@ -340,6 +341,22 @@ func TestCheckDeployed(t *testing.T) {
 			t.Errorf("Stale() = %+v, want nothing", stale)
 		}
 	})
+}
+
+func TestABootstrapWhoseCoreNamesNoBucketYetReadsAsNotYetBootstrappedRatherThanOneToDelete(t *testing.T) {
+	for _, status := range []cfntypes.StackStatus{cfntypes.StackStatusCreateInProgress, cfntypes.StackStatusReviewInProgress} {
+		t.Run(string(status), func(t *testing.T) {
+			api := stubStacksAPI{coreStackName: stubStack{status: status}.stamped(Stamp{})}
+
+			read, err := Read(context.Background(), api, defaultNamespace, environment.TierProduction)
+			if err != nil {
+				t.Fatalf("Read = %v, want no error: a core still being created has no outputs yet, and deleting it is never the answer", err)
+			}
+			if read.Deployed.Present {
+				t.Errorf("Read = %+v, want a bootstrap not yet present", read.Deployed)
+			}
+		})
+	}
 }
 
 func TestPreviewStackTemplate(t *testing.T) {

@@ -51,6 +51,7 @@ export function assetStoreServing(
 
 export function noAssets(): RouteDeps["assetStore"] {
   return {
+    storage: TEST_STORAGE,
     static: nextStatic(),
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},

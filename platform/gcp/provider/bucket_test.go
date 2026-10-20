@@ -200,6 +200,28 @@ func TestABucketNameAnotherAccountHoldsIsRefusedWithWhatToRename(t *testing.T) {
 	}
 }
 
+func TestABucketTheDeployCannotReadForAMomentKeepsItsRecordedName(t *testing.T) {
+	p, server := servingStorage(t)
+	first, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.forbiddingReads = true
+
+	_, err = p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(err.Error(), first.Properties[provider.PropertyBucket]) {
+		t.Fatalf("ProvisionBucket() over a bucket it made but cannot read = %v, want a %s refusal naming %s", err, refusal.CodeDenied, first.Properties[provider.PropertyBucket])
+	}
+
+	server.forbiddingReads = false
+	again, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil)
+	if err != nil || again.Properties[provider.PropertyBucket] != first.Properties[provider.PropertyBucket] || len(server.created) != 1 {
+		t.Errorf("the next deploy bound %v, %v with %d buckets created, want the bucket it made first, %s: a new name would leave its objects behind",
+			again.Properties, err, len(server.created), first.Properties[provider.PropertyBucket])
+	}
+}
+
 func TestRemovingABucketDeletesItsObjectsThenTheBucket(t *testing.T) {
 	p, server := servingStorage(t)
 	name := appBucketOf(t, namesOf(t, p), "prod", "uploads")

@@ -1,9 +1,13 @@
 package component_test
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
+	s3 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -36,21 +40,55 @@ func TestEveryProgramDeclaresAProviderNamedAWSWithTheRegionAndTheStacksTags(t *t
 	}
 }
 
+func TestAnAWSResourceCarryingAFileAssetIsRegisteredThroughTheDeclaredProvider(t *testing.T) {
+	t.Parallel()
+
+	const objectToken = "aws:s3/bucketObjectv2:BucketObjectv2"
+	const key = "fn/shop/prod/web/r1/fn-web-index/aa1a3cdb8653b858.zip"
+	zip := filepath.Join(t.TempDir(), "code.zip")
+	if err := os.WriteFile(zip, []byte("PK\x05\x06"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rec := componenttest.Record(t, func(pctx *sdk.Context) error {
+		return component.ProgramIn("eu-west-1")(pctx, component.Program{
+			Run: func(pctx *sdk.Context) error {
+				_, err := s3.NewBucketObjectv2(pctx, key, &s3.BucketObjectv2Args{
+					Bucket: sdk.String("ocel-prod-artifacts-k3x9q2"),
+					Key:    sdk.String(key),
+					Source: sdk.NewFileAsset(zip),
+				})
+				return err
+			},
+		})
+	})
+
+	provider := rec.ProviderOf(objectToken, key)
+	if !strings.Contains(provider, "::"+providerToken+"::"+component.ProviderName+"::") {
+		t.Errorf("the object's provider = %q, want the declared %s attached in the program, not by an engine transform that drops the asset's hash", provider, component.ProviderName)
+	}
+	if source := rec.InputsOf(t, objectToken, key)["source"]; !source.IsAsset() || source.AssetValue().Path != zip {
+		t.Errorf("the object's source = %v, want the file asset at %s", source, zip)
+	}
+}
+
 func TestAnAWSResourceWithNoProviderIsHandedTheDeclaredOne(t *testing.T) {
 	t.Parallel()
 
 	declared := &aws.Provider{}
 	through := component.ThroughProvider(declared)
 
-	result := through(t.Context(), &sdk.ResourceTransformArgs{Type: "aws:sqs/queue:Queue", Name: "q"})
-	if result == nil || result.Opts.Provider != declared {
-		t.Errorf("transform of an aws resource = %+v, want it handed the declared provider", result)
+	result := through(&sdk.ResourceTransformationArgs{Type: "aws:sqs/queue:Queue", Name: "q"})
+	if result == nil {
+		t.Fatal("transform of an aws resource = nil, want it handed the declared provider")
 	}
-	if result := through(t.Context(), &sdk.ResourceTransformArgs{Type: component.RandomTagToken, Name: "t"}); result != nil {
+	if handed, err := sdk.NewResourceOptions(result.Opts...); err != nil || handed.Provider != declared {
+		t.Errorf("transform of an aws resource names provider %v (%v), want the declared one", handed, err)
+	}
+	if result := through(&sdk.ResourceTransformationArgs{Type: component.RandomTagToken, Name: "t"}); result != nil {
 		t.Errorf("transform of an ocel resource = %+v, want it left to its own provider", result)
 	}
 	chosen := &aws.Provider{}
-	if result := through(t.Context(), &sdk.ResourceTransformArgs{Type: "aws:sqs/queue:Queue", Name: "q", Opts: sdk.ResourceOptions{Provider: chosen}}); result != nil {
+	if result := through(&sdk.ResourceTransformationArgs{Type: "aws:sqs/queue:Queue", Name: "q", Opts: []sdk.ResourceOption{sdk.Provider(chosen)}}); result != nil {
 		t.Errorf("transform of a resource that names its provider = %+v, want that provider kept", result)
 	}
 	invoked := component.InvokedThroughProvider(declared)(t.Context(), &sdk.InvokeTransformArgs{Token: "aws:ec2/getSubnets:getSubnets"})

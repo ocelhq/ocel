@@ -22,6 +22,7 @@ const (
 	containerFrontSegment = "front"
 	containersWord        = "containers"
 	publicWord            = "public"
+	livenessWord          = "liveness"
 	targetGroupWord       = "tg"
 
 	RuntimeLayerToPublish = "ocel:runtime-layer-to-publish"
@@ -46,6 +47,10 @@ func PublicBalancerName(namespace string, tier environment.Tier) string {
 
 func PublicTargetGroupName(namespace string, tier environment.Tier) string {
 	return naming.Join(naming.WordSeparator, PublicBalancerName(namespace, tier), targetGroupWord)
+}
+
+func PublicLivenessName(namespace string, tier environment.Tier) string {
+	return naming.Join(naming.WordSeparator, PublicBalancerName(namespace, tier), livenessWord)
 }
 
 func ContainerFrontKey(tier environment.Tier) records.Key {

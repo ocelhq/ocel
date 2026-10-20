@@ -33,7 +33,11 @@ func (c *Clients) RecordedTierBuckets(ctx context.Context, tier environment.Tier
 	if read, ok := c.tierBuckets.read[tier]; ok {
 		return maps.Clone(read), nil
 	}
-	entry, err := records.ReadOrEmpty(ctx, c.Records, TierBucketsKey(tier))
+	store, err := c.tierBucketRecords(tier)
+	if err != nil {
+		return nil, err
+	}
+	entry, err := records.ReadOrEmpty(ctx, store, TierBucketsKey(tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the buckets the %s tier keeps its objects in: %w", tier, err)
 	}
@@ -93,8 +97,12 @@ func (c *Clients) ForgetTierBucket(ctx context.Context, tier environment.Tier, c
 }
 
 func (c *Clients) changeTierBuckets(ctx context.Context, tier environment.Tier, change func(naming.Buckets) bool) (naming.Buckets, error) {
+	store, err := c.tierBucketRecords(tier)
+	if err != nil {
+		return nil, err
+	}
 	var recorded naming.Buckets
-	err := records.Change(ctx, c.Records, TierBucketsKey(tier), func(entry records.Entry) ([]byte, bool, error) {
+	err = records.Change(ctx, store, TierBucketsKey(tier), func(entry records.Entry) ([]byte, bool, error) {
 		var err error
 		if recorded, err = decodeTierBuckets(entry); err != nil || !change(recorded) {
 			return nil, false, err
@@ -113,6 +121,13 @@ func (c *Clients) changeTierBuckets(ctx context.Context, tier environment.Tier, 
 	}
 	c.tierBuckets.read[tier] = maps.Clone(recorded)
 	return recorded, nil
+}
+
+func (c *Clients) tierBucketRecords(tier environment.Tier) (records.Store, error) {
+	if c.Records == nil {
+		return nil, fmt.Errorf("gcp: these clients hold no record store, so the buckets of the %s tier cannot be read or recorded", tier)
+	}
+	return c.Records, nil
 }
 
 func (c *Clients) DropTierBucketsRead(tier environment.Tier) {

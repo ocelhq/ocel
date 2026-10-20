@@ -30,8 +30,9 @@ type storageServer struct {
 
 	listed int
 
-	takenElsewhere bool
-	staleSets      int
+	takenElsewhere  bool
+	forbiddingReads bool
+	staleSets       int
 }
 
 func servingStorage(t *testing.T) (*Provider, *storageServer) {
@@ -101,6 +102,10 @@ func (s *storageServer) bucket(w http.ResponseWriter, r *http.Request, name stri
 	}
 	switch r.Method {
 	case http.MethodGet:
+		if s.forbiddingReads {
+			forbidden(w)
+			return
+		}
 		googletest.WriteBody(w, current)
 	case http.MethodPatch:
 		patch := googletest.ReadBody[raw.Bucket](w, r)

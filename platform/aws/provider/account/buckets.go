@@ -3,6 +3,9 @@ package account
 import (
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -31,6 +34,15 @@ var bucketOutputs = map[string]naming.StorageClass{
 	outputArtifactBucket: naming.StorageArtifacts,
 	outputEdgeBucket:     naming.StorageEdge,
 	outputCacheBucket:    naming.StorageCache,
+}
+
+func namesABucket(core *cfntypes.Stack) bool {
+	for _, output := range core.Outputs {
+		if _, ok := bucketOutputs[aws.ToString(output.OutputKey)]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (n Namespace) bootstrapBucketTag(tier environment.Tier, buckets naming.Buckets) (string, error) {

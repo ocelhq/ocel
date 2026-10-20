@@ -115,6 +115,7 @@ function serveRelease(
   const deps = routedDeps(served, releases, base);
   return (request) => {
     const storage = readAssetStorage(request, served.record, served.storage);
+    if (!storage) return Promise.resolve(assetNotFoundResponse());
     return dispatch(
       request,
       storage === deps.assetStore.storage
@@ -252,6 +253,16 @@ function deploymentNotFoundResponse(): Response {
     status: 404,
     headers: {
       "content-type": "text/html; charset=utf-8",
+      [ROUTER_HEADER]: ROUTER_KIND,
+    },
+  });
+}
+
+function assetNotFoundResponse(): Response {
+  return new Response("Not Found", {
+    status: 404,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
       [ROUTER_HEADER]: ROUTER_KIND,
     },
   });

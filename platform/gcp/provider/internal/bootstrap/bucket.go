@@ -111,8 +111,10 @@ func (b Engine) makeBucket(ctx context.Context, read Survey, target Resource) (s
 	if err != nil {
 		return "", err
 	}
+	var minted string
 	name, err := b.Clients.ClaimTierBucket(ctx, read.Tier, target.Class, func() string {
-		return read.Names.TierBucket(read.Tier, target.Class, naming.NewRandomTag())
+		minted = read.Names.TierBucket(read.Tier, target.Class, naming.NewRandomTag())
+		return minted
 	})
 	if err != nil {
 		return "", err
@@ -130,6 +132,13 @@ func (b Engine) makeBucket(ctx context.Context, read Survey, target Resource) (s
 	}
 	if attrs != nil {
 		return name, nil
+	}
+	seenFree := name == minted || name == read.Buckets[target.Class]
+	if err != nil && !seenFree {
+		return "", refusal.Refuse(refusal.CodeDenied,
+			"the %s bucket of the %s tier is recorded as %s, and Google Cloud answers that it exists but these credentials cannot read it.\n"+
+				"Check that they hold storage.buckets.get on %s in project %s, then bootstrap again: the name stays recorded, since forgetting it would leave what the bucket holds behind",
+			target.Class, read.Tier, name, name, read.Project)
 	}
 	if err := b.Clients.ForgetTierBucket(ctx, read.Tier, target.Class, name); err != nil {
 		return "", err
