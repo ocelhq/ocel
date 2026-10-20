@@ -26,8 +26,6 @@ const (
 	tagField          = "tag"
 	tagStaleField     = "stale"
 	tagExpiredField   = "expired"
-
-	tagRecordsRole = "roles/datastore.user"
 )
 
 func tagIndexes() []*firestoreadmin.GoogleFirestoreAdminV1Index {

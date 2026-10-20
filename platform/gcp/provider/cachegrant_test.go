@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -205,7 +206,7 @@ func TestAnAppWithoutISRIsGrantedNoCache(t *testing.T) {
 func tagRecordBindingsOf(server *googletest.IAM) []string {
 	var bound []string
 	for _, binding := range projectBindingsOf(server) {
-		if strings.HasPrefix(binding, tagRecordsRole+" ") && strings.Contains(binding, ports.ProjectWritableDatabasePrefix("ocel", environment.TierProduction)) {
+		if strings.HasPrefix(binding, credential.TaskRecordsRole+" ") && strings.Contains(binding, ports.ProjectWritableDatabasePrefix("ocel", environment.TierProduction)) {
 			bound = append(bound, binding)
 		}
 	}
@@ -222,12 +223,12 @@ func TestANextAppsAccountMayUseItsProjectsTagRecordsAndNoOtherDatabase(t *testin
 		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
-	want := tagRecordsRole + " serviceAccount:" + account + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop") + `"`
+	want := credential.TaskRecordsRole + " serviceAccount:" + account + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop") + `"`
 	if got := tagRecordBindingsOf(server); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's tag record bindings = %q, want exactly %q", got, want)
 	}
 	for _, binding := range server.Project.Bindings {
-		if binding.Role == tagRecordsRole && strings.Contains(binding.Condition.Expression, ports.ProjectWritableDatabasePrefix("ocel", environment.TierProduction)) &&
+		if binding.Role == credential.TaskRecordsRole && strings.Contains(binding.Condition.Expression, ports.ProjectWritableDatabasePrefix("ocel", environment.TierProduction)) &&
 			binding.Condition.Title != "ocel shop production runs and tag records" {
 			t.Errorf("the tag records binding's condition = %+v, want the title %q", binding.Condition, "ocel shop production runs and tag records")
 		}
