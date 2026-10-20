@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -45,7 +44,7 @@ type checkedResource struct {
 
 func deployOf(tier environment.Tier) credential.Deploy {
 	names := names.New("ocel", "acme-prod")
-	return credential.Deploy{Names: names, Region: "europe-west1", Tier: tier, GrantableRoles: grants.ListGrantedRoles(names)}
+	return credential.New(names, "europe-west1", tier)
 }
 
 func predefinedRoles(t *testing.T) map[string][]string {

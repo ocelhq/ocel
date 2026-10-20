@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
@@ -50,7 +51,7 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 			return nil, err
 		}
 		granted = append(granted,
-			grants.OnProject(grants.RecordsRole, member, variables.ProjectDatabaseCondition(c, spec.Ref.Tier, project)),
+			grants.OnProject(credential.RecordsRole, member, variables.ProjectDatabaseCondition(c, spec.Ref.Tier, project)),
 			grants.On(grants.Key, c.Workload().ProjectKeyPath(spec.Ref.Tier, project), grants.OpeningRole, member))
 	}
 	held, err := registry.Grants(ctx, component.App{Clients: c, Spec: spec, Account: account, Member: member, Topics: declared})

@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
@@ -204,7 +205,7 @@ func TestADeployRecordsWhatItGrantsBeforeItGrantsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	member := appMember(c, spec.Ref, "api")
-	if !slices.ContainsFunc(recorded, func(grant grants.Grant) bool { return grant.Member == member && grant.Role == grants.RecordsRole }) {
+	if !slices.ContainsFunc(recorded, func(grant grants.Grant) bool { return grant.Member == member && grant.Role == credential.RecordsRole }) {
 		t.Errorf("the deploy granted the records role and recorded %+v, want every grant on record before it lands so a removal can take it back", recorded)
 	}
 }
@@ -276,7 +277,7 @@ func TestRevokingAnAppsGrantsTouchesNoOtherMembersBindings(t *testing.T) {
 	p, c, spec, member := grantedAppAccount(t, server)
 	other := "serviceAccount:other@acme-prod.iam.gserviceaccount.com"
 	for _, binding := range server.Project.Bindings {
-		if binding.Role == grants.RecordsRole {
+		if binding.Role == credential.RecordsRole {
 			binding.Members = append(binding.Members, other)
 		}
 	}
@@ -290,7 +291,7 @@ func TestRevokingAnAppsGrantsTouchesNoOtherMembersBindings(t *testing.T) {
 
 	want := []string{
 		"roles/bigquery.dataEditor " + member + " " + conditioned.Expression,
-		grants.RecordsRole + " " + other + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`,
+		credential.RecordsRole + " " + other + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`,
 		"roles/viewer " + other + " ",
 	}
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
