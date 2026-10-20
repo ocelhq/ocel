@@ -251,6 +251,10 @@ func (c *Clients) BucketTagged(bucket string) TaggedResource {
 	return TaggedResource{Name: "//storage.googleapis.com/projects/_/buckets/" + bucket, Location: c.Region}
 }
 
+func (c *Clients) SQLInstanceTagged(instance string) TaggedResource {
+	return TaggedResource{Name: "//sqladmin.googleapis.com/projects/" + c.Project() + "/instances/" + instance, Location: c.Region}
+}
+
 func (c *Clients) DatabaseTagged(database string) TaggedResource {
 	return TaggedResource{Name: "//firestore.googleapis.com/projects/" + c.Project() + "/databases/" + database, Location: c.Region}
 }
