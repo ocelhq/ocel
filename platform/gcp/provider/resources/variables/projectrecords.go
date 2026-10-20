@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
+	kms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -85,8 +86,11 @@ func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.T
 			CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
 		})
 	})
-	if err == nil || status.Code(err) == codes.AlreadyExists {
+	if err == nil {
 		return nil
+	}
+	if status.Code(err) == codes.AlreadyExists {
+		return refuseUnsealingKey(ctx, c, client, tier, project)
 	}
 	if status.Code(err) == codes.NotFound {
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -94,6 +98,32 @@ func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.T
 			c.KeyRing(), project, tier, project, provider.BootstrapCommand(tier))
 	}
 	return gcloud.ExplainMissingGrant(fmt.Errorf("create the key project %s seals its %s values under: %w", project, tier, err), c.DeployCredential(tier).ProjectPermissions().String())
+}
+
+func refuseUnsealingKey(ctx context.Context, c *gcloud.Clients, client *kms.KeyManagementClient, tier environment.Tier, project string) error {
+	name := c.Workload().ProjectKeyPath(tier, project)
+	key, err := googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
+		return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: name})
+	})
+	if err != nil {
+		return gcloud.ExplainMissingGrant(fmt.Errorf("read the key project %s seals its %s values under: %w", project, tier, err), c.DeployCredential(tier).ProjectKeys().String())
+	}
+	var lacks string
+	switch {
+	case key.GetPurpose() != kmspb.CryptoKey_ENCRYPT_DECRYPT:
+		lacks = "its purpose is " + key.GetPurpose().String() + ", not " + kmspb.CryptoKey_ENCRYPT_DECRYPT.String()
+	case key.GetPrimary() == nil:
+		lacks = "it has no primary version"
+	case key.GetPrimary().GetState() != kmspb.CryptoKeyVersion_ENABLED:
+		lacks = "its primary version is " + key.GetPrimary().GetState().String()
+	default:
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"the key %s, which project %s seals its %s values under, is already made and cannot seal a value: %s.\n"+
+			"Ocel makes it for %s with an enabled primary version, so another credential made it first. "+
+			"Give it an enabled primary version with `gcloud kms keys versions create --key %s --primary` if its purpose is %s, then try again",
+		name, project, tier, lacks, kmspb.CryptoKey_ENCRYPT_DECRYPT, name, kmspb.CryptoKey_ENCRYPT_DECRYPT)
 }
 
 func keyRingPolicy(c *gcloud.Clients) policy.Resource {

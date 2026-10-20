@@ -190,7 +190,8 @@ func (s *IAM) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*
 	if !s.keys[req.GetName()] {
 		return nil, status.Error(codes.NotFound, req.GetName())
 	}
-	return &kmspb.CryptoKey{Name: req.GetName()}, nil
+	return &kmspb.CryptoKey{Name: req.GetName(), Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT,
+		Primary: &kmspb.CryptoKeyVersion{Name: req.GetName() + "/cryptoKeyVersions/1", State: kmspb.CryptoKeyVersion_ENABLED}}, nil
 }
 
 func (s *IAM) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {

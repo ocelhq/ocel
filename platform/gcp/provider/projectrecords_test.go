@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 func TestAnAppIsGrantedNoRecordsOrKeyOfTheNamespaceOrTheTier(t *testing.T) {
@@ -87,8 +88,22 @@ type projectKeysKMS struct {
 
 	mu       sync.Mutex
 	keys     map[string]bool
+	planted  map[string]*kmspb.CryptoKey
 	created  []string
 	ringless bool
+}
+
+func (k *projectKeysKMS) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if planted := k.planted[req.GetName()]; planted != nil {
+		return planted, nil
+	}
+	if !k.keys[req.GetName()] {
+		return nil, status.Error(codes.NotFound, req.GetName())
+	}
+	return &kmspb.CryptoKey{Name: req.GetName(), Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT,
+		Primary: &kmspb.CryptoKeyVersion{Name: req.GetName() + "/cryptoKeyVersions/1", State: kmspb.CryptoKeyVersion_ENABLED}}, nil
 }
 
 func (k *projectKeysKMS) CreateCryptoKey(_ context.Context, req *kmspb.CreateCryptoKeyRequest) (*kmspb.CryptoKey, error) {
@@ -170,5 +185,37 @@ func TestAValueOfEveryProjectIsSealedUnderTheTierKeyAndMakesNoKey(t *testing.T) 
 
 	if len(kms.created) != 0 {
 		t.Errorf("made the keys %q, want none: a value no one project owns is sealed under the tier key", kms.created)
+	}
+}
+
+func TestAProjectKeyFoundMadeWithNoVersionToSealUnderIsRefused(t *testing.T) {
+	t.Parallel()
+	p, kms := servingProjectKeys(t)
+	name := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")
+	for label, planted := range map[string]*kmspb.CryptoKey{
+		"no primary version":           {Name: name, Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
+		"a disabled primary":           {Name: name, Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT, Primary: &kmspb.CryptoKeyVersion{Name: name + "/cryptoKeyVersions/1", State: kmspb.CryptoKeyVersion_DISABLED}},
+		"another purpose than sealing": {Name: name, Purpose: kmspb.CryptoKey_ASYMMETRIC_SIGN},
+	} {
+		kms.mu.Lock()
+		kms.keys[name], kms.planted = true, map[string]*kmspb.CryptoKey{name: planted}
+		kms.mu.Unlock()
+
+		err := variables.EnsureProjectKey(context.Background(), p.resolved, environment.TierProduction, "shop")
+
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(refused.Message, name) {
+			t.Errorf("EnsureProjectKey() over a key with %s = %v, want a %s refusal naming %s: no value of shop can be sealed under it", label, err, refusal.CodeInvalid, name)
+		}
+	}
+}
+
+func TestAProjectKeyFoundMadeWithAnEnabledPrimaryVersionIsKept(t *testing.T) {
+	t.Parallel()
+	p, kms := servingProjectKeys(t)
+	kms.keys["projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/"+ports.ProjectKey(environment.TierProduction, "shop")] = true
+
+	if err := variables.EnsureProjectKey(context.Background(), p.resolved, environment.TierProduction, "shop"); err != nil {
+		t.Errorf("EnsureProjectKey() over a key that seals = %v, want it kept", err)
 	}
 }
