@@ -539,8 +539,8 @@ credential must neither change nor read what production runs. `ocel bootstrap` m
 makes for a tier that Google lets carry a tag is bound to its tier's value: its Cloud Run
 services, service accounts, Pub/Sub topics and subscriptions, buckets, secrets, image
 repositories, Cloud SQL instances and Firestore databases, the tier's records database among
-them. Each deploy credential holds its roles on the resources carrying its own tier's value or
-none, and holds none on a resource carrying the other tier's.
+them. Each deploy credential holds its tag-fenced roles on the resources carrying its own tier's
+value or none, and no grant it holds reaches a resource carrying the other tier's.
 Every namespace and both tiers in the project share the key, and `ocel bootstrap destroy` keeps
 it: Google refuses to delete a value a resource is still bound to.
 
@@ -565,7 +565,9 @@ each tier's credential for your project and namespace. For the preview tier they
   `roles/iam.serviceAccountAdmin` and `roles/iam.serviceAccountUser`, each on the condition
   `!resource.hasTagKey('my-project/ocel-tier') || resource.matchTag('my-project/ocel-tier', 'preview')`:
   a resource carrying the preview value, or no `ocel-tier` value at all. A resource carrying
-  `production` is out of its reach.
+  `production` is out of its reach. The project carries no `ocel-tier` value, so these roles
+  also hold what Google checks against the project: creating each kind of resource a deploy
+  makes, listing them, and reading the project.
 - `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the tier's key and its projects' keys, and
   `roles/cloudkms.admin` on its projects' keys, by name: KMS keys take no tag.
 - `roles/memorystore.admin` and `roles/cloudscheduler.admin` on the project, since Memorystore
@@ -577,9 +579,10 @@ each tier's credential for your project and namespace. For the preview tier they
   no others.
 - The `<namespace with _ for ->_parts` role `ocel bootstrap` makes, unconditioned: it creates the
   tier's network, subnetwork and service connection policies, which carry no tag.
-- A custom role you make, unconditioned, holding what Google checks against the project itself:
-  creating each kind of resource a deploy makes, listing services, accounts, topics, databases,
-  instances and keys, and reading the project.
+- A custom role you make, unconditioned, holding `cloudkms.cryptoKeys.create` and
+  `cloudkms.cryptoKeys.list`: Cloud KMS checks both against the key ring both tiers share, and
+  `roles/cloudkms.admin` on that ring would hand over the ring's policy, which every key in it
+  inherits.
 
 A condition holds a comma inside `matchTag`, so pass it from a file:
 

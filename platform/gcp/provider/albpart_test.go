@@ -157,8 +157,8 @@ func TestADeployMayAddAndRetireTheALBsGateRepositoryAndTheBaseKeepsTheCDNPurgeRo
 	t.Parallel()
 	names := names.New("ocel", "acme-prod")
 	deploy := deployOf(environment.TierProduction)
-	if !slices.Contains(deploy.ProjectPermissions().Permissions, "artifactregistry.repositories.create") {
-		t.Errorf("a deploy is granted %s, want artifactregistry.repositories.create: a deploy adds the gate's repository with the load balancer", deploy.ProjectPermissions())
+	if _, holds := grantedOver(t, deploy, checkedResource{name: "projects/acme-prod"})["artifactregistry.repositories.create"]; !holds {
+		t.Errorf("a deploy credential holds no artifactregistry.repositories.create on projects/acme-prod: a deploy adds the gate's repository with the load balancer")
 	}
 	if lines, want := credential.Lines(deploy.Grants()), deploy.Tiered(credential.RepositoriesRole).String(); !slices.Contains(lines, want) {
 		t.Errorf("a deploy is granted\n%s\nwant %s: the last destroy removes the gate's repository, which carries its tier's tag", strings.Join(lines, "\n"), want)

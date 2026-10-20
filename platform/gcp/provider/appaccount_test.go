@@ -374,11 +374,8 @@ func TestAQueueGrantRacedByAnotherDeployIsReadAgainAndWritten(t *testing.T) {
 
 func TestADeployCredentialThatMayNotReadOrMakeAnAppsAccountIsToldWhichGrantItLacks(t *testing.T) {
 	t.Parallel()
+	lacking := "roles/iam.serviceAccountAdmin, on the condition !resource.hasTagKey('acme-prod/ocel-tier') || resource.matchTag('acme-prod/ocel-tier', 'production')"
 	for name, deniedAt := range map[string]string{"reading": http.MethodGet, "creating": http.MethodPost} {
-		lacking := map[string]string{
-			http.MethodGet:  "roles/iam.serviceAccountAdmin, on the condition !resource.hasTagKey('acme-prod/ocel-tier') || resource.matchTag('acme-prod/ocel-tier', 'production')",
-			http.MethodPost: "a custom role holding resourcemanager.projects.get, run.services.create",
-		}[deniedAt]
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := (&googletest.IAM{}).Serve(t, func(w http.ResponseWriter, r *http.Request) {

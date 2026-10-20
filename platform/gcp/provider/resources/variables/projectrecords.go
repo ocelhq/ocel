@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -65,13 +66,17 @@ func EnsureProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environm
 	if c.Emulated() {
 		return nil
 	}
-	err := bootstrap.Engine{Clients: c}.MakeTierDatabase(ctx, tier, c.ProjectDatabase(tier, project))
+	return makeProjectDatabase(ctx, c, tier, c.ProjectDatabase(tier, project))
+}
+
+func makeProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environment.Tier, database string) error {
+	err := bootstrap.Engine{Clients: c}.MakeTierDatabase(ctx, tier, database)
 	if googleretry.AnsweredCode(err) == http.StatusTooManyRequests || err != nil && strings.Contains(strings.ToLower(err.Error()), databaseQuotaMessage) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project keeps its values in one of its own per tier.\n"+
 				"Ask Google support to raise the limit of databases per project, or remove projects this tier no longer runs, then try again", c.Project())
 	}
-	return gcloud.ExplainMissingGrant(err, c.DeployCredential(tier).ProjectPermissions().String())
+	return gcloud.ExplainMissingGrant(err, c.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 }
 
 func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.Tier, project string) error {

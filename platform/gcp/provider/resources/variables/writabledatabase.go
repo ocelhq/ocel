@@ -107,7 +107,7 @@ func makeWritableDatabase(ctx context.Context, b bootstrap.Engine, tier environm
 			"project %s has as many Firestore databases as Firestore allows, and every Ocel project that runs topics, tasks or a revalidating Next app keeps its runs and tag records in one of its own per tier.\n"+
 				"Ask Google support to raise the limit of databases per project, or remove projects this tier no longer runs, then try again", b.Clients.Project())
 	}
-	return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).ProjectPermissions().String())
+	return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 }
 
 func makeLayout(ctx context.Context, b bootstrap.Engine, database string, layout Layout) error {

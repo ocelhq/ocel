@@ -35,24 +35,6 @@ const (
 var TieredRoles = []string{RunRole, TopicsRole, BucketsRole, SecretsRole, RepositoriesRole, DatabasesRole, InstancesRole, AccountsRole, RunAsRole}
 
 var projectPermissions = []string{
-	"resourcemanager.projects.get",
-	"run.services.create",
-	"run.services.list",
-	"run.operations.get",
-	"run.locations.list",
-	"iam.serviceAccounts.create",
-	"iam.serviceAccounts.list",
-	"pubsub.topics.create",
-	"pubsub.subscriptions.create",
-	"storage.buckets.create",
-	"secretmanager.secrets.create",
-	"artifactregistry.repositories.create",
-	"datastore.databases.create",
-	"datastore.databases.list",
-	"datastore.locations.list",
-	"cloudsql.instances.create",
-	"cloudsql.instances.list",
-	"cloudsql.instances.get",
 	"cloudkms.cryptoKeys.create",
 	"cloudkms.cryptoKeys.list",
 }
@@ -88,7 +70,7 @@ func (d Deploy) Tiered(role string) Grant {
 func (d Deploy) ProjectPermissions() Grant {
 	return Grant{
 		Permissions: projectPermissions,
-		Why:         "Google checks creating a resource, listing a kind and reading the project against the project, which carries no tier tag",
+		Why:         "Cloud KMS checks creating and listing a key against the key ring both tiers share, and a name condition admitting the ring to roles/cloudkms.admin would give away the ring's policy, which every key in it inherits",
 	}
 }
 
