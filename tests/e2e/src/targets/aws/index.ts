@@ -24,7 +24,7 @@ import type { Deployment, Exposure, ReleaseCycle, Restart, Target } from "../typ
 import { AwsBootstrap } from "./bootstrap";
 import { AwsDispatch } from "./dispatch";
 import { describeExposed, failOver, keepPersistedGroups, listTaggedGroups } from "./kv";
-import { readRetiringParts, refuseWhatDestroyLeft } from "./leftBehind";
+import { BOOTSTRAP_STATUS_ARGS, readRetiringParts, refuseWhatDestroyLeft } from "./leftBehind";
 import { ocelEnvIn } from "./namespace";
 import { awaitServing } from "./serving";
 import { awsStore, cliAt } from "./store";
@@ -215,7 +215,7 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
       dir,
       "destroy",
       "bootstrap-status",
-      ["bootstrap", "status", "production", "--json"],
+      BOOTSTRAP_STATUS_ARGS,
       env,
     );
     const store = awsStore(await this.world.endpoint(), undefined, namespace);

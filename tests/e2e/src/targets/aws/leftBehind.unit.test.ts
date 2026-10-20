@@ -31,19 +31,15 @@ describe("readRetiringParts", () => {
     ).toEqual([]);
   });
 
-  it("reads the result past the lines that are not it", () => {
-    const stdout = [
-      "reading the production bootstrap",
-      JSON.stringify({ event: "span" }),
-      status([{ tier: "TIER_PRODUCTION", present: true, parts: [part("containers", true)] }]),
-    ].join("\n");
-
-    expect(readRetiringParts(stdout)).toEqual(["containers"]);
+  it("refuses a failed result, naming the command and what ocel said", () => {
+    expect(() =>
+      readRetiringParts(JSON.stringify({ ok: false, error: { message: "no credentials" } })),
+    ).toThrow(/ocel bootstrap status production --json failed: no credentials/);
   });
 
-  it("refuses output that holds no bootstrap status, naming the command", () => {
-    expect(() => readRetiringParts('{"ok":false,"error":{}}\n')).toThrow(
-      /`ocel bootstrap status production --json` printed no tiers/,
+  it("refuses a result that holds no bootstrap status, naming the command", () => {
+    expect(() => readRetiringParts(JSON.stringify({ ok: true, data: {} }))).toThrow(
+      /ocel bootstrap status production --json printed no tiers/,
     );
   });
 });

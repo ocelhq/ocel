@@ -1,34 +1,25 @@
-const STATUS_COMMAND = "ocel bootstrap status production --json";
+import { readResultData } from "../../ocel";
+
+export const BOOTSTRAP_STATUS_ARGS = ["bootstrap", "status", "production", "--json"];
+
+const STATUS_COMMAND = `ocel ${BOOTSTRAP_STATUS_ARGS.join(" ")}`;
 
 const PRODUCTION = "TIER_PRODUCTION";
 
-type Part = { name?: string; retiresWithLastUser?: boolean };
+type Part = { name: string; retiresWithLastUser: boolean };
 
-type TierStatus = { tier?: string; parts?: Part[] };
-
-function tiersIn(line: string): TierStatus[] | undefined {
-  try {
-    const tiers = (JSON.parse(line) as { data?: { tiers?: unknown } } | null)?.data?.tiers;
-    return Array.isArray(tiers) ? (tiers as TierStatus[]) : undefined;
-  } catch {
-    return undefined;
-  }
-}
+type TierStatus = { tier: string; parts: Part[] };
 
 export function readRetiringParts(stdout: string): string[] {
-  const tiers = stdout
-    .split("\n")
-    .map(tiersIn)
-    .filter((found) => found !== undefined)
-    .at(-1);
-  if (!tiers) {
-    throw new Error(`\`${STATUS_COMMAND}\` printed no tiers`);
+  const { tiers } = readResultData(stdout, STATUS_COMMAND);
+  if (!Array.isArray(tiers)) {
+    throw new Error(`${STATUS_COMMAND} printed no tiers: ${stdout.trim()}`);
   }
   return tiers
-    .filter((one) => one.tier === PRODUCTION)
-    .flatMap((one) => one.parts ?? [])
-    .filter((part) => part.retiresWithLastUser === true)
-    .map((part) => part.name ?? "");
+    .filter((one: TierStatus) => one.tier === PRODUCTION)
+    .flatMap((one: TierStatus) => one.parts)
+    .filter((part: Part) => part.retiresWithLastUser)
+    .map((part: Part) => part.name);
 }
 
 function listed(names: string[]): string {

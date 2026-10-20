@@ -78,6 +78,25 @@ export class NonzeroExitError extends Error {
   }
 }
 
+type ResultEnvelope = {
+  ok?: boolean;
+  data?: Record<string, unknown>;
+  error?: { message?: string };
+};
+
+export function readResultData(stdout: string, command: string): Record<string, unknown> {
+  let envelope: ResultEnvelope;
+  try {
+    envelope = JSON.parse(stdout) as ResultEnvelope;
+  } catch {
+    throw new Error(`${command} printed no JSON: ${stdout.trim() || "(nothing)"}`);
+  }
+  if (envelope.ok !== true) {
+    throw new Error(`${command} failed: ${envelope.error?.message ?? JSON.stringify(envelope)}`);
+  }
+  return envelope.data ?? {};
+}
+
 export async function recordOutput(said: string[], ran: Promise<Ran>): Promise<Ran> {
   try {
     const result = await ran;

@@ -1,33 +1,20 @@
-import { ocel } from "./ocel";
+import { ocel, readResultData } from "./ocel";
 import type { Log } from "./progress";
 
 export type ProjectTier = "production" | "preview";
 
-type Envelope = {
-  ok?: boolean;
-  data?: { projects?: Array<{ slug?: unknown }> };
-  error?: { message?: string };
-};
+const PROJECTS_COMMAND = "ocel projects --json";
+
+type ListedProject = { slug?: unknown };
 
 export function projectSlugs(stdout: string): string[] {
-  let envelope: Envelope;
-  try {
-    envelope = JSON.parse(stdout) as Envelope;
-  } catch {
-    throw new Error(`ocel projects --json printed no JSON: ${stdout.trim() || "(nothing)"}`);
-  }
-  if (envelope.ok !== true) {
-    throw new Error(
-      `ocel projects --json failed: ${envelope.error?.message ?? JSON.stringify(envelope)}`,
-    );
-  }
-  const projects = envelope.data?.projects;
+  const { projects } = readResultData(stdout, PROJECTS_COMMAND);
   if (!Array.isArray(projects)) {
-    throw new Error(`ocel projects --json printed no project list: ${stdout.trim()}`);
+    throw new Error(`${PROJECTS_COMMAND} printed no project list: ${stdout.trim()}`);
   }
-  return projects.map((project) => {
+  return projects.map((project: ListedProject) => {
     if (typeof project.slug !== "string" || project.slug === "") {
-      throw new Error(`ocel projects --json listed a project with no slug: ${stdout.trim()}`);
+      throw new Error(`${PROJECTS_COMMAND} listed a project with no slug: ${stdout.trim()}`);
     }
     return project.slug;
   });
