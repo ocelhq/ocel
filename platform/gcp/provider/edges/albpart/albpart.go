@@ -374,6 +374,9 @@ func Front(openBootstrap func(context.Context) (bootstrap.Engine, error)) *alb.F
 			if err := Claim(ctx, b, tier, user); err != nil {
 				return err
 			}
+			if err := b.EnsurePart(ctx, tier, user, bootstrap.EdgeBucket.For(b, tier)); err != nil {
+				return err
+			}
 			return b.EnsurePart(ctx, tier, user, NewPart(b, tier))
 		},
 		Release: func(ctx context.Context, tier environment.Tier, user string) error {

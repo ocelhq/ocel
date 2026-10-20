@@ -32,6 +32,10 @@ type Part struct {
 	Shape func(names names.Names, tier environment.Tier, region string) []pricing.Shaped
 }
 
+func NewPart(part bootstrap.ResourcePart) Part {
+	return Part{Name: part.Name, Shape: part.Shape}
+}
+
 type Shape struct {
 	Tree        *pricing.Tree
 	Vendor      string
@@ -104,8 +108,14 @@ func (r Registry) Preflight(declared []provider.Resource) ([]string, error) {
 	return parts, nil
 }
 
-func (r Registry) Shape(shape Shape, declared []provider.Resource) error {
+func (r Registry) Shape(shape Shape, declared []provider.Resource, used []Part) error {
 	var shaped []string
+	for _, part := range used {
+		if !slices.Contains(shaped, part.Name) {
+			shaped = append(shaped, part.Name)
+			shape.Tree.AddShaped(shape.Shared, shape.Vendor, shape.Region, part.Shape(shape.Names, shape.Request.Deploy.Tier, shape.Region))
+		}
+	}
 	for _, each := range r {
 		var own []provider.Resource
 		for _, resource := range declared {

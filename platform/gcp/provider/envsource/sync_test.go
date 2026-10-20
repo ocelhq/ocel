@@ -591,12 +591,6 @@ func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheStampThenTheDatabase
 	for _, taking := range bootstrap.Removals(read) {
 		order = append(order, taking.Resource.ID())
 	}
-	at := func(class naming.StorageClass) int {
-		return slices.Index(order, (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.TierBucketStem(tier, class)}).ID())
-	}
-	if at(naming.StorageEdge) > at(naming.StorageState) || at(naming.StorageCache) > at(naming.StorageState) {
-		t.Errorf("removal runs %v, want the edge and cache buckets before the state bucket with the stamp", order)
-	}
 	stamp, database := (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.TierBucketStem(tier, naming.StorageState)}).ID(), (bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.RecordsDatabase(tier)}).ID()
 	if !slices.Equal(order[len(order)-2:], []string{stamp, database}) {
 		t.Errorf("removal ends on %v, want the bucket with the stamp and then the database the tier's bucket names are recorded in: "+
@@ -607,7 +601,7 @@ func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheStampThenTheDatabase
 	}
 }
 
-func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeeds(t *testing.T) {
+func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeedsAndTheSyncItsAPIs(t *testing.T) {
 	t.Parallel()
 	for _, permission := range []string{
 		"run.services.create", "run.services.get", "run.services.update", "run.services.delete",
@@ -629,7 +623,7 @@ func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeeds(t *testing.T) {
 			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", bootstrap.RolesCovering(nil), role)
 		}
 	}
-	if !slices.Contains(bootstrap.BootstrapAPIs, "cloudscheduler.googleapis.com") {
-		t.Errorf("a bootstrap checks %v are on, want cloudscheduler.googleapis.com among them", bootstrap.BootstrapAPIs)
+	if !slices.Contains(SyncAPIs, "cloudscheduler.googleapis.com") || !slices.Contains(SyncAPIs, "run.googleapis.com") {
+		t.Errorf("the env source sync checks %v are on, want Cloud Scheduler and Cloud Run among them", SyncAPIs)
 	}
 }

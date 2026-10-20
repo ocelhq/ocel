@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
@@ -147,6 +148,7 @@ func servingProjectKeys(t *testing.T) (*Provider, *projectKeysKMS) {
 func TestTheFirstValueAProjectSealsMakesTheProjectsKeyAndIsSealedUnderIt(t *testing.T) {
 	t.Parallel()
 	p, kms := servingProjectKeys(t)
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
 	bound := seal.BindToProject("shop", "variable", "STRIPE_KEY")
 
 	for range 2 {
@@ -160,24 +162,22 @@ func TestTheFirstValueAProjectSealsMakesTheProjectsKeyAndIsSealedUnderIt(t *test
 	}
 }
 
-func TestTheFirstValueAProjectSealsWhereNoKeyRingExistsIsRefusedNamingTheBootstrap(t *testing.T) {
+func TestAProjectKeyThatCannotBeMadeWhereNoKeyRingExistsIsRefusedNamingThePartThatHoldsIt(t *testing.T) {
 	t.Parallel()
 	p, kms := servingProjectKeys(t)
 	kms.ringless = true
 
-	_, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "STRIPE_KEY"), []byte("sk_live"))
+	err := variables.EnsureProjectKey(context.Background(), p.resolved, environment.TierProduction, "shop")
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Seal() where no key ring exists = %v, want a %s refusal: no project key can be made before the bootstrap makes the ring", err, refusal.CodeNotReady)
-	}
-	if !strings.Contains(refused.Message, "`ocel bootstrap production`") {
-		t.Errorf("Seal() refused with %q, want it to name the command that makes the key ring", refused.Message)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, bootstrap.KeysPart) {
+		t.Fatalf("EnsureProjectKey() where no key ring exists = %v, want a %s refusal naming the %s part that holds the ring", err, refusal.CodeNotReady, bootstrap.KeysPart)
 	}
 }
 
 func TestAValueOfEveryProjectIsSealedUnderTheTierKeyAndMakesNoKey(t *testing.T) {
 	t.Parallel()
 	p, kms := servingProjectKeys(t)
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
 
 	if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.Bind("gates"), []byte("v")); err != nil {
 		t.Fatalf("Seal() = %v", err)

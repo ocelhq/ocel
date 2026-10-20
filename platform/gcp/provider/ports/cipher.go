@@ -9,7 +9,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
@@ -73,9 +72,10 @@ func (s Cipher) keyless(tier environment.Tier, bound seal.AssociatedData, doing 
 		return refuseNoProjectKey(tier, project)
 	}
 	if status.Code(err) == codes.NotFound {
-		return refusal.Refuse(refusal.CodeNotReady,
-			"this project has no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
-			tier, s.Clients.KeyRing(), tier, provider.BootstrapCommand(tier))
+		return missingProjectPart{condition: ErrNoTierKey, refused: refusal.Refuse(refusal.CodeNotReady,
+			"this project has no %s key on the %s ring yet, and every %s value that belongs to no project is sealed under it.\n"+
+				"Deploy to the %s tier, or set a value with the ocel CLI, which adds it, then try again",
+			tier, s.Clients.KeyRing(), tier, tier)}
 	}
 	return fmt.Errorf("%s: %w", doing, err)
 }

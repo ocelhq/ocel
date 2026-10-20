@@ -54,7 +54,7 @@ type customRole struct {
 }
 
 func FindCustomRole(names names.Names, id string) (customRole, bool) {
-	for _, role := range []customRole{NewCDNPurgeRole(names), NewPartsRole(names), newRealtimeSubscriptionsRole(names)} {
+	for _, role := range []customRole{NewCDNPurgeRole(names), NewPartsRole(names)} {
 		if role.ID == id {
 			return role, true
 		}
@@ -166,16 +166,6 @@ func refusePurgedRole(path string) error {
 		"the custom role %s was deleted, and Google undeletes a role only in the first 7 days and holds its id from reuse until it is purged, up to 44 days after the deletion.\n"+
 			"Bootstrap again once Google has purged it, or under another namespace in %s",
 		path, provider.NamespaceEnvVar)
-}
-
-func newRealtimeSubscriptionsRole(names names.Names) customRole {
-	return customRole{
-		ID:          names.RealtimeSubscriptionsRole(),
-		title:       "ocel realtime subscriptions (" + string(names.Namespace()) + ")",
-		description: "lets a realtime gateway instance make, pull and delete the Pub/Sub subscription it hears its environment's topic through, and nothing else",
-		Permissions: []string{"pubsub.subscriptions.create", "pubsub.subscriptions.consume", "pubsub.subscriptions.delete"},
-		DriftReason: "it holds other permissions than a realtime gateway instance needs to hold its own Pub/Sub subscription",
-	}
 }
 
 func NewCDNPurgeRole(names names.Names) customRole {

@@ -43,11 +43,12 @@ type Engine struct {
 	DeployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
 	TearDown       func(ctx context.Context, service string, progress progress.Log) error
 
-	Removable     []RemovablePart
-	Accounts      []Account
-	FrontParts    FrontParts
-	TakeRecords   func(ctx context.Context, b Engine, tier environment.Tier) error
-	SweepAccounts func(ctx context.Context, b Engine, req provider.BootstrapRequest, progress progress.Log) error
+	Removable             []RemovablePart
+	ReplacementsConsented bool
+	Accounts              []Account
+	FrontParts            FrontParts
+	TakeRecords           func(ctx context.Context, b Engine, tier environment.Tier) error
+	SweepAccounts         func(ctx context.Context, b Engine, req provider.BootstrapRequest, progress progress.Log) error
 }
 
 func (b Engine) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
@@ -169,11 +170,15 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	added, err := b.PlanFrontedParts(ctx, req)
+	if err != nil {
+		return provider.Plan{}, err
+	}
 	removed, err := b.PlanRemovedParts(ctx, req.Tier, named, req.Force)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return provider.Plan{Groups: slices.Concat(bootstrapplan.PrefixWithVendor(gcloud.Vendor, append(append(groups, fronts...), params)), removed)}, nil
+	return provider.Plan{Groups: slices.Concat(bootstrapplan.PrefixWithVendor(gcloud.Vendor, append(append(groups, fronts...), params)), added, removed)}, nil
 }
 
 func Planned(read Survey, items []Resource) []provider.Change {
@@ -215,8 +220,9 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 	}
 	defer b.Surveyed.forget(req.Tier)
 	items := Resources(read.Names, req.Tier, read.Emulated)
+	b.ReplacementsConsented = !req.RefuseReplacements
 	if req.RefuseReplacements {
-		if err := RefuseReplacements(read, items); err != nil {
+		if err := RefuseReplacements(read, items, "re-run with --yes"); err != nil {
 			return err
 		}
 	}
@@ -275,7 +281,7 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 	return err
 }
 
-func RefuseReplacements(read Survey, items []Resource) error {
+func RefuseReplacements(read Survey, items []Resource, consent string) error {
 	var replaced []string
 	for _, item := range items {
 		if reason := read.replaces(item); reason != "" {
@@ -286,8 +292,8 @@ func RefuseReplacements(read Survey, items []Resource) error {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"bootstrapping the %s tier would replace %s\nRestore what it would replace, or re-run with --yes to replace it",
-		read.Tier, strings.Join(replaced, "; "))
+		"bootstrapping the %s tier would replace %s\nRestore what it would replace, or %s to replace it",
+		read.Tier, strings.Join(replaced, "; "), consent)
 }
 
 func stateBucketOf(read Survey) Resource {
@@ -455,9 +461,7 @@ func (b Engine) PlanRemove(ctx context.Context, tier environment.Tier) (provider
 	return provider.Plan{Groups: slices.Concat(parts, bootstrapplan.PrefixWithVendor(gcloud.Vendor, append([]provider.ChangeGroup{stack, params}, fronts...)))}, nil
 }
 
-var removalOrder = []Kind{
-	KindSecret, KindGrant, KindKey, KindKeyRing, KindRole, KindQueue, KindServiceAccount, KindRepository, KindBucket,
-}
+var removalOrder = []Kind{KindSecret, KindRole, KindRepository, KindBucket}
 
 func Removals(read Survey) []Removal {
 	stampBucket := stateBucketOf(read)

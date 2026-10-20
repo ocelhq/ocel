@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
@@ -85,11 +86,11 @@ func servableFacts(facts provider.Facts) provider.Facts {
 
 func TestLiveStacks(t *testing.T) {
 	p := live(t)
-	if emulated() {
-		bootstrappedWith(t, p, environment.TierPreview)
-	} else {
-		bootstrappedWith(t, p, environment.TierPreview, gcp.NetworkPart)
+	parts := []string{bootstrap.EdgeBucketPart, bootstrap.CacheBucketPart, bootstrap.RealtimePart, bootstrap.TopicsPart}
+	if !emulated() {
+		parts = append(parts, gcp.NetworkPart)
 	}
+	bootstrappedWith(t, p, environment.TierPreview, parts...)
 	writableDatabaseMade(t, p, environment.TierPreview, "conformance")
 
 	conformance.RunStacks(t, servableFacts(p.Facts()), p.Stacks(), p.Artifacts(), p.KeyValues(), realtime.RootRealtime, postgres.RootPostgres)
@@ -106,24 +107,24 @@ func TestLiveTheCipherSealsAsEveryCipherMust(t *testing.T) {
 	conformance.RunCipher(t, vendor.Cipher())
 }
 
-func TestLiveSealingWhereNoKeyRingExistsSaysWhatToRun(t *testing.T) {
+func TestLiveSealingInATierNeverBootstrappedSaysWhatToRun(t *testing.T) {
 	live(t)
 
-	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "australia-southeast2"})
+	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
 	var refused refusal.Refusal
-	_, err := elsewhere.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "DATABASE_URL"), []byte("postgres://example"))
+	_, err := nowhere.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "DATABASE_URL"), []byte("postgres://example"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Seal() where no key ring exists = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("Seal() in a tier never bootstrapped = %v, want a %s refusal: the keys part a first seal adds is recorded in the tier's records database", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "ocel bootstrap") {
-		t.Errorf("Seal() refused with %q, want it to name the command that creates the key", refused.Message)
+		t.Errorf("Seal() refused with %q, want it to name the command that bootstraps the tier", refused.Message)
 	}
 }
 
 func bootstrappedTiers(t *testing.T, p *gcp.Provider) {
 	t.Helper()
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		bootstrapped(t, p, tier)
+		bootstrappedWith(t, p, tier, bootstrap.EdgeBucketPart, bootstrap.CacheBucketPart)
 	}
 }
 

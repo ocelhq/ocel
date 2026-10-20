@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -177,7 +178,8 @@ func (p *Provider) DNS() provider.DNS { return dns{} }
 func (p *Provider) Certificates() provider.Certificates { return certs.New(p.openClients) }
 
 func (p *Provider) Connector() provider.Connector {
-	return connector.New(p.openClients, p.services(), p.options.Region, p.emulated(), p.images.Based, p.pushImage)
+	return connector.New(p.openClients, p.services(), p.options.Region, p.emulated(), p.images.Based, p.pushImage,
+		func(ctx context.Context, tier environment.Tier) error { return p.ensureKeys(ctx, tier, "") })
 }
 
 func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }

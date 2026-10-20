@@ -66,54 +66,6 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_storage_bucket:ocel-preview-edge",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_storage_bucket",
-      "name": "ocel-preview-edge",
-      "region": "europe-west1",
-      "properties": {
-        "location": "europe-west1",
-        "storage_class": "STANDARD",
-        "versioning": {
-          "enabled": false
-        }
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/google_storage_bucket:ocel-preview-cache",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_storage_bucket",
-      "name": "ocel-preview-cache",
-      "region": "europe-west1",
-      "properties": {
-        "location": "europe-west1",
-        "storage_class": "STANDARD",
-        "versioning": {
-          "enabled": false
-        }
-      }
-    },
-    {
-      "id": "project:shop/shared:preview/google_kms_key_ring:ocel",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_kms_key_ring",
-      "name": "ocel",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/google_kms_crypto_key:preview",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_kms_crypto_key",
-      "name": "preview",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
       "id": "project:shop/shared:preview/google_project_iam_custom_role:ocel_cdn_purge",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
@@ -132,24 +84,6 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_project_iam_custom_role:ocel_realtime_subscriptions",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_project_iam_custom_role",
-      "name": "ocel_realtime_subscriptions",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/google_service_account:ocel-preview-realtime",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_service_account",
-      "name": "ocel-preview-realtime",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
       "id": "project:shop/shared:preview/google_artifact_registry_repository:ocel-preview-containers",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
@@ -162,38 +96,11 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_project_iam_member:roles/compute.networkUser",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_project_iam_member",
-      "name": "roles/compute.networkUser",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/google_service_account:ocel-preview-push",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_service_account",
-      "name": "ocel-preview-push",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
       "id": "project:shop/shared:preview/google_logging_log_view:ocel-preview-logs",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_logging_log_view",
       "name": "ocel-preview-logs",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
-      "id": "project:shop/shared:preview/google_service_account:ocel-preview-env-sync",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_service_account",
-      "name": "ocel-preview-env-sync",
       "region": "europe-west1",
       "properties": {}
     },
@@ -209,15 +116,6 @@
           "auto": {}
         }
       }
-    },
-    {
-      "id": "project:shop/shared:preview/google_kms_crypto_key:preview-p-8650dee75b",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_kms_crypto_key",
-      "name": "preview-p-8650dee75b",
-      "region": "europe-west1",
-      "properties": {}
     },
     {
       "id": "project:shop/shared:preview/google_firestore_database:ocel-app-preview-v-8650dee75b",
@@ -470,6 +368,39 @@
           "scaling": {
             "min_instance_count": 1
           }
+        }
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/google_kms_key_ring:ocel",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_kms_key_ring",
+      "name": "ocel",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/google_kms_crypto_key:preview",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_kms_crypto_key",
+      "name": "preview",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/google_storage_bucket:ocel-preview-edge",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_storage_bucket",
+      "name": "ocel-preview-edge",
+      "region": "europe-west1",
+      "properties": {
+        "location": "europe-west1",
+        "storage_class": "STANDARD",
+        "versioning": {
+          "enabled": false
         }
       }
     },

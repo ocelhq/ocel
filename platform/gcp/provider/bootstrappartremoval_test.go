@@ -24,7 +24,10 @@ func TestTheBootstrapOffersEveryPartADeployAddsAndNoEdgeRequiresOne(t *testing.T
 	t.Parallel()
 
 	offered := composed(bootstrap.Engine{}).Parts()
-	for _, name := range []string{network.PartName, albpart.PartName, envsource.PartName, bastion.PartName} {
+	for _, name := range []string{
+		bootstrap.KeysPart, bootstrap.EdgeBucketPart, bootstrap.CacheBucketPart, network.PartName, albpart.PartName,
+		bootstrap.RealtimePart, bootstrap.TopicsPart, envsource.PartName, bastion.PartName,
+	} {
 		at := slices.IndexFunc(offered, func(part provider.Part) bool { return part.Name == name })
 		if at < 0 {
 			t.Errorf("Parts() = %v, want %s offered, so `ocel bootstrap <tier> --remove %s` can name it", offered, name, name)

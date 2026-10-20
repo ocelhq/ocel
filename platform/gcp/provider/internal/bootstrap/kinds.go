@@ -23,7 +23,6 @@ const (
 	KindRole           Kind = "iam:role"
 	KindService        Kind = "run:service"
 	KindSchedule       Kind = "cloudscheduler:job"
-	KindGrant          Kind = "resourcemanager:grant"
 	KindQueue          Kind = "cloudtasks:queue"
 	KindTierTag        Kind = "resourcemanager:tagkey"
 	KindLogView        Kind = "logging:view"
@@ -72,7 +71,6 @@ func init() {
 		KindRepository:     repositoryKind,
 		KindServiceAccount: accountKind,
 		KindRole:           roleKind,
-		KindGrant:          grantKind,
 		KindQueue:          queueKind,
 		KindTierTag:        tierTagKind,
 		KindLogView:        logViewKind,

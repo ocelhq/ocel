@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 func (r realtimeEnvironment) secrets() (*secretmanager.Service, error) { return r.clients.Secrets() }
@@ -139,11 +140,22 @@ func (r realtimeEnvironment) writeKeys(ctx context.Context, keys map[string]stri
 			return err
 		}
 	}
+	if err := r.letGatewaysReadKeys(ctx, secret.name); err != nil {
+		return err
+	}
 	added, err := r.clients.AddSecretVersion(ctx, service, secret.name, secret.written)
 	if err != nil {
 		return err
 	}
 	return r.clients.DestroyVersionsBefore(ctx, service, secret.name, added)
+}
+
+func (r realtimeEnvironment) letGatewaysReadKeys(ctx context.Context, name string) error {
+	member := realtimeMember(r.clients, r.ref.Tier)
+	if _, err := policy.Edit(ctx, gcloud.SecretPolicy(r.clients, name), policy.Grant(realtimeKeysReaderRole, member, nil)); err != nil {
+		return fmt.Errorf("let %s read the gateway's keys secret %s: %w", member, name, err)
+	}
+	return nil
 }
 
 func (r realtimeEnvironment) removeKeys(ctx context.Context) error {

@@ -22,7 +22,7 @@ const (
 	AccountsRole         = "roles/iam.serviceAccountAdmin"
 	RunAsRole            = "roles/iam.serviceAccountUser"
 	SealingRole          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-	ProjectKeysRole      = "roles/cloudkms.admin"
+	KeysRole             = "roles/cloudkms.admin"
 	StoresRole           = "roles/memorystore.admin"
 	SchedulesRole        = "roles/cloudscheduler.admin"
 	LogsRole             = "roles/logging.viewAccessor"
@@ -35,6 +35,8 @@ const (
 var TieredRoles = []string{RunRole, TopicsRole, BucketsRole, SecretsRole, RepositoriesRole, DatabasesRole, InstancesRole, AccountsRole, RunAsRole}
 
 var projectPermissions = []string{
+	"cloudkms.keyRings.create",
+	"cloudkms.keyRings.get",
 	"cloudkms.cryptoKeys.create",
 	"cloudkms.cryptoKeys.list",
 }
@@ -44,7 +46,9 @@ const (
 	TaskRecordsRole = "roles/datastore.user"
 )
 
-var appGrantedRoles = []string{RecordsRole, TaskRecordsRole}
+const RealtimeSubscriptionsRole = "roles/pubsub.editor"
+
+var appGrantedRoles = []string{RecordsRole, TaskRecordsRole, RealtimeSubscriptionsRole}
 
 type Deploy struct {
 	names  names.Names
@@ -70,11 +74,7 @@ func (d Deploy) Tiered(role string) Grant {
 func (d Deploy) ProjectPermissions() Grant {
 	return Grant{
 		Permissions: projectPermissions,
-		Condition: &policy.Condition{
-			Title:      "ocel key ring",
-			Expression: fmt.Sprintf("resource.name == %q", d.keyRingPath()),
-		},
-		Why: "roles/cloudkms.admin on the key ring both tiers share would give away the ring's policy, which every key in it inherits",
+		Why:         "Cloud KMS checks making and reading the key ring, and making and listing the keys on it, against the ring both tiers' keys hang on, which no tier tag fences",
 	}
 }
 
@@ -90,23 +90,24 @@ func (d Deploy) projectKeysPrefix() string {
 	return d.keyRingPath() + "/cryptoKeys/" + ports.ProjectKeyPrefix(d.tier)
 }
 
-func (d Deploy) Sealing() Grant {
+func (d Deploy) keysCondition(title string) *policy.Condition {
 	tierKey := d.keyRingPath() + "/cryptoKeys/" + string(d.tier)
-	return Grant{Role: SealingRole, Condition: &policy.Condition{
-		Title:      "ocel " + string(d.tier) + " keys",
+	return &policy.Condition{
+		Title:      title,
 		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)", tierKey, d.projectKeysPrefix()),
-	}}
+	}
 }
 
-func (d Deploy) ProjectKeys() Grant {
-	return Grant{Role: ProjectKeysRole, Condition: &policy.Condition{
-		Title:      "ocel " + string(d.tier) + " project keys",
-		Expression: fmt.Sprintf("resource.name.startsWith(%q)", d.projectKeysPrefix()),
-	}}
+func (d Deploy) Sealing() Grant {
+	return Grant{Role: SealingRole, Condition: d.keysCondition("ocel " + string(d.tier) + " keys")}
+}
+
+func (d Deploy) Keys() Grant {
+	return Grant{Role: KeysRole, Condition: d.keysCondition("ocel " + string(d.tier) + " keys to administer")}
 }
 
 func (d Deploy) Queue() Grant {
-	return Grant{Role: QueueRole, On: Resource{Noun: "the queue", Name: d.names.DelayQueuePath(d.region, d.tier)}}
+	return Grant{Role: QueueRole, Why: "Cloud Tasks queues take no tag, so no condition holds one tier's delay queue apart"}
 }
 
 func (d Deploy) Stores() Grant {
@@ -150,7 +151,7 @@ func (d Deploy) Grants() []Grant {
 	}
 	return append(grants,
 		d.Sealing(),
-		d.ProjectKeys(),
+		d.Keys(),
 		d.Stores(),
 		d.Schedules(),
 		d.Logs(),

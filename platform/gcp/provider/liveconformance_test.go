@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
 
 type servedHere struct{ provider.Provider }
@@ -23,7 +24,7 @@ func TestLiveGCPProviderConformsWithItsProjectBehindIt(t *testing.T) {
 	if emulated() {
 		t.Setenv(provider.NamespaceEnvVar, namesOf(t, live(t)).Namespace().String()+"-conformance")
 	}
-	bootstrapped(t, live(t), environment.TierProduction)
+	bootstrappedWith(t, live(t), environment.TierProduction, bootstrap.EdgeBucketPart, bootstrap.CacheBucketPart)
 	writableDatabaseMade(t, live(t), environment.TierPreview, "conformance")
 
 	conformance.Run(t, conformance.Suite{

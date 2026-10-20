@@ -17,17 +17,19 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 )
 
-func TestTheBaseGivesATierThePushAccountAndDelayQueueItsTopicsAndTasksRunThrough(t *testing.T) {
+func TestTheFirstTopicOrTaskAddsThePushAccountAndDelayQueueAndNoBootstrapMakesThem(t *testing.T) {
 	t.Parallel()
 
 	names := names.New("ocel", "acme-prod")
 	push := bootstrap.Resource{Kind: bootstrap.KindServiceAccount, Name: names.PushAccount(environment.TierProduction)}
-	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), push.ID()) {
-		t.Errorf("the base provisions %v, want %s: Pub/Sub may sign a push as it only once a bootstrap grants it", googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), push.ID())
-	}
 	queue := bootstrap.Resource{Kind: bootstrap.KindQueue, Name: names.DelayQueue(environment.TierProduction)}
-	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, true)), queue.ID()) {
-		t.Errorf("the base provisions %v, want %s: a deploy grants apps the queue and may grant only on a queue that already exists", googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, true)), queue.ID())
+	for _, emulated := range []bool{false, true} {
+		if base := googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, emulated)); slices.Contains(base, push.ID()) || slices.Contains(base, queue.ID()) {
+			t.Errorf("the base provisions %v, want neither %s nor %s: the first deploy declaring a topic or task adds them", base, push.ID(), queue.ID())
+		}
+	}
+	if got := googletest.IdsOf(bootstrap.Topics.Items(names, environment.TierProduction)); !slices.Equal(got, []string{push.ID(), queue.ID()}) {
+		t.Errorf("the topics part holds %v, want %s and %s", got, push.ID(), queue.ID())
 	}
 }
 
@@ -36,8 +38,8 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 
 	for _, api := range []string{"pubsub.googleapis.com", "cloudtasks.googleapis.com"} {
-		if !slices.Contains(bootstrap.APIsFor(environment.TierProduction, nil), api) {
-			t.Errorf("a bootstrap checks %v, want %s: the base grants Pub/Sub's agent the push account and makes the delay queue", bootstrap.APIsFor(environment.TierProduction, nil), api)
+		if !slices.Contains(bootstrap.Topics.APIs, api) {
+			t.Errorf("the topics part checks %v, want %s: it grants Pub/Sub's agent the push account and makes the delay queue", bootstrap.Topics.APIs, api)
 		}
 	}
 	if parts := bootstrap.NewPartsRole(b.Clients.Names).Permissions; slices.ContainsFunc(parts, func(permission string) bool { return strings.HasPrefix(permission, "cloudtasks.") }) {
@@ -45,14 +47,14 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 	}
 	for _, permission := range []string{"cloudtasks.queues.create", "cloudtasks.queues.purge", "cloudtasks.queues.getIamPolicy", "cloudtasks.queues.setIamPolicy"} {
 		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
-			t.Errorf("a bootstrap checks %v, want %s among them: the base makes, purges and grants on the delay queue", bootstrap.BootstrapPermissions, permission)
+			t.Errorf("a bootstrap checks %v, want %s among them: a bootstrap mends and purges the delay queue", bootstrap.BootstrapPermissions, permission)
 		}
 	}
 	deploy := deployOf(environment.TierProduction)
-	onProject := grantedOver(t, deploy, checkedResource{name: "projects/acme-prod"})
-	for _, permission := range []string{"datastore.databases.create", "datastore.databases.list"} {
-		if _, holds := onProject[permission]; !holds {
-			t.Errorf("a deploy credential holds no %s on projects/acme-prod: a deploy makes a project's database of runs, and Firestore checks that against the project", permission)
+	held := grantedOver(t, deploy, checkedResource{name: "projects/acme-prod"})
+	for _, permission := range []string{"datastore.databases.create", "datastore.databases.list", "cloudtasks.queues.create", "cloudtasks.queues.setIamPolicy", "cloudtasks.queues.purge"} {
+		if _, holds := held[permission]; !holds {
+			t.Errorf("a deploy lacks %s on the untagged project: it makes a project's database of runs and its tier's delay queue, and Google checks both against the project", permission)
 		}
 	}
 	lines := credential.Lines(deploy.Grants())
@@ -160,13 +162,16 @@ func declaringATaskOf(project string) provider.DeployPreflight {
 
 func TestADryDeployDeclaringATaskPlansItsProjectsWritableDatabaseAndMakesNothing(t *testing.T) {
 	database := ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")
-	if planned := plannedBy(t, failingOnAnyCall(t), declaringATaskOf("shop")); !plansWritableDatabase(planned, database) {
+	p := failingOnAnyCall(t)
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics)
+	if planned := plannedBy(t, p, declaringATaskOf("shop")); !plansWritableDatabase(planned, database) {
 		t.Errorf("a dry deploy declaring a task planned %+v, want %s created", planned, database)
 	}
 }
 
 func TestTheFirstDeployDeclaringATaskMakesItsProjectsWritableDatabaseAndAnotherProjectsIsStillPlanned(t *testing.T) {
 	p, _ := deployingNetworks(t)
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics)
 
 	if err := p.ApplyPreflight(context.Background(), declaringATaskOf("shop")); err != nil {
 		t.Fatalf("ApplyPreflight() = %v", err)

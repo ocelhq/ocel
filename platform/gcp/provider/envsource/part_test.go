@@ -3,6 +3,7 @@ package envsource
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -15,20 +16,48 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-func TestABootstrapMakesTheSyncAccountAndLeavesTheSyncToTheFirstScheduledEnvSource(t *testing.T) {
+func TestTheFirstScheduledEnvSourceAddsTheSyncWithTheAccountItRunsAsAndNoBootstrapMakesThem(t *testing.T) {
 	t.Parallel()
 	names := names.New("ocel", "acme-prod")
 	for _, tier := range googletest.BothTiers {
 		for _, emulated := range []bool{false, true} {
 			ids := googletest.IdsOf(bootstrap.Resources(names, tier, emulated))
-			if !slices.Contains(ids, (bootstrap.Resource{Kind: bootstrap.KindServiceAccount, Name: names.EnvSourceSyncAccount(tier)}).ID()) {
-				t.Errorf("a %s bootstrap (emulated=%t) provisions %v, want the sync's account among them: only a bootstrap may grant it the tier key", tier, emulated, ids)
-			}
-			for _, each := range []bootstrap.Resource{{Kind: bootstrap.KindService, Name: names.EnvSourceSync(tier)}, {Kind: bootstrap.KindSchedule, Name: names.EnvSourceSync(tier)}} {
+			for _, each := range []bootstrap.Resource{
+				{Kind: bootstrap.KindServiceAccount, Name: names.EnvSourceSyncAccount(tier)},
+				{Kind: bootstrap.KindService, Name: names.EnvSourceSync(tier)},
+				{Kind: bootstrap.KindSchedule, Name: names.EnvSourceSync(tier)},
+			} {
 				if slices.Contains(ids, each.ID()) {
 					t.Errorf("a %s bootstrap (emulated=%t) provisions %s, which the first scheduled env source adds", tier, emulated, each.ID())
 				}
 			}
+		}
+	}
+}
+
+func TestTheFirstScheduledEnvSourceMakesTheKeysTheSyncSealsUnderAndLetsTheSyncSealForItsProject(t *testing.T) {
+	t.Parallel()
+	server := googletest.NewSync()
+	b := syncOpened(server, t)
+	b.Records = fake.NewKeyValues()
+	ctx := context.Background()
+	tier := environment.TierPreview
+	key := b.Clients.Workload().ProjectKeyPath(tier, "shop")
+
+	if err := Ensure(ctx, b, tier, "shop"); err != nil {
+		t.Fatalf("Ensure() = %v", err)
+	}
+
+	if !server.HasKey(gcloud.KeyPath(b.Clients, string(tier))) {
+		t.Errorf("the first scheduled env source of %s left no %s key, and the sync seals under it", tier, tier)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, bootstrap.KeysPart); err != nil || !present {
+		t.Errorf("the keys part is recorded %t, %v, want it added with the sync", present, err)
+	}
+	member := "serviceAccount:" + b.Clients.EnvSourceSyncAccountEmail(tier)
+	for _, role := range SyncKeyRoles {
+		if !slices.Contains(server.KeyMembers(key, role), member) {
+			t.Errorf("project shop's key binds %v to %s, want %s: the sync seals what it reads for shop under shop's key", server.KeyMembers(key, role), role, member)
 		}
 	}
 }
@@ -59,8 +88,8 @@ func TestTheFirstScheduledEnvSourceAddsTheSyncServiceAndScheduleAsAPartItRecords
 		t.Errorf("schedulePresence() = %+v, %v, want the schedule calling the service", found, err)
 	}
 	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, PartName)
-	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" || len(recorded.Resources) != 2 {
-		t.Errorf("part record = %+v, %v, %v, want it ready, added by shop, naming the service and the schedule", recorded, present, err)
+	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != "shop" || len(recorded.Resources) != 3 {
+		t.Errorf("part record = %+v, %v, %v, want it ready, added by shop, naming the account, the service and the schedule", recorded, present, err)
 	}
 
 	pushes := len(server.Pushed)
@@ -166,8 +195,8 @@ func TestATierWithAnEnvSourceSyncDescribesItAsAPartUsedByItsScheduledProjects(t 
 	if err != nil || !present {
 		t.Fatalf("envSourceSyncPart() = %v, %v, want the part", present, err)
 	}
-	if part.Name != PartName || !part.Current || len(part.Resources) != 2 || part.Shape == nil || len(part.Shape.Resources) != 2 {
-		t.Errorf("part = %+v, want it current, with the service and schedule and the shape that prices them", part)
+	if part.Name != PartName || !part.Current || len(part.Resources) != 3 || part.Shape == nil || len(part.Shape.Resources) != 2 {
+		t.Errorf("part = %+v, want it current, with the account, the service and schedule and the shape that prices the last two", part)
 	}
 }
 
@@ -191,13 +220,13 @@ func TestRemovingATierTakesItsEnvSourceSyncAndAPlanToRemoveItListsIt(t *testing.
 	}
 	var kinds []string
 	for _, change := range changes {
-		if change.Action != provider.ActionDelete || change.Name != name {
+		if change.Action != provider.ActionDelete || (change.Name != name && change.Name != b.Clients.EnvSourceSyncAccount(tier)) {
 			t.Errorf("change %+v, want %s deleted", change, name)
 		}
 		kinds = append(kinds, change.Kind)
 	}
-	if !slices.Equal(kinds, []string{string(bootstrap.KindSchedule), string(bootstrap.KindService)}) {
-		t.Errorf("a plan to remove the tier deletes %v, want the schedule, then the service it calls", kinds)
+	if !slices.Equal(kinds, []string{string(bootstrap.KindSchedule), string(bootstrap.KindService), string(bootstrap.KindServiceAccount)}) {
+		t.Errorf("a plan to remove the tier deletes %v, want the schedule, then the service it calls, then the account it runs as", kinds)
 	}
 
 	if err := removeEnvSourceSync(ctx, b, tier, nil); err != nil {
@@ -208,5 +237,8 @@ func TestRemovingATierTakesItsEnvSourceSyncAndAPlanToRemoveItListsIt(t *testing.
 	}
 	if found, err := schedulePresence(ctx, b, tier, name); err != nil || found.Present {
 		t.Errorf("schedulePresence() after removal = %+v, %v, want it gone", found, err)
+	}
+	if !slices.ContainsFunc(server.DeletedAccounts, func(path string) bool { return strings.Contains(path, "/"+b.Clients.EnvSourceSyncAccount(tier)+"@") }) {
+		t.Errorf("removal deleted the accounts %v, want the sync's own among them", server.DeletedAccounts)
 	}
 }

@@ -147,7 +147,7 @@ var bootstrapRoles = []string{
 func BootstrapRoles() []string { return slices.Clone(bootstrapRoles) }
 
 func (b Engine) preflight(ctx context.Context, read Survey, parts []string) error {
-	if err := b.servicesOn(ctx, APIsFor(read.Tier, parts)); err != nil {
+	if err := b.RefuseServicesOff(ctx, APIsFor(read.Tier, parts)); err != nil {
 		return err
 	}
 	if err := b.Permitted(ctx, parts); err != nil {
@@ -173,7 +173,7 @@ func RolesCovering(parts []string) []string {
 	return roles
 }
 
-func (b Engine) servicesOn(ctx context.Context, apis []string) error {
+func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
 	service, err := b.Clients.Services()
 	if err != nil {
 		return err

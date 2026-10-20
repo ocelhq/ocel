@@ -15,6 +15,7 @@ import (
 	"google.golang.org/api/iam/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -56,10 +57,10 @@ func accountGrants(t *testing.T, email, role, member string) bool {
 	})
 }
 
-func TestLiveTheBaseGivesTheTierADelayQueueAndAPushAccount(t *testing.T) {
+func TestLiveTheTopicsPartGivesTheTierADelayQueueAndAPushAccount(t *testing.T) {
 	p := live(t)
 	tier := environment.TierProduction
-	bootstrappedWith(t, p, tier)
+	bootstrappedWith(t, p, tier, bootstrap.TopicsPart)
 	names := liveNames(t)
 	ctx := context.Background()
 

@@ -36,18 +36,16 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
 	for _, item := range bootstrap.Resources(names, req.Deploy.Tier, false) {
-		if item.Kind == bootstrap.KindQueue {
-			continue
-		}
 		shaped, priced := item.Shape(region)
 		if !priced {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
 		}
 		tree.Add(shared, string(gcloud.Vendor), shaped.Type, item.Name, region, shaped.Properties)
 	}
-	owned := []bootstrap.Resource{
-		{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)},
-		{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)},
+	use := deployUse{deploy: req.Deploy, front: req.Edge, usages: req.Usages, uses: req.Uses}
+	owned := []bootstrap.Resource{{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}}
+	if use.opensValues() || slices.ContainsFunc(req.Resources, func(resource provider.Resource) bool { return resource.Type == provider.BindingPostgres }) {
+		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)})
 	}
 	if topic.DeclaresTopics(req.Resources) || slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
 		return app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext
@@ -115,7 +113,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 	}
 
-	if err := p.components().Shape(component.Shape{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment}, req.Resources); err != nil {
+	if err := p.components().Shape(component.Shape{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment}, req.Resources, use.parts()); err != nil {
 		return nil, err
 	}
 

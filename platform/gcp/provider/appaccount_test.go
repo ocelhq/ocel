@@ -199,11 +199,30 @@ func TestAnAppsAccountIsCreatedOnceAndReusedByTheNextDeploy(t *testing.T) {
 	}
 }
 
+var openingASecret = provider.AppValues{Secrets: []provider.SecretRef{{Key: "STRIPE_KEY"}}}
+
+func TestAnAppThatOpensNoValueIsGrantedNoKeyAndMakesNone(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	p, c := ensuringAccounts(t, server)
+
+	if _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := keyBindingsOf(server); len(got) != 0 {
+		t.Errorf("the keys bind %q, want nothing: an app with no secret and no binding opens no value", got)
+	}
+	if server.HasKey(c.Workload().ProjectKeyPath(environment.TierProduction, "shop")) {
+		t.Error("deploying an app that opens no value made its project's key, which needs the tier's key ring")
+	}
+}
+
 func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothingMore(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
-	email, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
+	email, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +252,7 @@ func TestAGrantRefusedBecauseTheNewAccountIsNotYetVisibleIsRetried(t *testing.T)
 	server.Unseen = 2
 	p, c := ensuringAccounts(t, server)
 
-	if _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
+	if _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v, want the grant retried until the account is visible", err)
 	}
 

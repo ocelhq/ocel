@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	s3store "github.com/ocelhq/ocel/platform/s3"
@@ -240,11 +239,15 @@ func TestRemovingABucketDeletesItsObjectsThenTheBucket(t *testing.T) {
 	}
 }
 
-func TestABootstrapChecksTheAPIAppsSignTheirBucketURLsThroughIsOn(t *testing.T) {
+func TestADeployDeclaringABucketChecksTheAPIAppsSignItsURLsThroughIsOn(t *testing.T) {
 	t.Parallel()
 
-	if !slices.Contains(bootstrap.APIsFor(environment.TierProduction, nil), "iamcredentials.googleapis.com") {
-		t.Errorf("a bootstrap checks %v are on, want iamcredentials.googleapis.com among them: an app signs its buckets' URLs through it, and every signed URL fails while it is off", bootstrap.APIsFor(environment.TierProduction, nil))
+	pre := provider.DeployPreflight{Resources: []provider.Resource{{Name: "avatars", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}}}}
+	if apis := deployAPIs(pre); !slices.Contains(apis, "iamcredentials.googleapis.com") {
+		t.Errorf("a deploy declaring a bucket checks %v are on, want iamcredentials.googleapis.com among them: an app signs its bucket's URLs through it, and every signed URL fails while it is off", apis)
+	}
+	if apis := deployAPIs(provider.DeployPreflight{}); len(apis) != 0 {
+		t.Errorf("a deploy declaring nothing checks %v are on, want none", apis)
 	}
 }
 

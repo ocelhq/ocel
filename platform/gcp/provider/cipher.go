@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
@@ -30,12 +31,17 @@ func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 		return nil, err
 	}
 	sealed, err := opened.Seal(ctx, tier, bound, plaintext)
-	if !errors.Is(err, ports.ErrNoProjectKey) {
+	if !errors.Is(err, ports.ErrNoProjectKey) && !errors.Is(err, ports.ErrNoTierKey) {
 		return sealed, err
 	}
-	project, _ := ports.ProjectSealedFor(bound)
-	if err := variables.EnsureProjectKey(ctx, c, tier, project); err != nil {
+	project, owned := ports.ProjectSealedFor(bound)
+	if err := s.p.ensureKeys(ctx, tier, project); err != nil {
 		return nil, err
+	}
+	if owned {
+		if err := variables.EnsureProjectKey(ctx, c, tier, project); err != nil {
+			return nil, err
+		}
 	}
 	return opened.Seal(ctx, tier, bound, plaintext)
 }
@@ -46,4 +52,12 @@ func (s cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 		return nil, err
 	}
 	return opened.Open(ctx, tier, bound, sealed)
+}
+
+func (p *Provider) ensureKeys(ctx context.Context, tier environment.Tier, addedBy string) error {
+	b, err := bootstrapGate{p}.openBootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	return b.EnsurePart(ctx, tier, addedBy, bootstrap.Keys.For(b, tier))
 }

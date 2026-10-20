@@ -404,6 +404,26 @@ func TestABootstrapPlanNamesWhatTheEdgesFrontInstallsAndWhatRemovingItTakes(t *t
 	}
 }
 
+func TestABootstrapInstallingAFrontPlansTheEdgeBucketAndKeysTheFrontReadsAsPartsAddedWithIt(t *testing.T) {
+	t.Parallel()
+
+	b, _ := fronting(t)
+	planned, err := b.PlanFrontedParts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parts []string
+	for _, group := range planned {
+		parts = append(parts, group.Part)
+	}
+	if !slices.Equal(parts, []string{bootstrap.KeysPart, bootstrap.EdgeBucketPart}) {
+		t.Errorf("a bootstrap installing %s plans the parts %v, want the keys and the edge bucket its front reads", bootstrap.CloudflareOriginPart, parts)
+	}
+	if none, err := b.PlanFrontedParts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil || len(none) != 0 {
+		t.Errorf("a bootstrap installing no front plans %+v, %v, want no part: the first deploy that needs one adds it", none, err)
+	}
+}
+
 func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T) {
 	t.Parallel()
 

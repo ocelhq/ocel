@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	gcpenvsource "github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -68,7 +70,8 @@ func servicesEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
-	for _, api := range bootstrap.BootstrapAPIs {
+	apis := slices.Concat(bootstrap.BootstrapAPIs, bootstrap.Keys.APIs, bootstrap.Realtime.APIs, bootstrap.Topics.APIs, gcpenvsource.SyncAPIs, []string{"iamcredentials.googleapis.com"})
+	for _, api := range apis {
 		name := "projects/" + liveProject() + "/services/" + api
 		if _, err := service.Services.Enable(name, &serviceusage.EnableServiceRequest{}).Context(ctx).Do(); err != nil {
 			t.Fatalf("enable %s: %v", api, err)
@@ -134,10 +137,10 @@ func TestLiveTheBootstrapProvisionsTheStackTheDataPortsRead(t *testing.T) {
 	p := live(t)
 	tier := environment.TierProduction
 	bootstrapped(t, p, environment.TierPreview)
-	bootstrap := bootstrapped(t, p, tier)
+	installed := bootstrappedWith(t, p, tier, bootstrap.EdgeBucketPart, bootstrap.CacheBucketPart)
 
 	ctx := context.Background()
-	described, err := bootstrap.Describe(ctx, tier)
+	described, err := installed.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() after Apply() = %v", err)
 	}
@@ -206,12 +209,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	rows := map[string]string{
 		"firestore:database/" + liveNames(t).RecordsDatabase(tier):                 provider.StackGroupKind,
 		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageState): provider.StackGroupKind,
-		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageEdge):  provider.StackGroupKind,
-		"storage:bucket/" + liveNames(t).TierBucketStem(tier, naming.StorageCache): provider.StackGroupKind,
-		"kms:keyring/" + liveNames(t).KeyRing():                                    provider.StackGroupKind,
-		"kms:key/" + string(tier):                                                  provider.StackGroupKind,
 		"secretmanager:secret/" + liveNames(t).PassphraseSecret(tier):              provider.ParameterGroupKind,
-		"iam:serviceaccount/" + liveNames(t).EnvSourceSyncAccount(tier):            provider.StackGroupKind,
 	}
 	if !emulated() {
 		rows["artifactregistry:repository/"+liveNames(t).Repository(tier)] = provider.StackGroupKind
@@ -230,7 +228,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) {
 	p := live(t)
 	if !emulated() {
-		t.Skip("a second namespace provisions a second key ring, and Google never deletes one, so this runs against the emulator only")
+		t.Skip("a second namespace makes custom roles of its own, and Google holds a deleted role's id for 44 days, so this runs against the emulator only")
 	}
 	tier := environment.TierProduction
 	here := bootstrapped(t, p, tier)
@@ -289,14 +287,14 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 
 func TestLiveAPlanIsRefusedWhileAnApiTheStackNeedsIsOff(t *testing.T) {
 	p := live(t)
-	servicesDisabled(t, "cloudkms.googleapis.com")
+	servicesDisabled(t, "secretmanager.googleapis.com")
 
 	var refused refusal.Refusal
 	_, err := bootstrapOf(t, p).Plan(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Plan() with an API off = %v, want a %s refusal: enabling it is a precondition, not a row in the stack", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refused.Message, "cloudkms.googleapis.com") {
+	if !strings.Contains(refused.Message, "secretmanager.googleapis.com") {
 		t.Errorf("Plan() refused with %q, want it to name the API that is off", refused.Message)
 	}
 }
@@ -418,9 +416,9 @@ func TestLiveASharedResourceStaysWhileTheSiblingTierIsInstalled(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
 	bootstrapped(t, p, environment.TierProduction)
-	bootstrap := bootstrapped(t, p, environment.TierPreview)
+	installed := bootstrappedWith(t, p, environment.TierPreview, bootstrap.KeysPart)
 
-	removal, err := bootstrap.PlanRemove(context.Background(), environment.TierPreview)
+	removal, err := installed.PlanRemove(context.Background(), environment.TierPreview)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -598,8 +596,12 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
 	defer client.Close()
-	if err := client.Bucket(liveTierBucket(t, tier, naming.StorageCache)).Delete(ctx); err != nil {
-		t.Fatalf("delete the cache bucket out of band: %v", err)
+	secrets, err := secretmanager.NewService(ctx, ports.EmulatorREST(endpoint())...)
+	if err != nil {
+		t.Fatalf("reach the emulator's secret manager: %v", err)
+	}
+	if _, err := secrets.Projects.Secrets.Delete("projects/" + liveProject() + "/secrets/" + liveNames(t).PassphraseSecret(tier)).Context(ctx).Do(); err != nil {
+		t.Fatalf("delete the passphrase secret out of band: %v", err)
 	}
 
 	described, err := bootstrap.Describe(ctx, tier)
@@ -607,7 +609,7 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 		t.Fatalf("Describe() = %v", err)
 	}
 	if len(described.Stacks) != 1 || described.Stacks[0].DigestCurrent {
-		t.Errorf("Describe().Stacks = %+v with a bucket gone, want the stack read as behind", described.Stacks)
+		t.Errorf("Describe().Stacks = %+v with the passphrase secret gone, want the stack read as behind", described.Stacks)
 	}
 
 	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier})
@@ -615,11 +617,11 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 		t.Fatalf("Plan() = %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Kind != provider.StackGroupKind {
+		if group.Kind != provider.ParameterGroupKind {
 			continue
 		}
 		if group.Action == provider.ActionKeep {
-			t.Errorf("Plan() shows %s as %q with a bucket gone while its rows create it, and the group is what the operator consents to",
+			t.Errorf("Plan() shows %s as %q with the passphrase secret gone while its rows create it, and the group is what the operator consents to",
 				group.Name, group.Action)
 		}
 	}
@@ -657,7 +659,7 @@ func TestLiveARemovalUnderWayReadsAsUnfinishedRatherThanDone(t *testing.T) {
 		t.Fatal("Remove() took nothing down at all, so nothing here was tested")
 	}
 	if !taken {
-		t.Error("Describe() reads a bootstrap whose key is already destroyed as finished: the next apply mints a new key version and every value sealed under the old one stays shut")
+		t.Error("Describe() reads a bootstrap already partly taken down as finished, and nothing would ever go back to finish taking it down")
 	}
 }
 
@@ -858,14 +860,14 @@ func rowsOf(t *testing.T, plan provider.Plan) map[string]provider.Change {
 func TestLiveTheEdgeBucketIsRemovedSlowlyBecauseItIsEmptiedFirst(t *testing.T) {
 	p := live(t)
 	tier := environment.TierPreview
-	bootstrap := bootstrapped(t, p, tier)
+	installed := bootstrappedWith(t, p, tier, bootstrap.EdgeBucketPart)
 
-	plan, err := bootstrap.PlanRemove(context.Background(), tier)
+	plan, err := installed.PlanRemove(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
 	rows := rowsOf(t, plan)
-	edge := rows["storage:bucket/"+liveTierBucket(t, tier, naming.StorageEdge)]
+	edge := rows["storage:bucket/"+liveNames(t).TierBucketStem(tier, naming.StorageEdge)]
 	if edge.Action != provider.ActionDelete || !edge.Slow {
 		t.Errorf("PlanRemove() shows the edge bucket as %q (slow %v), want a delete marked slow: every object in it is deleted one by one first",
 			edge.Action, edge.Slow)

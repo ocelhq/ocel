@@ -227,5 +227,5 @@ func (s *networkServer) installedWithout(policy string) {
 	s.policies["ocel-prod-network-memorystore"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.MemorystoreServiceClass}
 	s.policies["ocel-prod-network-cloudsql"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.CloudSQLServiceClass}
 	delete(s.policies, policy)
-	s.iam["ocel-prod-network"] = &compute.Policy{Bindings: []*compute.Binding{{Role: bootstrap.NetworkUserRole, Members: []string{serviceAgent}}}}
+	s.iam["ocel-prod-network"] = &compute.Policy{Bindings: []*compute.Binding{{Role: network.NetworkUserRole, Members: []string{serviceAgent}}}}
 }

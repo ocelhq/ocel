@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
@@ -716,7 +717,7 @@ func (p *Postgres) Component() component.Component {
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Egress:        true,
-		Parts:         []component.Part{network.Part},
+		Parts:         []component.Part{network.Part, component.NewPart(bootstrap.Keys)},
 		Preflight: func(resource provider.Resource) error {
 			_, err := readPostgres(resource)
 			return err

@@ -53,6 +53,7 @@ type Connector struct {
 	emulated    bool
 	based       func(ctx context.Context, ref string) (v1.Image, error)
 	pushImage   func(ctx context.Context, tier environment.Tier, app, ref string, built v1.Image, progress progress.Log) error
+	ensureKeys  func(ctx context.Context, tier environment.Tier) error
 }
 
 func New(
@@ -62,8 +63,9 @@ func New(
 	emulated bool,
 	based func(ctx context.Context, ref string) (v1.Image, error),
 	pushImage func(ctx context.Context, tier environment.Tier, app, ref string, built v1.Image, progress progress.Log) error,
+	ensureKeys func(ctx context.Context, tier environment.Tier) error,
 ) Connector {
-	return Connector{openClients: openClients, services: services, region: region, emulated: emulated, based: based, pushImage: pushImage}
+	return Connector{openClients: openClients, services: services, region: region, emulated: emulated, based: based, pushImage: pushImage, ensureKeys: ensureKeys}
 }
 
 func (p Connector) names(ctx context.Context) (names.Names, error) {
@@ -338,6 +340,11 @@ func (p Connector) bindConnectorKeys(ctx context.Context, wanted []string, progr
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
 	var errs []error
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if len(wanted) > 0 {
+			if err := p.ensureKeys(ctx, tier); err != nil {
+				return err
+			}
+		}
 		changed, err := gcloud.BindKeyRoles(ctx, clients, tier, member, connectorKeyRoles, wanted)
 		if err != nil && len(wanted) > 0 {
 			return err

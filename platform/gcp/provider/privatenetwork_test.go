@@ -68,15 +68,16 @@ func TestThePrivateNetworkChecksItsServicesAndADeployCredentialMayAddIt(t *testi
 		}
 	}
 	parts := bootstrap.NewPartsRole(b.Clients.Names).Permissions
-	for _, permission := range []string{"networkconnectivity.serviceConnectionPolicies.create", "compute.networks.create", "compute.subnetworks.create", "compute.regionOperations.get", "serviceusage.services.get"} {
+	for _, permission := range []string{
+		"networkconnectivity.serviceConnectionPolicies.create", "compute.networks.create", "compute.subnetworks.create", "compute.regionOperations.get", "serviceusage.services.get",
+		"compute.subnetworks.getIamPolicy", "compute.subnetworks.setIamPolicy",
+	} {
 		if !slices.Contains(parts, permission) {
-			t.Errorf("the parts role holds %v, want %s among them: a deploy adds the network", parts, permission)
+			t.Errorf("the parts role holds %v, want %s among them: a deploy adds the network and lets Cloud Run's agent attach services to its subnetwork", parts, permission)
 		}
 	}
-	for _, permission := range []string{"compute.subnetworks.setIamPolicy", "compute.networks.delete"} {
-		if slices.Contains(parts, permission) {
-			t.Errorf("the parts role holds %s, which no deploy needs: the Cloud Run agent is granted the network in the base, and only a bootstrap removes it", permission)
-		}
+	if slices.Contains(parts, "compute.networks.delete") {
+		t.Error("the parts role holds compute.networks.delete, which no deploy needs: only a bootstrap removes the network")
 	}
 	for _, role := range []string{"roles/compute.networkAdmin", "roles/cloudsql.viewer"} {
 		if !slices.Contains(bootstrap.BootstrapRoles(), role) {
@@ -99,9 +100,13 @@ func TestMakingThePrivateNetworkRaisesTheTiersNetworkSubnetworkAndPolicies(t *te
 		t.Fatalf("makeNetwork() = %v", err)
 	}
 
-	want := []string{"create network ocel-prod-network", "create subnetwork ocel-prod-network", "create policy ocel-prod-network-memorystore", "create policy ocel-prod-network-cloudsql"}
+	want := []string{"create network ocel-prod-network", "create subnetwork ocel-prod-network", "grant on ocel-prod-network", "create policy ocel-prod-network-memorystore", "create policy ocel-prod-network-cloudsql"}
 	if got := server.wrote(); !slices.Equal(got, want) {
 		t.Errorf("installing the network wrote %v, want %v", got, want)
+	}
+	granted := server.iam["ocel-prod-network"]
+	if granted == nil || len(granted.Bindings) != 1 || granted.Bindings[0].Role != network.NetworkUserRole || !slices.Equal(granted.Bindings[0].Members, []string{serviceAgent}) {
+		t.Errorf("the subnetwork's policy is %+v, want Cloud Run's agent alone granted %s on it: Direct VPC egress attaches services through it", granted, network.NetworkUserRole)
 	}
 	net := server.networks["ocel-prod-network"]
 	if net.AutoCreateSubnetworks || !slices.Contains(net.ForceSendFields, "AutoCreateSubnetworks") {
