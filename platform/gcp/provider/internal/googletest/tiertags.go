@@ -36,6 +36,7 @@ type TierTags struct {
 	BindingsUnseen int
 	BindingsDenied bool
 	ListsDenied    []string
+	NumberedNames  bool
 	ValuesAbsent   bool
 	Denied         []string
 
@@ -247,6 +248,9 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 
 func (s *TierTags) namespacedName(value string) string {
 	for namespaced, held := range s.Values {
+		if held.Name == value && s.NumberedNames {
+			return ProjectNumber + strings.TrimPrefix(namespaced, Project)
+		}
 		if held.Name == value {
 			return namespaced
 		}
