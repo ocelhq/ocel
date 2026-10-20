@@ -32,6 +32,8 @@ func TestABootstrapChecksItMayMakeTheTierTagAndBindEveryKindItTags(t *testing.T)
 		"secretmanager.secrets.deleteTagBinding",
 		"run.services.createTagBinding",
 		"run.services.listTagBindings",
+		"datastore.databases.listTagBindings",
+		"datastore.databases.deleteTagBinding",
 	} {
 		if !slices.Contains(bootstrap.PermissionsFor(nil), permission) {
 			t.Errorf("a bootstrap checks %v, want %s among them: the apply would stop on the tag it lacks", bootstrap.PermissionsFor(nil), permission)
