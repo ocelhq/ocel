@@ -272,7 +272,7 @@ func isShellCompletion(cmd *cobra.Command) bool {
 
 func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 	isJSON := func() bool { return set.json }
-	return commands.Invocation{
+	invocation := commands.Invocation{
 		Events:          bus,
 		Presentation:    set.presentation,
 		StdinIsTerminal: func(in io.Reader) bool { return terminal.IsTerminal(in) },
@@ -282,5 +282,10 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 
 		Console:    deployreport.Console{LoadCredentials: console.LoadCredentials},
 		CloudOffer: console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
+		BuilderJob: commands.ReadBuilderJob(os.Getenv),
 	}
+	if invocation.BuilderJob != nil {
+		invocation.Console, invocation.CloudOffer = deployreport.Console{}, nil
+	}
+	return invocation
 }

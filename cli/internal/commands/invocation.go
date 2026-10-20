@@ -38,9 +38,13 @@ type Invocation struct {
 
 	Console    deployreport.Console
 	CloudOffer func(ctx context.Context, creds console.Credentials) (*console.CloudOffer, error)
+	BuilderJob *BuilderJob
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {
+	if i.BuilderJob != nil {
+		return i.BuilderJob.loadProject(ctx, cwd, i.ConfigPath())
+	}
 	return project.Load(ctx, cwd, i.ConfigPath())
 }
 
