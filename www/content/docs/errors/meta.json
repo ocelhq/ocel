@@ -27,6 +27,7 @@
     "cloud.unsupported",
     "cloud.job_failed",
     "cloud.job_canceled",
+    "cloud.upgrade_required",
     "---Runs---",
     "interrupted",
     "dev.command_failed",
