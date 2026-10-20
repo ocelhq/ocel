@@ -11,9 +11,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
@@ -49,7 +51,11 @@ type fakeACM struct {
 	describeErr error
 	deleteErr   error
 	listErr     error
+	tagged      map[string]environment.Tier
+	refused     map[string]bool
 }
+
+var errAccessDenied = &smithy.GenericAPIError{Code: "AccessDeniedException", Message: "not authorized"}
 
 func (f *fakeACM) RequestCertificate(_ context.Context, in *acm.RequestCertificateInput, _ ...func(*acm.Options)) (*acm.RequestCertificateOutput, error) {
 	if f.requestErr != nil {
@@ -72,6 +78,9 @@ func (f *fakeACM) RequestCertificate(_ context.Context, in *acm.RequestCertifica
 }
 
 func (f *fakeACM) DescribeCertificate(_ context.Context, in *acm.DescribeCertificateInput, _ ...func(*acm.Options)) (*acm.DescribeCertificateOutput, error) {
+	if f.refused[aws.ToString(in.CertificateArn)] {
+		return nil, errAccessDenied
+	}
 	f.describes++
 	if f.describeErr != nil && f.describes == 1 {
 		return nil, f.describeErr
@@ -123,6 +132,18 @@ func (f *fakeACM) ListCertificates(_ context.Context, in *acm.ListCertificatesIn
 	}
 	if page+1 < len(f.listed) {
 		out.NextToken = aws.String(fmt.Sprintf("page-%d", page+1))
+	}
+	return out, nil
+}
+
+func (f *fakeACM) ListTagsForCertificate(_ context.Context, in *acm.ListTagsForCertificateInput, _ ...func(*acm.Options)) (*acm.ListTagsForCertificateOutput, error) {
+	arn := aws.ToString(in.CertificateArn)
+	if f.refused[arn] {
+		return nil, errAccessDenied
+	}
+	out := &acm.ListTagsForCertificateOutput{Tags: []acmtypes.Tag{{Key: aws.String("team"), Value: aws.String("web")}}}
+	if tier, ok := f.tagged[arn]; ok {
+		out.Tags = append(out.Tags, acmtypes.Tag{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))})
 	}
 	return out, nil
 }

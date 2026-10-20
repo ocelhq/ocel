@@ -42,12 +42,12 @@ func TestEveryCredentialChangesOnlyTheCertificatesItTagged(t *testing.T) {
 				},
 				"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
 			})}: true,
-			{action: "acm:ListTagsForCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:    true,
-			{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:      true,
-			{action: "acm:RemoveTagsFromCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}: true,
-			{action: "acm:DeleteCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:         true,
-			{action: "acm:DescribeCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, nil)}:                                  true,
-			{action: "acm:ListCertificates", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                                           true,
+			{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:         true,
+			{action: "acm:RemoveTagsFromCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:    true,
+			{action: "acm:DeleteCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:            true,
+			{action: "acm:DescribeCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.UnevaluatedOrMadeByItsStacks())}:    true,
+			{action: "acm:ListTagsForCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.UnevaluatedOrMadeByItsStacks())}: true,
+			{action: "acm:ListCertificates", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                                              true,
 		}
 		granted := map[grant]bool{}
 		for g := range grantsOf(t, document) {

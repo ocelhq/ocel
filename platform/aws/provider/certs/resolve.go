@@ -8,6 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func RegionOfARN(arn string) string {
@@ -74,19 +76,29 @@ func (i ACM) Existing(ctx context.Context, hostnames []string) (Certificate, err
 				Domains: certificateNames(aws.ToString(summary.DomainName), summary.SubjectAlternativeNameSummaries),
 				Adopted: true,
 			}
-			if cert.CoversAll(hostnames) {
-				return cert, nil
+			if !cert.CoversAll(hostnames) {
+				if !aws.ToBool(summary.HasAdditionalSubjectAlternativeNames) {
+					continue
+				}
+				described, err := i.describe(ctx, cert)
+				if refused(err) {
+					continue
+				}
+				if err != nil {
+					return Certificate{}, err
+				}
+				described.Region = i.Region
+				if !described.Issued() || !described.CoversAll(hostnames) {
+					continue
+				}
+				cert = described
 			}
-			if !aws.ToBool(summary.HasAdditionalSubjectAlternativeNames) {
-				continue
-			}
-			described, err := i.describe(ctx, cert)
+			adoptable, err := i.canAdopt(ctx, cert)
 			if err != nil {
 				return Certificate{}, err
 			}
-			described.Region = i.Region
-			if described.Issued() && described.CoversAll(hostnames) {
-				return described, nil
+			if adoptable {
+				return cert, nil
 			}
 		}
 		if token = out.NextToken; token == nil {
@@ -94,4 +106,20 @@ func (i ACM) Existing(ctx context.Context, hostnames []string) (Certificate, err
 		}
 	}
 	return Certificate{}, nil
+}
+
+func (i ACM) canAdopt(ctx context.Context, cert Certificate) (bool, error) {
+	out, err := i.API.ListTagsForCertificate(ctx, &acm.ListTagsForCertificateInput{CertificateArn: aws.String(cert.ARN)})
+	if refused(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the tags of certificate %s: %w", cert.ARN, err)
+	}
+	for _, tag := range out.Tags {
+		if aws.ToString(tag.Key) == naming.EnvTierTagKey {
+			return aws.ToString(tag.Value) == string(i.Tier), nil
+		}
+	}
+	return true, nil
 }
