@@ -259,7 +259,7 @@ func routedConfig(t *testing.T, kind edge.Kind) Config {
 	return Config{
 		Namespace:         testNamespace,
 		ArtifactRoot:      routedArtifactRoot(t),
-		AssetBucket:       "assets-bucket",
+		EdgeBucket:        "edge-bucket",
 		ImageOptimizerURL: "https://optimizer.lambda-url.us-east-1.on.aws/",
 		RuntimeLayers:     testRuntimeLayers(),
 		Slug:              "shop",

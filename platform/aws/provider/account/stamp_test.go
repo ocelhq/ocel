@@ -45,9 +45,9 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("parameter values are not in the body", func(t *testing.T) {
 		t.Parallel()
 
-		in := partInputs{ns: defaultNamespace, tier: environment.TierProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
+		in := partInputs{ns: defaultNamespace, tier: environment.TierProduction, refs: stackRefs{edgeBucketARN: "arn:one"}}
 		other := in
-		other.refs = stackRefs{assetBucket: "bucket-two", assetBucketARN: "arn:two"}
+		other.refs = stackRefs{edgeBucketARN: "arn:two"}
 		if cfn.TemplateDigest(renderedTemplate(cloudflareEdgePart, in).body) != cfn.TemplateDigest(renderedTemplate(cloudflareEdgePart, other).body) {
 			t.Fatal("the digest must not move when only a cross-stack parameter value moves")
 		}

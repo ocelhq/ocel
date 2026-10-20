@@ -40,7 +40,7 @@ import (
 
 const (
 	fakeStateTable  = "ocel-state"
-	fakeAssetBucket = "ocel-assets"
+	fakeEdgeBucket  = "ocel-prod-edge-k3x9q2"
 	fakeRegion      = "eu-west-1"
 	fakeSecret      = "3f7a9c1e5b2d84600f1a2b3c4d5e6f70"
 	fakeEntryURL    = "https://abcdef0123456789.lambda-url.eu-west-1.on.aws/"
@@ -218,8 +218,8 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	switch name {
 	case coreStackName:
 		outputs = map[string]string{
-			"StateTableName":  fakeStateTable,
-			"AssetBucketName": fakeAssetBucket,
+			"StateTableName": fakeStateTable,
+			"EdgeBucketName": fakeEdgeBucket,
 		}
 	default:
 		return &cloudformation.DescribeStacksOutput{}, nil

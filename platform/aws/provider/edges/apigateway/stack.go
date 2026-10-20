@@ -21,11 +21,11 @@ import (
 )
 
 type private struct {
-	API         string `json:"api,omitempty"`
-	StateTable  string `json:"stateTable,omitempty"`
-	AssetBucket string `json:"assetBucket,omitempty"`
-	Role        string `json:"invokeRole,omitempty"`
-	Region      string `json:"region,omitempty"`
+	API        string `json:"api,omitempty"`
+	StateTable string `json:"stateTable,omitempty"`
+	EdgeBucket string `json:"edgeBucket,omitempty"`
+	Role       string `json:"invokeRole,omitempty"`
+	Region     string `json:"region,omitempty"`
 }
 
 type stack struct {
@@ -48,12 +48,12 @@ func (s *stack) tier() environment.Tier { return s.state.Tier }
 
 func (s *stack) spec(pointer string) apiSpec {
 	return apiSpec{
-		name:        apiName(s.p.ns, s.slug(), s.tier(), pointer),
-		tags:        s.apiTags(pointer),
-		region:      s.own.Region,
-		account:     accountOf(s.own.Role),
-		role:        s.own.Role,
-		assetBucket: s.own.AssetBucket,
+		name:       apiName(s.p.ns, s.slug(), s.tier(), pointer),
+		tags:       s.apiTags(pointer),
+		region:     s.own.Region,
+		account:    accountOf(s.own.Role),
+		role:       s.own.Role,
+		edgeBucket: s.own.EdgeBucket,
 	}
 }
 

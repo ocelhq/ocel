@@ -18,7 +18,7 @@ const KindCloudflare = "cloudflare"
 
 var cloudflareEdgePart = part{
 	name:      CloudflareEdgePart,
-	summary:   "Cloudflare as the front — workers and the credential it reads the asset bucket with",
+	summary:   "Cloudflare as the front — workers and the credential it reads the edge bucket with",
 	edges:     []edge.Kind{KindCloudflare},
 	template:  cloudflareEdgeTemplate,
 	after:     mintEdgeCredentials,
@@ -29,7 +29,7 @@ var cloudflareEdgePart = part{
 
 func cloudflareEdgeTemplate(in partInputs) (partStack, error) {
 	params, values := crossStack([]crossStackParam{
-		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the edge reader is scoped to the objects in it the deploy tagged edge-readable.", in.refs.assetBucketARN},
+		{paramEdgeBucketARN, "ARN of the core bootstrap's edge bucket, the one bucket the edge reader reads.", in.refs.edgeBucketARN},
 	})
 
 	userName, err := in.ns.EdgeUserNameFor(in.tier)
@@ -49,7 +49,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier) cfn.
 		ID:   "EdgeUser",
 		Type: "AWS::IAM::User",
 		Metadata: cfn.Metadata{
-			Description: "The identity the " + string(tier) + " edge signs its calls into this account with: it invokes app functions and the image optimizer, lists the asset bucket and reads the objects in it the deploy tagged edge-readable.",
+			Description: "The identity the " + string(tier) + " edge signs its calls into this account with: it invokes app functions and the image optimizer, lists the edge bucket and reads the objects in it, and reaches no other bucket.",
 		},
 		Properties: map[string]any{
 			"UserName": userName,
@@ -66,12 +66,9 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier) cfn.
 					},
 					{
 						Actions:        []string{"s3:GetObject"},
-						ResourceValues: []any{cfn.Sub("${" + paramAssetBucketARN + "}/*")},
-						Condition: map[string]any{"StringEquals": map[string]any{
-							"s3:ExistingObjectTag/" + naming.EdgeReadableTagKey: naming.EdgeReadableTagValue,
-						}},
+						ResourceValues: []any{cfn.Sub("${" + paramEdgeBucketARN + "}/*")},
 					},
-					{Actions: []string{"s3:ListBucket"}, ResourceValues: []any{cfn.Ref(paramAssetBucketARN)}},
+					{Actions: []string{"s3:ListBucket"}, ResourceValues: []any{cfn.Ref(paramEdgeBucketARN)}},
 					{
 						Actions:        invoke,
 						ResourceValues: []any{cfn.Sub("arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:" + imageoptimizer.NamesFor(string(ns), tier).Function)},

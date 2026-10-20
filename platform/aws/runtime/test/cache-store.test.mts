@@ -3,11 +3,11 @@ import type { CacheStore } from "@framework/next-runtime/cache-store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 beforeEach(() => {
-  process.env.OCEL_ISR_BUCKET = "assets";
+  process.env.OCEL_EDGE_BUCKET = "edge";
+  process.env.OCEL_CACHE_BUCKET = "cache";
   process.env.OCEL_STORAGE_COORDINATE = "proj/prod/app/r3f8a1c9d";
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#";
-  delete process.env.OCEL_ISR_EDGE_READABLE;
 });
 
 afterEach(async () => {
@@ -67,7 +67,7 @@ test("refuses a key that would address something outside the deploy's prefix", a
   await expect(store.readEntry("../other/index")).rejects.toThrow("not addressable");
 });
 
-test("keeps fetch entries on the provider's bucket", async () => {
+test("keeps fetch entries on the provider's cache bucket", async () => {
   const { store, built, sent } = await entryStore([
     { Body: { transformToString: async () => `{"lastModified":9,"value":{}}` } },
   ]);
@@ -77,7 +77,7 @@ test("keeps fetch entries on the provider's bucket", async () => {
     value: {},
   });
   expect(sent[0]).toMatchObject({
-    Bucket: "assets",
+    Bucket: "cache",
     Key: "fetch-cache/proj/prod/app/r3f8a1c9d/deadbeef.cache.json",
   });
   expect(built).toHaveLength(1);
@@ -85,18 +85,18 @@ test("keeps fetch entries on the provider's bucket", async () => {
   expect(built[0].credentials).toBeUndefined();
 });
 
-test("writes fetch entries to the provider's bucket under the fetch prefix", async () => {
+test("writes fetch entries to the provider's cache bucket under the fetch prefix", async () => {
   const { store, sent } = await entryStore();
 
   await store.writeFetch("deadbeef", { lastModified: 1, value: {} });
 
   expect(sent[0]).toMatchObject({
-    Bucket: "assets",
+    Bucket: "cache",
     Key: "fetch-cache/proj/prod/app/r3f8a1c9d/deadbeef.cache.json",
   });
 });
 
-test("keeps page entries on the provider's own bucket", async () => {
+test("keeps page entries on the provider's edge bucket", async () => {
   const { store, built, sent } = await entryStore();
 
   await store.writeEntry("index", { lastModified: 1, value: {} });
@@ -104,7 +104,7 @@ test("keeps page entries on the provider's own bucket", async () => {
   expect(built[0].endpoint).toBeUndefined();
   expect(built[0].credentials).toBeUndefined();
   expect(sent[0]).toMatchObject({
-    Bucket: "assets",
+    Bucket: "edge",
     Key: "pages/proj/prod/app/r3f8a1c9d/index.cache.json",
   });
 });
@@ -143,46 +143,26 @@ test("serves a tagged entry off the snapshot, sending nothing to the table", asy
   expect(ddbSent).toEqual([]);
 });
 
-const edgeReadableTagging = "ocel%3Aedge=readable";
-
 const putsOf = (sent: any[]) => sent.filter((input) => input.Body !== undefined);
 
-test("tags a page entry edge-readable when the edge reads the asset bucket with its own key", async () => {
-  process.env.OCEL_ISR_EDGE_READABLE = "1";
+test("writes a page entry untagged into the edge bucket, which the edge reads whole", async () => {
   const { store, sent } = await entryStore();
 
   await store.writeEntry("blog/a", { lastModified: 1, value: { kind: "APP_PAGE" } });
 
   const [put] = putsOf(sent);
+  expect(put.Bucket).toBe("edge");
   expect(put.Key).toBe("pages/proj/prod/app/r3f8a1c9d/blog/a.cache.json");
-  expect(put.Tagging).toBe(edgeReadableTagging);
+  expect(put.Tagging).toBeUndefined();
 });
 
-test("never tags an image entry edge-readable, since the edge serves no image from the store", async () => {
-  process.env.OCEL_ISR_EDGE_READABLE = "1";
-  const { store, sent } = await entryStore();
-
-  await store.writeEntry("_next/image/abc", { lastModified: 1, value: { kind: "IMAGE" } });
-
-  expect(putsOf(sent)[0].Tagging).toBeUndefined();
-});
-
-test("never tags a data-cache entry edge-readable, however the edge reads", async () => {
-  process.env.OCEL_ISR_EDGE_READABLE = "1";
+test("writes a data-cache entry untagged into the cache bucket, which no edge reads", async () => {
   const { store, sent } = await entryStore();
 
   await store.writeFetch("hash1", { lastModified: 1, value: { kind: "FETCH", data: {} } });
 
   const [put] = putsOf(sent);
+  expect(put.Bucket).toBe("cache");
   expect(put.Key).toBe("fetch-cache/proj/prod/app/r3f8a1c9d/hash1.cache.json");
   expect(put.Tagging).toBeUndefined();
-});
-
-test("tags nothing when the edge holds no key to the asset bucket", async () => {
-  delete process.env.OCEL_ISR_EDGE_READABLE;
-  const { store, sent } = await entryStore();
-
-  await store.writeEntry("blog/a", { lastModified: 1, value: { kind: "APP_PAGE" } });
-
-  expect(putsOf(sent)[0].Tagging).toBeUndefined();
 });

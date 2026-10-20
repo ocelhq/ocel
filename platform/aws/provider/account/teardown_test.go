@@ -177,7 +177,8 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 			outputStateBucket:    "ocel-state",
 			outputStateTable:     fixtureStateTable,
 			outputArtifactBucket: "ocel-artifacts",
-			outputAssetBucket:    "ocel-assets",
+			outputEdgeBucket:     "ocel-edge",
+			outputCacheBucket:    "ocel-cache",
 			outputAppBoundaryARN: testAppBoundaryARN,
 		}},
 	}}
@@ -304,7 +305,7 @@ func TestTeardownEmptiesTheBucketsOnlyOnceTheTiersPartsAreGone(t *testing.T) {
 	if len(emptiedFirst) != 0 {
 		t.Errorf("%v were emptied before the tier's parts were removed, so a shared stack's state was gone before its destroy read it, and what its destroy wrote kept the state bucket from being deleted", emptiedFirst)
 	}
-	for _, bucket := range []string{"ocel-state", "ocel-artifacts", "ocel-assets"} {
+	for _, bucket := range []string{"ocel-state", "ocel-artifacts", "ocel-edge", "ocel-cache"} {
 		if !slices.Contains(buckets.listed, bucket) {
 			t.Errorf("emptied %v, want %s emptied before the core stack goes", buckets.listed, bucket)
 		}
@@ -401,7 +402,7 @@ func TestTeardownRetriesAfterAPartialStackDelete(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if !slices.Contains(buckets.listed, "ocel-assets") {
+	if !slices.Contains(buckets.listed, "ocel-cache") {
 		t.Errorf("listed buckets = %v, want a bucket CloudFormation already deleted to be skipped, not fatal", buckets.listed)
 	}
 }

@@ -47,7 +47,8 @@ test("the use-cache store of the host publishes tags revalidated together in one
     generatedAt: 100,
     records: {},
   });
-  vi.stubEnv("OCEL_ISR_BUCKET", "assets");
+  vi.stubEnv("OCEL_EDGE_BUCKET", "edge");
+  vi.stubEnv("OCEL_CACHE_BUCKET", "cache");
   vi.stubEnv("OCEL_STORAGE_COORDINATE", "proj/prod/app/r3f8a1c9d");
   vi.stubEnv("OCEL_STATE_TABLE", "state");
   vi.stubEnv("OCEL_ISR_TAG_NAMESPACE", "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#");
@@ -97,8 +98,8 @@ test("a use-cache store that fails to open is opened again on the next try", asy
   }));
   const host = newAwsNextHost({});
 
-  await expect(host.newUseCacheStore!()).rejects.toThrow("OCEL_ISR_BUCKET");
+  await expect(host.newUseCacheStore!()).rejects.toThrow("OCEL_CACHE_BUCKET");
 
-  vi.stubEnv("OCEL_ISR_BUCKET", "assets");
+  vi.stubEnv("OCEL_CACHE_BUCKET", "cache");
   await expect(host.newUseCacheStore!()).resolves.toBeDefined();
 });

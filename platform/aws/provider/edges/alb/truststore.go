@@ -23,7 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -37,6 +36,8 @@ const (
 	preconditionError = "PreconditionFailed"
 	bundleDigestTag   = "ocel:client-cas-sha256"
 	caQuota           = "CA certificates per trust store (L-43FE5A42)"
+	trustRecordKey    = "trust/client-cas.json"
+	trustBundleKey    = "trust/client-cas.pem"
 	trustStoreQuota   = "Trust stores per account (L-A8F7060B)"
 )
 
@@ -51,14 +52,6 @@ func (r trustRecord) listTrusted() []string {
 	}
 	slices.Sort(trusted)
 	return slices.Compact(trusted)
-}
-
-func formatRecordKey(tier environment.Tier) string {
-	return "ocel/trust/" + string(tier) + "/client-cas.json"
-}
-
-func formatBundleKey(tier environment.Tier) string {
-	return "ocel/trust/" + string(tier) + "/client-cas.pem"
 }
 
 func digestCertificates(certificates []string) string {
@@ -122,7 +115,7 @@ func (s *stack) untrustHostname(ctx context.Context, c Clients, hostname string)
 }
 
 func (s *stack) updateTrustRecord(ctx context.Context, c Clients, change func(trustRecord) trustRecord) error {
-	key := formatRecordKey(s.state.Tier)
+	key := trustRecordKey
 	for range recordWrites {
 		held, etag, err := readTrustRecord(ctx, c, key)
 		if err != nil {
@@ -180,8 +173,8 @@ func readTrustRecord(ctx context.Context, c Clients, key string) (trustRecord, s
 }
 
 func (s *stack) applyTrustRecord(ctx context.Context, c Clients) error {
-	return s.newLease(c, formatTrustLeaseKey(s.state.Tier), "applying the client CAs the load balancer trusts").hold(ctx, func(ctx context.Context) error {
-		record, etag, err := readTrustRecord(ctx, c, formatRecordKey(s.state.Tier))
+	return s.newLease(c, trustLeaseKey, "applying the client CAs the load balancer trusts").hold(ctx, func(ctx context.Context) error {
+		record, etag, err := readTrustRecord(ctx, c, trustRecordKey)
 		if err != nil {
 			return err
 		}
@@ -246,13 +239,13 @@ func (s *stack) clearTrustStore(ctx context.Context, c Clients, listener publicL
 			return err
 		}
 	}
-	if err := deleteObject(ctx, c, formatBundleKey(s.state.Tier), ""); err != nil {
+	if err := deleteObject(ctx, c, trustBundleKey, ""); err != nil {
 		return err
 	}
 	if recordETag == "" {
 		return nil
 	}
-	return deleteObject(ctx, c, formatRecordKey(s.state.Tier), recordETag)
+	return deleteObject(ctx, c, trustRecordKey, recordETag)
 }
 
 func (s *stack) deleteTrustStore(ctx context.Context, c Clients, store string) error {
@@ -326,7 +319,7 @@ func readBundleDigest(ctx context.Context, c Clients, store string) (string, err
 
 func (s *stack) writeTrustStore(ctx context.Context, c Clients, store string, trusted []string, digest string) (string, error) {
 	name := awsports.PublicBalancerName(s.namespace, s.state.Tier)
-	key := formatBundleKey(s.state.Tier)
+	key := trustBundleKey
 	if _, err := c.Objects.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(c.Bucket),
 		Key:    aws.String(key),

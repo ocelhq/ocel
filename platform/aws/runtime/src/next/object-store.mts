@@ -40,12 +40,6 @@ export async function readBodyText(body: any): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-export const edgeReadableTagging = "ocel%3Aedge=readable";
+export const edgeBucketVar = "OCEL_EDGE_BUCKET";
 
-export function edgeReadable(): boolean {
-  return process.env.OCEL_ISR_EDGE_READABLE === "1";
-}
-
-export function providerObjectStore(): ObjectStore {
-  return { bucket: requireEnv("OCEL_ISR_BUCKET"), client: newS3Client() };
-}
+export const cacheBucketVar = "OCEL_CACHE_BUCKET";

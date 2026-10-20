@@ -37,7 +37,7 @@ export function openStore(store: OriginStore): OpenedStore {
   const client = new AwsClient({ accessKeyId, secretAccessKey, service: "s3", region, retries: 0 });
   const url = store.url.replace(/\/$/, "");
   return {
-    objects: openObjectsUnder(client, url, store.prefix ?? ""),
+    objects: openObjectsUnder(client, url, ""),
     entries: store.holdsEntries
       ? openEntrySource(openObjectsUnder(client, url, store.entriesPrefix ?? ""))
       : undefined,

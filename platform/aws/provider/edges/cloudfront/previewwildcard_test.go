@@ -149,8 +149,8 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if arn := aws.ToString(associated.Items[1].FunctionARN); arn != fakeEmptyBodyARN(environment.TierPreview) {
 			t.Errorf("function association = %q, want the preview empty-body dropper", arn)
 		}
-		if origin := aws.ToString(wildcard.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeAssetBucket, fakeRegion) {
-			t.Errorf("origin = %q, want the preview bootstrap's asset bucket", origin)
+		if origin := aws.ToString(wildcard.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeEdgeBucket, fakeRegion) {
+			t.Errorf("origin = %q, want the preview bootstrap's edge bucket", origin)
 		}
 	})
 
@@ -440,7 +440,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if published.Origin != fakeEntryHost || published.Release != "d1.f1" {
 			t.Errorf("route = %+v, want the release's root function URL", published)
 		}
-		if published.Assets != assetOriginDomain(fakeAssetBucket, fakeRegion) || published.AssetPrefix != "/"+fakeAssetPrefix {
+		if published.Assets != assetOriginDomain(fakeEdgeBucket, fakeRegion) || published.AssetPrefix != "/"+fakeAssetPrefix {
 			t.Errorf("route = %+v, want the preview bootstrap's assets", published)
 		}
 		if published.Secret != fakeSecret {

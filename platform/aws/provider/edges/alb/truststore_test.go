@@ -3,6 +3,7 @@ package alb
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -126,7 +127,7 @@ func TestADisclaimRetriedAfterTheTrustRecordRefusedTheChangePrunesTheCA(t *testi
 func TestAClaimWhileAnotherDeployAppliesTheTrustStoreLeavesItToThatDeployAndIsBusy(t *testing.T) {
 	f := newFakeAWS()
 	stack := claimedStack(t, f)
-	f.hold("ocel/trust/production/client-cas.lease")
+	f.hold("leases/trust/client-cas.lease")
 
 	_, err := stack.Claim(context.Background(), router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}})
 	var refused refusal.Refusal
@@ -188,5 +189,17 @@ func TestATrustStoreThatStaysAssociatedFailsTheDisclaimAfterABoundedWait(t *test
 	var associated *elbv2types.TrustStoreInUseException
 	if !errors.As(err, &associated) {
 		t.Errorf("Disclaim while the trust store stays associated = %v, want the association reported once the wait runs out", err)
+	}
+}
+
+func TestTheTrustRecordAndItsBundleLiveUnderTrust(t *testing.T) {
+	f := newFakeAWS()
+	stack := claimedStack(t, f)
+
+	if _, err := stack.Claim(context.Background(), router.Claim{Hostname: testHostname, App: "admin", Certificate: testCertificate, ClientCAs: []string{mintCA(t, "zone one")}}); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if got, want := f.listKeys(), []string{"trust/client-cas.json", "trust/client-cas.pem"}; !slices.Equal(got, want) {
+		t.Errorf("the bucket holds %v, want %v", got, want)
 	}
 }

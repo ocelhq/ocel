@@ -35,7 +35,7 @@ type Deps struct {
 
 	EnsurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PartResource, error)
 
-	ArtifactBucket func(ctx context.Context, tier environment.Tier) (string, error)
+	StateBucket func(ctx context.Context, tier environment.Tier) (string, error)
 }
 
 var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error){

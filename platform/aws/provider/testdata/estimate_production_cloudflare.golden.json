@@ -118,7 +118,45 @@
       "monthlyUsage": "0.32"
     },
     {
-      "resource": "project:shop/shared:production/aws_s3_bucket:AssetBucket",
+      "resource": "project:shop/shared:production/aws_s3_bucket:EdgeBucket",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.023",
+          "monthlyCost": "0.23",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GB-month",
+          "rateRef": "aws/s3/storage"
+        },
+        {
+          "name": "PUT, COPY, POST, LIST requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/s3/requests-tier1"
+        },
+        {
+          "name": "GET and other requests",
+          "unit": "requests",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 requests",
+          "rateRef": "aws/s3/requests-tier2"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.32"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_s3_bucket:CacheBucket",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -842,12 +880,12 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "6.40",
-      "monthlyUsage": "392.70"
+      "monthlyUsage": "393.02"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "6.00",
-      "monthlyUsage": "9.56"
+      "monthlyUsage": "9.88"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -861,7 +899,7 @@
     }
   ],
   "coverage": {
-    "supported": 25,
+    "supported": 26,
     "free": 5,
     "supportedTypes": [
       "aws_cloudwatch_log_group",
@@ -888,5 +926,5 @@
     "CloudFront is priced at its United States rates whichever price class the distribution uses"
   ],
   "monthlyFixed": "6.40",
-  "monthlyUsage": "392.70"
+  "monthlyUsage": "393.02"
 }

@@ -49,14 +49,14 @@ type Clients struct {
 
 func FromConfig(
 	load func(context.Context) (aws.Config, error),
-	artifactBucket func(context.Context, environment.Tier) (string, error),
+	stateBucket func(context.Context, environment.Tier) (string, error),
 ) func(context.Context, environment.Tier) (Clients, error) {
 	return func(ctx context.Context, tier environment.Tier) (Clients, error) {
 		cfg, err := load(ctx)
 		if err != nil {
 			return Clients{}, err
 		}
-		bucket, err := artifactBucket(ctx, tier)
+		bucket, err := stateBucket(ctx, tier)
 		if err != nil {
 			return Clients{}, fmt.Errorf("read the bucket the %s tier keeps the trusted client CAs in: %w", tier, err)
 		}

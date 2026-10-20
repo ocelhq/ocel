@@ -19,6 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -35,12 +36,16 @@ const (
 	outputStateTableARN       = "StateTableArn"
 	outputStateTableStreamARN = "StateTableStreamArn"
 	outputArtifactBucket      = "ArtifactBucketName"
-	outputAssetBucket         = "AssetBucketName"
-	outputAssetBucketARN      = "AssetBucketArn"
+	outputEdgeBucket          = "EdgeBucketName"
+	outputEdgeBucketARN       = "EdgeBucketArn"
+	outputCacheBucket         = "CacheBucketName"
+	outputBucketTag           = "BucketTag"
 	outputInfraTier           = "InfrastructureTier"
 
 	artifactExpirationDays     = 30
 	artifactAbortMultipartDays = 7
+
+	CacheObjectLifetimeDays = 30
 
 	stateNoncurrentDays     = 7
 	stateAbortMultipartDays = 7
@@ -53,7 +58,8 @@ type Deployed struct {
 	StateBucket       string
 	StateTable        string
 	ArtifactBucket    string
-	AssetBucket       string
+	EdgeBucket        string
+	CacheBucket       string
 	VariablesTable    string
 	VariablesTableARN string
 	VariablesKeyARN   string
@@ -167,7 +173,7 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
-	intendedCore, err := target.core(broughtVariablesKey(d.Outputs))
+	intendedCore, err := target.core(broughtVariablesKey(d.Outputs), refs.bucketTag)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
@@ -244,10 +250,14 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			d.EdgeInvokeRoleARN = value
 		case outputArtifactBucket:
 			d.ArtifactBucket = value
-		case outputAssetBucket:
-			d.AssetBucket, refs.assetBucket = value, value
-		case outputAssetBucketARN:
-			refs.assetBucketARN = value
+		case outputEdgeBucket:
+			d.EdgeBucket = value
+		case outputEdgeBucketARN:
+			refs.edgeBucketARN = value
+		case outputCacheBucket:
+			d.CacheBucket = value
+		case outputBucketTag:
+			refs.bucketTag = value
 		case outputVariablesTable:
 			d.VariablesTable = value
 		case outputVariablesTableARN:
@@ -270,8 +280,23 @@ type spec struct {
 	stackStep string
 }
 
-func (s spec) core(broughtKey string) (partStack, error) {
-	return newPartStack(coreStackTemplate(s.ns, s.tier, broughtKey), nil)
+func (s spec) core(broughtKey, bucketTag string) (partStack, error) {
+	template, err := coreStackTemplate(s.ns, s.tier, broughtKey, bucketTag)
+	if err != nil {
+		return partStack{}, err
+	}
+	return newPartStack(template, nil)
+}
+
+func bucketTagOf(ctx context.Context, stacks cfn.StacksAPI, stackName string) (string, error) {
+	outputs, err := cfn.StackOutputs(ctx, stacks, stackName)
+	if err != nil {
+		return "", err
+	}
+	if tag := outputs[outputBucketTag]; naming.IsRandomTag(tag) {
+		return tag, nil
+	}
+	return naming.NewRandomTag(), nil
 }
 
 func productionBootstrap(ns Namespace) spec {
@@ -363,7 +388,11 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	progress.Say(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, progress)
-	core, err := target.core(coreVariablesKey(alongside, req.VariablesKey))
+	bucketTag, err := bucketTagOf(ctx, apis.CFN, target.stackName)
+	if err != nil {
+		return err
+	}
+	core, err := target.core(coreVariablesKey(alongside, req.VariablesKey), bucketTag)
 	if err != nil {
 		return err
 	}
@@ -602,15 +631,24 @@ func coreVariablesKey(alongside PartSet, brought string) string {
 	return ""
 }
 
-func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey string) cfn.Template {
+func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey, bucketTag string) (cfn.Template, error) {
+	buckets := make(map[naming.StorageClass]string, len(bootstrapStorageClasses))
+	for _, class := range bootstrapStorageClasses {
+		name, err := ns.BootstrapBucketName(tier, class, bucketTag)
+		if err != nil {
+			return cfn.Template{}, err
+		}
+		buckets[class] = name
+	}
 	return cfn.Template{
 		Description: coreStackDescription(tier),
 		Resources: []cfn.Resource{
-			stateBucketResource(tier),
+			stateBucketResource(tier, buckets[naming.StorageState]),
 			stateTableResource(),
-			artifactBucketResource(),
-			assetBucketResource(),
-			assetBucketPolicyResource(),
+			artifactBucketResource(buckets[naming.StorageArtifacts]),
+			edgeBucketResource(buckets[naming.StorageEdge]),
+			edgeBucketPolicyResource(),
+			cacheBucketResource(buckets[naming.StorageCache]),
 			variablesTableResource(tier),
 			appBoundaryResource(ns, tier, broughtKey),
 			tagInvalidatorRoleResource(ns, tier),
@@ -619,12 +657,20 @@ func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey string) c
 		Outputs: slices.Concat(
 			[]cfn.Output{{
 				Name:        outputStateBucket,
-				Description: "S3 bucket storing the Pulumi state Ocel plans every " + string(tier) + " deploy and teardown from. One versioned object per " + scopeOf(tier) + " stack.",
+				Description: "S3 bucket storing the Pulumi state Ocel plans every " + string(tier) + " deploy and teardown from, one versioned object per " + scopeOf(tier) + " stack, and the records the load balancer's trust store is applied from.",
 				Value:       cfn.Ref("StateBucket"),
 			}},
 			stateTableOutputs(),
 			[]cfn.Output{artifactBucketOutput()},
-			assetBucketOutputs(),
+			edgeBucketOutputs(),
+			[]cfn.Output{
+				cacheBucketOutput(),
+				{
+					Name:        outputBucketTag,
+					Description: "The random tag ending the name of each bucket above, minted by the first bootstrap and kept by every later one so the buckets keep their names.",
+					Value:       bucketTag,
+				},
+			},
 			variablesOutputs(),
 			[]cfn.Output{appBoundaryOutput()},
 			baseRoleOutputs(),
@@ -634,7 +680,7 @@ func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey string) c
 				Value:       string(tier),
 			}},
 		),
-	}
+	}, nil
 }
 
 func coreStackDescription(tier environment.Tier) string {
@@ -642,7 +688,7 @@ func coreStackDescription(tier environment.Tier) string {
 	if tier == environment.TierPreview {
 		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 	}
-	return "Ocel bootstrap (" + string(tier) + ") - the account-global core every " + scopeOf(tier) + " Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets, the variable store and the roles the tag invalidator and API Gateway run as. Each other piece a deploy needs is added beside it on first use." + apart
+	return "Ocel bootstrap (" + string(tier) + ") - the account-global core every " + scopeOf(tier) + " Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact, edge and cache buckets, the variable store and the roles the tag invalidator and API Gateway run as. Each other piece a deploy needs is added beside it on first use." + apart
 }
 
 func scopeOf(tier environment.Tier) string {
@@ -650,6 +696,18 @@ func scopeOf(tier environment.Tier) string {
 		return "preview environment"
 	}
 	return "production app"
+}
+
+var bootstrapStorageClasses = []naming.StorageClass{naming.StorageState, naming.StorageArtifacts, naming.StorageEdge, naming.StorageCache}
+
+func bucketProperties(name string, lifecycle ...any) map[string]any {
+	return map[string]any{
+		"BucketName":                     name,
+		"AbacStatus":                     "Enabled",
+		"BucketEncryption":               bucketEncryption(),
+		"PublicAccessBlockConfiguration": blockedPublicAccess(),
+		"LifecycleConfiguration":         map[string]any{"Rules": lifecycle},
+	}
 }
 
 func bucketEncryption() map[string]any {
@@ -669,33 +727,28 @@ func blockedPublicAccess() map[string]any {
 	}
 }
 
-func stateBucketResource(tier environment.Tier) cfn.Resource {
+func stateBucketResource(tier environment.Tier, name string) cfn.Resource {
+	properties := bucketProperties(name,
+		map[string]any{
+			"Id":                             "expire-noncurrent-state",
+			"Status":                         "Enabled",
+			"NoncurrentVersionExpiration":    map[string]any{"NoncurrentDays": stateNoncurrentDays},
+			"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": stateAbortMultipartDays},
+		},
+		map[string]any{
+			"Id":                        "expire-state-delete-markers",
+			"Status":                    "Enabled",
+			"ExpiredObjectDeleteMarker": true,
+		},
+	)
+	properties["VersioningConfiguration"] = map[string]any{"Status": "Enabled"}
 	return cfn.Resource{
 		ID:   "StateBucket",
 		Type: "AWS::S3::Bucket",
 		Metadata: cfn.Metadata{
-			Description: "Pulumi state for every " + scopeOf(tier) + " Ocel has deployed here, one versioned object per stack, read to plan a deploy and to tear one down. Emptying it strands what is already deployed.",
+			Description: "Pulumi state for every " + scopeOf(tier) + " Ocel has deployed here, one versioned object per stack, read to plan a deploy and to tear one down, and the client CAs the load balancer trusts. Emptying it strands what is already deployed.",
 		},
-		Properties: map[string]any{
-			"BucketEncryption":               bucketEncryption(),
-			"VersioningConfiguration":        map[string]any{"Status": "Enabled"},
-			"PublicAccessBlockConfiguration": blockedPublicAccess(),
-			"LifecycleConfiguration": map[string]any{
-				"Rules": []any{
-					map[string]any{
-						"Id":                             "expire-noncurrent-state",
-						"Status":                         "Enabled",
-						"NoncurrentVersionExpiration":    map[string]any{"NoncurrentDays": stateNoncurrentDays},
-						"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": stateAbortMultipartDays},
-					},
-					map[string]any{
-						"Id":                        "expire-state-delete-markers",
-						"Status":                    "Enabled",
-						"ExpiredObjectDeleteMarker": true,
-					},
-				},
-			},
-		},
+		Properties: properties,
 	}
 }
 
@@ -761,75 +814,59 @@ func stateTableOutputs() []cfn.Output {
 	}
 }
 
-func artifactBucketResource() cfn.Resource {
+func artifactBucketResource(name string) cfn.Resource {
 	return cfn.Resource{
 		ID:   "ArtifactBucket",
 		Type: "AWS::S3::Bucket",
 		Metadata: cfn.Metadata{
-			Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function keeps its own copy, and these objects age out on a lifecycle rule.",
+			Description: "Staging area for the Lambda code and payloads Ocel uploads before a stack references them, and the bytecode a function compiles on first boot. A deployed function keeps its own copy, and these objects age out on a lifecycle rule.",
 		},
-		Properties: map[string]any{
-			"BucketEncryption":               bucketEncryption(),
-			"PublicAccessBlockConfiguration": blockedPublicAccess(),
-			"LifecycleConfiguration": map[string]any{
-				"Rules": []any{
-					map[string]any{
-						"Id":                             "expire-artifacts",
-						"Status":                         "Enabled",
-						"ExpirationInDays":               artifactExpirationDays,
-						"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
-					},
-				},
-			},
-		},
+		Properties: bucketProperties(name, map[string]any{
+			"Id":                             "expire-artifacts",
+			"Status":                         "Enabled",
+			"ExpirationInDays":               artifactExpirationDays,
+			"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
+		}),
 	}
 }
 
 func artifactBucketOutput() cfn.Output {
 	return cfn.Output{
 		Name:        outputArtifactBucket,
-		Description: "S3 bucket Ocel stages function code in before a stack references it. Objects age out on a lifecycle rule.",
+		Description: "S3 bucket Ocel stages function code, payloads and compiled bytecode in. Objects age out on a lifecycle rule.",
 		Value:       cfn.Ref("ArtifactBucket"),
 	}
 }
 
-func assetBucketResource() cfn.Resource {
+func edgeBucketResource(name string) cfn.Resource {
 	return cfn.Resource{
-		ID:   "AssetBucket",
+		ID:   "EdgeBucket",
 		Type: "AWS::S3::Bucket",
 		Metadata: cfn.Metadata{
-			Description: "Per-build static assets, prerender fallbacks, image-optimizer config and the edge's fetch cache, keyed by build id. Read directly by the edge, the optimizer and the publisher.",
+			Description: "Everything an edge may serve or read: each release's static assets, page entries, route tables, edge bundles and image-optimizer config, keyed by kind and release. Removed with the release that wrote it.",
 		},
-		Properties: map[string]any{
-			"BucketEncryption":               bucketEncryption(),
-			"PublicAccessBlockConfiguration": blockedPublicAccess(),
-			"LifecycleConfiguration": map[string]any{
-				"Rules": []any{
-					map[string]any{
-						"Id":                             "abort-incomplete-uploads",
-						"Status":                         "Enabled",
-						"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
-					},
-				},
-			},
-		},
+		Properties: bucketProperties(name, map[string]any{
+			"Id":                             "abort-incomplete-uploads",
+			"Status":                         "Enabled",
+			"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
+		}),
 	}
 }
 
-func assetBucketPolicyResource() cfn.Resource {
+func edgeBucketPolicyResource() cfn.Resource {
 	return cfn.Resource{
-		ID:   "AssetBucketPolicy",
+		ID:   "EdgeBucketPolicy",
 		Type: "AWS::S3::BucketPolicy",
 		Metadata: cfn.Metadata{
-			Description: "The only grant on the asset bucket: CloudFront distributions in this account, and no one else, read objects out of it over an origin access control. One statement for the whole account, so no deploy rewrites it.",
+			Description: "The only bucket policy Ocel writes: CloudFront distributions in this account, and no one else, read the static assets in the edge bucket over an origin access control. One statement for the whole account, so no deploy rewrites it.",
 		},
 		Properties: map[string]any{
-			"Bucket": cfn.Ref("AssetBucket"),
+			"Bucket": cfn.Ref("EdgeBucket"),
 			"PolicyDocument": iam.Document([]iam.Statement{{
 				Sid:            "AllowCloudFrontOriginAccessControlRead",
 				Principal:      iam.Principal{Service: iam.CloudFrontPrincipal},
 				Actions:        []string{"s3:GetObject"},
-				ResourceValues: []any{cfn.Sub("${AssetBucket.Arn}/*")},
+				ResourceValues: []any{cfn.Sub("${EdgeBucket.Arn}/" + string(naming.ObjectAssets) + "/*")},
 				Condition: map[string]any{
 					"StringEquals": map[string]any{"AWS:SourceAccount": cfn.Ref("AWS::AccountId")},
 				},
@@ -838,17 +875,41 @@ func assetBucketPolicyResource() cfn.Resource {
 	}
 }
 
-func assetBucketOutputs() []cfn.Output {
+func edgeBucketOutputs() []cfn.Output {
 	return []cfn.Output{
 		{
-			Name:        outputAssetBucket,
-			Description: "S3 bucket storing per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache. Read directly by the edge.",
-			Value:       cfn.Ref("AssetBucket"),
+			Name:        outputEdgeBucket,
+			Description: "S3 bucket storing everything an edge may serve or read: static assets, page entries, route tables, edge bundles and image-optimizer config.",
+			Value:       cfn.Ref("EdgeBucket"),
 		},
 		{
-			Name:        outputAssetBucketARN,
-			Description: "ARN of that bucket, handed to every part stack that grants a read or a write inside it.",
-			Value:       cfn.GetAtt("AssetBucket", "Arn"),
+			Name:        outputEdgeBucketARN,
+			Description: "ARN of that bucket, handed to every part stack that grants a read inside it.",
+			Value:       cfn.GetAtt("EdgeBucket", "Arn"),
 		},
+	}
+}
+
+func cacheBucketResource(name string) cfn.Resource {
+	return cfn.Resource{
+		ID:   "CacheBucket",
+		Type: "AWS::S3::Bucket",
+		Metadata: cfn.Metadata{
+			Description: "What only an app's own code reads: each release's fetch cache, use-cache entries and tag clock. An object no release rewrote within the lifecycle rule's days ages out.",
+		},
+		Properties: bucketProperties(name, map[string]any{
+			"Id":                             "expire-cache",
+			"Status":                         "Enabled",
+			"ExpirationInDays":               CacheObjectLifetimeDays,
+			"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
+		}),
+	}
+}
+
+func cacheBucketOutput() cfn.Output {
+	return cfn.Output{
+		Name:        outputCacheBucket,
+		Description: "S3 bucket storing what only an app's own code reads: the fetch cache, use-cache entries and tag clock.",
+		Value:       cfn.Ref("CacheBucket"),
 	}
 }

@@ -60,13 +60,13 @@ func (p *Provider) imageOptimizerSpec(ctx context.Context, tier environment.Tier
 		return imageoptimizer.Spec{}, err
 	}
 	return imageoptimizer.Spec{
-		Namespace:      string(p.namespace),
-		Tier:           tier,
-		Region:         p.aws.Region,
-		Boundary:       deployed.AppBoundaryARN,
-		RolePath:       p.namespace.AppRolePathFor(tier),
-		AssetBucket:    deployed.AssetBucket,
-		AssetBucketARN: "arn:aws:s3:::" + deployed.AssetBucket,
+		Namespace:     string(p.namespace),
+		Tier:          tier,
+		Region:        p.aws.Region,
+		Boundary:      deployed.AppBoundaryARN,
+		RolePath:      p.namespace.AppRolePathFor(tier),
+		EdgeBucket:    deployed.EdgeBucket,
+		EdgeBucketARN: "arn:aws:s3:::" + deployed.EdgeBucket,
 	}, nil
 }
 

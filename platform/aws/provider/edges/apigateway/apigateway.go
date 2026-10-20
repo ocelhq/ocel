@@ -313,7 +313,7 @@ func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	own.StateTable = deployed.StateTable
-	own.AssetBucket = deployed.AssetBucket
+	own.EdgeBucket = deployed.EdgeBucket
 	own.Role = role
 	own.Region = c.Region
 

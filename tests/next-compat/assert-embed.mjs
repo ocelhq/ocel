@@ -76,22 +76,19 @@ if (!coordinate) {
   fail(`${resultPath} records no storage coordinate for its app: ${JSON.stringify(result)}`);
 }
 
-const assetBucket =
-  process.env.OCEL_ASSET_BUCKET ||
-  resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
 const artifactBucket =
   process.env.OCEL_ARTIFACT_BUCKET ||
   resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
 const functionName = resolveFunctionName(coordinate, fail);
 
 const keyPrefix = bytecodeCacheKeyPrefix({ coordinate, functionName });
-const cacheNames = (await listRetrying(assetBucket, keyPrefix)).map((full) =>
+const cacheNames = (await listRetrying(artifactBucket, keyPrefix)).map((full) =>
   full.slice(keyPrefix.length),
 );
 const candidates = cacheNames.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
 if (candidates.length !== 1) {
   fail(
-    `expected exactly one object matching node<version>-${LAMBDA_ARCH}.tar.gz under s3://${assetBucket}/${keyPrefix}, ` +
+    `expected exactly one object matching node<version>-${LAMBDA_ARCH}.tar.gz under s3://${artifactBucket}/${keyPrefix}, ` +
       `found ${candidates.length}${candidates.length ? `: ${candidates.join(", ")}` : ""}. Without the published cache ` +
       `there was nothing for the embed pass to embed — run assert-bytecode.mjs, which diagnoses the warm pass itself.`,
   );
@@ -105,7 +102,7 @@ if (!entryName) {
 }
 const taskPath = `${TASK_ROOT}/${entryName}`;
 log(
-  `the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must contain ${entryName}`,
+  `the cache is published at s3://${artifactBucket}/${cacheKey}, so the artifact must contain ${entryName}`,
 );
 
 const artifactPrefix = functionArtifactPrefix(coordinate);

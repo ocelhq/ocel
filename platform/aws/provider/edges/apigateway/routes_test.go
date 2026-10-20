@@ -30,7 +30,7 @@ func promotedWithStatic(t *testing.T, w *world, prefixes ...string) (*fakeAPI, e
 	return w.gateway.named(productionAPIName()), stack
 }
 
-func TestAPromotionRoutesEachImmutablePrefixTheReleaseStatesToTheAssetBucket(t *testing.T) {
+func TestAPromotionRoutesEachImmutablePrefixTheReleaseStatesToTheEdgeBucket(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -46,7 +46,7 @@ func TestAPromotionRoutesEachImmutablePrefixTheReleaseStatesToTheAssetBucket(t *
 	if static.transfer == agtypes.ResponseTransferModeStream {
 		t.Error("static integration streams, want it buffered so API Gateway maps its response headers")
 	}
-	if want := "s3:path/" + fakeAssetBucket + "/${stageVariables." + assetsVariable + "}/docs/_app/immutable/{proxy}"; !strings.Contains(static.uri, want) {
+	if want := "s3:path/" + fakeEdgeBucket + "/${stageVariables." + assetsVariable + "}/docs/_app/immutable/{proxy}"; !strings.Contains(static.uri, want) {
 		t.Errorf("static URI = %q, want it to hold %q", static.uri, want)
 	}
 	if methodOn(api, "/_next/static/{proxy+}", getMethod) != nil {

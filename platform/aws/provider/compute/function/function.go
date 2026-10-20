@@ -112,7 +112,7 @@ func assetReadPolicy(h *DispatchHost) (string, error) {
 			map[string]any{
 				"Effect":   "Allow",
 				"Action":   []string{"s3:GetObject"},
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", h.AssetBucket, h.AssetPrefix),
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", h.EdgeBucket, h.AssetPrefix),
 			},
 		},
 	}
@@ -235,7 +235,7 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 			return nil, err
 		}
 	}
-	if r.Dispatch != nil && r.Dispatch.AssetBucket != "" {
+	if r.Dispatch != nil && r.Dispatch.EdgeBucket != "" {
 		if documents[assetReadPolicyName], err = assetReadPolicy(r.Dispatch); err != nil {
 			return nil, err
 		}

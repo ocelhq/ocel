@@ -63,11 +63,6 @@ var CoordinateObjectKinds = []ObjectKind{
 
 var ISRObjectKinds = []ObjectKind{ObjectPages, ObjectFetchCache, ObjectUseCache, ObjectTagClock}
 
-const (
-	EdgeReadableTagKey   = "ocel:edge"
-	EdgeReadableTagValue = "readable"
-)
-
 const ImageConfigFile = "image-config.json"
 
 func (c Coordinate) StoragePrefix(kind ObjectKind) string {

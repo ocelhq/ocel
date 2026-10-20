@@ -66,14 +66,14 @@ type Config struct {
 
 	ArtifactRoot   string
 	ArtifactBucket string
+	EdgeBucket     string
+	CacheBucket    string
 	Objects        payloads.ObjectStore
 
 	Invoker function.InvokeAPI
 
 	Getter      function.ObjectsAPI
 	CodeUpdater function.FunctionCodeAPI
-
-	AssetBucket string
 
 	ImageOptimizerURL string
 
@@ -143,8 +143,9 @@ func (c Config) workerTarget() worker.Target {
 func (c Config) buckets() site.Buckets {
 	return site.Buckets{
 		Objects:      c.Objects,
-		Assets:       c.AssetBucket,
 		Artifacts:    c.ArtifactBucket,
+		Edge:         c.EdgeBucket,
+		Cache:        c.CacheBucket,
 		Tier:         c.Tier,
 		EdgeHoldsKey: c.EdgeAccessKeyID != "" && c.EdgeSecretKey != "",
 	}

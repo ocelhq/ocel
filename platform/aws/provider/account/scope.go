@@ -3,9 +3,9 @@ package account
 import (
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
@@ -13,10 +13,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
-var (
-	coreStackBuckets = []string{"StateBucket", "ArtifactBucket", "AssetBucket"}
-	coreStackTables  = []string{"StateTable", "VariablesTable"}
-)
+var coreStackTables = []string{"StateTable", "VariablesTable"}
+
+const anyBucketTag = "??????"
 
 func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 	core, _ := n.StackNameFor(tier)
@@ -54,8 +53,9 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 		KVTokens:            iam.ParameterARNPrefix + n.KVTokenRoot() + "/" + string(tier) + "/*",
 		SigningKeys:         "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/" + string(tier) + "/*",
 	}
-	for _, bucket := range coreStackBuckets {
-		named := "arn:aws:s3:::" + strings.ToLower(core+"-"+bucket) + "-*"
+	for _, class := range bootstrapStorageClasses {
+		untagged, _ := n.BootstrapBucketName(tier, class, "")
+		named := "arn:aws:s3:::" + untagged + naming.WordSeparator + anyBucketTag
 		s.BootstrapBuckets = append(s.BootstrapBuckets, named)
 		s.BootstrapObjects = append(s.BootstrapObjects, named+"/*")
 	}

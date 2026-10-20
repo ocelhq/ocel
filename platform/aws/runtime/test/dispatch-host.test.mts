@@ -227,10 +227,10 @@ test("an error body that never ends is aborted, and the object reads as absent",
   expect(aborted).toBe(true);
 });
 
-test("an asset bucket the function cannot read refuses to boot", () => {
-  const env = { OCEL_ASSET_BUCKET: "assets-bucket", AWS_REGION: "us-east-1" };
+test("an edge bucket the function cannot read refuses to boot", () => {
+  const env = { OCEL_EDGE_BUCKET: "edge-bucket", AWS_REGION: "us-east-1" };
 
-  expect(() => awsDispatchAccess(env)).toThrow(/assets-bucket/);
+  expect(() => awsDispatchAccess(env)).toThrow(/edge-bucket/);
   expect(awsDispatchAccess({ ...env, ...credentials }).assetBucket).toBeDefined();
 });
 

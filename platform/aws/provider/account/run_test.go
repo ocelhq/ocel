@@ -497,7 +497,7 @@ func TestRunDefaultEdge(t *testing.T) {
 			if err != nil {
 				t.Errorf("CheckDeployed inside the edge bootstrap: %v", err)
 			}
-			sawCore = deployed.AssetBucket != ""
+			sawCore = deployed.EdgeBucket != ""
 		}}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
@@ -505,7 +505,7 @@ func TestRunDefaultEdge(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		if !sawCore {
-			t.Error("the default edge was bootstrapped before the core it reads the asset bucket from")
+			t.Error("the default edge was bootstrapped before the core it reads the edge bucket from")
 		}
 	})
 

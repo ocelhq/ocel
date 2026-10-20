@@ -12,7 +12,7 @@ const genesis = { version: 1, deployedAt: 100, generatedAt: 100, records: {} };
 let bucket: TagSnapshotBucket;
 
 beforeEach(() => {
-  process.env.OCEL_ISR_BUCKET = "assets";
+  process.env.OCEL_CACHE_BUCKET = "cache";
   process.env.OCEL_STORAGE_COORDINATE = coordinate;
   serveS3From(() => bucket);
 });

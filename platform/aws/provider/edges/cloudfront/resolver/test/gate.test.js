@@ -300,7 +300,7 @@ describe.each(RESOLVERS)("the %s resolver", (_name, program) => {
       expect(answered.headers["x-ocel-cache-key"]).toBeUndefined();
     });
 
-    it("refuses a request for an immutable asset before it points it at the asset bucket", async () => {
+    it("refuses a request for an immutable asset before it points it at the edge bucket", async () => {
       const event = eventFor({ ...refused, target: "/_next/static/chunk.js" });
 
       const { answered, cf } = await admit(program, tier, event, vectors.gate);

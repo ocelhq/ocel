@@ -411,8 +411,8 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("cache tag header = %q, want %q", got, cloudfrontpart.CacheTagHeader)
 		}
 		origin := distribution.config.Origins.Items[0]
-		if aws.ToString(origin.DomainName) != assetOriginDomain(fakeAssetBucket, fakeRegion) {
-			t.Errorf("origin = %q, want the account's asset bucket", aws.ToString(origin.DomainName))
+		if aws.ToString(origin.DomainName) != assetOriginDomain(fakeEdgeBucket, fakeRegion) {
+			t.Errorf("origin = %q, want the account's edge bucket", aws.ToString(origin.DomainName))
 		}
 		if aws.ToString(origin.OriginAccessControlId) != ownState(t, stack).OriginAccessControl {
 			t.Errorf("origin access control = %q, want the one bootstrap made", aws.ToString(origin.OriginAccessControlId))
@@ -478,8 +478,8 @@ func TestPromote(t *testing.T) {
 		if published.Release != "d1.f1" {
 			t.Errorf("release = %q, want the build the promotion names", published.Release)
 		}
-		if published.Assets != assetOriginDomain(fakeAssetBucket, fakeRegion) {
-			t.Errorf("assets = %q, want the account's asset bucket", published.Assets)
+		if published.Assets != assetOriginDomain(fakeEdgeBucket, fakeRegion) {
+			t.Errorf("assets = %q, want the account's edge bucket", published.Assets)
 		}
 		if published.AssetPrefix != "/"+fakeAssetPrefix {
 			t.Errorf("assetPrefix = %q, want %q: CloudFront refuses an origin path that does not start with a slash or that ends with one", published.AssetPrefix, "/"+fakeAssetPrefix)
@@ -492,7 +492,7 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
-	t.Run("a container release is routed through the tier front, declared on the distribution as a VPC origin, with no asset bucket in front", func(t *testing.T) {
+	t.Run("a container release is routed through the tier front, declared on the distribution as a VPC origin, with no edge bucket in front", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()

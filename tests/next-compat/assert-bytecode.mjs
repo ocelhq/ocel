@@ -66,8 +66,8 @@ if (!Number.isFinite(finishedAt)) {
 }
 
 const bucket =
-  process.env.OCEL_ASSET_BUCKET ||
-  resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
+  process.env.OCEL_ARTIFACT_BUCKET ||
+  resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
 const functionName = resolveFunctionName(coordinate, fail);
 const keyPrefix = bytecodeCacheKeyPrefix({ coordinate, functionName });
 log(`expecting one object under s3://${bucket}/${keyPrefix}`);

@@ -63,11 +63,20 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/aws_s3_bucket:AssetBucket",
+      "id": "project:shop/shared:preview/aws_s3_bucket:EdgeBucket",
       "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_s3_bucket",
-      "name": "AssetBucket",
+      "name": "EdgeBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/aws_s3_bucket:CacheBucket",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "CacheBucket",
       "region": "us-east-1",
       "properties": {}
     },

@@ -16,7 +16,7 @@ const (
 	routerKindEnv        = "OCEL_ROUTER_KIND"
 	routeTableEnv        = "OCEL_NEXT_ROUTE_TABLE"
 	functionURLsEnv      = "OCEL_FUNCTION_URLS"
-	assetBucketEnv       = "OCEL_ASSET_BUCKET"
+	edgeBucketEnv        = "OCEL_EDGE_BUCKET"
 	assetPrefixEnv       = "OCEL_ASSET_PREFIX"
 	slugEnv              = "OCEL_SLUG"
 	appNameEnv           = "OCEL_APP"
@@ -29,7 +29,7 @@ const (
 
 type DispatchHost struct {
 	RootFunction      string
-	AssetBucket       string
+	EdgeBucket        string
 	AssetPrefix       string
 	ImageOptimizerURL string
 	Env               map[string]string
@@ -72,7 +72,7 @@ func siblingFunctionURLs(urls pulumi.StringMap) pulumi.StringOutput {
 	}).(pulumi.StringOutput)
 }
 
-func NewDispatchHost(app *provider.AppSpec, slug, assetBucket, imageOptimizerURL string) *DispatchHost {
+func NewDispatchHost(app *provider.AppSpec, slug, edgeBucket, imageOptimizerURL string) *DispatchHost {
 	routing := app.Routing
 	if routing == nil {
 		return nil
@@ -80,7 +80,7 @@ func NewDispatchHost(app *provider.AppSpec, slug, assetBucket, imageOptimizerURL
 	prefix := app.AssetPrefix
 	host := &DispatchHost{
 		RootFunction:      routing.RootFunction,
-		AssetBucket:       assetBucket,
+		EdgeBucket:        edgeBucket,
 		AssetPrefix:       prefix,
 		ImageOptimizerURL: imageOptimizerURL,
 		Env: map[string]string{
@@ -91,8 +91,8 @@ func NewDispatchHost(app *provider.AppSpec, slug, assetBucket, imageOptimizerURL
 			buildIDEnv:     app.BuildID,
 		},
 	}
-	if assetBucket != "" {
-		host.Env[assetBucketEnv] = assetBucket
+	if edgeBucket != "" {
+		host.Env[edgeBucketEnv] = edgeBucket
 	}
 	if imageOptimizerURL != "" {
 		host.Env[edge.ImageOptimizerURLVar] = imageOptimizerURL

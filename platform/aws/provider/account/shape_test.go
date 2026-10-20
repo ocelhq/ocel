@@ -26,8 +26,8 @@ func TestTheCoreShapesItsBucketsTablesAndLayers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(shapedOf(shaped, "aws_s3_bucket")); got != 3 {
-		t.Errorf("buckets = %d, want state, artifact and asset", got)
+	if got := len(shapedOf(shaped, "aws_s3_bucket")); got != 4 {
+		t.Errorf("buckets = %d, want state, artifacts, edge and cache", got)
 	}
 	tables := shapedOf(shaped, "aws_dynamodb_table")
 	if len(tables) != 2 {

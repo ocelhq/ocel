@@ -23,7 +23,7 @@ import (
 type private struct {
 	Distribution        string `json:"distribution,omitempty"`
 	StateTable          string `json:"stateTable,omitempty"`
-	AssetBucket         string `json:"assetBucket,omitempty"`
+	EdgeBucket          string `json:"edgeBucket,omitempty"`
 	Region              string `json:"region,omitempty"`
 	Function            string `json:"function,omitempty"`
 	EmptyBodyFunction   string `json:"emptyBodyFunction,omitempty"`
@@ -58,7 +58,7 @@ func (s *stack) spec() distributionSpec {
 		name:          distributionName(s.p.ns, s.slug(), s.tier()),
 		managedBy:     string(s.p.ns),
 		tier:          s.tier(),
-		assetOrigin:   assetOriginDomain(s.own.AssetBucket, s.own.Region),
+		assetOrigin:   assetOriginDomain(s.own.EdgeBucket, s.own.Region),
 		function:      s.own.Function,
 		emptyBody:     s.own.EmptyBodyFunction,
 		cachePolicy:   s.own.CachePolicy,
@@ -85,7 +85,7 @@ func (s *stack) clients(ctx context.Context) (Clients, error) {
 		return c, err
 	}
 	s.own.StateTable = deployed.StateTable
-	s.own.AssetBucket = deployed.AssetBucket
+	s.own.EdgeBucket = deployed.EdgeBucket
 	s.own.Region = c.Region
 	s.own.Function = set.functionARN
 	s.own.EmptyBodyFunction = set.emptyBodyFunctionARN
@@ -257,7 +257,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, rec
 	if published.Origin == "" {
 		return route{}, fmt.Errorf("promote %s: the release record for %s/%s names root function %s but no URL the edge can reach it on, and the %q edge fronts a release over its root function's URL; re-run the deploy to write the record again", promotionID, app, release, record.RootFunctionPhysical, Kind)
 	}
-	published.Assets = assetOriginDomain(s.own.AssetBucket, s.own.Region)
+	published.Assets = assetOriginDomain(s.own.EdgeBucket, s.own.Region)
 	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
 	if record.Static != nil {
 		published.Immutable = record.Static.ImmutablePrefixes

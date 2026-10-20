@@ -20,8 +20,8 @@ func cloudflareNames(tier environment.Tier) edgeNames { return namesFor(tier, Ki
 
 func fixtureRefs() stackRefs {
 	return stackRefs{
-		assetBucket:         "ocel-assets",
-		assetBucketARN:      "arn:aws:s3:::ocel-assets",
+		edgeBucketARN:       "arn:aws:s3:::ocel-prod-edge-" + fixtureBucketTag,
+		bucketTag:           fixtureBucketTag,
 		stateTable:          "ocel-state",
 		stateTableARN:       "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state",
 		stateTableStreamARN: "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state/stream/2026-01-01T00:00:00.000",
@@ -64,8 +64,29 @@ func declaredResources(body string) []templateResource {
 	return out
 }
 
+const fixtureBucketTag = "k3x9q2"
+
 func coreBody(ns Namespace, tier environment.Tier, broughtKey string) string {
-	body, err := coreStackTemplate(ns, tier, broughtKey).Body()
+	return coreBodyTagged(ns, tier, broughtKey, fixtureBucketTag)
+}
+
+func writtenCoreBody(stacks *fakeCFN, ns Namespace, tier environment.Tier, broughtKey string) string {
+	core, err := ns.StackNameFor(tier)
+	if err != nil {
+		panic(err)
+	}
+	stacks.mu.Lock()
+	tag := stacks.outputs[core][outputBucketTag]
+	stacks.mu.Unlock()
+	return coreBodyTagged(ns, tier, broughtKey, tag)
+}
+
+func coreBodyTagged(ns Namespace, tier environment.Tier, broughtKey, bucketTag string) string {
+	template, err := coreStackTemplate(ns, tier, broughtKey, bucketTag)
+	if err != nil {
+		panic(err)
+	}
+	body, err := template.Body()
 	if err != nil {
 		panic(err)
 	}

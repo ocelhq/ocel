@@ -5,7 +5,6 @@ import { purgeHeader } from "@platform/edge-contract/purge";
 import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { expect, test } from "vitest";
 import { parseTagNamespace, tagNamespace } from "../src/cache/tag-index.mjs";
-import { edgeReadableTagging } from "../src/next/object-store.mjs";
 
 test("the snapshot is keyed where the deploy seeds it", () => {
   expect(tagSnapshotKey(contract.tagNamespace.coordinate)).toBe(contract.tagSnapshotKey);
@@ -43,8 +42,4 @@ test("the origin shapes for an edge cache under the header name the edge sends",
 
 test("the origin names an edge-cached page's tags under the header name the edge reads", () => {
   expect(edgeCacheTagHeader).toBe(contract.edgeCacheTagHeader);
-});
-
-test("page entries are tagged edge-readable exactly as the deploy tags what the edge may read", () => {
-  expect(edgeReadableTagging).toBe(contract.edgeReadableTagging);
 });

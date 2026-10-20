@@ -52,7 +52,7 @@ func removingBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		stackName: {
 			summary("StateBucket", "AWS::S3::Bucket"),
 			summary("StateTable", "AWS::DynamoDB::Table"),
-			summary("AssetBucket", "AWS::S3::Bucket"),
+			summary("EdgeBucket", "AWS::S3::Bucket"),
 		},
 		edgeStack:         {summary("EdgeUser", "AWS::IAM::User")},
 		variablesKeyStack: {summary("VariablesKey", "AWS::KMS::Key")},

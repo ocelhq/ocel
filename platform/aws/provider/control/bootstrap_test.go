@@ -58,7 +58,8 @@ func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 		Present:        true,
 		StateBucket:    "ocel-state",
 		ArtifactBucket: "ocel-artifacts",
-		AssetBucket:    "ocel-assets",
+		EdgeBucket:     "ocel-edge",
+		CacheBucket:    "ocel-cache",
 		StateTable:     "ocel-state-table",
 		VariablesTable: "ocel-variables",
 	}
@@ -406,8 +407,8 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 	if !slices.Equal(cfn.deleted, []string{coreStackName}) {
 		t.Errorf("deleted stacks = %v, want [%s]", cfn.deleted, coreStackName)
 	}
-	if !slices.Equal(buckets.emptied, []string{"ocel-state", "ocel-artifacts", "ocel-assets"}) {
-		t.Errorf("emptied buckets = %v, want state, artifact and asset", buckets.emptied)
+	if !slices.Equal(buckets.emptied, []string{"ocel-state", "ocel-artifacts", "ocel-edge", "ocel-cache"}) {
+		t.Errorf("emptied buckets = %v, want state, artifacts, edge and cache", buckets.emptied)
 	}
 	if !slices.Contains(buckets.deleted, "gone.json@v2") {
 		t.Errorf("deleted objects = %v, want the delete markers gone too", buckets.deleted)
@@ -491,7 +492,8 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 	outputs := []cfntypes.Output{
 		{OutputKey: aws.String("StateBucketName"), OutputValue: aws.String(deployed.StateBucket)},
 		{OutputKey: aws.String("ArtifactBucketName"), OutputValue: aws.String(deployed.ArtifactBucket)},
-		{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(deployed.AssetBucket)},
+		{OutputKey: aws.String("EdgeBucketName"), OutputValue: aws.String(deployed.EdgeBucket)},
+		{OutputKey: aws.String("CacheBucketName"), OutputValue: aws.String(deployed.CacheBucket)},
 		{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(deployed.StateTable)},
 		{OutputKey: aws.String("VariablesTableName"), OutputValue: aws.String(deployed.VariablesTable)},
 	}

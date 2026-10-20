@@ -198,21 +198,6 @@ func TestUploadArtifact(t *testing.T) {
 	})
 }
 
-func TestEdgeReadableTagging(t *testing.T) {
-	t.Run("matches the tagging the cache handler writes page entries with", func(t *testing.T) {
-		var contract struct {
-			EdgeReadableTagging string `json:"edgeReadableTagging"`
-		}
-		if err := json.Unmarshal(nextCacheFixture(t, "edge-contract.json"), &contract); err != nil {
-			t.Fatalf("parse fixture: %v", err)
-		}
-
-		if edgeReadableTagging != contract.EdgeReadableTagging {
-			t.Errorf("edgeReadableTagging = %q, want the contract's %q", edgeReadableTagging, contract.EdgeReadableTagging)
-		}
-	})
-}
-
 var nextStatic = &edge.Static{
 	ImmutablePrefixes:      []string{"/_next/static/"},
 	MustRevalidatePrefixes: []string{"/_next/static/service-worker/"},
@@ -267,5 +252,3 @@ func appOfRouteTable(rel string) (string, bool) {
 	}
 	return parts[1], true
 }
-
-const wantEdgeReadableTagging = "ocel%3Aedge=readable"

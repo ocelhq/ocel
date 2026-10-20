@@ -7,12 +7,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-func TestTheEdgeReachesAnAWSOriginBySigningForLambdaAndReadsEntriesFromTheAssetBucket(t *testing.T) {
+func TestTheEdgeReachesAnAWSOriginBySigningForLambdaAndReadsEntriesFromTheEdgeBucket(t *testing.T) {
 	t.Parallel()
 
 	got := OriginReach(OriginAccess{
 		Region:            "eu-west-2",
-		AssetBucket:       "assets-bucket",
+		EdgeBucket:        "ocel-prod-edge-k3x9q2",
 		AccessKeyID:       "AKIA",
 		SecretAccessKey:   "secret",
 		ImageOptimizerURL: "https://optimizer.example",
@@ -20,7 +20,7 @@ func TestTheEdgeReachesAnAWSOriginBySigningForLambdaAndReadsEntriesFromTheAssetB
 
 	want := edge.OriginReach{
 		Reach:    edge.Reach{Kind: edge.ReachSigV4, Service: "lambda", Region: "eu-west-2", AccessKeyID: "AKIA", SecretAccessKey: "secret"},
-		Store:    &edge.OriginStore{URL: "https://assets-bucket.s3.eu-west-2.amazonaws.com", Region: "eu-west-2", HoldsEntries: true, AccessKeyID: "AKIA", SecretAccessKey: "secret"},
+		Store:    &edge.OriginStore{URL: "https://ocel-prod-edge-k3x9q2.s3.eu-west-2.amazonaws.com", Region: "eu-west-2", HoldsEntries: true, AccessKeyID: "AKIA", SecretAccessKey: "secret"},
 		Throttle: edge.Throttle{Status: 429, Header: "x-amzn-errortype"},
 		Images:   &edge.OriginImages{OptimizerURL: "https://optimizer.example", MaxRequestBytes: MaxImageRequestBytes},
 	}
@@ -32,7 +32,7 @@ func TestTheEdgeReachesAnAWSOriginBySigningForLambdaAndReadsEntriesFromTheAssetB
 	}
 }
 
-func TestAnAWSOriginWithNoAssetBucketOrOptimizerNamesNoStoreOrImagesToTheEdge(t *testing.T) {
+func TestAnAWSOriginWithNoEdgeBucketOrOptimizerNamesNoStoreOrImagesToTheEdge(t *testing.T) {
 	t.Parallel()
 
 	got := OriginReach(OriginAccess{Region: "eu-west-2", AccessKeyID: "AKIA", SecretAccessKey: "secret"})

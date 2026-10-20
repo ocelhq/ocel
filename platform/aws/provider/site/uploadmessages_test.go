@@ -40,12 +40,12 @@ func TestAnUploadSaysWhichAppAndHowManyFilesOrWhere(t *testing.T) {
 				set, _, err := edgeBundleSet(cfg.buckets, cfg.root, "web", builds.coords["web"], builds.baked["web"])
 				return set, err
 			},
-			want: "INFO Uploading web's edge bundle to bucket assets",
+			want: "INFO Uploading web's edge bundle to bucket edge",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := publication{root: tc.tree(t), buckets: Buckets{Assets: "assets", Objects: &fakeArtifactStore{exists: map[string]bool{}}, EdgeHoldsKey: true}}
+			cfg := publication{root: tc.tree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: &fakeArtifactStore{exists: map[string]bool{}}, EdgeHoldsKey: true}}
 			set, err := tc.set(cfg, appBuildsFor(t, cfg, twoAppManifest()))
 			if err != nil {
 				t.Fatalf("the %s set: %v", tc.name, err)

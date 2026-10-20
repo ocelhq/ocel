@@ -165,14 +165,14 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
   };
   const routeTable = "route-tables/shop/prod/web/r1a2b3c4d/ab.json";
 
-  it("is a path-style GET of the key under the store's prefix at the endpoint the origin names", async () => {
+  it("is a path-style GET of the key in the store's bucket at the endpoint the origin names", async () => {
     const gcs = s3Answering(() => new Response("bytes", { headers: { etag: '"e1"' } }));
 
     const response = await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get()));
 
     expect(gcs.calls).toHaveLength(1);
     expect(gcs.calls[0].method).toBe("GET");
-    expect(gcs.calls[0].url).toBe(`https://objects.example.com/ocel-acme-production/assets/${key}`);
+    expect(gcs.calls[0].url).toBe(`https://objects.example.com/ocel-acme-production/${key}`);
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("bytes");
     expect(response.headers.get("etag")).toBe('"e1"');
@@ -184,9 +184,7 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
 
     await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get(routeTable)));
 
-    expect(gcs.calls[0].url).toBe(
-      `https://objects.example.com/ocel-acme-production/assets/${routeTable}`,
-    );
+    expect(gcs.calls[0].url).toBe(`https://objects.example.com/ocel-acme-production/${routeTable}`);
   });
 
   it("signs the GET as Signature Version 4 in the region auto for the service s3", async () => {
@@ -210,7 +208,7 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
     await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get(odd)));
 
     expect(new URL(gcs.calls[0].url).pathname).toBe(
-      "/ocel-acme-production/assets/assets/shop/prod/web/r1a2b3c4d/docs/%5B...slug%5D%20one.html",
+      "/ocel-acme-production/assets/shop/prod/web/r1a2b3c4d/docs/%5B...slug%5D%20one.html",
     );
     expect(sentSignature(gcs.calls[0])).toBe(
       await expectedSignature(gcs.calls[0], "examplesecret/key+"),

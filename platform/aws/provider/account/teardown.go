@@ -146,7 +146,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		}
 	}
 
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.EdgeBucket, deployed.CacheBucket} {
 		if bucket == "" {
 			continue
 		}

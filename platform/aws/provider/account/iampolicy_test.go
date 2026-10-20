@@ -72,16 +72,23 @@ func (s *templateText) UnmarshalJSON(b []byte) error {
 }
 
 func iamResourceMatches(pattern, arn string) bool {
-	parts := strings.Split(pattern, "*")
-	for i := range parts {
-		parts[i] = regexp.QuoteMeta(parts[i])
+	var expr strings.Builder
+	for _, r := range pattern {
+		switch r {
+		case '*':
+			expr.WriteString(".*")
+		case '?':
+			expr.WriteString(".")
+		default:
+			expr.WriteString(regexp.QuoteMeta(string(r)))
+		}
 	}
-	return regexp.MustCompile("^" + strings.Join(parts, ".*") + "$").MatchString(arn)
+	return regexp.MustCompile("^" + expr.String() + "$").MatchString(arn)
 }
 
 func iamResourceMatchesAny(patterns []string, arn string) bool {
 	for _, pattern := range patterns {
-		pattern = strings.ReplaceAll(pattern, "${"+paramAssetBucketARN+"}", "arn:aws:s3:::assets")
+		pattern = strings.ReplaceAll(pattern, "${"+paramEdgeBucketARN+"}", "arn:aws:s3:::edge")
 		if iamResourceMatches(pattern, arn) {
 			return true
 		}

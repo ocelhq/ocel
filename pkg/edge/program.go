@@ -45,7 +45,6 @@ type Reach struct {
 
 type OriginStore struct {
 	URL             string `json:"url"`
-	Prefix          string `json:"prefix,omitempty"`
 	Region          string `json:"region"`
 	HoldsEntries    bool   `json:"holdsEntries"`
 	EntriesPrefix   string `json:"entriesPrefix,omitempty"`

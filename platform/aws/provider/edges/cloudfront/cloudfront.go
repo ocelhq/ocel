@@ -299,7 +299,7 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	own.StateTable = deployed.StateTable
-	own.AssetBucket = deployed.AssetBucket
+	own.EdgeBucket = deployed.EdgeBucket
 	own.Region = c.Region
 	own.ShieldsOrigin = p.options.ShieldsOrigin()
 	own.Function = set.functionARN

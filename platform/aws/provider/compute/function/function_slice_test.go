@@ -171,7 +171,7 @@ func TestTheBytecodeCacheFollowsTheSpecWhateverTheOperatorsShell(t *testing.T) {
 	for _, shell := range []string{"", "0", "1"} {
 		t.Run("OCEL_BYTECODE_CACHE="+shell, func(t *testing.T) {
 			t.Setenv("OCEL_BYTECODE_CACHE", shell)
-			cache := Bytecode{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"}
+			cache := Bytecode{Bucket: "artifacts-xyz", Prefix: "bytecode/proj/prod/api/API1"}
 
 			env := Env(map[string]string{}, Args{Handler: "index.mjs"}, nil, &cache)
 			if env["OCEL_BYTECODE_PREFIX"] != cache.Prefix || env["OCEL_BYTECODE_BUCKET"] != cache.Bucket {
@@ -188,10 +188,11 @@ func isrCacheFor(t *testing.T, env, project, app, buildID string) site.ISR {
 	t.Helper()
 	coord := storageCoordinate(env, project, app, deployedAs(buildID).Token())
 	return site.ISR{
-		Coord:    coord,
-		Bucket:   "assets-xyz",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		Coord:       coord,
+		EdgeBucket:  "edge-xyz",
+		CacheBucket: "cache-xyz",
+		Table:       "state-abc",
+		TableARN:    "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
 	}
 }
 
@@ -211,8 +212,11 @@ func TestISREnv(t *testing.T) {
 
 		env := cfg.Env()
 
-		if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
-			t.Errorf("OCEL_ISR_BUCKET = %q", env["OCEL_ISR_BUCKET"])
+		if env["OCEL_EDGE_BUCKET"] != "edge-xyz" {
+			t.Errorf("OCEL_EDGE_BUCKET = %q, want the bucket page entries live in", env["OCEL_EDGE_BUCKET"])
+		}
+		if env["OCEL_CACHE_BUCKET"] != "cache-xyz" {
+			t.Errorf("OCEL_CACHE_BUCKET = %q, want the bucket the fetch cache, use-cache entries and tag clock live in", env["OCEL_CACHE_BUCKET"])
 		}
 		if want := "proj123/prod/marketing/" + releaseTokenFor("build456"); env["OCEL_STORAGE_COORDINATE"] != want {
 			t.Errorf("OCEL_STORAGE_COORDINATE = %q, want %q", env["OCEL_STORAGE_COORDINATE"], want)
@@ -233,7 +237,7 @@ func bytecodeCacheFor(t *testing.T, env, project, app, buildID string) Bytecode 
 	t.Helper()
 	coord := storageCoordinate(env, project, app, deployedAs(buildID).Token())
 	return Bytecode{
-		Bucket: "assets-xyz",
+		Bucket: "artifacts-xyz",
 		Prefix: bytecodePrefixOf(coord),
 	}
 }
@@ -247,11 +251,13 @@ func TestBytecodeEnv(t *testing.T) {
 		if want := "bytecode/proj123/prod/marketing/" + releaseTokenFor("build456"); env["OCEL_BYTECODE_PREFIX"] != want {
 			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], want)
 		}
-		if env["OCEL_BYTECODE_BUCKET"] != "assets-xyz" {
-			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want the asset bucket", env["OCEL_BYTECODE_BUCKET"])
+		if env["OCEL_BYTECODE_BUCKET"] != "artifacts-xyz" {
+			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want the artifacts bucket", env["OCEL_BYTECODE_BUCKET"])
 		}
-		if _, ok := env["OCEL_ISR_BUCKET"]; ok {
-			t.Error("OCEL_ISR_BUCKET is set; the compile cache has nothing to do with ISR")
+		for _, isr := range []string{"OCEL_EDGE_BUCKET", "OCEL_CACHE_BUCKET"} {
+			if _, ok := env[isr]; ok {
+				t.Errorf("%s is set; the compile cache has nothing to do with ISR", isr)
+			}
 		}
 	})
 }
@@ -274,7 +280,7 @@ func TestBytecodePolicy(t *testing.T) {
 		}
 
 		stmt := doc.Statement[0]
-		if want := []string{"arn:aws:s3:::assets-xyz/bytecode/proj123/prod/marketing/" + releaseTokenFor("build456") + "/*"}; !slices.Equal(stmt.Resource, want) {
+		if want := []string{"arn:aws:s3:::artifacts-xyz/bytecode/proj123/prod/marketing/" + releaseTokenFor("build456") + "/*"}; !slices.Equal(stmt.Resource, want) {
 			t.Errorf("Resource = %q, want %q", stmt.Resource, want)
 		}
 		if want := []string{"s3:GetObject", "s3:PutObject"}; !slices.Equal(stmt.Action, want) {
@@ -303,59 +309,19 @@ func TestBytecodePolicy(t *testing.T) {
 	})
 }
 
-func TestISREdgeReadable(t *testing.T) {
-	t.Run("tells the cache handler to tag its page entries when the edge reads the asset bucket", func(t *testing.T) {
-		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-		cfg.EdgeReadable = true
+func TestISRNeverTagsAnObject(t *testing.T) {
+	cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
-		if got := cfg.Env()["OCEL_ISR_EDGE_READABLE"]; got != "1" {
-			t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want 1", got)
-		}
-	})
-
-	t.Run("says nothing about it otherwise", func(t *testing.T) {
-		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-
-		if got, ok := cfg.Env()["OCEL_ISR_EDGE_READABLE"]; ok {
-			t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want it unset", got)
-		}
-	})
-
-	t.Run("lets the function tag only its page entries, and only when the edge reads", func(t *testing.T) {
-		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-		without, err := cfg.Policy()
-		if err != nil {
-			t.Fatalf("ISR.Policy: %v", err)
-		}
-		cfg.EdgeReadable = true
-		with, err := cfg.Policy()
-		if err != nil {
-			t.Fatalf("ISR.Policy: %v", err)
-		}
-
-		if strings.Contains(without, "s3:PutObjectTagging") {
-			t.Errorf("policy grants tagging with no edge reading: %s", without)
-		}
-		var doc struct {
-			Statement []struct {
-				Action   []string `json:"Action"`
-				Resource any      `json:"Resource"`
-			} `json:"Statement"`
-		}
-		if err := json.Unmarshal([]byte(with), &doc); err != nil {
-			t.Fatalf("parse policy: %v", err)
-		}
-		var tagged []any
-		for _, statement := range doc.Statement {
-			if slices.Contains(statement.Action, "s3:PutObjectTagging") {
-				tagged = append(tagged, statement.Resource)
-			}
-		}
-		want := fmt.Sprintf("arn:aws:s3:::%s/pages/proj123/prod/marketing/%s/*", cfg.Bucket, releaseTokenFor("build456"))
-		if len(tagged) != 1 || tagged[0] != want {
-			t.Errorf("s3:PutObjectTagging is granted on %v, want only %s", tagged, want)
-		}
-	})
+	if got, ok := cfg.Env()["OCEL_ISR_EDGE_READABLE"]; ok {
+		t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want it unset: an edge reads a page entry because it is in the edge bucket", got)
+	}
+	policy, err := cfg.Policy()
+	if err != nil {
+		t.Fatalf("ISR.Policy: %v", err)
+	}
+	if strings.Contains(policy, "Tagging") {
+		t.Errorf("policy grants object tagging: %s", policy)
+	}
 }
 
 func TestISRPolicy(t *testing.T) {
@@ -378,10 +344,10 @@ func TestISRPolicy(t *testing.T) {
 		s3Stmt := doc.Statement[0]
 		at := "/proj123/prod/marketing/" + releaseTokenFor("build456") + "/*"
 		if want := []string{
-			"arn:aws:s3:::assets-xyz/pages" + at,
-			"arn:aws:s3:::assets-xyz/fetch-cache" + at,
-			"arn:aws:s3:::assets-xyz/use-cache" + at,
-			"arn:aws:s3:::assets-xyz/tag-clock" + at,
+			"arn:aws:s3:::edge-xyz/pages" + at,
+			"arn:aws:s3:::cache-xyz/fetch-cache" + at,
+			"arn:aws:s3:::cache-xyz/use-cache" + at,
+			"arn:aws:s3:::cache-xyz/tag-clock" + at,
 		}; !slices.Equal(s3Stmt.Resource, want) {
 			t.Errorf("S3 Resource = %q, want %q", s3Stmt.Resource, want)
 		}
@@ -419,10 +385,10 @@ func TestISRPolicy(t *testing.T) {
 
 		webDoc, adminDoc := parsePolicy(t, web), parsePolicy(t, admin)
 
-		if want := "arn:aws:s3:::assets-xyz/" + web.Coord.StoragePrefix(naming.ObjectPages) + "*"; !slices.Contains(webDoc.Statement[0].Resource, want) {
+		if want := "arn:aws:s3:::edge-xyz/" + web.Coord.StoragePrefix(naming.ObjectPages) + "*"; !slices.Contains(webDoc.Statement[0].Resource, want) {
 			t.Errorf("web S3 Resource = %q, want it to hold %q", webDoc.Statement[0].Resource, want)
 		}
-		if want := "arn:aws:s3:::assets-xyz/" + admin.Coord.StoragePrefix(naming.ObjectPages) + "*"; !slices.Contains(adminDoc.Statement[0].Resource, want) {
+		if want := "arn:aws:s3:::edge-xyz/" + admin.Coord.StoragePrefix(naming.ObjectPages) + "*"; !slices.Contains(adminDoc.Statement[0].Resource, want) {
 			t.Errorf("admin S3 Resource = %q, want it to hold %q", adminDoc.Statement[0].Resource, want)
 		}
 		if strings.Contains(strings.Join(webDoc.Statement[0].Resource, " "), "admin") {
@@ -577,10 +543,10 @@ func TestTagNamespace(t *testing.T) {
 	})
 
 	t.Run("refuses a cache with no coordinate", func(t *testing.T) {
-		if got := (site.ISR{Bucket: "assets-xyz"}).TagNamespace(); got != "" {
+		if got := (site.ISR{EdgeBucket: "edge-xyz", CacheBucket: "cache-xyz"}).TagNamespace(); got != "" {
 			t.Errorf("TagNamespace() = %q, want %q", got, "")
 		}
-		if _, err := (site.ISR{Bucket: "assets-xyz"}).Policy(); err == nil {
+		if _, err := (site.ISR{EdgeBucket: "edge-xyz", CacheBucket: "cache-xyz"}).Policy(); err == nil {
 			t.Error("ISR.Policy accepted a cache with no coordinate; an unscoped tag grant must never render")
 		}
 	})

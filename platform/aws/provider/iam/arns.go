@@ -3,8 +3,7 @@ package iam
 const (
 	CallerAccount = "${aws:PrincipalAccount}"
 
-	ManagedByTagKey   = "ocel:managed-by"
-	ManagedByTagValue = "ocel"
+	ManagedByTagKey = "ocel:managed-by"
 )
 
 const (
