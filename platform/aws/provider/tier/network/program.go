@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
@@ -217,4 +218,42 @@ func decode(outputs auto.OutputMap) (Network, error) {
 		return Network{}, fmt.Errorf("output %q of %s names no VPC, clients group or %d subnets of each kind", outputKeyNetwork, Slug, Zones)
 	}
 	return network, nil
+}
+
+const (
+	tokenVPC              = "aws:ec2/vpc:Vpc"
+	tokenInternetGateway  = "aws:ec2/internetGateway:InternetGateway"
+	tokenSubnet           = "aws:ec2/subnet:Subnet"
+	tokenRouteTable       = "aws:ec2/routeTable:RouteTable"
+	tokenRoute            = "aws:ec2/route:Route"
+	tokenRouteAssociation = "aws:ec2/routeTableAssociation:RouteTableAssociation"
+	tokenVPCEndpoint      = "aws:ec2/vpcEndpoint:VpcEndpoint"
+)
+
+func createdBy(namespace string, tier environment.Tier) []provider.Change {
+	name := func(words ...string) string { return nameFor(namespace, tier, words...) }
+	created := func(token, name string) provider.Change {
+		return provider.Change{Kind: token, Name: name, Action: provider.ActionCreate}
+	}
+	changes := []provider.Change{
+		created(tokenVPC, name()),
+		created(tokenInternetGateway, component.NameOf(name()).Part(gatewayPart)),
+		created(tokenRouteTable, name(publicWord)),
+		created(tokenRoute, component.NameOf(name(publicWord)).Part(internetPart)),
+		created(tokenRouteTable, name(isolatedWord)),
+		created(component.TokenEC2SecurityGroup, component.SecurityGroupName(name(clientsWord))),
+	}
+	for i := range Zones {
+		n := strconv.Itoa(i + 1)
+		for _, role := range []string{publicWord, privateWord, isolatedWord} {
+			changes = append(changes,
+				created(tokenSubnet, name(role, n)),
+				created(tokenRouteAssociation, component.NameOf(name(role, n)).Part(associationPart)))
+		}
+		changes = append(changes, created(tokenRouteTable, name(privateWord, n)))
+	}
+	for _, service := range endpointServices {
+		changes = append(changes, created(tokenVPCEndpoint, name(service)))
+	}
+	return changes
 }

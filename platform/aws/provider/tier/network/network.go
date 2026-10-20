@@ -292,12 +292,13 @@ func Shape(tier environment.Tier) []pricing.Shaped {
 	return shaped
 }
 
-func NewChangeGroup(tier environment.Tier) provider.ChangeGroup {
+func NewChangeGroup(namespace string, tier environment.Tier) provider.ChangeGroup {
 	return provider.ChangeGroup{
-		Kind:   provider.StackGroupKind,
-		Name:   StackRef(tier).Name.String(),
-		Action: provider.ActionCreate,
-		Part:   Part,
-		Reason: "the first container app, VPC-attached function, database or cache in the " + string(tier) + " tier adds the " + Part + " part: " + Summary,
+		Kind:    provider.StackGroupKind,
+		Name:    StackRef(tier).Name.String(),
+		Action:  provider.ActionCreate,
+		Part:    Part,
+		Reason:  "the first container app, VPC-attached function, database or cache in the " + string(tier) + " tier adds the " + Part + " part: " + Summary,
+		Changes: createdBy(namespace, tier),
 	}
 }
