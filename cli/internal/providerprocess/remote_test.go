@@ -3,6 +3,10 @@ package providerprocess_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -212,6 +216,56 @@ func TestARemoteProviderRejectingTheTokenFailsWithConsoleNotLoggedIn(t *testing.
 	var coded *clierror.Error
 	if !errors.As(err, &coded) || coded.Code != clierror.CodeConsoleNotLoggedIn || !strings.Contains(err.Error(), "ocel login") {
 		t.Fatalf("err = %v, want console.not_logged_in naming ocel login", err)
+	}
+}
+
+func TestARemoteProviderOutOfSessionsWhenOneOpensFailsAsBusyInOcelCloudsWords(t *testing.T) {
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = connect.NewErrorWriter().Write(w, r, connect.NewError(connect.CodeResourceExhausted, errors.New("cloud.session_limit: this organization holds 64 open sessions")))
+	}))
+	t.Cleanup(refusing.Close)
+	ctx, span := remoteSpan(t)
+
+	_, err := providerprocess.StartRemote(ctx, remoteProject(t), span, providerprocess.Questions{}, providerprocess.Remote{Name: "ocel", URL: refusing.URL, Tokens: &issuedTokens{tokens: []string{clitest.FakeCloudToken}}})
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeProviderBusy || !coded.Retryable {
+		t.Fatalf("err = %v, want a retryable %s", err, clierror.CodeProviderBusy)
+	}
+	if !strings.Contains(err.Error(), "cloud.session_limit: this organization holds 64 open sessions") || strings.Contains(err.Error(), "resource_exhausted") {
+		t.Fatalf("err = %q, want Ocel Cloud's own words without the Connect code", err)
+	}
+}
+
+func TestAVariableStoreCallRefusedByARemoteProviderFailsWithTheCodeOfItsKind(t *testing.T) {
+	server := clitest.ServeRemoteProvider(t, fake.NewForProject(fake.Options{}))
+	upstream, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forward := httputil.NewSingleHostReverseProxy(upstream)
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "VariableStoreService") {
+			_ = connect.NewErrorWriter().Write(w, r, connect.NewError(connect.CodeResourceExhausted, errors.New("cloud.rate_limited: try again in a minute")))
+			return
+		}
+		forward.ServeHTTP(w, r)
+	}))
+	t.Cleanup(refusing.Close)
+	ctx, span := remoteSpan(t)
+	p, err := providerprocess.StartRemote(ctx, remoteProject(t), span, providerprocess.Questions{}, providerprocess.Remote{Name: "ocel", URL: refusing.URL, Tokens: &issuedTokens{tokens: []string{clitest.FakeCloudToken}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(p.Close)
+	store, err := p.VariableStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = store.ListValues(t.Context(), &variablestorev1.ListValuesRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Slug: "shop"})
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeProviderBusy || !coded.Retryable || connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("err = %v, want a retryable %s that keeps its Connect code", err, clierror.CodeProviderBusy)
 	}
 }
 
