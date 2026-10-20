@@ -52,6 +52,10 @@ func newRealtimeHarness(t *testing.T) *realtimeHarness {
 			h.writes = append(h.writes, r.Method+" "+r.URL.Path)
 			h.mu.Unlock()
 		}
+		if r.URL.Path == "/v1/projects/"+googletest.Project {
+			googletest.WriteBody(w, map[string]string{"projectId": googletest.Project, "projectNumber": googletest.ProjectNumber})
+			return
+		}
 		if googletest.IsPubSubPath(r.URL.Path) {
 			servePubSub(w, r)
 			return

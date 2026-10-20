@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -75,7 +76,16 @@ func nameTopic(names topics.Names, topic declaredTopic) (string, error) {
 }
 
 func topologyOf(c *gcloud.Clients, ref provider.StackRef, declared map[string]*provider.TopicSpec) topics.Topology {
-	return topics.Topology{Names: Names(c.Names, ref), Topics: declared}
+	return topics.Topology{Names: Names(c.Names, ref), Topics: declared, Tags: TierTagsOf(c, ref.Tier)}
+}
+
+func TierTagsOf(c *gcloud.Clients, tier environment.Tier) topics.TierTags {
+	return topics.TierTags{
+		Inline: c.InlineTierTags(tier),
+		Remove: func(ctx context.Context, path string) error {
+			return c.RemoveTierTag(ctx, tier, c.PubSubTagged(path))
+		},
+	}
 }
 
 func (p *Topic) Provision(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {

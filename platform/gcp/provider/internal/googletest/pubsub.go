@@ -25,6 +25,10 @@ type PubSub struct {
 	DeniedCreates int
 	PublishedAgo  time.Duration
 
+	TierTags      *TierTags
+	InlineTags    map[string]map[string]string
+	DeletedTagged []string
+
 	pending map[string][]*pubsub.ReceivedMessage
 	arrived map[string]chan struct{}
 	acked   int
@@ -79,6 +83,9 @@ func (p *PubSub) serveTopic(t *testing.T, w http.ResponseWriter, r *http.Request
 			answerPubSub(w, http.StatusConflict, "ALREADY_EXISTS")
 			return
 		}
+		var asked pubsub.Topic
+		_ = json.NewDecoder(r.Body).Decode(&asked)
+		p.tagInline(topic, asked.Tags)
 		p.Topics[topic] = &pubsub.Policy{Etag: "BwXhoLA="}
 		_ = json.NewEncoder(w).Encode(&pubsub.Topic{Name: topic})
 	case !exists:
@@ -86,6 +93,7 @@ func (p *PubSub) serveTopic(t *testing.T, w http.ResponseWriter, r *http.Request
 	case r.Method == http.MethodGet && verb == "":
 		_ = json.NewEncoder(w).Encode(&pubsub.Topic{Name: topic})
 	case r.Method == http.MethodDelete && verb == "":
+		p.noteTagged(topic)
 		delete(p.Topics, topic)
 		p.Deleted = append(p.Deleted, topic)
 		_, _ = w.Write([]byte(`{}`))
@@ -126,6 +134,27 @@ func (p *PubSub) serveTopic(t *testing.T, w http.ResponseWriter, r *http.Request
 	}
 }
 
+func PubSubTagParent(path string) string { return "//pubsub.googleapis.com/" + path }
+
+func (p *PubSub) tagInline(path string, tags map[string]string) {
+	if len(tags) == 0 {
+		return
+	}
+	if p.InlineTags == nil {
+		p.InlineTags = map[string]map[string]string{}
+	}
+	p.InlineTags[path] = tags
+	if p.TierTags != nil {
+		p.TierTags.BindInline(PubSubTagParent(path), tags)
+	}
+}
+
+func (p *PubSub) noteTagged(path string) {
+	if p.TierTags != nil && len(p.TierTags.Bound(PubSubTagParent(path))) > 0 {
+		p.DeletedTagged = append(p.DeletedTagged, path)
+	}
+}
+
 func (p *PubSub) wake(subscription string) {
 	if arrived := p.arrived[subscription]; arrived != nil {
 		close(arrived)
@@ -158,6 +187,7 @@ func (p *PubSub) serveSubscription(t *testing.T, w http.ResponseWriter, r *http.
 			return
 		}
 		asked.Name = name
+		p.tagInline(name, asked.Tags)
 		p.Subscriptions[name] = &asked
 		p.Created = append(p.Created, name)
 		_ = json.NewEncoder(w).Encode(&asked)
@@ -167,11 +197,19 @@ func (p *PubSub) serveSubscription(t *testing.T, w http.ResponseWriter, r *http.
 			answerPubSub(w, http.StatusNotFound, "NOT_FOUND")
 			return
 		}
+		p.noteTagged(name)
 		delete(p.Subscriptions, name)
 		delete(p.pending, name)
 		p.wake(name)
 		p.Deleted = append(p.Deleted, name)
 		_, _ = w.Write([]byte(`{}`))
+	case r.Method == http.MethodGet && verb == "":
+		defer p.Mu.Unlock()
+		if !exists {
+			answerPubSub(w, http.StatusNotFound, "NOT_FOUND")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(p.Subscriptions[name])
 	case verb == "pull":
 		p.pull(w, r, name, exists)
 	case verb == "acknowledge":

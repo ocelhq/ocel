@@ -40,7 +40,7 @@ func TestAResourceCarryingTheOtherTiersTagIsRefusedRatherThanRetagged(t *testing
 	t.Parallel()
 	ctx := context.Background()
 	clients, tags := taggedClients(t)
-	topic := clients.TopicTagged("shop-orders")
+	topic := clients.PubSubTagged("projects/acme-prod/topics/shop-orders")
 	if err := clients.EnsureTierTag(ctx, environment.TierProduction, topic); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestAnEmulatorThatServesNoTagsLeavesResourcesUntaggedWithoutAsking(t *testi
 	t.Parallel()
 	clients := googletest.Clients("http://127.0.0.1:1")
 
-	if err := clients.EnsureTierTag(context.Background(), environment.TierPreview, clients.TopicTagged("shop-orders")); err != nil {
+	if err := clients.EnsureTierTag(context.Background(), environment.TierPreview, clients.PubSubTagged("projects/acme-prod/topics/shop-orders")); err != nil {
 		t.Errorf("binding against an emulator that serves no tags answered %v, want nothing asked of it", err)
 	}
 	if tags := clients.InlineTierTags(environment.TierPreview); tags != nil {
