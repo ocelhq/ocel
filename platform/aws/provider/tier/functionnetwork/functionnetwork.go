@@ -354,6 +354,25 @@ func Shape(tier environment.Tier) []pricing.Shaped {
 	return shaped
 }
 
+func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
+	current, present, err := s.Read(ctx, tier)
+	if err != nil || !present {
+		return nil, err
+	}
+	patches, err := s.patchesFor(ctx, tier)
+	if err != nil || patches.IsEmpty() || patches.Digest == current.patchDigest {
+		return nil, err
+	}
+	return &provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
+		Name:   StackRef(tier).Name.String(),
+		Action: provider.ActionUpdate,
+		Part:   Part,
+		Reason: "the transforms that patch the NAT gateways of the " + string(tier) + " tier differ from the ones they carry, so this deploy provisions the function network again with them, for every project in the tier",
+		Slow:   true,
+	}, nil
+}
+
 func NewChangeGroup(tier environment.Tier) provider.ChangeGroup {
 	return provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,

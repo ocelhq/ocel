@@ -290,6 +290,36 @@ func TestThePlanOfTheFirstDatabaseInATierShowsTheNetworkItRaises(t *testing.T) {
 	}
 }
 
+func TestThePlanOfADatabaseWhoseTransformsPatchTheNetworkOtherwiseThanItCarriesShowsTheNetworkProvisionedAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	engine := &mockedEngine{outputs: provisionedOutputs()}
+	engine.outputs["network"] = patchedNetworkOutputs("10.20.0.0/16", "patched-by-another-project")["network"]
+	cfg := conformingConfig(&fakeArtifactStore{})
+	cfg.Transform = &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"enableNetworkAddressUsageMetrics": true}}}}
+	stacks := stacksWith(cfg, engine)
+	spec := provider.StackSpec{
+		Ref:       provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:      provider.StackInfra,
+		Recorded:  true,
+		Resources: []provider.Resource{{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}},
+	}
+	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	plan, err := stacks.Plan(ctx, spec, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
+		return group.Part == network.Part && group.Action == provider.ActionUpdate
+	}) {
+		t.Errorf("plan groups = %+v, want the network provisioned again: the deploy repatches it for every project in the tier", plan.Groups)
+	}
+}
+
 func TestAnInfraStackThatDropsItsLastDatabaseLetsGoOfTheTiersNetwork(t *testing.T) {
 	t.Parallel()
 

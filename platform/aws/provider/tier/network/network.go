@@ -207,6 +207,25 @@ func (s *Stacks) repatch(ctx context.Context, owner sharedstack.Owner, tier envi
 	return provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, current.Zones, patches), progress)
 }
 
+func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
+	current, present, err := s.Read(ctx, tier)
+	if err != nil || !present {
+		return nil, err
+	}
+	patches, err := s.patchesFor(ctx, tier)
+	if err != nil || patches.IsEmpty() || patches.Digest == current.PatchDigest {
+		return nil, err
+	}
+	return &provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
+		Name:   StackRef(tier).Name.String(),
+		Action: provider.ActionUpdate,
+		Part:   Part,
+		Reason: "the transforms that patch the network of the " + string(tier) + " tier differ from the ones it carries, so this deploy provisions it again with them, for every project in the tier",
+		Slow:   true,
+	}, nil
+}
+
 func refuseNewBlock(tier environment.Tier, current Network, configured string) error {
 	if configured == "" || configured == current.CIDR {
 		return nil
