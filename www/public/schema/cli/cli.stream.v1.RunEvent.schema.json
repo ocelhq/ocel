@@ -1,5 +1,89 @@
 {
   "$defs": {
+    "app.resources.v1.GroupDefinition.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "minLength": 1,
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Group Definition",
+      "type": "object"
+    },
+    "app.resources.v1.VariableDefinition.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "anyOf": [
+            {
+              "pattern": "^VARIABLE_CLASS_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "VARIABLE_CLASS_PLAIN",
+                "VARIABLE_CLASS_SENSITIVE",
+                "VARIABLE_CLASS_SECRET",
+                "VARIABLE_CLASS_DERIVED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Variable Class"
+        },
+        "description": {
+          "default": "",
+          "type": "string"
+        },
+        "folders": {
+          "items": {
+            "pattern": "^(/[^/#\\x00-\\x1f\\x7f]+)+$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "group": {
+          "default": "",
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "minLength": 1,
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "type": "boolean"
+        },
+        "source": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Variable Definition",
+      "type": "object"
+    },
     "cli.stream.v1.Assumption.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -330,6 +414,9 @@
         "^(cloud_job)$": {
           "$ref": "#/$defs/cli.stream.v1.CloudJob.jsonschema.json"
         },
+        "^(deployment_report)$": {
+          "$ref": "#/$defs/console.v1.Deployment.jsonschema.json"
+        },
         "^(duration_ms)$": {
           "anyOf": [
             {
@@ -376,6 +463,9 @@
         },
         "cloudJob": {
           "$ref": "#/$defs/cli.stream.v1.CloudJob.jsonschema.json"
+        },
+        "deploymentReport": {
+          "$ref": "#/$defs/console.v1.Deployment.jsonschema.json"
         },
         "detail": {
           "default": "",
@@ -704,6 +794,66 @@
         }
       },
       "title": "Variables Needed",
+      "type": "object"
+    },
+    "common.environment.v1.Environment.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "identity": {
+          "default": "",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "type": "string"
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "pattern": "^LIFECYCLE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "LIFECYCLE_EPHEMERAL",
+                "LIFECYCLE_PERSISTENT"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Lifecycle"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "^TIER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TIER_PREVIEW",
+                "TIER_PRODUCTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Tier"
+        }
+      },
+      "title": "Environment",
       "type": "object"
     },
     "common.plan.v1.Change.jsonschema.json": {
@@ -1571,11 +1721,1605 @@
       "title": "Started",
       "type": "object"
     },
+    "console.v1.App.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(build_id)$": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "^(framework_build_id)$": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "^(health_path)$": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "^(storage_coordinate)$": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        }
+      },
+      "properties": {
+        "buildId": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "compute": {
+          "anyOf": [
+            {
+              "enum": [
+                "COMPUTE_KIND_SERVERLESS",
+                "COMPUTE_KIND_CONTAINER"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Compute Kind"
+        },
+        "error": {
+          "default": "",
+          "maxLength": 4000,
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "framework": {
+          "default": "",
+          "enum": [
+            "node",
+            "next",
+            "sveltekit",
+            "go",
+            "python",
+            "rust"
+          ],
+          "type": "string"
+        },
+        "frameworkBuildId": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "healthPath": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "hostnames": {
+          "items": {
+            "maxLength": 253,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "name": {
+          "default": "",
+          "maxLength": 63,
+          "minLength": 1,
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "APP_OUTCOME_SUCCEEDED",
+                "APP_OUTCOME_FAILED",
+                "APP_OUTCOME_SKIPPED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "App Outcome"
+        },
+        "release": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "runtime": {
+          "$ref": "#/$defs/console.v1.Runtime.jsonschema.json"
+        },
+        "storageCoordinate": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        },
+        "urls": {
+          "items": {
+            "pattern": "^(?:(?:[a-zA-Z][a-zA-Z\\d+\\-.]*):)?(?://(?:[A-Za-z0-9\\-\\.]+(?::\\d+)?))?(/[^\\?#]*)?(?:\\?([^#]*))?(?:#(.*))?$",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "variables": {
+          "items": {
+            "$ref": "#/$defs/app.resources.v1.VariableDefinition.jsonschema.json"
+          },
+          "maxItems": 500,
+          "type": "array"
+        }
+      },
+      "title": "App",
+      "type": "object"
+    },
+    "console.v1.CI.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(run_url)$": {
+          "default": "",
+          "maxLength": 2048,
+          "pattern": "^(?:(?:[a-zA-Z][a-zA-Z\\d+\\-.]*):)?(?://(?:[A-Za-z0-9\\-\\.]+(?::\\d+)?))?(/[^\\?#]*)?(?:\\?([^#]*))?(?:#(.*))?$",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "name": {
+          "default": "",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "pr": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "repo": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "runUrl": {
+          "default": "",
+          "maxLength": 2048,
+          "pattern": "^(?:(?:[a-zA-Z][a-zA-Z\\d+\\-.]*):)?(?://(?:[A-Za-z0-9\\-\\.]+(?::\\d+)?))?(/[^\\?#]*)?(?:\\?([^#]*))?(?:#(.*))?$",
+          "type": "string"
+        }
+      },
+      "title": "CI",
+      "type": "object"
+    },
+    "console.v1.Deployment.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(cli_version)$": {
+          "default": "",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "^(finished_at)$": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "^(started_at)$": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "^(variable_groups)$": {
+          "items": {
+            "$ref": "#/$defs/app.resources.v1.GroupDefinition.jsonschema.json"
+          },
+          "maxItems": 500,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "apps": {
+          "items": {
+            "$ref": "#/$defs/console.v1.App.jsonschema.json"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "ci": {
+          "$ref": "#/$defs/console.v1.CI.jsonschema.json"
+        },
+        "cliVersion": {
+          "default": "",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "edge": {
+          "$ref": "#/$defs/console.v1.Edge.jsonschema.json"
+        },
+        "environment": {
+          "$ref": "#/$defs/common.environment.v1.Environment.jsonschema.json"
+        },
+        "error": {
+          "default": "",
+          "maxLength": 4000,
+          "type": "string"
+        },
+        "finishedAt": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "id": {
+          "default": "",
+          "pattern": "^[0-9a-f]{32}$",
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "DEPLOYMENT_KIND_DEPLOY",
+                "DEPLOYMENT_KIND_PREVIEW_UP",
+                "DEPLOYMENT_KIND_ROLLBACK"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Deployment Kind"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/console.v1.Link.jsonschema.json"
+          },
+          "maxItems": 2000,
+          "type": "array"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "DEPLOYMENT_OUTCOME_SUCCEEDED",
+                "DEPLOYMENT_OUTCOME_FAILED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Deployment Outcome"
+        },
+        "promotion": {
+          "$ref": "#/$defs/console.v1.Promotion.jsonschema.json"
+        },
+        "provider": {
+          "$ref": "#/$defs/console.v1.Provider.jsonschema.json"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/console.v1.Resource.jsonschema.json"
+          },
+          "maxItems": 200,
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/console.v1.Source.jsonschema.json"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.trace.v1.Span.jsonschema.json"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "target": {
+          "default": "",
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^/\\s]+(?:/[^/\\s]+)+$",
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/console.v1.Trigger.jsonschema.json"
+        },
+        "usages": {
+          "items": {
+            "$ref": "#/$defs/console.v1.Usage.jsonschema.json"
+          },
+          "maxItems": 2000,
+          "type": "array"
+        },
+        "variableGroups": {
+          "items": {
+            "$ref": "#/$defs/app.resources.v1.GroupDefinition.jsonschema.json"
+          },
+          "maxItems": 500,
+          "type": "array"
+        }
+      },
+      "required": [
+        "environment",
+        "provider",
+        "startedAt",
+        "finishedAt",
+        "trigger"
+      ],
+      "title": "Deployment",
+      "type": "object"
+    },
+    "console.v1.Edge.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "default": "",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "title": "Edge",
+      "type": "object"
+    },
+    "console.v1.Grant.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 64,
+          "type": "string"
+        }
+      },
+      "title": "Grant",
+      "type": "object"
+    },
+    "console.v1.Link.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "default": "",
+          "maxLength": 63,
+          "minLength": 1,
+          "type": "string"
+        },
+        "grants": {
+          "items": {
+            "$ref": "#/$defs/console.v1.Grant.jsonschema.json"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "resource": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "title": "Link",
+      "type": "object"
+    },
+    "console.v1.Promotion.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "tag": {
+          "default": "",
+          "maxLength": 128,
+          "type": "string"
+        }
+      },
+      "title": "Promotion",
+      "type": "object"
+    },
+    "console.v1.Provider.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "region": {
+          "default": "",
+          "maxLength": 64,
+          "type": "string"
+        }
+      },
+      "title": "Provider",
+      "type": "object"
+    },
+    "console.v1.Resource.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/console.v1.ResourceBinding.jsonschema.json"
+        },
+        "name": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "default": "",
+          "enum": [
+            "postgres",
+            "bucket",
+            "topic",
+            "task",
+            "kv",
+            "realtime",
+            "custom"
+          ],
+          "type": "string"
+        }
+      },
+      "title": "Resource",
+      "type": "object"
+    },
+    "console.v1.ResourceBinding.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(property_keys)$": {
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 200,
+          "type": "array"
+        }
+      },
+      "properties": {
+        "name": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "propertyKeys": {
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 200,
+          "type": "array"
+        },
+        "source": {
+          "default": "",
+          "maxLength": 512,
+          "type": "string"
+        }
+      },
+      "title": "Resource Binding",
+      "type": "object"
+    },
+    "console.v1.Runtime.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "arch": {
+          "default": "",
+          "maxLength": 32,
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "title": "Runtime",
+      "type": "object"
+    },
+    "console.v1.Source.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "commit": {
+          "default": "",
+          "pattern": "^[0-9a-f]{7,64}$",
+          "type": "string"
+        },
+        "dirty": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Source",
+      "type": "object"
+    },
+    "console.v1.Trigger.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "default": "",
+          "maxLength": 256,
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "TRIGGER_KIND_CLI",
+                "TRIGGER_KIND_CI",
+                "TRIGGER_KIND_GIT"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Trigger Kind"
+        }
+      },
+      "title": "Trigger",
+      "type": "object"
+    },
+    "console.v1.Usage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "default": "",
+          "maxLength": 63,
+          "minLength": 1,
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "maxItems": 200,
+          "type": "array"
+        },
+        "resource": {
+          "default": "",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    },
     "google.protobuf.Timestamp.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "format": "date-time",
       "title": "Timestamp",
       "type": "string"
+    },
+    "opentelemetry.proto.common.v1.AnyValue.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Represents any type of attribute value. AnyValue may contain a\n primitive value such as a string or integer or it may contain an arbitrary nested\n object containing arrays, key-value lists and primitives.",
+      "patternProperties": {
+        "^(array_value)$": {
+          "$ref": "#/$defs/opentelemetry.proto.common.v1.ArrayValue.jsonschema.json"
+        },
+        "^(bool_value)$": {
+          "type": "boolean"
+        },
+        "^(bytes_value)$": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(double_value)$": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "Infinity",
+                "-Infinity",
+                "NaN"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "^(int_value)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ]
+        },
+        "^(kvlist_value)$": {
+          "$ref": "#/$defs/opentelemetry.proto.common.v1.KeyValueList.jsonschema.json"
+        },
+        "^(string_value)$": {
+          "type": "string"
+        },
+        "^(string_value_strindex)$": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "description": "Note: This is currently used exclusively in the Profiling signal.\n Implementers of OTLP receivers for signals other than Profiling should\n treat the presence of this value as a non-fatal issue.\n Log an error or warning indicating an unexpected field intended for the\n Profiling signal and process the data as if this value were absent or\n empty, ignoring its semantic content for the non-Profiling signal.\n\n Status: [Alpha]\n\n [Since v1.10.0]",
+          "title": "Reference to the string value in ProfilesDictionary.string_table."
+        }
+      },
+      "properties": {
+        "arrayValue": {
+          "$ref": "#/$defs/opentelemetry.proto.common.v1.ArrayValue.jsonschema.json"
+        },
+        "boolValue": {
+          "type": "boolean"
+        },
+        "bytesValue": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "doubleValue": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "Infinity",
+                "-Infinity",
+                "NaN"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "intValue": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ]
+        },
+        "kvlistValue": {
+          "$ref": "#/$defs/opentelemetry.proto.common.v1.KeyValueList.jsonschema.json"
+        },
+        "stringValue": {
+          "type": "string"
+        },
+        "stringValueStrindex": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "description": "Note: This is currently used exclusively in the Profiling signal.\n Implementers of OTLP receivers for signals other than Profiling should\n treat the presence of this value as a non-fatal issue.\n Log an error or warning indicating an unexpected field intended for the\n Profiling signal and process the data as if this value were absent or\n empty, ignoring its semantic content for the non-Profiling signal.\n\n Status: [Alpha]\n\n [Since v1.10.0]",
+          "title": "Reference to the string value in ProfilesDictionary.string_table."
+        }
+      },
+      "title": "Any Value",
+      "type": "object",
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "stringValue"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "string_value"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "boolValue"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "bool_value"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "intValue"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "int_value"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "doubleValue"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "double_value"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "arrayValue"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "array_value"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "kvlistValue"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "kvlist_value"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "bytesValue"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "bytes_value"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "stringValueStrindex"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "string_value_strindex"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "stringValue"
+                  ]
+                },
+                {
+                  "required": [
+                    "string_value"
+                  ]
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "boolValue"
+                  ]
+                },
+                {
+                  "required": [
+                    "bool_value"
+                  ]
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "intValue"
+                  ]
+                },
+                {
+                  "required": [
+                    "int_value"
+                  ]
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "doubleValue"
+                  ]
+                },
+                {
+                  "required": [
+                    "double_value"
+                  ]
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "arrayValue"
+                  ]
+                },
+                {
+                  "required": [
+                    "array_value"
+                  ]
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "kvlistValue"
+                  ]
+                },
+                {
+                  "required": [
+                    "kvlist_value"
+                  ]
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "bytesValue"
+                  ]
+                },
+                {
+                  "required": [
+                    "bytes_value"
+                  ]
+                }
+              ]
+            },
+            {
+              "anyOf": [
+                {
+                  "required": [
+                    "stringValueStrindex"
+                  ]
+                },
+                {
+                  "required": [
+                    "string_value_strindex"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "opentelemetry.proto.common.v1.ArrayValue.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ArrayValue is a list of AnyValue messages. We need ArrayValue as a message\n since oneof in AnyValue does not allow repeated fields.",
+      "properties": {
+        "values": {
+          "description": "Array of values. The array may be empty (contain 0 elements).",
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.common.v1.AnyValue.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Array Value",
+      "type": "object"
+    },
+    "opentelemetry.proto.common.v1.KeyValue.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Represents a key-value pair that is used to store Span attributes, Link\n attributes, etc.",
+      "patternProperties": {
+        "^(key_strindex)$": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "Note: This is currently used exclusively in the Profiling signal.\n Implementers of OTLP receivers for signals other than Profiling should\n treat the presence of this key as a non-fatal issue.\n Log an error or warning indicating an unexpected field intended for the\n Profiling signal and process the data as if this value were absent or\n empty, ignoring its semantic content for the non-Profiling signal.\n\n Status: [Alpha]\n\n [Since v1.10.0]",
+          "title": "Reference to the string key in ProfilesDictionary.string_table.\n key MUST NOT be set if key_strindex is used."
+        }
+      },
+      "properties": {
+        "key": {
+          "default": "",
+          "description": "The key name of the pair.\n key_strindex MUST NOT be set if key is used.",
+          "type": "string"
+        },
+        "keyStrindex": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "Note: This is currently used exclusively in the Profiling signal.\n Implementers of OTLP receivers for signals other than Profiling should\n treat the presence of this key as a non-fatal issue.\n Log an error or warning indicating an unexpected field intended for the\n Profiling signal and process the data as if this value were absent or\n empty, ignoring its semantic content for the non-Profiling signal.\n\n Status: [Alpha]\n\n [Since v1.10.0]",
+          "title": "Reference to the string key in ProfilesDictionary.string_table.\n key MUST NOT be set if key_strindex is used."
+        },
+        "value": {
+          "$ref": "#/$defs/opentelemetry.proto.common.v1.AnyValue.jsonschema.json",
+          "description": "The value of the pair."
+        }
+      },
+      "title": "Key Value",
+      "type": "object"
+    },
+    "opentelemetry.proto.common.v1.KeyValueList.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "KeyValueList is a list of KeyValue messages. We need KeyValueList as a message\n since `oneof` in AnyValue does not allow repeated fields. Everywhere else where we need\n a list of KeyValue messages (e.g. in Span) we use `repeated KeyValue` directly to\n avoid unnecessary extra wrapping (which slows down the protocol). The 2 approaches\n are semantically equivalent.",
+      "properties": {
+        "values": {
+          "description": "The keys MUST be unique (it is not allowed to have more than one\n value with the same key).\n The behavior of software that receives duplicated keys can be unpredictable.",
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.common.v1.KeyValue.jsonschema.json"
+          },
+          "title": "A collection of key/value pairs of key-value pairs. The list may be empty (may\n contain 0 elements).",
+          "type": "array"
+        }
+      },
+      "title": "Key Value List",
+      "type": "object"
+    },
+    "opentelemetry.proto.trace.v1.Span.Event.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Event is a time-stamped annotation of the span, consisting of user-supplied\n text description and key-value pairs.",
+      "patternProperties": {
+        "^(dropped_attributes_count)$": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped attributes. If the value is 0,\n then no attributes were dropped."
+        },
+        "^(time_unix_nano)$": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The time the event occurred."
+        }
+      },
+      "properties": {
+        "attributes": {
+          "description": "A collection of attribute key/value pairs on the event.\n Attribute keys MUST be unique (it is not allowed to have more than one\n attribute with the same key).\n The behavior of software that receives duplicated keys can be unpredictable.",
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.common.v1.KeyValue.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "droppedAttributesCount": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped attributes. If the value is 0,\n then no attributes were dropped."
+        },
+        "name": {
+          "default": "",
+          "description": "The name of the event.\n This field is semantically required to be set to non-empty string.",
+          "type": "string"
+        },
+        "timeUnixNano": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The time the event occurred."
+        }
+      },
+      "title": "Event",
+      "type": "object"
+    },
+    "opentelemetry.proto.trace.v1.Span.Link.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "A pointer from the current span to another span in the same trace or in a\n different trace. For example, this can be used in batching operations,\n where a single batch handler processes multiple requests from different\n traces or when the handler receives a request from a different project.",
+      "patternProperties": {
+        "^(dropped_attributes_count)$": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped attributes. If the value is 0,\n then no attributes were dropped."
+        },
+        "^(span_id)$": {
+          "default": null,
+          "description": "A unique identifier for the linked span. The ID is an 8-byte array.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(trace_id)$": {
+          "default": null,
+          "description": "A unique identifier of a trace that this linked span is part of. The ID is a\n 16-byte array.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(trace_state)$": {
+          "default": "",
+          "description": "The trace_state associated with the link.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "attributes": {
+          "description": "A collection of attribute key/value pairs on the link.\n Attribute keys MUST be unique (it is not allowed to have more than one\n attribute with the same key).\n The behavior of software that receives duplicated keys can be unpredictable.",
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.common.v1.KeyValue.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "droppedAttributesCount": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped attributes. If the value is 0,\n then no attributes were dropped."
+        },
+        "flags": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "Bits 0-7 (8 least significant bits) are the trace flags as defined in W3C Trace\n Context specification. To read the 8-bit W3C trace flag, use\n `flags & SPAN_FLAGS_TRACE_FLAGS_MASK`.\n\n See https://www.w3.org/TR/trace-context-2/#trace-flags for the flag definitions.\n\n Bits 8 and 9 represent the 3 states of whether the link is remote.\n The states are (unknown, is not remote, is remote).\n To read whether the value is known, use `(flags & SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK) != 0`.\n To read whether the link is remote, use `(flags & SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK) != 0`.\n\n Readers MUST NOT assume that bits 10-31 (22 most significant bits) will be zero.\n When creating new spans, bits 10-31 (most-significant 22-bits) MUST be zero.\n\n [Optional].\n\n [Since v1.1.0]",
+          "title": "Flags, a bit field."
+        },
+        "spanId": {
+          "default": null,
+          "description": "A unique identifier for the linked span. The ID is an 8-byte array.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "traceId": {
+          "default": null,
+          "description": "A unique identifier of a trace that this linked span is part of. The ID is a\n 16-byte array.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "traceState": {
+          "default": "",
+          "description": "The trace_state associated with the link.",
+          "type": "string"
+        }
+      },
+      "title": "Link",
+      "type": "object"
+    },
+    "opentelemetry.proto.trace.v1.Span.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "The next available field id is 17.",
+      "patternProperties": {
+        "^(dropped_attributes_count)$": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of attributes that were discarded. Attributes\n can be discarded because their keys are too long or because there are too many\n attributes. If this value is 0, then no attributes were dropped."
+        },
+        "^(dropped_events_count)$": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped events. If the value is 0, then no\n events were dropped."
+        },
+        "^(dropped_links_count)$": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped links after the maximum size was\n enforced. If this value is 0, then no links were dropped."
+        },
+        "^(end_time_unix_nano)$": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "This field is semantically required and it is expected that end_time >= start_time.",
+          "title": "The end time of the span. On the client side, this is the time\n kept by the local machine where the span execution ends. On the server side, this\n is the time when the server application handler stops running.\n Value is UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+        },
+        "^(parent_span_id)$": {
+          "default": null,
+          "description": "The `span_id` of this span's parent span. If this is a root span, then this\n field must be empty. The ID is an 8-byte array.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(span_id)$": {
+          "default": null,
+          "description": "This field is required.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "title": "A unique identifier for a span within a trace, assigned when the span\n is created. The ID is an 8-byte array. An ID with all zeroes OR of length\n other than 8 bytes is considered invalid (empty string in OTLP/JSON\n is zero-length and thus is also invalid).",
+          "type": "string"
+        },
+        "^(start_time_unix_nano)$": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "This field is semantically required and it is expected that end_time >= start_time.",
+          "title": "The start time of the span. On the client side, this is the time\n kept by the local machine where the span execution starts. On the server side, this\n is the time when the server's application handler starts running.\n Value is UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+        },
+        "^(trace_id)$": {
+          "default": null,
+          "description": "This field is required.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "title": "A unique identifier for a trace. All spans from the same trace share\n the same `trace_id`. The ID is a 16-byte array. An ID with all zeroes OR\n of length other than 16 bytes is considered invalid (empty string in OTLP/JSON\n is zero-length and thus is also invalid).",
+          "type": "string"
+        },
+        "^(trace_state)$": {
+          "default": "",
+          "description": "trace_state conveys information about request position in multiple distributed tracing graphs.\n It is a trace_state in w3c-trace-context format: https://www.w3.org/TR/trace-context/#tracestate-header\n See also https://github.com/w3c/distributed-tracing for more details about this field.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "attributes": {
+          "description": "\"user_agent.original\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36\"\n     \"http.response.status_code\": 200\n     \"com.example.myattribute\": true\n     \"com.example.score\": 10.239\n\n Attribute keys MUST be unique (it is not allowed to have more than one\n attribute with the same key).\n The behavior of software that receives duplicated keys can be unpredictable.",
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.common.v1.KeyValue.jsonschema.json"
+          },
+          "title": "A collection of key/value pairs. Note, global attributes\n like service name can be set using the resource API. Examples of attributes:",
+          "type": "array"
+        },
+        "droppedAttributesCount": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of attributes that were discarded. Attributes\n can be discarded because their keys are too long or because there are too many\n attributes. If this value is 0, then no attributes were dropped."
+        },
+        "droppedEventsCount": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped events. If the value is 0, then no\n events were dropped."
+        },
+        "droppedLinksCount": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of dropped links after the maximum size was\n enforced. If this value is 0, then no links were dropped."
+        },
+        "endTimeUnixNano": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "This field is semantically required and it is expected that end_time >= start_time.",
+          "title": "The end time of the span. On the client side, this is the time\n kept by the local machine where the span execution ends. On the server side, this\n is the time when the server application handler stops running.\n Value is UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+        },
+        "events": {
+          "description": "A collection of Event items.",
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.trace.v1.Span.Event.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "flags": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "Bits 0-7 (8 least significant bits) are the trace flags as defined in W3C Trace\n Context specification. To read the 8-bit W3C trace flag, use\n `flags & SPAN_FLAGS_TRACE_FLAGS_MASK`.\n\n See https://www.w3.org/TR/trace-context-2/#trace-flags for the flag definitions.\n\n Bits 8 and 9 represent the 3 states of whether a span's parent\n is remote. The states are (unknown, is not remote, is remote).\n To read whether the value is known, use `(flags & SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK) != 0`.\n To read whether the span is remote, use `(flags & SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK) != 0`.\n\n When creating span messages, if the message is logically forwarded from another source\n with an equivalent flags fields (i.e., usually another OTLP span message), the field SHOULD\n be copied as-is. If creating from a source that does not have an equivalent flags field\n (such as a runtime representation of an OpenTelemetry span), the high 22 bits MUST\n be set to zero.\n Readers MUST NOT assume that bits 10-31 (22 most significant bits) will be zero.\n\n [Optional].\n\n [Since v1.1.0]",
+          "title": "Flags, a bit field."
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "pattern": "^SPAN_KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "SPAN_KIND_INTERNAL",
+                "SPAN_KIND_SERVER",
+                "SPAN_KIND_CLIENT",
+                "SPAN_KIND_PRODUCER",
+                "SPAN_KIND_CONSUMER"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Distinguishes between spans generated in a particular context. For example,\n two spans with the same name may be distinguished using `CLIENT` (caller)\n and `SERVER` (callee) to identify queueing latency associated with the span.",
+          "title": "Span Kind"
+        },
+        "links": {
+          "description": "A collection of Links, which are references from this span to a span\n in the same or different trace.",
+          "items": {
+            "$ref": "#/$defs/opentelemetry.proto.trace.v1.Span.Link.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "name": {
+          "default": "",
+          "description": "For example, the name can be a qualified method name or a file name\n and a line number where the operation is called. A best practice is to use\n the same display name at the same call point in an application.\n This makes it easier to correlate spans in different traces.\n\n This field is semantically required to be set to non-empty string.\n Empty value is equivalent to an unknown span name.\n\n This field is required.",
+          "title": "A description of the span's operation.",
+          "type": "string"
+        },
+        "parentSpanId": {
+          "default": null,
+          "description": "The `span_id` of this span's parent span. If this is a root span, then this\n field must be empty. The ID is an 8-byte array.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "spanId": {
+          "default": null,
+          "description": "This field is required.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "title": "A unique identifier for a span within a trace, assigned when the span\n is created. The ID is an 8-byte array. An ID with all zeroes OR of length\n other than 8 bytes is considered invalid (empty string in OTLP/JSON\n is zero-length and thus is also invalid).",
+          "type": "string"
+        },
+        "startTimeUnixNano": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "This field is semantically required and it is expected that end_time >= start_time.",
+          "title": "The start time of the span. On the client side, this is the time\n kept by the local machine where the span execution starts. On the server side, this\n is the time when the server's application handler starts running.\n Value is UNIX Epoch time in nanoseconds since 00:00:00 UTC on 1 January 1970."
+        },
+        "status": {
+          "$ref": "#/$defs/opentelemetry.proto.trace.v1.Status.jsonschema.json",
+          "description": "An optional final status for this span. Semantically when Status isn't set, it means\n span's status code is unset, i.e. assume STATUS_CODE_UNSET (code = 0)."
+        },
+        "traceId": {
+          "default": null,
+          "description": "This field is required.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "title": "A unique identifier for a trace. All spans from the same trace share\n the same `trace_id`. The ID is a 16-byte array. An ID with all zeroes OR\n of length other than 16 bytes is considered invalid (empty string in OTLP/JSON\n is zero-length and thus is also invalid).",
+          "type": "string"
+        },
+        "traceState": {
+          "default": "",
+          "description": "trace_state conveys information about request position in multiple distributed tracing graphs.\n It is a trace_state in w3c-trace-context format: https://www.w3.org/TR/trace-context/#tracestate-header\n See also https://github.com/w3c/distributed-tracing for more details about this field.",
+          "type": "string"
+        }
+      },
+      "title": "A Span represents a single operation performed by a single component of the system.",
+      "type": "object"
+    },
+    "opentelemetry.proto.trace.v1.Status.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "The Status type defines a logical error model that is suitable for different\n programming environments, including REST APIs and RPC APIs.",
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "pattern": "^STATUS_CODE_UNSET$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "STATUS_CODE_OK",
+                "STATUS_CODE_ERROR"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The status code.",
+          "title": "Status Code"
+        },
+        "message": {
+          "default": "",
+          "description": "A developer-facing human readable error message.",
+          "type": "string"
+        }
+      },
+      "title": "Status",
+      "type": "object"
     }
   },
   "$id": "https://ocel.dev/schema/cli/cli.stream.v1.RunEvent.schema.json",

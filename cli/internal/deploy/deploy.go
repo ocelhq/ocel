@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -72,11 +73,16 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	}
 
 	deployTelemetry := watchDeploy(dependencies.Events, cfg, target.telemetryTarget(), opts.Dry)
-	var attempt *deployreport.Attempt
-	var apps []*consolev1.App
-	var succeeded *consolev1.Deployment
+	var report *consolev1.Deployment
 	err = dependencies.WithProvider(ctx, cfg, target.command(), commands.OpenOptions{Intent: commands.Deploy, Tier: target.tier, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
+		var attempt *deployreport.Attempt
+		var apps []*consolev1.App
+		var succeeded *consolev1.Deployment
+		defer func() {
+			report = attempt.Report(time.Now(), apps, succeeded, err)
+			run.SetDeploymentReport(report)
+		}()
 		facts, err := runPreflight(ctx, dependencies, policy, check, provider, p.Project, p.Preflight, opts.Prebuilt, env)
 		check.End(err)
 		if err != nil {
@@ -139,7 +145,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		return nil
 	})
 	deployTelemetry.record(dependencies.RecordEvent, err)
-	dependencies.Console.ReportAttempt(ctx, attempt, apps, succeeded, err, stderr)
+	dependencies.Console.ReportDeployment(ctx, cfg.Dir, report, stderr)
 	return err
 }
 

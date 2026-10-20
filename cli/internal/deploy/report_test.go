@@ -211,6 +211,63 @@ func TestADeployWhoseReportCannotBeCompletedStillReportsItsLivePromotion(t *test
 	}
 }
 
+func TestADeploysSummaryCarriesTheDeploymentItWritesToTheReportFileWithNoConsoleToReportTo(t *testing.T) {
+	dependencies, fixture, _ := reportingDeploy(t)
+	dependencies.Console = deployreport.Console{}
+	useJSONFormat(t, &dependencies)
+
+	stream, stderr, err := deployOnce(t, dependencies, fixture, deployOptions{})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stderr=%s", err, stderr)
+	}
+
+	evs := envelopes(t, stream)
+	got := evs[len(evs)-1].GetSummary().GetDeploymentReport()
+	file := readDeployReport(t, fixture.Root)
+	if got.GetId() == "" || got.GetId() != file.GetId() || got.GetOutcome() != consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED || got.GetPromotion().GetId() != file.GetPromotion().GetId() {
+		t.Errorf("summary carries %v, want the deployment the report file holds: %v", got, file)
+	}
+	if got.GetTarget() != fixtureTarget || got.GetProvider().GetName() != "fake" {
+		t.Errorf("target %q provider %q, want %q and fake", got.GetTarget(), got.GetProvider().GetName(), fixtureTarget)
+	}
+}
+
+func TestAFailedDeploysSummaryCarriesTheFailedDeploymentItReports(t *testing.T) {
+	dependencies, fixture, console := reportingDeploy(t)
+	console.Link(t, fixture.Root)
+	useJSONFormat(t, &dependencies)
+	fixture.Provider.FakeStacks().Entering(func(provider.StackSpec) error { return errors.New("simulated deploy failure") })
+
+	stream, _, err := deployOnce(t, dependencies, fixture, deployOptions{})
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want the simulated failure")
+	}
+
+	evs := envelopes(t, stream)
+	got := evs[len(evs)-1].GetSummary().GetDeploymentReport()
+	if got.GetOutcome() != consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_FAILED || !strings.Contains(got.GetError(), "simulated deploy failure") {
+		t.Errorf("summary carries %v, want the failed deployment", got)
+	}
+	if reports := console.Reports(); len(reports) != 1 || reports[0].GetDeployment().GetId() != got.GetId() || reports[0].GetDeployment().GetError() != got.GetError() {
+		t.Errorf("the console received %v, want the one deployment the summary carries", reports)
+	}
+}
+
+func TestADryDeploysSummaryCarriesNoDeployment(t *testing.T) {
+	dependencies, fixture, _ := reportingDeploy(t)
+	useJSONFormat(t, &dependencies)
+
+	stream, stderr, err := deployOnce(t, dependencies, fixture, deployOptions{dry: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stderr=%s", err, stderr)
+	}
+
+	evs := envelopes(t, stream)
+	if got := evs[len(evs)-1].GetSummary().GetDeploymentReport(); got != nil {
+		t.Errorf("summary carries %v from a dry run, want none", got)
+	}
+}
+
 func TestADryDeployReportsNothing(t *testing.T) {
 	dependencies, fixture, console := reportingDeploy(t)
 	console.Link(t, fixture.Root)

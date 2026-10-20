@@ -7,6 +7,7 @@ import "buf/validate/validate.proto";
 import "cloud/v1/job.proto";
 import "common/environment/v1/environment.proto";
 import "common/progress/v1/progress.proto";
+import "console/v1/deployment.proto";
 
 message RunEvent {
   common.progress.v1.OperationEvent operation = 1;
@@ -127,6 +128,8 @@ message RunSummary {
   repeated Assumption assumed = 17;
 
   CloudJob cloud_job = 18;
+
+  console.v1.Deployment deployment_report = 19;
 }
 
 message CloudJob {

@@ -22,25 +22,15 @@ type Console struct {
 }
 
 func (c Console) ReportDeployment(ctx context.Context, projectDir string, deployment *consolev1.Deployment, stderr io.Writer) {
+	if deployment == nil {
+		return
+	}
 	c.send(ctx, projectDir, "deployment "+deployment.GetId(), stderr, func(ctx context.Context, client *console.Client, accessToken, projectID string) error {
 		if deployment.GetTarget() == "" {
 			return errNoTarget
 		}
 		return client.ReportDeployment(ctx, accessToken, projectID, deployment)
 	})
-}
-
-func (c Console) ReportAttempt(ctx context.Context, attempt *Attempt, apps []*consolev1.App, succeeded *consolev1.Deployment, runErr error, stderr io.Writer) {
-	if attempt == nil {
-		return
-	}
-	deployment := succeeded
-	if deployment == nil && runErr != nil {
-		deployment = attempt.Failed(time.Now(), apps, runErr)
-	}
-	if deployment != nil {
-		c.ReportDeployment(ctx, attempt.Project.Dir, deployment, stderr)
-	}
 }
 
 func (c Console) ReportEnvironmentEvent(ctx context.Context, projectDir string, event *consolev1.EnvironmentEvent, stderr io.Writer) {
