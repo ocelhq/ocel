@@ -1023,6 +1023,7 @@ type OperationResult struct {
 	Connector         *ConnectorInstalled    `protobuf:"bytes,11,opt,name=connector,proto3" json:"connector,omitempty"`
 	PromotedAtSeconds int64                  `protobuf:"varint,12,opt,name=promoted_at_seconds,json=promotedAtSeconds,proto3" json:"promoted_at_seconds,omitempty"`
 	Protection        *ProtectionPublished   `protobuf:"bytes,13,opt,name=protection,proto3" json:"protection,omitempty"`
+	ConnectCode       string                 `protobuf:"bytes,14,opt,name=connect_code,json=connectCode,proto3" json:"connect_code,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1125,6 +1126,13 @@ func (x *OperationResult) GetProtection() *ProtectionPublished {
 		return x.Protection
 	}
 	return nil
+}
+
+func (x *OperationResult) GetConnectCode() string {
+	if x != nil {
+		return x.ConnectCode
+	}
+	return ""
 }
 
 type ProtectionPublished struct {
@@ -1396,7 +1404,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x0edeployment_url\x18\x05 \x01(\tR\rdeploymentUrl\x12-\n" +
 	"\x12storage_coordinate\x18\x06 \x01(\tR\x11storageCoordinate\x12\x18\n" +
 	"\arelease\x18\a \x01(\tR\arelease\x12\x19\n" +
-	"\bbuild_id\x18\b \x01(\tR\abuildId\"\xd0\x03\n" +
+	"\bbuild_id\x18\b \x01(\tR\abuildId\"\x85\x04\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +
@@ -1410,7 +1418,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x13promoted_at_seconds\x18\f \x01(\x03R\x11promotedAtSeconds\x12G\n" +
 	"\n" +
 	"protection\x18\r \x01(\v2'.common.progress.v1.ProtectionPublishedR\n" +
-	"protection\"P\n" +
+	"protection\x123\n" +
+	"\fconnect_code\x18\x0e \x01(\tB\x10\xbaH\rr\v2\t^[a-z_]*$R\vconnectCode\"P\n" +
 	"\x13ProtectionPublished\x129\n" +
 	"\x05edges\x18\x01 \x03(\v2#.common.progress.v1.EdgePublicationR\x05edges\"Y\n" +
 	"\x0fEdgePublication\x12\x12\n" +

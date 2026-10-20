@@ -74,11 +74,17 @@ func (u unsupportedCall) Error() string { return u.message }
 func (u unsupportedCall) Unwrap() error { return u.cause }
 
 func unsupportedIn(err error) error {
+	var message string
 	var rpcErr *connect.Error
-	if connect.CodeOf(err) != connect.CodeUnimplemented || !errors.As(err, &rpcErr) {
+	var failed *OperationFailedError
+	switch {
+	case connect.CodeOf(err) == connect.CodeUnimplemented && errors.As(err, &rpcErr):
+		message = strings.Replace(err.Error(), rpcErr.Error(), rpcErr.Message(), 1)
+	case errors.As(err, &failed) && failed.ConnectCode == connect.CodeUnimplemented.String():
+		message = strings.TrimPrefix(failed.Message, failed.ConnectCode+": ")
+	default:
 		return err
 	}
-	message := strings.Replace(err.Error(), rpcErr.Error(), rpcErr.Message(), 1)
 	return &clierror.Error{Code: clierror.CodeProviderUnsupported, Cause: unsupportedCall{message: message, cause: err}}
 }
 

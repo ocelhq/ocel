@@ -324,6 +324,10 @@ func TestAProviderAnsweringThatItDoesNotSupportACallFailsWithProviderUnsupported
 			_, err := Stream(ctx, p, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy)
 			return err
 		}, "simulated provider runs no serverless app"},
+		"unsupported-deploy-result": {func(ctx context.Context, p *Provider) error {
+			_, err := Stream(ctx, p, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy)
+			return err
+		}, "simulated provider runs no worker"},
 		"unimplemented-logs": {func(ctx context.Context, p *Provider) error {
 			_, err := readLogMessages(ctx, p)
 			return err

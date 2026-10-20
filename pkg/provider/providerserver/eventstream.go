@@ -246,9 +246,19 @@ func failureResult(err error) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Level: progressv1.Level_LEVEL_ERROR,
 		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
-			Success: false,
-			Error:   err.Error(),
+			Success:     false,
+			Error:       err.Error(),
+			ConnectCode: refusedWith(err),
 		}},
+	}
+}
+
+func refusedWith(err error) string {
+	switch code := connect.CodeOf(err); code {
+	case connect.CodeInternal, connect.CodeUnknown:
+		return ""
+	default:
+		return code.String()
 	}
 }
 
