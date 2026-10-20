@@ -7,7 +7,7 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 )
 
-const containerPhysical = "shop-prod-web-container-r3f8a1c90"
+const containerPhysical = "ocel-app-shop-prod-web-container-r3f8a1c90"
 
 func TestARuleKeepsThePriorityItAlreadyOwnsOnTheFront(t *testing.T) {
 	t.Parallel()

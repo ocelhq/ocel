@@ -19,6 +19,10 @@ func TestSanitizeKeepsTheAlphabet(t *testing.T) {
 	}
 }
 
+func fitFunctionName(c Coordinate) string {
+	return Fit(64, WordSeparator, Fixed(c.Project), Fixed(c.Env), Fixed(c.App), Compressible(c.Name), Fixed(c.Release.String()))
+}
+
 func TestFitKeepsFixedFieldsAndMarksTruncation(t *testing.T) {
 	c := Coordinate{
 		Project: "a-fairly-long-project-slug",
@@ -28,7 +32,7 @@ func TestFitKeepsFixedFieldsAndMarksTruncation(t *testing.T) {
 		Name:    "api-users-with-a-very-long-route-identifier",
 		Release: NewReleaseToken("build-1", ""),
 	}
-	got := c.PhysicalName(64)
+	got := fitFunctionName(c)
 	if len(got) > 64 {
 		t.Fatalf("PhysicalName = %q (%d chars), want <= 64", got, len(got))
 	}
@@ -50,15 +54,15 @@ func TestFitStaysCollisionSafe(t *testing.T) {
 	a.Name = long + "one"
 	b.Name = long + "two"
 
-	if a.PhysicalName(64) == b.PhysicalName(64) {
-		t.Fatalf("distinct routes collided on %q", a.PhysicalName(64))
+	if fitFunctionName(a) == fitFunctionName(b) {
+		t.Fatalf("distinct routes collided on %q", fitFunctionName(a))
 	}
 }
 
 func TestFitIsStableWhenItFits(t *testing.T) {
 	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "api-users", Release: NewReleaseToken("build-1", "")}
 	want := "shop-prod-web-api-users-" + c.Release.String()
-	if got := c.PhysicalName(64); got != want {
+	if got := fitFunctionName(c); got != want {
 		t.Errorf("PhysicalName = %q, want %q", got, want)
 	}
 }
@@ -66,7 +70,7 @@ func TestFitIsStableWhenItFits(t *testing.T) {
 func TestFitOmitsEmptySegments(t *testing.T) {
 	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Release: NewReleaseToken("build-1", "")}
 	want := "shop-prod-web-" + c.Release.String()
-	if got := c.PhysicalName(64); got != want {
+	if got := fitFunctionName(c); got != want {
 		t.Errorf("PhysicalName = %q, want %q", got, want)
 	}
 	if got := Fit(64, WordSeparator, Fixed("shop"), Compressible(""), Fixed("prod")); got != "shop-prod" {

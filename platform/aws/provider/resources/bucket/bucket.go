@@ -32,8 +32,9 @@ func New(artifacts component.Artifacts) component.Component {
 			return Grants(strings.Repeat("b", maxS3BucketNameLen), NewSessions(at.Project, at.Env, at.StateTableARN))
 		},
 		Credential: credential,
-		Transform: func(project, env, name string) component.Transformable {
-			return component.Transformable{Kind: transformKind, Names: resourceNames(project, env, name)}
+		Transform: func(at component.Stack, declared provider.Resource) (component.Transformable, error) {
+			names, err := resourceNames(at, declared.Name)
+			return component.Transformable{Kind: transformKind, Names: names}, err
 		},
 		Shape: shape,
 	}
@@ -50,10 +51,9 @@ func declare(ctx *pulumi.Context, at component.Stack, declared []provider.Resour
 	sessions := NewSessions(at.Project, at.Env, at.StateTableARN)
 	for _, resource := range declared {
 		args := translate(resource.Bucket)
-		args.Tier = at.Tier()
 		args.Tags = at.Transforms.TagsFor(transformKind, resource.Name)
 		args.PatchedCORS = at.Transforms.Patches(transformKind, resource.Name, "cors")
-		if err := register(ctx, at.Project, at.Env, resource.Name, args, at.StateTable, at.AppBoundaryARN, at.AppRolePath, sessions, completer); err != nil {
+		if err := register(ctx, at, resource.Name, args, sessions, completer); err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
 		}
 	}

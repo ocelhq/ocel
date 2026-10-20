@@ -159,17 +159,17 @@ func registeredKV(t *testing.T, project string) *componenttest.Recorder {
 	args.AuthToken = "a-minted-token"
 	args.AuthTokenParameter = "/ocel/kv/shop/prod/kv--cache"
 	return componenttest.Record(t, func(ctx *pulumi.Context) error {
-		return registerKV(ctx, project, "prod", "kv--cache", args, testNetwork)
+		return registerKV(ctx, testStack(project), "kv--cache", args)
 	})
 }
 
 func TestAStoreIsAReplicationGroupOfTwoEncryptedNodesThatFailOverAcrossZones(t *testing.T) {
 	t.Parallel()
 
-	group := registeredKV(t, "shop").InputsOf(t, component.TokenElastiCacheReplicationGroup, "kv-cache")
+	group := registeredKV(t, "shop").InputsOf(t, component.TokenElastiCacheReplicationGroup, testGroup)
 
 	for field, want := range map[string]any{
-		"replicationGroupId":       "ocel-app-shop-prod-cache",
+		"replicationGroupId":       testGroup,
 		"engine":                   "valkey",
 		"engineVersion":            "9.1",
 		"nodeType":                 "cache.t4g.micro",
@@ -180,8 +180,8 @@ func TestAStoreIsAReplicationGroupOfTwoEncryptedNodesThatFailOverAcrossZones(t *
 		"transitEncryptionEnabled": true,
 		"atRestEncryptionEnabled":  true,
 		"snapshotRetentionLimit":   float64(1),
-		"parameterGroupName":       "ocel-app-shop-prod-cache-valkey9",
-		"subnetGroupName":          "ocel-app-shop-prod-cache-subnets",
+		"parameterGroupName":       testGroup + "-valkey9",
+		"subnetGroupName":          testGroup + "-subnets",
 	} {
 		if got := group[resource.PropertyKey(field)].V; got != want {
 			t.Errorf("replication group %s = %v, want %v", field, got, want)
@@ -196,12 +196,12 @@ func TestAStoreIsAReplicationGroupOfTwoEncryptedNodesThatFailOverAcrossZones(t *
 func TestAStoresParameterGroupCarriesItsEvictionAndReserveUnderAFamilyNamedGroup(t *testing.T) {
 	t.Parallel()
 
-	group := registeredKV(t, "shop").InputsOf(t, component.TokenElastiCacheParameterGroup, "kv-cache-parameters")
+	group := registeredKV(t, "shop").InputsOf(t, component.TokenElastiCacheParameterGroup, testGroup+"-valkey9")
 
 	if got := group["family"].StringValue(); got != "valkey9" {
 		t.Errorf("parameter group family = %q, want valkey9", got)
 	}
-	if got := group["name"].StringValue(); got != "ocel-app-shop-prod-cache-valkey9" {
+	if got := group["name"].StringValue(); got != testGroup+"-valkey9" {
 		t.Errorf("parameter group name = %q, want the family in it so a major upgrade makes a new group", got)
 	}
 	parameters := map[string]string{}
@@ -218,7 +218,7 @@ func TestAStoresParameterGroupCarriesItsEvictionAndReserveUnderAFamilyNamedGroup
 func TestAStoreAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
 	t.Parallel()
 
-	sg := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, "kv-cache-security-group")
+	sg := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, testGroup+"-sg")
 
 	ingress := sg["ingress"].ArrayValue()
 	if len(ingress) != 1 {
@@ -241,7 +241,7 @@ func TestAStoresSecurityGroupDescribesItselfAndItsRuleInWhatEC2Accepts(t *testin
 	t.Parallel()
 
 	accepted := regexp.MustCompile(`^[0-9A-Za-z_ .:/()#,@\[\]+=&;{}!$*-]*$`)
-	sg := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, "kv-cache-security-group")
+	sg := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, testGroup+"-sg")
 
 	descriptions := []string{sg["description"].StringValue()}
 	for _, rule := range sg["ingress"].ArrayValue() {
@@ -257,7 +257,7 @@ func TestAStoresSecurityGroupDescribesItselfAndItsRuleInWhatEC2Accepts(t *testin
 func TestAStoreSendsNothingOutOfItsSecurityGroup(t *testing.T) {
 	t.Parallel()
 
-	group := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, "kv-cache-security-group")
+	group := registeredKV(t, "shop").InputsOf(t, component.TokenEC2SecurityGroup, testGroup+"-sg")
 
 	if egress, set := group["egress"]; !set || !egress.IsArray() || len(egress.ArrayValue()) != 0 {
 		t.Errorf("security group egress = %v, want an empty list: ElastiCache opens no connection out, and an empty list also revokes the allow-all rule AWS adds", egress)
@@ -268,12 +268,7 @@ func TestEveryResourceOfAStoreIsTaggedAsAKVStore(t *testing.T) {
 	t.Parallel()
 
 	rec := registeredKV(t, "shop")
-	for typeToken, name := range map[string]string{
-		component.TokenEC2SecurityGroup:            "kv-cache-security-group",
-		component.TokenElastiCacheSubnetGroup:      "kv-cache-subnet-group",
-		component.TokenElastiCacheParameterGroup:   "kv-cache-parameters",
-		component.TokenElastiCacheReplicationGroup: "kv-cache",
-	} {
+	for typeToken, name := range pulumiNames(t, "shop") {
 		if got, want := rec.Component(t, typeToken, name), naming.KindKV.Component(); got != want {
 			t.Errorf("%s on %s = %q, want %q", component.TagComponent, name, got, want)
 		}
@@ -283,16 +278,25 @@ func TestEveryResourceOfAStoreIsTaggedAsAKVStore(t *testing.T) {
 func TestEveryResourceOfAStoreIsTaggedWithTheStoresDeclaredName(t *testing.T) {
 	t.Parallel()
 
-	rec := registeredKV(t, strings.Repeat("a-long-project-slug-", 3))
-	for typeToken, name := range map[string]string{
-		component.TokenEC2SecurityGroup:            "kv-cache-security-group",
-		component.TokenElastiCacheSubnetGroup:      "kv-cache-subnet-group",
-		component.TokenElastiCacheParameterGroup:   "kv-cache-parameters",
-		component.TokenElastiCacheReplicationGroup: "kv-cache",
-	} {
+	long := strings.Repeat("a-long-project-slug-", 3)
+	rec := registeredKV(t, long)
+	for typeToken, name := range pulumiNames(t, long) {
 		got := rec.Tags(t, typeToken, name)[component.TagResource]
 		if got != "cache" {
 			t.Errorf("%s on %s = %q, want cache: a long project slug compresses the store's name out of its ids, and this tag still finds it", component.TagResource, name, got)
 		}
 	}
+}
+
+func pulumiNames(t *testing.T, project string) map[string]string {
+	t.Helper()
+	names, err := resourceNames(testStack(project), "kv--cache", "valkey9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byToken := map[string]string{}
+	for _, refs := range names {
+		byToken[refs[0].Token] = refs[0].Name
+	}
+	return byToken
 }

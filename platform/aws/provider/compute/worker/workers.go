@@ -14,18 +14,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 const (
+	workerRoleWord    = "worker-role"
+	schedulerRoleWord = "scheduler-role"
+	queuesPolicyName  = "queues"
+
 	reportBatchItemFailures = "ReportBatchItemFailures"
 	minEventConcurrency     = 2
 	maxEventConcurrency     = 1000
@@ -38,6 +40,7 @@ type Target struct {
 }
 
 type Stack struct {
+	names    queues.Names
 	project  string
 	stack    naming.StackName
 	topics   topic.Topics
@@ -69,10 +72,20 @@ func NewStack(spec provider.StackSpec, functions function.AppStack, role functio
 	}
 	entry := functions.Functions[at]
 	args := functions.Args(entry)
+	names := queues.Names{Namespace: target.Namespace, Project: project, Env: spec.Ref.Name.Env}
+	topics, err := topic.Of(names, app.Topics)
+	if err != nil {
+		return nil, err
+	}
+	group, err := names.ScheduleGroup()
+	if err != nil {
+		return nil, err
+	}
 	return &Stack{
+		names:    names,
 		project:  project,
 		stack:    StackName(spec.Ref.Name.Env, app.App),
-		topics:   topic.Of(project, spec.Ref.Name.Env, app.Topics),
+		topics:   topics,
 		workers:  app.Workers,
 		args:     args,
 		artifact: functions.Artifacts[entry.Logical],
@@ -85,7 +98,7 @@ func NewStack(spec provider.StackSpec, functions function.AppStack, role functio
 		account:  component.AccountOfARN(target.StateTable.ARN),
 		table:    target.StateTable.ARN,
 		prefix:   naming.TaskKeyPrefix(project, spec.Ref.Name.Env),
-		group:    queues.ScheduleGroupName(project, spec.Ref.Name.Env),
+		group:    group,
 	}, nil
 }
 
@@ -119,7 +132,12 @@ func (w *Stack) coordinate(kind naming.Kind, name string) naming.Coordinate {
 }
 
 func (w *Stack) Declare(ctx *pulumi.Context) error {
-	role, err := function.NewRole(ctx, w.coordinate(naming.KindRole, "worker-role"), w.role)
+	roleAt := w.coordinate(naming.KindRole, workerRoleWord)
+	role, err := function.NewRole(ctx, roleAt, w.role)
+	if err != nil {
+		return err
+	}
+	roleName, err := function.RoleName(w.names.Namespace, roleAt)
 	if err != nil {
 		return err
 	}
@@ -127,10 +145,7 @@ func (w *Stack) Declare(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	consuming, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "queues"), &awsiam.RolePolicyArgs{
-		Role:   role.Name,
-		Policy: pulumi.String(consumption),
-	})
+	consuming, err := component.NewRolePolicy(ctx, roleName, role, queuesPolicyName, pulumi.String(consumption))
 	if err != nil {
 		return err
 	}
@@ -150,8 +165,13 @@ func (w *Stack) Declare(ctx *pulumi.Context) error {
 	if len(crons) == 0 {
 		return nil
 	}
-	assumed := task.SchedulerRole{At: w.coordinate(naming.KindRole, "scheduler"), Boundary: w.role.Boundary, Path: w.role.Path, Tags: w.role.Tags}
-	return task.DeclareCrons(ctx, assumed, w.group, invokingPolicy(functions), crons)
+	schedulerAt := w.coordinate(naming.KindRole, schedulerRoleWord)
+	scheduler, err := component.PhysicalName(w.names.Namespace, schedulerAt, component.MaxRoleNameLen)
+	if err != nil {
+		return err
+	}
+	assumed := task.SchedulerRole{Name: scheduler, At: schedulerAt, Boundary: w.role.Boundary, Path: w.role.Path, Tags: w.role.Tags}
+	return task.DeclareCrons(ctx, assumed, w.names, w.group, invokingPolicy(functions), crons)
 }
 
 func invokingPolicy(functions []*lambda.Function) pulumi.StringOutput {
@@ -200,8 +220,11 @@ func consumptionPolicy(workers []provider.WorkerSpec, topics topic.Topics, regio
 
 func (w *Stack) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, roleARN pulumi.StringInput, consuming pulumi.Resource) (*lambda.Function, error) {
 	at := w.coordinate(naming.KindWorker, worker.Name)
-	scope := awsports.AppScope + naming.WordSeparator
-	name := scope + at.PhysicalName(component.MaxLambdaNameLen-len(scope))
+	physical, err := component.PhysicalName(w.names.Namespace, at, component.MaxLambdaNameLen)
+	if err != nil {
+		return nil, err
+	}
+	name := component.NameOf(physical)
 	env := pulumi.StringMap{}
 	args := w.args
 	args.TimeoutSeconds = int(topic.WorkerTimeout(w.topics, worker.Name) / time.Second)
@@ -213,12 +236,12 @@ func (w *Stack) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, r
 	if worker.Concurrency > 0 {
 		env[queues.WorkerConcurrencyEnv] = pulumi.String(strconv.Itoa(worker.Concurrency))
 	}
-	logs, err := component.NewLambdaLogGroup(ctx, naming.ResourceID(naming.KindWorker, worker.Name, "logs"), name, at.Kind, "", args.Tags)
+	logs, err := component.NewLambdaLogGroup(ctx, name, at.Kind, "", args.Tags)
 	if err != nil {
 		return nil, err
 	}
-	fn, err := lambda.NewFunction(ctx, naming.ResourceID(naming.KindWorker, worker.Name), &lambda.FunctionArgs{
-		Name:          pulumi.String(name),
+	fn, err := lambda.NewFunction(ctx, name.Pulumi, &lambda.FunctionArgs{
+		Name:          name.AWS,
 		Description:   component.CapDescription(at.Description("worker "+worker.Name+": serves its tasks and consumers from their queues"), component.MaxDescriptionLen),
 		Runtime:       pulumi.String(args.Runtime),
 		Handler:       pulumi.String(args.LambdaHandler()),
@@ -239,7 +262,7 @@ func (w *Stack) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, r
 		return nil, err
 	}
 	for _, queue := range w.topics.Served(worker.Name) {
-		if _, err := lambda.NewEventSourceMapping(ctx, naming.ResourceID(naming.KindWorker, worker.Name, queue.Topic, queue.Consumer.Name),
+		if _, err := lambda.NewEventSourceMapping(ctx, name.Part(queue.Name),
 			eventSourceMapping(queue, worker, fn, w.region, w.account, component.Tags(at.Kind, "", args.Tags)), pulumi.DependsOn([]pulumi.Resource{consuming})); err != nil {
 			return nil, err
 		}

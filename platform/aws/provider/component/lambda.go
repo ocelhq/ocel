@@ -14,13 +14,14 @@ const (
 	LambdaNodeRuntime      = "nodejs24.x"
 )
 
-func LambdaLogGroupPrefixFor(base string) string {
-	return LambdaLogGroupPrefix + base + naming.WordSeparator
+func LambdaLogGroupName(function Name) Name {
+	return Name{Pulumi: LambdaLogGroupPrefix + function.Pulumi, AWS: pulumi.Sprintf("%s%s", LambdaLogGroupPrefix, function.AWS)}
 }
 
-func NewLambdaLogGroup(ctx *pulumi.Context, id, base string, kind naming.Kind, bundle string, tags map[string]string, opts ...pulumi.ResourceOption) (*cloudwatch.LogGroup, error) {
-	return cloudwatch.NewLogGroup(ctx, id, &cloudwatch.LogGroupArgs{
-		NamePrefix:      pulumi.String(LambdaLogGroupPrefixFor(base)),
+func NewLambdaLogGroup(ctx *pulumi.Context, function Name, kind naming.Kind, bundle string, tags map[string]string, opts ...pulumi.ResourceOption) (*cloudwatch.LogGroup, error) {
+	group := LambdaLogGroupName(function)
+	return cloudwatch.NewLogGroup(ctx, group.Pulumi, &cloudwatch.LogGroupArgs{
+		Name:            group.AWS,
 		RetentionInDays: pulumi.Int(LambdaLogRetentionDays),
 		Tags:            Tags(kind, bundle, tags),
 	}, opts...)

@@ -302,11 +302,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/environment:prod/aws_lambda_function:uploads-upload-completer",
+      "id": "project:shop/environment:prod/aws_lambda_function:uploads-completer",
       "scope": "project:shop/environment:prod",
       "vendor": "aws",
       "type": "aws_lambda_function",
-      "name": "uploads-upload-completer",
+      "name": "uploads-completer",
       "region": "us-east-1",
       "properties": {
         "architectures": [
@@ -321,11 +321,11 @@
       }
     },
     {
-      "id": "project:shop/environment:prod/aws_cloudwatch_log_group:uploads-upload-completer",
+      "id": "project:shop/environment:prod/aws_cloudwatch_log_group:uploads-completer",
       "scope": "project:shop/environment:prod",
       "vendor": "aws",
       "type": "aws_cloudwatch_log_group",
-      "name": "uploads-upload-completer",
+      "name": "uploads-completer",
       "region": "us-east-1",
       "properties": {
         "retention_in_days": 14

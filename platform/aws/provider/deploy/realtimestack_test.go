@@ -147,7 +147,7 @@ func TestProvisioningRealtimePlacesTheAuthorizerItDeclares(t *testing.T) {
 		t.Errorf("uploaded %v, want the realtime authorizer placed at %s", uploader.puts, at.Key)
 	}
 	want := payloads.Placement{Bucket: at.Bucket, Key: at.Key}
-	if placed := recorder.code["realtime-authorizer"]; placed != want {
+	if placed := recorder.codeOf("-authorizer"); placed != want {
 		t.Errorf("the authorizer lambda declares code at %+v, want %+v", placed, want)
 	}
 }

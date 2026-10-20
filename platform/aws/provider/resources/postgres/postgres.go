@@ -38,8 +38,9 @@ func New(clusters ClustersAPI) component.Component {
 				return disableDeletionProtection(ctx, clusters, ref, outputs, progress)
 			},
 		},
-		Transform: func(project, env, name string) component.Transformable {
-			return component.Transformable{Kind: transformKind, Names: resourceNames(project, env, name)}
+		Transform: func(at component.Stack, declared provider.Resource) (component.Transformable, error) {
+			names, err := resourceNames(at, declared.Name)
+			return component.Transformable{Kind: transformKind, Names: names}, err
 		},
 		Shape: shape,
 	}
@@ -50,7 +51,7 @@ func declare(ctx *pulumi.Context, at component.Stack, declared []provider.Resour
 		args := translate(resource.Postgres, at.Tier())
 		args.Tags = at.Transforms.TagsFor(transformKind, resource.Name)
 		args.Protected = at.Tier() == environment.TierProduction
-		if err := register(ctx, at.Project, at.Env, resource.Name, args, at.Network); err != nil {
+		if err := register(ctx, at, resource.Name, args); err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
 		}
 	}

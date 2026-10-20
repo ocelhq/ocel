@@ -27,7 +27,7 @@ type resourceKey struct {
 
 type transformCandidate struct {
 	key   resourceKey
-	names map[string]component.ResourceRef
+	names map[string][]component.ResourceRef
 	check func(name string, patches map[string]map[string]any) error
 }
 
@@ -143,7 +143,7 @@ func indexPatches(candidates []transformCandidate, results []transform.Result) (
 		}
 		for _, key := range slices.Sorted(maps.Keys(result.Patches)) {
 			patch := result.Patches[key]
-			ref, constructed := candidate.names[key]
+			refs, constructed := candidate.names[key]
 			if !constructed {
 				return nil, refusal.Refuse(refusal.CodeInvalid,
 					"a transform patches %s's %s, and this deploy constructs no such resource for it",
@@ -157,15 +157,18 @@ func indexPatches(candidates []transformCandidate, results []transform.Result) (
 			}
 			indexed.surfaces[candidate.key][key] = true
 			site := candidate.key.Type + " " + candidate.key.Name + "'s " + key
-			if earlier, taken := indexed.patches[ref]; taken {
-				merged, err := mergeClaims(earlier, patch, indexed.sites[ref], site)
-				if err != nil {
-					return nil, err
+			for _, ref := range refs {
+				claimed := patch
+				if earlier, taken := indexed.patches[ref]; taken {
+					merged, err := mergeClaims(earlier, patch, indexed.sites[ref], site)
+					if err != nil {
+						return nil, err
+					}
+					claimed = merged
 				}
-				patch = merged
+				indexed.patches[ref] = claimed
+				indexed.sites[ref] = site
 			}
-			indexed.patches[ref] = patch
-			indexed.sites[ref] = site
 		}
 		if candidate.check != nil {
 			if err := candidate.check(candidate.key.Name, result.Patches); err != nil {

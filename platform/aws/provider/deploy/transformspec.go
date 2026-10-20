@@ -28,7 +28,7 @@ func NodePass(root string, modules []string) transform.NodePass {
 	}
 }
 
-func transformStackSpec(ctx context.Context, pass transform.Pass, registry component.Registry, spec provider.StackSpec) (*transformPatches, error) {
+func transformStackSpec(ctx context.Context, namespace string, pass transform.Pass, registry component.Registry, spec provider.StackSpec) (*transformPatches, error) {
 	if pass == nil {
 		return nil, nil
 	}
@@ -41,24 +41,37 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, registry compo
 	var candidates []transformCandidate
 
 	if app := spec.App; app != nil && app.Compute == provider.ComputeContainer {
+		names, err := container.ResourceNames(namespace, project, stack)
+		if err != nil {
+			return nil, err
+		}
 		req.Resources = append(req.Resources, transform.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
 		candidates = append(candidates, transformCandidate{
 			key:   resourceKey{Type: transformTypeContainer, Name: app.App},
-			names: container.ResourceNames(),
+			names: names,
 		})
 	} else if app != nil {
 		for _, spec := range app.Functions {
+			candidate, err := functionCandidate(namespace, project, stack, spec.Name)
+			if err != nil {
+				return nil, err
+			}
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: transformTypeFunction, Name: spec.Name, App: app.App,
 			})
-			candidates = append(candidates, functionCandidate(project, stack, spec.Name))
+			candidates = append(candidates, candidate)
 		}
 	} else {
+		at := component.Stack{Ref: spec.Ref, Namespace: namespace, Project: project, Env: stack.Env}
 		for _, resource := range spec.Resources {
 			if resource.Binding != "" {
 				continue
 			}
-			if shown, candidate, patchable := newInfraTransformCandidate(registry, project, stack.Env, resource); patchable {
+			shown, candidate, patchable, err := newInfraTransformCandidate(registry, at, resource)
+			if err != nil {
+				return nil, err
+			}
+			if patchable {
 				req.Resources = append(req.Resources, shown)
 				candidates = append(candidates, candidate)
 			}
@@ -81,14 +94,18 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, registry compo
 	return indexPatches(candidates, results)
 }
 
-func functionCandidate(project string, stack naming.StackName, name string) transformCandidate {
+func functionCandidate(namespace, project string, stack naming.StackName, name string) (transformCandidate, error) {
+	names, err := function.ResourceNames(namespace, project, stack, name)
+	if err != nil {
+		return transformCandidate{}, err
+	}
 	return transformCandidate{
 		key:   resourceKey{Type: transformTypeFunction, Name: name},
-		names: function.ResourceNames(project, stack, name),
+		names: names,
 		check: func(name string, patches map[string]map[string]any) error {
 			return checkVPCConfig(name, patches["lambda"])
 		},
-	}
+	}, nil
 }
 
 func resolveSpecOutputs(ctx context.Context, spec provider.StackSpec, candidates []transformCandidate, results []transform.Result) error {
@@ -223,12 +240,15 @@ func resolveSpecBindings(ctx context.Context, bindings provider.Bindings, names 
 	return records, nil
 }
 
-func newInfraTransformCandidate(registry component.Registry, project, env string, resource provider.Resource) (transform.Resource, transformCandidate, bool) {
+func newInfraTransformCandidate(registry component.Registry, at component.Stack, resource provider.Resource) (transform.Resource, transformCandidate, bool, error) {
 	transformed, served := registry.For(resource.Type)
 	if !served || transformed.Transform == nil {
-		return transform.Resource{}, transformCandidate{}, false
+		return transform.Resource{}, transformCandidate{}, false, nil
 	}
-	target := transformed.Transform(project, env, resource.Name)
+	target, err := transformed.Transform(at, resource)
+	if err != nil {
+		return transform.Resource{}, transformCandidate{}, false, err
+	}
 	key := resourceKey{Type: target.Kind, Name: resource.Name}
-	return transform.Resource{Type: target.Kind, Name: resource.Name}, transformCandidate{key: key, names: target.Names, check: target.Check}, true
+	return transform.Resource{Type: target.Kind, Name: resource.Name}, transformCandidate{key: key, names: target.Names, check: target.Check}, true, nil
 }

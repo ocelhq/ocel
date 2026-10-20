@@ -26,7 +26,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
+	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 )
 
 func buildIDFor(label string) string {
@@ -253,6 +257,7 @@ func routedArtifactRoot(t *testing.T) string {
 func routedConfig(t *testing.T, kind edge.Kind) Config {
 	t.Helper()
 	return Config{
+		Namespace:         testNamespace,
 		ArtifactRoot:      routedArtifactRoot(t),
 		AssetBucket:       "assets-bucket",
 		ImageOptimizerURL: "https://optimizer.lambda-url.us-east-1.on.aws/",
@@ -281,4 +286,40 @@ func functionEnvOf(t *testing.T, rec *inputRecorder, name string) map[string]str
 		}
 	}
 	return env
+}
+
+const testNamespace = "ocel"
+
+func workerService(project, env, app, worker string) string {
+	name, err := container.WorkerServiceName(testNamespace, project, env, app, worker)
+	if err != nil {
+		panic(err)
+	}
+	return name
+}
+
+func queueNames(t *testing.T, topic, consumer string, fifo bool) queues.QueueNames {
+	t.Helper()
+	named, err := queues.Names{Namespace: testNamespace, Project: "shop", Env: "prod"}.Queues(topic, consumer, fifo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return named
+}
+
+func namedFunction(stack naming.StackName, logical string) string {
+	name, err := function.Name(testNamespace, "shop", stack, logical)
+	if err != nil {
+		panic(err)
+	}
+	return name.Pulumi
+}
+
+func mustFunctionNames(t *testing.T, stack naming.StackName, logical string) map[string][]component.ResourceRef {
+	t.Helper()
+	names, err := function.ResourceNames(testNamespace, "shop", stack, logical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
 }

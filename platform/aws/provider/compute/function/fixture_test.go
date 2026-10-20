@@ -14,9 +14,11 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 const (
+	testNamespace             = "ocel"
 	rolePolicyToken           = "aws:iam/rolePolicy:RolePolicy"
 	productionVariablesKeyARN = "arn:aws:kms:us-east-1:1234:key/prod-key"
 )
@@ -137,4 +139,29 @@ func writeTree(t *testing.T, files map[string]string) string {
 		}
 	}
 	return dir
+}
+
+func namedFunction(stack naming.StackName, logical string) component.Name {
+	name, err := Name(testNamespace, "shop", stack, logical)
+	if err != nil {
+		panic(err)
+	}
+	return name
+}
+
+func namedRole(stack naming.StackName) component.Name {
+	name, err := RoleName(testNamespace, component.AppRoleCoordinate("shop", stack))
+	if err != nil {
+		panic(err)
+	}
+	return name
+}
+
+func mustResourceNames(t *testing.T, stack naming.StackName, logical string) map[string][]component.ResourceRef {
+	t.Helper()
+	names, err := ResourceNames(testNamespace, "shop", stack, logical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
 }

@@ -28,8 +28,7 @@ const (
 	Part    = "containers"
 	Summary = "the load balancer and cluster every container app in the tier runs behind"
 
-	TaskPort              = 8080
-	TargetGroupNamePrefix = "ocel-"
+	TaskPort = 8080
 
 	logRetentionDays = 14
 

@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -29,6 +28,8 @@ const (
 	maxReplicationGroupDescriptionLen = 255
 	maxParameterGroupDescriptionLen   = 255
 	OutputKeyAuthTokenParameter       = "authTokenParameter"
+
+	subnetsSuffix = "subnets"
 )
 
 var kvEngineVersions = map[string]string{
@@ -109,22 +110,22 @@ func translateKV(name string, spec *provider.KVSpec) (kvArgs, error) {
 	}, nil
 }
 
-func kvGroupID(at naming.Coordinate) string {
-	scope := awsports.AppScope + naming.WordSeparator
-	return scope + naming.Fit(maxReplicationGroupIDLen-len(scope), naming.WordSeparator,
-		naming.Fixed(at.Project),
-		naming.Fixed(at.Env),
-		naming.Compressible(at.Name),
-	)
+func groupID(namespace string, at naming.Coordinate) (string, error) {
+	return component.PhysicalName(namespace, at, maxReplicationGroupIDLen)
 }
 
-func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvArgs, network component.Network) error {
-	at := component.ResourceCoordinate(project, env, logicalName, naming.KindKV)
-	groupID := kvGroupID(at)
+func registerKV(ctx *pulumi.Context, stack component.Stack, logicalName string, args kvArgs) error {
+	at := component.ResourceCoordinate(stack.Project, stack.Env, logicalName, naming.KindKV)
+	network := stack.Network
+	group, err := groupID(stack.Namespace, at)
+	if err != nil {
+		return err
+	}
 	tags := component.Tags(at.Kind, "", args.Tags)
 	tags[component.TagResource] = pulumi.String(at.Name)
 
 	securityGroup, err := component.NewVPCSecurityGroup(ctx, at, component.VPCSecurityGroup{
+		Owner:   group,
 		Subject: "the " + at.Name + " kv store",
 		Engine:  "Valkey",
 		Port:    args.Port,
@@ -137,8 +138,9 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 		return err
 	}
 
-	subnetGroup, err := elasticache.NewSubnetGroup(ctx, naming.ResourceID(at.Kind, at.Name, "subnet-group"), &elasticache.SubnetGroupArgs{
-		Name:        pulumi.String(groupID + naming.WordSeparator + "subnets"),
+	subnets := group + naming.WordSeparator + subnetsSuffix
+	subnetGroup, err := elasticache.NewSubnetGroup(ctx, subnets, &elasticache.SubnetGroupArgs{
+		Name:        pulumi.String(subnets),
 		Description: component.CapDescription(at.Description("subnet group placing the "+at.Name+" kv store in the VPC's subnets"), component.MaxSubnetGroupDescriptionLen),
 		SubnetIds:   pulumi.ToStringArray(network.SubnetIDs),
 		Tags:        tags,
@@ -147,8 +149,9 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 		return err
 	}
 
-	parameters, err := elasticache.NewParameterGroup(ctx, naming.ResourceID(at.Kind, at.Name, "parameters"), &elasticache.ParameterGroupArgs{
-		Name:        pulumi.String(groupID + naming.WordSeparator + args.Family),
+	parameterGroup := group + naming.WordSeparator + args.Family
+	parameters, err := elasticache.NewParameterGroup(ctx, parameterGroup, &elasticache.ParameterGroupArgs{
+		Name:        pulumi.String(parameterGroup),
 		Family:      pulumi.String(args.Family),
 		Description: component.CapDescription(at.Description("eviction and reserved memory for the "+at.Name+" kv store"), maxParameterGroupDescriptionLen),
 		Parameters: elasticache.ParameterGroupParameterArray{
@@ -161,8 +164,8 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 		return err
 	}
 
-	group, err := elasticache.NewReplicationGroup(ctx, naming.ResourceID(at.Kind, at.Name), &elasticache.ReplicationGroupArgs{
-		ReplicationGroupId:       pulumi.String(groupID),
+	replicationGroup, err := elasticache.NewReplicationGroup(ctx, group, &elasticache.ReplicationGroupArgs{
+		ReplicationGroupId:       pulumi.String(group),
 		Description:              component.CapDescription(at.Description("the "+at.Name+" kv store"), maxReplicationGroupDescriptionLen),
 		Engine:                   pulumi.String(args.Engine),
 		EngineVersion:            pulumi.String(args.EngineVersion),
@@ -186,8 +189,8 @@ func registerKV(ctx *pulumi.Context, project, env, logicalName string, args kvAr
 	}
 
 	ctx.Export(logicalName, pulumi.Map{
-		component.OutputKeyHost:     group.PrimaryEndpointAddress,
-		component.OutputKeyPort:     group.Port,
+		component.OutputKeyHost:     replicationGroup.PrimaryEndpointAddress,
+		component.OutputKeyPort:     replicationGroup.Port,
 		OutputKeyAuthTokenParameter: pulumi.String(args.AuthTokenParameter),
 	})
 	return nil

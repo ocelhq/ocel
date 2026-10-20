@@ -47,10 +47,15 @@ func New(tokens Tokens) component.Component {
 		Sweep: func(ctx context.Context, at component.Stack, kept []provider.Resource) error {
 			return sweep(ctx, at, kept, tokens)
 		},
-		Transform: func(project, env, name string) component.Transformable {
-			return component.Transformable{Kind: transformKind, Names: resourceNames(project, env, name), Check: func(name string, patches map[string]map[string]any) error {
+		Transform: func(at component.Stack, declared provider.Resource) (component.Transformable, error) {
+			args, err := translateKV(declared.Name, declared.KV)
+			if err != nil {
+				return component.Transformable{}, err
+			}
+			names, err := resourceNames(at, declared.Name, args.Family)
+			return component.Transformable{Kind: transformKind, Names: names, Check: func(name string, patches map[string]map[string]any) error {
 				return checkKVNodeCount(name, patches["replicationGroup"])
-			}}
+			}}, err
 		},
 		Shape: shape,
 	}
@@ -71,7 +76,7 @@ func declare(ctx *pulumi.Context, at component.Stack, resource provider.Resource
 		return err
 	}
 	args.Tags = at.Transforms.TagsFor(transformKind, resource.Name)
-	return registerKV(ctx, at.Project, at.Env, resource.Name, args, at.Network)
+	return registerKV(ctx, at, resource.Name, args)
 }
 
 func sweep(ctx context.Context, at component.Stack, kept []provider.Resource, tokens Tokens) error {

@@ -11,7 +11,10 @@ func shape(cost component.CostTree, scope string, at component.Stack, declared [
 		if err != nil {
 			return err
 		}
-		names := resourceNames(at.Project, at.Env, resource.Name)
+		names, err := resourceNames(at, resource.Name, args.Family)
+		if err != nil {
+			return err
+		}
 		cost.Add(scope, component.TerraformElastiCacheReplicationGroup, resource.Name, map[string]any{
 			"engine":                     args.Engine,
 			"engine_version":             args.EngineVersion,
@@ -20,9 +23,9 @@ func shape(cost component.CostTree, scope string, at component.Stack, declared [
 			"automatic_failover_enabled": args.AutomaticFailoverEnabled,
 			"multi_az_enabled":           args.MultiAZEnabled,
 			"snapshot_retention_limit":   args.SnapshotRetentionLimit,
-		}, names["replicationGroup"])
-		cost.Add(scope, component.TerraformElastiCacheParameterGroup, resource.Name, map[string]any{"family": args.Family}, names["parameterGroup"])
-		cost.Add(scope, component.TerraformElastiCacheSubnetGroup, resource.Name, map[string]any{}, names["subnetGroup"])
+		}, names["replicationGroup"][0])
+		cost.Add(scope, component.TerraformElastiCacheParameterGroup, resource.Name, map[string]any{"family": args.Family}, names["parameterGroup"][0])
+		cost.Add(scope, component.TerraformElastiCacheSubnetGroup, resource.Name, map[string]any{}, names["subnetGroup"][0])
 		cost.AddPlain(scope, component.TerraformSSMParameter, resource.Name, map[string]any{"type": "SecureString"})
 	}
 	return nil

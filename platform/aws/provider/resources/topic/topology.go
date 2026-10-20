@@ -51,7 +51,7 @@ type Topic struct {
 
 func (t Topic) IsTask() bool { return t.Resource.Type == provider.BindingTask }
 
-func Of(project, env string, resources []provider.Resource) Topics {
+func Of(names queues.Names, resources []provider.Resource) (Topics, error) {
 	var topics []Topic
 	for _, resource := range resources {
 		if resource.Topic == nil || resource.Binding != "" {
@@ -61,21 +61,29 @@ func Of(project, env string, resources []provider.Resource) Topics {
 		fifo := declared.Ordered
 		topic := Topic{Resource: resource, Spec: declared}
 		if resource.Type != provider.BindingTask {
-			topic.SNS = queues.TopicName(project, env, resource.Declared, fifo)
+			sns, err := names.Topic(resource.Declared, fifo)
+			if err != nil {
+				return nil, err
+			}
+			topic.SNS = sns
 		}
 		for _, consumer := range declared.Consumers {
+			named, err := names.Queues(resource.Declared, consumer.Name, fifo)
+			if err != nil {
+				return nil, err
+			}
 			topic.Queues = append(topic.Queues, Queue{
 				Topic:      resource.Declared,
 				Consumer:   consumer,
-				Name:       queues.QueueName(project, env, resource.Declared, consumer.Name, fifo),
-				DeadLetter: queues.DeadLetterQueueName(project, env, resource.Declared, consumer.Name, fifo),
+				Name:       named.Queue,
+				DeadLetter: named.DeadLetter,
 				FIFO:       fifo,
 			})
 		}
 		topics = append(topics, topic)
 	}
 	slices.SortFunc(topics, func(a, b Topic) int { return cmp.Compare(a.Resource.Declared, b.Resource.Declared) })
-	return topics
+	return topics, nil
 }
 
 func WorkerTimeout(topics []Topic, worker string) time.Duration {
@@ -161,7 +169,7 @@ func Register(ctx *pulumi.Context, topic Topic, visibility func(queue Queue) int
 	var snsTopic *sns.Topic
 	if topic.SNS != "" {
 		var err error
-		snsTopic, err = sns.NewTopic(ctx, naming.ResourceID(naming.KindTopic, at), &sns.TopicArgs{
+		snsTopic, err = sns.NewTopic(ctx, topic.SNS, &sns.TopicArgs{
 			Name:      pulumi.String(topic.SNS),
 			FifoTopic: pulumi.Bool(topic.Spec.Ordered),
 			Tags:      tags,
@@ -173,7 +181,7 @@ func Register(ctx *pulumi.Context, topic Topic, visibility func(queue Queue) int
 	queueNames := pulumi.StringMap{}
 	for _, queue := range topic.Queues {
 		consumer := queue.Consumer.Name
-		deadLetter, err := sqs.NewQueue(ctx, naming.ResourceID(naming.KindTopic, at, consumer, "dead-letters"), &sqs.QueueArgs{
+		deadLetter, err := sqs.NewQueue(ctx, queue.DeadLetter, &sqs.QueueArgs{
 			Name:                    pulumi.String(queue.DeadLetter),
 			FifoQueue:               pulumi.Bool(queue.FIFO),
 			MessageRetentionSeconds: pulumi.Int(int(queues.MessageRetention / time.Second)),
@@ -186,7 +194,7 @@ func Register(ctx *pulumi.Context, topic Topic, visibility func(queue Queue) int
 			encoded, err := json.Marshal(map[string]any{"deadLetterTargetArn": arn, "maxReceiveCount": queues.MaxReceiveCount})
 			return string(encoded), err
 		}).(pulumi.StringOutput)
-		created, err := sqs.NewQueue(ctx, naming.ResourceID(naming.KindTopic, at, consumer), &sqs.QueueArgs{
+		created, err := sqs.NewQueue(ctx, queue.Name, &sqs.QueueArgs{
 			Name:                      pulumi.String(queue.Name),
 			FifoQueue:                 pulumi.Bool(queue.FIFO),
 			ContentBasedDeduplication: pulumi.Bool(queue.FIFO && topic.IsTask() && topic.Spec.Cron != ""),
@@ -205,14 +213,14 @@ func Register(ctx *pulumi.Context, topic Topic, visibility func(queue Queue) int
 		policy := pulumi.All(created.Arn, snsTopic.Arn).ApplyT(func(arns []any) (string, error) {
 			return snsDeliveryPolicy(fmt.Sprint(arns[0]), fmt.Sprint(arns[1]))
 		}).(pulumi.StringOutput)
-		allowed, err := sqs.NewQueuePolicy(ctx, naming.ResourceID(naming.KindTopic, at, consumer, "delivery"), &sqs.QueuePolicyArgs{
+		allowed, err := sqs.NewQueuePolicy(ctx, queue.Name+"/policy", &sqs.QueuePolicyArgs{
 			QueueUrl: created.Url,
 			Policy:   policy,
 		})
 		if err != nil {
 			return err
 		}
-		if _, err := sns.NewTopicSubscription(ctx, naming.ResourceID(naming.KindTopic, at, consumer, "subscription"), &sns.TopicSubscriptionArgs{
+		if _, err := sns.NewTopicSubscription(ctx, queue.Name+"/subscription", &sns.TopicSubscriptionArgs{
 			Topic:              snsTopic.Arn,
 			Protocol:           pulumi.String("sqs"),
 			Endpoint:           created.Arn,
@@ -279,11 +287,14 @@ func TasksPolicy(table StateTable, project, env string, topics []Topic, wakes []
 	return string(encoded), err
 }
 
-func CollectBinding(table StateTable, project, env string, resource provider.Resource) (*bindingsv1.Binding, error) {
+func CollectBinding(table StateTable, names queues.Names, resource provider.Resource) (*bindingsv1.Binding, error) {
 	if component.AccountOfARN(table.ARN) == "" {
 		return nil, fmt.Errorf("%s keeps its runs in this account's state table, and this deploy resolved no ARN for it", resource.Declared)
 	}
-	topics := Of(project, env, []provider.Resource{resource})
+	topics, err := Of(names, []provider.Resource{resource})
+	if err != nil {
+		return nil, err
+	}
 	if len(topics) != 1 {
 		return nil, fmt.Errorf("%s declares no consumers, so nothing runs what it is sent", resource.Declared)
 	}

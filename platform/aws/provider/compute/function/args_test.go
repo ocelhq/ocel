@@ -294,9 +294,8 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 
 			rec := &inputRecorder{}
 			stack := testStack(t, "prod", "api")
-			coord := Coordinate("shop", stack, "fn--api--web")
 			program := func(pctx *pulumi.Context) error {
-				role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "api", Boundary: componenttest.BoundaryARN})
+				role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
 				if err != nil {
 					return err
 				}
@@ -308,6 +307,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 					return err
 				}
 				return AppStack{
+					Namespace: testNamespace,
 					Project:   "shop",
 					Stack:     stack,
 					Functions: []AppFunction{{Logical: "fn--api--web", RouteID: "/"}},
@@ -323,7 +323,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 				t.Fatalf("run program: %v", err)
 			}
 
-			inputs := rec.inputs("aws:lambda/function:Function", coord.PhysicalName(component.MaxLambdaBaseNameLen))
+			inputs := rec.inputs("aws:lambda/function:Function", namedFunction(stack, "fn--api--web").Pulumi)
 			got, ok := inputs[resource.PropertyKey("handler")]
 			if !ok || !got.IsString() {
 				t.Fatalf("handler = %v, want a string", got)

@@ -5,12 +5,15 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
-func resourceNames(project, env, logicalName string) map[string]component.ResourceRef {
-	at := component.ResourceCoordinate(project, env, logicalName, naming.KindDatabase)
-	return map[string]component.ResourceRef{
-		"securityGroup": {Token: component.TokenEC2SecurityGroup, Name: naming.ResourceID(at.Kind, at.Name, "security-group")},
-		"subnetGroup":   {Token: component.TokenRDSSubnetGroup, Name: naming.ResourceID(at.Kind, at.Name, "subnet-group")},
-		"cluster":       {Token: component.TokenRDSCluster, Name: naming.ResourceID(at.Kind, at.Name)},
-		"instance":      {Token: component.TokenRDSClusterMember, Name: naming.ResourceID(at.Kind, at.Name, "instance")},
+func resourceNames(at component.Stack, logicalName string) (map[string][]component.ResourceRef, error) {
+	cluster, err := ClusterName(at.Namespace, at.Tier(), component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindDatabase))
+	if err != nil {
+		return nil, err
 	}
+	return map[string][]component.ResourceRef{
+		"securityGroup": {{Token: component.TokenEC2SecurityGroup, Name: component.SecurityGroupName(cluster)}},
+		"subnetGroup":   {{Token: component.TokenRDSSubnetGroup, Name: cluster + naming.WordSeparator + subnetsSuffix}},
+		"cluster":       {{Token: component.TokenRDSCluster, Name: cluster}},
+		"instance":      {{Token: component.TokenRDSClusterMember, Name: cluster + naming.WordSeparator + instanceSuffix}},
+	}, nil
 }

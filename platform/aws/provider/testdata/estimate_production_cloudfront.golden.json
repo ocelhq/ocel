@@ -572,7 +572,7 @@
       "monthlyUsage": "0.32"
     },
     {
-      "resource": "project:shop/environment:prod/aws_lambda_function:uploads-upload-completer",
+      "resource": "project:shop/environment:prod/aws_lambda_function:uploads-completer",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -600,7 +600,7 @@
       "monthlyUsage": "0.62"
     },
     {
-      "resource": "project:shop/environment:prod/aws_cloudwatch_log_group:uploads-upload-completer",
+      "resource": "project:shop/environment:prod/aws_cloudwatch_log_group:uploads-completer",
       "status": "STATUS_PRICED",
       "components": [
         {

@@ -26,7 +26,7 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	transformed, err := transformStackSpec(ctx, r.cfg.Transform, r.registry, spec)
+	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.Transform, r.registry, spec)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -136,7 +136,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		return provider.Plan{}, err
 	}
 	work.Infra = infra
-	transformed, err := transformStackSpec(ctx, r.cfg.Transform, r.registry, spec)
+	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.Transform, r.registry, spec)
 	if err != nil {
 		return provider.Plan{}, err
 	}

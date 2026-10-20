@@ -32,7 +32,11 @@ const (
 	appSyncHTTPDNSKey     = "HTTP"
 	appSyncRealtimeDNSKey = "REALTIME"
 
-	maxAppSyncAPINameLen = 50
+	maxAppSyncAPINameLen       = 50
+	realtimeWord               = "realtime"
+	authorizerSuffix           = "authorizer"
+	authorizerInvokePermission = "appsync-invoke"
+	authorizerReadsAPIPolicy   = "api"
 )
 
 type realtimeNamespace struct {
@@ -49,9 +53,9 @@ type realtimeArgs struct {
 	RolePath    string
 }
 
-func appSyncAPIName(project, env string) string {
-	scope := awsports.AppScope + naming.WordSeparator
-	return scope + naming.Fit(maxAppSyncAPINameLen-len(scope), naming.WordSeparator, naming.Fixed(project), naming.Compressible(env))
+func apiName(namespace, project, env string) (string, error) {
+	at := naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: naming.KindRealtime, Name: realtimeWord}
+	return component.PhysicalName(namespace, at, maxAppSyncAPINameLen)
 }
 
 func encodeVerifyKeys(namespaces []realtimeNamespace) (string, error) {
@@ -63,8 +67,8 @@ func encodeVerifyKeys(namespaces []realtimeNamespace) (string, error) {
 	return string(encoded), err
 }
 
-func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArgs) error {
-	at := naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: naming.KindRealtimeAuthorizer}
+func registerRealtime(ctx *pulumi.Context, stack component.Stack, args realtimeArgs) error {
+	at := naming.Coordinate{Project: stack.Project, Env: stack.Env, App: naming.InfraApp, Kind: naming.KindRealtimeAuthorizer}
 	if args.BoundaryARN == "" {
 		return fmt.Errorf("realtime: this deploy resolved no app boundary, and the authorizer's role made without one is capped by nothing")
 	}
@@ -72,9 +76,15 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 	if err != nil {
 		return err
 	}
-	authorizerID := naming.ResourceID(naming.KindRealtimeAuthorizer, "")
+	physical, err := apiName(stack.Namespace, stack.Project, stack.Env)
+	if err != nil {
+		return err
+	}
+	name := component.NameOf(physical)
+	authorizerName := name.Child(authorizerSuffix)
 
-	role, err := awsiam.NewRole(ctx, naming.ResourceID(naming.KindRealtimeAuthorizer, "", "role"), &awsiam.RoleArgs{
+	role, err := awsiam.NewRole(ctx, authorizerName.Pulumi, &awsiam.RoleArgs{
+		Name:                authorizerName.AWS,
 		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy("lambda.amazonaws.com")),
 		Description:         pulumi.String(at.Description("execution role for the realtime authorizer")),
 		PermissionsBoundary: pulumi.String(args.BoundaryARN),
@@ -84,22 +94,17 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 	if err != nil {
 		return err
 	}
-	if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRealtimeAuthorizer, "", "logs-policy"), &awsiam.RolePolicyAttachmentArgs{
-		Role:      role.Name,
-		PolicyArn: pulumi.String(iam.LambdaBasicExecutionPolicyARN),
-	}); err != nil {
+	if _, err := component.AttachManagedPolicy(ctx, authorizerName, role, iam.LambdaBasicExecutionPolicyARN); err != nil {
 		return err
 	}
 
-	logs, err := component.NewLambdaLogGroup(ctx,
-		naming.ResourceID(naming.KindRealtimeAuthorizer, "", "logs"),
-		at.PhysicalPrefix(component.MaxLambdaBaseNameLen-len(naming.KindRealtimeAuthorizer))+string(naming.KindRealtimeAuthorizer),
-		naming.KindRealtimeAuthorizer, "", nil)
+	logs, err := component.NewLambdaLogGroup(ctx, authorizerName, naming.KindRealtimeAuthorizer, "", nil)
 	if err != nil {
 		return err
 	}
 
-	authorizer, err := lambda.NewFunction(ctx, authorizerID, &lambda.FunctionArgs{
+	authorizer, err := lambda.NewFunction(ctx, authorizerName.Pulumi, &lambda.FunctionArgs{
+		Name:          authorizerName.AWS,
 		Runtime:       pulumi.String(realtimeAuthorizerRuntime),
 		Handler:       pulumi.String(realtimeAuthorizerHandler),
 		Architectures: pulumi.StringArray{pulumi.String(arch.ARM64)},
@@ -119,8 +124,8 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 		return err
 	}
 
-	api, err := appsync.NewApi(ctx, naming.ResourceID(naming.KindRealtime, ""), &appsync.ApiArgs{
-		Name: pulumi.String(appSyncAPIName(project, env)),
+	api, err := appsync.NewApi(ctx, name.Pulumi, &appsync.ApiArgs{
+		Name: name.AWS,
 		EventConfig: &appsync.ApiEventConfigArgs{
 			AuthProviders: appsync.ApiEventConfigAuthProviderArray{
 				&appsync.ApiEventConfigAuthProviderArgs{
@@ -150,7 +155,7 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 		return err
 	}
 
-	if _, err := lambda.NewPermission(ctx, naming.ResourceID(naming.KindRealtimeAuthorizer, "", "permission"), &lambda.PermissionArgs{
+	if _, err := lambda.NewPermission(ctx, authorizerName.Part(authorizerInvokePermission), &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  authorizer.Name,
 		Principal: pulumi.String(appSyncPrincipal),
@@ -162,18 +167,15 @@ func registerRealtime(ctx *pulumi.Context, project, env string, args realtimeArg
 	readsOwnAPI := api.ApiArn.ApplyT(func(arn string) (string, error) {
 		return iam.InlinePolicy([]string{"appsync:GetApi"}, []string{arn}, nil)
 	}).(pulumi.StringOutput)
-	if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRealtimeAuthorizer, "", "role", "policy", "api"), &awsiam.RolePolicyArgs{
-		Role:   role.ID(),
-		Policy: readsOwnAPI,
-	}); err != nil {
+	if _, err := component.NewRolePolicy(ctx, authorizerName, role, authorizerReadsAPIPolicy, readsOwnAPI); err != nil {
 		return err
 	}
 
 	httpHost := api.Dns.MapIndex(pulumi.String(appSyncHTTPDNSKey))
 	realtimeHost := api.Dns.MapIndex(pulumi.String(appSyncRealtimeDNSKey))
 	for _, ns := range args.Namespaces {
-		at := component.ResourceCoordinate(project, env, ns.LogicalName, naming.KindRealtime)
-		if _, err := appsync.NewChannelNamespace(ctx, naming.ResourceID(naming.KindRealtime, at.Name), &appsync.ChannelNamespaceArgs{
+		at := component.ResourceCoordinate(stack.Project, stack.Env, ns.LogicalName, naming.KindRealtime)
+		if _, err := appsync.NewChannelNamespace(ctx, name.Part(ns.Namespace), &appsync.ChannelNamespaceArgs{
 			ApiId: api.ApiId,
 			Name:  pulumi.String(ns.Namespace),
 			Tags:  component.Tags(naming.KindRealtime, "", map[string]string{component.TagResource: at.Name}),

@@ -31,7 +31,7 @@ func TestAContainerWorkerIsAServiceWithNoLoadBalancerThatSitsAtNoTasks(t *testin
 		t.Fatalf("declared %d services, want one for the one worker: %v", len(names), names)
 	}
 	service := rec.inputs("aws:ecs/service:Service", names[0])
-	if service["name"].StringValue() != container.WorkerServiceName("shop", "prod", "web", "media") {
+	if service["name"].StringValue() != workerService("shop", "prod", "web", "media") {
 		t.Errorf("service name = %q, want the one the topology tells a sender to wake", service["name"].StringValue())
 	}
 	if service["desiredCount"].NumberValue() != 0 {
@@ -93,11 +93,11 @@ func TestAContainerWorkerRunsTheAppsImageAsAWorkerNamingTheQueuesItServes(t *tes
 	if err != nil {
 		t.Fatalf("%s = %q: %v", queues.EnvVar, env[queues.EnvVar], err)
 	}
-	if topology.Topics["resize"].Queues["resize"] != queues.QueueName("shop", "prod", "resize", "resize", false) {
+	if topology.Topics["resize"].Queues["resize"] != queueName(t, "resize", "resize", false) {
 		t.Errorf("topology topics = %+v, want the queues the deploy made", topology.Topics)
 	}
 	media := topology.Workers["media"]
-	if media.Concurrency != 2 || media.Service == nil || media.Service.Name != container.WorkerServiceName("shop", "prod", "web", "media") {
+	if media.Concurrency != 2 || media.Service == nil || media.Service.Name != workerService("shop", "prod", "web", "media") {
 		t.Errorf("topology worker = %+v, want its concurrency and the service it sets to no tasks when idle", media)
 	}
 }
@@ -139,7 +139,7 @@ func TestAContainerWorkersBacklogAlarmWatchesTheVisibleMessagesOfEveryQueueItSer
 	for i := range 11 {
 		spec.App.Topics = append(spec.App.Topics, taskResource("job-"+strconv.Itoa(i), provider.ConsumerSpec{Worker: "media"}))
 	}
-	hosted.topics = topic.Of("shop", "prod", spec.App.Topics)
+	hosted.topics = mustTopics(t, spec.App.Topics)
 	rec := programRecorded(t, hosted)
 
 	alarms := rec.registered("aws:cloudwatch/metricAlarm:MetricAlarm")
@@ -195,18 +195,18 @@ func TestAContainerWorkersTaskRoleReachesOnlyTheQueuesItServesAndItsOwnService(t
 	}
 	all := strings.Join(policies, "\n")
 	for _, want := range []string{
-		topic.SQSQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", "resize", "resize", false)),
+		topic.SQSQueueARN("us-east-1", mockAccount, queueName(t, "resize", "resize", false)),
 		"sqs:ReceiveMessage",
 		"sqs:ChangeMessageVisibility",
 		"sqs:GetQueueAttributes",
-		"service/ocel-prod-containers/" + container.WorkerServiceName("shop", "prod", "web", "media"),
+		"service/ocel-prod-containers/" + workerService("shop", "prod", "web", "media"),
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("the worker's policies %s name no %s", all, want)
 		}
 	}
 	for _, policy := range policies {
-		if strings.Contains(policy, "sqs:ReceiveMessage") && strings.Contains(policy, queues.QueueName("shop", "prod", "orders", "audit-log", false)) {
+		if strings.Contains(policy, "sqs:ReceiveMessage") && strings.Contains(policy, queueName(t, "orders", "audit-log", false)) {
 			t.Errorf("the worker may receive from a queue another worker serves: %s", policy)
 		}
 	}
@@ -216,13 +216,13 @@ func TestAContainerWorkersStackExportsEachWorkersServiceForTheDeployToRecord(t *
 	t.Parallel()
 
 	_, _, hosted := hostingContainerWorkers(t, mediaOnContainers)
-	outputs := auto.OutputMap{resources.WorkerName("media"): auto.OutputValue{Value: map[string]any{container.OutputKeyPhysical: "ocel-app-shop-prod-web-media"}}}
+	outputs := auto.OutputMap{resources.WorkerName("media"): auto.OutputValue{Value: map[string]any{container.OutputKeyPhysical: workerService("shop", "prod", "web", "media")}}}
 
 	result, err := hosted.Decode(outputs)
 	if err != nil {
 		t.Fatalf("Decode() = %v", err)
 	}
-	if len(result.Containers) != 1 || result.Containers[0].Name != resources.WorkerName("media") || result.Containers[0].Physical != "ocel-app-shop-prod-web-media" || result.Containers[0].URL != "" || result.Containers[0].Image != containerImage {
+	if len(result.Containers) != 1 || result.Containers[0].Name != resources.WorkerName("media") || result.Containers[0].Physical != workerService("shop", "prod", "web", "media") || result.Containers[0].URL != "" || result.Containers[0].Image != containerImage {
 		t.Errorf("Containers = %+v, want the media worker by its service, with no URL: it takes no traffic", result.Containers)
 	}
 	if _, err := hosted.Decode(auto.OutputMap{}); err == nil {
@@ -290,7 +290,7 @@ func TestACronTaskOnAContainerWorkerIsScheduledOntoItsQueueByARoleThatMaySendThe
 	_, _, hosted := hostingContainerWorkersBeside(t, []provider.Resource{nightly}, mediaOnContainers)
 	rec := programRecorded(t, hosted)
 
-	queue := "arn:aws:sqs:us-east-1:" + mockAccount + ":" + topic.Of("shop", "prod", []provider.Resource{nightly})[0].Queues[0].Name
+	queue := "arn:aws:sqs:us-east-1:" + mockAccount + ":" + mustTopics(t, []provider.Resource{nightly})[0].Queues[0].Name
 	schedules := rec.registered("aws:scheduler/schedule:Schedule")
 	if len(schedules) != 1 {
 		t.Fatalf("declared %d schedules, want one for the nightly task", len(schedules))
@@ -303,7 +303,7 @@ func TestACronTaskOnAContainerWorkerIsScheduledOntoItsQueueByARoleThatMaySendThe
 	if input := target["input"].StringValue(); !strings.Contains(input, `"ocelCron":"nightly"`) || !strings.Contains(input, "<aws.scheduler.scheduled-time>") {
 		t.Errorf("the schedule sends %q, want the cron marker naming the task and the time it fired for", input)
 	}
-	if schedule["groupName"].StringValue() != queues.ScheduleGroupName("shop", "prod") {
+	if schedule["groupName"].StringValue() != scheduleGroup(t) {
 		t.Errorf("the schedule is in group %v, want the deployment's", schedule["groupName"])
 	}
 
@@ -354,7 +354,7 @@ func TestAnOrderedCronTaskOnAContainerWorkerIsScheduledIntoOneMessageGroupOfAQue
 	}
 	for _, name := range declared.registered("aws:sqs/queue:Queue") {
 		queue := declared.inputs("aws:sqs/queue:Queue", name)
-		if queue["name"].StringValue() == queues.QueueName("shop", "prod", "nightly", "nightly", true) && !queue["contentBasedDeduplication"].BoolValue() {
+		if queue["name"].StringValue() == queueName(t, "nightly", "nightly", true) && !queue["contentBasedDeduplication"].BoolValue() {
 			t.Errorf("the nightly queue does not deduplicate by content, so a schedule's send, which names no deduplication id, is refused")
 		}
 	}

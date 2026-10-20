@@ -5,30 +5,20 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
-func TestRoleCoordinate(t *testing.T) {
+func TestAnAppsExecutionRoleIsNamedForItsReleaseUnderTheAppFence(t *testing.T) {
 	t.Parallel()
 
 	coord := AppRoleCoordinate("shop", testStack(t, "prod", "web"))
 
-	if got, want := RolePrefix(coord), "shop-prod-web-app-role-r3f8a1c90-"; got != want {
-		t.Errorf("rolePrefix = %q, want %q", got, want)
+	got, err := PhysicalName("ocel", coord, MaxRoleNameLen)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got, want := naming.ResourceID(naming.KindRole, AppRoleLocalName), "role-app"; got != want {
-		t.Errorf("resource id = %q, want %q", got, want)
-	}
-	for _, tc := range []struct {
-		parts []string
-		want  string
-	}{
-		{[]string{"policy", "logs"}, "role-app-policy-logs"},
-		{[]string{"policy", "isr", "cache"}, "role-app-policy-isr-cache"},
-		{[]string{"policy", "variables", "read"}, "role-app-policy-variables-read"},
-	} {
-		if got := naming.ResourceID(naming.KindRole, AppRoleLocalName, tc.parts...); got != tc.want {
-			t.Errorf("resource id = %q, want %q", got, tc.want)
-		}
+	if want := "ocel-app-shop-prod-web-role-r3f8a1c90"; got != want {
+		t.Errorf("PhysicalName = %q, want %q", got, want)
 	}
 	if got, want := string(Describe(coord, "execution role for this app's functions")),
 		"shop / prod / web - execution role for this app's functions - release r3f8a1c90"; got != want {
@@ -36,17 +26,73 @@ func TestRoleCoordinate(t *testing.T) {
 	}
 }
 
-func TestRolePrefixLeavesRoomForTheSuffix(t *testing.T) {
+func TestAResourceOutsideAnyReleaseEndsInTheHashOfItsCoordinate(t *testing.T) {
 	t.Parallel()
 
-	long := AppRoleCoordinate(strings.Repeat("p", 30), naming.AppStack(strings.Repeat("e", 30), strings.Repeat("a", 30), fixedRelease(t)))
+	worker := naming.Coordinate{Project: "shop", Env: "prod", App: "web", Kind: naming.KindWorker, Name: "mailer"}
 
-	got := RolePrefix(long)
-	if len(got)+IAMAutonameSuffixLen > MaxRoleNameLen {
-		t.Errorf("rolePrefix = %q (%d chars) leaves no room for the %d-character suffix within %d", got, len(got), IAMAutonameSuffixLen, MaxRoleNameLen)
+	got, err := PhysicalName("ocel", worker, MaxLambdaNameLen)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.HasSuffix(got, naming.WordSeparator) {
-		t.Errorf("rolePrefix = %q, want it to end on the word separator", got)
+	if want := "ocel-app-shop-prod-web-mailer-" + worker.HashTag("ocel"); got != want {
+		t.Errorf("PhysicalName = %q, want %q", got, want)
+	}
+}
+
+func TestANameThatCannotFitIsRefusedNamingTheResourceAndTheLimit(t *testing.T) {
+	t.Parallel()
+
+	at := naming.Coordinate{Project: "shop", Env: "prod", App: "web", Kind: naming.KindWorker, Name: strings.Repeat("m", 60)}
+
+	_, err := PhysicalName("ocel", at, MaxLambdaNameLen)
+	if err == nil {
+		t.Fatal("a worker whose declared name alone overruns Lambda's limit was named rather than refused")
+	}
+	if !strings.Contains(err.Error(), "worker "+at.Name) || !strings.Contains(err.Error(), "64") {
+		t.Errorf("refusal %q, want it to name the worker and Lambda's 64 characters", err)
+	}
+}
+
+func TestAChildIsItsParentPlusItsSuffixAndAPartIsNamedUnderIt(t *testing.T) {
+	t.Parallel()
+
+	bucket := NameOf("ocel-app-shop-prod-uploads-k3x9q2")
+	completer := bucket.Child("completer")
+
+	if completer.Pulumi != "ocel-app-shop-prod-uploads-k3x9q2-completer" {
+		t.Errorf("Child = %q, want the parent plus -completer", completer.Pulumi)
+	}
+	if got, want := bucket.Part("abac"), "ocel-app-shop-prod-uploads-k3x9q2/abac"; got != want {
+		t.Errorf("Part = %q, want %q", got, want)
+	}
+	if got, want := completer.Attachment(iam.LambdaBasicExecutionPolicyARN), "ocel-app-shop-prod-uploads-k3x9q2-completer/AWSLambdaBasicExecutionRole"; got != want {
+		t.Errorf("Attachment = %q, want %q", got, want)
+	}
+	if got, want := LambdaLogGroupName(completer).Pulumi, "/aws/lambda/ocel-app-shop-prod-uploads-k3x9q2-completer"; got != want {
+		t.Errorf("LambdaLogGroupName = %q, want %q", got, want)
+	}
+}
+
+func TestARandomlyTaggedNamesHeadLeavesRoomForTheTagAndItsChildren(t *testing.T) {
+	t.Parallel()
+
+	at := ResourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
+	head, err := RandomTaggedHead("ocel", at, 63, "completer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-shop-prod-uploads"; head != want {
+		t.Errorf("RandomTaggedHead = %q, want %q", head, want)
+	}
+
+	long := ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "bucket--uploads", naming.KindBucket)
+	head, err = RandomTaggedHead("ocel", long, 63, "completer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(head + "-" + naming.NewRandomTag() + "-completer"); got > 63 {
+		t.Errorf("RandomTaggedHead = %q leaves its completer %d characters, over S3's 63", head, got)
 	}
 }
 

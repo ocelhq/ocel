@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 func masterUserSecret(args pulumi.MockResourceArgs) resource.PropertyMap {
@@ -102,8 +101,8 @@ func TestAProductionPostgresRefusesDeletionAndKeepsAFinalSnapshotWhenDeleted(t *
 		id = declared.StringValue()
 	}
 	assertRDSAcceptsSnapshotIdentifier(t, id)
-	if !strings.HasPrefix(id, awsports.AppScope+naming.WordSeparator) {
-		t.Errorf("final snapshot identifier %q is outside the %s- scope the deploy credential may snapshot into", id, awsports.AppScope)
+	if fence := naming.AppFence(testNamespace); !strings.HasPrefix(id, fence) {
+		t.Errorf("final snapshot identifier %q is outside the %s fence the deploy credential may snapshot into", id, fence)
 	}
 	if !slices.Contains(cluster.ignoreChanges, "finalSnapshotIdentifier") {
 		t.Errorf("ignoreChanges = %v, want finalSnapshotIdentifier kept at the value the cluster was created with, or every deploy plans an update to it", cluster.ignoreChanges)

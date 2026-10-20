@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -174,8 +173,8 @@ func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 			Project:    cfg.PulumiProject,
 			Env:        map[string]string{"AWS_REGION": cfg.Region},
 		},
-		Program:   component.RunProgram,
-		Configure: configureDefaultTags,
+		Program:   component.ProgramIn(cfg.Region),
+		Configure: component.DefaultProvidersDisabled,
 		Secrets:   created.secrets,
 		Refresh:   r.refreshPolicy(),
 		Engine:    r.engine,
@@ -259,6 +258,7 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 func (r *release) stackOf(ref provider.StackRef, declared []provider.Resource, transformed *transformPatches, previewing bool) component.Stack {
 	return component.Stack{
 		Ref:            ref,
+		Namespace:      r.cfg.Namespace,
 		Project:        naming.Sanitize(ref.Project),
 		Env:            ref.Name.Env,
 		Region:         r.cfg.Region,
@@ -283,17 +283,6 @@ func (r *release) sweep(ctx context.Context, ref provider.StackRef, kept []provi
 		}
 	}
 	return nil
-}
-
-func configureDefaultTags(_ context.Context, program component.Program) (auto.ConfigMap, error) {
-	if len(program.Tags) == 0 {
-		return auto.ConfigMap{}, nil
-	}
-	encoded, err := json.Marshal(map[string]map[string]string{"tags": program.Tags})
-	if err != nil {
-		return nil, fmt.Errorf("render default tags: %w", err)
-	}
-	return auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: string(encoded)}}, nil
 }
 
 func (r *release) secrets(program component.Program) []string {
@@ -362,7 +351,15 @@ func (r *release) packApp(spec provider.StackSpec) (variables.Bundle, error) {
 		return variables.Bundle{}, err
 	}
 	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
-	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topic.Of(project, env, spec.App.Topics), container.WorkerServices(r.cfg.Namespace, r.cfg.Tier, project, env, spec.App.DeploymentWorkers))
+	topics, err := topic.Of(r.cfg.queueNames(project, env), spec.App.Topics)
+	if err != nil {
+		return variables.Bundle{}, err
+	}
+	served, err := container.WorkerServices(r.cfg.Namespace, r.cfg.Tier, project, env, spec.App.DeploymentWorkers)
+	if err != nil {
+		return variables.Bundle{}, err
+	}
+	topology, err := topic.QueueTopology(r.cfg.stateTable(), project, env, topics, served)
 	if err != nil {
 		return variables.Bundle{}, err
 	}
@@ -559,7 +556,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 		return preparedStack{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s provisions an app and this spec names none", spec.Ref.Name)
 	}
-	transformed, err := transformStackSpec(ctx, r.cfg.Transform, r.registry, spec)
+	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.Transform, r.registry, spec)
 	if err != nil {
 		return preparedStack{}, err
 	}

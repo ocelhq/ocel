@@ -250,6 +250,7 @@ func conformingConfig(uploader *fakeArtifactStore) Config {
 	keys := newFakeSigningKeys()
 	keys.values[conformanceSigningKey("c-realtime")] = conformanceSeed
 	return Config{
+		Namespace:      testNamespace,
 		Slug:           "conformance",
 		Region:         "eu-west-1",
 		BackendURL:     "s3://ocel-state/conformance",
@@ -418,6 +419,17 @@ func (r *lambdaCodeRecorder) NewResource(args sdk.MockResourceArgs) (string, res
 	return r.standInCloud.NewResource(args)
 }
 
+func (r *lambdaCodeRecorder) codeOf(suffix string) payloads.Placement {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, placed := range r.code {
+		if strings.HasSuffix(name, suffix) {
+			return placed
+		}
+	}
+	return payloads.Placement{}
+}
+
 func stringInput(inputs resource.PropertyMap, key string) string {
 	value, present := inputs[resource.PropertyKey(key)]
 	if !present || !value.IsString() {
@@ -448,7 +460,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 		t.Errorf("uploaded %v, want the upload completer placed at %s", uploader.puts, at.Key)
 	}
 	want := payloads.Placement{Bucket: at.Bucket, Key: at.Key}
-	if placed := recorder.code["bucket-c-bucket-upload-completer"]; placed != want {
+	if placed := recorder.codeOf("-completer"); placed != want {
 		t.Errorf("the upload completer lambda declares code at %+v, want %+v", placed, want)
 	}
 }

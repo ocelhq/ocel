@@ -28,7 +28,7 @@ type Component struct {
 	Credential   func(scope iam.Scope) []iam.Statement
 	Sweep        func(ctx context.Context, at Stack, kept []provider.Resource) error
 	Teardown     *Teardown
-	Transform    func(project, env, name string) Transformable
+	Transform    func(at Stack, declared provider.Resource) (Transformable, error)
 	Shape        func(cost CostTree, scope string, at Stack, declared []provider.Resource) error
 }
 
@@ -38,10 +38,11 @@ type Teardown struct {
 }
 
 type Stack struct {
-	Ref     provider.StackRef
-	Project string
-	Env     string
-	Region  string
+	Ref       provider.StackRef
+	Namespace string
+	Project   string
+	Env       string
+	Region    string
 
 	Previewing bool
 
@@ -72,7 +73,7 @@ type Transforms interface {
 
 type Transformable struct {
 	Kind  string
-	Names map[string]ResourceRef
+	Names map[string][]ResourceRef
 	Check func(name string, patches map[string]map[string]any) error
 }
 

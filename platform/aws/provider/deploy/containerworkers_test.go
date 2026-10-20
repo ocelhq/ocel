@@ -41,7 +41,7 @@ func containerStacksHostingWorkers(t *testing.T, store records.Store) (*Stacks, 
 		container.OutputKeyURL:      "http://" + fixtureOrigin,
 		container.OutputKeyPhysical: containerPhysical,
 	}}
-	outputs[resources.WorkerName("media")] = auto.OutputValue{Value: map[string]any{container.OutputKeyPhysical: container.WorkerServiceName("shop", "prod", "web", "media")}}
+	outputs[resources.WorkerName("media")] = auto.OutputValue{Value: map[string]any{container.OutputKeyPhysical: workerService("shop", "prod", "web", "media")}}
 	engine := &mockedEngine{outputs: outputs}
 	return stacksWith(cfg, engine), engine, spec
 }
@@ -417,7 +417,7 @@ func TestProvisioningAContainerAppThatOnlyHostsItsWorkerReturnsTheWorkerAloneAnd
 	spec.App.DeploymentWorkers = spec.App.Workers
 	spec.App.Topics = []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "web"})}
 	delete(engine.outputs, "web")
-	engine.outputs[resources.WorkerName("web")] = auto.OutputValue{Value: map[string]any{container.OutputKeyPhysical: container.WorkerServiceName("shop", "prod", "web", "web")}}
+	engine.outputs[resources.WorkerName("web")] = auto.OutputValue{Value: map[string]any{container.OutputKeyPhysical: workerService("shop", "prod", "web", "web")}}
 
 	result, err := stacks.Provision(context.Background(), spec, progress.Discard())
 	if err != nil {

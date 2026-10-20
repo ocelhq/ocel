@@ -3,22 +3,27 @@ package bucket
 import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
-func resourceNames(project, env, logicalName string) map[string]component.ResourceRef {
-	at := component.ResourceCoordinate(project, env, logicalName, naming.KindBucket)
-	completerRole := naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-role")
-	return map[string]component.ResourceRef{
-		"bucket":                        {Token: component.TokenS3Bucket, Name: naming.ResourceID(at.Kind, at.Name)},
-		"publicAccessBlock":             {Token: component.TokenS3PublicAccess, Name: naming.ResourceID(at.Kind, at.Name, "public-access-block")},
-		"cors":                          {Token: component.TokenS3CORS, Name: naming.ResourceID(at.Kind, at.Name, "cors")},
-		"uploadCompleterRole":           {Token: component.TokenIAMRole, Name: completerRole},
-		"uploadCompleterS3Policy":       {Token: component.TokenIAMRolePolicy, Name: completerRole + "-policy-s3"},
-		"uploadCompleterSessionsPolicy": {Token: component.TokenIAMRolePolicy, Name: completerRole + "-policy-sessions"},
-		"uploadCompleterLogsPolicy":     {Token: component.TokenIAMRoleAttachment, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs-policy")},
-		"uploadCompleterLogGroup":       {Token: component.TokenLogGroup, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs")},
-		"uploadCompleter":               {Token: component.TokenLambdaFunction, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName)},
-		"uploadCompleterPermission":     {Token: component.TokenLambdaPermission, Name: naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-permission")},
-		"notification":                  {Token: component.TokenS3Notification, Name: naming.ResourceID(at.Kind, at.Name, "notification")},
+func resourceNames(at component.Stack, logicalName string) (map[string][]component.ResourceRef, error) {
+	head, err := component.RandomTaggedHead(at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindBucket), component.MaxLambdaNameLen, uploadCompleterSuffix)
+	if err != nil {
+		return nil, err
 	}
+	bucket := component.NameOf(head)
+	completer := bucket.Child(uploadCompleterSuffix)
+	return map[string][]component.ResourceRef{
+		"bucket":                        {{Token: component.TokenS3Bucket, Name: bucket.Pulumi}},
+		"publicAccessBlock":             {{Token: component.TokenS3PublicAccess, Name: bucket.Part(publicAccessBlockPart)}},
+		"cors":                          {{Token: component.TokenS3CORS, Name: bucket.Part(corsPart)}},
+		"uploadCompleterRole":           {{Token: component.TokenIAMRole, Name: completer.Pulumi}},
+		"uploadCompleterS3Policy":       {{Token: component.TokenIAMRolePolicy, Name: completer.Part(completerS3Policy)}},
+		"uploadCompleterSessionsPolicy": {{Token: component.TokenIAMRolePolicy, Name: completer.Part(completerSessionsPolicy)}},
+		"uploadCompleterLogsPolicy":     {{Token: component.TokenIAMRoleAttachment, Name: completer.Attachment(iam.LambdaBasicExecutionPolicyARN)}},
+		"uploadCompleterLogGroup":       {{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(completer).Pulumi}},
+		"uploadCompleter":               {{Token: component.TokenLambdaFunction, Name: completer.Pulumi}},
+		"uploadCompleterPermission":     {{Token: component.TokenLambdaPermission, Name: completer.Part(completerInvokePermission)}},
+		"notification":                  {{Token: component.TokenS3Notification, Name: bucket.Part(notificationPart)}},
+	}, nil
 }

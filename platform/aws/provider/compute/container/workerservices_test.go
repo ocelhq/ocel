@@ -17,10 +17,13 @@ const testStateTableARN = "arn:aws:dynamodb:us-east-1:" + mockAccount + ":table/
 func TestOnlyAWorkerOnContainerComputeNamesTheServiceASenderWakes(t *testing.T) {
 	t.Parallel()
 
-	got := WorkerServices("ocel", environment.TierProduction, "shop", "prod", []provider.WorkerSpec{
+	got, err := WorkerServices("ocel", environment.TierProduction, "shop", "prod", []provider.WorkerSpec{
 		{Name: "media", Concurrency: 4, App: "jobs", Compute: provider.ComputeContainer},
 		{Name: "worker", App: "web", Compute: provider.ComputeServerless},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("containerWorkers() = %+v, want only the media worker: a function is woken by its queue, not by a sender", got)
 	}
@@ -28,7 +31,7 @@ func TestOnlyAWorkerOnContainerComputeNamesTheServiceASenderWakes(t *testing.T) 
 	if media.Concurrency != 4 {
 		t.Errorf("media concurrency = %d, want 4: the engine holds a worker's cap in slots", media.Concurrency)
 	}
-	want := &queues.Service{Cluster: awsports.ContainerClusterName("ocel", environment.TierProduction), Name: WorkerServiceName("shop", "prod", "jobs", "media")}
+	want := &queues.Service{Cluster: awsports.ContainerClusterName("ocel", environment.TierProduction), Name: workerService("shop", "prod", "jobs", "media")}
 	if media.Service == nil || *media.Service != *want {
 		t.Errorf("media service = %+v, want %+v", media.Service, want)
 	}
@@ -39,11 +42,11 @@ func TestAContainerWorkersServiceNameIsOneForEachWorkerOfEachAppAndEnvironment(t
 
 	names := map[string]bool{}
 	for _, name := range []string{
-		WorkerServiceName("shop", "prod", "jobs", "media"),
-		WorkerServiceName("shop", "prod", "jobs", "reports"),
-		WorkerServiceName("shop", "prod", "web", "media"),
-		WorkerServiceName("shop", "staging", "jobs", "media"),
-		WorkerServiceName("other", "prod", "jobs", "media"),
+		workerService("shop", "prod", "jobs", "media"),
+		workerService("shop", "prod", "jobs", "reports"),
+		workerService("shop", "prod", "web", "media"),
+		workerService("shop", "staging", "jobs", "media"),
+		workerService("other", "prod", "jobs", "media"),
 	} {
 		if len(name) > 255 || names[name] {
 			t.Errorf("service name %q repeats an earlier one or is longer than ECS allows", name)
@@ -55,13 +58,17 @@ func TestAContainerWorkersServiceNameIsOneForEachWorkerOfEachAppAndEnvironment(t
 func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNoOtherService(t *testing.T) {
 	t.Parallel()
 
-	topics := topic.Of("shop", "prod", []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "media"})})
+	topics := mustTopics(t, []provider.Resource{taskResource("resize", provider.ConsumerSpec{Worker: "media"})})
 	workers := []provider.WorkerSpec{
 		{Name: "media", App: "jobs", Compute: provider.ComputeContainer},
 		{Name: "worker", App: "web", Compute: provider.ComputeServerless},
 	}
 	table := topic.StateTable{Region: "us-east-1", ARN: testStateTableARN}
-	policy, err := topic.TasksPolicy(table, "shop", "prod", topics, WorkerServiceARNs(table, "ocel", environment.TierProduction, "shop", "prod", workers))
+	wakes, err := WorkerServiceARNs(table, "ocel", environment.TierProduction, "shop", "prod", workers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, err := topic.TasksPolicy(table, "shop", "prod", topics, wakes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +81,7 @@ func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNo
 	if err := json.Unmarshal([]byte(policy), &document); err != nil {
 		t.Fatalf("the policy %s is not JSON: %v", policy, err)
 	}
-	service := "arn:aws:ecs:us-east-1:" + mockAccount + ":service/ocel-prod-containers/" + WorkerServiceName("shop", "prod", "jobs", "media")
+	service := "arn:aws:ecs:us-east-1:" + mockAccount + ":service/ocel-prod-containers/" + workerService("shop", "prod", "jobs", "media")
 	var found bool
 	for _, statement := range document.Statement {
 		actions, _ := json.Marshal(statement.Action)
@@ -100,4 +107,32 @@ func TestAnAppReachingTasksMayWakeExactlyTheContainerWorkersOfTheDeploymentAndNo
 	if strings.Contains(policy, "ecs:") {
 		t.Errorf("a deployment with no container worker was granted %s", policy)
 	}
+}
+
+var shopNames = queues.Names{Namespace: "ocel", Project: "shop", Env: "prod"}
+
+func mustTopics(t *testing.T, resources []provider.Resource) topic.Topics {
+	t.Helper()
+	topics, err := topic.Of(shopNames, resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return topics
+}
+
+func queueName(t *testing.T, topic, consumer string, fifo bool) string {
+	t.Helper()
+	named, err := shopNames.Queues(topic, consumer, fifo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return named.Queue
+}
+
+func workerService(project, env, app, worker string) string {
+	name, err := WorkerServiceName(shopNames.Namespace, project, env, app, worker)
+	if err != nil {
+		panic(err)
+	}
+	return name
 }

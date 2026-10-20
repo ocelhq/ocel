@@ -22,7 +22,7 @@ import (
 func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFailures(t *testing.T) {
 	t.Parallel()
 
-	topics := topic.Of("shop", "prod", []provider.Resource{
+	topics := mustTopics(t, []provider.Resource{
 		taskResource("limited", provider.ConsumerSpec{Worker: "worker", Concurrency: 2}),
 		taskResource("laned", provider.ConsumerSpec{Worker: "worker", Concurrency: 1}),
 		taskResource("tally", provider.ConsumerSpec{Worker: "worker", Batch: &provider.BatchPolicy{Size: 50}}),
@@ -30,6 +30,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		taskResource("alpha", provider.ConsumerSpec{Worker: "capped", Concurrency: 10}),
 	})
 	work := &Stack{
+		names:    shopNames,
 		project:  "shop",
 		stack:    StackName("prod", "web"),
 		topics:   topics,
@@ -37,13 +38,13 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		args:     function.Args{Runtime: component.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		artifact: function.Artifact{Bucket: "artifacts", Key: "web.zip"},
 		env:      map[string]string{"APP_VAR": "1"},
-		role:     function.ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN},
+		role:     function.ExecutionRole{Namespace: "ocel", App: "web", Boundary: componenttest.BoundaryARN},
 		layer:    "arn:aws:lambda:us-east-1:123456789012:layer:ocel-runtime:1",
 		region:   "us-east-1",
 		account:  mockAccount,
 		table:    testStateTableARN,
 		prefix:   naming.TaskKeyPrefix("shop", "prod"),
-		group:    queues.ScheduleGroupName("shop", "prod"),
+		group:    scheduleGroup(t),
 	}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.Declare(pctx) }, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
@@ -86,7 +87,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		t.Fatalf("event source mappings = %d, want one per queue the workers serve", len(mappings))
 	}
 	mapping := func(task string) resource.PropertyMap {
-		return mappings[topic.SQSQueueARN("us-east-1", mockAccount, queues.QueueName("shop", "prod", task, task, false))]
+		return mappings[topic.SQSQueueARN("us-east-1", mockAccount, queueName(t, task, task, false))]
 	}
 	for task, want := range map[string]struct {
 		batch, concurrency, window float64
@@ -117,7 +118,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		t.Fatalf("schedules = %v, want heartbeat's", schedules)
 	}
 	schedule := rec.inputs("aws:scheduler/schedule:Schedule", schedules[0])
-	if schedule["scheduleExpression"].StringValue() != "cron(* * * * ? *)" || schedule["groupName"].StringValue() != queues.ScheduleGroupName("shop", "prod") {
+	if schedule["scheduleExpression"].StringValue() != "cron(* * * * ? *)" || schedule["groupName"].StringValue() != scheduleGroup(t) {
 		t.Errorf("schedule = %v, want every minute in the environment's group", schedule)
 	}
 	var input map[string]string
@@ -126,7 +127,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 	}
 	policies := strings.Join(policyDocuments(rec), "\n")
 	for _, queue := range []string{"limited", "laned", "tally", "heartbeat", "alpha"} {
-		if !strings.Contains(policies, queues.QueueName("shop", "prod", queue, queue, false)) {
+		if !strings.Contains(policies, queueName(t, queue, queue, false)) {
 			t.Errorf("no role policy lets the workers read %s's queue", queue)
 		}
 	}
@@ -146,17 +147,18 @@ func TestTheSchedulerRoleCarriesTheManagedByTagTheCredentialCreatesAndPassesRole
 	t.Parallel()
 
 	work := &Stack{
+		names:   shopNames,
 		project: "shop",
 		stack:   StackName("prod", "web"),
-		topics:  topic.Of("shop", "prod", []provider.Resource{taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute)}),
+		topics:  mustTopics(t, []provider.Resource{taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute)}),
 		workers: []provider.WorkerSpec{{Name: "worker"}},
 		args:    function.Args{Runtime: component.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
-		role:    function.ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN, Tags: map[string]string{"ocel:managed-by": "ocel"}},
+		role:    function.ExecutionRole{Namespace: "ocel", App: "web", Boundary: componenttest.BoundaryARN, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		region:  "us-east-1",
 		account: mockAccount,
 		table:   testStateTableARN,
 		prefix:  naming.TaskKeyPrefix("shop", "prod"),
-		group:   queues.ScheduleGroupName("shop", "prod"),
+		group:   scheduleGroup(t),
 	}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.Declare(pctx) }, pulumi.WithMocks("shop", "prod--web", rec)); err != nil {
@@ -178,11 +180,12 @@ func TestTheWorkersProgramExportsEachWorkersLambdaNameForTheStackToDecode(t *tes
 	t.Parallel()
 
 	work := &Stack{
+		names:   shopNames,
 		project: "shop",
 		stack:   StackName("prod", "web"),
 		workers: []provider.WorkerSpec{{Name: "media"}, {Name: "ledger"}},
 		args:    function.Args{Runtime: component.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024},
-		role:    function.ExecutionRole{App: "web", Boundary: componenttest.BoundaryARN},
+		role:    function.ExecutionRole{Namespace: "ocel", App: "web", Boundary: componenttest.BoundaryARN},
 		region:  "us-east-1",
 		account: mockAccount,
 		table:   testStateTableARN,

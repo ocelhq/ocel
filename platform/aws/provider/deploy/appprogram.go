@@ -109,6 +109,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	vpcAccess = vpcAccess || (network != nil && len(app.Workers) > 0)
 
 	appFunctions := function.AppStack{
+		Namespace: r.cfg.Namespace,
 		Project:   project,
 		Stack:     stack,
 		Functions: functions,
@@ -134,13 +135,21 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		roleTags = args[app.Functions[0].Name].Tags
 	}
 	role := function.ExecutionRole{
-		App: app.App, Cache: cache, Bytecode: bytecode,
+		Namespace: r.cfg.Namespace,
+		App:       app.App, Cache: cache, Bytecode: bytecode,
 		Variables: variables.Reader{KeyARN: r.cfg.VariablesKeyARN}, Boundary: r.cfg.AppBoundaryARN, Path: r.cfg.AppRolePath,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
 	if topic.ReachesTasks(app) {
-		wakes := container.WorkerServiceARNs(r.cfg.stateTable(), r.cfg.Namespace, r.cfg.Tier, project, stack.Env, app.DeploymentWorkers)
-		if role.TasksPolicy, err = topic.TasksPolicy(r.cfg.stateTable(), project, stack.Env, topic.Of(project, stack.Env, app.Topics), wakes); err != nil {
+		wakes, err := container.WorkerServiceARNs(r.cfg.stateTable(), r.cfg.Namespace, r.cfg.Tier, project, stack.Env, app.DeploymentWorkers)
+		if err != nil {
+			return nil, err
+		}
+		topics, err := topic.Of(r.cfg.queueNames(project, stack.Env), app.Topics)
+		if err != nil {
+			return nil, err
+		}
+		if role.TasksPolicy, err = topic.TasksPolicy(r.cfg.stateTable(), project, stack.Env, topics, wakes); err != nil {
 			return nil, err
 		}
 	}
@@ -260,7 +269,7 @@ func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.Sta
 }
 
 func appExecutionRole(cfg Config, app string, caches map[string]*site.ISR, bytecode map[string]*function.Bytecode, bundle variables.Bundle, tags map[string]string, policies []iam.BindingPolicy, vpcAccess bool, dispatch *function.DispatchHost) function.ExecutionRole {
-	role := function.ExecutionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], Variables: variables.Reader{KeyARN: cfg.VariablesKeyARN}, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
+	role := function.ExecutionRole{Namespace: cfg.Namespace, App: app, Cache: caches[app], Bytecode: bytecode[app], Variables: variables.Reader{KeyARN: cfg.VariablesKeyARN}, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
 	if bundle.HasLive() {
 		role.Variables.TableARN = cfg.VariablesTableARN
 		role.Variables.Referenced = bundle.Referenced

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -51,6 +52,16 @@ const (
 	OutputKeyURL = "url"
 
 	OutputKeyName = "functionName"
+
+	isrCachePolicy      = "isr-cache"
+	bytecodeCachePolicy = "bytecode-cache"
+	assetReadPolicyName = "asset-read"
+	dispatchPolicyName  = "dispatch-invoke"
+	bindingPolicyWord   = "binding"
+	TasksPolicyName     = "tasks"
+	VariablesPolicyName = "variables-read"
+
+	urlPart = "url"
 )
 
 type Args struct {
@@ -169,6 +180,7 @@ type Artifact struct {
 }
 
 type ExecutionRole struct {
+	Namespace string
 	App       string
 	Tags      map[string]string
 	Cache     *site.ISR
@@ -188,9 +200,13 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 	if r.Boundary == "" {
 		return nil, fmt.Errorf("mint the execution role for %s: this deploy resolved no app boundary, and a role made without one is capped by nothing", r.App)
 	}
-	id := naming.ResourceID(naming.KindRole, component.AppRoleLocalName)
-	role, err := awsiam.NewRole(ctx, id, &awsiam.RoleArgs{
-		NamePrefix:          pulumi.String(component.RolePrefix(coord)),
+	physical, err := component.PhysicalName(r.Namespace, coord, component.MaxRoleNameLen)
+	if err != nil {
+		return nil, err
+	}
+	name := component.NameOf(physical)
+	role, err := awsiam.NewRole(ctx, name.Pulumi, &awsiam.RoleArgs{
+		Name:                name.AWS,
 		Description:         component.Describe(coord, "execution role for this app's functions"),
 		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.LambdaPrincipal)),
 		PermissionsBoundary: pulumi.String(r.Boundary),
@@ -200,85 +216,58 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 	if err != nil {
 		return nil, err
 	}
-	if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "logs"), &awsiam.RolePolicyAttachmentArgs{
-		Role:      role.Name,
-		PolicyArn: pulumi.String(iam.LambdaBasicExecutionPolicyARN),
-	}); err != nil {
+	if _, err := component.AttachManagedPolicy(ctx, name, role, iam.LambdaBasicExecutionPolicyARN); err != nil {
 		return nil, err
 	}
 	if r.VPCAccess {
-		if _, err := awsiam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "vpc"), &awsiam.RolePolicyAttachmentArgs{
-			Role:      role.Name,
-			PolicyArn: pulumi.String(iam.LambdaVPCAccessPolicyARN),
-		}); err != nil {
+		if _, err := component.AttachManagedPolicy(ctx, name, role, iam.LambdaVPCAccessPolicyARN); err != nil {
 			return nil, err
 		}
 	}
+	documents := map[string]string{}
 	if r.Cache != nil {
-		policy, err := r.Cache.Policy()
-		if err != nil {
-			return nil, err
-		}
-		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "isr", "cache"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(policy),
-		}); err != nil {
+		if documents[isrCachePolicy], err = r.Cache.Policy(); err != nil {
 			return nil, err
 		}
 	}
 	if r.Bytecode != nil {
-		policy, err := bytecodePolicy(*r.Bytecode)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "bytecode", "cache"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(policy),
-		}); err != nil {
+		if documents[bytecodeCachePolicy], err = bytecodePolicy(*r.Bytecode); err != nil {
 			return nil, err
 		}
 	}
 	if r.Dispatch != nil && r.Dispatch.AssetBucket != "" {
-		policy, err := assetReadPolicy(r.Dispatch)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "asset", "read"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(policy),
-		}); err != nil {
+		if documents[assetReadPolicyName], err = assetReadPolicy(r.Dispatch); err != nil {
 			return nil, err
 		}
 	}
 	for _, binding := range r.BindingPolicies {
-		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "binding", binding.Binding), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(binding.Policy),
-		}); err != nil {
-			return nil, err
-		}
+		documents[BindingPolicyName(binding.Binding)] = binding.Policy
 	}
 	if r.TasksPolicy != "" {
-		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "tasks"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(r.TasksPolicy),
-		}); err != nil {
-			return nil, err
-		}
+		documents[TasksPolicyName] = r.TasksPolicy
 	}
 	variablesPolicy, err := variables.ReadPolicy(r.Variables)
 	if err != nil {
 		return nil, err
 	}
 	if variablesPolicy != "" {
-		if _, err := awsiam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "variables", "read"), &awsiam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(variablesPolicy),
-		}); err != nil {
+		documents[VariablesPolicyName] = variablesPolicy
+	}
+	for _, policy := range slices.Sorted(maps.Keys(documents)) {
+		if _, err := component.NewRolePolicy(ctx, name, role, policy, pulumi.String(documents[policy])); err != nil {
 			return nil, err
 		}
 	}
 	return role, nil
+}
+
+func BindingPolicyName(binding string) string {
+	return naming.Join(naming.WordSeparator, bindingPolicyWord, binding)
+}
+
+func RoleName(namespace string, coord naming.Coordinate) (component.Name, error) {
+	physical, err := component.PhysicalName(namespace, coord, component.MaxRoleNameLen)
+	return component.NameOf(physical), err
 }
 
 func (a Args) LambdaHandler() string {
@@ -311,7 +300,7 @@ func RuntimeLayerInput(arn string) pulumi.StringArrayInput {
 	return pulumi.StringArray{pulumi.String(arn)}
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, bundle string, args Args, artifact Artifact, base map[string]string, resolved map[string]pulumi.StringInput, isr *site.ISR, bytecode *Bytecode, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, name component.Name, bundle string, args Args, artifact Artifact, base map[string]string, resolved map[string]pulumi.StringInput, isr *site.ISR, bytecode *Bytecode, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -322,17 +311,17 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		env[key] = value
 	}
 
-	resourceName := coord.PhysicalName(component.MaxLambdaBaseNameLen)
 	if bundle == "" {
 		bundle = naming.PathSeparator + coord.Name
 	}
 
-	logs, err := component.NewLambdaLogGroup(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "logs"), resourceName, coord.Kind, bundle, args.Tags, opts...)
+	logs, err := component.NewLambdaLogGroup(ctx, name, coord.Kind, bundle, args.Tags, opts...)
 	if err != nil {
 		return none, err
 	}
 
-	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
+	fn, err := lambda.NewFunction(ctx, name.Pulumi, &lambda.FunctionArgs{
+		Name:        name.AWS,
 		Description: component.Describe(coord, "bundle "+bundle),
 		Runtime:     pulumi.String(args.Runtime),
 		Handler:     pulumi.String(args.LambdaHandler()),
@@ -359,7 +348,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		return none, err
 	}
 
-	url, err := lambda.NewFunctionUrl(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url"), &lambda.FunctionUrlArgs{
+	url, err := lambda.NewFunctionUrl(ctx, name.Part(urlPart), &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
 		AuthorizationType: pulumi.String(urlAuth),
 		InvokeMode:        pulumi.String(args.InvokeMode),
@@ -381,7 +370,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 			if permission.ViaURL {
 				args.InvokedViaFunctionUrl = pulumi.Bool(true)
 			}
-			if _, err := lambda.NewPermission(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "url", strings.ToLower(permission.Verb())), args); err != nil {
+			if _, err := lambda.NewPermission(ctx, urlPermissionName(name, permission), args); err != nil {
 				return none, err
 			}
 		}
@@ -399,15 +388,35 @@ type functionRef struct {
 	ARN pulumi.StringOutput
 }
 
-func ResourceNames(project string, stack naming.StackName, logicalName string) map[string]component.ResourceRef {
-	coord := Coordinate(project, stack, logicalName)
-	return map[string]component.ResourceRef{
-		"lambda":        {Token: component.TokenLambdaFunction, Name: coord.PhysicalName(component.MaxLambdaBaseNameLen)},
-		"url":           {Token: component.TokenLambdaFunctionURL, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url")},
-		"urlPermission": {Token: component.TokenLambdaPermission, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url", "invoke")},
-		"logGroup":      {Token: component.TokenLogGroup, Name: naming.ResourceID(naming.KindFunction, coord.Name, "logs")},
-		"role":          {Token: component.TokenIAMRole, Name: naming.ResourceID(naming.KindRole, component.AppRoleLocalName)},
+func Name(namespace, project string, stack naming.StackName, logicalName string) (component.Name, error) {
+	physical, err := component.PhysicalName(namespace, Coordinate(project, stack, logicalName), component.MaxLambdaNameLen)
+	return component.NameOf(physical), err
+}
+
+func ResourceNames(namespace, project string, stack naming.StackName, logicalName string) (map[string][]component.ResourceRef, error) {
+	name, err := Name(namespace, project, stack, logicalName)
+	if err != nil {
+		return nil, err
 	}
+	role, err := RoleName(namespace, component.AppRoleCoordinate(project, stack))
+	if err != nil {
+		return nil, err
+	}
+	var urlPermissions []component.ResourceRef
+	for _, permission := range functionurl.Public() {
+		urlPermissions = append(urlPermissions, component.ResourceRef{Token: component.TokenLambdaPermission, Name: urlPermissionName(name, permission)})
+	}
+	return map[string][]component.ResourceRef{
+		"lambda":        {{Token: component.TokenLambdaFunction, Name: name.Pulumi}},
+		"url":           {{Token: component.TokenLambdaFunctionURL, Name: name.Part(urlPart)}},
+		"urlPermission": urlPermissions,
+		"logGroup":      {{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(name).Pulumi}},
+		"role":          {{Token: component.TokenIAMRole, Name: role.Pulumi}},
+	}, nil
+}
+
+func urlPermissionName(function component.Name, permission functionurl.Permission) string {
+	return function.Part(strings.ToLower(permission.Verb()))
 }
 
 func FindArtifact(buckets site.Buckets, ref provider.ArtifactRef) (Artifact, error) {

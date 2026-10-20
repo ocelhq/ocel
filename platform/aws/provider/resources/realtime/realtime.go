@@ -77,7 +77,7 @@ func declare(ctx *pulumi.Context, at component.Stack, realtimes []provider.Resou
 			SigningKeySecret: secret,
 		})
 	}
-	return registerRealtime(ctx, at.Project, at.Env, args)
+	return registerRealtime(ctx, at, args)
 }
 
 func sweep(ctx context.Context, at component.Stack, kept []provider.Resource, keys Keys) error {

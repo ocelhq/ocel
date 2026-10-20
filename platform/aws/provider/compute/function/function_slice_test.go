@@ -31,7 +31,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "api", Boundary: componenttest.BoundaryARN})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -43,6 +43,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 			return err
 		}
 		stackFunctions := AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: []AppFunction{{Logical: "fn--api--users", RouteID: "/users"}},
@@ -59,7 +60,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 		t.Fatalf("run program: %v", err)
 	}
 
-	inputs := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")
+	inputs := rec.inputs("aws:lambda/function:Function", "ocel-app-shop-prod-api-users-r3f8a1c90")
 	if got := stringsAt(inputs, "architectures"); !slices.Equal(got, []string{arch.ARM64}) {
 		t.Errorf("architectures = %v, want [%s] — the runtime and the app's own binary are built for one machine", got, arch.ARM64)
 	}
@@ -80,7 +81,7 @@ func TestADryPlanBootsAFunctionThroughTheRuntimeLayerTheDeployWouldPublish(t *te
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "api", Boundary: componenttest.BoundaryARN})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -92,6 +93,7 @@ func TestADryPlanBootsAFunctionThroughTheRuntimeLayerTheDeployWouldPublish(t *te
 			return err
 		}
 		stackFunctions := AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: []AppFunction{{Logical: "fn--api--users", RouteID: "/users"}},
@@ -107,7 +109,7 @@ func TestADryPlanBootsAFunctionThroughTheRuntimeLayerTheDeployWouldPublish(t *te
 		t.Fatalf("run program: %v", err)
 	}
 
-	layers, ok := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")[resource.PropertyKey("layers")]
+	layers, ok := rec.inputs("aws:lambda/function:Function", "ocel-app-shop-prod-api-users-r3f8a1c90")[resource.PropertyKey("layers")]
 	if !ok || !layers.IsArray() || len(layers.ArrayValue()) != 1 {
 		t.Fatalf("the function's layers = %v, want the one runtime layer the deploy would publish", layers)
 	}
@@ -133,7 +135,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "api", Boundary: componenttest.BoundaryARN})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -142,6 +144,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 			return err
 		}
 		return AppStack{
+			Namespace: testNamespace,
 			Project:   "shop",
 			Stack:     stack,
 			Functions: []AppFunction{{Logical: "fn--api--users", RouteID: "/users"}},
@@ -158,7 +161,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 	if published := rec.registered("aws:lambda/layerVersion:LayerVersion"); len(published) != 0 {
 		t.Errorf("the release stack publishes %v, want the layers the account's bootstrap already published", published)
 	}
-	layers := stringsAt(rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90"), "layers")
+	layers := stringsAt(rec.inputs("aws:lambda/function:Function", "ocel-app-shop-prod-api-users-r3f8a1c90"), "layers")
 	if want := testRuntimeLayerARN(arch.X8664); len(layers) != 1 || layers[0] != want {
 		t.Errorf("the function's layers = %v, want [%s]: the version ARN the bootstrap published", layers, want)
 	}
@@ -615,7 +618,7 @@ func TestFunctionLogGroup(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "api", Boundary: componenttest.BoundaryARN})
+		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -623,7 +626,7 @@ func TestFunctionLogGroup(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = registerFunction(pctx, "fn--api--users", Coordinate("shop", stack, "fn--api--users"),
+		_, err = registerFunction(pctx, "fn--api--users", Coordinate("shop", stack, "fn--api--users"), namedFunction(stack, "fn--api--users"),
 			"/users", args, Artifact{Bucket: "artifacts", Key: "fn.zip"},
 			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionurl.AuthIAM, "")
 		return err
@@ -632,24 +635,21 @@ func TestFunctionLogGroup(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	group := rec.inputs("aws:cloudwatch/logGroup:LogGroup", naming.ResourceID(naming.KindFunction, "users", "logs"))
+	want := "/aws/lambda/ocel-app-shop-prod-api-users-r3f8a1c90"
+	group := rec.inputs("aws:cloudwatch/logGroup:LogGroup", want)
 	if len(group) == 0 {
 		t.Fatal("the deploy owns no log group for the function, so Lambda mints one on first invoke that the teardown never reclaims")
 	}
-	want := component.LambdaLogGroupPrefixFor("shop-prod-api-users-r3f8a1c90")
-	if got := group["namePrefix"]; !got.IsString() || got.StringValue() != want {
-		t.Errorf("the log group's namePrefix = %v, want %q", got, want)
-	}
-	if got, ok := group["name"]; ok {
-		t.Errorf("the log group fixes its name to %v, so two stacks sharing a base collide on CreateLogGroup", got)
+	if got := group["name"]; !got.IsString() || got.StringValue() != want {
+		t.Errorf("the log group's name = %v, want %q, the group Lambda writes the function's logs to", got, want)
 	}
 	retention, ok := group["retentionInDays"]
 	if !ok || !retention.IsNumber() || retention.NumberValue() <= 0 {
 		t.Errorf("the log group's retentionInDays = %v, want a finite retention rather than events kept forever", retention)
 	}
 
-	logging := rec.object(t, "aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90", "loggingConfig")
-	if got := logging["logGroup"]; !got.IsString() || !strings.HasPrefix(got.StringValue(), want) {
+	logging := rec.object(t, "aws:lambda/function:Function", "ocel-app-shop-prod-api-users-r3f8a1c90", "loggingConfig")
+	if got := logging["logGroup"]; !got.IsString() || got.StringValue() != want {
 		t.Errorf("the function's loggingConfig.logGroup = %v, want the group the deploy owns under %q", got, want)
 	}
 }
@@ -670,7 +670,7 @@ func TestAFunctionsEnvironmentIsSealedUnderTheTierVariablesKey(t *testing.T) {
 			rec := &inputRecorder{}
 			program := func(pctx *pulumi.Context) error {
 				stack := testStack(t, "prod", "api")
-				role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{App: "api", Boundary: componenttest.BoundaryARN})
+				role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
 				if err != nil {
 					return err
 				}
@@ -678,7 +678,7 @@ func TestAFunctionsEnvironmentIsSealedUnderTheTierVariablesKey(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				_, err = registerFunction(pctx, "fn--api--users", Coordinate("shop", stack, "fn--api--users"),
+				_, err = registerFunction(pctx, "fn--api--users", Coordinate("shop", stack, "fn--api--users"), namedFunction(stack, "fn--api--users"),
 					"/users", args, Artifact{Bucket: "artifacts", Key: "fn.zip"},
 					nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionurl.AuthIAM, tc.key)
 				return err
@@ -687,7 +687,7 @@ func TestAFunctionsEnvironmentIsSealedUnderTheTierVariablesKey(t *testing.T) {
 				t.Fatalf("run program: %v", err)
 			}
 
-			fn := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")
+			fn := rec.inputs("aws:lambda/function:Function", "ocel-app-shop-prod-api-users-r3f8a1c90")
 			got, set := fn["kmsKeyArn"]
 			if tc.key == "" {
 				if set {
@@ -706,7 +706,7 @@ func TestARoleWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
 	t.Parallel()
 
 	program := func(pctx *pulumi.Context) error {
-		_, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{App: "api"})
+		_, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{Namespace: testNamespace, App: "api"})
 		return err
 	}
 	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", &inputRecorder{}))
@@ -731,7 +731,8 @@ func TestAFunctionRoleGrantsTheVariablesKeyOnlyWhereTheAccountNamesOne(t *testin
 			rec := &inputRecorder{}
 			program := func(pctx *pulumi.Context) error {
 				_, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{
-					App: "api", Boundary: componenttest.BoundaryARN, Variables: variables.Reader{KeyARN: tc.key},
+					Namespace: testNamespace,
+					App:       "api", Boundary: componenttest.BoundaryARN, Variables: variables.Reader{KeyARN: tc.key},
 				})
 				return err
 			}
@@ -739,7 +740,7 @@ func TestAFunctionRoleGrantsTheVariablesKeyOnlyWhereTheAccountNamesOne(t *testin
 				t.Fatalf("run program: %v", err)
 			}
 
-			name := naming.ResourceID(naming.KindRole, component.AppRoleLocalName, "policy", "variables", "read")
+			name := namedRole(testStack(t, "prod", "api")).Part(VariablesPolicyName)
 			raw, declared := rec.inputs(rolePolicyToken, name)["policy"]
 			if tc.key == "" {
 				if declared {

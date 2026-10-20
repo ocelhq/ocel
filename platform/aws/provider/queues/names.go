@@ -1,69 +1,109 @@
 package queues
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"strconv"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const (
 	fifoSuffix = ".fifo"
 
-	maxQueueNameLen    = 80
-	maxTopicNameLen    = 256
-	maxGroupNameLen    = 64
-	maxScheduleNameLen = 64
-	consumerDigitsLen  = 8
+	maxQueueNameLen         = 80
+	maxTopicNameLen         = 256
+	maxScheduleGroupNameLen = 64
+	maxScheduleNameLen      = 64
 
-	deadLetterSegment   = "dlq"
-	scheduleGroupSuffix = "cron"
+	deadLetterSuffix  = "dlq"
+	scheduleGroupWord = "cron"
 )
 
-func QueueName(project, env, topic, consumer string, fifo bool) string {
-	return fitName(maxQueueNameLen, fifo, project, env, []string{topic, consumer}, consumerDigits(topic, consumer))
+type Names struct {
+	Namespace string
+	Project   string
+	Env       string
 }
 
-func DeadLetterQueueName(project, env, topic, consumer string, fifo bool) string {
-	return fitName(maxQueueNameLen, fifo, project, env, []string{topic, consumer}, consumerDigits(topic, consumer), deadLetterSegment)
+type QueueNames struct {
+	Queue      string
+	DeadLetter string
 }
 
-func TopicName(project, env, topic string, fifo bool) string {
-	return fitName(maxTopicNameLen, fifo, project, env, []string{topic})
+func (n Names) Queues(topic, consumer string, fifo bool) (QueueNames, error) {
+	limit := maxQueueNameLen
+	if fifo {
+		limit -= len(fifoSuffix)
+	}
+	name := naming.PhysicalName{
+		Namespace: n.Namespace,
+		Project:   n.Project,
+		Env:       n.Env,
+		Declared:  naming.Join(naming.WordSeparator, topic, consumer),
+		Tag:       naming.HashTag(n.Namespace, n.Project, n.Env, "", string(naming.KindTopic), topic, consumer),
+	}
+	queue, err := name.FitWithChildren(limit, deadLetterSuffix)
+	if err != nil {
+		return QueueNames{}, refused("topic "+topic+"'s consumer "+consumer+"'s queue", limit, err)
+	}
+	deadLetter := queue + naming.WordSeparator + deadLetterSuffix
+	if fifo {
+		return QueueNames{Queue: queue + fifoSuffix, DeadLetter: deadLetter + fifoSuffix}, nil
+	}
+	return QueueNames{Queue: queue, DeadLetter: deadLetter}, nil
 }
 
-func ScheduleGroupName(project, env string) string {
-	return naming.Fit(maxGroupNameLen, naming.WordSeparator, naming.Fixed(awsports.AppScope), naming.Fixed(project), naming.Compressible(env), naming.Fixed(scheduleGroupSuffix))
+func (n Names) Topic(topic string, fifo bool) (string, error) {
+	limit := maxTopicNameLen
+	if fifo {
+		limit -= len(fifoSuffix)
+	}
+	at := naming.Coordinate{Project: n.Project, Env: n.Env, App: naming.InfraApp, Kind: naming.KindTopic, Name: topic}
+	name, err := at.AppResourceName(n.Namespace, at.HashTag(n.Namespace)).Fit(limit)
+	if err != nil {
+		return "", refused("topic "+topic, limit, err)
+	}
+	if fifo {
+		return name + fifoSuffix, nil
+	}
+	return name, nil
 }
 
-func CronScheduleName(task string) string {
-	return naming.Fit(maxScheduleNameLen, naming.WordSeparator, naming.Compressible(task))
+func (n Names) ScheduleGroup() (string, error) {
+	at := naming.Coordinate{Project: n.Project, Env: n.Env, App: naming.InfraApp, Kind: naming.KindWorker, Name: scheduleGroupWord}
+	name, err := at.AppResourceName(n.Namespace, at.HashTag(n.Namespace)).Fit(maxScheduleGroupNameLen)
+	if err != nil {
+		return "", refused("cron schedule group", maxScheduleGroupNameLen, err)
+	}
+	return name, nil
+}
+
+func (n Names) Schedules(task string, expressions int) ([]string, error) {
+	at := naming.Coordinate{Project: n.Project, Env: n.Env, App: naming.InfraApp, Kind: naming.KindTopic, Name: task}
+	physical := at.AppResourceName(n.Namespace, at.HashTag(n.Namespace))
+	if expressions <= 1 {
+		name, err := physical.Fit(maxScheduleNameLen)
+		if err != nil {
+			return nil, refused("task "+task+"'s schedule", maxScheduleNameLen, err)
+		}
+		return []string{name}, nil
+	}
+	name, err := physical.FitWithChildren(maxScheduleNameLen, strconv.Itoa(expressions))
+	if err != nil {
+		return nil, refused("task "+task+"'s schedules", maxScheduleNameLen, err)
+	}
+	names := make([]string, 0, expressions)
+	for i := range expressions {
+		names = append(names, name+naming.WordSeparator+strconv.Itoa(i+1))
+	}
+	return names, nil
 }
 
 func IsFIFO(name string) bool {
-	return len(name) > len(fifoSuffix) && name[len(name)-len(fifoSuffix):] == fifoSuffix
+	return len(name) > len(fifoSuffix) && strings.HasSuffix(name, fifoSuffix)
 }
 
-func fitName(max int, fifo bool, project, env string, compressible []string, fixed ...string) string {
-	if fifo {
-		max -= len(fifoSuffix)
-	}
-	segments := []naming.Segment{naming.Fixed(awsports.AppScope), naming.Fixed(project), naming.Fixed(env)}
-	for _, part := range compressible {
-		segments = append(segments, naming.Compressible(part))
-	}
-	for _, part := range fixed {
-		segments = append(segments, naming.Fixed(part))
-	}
-	name := naming.Fit(max, naming.WordSeparator, segments...)
-	if fifo {
-		return name + fifoSuffix
-	}
-	return name
-}
-
-func consumerDigits(topic, consumer string) string {
-	sum := sha256.Sum256([]byte(topic + "/" + consumer))
-	return hex.EncodeToString(sum[:])[:consumerDigitsLen]
+func refused(what string, limit int, err error) error {
+	return refusal.Refuse(refusal.CodeInvalid, "the %s takes no AWS name within %d characters: %v", what, limit, err)
 }
