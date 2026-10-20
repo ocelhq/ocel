@@ -86,7 +86,7 @@ func TestRemoveOfAClusterAnotherRemovalTookFirstFinishesTheRest(t *testing.T) {
 	clients, _ := readyBastion(t, account)
 	account.goneOnLookup = true
 
-	if err := bastion.Remove(context.Background(), clients, environment.TierProduction); err != nil {
+	if err := bastion.Remove(context.Background(), clients, "ocel", environment.TierProduction); err != nil {
 		t.Fatalf("Remove() of a cluster deleted between its lookup and its deletion = %v, want the rest of the bastion removed", err)
 	}
 	if len(account.roles) != 0 || len(account.groups) != 0 {
