@@ -75,6 +75,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	}
 	served := run.Serving{
 		Service:   service,
+		Tier:      spec.Ref.Tier,
 		Image:     app.Image,
 		Env:       values,
 		Account:   account,

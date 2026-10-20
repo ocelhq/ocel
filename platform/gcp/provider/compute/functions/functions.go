@@ -108,6 +108,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		}
 		served := run.Serving{
 			Service:          service,
+			Tier:             spec.Ref.Tier,
 			Image:            image,
 			Account:          account,
 			Compute:          provider.ComputeServerless,
