@@ -184,3 +184,14 @@ func TestADeployMayAddTheBootstrapPartsGoogleNamesNoConditionForThroughOneCustom
 		}
 	}
 }
+
+func TestADeployCredentialReadsOnlyItsOwnTiersLogs(t *testing.T) {
+	t.Skip("Needs a ruling: a log view filters on resource labels and log labels, a Cloud Run log entry names its service and revision and no tier, and an app service's name holds no tier word, so no view holds one tier's logs and roles/logging.viewer stays on the project")
+	t.Parallel()
+
+	for _, line := range renderedDeploy(t, environment.TierPreview) {
+		if line == credential.LogsRole {
+			t.Errorf("Permissions(deploy, preview) grants %s on the project, which reads production's logs too", line)
+		}
+	}
+}
