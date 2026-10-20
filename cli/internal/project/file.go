@@ -47,14 +47,16 @@ const initCommand = "ocel init"
 
 const initWithProviderCommand = initCommand + " --provider <id>"
 
+const loginCommand = "ocel login"
+
 type NoConfigError struct {
 	Names    []string
 	StartDir string
 }
 
 func (e NoConfigError) Error() string {
-	return fmt.Sprintf("no %s found in %s or any parent directory.\nRun `%s` and try again, where <id> is one of %s",
-		english.Or(e.Names), e.StartDir, initWithProviderCommand, strings.Join(configdoc.ProviderIDs(), ", "))
+	return fmt.Sprintf("no %s found in %s or any parent directory.\nRun `%s` and try again, where <id> is one of %s, or run `%s` to deploy through a console that offers Ocel Cloud",
+		english.Or(e.Names), e.StartDir, initWithProviderCommand, strings.Join(configdoc.ProviderIDs(), ", "), loginCommand)
 }
 
 func (NoConfigError) Missing() prerequisite.Kind { return prerequisite.Project }

@@ -106,7 +106,7 @@ func sortedCapabilities(values []string) []string {
 }
 
 func readFingerprint(ctx context.Context, dependencies Dependencies, cfg *project.Project) (fingerprint string, err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
+	if _, err := dependencies.RequireProvider(ctx, cfg, "ocel connector status"); err != nil {
 		return "", err
 	}
 

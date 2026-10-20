@@ -280,6 +280,7 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 		Questions:       providerprocess.Questions{Prompt: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
 		ConfigPath:      set.explicitConfigPath,
 
-		Console: deployreport.Console{LoadCredentials: console.LoadCredentials},
+		Console:    deployreport.Console{LoadCredentials: console.LoadCredentials},
+		CloudOffer: console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -35,7 +36,8 @@ type Invocation struct {
 	Setups          prerequisite.Setups
 	RecordEvent     func(telemetry.Payload) bool
 
-	Console deployreport.Console
+	Console    deployreport.Console
+	CloudOffer func(ctx context.Context, creds console.Credentials) (*console.CloudOffer, error)
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {

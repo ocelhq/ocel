@@ -95,9 +95,13 @@ func (p *Project) EdgeSelection() *contractv1.EdgeSelection {
 	return selection
 }
 
+func (p *Project) HasProvider() bool {
+	return p.Provider != nil
+}
+
 func (p *Project) RequireProvider() (*Provider, error) {
 	if p.Provider == nil {
-		return nil, newInvalidConfigError(fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s", filepath.Base(p.Path), strings.Join(configdoc.ProviderIDs(), ", ")), "provider")
+		return nil, newInvalidConfigError(fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s, or run `%s` to deploy through a console that offers Ocel Cloud", filepath.Base(p.Path), strings.Join(configdoc.ProviderIDs(), ", "), loginCommand), "provider")
 	}
 	return p.Provider, nil
 }

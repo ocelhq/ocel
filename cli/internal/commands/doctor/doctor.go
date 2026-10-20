@@ -155,7 +155,7 @@ func diagnose(ctx context.Context, invocation commands.Invocation, cwd string) r
 	checked.identity = join(cfg.Slug, filepath.Base(cfg.Path))
 	checked.checks = append(checked.checks, appsCheck(cfg, roots, rootsErr))
 
-	descriptor, providerErr := cfg.RequireProvider()
+	descriptor, providerErr := invocation.RequireProvider(ctx, cfg, "ocel doctor")
 	if providerErr != nil {
 		checked.fail(firstLine(providerErr.Error()), "")
 	} else {

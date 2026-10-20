@@ -14,7 +14,7 @@ import (
 )
 
 func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Project, _ *console.Link, opts options) (err error) {
-	if _, err := requireProviderID(cfg); err != nil {
+	if _, err := requireProviderID(ctx, dependencies, cfg, "ocel connector rm"); err != nil {
 		return err
 	}
 	access, err := readAccessToken(dependencies)

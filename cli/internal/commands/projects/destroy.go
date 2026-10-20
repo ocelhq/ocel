@@ -131,7 +131,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, opts destro
 }
 
 func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *project.Project, slug string, tiers []environmentv1.Tier, policy consent.Policy, bypassNotice string) (destroyed []*consolev1.EnvironmentEvent, err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
+	if _, err := invocation.RequireProvider(ctx, cfg, policy.Command); err != nil {
 		return nil, err
 	}
 	if err := policy.Refuse(); err != nil {

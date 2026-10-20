@@ -42,7 +42,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		return err
 	}
 
-	if _, err := cfg.RequireProvider(); err != nil {
+	if _, err := invocation.RequireProvider(ctx, cfg, destroyCommand(tier)); err != nil {
 		return err
 	}
 	policy := consent.NewPlanPolicy(destroyCommand(tier), opts.Yes || bypass, invocation.CanAsk(stdin), stdout, stdin)
