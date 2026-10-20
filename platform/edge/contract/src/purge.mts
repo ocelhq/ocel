@@ -1,4 +1,5 @@
 import { storedCacheTags } from "./cache-tags.mjs";
+import { parseObjectKey } from "./storage-key.mjs";
 
 export const purgePath = "/.ocel/purge";
 
@@ -104,10 +105,10 @@ export function readPurgeEntry(
   return { tag, mode: "invalidate", raisedAt: stale };
 }
 
-export function readReleaseToken(isrPrefix: string): string | undefined {
-  const segments = isrPrefix.split("/");
-  if (segments.length !== 5 || segments[4] !== "isr" || segments.includes("")) return undefined;
-  return segments[3];
+export function readReleaseToken(pagesPrefix: string): string | undefined {
+  const parsed = parseObjectKey(pagesPrefix);
+  if (parsed?.kind !== "pages" || parsed.rest !== "") return undefined;
+  return parsed.release;
 }
 
 const encoder = new TextEncoder();
@@ -147,8 +148,8 @@ export async function verifyPurge(
   return crypto.subtle.verify("HMAC", key, expected, body);
 }
 
-export function derivePurgeSecret(seed: string, isrPrefix: string): Promise<string> {
-  return signPurge(seed, isrPrefix);
+export function derivePurgeSecret(seed: string, pagesPrefix: string): Promise<string> {
+  return signPurge(seed, pagesPrefix);
 }
 
 function isRetryable(status: number): boolean {
@@ -192,7 +193,7 @@ export async function postPurge(
   sender: PurgeSender,
   url: string,
   secret: string,
-  isrPrefix: string,
+  pagesPrefix: string,
   entries: readonly PurgeEntry[],
 ): Promise<void> {
   for (const mode of ["purge", "invalidate"] as const) {
@@ -201,7 +202,7 @@ export async function postPurge(
       .map(({ tag, raisedAt }) => ({ tag, raisedAt }));
     for (let i = 0; i < tags.length; i += tagsPerPurgeRequest) {
       const body = JSON.stringify({
-        isrPrefix,
+        pagesPrefix,
         mode,
         tags: tags.slice(i, i + tagsPerPurgeRequest),
       });

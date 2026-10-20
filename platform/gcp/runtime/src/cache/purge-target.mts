@@ -1,3 +1,4 @@
+import { pagesPrefix, parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { newCdnPurge, type PurgeTags } from "./cdn-purge.mjs";
 import { cloudCdnRelease } from "./cloud-cdn-tags.mjs";
 import { newCloudflarePurge } from "./cloudflare-purge.mjs";
@@ -14,11 +15,11 @@ export function openPurgeFor(env: NodeJS.ProcessEnv): PurgeTags | undefined {
   const url = env.OCEL_PURGE_URL;
   if (!url) return undefined;
   const secret = env.OCEL_PURGE_SECRET;
-  const isrPrefix = env.OCEL_ISR_PREFIX;
-  if (release === null || !isrPrefix || !secret) {
+  const coordinate = parseStorageCoordinate(env.OCEL_STORAGE_COORDINATE ?? "");
+  if (release === null || coordinate === undefined || !secret) {
     throw new Error(
       "ocel: OCEL_PURGE_URL names where to purge, and this service is told no release its responses are tagged with or no OCEL_PURGE_SECRET to sign the purge with",
     );
   }
-  return newCloudflarePurge({ url, isrPrefix, secret });
+  return newCloudflarePurge({ url, pagesPrefix: pagesPrefix(coordinate), secret });
 }

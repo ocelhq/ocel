@@ -12,14 +12,14 @@ import {
 } from "../src/serve-key";
 import { awsOrigin, FN_URL, withGlobalFetch } from "./origin-deps";
 
-const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
+const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
 const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
 const DIGEST = "d".repeat(64);
 const DEPLOYMENT_OPTIMIZER = `${FN_URL}_ocel/image`;
 const ENV_OPTIMIZER = "https://opt.lambda-url.eu-west-2.on.aws/";
 
 const PAYLOAD: ImageOriginRequest = {
-  assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
+  assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
   url: "/a.png",
   w: 640,
   q: 75,
@@ -35,7 +35,7 @@ const record = {
   buildId: "build-1",
   functionUrls: { "/": `${FN_URL}stage` },
   assetPrefix: PAYLOAD.assetPrefix,
-  isrPrefix,
+  pagesPrefix,
   createdAt: 1,
   edge: {},
 };
@@ -62,7 +62,7 @@ function imageRequest(
   const { url } = buildImageCall(optimizer, coordinates, DIGEST);
   return new Request(url, {
     headers: {
-      [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix }),
+      [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", pagesPrefix }),
       [IMAGE_CALL_HEADER]: JSON.stringify({
         payload: "payload" in over ? over.payload : PAYLOAD,
         minimumCacheTTL: "minimumCacheTTL" in over ? over.minimumCacheTTL : 14400,

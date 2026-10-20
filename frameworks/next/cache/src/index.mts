@@ -1,4 +1,5 @@
 import type { TagRecord } from "@platform/edge-contract/purge";
+import { objectKey, type StorageCoordinate } from "@platform/edge-contract/storage-key";
 
 export { cacheKey, variantHeadersFile } from "./naming.mjs";
 export {
@@ -26,8 +27,8 @@ export interface TagSnapshot {
   records: Record<string, TagRecord>;
 }
 
-export function tagSnapshotKey(prefix: string): string {
-  return `${prefix}/tag-clock.json`;
+export function tagSnapshotKey(coordinate: StorageCoordinate): string {
+  return objectKey("tag-clock", coordinate, "tag-clock.json");
 }
 
 const TAGS_HEADER = "x-next-cache-tags";
@@ -45,12 +46,12 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function entryObjectKey(isrPrefix: string, key: string): string | null {
+export function entryObjectKey(pagesPrefix: string, key: string): string | null {
   if (key === "" || key.startsWith("/") || key.includes("\\")) return null;
   for (const segment of key.split("/")) {
     if (segment === "." || segment === "..") return null;
   }
-  return `${isrPrefix}/cache/${key}.cache.json`;
+  return `${pagesPrefix}/${key}.cache.json`;
 }
 
 export function tagsOf(value: Record<string, any>, ctx: any): string[] {

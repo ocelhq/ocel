@@ -133,7 +133,7 @@ func TestABuildThatDeclaresRevalidationAsksForAnISRLedgerWhateverItsFramework(t 
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
-	if declared.ISR == nil || declared.ISR.Prefix == "" || declared.ISR.TagNamespace == "" {
+	if declared.ISR == nil || declared.ISR.Coordinate.Release.IsZero() || declared.ISR.TagNamespace == "" {
 		t.Fatalf("ISR = %+v, want the prefix and tag namespace a revalidation writes through", declared.ISR)
 	}
 	root = servingRoot(t, "web", buildoutput.Hosting{Framework: buildoutput.FrameworkNext}, nil)
@@ -325,7 +325,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	if app.Bytecode == nil || app.Bytecode.Prefix == "" {
 		t.Errorf("Bytecode = %+v, want the prefix the runtime warms its compile cache under", app.Bytecode)
 	}
-	if app.ISR == nil || app.ISR.Prefix == "" || app.ISR.TagNamespace == "" {
+	if app.ISR == nil || app.ISR.Coordinate.Release.IsZero() || app.ISR.TagNamespace == "" {
 		t.Errorf("ISR = %+v, want the ledger a build declaring ISR revalidates through", app.ISR)
 	}
 	if app.Routing == nil || app.Routing.RootFunction != "index" || string(app.Routing.RouteTable.Table) != string(routing) {

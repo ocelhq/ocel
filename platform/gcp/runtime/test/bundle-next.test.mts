@@ -126,9 +126,9 @@ test("the server preload imports nothing but Node's own modules", async () => {
 
 const cacheEnv = {
   PORT: "8080",
-  OCEL_ISR_BUCKET: "bucket",
-  OCEL_ISR_OBJECT_PREFIX: "cache/app",
-  OCEL_ISR_PREFIX: "app",
+  OCEL_EDGE_BUCKET: "edge",
+  OCEL_CACHE_BUCKET: "cache",
+  OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
   OCEL_TAG_DATABASE: "database",
 };
 

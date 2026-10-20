@@ -43,15 +43,15 @@ const gzipped = gzipSync(Buffer.from("compressed by the app"));
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ocel-gcp-dispatch-"));
   await writeFile(join(dir, "routing.json"), JSON.stringify(manifest));
-  bucket.objects.set("assets/prod/shop/web/r1/assets/logo.svg", {
+  bucket.objects.set("assets/shop/prod/web/r1a2b3c4d/logo.svg", {
     body: "<svg/>",
     generation: "3",
   });
   stored = await serveBucket(bucket);
   assetEnv = {
-    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
     OCEL_STORAGE_ENDPOINT: stored.endpoint,
-    OCEL_ASSET_PREFIX: "prod/shop/web/r1/assets",
+    OCEL_ASSET_PREFIX: "assets/shop/prod/web/r1a2b3c4d",
   };
   local = http.createServer((req, res) => {
     if (req.headers["x-ocel-entry"] === "/gzipped") {
@@ -175,7 +175,7 @@ test("a page the GCP dispatch serves carries its release tag when its edge purge
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
     OCEL_EDGE_CACHE: "all",
     OCEL_CACHE_TAG_PURGE: "1",
-    OCEL_ISR_PREFIX: "production/shop/web/r1a2b3c4d/isr",
+    OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
   });
   const edge = http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }));
   await new Promise<void>((resolve) => edge.listen({ host: "127.0.0.1", port: 0 }, resolve));

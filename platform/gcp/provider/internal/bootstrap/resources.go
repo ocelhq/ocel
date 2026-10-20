@@ -3,9 +3,11 @@ package bootstrap
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
@@ -27,12 +29,12 @@ var BootstrapAPIs = []string{
 }
 
 type Resource struct {
-	Kind      Kind
-	Name      string
-	Note      string
-	Slow      bool
-	Shared    bool
-	Versioned bool
+	Kind   Kind
+	Name   string
+	Note   string
+	Slow   bool
+	Shared bool
+	Class  naming.StorageClass
 }
 
 func (i Resource) ID() string { return string(i.Kind) + "/" + i.Name }
@@ -52,12 +54,16 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 			Note: "every record this project stores, and both tiers keep theirs in it",
 		},
 		{
-			Kind: KindBucket, Name: names.Bucket(tier),
-			Note: "the artifacts this tier deploys, and the stamp saying what this bootstrap is",
+			Kind: KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageState), Class: naming.StorageState,
+			Note: fmt.Sprintf("the state every stack in this tier writes and the stamp saying what this bootstrap is, versioned so a bad write is recoverable for %d days", NoncurrentStateLifetimeDays),
 		},
 		{
-			Kind: KindBucket, Name: names.StateBucket(tier), Versioned: true,
-			Note: "the state every stack in this tier writes, versioned so a bad write is recoverable",
+			Kind: KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageEdge), Class: naming.StorageEdge,
+			Note: "what this tier's edges and its load balancer may serve: static files, prerendered pages, route tables, edge bundles and image settings",
+		},
+		{
+			Kind: KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageCache), Class: naming.StorageCache,
+			Note: fmt.Sprintf("what only an app's own code reads back, its fetch and use-cache entries, each deleted %d days after its last write", CacheObjectLifetimeDays),
 		},
 		{
 			Kind: KindKeyRing, Name: names.KeyRing(), Shared: true,

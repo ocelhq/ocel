@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -243,7 +244,7 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	}
 }
 
-func TestADeployReportsTheStoragePrefixItWroteEachAppUnder(t *testing.T) {
+func TestADeployReportsTheStorageCoordinateItWroteEachAppUnder(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
 
@@ -251,12 +252,13 @@ func TestADeployReportsTheStoragePrefixItWroteEachAppUnder(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	prefix := result.GetApps()[0].GetStoragePrefix()
-	if !regexp.MustCompile(`^prod/shop/web/r[0-9a-f]{8}/$`).MatchString(prefix) {
-		t.Fatalf("the result reports storage prefix %q for web, want prod/shop/web/<release token>/", prefix)
+	coordinate := result.GetApps()[0].GetStoragePrefix()
+	if !regexp.MustCompile(`^shop/prod/web/r[0-9a-f]{8}$`).MatchString(coordinate) {
+		t.Fatalf("the result reports storage coordinate %q for web, want shop/prod/web/<release token>", coordinate)
 	}
-	if key := p.FakeStacks().Shipped(p.FakeStacks().Provisioned()[1].Ref)[0].Ref.Key; !strings.HasPrefix(key, prefix) {
-		t.Errorf("web's function artifact is %q, want it under the reported prefix %q", key, prefix)
+	key := p.FakeStacks().Shipped(p.FakeStacks().Provisioned()[1].Ref)[0].Ref.Key
+	if parsed, err := naming.ParseObjectKey(key); err != nil || parsed.Coordinate().StorageCoordinate() != coordinate {
+		t.Errorf("web's function artifact is %q, want it under the reported coordinate %q", key, coordinate)
 	}
 }
 
@@ -461,7 +463,7 @@ func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 		t.Fatalf("Open(%+v) after the deploy = %v, want the artifact stored where the plan named it", ref, err)
 	}
 	defer opened.Close()
-	if !strings.HasPrefix(ref.Key, "prod/shop/web/") {
+	if !strings.HasPrefix(ref.Key, "fn/shop/prod/web/") {
 		t.Errorf("the artifact landed at %q, want it under the release's own prefix", ref.Key)
 	}
 }

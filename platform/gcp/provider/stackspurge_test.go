@@ -65,7 +65,7 @@ func isrSpec(front edge.Edge, compute provider.Compute, isr *provider.ISRSpec) p
 	}
 }
 
-const isrPrefix = "p/shop/main/web/r1/isr"
+const pagesPrefix = "pages/shop/prod/web/r1a2b3c4d"
 
 func TestANextDeployBehindTheCodeRunningEdgeHandsItsPurgeSecretToTheRecord(t *testing.T) {
 	t.Parallel()
@@ -78,12 +78,12 @@ func TestANextDeployBehindTheCodeRunningEdgeHandsItsPurgeSecretToTheRecord(t *te
 	}
 	wrapped := stacks{Stacks: recordingStacks{order: order, result: provider.StackResult{}}, p: programming(h)}
 
-	result, err := wrapped.Provision(t.Context(), isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix}), nil)
+	result, err := wrapped.Provision(t.Context(), isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Coordinate: cachedRelease()}), nil)
 	if err != nil {
 		t.Fatalf("Provision = %v", err)
 	}
 
-	if want := edge.DerivePurgeSecret(seed, isrPrefix); result.PurgeSecret != want {
+	if want := edge.DerivePurgeSecret(seed, pagesPrefix); result.PurgeSecret != want {
 		t.Errorf("PurgeSecret = %q, want %q", result.PurgeSecret, want)
 	}
 	if !slices.Equal(order.steps, []string{"provision"}) {
@@ -94,9 +94,9 @@ func TestANextDeployBehindTheCodeRunningEdgeHandsItsPurgeSecretToTheRecord(t *te
 func TestADeployNotBehindTheCodeRunningEdgeHandsNoPurgeSecretToTheRecord(t *testing.T) {
 	t.Parallel()
 	for name, spec := range map[string]provider.StackSpec{
-		"the alb front":       isrSpec(codeRunningFront{kind: "alb"}, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix}),
-		"no front":            isrSpec(nil, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix}),
-		"container compute":   isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeContainer, &provider.ISRSpec{Prefix: isrPrefix}),
+		"the alb front":       isrSpec(codeRunningFront{kind: "alb"}, provider.ComputeServerless, &provider.ISRSpec{Coordinate: cachedRelease()}),
+		"no front":            isrSpec(nil, provider.ComputeServerless, &provider.ISRSpec{Coordinate: cachedRelease()}),
+		"container compute":   isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeContainer, &provider.ISRSpec{Coordinate: cachedRelease()}),
 		"an app without ISR":  isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, nil),
 		"a stack with no app": {Edge: codeRunningFront{kind: cloudflareKind, runsCode: true}},
 	} {
@@ -125,7 +125,7 @@ func TestANextDeployBehindAnEdgeItNeverAdoptedIsNotReadyAndDeploysNothing(t *tes
 	order := &orderLog{}
 	wrapped := stacks{Stacks: recordingStacks{order: order}, p: programming(h)}
 
-	_, err := wrapped.Provision(t.Context(), isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix}), nil)
+	_, err := wrapped.Provision(t.Context(), isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Coordinate: cachedRelease()}), nil)
 
 	if refusalCode(err) != refusal.CodeNotReady {
 		t.Errorf("Provision = %v, want a not-ready refusal", err)
@@ -140,7 +140,7 @@ func TestANextDeployBehindTheWorkerOnATierWithNoOriginWildcardProvisionsNothing(
 	h := newOffersHarness(t)
 	order := &orderLog{}
 	adoptTheWorker(t, h)
-	spec := isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Prefix: isrPrefix})
+	spec := isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Coordinate: cachedRelease()})
 	spec.App.Functions = []provider.FunctionSpec{{Name: "web"}}
 	wrapped := stacks{Stacks: recordingStacks{order: order}, p: programming(h)}
 

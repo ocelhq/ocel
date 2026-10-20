@@ -40,8 +40,7 @@ test("the AWS host declares the 50 cache tags CloudFront stores per object", () 
 });
 
 test("the use-cache store of the host publishes tags revalidated together in one snapshot write", async () => {
-  const prefix = "prod/proj/app/r3f8a1c9d/isr";
-  const snapshotKey = `${prefix}/tag-clock.json`;
+  const snapshotKey = "tag-clock/proj/prod/app/r3f8a1c9d/tag-clock.json";
   const bucket = newTagSnapshotBucket(snapshotKey, {
     version: 1,
     deployedAt: 100,
@@ -49,7 +48,7 @@ test("the use-cache store of the host publishes tags revalidated together in one
     records: {},
   });
   vi.stubEnv("OCEL_ISR_BUCKET", "assets");
-  vi.stubEnv("OCEL_ISR_PREFIX", prefix);
+  vi.stubEnv("OCEL_STORAGE_COORDINATE", "proj/prod/app/r3f8a1c9d");
   vi.stubEnv("OCEL_STATE_TABLE", "state");
   vi.stubEnv("OCEL_ISR_TAG_NAMESPACE", "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#");
   serveS3From(() => bucket);
@@ -77,12 +76,11 @@ test("the use-cache store of the host publishes tags revalidated together in one
 });
 
 test("a use-cache store that fails to open is opened again on the next try", async () => {
-  const prefix = "prod/proj/app/r3f8a1c9d/isr";
-  vi.stubEnv("OCEL_ISR_PREFIX", prefix);
+  vi.stubEnv("OCEL_STORAGE_COORDINATE", "proj/prod/app/r3f8a1c9d");
   vi.stubEnv("OCEL_STATE_TABLE", "state");
   vi.stubEnv("OCEL_ISR_TAG_NAMESPACE", "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#");
   serveS3From(() =>
-    newTagSnapshotBucket(`${prefix}/tag-clock.json`, {
+    newTagSnapshotBucket("tag-clock/proj/prod/app/r3f8a1c9d/tag-clock.json", {
       version: 1,
       deployedAt: 100,
       generatedAt: 100,

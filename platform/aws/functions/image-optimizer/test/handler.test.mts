@@ -21,7 +21,7 @@ function event(body: unknown, overrides: Record<string, unknown> = {}) {
 test("answers a POST of the edge's payload", async () => {
   const config = imageConfig();
   const store = storeWithConfig(config);
-  store.put("prod/proj1/web/r3f8a1c9d/assets/logo.png", { bytes: await solid("png", 300, 150) });
+  store.put("assets/proj1/prod/web/r3f8a1c9d/logo.png", { bytes: await solid("png", 300, 150) });
   const response = await handle(event(payload(config)), { store });
   expect(response.status).toBe(200);
   expect(response.headers["content-type"]).toBe("image/webp");
@@ -30,7 +30,7 @@ test("answers a POST of the edge's payload", async () => {
 test("decodes a base64 body, which is how a Function URL may deliver it", async () => {
   const config = imageConfig();
   const store = storeWithConfig(config);
-  store.put("prod/proj1/web/r3f8a1c9d/assets/logo.png", { bytes: await solid("png", 300, 150) });
+  store.put("assets/proj1/prod/web/r3f8a1c9d/logo.png", { bytes: await solid("png", 300, 150) });
   const response = await handle(
     event(Buffer.from(JSON.stringify(payload(config))).toString("base64"), {
       isBase64Encoded: true,

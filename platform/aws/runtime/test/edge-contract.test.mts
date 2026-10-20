@@ -2,30 +2,32 @@ import { tagSnapshotKey } from "@framework/next-cache";
 import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
 import { edgeCacheHeader, edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import { purgeHeader } from "@platform/edge-contract/purge";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { expect, test } from "vitest";
-import { isrPrefixOf, tagNamespace } from "../src/cache/tag-index.mjs";
+import { parseTagNamespace, tagNamespace } from "../src/cache/tag-index.mjs";
 import { edgeReadableTagging } from "../src/next/object-store.mjs";
 
-test("the snapshot is keyed at the suffix the deploy seeds it under", () => {
-  const prefix = contract.tagNamespace.isrPrefix;
-  expect(tagSnapshotKey(prefix)).toBe(prefix + contract.tagSnapshotSuffix);
+test("the snapshot is keyed where the deploy seeds it", () => {
+  expect(tagSnapshotKey(contract.tagNamespace.coordinate)).toBe(contract.tagSnapshotKey);
 });
 
 test("tag records are namespaced exactly as the deploy grants them", () => {
-  expect(tagNamespace(contract.tagNamespace.isrPrefix)).toBe(
+  expect(tagNamespace(contract.tagNamespace.coordinate)).toBe(
     contract.tagNamespace.partitionKeyPrefix,
   );
 });
 
-test("the publisher reads back the very prefix the deploy wrote the tag items for", () => {
-  expect(isrPrefixOf(contract.tagNamespace.partitionKeyPrefix)).toBe(
-    contract.tagNamespace.isrPrefix,
+test("the publisher reads back the very release the deploy wrote the tag items for", () => {
+  expect(parseTagNamespace(contract.tagNamespace.partitionKeyPrefix)).toEqual(
+    contract.tagNamespace.coordinate,
   );
 });
 
-test("the contract's prefix and key are one coordinate, spelled twice", () => {
+test("the contract's storage coordinate and key are one coordinate, spelled twice", () => {
   const { project, env, app, release } = contract.tagNamespace.coordinate;
-  expect(contract.tagNamespace.isrPrefix).toBe(`${env}/${project}/${app}/${release}/isr`);
+  expect(parseStorageCoordinate(contract.tagNamespace.storageCoordinate)).toEqual(
+    contract.tagNamespace.coordinate,
+  );
   expect(contract.tagNamespace.partitionKeyPrefix).toBe(
     `PROJECT#${project}#STACK#${env}--${app}--${release}#TAG#`,
   );

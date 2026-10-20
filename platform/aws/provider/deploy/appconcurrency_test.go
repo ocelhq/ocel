@@ -84,9 +84,9 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 				{Name: "fn--" + app + "--entry", ArtifactDir: writeTree(t, map[string]string{"index.js": "the " + app + " entry"})},
 			},
 			Routing:     &provider.RoutingSpec{RootFunction: "fn--" + app + "--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
-			ISR:         &provider.ISRSpec{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
+			ISR:         &provider.ISRSpec{Coordinate: coord, TagNamespace: "tag:shop"},
 			Bytecode:    &provider.BytecodeSpec{Prefix: bytecodePrefixOf(coord)},
-			AssetPrefix: coord.AssetKey(""),
+			AssetPrefix: coord.AssetPrefix(),
 			Static:      nextStatic,
 		},
 	}

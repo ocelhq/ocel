@@ -72,7 +72,7 @@ func mintSigningKey() ([]byte, error) {
 	return seed, nil
 }
 
-func ensureSigningKey(ctx context.Context, keys SigningKeysAPI, tier environment.Tier, name string) ([]byte, error) {
+func ensureSigningKey(ctx context.Context, keys SigningKeysAPI, managedBy string, tier environment.Tier, name string) ([]byte, error) {
 	seed, found, err := readSigningKey(ctx, keys, name)
 	if err != nil || found {
 		return seed, err
@@ -86,7 +86,7 @@ func ensureSigningKey(ctx context.Context, keys SigningKeysAPI, tier environment
 		Description:  aws.String("Ocel: the Ed25519 key an app signs its realtime tokens with."),
 		SecretString: aws.String(base64.StdEncoding.EncodeToString(minted)),
 		Tags: []smtypes.Tag{
-			{Key: aws.String(iam.ManagedByTagKey), Value: aws.String(iam.ManagedByTagValue)},
+			{Key: aws.String(iam.ManagedByTagKey), Value: aws.String(managedBy)},
 			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))},
 		},
 	})

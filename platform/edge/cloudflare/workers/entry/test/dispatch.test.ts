@@ -1,6 +1,6 @@
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { describe, expect, it } from "vitest";
-import { EMPTY_ROUTES, servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
+import { EMPTY_ROUTES, servedNextRelease, UNTOKENED_PAGES_PREFIX } from "./next-release";
 import { fakeServing } from "./serving-deps";
 
 type Dispatch = NextRouteTable["dispatch"];
@@ -9,7 +9,10 @@ describe("a routed prerender", () => {
   it("invokes the parent function for a prerender route until ISR lands", async () => {
     const serve = servedNextRelease({
       table: { dispatch: { "/": { kind: "prerender", id: "/" } } },
-      record: { functionUrls: { "/": "https://fn.example.com" }, isrPrefix: UNTOKENED_ISR_PREFIX },
+      record: {
+        functionUrls: { "/": "https://fn.example.com" },
+        pagesPrefix: UNTOKENED_PAGES_PREFIX,
+      },
       fetch: (async () => new Response("rendered", { status: 200 })) as unknown as typeof fetch,
     });
 

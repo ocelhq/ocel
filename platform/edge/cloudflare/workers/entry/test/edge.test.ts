@@ -15,7 +15,7 @@ import {
   EMPTY_ROUTES,
   type NextRelease,
   servedNextRelease,
-  UNTOKENED_ISR_PREFIX,
+  UNTOKENED_PAGES_PREFIX,
 } from "./next-release";
 
 function nodeRequireChunkFor(entryKey: string): string {
@@ -68,7 +68,7 @@ function missingBundle(): NextRelease["record"] {
   return {
     edge: {
       code: {
-        bundleKey: `prod/p1/web/gone-${seq}/edge/bundle.json`,
+        bundleKey: `bundles/p1/prod/web/r9${String(seq).padStart(7, "0")}/bundle.json`,
         loaderId: `edge-missing-${seq}`,
         compatDate: "2026-03-10",
         compatFlags: [],
@@ -116,14 +116,14 @@ async function gated(
 
 describe("ownBundleKey", () => {
   it.each([
-    ["prod/p1/web/r1/edge/bundle.json", true],
-    ["preview/p1/web/r1/edge/bundle.json", true],
-    ["prod/p2/web/r1/edge/bundle.json", false],
-    ["prod/p1/admin/r1/edge/bundle.json", false],
-    ["prod/p1/web/r1/edge/sealed.bin", false],
-    ["prod/p1/web/r1/assets/bundle.json", false],
-    ["prod/p1/web/../../p2/web/r1/edge/bundle.json", false],
-    ["prod/p1/web/r1/edge/bundle.json/extra", false],
+    ["bundles/p1/prod/web/r00000001/bundle.json", true],
+    ["bundles/p1/preview/web/r00000001/bundle.json", true],
+    ["bundles/p2/prod/web/r00000001/bundle.json", false],
+    ["bundles/p1/prod/admin/r00000001/bundle.json", false],
+    ["bundles/p1/prod/web/r00000001/sealed.bin", false],
+    ["assets/p1/prod/web/r00000001/bundle.json", false],
+    ["bundles/p1/prod/web/../../p2/r00000001/bundle.json", false],
+    ["bundles/p1/prod/web/r00000001/bundle.json/extra", false],
     ["", false],
   ])("%s is p1/web's own: %s", (key, own) => {
     expect(ownBundleKey(key, "p1", "web")).toBe(own);
@@ -595,7 +595,7 @@ describe("edge-parented prerenders", () => {
           },
         },
       },
-      record: { isrPrefix: UNTOKENED_ISR_PREFIX },
+      record: { pagesPrefix: UNTOKENED_PAGES_PREFIX },
       edgeBundle: renderer,
     })(new Request("https://app.example/edge-blog"));
 
@@ -605,7 +605,7 @@ describe("edge-parented prerenders", () => {
   it("still 502s a prerender with neither a Function URL nor an edge entry", async () => {
     const res = await servedNextRelease({
       table: { dispatch: { "/blog": { kind: "prerender", id: "/blog", config: {} } } },
-      record: { isrPrefix: UNTOKENED_ISR_PREFIX },
+      record: { pagesPrefix: UNTOKENED_PAGES_PREFIX },
     })(new Request("https://app.example/blog"));
 
     expect(res.status).toBe(502);

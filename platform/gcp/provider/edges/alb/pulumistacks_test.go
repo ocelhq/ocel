@@ -25,11 +25,11 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 		{Tier: tier, Slug: "shop"},
 		{Tier: tier, Slug: "blog"},
 	} {
-		config, _ := stacks.config(googletest.Clients(""), target, "secret")
+		config, _ := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", target, "secret")
 		prefixes[target.Slug] = config.Backend.URL
 	}
 
-	bucket := "gs://" + googletest.Clients("").StateBucket(tier) + "/"
+	bucket := "gs://ocel-prod-state-k3x9q2/"
 	for slug, url := range prefixes {
 		if !strings.HasPrefix(url, bucket) {
 			t.Errorf("the %q stack keeps state at %q, want it in the tier's own state bucket %q", slug, url, bucket)
@@ -45,7 +45,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	t.Parallel()
 
 	stacks := stacking(t)
-	front, ref := stacks.config(googletest.Clients(""), Target{Tier: environment.TierProduction}, "secret")
+	front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction}, "secret")
 	if front.Refresh == nil || !front.Refresh(ref, pulumi.OperationProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by keeping " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the tier back to unrouted")
@@ -56,7 +56,7 @@ func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing
 	t.Parallel()
 
 	stacks := stacking(t)
-	config, ref := stacks.config(googletest.Clients(""), Target{Tier: environment.TierProduction, Slug: "shop"}, "secret")
+	config, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction, Slug: "shop"}, "secret")
 	if _, err := pulumi.New(config).Workspace(ref, nil); err != nil {
 		t.Errorf("Workspace() for a teardown = %v, want the stack ready to destroy: a teardown has no program to hand it", err)
 	}

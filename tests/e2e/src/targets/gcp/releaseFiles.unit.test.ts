@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { assetPrefixOf, releaseObjectUrl, tierBucket } from "./releaseFiles";
+import { assetPrefixOf, edgeBucketIn, releaseObjectUrl } from "./releaseFiles";
 
 const listed = {
   services: [
@@ -10,7 +10,7 @@ const listed = {
           {
             env: [
               { name: "GREETING", value: "journey-hello" },
-              { name: "OCEL_ASSET_PREFIX", value: "prod/shop/web/r0123abcd/assets" },
+              { name: "OCEL_ASSET_PREFIX", value: "assets/shop/prod/web/r0123abcd" },
             ],
           },
         ],
@@ -22,23 +22,45 @@ const listed = {
 
 describe("the files a release uploaded", () => {
   it("live under the asset prefix the service's current template is told", () => {
-    expect(assetPrefixOf(listed, "ocel-shop-prod-web")).toBe("prod/shop/web/r0123abcd/assets");
+    expect(assetPrefixOf(listed, "ocel-shop-prod-web")).toBe("assets/shop/prod/web/r0123abcd");
   });
 
   it("cannot be found for a service that is told no asset prefix", () => {
     expect(() => assetPrefixOf(listed, "ocel-shop-prod-api")).toThrow(/OCEL_ASSET_PREFIX/);
   });
 
-  it("are read from the tier's bucket under the assets store", () => {
+  it("are read from the tier's edge bucket under the release's asset prefix", () => {
     expect(
       releaseObjectUrl(
-        tierBucket("ocel", "acme-prod"),
-        "prod/shop/web/r0123abcd/assets",
+        "ocel-prod-edge-k3x9q2",
+        "assets/shop/prod/web/r0123abcd",
         "/_next/static/chunks/a.js",
       ),
     ).toBe(
-      "https://storage.googleapis.com/storage/v1/b/ocel-acme-prod-production/o/" +
-        "assets%2Fprod%2Fshop%2Fweb%2Fr0123abcd%2Fassets%2F_next%2Fstatic%2Fchunks%2Fa.js?alt=media",
+      "https://storage.googleapis.com/storage/v1/b/ocel-prod-edge-k3x9q2/o/" +
+        "assets%2Fshop%2Fprod%2Fweb%2Fr0123abcd%2F_next%2Fstatic%2Fchunks%2Fa.js?alt=media",
+    );
+  });
+});
+
+describe("the production edge bucket", () => {
+  it("is the one bucket named for the namespace's production edge and a random tag", () => {
+    expect(
+      edgeBucketIn(
+        [
+          "ocel-prod-edge-k3x9q2",
+          "ocel-prod-edge",
+          "ocel-prod-edge-k3x9q2-x",
+          "ocel-prod-edgy-k3x9q2",
+        ],
+        "ocel",
+      ),
+    ).toBe("ocel-prod-edge-k3x9q2");
+  });
+
+  it("cannot be told apart where two are listed", () => {
+    expect(() => edgeBucketIn(["ocel-prod-edge-k3x9q2", "ocel-prod-edge-a1b2c3"], "ocel")).toThrow(
+      /one production edge bucket/,
     );
   });
 });

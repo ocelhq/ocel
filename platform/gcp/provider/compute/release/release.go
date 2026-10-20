@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
-type CacheGrants func(c *gcloud.Clients, spec provider.StackSpec, member string) ([]grants.Grant, error)
+type CacheGrants func(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, member string) ([]grants.Grant, error)
 
 type Release struct {
 	OpenClients       func(context.Context) (*gcloud.Clients, error)

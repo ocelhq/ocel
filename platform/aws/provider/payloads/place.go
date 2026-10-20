@@ -9,6 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type ObjectStore interface {
@@ -24,22 +26,22 @@ type Placement struct {
 
 func (p Placement) Present() bool { return p.Bucket != "" && p.Key != "" }
 
-func Key(prefix, digest string) string {
-	return fmt.Sprintf("%s/%s.zip", prefix, digest)
+func Key(name, digest string) string {
+	return naming.PayloadKey(name, digest)
 }
 
-func At(bucket, prefix string, p Payload) Placement {
-	return Placement{Bucket: bucket, Key: Key(prefix, p.SHA256), SHA256: p.SHA256}
+func At(bucket, name string, p Payload) Placement {
+	return Placement{Bucket: bucket, Key: Key(name, p.SHA256), SHA256: p.SHA256}
 }
 
-func Place(ctx context.Context, store ObjectStore, bucket, prefix, label string, p Payload) (Placement, error) {
+func Place(ctx context.Context, store ObjectStore, bucket, name, label string, p Payload) (Placement, error) {
 	if bucket == "" {
 		return Placement{}, fmt.Errorf("no artifact bucket to place the %s into", label)
 	}
 	if store == nil {
 		return Placement{}, fmt.Errorf("no artifact store configured for the %s", label)
 	}
-	at := At(bucket, prefix, p)
+	at := At(bucket, name, p)
 
 	head, err := store.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket:       aws.String(at.Bucket),

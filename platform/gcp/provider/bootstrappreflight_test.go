@@ -97,6 +97,15 @@ func TestARegionFirestoreServesIsAdmitted(t *testing.T) {
 	}
 }
 
+func TestABootstrapChecksThePermissionsItFindsAndMendsItsBucketsWith(t *testing.T) {
+	t.Parallel()
+	for _, permission := range []string{"storage.buckets.list", "storage.buckets.update"} {
+		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
+			t.Errorf("a bootstrap does not check %s, and the survey finds a tier's randomly tagged buckets by listing them and mends them by updating", permission)
+		}
+	}
+}
+
 func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
 	t.Parallel()
 	for _, permission := range []string{

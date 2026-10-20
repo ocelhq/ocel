@@ -12,8 +12,8 @@ declare module "cloudflare:test" {
 let objects = 0;
 const freshQueue = () => env.PURGE_QUEUE.getByName(`times-${objects++}`);
 
-const r1 = { release: "r1", slug: "p1", isrPrefix: "production/p1/web/r1/isr" };
-const r10 = { release: "r10", slug: "p1", isrPrefix: "production/p1/web/r10/isr" };
+const r1 = { release: "r1", slug: "p1", pagesPrefix: "pages/p1/prod/web/r00000001" };
+const r10 = { release: "r10", slug: "p1", pagesPrefix: "pages/p1/prod/web/r00000010" };
 
 describe("the times the PurgeQueue keeps for the tags raised", () => {
   it("reads back the latest purge and invalidation of a tag, apart", async () => {

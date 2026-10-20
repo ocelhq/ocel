@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	AuthorizerKeyPrefix              = "ocel-realtime-authorizer"
+	AuthorizerPayload                = "realtime-authorizer"
 	realtimeAuthorizerRuntime        = "provided.al2023"
 	realtimeAuthorizerHandler        = "bootstrap"
 	realtimeAuthorizerMemoryMB       = 128

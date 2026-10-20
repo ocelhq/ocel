@@ -19,7 +19,7 @@ export interface ReleaseRecord {
   static?: Static;
   functionUrls: Record<string, string>;
   assetPrefix: string;
-  isrPrefix: string;
+  pagesPrefix: string;
   prerenders?: boolean;
   createdAt: number;
   edgeBundle?: EdgeBundle;

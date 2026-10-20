@@ -45,9 +45,9 @@ function viaBucket(next: typeof fetch): typeof fetch {
   }) as typeof fetch;
 }
 
-const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
+const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
 const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
-const entryKey = `${isrPrefix}/cache/blog/a.cache.json`;
+const entryKey = `${pagesPrefix}/blog/a.cache.json`;
 
 const record = {
   app: "web",
@@ -55,8 +55,8 @@ const record = {
   release: "build-1~fp1",
   buildId: "build-1",
   functionUrls: { "/blog": `${FN_URL}stage` },
-  assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
-  isrPrefix,
+  assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
+  pagesPrefix,
   createdAt: 1,
   edge: {},
 };
@@ -120,7 +120,7 @@ function harness(
   });
   const released = {
     slug: "p1",
-    isrPrefix,
+    pagesPrefix,
     ...options.release,
   };
   const serve = new Serve(
@@ -165,7 +165,7 @@ function harness(
   return harnessed as unknown as Harness & { request: typeof request };
 }
 
-const fallbackKey = `${isrPrefix}/cache/blog/[id].cache.json`;
+const fallbackKey = `${pagesPrefix}/blog/[id].cache.json`;
 
 async function seed(entry: object | null, key = entryKey): Promise<void> {
   if (entry) objects.set(key, JSON.stringify(entry));
@@ -460,13 +460,13 @@ describe("Serve answering a pages router path the build did not prerender", () =
 
   it("answers the generated page, not the fallback, once the build's store holds it", async () => {
     await seed(lazyFallback(), fallbackKey);
-    await seed(storedEntry(), `${isrPrefix}/cache/blog/9.cache.json`);
+    await seed(storedEntry(), `${pagesPrefix}/blog/9.cache.json`);
     const h = lazy();
 
     const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/9")));
 
     expect(await response.text()).toBe("<html>from the store</html>");
-    objects.delete(`${isrPrefix}/cache/blog/9.cache.json`);
+    objects.delete(`${pagesPrefix}/blog/9.cache.json`);
   });
 
   it("renders the page's data request at the origin, which generates the page", async () => {

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -47,6 +48,8 @@ type Survey struct {
 	Replacing map[string]string
 	Sibling   bool
 	stateOf   string
+
+	StateBucket string
 }
 
 func (s Survey) has(target Resource) bool { return s.Held[target.ID()] }
@@ -89,22 +92,41 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 		}
 	}
 
-	sibling, err := b.stamped(ctx, read.Names.Bucket(tier.Sibling()))
+	sibling, err := b.stampedIn(ctx, tier.Sibling())
 	if err != nil {
 		return Survey{}, err
 	}
 	read.Sibling = sibling.present
 
-	own, err := b.stamped(ctx, read.Names.Bucket(tier))
+	if read.StateBucket, err = b.stateBucket(ctx, tier); err != nil {
+		return Survey{}, err
+	}
+	own, err := b.stamped(ctx, read.StateBucket)
 	if err != nil {
 		return Survey{}, err
 	}
 	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
 
-	if read.stateOf, err = b.stateIn(ctx, read.Names.StateBucket(tier)); err != nil {
+	if read.stateOf, err = b.stateIn(ctx, read.StateBucket); err != nil {
 		return Survey{}, err
 	}
 	return read, nil
+}
+
+func (b Engine) stateBucket(ctx context.Context, tier environment.Tier) (string, error) {
+	attrs, err := b.Clients.FindTierBucket(ctx, tier, naming.StorageState)
+	if err != nil || attrs == nil {
+		return "", err
+	}
+	return attrs.Name, nil
+}
+
+func (b Engine) stampedIn(ctx context.Context, tier environment.Tier) (stamped, error) {
+	bucket, err := b.stateBucket(ctx, tier)
+	if err != nil {
+		return stamped{}, err
+	}
+	return b.stamped(ctx, bucket)
 }
 
 type stamped struct {
@@ -114,6 +136,9 @@ type stamped struct {
 }
 
 func (b Engine) stamped(ctx context.Context, bucket string) (stamped, error) {
+	if bucket == "" {
+		return stamped{}, nil
+	}
 	client, err := b.Clients.Storage()
 	if err != nil {
 		return stamped{}, err
@@ -140,18 +165,26 @@ func (b Engine) stamped(ctx context.Context, bucket string) (stamped, error) {
 const stateRoot = ".pulumi/stacks/"
 
 func (b Engine) stateIn(ctx context.Context, bucket string) (string, error) {
+	if bucket == "" {
+		return "", nil
+	}
 	client, err := b.Clients.Storage()
 	if err != nil {
 		return "", err
 	}
-	attrs, err := client.Bucket(bucket).Objects(ctx, nil).Next()
-	if errors.Is(err, iterator.Done) || errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
-		return "", nil
+	objects := client.Bucket(bucket).Objects(ctx, nil)
+	for {
+		attrs, err := objects.Next()
+		if errors.Is(err, iterator.Done) || errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
+			return "", nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("list what %s contains: %w", bucket, err)
+		}
+		if attrs.Name != StampObject {
+			return stackNamed(attrs.Name), nil
+		}
 	}
-	if err != nil {
-		return "", fmt.Errorf("list what %s contains: %w", bucket, err)
-	}
-	return stackNamed(attrs.Name), nil
 }
 
 func stackNamed(object string) string {

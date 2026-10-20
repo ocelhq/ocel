@@ -59,9 +59,9 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if err != nil {
 		return AppServing{}, err
 	}
-	facts := AppServing{AssetPrefix: q.Coordinate.AssetKey("")}
+	facts := AppServing{AssetPrefix: q.Coordinate.AssetPrefix()}
 	if q.CachesBytecode {
-		facts.Bytecode = &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())}
+		facts.Bytecode = &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.StoragePrefix(naming.ObjectBytecode))}
 	}
 	if present {
 		facts.RootFunction = hosting.RootFunction
@@ -73,7 +73,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	}
 	if uses.Revalidation {
 		facts.ISR = &provider.ISRSpec{
-			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
+			Coordinate:   q.Coordinate,
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
 		_, facts.Prerenders = hosting.Needs[edge.NeedEdgeCache]

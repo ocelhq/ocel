@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	stateBucketSuffix   = "-state"
 	repositoryWord      = "containers"
 	networkWord         = "network"
 	passphraseWords     = "pulumi-passphrase"
@@ -53,14 +52,6 @@ type Names struct {
 func (n Names) Namespace() provider.Namespace { return n.namespace }
 
 func (n Names) Project() string { return n.project }
-
-func (n Names) Bucket(tier environment.Tier) string {
-	return string(n.namespace) + "-" + n.project + "-" + string(tier)
-}
-
-func (n Names) StateBucket(tier environment.Tier) string {
-	return n.Bucket(tier) + stateBucketSuffix
-}
 
 func (n Names) Repository(tier environment.Tier) string {
 	return n.mustOcelName(naming.TierWord(tier), repositoryWord)
@@ -338,17 +329,6 @@ func (n Names) PurgeSeedSecret(tier environment.Tier, kind edge.Kind) string {
 }
 
 func (n Names) Fit() error {
-	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, bucket := range []string{n.StateBucket(tier), n.Bucket(tier)} {
-			if len(bucket) > maxBucketName {
-				return refusal.Refuse(refusal.CodeInvalid,
-					"the %s bucket this bootstrap names is %d characters and Cloud Storage takes %d: "+
-						"namespace %q and project %q together leave nothing to cut.\n"+
-						"Name a shorter namespace in %s, or deploy into a project with a shorter id",
-					bucket, len(bucket), maxBucketName, n.namespace, n.project, provider.NamespaceEnvVar)
-			}
-		}
-	}
 	if len(n.Database()) < minDatabaseID {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %q Firestore database this bootstrap names is %d characters and Firestore takes at least %d.\n"+

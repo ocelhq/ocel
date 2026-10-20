@@ -30,7 +30,7 @@ func (r *deployRun) digestInfraSpec() (string, error) {
 	}
 	encoded, err := json.Marshal(infraSpecInput{
 		Resources:  declared,
-		Tags:       infraTags(r.spec),
+		Tags:       infraTags(r.managedBy, r.spec),
 		Edge:       r.front.Kind(),
 		Parts:      r.parts,
 		Options:    r.options,

@@ -129,20 +129,20 @@ func appCoordinate(p provider.DeploySpec, app string, release naming.ReleaseToke
 	}
 }
 
-func appTags(p provider.DeploySpec, entry provider.AppEntry) map[string]string {
+func appTags(managedBy string, p provider.DeploySpec, entry provider.AppEntry) map[string]string {
 	coordinate := appCoordinate(p, entry.App, entry.Release.Token())
 	coordinate.Kind = naming.KindFunction
 	return coordinate.Tags(naming.TagValues{
-		ManagedBy: "ocel",
+		ManagedBy: managedBy,
 		EnvTier:   p.Tier,
 		BuildID:   entry.Release.BuildID(),
 		Promotion: p.PromotionID,
 	})
 }
 
-func infraTags(p provider.DeploySpec) map[string]string {
+func infraTags(managedBy string, p provider.DeploySpec) map[string]string {
 	tags := map[string]string{
-		"ocel:managed-by":    "ocel",
+		"ocel:managed-by":    managedBy,
 		"ocel:project":       naming.Sanitize(p.Slug),
 		"ocel:env":           p.Env,
 		naming.EnvTierTagKey: string(p.Tier),

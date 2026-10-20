@@ -1,6 +1,7 @@
-import { isrPrefixOf } from "@platform/aws-runtime/tag-index";
+import { parseTagNamespace } from "@platform/aws-runtime/tag-index";
 
 import { type PurgeEntry, readPurgeEntry } from "@platform/edge-contract/purge";
+import { pagesPrefix, parseObjectKey } from "@platform/edge-contract/storage-key";
 
 type Attribute = { S?: string; N?: string };
 
@@ -49,10 +50,10 @@ function mergeEntry(entries: PurgeEntry[], next: PurgeEntry): void {
   entries.splice(0, entries.length, ...kept, next);
 }
 
-export function coordinateOf(isrPrefix: string): Coordinate | null {
-  const segments = isrPrefix.split("/");
-  if (segments.length !== 5) return null;
-  return { project: segments[1]!, release: segments[3]! };
+export function coordinateOf(prefix: string): Coordinate | null {
+  const key = parseObjectKey(prefix);
+  if (key?.kind !== "pages" || key.rest !== "") return null;
+  return { project: key.project, release: key.release };
 }
 
 export function raisesOf(records: readonly StreamRecord[]): Raises {
@@ -61,9 +62,10 @@ export function raisesOf(records: readonly StreamRecord[]): Raises {
     const image = record.dynamodb?.NewImage;
     if (image === undefined) continue;
 
-    const isrPrefix = isrPrefixOf(image.gsi1pk?.S ?? "");
+    const coordinate = parseTagNamespace(image.gsi1pk?.S ?? "");
     const tag = image.tag?.S;
-    if (isrPrefix === null || tag === undefined || tag === "") continue;
+    if (coordinate === null || tag === undefined || tag === "") continue;
+    const prefix = pagesPrefix(coordinate);
     const entry = readPurgeEntry(
       tag,
       { stale: readTimestamp(image.stale), expired: readTimestamp(image.expired) },
@@ -71,13 +73,13 @@ export function raisesOf(records: readonly StreamRecord[]): Raises {
     );
     if (entry === undefined) continue;
 
-    const raise: Raise = raises.get(isrPrefix) ?? { tags: [], entries: [], sequenceNumbers: [] };
+    const raise: Raise = raises.get(prefix) ?? { tags: [], entries: [], sequenceNumbers: [] };
     if (!raise.tags.includes(tag)) raise.tags.push(tag);
     mergeEntry(raise.entries, entry);
     if (record.dynamodb?.SequenceNumber !== undefined) {
       raise.sequenceNumbers.push(record.dynamodb.SequenceNumber);
     }
-    raises.set(isrPrefix, raise);
+    raises.set(prefix, raise);
   }
   return raises;
 }

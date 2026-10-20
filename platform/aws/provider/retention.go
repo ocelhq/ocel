@@ -18,16 +18,16 @@ import (
 const imageReclaimGrace = 30 * time.Minute
 
 func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, app, imageRef string, _ provider.ImageStore, log progress.Log) error {
-	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), imageRef, otherStacksImages(p.KeyValues(), ref), time.Now().Add(-imageReclaimGrace))
+	removed, err := registry.Reconcile(ctx, ecr.NewFromConfig(p.aws), string(p.namespace), imageRef, otherStacksImages(p.KeyValues(), ref), time.Now().Add(-imageReclaimGrace))
 	resources.SayRemovedImages(log, app, removed)
 	return err
 }
 
 func (p *Provider) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, images provider.ImageStore, log progress.Log) error {
-	return forgetImages(ctx, p.KeyValues(), ecr.NewFromConfig(p.aws), ref, app, images, log)
+	return forgetImages(ctx, p.KeyValues(), ecr.NewFromConfig(p.aws), string(p.namespace), ref, app, images, log)
 }
 
-func forgetImages(ctx context.Context, store records.Store, api registry.ECRAPI, ref provider.StackRef, app string, images provider.ImageStore, log progress.Log) error {
+func forgetImages(ctx context.Context, store records.Store, api registry.ECRAPI, namespace string, ref provider.StackRef, app string, images provider.ImageStore, log progress.Log) error {
 	recorded, found, err := stackrecords.Read(ctx, store, ref.Tier, ref.Project, ref.Name)
 	if err != nil || !found {
 		return err
@@ -52,7 +52,7 @@ func forgetImages(ctx context.Context, store records.Store, api registry.ECRAPI,
 	if len(unkept) == 0 {
 		return nil
 	}
-	target, err := registry.Resolve(ctx, api)
+	target, err := registry.Resolve(ctx, api, namespace)
 	if err != nil {
 		return err
 	}

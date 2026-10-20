@@ -615,31 +615,30 @@ describe("lambdaFunctionNames", () => {
 });
 
 describe("storageCoordinate", () => {
-  it("reads the env, project, app and release token from the prefix the deploy recorded", () => {
-    expect(storageCoordinate("pr-7/e2e-42/app/r0123abcd/")).toEqual({
-      prefix: "pr-7/e2e-42/app/r0123abcd",
-      env: "pr-7",
+  it("reads the project, env, app and release token of the coordinate the deploy recorded", () => {
+    expect(storageCoordinate("e2e-42/pr-7/app/r0123abcd")).toEqual({
       project: "e2e-42",
+      env: "pr-7",
       app: "app",
       release: "r0123abcd",
     });
   });
 
-  it("refuses a missing or partial prefix rather than guessing one", () => {
+  it("refuses a missing or partial coordinate rather than guessing one", () => {
     expect(storageCoordinate(undefined)).toBeNull();
     expect(storageCoordinate("")).toBeNull();
-    expect(storageCoordinate("prod/s/app/")).toBeNull();
+    expect(storageCoordinate("s/prod/app")).toBeNull();
   });
 });
 
 describe("bytecodeCacheKeyPrefix", () => {
-  it("joins prefix/bytecode/functionName with a trailing slash", () => {
+  it("is the bytecode kind of the release, then the function, with a trailing slash", () => {
     expect(
       bytecodeCacheKeyPrefix({
-        prefix: "pr-7/e2e-42/app/r0123abcd",
+        coordinate: { project: "e2e-42", env: "pr-7", app: "app", release: "r0123abcd" },
         functionName: "proj--web-abc123",
       }),
-    ).toBe("pr-7/e2e-42/app/r0123abcd/bytecode/proj--web-abc123/");
+    ).toBe("bytecode/e2e-42/pr-7/app/r0123abcd/proj--web-abc123/");
   });
 });
 

@@ -2,7 +2,6 @@ package alb
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/compute"
@@ -10,9 +9,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const objectViewerRole = "roles/storage.objectViewer"
@@ -48,18 +46,11 @@ func declareAssetsBackend(ctx *pulumi.Context, names names, tier environment.Tie
 		Member:  pulumi.String(assets.Agent),
 		Condition: &projects.IAMMemberConditionArgs{
 			Title:       pulumi.String(names.AssetsReader),
-			Description: pulumi.String("lists the tier's bucket and reads the static files of its releases, and nothing else in it"),
-			Expression:  pulumi.String(releaseFilesCondition(assets.Name)),
+			Description: pulumi.String("lists and reads the tier's edge bucket, which holds only what an edge may serve"),
+			Expression:  pulumi.String(gcloud.BucketCondition(names.AssetsReader, assets.Name).Expression),
 		},
 	}, pulumi.DependsOn([]pulumi.Resource{bucket}))
 	return bucket, err
-}
-
-func releaseFilesCondition(bucket string) string {
-	name := "projects/_/buckets/" + bucket
-	objects := name + "/objects/" + provider.StoreAssets + "/"
-	return fmt.Sprintf(`resource.name == %q || (resource.name.startsWith(%q) && resource.name.extract(%q) != "")`,
-		name, objects, objects+"{release}/"+naming.AssetsSegment+"/")
 }
 
 func (e *Edge) raiseFront(ctx context.Context, spec loadBalancerSpec, progress progress.Log) (map[string]string, error) {

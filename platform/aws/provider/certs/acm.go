@@ -95,11 +95,12 @@ func cutSuffixFold(s, suffix string) (string, bool) {
 }
 
 type ACM struct {
-	API      ACMAPI
-	Region   string
-	Wait     func(context.Context, time.Duration) error
-	Attempts int
-	Every    time.Duration
+	API       ACMAPI
+	ManagedBy string
+	Region    string
+	Wait      func(context.Context, time.Duration) error
+	Attempts  int
+	Every     time.Duration
 }
 
 const (
@@ -161,7 +162,7 @@ func (i ACM) Request(ctx context.Context, hostnames []string) (Certificate, erro
 		SubjectAlternativeNames: alternates,
 		ValidationMethod:        acmtypes.ValidationMethodDns,
 		IdempotencyToken:        aws.String(idempotencyToken(strings.Join(hostnames, ","))),
-		Tags:                    []acmtypes.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")}},
+		Tags:                    []acmtypes.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String(i.ManagedBy)}},
 	})
 	if err != nil {
 		return Certificate{}, fmt.Errorf("request a certificate for %s in %s: %w", strings.Join(hostnames, ", "), i.Region, err)

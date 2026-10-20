@@ -1,8 +1,5 @@
+import { objectKey, parseObjectKey } from "@platform/edge-contract/storage-key";
 import { BootstrapError } from "./errors.mjs";
-
-const SEGMENT = /^[A-Za-z0-9._-]+$/;
-
-const ASSETS = "assets";
 
 const IMAGE_CONFIG = "image-config.json";
 
@@ -10,20 +7,17 @@ export function releaseAssetPrefix(value: unknown): string {
   if (typeof value !== "string" || value === "") {
     throw new BootstrapError("request has no asset prefix", value);
   }
-  const segments = value.split("/");
-  if (segments.at(-1) !== ASSETS) {
-    throw new BootstrapError(`asset prefix does not end in ${ASSETS}`, value);
-  }
-  for (const part of segments) {
-    if (!SEGMENT.test(part) || part.includes("..")) {
-      throw new BootstrapError("asset prefix has an unusable segment", value);
-    }
+  const key = parseObjectKey(value);
+  if (key?.kind !== "assets" || key.rest !== "") {
+    throw new BootstrapError("asset prefix names no release's assets", value);
   }
   return value;
 }
 
 export function imageConfigKey(assetPrefix: string): string {
-  return assetPrefix.slice(0, -ASSETS.length) + IMAGE_CONFIG;
+  const key = parseObjectKey(assetPrefix);
+  if (key === undefined) throw new BootstrapError("asset prefix names no release", assetPrefix);
+  return objectKey("image-config", key, IMAGE_CONFIG);
 }
 
 export function assetKey(assetPrefix: string, pathname: string): string {

@@ -66,9 +66,9 @@ export class PurgeQueue extends DurableObject<Env> {
   }
 
   async raise(scope: ReleaseScope, mode: PurgeMode, tags: RaisedTag[]): Promise<void> {
-    const release = readReleaseToken(scope.isrPrefix);
+    const release = readReleaseToken(scope.pagesPrefix);
     if (release === undefined) {
-      throw new Error(`ocel: ${scope.isrPrefix} is not the ISR prefix of a release`);
+      throw new Error(`ocel: ${scope.pagesPrefix} is not the pages prefix of a release`);
     }
     this.ctx.storage.transactionSync(() => {
       this.times.record({ ...scope, release }, mode, tags);
@@ -110,9 +110,9 @@ export class PurgeQueue extends DurableObject<Env> {
   }
 
   private async retireUnservedReleases(): Promise<void> {
-    for (const { release, slug, isrPrefix } of this.readDueChecks(RELEASES_CHECKED_PER_ALARM)) {
+    for (const { release, slug, pagesPrefix } of this.readDueChecks(RELEASES_CHECKED_PER_ALARM)) {
       try {
-        const served = await this.releases.readServedRecord({ slug, isrPrefix });
+        const served = await this.releases.readServedRecord({ slug, pagesPrefix });
         if (served.kind === "forgotten") this.times.forget(release);
         else if (served.kind === "not-served") this.times.retire(release, Date.now());
         else this.times.markChecked(release, Date.now());

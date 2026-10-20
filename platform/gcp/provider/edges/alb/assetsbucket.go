@@ -18,9 +18,13 @@ func (p *AssetsBuckets) Read(ctx context.Context, tier environment.Tier) (Assets
 	if err != nil {
 		return AssetsBucket{}, err
 	}
+	buckets, err := clients.TierBuckets(ctx, tier)
+	if err != nil {
+		return AssetsBucket{}, err
+	}
 	agent, err := clients.ReadServiceAgent(ctx, loadBalancerAgentDomain)
 	if err != nil {
 		return AssetsBucket{}, err
 	}
-	return AssetsBucket{Name: clients.Bucket(tier), Agent: agent}, nil
+	return AssetsBucket{Name: buckets.Edge, Agent: agent}, nil
 }

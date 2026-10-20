@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -13,6 +14,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -43,6 +45,13 @@ type Buckets struct {
 
 func (b Buckets) Buckets(context.Context, environment.Tier) (Buckets, error) { return b, nil }
 
+func (b Buckets) Holding(kind naming.ObjectKind) string {
+	if kind == naming.ObjectFunction || kind == naming.ObjectPayloads {
+		return b.Functions
+	}
+	return b.Assets
+}
+
 func (a Artifacts) buckets(ctx context.Context, tier environment.Tier) (Buckets, error) {
 	if tier == "" {
 		return Buckets{}, refusal.Refuse(refusal.CodeInvalid,
@@ -54,31 +63,25 @@ func (a Artifacts) buckets(ctx context.Context, tier environment.Tier) (Buckets,
 	return a.Stores.Buckets(ctx, tier)
 }
 
-func (a Artifacts) bucket(ctx context.Context, tier environment.Tier, store string) (string, S3API, error) {
+func (a Artifacts) bucket(ctx context.Context, tier environment.Tier, key string) (string, S3API, error) {
+	kind, err := naming.ParseObjectKind(key)
+	if err != nil {
+		return "", nil, refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
+	}
 	buckets, err := a.buckets(ctx, tier)
 	if err != nil {
 		return "", nil, err
 	}
-	var name string
-	switch store {
-	case provider.StoreFunctions:
-		name = buckets.Functions
-	case provider.StoreAssets:
-		name = buckets.Assets
-	default:
-		return "", nil, refusal.Refuse(refusal.CodeInvalid,
-			"this provider keeps no %q store; it keeps %q and %q",
-			store, provider.StoreFunctions, provider.StoreAssets)
-	}
+	name := buckets.Holding(kind)
 	if name == "" {
 		return "", nil, refusal.Refuse(refusal.CodeNotReady,
-			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, provider.BootstrapCommand(tier))
+			"this account has no bucket for %s objects yet.\nRun `%s` to create it, then try again", kind, provider.BootstrapCommand(tier))
 	}
 	return name, a.S3, nil
 }
 
 func (a Artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
-	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Key)
 	if err != nil {
 		return err
 	}
@@ -101,7 +104,7 @@ func (a Artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Re
 }
 
 func (a Artifacts) Has(ctx context.Context, ref provider.ArtifactRef) (bool, error) {
-	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Key)
 	if err != nil {
 		return false, err
 	}
@@ -133,7 +136,7 @@ func absent(err error) bool {
 }
 
 func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {
-	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -150,33 +153,30 @@ func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadC
 	return out.Body, nil
 }
 
-func (a Artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Log) error {
-	if prefix == "" {
-		return refusal.Refuse(refusal.CodeInvalid, "an empty prefix names every artifact this account keeps")
+func (a Artifacts) RemoveObjects(ctx context.Context, tier environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, progress progress.Log) error {
+	if scope.Project == "" {
+		return refusal.Refuse(refusal.CodeInvalid, "a scope naming no project names every project's objects")
 	}
 	buckets, err := a.buckets(ctx, tier)
 	if err != nil {
 		return err
 	}
-	sweeps := []string{buckets.Functions, buckets.Assets}
 	var errs []error
-	swept := 0
-	for _, bucket := range sweeps {
+	var swept []string
+	for _, kind := range kinds {
+		bucket := buckets.Holding(kind)
 		if bucket == "" {
 			continue
 		}
+		prefix := scope.StoragePrefix(kind)
 		if err := a.sweep(ctx, a.S3, bucket, prefix); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		swept++
+		swept = append(swept, prefix)
 	}
-	if progress != nil && len(errs) == 0 {
-		buckets := "buckets"
-		if swept == 1 {
-			buckets = "bucket"
-		}
-		progress.Say(fmt.Sprintf("Removed the %s artifacts under %s from %d %s", tier, prefix, swept, buckets))
+	if progress != nil && len(errs) == 0 && len(swept) > 0 {
+		progress.Say(fmt.Sprintf("Removed the %s objects under %s", tier, strings.Join(swept, ", ")))
 	}
 	return errors.Join(errs...)
 }

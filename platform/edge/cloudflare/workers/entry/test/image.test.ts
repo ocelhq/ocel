@@ -4,16 +4,16 @@ import { describe, expect, it } from "vitest";
 import { IMAGE_CALL_HEADER, parseRenderCall, RENDER_RELEASE_HEADER } from "../src/serve-key";
 import { countingLoader, edgeBundle } from "./edge-bundle";
 import {
-  ISR_PREFIX,
   type NextRelease,
+  PAGES_PREFIX,
   servedNextRelease,
-  UNTOKENED_ISR_PREFIX,
+  UNTOKENED_PAGES_PREFIX,
 } from "./next-release";
 import { fakeServing } from "./serving-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
-const ASSET_PREFIX = "prod/p1/web/r3f8a1c9d/assets";
+const ASSET_PREFIX = "assets/p1/prod/web/r3f8a1c9d";
 
 function imageRelease(over: NextRelease = {}) {
   return servedNextRelease({
@@ -28,7 +28,7 @@ function imageRelease(over: NextRelease = {}) {
       },
       ...over.table,
     },
-    record: { assetPrefix: ASSET_PREFIX, isrPrefix: UNTOKENED_ISR_PREFIX, ...over.record },
+    record: { assetPrefix: ASSET_PREFIX, pagesPrefix: UNTOKENED_PAGES_PREFIX, ...over.record },
     assets: { "/404.html": "<h1>not found</h1>" },
   });
 }
@@ -151,7 +151,7 @@ describe("the /_next/image route through Workers Cache", () => {
     const fake = fakeServing(answer);
     let originCalls = 0;
     const serve = imageRelease({
-      record: { isrPrefix: ISR_PREFIX },
+      record: { pagesPrefix: PAGES_PREFIX },
       serve: fake.serving.serve,
       base: {
         images: optimizerUrl === null ? undefined : { optimizerUrl },
@@ -180,7 +180,7 @@ describe("the /_next/image route through Workers Cache", () => {
     expect(new URL(request.url).pathname).toMatch(/\/[0-9a-f]{64}$/);
     expect(JSON.parse(request.headers.get(RENDER_RELEASE_HEADER)!)).toMatchObject({
       slug: "p1",
-      isrPrefix: ISR_PREFIX,
+      pagesPrefix: PAGES_PREFIX,
     });
     expect(JSON.parse(request.headers.get(IMAGE_CALL_HEADER)!)).toEqual({
       payload: {
@@ -315,7 +315,7 @@ describe("the /_next/image route through Workers Cache", () => {
     const keyed = async (buildId: string) => {
       const fake = fakeServing(optimized);
       await imageRelease({
-        record: { isrPrefix: ISR_PREFIX, buildId },
+        record: { pagesPrefix: PAGES_PREFIX, buildId },
         serve: fake.serving.serve,
         base: { images: { optimizerUrl: OPTIMIZER } },
       })(new Request(IMAGE));

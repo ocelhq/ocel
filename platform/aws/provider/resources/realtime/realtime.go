@@ -18,6 +18,7 @@ import (
 type Keys struct {
 	SigningKeys SigningKeysAPI
 	Root        string
+	ManagedBy   string
 }
 
 func New(artifacts component.Artifacts, keys Keys) component.Component {
@@ -45,7 +46,7 @@ func New(artifacts component.Artifacts, keys Keys) component.Component {
 }
 
 func placeRealtimeAuthorizer(ctx context.Context, artifacts component.Artifacts, at component.Stack) (payloads.Placement, error) {
-	return component.PlacePayload(ctx, artifacts, at.Tier(), AuthorizerKeyPrefix, "realtime authorizer", payloads.RealtimeAuthorizer())
+	return component.PlacePayload(ctx, artifacts, at.Tier(), AuthorizerPayload, "realtime authorizer", payloads.RealtimeAuthorizer())
 }
 
 func declare(ctx *pulumi.Context, at component.Stack, realtimes []provider.Resource, artifacts component.Artifacts, keys Keys) error {
@@ -64,7 +65,7 @@ func declare(ctx *pulumi.Context, at component.Stack, realtimes []provider.Resou
 		if at.Previewing {
 			seed, err = previewSigningKey(ctx.Context(), keys.SigningKeys, secret)
 		} else {
-			seed, err = ensureSigningKey(ctx.Context(), keys.SigningKeys, at.Tier(), secret)
+			seed, err = ensureSigningKey(ctx.Context(), keys.SigningKeys, keys.ManagedBy, at.Tier(), secret)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)

@@ -16,6 +16,7 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -121,8 +122,8 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 	}
 	policy, err := lambdapart.Document(
 		map[string]any{"Effect": "Allow", "Action": "s3:GetObject", "Resource": []string{
-			spec.AssetBucketARN + "/*/assets/*",
-			spec.AssetBucketARN + "/*/image-config.json",
+			spec.AssetBucketARN + "/" + string(naming.ObjectAssets) + "/*",
+			spec.AssetBucketARN + "/" + string(naming.ObjectImageConfig) + "/*",
 		}},
 		map[string]any{"Effect": "Allow", "Action": []string{"logs:CreateLogStream", "logs:PutLogEvents"},
 			"Resource": "arn:aws:logs:" + spec.Region + ":" + account + ":log-group:" + names.LogGroup + ":*"},

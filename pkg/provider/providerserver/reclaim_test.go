@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -35,17 +36,15 @@ func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 		t.Fatalf("ReclaimTargets() returned %d targets, want one per removed record", len(targets))
 	}
 
-	byApp := map[string][]string{}
+	byApp := map[string][]naming.ObjectKind{}
 	for _, target := range targets {
-		byApp[target.Release.Fingerprint()] = target.Prefixes
+		byApp[target.Release.Fingerprint()] = target.Kinds
 	}
-	if len(byApp[gone.Fingerprint()]) == 0 {
-		t.Error("the release nothing else serves keeps its stored objects, want them reclaimed")
+	if !slices.Equal(byApp[gone.Fingerprint()], naming.CoordinateObjectKinds) {
+		t.Errorf("the release nothing else serves reclaims %v, want every kind of its stored objects", byApp[gone.Fingerprint()])
 	}
-	for _, prefix := range byApp[shared.Fingerprint()] {
-		if !strings.HasSuffix(prefix, "isr/") {
-			t.Errorf("a release another pointer still serves would lose %s, want only its cache reclaimed", prefix)
-		}
+	if !slices.Equal(byApp[shared.Fingerprint()], naming.ISRObjectKinds) {
+		t.Errorf("a release another pointer still serves reclaims %v, want only its cache kinds", byApp[shared.Fingerprint()])
 	}
 }
 

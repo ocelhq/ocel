@@ -4,10 +4,10 @@ import {
   compileOcelRouteTable,
   readOcelRouteTable,
 } from "@platform/edge-contract/ocel-route-table";
+import { parseObjectKey } from "@platform/edge-contract/storage-key";
 import type { EdgeObjectStore } from "./edge";
 import { lruSet } from "./lru";
 
-const ROUTE_TABLE_DIR = "route-table";
 const ROUTE_TABLE_FILE = /^[0-9a-f]{64}\.json$/;
 
 export const ROUTE_TABLE_CACHE_MAX = 16;
@@ -15,13 +15,9 @@ export const ROUTE_TABLE_CACHE_MAX = 16;
 const routeTables = new Map<string, Promise<unknown>>();
 
 export function ownRouteTableKey(key: string, slug: string): boolean {
-  const segments = key.split("/");
+  const parsed = parseObjectKey(key);
   return (
-    segments.length === 6 &&
-    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..") &&
-    segments[1] === slug &&
-    segments[4] === ROUTE_TABLE_DIR &&
-    ROUTE_TABLE_FILE.test(segments[5])
+    parsed?.kind === "route-tables" && parsed.project === slug && ROUTE_TABLE_FILE.test(parsed.rest)
   );
 }
 

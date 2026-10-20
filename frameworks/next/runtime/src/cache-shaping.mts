@@ -9,12 +9,12 @@ import {
   edgeCacheTagHeader,
   readEdgeCacheMode,
 } from "@platform/edge-contract/edge-cache";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 
 const cacheTagHeader = "cache-tag";
 
-const releasePattern = /^r[0-9a-f]{8}$/;
 const dataRoutePattern = /^\/_next\/data\/[^/]+\/(.*)\.json$/;
 
 export interface RevalidatingRoutes {
@@ -29,10 +29,8 @@ export interface OriginShaping extends RevalidatingRoutes {
   tagsPerObject: number;
 }
 
-export function releaseOf(isrPrefix: string | undefined): string | null {
-  const segments = isrPrefix?.split("/") ?? [];
-  if (segments.length !== 5 || segments[4] !== "isr") return null;
-  return releasePattern.test(segments[3]!) ? segments[3]! : null;
+export function releaseOf(storageCoordinate: string | undefined): string | null {
+  return parseStorageCoordinate(storageCoordinate ?? "")?.release ?? null;
 }
 
 export function revalidatingRoutes(config: LauncherConfig): RevalidatingRoutes {
@@ -62,7 +60,7 @@ export function originShaping(
   return {
     ...routes,
     edgeCachesOnlyMarked: cachesOnlyMarked(mode),
-    release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_ISR_PREFIX) : null,
+    release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_STORAGE_COORDINATE) : null,
     tagsPerObject,
   };
 }

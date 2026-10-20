@@ -61,14 +61,18 @@ func (s Scope) AppBucketARN() string { return s.appFenced("arn:aws:s3:::", "") }
 
 func (s Scope) AppWorkerFunctionARN() string { return s.appFenced("arn:aws:lambda:*:*:function:", "") }
 
-func (s Scope) AppClusterARN() string { return s.appFenced("arn:aws:rds:*:*:cluster:", "") }
+func (s Scope) tierFenced(arnPrefix string) string {
+	return arnPrefix + naming.AppFence(s.Namespace) + naming.TierWord(s.Tier) + naming.WordSeparator + "*"
+}
 
-func (s Scope) AppInstanceARN() string { return s.appFenced("arn:aws:rds:*:*:db:", "") }
+func (s Scope) AppClusterARN() string { return s.tierFenced("arn:aws:rds:*:*:cluster:") }
 
-func (s Scope) AppSubnetGroupARN() string { return s.appFenced("arn:aws:rds:*:*:subgrp:", "") }
+func (s Scope) AppInstanceARN() string { return s.tierFenced("arn:aws:rds:*:*:db:") }
+
+func (s Scope) AppSubnetGroupARN() string { return s.tierFenced("arn:aws:rds:*:*:subgrp:") }
 
 func (s Scope) AppClusterSnapshotARN() string {
-	return s.appFenced("arn:aws:rds:*:*:cluster-snapshot:", "")
+	return s.tierFenced("arn:aws:rds:*:*:cluster-snapshot:")
 }
 
 func (s Scope) AppQueueARN() string { return s.appFenced("arn:aws:sqs:*:*:", "") }

@@ -595,11 +595,13 @@ func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheBucketWithTheStamp(t
 	for _, taking := range bootstrap.Removals(read) {
 		order = append(order, taking.Resource.ID())
 	}
-	at := func(target bootstrap.Resource) int { return slices.Index(order, target.ID()) }
-	if at(bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.StateBucket(tier)}) > at(bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.Bucket(tier)}) {
-		t.Errorf("removal runs %v, want the state bucket before the bucket with the stamp", order)
+	at := func(class naming.StorageClass) int {
+		return slices.Index(order, (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.UntaggedTierBucket(tier, class)}).ID())
 	}
-	if last := order[len(order)-1]; last != (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.Bucket(tier)}).ID() {
+	if at(naming.StorageEdge) > at(naming.StorageState) || at(naming.StorageCache) > at(naming.StorageState) {
+		t.Errorf("removal runs %v, want the edge and cache buckets before the state bucket with the stamp", order)
+	}
+	if last := order[len(order)-1]; last != (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.UntaggedTierBucket(tier, naming.StorageState)}).ID() {
 		t.Errorf("removal ends on %s, want the bucket with the stamp: a removal stopped part way reads as unfinished only while the stamp exists", last)
 	}
 	if len(order) != len(bootstrap.Resources(names, tier, false)) {

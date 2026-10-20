@@ -51,7 +51,7 @@ export interface Serving {
   host: string;
   release: string;
   slug: string;
-  isrPrefix: string;
+  pagesPrefix: string;
   purge(groups: PurgeGroup[], awaited: boolean): Promise<void>;
 }
 
@@ -231,7 +231,7 @@ async function prerender(ctx: PrerenderContext, deps: ServePrerenderDeps): Promi
     const served = buildServeRequest(canonical, forwarded);
     const release: RenderRelease = {
       slug: serving.slug,
-      isrPrefix: serving.isrPrefix,
+      pagesPrefix: serving.pagesPrefix,
       tags: target.edgeEntryKey ? (target.tags ?? []) : [],
       ...(sharedShell && { sharesFallbackShell: true }),
       ...(!target.edgeEntryKey && { entry: buildStoredEntryCall(ctx, sharedShell) }),

@@ -8,7 +8,9 @@ import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
 import { newFirestoreDatabase } from "./firestore-database.mjs";
 
 const database = "projects/p/databases/d";
-const prefix = "cache/shop/web/prod/r1a2b3c4d/isr";
+
+const coordinate = { project: "shop", env: "prod", app: "web", release: "r1a2b3c4d" };
+
 const entry = { tags: [], stale: 1, timestamp: 2, expire: 3, revalidate: 4, body: "b" };
 
 function open() {
@@ -22,8 +24,11 @@ function open() {
         fetch: bucket.fetch,
         sleep: async () => {},
       }),
-      prefix,
-      newFirestoreTagRecords(newFirestore({ database, fetch: fake.fetch }), "prod/shop/web/r1/isr"),
+      coordinate,
+      newFirestoreTagRecords(
+        newFirestore({ database, fetch: fake.fetch }),
+        "pages/shop/prod/web/r1a2b3c4d",
+      ),
     );
   return { bucket, instance };
 }
@@ -54,7 +59,7 @@ test("a use-cache key is stored under its SHA-256, so any key is a valid object 
   await instance().writeEntry(key, entry);
 
   const hash = createHash("sha256").update(key).digest("hex");
-  expect([...bucket.objects.keys()]).toEqual([`${prefix}/use-cache/${hash}.json`]);
+  expect([...bucket.objects.keys()]).toEqual([`use-cache/shop/prod/web/r1a2b3c4d/${hash}.json`]);
 });
 
 test("a use-cache entry never written reads as null", async () => {

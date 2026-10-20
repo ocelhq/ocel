@@ -14,7 +14,7 @@ func NewNodePurgeEnv(spec provider.StackSpec, purgeSecret string) map[string]str
 	if !signs && !purgesCloudCDN(spec) {
 		return nil
 	}
-	env := map[string]string{isrPrefixEnvVar: isr.Prefix}
+	env := map[string]string{storageCoordinateEnvVar: isr.Coordinate.StorageCoordinate()}
 	if signs {
 		env[purgeSecretEnvVar] = purgeSecret
 		env[edge.PurgeURLVar] = isr.PurgeURL

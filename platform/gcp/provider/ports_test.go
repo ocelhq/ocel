@@ -230,21 +230,21 @@ func TestNoPortIsNilForProviderserverToCallThrough(t *testing.T) {
 	}
 }
 
-func TestAnArtifactThatNamesNoTierOrNoStoreIsTheCallersMistake(t *testing.T) {
+func TestAnArtifactThatNamesNoTierOrNoKindIsTheCallersMistake(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	p := testProvider(t)
-	tierless := provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "bundle.zip"}
-	storeless := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
+	tierless := provider.ArtifactRef{Key: "fn/shop/prod/web/r1a2b3c4d/api/bundle.zip"}
+	storeless := provider.ArtifactRef{Tier: environment.TierProduction, Key: "bundle.zip"}
 
 	for name, refused := range map[string]error{
-		"Put with no tier":   p.Artifacts().Put(ctx, tierless, bytes.NewReader(nil)),
-		"Has with no tier":   errorOf(p.Artifacts().Has(ctx, tierless)),
-		"Open with no tier":  errorOf(p.Artifacts().Open(ctx, tierless)),
-		"Put with no store":  p.Artifacts().Put(ctx, storeless, bytes.NewReader(nil)),
-		"Has with no store":  errorOf(p.Artifacts().Has(ctx, storeless)),
-		"Open with no store": errorOf(p.Artifacts().Open(ctx, storeless)),
+		"Put with no tier":  p.Artifacts().Put(ctx, tierless, bytes.NewReader(nil)),
+		"Has with no tier":  errorOf(p.Artifacts().Has(ctx, tierless)),
+		"Open with no tier": errorOf(p.Artifacts().Open(ctx, tierless)),
+		"Put with no kind":  p.Artifacts().Put(ctx, storeless, bytes.NewReader(nil)),
+		"Has with no kind":  errorOf(p.Artifacts().Has(ctx, storeless)),
+		"Open with no kind": errorOf(p.Artifacts().Open(ctx, storeless)),
 	} {
 		var rejection refusal.Refusal
 		if !errors.As(refused, &rejection) || rejection.Code != refusal.CodeInvalid {
@@ -453,6 +453,9 @@ func TestADeployAdministersTheBucketsOfItsNamespaceAndNoOtherBucket(t *testing.T
 	}
 	if !strings.Contains(document.Document, "a custom role holding storage.buckets.create") {
 		t.Errorf("Permissions(deploy) =\n%s\nwant a custom role holding storage.buckets.create: Cloud Storage checks creating a bucket against the project, where no bucket name condition can admit it", document.Document)
+	}
+	if !strings.Contains(document.Document, "storage.buckets.list") {
+		t.Errorf("Permissions(deploy) =\n%s\nwant storage.buckets.list in the custom role: a deploy finds its tier's randomly tagged buckets and an app's bucket by listing, which Cloud Storage checks against the project", document.Document)
 	}
 }
 

@@ -19,7 +19,7 @@ import (
 
 func SeedPrerenders(ctx context.Context, store *assets.Store, spec provider.StackSpec, runProgress progress.Log) error {
 	isr := spec.App.ISR
-	seeds, err := prerender.Seeds(buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App), isr.Prefix)
+	seeds, err := prerender.Seeds(buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App), isr.Coordinate)
 	if err != nil {
 		return err
 	}
@@ -52,5 +52,5 @@ func prerenderCount(n int) string {
 }
 
 func createSeed(ctx context.Context, store *assets.Store, spec provider.StackSpec, key string, body []byte) error {
-	return store.CreateObject(ctx, spec.Ref.Tier, provider.StoreCache, key, storage.ObjectAttrs{}, body)
+	return store.CreateObject(ctx, spec.Ref.Tier, key, storage.ObjectAttrs{}, body)
 }

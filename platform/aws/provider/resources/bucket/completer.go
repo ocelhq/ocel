@@ -8,8 +8,8 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-const UploadCompleterKeyPrefix = "ocel-upload-completer"
+const UploadCompleterPayload = "upload-completer"
 
 func placeUploadCompleter(ctx context.Context, artifacts component.Artifacts, tier environment.Tier) (payloads.Placement, error) {
-	return component.PlacePayload(ctx, artifacts, tier, UploadCompleterKeyPrefix, "upload completer", payloads.UploadCompleter())
+	return component.PlacePayload(ctx, artifacts, tier, UploadCompleterPayload, "upload completer", payloads.UploadCompleter())
 }

@@ -10,7 +10,7 @@ const shopBackend = "ocel-alb-shop-production-shop"
 func shopRoutes() *StaticRoutes {
 	return &StaticRoutes{
 		Backend:   "ocel-alb-production-assets",
-		Objects:   "/assets/production/shop/web/r1/assets",
+		Objects:   "/assets/shop/prod/web/r1",
 		Immutable: []string{"/_next/static/"},
 	}
 }
@@ -38,7 +38,7 @@ func TestRoutingAHostnameWithStaticRoutesSendsItsImmutablePrefixToTheBackendBuck
 		t.Errorf("the rule matches %+v, want the prefix /_next/static/", rule.MatchRules)
 	}
 	if rule.RouteAction == nil || rule.RouteAction.UrlRewrite == nil ||
-		rule.RouteAction.UrlRewrite.PathPrefixRewrite != "/assets/production/shop/web/r1/assets/_next/static/" {
+		rule.RouteAction.UrlRewrite.PathPrefixRewrite != "/assets/shop/prod/web/r1/_next/static/" {
 		t.Errorf("the rule rewrites with %+v, want the matched prefix replaced so the request path lands on the release's object key", rule.RouteAction)
 	}
 }
@@ -75,13 +75,13 @@ func TestRoutingAgainWithAnotherReleasesStaticRoutesRewritesTheRuleToThatRelease
 		t.Fatalf("Route = %v", err)
 	}
 	next := shopRoutes()
-	next.Objects = "/assets/production/shop/web/r2/assets"
+	next.Objects = "/assets/shop/prod/web/r2"
 	if err := p.Route(ctx, tierRoutes, "shop.example.com", shopBackend, next); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
 	got := server.current().PathMatchers[0].RouteRules[0].RouteAction.UrlRewrite.PathPrefixRewrite
-	if want := "/assets/production/shop/web/r2/assets/_next/static/"; got != want {
+	if want := "/assets/shop/prod/web/r2/_next/static/"; got != want {
 		t.Errorf("the rule rewrites to %q after the promote, want %q", got, want)
 	}
 	if got := server.writes(); got != 2 {

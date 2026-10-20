@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -60,17 +61,24 @@ func (a *Artifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemovePrefix(_ context.Context, tier environment.Tier, prefix string, progress progress.Log) error {
-	a.journal.note("remove-prefix " + prefix)
+func (a *Artifacts) RemoveObjects(_ context.Context, tier environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, progress progress.Log) error {
+	if scope.Project == "" {
+		return refusal.Refuse(refusal.CodeInvalid, "a scope naming no project names every project's objects")
+	}
+	prefixes := make([]string, len(kinds))
+	for i, kind := range kinds {
+		prefixes[i] = scope.StoragePrefix(kind)
+		a.journal.note("remove " + prefixes[i])
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for ref := range maps.Keys(a.objects) {
-		if ref.Tier == tier && strings.HasPrefix(ref.Key, prefix) {
+		if ref.Tier == tier && slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(ref.Key, prefix) }) {
 			delete(a.objects, ref)
 		}
 	}
 	if progress != nil {
-		progress.Say("Removed the " + string(tier) + " artifacts under " + prefix)
+		progress.Say("Removed the " + string(tier) + " objects under " + strings.Join(prefixes, ", "))
 	}
 	return nil
 }

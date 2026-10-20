@@ -60,16 +60,12 @@ func storageCoordinate(env, slug, app string, release naming.ReleaseToken) namin
 	}
 }
 
-func isrPrefixOf(c naming.Coordinate) string {
-	return strings.TrimSuffix(c.ISRPrefix(), naming.PathSeparator)
-}
-
 func bytecodePrefixOf(c naming.Coordinate) string {
-	return strings.TrimSuffix(c.BytecodePrefix(), naming.PathSeparator)
+	return strings.TrimSuffix(c.StoragePrefix(naming.ObjectBytecode), naming.PathSeparator)
 }
 
 func appEdgeBundleKey(c naming.Coordinate) string {
-	return path.Join(c.StoragePrefix()+"edge", "bundle.json")
+	return c.BundleKey("bundle.json")
 }
 
 func edgeRouteTable(key string) *provider.EdgeRouteTable {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -15,12 +16,18 @@ import (
 	"google.golang.org/api/iam/v1"
 )
 
-const cacheGrantPrefix = "prod/shop/web/r1a2b3c4d/isr"
-
-func cachedAt(prefix string) provider.StackSpec {
+func cachedAt(release naming.Coordinate) provider.StackSpec {
 	spec := nextSpec()
-	spec.App.ISR = &provider.ISRSpec{Prefix: prefix}
+	spec.App.ISR = &provider.ISRSpec{Coordinate: release}
 	return spec
+}
+
+func cacheCondition(edgeBucket, cacheBucket, coordinate string) string {
+	starts := []string{`resource.name.startsWith("projects/_/buckets/` + edgeBucket + `/objects/pages/` + coordinate + `/")`}
+	for _, kind := range []string{"fetch-cache", "use-cache", "tag-clock"} {
+		starts = append(starts, `resource.name.startsWith("projects/_/buckets/`+cacheBucket+`/objects/`+kind+"/"+coordinate+`/")`)
+	}
+	return strings.Join(starts, " || ")
 }
 
 func cacheBindingsOf(server *googletest.IAM) []string {
@@ -33,24 +40,54 @@ func cacheBindingsOf(server *googletest.IAM) []string {
 	return bound
 }
 
-func TestAnAppsAccountMayUseObjectsUnderItsOwnCachePrefixAndNoOther(t *testing.T) {
+func TestAnAppsAccountMayUseItsOwnEnvAndAppsCacheKindsAndNoOther(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.Open(t)
 	member := "serviceAccount:" + c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
 
-	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
+	if err := applyAppGrants(t, c, cachedAt(cachedRelease())); err != nil {
 		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
-	want := grants.ObjectsRole + " " + member + ` resource.name.startsWith("projects/_/buckets/ocel-acme-prod-production/objects/cache/shop/web/")`
+	want := grants.ObjectsRole + " " + member + " " + cacheCondition("ocel-prod-edge-k3x9q2", "ocel-prod-cache-k3x9q2", "shop/prod/web")
 	if got := cacheBindingsOf(server); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's storage bindings = %q, want exactly %q", got, want)
 	}
 	for _, binding := range server.Project.Bindings {
-		if binding.Role == grants.ObjectsRole && (binding.Condition == nil || binding.Condition.Title != "ocel cache of shop/web") {
-			t.Errorf("the cache binding's condition = %+v, want the title %q", binding.Condition, "ocel cache of shop/web")
+		if binding.Role == grants.ObjectsRole && (binding.Condition == nil || binding.Condition.Title != "ocel cache of shop/prod/web") {
+			t.Errorf("the cache binding's condition = %+v, want the title %q", binding.Condition, "ocel cache of shop/prod/web")
 		}
+	}
+}
+
+func previewCachedAt(env string) provider.StackSpec {
+	release := cachedRelease()
+	release.Env = env
+	spec := cachedAt(release)
+	spec.Ref.Tier = environment.TierPreview
+	spec.Ref.Name = naming.StackName{Env: env, App: "web"}
+	return spec
+}
+
+func TestAPreviewEnvsAccountMayUseItsOwnCacheAndNoOtherPreviewEnvsOrProductions(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	c := server.Open(t)
+	for _, env := range []string{"pr-7", "pr-8"} {
+		if err := applyAppGrants(t, c, previewCachedAt(env)); err != nil {
+			t.Fatalf("applyAppGrants(%s) = %v", env, err)
+		}
+	}
+
+	var want []string
+	for _, env := range []string{"pr-7", "pr-8"} {
+		member := "serviceAccount:" + c.AppAccountEmail(environment.TierPreview, "shop", env, "web")
+		want = append(want, grants.ObjectsRole+" "+member+" "+cacheCondition("ocel-preview-edge-k3x9q2", "ocel-preview-cache-k3x9q2", "shop/"+env+"/web"))
+	}
+	slices.Sort(want)
+	if got := cacheBindingsOf(server); !slices.Equal(got, want) {
+		t.Errorf("the project's storage bindings = %q, want exactly %q: each preview's account reaches its own env's cache in the preview buckets and nothing beside", got, want)
 	}
 }
 
@@ -72,13 +109,9 @@ func TestTheCacheGrantPrefixIsTheOneTheRuntimeWritesUnder(t *testing.T) {
 	if len(expressions) != 1 {
 		t.Fatalf("the project's storage bindings = %q, want the one binding of the app's account", expressions)
 	}
-	opening := `resource.name.startsWith("projects/_/buckets/` + env["OCEL_ISR_BUCKET"] + `/objects/`
-	if !strings.HasPrefix(expressions[0], opening) || !strings.HasSuffix(expressions[0], `")`) {
-		t.Fatalf("the grant %q is not a startsWith over an object of bucket %q", expressions[0], env["OCEL_ISR_BUCKET"])
-	}
-	granted := strings.TrimSuffix(strings.TrimPrefix(expressions[0], opening), `")`)
-	if !strings.HasPrefix(env["OCEL_ISR_OBJECT_PREFIX"]+"/", granted) {
-		t.Errorf("the grant over %q is not a prefix of OCEL_ISR_OBJECT_PREFIX %q", granted, env["OCEL_ISR_OBJECT_PREFIX"])
+	coordinate := env["OCEL_STORAGE_COORDINATE"]
+	if want := cacheCondition(env["OCEL_EDGE_BUCKET"], env["OCEL_CACHE_BUCKET"], coordinate[:strings.LastIndex(coordinate, "/")]); expressions[0] != want {
+		t.Errorf("the grant is %q, want %q: every cache kind of the release at OCEL_STORAGE_COORDINATE %q", expressions[0], want, coordinate)
 	}
 }
 
@@ -86,16 +119,50 @@ func TestARedeployOfAnAppWritesNoPolicy(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	c := server.Open(t)
-	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
+	if err := applyAppGrants(t, c, cachedAt(cachedRelease())); err != nil {
 		t.Fatal(err)
 	}
 	before := server.ProjectWrites
 
-	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
+	redeployed := cachedRelease()
+	redeployed.Release = naming.NewReleaseToken("d2", "f2")
+	if err := applyAppGrants(t, c, cachedAt(redeployed)); err != nil {
 		t.Fatalf("second applyAppGrants() = %v", err)
 	}
 	if got := server.ProjectWrites - before; got != 0 {
 		t.Errorf("a redeploy wrote the project policy %d times, want 0", got)
+	}
+}
+
+func iamWrites(server *googletest.IAM) int {
+	server.Mu.Lock()
+	defer server.Mu.Unlock()
+	return server.Writes + server.AccountWrites + server.TopicWrites + server.QueueWrites
+}
+
+func TestARedeployOfANextAppWritesNoIAMPolicyAtAll(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	p, c := ensuringAccounts(t, server)
+	first := routedNextSpec()
+	if _, err := p.release().EnsureAccount(context.Background(), c, first, nil); err != nil {
+		t.Fatalf("EnsureAccount() = %v", err)
+	}
+	before := iamWrites(server)
+	if before == 0 {
+		t.Fatal("the first deploy set no IAM policy, so a redeploy setting none proves nothing")
+	}
+
+	redeployed := routedNextSpec()
+	release := cachedRelease()
+	release.Release = naming.NewReleaseToken("d2", "f2")
+	redeployed.App.ISR.Coordinate = release
+	redeployed.App.AssetPrefix = release.AssetPrefix()
+	if _, err := p.release().EnsureAccount(context.Background(), c, redeployed, nil); err != nil {
+		t.Fatalf("second EnsureAccount() = %v", err)
+	}
+	if got := iamWrites(server) - before; got != 0 {
+		t.Errorf("a redeploy of the same env and app set %d IAM policies, want none: its cache and asset grants are per env and app, not per release", got)
 	}
 }
 
@@ -104,7 +171,7 @@ func TestACachePolicyChangedUnderTheGrantIsReadAgainAndWritten(t *testing.T) {
 	server := &policyServer{refusals: 1}
 	c := server.open(t)
 
-	if err := applyAppGrants(t, c, cachedAt(cacheGrantPrefix)); err != nil {
+	if err := applyAppGrants(t, c, cachedAt(cachedRelease())); err != nil {
 		t.Fatalf("applyAppGrants() against a policy that changed once under it = %v", err)
 	}
 	if reads, writes := server.reads.Load(), server.writes.Load(); reads != 2 || writes != 2 {
@@ -206,13 +273,9 @@ func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T
 	if len(expressions) != 1 {
 		t.Fatalf("the container's account holds the storage bindings %q, want exactly one", expressions)
 	}
-	opening := `resource.name.startsWith("projects/_/buckets/` + env["OCEL_ISR_BUCKET"] + `/objects/`
-	if !strings.HasPrefix(expressions[0], opening) || !strings.HasSuffix(expressions[0], `")`) {
-		t.Fatalf("the grant %q is not a startsWith over an object of bucket %q", expressions[0], env["OCEL_ISR_BUCKET"])
-	}
-	granted := strings.TrimSuffix(strings.TrimPrefix(expressions[0], opening), `")`)
-	if !strings.HasPrefix(env["OCEL_ISR_OBJECT_PREFIX"]+"/", granted) {
-		t.Errorf("the grant over %q is not a prefix of OCEL_ISR_OBJECT_PREFIX %q", granted, env["OCEL_ISR_OBJECT_PREFIX"])
+	coordinate := env["OCEL_STORAGE_COORDINATE"]
+	if want := cacheCondition(env["OCEL_EDGE_BUCKET"], env["OCEL_CACHE_BUCKET"], coordinate[:strings.LastIndex(coordinate, "/")]); expressions[0] != want {
+		t.Errorf("the grant is %q, want %q: every cache kind of the release at OCEL_STORAGE_COORDINATE %q", expressions[0], want, coordinate)
 	}
 	if got := tagRecordBindingsOf(server.Identities()); len(got) != 1 || !strings.Contains(got[0], account) {
 		t.Errorf("the project's tag record bindings = %q, want the one of %s", got, account)

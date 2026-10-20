@@ -205,7 +205,7 @@ func TestAnAppsTagsNameItsBuildAndItsRelease(t *testing.T) {
 	}
 	entry := spec.Apps[0]
 
-	tags := appTags(spec, entry)
+	tags := appTags("ocel", spec, entry)
 	if tags["ocel:build"] != buildID {
 		t.Errorf("ocel:build = %q, want the build id %q the app was built under", tags["ocel:build"], buildID)
 	}

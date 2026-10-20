@@ -14,7 +14,7 @@ import { readGcpDispatchHost } from "../src/next/dispatch-host.mjs";
 import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
 import { type ServedBucket, serveBucket } from "./serve-bucket.mjs";
 
-const assetPrefix = "prod/shop/web/r1/assets";
+const assetPrefix = "assets/shop/prod/web/r1a2b3c4d";
 
 const bucket = newCloudStorageBucket();
 let stored: ServedBucket;
@@ -24,11 +24,11 @@ let env: NodeJS.ProcessEnv;
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ocel-gcp-image-"));
   const config = imageConfig();
-  bucket.objects.set(`assets/${assetPrefix}/logo.png`, {
+  bucket.objects.set(`${assetPrefix}/logo.png`, {
     body: await solid("png", 400, 200),
     generation: "1",
   });
-  bucket.objects.set("assets/prod/shop/web/r1/image-config.json", {
+  bucket.objects.set("image-config/shop/prod/web/r1a2b3c4d/image-config.json", {
     body: serialize(config),
     generation: "1",
   });
@@ -54,7 +54,7 @@ beforeAll(async () => {
   );
   env = {
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
-    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
     OCEL_STORAGE_ENDPOINT: stored.endpoint,
     OCEL_ASSET_PREFIX: assetPrefix,
   };

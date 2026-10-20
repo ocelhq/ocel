@@ -71,9 +71,10 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, teardown pro
 		if stack.IsInfra() {
 			return errors.Join(errs...)
 		}
-		for _, prefix := range reclaimedPrefixes(slug, pointer, stack.App, stack.Release, elsewhere, here) {
-			if err := p.Artifacts().RemovePrefix(ctx, environment.TierPreview, prefix, progress); err != nil {
-				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
+		scope := releaseScope(slug, pointer, stack.App, stack.Release)
+		if kinds := reclaimedKinds(scope, elsewhere, here); len(kinds) > 0 {
+			if err := p.Artifacts().RemoveObjects(ctx, environment.TierPreview, scope, kinds, progress); err != nil {
+				errs = append(errs, fmt.Errorf("remove the objects of %s release %s: %w", stack.App, stack.Release, err))
 			}
 		}
 		return errors.Join(errs...)
@@ -81,10 +82,11 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, teardown pro
 }
 
 type ReclaimTarget struct {
-	App      string
-	Release  provider.Release
-	Stack    naming.StackName
-	Prefixes []string
+	App     string
+	Release provider.Release
+	Stack   naming.StackName
+	Scope   naming.Coordinate
+	Kinds   []naming.ObjectKind
 }
 
 func ReclaimTargets(slug, env string, removed []router.ReleaseRecord, surviving, servingHere []string, containersRetained bool) ([]ReclaimTarget, []string, error) {
@@ -108,11 +110,13 @@ func ReclaimTargets(slug, env string, removed []router.ReleaseRecord, surviving,
 			continue
 		}
 		token := release.Token()
+		scope := releaseScope(slug, env, record.App, token)
 		targets = append(targets, ReclaimTarget{
-			App:      record.App,
-			Release:  release,
-			Stack:    naming.AppStack(env, record.App, token),
-			Prefixes: reclaimedPrefixes(slug, env, record.App, token, elsewhere, here),
+			App:     record.App,
+			Release: release,
+			Stack:   naming.AppStack(env, record.App, token),
+			Scope:   scope,
+			Kinds:   reclaimedKinds(scope, elsewhere, here),
 		})
 	}
 	return targets, refused, errors.Join(errs...)
@@ -122,14 +126,17 @@ func isRetainedContainer(containersRetained bool, image string) bool {
 	return containersRetained && image != ""
 }
 
-func reclaimedPrefixes(slug, env, app string, release naming.ReleaseToken, elsewhere, here map[appRelease]bool) []string {
-	coordinate := naming.Coordinate{Project: naming.Sanitize(slug), Env: env, App: app, Release: release}
-	released := appRelease{app: app, release: release.String()}
+func releaseScope(slug, env, app string, release naming.ReleaseToken) naming.Coordinate {
+	return naming.Coordinate{Project: naming.Sanitize(slug), Env: env, App: app, Release: release}
+}
+
+func reclaimedKinds(scope naming.Coordinate, elsewhere, here map[appRelease]bool) []naming.ObjectKind {
+	released := appRelease{app: scope.App, release: scope.Release.String()}
 	switch {
 	case !elsewhere[released]:
-		return []string{coordinate.StoragePrefix()}
+		return naming.CoordinateObjectKinds
 	case !here[released]:
-		return []string{coordinate.ISRPrefix()}
+		return naming.ISRObjectKinds
 	}
 	return nil
 }
@@ -216,9 +223,9 @@ func destroyReclaimTarget(ctx context.Context, p provider.Provider, teardown pro
 	if err := stackrecords.Forget(ctx, p.KeyValues(), tier, slug, target.Stack); err != nil {
 		errs = append(errs, err)
 	}
-	for _, prefix := range target.Prefixes {
-		if err := p.Artifacts().RemovePrefix(ctx, tier, prefix, progress); err != nil {
-			errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
+	if len(target.Kinds) > 0 {
+		if err := p.Artifacts().RemoveObjects(ctx, tier, target.Scope, target.Kinds, progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove the objects of %s release %s: %w", target.App, target.Release, err))
 		}
 	}
 	return errors.Join(errs...)
@@ -269,10 +276,11 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 			continue
 		}
 		targets = append(targets, ReclaimTarget{
-			App:      entry.App,
-			Release:  entry.Release,
-			Stack:    entry.Stack,
-			Prefixes: []string{appCoordinate(r.spec, entry.App, entry.Release.Token()).StoragePrefix()},
+			App:     entry.App,
+			Release: entry.Release,
+			Stack:   entry.Stack,
+			Scope:   appCoordinate(r.spec, entry.App, entry.Release.Token()),
+			Kinds:   naming.CoordinateObjectKinds,
 		})
 	}
 	teardown := r.teardown()

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 beforeEach(() => {
   process.env.OCEL_ISR_BUCKET = "assets";
-  process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
+  process.env.OCEL_STORAGE_COORDINATE = "proj/prod/app/r3f8a1c9d";
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#";
   delete process.env.OCEL_ISR_EDGE_READABLE;
@@ -78,7 +78,7 @@ test("keeps fetch entries on the provider's bucket", async () => {
   });
   expect(sent[0]).toMatchObject({
     Bucket: "assets",
-    Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
+    Key: "fetch-cache/proj/prod/app/r3f8a1c9d/deadbeef.cache.json",
   });
   expect(built).toHaveLength(1);
   expect(built[0].endpoint).toBeUndefined();
@@ -92,7 +92,7 @@ test("writes fetch entries to the provider's bucket under the fetch prefix", asy
 
   expect(sent[0]).toMatchObject({
     Bucket: "assets",
-    Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
+    Key: "fetch-cache/proj/prod/app/r3f8a1c9d/deadbeef.cache.json",
   });
 });
 
@@ -105,7 +105,7 @@ test("keeps page entries on the provider's own bucket", async () => {
   expect(built[0].credentials).toBeUndefined();
   expect(sent[0]).toMatchObject({
     Bucket: "assets",
-    Key: "prod/proj/app/BID/cache/index.cache.json",
+    Key: "pages/proj/prod/app/r3f8a1c9d/index.cache.json",
   });
 });
 
@@ -137,8 +137,8 @@ test("serves a tagged entry off the snapshot, sending nothing to the table", asy
 
   expect(entry).not.toBeNull();
   expect(sent.map((s: any) => s.Key)).toEqual([
-    "prod/proj/app/BID/cache/index.cache.json",
-    "prod/proj/app/BID/tag-clock.json",
+    "pages/proj/prod/app/r3f8a1c9d/index.cache.json",
+    "tag-clock/proj/prod/app/r3f8a1c9d/tag-clock.json",
   ]);
   expect(ddbSent).toEqual([]);
 });
@@ -154,7 +154,7 @@ test("tags a page entry edge-readable when the edge reads the asset bucket with 
   await store.writeEntry("blog/a", { lastModified: 1, value: { kind: "APP_PAGE" } });
 
   const [put] = putsOf(sent);
-  expect(put.Key).toBe("prod/proj/app/BID/cache/blog/a.cache.json");
+  expect(put.Key).toBe("pages/proj/prod/app/r3f8a1c9d/blog/a.cache.json");
   expect(put.Tagging).toBe(edgeReadableTagging);
 });
 
@@ -174,7 +174,7 @@ test("never tags a data-cache entry edge-readable, however the edge reads", asyn
   await store.writeFetch("hash1", { lastModified: 1, value: { kind: "FETCH", data: {} } });
 
   const [put] = putsOf(sent);
-  expect(put.Key).toBe("prod/proj/app/BID/fetch-cache/hash1.cache.json");
+  expect(put.Key).toBe("fetch-cache/proj/prod/app/r3f8a1c9d/hash1.cache.json");
   expect(put.Tagging).toBeUndefined();
 });
 

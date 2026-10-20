@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -117,7 +118,7 @@ func TestPruningOnALaneWithATagEmulatorDeletesTheTagRecordsThere(t *testing.T) {
 	p.resolved.TagEndpoint = p.tagEndpoint
 	log := &sayings{Log: progress.Discard()}
 
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, "prod/shop/web/r1a2b3c4d/isr/", log); err != nil {
+	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, cachedRelease(), log); err != nil {
 		t.Fatalf("removeTagRecords() = %v", err)
 	}
 
@@ -133,19 +134,19 @@ func TestPruningOnALaneWithATagEmulatorDeletesTheTagRecordsThere(t *testing.T) {
 	}
 }
 
-func TestPruningAReleaseDeletesTheTagRecordsOfItsISRPrefixAndNoOther(t *testing.T) {
+func TestPruningAReleaseDeletesTheTagRecordsOfItsPagesPrefixAndNoOther(t *testing.T) {
 	fake := &taggedFirestore{listed: []string{tagDocument("aaa"), tagDocument("bbb")}}
 	p := tagRecordsServedBy(t, fake)
 	log := &sayings{Log: progress.Discard()}
 
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, "prod/shop/web/r1a2b3c4d/isr/", log); err != nil {
+	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, cachedRelease(), log); err != nil {
 		t.Fatalf("removeTagRecords() = %v", err)
 	}
 
 	if len(fake.queries) != 1 {
 		t.Fatalf("the prune ran %d queries, want one", len(fake.queries))
 	}
-	want := map[string]string{"GREATER_THAN_OR_EQUAL": "prod/shop/web/r1a2b3c4d/isr/", "LESS_THAN": "prod/shop/web/r1a2b3c4d/isr/"}
+	want := map[string]string{"GREATER_THAN_OR_EQUAL": "pages/shop/prod/web/r1a2b3c4d/", "LESS_THAN": "pages/shop/prod/web/r1a2b3c4d/"}
 	if got := prefixBounds(t, fake.queries[0]); !maps.Equal(got, want) {
 		t.Errorf("the prune ranged over %q, want %q", got, want)
 	}
@@ -159,22 +160,8 @@ func TestPruningAReleaseDeletesTheTagRecordsOfItsISRPrefixAndNoOther(t *testing.
 	if len(fake.authorizations) != 0 {
 		t.Errorf("the prune sent authorization %q to floci, want none: admin credentials go only to the tag emulator", fake.authorizations)
 	}
-	if want := []string{"Removed 2 tag records under prod/shop/web/r1a2b3c4d/isr/ from Firestore database " + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")}; !slices.Equal(log.said, want) {
+	if want := []string{"Removed 2 tag records under pages/shop/prod/web/r1a2b3c4d/ from Firestore database " + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")}; !slices.Equal(log.said, want) {
 		t.Errorf("the prune said %q, want %q", log.said, want)
-	}
-}
-
-func TestPruningAReleaseByItsWholePrefixRangesOverTheISRPrefixToo(t *testing.T) {
-	fake := &taggedFirestore{}
-	p := tagRecordsServedBy(t, fake)
-
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, "prod/shop/web/r1a2b3c4d/", nil); err != nil {
-		t.Fatalf("removeTagRecords() = %v", err)
-	}
-
-	want := map[string]string{"GREATER_THAN_OR_EQUAL": "prod/shop/web/r1a2b3c4d/", "LESS_THAN": "prod/shop/web/r1a2b3c4d/"}
-	if got := prefixBounds(t, fake.queries[0]); !maps.Equal(got, want) {
-		t.Errorf("the prune ranged over %q, want %q: the isr prefix lies inside it", got, want)
 	}
 }
 
@@ -182,13 +169,13 @@ func TestRemovingAProjectsEnvironmentDeletesOnlyThatEnvironmentsTagRecords(t *te
 	fake := &taggedFirestore{listed: []string{tagDocument("aaa")}}
 	p := tagRecordsServedBy(t, fake)
 
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierPreview, "pr-7/shop/", nil); err != nil {
+	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierPreview, naming.Coordinate{Project: "shop", Env: "pr-7"}, nil); err != nil {
 		t.Fatalf("removeTagRecords() = %v", err)
 	}
 
-	want := map[string]string{"GREATER_THAN_OR_EQUAL": "pr-7/shop/", "LESS_THAN": "pr-7/shop/"}
+	want := map[string]string{"GREATER_THAN_OR_EQUAL": "pages/shop/pr-7/", "LESS_THAN": "pages/shop/pr-7/"}
 	if got := prefixBounds(t, fake.queries[0]); !maps.Equal(got, want) {
-		t.Errorf("the prune ranged over %q, want %q: pr-70/shop/ and prod/shop/ fall outside it", got, want)
+		t.Errorf("the prune ranged over %q, want %q: pages/shop/pr-70/ and pages/shop/prod/ fall outside it", got, want)
 	}
 }
 
@@ -197,7 +184,7 @@ func TestPruningATierWithNoTagsDatabaseSucceeds(t *testing.T) {
 	p := tagRecordsServedBy(t, fake)
 	log := &sayings{Log: progress.Discard()}
 
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, "prod/shop/web/r1/isr/", log); err != nil {
+	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, cachedRelease(), log); err != nil {
 		t.Fatalf("removeTagRecords() with no tags database = %v, want nil", err)
 	}
 	if len(log.said) != 0 {

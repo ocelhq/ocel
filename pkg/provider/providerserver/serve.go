@@ -172,9 +172,10 @@ type session struct {
 	config Config
 	writer provider.WrittenBy
 
-	mu       sync.Mutex
-	provider provider.Provider
-	settings provider.Settings
+	mu        sync.Mutex
+	provider  provider.Provider
+	settings  provider.Settings
+	namespace provider.Namespace
 
 	bootstrapStatuses bootstrapplan.Statuses
 	previewKeys       openedPreviewKeys
@@ -202,6 +203,10 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 		return provider.RefusalError(refusal.Refuse(refusal.CodeInvalid,
 			"the provider was configured with the project directory %q, which is not absolute: configure it with the project's absolute path", settings.ProjectDir))
 	}
+	namespace, err := provider.NamespaceFromEnv()
+	if err != nil {
+		return provider.RefusalError(err)
+	}
 	p, err := s.config.New(ctx, settings)
 	if err != nil {
 		return provider.RefusalError(err)
@@ -211,7 +216,14 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	}
 	s.provider = p
 	s.settings = settings
+	s.namespace = namespace
 	return nil
+}
+
+func (s *session) managedBy() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return string(s.namespace)
 }
 
 func (s *session) use() (provider.Provider, error) {

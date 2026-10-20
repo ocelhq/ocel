@@ -355,7 +355,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 			if strings.Contains(aws.ToString(in.LayerName), runtimeArchTokens[arch.ARM64]) {
 				architecture = arch.ARM64
 			}
-			key := payloads.Key(runtimeLayerKeyPrefix, shipped[architecture].SHA256)
+			key := payloads.Key(runtimeLayerPayload, shipped[architecture].SHA256)
 			if !store.has(key) {
 				t.Errorf("the %s runtime was published before its payload was placed at %s", architecture, key)
 			}

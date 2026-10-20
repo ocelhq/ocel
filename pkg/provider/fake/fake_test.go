@@ -20,28 +20,32 @@ func TestTheFakeKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
 	conformance.RunStore(t, fake.NewKeyValues())
 }
 
-func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
+func TestArtifactsRemoveObjectsLeavesTheRest(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	artifacts := fake.NewArtifacts()
-	kept := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "other/app.zip"}
-	removed := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreAssets, Key: "releases/r1/app.zip"}
+	scope := naming.Coordinate{Project: "shop", Env: "pr-7"}
+	kept := provider.ArtifactRef{Tier: environment.TierProduction, Key: "fn/shop/prod/web/r1a2b3c4d/api/1.zip"}
+	removed := provider.ArtifactRef{Tier: environment.TierProduction, Key: "fn/shop/pr-7/web/r1a2b3c4d/api/1.zip"}
+	otherKind := provider.ArtifactRef{Tier: environment.TierProduction, Key: "assets/shop/pr-7/web/r1a2b3c4d/app.js"}
 
-	for _, ref := range []provider.ArtifactRef{kept, removed} {
+	for _, ref := range []provider.ArtifactRef{kept, removed, otherKind} {
 		if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("body"))); err != nil {
 			t.Fatalf("Put() error = %v", err)
 		}
 	}
 
-	if err := artifacts.RemovePrefix(ctx, environment.TierProduction, "releases/", nil); err != nil {
-		t.Fatalf("RemovePrefix() error = %v", err)
+	if err := artifacts.RemoveObjects(ctx, environment.TierProduction, scope, []naming.ObjectKind{naming.ObjectFunction}, nil); err != nil {
+		t.Fatalf("RemoveObjects() error = %v", err)
 	}
 	if _, err := artifacts.Open(ctx, removed); err == nil {
-		t.Error("Open() found an artifact under the removed prefix")
+		t.Error("Open() found an artifact under the removed scope")
 	}
-	if _, err := artifacts.Open(ctx, kept); err != nil {
-		t.Errorf("Open() of an artifact outside the prefix: error = %v", err)
+	for _, ref := range []provider.ArtifactRef{kept, otherKind} {
+		if _, err := artifacts.Open(ctx, ref); err != nil {
+			t.Errorf("Open(%s) of an artifact outside the scope or kinds removed: error = %v", ref.Key, err)
+		}
 	}
 }
 
@@ -160,8 +164,8 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing
 	if err := bootstrap.Remove(ctx, environment.TierProduction, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	if err := artifacts.RemovePrefix(ctx, environment.TierProduction, "releases/", progress); err != nil {
-		t.Fatalf("RemovePrefix() = %v", err)
+	if err := artifacts.RemoveObjects(ctx, environment.TierProduction, naming.Coordinate{Project: "shop"}, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets}, progress); err != nil {
+		t.Fatalf("RemoveObjects() = %v", err)
 	}
 
 	stack := naming.InfraStack("prod").String()
@@ -170,7 +174,7 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing
 		"INFO Destroyed stack " + stack,
 		"INFO Applied the production bootstrap",
 		"INFO Removed the production bootstrap",
-		"INFO Removed the production artifacts under releases/",
+		"INFO Removed the production objects under fn/shop/, assets/shop/",
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the reference provider said %q, want %q", got, want)

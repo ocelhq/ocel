@@ -118,7 +118,11 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		}
 		if next.Serves(app) {
 			served = next.FillServingDefaults(served)
-			if values, err = run.MergeValues(fn.Name, release.NextValues, values, next.NewEnv(spec, fn, served, next.NewCache(named, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, facts.PurgeSecret))); err != nil {
+			buckets, err := c.TierBuckets(ctx, spec.Ref.Tier)
+			if err != nil {
+				return nil, err
+			}
+			if values, err = run.MergeValues(fn.Name, release.NextValues, values, next.NewEnv(spec, fn, served, next.NewCache(named, buckets, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, facts.PurgeSecret))); err != nil {
 				return nil, err
 			}
 		}

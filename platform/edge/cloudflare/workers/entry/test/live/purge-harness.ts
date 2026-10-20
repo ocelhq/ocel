@@ -8,7 +8,7 @@ export { PurgeQueue } from "../../src/purge-queue";
 
 interface HarnessEnv {
   OCEL_HARNESS_RELEASE: string;
-  OCEL_HARNESS_ISR_PREFIX: string;
+  OCEL_HARNESS_PAGES_PREFIX: string;
   OCEL_PURGE_SECRET: string;
 }
 
@@ -30,8 +30,8 @@ export class Serve extends ProductionServe {
 
 function servedBy(harness: HarnessEnv): Pick<Env, "RELEASES" | "OCEL_SLUG"> {
   const releases = {
-    async readServedRecord({ isrPrefix }: { isrPrefix: string }): Promise<ServedRecordResult> {
-      if (isrPrefix !== harness.OCEL_HARNESS_ISR_PREFIX) return { kind: "not-served" };
+    async readServedRecord({ pagesPrefix }: { pagesPrefix: string }): Promise<ServedRecordResult> {
+      if (pagesPrefix !== harness.OCEL_HARNESS_PAGES_PREFIX) return { kind: "not-served" };
       return {
         kind: "record",
         record: { edge: { purgeSecret: harness.OCEL_PURGE_SECRET } } as StoredRecord,

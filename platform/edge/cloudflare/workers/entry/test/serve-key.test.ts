@@ -12,7 +12,7 @@ import {
 } from "../src/serve-key";
 import { hasDraftCookie } from "../src/serve-prerender";
 
-const key = "prod/shop/web/r1a2b3c4d/assets/_next/static/app.js";
+const key = "assets/shop/prod/web/r1a2b3c4d/_next/static/app.js";
 
 describe("the cache key of an object read through Serve", () => {
   it("carries the host, app and release of the key it reads", () => {
@@ -56,15 +56,17 @@ describe("the cache key of an object read through Serve", () => {
   });
 
   it("keeps a key's special characters in one path segment each", () => {
-    const call = buildObjectCall("h", "prod/shop/web/r1/assets/a b/c?d#e%f.js");
-    expect(new URL(call.url).pathname).toBe("/prod/shop/web/r1/assets/a%20b/c%3Fd%23e%25f.js");
+    const call = buildObjectCall("h", "assets/shop/prod/web/r00000001/a b/c?d#e%f.js");
+    expect(new URL(call.url).pathname).toBe(
+      "/assets/shop/prod/web/r00000001/a%20b/c%3Fd%23e%25f.js",
+    );
     expect(new URL(call.url).search).toBe("");
   });
 
   it.each([
-    ["a key outside any release", "prod/shop"],
-    ["an empty segment", "prod/shop//r1/assets/a.js"],
-    ["a dot segment", "prod/shop/web/r1/../r2/a.js"],
+    ["a key outside any release", "assets/shop"],
+    ["an empty segment", "assets/shop//web/r00000001/a.js"],
+    ["a dot segment", "assets/shop/prod/web/r00000001/../r00000002/a.js"],
   ])("refuses %s", (_name, bad) => {
     expect(() => buildObjectCall("h", bad)).toThrow(/outside a release/);
   });

@@ -119,11 +119,11 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
   if (header === null) return undefined;
   try {
     const parsed = JSON.parse(header) as Partial<RenderRelease>;
-    if (typeof parsed.slug !== "string" || typeof parsed.isrPrefix !== "string") return undefined;
+    if (typeof parsed.slug !== "string" || typeof parsed.pagesPrefix !== "string") return undefined;
     const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === "string") : [];
     return {
       slug: parsed.slug,
-      isrPrefix: parsed.isrPrefix,
+      pagesPrefix: parsed.pagesPrefix,
       tags,
       ...(parsed.sharesFallbackShell === true && { sharesFallbackShell: true }),
       ...(parsed.honoursAppCacheHeaders === true && { honoursAppCacheHeaders: true }),
@@ -220,9 +220,9 @@ async function readRenderRecord(
   if (!render) return undefined;
   const served = await env.RELEASES.readServedRecord({
     slug: render.slug,
-    isrPrefix: render.isrPrefix,
+    pagesPrefix: render.pagesPrefix,
   });
-  if (served.kind !== "record" || readReleaseToken(served.record.isrPrefix) !== release) {
+  if (served.kind !== "record" || readReleaseToken(served.record.pagesPrefix) !== release) {
     return undefined;
   }
   return { record: served.record, render };
@@ -374,7 +374,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     ) {
       return respondMiss();
     }
-    const scope = { slug: found.render.slug, isrPrefix: found.render.isrPrefix };
+    const scope = { slug: found.render.slug, pagesPrefix: found.render.pagesPrefix };
     const render = () =>
       this.renderAtOrigin(request, { host, release, scope, keyedUrl, honoursAppCacheHeaders });
     if (variant === PPR_SHELL_VARIANT) {
@@ -458,7 +458,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (!source) return null;
     return readFromStore(
       {
-        isrPrefix: render.isrPrefix,
+        pagesPrefix: render.pagesPrefix,
         release,
         entryPath: entry.path,
         fallbackPath: sharedShell ? undefined : entry.fallbackPath,

@@ -56,7 +56,7 @@ if (!existsSync(resultPath)) {
 const result = JSON.parse(readFileSync(resultPath, "utf8"));
 const coordinate = storageCoordinate(result.apps?.[0]?.storagePrefix);
 if (!coordinate) {
-  fail(`${resultPath} records no storage prefix for its app: ${JSON.stringify(result)}`);
+  fail(`${resultPath} records no storage coordinate for its app: ${JSON.stringify(result)}`);
 }
 const finishedAt = Date.parse(result.finishedAt ?? "");
 if (!Number.isFinite(finishedAt)) {
@@ -69,7 +69,7 @@ const bucket =
   process.env.OCEL_ASSET_BUCKET ||
   resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
 const functionName = resolveFunctionName(coordinate, fail);
-const keyPrefix = bytecodeCacheKeyPrefix({ prefix: coordinate.prefix, functionName });
+const keyPrefix = bytecodeCacheKeyPrefix({ coordinate, functionName });
 log(`expecting one object under s3://${bucket}/${keyPrefix}`);
 
 let names = null;

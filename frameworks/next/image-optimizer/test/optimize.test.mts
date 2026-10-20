@@ -13,7 +13,7 @@ import { animatedGif, solid } from "../test-support/images.mjs";
 
 type LookupCallback = (err: Error | null, addresses: LookupAddress[]) => void;
 
-const ASSET = "prod/proj1/web/r3f8a1c9d/assets/logo.png";
+const ASSET = "assets/proj1/prod/web/r3f8a1c9d/logo.png";
 
 beforeEach(() => resetConfigMemo());
 
@@ -50,13 +50,13 @@ describe("the config the edge validated against", () => {
     const response = await optimize(payload(declared), { store });
     expect(response.status).toBe(502);
     expect(response.headers).toEqual({ [IMAGE_ERROR]: "1" });
-    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
+    expect(store.reads).toEqual(["image-config/proj1/prod/web/r3f8a1c9d/image-config.json"]);
   });
 
   test("a missing config is a 502", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    store.objects.delete("prod/proj1/web/r3f8a1c9d/image-config.json");
+    store.objects.delete("image-config/proj1/prod/web/r3f8a1c9d/image-config.json");
     expect((await optimize(payload(config), { store })).status).toBe(502);
   });
 
@@ -64,10 +64,10 @@ describe("the config the edge validated against", () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
     store.put(
-      "prod/proj1/web/rbbbbbbbb/image-config.json",
-      store.objects.get("prod/proj1/web/r3f8a1c9d/image-config.json")!,
+      "image-config/proj1/prod/web/rbbbbbbbb/image-config.json",
+      store.objects.get("image-config/proj1/prod/web/r3f8a1c9d/image-config.json")!,
     );
-    store.objects.delete("prod/proj1/web/r3f8a1c9d/image-config.json");
+    store.objects.delete("image-config/proj1/prod/web/r3f8a1c9d/image-config.json");
     expect((await optimize(payload(config), { store })).status).toBe(502);
   });
 
@@ -75,7 +75,7 @@ describe("the config the edge validated against", () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
     const response = await optimize(
-      payload(config, { assetPrefix: "prod/proj1/web/../rbbbbbbbb/assets" }),
+      payload(config, { assetPrefix: "assets/proj1/prod/../rbbbbbbbb" }),
       { store },
     );
     expect(response.status).toBe(502);
@@ -211,7 +211,7 @@ describe("a local image", () => {
       { store },
     );
     expect(response.status).toBe(502);
-    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
+    expect(store.reads).toEqual(["image-config/proj1/prod/web/r3f8a1c9d/image-config.json"]);
   });
 
   test("no cache-control on the object means none on the response", async () => {
@@ -248,7 +248,7 @@ describe("an image a route answered", () => {
     expect(response.headers["content-type"]).toBe("image/webp");
     expect(response.headers["cache-control"]).toBe("max-age=60");
     expect(response.headers["content-disposition"]).toBe('attachment; filename="og.webp"');
-    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
+    expect(store.reads).toEqual(["image-config/proj1/prod/web/r3f8a1c9d/image-config.json"]);
   });
 
   test("is capped at maximumResponseBody like any other read", async () => {
@@ -263,7 +263,7 @@ describe("an image a route answered", () => {
     );
     expect(response.status).toBe(400);
     expect(text(response.body)).toBe('"url" parameter is valid but upstream response is invalid');
-    expect(store.reads).toEqual(["prod/proj1/web/r3f8a1c9d/image-config.json"]);
+    expect(store.reads).toEqual(["image-config/proj1/prod/web/r3f8a1c9d/image-config.json"]);
   });
 
   test("never stands in for a remote source", async () => {

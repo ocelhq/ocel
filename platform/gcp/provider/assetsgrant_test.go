@@ -31,7 +31,8 @@ func TestAnAppsAccountMayReadItsOwnStaticFilesAndNoOtherApps(t *testing.T) {
 
 	granted := assetBindingsOf(server.Identities())
 	want := grants.AssetsRole + " serviceAccount:" + namesOf(t, p).AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") +
-		` resource.name.startsWith("projects/_/buckets/` + namesOf(t, p).Bucket(environment.TierProduction) + `/objects/assets/prod/shop/web/")`
+		` resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/assets/shop/prod/web/")` +
+		` || resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/image-config/shop/prod/web/")`
 	if !slices.Equal(granted, []string{want}) {
 		t.Errorf("the app's asset bindings = %q, want exactly %q", granted, want)
 	}
@@ -47,8 +48,8 @@ func TestAnAppsAssetsGrantIsTitledForTheApp(t *testing.T) {
 	}
 
 	for _, binding := range server.Project.Bindings {
-		if binding.Role == grants.AssetsRole && (binding.Condition == nil || binding.Condition.Title != "ocel assets of prod/shop/web") {
-			t.Errorf("the assets binding's condition = %+v, want the title %q", binding.Condition, "ocel assets of prod/shop/web")
+		if binding.Role == grants.AssetsRole && (binding.Condition == nil || binding.Condition.Title != "ocel assets of shop/prod/web") {
+			t.Errorf("the assets binding's condition = %+v, want the title %q", binding.Condition, "ocel assets of shop/prod/web")
 		}
 	}
 }

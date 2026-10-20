@@ -104,16 +104,12 @@ func storageCoordinate(env, slug, app string, release naming.ReleaseToken) namin
 	}
 }
 
-func isrPrefixOf(c naming.Coordinate) string {
-	return strings.TrimSuffix(c.ISRPrefix(), naming.PathSeparator)
-}
-
 func bytecodePrefixOf(c naming.Coordinate) string {
-	return strings.TrimSuffix(c.BytecodePrefix(), naming.PathSeparator)
+	return strings.TrimSuffix(c.StoragePrefix(naming.ObjectBytecode), naming.PathSeparator)
 }
 
 func appAssetPrefix(c naming.Coordinate) string {
-	return c.AssetKey("")
+	return c.AssetPrefix()
 }
 
 func nextManifest() *contractv1.Manifest {

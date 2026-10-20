@@ -16,9 +16,12 @@ func TestIssuerFor(t *testing.T) {
 		t.Error("an edge that certifies nothing was handed an ACM client; it terminates TLS itself")
 	}
 
-	pinned := ACMFor(CloudFrontRegion, Deps{AWS: aws.Config{Region: "eu-west-2"}})
+	pinned := ACMFor(CloudFrontRegion, Deps{AWS: aws.Config{Region: "eu-west-2"}, Namespace: "acme"})
 	if pinned.API == nil || pinned.Region != CloudFrontRegion {
 		t.Errorf("acm = %+v, want an ACM client in %s", pinned, CloudFrontRegion)
+	}
+	if pinned.ManagedBy != "acme" {
+		t.Errorf("acm tags what it requests as managed by %q, want acme, the namespace it serves", pinned.ManagedBy)
 	}
 }
 

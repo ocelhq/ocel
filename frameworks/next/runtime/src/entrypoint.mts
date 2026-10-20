@@ -90,7 +90,7 @@ async function boot(): Promise<void> {
   const edgeCachesOnlyMarked = cachesOnlyMarked(readEdgeCacheMode(process.env));
   const purgeRelease =
     invalidatesByCacheTag(process.env) && edgeCachesOnlyMarked
-      ? releaseOf(process.env.OCEL_ISR_PREFIX)
+      ? releaseOf(process.env.OCEL_STORAGE_COORDINATE)
       : null;
 
   const invoke: Invoke = (req, res, ocel) => {

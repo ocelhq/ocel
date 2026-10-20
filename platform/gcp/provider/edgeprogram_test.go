@@ -140,8 +140,7 @@ func TestTheEntryWorkerReadsAssetsFromTheTiersBucketWithTheKeyOfItsAssetReader(t
 	}
 
 	want := &edge.OriginStore{
-		URL:             "https://storage.googleapis.com/" + h.clients.Bucket(environment.TierProduction),
-		Prefix:          "assets/",
+		URL:             "https://storage.googleapis.com/ocel-prod-edge-k3x9q2",
 		Region:          "auto",
 		AccessKeyID:     "GOOG1EREADER",
 		SecretAccessKey: "reader-secret",

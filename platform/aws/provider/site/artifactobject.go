@@ -16,7 +16,7 @@ func ShipArtifacts(pctx *sdk.Context, b Buckets, uploads []functioncode.Upload) 
 	}
 	shipped := make(map[string]sdk.Resource, len(uploads))
 	for _, upload := range uploads {
-		bucket, err := b.Find(upload.Ref.Bucket)
+		bucket, err := b.Find(upload.Ref.Key)
 		if err != nil {
 			return nil, fmt.Errorf("ship %s's artifact: %w", upload.Name, err)
 		}

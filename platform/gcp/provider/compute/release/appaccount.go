@@ -55,12 +55,12 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 		return nil, err
 	}
 	granted = append(granted, held...)
-	cache, err := cacheGrants(c, spec, member)
+	cache, err := cacheGrants(ctx, c, spec, member)
 	if err != nil {
 		return nil, err
 	}
 	granted = append(granted, cache...)
-	assets, err := assets.Grants(c, spec, member)
+	assets, err := assets.Grants(ctx, c, spec, member)
 	if err != nil {
 		return nil, err
 	}

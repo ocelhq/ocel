@@ -151,7 +151,7 @@ func TestTheStagedRecordIncludesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testi
 	}
 }
 
-func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
+func TestTheStagedRecordNamesThePagesPrefixTheFunctionWritesUnder(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	stager := staging(t, provider)
@@ -173,12 +173,12 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	if app == nil || app.ISR == nil {
 		t.Fatal("the last spec the stacks port saw has no ISR spec")
 	}
-	if staged[0].IsrPrefix != app.ISR.Prefix {
-		t.Errorf("isrPrefix = %q, want %q: the edge reads entries at <isrPrefix>/cache/<route>.cache.json, so a prefix that differs from the one the function writes under misses every prerender",
-			staged[0].IsrPrefix, app.ISR.Prefix)
+	if want := app.ISR.Coordinate.PagesPrefix(); staged[0].PagesPrefix != want {
+		t.Errorf("pagesPrefix = %q, want %q: the edge reads entries at <pagesPrefix>/<route>.cache.json, so a prefix that differs from the one the function writes under misses every prerender",
+			staged[0].PagesPrefix, want)
 	}
-	if strings.HasSuffix(staged[0].IsrPrefix, "/") {
-		t.Errorf("isrPrefix = %q, want no trailing slash", staged[0].IsrPrefix)
+	if strings.HasSuffix(staged[0].PagesPrefix, "/") {
+		t.Errorf("pagesPrefix = %q, want no trailing slash", staged[0].PagesPrefix)
 	}
 }
 
@@ -293,7 +293,7 @@ func TestARecordBehindAnEdgeThatRunsCodeNamesTheRouteTableItsProviderStoredByDig
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(compact.Bytes())
-	if key := staged[0].RouteTable.Key; !strings.HasSuffix(key, "/route-table/"+hex.EncodeToString(digest[:])+".json") {
+	if key := staged[0].RouteTable.Key; !strings.HasPrefix(key, "route-tables/shop/") || !strings.HasSuffix(key, "/"+hex.EncodeToString(digest[:])+".json") {
 		t.Errorf("routeTable.key = %q, want the release's route-table key named by the digest of the compact table", key)
 	}
 	if staged[0].RouteTable.Format != edge.RouteTableNext {

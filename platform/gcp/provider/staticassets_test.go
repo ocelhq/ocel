@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
@@ -47,7 +46,7 @@ func uploadNamed(t *testing.T, uploads []googletest.Upload, name string) googlet
 	return googletest.Upload{}
 }
 
-func TestANextDeployUploadsItsStaticFilesAndImageConfigUnderTheReleasesStoragePrefix(t *testing.T) {
+func TestANextDeployUploadsItsStaticFilesAndImageConfigUnderTheReleasesKindPrefixes(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	root := plantStatic(t, map[string]string{
@@ -64,9 +63,9 @@ func TestANextDeployUploadsItsStaticFilesAndImageConfigUnderTheReleasesStoragePr
 	names := uploadNames(server.Stored())
 	slices.Sort(names)
 	want := []string{
-		"assets/prod/shop/web/r1/assets/_next/static/app.js",
-		"assets/prod/shop/web/r1/assets/logo.svg",
-		"assets/prod/shop/web/r1/image-config.json",
+		"assets/shop/prod/web/r1a2b3c4d/_next/static/app.js",
+		"assets/shop/prod/web/r1a2b3c4d/logo.svg",
+		"image-config/shop/prod/web/r1a2b3c4d/image-config.json",
 	}
 	if !slices.Equal(names, want) {
 		t.Errorf("the deploy uploaded %v, want %v", names, want)
@@ -83,11 +82,11 @@ func TestAStaticFileIsUploadedTypedAndCachedAsTheRouterServesIt(t *testing.T) {
 	}
 
 	uploads := server.Stored()
-	chunk := uploadNamed(t, uploads, "assets/prod/shop/web/r1/assets/_next/static/app.js")
+	chunk := uploadNamed(t, uploads, "assets/shop/prod/web/r1a2b3c4d/_next/static/app.js")
 	if chunk.ContentType != "text/javascript; charset=utf-8" || chunk.CacheControl != edge.ImmutableCacheControl {
 		t.Errorf("the chunk is %q cached as %q, want its type and the immutable cache control", chunk.ContentType, chunk.CacheControl)
 	}
-	logo := uploadNamed(t, uploads, "assets/prod/shop/web/r1/assets/logo.svg")
+	logo := uploadNamed(t, uploads, "assets/shop/prod/web/r1a2b3c4d/logo.svg")
 	if logo.ContentType != "image/svg+xml" || logo.CacheControl != edge.RevalidateCacheControl {
 		t.Errorf("the logo is %q cached as %q, want its type and the revalidating cache control", logo.ContentType, logo.CacheControl)
 	}
@@ -112,8 +111,8 @@ func TestTheStaticFilesAreUploadedBeforeTheServiceIsCreated(t *testing.T) {
 }
 
 func TestARedeployOfTheSameReleaseUploadsOnlyTheStaticFilesItLacks(t *testing.T) {
-	const logo = "assets/prod/shop/web/r1/assets/logo.svg"
-	const chunk = "assets/prod/shop/web/r1/assets/_next/static/app.js"
+	const logo = "assets/shop/prod/web/r1a2b3c4d/logo.svg"
+	const chunk = "assets/shop/prod/web/r1a2b3c4d/_next/static/app.js"
 	server := &googletest.Run{Present: map[string]bool{logo: true}}
 	p := providerServing(server, t)
 	root := plantStatic(t, map[string]string{"static/logo.svg": "<svg/>", "static/_next/static/app.js": "chunk"})
@@ -131,7 +130,7 @@ func TestARedeployOfTheSameReleaseUploadsOnlyTheStaticFilesItLacks(t *testing.T)
 }
 
 func TestARedeployOfTheSameReleaseReplacesItsImageConfig(t *testing.T) {
-	const imageConfig = "assets/prod/shop/web/r1/image-config.json"
+	const imageConfig = "image-config/shop/prod/web/r1a2b3c4d/image-config.json"
 	server := &googletest.Run{Present: map[string]bool{imageConfig: true}}
 	p := providerServing(server, t)
 	root := plantStatic(t, map[string]string{"image-config.json": `{"sizes":[640]}`})
@@ -164,10 +163,10 @@ func TestAStaticFilesAssetPrefixThatIsNotAReleasesAssetsIsRefused(t *testing.T) 
 	p := providerServing(server, t)
 	root := plantStatic(t, map[string]string{"static/logo.svg": "<svg/>"})
 	spec := staticSpec()
-	spec.App.AssetPrefix = "prod/shop/web/r1/files"
+	spec.App.AssetPrefix = "files/shop/prod/web/r1a2b3c4d"
 
 	if _, err := p.ProvisionFunctions(context.Background(), builtAt(spec, root), nil); err == nil {
-		t.Fatal("ProvisionFunctions() = nil, want a refusal: the router reads assets under the prefix and the image config beside it")
+		t.Fatal("ProvisionFunctions() = nil, want a refusal: the router reads assets under the prefix of the assets kind")
 	}
 }
 
@@ -179,7 +178,7 @@ func TestANextServiceIsToldTheBucketItsStaticFilesLiveIn(t *testing.T) {
 	}
 	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
-	if got, want := env["OCEL_ASSET_BUCKET"], namesOf(t, p).Bucket(environment.TierProduction); got != want {
-		t.Errorf("the Next service reads OCEL_ASSET_BUCKET=%q, want its tier's bucket %q", got, want)
+	if got, want := env["OCEL_EDGE_BUCKET"], "ocel-prod-edge-k3x9q2"; got != want {
+		t.Errorf("the Next service reads OCEL_EDGE_BUCKET=%q, want its tier's edge bucket %q", got, want)
 	}
 }

@@ -93,7 +93,7 @@ func bootstrapPayloads() map[string]payloads.Payload {
 		if err != nil {
 			panic(err)
 		}
-		byKey[payloads.Key(runtimeLayerKeyPrefix, p.SHA256)] = p
+		byKey[payloads.Key(runtimeLayerPayload, p.SHA256)] = p
 	}
 	return byKey
 }

@@ -70,7 +70,7 @@ func TestAppExecutionRole(t *testing.T) {
 	t.Run("is granted the bootstrap's variables key", func(t *testing.T) {
 		t.Parallel()
 
-		caches := map[string]*site.ISR{"web": {Prefix: "prod/proj/web/WEB1"}}
+		caches := map[string]*site.ISR{"web": {Bucket: "assets"}}
 
 		role := appExecutionRole(Config{VariablesKeyARN: productionVariablesKeyARN}, "web", caches, nil, variables.Bundle{}, nil, nil, false, nil)
 		if role.Variables.KeyARN != productionVariablesKeyARN {

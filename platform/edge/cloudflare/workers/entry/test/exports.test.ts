@@ -14,12 +14,16 @@ describe("the purge queue of a project", () => {
     const exports = { PurgeQueue: env.PURGE_QUEUE };
     const queue = newPurgeQueuePort(exports);
 
-    await queue.raise({ slug: "slug-a", isrPrefix: "production/slug-a/web/r1/isr" }, "invalidate", [
-      { tag: "r1|a", raisedAt: 5_000 },
-    ]);
-    await queue.raise({ slug: "slug-b", isrPrefix: "production/slug-b/web/r2/isr" }, "invalidate", [
-      { tag: "r2|a", raisedAt: 6_000 },
-    ]);
+    await queue.raise(
+      { slug: "slug-a", pagesPrefix: "pages/slug-a/prod/web/r00000001" },
+      "invalidate",
+      [{ tag: "r1|a", raisedAt: 5_000 }],
+    );
+    await queue.raise(
+      { slug: "slug-b", pagesPrefix: "pages/slug-b/prod/web/r00000002" },
+      "invalidate",
+      [{ tag: "r2|a", raisedAt: 6_000 }],
+    );
 
     expect(await openPurgeQueue(exports, "slug-a").readTimes(["r1|a", "r2|a"])).toEqual({
       "r1|a": { invalidatedAt: 5_000 },

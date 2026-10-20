@@ -20,7 +20,7 @@ func artifactOf(t *testing.T, name string, size int) functioncode.Upload {
 	}
 	return functioncode.Upload{
 		Name: name,
-		Ref:  provider.ArtifactRef{Tier: "production", Bucket: provider.StoreFunctions, Key: name + ".zip"},
+		Ref:  provider.ArtifactRef{Tier: "production", Key: name + ".zip"},
 		Path: path,
 	}
 }

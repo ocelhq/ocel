@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	objectsOfB1 = "/assets/production/shop/web/b1/assets"
-	objectsOfB2 = "/assets/production/shop/web/b2/assets"
+	objectsOfB1 = "/assets/shop/prod/web/b1"
+	objectsOfB2 = "/assets/shop/prod/web/b2"
 )
 
 func servingB1ThenStaging(t *testing.T) (*world, func(id, build string) error) {
@@ -133,7 +133,7 @@ func TestAPromotionThatMovedOneHostnameBeforeAnotherFailedSharesFilesFromWhereEa
 	before := len(w.copied())
 	promote(t, stack, "p3", "b3")
 
-	objectsOfB3 := "/assets/production/shop/web/b3/assets"
+	objectsOfB3 := "/assets/shop/prod/web/b3"
 	var froms []string
 	for _, copied := range w.copied()[before:] {
 		if copied.To == objectsOfB3 {

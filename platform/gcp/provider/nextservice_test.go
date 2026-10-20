@@ -118,11 +118,19 @@ func TestANodeFunctionKeepsTheProfileItRunsOn(t *testing.T) {
 	}
 }
 
+func cachedRelease() naming.Coordinate {
+	release, err := naming.ParseReleaseToken("r1a2b3c4d")
+	if err != nil {
+		panic(err)
+	}
+	return naming.Coordinate{Project: "shop", Env: stackrecords.ProductionEnv, App: "web", Release: release}
+}
+
 func routedNextSpec() provider.StackSpec {
 	spec := nextSpec()
 	spec.App.Routing = &provider.RoutingSpec{RootFunction: "bundle-0", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(`{"rootFunction":"bundle-0"}`)}}
-	spec.App.ISR = &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr", TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
-	spec.App.AssetPrefix = "prod/shop/web/r1/assets"
+	spec.App.ISR = &provider.ISRSpec{Coordinate: cachedRelease(), TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
+	spec.App.AssetPrefix = "assets/shop/prod/web/r1a2b3c4d"
 	return spec
 }
 
@@ -131,7 +139,7 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 
 	for name, want := range map[string]string{
 		"OCEL_NEXT_ROUTE_TABLE": "/ocel/app/" + edge.NextRouteTableFile,
-		"OCEL_ASSET_PREFIX":     "prod/shop/web/r1/assets",
+		"OCEL_ASSET_PREFIX":     "assets/shop/prod/web/r1a2b3c4d",
 		"OCEL_SLUG":             "shop",
 		"OCEL_APP":              "web",
 		"OCEL_BUILD_ID":         "dpl_7",
@@ -146,15 +154,15 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 func TestANextServiceIsToldWhereItsIncrementalCacheLives(t *testing.T) {
 	env := googletest.EnvOf(releasedNext(t, routedNextSpec()))
 
-	if got := env["OCEL_ISR_PREFIX"]; got != "prod/shop/web/r1/isr" {
-		t.Errorf("the Next service reads OCEL_ISR_PREFIX=%q, want the prefix its spec names", got)
+	if got := env["OCEL_STORAGE_COORDINATE"]; got != "shop/prod/web/r1a2b3c4d" {
+		t.Errorf("the Next service reads OCEL_STORAGE_COORDINATE=%q, want the release its spec names", got)
 	}
 	if got := env["OCEL_ISR_TAG_NAMESPACE"]; got != "PROJECT#shop#STACK#prod--web--r1#TAG#" {
 		t.Errorf("the Next service reads OCEL_ISR_TAG_NAMESPACE=%q, want the namespace its spec names", got)
 	}
 }
 
-func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t *testing.T) {
+func TestANextServiceIsToldTheEdgeAndCacheBucketsItsEntriesLiveIn(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
@@ -162,11 +170,13 @@ func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t
 	}
 	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
-	if got, want := env["OCEL_ISR_BUCKET"], namesOf(t, p).Bucket(environment.TierProduction); got != want {
-		t.Errorf("the Next service reads OCEL_ISR_BUCKET=%q, want its tier's bucket %q", got, want)
-	}
-	if got, want := env["OCEL_ISR_OBJECT_PREFIX"], "cache/shop/web/prod/r1/isr"; got != want {
-		t.Errorf("the Next service reads OCEL_ISR_OBJECT_PREFIX=%q, want %q", got, want)
+	for name, want := range map[string]string{
+		"OCEL_EDGE_BUCKET":  "ocel-prod-edge-k3x9q2",
+		"OCEL_CACHE_BUCKET": "ocel-prod-cache-k3x9q2",
+	} {
+		if got := env[name]; got != want {
+			t.Errorf("the Next service reads %s=%q, want %q", name, got, want)
+		}
 	}
 	endpoint, err := url.Parse(env["OCEL_STORAGE_ENDPOINT"])
 	if err != nil || endpoint.Hostname() != "host.docker.internal" {
@@ -177,7 +187,7 @@ func TestANextServiceIsToldTheCacheBucketAndTheObjectPrefixItsEntriesLiveUnder(t
 func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T) {
 	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
-	for _, name := range []string{"OCEL_ISR_BUCKET", "OCEL_ISR_OBJECT_PREFIX", "OCEL_STORAGE_ENDPOINT"} {
+	for _, name := range []string{"OCEL_CACHE_BUCKET", "OCEL_STORAGE_COORDINATE", "OCEL_STORAGE_ENDPOINT"} {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service with no incremental cache reads %s=%q", name, got)
 		}
@@ -187,7 +197,7 @@ func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T
 func TestANextServiceThatRoutesNothingIsToldNoRoutingManifest(t *testing.T) {
 	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
-	for _, name := range []string{"OCEL_NEXT_ROUTE_TABLE", "OCEL_ISR_PREFIX", "OCEL_ASSET_PREFIX"} {
+	for _, name := range []string{"OCEL_NEXT_ROUTE_TABLE", "OCEL_STORAGE_COORDINATE", "OCEL_ASSET_PREFIX"} {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service whose spec routes nothing reads %s=%q", name, got)
 		}
@@ -363,7 +373,7 @@ func nextContainerSpec() provider.StackSpec {
 			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 			HealthCheckPath: "/",
 			Instances:       provider.Instances{Min: 1, Max: 1},
-			ISR:             &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr", TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
+			ISR:             &provider.ISRSpec{Coordinate: cachedRelease(), TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
 		},
 	}
 }
@@ -416,7 +426,7 @@ func TestANextContainerAsksForTwoGibibytesOfMemory(t *testing.T) {
 	}
 }
 
-func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntriesLiveIn(t *testing.T) {
+func TestANextContainerIsToldTheCacheBucketStorageCoordinateAndTagsDatabaseItsEntriesLiveIn(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
@@ -425,11 +435,11 @@ func TestANextContainerIsToldTheCacheBucketObjectPrefixAndTagsDatabaseItsEntries
 	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
 	for name, want := range map[string]string{
-		"OCEL_ISR_BUCKET":        namesOf(t, p).Bucket(environment.TierProduction),
-		"OCEL_ISR_OBJECT_PREFIX": "cache/shop/web/prod/r1/isr",
-		"OCEL_ISR_PREFIX":        "prod/shop/web/r1/isr",
-		"OCEL_ISR_TAG_NAMESPACE": "PROJECT#shop#STACK#prod--web--r1#TAG#",
-		"OCEL_TAG_DATABASE":      "projects/" + namesOf(t, p).Project() + "/databases/" + namesOf(t, p).ProjectWritableDatabase(environment.TierProduction, "shop"),
+		"OCEL_EDGE_BUCKET":        "ocel-prod-edge-k3x9q2",
+		"OCEL_CACHE_BUCKET":       "ocel-prod-cache-k3x9q2",
+		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r1a2b3c4d",
+		"OCEL_ISR_TAG_NAMESPACE":  "PROJECT#shop#STACK#prod--web--r1#TAG#",
+		"OCEL_TAG_DATABASE":       "projects/" + namesOf(t, p).Project() + "/databases/" + namesOf(t, p).ProjectWritableDatabase(environment.TierProduction, "shop"),
 	} {
 		if got := env[name]; got != want {
 			t.Errorf("a Next container reads %s=%q, want %q", name, got, want)
@@ -447,7 +457,7 @@ func TestANextContainerIsToldNothingOnlyTheServerlessEntrypointReads(t *testing.
 
 	env := googletest.EnvOf(service.Template.Containers[0])
 	for _, name := range []string{
-		next.RouteTableEnvVar, next.RouterKindEnvVar, next.AssetBucketEnvVar,
+		next.RouteTableEnvVar, next.RouterKindEnvVar,
 		edge.OriginDispatchVar, edge.OriginSignedVar,
 	} {
 		if _, told := env[name]; told {

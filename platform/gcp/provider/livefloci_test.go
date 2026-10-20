@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -137,7 +138,7 @@ func TestLiveArtifactsWhereNoBucketExistsSayWhatToRun(t *testing.T) {
 	live(t)
 
 	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
-	ref := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "conformance/bundle.zip"}
+	ref := provider.ArtifactRef{Tier: environment.TierProduction, Key: "assets/conformance/prod/web/r1a2b3c4d/bundle.js"}
 
 	var refused refusal.Refusal
 	err := nowhere.Artifacts().Put(context.Background(), ref, bytes.NewReader([]byte("a build artifact")))
@@ -149,58 +150,66 @@ func TestLiveArtifactsWhereNoBucketExistsSayWhatToRun(t *testing.T) {
 	}
 }
 
-func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
+func TestLiveRemovingAScopeLeavesEveryKindItDoesNotName(t *testing.T) {
 	p := live(t)
 	bootstrappedTiers(t, p)
 
 	ctx := context.Background()
 	artifacts := p.Artifacts()
 	tier := environment.TierProduction
-	swept, kept := "conformance/"+t.Name()+"/", "conformance/"+t.Name()+"-beside/"
+	swept := naming.Coordinate{Project: "conformance", Env: "prod", App: "web", Release: naming.NewReleaseToken(t.Name(), "")}
+	beside := swept
+	beside.Release = naming.NewReleaseToken(t.Name()+"-beside", "")
+	kinds := []naming.ObjectKind{naming.ObjectFetchCache, naming.ObjectAssets, naming.ObjectPages}
 
-	for _, store := range []string{provider.StoreFunctions, provider.StoreAssets, provider.StoreCache} {
-		for _, prefix := range []string{swept, kept} {
-			ref := provider.ArtifactRef{Tier: tier, Bucket: store, Key: prefix + "bundle.zip"}
-			if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte(store))); err != nil {
-				t.Fatalf("Put(%s/%s) = %v", store, prefix, err)
+	for _, kind := range append(kinds, naming.ObjectTagClock) {
+		for _, release := range []naming.Coordinate{swept, beside} {
+			ref := provider.ArtifactRef{Tier: tier, Key: release.ObjectKey(kind, "bundle.zip")}
+			if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte(kind))); err != nil {
+				t.Fatalf("Put(%s) = %v", ref.Key, err)
 			}
 		}
 	}
 
-	if err := artifacts.RemovePrefix(ctx, tier, swept, nil); err != nil {
-		t.Fatalf("RemovePrefix(%s) = %v", swept, err)
+	if err := artifacts.RemoveObjects(ctx, tier, swept, kinds, nil); err != nil {
+		t.Fatalf("RemoveObjects(%+v) = %v", swept, err)
 	}
 
-	for _, store := range []string{provider.StoreFunctions, provider.StoreAssets, provider.StoreCache} {
-		gone, err := artifacts.Has(ctx, provider.ArtifactRef{Tier: tier, Bucket: store, Key: swept + "bundle.zip"})
-		if err != nil || gone {
-			t.Errorf("Has(%s/%s) = %v, %v, want it swept: one prefix names the same run in every store", store, swept, gone, err)
-		}
-		left, err := artifacts.Has(ctx, provider.ArtifactRef{Tier: tier, Bucket: store, Key: kept + "bundle.zip"})
-		if err != nil || !left {
-			t.Errorf("Has(%s/%s) = %v, %v, want it left alone", store, kept, left, err)
+	for _, kind := range kinds {
+		key := swept.ObjectKey(kind, "bundle.zip")
+		if gone, err := artifacts.Has(ctx, provider.ArtifactRef{Tier: tier, Key: key}); err != nil || gone {
+			t.Errorf("Has(%s) = %v, %v, want it swept", key, gone, err)
 		}
 	}
+	for _, key := range []string{swept.ObjectKey(naming.ObjectTagClock, "bundle.zip"), beside.ObjectKey(naming.ObjectFetchCache, "bundle.zip")} {
+		if left, err := artifacts.Has(ctx, provider.ArtifactRef{Tier: tier, Key: key}); err != nil || !left {
+			t.Errorf("Has(%s) = %v, %v, want it left alone", key, left, err)
+		}
+	}
+	t.Cleanup(func() {
+		_ = artifacts.RemoveObjects(ctx, tier, naming.Coordinate{Project: "conformance"}, naming.CoordinateObjectKinds, nil)
+	})
 }
 
-func TestLiveRemovingNoPrefixIsRefusedRatherThanSweepingTheBucket(t *testing.T) {
+func TestLiveRemovingAScopeNamingNoProjectIsRefusedRatherThanSweepingTheBucket(t *testing.T) {
 	p := live(t)
 	bootstrappedTiers(t, p)
 
 	ctx := context.Background()
 	artifacts := p.Artifacts()
-	ref := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	release := naming.Coordinate{Project: "conformance", Env: "prod", App: "web", Name: "api", Release: naming.NewReleaseToken(t.Name(), "")}
+	ref := provider.ArtifactRef{Tier: environment.TierProduction, Key: release.AssetKey("bundle.js")}
 	if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact"))); err != nil {
 		t.Fatal(err)
 	}
 
 	var refused refusal.Refusal
-	err := artifacts.RemovePrefix(ctx, environment.TierProduction, "", nil)
+	err := artifacts.RemoveObjects(ctx, environment.TierProduction, naming.Coordinate{}, naming.CoordinateObjectKinds, nil)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("RemovePrefix(\"\") = %v, want an %s refusal: an empty prefix names every artifact the tier keeps", err, refusal.CodeInvalid)
+		t.Fatalf("RemoveObjects() of an empty scope = %v, want an %s refusal: it names every project's objects", err, refusal.CodeInvalid)
 	}
 	stored, err := artifacts.Has(ctx, ref)
 	if err != nil || !stored {
-		t.Fatalf("Has() after RemovePrefix(\"\") = %v, %v, want the artifact left where it was", stored, err)
+		t.Fatalf("Has() after RemoveObjects() of an empty scope = %v, %v, want the artifact left where it was", stored, err)
 	}
 }

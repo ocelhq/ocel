@@ -83,7 +83,7 @@ beforeAll(async () => {
   });
   process.env.OCEL_EDGE_CACHE = "all";
   process.env.OCEL_CACHE_TAG_PURGE = "1";
-  process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
+  process.env.OCEL_STORAGE_COORDINATE = "shop/prod/web/r0a1b2c3d";
   (globalThis as Record<string, unknown>).__announceTestPurge = () =>
     notePurge("products", { expired: 1 }, 1);
   process.env.OCEL_CONTROL_SOCKET = sockPath;
@@ -93,7 +93,7 @@ beforeAll(async () => {
 afterAll(async () => {
   delete process.env.OCEL_EDGE_CACHE;
   delete process.env.OCEL_CACHE_TAG_PURGE;
-  delete process.env.OCEL_ISR_PREFIX;
+  delete process.env.OCEL_STORAGE_COORDINATE;
   delete (globalThis as Record<string, unknown>).__announceTestPurge;
   for (const c of controlConns) c.end();
   await new Promise<void>((resolve) => controlServer.close(() => resolve()));

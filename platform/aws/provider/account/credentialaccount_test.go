@@ -658,7 +658,9 @@ func ocelBucketOf(tier environment.Tier) requestContext {
 	return bucketRequest(bucketTaggedFor(tier))
 }
 
-const tierCluster = "arn:aws:rds:" + tierResourceAccount + ":cluster:ocel-app-shop-prod-main-k3x9q0"
+func tierCluster(tier environment.Tier) string {
+	return "arn:aws:rds:" + tierResourceAccount + ":cluster:ocel-app-" + naming.TierWord(tier) + "-shop-prod-main-k3x9q0"
+}
 
 func tierResources() []tierResource {
 	const region = tierResourceAccount
@@ -668,9 +670,12 @@ func tierResources() []tierResource {
 		return "arn:aws:secretsmanager:" + region + ":secret:" + realtime.SigningKeySecret(defaultNamespace.SigningKeyRoot(), tier, "shop", "prod", "realtime--live") + "-AbCdEf"
 	}
 	return []tierResource{
-		{"postgres", "rds:ModifyDBCluster", fixed(tierCluster), ocelRoleOf},
-		{"postgres", "rds:DeleteDBCluster", fixed(tierCluster), ocelRoleOf},
-		{"postgres", "rds-data:ExecuteStatement", fixed(tierCluster), ocelRoleOf},
+		{"postgres", "rds:ModifyDBCluster", tierCluster, ocelRoleOf},
+		{"postgres", "rds:DeleteDBCluster", tierCluster, ocelRoleOf},
+		{"postgres", "rds-data:ExecuteStatement", tierCluster, ocelRoleOf},
+		{"postgres", "secretsmanager:GetSecretValue", fixed("arn:aws:secretsmanager:" + region + ":secret:rds!cluster-0a1b2c3d-AbCdEf"), func(tier environment.Tier) requestContext {
+			return requestContext{"aws:ResourceTag/" + iam.ManagedSecretClusterTagKey: tierCluster(tier)}
+		}},
 		{"postgres", "rds-db:connect", func(tier environment.Tier) string {
 			return "arn:aws:rds-db:" + region + ":dbuser:cluster-ABCDEFGHIJKL/" + postgres.AppRoleFor(tier)
 		}, untagged},
@@ -716,7 +721,7 @@ func TestADeployCredentialCreatesAndRetagsResourcesOnlyForItsOwnTier(t *testing.
 		sibling := tier.Sibling()
 		_, deployDoc := renderedCredentialsOf(t, tier)
 		for _, c := range []struct{ action, arn string }{
-			{"rds:CreateDBCluster", tierCluster},
+			{"rds:CreateDBCluster", tierCluster(tier)},
 			{"elasticache:CreateReplicationGroup", "arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"},
 			{"appsync:CreateApi", iam.AnyResource},
 			{"sqs:CreateQueue", "arn:aws:sqs:" + region + ":ocel-app-shop-prod-topic-orders"},
@@ -733,7 +738,7 @@ func TestADeployCredentialCreatesAndRetagsResourcesOnlyForItsOwnTier(t *testing.
 		retag := ocelRoleOf(sibling)
 		maps.Copy(retag, creating(tier))
 		for _, c := range []struct{ action, arn string }{
-			{"rds:AddTagsToResource", tierCluster},
+			{"rds:AddTagsToResource", tierCluster(sibling)},
 			{"elasticache:AddTagsToResource", "arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"},
 			{"sqs:TagQueue", "arn:aws:sqs:" + region + ":ocel-app-shop-prod-topic-orders"},
 			{"sns:TagResource", "arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"},

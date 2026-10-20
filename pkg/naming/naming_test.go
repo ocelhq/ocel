@@ -147,31 +147,6 @@ func TestValidateRejectsTheFieldSeparator(t *testing.T) {
 	}
 }
 
-func TestStorageKeysShareOnePrefix(t *testing.T) {
-	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "api-users", Release: NewReleaseToken("b", "")}
-	prefix := c.StoragePrefix()
-	for _, key := range []string{
-		c.FunctionArtifactKey("deadbeef"),
-		c.AssetKey("/static/app.js"),
-		c.ImageConfigKey(),
-		c.ISRPrefix(),
-		c.BytecodePrefix(),
-	} {
-		if !strings.HasPrefix(key, prefix) {
-			t.Errorf("key %q does not live under the release prefix %q", key, prefix)
-		}
-	}
-	if want := "prod/shop/web/" + c.Release.String() + "/"; prefix != want {
-		t.Errorf("StoragePrefix = %q, want %q", prefix, want)
-	}
-	if want := prefix + "bytecode/"; c.BytecodePrefix() != want {
-		t.Errorf("BytecodePrefix = %q, want %q", c.BytecodePrefix(), want)
-	}
-	if c.BytecodePrefix() == c.ISRPrefix() {
-		t.Errorf("BytecodePrefix and ISRPrefix share %q; the compile cache must not land in the ISR namespace", c.ISRPrefix())
-	}
-}
-
 func TestSessionKeysPartitionByProjectAndEnvironment(t *testing.T) {
 	prod := SessionKeyPrefix("shop", "prod")
 

@@ -7,10 +7,10 @@ declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
 }
 
-const WEB_PREFIX = "production/p1/web/r0a1b2c3d/isr";
-const PREVIEW_PREFIX = "pr-42/p1/web/r0000000a/isr";
-const OLDER_PREFIX = "production/p1/web/r00000001/isr";
-const NEWER_PREFIX = "production/p1/web/r00000002/isr";
+const WEB_PREFIX = "pages/p1/prod/web/r0a1b2c3d";
+const PREVIEW_PREFIX = "pages/p1/pr-42/web/r0000000a";
+const OLDER_PREFIX = "pages/p1/prod/web/r00000001";
+const NEWER_PREFIX = "pages/p1/prod/web/r00000002";
 const WEB_KEPT = { app: "web", releaseToken: "r0a1b2c3d" };
 const OLDER_KEPT = { app: "web", releaseToken: "r00000001" };
 const NEWER_KEPT = { app: "web", releaseToken: "r00000002" };
@@ -30,8 +30,8 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     rootFunction: "/",
     routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
-    assetPrefix: "production/p1/web/r0a1b2c3d/assets",
-    isrPrefix: WEB_PREFIX,
+    assetPrefix: "assets/p1/prod/web/r0a1b2c3d",
+    pagesPrefix: WEB_PREFIX,
     edge: { purgeSecret: "purge-secret" },
     createdAt: 1_000,
     ...over,
@@ -43,9 +43,9 @@ function makePointerMove(over: Partial<PointerMove> = {}): PointerMove {
 }
 
 describe("readServedRecord", () => {
-  it("returns the record of a release a pointer serves, by its ISR prefix, on whichever pointer", async () => {
+  it("returns the record of a release a pointer serves, by its pages prefix, on whichever pointer", async () => {
     const store = storeStub();
-    const preview = makeRecord({ release: "build-2~fp2", isrPrefix: PREVIEW_PREFIX });
+    const preview = makeRecord({ release: "build-2~fp2", pagesPrefix: PREVIEW_PREFIX });
     await store.movePointer(makePointerMove());
     await store.movePointer(
       makePointerMove({ promotionId: "promo-preview", pointer: "pr-42", records: [preview] }),
@@ -65,7 +65,7 @@ describe("readServedRecord", () => {
     const store = storeStub();
     const api = makeRecord({
       app: "api",
-      isrPrefix: "production/p1/api/r0a1b2c3d/isr",
+      pagesPrefix: "pages/p1/prod/api/r0a1b2c3d",
       edge: { purgeSecret: "api-secret" },
     });
     await store.movePointer(makePointerMove({ records: [api, makeRecord()] }));
@@ -74,13 +74,13 @@ describe("readServedRecord", () => {
       kind: "record",
       record: makeRecord(),
     });
-    expect(await store.readServedRecord("production/p1/api/r0a1b2c3d/isr")).toEqual({
+    expect(await store.readServedRecord("pages/p1/prod/api/r0a1b2c3d")).toEqual({
       kind: "record",
       record: api,
     });
   });
 
-  it("does not take a release's name for its ISR prefix", async () => {
+  it("does not take a release's name for its pages prefix", async () => {
     const store = storeStub();
     await store.movePointer(makePointerMove());
 
@@ -95,7 +95,7 @@ describe("readServedRecord", () => {
     const store = storeStub();
     await store.movePointer(
       makePointerMove({
-        records: [makeRecord({ release: "build-2~fp2", isrPrefix: OLDER_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: OLDER_PREFIX })],
         kept: [WEB_KEPT, OLDER_KEPT],
       }),
     );
@@ -107,7 +107,7 @@ describe("readServedRecord", () => {
     const store = storeStub();
     await store.movePointer(makePointerMove({ kept: [WEB_KEPT] }));
 
-    expect(await store.readServedRecord("production/p1/api/r0a1b2c3d/isr")).toEqual({
+    expect(await store.readServedRecord("pages/p1/prod/api/r0a1b2c3d")).toEqual({
       kind: "forgotten",
     });
   });
@@ -119,7 +119,7 @@ describe("readServedRecord", () => {
       makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ release: "build-2~fp2", isrPrefix: NEWER_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: NEWER_PREFIX })],
         kept: [NEWER_KEPT, WEB_KEPT],
       }),
     );
@@ -138,7 +138,7 @@ describe("readServedRecord", () => {
       makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ release: "build-2~fp2", isrPrefix: NEWER_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: NEWER_PREFIX })],
         kept: [NEWER_KEPT],
       }),
     );
@@ -184,7 +184,7 @@ describe("readServedRecord", () => {
       makePointerMove({
         promotionId: "promo-2",
         replaces: "promo-1",
-        records: [makeRecord({ release: "build-2~fp2", isrPrefix: PREVIEW_PREFIX })],
+        records: [makeRecord({ release: "build-2~fp2", pagesPrefix: PREVIEW_PREFIX })],
         kept: [WEB_KEPT],
       }),
     );
@@ -193,16 +193,16 @@ describe("readServedRecord", () => {
     expect(await store.readServedRecord(PREVIEW_PREFIX)).toMatchObject({ kind: "record" });
   });
 
-  it("is reachable through the entrypoint the entry worker binds, by project and ISR prefix", async () => {
+  it("is reachable through the entrypoint the entry worker binds, by project and pages prefix", async () => {
     const slug = "served-record-entrypoint";
     await env.RELEASES_DO.get(env.RELEASES_DO.idFromName(slug)).movePointer(makePointerMove());
     const entry = new (await import("../src/index")).default(createExecutionContext(), env);
 
-    expect(await entry.readServedRecord({ slug, isrPrefix: WEB_PREFIX })).toEqual({
+    expect(await entry.readServedRecord({ slug, pagesPrefix: WEB_PREFIX })).toEqual({
       kind: "record",
       record: makeRecord(),
     });
-    expect(await entry.readServedRecord({ slug, isrPrefix: PREVIEW_PREFIX })).toEqual({
+    expect(await entry.readServedRecord({ slug, pagesPrefix: PREVIEW_PREFIX })).toEqual({
       kind: "forgotten",
     });
   });

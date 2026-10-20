@@ -51,7 +51,7 @@ import {
   strayStores,
 } from "./memorystore";
 import { gcpSlug, namespaceOf } from "./names";
-import { assetPrefixOf, readReleaseFile, tierBucket } from "./releaseFiles";
+import { assetPrefixOf, edgeBucketIn, edgeBucketPrefix, readReleaseFile } from "./releaseFiles";
 import { countOriginRequests } from "./requestLog";
 import {
   accessToken,
@@ -362,9 +362,13 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
     const namespace = namespaceOf(process.env);
     const listed = await readServices(where);
     const service = findAppService(servicesIn(listed), namespace, gcpSlug(cell, process.env), app);
+    const buckets = await listAppBuckets(where, edgeBucketPrefix(namespace));
     return readReleaseFile(
       where,
-      tierBucket(namespace, where.project),
+      edgeBucketIn(
+        buckets.map((bucket) => bucket.name),
+        namespace,
+      ),
       assetPrefixOf(listed, service.name),
       path,
     );

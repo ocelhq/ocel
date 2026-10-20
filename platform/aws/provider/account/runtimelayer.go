@@ -24,9 +24,9 @@ import (
 )
 
 const (
-	runtimeLayerKeyPrefix = "ocel-runtime-layer"
-	runtimeLayerLabel     = "function runtime"
-	runtimeDigestLen      = 12
+	runtimeLayerPayload = "runtime-layer"
+	runtimeLayerLabel   = "function runtime"
+	runtimeDigestLen    = 12
 
 	runtimeLayerGroupKind = "layers"
 	runtimeLayerType      = "AWS::Lambda::LayerVersion"
@@ -219,7 +219,7 @@ func ensureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier envi
 }
 
 func publishRuntimeLayer(ctx context.Context, apis APIs, tier environment.Tier, name, architecture, bucket string, payload payloads.Payload) (string, error) {
-	at, err := payloads.Place(ctx, apis.Store, bucket, runtimeLayerKeyPrefix, runtimeLayerLabel+" ("+architecture+")", payload)
+	at, err := payloads.Place(ctx, apis.Store, bucket, runtimeLayerPayload, runtimeLayerLabel+" ("+architecture+")", payload)
 	if err != nil {
 		return "", err
 	}

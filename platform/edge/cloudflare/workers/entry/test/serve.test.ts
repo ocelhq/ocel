@@ -19,7 +19,7 @@ import {
 import { awsOrigin, FN_URL, storeOrigin, withGlobalFetch } from "./origin-deps";
 import { expectedSignature, sentSignature } from "./sigv4";
 
-const key = "prod/shop/web/r1a2b3c4d/assets/_next/static/app.js";
+const key = "assets/shop/prod/web/r1a2b3c4d/_next/static/app.js";
 const props: ServeProps = {
   kind: "object",
   host: "shop.example.com",
@@ -63,7 +63,7 @@ describe("Serve reading an object from the asset bucket", () => {
 
     expect(s3.calls).toHaveLength(1);
     expect(s3.calls[0].url).toBe(
-      "https://assets-bucket.s3.us-east-1.amazonaws.com/prod/shop/web/r1a2b3c4d/assets/_next/static/app.js",
+      "https://assets-bucket.s3.us-east-1.amazonaws.com/assets/shop/prod/web/r1a2b3c4d/_next/static/app.js",
     );
     expect(s3.calls[0].headers.get("authorization")).toMatch(
       /^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE\/.+\/us-east-1\/s3\//,
@@ -163,7 +163,7 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
       secretAccessKey: "examplesecret/key+",
     }),
   };
-  const routeTable = "prod/shop/web/r1a2b3c4d/route-table/ab.json";
+  const routeTable = "route-tables/shop/prod/web/r1a2b3c4d/ab.json";
 
   it("is a path-style GET of the key under the store's prefix at the endpoint the origin names", async () => {
     const gcs = s3Answering(() => new Response("bytes", { headers: { etag: '"e1"' } }));
@@ -205,12 +205,12 @@ describe("Serve reading an object from a bucket an HMAC key reads", () => {
 
   it("encodes the characters of an object name once, in the url and in the signature", async () => {
     const gcs = s3Answering(() => new Response("page"));
-    const odd = "prod/shop/web/r1a2b3c4d/assets/docs/[...slug] one.html";
+    const odd = "assets/shop/prod/web/r1a2b3c4d/docs/[...slug] one.html";
 
     await withGlobalFetch(gcs.fetch, () => serveWith(hmacEnv).fetch(get(odd)));
 
     expect(new URL(gcs.calls[0].url).pathname).toBe(
-      "/ocel-acme-production/assets/prod/shop/web/r1a2b3c4d/assets/docs/%5B...slug%5D%20one.html",
+      "/ocel-acme-production/assets/assets/shop/prod/web/r1a2b3c4d/docs/%5B...slug%5D%20one.html",
     );
     expect(sentSignature(gcs.calls[0])).toBe(
       await expectedSignature(gcs.calls[0], "examplesecret/key+"),
@@ -266,8 +266,8 @@ describe("Serve reading an object where the origin has no asset bucket", () => {
 describe("Serve fetching from the origin", () => {
   const originProps: ServeProps = RENDER_PROPS;
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
-  const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
-  const renderRelease = { [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix }) };
+  const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
+  const renderRelease = { [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", pagesPrefix }) };
   const originRequest = (path: string, origin = FN_URL) =>
     new Request(buildOriginCall(`${origin}${path}`, coordinates).url, { headers: renderRelease });
   const servedRecords = (record: object | null) => ({
@@ -279,8 +279,8 @@ describe("Serve fetching from the origin", () => {
     release: "build-1~fp1",
     buildId: "build-1",
     functionUrls: { "/blog": `${FN_URL}stage` },
-    assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
-    isrPrefix,
+    assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
+    pagesPrefix,
     createdAt: 1,
     edge: {},
   };
@@ -322,7 +322,7 @@ describe("Serve fetching from the origin", () => {
   });
 
   it("fetches nothing for a release that is not served, or is not the one the call is keyed under", async () => {
-    for (const record of [null, { ...originRecord, isrPrefix: "prod/p1/web/r9z8y7x6w/isr" }]) {
+    for (const record of [null, { ...originRecord, pagesPrefix: "pages/p1/prod/web/r9f8e7d6c" }]) {
       const wire = s3Answering(() => new Response("page"));
 
       const response = await withGlobalFetch(wire.fetch, () =>
@@ -434,7 +434,7 @@ describe("Serve fetching from the origin", () => {
     const nodeRelease = {
       [RENDER_RELEASE_HEADER]: JSON.stringify({
         slug: "p1",
-        isrPrefix,
+        pagesPrefix,
         tags: [],
         honoursAppCacheHeaders: true,
       }),
@@ -693,16 +693,16 @@ describe("Serve fetching from the origin", () => {
 
 describe("Serve rendering an edge-runtime prerender", () => {
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
-  const isrPrefix = "prod/p1/web/r1a2b3c4d/isr";
-  const bundleKey = "prod/p1/web/r1a2b3c4d/edge/bundle.json";
+  const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
+  const bundleKey = "bundles/p1/prod/web/r1a2b3c4d/bundle.json";
   const edgeRecord = {
     app: "web",
     framework: "next",
     release: "build-1~fp1",
     buildId: "build-1",
     functionUrls: {},
-    assetPrefix: "prod/p1/web/r1a2b3c4d/assets",
-    isrPrefix,
+    assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
+    pagesPrefix,
     createdAt: 1,
     edge: {
       purgeSecret: "s3cr3t",
@@ -712,7 +712,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
 
   function edgeServe(answer: () => Response, record: object | null = edgeRecord) {
     const rendered: { entryKey: string; request: Request }[] = [];
-    const served: { slug: string; isrPrefix: string }[] = [];
+    const served: { slug: string; pagesPrefix: string }[] = [];
     const loader = {
       get: () => ({
         getEntrypoint: (_name: unknown, options: { props: { entryKey: string } }) => ({
@@ -724,7 +724,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
       }),
     };
     const releases = {
-      readServedRecord: async (args: { slug: string; isrPrefix: string }) => {
+      readServedRecord: async (args: { slug: string; pagesPrefix: string }) => {
         served.push(args);
         return record ? { kind: "record", record } : { kind: "not-served" };
       },
@@ -744,7 +744,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
     const call = buildEdgeCall(`https://shop.example.com${path}`, coordinates, "app/edge-blog");
     return new Request(call.url, {
       headers: {
-        [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", isrPrefix, tags }),
+        [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", pagesPrefix, tags }),
         "x-ocel-entry": "app/edge-blog/page",
       },
     });
@@ -758,7 +758,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
 
     const response = await serve.fetch(edgeRequest("/blog?page=2"));
 
-    expect(served).toEqual([{ slug: "p1", isrPrefix }]);
+    expect(served).toEqual([{ slug: "p1", pagesPrefix }]);
     expect(rendered.map(({ entryKey }) => entryKey)).toEqual(["app/edge-blog"]);
     expect(rendered[0].request.url).toBe("https://shop.example.com/blog?page=2");
     expect(rendered[0].request.headers.has(RENDER_RELEASE_HEADER)).toBe(false);
@@ -818,7 +818,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
   it("renders nothing from a record of another release than the one it is keyed under", async () => {
     const { serve, rendered } = edgeServe(cacheable, {
       ...edgeRecord,
-      isrPrefix: "prod/p1/web/r9z8y7x6w/isr",
+      pagesPrefix: "pages/p1/prod/web/r9f8e7d6c",
     });
 
     const response = await serve.fetch(edgeRequest("/blog"));

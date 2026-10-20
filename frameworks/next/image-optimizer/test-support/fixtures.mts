@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import type { CompiledImageConfig, ImageOriginRequest } from "@framework/next-protocol/image";
 import type { ObjectStore, StoredObject } from "../src/store.mjs";
 
-export const ASSET_PREFIX = "prod/proj1/web/r3f8a1c9d/assets";
+export const ASSET_PREFIX = "assets/proj1/prod/web/r3f8a1c9d";
 
-export const CONFIG_KEY = "prod/proj1/web/r3f8a1c9d/image-config.json";
+export const CONFIG_KEY = "image-config/proj1/prod/web/r3f8a1c9d/image-config.json";
 
 export function imageConfig(overrides: Partial<CompiledImageConfig> = {}): CompiledImageConfig {
   return {

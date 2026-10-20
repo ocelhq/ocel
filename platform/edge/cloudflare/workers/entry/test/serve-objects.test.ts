@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ServeProps } from "../src/serve-key";
 import { serveObjects } from "../src/serve-objects";
 
-const key = "prod/shop/web/r1a2b3c4d/route-table/abc.json";
+const key = "route-tables/shop/prod/web/r1a2b3c4d/abc.json";
 
 function serving(answer: (request: Request) => Response) {
   const calls: { props: ServeProps; request: Request }[] = [];
@@ -55,7 +55,7 @@ describe("the object store that reads through Serve", () => {
   it("reads a key that names no object of a release as none, without asking Serve", async () => {
     const { calls, serve } = serving(() => new Response("x"));
 
-    expect(await serveObjects(serve, "h").get("prod/shop/web/r1a2b3c4d/assets/")).toBeNull();
+    expect(await serveObjects(serve, "h").get("assets/shop/prod/web/r1a2b3c4d/")).toBeNull();
     expect(calls).toHaveLength(0);
   });
 

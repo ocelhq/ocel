@@ -25,7 +25,7 @@ func TestTheRouteTableHoldingABypassTokenIsNotPublishedWithTheStaticFiles(t *tes
 			t.Fatal(err)
 		}
 	}
-	keys, err := newStaticKeys("production/shop/web/r1a2b3c4d/assets")
+	keys, err := newStaticKeys("assets/shop/prod/web/r1a2b3c4d")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestTheRouteTableHoldingABypassTokenIsNotPublishedWithTheStaticFiles(t *tes
 		t.Fatal(err)
 	}
 
-	if len(files) != 1 || files[0].key != "production/shop/web/r1a2b3c4d/assets/logo.svg" {
+	if len(files) != 1 || files[0].key != "assets/shop/prod/web/r1a2b3c4d/logo.svg" {
 		t.Errorf("published %+v, want the one file under %s and nothing beside it", files, edge.StaticAssetDir)
 	}
 }

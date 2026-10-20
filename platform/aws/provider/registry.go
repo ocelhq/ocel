@@ -11,5 +11,5 @@ import (
 )
 
 func (p *Provider) EnsureImageRegistry(ctx context.Context, _ environment.Tier) (provider.RegistryTarget, error) {
-	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws))
+	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws), string(p.namespace))
 }

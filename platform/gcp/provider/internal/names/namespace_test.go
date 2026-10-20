@@ -225,3 +225,59 @@ func TestNoAppResourceOfAnotherNamespaceStartsWithThisNamespacesAppFence(t *test
 		}
 	}
 }
+
+func TestNoTierBucketFallsUnderTheAppFenceWhateverTheGoogleCloudProjectID(t *testing.T) {
+	for _, project := range []string{"acme-prod", "app-shop", "app"} {
+		named := names.New("ocel", project)
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+			for _, class := range names.TierStorageClasses {
+				bucket := named.TierBucket(tier, class, "k3x9q2")
+				if strings.HasPrefix(bucket, named.AppFence()) {
+					t.Errorf("in Google Cloud project %s the %s %s bucket is %q, under the app fence %q the deploy credential administers buckets by", project, tier, class, bucket, named.AppFence())
+				}
+			}
+		}
+	}
+}
+
+func TestATierBucketIsNamedForItsTierWordAndClassWithItsRandomTagLast(t *testing.T) {
+	named := names.New("ocel", "acme-prod")
+	for tier, want := range map[environment.Tier]string{
+		environment.TierProduction: "ocel-prod-edge-k3x9q2",
+		environment.TierPreview:    "ocel-preview-edge-k3x9q2",
+	} {
+		if got := named.TierBucket(tier, naming.StorageEdge, "k3x9q2"); got != want {
+			t.Errorf("TierBucket(%s, edge) = %q, want %q", tier, got, want)
+		}
+	}
+	long := names.New("northwind-traders", "acme-prod")
+	if got := long.TierBucket(environment.TierPreview, naming.StorageCache, "k3x9q2"); got != naming.NamespaceField("northwind-traders")+"-preview-cache-k3x9q2" {
+		t.Errorf("TierBucket() of a long namespace = %q, want it under the namespace's compacted field", got)
+	}
+}
+
+func TestATierBucketIsReadBackAsItsClassAndNoOtherNameIs(t *testing.T) {
+	named := names.New("ocel", "acme-prod")
+	for bucket, want := range map[string]naming.StorageClass{
+		"ocel-prod-state-k3x9q2": naming.StorageState,
+		"ocel-prod-edge-k3x9q2":  naming.StorageEdge,
+		"ocel-prod-cache-000000": naming.StorageCache,
+	} {
+		if class, ok := named.TierBucketClass(environment.TierProduction, bucket); !ok || class != want {
+			t.Errorf("TierBucketClass(production, %q) = %q, %v, want %q", bucket, class, ok, want)
+		}
+	}
+	for _, bucket := range []string{
+		"ocel-preview-edge-k3x9q2",
+		"ocel-prod-edge-K3X9Q2",
+		"ocel-prod-edge-k3x9q",
+		"ocel-prod-edge-k3x9q2-x",
+		"ocel-prod-x-edge-k3x9q2",
+		"ocel-prod-artifacts-k3x9q2",
+		"ocel-prod-edge",
+	} {
+		if class, ok := named.TierBucketClass(environment.TierProduction, bucket); ok {
+			t.Errorf("TierBucketClass(production, %q) = %q, want no class: it is no production bucket of namespace ocel", bucket, class)
+		}
+	}
+}

@@ -9,7 +9,7 @@ import { afterAll, expect, it } from "vitest";
 
 import { bunArgs } from "../scripts/bundle.mjs";
 
-const namespace = tagNamespace("prod/acme/web/r0a1b2c3d/isr")!;
+const namespace = tagNamespace({ project: "acme", env: "prod", app: "web", release: "r0a1b2c3d" })!;
 
 const raised = {
   dynamodb: {

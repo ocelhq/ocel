@@ -114,7 +114,7 @@ func (p certificates) Inspect(ctx context.Context, kind edge.Kind, answering rou
 	if err != nil {
 		return provider.CertificateHealth{}, err
 	}
-	certificates := registry.Certificates(front, answering, certs.Deps{AWS: p.aws})
+	certificates := registry.Certificates(front, answering, certs.Deps{AWS: p.aws, Namespace: string(p.namespace)})
 	if !certificates.Issues() {
 		return provider.CertificateHealth{}, nil
 	}
@@ -147,7 +147,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 		return nil
 	}
 	discarded := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
-	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws}).Discard(ctx, discarded, progress)
+	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws, Namespace: string(p.namespace)}).Discard(ctx, discarded, progress)
 }
 
 func (p *Provider) certificatesFor(kind edge.Kind, answering router.Kind, hostname string, progress progress.Log) (certs.Certificates, error) {
@@ -156,7 +156,7 @@ func (p *Provider) certificatesFor(kind edge.Kind, answering router.Kind, hostna
 	if err != nil {
 		return certs.Certificates{}, err
 	}
-	certificates := registry.Certificates(front, answering, certs.Deps{AWS: p.aws})
+	certificates := registry.Certificates(front, answering, certs.Deps{AWS: p.aws, Namespace: string(p.namespace)})
 	if note := edges.IgnoredPinNote(front, certificates, hostname); note != "" {
 		progress.Warn(note)
 	}

@@ -15,6 +15,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -96,10 +97,12 @@ func (tierBuckets) Buckets(_ context.Context, tier environment.Tier) (ports.Buck
 	}, nil
 }
 
-func everyStoreRef() []provider.ArtifactRef {
+func everyBucketRef() []provider.ArtifactRef {
+	release := releaseOf("r1a2b3c4d")
+	release.Name = "api"
 	return []provider.ArtifactRef{
-		{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
-		{Tier: environment.TierProduction, Bucket: provider.StoreAssets, Key: "shop/prod/web/static/app.js"},
+		{Tier: environment.TierProduction, Key: release.FunctionArtifactKey("bundle")},
+		{Tier: environment.TierProduction, Key: release.AssetKey("static/app.js")},
 	}
 }
 
@@ -107,37 +110,56 @@ func TestArtifactsRunTheConformancePortTier(t *testing.T) {
 	conformance.RunArtifactStore(t, provider.Facts{StoresArtifacts: true}, artifacts())
 }
 
-func TestAStoreThisProviderKeepsNoneOfRefusesRatherThanWritingNowhere(t *testing.T) {
+func TestAKeyOfNoKindOcelStoresIsRefusedRatherThanWrittenNowhere(t *testing.T) {
 	t.Parallel()
 
-	cache := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreCache, Key: "shop/prod/web/cache.json"}
-	if err := artifacts().Put(context.Background(), cache, bytes.NewReader([]byte("x"))); err == nil {
-		t.Fatal("Put() into a store this provider keeps none of succeeded, so the artifact went nowhere")
+	stray := provider.ArtifactRef{Tier: environment.TierProduction, Key: "prod/shop/web/r1a2b3c4d/cache.json"}
+	if err := artifacts().Put(context.Background(), stray, bytes.NewReader([]byte("x"))); err == nil {
+		t.Fatal("Put() of a key naming no kind succeeded, so the artifact went to a bucket nothing reads it from")
 	}
 }
 
-func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
+func TestAFunctionArtifactLandsInTheArtifactBucketAndEveryOtherKindInTheAssetBucket(t *testing.T) {
+	t.Parallel()
+
+	s3 := newFakeS3()
+	store := ports.Artifacts{S3: s3, Stores: tierBuckets{}}
+	refs := everyBucketRef()
+	for _, ref := range refs {
+		if err := store.Put(context.Background(), ref, bytes.NewReader([]byte("x"))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, at := range []string{"ocel-artifacts-production/" + refs[0].Key, "ocel-assets-production/" + refs[1].Key} {
+		if _, stored := s3.objects[at]; !stored {
+			t.Errorf("nothing stored at %s, want each kind in the bucket it is served from", at)
+		}
+	}
+}
+
+func TestASweepReachesEveryBucketTheAccountKeeps(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	store := artifacts()
-	for _, ref := range everyStoreRef() {
+	for _, ref := range everyBucketRef() {
 		if err := store.Put(ctx, ref, bytes.NewReader([]byte("x"))); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var progress fake.Log
-	if err := store.RemovePrefix(ctx, environment.TierProduction, "shop/prod/", &progress); err != nil {
-		t.Fatalf("RemovePrefix() = %v", err)
+	scope := naming.Coordinate{Project: "shop", Env: "prod"}
+	if err := store.RemoveObjects(ctx, environment.TierProduction, scope, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets}, &progress); err != nil {
+		t.Fatalf("RemoveObjects() = %v", err)
 	}
-	if want := []string{"INFO Removed the production artifacts under shop/prod/ from 2 buckets"}; !slices.Equal(progress.Lines(), want) {
-		t.Errorf("RemovePrefix() said %q, want %q", progress.Lines(), want)
+	if want := []string{"INFO Removed the production objects under fn/shop/prod/, assets/shop/prod/"}; !slices.Equal(progress.Lines(), want) {
+		t.Errorf("RemoveObjects() said %q, want %q", progress.Lines(), want)
 	}
-	for _, ref := range everyStoreRef() {
+	for _, ref := range everyBucketRef() {
 		body, err := store.Open(ctx, ref)
 		if err == nil {
 			body.Close()
-			t.Errorf("%s survived the sweep, and a reclaimed release must leave nothing behind", ref.Bucket)
+			t.Errorf("%s survived the sweep, and a reclaimed release must leave nothing behind", ref.Key)
 		}
 	}
 }
@@ -152,7 +174,7 @@ func TestASweepOfABucketAlreadyTornDownIsNoWork(t *testing.T) {
 	t.Parallel()
 
 	store := ports.Artifacts{S3: goneS3{newFakeS3()}, Stores: tierBuckets{}}
-	if err := store.RemovePrefix(context.Background(), environment.TierProduction, "shop/prod/", nil); err != nil {
-		t.Fatalf("RemovePrefix() over buckets already gone = %v, want the destroy to continue", err)
+	if err := store.RemoveObjects(context.Background(), environment.TierProduction, naming.Coordinate{Project: "shop", Env: "prod"}, naming.CoordinateObjectKinds, nil); err != nil {
+		t.Fatalf("RemoveObjects() over buckets already gone = %v, want the destroy to continue", err)
 	}
 }

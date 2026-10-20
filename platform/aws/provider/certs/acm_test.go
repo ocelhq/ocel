@@ -128,11 +128,12 @@ func (f *fakeACM) ListCertificates(_ context.Context, in *acm.ListCertificatesIn
 
 func testIssuer(api ACMAPI, attempts int) ACM {
 	return ACM{
-		API:      api,
-		Region:   CloudFrontRegion,
-		Wait:     func(context.Context, time.Duration) error { return nil },
-		Attempts: attempts,
-		Every:    time.Millisecond,
+		API:       api,
+		ManagedBy: "acme",
+		Region:    CloudFrontRegion,
+		Wait:      func(context.Context, time.Duration) error { return nil },
+		Attempts:  attempts,
+		Every:     time.Millisecond,
 	}
 }
 
@@ -195,8 +196,8 @@ func TestIssuerRequest(t *testing.T) {
 		for _, tag := range api.requested[0].Tags {
 			tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 		}
-		if tags["ocel:managed-by"] != "ocel" {
-			t.Errorf("request tags = %v, want ocel:managed-by=ocel: the deploy credential requests, deletes and tags only certificates carrying it", tags)
+		if tags["ocel:managed-by"] != "acme" {
+			t.Errorf("request tags = %v, want ocel:managed-by=acme: the deploy credential of namespace acme requests, deletes and tags only certificates carrying it", tags)
 		}
 	})
 

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"cloud.google.com/go/storage"
@@ -33,21 +32,21 @@ type staticFile struct {
 type staticKeys struct {
 	assets      string
 	imageConfig string
-	appPrefix   string
+	app         naming.Coordinate
 }
 
 func newStaticKeys(assetPrefix string) (staticKeys, error) {
-	segments := strings.Split(assetPrefix, naming.PathSeparator)
-	if len(segments) != 5 || segments[4] != naming.AssetsSegment || slices.Contains(segments, "") {
+	key, err := naming.ParseObjectKey(assetPrefix)
+	if err != nil || key.Kind != naming.ObjectAssets || key.Rest != "" {
 		return staticKeys{}, refusal.Refuse(refusal.CodeInvalid,
-			"the asset prefix %q is not <env>/<project>/<app>/<release token>/%s, where the router reads a release's static files and its image config sits beside them",
-			assetPrefix, naming.AssetsSegment)
+			"the asset prefix %q is not %s/<project>/<env>/<app>/<release token>, where the router reads a release's static files",
+			assetPrefix, naming.ObjectAssets)
 	}
-	release := path.Join(segments[:4]...)
+	release := key.Coordinate()
 	return staticKeys{
 		assets:      assetPrefix,
-		imageConfig: path.Join(release, naming.ImageConfigFile),
-		appPrefix:   provider.StoreAssets + "/" + path.Join(segments[:3]...) + "/",
+		imageConfig: release.ImageConfigKey(),
+		app:         naming.Coordinate{Project: release.Project, Env: release.Env, App: release.App},
 	}, nil
 }
 
@@ -79,7 +78,7 @@ func (p *Store) UploadStaticFiles(ctx context.Context, spec provider.StackSpec, 
 		group.Go(func() error {
 			defer functioncode.TakeUploadSlot()()
 			if file.key != keys.imageConfig {
-				present, err := p.Has(ctx, provider.ArtifactRef{Tier: spec.Ref.Tier, Bucket: provider.StoreAssets, Key: file.key})
+				present, err := p.Has(ctx, provider.ArtifactRef{Tier: spec.Ref.Tier, Key: file.key})
 				if err != nil || present {
 					return err
 				}
@@ -90,10 +89,10 @@ func (p *Store) UploadStaticFiles(ctx context.Context, spec provider.StackSpec, 
 			}
 			attrs := storage.ObjectAttrs{ContentType: contenttype.Infer(file.key)}
 			if file.key == keys.imageConfig {
-				return p.replaceObject(ctx, spec.Ref.Tier, provider.StoreAssets, file.key, attrs, body)
+				return p.replaceObject(ctx, spec.Ref.Tier, file.key, attrs, body)
 			}
 			attrs.CacheControl = spec.App.Static.CacheControl("/" + strings.TrimPrefix(file.key, keys.assets+"/"))
-			return p.CreateObject(ctx, spec.Ref.Tier, provider.StoreAssets, file.key, attrs, body)
+			return p.CreateObject(ctx, spec.Ref.Tier, file.key, attrs, body)
 		})
 	}
 	return group.Wait()

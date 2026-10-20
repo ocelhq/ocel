@@ -11,7 +11,7 @@ const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig
 
 const OPTIMIZER_URL = "https://opt123.lambda-url.us-east-1.on.aws/";
 
-const ASSET_PREFIX = "prod/acme/web/r3f8a1c9d/assets";
+const ASSET_PREFIX = "assets/acme/prod/web/r3f8a1c9d";
 
 const PAYLOAD: ImageOriginRequest = {
   assetPrefix: ASSET_PREFIX,

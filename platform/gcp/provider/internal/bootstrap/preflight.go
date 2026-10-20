@@ -36,6 +36,8 @@ var BootstrapPermissions = []string{
 	"datastore.schemas.list",
 	"datastore.schemas.update",
 	"storage.buckets.create",
+	"storage.buckets.list",
+	"storage.buckets.update",
 	"storage.buckets.delete",
 	"cloudkms.keyRings.create",
 	"cloudkms.keyRings.get",
@@ -173,6 +175,7 @@ const (
 
 var projectPermissions = []string{
 	"storage.buckets.create",
+	"storage.buckets.list",
 	"cloudsql.instances.create",
 	"cloudsql.instances.list",
 	"cloudsql.instances.get",
@@ -195,7 +198,7 @@ func PartsGrant(names names.Names) string {
 
 func ProjectPermissionsGrant() string {
 	return "a custom role holding " + strings.Join(projectPermissions, ", ") +
-		", unconditioned: Google checks creating a bucket, an instance or a secret, listing instances and reading Cloud SQL operations against the project, " +
+		", unconditioned: Google checks creating and listing buckets, creating an instance or a secret, listing instances and reading Cloud SQL operations against the project, " +
 		"where no name condition admits them"
 }
 

@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import { basename, join, relative } from "node:path";
+import {
+  objectKey,
+  parseStorageCoordinate,
+  storagePrefix,
+} from "@platform/edge-contract/storage-key";
 
 export const DNS_LABEL = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -484,17 +489,17 @@ export function lambdaFunctionNames(response) {
     .map((match) => match[1]);
 }
 
-export function storageCoordinate(storagePrefix) {
-  const segments = (storagePrefix ?? "").replace(/\/$/, "").split("/");
-  if (segments.length !== 4 || segments.some((segment) => segment === "")) {
-    return null;
-  }
-  const [env, project, app, release] = segments;
-  return { prefix: segments.join("/"), env, project, app, release };
+export function storageCoordinate(value) {
+  const coordinate = parseStorageCoordinate(value ?? "");
+  return coordinate === undefined ? null : coordinate;
 }
 
-export function bytecodeCacheKeyPrefix({ prefix, functionName }) {
-  return `${prefix}/bytecode/${functionName}/`;
+export function bytecodeCacheKeyPrefix({ coordinate, functionName }) {
+  return objectKey("bytecode", coordinate, `${functionName}/`);
+}
+
+export function functionArtifactPrefix(coordinate) {
+  return storagePrefix("fn", coordinate);
 }
 
 const BYTECODE_ARCHIVE_NAME = /^node(\d+\.\d+\.\d+)-([a-z0-9_]+)\.tar\.gz$/;

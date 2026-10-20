@@ -14,7 +14,7 @@ import { newImageEndpointInvoke } from "../src/next/image-endpoint.mjs";
 import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
 import { type ServedBucket, serveBucket } from "./serve-bucket.mjs";
 
-const assetPrefix = "prod/shop/web/r1/assets";
+const assetPrefix = "assets/shop/prod/web/r1a2b3c4d";
 
 const bucket = newCloudStorageBucket();
 let stored: ServedBucket;
@@ -23,17 +23,17 @@ let server: http.Server;
 const handedToNext: string[] = [];
 
 beforeAll(async () => {
-  bucket.objects.set(`assets/${assetPrefix}/logo.png`, {
+  bucket.objects.set(`${assetPrefix}/logo.png`, {
     body: await solid("png", 400, 200),
     generation: "1",
   });
-  bucket.objects.set("assets/prod/shop/web/r1/image-config.json", {
+  bucket.objects.set("image-config/shop/prod/web/r1a2b3c4d/image-config.json", {
     body: serialize(imageConfig()),
     generation: "1",
   });
   stored = await serveBucket(bucket);
   const env = {
-    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
     OCEL_STORAGE_ENDPOINT: stored.endpoint,
     OCEL_IMAGE_ENDPOINT: "1",
   };
@@ -150,5 +150,5 @@ test("the GCP service installs no image path where it holds no assets", () => {
 test("the GCP service installs no image path unless it is told an edge posts images to it", () => {
   const next: Invoke = () => {};
 
-  expect(newImageEndpointInvoke(next, { OCEL_ASSET_BUCKET: "ocel-acme-production" })).toBe(next);
+  expect(newImageEndpointInvoke(next, { OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2" })).toBe(next);
 });

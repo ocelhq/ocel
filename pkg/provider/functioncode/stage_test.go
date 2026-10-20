@@ -210,8 +210,8 @@ func TestStageShipsEveryFunctionWithTheVendorsOverlayAndItsOwn(t *testing.T) {
 		if files[buildoutput.StateDir+"/variables.sealed"] != "sealed for web" {
 			t.Errorf("%s's package holds %v, want the vendor's sealed values in every function: without them the function boots with no variables", upload.Name, files)
 		}
-		if upload.Ref.Bucket != provider.StoreFunctions || upload.Ref.Tier != environment.TierProduction || upload.Ref.Key == "" {
-			t.Errorf("%s ships to %+v, want the tier's functions store under a key its digest names", upload.Name, upload.Ref)
+		if kind, err := naming.ParseObjectKind(upload.Ref.Key); upload.Ref.Tier != environment.TierProduction || err != nil || kind != naming.ObjectFunction {
+			t.Errorf("%s ships to %+v, want the tier's function artifacts under a key its digest names", upload.Name, upload.Ref)
 		}
 	}
 	if _, ok := unzipped(t, staged[0].Path)["route-table.json"]; !ok {

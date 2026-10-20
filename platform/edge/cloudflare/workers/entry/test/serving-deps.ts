@@ -37,7 +37,7 @@ export function fakeServing(
     host: "shop.example.com",
     release: "r0a1b2c3d",
     slug: "p1",
-    isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
+    pagesPrefix: "pages/p1/prod/web/r0a1b2c3d",
     serve: ({ props }) => ({
       fetch: async (request) => {
         const call = {

@@ -45,7 +45,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
-    isrPrefix: "prod/p1/web/build-1",
+    pagesPrefix: "pages/p1/prod/web/build-1",
     createdAt: 1_000,
     ...over,
   };

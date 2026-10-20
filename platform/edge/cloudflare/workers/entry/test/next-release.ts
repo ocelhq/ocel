@@ -12,9 +12,9 @@ import { freshRouteTableKey, objectStoreHolding } from "./route-table-store";
 
 export const RELEASE_TOKEN = "r0a1b2c3d";
 
-export const ISR_PREFIX = `prod/p1/web/${RELEASE_TOKEN}/isr`;
+export const PAGES_PREFIX = `pages/p1/prod/web/${RELEASE_TOKEN}`;
 
-export const UNTOKENED_ISR_PREFIX = "prod/p1/web/build-1";
+export const UNTOKENED_PAGES_PREFIX = "pages/p1/prod/web/build-1";
 
 export const EMPTY_ROUTES = {
   beforeMiddleware: [],
@@ -49,7 +49,7 @@ function nextRecord(tableKey: string, over: Partial<StoredRecord> = {}): StoredR
     routeTable: { format: "next", key: tableKey },
     functionUrls: {},
     assetPrefix: "",
-    isrPrefix: ISR_PREFIX,
+    pagesPrefix: PAGES_PREFIX,
     createdAt: 1_000,
     edge: {},
     ...over,
@@ -88,7 +88,7 @@ export function servedNextRelease(release: NextRelease = {}): ServeFetch {
   const bundled: Partial<StoredRecord> = {};
   if (release.edgeBundle !== undefined) {
     const id = `edge-${edgeBundles++}`;
-    const bundleKey = `prod/p1/web/${id}/edge/bundle.json`;
+    const bundleKey = `bundles/p1/prod/web/r${String(edgeBundles).padStart(8, "0")}/bundle.json`;
     objects[bundleKey] = release.edgeBundle;
     bundled.edge = {
       code: { bundleKey, loaderId: id, compatDate: "2026-03-10", compatFlags: ["nodejs_compat"] },

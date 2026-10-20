@@ -72,6 +72,7 @@ type Clients struct {
 	logs          Memo[*logging.Client]
 	numberLock    sync.Mutex
 	projectNumber int64
+	tierBuckets   tierBucketsFound
 }
 
 func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, error)) (T, error) {

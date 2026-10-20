@@ -30,6 +30,7 @@ import {
   DEPLOY_REPORT_FILE,
   embeddedArtifactPairs,
   embeddedBytecodePath,
+  functionArtifactPrefix,
   logWindowVerdict,
   OCEL_CONFIG_FILE,
   storageCoordinate,
@@ -72,7 +73,7 @@ if (!existsSync(resultPath)) {
 const result = JSON.parse(readFileSync(resultPath, "utf8"));
 const coordinate = storageCoordinate(result.apps?.[0]?.storagePrefix);
 if (!coordinate) {
-  fail(`${resultPath} records no storage prefix for its app: ${JSON.stringify(result)}`);
+  fail(`${resultPath} records no storage coordinate for its app: ${JSON.stringify(result)}`);
 }
 
 const assetBucket =
@@ -83,7 +84,7 @@ const artifactBucket =
   resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
 const functionName = resolveFunctionName(coordinate, fail);
 
-const keyPrefix = bytecodeCacheKeyPrefix({ prefix: coordinate.prefix, functionName });
+const keyPrefix = bytecodeCacheKeyPrefix({ coordinate, functionName });
 const cacheNames = (await listRetrying(assetBucket, keyPrefix)).map((full) =>
   full.slice(keyPrefix.length),
 );
@@ -107,7 +108,7 @@ log(
   `the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must contain ${entryName}`,
 );
 
-const artifactPrefix = `${coordinate.prefix}/`;
+const artifactPrefix = functionArtifactPrefix(coordinate);
 const artifactKeys = await listRetrying(artifactBucket, artifactPrefix);
 const pairs = embeddedArtifactPairs(artifactKeys);
 if (pairs.length !== 1) {

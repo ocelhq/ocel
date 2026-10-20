@@ -44,7 +44,7 @@ test("the GCP host's in-instance cache holds 50 MB where its service names no me
 });
 
 test("the GCP host installs every store an app with an incremental cache boots with", () => {
-  const env = { PORT: "8080", OCEL_ISR_PREFIX: "prod/shop/web/r1/isr" };
+  const env = { PORT: "8080", OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d" };
 
   expect(refuseIncompleteHost(newGcpNextHost(env), env)).toBeUndefined();
 });
@@ -59,7 +59,7 @@ test("the GCP host's cache store keeps an entry for the next request the instanc
   expect(await store.readFetch("hash")).toEqual(entry);
 });
 
-test("the GCP host keeps a fetch entry in the bucket and under the object prefix its service is told", async () => {
+test("the GCP host keeps a fetch entry in the cache bucket and under the release its service is told", async () => {
   const requests: { method?: string; url?: string }[] = [];
   const server = http.createServer((req, res) => {
     requests.push({ method: req.method, url: req.url });
@@ -72,9 +72,9 @@ test("the GCP host keeps a fetch entry in the bucket and under the object prefix
     const { port } = server.address() as { port: number };
     const env = {
       PORT: "8080",
-      OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
-      OCEL_ISR_BUCKET: "b",
-      OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
+      OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
+      OCEL_EDGE_BUCKET: "e",
+      OCEL_CACHE_BUCKET: "c",
       OCEL_STORAGE_ENDPOINT: `http://127.0.0.1:${port}`,
       OCEL_TAG_DATABASE: "projects/p/databases/d",
     };
@@ -86,10 +86,8 @@ test("the GCP host keeps a fetch entry in the bucket and under the object prefix
     expect(requests).toHaveLength(1);
     const url = new URL(requests[0]!.url!, "http://x");
     expect(requests[0]!.method).toBe("POST");
-    expect(url.pathname).toBe("/upload/storage/v1/b/b/o");
-    expect(url.searchParams.get("name")).toBe(
-      "cache/shop/web/prod/r1/isr/fetch-cache/abc.cache.json",
-    );
+    expect(url.pathname).toBe("/upload/storage/v1/b/c/o");
+    expect(url.searchParams.get("name")).toBe("fetch-cache/shop/prod/web/r1a2b3c4d/abc.cache.json");
     expect(refuseIncompleteHost(host, env)).toBeUndefined();
   } finally {
     server.close();
@@ -121,9 +119,9 @@ async function listen(
 
 const tagEnv = {
   PORT: "8080",
-  OCEL_ISR_PREFIX: "prod/shop/web/r1/isr",
-  OCEL_ISR_BUCKET: "b",
-  OCEL_ISR_OBJECT_PREFIX: "cache/shop/web/prod/r1/isr",
+  OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
+  OCEL_EDGE_BUCKET: "e",
+  OCEL_CACHE_BUCKET: "c",
   OCEL_TAG_DATABASE: "projects/p/databases/d",
 };
 
@@ -212,7 +210,6 @@ test("the GCP host's cache store and the cache the default use-cache handler fil
 
 const purgeEnv = {
   ...tagEnv,
-  OCEL_ISR_PREFIX: "prod/shop/web/r1a2b3c4d/isr",
   OCEL_CACHE_TAG_PURGE: "1",
 };
 
@@ -276,7 +273,7 @@ test("a GCP host told a url map but no release refuses to start", () => {
   expect(() =>
     newGcpNextHost({
       ...tagEnv,
-      OCEL_ISR_PREFIX: "prod/shop/web/r1a2b3c4d/isr",
+      OCEL_STORAGE_COORDINATE: "",
       OCEL_CDN_URL_MAP: "projects/p/global/urlMaps/m",
     }),
   ).toThrow(/OCEL_CDN_URL_MAP/);
@@ -309,7 +306,7 @@ test("the GCP host told where the worker purges clears each tag it records at th
     const bodies = fetched.map((call) => JSON.parse(String(call.init?.body)));
     expect(
       bodies.every(
-        (body) => body.isrPrefix === "prod/shop/web/r1a2b3c4d/isr" && body.mode === "purge",
+        (body) => body.pagesPrefix === "pages/shop/prod/web/r1a2b3c4d" && body.mode === "purge",
       ),
     ).toBe(true);
     expect(
@@ -358,11 +355,11 @@ test("the GCP host keeps pages in Cloud Storage and tags in the tags database, w
     await useCache.writeTag("a", { expired: 5, writtenAt: 1 });
 
     expect(calls.map((url) => url.pathname)).toEqual([
-      "/upload/storage/v1/b/b/o",
+      "/upload/storage/v1/b/e/o",
       "/v1/projects/p/databases/d/documents:commit",
     ]);
     expect(calls[0]!.searchParams.get("name")).toBe(
-      "cache/shop/web/prod/r1/isr/cache/blog.cache.json",
+      "pages/shop/prod/web/r1a2b3c4d/blog.cache.json",
     );
   } finally {
     server.close();
@@ -372,12 +369,12 @@ test("the GCP host keeps pages in Cloud Storage and tags in the tags database, w
 test("the GCP host's origin invoke answers the optimizer's image path and leaves every other request to Next", async () => {
   const withAssets = newGcpNextHost({
     PORT: "8080",
-    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
     OCEL_IMAGE_ENDPOINT: "1",
   });
   const withoutEndpoint = newGcpNextHost({
     PORT: "8080",
-    OCEL_ASSET_BUCKET: "ocel-acme-production",
+    OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
   });
   const without = newGcpNextHost({ PORT: "8080" });
   const next = async () => {};

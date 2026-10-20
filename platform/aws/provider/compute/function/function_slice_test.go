@@ -187,7 +187,6 @@ func isrCacheFor(t *testing.T, env, project, app, buildID string) site.ISR {
 	return site.ISR{
 		Coord:    coord,
 		Bucket:   "assets-xyz",
-		Prefix:   isrPrefixOf(coord),
 		Table:    "state-abc",
 		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
 	}
@@ -212,8 +211,8 @@ func TestISREnv(t *testing.T) {
 		if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
 			t.Errorf("OCEL_ISR_BUCKET = %q", env["OCEL_ISR_BUCKET"])
 		}
-		if env["OCEL_ISR_PREFIX"] != cfg.Prefix {
-			t.Errorf("OCEL_ISR_PREFIX = %q, want %q", env["OCEL_ISR_PREFIX"], cfg.Prefix)
+		if want := "proj123/prod/marketing/" + releaseTokenFor("build456"); env["OCEL_STORAGE_COORDINATE"] != want {
+			t.Errorf("OCEL_STORAGE_COORDINATE = %q, want %q", env["OCEL_STORAGE_COORDINATE"], want)
 		}
 		if env["OCEL_STATE_TABLE"] != "state-abc" {
 			t.Errorf("OCEL_STATE_TABLE = %q", env["OCEL_STATE_TABLE"])
@@ -242,7 +241,7 @@ func TestBytecodeEnv(t *testing.T) {
 
 		env := cfg.env()
 
-		if want := "prod/proj123/marketing/" + releaseTokenFor("build456") + "/bytecode"; env["OCEL_BYTECODE_PREFIX"] != want {
+		if want := "bytecode/proj123/prod/marketing/" + releaseTokenFor("build456"); env["OCEL_BYTECODE_PREFIX"] != want {
 			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], want)
 		}
 		if env["OCEL_BYTECODE_BUCKET"] != "assets-xyz" {
@@ -272,13 +271,13 @@ func TestBytecodePolicy(t *testing.T) {
 		}
 
 		stmt := doc.Statement[0]
-		if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/" + releaseTokenFor("build456") + "/bytecode/*"; stmt.Resource != want {
+		if want := []string{"arn:aws:s3:::assets-xyz/bytecode/proj123/prod/marketing/" + releaseTokenFor("build456") + "/*"}; !slices.Equal(stmt.Resource, want) {
 			t.Errorf("Resource = %q, want %q", stmt.Resource, want)
 		}
 		if want := []string{"s3:GetObject", "s3:PutObject"}; !slices.Equal(stmt.Action, want) {
 			t.Errorf("Action = %v, want exactly %v", stmt.Action, want)
 		}
-		dir := strings.TrimSuffix(strings.TrimPrefix(stmt.Resource, "arn:aws:s3:::"), "*")
+		dir := strings.TrimSuffix(strings.TrimPrefix(stmt.Resource[0], "arn:aws:s3:::"), "*")
 		if !strings.HasPrefix(cfg.Bucket+"/"+key, dir) {
 			t.Errorf("bytecode key %s/%s is not covered by %q", cfg.Bucket, key, stmt.Resource)
 		}
@@ -349,7 +348,7 @@ func TestISREdgeReadable(t *testing.T) {
 				tagged = append(tagged, statement.Resource)
 			}
 		}
-		want := fmt.Sprintf("arn:aws:s3:::%s/%s/cache/*", cfg.Bucket, cfg.Prefix)
+		want := fmt.Sprintf("arn:aws:s3:::%s/pages/proj123/prod/marketing/%s/*", cfg.Bucket, releaseTokenFor("build456"))
 		if len(tagged) != 1 || tagged[0] != want {
 			t.Errorf("s3:PutObjectTagging is granted on %v, want only %s", tagged, want)
 		}
@@ -365,14 +364,7 @@ func TestISRPolicy(t *testing.T) {
 			t.Fatalf("ISR.Policy: %v", err)
 		}
 
-		var doc struct {
-			Statement []struct {
-				Effect    string   `json:"Effect"`
-				Action    []string `json:"Action"`
-				Resource  string   `json:"Resource"`
-				Condition map[string]map[string][]string
-			}
-		}
+		var doc policyDoc
 		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 			t.Fatalf("policy is not valid JSON: %v", err)
 		}
@@ -381,12 +373,18 @@ func TestISRPolicy(t *testing.T) {
 		}
 
 		s3Stmt := doc.Statement[0]
-		if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/" + releaseTokenFor("build456") + "/isr/*"; s3Stmt.Resource != want {
+		at := "/proj123/prod/marketing/" + releaseTokenFor("build456") + "/*"
+		if want := []string{
+			"arn:aws:s3:::assets-xyz/pages" + at,
+			"arn:aws:s3:::assets-xyz/fetch-cache" + at,
+			"arn:aws:s3:::assets-xyz/use-cache" + at,
+			"arn:aws:s3:::assets-xyz/tag-clock" + at,
+		}; !slices.Equal(s3Stmt.Resource, want) {
 			t.Errorf("S3 Resource = %q, want %q", s3Stmt.Resource, want)
 		}
 
 		ddbStmt := doc.Statement[1]
-		if ddbStmt.Resource != cfg.TableARN {
+		if !slices.Equal(ddbStmt.Resource, []string{cfg.TableARN}) {
 			t.Errorf("DynamoDB Resource = %q, want the table ARN", ddbStmt.Resource)
 		}
 		wantActions := []string{"dynamodb:UpdateItem"}
@@ -399,7 +397,7 @@ func TestISRPolicy(t *testing.T) {
 		}
 
 		for _, stmt := range doc.Statement {
-			if strings.Contains(stmt.Resource, "/index/") {
+			if strings.Contains(strings.Join(stmt.Resource, " "), "/index/") {
 				t.Errorf("policy still grants %v on the index %q", stmt.Action, stmt.Resource)
 			}
 			for _, read := range []string{"dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:GetItem"} {
@@ -418,13 +416,13 @@ func TestISRPolicy(t *testing.T) {
 
 		webDoc, adminDoc := parsePolicy(t, web), parsePolicy(t, admin)
 
-		if want := "arn:aws:s3:::assets-xyz/" + web.Prefix + "/*"; webDoc.Statement[0].Resource != want {
-			t.Errorf("web S3 Resource = %q, want %q", webDoc.Statement[0].Resource, want)
+		if want := "arn:aws:s3:::assets-xyz/" + web.Coord.StoragePrefix(naming.ObjectPages) + "*"; !slices.Contains(webDoc.Statement[0].Resource, want) {
+			t.Errorf("web S3 Resource = %q, want it to hold %q", webDoc.Statement[0].Resource, want)
 		}
-		if want := "arn:aws:s3:::assets-xyz/" + admin.Prefix + "/*"; adminDoc.Statement[0].Resource != want {
-			t.Errorf("admin S3 Resource = %q, want %q", adminDoc.Statement[0].Resource, want)
+		if want := "arn:aws:s3:::assets-xyz/" + admin.Coord.StoragePrefix(naming.ObjectPages) + "*"; !slices.Contains(adminDoc.Statement[0].Resource, want) {
+			t.Errorf("admin S3 Resource = %q, want it to hold %q", adminDoc.Statement[0].Resource, want)
 		}
-		if strings.Contains(webDoc.Statement[0].Resource, "admin") {
+		if strings.Contains(strings.Join(webDoc.Statement[0].Resource, " "), "admin") {
 			t.Errorf("web's S3 grant %q reaches the admin app", webDoc.Statement[0].Resource)
 		}
 
@@ -506,11 +504,22 @@ func TestArtifactArchivePath(t *testing.T) {
 
 type policyDoc struct {
 	Statement []struct {
-		Effect    string   `json:"Effect"`
-		Action    []string `json:"Action"`
-		Resource  string   `json:"Resource"`
+		Effect    string    `json:"Effect"`
+		Action    []string  `json:"Action"`
+		Resource  resources `json:"Resource"`
 		Condition map[string]map[string][]string
 	}
+}
+
+type resources []string
+
+func (r *resources) UnmarshalJSON(raw []byte) error {
+	var one string
+	if err := json.Unmarshal(raw, &one); err == nil {
+		*r = resources{one}
+		return nil
+	}
+	return json.Unmarshal(raw, (*[]string)(r))
 }
 
 func parsePolicy(t *testing.T, cfg site.ISR) policyDoc {
@@ -540,7 +549,7 @@ func TestTagNamespace(t *testing.T) {
 					App     string `json:"app"`
 					Release string `json:"release"`
 				} `json:"coordinate"`
-				ISRPrefix          string `json:"isrPrefix"`
+				StorageCoordinate  string `json:"storageCoordinate"`
 				PartitionKeyPrefix string `json:"partitionKeyPrefix"`
 			} `json:"tagNamespace"`
 		}
@@ -555,8 +564,8 @@ func TestTagNamespace(t *testing.T) {
 		}
 		coord := storageCoordinate(facts.Env, facts.Project, facts.App, release)
 
-		if got := isrPrefixOf(coord); got != contract.TagNamespace.ISRPrefix {
-			t.Errorf("isrPrefixOf() = %q, want the contract's isrPrefix %q", got, contract.TagNamespace.ISRPrefix)
+		if got := coord.StorageCoordinate(); got != contract.TagNamespace.StorageCoordinate {
+			t.Errorf("StorageCoordinate() = %q, want the contract's %q", got, contract.TagNamespace.StorageCoordinate)
 		}
 		cfg := site.ISR{Coord: coord}
 		if got := cfg.TagNamespace(); got != contract.TagNamespace.PartitionKeyPrefix {
@@ -565,10 +574,10 @@ func TestTagNamespace(t *testing.T) {
 	})
 
 	t.Run("refuses a cache with no coordinate", func(t *testing.T) {
-		if got := (site.ISR{Prefix: "prod/proj/web/r3f8a1c9d/isr"}).TagNamespace(); got != "" {
-			t.Errorf("TagNamespace() = %q, want %q — a rendered path is not a coordinate", got, "")
+		if got := (site.ISR{Bucket: "assets-xyz"}).TagNamespace(); got != "" {
+			t.Errorf("TagNamespace() = %q, want %q", got, "")
 		}
-		if _, err := (site.ISR{Prefix: "prod/proj/web/r3f8a1c9d/isr"}).Policy(); err == nil {
+		if _, err := (site.ISR{Bucket: "assets-xyz"}).Policy(); err == nil {
 			t.Error("ISR.Policy accepted a cache with no coordinate; an unscoped tag grant must never render")
 		}
 	})

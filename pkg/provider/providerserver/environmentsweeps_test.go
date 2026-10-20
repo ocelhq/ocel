@@ -166,12 +166,12 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 		t.Fatal("a teardown whose stack record would not be forgotten reported success")
 	}
 
-	prefix := (naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: releaseOf(t, releaseFor(1))}).StoragePrefix()
+	prefix := (naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: releaseOf(t, releaseFor(1))}).StoragePrefix(naming.ObjectFunction)
 	journal := vendor.Journal()
 	if len(journal) == 0 {
 		t.Fatal("the teardown reached the provider not at all, so the reclaim below is asserted over an empty run")
 	}
-	if !slices.Contains(journal, "remove-prefix "+prefix) {
+	if !slices.Contains(journal, "remove "+prefix) {
 		t.Errorf("the teardown reached %v and never removed %s: the release behind this stack is already destroyed, so the artifacts under its prefix are bytes no later run names — the stack record that remains is what the next run retries from, not a reason to leave them",
 			journal, prefix)
 	}

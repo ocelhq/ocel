@@ -1,4 +1,8 @@
 import type { S3Client } from "@aws-sdk/client-s3";
+import {
+  parseStorageCoordinate,
+  type StorageCoordinate,
+} from "@platform/edge-contract/storage-key";
 import { newS3Client } from "../cache/sdk-clients.mjs";
 
 export interface ObjectStore {
@@ -10,6 +14,17 @@ export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`ocel cache: ${name} is not set`);
   return value;
+}
+
+export function requireStorageCoordinate(): StorageCoordinate {
+  const value = requireEnv("OCEL_STORAGE_COORDINATE");
+  const coordinate = parseStorageCoordinate(value);
+  if (coordinate === undefined) {
+    throw new Error(
+      `ocel cache: OCEL_STORAGE_COORDINATE ${JSON.stringify(value)} names no release`,
+    );
+  }
+  return coordinate;
 }
 
 export function isNotFound(err: any): boolean {
