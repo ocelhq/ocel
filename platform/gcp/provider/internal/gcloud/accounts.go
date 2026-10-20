@@ -49,14 +49,14 @@ func (c *Clients) CreateAccount(ctx context.Context, tier environment.Tier, acco
 		return ExplainMissingGrant(err, c.DeployCredential(tier).Tiered(credential.AccountsRole).String())
 	}
 	if found == nil {
-		if found, err = c.makeAccount(ctx, account, displayName, description); err != nil {
+		if found, err = c.makeAccount(ctx, tier, account, displayName, description); err != nil {
 			return err
 		}
 	}
 	return c.EnsureTierTag(ctx, tier, c.AccountTagged(found.UniqueId))
 }
 
-func (c *Clients) makeAccount(ctx context.Context, account, displayName, description string) (*iam.ServiceAccount, error) {
+func (c *Clients) makeAccount(ctx context.Context, tier environment.Tier, account, displayName, description string) (*iam.ServiceAccount, error) {
 	service, err := c.Accounts()
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (c *Clients) makeAccount(ctx context.Context, account, displayName, descrip
 			"project %s has as many service accounts as its Service Account Count quota allows, and every app ocel deploys runs as one of its own.\n"+
 				"Delete accounts nothing uses or raise the quota in the console, then deploy again", c.Project())
 	}
-	return nil, ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), credential.Deploy{}.ProjectPermissions().String())
+	return nil, ExplainMissingGrant(fmt.Errorf("create the %s service account: %w", account, err), c.DeployCredential(tier).ProjectPermissions().String())
 }
 
 func (c *Clients) readTakenAccount(ctx context.Context, account string) (*iam.ServiceAccount, error) {

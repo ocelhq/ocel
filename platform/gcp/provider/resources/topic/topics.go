@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -359,7 +360,7 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, acc
 		return nil, err
 	}
 	granted := []grants.Grant{
-		grants.OnProject(grants.TaskRecordsRole, member, variables.ProjectWritableDatabaseCondition(c, spec.Ref.Tier, spec.Ref.Project)),
+		grants.OnProject(credential.TaskRecordsRole, member, variables.ProjectWritableDatabaseCondition(c, spec.Ref.Tier, spec.Ref.Project)),
 		grants.On(grants.Queue, c.DelayQueuePath(c.Region, spec.Ref.Tier), task.QueueEnqueuerRole, member),
 		grants.On(grants.Account, account, bootstrap.RunAsRole, member),
 		grants.On(grants.Account, account, bootstrap.RunAsRole, agent),

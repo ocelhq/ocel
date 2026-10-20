@@ -7,9 +7,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
 
 func TestBindingKeyRolesReadsThePolicyAgainWhenItChangedUnderTheWrite(t *testing.T) {
@@ -42,11 +42,11 @@ func TestWritingTheProjectPolicyReadsItAgainWhenAnEtagMismatchRefusesTheWrite(t 
 	granting := googletest.GrantedIAM()
 	granting.ProjectStale = 1
 	c := granting.Open(t)
-	if err := gcloud.BindProjectRole(context.Background(), c, member, grants.RecordsRole, nil, true); err != nil {
+	if err := gcloud.BindProjectRole(context.Background(), c, member, credential.RecordsRole, nil, true); err != nil {
 		t.Fatalf("bindProjectRole() = %v, want the grant to land after the 412", err)
 	}
-	if got, _ := granting.ProjectMembers(grants.RecordsRole); !slices.Contains(got, member) {
-		t.Errorf("%s has members %q, want %s", grants.RecordsRole, got, member)
+	if got, _ := granting.ProjectMembers(credential.RecordsRole); !slices.Contains(got, member) {
+		t.Errorf("%s has members %q, want %s", credential.RecordsRole, got, member)
 	}
 
 }

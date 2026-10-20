@@ -2,6 +2,7 @@ package credential
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -68,24 +69,34 @@ var projectPermissions = []string{
 	"cloudkms.cryptoKeys.list",
 }
 
+const (
+	RecordsRole     = "roles/datastore.viewer"
+	TaskRecordsRole = "roles/datastore.user"
+)
+
+var appGrantedRoles = []string{RecordsRole, TaskRecordsRole}
+
 type Deploy struct {
-	Names          names.Names
-	Region         string
-	Tier           environment.Tier
-	GrantableRoles []string
+	names  names.Names
+	region string
+	tier   environment.Tier
+}
+
+func New(names names.Names, region string, tier environment.Tier) Deploy {
+	return Deploy{names: names, region: region, tier: tier}
 }
 
 func (d Deploy) TierCondition() *policy.Condition {
 	return &policy.Condition{
-		Title:      "ocel " + string(d.Tier) + " tier",
-		Expression: fmt.Sprintf("resource.matchTag('%s', '%s')", d.Names.TierTagKeyPath(), d.Tier),
+		Title:      "ocel " + string(d.tier) + " tier",
+		Expression: fmt.Sprintf("resource.matchTag('%s', '%s')", d.names.TierTagKeyPath(), d.tier),
 	}
 }
 
 func (d Deploy) UntaggedCondition() *policy.Condition {
 	return &policy.Condition{
 		Title:      "ocel untagged",
-		Expression: fmt.Sprintf("!resource.hasTagKey('%s')", d.Names.TierTagKeyPath()),
+		Expression: fmt.Sprintf("!resource.hasTagKey('%s')", d.names.TierTagKeyPath()),
 	}
 }
 
@@ -113,34 +124,34 @@ func (d Deploy) Untagged() Grant {
 }
 
 func (d Deploy) TagValue() Grant {
-	return Grant{Role: TagUserRole, On: d.Names.TierTagValuePath(d.Tier)}
+	return Grant{Role: TagUserRole, On: d.names.TierTagValuePath(d.tier)}
 }
 
 func (d Deploy) keyRingPath() string {
-	return "projects/" + d.Names.Project() + "/locations/" + d.Region + "/keyRings/" + d.Names.KeyRing()
+	return "projects/" + d.names.Project() + "/locations/" + d.region + "/keyRings/" + d.names.KeyRing()
 }
 
 func (d Deploy) projectKeysPrefix() string {
-	return d.keyRingPath() + "/cryptoKeys/" + ports.ProjectKeyPrefix(d.Tier)
+	return d.keyRingPath() + "/cryptoKeys/" + ports.ProjectKeyPrefix(d.tier)
 }
 
 func (d Deploy) Sealing() Grant {
-	tierKey := d.keyRingPath() + "/cryptoKeys/" + string(d.Tier)
+	tierKey := d.keyRingPath() + "/cryptoKeys/" + string(d.tier)
 	return Grant{Role: SealingRole, Condition: &policy.Condition{
-		Title:      "ocel " + string(d.Tier) + " keys",
+		Title:      "ocel " + string(d.tier) + " keys",
 		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)", tierKey, d.projectKeysPrefix()),
 	}}
 }
 
 func (d Deploy) ProjectKeys() Grant {
 	return Grant{Role: ProjectKeysRole, Condition: &policy.Condition{
-		Title:      "ocel " + string(d.Tier) + " project keys",
+		Title:      "ocel " + string(d.tier) + " project keys",
 		Expression: fmt.Sprintf("resource.name.startsWith(%q)", d.projectKeysPrefix()),
 	}}
 }
 
 func (d Deploy) Queue() Grant {
-	return Grant{Role: QueueRole, On: d.Names.DelayQueuePath(d.Region, d.Tier)}
+	return Grant{Role: QueueRole, On: d.names.DelayQueuePath(d.region, d.tier)}
 }
 
 func (d Deploy) Stores() Grant {
@@ -157,14 +168,15 @@ func (d Deploy) Logs() Grant {
 
 func (d Deploy) Parts() Grant {
 	return Grant{
-		Role: d.Names.PartsRolePath(),
+		Role: d.names.PartsRolePath(),
 		Why:  "Compute Engine, Network Connectivity and Service Usage name no resource attribute an IAM condition could hold a part by, and a tier's network carries no tier tag",
 	}
 }
 
 func (d Deploy) AppGrants() Grant {
-	quoted := make([]string, len(d.GrantableRoles))
-	for i, role := range d.GrantableRoles {
+	grantable := append(slices.Clone(appGrantedRoles), d.names.CDNPurgeRolePath())
+	quoted := make([]string, len(grantable))
+	for i, role := range grantable {
 		quoted[i] = "'" + role + "'"
 	}
 	return Grant{Role: ProjectGrantsRole, Condition: &policy.Condition{

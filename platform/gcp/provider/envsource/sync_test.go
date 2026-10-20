@@ -15,9 +15,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
@@ -97,8 +97,8 @@ func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t 
 			t.Errorf("the production key binds %v to %s, want the sync account: it opens its credentials and seals what it copies", granted, role)
 		}
 	}
-	if readers, _ := server.ProjectMembers(grants.RecordsRole); slices.Contains(readers, member) {
-		t.Errorf("the sync account has an app's %s too, and one grant is what it needs", grants.RecordsRole)
+	if readers, _ := server.ProjectMembers(credential.RecordsRole); slices.Contains(readers, member) {
+		t.Errorf("the sync account has an app's %s too, and one grant is what it needs", credential.RecordsRole)
 	}
 
 	found, err := b.AccountPresence(ctx, environment.TierProduction, name)

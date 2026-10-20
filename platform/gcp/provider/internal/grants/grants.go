@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 	"google.golang.org/api/googleapi"
@@ -40,20 +39,12 @@ var targetOrder = []targetKind{Project, Key, Account, Queue, Topic, Bucket, Secr
 const appGrantsRecord = "appgrants"
 
 const (
-	RecordsRole     = "roles/datastore.viewer"
-	OpeningRole     = "roles/cloudkms.cryptoKeyDecrypter"
-	ObjectsRole     = "roles/storage.objectUser"
-	AssetsRole      = "roles/storage.objectViewer"
-	TaskRecordsRole = "roles/datastore.user"
+	OpeningRole = "roles/cloudkms.cryptoKeyDecrypter"
+	ObjectsRole = "roles/storage.objectUser"
+	AssetsRole  = "roles/storage.objectViewer"
 )
 
 const TokenCreatorRole = "roles/iam.serviceAccountTokenCreator"
-
-var appGrantedRoles = []string{RecordsRole, TaskRecordsRole}
-
-func ListGrantedRoles(names names.Names) []string {
-	return append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
-}
 
 type grantTarget struct {
 	Kind targetKind `json:"kind"`
@@ -199,14 +190,9 @@ func policyOf(c *gcloud.Clients, target grantTarget) policy.Resource {
 		return topics.TopicPolicy(service, target.Name).Read(ctx)
 	}}
 }
-func DeployCredential(c *gcloud.Clients, tier environment.Tier) credential.Deploy {
-	deploy := c.DeployCredential(tier)
-	deploy.GrantableRoles = ListGrantedRoles(c.Names)
-	return deploy
-}
 
 func explainRefusedGrant(c *gcloud.Clients, tier environment.Tier, target grantTarget, err error) error {
-	deploy := DeployCredential(c, tier)
+	deploy := c.DeployCredential(tier)
 	switch target.Kind {
 	case Project:
 		if isMissingRole(err, c.CDNPurgeRolePath()) {

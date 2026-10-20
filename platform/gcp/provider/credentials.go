@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -101,7 +100,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 			"a deploy credential is rendered for the production or the preview tier, and this request named %q", tier)
 	}
 	names := names.New(c.Namespace, project)
-	deploy := credential.Deploy{Names: names, Region: c.Region, Tier: tier, GrantableRoles: grants.ListGrantedRoles(names)}
+	deploy := credential.New(names, c.Region, tier)
 	return edge.CredentialDocument{
 		Heading: fmt.Sprintf("the roles a deploy credential of the %s tier is granted on project %s, whose %s resources carry the %s tag; make each custom role named by its permissions yourself",
 			tier, project, tier, names.TierTagValuePath(tier)),

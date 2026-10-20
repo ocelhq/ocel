@@ -6,5 +6,5 @@ import (
 )
 
 func (c *Clients) DeployCredential(tier environment.Tier) credential.Deploy {
-	return credential.Deploy{Names: c.Names, Region: c.Region, Tier: tier}
+	return credential.New(c.Names, c.Region, tier)
 }
