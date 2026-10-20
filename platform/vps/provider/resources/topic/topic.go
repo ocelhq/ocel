@@ -1,6 +1,7 @@
 package topic
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -93,10 +94,18 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, _ *pr
 	switch {
 	case len(recorded.Value) == 0:
 		change.Add(provider.ActionCreate, "")
-	case string(recorded.Value) != string(config):
+	case !sameRecord(recorded.Value, config):
 		change.Add(provider.ActionUpdate, describeChange(recorded.Value, in.Resource.Topic))
 	}
 	return change.Report()
+}
+
+func sameRecord(kept, wanted []byte) bool {
+	var a, b bytes.Buffer
+	if json.Compact(&a, kept) != nil || json.Compact(&b, wanted) != nil {
+		return false
+	}
+	return bytes.Equal(a.Bytes(), b.Bytes())
 }
 
 func describeChange(recorded []byte, spec *provider.TopicSpec) string {
@@ -136,7 +145,7 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 		return provider.Binding{}, err
 	}
 	if err := records.Change(ctx, r.box.KeyValues, key, func(recorded records.Entry) ([]byte, bool, error) {
-		return config, string(recorded.Value) != string(config), nil
+		return config, !sameRecord(recorded.Value, config), nil
 	}); err != nil {
 		return provider.Binding{}, err
 	}
