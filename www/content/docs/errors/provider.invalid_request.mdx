@@ -1,0 +1,10 @@
+---
+title: provider.invalid_request
+description: The provider refused the request as invalid.
+---
+
+The provider answered that the request the command made is not one it can act on: a value it does not accept, a name that is taken, or a combination it refuses. The request comes from the command line and the project's config, so the message, which is the provider's own, names what to change in one of them.
+
+## Fix
+
+Change what the message names, in the command line or the project's config (see [configuration](/docs/configuration)), and run the command again.

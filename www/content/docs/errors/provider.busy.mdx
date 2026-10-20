@@ -1,0 +1,10 @@
+---
+title: provider.busy
+description: The provider refused for now, while something else holds or changes what the command needs.
+---
+
+The provider answered that it cannot act now: another run holds what this one needs, what the command read changed before it wrote, or the provider is throttling calls. The run's error is marked retryable. The message is the provider's own and names what held it.
+
+## Fix
+
+Wait for the other run to finish, then run the command again.

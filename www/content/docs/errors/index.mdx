@@ -31,9 +31,14 @@ A failure with no code reports `internal`. It has no page, because it means Ocel
 
 | Code | Meaning |
 | --- | --- |
-| [`provider.unavailable`](/docs/errors/provider.unavailable) | The provider process did not start. |
+| [`provider.unavailable`](/docs/errors/provider.unavailable) | The provider did not start, or could not be reached. |
 | [`provider.version_mismatch`](/docs/errors/provider.version_mismatch) | The provider is not the release of this CLI. |
 | [`provider.unsupported`](/docs/errors/provider.unsupported) | The provider does not do what the command asked of it. |
+| [`provider.denied`](/docs/errors/provider.denied) | The provider refused what the command asked, as not permitted. |
+| [`provider.not_ready`](/docs/errors/provider.not_ready) | Something the command needs is not in place in the provider yet. |
+| [`provider.not_found`](/docs/errors/provider.not_found) | The provider has no record of what the command named. |
+| [`provider.invalid_request`](/docs/errors/provider.invalid_request) | The provider refused the request as invalid. |
+| [`provider.busy`](/docs/errors/provider.busy) | The provider refused for now, while something else holds or changes what the command needs. |
 | [`prerequisite.missing`](/docs/errors/prerequisite.missing) | Something this command needs is not set up. |
 | [`bootstrap.missing`](/docs/errors/bootstrap.missing) | The account has no Ocel infrastructure for this tier. |
 | [`bootstrap.parts_missing`](/docs/errors/bootstrap.parts_missing) | The bootstrap lacks a part the project wants. |
