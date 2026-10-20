@@ -67,7 +67,7 @@ jobs:
   modules:
     if: ${{ !cancelled() && github.event_name != 'schedule' }}
     name: modules
-    needs: [build, binaries, lint]
+    needs: [build, binaries, lint, vps-images]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
