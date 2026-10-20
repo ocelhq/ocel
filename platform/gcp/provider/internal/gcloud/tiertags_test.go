@@ -108,14 +108,11 @@ func TestARegionalResourceIsBoundThroughItsRegionsEndpointAndAGlobalOneThroughTh
 	clients := googletest.Clients("")
 
 	regional := clients.RunServiceTagged("shop-web")
-	if regional.Location != googletest.Region {
-		t.Errorf("a Cloud Run service is bound at %q, want its region %q", regional.Location, googletest.Region)
-	}
-	if got, want := gcloud.TierTagEndpointAt(regional.Location), "https://europe-west1-cloudresourcemanager.googleapis.com/"; got != want {
-		t.Errorf("a binding in %s goes to %s, want %s", regional.Location, got, want)
+	if got, want := clients.TagEndpointOf(regional), "https://europe-west1-cloudresourcemanager.googleapis.com/"; got != want {
+		t.Errorf("a Cloud Run service binding in %s goes to %s, want %s", googletest.Region, got, want)
 	}
 	global := clients.AccountTagged("104857600000000000001")
-	if got, want := gcloud.TierTagEndpointAt(global.Location), "https://cloudresourcemanager.googleapis.com/"; got != want {
+	if got, want := clients.TagEndpointOf(global), "https://cloudresourcemanager.googleapis.com/"; got != want {
 		t.Errorf("a service account binding goes to %s, want %s", got, want)
 	}
 }
