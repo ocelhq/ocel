@@ -140,9 +140,6 @@ func (p *Provider) planNetworkRetiredWith(ctx context.Context, at environment.Ti
 }
 
 func planNetworkRetiredWith(ctx context.Context, store records.Store, region string, partsByConsumer map[string]string, at environment.Tier, removed []string) (*provider.ChangeGroup, error) {
-	if slices.Contains(removed, network.Part) {
-		return nil, nil
-	}
 	part, present, err := network.ReadPart(ctx, store, region, at)
 	if err != nil || !present || len(part.UsedBy) == 0 {
 		return nil, err
