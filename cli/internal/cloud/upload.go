@@ -41,6 +41,7 @@ type Client struct {
 	http   *http.Client
 	tokens TokenSource
 	upload cloudv1connect.UploadServiceClient
+	jobs   cloudv1connect.JobServiceClient
 	sleep  func(ctx context.Context, d time.Duration) error
 }
 
@@ -52,6 +53,7 @@ func New(apiURL string, tokens TokenSource) *Client {
 		sleep:  sleep,
 	}
 	c.upload = cloudv1connect.NewUploadServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.bearer()))
+	c.jobs = cloudv1connect.NewJobServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.bearer()))
 	return c
 }
 
