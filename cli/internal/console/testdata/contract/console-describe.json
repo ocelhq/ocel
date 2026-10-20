@@ -1,0 +1,31 @@
+{
+  "name": "console-describe",
+  "request": {
+    "method": "POST",
+    "path": "/api/connect/console.v1.ConsoleService/Describe",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "consoleVersion": "0.0.0-alpha",
+      "capabilities": [
+        "deployments.report",
+        "connectors",
+        "cloud"
+      ],
+      "cloud": {
+        "apiUrl": "{{cloud.api_url}}",
+        "providerUrl": "{{cloud.provider_url}}",
+        "audience": "{{cloud.audience}}"
+      }
+    }
+  },
+  "dynamic": [
+    "$.consoleVersion",
+    "$.capabilities"
+  ]
+}

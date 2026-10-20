@@ -7,10 +7,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
 
 func TestLoginKeepsTheConsoleInEffectAndStartsANewOneElsewhere(t *testing.T) {
@@ -112,5 +115,113 @@ func TestLoginAsJSONOfAnExistingLoginPrintsItsAccount(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "secret-token") {
 		t.Errorf("stdout = %q, want no token", stdout.String())
+	}
+}
+
+type describedConsole struct {
+	consolev1connect.UnimplementedConsoleServiceHandler
+	cloud *consolev1.CloudOffer
+}
+
+func (d *describedConsole) Describe(context.Context, *consolev1.DescribeRequest) (*consolev1.DescribeResponse, error) {
+	return &consolev1.DescribeResponse{ConsoleVersion: "1.0.0", Cloud: d.cloud}, nil
+}
+
+func serveDeviceLogin(t *testing.T, describe consolev1connect.ConsoleServiceHandler) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth/device/code", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"device_code":"dev","user_code":"ABCD1234","verification_uri":"https://console.example.com/device","expires_in":600,"interval":1}`))
+	})
+	mux.HandleFunc("/api/auth/device/token", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"access_token":"secret-token","token_type":"Bearer","expires_in":3600}`))
+	})
+	mux.HandleFunc("/api/auth/get-session", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"session":{},"user":{"email":"ada@example.com","name":"Ada"}}`))
+	})
+	if describe != nil {
+		path, handler := consolev1connect.NewConsoleServiceHandler(describe)
+		mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func TestLoginSavesWhetherTheConsoleOffersOcelCloudAndSaysSo(t *testing.T) {
+	cases := []struct {
+		name      string
+		describe  consolev1connect.ConsoleServiceHandler
+		wantCloud *console.CloudOffer
+		wantLine  string
+	}{
+		{
+			name:      "a console that offers Ocel Cloud",
+			describe:  &describedConsole{cloud: &consolev1.CloudOffer{ApiUrl: "https://cloud.example.test", Audience: "ocel-cloud"}},
+			wantCloud: &console.CloudOffer{APIURL: "https://cloud.example.test", Audience: "ocel-cloud"},
+			wantLine:  "offers Ocel Cloud at https://cloud.example.test.",
+		},
+		{
+			name:     "a console that offers none",
+			describe: &describedConsole{},
+			wantLine: "offers no Ocel Cloud.",
+		},
+		{
+			name:     "a console that cannot describe itself",
+			wantLine: "offers no Ocel Cloud.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			url := serveDeviceLogin(t, tc.describe)
+			t.Setenv(console.URLEnvVar, url)
+
+			var saved console.Credentials
+			dependencies := newTestDependencies()
+			dependencies.LoadCredentials = func() (console.Credentials, error) { return console.Credentials{}, console.ErrNotLoggedIn }
+			dependencies.SaveCredentials = func(creds console.Credentials) (console.CredentialStore, error) {
+				saved = creds
+				return console.KeyringStore, nil
+			}
+
+			before := time.Now()
+			var out bytes.Buffer
+			if err := run(context.Background(), dependencies, false, strings.NewReader(""), &out, &bytes.Buffer{}); err != nil {
+				t.Fatalf("run err = %v; out=%s", err, out.String())
+			}
+
+			if (saved.Cloud == nil) != (tc.wantCloud == nil) || saved.Cloud != nil && *saved.Cloud != *tc.wantCloud {
+				t.Errorf("saved offer = %+v, want %+v", saved.Cloud, tc.wantCloud)
+			}
+			if saved.CloudFetchedAt.Before(before) {
+				t.Errorf("saved fetched at %v, want the time of this login", saved.CloudFetchedAt)
+			}
+			if want := url + " " + tc.wantLine; !strings.Contains(out.String(), want) {
+				t.Errorf("out = %q, want it to say %q", out.String(), want)
+			}
+		})
+	}
+}
+
+func TestLoginOfAnExistingLoginSaysWhetherTheConsoleOffersOcelCloud(t *testing.T) {
+	t.Setenv(console.URLEnvVar, "https://console.example.com")
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = func() (console.Credentials, error) {
+		return console.Credentials{
+			AccessToken:    "tok",
+			APIURL:         "https://console.example.com",
+			Email:          "ada@example.com",
+			Store:          console.KeyringStore,
+			Cloud:          &console.CloudOffer{APIURL: "https://cloud.example.test", Audience: "ocel-cloud"},
+			CloudFetchedAt: time.Now(),
+		}, nil
+	}
+
+	var out bytes.Buffer
+	if err := run(context.Background(), dependencies, false, strings.NewReader(""), &out, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run err = %v", err)
+	}
+	if want := "https://console.example.com offers Ocel Cloud at https://cloud.example.test."; !strings.Contains(out.String(), want) {
+		t.Errorf("out = %q, want it to say %q", out.String(), want)
 	}
 }

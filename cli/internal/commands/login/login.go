@@ -57,6 +57,8 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 			return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: existing.Email, ConsoleUrl: apiURL})
 		}
 		fmt.Fprintf(out, "Already logged in as %s at %s. Pass --force to log in again.\n", identity(existing), apiURL)
+		offer, err := console.NewCloudOffers(dependencies.LoadCredentials, dependencies.SaveCredentials).Resolve(ctx, existing)
+		printCloudOffer(out, apiURL, offer, err)
 		return nil
 	}
 
@@ -96,6 +98,11 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	if session, sessErr := client.GetSession(ctx, token.AccessToken); sessErr == nil && session != nil {
 		creds.Email = session.User.Email
 	}
+	offer, offerErr := client.ReadCloudOffer(ctx)
+	if offerErr == nil {
+		creds.Cloud = offer
+		creds.CloudFetchedAt = time.Now()
+	}
 
 	store, err := dependencies.SaveCredentials(creds)
 	if err != nil {
@@ -109,7 +116,20 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	if store == console.FileStore {
 		fmt.Fprintln(out, p.Faint("  No OS keyring, so the token is saved to a file only you can read."))
 	}
+	printCloudOffer(out, apiURL, offer, offerErr)
 	return nil
+}
+
+func printCloudOffer(out io.Writer, apiURL string, offer *console.CloudOffer, err error) {
+	p := terminal.PaletteFor(out)
+	switch {
+	case err != nil:
+		fmt.Fprintln(out, p.Faint(fmt.Sprintf("  Could not learn whether %s offers Ocel Cloud: %v", apiURL, err)))
+	case offer != nil:
+		fmt.Fprintln(out, p.Faint(fmt.Sprintf("  %s offers Ocel Cloud at %s.", apiURL, offer.APIURL)))
+	default:
+		fmt.Fprintln(out, p.Faint(fmt.Sprintf("  %s offers no Ocel Cloud.", apiURL)))
+	}
 }
 
 func sameConsole(stored, target string) bool {
