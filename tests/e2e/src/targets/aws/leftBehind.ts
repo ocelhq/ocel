@@ -22,27 +22,21 @@ export function readRetiringParts(stdout: string): string[] {
     .map((part: Part) => part.name);
 }
 
-function listed(names: string[]): string {
-  return names.length < 2
-    ? names.join("")
-    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
+const listed = new Intl.ListFormat("en", { type: "conjunction" });
 
 export function refuseWhatDestroyLeft(
   slug: string,
   parts: string[],
   trustStoreObjects: string[],
 ): Error | undefined {
-  const left = [
-    ...(parts.length === 0
-      ? []
-      : [
-          `${listed(parts)}, which ${parts.length === 1 ? "retires with its" : "retire with their"} last user`,
-        ]),
-    ...(trustStoreObjects.length === 0
-      ? []
-      : [`${listed(trustStoreObjects)}, kept for the load balancer's trust store`]),
-  ];
+  const left: string[] = [];
+  if (parts.length > 0) {
+    const retire = parts.length === 1 ? "retires with its" : "retire with their";
+    left.push(`${listed.format(parts)}, which ${retire} last user`);
+  }
+  if (trustStoreObjects.length > 0) {
+    left.push(`${listed.format(trustStoreObjects)}, kept for the load balancer's trust store`);
+  }
   if (left.length === 0) {
     return undefined;
   }
