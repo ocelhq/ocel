@@ -708,7 +708,7 @@ func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
 			Path:     "ocel." + vendor + ".json",
 			Provider: &project.Provider{ID: vendor},
 		}
-		named, err := requireProviderID(cfg)
+		named, err := requireProviderID(t.Context(), Dependencies{}, cfg, "ocel connector add")
 		if err != nil {
 			t.Fatalf("requireProviderID(%s) = %v, want the vendor the config names", vendor, err)
 		}

@@ -25,7 +25,7 @@ func explainUnfinishedAdd(err error) error {
 }
 
 func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project, link *console.Link, opts options) (err error) {
-	vendor, err := requireProviderID(cfg)
+	vendor, err := requireProviderID(ctx, dependencies, cfg, "ocel connector add")
 	if err != nil {
 		return err
 	}

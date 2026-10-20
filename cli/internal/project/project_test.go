@@ -1620,6 +1620,9 @@ func TestAProjectRequiresTheProviderItsConfigNames(t *testing.T) {
 		if !strings.Contains(err.Error(), "\"provider\"") {
 			t.Fatalf("err = %q, want it to mention %q", err.Error(), "provider")
 		}
+		if !strings.Contains(err.Error(), "`ocel login`") || cfg.HasProvider() {
+			t.Fatalf("err = %q, want it to offer `ocel login`", err.Error())
+		}
 	})
 
 	t.Run("returns the descriptor when the provider is present", func(t *testing.T) {

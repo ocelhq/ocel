@@ -30,6 +30,17 @@ func FindRoot(startDir, explicitPath string) (string, error) {
 	return filepath.Dir(configPath), nil
 }
 
+func FindConfig(startDir, explicitPath string) (string, error) {
+	if explicitPath != "" {
+		return explicitConfigFile(startDir, explicitPath)
+	}
+	root, err := findProjectRoot(startDir)
+	if err != nil {
+		return "", err
+	}
+	return defaultConfigFile(root), nil
+}
+
 func find(ctx context.Context, startDir, explicitPath string, optional bool) (*Project, error) {
 	if explicitPath != "" {
 		configPath, err := explicitConfigFile(startDir, explicitPath)

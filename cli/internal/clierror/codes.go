@@ -21,6 +21,7 @@ const (
 	CodeBootstrapPartsMissing      = "bootstrap.parts_missing"
 	CodeConsoleNotLoggedIn         = "console.not_logged_in"
 	CodeConsoleNotLinked           = "console.not_linked"
+	CodeCloudUnsupported           = "cloud.unsupported"
 	CodeDoctorChecksFailed         = "doctor.checks_failed"
 	CodeDevCommandFailed           = "dev.command_failed"
 )
@@ -45,6 +46,7 @@ func Codes() []string {
 		CodeBootstrapPartsMissing,
 		CodeConsoleNotLoggedIn,
 		CodeConsoleNotLinked,
+		CodeCloudUnsupported,
 		CodeDoctorChecksFailed,
 		CodeDevCommandFailed,
 	}

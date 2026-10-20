@@ -23,6 +23,7 @@
     "---Console---",
     "console.not_logged_in",
     "console.not_linked",
+    "cloud.unsupported",
     "---Runs---",
     "interrupted",
     "dev.command_failed",

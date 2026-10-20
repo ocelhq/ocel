@@ -173,8 +173,8 @@ func readAccessToken(dependencies Dependencies) (string, error) {
 	return credentials.AccessToken, nil
 }
 
-func requireProviderID(cfg *project.Project) (string, error) {
-	declared, err := cfg.RequireProvider()
+func requireProviderID(ctx context.Context, dependencies Dependencies, cfg *project.Project, command string) (string, error) {
+	declared, err := dependencies.RequireProvider(ctx, cfg, command)
 	if err != nil {
 		return "", err
 	}

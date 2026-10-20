@@ -106,7 +106,7 @@ type ProviderRun struct {
 }
 
 func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, command string, opts OpenOptions, work func(context.Context, ProviderRun) error) (err error) {
-	if _, err := cfg.RequireProvider(); err != nil {
+	if _, err := i.RequireProvider(ctx, cfg, command); err != nil {
 		return err
 	}
 	ctx, running, err := i.Events.Begin(ctx, command, cfg.Dir)
