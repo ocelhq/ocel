@@ -24,7 +24,7 @@ func TestANetworkStillInUseIsRefusedNamingThePartsInItByTheNamesRemoveTakes(t *t
 			t.Errorf("refusal %q does not say %q", refused.Message, named)
 		}
 	}
-	if strings.Contains(refused.Message, "--remove ocel-") || strings.Contains(refused.Message, "environments of ocel-") {
-		t.Errorf("refusal %q tells the user to act on a consumer's slug, which no command takes", refused.Message)
+	if strings.Contains(refused.Message, "ocel-") {
+		t.Errorf("refusal %q names a consumer's slug, which no command takes", refused.Message)
 	}
 }

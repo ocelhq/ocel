@@ -58,7 +58,7 @@ func TestARemovalOfTheNetworkThatAPartStillRunsInIsRefusedNamingIt(t *testing.T)
 	}
 	_, err := part.Removal.Plan(ctx, environment.TierProduction)
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "ocel-containers") {
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "the containers part still runs") {
 		t.Fatalf("Removal.Plan() = %v, want a refusal naming the containers part still in it: a VPC is not deleted while anything runs in it", err)
 	}
 }

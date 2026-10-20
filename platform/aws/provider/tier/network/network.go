@@ -280,18 +280,24 @@ func (s *Stacks) RefuseInUse(tier environment.Tier, users []string) error {
 			projects = append(projects, user)
 		}
 	}
-	var steps []string
+	var running, steps []string
+	verb := "run"
+	if len(parts) == 1 && len(projects) == 0 {
+		verb = "runs"
+	}
 	if len(parts) > 0 {
-		steps = append(steps, fmt.Sprintf("remove the %s %s with `%s --remove <part>`",
-			strings.Join(parts, " and "), plural(len(parts), "part", "parts"), provider.BootstrapCommand(tier)))
+		named := fmt.Sprintf("the %s %s", strings.Join(parts, " and "), plural(len(parts), "part", "parts"))
+		running = append(running, named)
+		steps = append(steps, fmt.Sprintf("remove %s with `%s --remove <part>`", named, provider.BootstrapCommand(tier)))
 	}
 	if len(projects) > 0 {
+		running = append(running, "the databases and caches of "+strings.Join(projects, ", "))
 		steps = append(steps, fmt.Sprintf("destroy the environments of %s whose databases and caches sit in it", strings.Join(projects, ", ")))
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s still run in the network of the %s tier, and a VPC is not deleted while anything is in it.\n"+
+		"%s still %s in the network of the %s tier, and a VPC is not deleted while anything is in it.\n"+
 			"To free it, %s; the last one to leave takes the network down",
-		strings.Join(users, ", "), tier, strings.Join(steps, ", and "))
+		strings.Join(running, " and "), verb, tier, strings.Join(steps, ", and "))
 }
 
 func plural(n int, one, many string) string {
