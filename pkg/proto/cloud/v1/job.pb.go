@@ -8,6 +8,7 @@ package cloudv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -842,6 +843,7 @@ type Job struct {
 	Error         *JobError              `protobuf:"bytes,10,opt,name=error,proto3" json:"error,omitempty"`
 	Result        *JobResult             `protobuf:"bytes,11,opt,name=result,proto3" json:"result,omitempty"`
 	SourceId      string                 `protobuf:"bytes,12,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	Input         *JobInput              `protobuf:"bytes,13,opt,name=input,proto3" json:"input,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -960,6 +962,597 @@ func (x *Job) GetSourceId() string {
 	return ""
 }
 
+func (x *Job) GetInput() *JobInput {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+type JobInput struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Types that are valid to be assigned to Need:
+	//
+	//	*JobInput_Variables
+	//	*JobInput_Confirmation
+	Need          isJobInput_Need `protobuf_oneof:"need"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobInput) Reset() {
+	*x = JobInput{}
+	mi := &file_cloud_v1_job_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobInput) ProtoMessage() {}
+
+func (x *JobInput) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobInput.ProtoReflect.Descriptor instead.
+func (*JobInput) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *JobInput) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *JobInput) GetNeed() isJobInput_Need {
+	if x != nil {
+		return x.Need
+	}
+	return nil
+}
+
+func (x *JobInput) GetVariables() *VariablesNeeded {
+	if x != nil {
+		if x, ok := x.Need.(*JobInput_Variables); ok {
+			return x.Variables
+		}
+	}
+	return nil
+}
+
+func (x *JobInput) GetConfirmation() *Confirmation {
+	if x != nil {
+		if x, ok := x.Need.(*JobInput_Confirmation); ok {
+			return x.Confirmation
+		}
+	}
+	return nil
+}
+
+type isJobInput_Need interface {
+	isJobInput_Need()
+}
+
+type JobInput_Variables struct {
+	Variables *VariablesNeeded `protobuf:"bytes,2,opt,name=variables,proto3,oneof"`
+}
+
+type JobInput_Confirmation struct {
+	Confirmation *Confirmation `protobuf:"bytes,3,opt,name=confirmation,proto3,oneof"`
+}
+
+func (*JobInput_Variables) isJobInput_Need() {}
+
+func (*JobInput_Confirmation) isJobInput_Need() {}
+
+type VariablesNeeded struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Variables     []*NeededVariable      `protobuf:"bytes,2,rep,name=variables,proto3" json:"variables,omitempty"`
+	Groups        []*NeededGroup         `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VariablesNeeded) Reset() {
+	*x = VariablesNeeded{}
+	mi := &file_cloud_v1_job_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VariablesNeeded) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VariablesNeeded) ProtoMessage() {}
+
+func (x *VariablesNeeded) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VariablesNeeded.ProtoReflect.Descriptor instead.
+func (*VariablesNeeded) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *VariablesNeeded) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *VariablesNeeded) GetVariables() []*NeededVariable {
+	if x != nil {
+		return x.Variables
+	}
+	return nil
+}
+
+func (x *VariablesNeeded) GetGroups() []*NeededGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type NeededVariable struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Secret        bool                   `protobuf:"varint,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	Group         string                 `protobuf:"bytes,6,opt,name=group,proto3" json:"group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NeededVariable) Reset() {
+	*x = NeededVariable{}
+	mi := &file_cloud_v1_job_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NeededVariable) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NeededVariable) ProtoMessage() {}
+
+func (x *NeededVariable) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NeededVariable.ProtoReflect.Descriptor instead.
+func (*NeededVariable) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *NeededVariable) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *NeededVariable) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *NeededVariable) GetSecret() bool {
+	if x != nil {
+		return x.Secret
+	}
+	return false
+}
+
+func (x *NeededVariable) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *NeededVariable) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *NeededVariable) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+type NeededGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NeededGroup) Reset() {
+	*x = NeededGroup{}
+	mi := &file_cloud_v1_job_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NeededGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NeededGroup) ProtoMessage() {}
+
+func (x *NeededGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NeededGroup.ProtoReflect.Descriptor instead.
+func (*NeededGroup) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *NeededGroup) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *NeededGroup) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type Confirmation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Finding       string                 `protobuf:"bytes,1,opt,name=finding,proto3" json:"finding,omitempty"`
+	Question      string                 `protobuf:"bytes,2,opt,name=question,proto3" json:"question,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Confirmation) Reset() {
+	*x = Confirmation{}
+	mi := &file_cloud_v1_job_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Confirmation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Confirmation) ProtoMessage() {}
+
+func (x *Confirmation) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Confirmation.ProtoReflect.Descriptor instead.
+func (*Confirmation) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *Confirmation) GetFinding() string {
+	if x != nil {
+		return x.Finding
+	}
+	return ""
+}
+
+func (x *Confirmation) GetQuestion() string {
+	if x != nil {
+		return x.Question
+	}
+	return ""
+}
+
+type RespondJobRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	JobId   string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	InputId string                 `protobuf:"bytes,2,opt,name=input_id,json=inputId,proto3" json:"input_id,omitempty"`
+	// Types that are valid to be assigned to Answer:
+	//
+	//	*RespondJobRequest_Variables
+	//	*RespondJobRequest_Confirmed
+	Answer        isRespondJobRequest_Answer `protobuf_oneof:"answer"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RespondJobRequest) Reset() {
+	*x = RespondJobRequest{}
+	mi := &file_cloud_v1_job_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondJobRequest) ProtoMessage() {}
+
+func (x *RespondJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondJobRequest.ProtoReflect.Descriptor instead.
+func (*RespondJobRequest) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RespondJobRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *RespondJobRequest) GetInputId() string {
+	if x != nil {
+		return x.InputId
+	}
+	return ""
+}
+
+func (x *RespondJobRequest) GetAnswer() isRespondJobRequest_Answer {
+	if x != nil {
+		return x.Answer
+	}
+	return nil
+}
+
+func (x *RespondJobRequest) GetVariables() *VariableValues {
+	if x != nil {
+		if x, ok := x.Answer.(*RespondJobRequest_Variables); ok {
+			return x.Variables
+		}
+	}
+	return nil
+}
+
+func (x *RespondJobRequest) GetConfirmed() bool {
+	if x != nil {
+		if x, ok := x.Answer.(*RespondJobRequest_Confirmed); ok {
+			return x.Confirmed
+		}
+	}
+	return false
+}
+
+type isRespondJobRequest_Answer interface {
+	isRespondJobRequest_Answer()
+}
+
+type RespondJobRequest_Variables struct {
+	Variables *VariableValues `protobuf:"bytes,3,opt,name=variables,proto3,oneof"`
+}
+
+type RespondJobRequest_Confirmed struct {
+	Confirmed bool `protobuf:"varint,4,opt,name=confirmed,proto3,oneof"`
+}
+
+func (*RespondJobRequest_Variables) isRespondJobRequest_Answer() {}
+
+func (*RespondJobRequest_Confirmed) isRespondJobRequest_Answer() {}
+
+type VariableValues struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []*VariableValue       `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VariableValues) Reset() {
+	*x = VariableValues{}
+	mi := &file_cloud_v1_job_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VariableValues) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VariableValues) ProtoMessage() {}
+
+func (x *VariableValues) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VariableValues.ProtoReflect.Descriptor instead.
+func (*VariableValues) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *VariableValues) GetValues() []*VariableValue {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type VariableValue struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VariableValue) Reset() {
+	*x = VariableValue{}
+	mi := &file_cloud_v1_job_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VariableValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VariableValue) ProtoMessage() {}
+
+func (x *VariableValue) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VariableValue.ProtoReflect.Descriptor instead.
+func (*VariableValue) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *VariableValue) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *VariableValue) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *VariableValue) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+type RespondJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Job           *Job                   `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RespondJobResponse) Reset() {
+	*x = RespondJobResponse{}
+	mi := &file_cloud_v1_job_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RespondJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RespondJobResponse) ProtoMessage() {}
+
+func (x *RespondJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RespondJobResponse.ProtoReflect.Descriptor instead.
+func (*RespondJobResponse) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *RespondJobResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
+	}
+	return nil
+}
+
 type JobError struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
@@ -970,7 +1563,7 @@ type JobError struct {
 
 func (x *JobError) Reset() {
 	*x = JobError{}
-	mi := &file_cloud_v1_job_proto_msgTypes[11]
+	mi := &file_cloud_v1_job_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -982,7 +1575,7 @@ func (x *JobError) String() string {
 func (*JobError) ProtoMessage() {}
 
 func (x *JobError) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[11]
+	mi := &file_cloud_v1_job_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -995,7 +1588,7 @@ func (x *JobError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobError.ProtoReflect.Descriptor instead.
 func (*JobError) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{11}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *JobError) GetCode() string {
@@ -1023,7 +1616,7 @@ type JobResult struct {
 
 func (x *JobResult) Reset() {
 	*x = JobResult{}
-	mi := &file_cloud_v1_job_proto_msgTypes[12]
+	mi := &file_cloud_v1_job_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1035,7 +1628,7 @@ func (x *JobResult) String() string {
 func (*JobResult) ProtoMessage() {}
 
 func (x *JobResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[12]
+	mi := &file_cloud_v1_job_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1048,7 +1641,7 @@ func (x *JobResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobResult.ProtoReflect.Descriptor instead.
 func (*JobResult) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{12}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *JobResult) GetUrls() []string {
@@ -1082,7 +1675,7 @@ type AppBuild struct {
 
 func (x *AppBuild) Reset() {
 	*x = AppBuild{}
-	mi := &file_cloud_v1_job_proto_msgTypes[13]
+	mi := &file_cloud_v1_job_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1094,7 +1687,7 @@ func (x *AppBuild) String() string {
 func (*AppBuild) ProtoMessage() {}
 
 func (x *AppBuild) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[13]
+	mi := &file_cloud_v1_job_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1107,7 +1700,7 @@ func (x *AppBuild) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppBuild.ProtoReflect.Descriptor instead.
 func (*AppBuild) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{13}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AppBuild) GetApp() string {
@@ -1138,7 +1731,7 @@ type JobEvent struct {
 
 func (x *JobEvent) Reset() {
 	*x = JobEvent{}
-	mi := &file_cloud_v1_job_proto_msgTypes[14]
+	mi := &file_cloud_v1_job_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1150,7 +1743,7 @@ func (x *JobEvent) String() string {
 func (*JobEvent) ProtoMessage() {}
 
 func (x *JobEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[14]
+	mi := &file_cloud_v1_job_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1163,7 +1756,7 @@ func (x *JobEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobEvent.ProtoReflect.Descriptor instead.
 func (*JobEvent) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{14}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *JobEvent) GetSeq() uint64 {
@@ -1205,7 +1798,7 @@ var File_cloud_v1_job_proto protoreflect.FileDescriptor
 
 const file_cloud_v1_job_proto_rawDesc = "" +
 	"\n" +
-	"\x12cloud/v1/job.proto\x12\bcloud.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb0\x01\n" +
+	"\x12cloud/v1/job.proto\x12\bcloud.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb0\x01\n" +
 	"\n" +
 	"GitContext\x122\n" +
 	"\x06commit\x18\x01 \x01(\tB\x1a\xbaH\x17\xd8\x01\x01r\x122\x10^[0-9a-f]{7,64}$R\x06commit\x125\n" +
@@ -1251,7 +1844,7 @@ const file_cloud_v1_job_proto_rawDesc = "" +
 	"\x15ListJobEventsResponse\x12*\n" +
 	"\x06events\x18\x01 \x03(\v2\x12.cloud.v1.JobEventR\x06events\x12\x12\n" +
 	"\x04more\x18\x02 \x01(\bR\x04more\x12\x1f\n" +
-	"\x03job\x18\x03 \x01(\v2\r.cloud.v1.JobR\x03job\"\xed\x03\n" +
+	"\x03job\x18\x03 \x01(\v2\r.cloud.v1.JobR\x03job\"\x97\x04\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1268,7 +1861,45 @@ const file_cloud_v1_job_proto_rawDesc = "" +
 	"\x05error\x18\n" +
 	" \x01(\v2\x12.cloud.v1.JobErrorR\x05error\x12+\n" +
 	"\x06result\x18\v \x01(\v2\x13.cloud.v1.JobResultR\x06result\x12\x1b\n" +
-	"\tsource_id\x18\f \x01(\tR\bsourceId\"8\n" +
+	"\tsource_id\x18\f \x01(\tR\bsourceId\x12(\n" +
+	"\x05input\x18\r \x01(\v2\x12.cloud.v1.JobInputR\x05input\"\xc0\x01\n" +
+	"\bJobInput\x12,\n" +
+	"\x02id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\x02id\x129\n" +
+	"\tvariables\x18\x02 \x01(\v2\x19.cloud.v1.VariablesNeededH\x00R\tvariables\x12<\n" +
+	"\fconfirmation\x18\x03 \x01(\v2\x16.cloud.v1.ConfirmationH\x00R\fconfirmationB\r\n" +
+	"\x04need\x12\x05\xbaH\x02\b\x01\"\xbf\x01\n" +
+	"\x0fVariablesNeeded\x12;\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x12@\n" +
+	"\tvariables\x18\x02 \x03(\v2\x18.cloud.v1.NeededVariableB\b\xbaH\x05\x92\x01\x02\b\x01R\tvariables\x12-\n" +
+	"\x06groups\x18\x03 \x03(\v2\x15.cloud.v1.NeededGroupR\x06groups\"\x80\x02\n" +
+	"\x0eNeededVariable\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x128\n" +
+	"\x06folder\x18\x02 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x16\n" +
+	"\x06secret\x18\x03 \x01(\bR\x06secret\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x121\n" +
+	"\x05group\x18\x06 \x01(\tB\x1b\xbaH\x18r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\x05group\"`\n" +
+	"\vNeededGroup\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\"M\n" +
+	"\fConfirmation\x12\x18\n" +
+	"\afinding\x18\x01 \x01(\tR\afinding\x12#\n" +
+	"\bquestion\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bquestion\"\xec\x01\n" +
+	"\x11RespondJobRequest\x123\n" +
+	"\x06job_id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\x05jobId\x127\n" +
+	"\binput_id\x18\x02 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\ainputId\x128\n" +
+	"\tvariables\x18\x03 \x01(\v2\x18.cloud.v1.VariableValuesH\x00R\tvariables\x12\x1e\n" +
+	"\tconfirmed\x18\x04 \x01(\bH\x00R\tconfirmedB\x0f\n" +
+	"\x06answer\x12\x05\xbaH\x02\b\x01\"K\n" +
+	"\x0eVariableValues\x129\n" +
+	"\x06values\x18\x01 \x03(\v2\x17.cloud.v1.VariableValueB\b\xbaH\x05\x92\x01\x02\b\x01R\x06values\"\x95\x01\n" +
+	"\rVariableValue\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x128\n" +
+	"\x06folder\x18\x02 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x19\n" +
+	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\"5\n" +
+	"\x12RespondJobResponse\x12\x1f\n" +
+	"\x03job\x18\x01 \x01(\v2\r.cloud.v1.JobR\x03job\"8\n" +
 	"\bJobError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"p\n" +
@@ -1312,13 +1943,15 @@ const file_cloud_v1_job_proto_rawDesc = "" +
 	"\x15JOB_EVENT_LEVEL_DEBUG\x10\x01\x12\x18\n" +
 	"\x14JOB_EVENT_LEVEL_INFO\x10\x02\x12\x18\n" +
 	"\x14JOB_EVENT_LEVEL_WARN\x10\x03\x12\x19\n" +
-	"\x15JOB_EVENT_LEVEL_ERROR\x10\x042\xa4\x02\n" +
+	"\x15JOB_EVENT_LEVEL_ERROR\x10\x042\xed\x02\n" +
 	"\n" +
 	"JobService\x12A\n" +
 	"\bStartJob\x12\x19.cloud.v1.StartJobRequest\x1a\x1a.cloud.v1.StartJobResponse\x12;\n" +
 	"\x06GetJob\x12\x17.cloud.v1.GetJobRequest\x1a\x18.cloud.v1.GetJobResponse\x12D\n" +
 	"\tCancelJob\x12\x1a.cloud.v1.CancelJobRequest\x1a\x1b.cloud.v1.CancelJobResponse\x12P\n" +
-	"\rListJobEvents\x12\x1e.cloud.v1.ListJobEventsRequest\x1a\x1f.cloud.v1.ListJobEventsResponseB3Z1github.com/ocelhq/ocel/pkg/proto/cloud/v1;cloudv1b\x06proto3"
+	"\rListJobEvents\x12\x1e.cloud.v1.ListJobEventsRequest\x1a\x1f.cloud.v1.ListJobEventsResponse\x12G\n" +
+	"\n" +
+	"RespondJob\x12\x1b.cloud.v1.RespondJobRequest\x1a\x1c.cloud.v1.RespondJobResponseB3Z1github.com/ocelhq/ocel/pkg/proto/cloud/v1;cloudv1b\x06proto3"
 
 var (
 	file_cloud_v1_job_proto_rawDescOnce sync.Once
@@ -1333,7 +1966,7 @@ func file_cloud_v1_job_proto_rawDescGZIP() []byte {
 }
 
 var file_cloud_v1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_cloud_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_cloud_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_cloud_v1_job_proto_goTypes = []any{
 	(JobCommand)(0),               // 0: cloud.v1.JobCommand
 	(JobState)(0),                 // 1: cloud.v1.JobState
@@ -1350,11 +1983,21 @@ var file_cloud_v1_job_proto_goTypes = []any{
 	(*ListJobEventsRequest)(nil),  // 12: cloud.v1.ListJobEventsRequest
 	(*ListJobEventsResponse)(nil), // 13: cloud.v1.ListJobEventsResponse
 	(*Job)(nil),                   // 14: cloud.v1.Job
-	(*JobError)(nil),              // 15: cloud.v1.JobError
-	(*JobResult)(nil),             // 16: cloud.v1.JobResult
-	(*AppBuild)(nil),              // 17: cloud.v1.AppBuild
-	(*JobEvent)(nil),              // 18: cloud.v1.JobEvent
-	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
+	(*JobInput)(nil),              // 15: cloud.v1.JobInput
+	(*VariablesNeeded)(nil),       // 16: cloud.v1.VariablesNeeded
+	(*NeededVariable)(nil),        // 17: cloud.v1.NeededVariable
+	(*NeededGroup)(nil),           // 18: cloud.v1.NeededGroup
+	(*Confirmation)(nil),          // 19: cloud.v1.Confirmation
+	(*RespondJobRequest)(nil),     // 20: cloud.v1.RespondJobRequest
+	(*VariableValues)(nil),        // 21: cloud.v1.VariableValues
+	(*VariableValue)(nil),         // 22: cloud.v1.VariableValue
+	(*RespondJobResponse)(nil),    // 23: cloud.v1.RespondJobResponse
+	(*JobError)(nil),              // 24: cloud.v1.JobError
+	(*JobResult)(nil),             // 25: cloud.v1.JobResult
+	(*AppBuild)(nil),              // 26: cloud.v1.AppBuild
+	(*JobEvent)(nil),              // 27: cloud.v1.JobEvent
+	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
+	(v1.Tier)(0),                  // 29: common.environment.v1.Tier
 }
 var file_cloud_v1_job_proto_depIdxs = []int32{
 	0,  // 0: cloud.v1.StartJobRequest.command:type_name -> cloud.v1.JobCommand
@@ -1363,33 +2006,44 @@ var file_cloud_v1_job_proto_depIdxs = []int32{
 	14, // 3: cloud.v1.StartJobResponse.job:type_name -> cloud.v1.Job
 	14, // 4: cloud.v1.GetJobResponse.job:type_name -> cloud.v1.Job
 	14, // 5: cloud.v1.CancelJobResponse.job:type_name -> cloud.v1.Job
-	18, // 6: cloud.v1.ListJobEventsResponse.events:type_name -> cloud.v1.JobEvent
+	27, // 6: cloud.v1.ListJobEventsResponse.events:type_name -> cloud.v1.JobEvent
 	14, // 7: cloud.v1.ListJobEventsResponse.job:type_name -> cloud.v1.Job
 	0,  // 8: cloud.v1.Job.command:type_name -> cloud.v1.JobCommand
 	1,  // 9: cloud.v1.Job.state:type_name -> cloud.v1.JobState
 	2,  // 10: cloud.v1.Job.phase:type_name -> cloud.v1.JobPhase
-	19, // 11: cloud.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	19, // 12: cloud.v1.Job.started_at:type_name -> google.protobuf.Timestamp
-	19, // 13: cloud.v1.Job.ended_at:type_name -> google.protobuf.Timestamp
-	15, // 14: cloud.v1.Job.error:type_name -> cloud.v1.JobError
-	16, // 15: cloud.v1.Job.result:type_name -> cloud.v1.JobResult
-	17, // 16: cloud.v1.JobResult.builds:type_name -> cloud.v1.AppBuild
-	19, // 17: cloud.v1.JobEvent.time:type_name -> google.protobuf.Timestamp
-	3,  // 18: cloud.v1.JobEvent.level:type_name -> cloud.v1.JobEventLevel
-	2,  // 19: cloud.v1.JobEvent.phase:type_name -> cloud.v1.JobPhase
-	6,  // 20: cloud.v1.JobService.StartJob:input_type -> cloud.v1.StartJobRequest
-	8,  // 21: cloud.v1.JobService.GetJob:input_type -> cloud.v1.GetJobRequest
-	10, // 22: cloud.v1.JobService.CancelJob:input_type -> cloud.v1.CancelJobRequest
-	12, // 23: cloud.v1.JobService.ListJobEvents:input_type -> cloud.v1.ListJobEventsRequest
-	7,  // 24: cloud.v1.JobService.StartJob:output_type -> cloud.v1.StartJobResponse
-	9,  // 25: cloud.v1.JobService.GetJob:output_type -> cloud.v1.GetJobResponse
-	11, // 26: cloud.v1.JobService.CancelJob:output_type -> cloud.v1.CancelJobResponse
-	13, // 27: cloud.v1.JobService.ListJobEvents:output_type -> cloud.v1.ListJobEventsResponse
-	24, // [24:28] is the sub-list for method output_type
-	20, // [20:24] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	28, // 11: cloud.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	28, // 12: cloud.v1.Job.started_at:type_name -> google.protobuf.Timestamp
+	28, // 13: cloud.v1.Job.ended_at:type_name -> google.protobuf.Timestamp
+	24, // 14: cloud.v1.Job.error:type_name -> cloud.v1.JobError
+	25, // 15: cloud.v1.Job.result:type_name -> cloud.v1.JobResult
+	15, // 16: cloud.v1.Job.input:type_name -> cloud.v1.JobInput
+	16, // 17: cloud.v1.JobInput.variables:type_name -> cloud.v1.VariablesNeeded
+	19, // 18: cloud.v1.JobInput.confirmation:type_name -> cloud.v1.Confirmation
+	29, // 19: cloud.v1.VariablesNeeded.tier:type_name -> common.environment.v1.Tier
+	17, // 20: cloud.v1.VariablesNeeded.variables:type_name -> cloud.v1.NeededVariable
+	18, // 21: cloud.v1.VariablesNeeded.groups:type_name -> cloud.v1.NeededGroup
+	21, // 22: cloud.v1.RespondJobRequest.variables:type_name -> cloud.v1.VariableValues
+	22, // 23: cloud.v1.VariableValues.values:type_name -> cloud.v1.VariableValue
+	14, // 24: cloud.v1.RespondJobResponse.job:type_name -> cloud.v1.Job
+	26, // 25: cloud.v1.JobResult.builds:type_name -> cloud.v1.AppBuild
+	28, // 26: cloud.v1.JobEvent.time:type_name -> google.protobuf.Timestamp
+	3,  // 27: cloud.v1.JobEvent.level:type_name -> cloud.v1.JobEventLevel
+	2,  // 28: cloud.v1.JobEvent.phase:type_name -> cloud.v1.JobPhase
+	6,  // 29: cloud.v1.JobService.StartJob:input_type -> cloud.v1.StartJobRequest
+	8,  // 30: cloud.v1.JobService.GetJob:input_type -> cloud.v1.GetJobRequest
+	10, // 31: cloud.v1.JobService.CancelJob:input_type -> cloud.v1.CancelJobRequest
+	12, // 32: cloud.v1.JobService.ListJobEvents:input_type -> cloud.v1.ListJobEventsRequest
+	20, // 33: cloud.v1.JobService.RespondJob:input_type -> cloud.v1.RespondJobRequest
+	7,  // 34: cloud.v1.JobService.StartJob:output_type -> cloud.v1.StartJobResponse
+	9,  // 35: cloud.v1.JobService.GetJob:output_type -> cloud.v1.GetJobResponse
+	11, // 36: cloud.v1.JobService.CancelJob:output_type -> cloud.v1.CancelJobResponse
+	13, // 37: cloud.v1.JobService.ListJobEvents:output_type -> cloud.v1.ListJobEventsResponse
+	23, // 38: cloud.v1.JobService.RespondJob:output_type -> cloud.v1.RespondJobResponse
+	34, // [34:39] is the sub-list for method output_type
+	29, // [29:34] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_cloud_v1_job_proto_init() }
@@ -1397,13 +2051,21 @@ func file_cloud_v1_job_proto_init() {
 	if File_cloud_v1_job_proto != nil {
 		return
 	}
+	file_cloud_v1_job_proto_msgTypes[11].OneofWrappers = []any{
+		(*JobInput_Variables)(nil),
+		(*JobInput_Confirmation)(nil),
+	}
+	file_cloud_v1_job_proto_msgTypes[16].OneofWrappers = []any{
+		(*RespondJobRequest_Variables)(nil),
+		(*RespondJobRequest_Confirmed)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cloud_v1_job_proto_rawDesc), len(file_cloud_v1_job_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   15,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

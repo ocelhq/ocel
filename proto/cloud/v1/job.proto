@@ -4,6 +4,7 @@ package cloud.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cloud/v1;cloudv1";
 
 import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
 import "google/protobuf/timestamp.proto";
 
 enum JobCommand {
@@ -197,6 +198,99 @@ message Job {
   JobResult result = 11;
 
   string source_id = 12;
+
+  JobInput input = 13;
+}
+
+message JobInput {
+  string id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  oneof need {
+    option (buf.validate.oneof).required = true;
+
+    VariablesNeeded variables = 2;
+
+    Confirmation confirmation = 3;
+  }
+}
+
+message VariablesNeeded {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  repeated NeededVariable variables = 2 [(buf.validate.field).repeated.min_items = 1];
+
+  repeated NeededGroup groups = 3;
+}
+
+message NeededVariable {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
+
+  bool secret = 3;
+
+  string description = 4;
+
+  string reason = 5;
+
+  string group = 6 [(buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$"];
+}
+
+message NeededGroup {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string description = 2;
+}
+
+message Confirmation {
+  string finding = 1;
+
+  string question = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message RespondJobRequest {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  string input_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  oneof answer {
+    option (buf.validate.oneof).required = true;
+
+    VariableValues variables = 3;
+
+    bool confirmed = 4;
+  }
+}
+
+message VariableValues {
+  repeated VariableValue values = 1 [(buf.validate.field).repeated.min_items = 1];
+}
+
+message VariableValue {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
+
+  string value = 3 [debug_redact = true];
+}
+
+message RespondJobResponse {
+  Job job = 1;
 }
 
 message JobError {
@@ -240,4 +334,6 @@ service JobService {
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
 
   rpc ListJobEvents(ListJobEventsRequest) returns (ListJobEventsResponse);
+
+  rpc RespondJob(RespondJobRequest) returns (RespondJobResponse);
 }
