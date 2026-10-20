@@ -33,21 +33,23 @@ type Layout struct {
 	Isolated []string
 }
 
-func CIDRFor(namespace string, tier environment.Tier, configured string) string {
-	if configured != "" {
-		return configured
-	}
-	return DefaultCIDR(namespace, tier)
+func DefaultCIDR(namespace string, tier environment.Tier) string {
+	return DefaultCIDRs(namespace, tier)[0]
 }
 
-func DefaultCIDR(namespace string, tier environment.Tier) string {
+func DefaultCIDRs(namespace string, tier environment.Tier) []string {
 	sum := fnv.New32a()
 	_, _ = sum.Write([]byte(namespace))
-	second := defaultSecondOctetFrom + 2*int(sum.Sum32()%defaultBlockPairs)
-	if tier != environment.TierProduction {
-		second++
+	first := int(sum.Sum32() % defaultBlockPairs)
+	blocks := make([]string, 0, defaultBlockPairs)
+	for step := range defaultBlockPairs {
+		second := defaultSecondOctetFrom + 2*((first+step)%defaultBlockPairs)
+		if tier != environment.TierProduction {
+			second++
+		}
+		blocks = append(blocks, netip.PrefixFrom(netip.AddrFrom4([4]byte{10, byte(second), 0, 0}), widestBits).String())
 	}
-	return netip.PrefixFrom(netip.AddrFrom4([4]byte{10, byte(second), 0, 0}), widestBits).String()
+	return blocks
 }
 
 func NewLayout(cidr string) (Layout, error) {

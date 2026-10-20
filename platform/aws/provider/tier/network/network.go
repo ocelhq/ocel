@@ -141,15 +141,17 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 		}
 		return current, Shared.Claim(ctx, owner, consumer)
 	}
-	layout, err := NewLayout(CIDRFor(owner.Namespace, tier, owner.NetworkCIDR))
-	if err != nil {
-		return Network{}, err
-	}
 	zones, err := PickZones(ctx, owner.EC2)
 	if err != nil {
 		return Network{}, err
 	}
-	if err := RefusePlacement(ctx, owner.EC2, owner.Quotas, owner.Region, owner.Namespace, tier, layout.CIDR); err != nil {
+	layout, err := Place(ctx, owner.EC2, owner.Quotas, Placement{
+		Region:     owner.Region,
+		Namespace:  owner.Namespace,
+		Tier:       tier,
+		Configured: owner.NetworkCIDR,
+	})
+	if err != nil {
 		return Network{}, err
 	}
 	if progress != nil {

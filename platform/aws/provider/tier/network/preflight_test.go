@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -86,22 +87,57 @@ func TestARegionWithFewerThanTwoReachableZonesIsRefused(t *testing.T) {
 	}
 }
 
-func TestANetworkWhoseBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNamingItAndTheOption(t *testing.T) {
+func placing(configured string) Placement {
+	return Placement{Region: "us-east-1", Namespace: "ocel", Tier: "production", Configured: configured}
+}
+
+func TestANetworkWhoseConfiguredBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNamingItAndTheOption(t *testing.T) {
 	t.Parallel()
 
 	region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), vpc("vpc-theirs", "192.168.0.0/16", "10.20.128.0/17")}}
-	err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16")
+	_, err := Place(context.Background(), region, region, placing("10.20.0.0/16"))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
-		t.Fatalf("RefusePlacement() = %v, want a refusal", err)
+		t.Fatalf("Place() = %v, want a refusal", err)
 	}
 	for _, named := range []string{"vpc-theirs", "10.20.128.0/17", "network.production.cidr"} {
 		if !strings.Contains(refused.Message, named) {
 			t.Errorf("refusal %q does not name %q", refused.Message, named)
 		}
 	}
-	if err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.30.0.0/16"); err != nil {
-		t.Errorf("RefusePlacement() = %v, want a block clear of every VPC accepted", err)
+	if layout, err := Place(context.Background(), region, region, placing("10.30.0.0/16")); err != nil || layout.CIDR != "10.30.0.0/16" {
+		t.Errorf("Place() = %+v, %v, want the configured block clear of every VPC taken", layout, err)
+	}
+}
+
+func TestANetworkWithNoConfiguredBlockTakesTheFirstDefaultBlockNoOtherVPCOverlaps(t *testing.T) {
+	t.Parallel()
+
+	candidates := DefaultCIDRs("ocel", "production")
+	first, second := netip.MustParsePrefix(candidates[0]), netip.MustParsePrefix(candidates[1])
+	region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{
+		vpc("vpc-same-default", candidates[0]),
+		vpc("vpc-partly-in-the-way", netip.PrefixFrom(second.Addr(), 20).String()),
+	}}
+	layout, err := Place(context.Background(), region, region, placing(""))
+	if err != nil || layout.CIDR != candidates[2] {
+		t.Fatalf("Place() = %+v, %v, want %s: %s and %s each overlap a VPC in the region", layout, err, candidates[2], first, second)
+	}
+
+	clear := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16")}}
+	if layout, err := Place(context.Background(), clear, clear, placing("")); err != nil || layout.CIDR != candidates[0] {
+		t.Errorf("Place() = %+v, %v, want the namespace's own default %s when nothing holds it", layout, err, candidates[0])
+	}
+}
+
+func TestANetworkWithNoConfiguredBlockIsRefusedNamingTheOptionWhenEveryDefaultBlockIsHeld(t *testing.T) {
+	t.Parallel()
+
+	region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{vpc("vpc-everything", "10.0.0.0/8")}}
+	_, err := Place(context.Background(), region, region, placing(""))
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "network.production.cidr") {
+		t.Fatalf("Place() = %v, want a refusal naming the option that sets a block", err)
 	}
 }
 
@@ -117,8 +153,8 @@ func TestARetriedNetworkIsNotRefusedForTheVPCItsOwnFailedRaiseLeftBehind(t *test
 
 	leftover := taggedAs(vpc("vpc-leftover", "10.20.0.0/16"), stackTags("ocel", "production"))
 	region := &fakeRegion{quota: 2, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), leftover}}
-	if err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16"); err != nil {
-		t.Errorf("RefusePlacement() = %v, want the network's own VPC neither in the way nor counted against the quota: the retry takes it over", err)
+	if _, err := Place(context.Background(), region, region, placing("10.20.0.0/16")); err != nil {
+		t.Errorf("Place() = %v, want the network's own VPC neither in the way nor counted against the quota: the retry takes it over", err)
 	}
 
 	for _, theirs := range []ec2types.Vpc{
@@ -126,10 +162,10 @@ func TestARetriedNetworkIsNotRefusedForTheVPCItsOwnFailedRaiseLeftBehind(t *test
 		taggedAs(vpc("vpc-other-tier", "10.20.0.0/16"), stackTags("ocel", "preview")),
 	} {
 		region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{theirs}}
-		err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16")
+		_, err := Place(context.Background(), region, region, placing("10.20.0.0/16"))
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || !strings.Contains(refused.Message, aws.ToString(theirs.VpcId)) {
-			t.Errorf("RefusePlacement() = %v, want a refusal naming %s, a network of another namespace or tier", err, aws.ToString(theirs.VpcId))
+			t.Errorf("Place() = %v, want a refusal naming %s, a network of another namespace or tier", err, aws.ToString(theirs.VpcId))
 		}
 	}
 }
@@ -138,9 +174,9 @@ func TestANetworkInARegionAtItsVPCQuotaIsRefusedNamingTheQuota(t *testing.T) {
 	t.Parallel()
 
 	region := &fakeRegion{quota: 2, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), vpc("vpc-theirs", "192.168.0.0/16")}}
-	err := RefusePlacement(context.Background(), region, region, "us-east-1", "ocel", "production", "10.20.0.0/16")
+	_, err := Place(context.Background(), region, region, placing("10.20.0.0/16"))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "L-F678F1CE") {
-		t.Fatalf("RefusePlacement() = %v, want a refusal naming quota L-F678F1CE", err)
+		t.Fatalf("Place() = %v, want a refusal naming quota L-F678F1CE", err)
 	}
 }

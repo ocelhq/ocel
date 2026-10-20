@@ -35,6 +35,15 @@ func (r networkRegion) DescribeVpcs(context.Context, *awsec2.DescribeVpcsInput, 
 	return &awsec2.DescribeVpcsOutput{Vpcs: r.vpcs}, nil
 }
 
+type changingRegion struct {
+	defaultVPCNetwork
+	vpcs *[]ec2types.Vpc
+}
+
+func (r changingRegion) DescribeVpcs(context.Context, *awsec2.DescribeVpcsInput, ...func(*awsec2.Options)) (*awsec2.DescribeVpcsOutput, error) {
+	return &awsec2.DescribeVpcsOutput{Vpcs: *r.vpcs}, nil
+}
+
 type roomyQuotas struct{}
 
 func (roomyQuotas) GetServiceQuota(context.Context, *servicequotas.GetServiceQuotaInput, ...func(*servicequotas.Options)) (*servicequotas.GetServiceQuotaOutput, error) {
@@ -142,6 +151,29 @@ func TestAClaimWhoseConfigAsksForAnotherBlockThanTheNetworkHoldsIsRefused(t *tes
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, network.DefaultCIDR("ocel", environment.TierProduction)) || !strings.Contains(refused.Message, "network.production.cidr") {
 		t.Fatalf("Claim() = %v, want a refusal naming the block the VPC holds and the option asking for another", err)
+	}
+}
+
+func TestARaisedNetworkKeepsTheBlockItWasRaisedWithThoughAnotherVPCNowOverlapsIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	held := network.DefaultCIDR("ocel", environment.TierProduction)
+	vpcs := []ec2types.Vpc{}
+	cfg := routedConfig(t, cloudfront.Kind)
+	cfg.Network = changingRegion{vpcs: &vpcs}
+	stacks, engine, _ := networkStacks(t, cfg)
+	if _, err := stacks.Network().Claim(ctx, consumerRef("shop"), progress.Discard()); err != nil {
+		t.Fatalf("Claim(shop) = %v", err)
+	}
+
+	vpcs = append(vpcs, ec2types.Vpc{VpcId: aws.String("vpc-later"), CidrBlock: aws.String(held)})
+	claimed, err := stacks.Network().Claim(ctx, consumerRef("admin"), progress.Discard())
+	if err != nil || claimed.CIDR != held {
+		t.Fatalf("Claim(admin) = %+v, %v, want the network on %s it was raised with: a VPC made since does not move it", claimed, err, held)
+	}
+	if ran := engine.stacks(); len(ran) != 1 {
+		t.Errorf("ran %v, want the network provisioned once", ran)
 	}
 }
 
