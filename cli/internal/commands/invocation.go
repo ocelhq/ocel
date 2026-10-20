@@ -37,10 +37,11 @@ type Invocation struct {
 	Setups          prerequisite.Setups
 	RecordEvent     func(telemetry.Payload) bool
 
-	Console    deployreport.Console
-	CloudOffer func(ctx context.Context, creds console.Credentials) (*console.CloudOffer, error)
-	BuilderJob *BuilderJob
-	JobAnswers *jobinput.Answers
+	Console       deployreport.Console
+	CloudOffer    func(ctx context.Context, creds console.Credentials) (*console.CloudOffer, error)
+	CloudSessions *CloudSessions
+	BuilderJob    *BuilderJob
+	JobAnswers    *jobinput.Answers
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {
