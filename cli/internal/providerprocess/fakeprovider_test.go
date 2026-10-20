@@ -263,6 +263,8 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 			return err
 		}
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("simulated deploy refusal"))
+	case "unsupported-deploy":
+		return provider.RefusalError(refusal.Refuse(refusal.CodeUnsupported, "simulated provider runs no serverless app"))
 	case "hang-deploy":
 		time.Sleep(30 * time.Second)
 		return nil

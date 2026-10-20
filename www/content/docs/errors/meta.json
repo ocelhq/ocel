@@ -17,6 +17,7 @@
     "---Provider and account---",
     "provider.unavailable",
     "provider.version_mismatch",
+    "provider.unsupported",
     "prerequisite.missing",
     "bootstrap.missing",
     "bootstrap.parts_missing",
