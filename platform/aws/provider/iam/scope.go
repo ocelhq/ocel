@@ -29,6 +29,8 @@ type Scope struct {
 	RuntimeLayerVersions []string
 
 	BastionRole                string
+	TierFunctions              []string
+	TierFunctionLogGroups      []string
 	EnvSourceSyncFunction      string
 	EnvSourceSyncScheduleGroup string
 	EnvSourceSyncSchedule      string
@@ -59,7 +61,17 @@ func (s Scope) appFenced(arnPrefix, suffix string) string {
 
 func (s Scope) AppBucketARN() string { return s.appFenced("arn:aws:s3:::", "") }
 
-func (s Scope) AppWorkerFunctionARN() string { return s.appFenced("arn:aws:lambda:*:*:function:", "") }
+func (s Scope) AppFunctionARN() string { return s.appFenced("arn:aws:lambda:*:*:function:", "") }
+
+func (s Scope) FunctionARNs() []string {
+	return append([]string{s.AppFunctionARN()}, s.TierFunctions...)
+}
+
+func (s Scope) FunctionLogGroupARNs() []string {
+	return append([]string{s.appFenced("arn:aws:logs:*:*:log-group:/aws/lambda/", "")}, s.TierFunctionLogGroups...)
+}
+
+func (s Scope) AppBoundaryRoles() []string { return []string{s.AppRoles, s.BastionRole} }
 
 func (s Scope) tierFenced(arnPrefix string) string {
 	return arnPrefix + naming.AppFence(s.Namespace) + naming.TierWord(s.Tier) + naming.WordSeparator + "*"
@@ -164,11 +176,17 @@ func (s Scope) RetaggedOnlyAsItsTier() map[string]any {
 }
 
 func (s Scope) TaggedOnCreateForItsTier() map[string]any {
-	return MergeConditions(s.TaggedOnCreate(), s.MadeForItsTier())
+	return map[string]any{"StringEquals": map[string]any{
+		"aws:RequestTag/" + naming.ManagedByTagKey: s.Namespace,
+		"aws:RequestTag/" + naming.EnvTierTagKey:   string(s.Tier),
+	}}
 }
 
 func (s Scope) TaggedByOcelForItsTier() map[string]any {
-	return MergeConditions(s.TaggedByOcel(), s.MadeByItsStacks())
+	return map[string]any{"StringEquals": map[string]any{
+		"aws:ResourceTag/" + naming.ManagedByTagKey: s.Namespace,
+		"aws:ResourceTag/" + naming.EnvTierTagKey:   string(s.Tier),
+	}}
 }
 
 func (s Scope) RetaggedByOcelOnlyAsItsTier() map[string]any {
@@ -183,16 +201,8 @@ func InCallerAccount() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceAccount": CallerAccount}}
 }
 
-func (s Scope) TaggedOnCreate() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + ManagedByTagKey: s.Namespace}}
-}
-
-func (s Scope) TaggedByOcel() map[string]any {
-	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + ManagedByTagKey: s.Namespace}}
-}
-
 func (s Scope) OfAppWorker() map[string]any {
-	return map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": s.AppWorkerFunctionARN()}}
+	return map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": s.AppFunctionARN()}}
 }
 
 func KeyPairSuppliedByCaller() map[string]any {
@@ -211,14 +221,10 @@ func (s Scope) TaggedOnCreateOnlyForItsTier() map[string]any {
 	return MergeConditions(s.TaggedOnCreateForItsTier(), s.TaggedOnlyAsItsTier())
 }
 
-func (s Scope) AttachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
-	condition := map[string]any{
+func AttachedPolicyIsAServiceRole() map[string]any {
+	return map[string]any{
 		"ArnEquals": map[string]any{"iam:PolicyARN": []string{LambdaBasicExecutionPolicyARN, LambdaVPCAccessPolicyARN, ECSTaskExecutionPolicyARN}},
 	}
-	if resourceTagged {
-		return MergeConditions(condition, s.TaggedByOcel())
-	}
-	return condition
 }
 
 func PassedTo(service any) map[string]any {

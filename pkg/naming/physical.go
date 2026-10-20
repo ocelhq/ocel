@@ -1,67 +1,58 @@
 package naming
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
-
-const (
-	AppWord        = "app"
-	productionWord = "prod"
-)
-
-func AppFence(namespace string) string {
-	return NamespaceField(namespace) + WordSeparator + AppWord + WordSeparator
-}
-
-func TierWord(tier environment.Tier) string {
-	if tier == environment.TierProduction {
-		return productionWord
-	}
-	return Sanitize(string(tier))
-}
 
 const minCutFieldChars = 3
 
 type PhysicalName struct {
-	Namespace string
+	Fence     string
+	Qualifier string
 	Project   string
 	Env       string
 	App       string
 	Declared  string
+	Kind      string
 	Tag       string
 }
 
 func (c Coordinate) AppResourceName(namespace, tag string) PhysicalName {
-	return PhysicalName{Namespace: namespace, Project: c.Project, Env: c.Env, App: c.appField(), Declared: c.Name, Tag: tag}
+	return PhysicalName{Fence: AppFence(namespace), Project: c.Project, Env: c.Env, App: c.App, Declared: c.Name, Tag: tag}
 }
 
-func (p PhysicalName) Fit(limit int) (string, error) {
-	return p.fit(limit, 0)
+func (p PhysicalName) Fit(limit int, childSuffixes ...string) (string, error) {
+	return p.fit(limit, longestChildSuffix(childSuffixes), true)
 }
 
-func (p PhysicalName) FitWithChildren(limit int, childSuffixes ...string) (string, error) {
-	reserved := 0
-	for _, suffix := range childSuffixes {
-		reserved = max(reserved, len(WordSeparator)+len(Sanitize(suffix)))
+func (p PhysicalName) FitUntagged(limit int, childSuffixes ...string) (string, error) {
+	p.Tag = ""
+	return p.fit(limit, longestChildSuffix(childSuffixes)+len(WordSeparator)+tagChars, false)
+}
+
+func (p PhysicalName) fit(limit, reserved int, tagged bool) (string, error) {
+	required := []struct{ field, value string }{{"project", p.Project}, {"env", p.Env}}
+	if tagged {
+		required = append(required, struct{ field, value string }{"tag", p.Tag})
 	}
-	return p.fit(limit, reserved)
-}
-
-func (p PhysicalName) fit(limit, reserved int) (string, error) {
-	for field, value := range map[string]string{"namespace": p.Namespace, "project": p.Project, "env": p.Env, "declared name": p.Declared, "tag": p.Tag} {
-		if value == "" {
-			return "", fmt.Errorf("a physical name needs a %s", field)
+	for _, required := range required {
+		if required.value == "" {
+			return "", fmt.Errorf("a physical name needs a %s", required.field)
 		}
 	}
-	project, env, app := Sanitize(p.Project), Sanitize(p.Env), ""
-	if p.App != "" && p.App != InfraApp {
-		app = Sanitize(p.App)
+	project, env, app := Sanitize(p.Project), Sanitize(p.Env), appField(p.App)
+	if app != "" {
+		app = Sanitize(app)
+	}
+	if app == "" && p.Declared == "" {
+		return "", fmt.Errorf("the physical name in %s/%s needs a declared name or an app", p.Project, p.Env)
 	}
 	name := func() string {
-		return AppFence(p.Namespace) + Join(WordSeparator, project, env, app, p.Declared, p.Tag)
+		return p.Fence + Join(WordSeparator, p.Qualifier, project, env, app, p.Declared, p.Kind, p.Tag)
 	}
 	full := name()
 	for _, field := range []*string{&env, &project, &app} {
@@ -72,23 +63,22 @@ func (p PhysicalName) fit(limit, reserved int) (string, error) {
 		keep := max(len(*field)-over, min(len(*field), minCutFieldChars))
 		*field = strings.TrimRight((*field)[:keep], WordSeparator)
 	}
-	fitted := name()
-	if len(fitted)+reserved <= limit {
+	if fitted := name(); len(fitted)+reserved <= limit {
 		return fitted, nil
 	}
+	kept := ""
 	if reserved > 0 {
-		return "", fmt.Errorf("%q does not fit %d characters with %d kept for its children's suffixes, even with env, project and app cut to %d characters each", full, limit, reserved, minCutFieldChars)
+		kept = fmt.Sprintf(" with %d kept for what is appended to it", reserved)
 	}
-	return "", fmt.Errorf("%q does not fit %d characters, even with env, project and app cut to %d characters each", full, limit, minCutFieldChars)
+	return "", refusal.Refuse(refusal.CodeInvalid,
+		"%s does not fit %d characters%s, even with env, project and app cut to %d characters each\nShorten %s",
+		full, limit, kept, minCutFieldChars, cmp.Or(p.Declared, p.App))
 }
 
-func OcelName(namespace string, words ...string) (string, error) {
-	rest := Join(WordSeparator, words...)
-	if rest == "" {
-		return "", fmt.Errorf("an Ocel-owned name in namespace %q needs a word after the namespace", namespace)
+func longestChildSuffix(childSuffixes []string) int {
+	longest := 0
+	for _, suffix := range childSuffixes {
+		longest = max(longest, len(WordSeparator)+len(Sanitize(suffix)))
 	}
-	if first, _, _ := strings.Cut(rest, WordSeparator); first == AppWord {
-		return "", fmt.Errorf("the Ocel-owned name %q starts with the fence %q that only app resources are named under", NamespaceField(namespace)+WordSeparator+rest, AppFence(namespace))
-	}
-	return NamespaceField(namespace) + WordSeparator + rest, nil
+	return longest
 }

@@ -21,8 +21,7 @@ import (
 const ProjectTag = "ocel:project"
 
 const (
-	ecrUsername  = "AWS"
-	managedByTag = "ocel:managed-by"
+	ecrUsername = "AWS"
 )
 
 type ECRAPI interface {
@@ -165,7 +164,7 @@ func ensure(ctx context.Context, api ECRAPI, managedBy, name string) (bool, erro
 		return false, fmt.Errorf("the image repository %s names no project, so no credential limited to a project could ever delete its images", name)
 	}
 	tags := []ecrtypes.Tag{
-		{Key: aws.String(managedByTag), Value: aws.String(managedBy)},
+		{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(managedBy)},
 		{Key: aws.String(ProjectTag), Value: aws.String(project)},
 	}
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{

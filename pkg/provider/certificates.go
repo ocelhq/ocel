@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
@@ -18,6 +19,7 @@ type Certificate struct {
 func (c Certificate) Issued() bool { return c.ID != "" }
 
 type CertificateRequest struct {
+	Tier     environment.Tier
 	Kind     edge.Kind
 	Router   router.Kind
 	Hostname string

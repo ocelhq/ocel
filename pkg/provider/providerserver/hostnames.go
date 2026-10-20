@@ -352,6 +352,7 @@ func (s *edgeSession) readHostRouter(hostname string) (router.Kind, error) {
 
 func (d *hostnames) hostCertificates(host string, hostState *stackrecords.HostnameState, answering router.Kind) hostCertificates {
 	return hostCertificates{
+		tier:      d.tier,
 		provider:  d.provider,
 		cutover:   d.cutover,
 		router:    answering,

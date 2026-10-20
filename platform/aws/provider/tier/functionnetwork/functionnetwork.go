@@ -40,7 +40,6 @@ const (
 	anyIPv4     = "0.0.0.0/0"
 	stackTagKey = "ocel:stack"
 
-	managedByTagKey   = "ocel:managed-by"
 	functionsWord     = "functions"
 	securityGroupWord = "sg"
 	privateWord       = "private"
@@ -108,10 +107,10 @@ func nameFor(namespace string, tier environment.Tier, parts ...string) string {
 
 func stackTags(namespace string, tier environment.Tier) map[string]string {
 	return map[string]string{
-		managedByTagKey:      namespace,
-		"ocel:project":       Slug,
-		naming.EnvTierTagKey: string(tier),
-		stackTagKey:          StackRef(tier).Name.String(),
+		naming.ManagedByTagKey: namespace,
+		"ocel:project":         Slug,
+		naming.EnvTierTagKey:   string(tier),
+		stackTagKey:            StackRef(tier).Name.String(),
 	}
 }
 

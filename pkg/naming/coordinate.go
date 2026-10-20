@@ -113,7 +113,14 @@ func (c Coordinate) Description(detail string) string {
 	return head + " - " + detail
 }
 
-const EnvTierTagKey = "ocel:env-tier"
+const (
+	ManagedByTagKey = "ocel:managed-by"
+	EnvTierTagKey   = "ocel:env-tier"
+)
+
+func OcelTags(namespace string, tier environment.Tier) map[string]string {
+	return map[string]string{ManagedByTagKey: namespace, EnvTierTagKey: string(tier)}
+}
 
 type TagValues struct {
 	ManagedBy string
@@ -126,7 +133,7 @@ type TagValues struct {
 
 func (c Coordinate) Tags(v TagValues) map[string]string {
 	tags := map[string]string{
-		"ocel:managed-by": v.ManagedBy,
+		ManagedByTagKey:   v.ManagedBy,
 		"ocel:project":    c.Project,
 		"ocel:env":        c.Env,
 		EnvTierTagKey:     string(v.EnvTier),

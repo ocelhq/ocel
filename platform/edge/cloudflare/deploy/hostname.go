@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 type routeSpec struct {
@@ -28,16 +27,6 @@ type routeSpec struct {
 
 func (spec routeSpec) ownsRoute(scriptName, owner string) bool {
 	return owner == scriptName || spec.owns != nil && spec.owns(owner)
-}
-
-func projectOwnsScript(namespace, slug string) func(script string) bool {
-	stem := naming.NamespaceField(namespace) + fieldSeparator + slug + fieldSeparator
-	return func(script string) bool {
-		if namespace == "" || slug == "" || script == "" {
-			return false
-		}
-		return strings.HasPrefix(script, stem)
-	}
 }
 
 func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec routeSpec, warn func(string)) error {

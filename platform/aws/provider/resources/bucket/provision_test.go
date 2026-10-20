@@ -117,7 +117,7 @@ func TestABucketIsCreatedTaggedForItsNamespaceAndTierWithABACOnThatOutlivesIt(t 
 	})
 
 	tags := rec.Tags(t, component.TokenS3Bucket, testBucket)
-	if tags[iam.ManagedByTagKey] != "ocel" || tags[naming.EnvTierTagKey] != string(environment.TierProduction) {
+	if tags[naming.ManagedByTagKey] != "ocel" || tags[naming.EnvTierTagKey] != string(environment.TierProduction) {
 		t.Errorf("bucket tags = %v, want the namespace and tier the deploy credential creates a bucket under", tags)
 	}
 	abac := rec.InputsOf(t, tokenS3ABAC, testBucket+"/abac")

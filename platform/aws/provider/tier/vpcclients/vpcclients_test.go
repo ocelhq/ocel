@@ -76,7 +76,7 @@ func TestTheClientsGroupIsMadeOnceInTheDefaultVPCTaggedForItsTier(t *testing.T) 
 	for _, tag := range created.TagSpecifications[0].Tags {
 		tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 	}
-	if tags[managedByTagKey] != "ocel" || tags[naming.EnvTierTagKey] != string(environment.TierProduction) {
+	if tags[naming.ManagedByTagKey] != "ocel" || tags[naming.EnvTierTagKey] != string(environment.TierProduction) {
 		t.Errorf("tags = %v, want the ocel and tier tags the deploy credential may delete it by", tags)
 	}
 }

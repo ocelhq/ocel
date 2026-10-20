@@ -29,9 +29,6 @@ const (
 	syncPolicyName     = "env-source-sync"
 	invokePolicyName   = "invoke-env-source-sync"
 
-	managedByTagKey = "ocel:managed-by"
-	tierTagKey      = "ocel:env-tier"
-
 	syncWord     = "env-sync"
 	scheduleWord = "schedule"
 )

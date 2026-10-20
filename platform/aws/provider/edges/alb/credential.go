@@ -27,7 +27,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:CreateTrustStore"},
 			Resources: slices.Concat(s.ContainerBalancerARNs(), []string{iam.AppTargetGroupARN, s.ContainerTrustStoreARN()}),
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -35,12 +35,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"elasticloadbalancing:RemoveListenerCertificates",
 			},
 			Resources: s.ContainerListenerARNs(),
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags", "elasticloadbalancing:ModifyTrustStore", "elasticloadbalancing:DeleteTrustStore"},
 			Resources: []string{s.ContainerTrustStoreARN()},
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -62,12 +62,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"elasticloadbalancing:SetSubnets",
 			},
 			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), []string{iam.AppTargetGroupARN}),
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags"},
 			Resources: slices.Concat(s.ContainerBalancerARNs(), s.ContainerListenerARNs(), s.ContainerRuleARNs(), []string{iam.AppTargetGroupARN, s.ContainerTrustStoreARN()}),
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 	}
 }

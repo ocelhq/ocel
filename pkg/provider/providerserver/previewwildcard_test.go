@@ -87,6 +87,9 @@ func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
 		t.Fatalf("UsePreviewWildcard() = %q, want the rotation cut over", result.GetError())
 	}
 
+	if tier := vendor.CertificateTier("*.preview.acme.com"); tier != environment.TierPreview {
+		t.Errorf("the wildcard certificate was asked for the %q tier, want preview: the preview tier's credential alone discards it", tier)
+	}
 	if discarded := vendor.Discarded(); !slices.Contains(discarded, "issued-for-*.preview.acme.com") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}

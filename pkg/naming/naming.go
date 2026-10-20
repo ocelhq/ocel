@@ -23,7 +23,6 @@ const (
 var (
 	ingestPattern     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	repositoryPattern = regexp.MustCompile(`^[a-z0-9]+([._-][a-z0-9]+)*$`)
-	compactedPattern  = regexp.MustCompile(`^[a-z0-9-]{1,5}-[0-9a-f]{6}$`)
 )
 
 func IsRepositorySegment(value string) bool {
@@ -81,28 +80,6 @@ func SanitizeAlpha(value string) string {
 		return "a" + out
 	}
 	return out
-}
-
-const (
-	MaxNamespaceField    = 12
-	namespaceDigestChars = 6
-	namespaceHeadChars   = MaxNamespaceField - len(WordSeparator) - namespaceDigestChars
-)
-
-func NamespaceField(namespace string) string {
-	if len(namespace) <= MaxNamespaceField {
-		return namespace
-	}
-	head := strings.TrimRight(namespace[:namespaceHeadChars], WordSeparator)
-	if strings.HasSuffix(WordSeparator+head, WordSeparator+AppWord) {
-		head = strings.TrimRight(head[:len(head)-1], WordSeparator)
-	}
-	sum := sha256.Sum256([]byte(namespace))
-	return head + WordSeparator + hex.EncodeToString(sum[:])[:namespaceDigestChars]
-}
-
-func IsCompactedNamespaceField(value string) bool {
-	return compactedPattern.MatchString(value)
 }
 
 const WildcardSuffix = "wildcard"

@@ -14,6 +14,7 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -64,7 +65,8 @@ func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname str
 			}},
 			Actions: actions,
 			Tags: []elbv2types.Tag{
-				{Key: aws.String("ocel:managed-by"), Value: aws.String(s.namespace)},
+				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(s.namespace)},
+				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(s.state.Tier))},
 				{Key: aws.String("ocel:project"), Value: aws.String(s.state.Slug)},
 			},
 		})

@@ -867,10 +867,10 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRoutes: []map[string]any{
-					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel--shop--prod--root"},
+					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-prod-entry-shop-138c36"},
 				},
 			},
-			script:          "ocel--shop--prod--web",
+			script:          "ocel-preview-entry-shop-a72e31",
 			spec:            ownedSpec("shop", "shop.app.com"),
 			repointedRoutes: []string{"mine"},
 		},
@@ -1013,9 +1013,9 @@ func TestAttachingARouteHeldByAnotherWorkerOfTheProjectSinceTheListingRepointsIt
 	t.Parallel()
 	m := &cfMock{
 		zoneID: "zone1", zoneName: "app.com",
-		routesAddedAfterListing: []map[string]any{{"id": "late", "pattern": "shop.app.com/*", "script": "ocel--shop--prod--root"}},
+		routesAddedAfterListing: []map[string]any{{"id": "late", "pattern": "shop.app.com/*", "script": "ocel-prod-entry-shop-138c36"}},
 	}
-	up := upload{accountID: "acct", scriptName: "ocel--shop--prod--web"}
+	up := upload{accountID: "acct", scriptName: "ocel-preview-entry-shop-a72e31"}
 
 	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v, want the project's own route repointed", err)

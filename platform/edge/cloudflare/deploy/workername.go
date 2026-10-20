@@ -8,41 +8,32 @@ import (
 )
 
 const (
-	fieldSeparator = "--"
-	wordSeparator  = "-"
-
 	maxWorkerNameLength = 63
-	rootWorkerApp       = "root"
-	productionWorkerEnv = "prod"
-	previewWorkerEnv    = "preview"
+	entryWorkerWord     = "entry"
 )
 
-func workerEnvFor(tier environment.Tier) (string, error) {
-	switch tier {
-	case environment.TierProduction:
-		return productionWorkerEnv, nil
-	case environment.TierPreview:
-		return previewWorkerEnv, nil
-	default:
-		return "", fmt.Errorf("stack workers: unknown tier %q", tier)
-	}
-}
-
-func workerScriptName(namespace, slug, env, app string) string {
-	return naming.Fit(maxWorkerNameLength, naming.FieldSeparator,
-		naming.Fixed(naming.NamespaceField(namespace)),
-		naming.Fixed(slug),
-		naming.Fixed(env),
-		naming.Compressible(app),
-	)
-}
+var workerTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
 
 func entryWorkerName(namespace, slug string, tier environment.Tier) (string, error) {
-	env, err := workerEnvFor(tier)
-	if err != nil {
-		return "", err
+	if tier != environment.TierProduction && tier != environment.TierPreview {
+		return "", fmt.Errorf("stack workers: unknown tier %q", tier)
 	}
-	return workerScriptName(namespace, slug, env, rootWorkerApp), nil
+	return naming.TaggedName{
+		Head:     naming.OcelName(namespace, tier, entryWorkerWord),
+		Readable: naming.Sanitize(slug),
+		Tag:      naming.HashTag(namespace, slug, string(tier)),
+	}.Fit(maxWorkerNameLength), nil
+}
+
+func projectOwnsScript(namespace, slug string) func(script string) bool {
+	owned := map[string]bool{}
+	if namespace != "" && slug != "" {
+		for _, tier := range workerTiers {
+			name, _ := entryWorkerName(namespace, slug, tier)
+			owned[name] = true
+		}
+	}
+	return func(script string) bool { return owned[script] }
 }
 
 func ProjectOwnsWorker(namespace, slug, script string) bool {

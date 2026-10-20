@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -185,7 +183,7 @@ func TestTheAppBoundaryLetsAnAppRoleStartOnlyTheWorkerServicesOfItsTiersClusterT
 				t.Errorf("ecs is admitted on %q, want %q: this tier's cluster and the app scope alone", st.Resource, want)
 			}
 			equals, _ := st.Condition["StringEquals"].(map[string]any)
-			if equals["aws:ResourceTag/"+iam.ManagedByTagKey] != string(defaultNamespace) {
+			if equals["aws:ResourceTag/"+naming.ManagedByTagKey] != string(defaultNamespace) {
 				t.Errorf("ecs is admitted under %v, want it pinned to services Ocel tagged", st.Condition)
 			}
 		})

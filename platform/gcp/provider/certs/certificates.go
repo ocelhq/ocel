@@ -45,10 +45,7 @@ func authorizationID(namespace, hostname string) string {
 }
 
 func certificateName(namespace, hostname string, role ...string) string {
-	head, err := naming.OcelName(namespace, certificateWord)
-	if err != nil {
-		panic(err)
-	}
+	head := naming.MustUntieredOcelName(namespace, certificateWord)
 	tag := naming.HashTag(namespace, hostname)
 	room := maxCertificateName - len(head) - len(tag) - 2*len(naming.WordSeparator) - len(naming.WordSeparator+authorizationRole)
 	readable := naming.SanitizeHost(hostname)

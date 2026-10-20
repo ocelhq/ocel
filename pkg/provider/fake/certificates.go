@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -51,6 +52,12 @@ func (p *Provider) RefuseDiscardingAServingCertificate(err error) {
 	p.servingDiscardRefusal = err
 }
 
+func (p *Provider) CertificateTier(hostname string) environment.Tier {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.certificateTiers[hostname]
+}
+
 func (p *Provider) Discarded() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -61,6 +68,10 @@ type certificates struct{ *Provider }
 
 func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
 	p.mu.Lock()
+	if p.certificateTiers == nil {
+		p.certificateTiers = map[string]environment.Tier{}
+	}
+	p.certificateTiers[req.Hostname] = req.Tier
 	refusal, pinned, validation := p.certRefusal, p.pins[req.Hostname], slices.Clone(p.issue)
 	rotation, pending := p.rotation, p.pending
 	p.mu.Unlock()

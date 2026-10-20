@@ -7,7 +7,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"acm:RequestCertificate"},
 			Resources: []string{iam.AnyResource},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -17,7 +17,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"acm:RemoveTagsFromCertificate",
 			},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"acm:DescribeCertificate"},

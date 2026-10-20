@@ -24,8 +24,6 @@ const (
 	httpsPort           = 443
 	anywhere            = "0.0.0.0/0"
 
-	managedByTagKey = "ocel:managed-by"
-
 	pollJitter        = 0.5
 	pollCeiling       = 10 * time.Second
 	agentReadyTimeout = 5 * time.Minute

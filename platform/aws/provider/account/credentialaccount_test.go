@@ -20,14 +20,14 @@ import (
 )
 
 func ocelRoleOf(tier environment.Tier) requestContext {
-	return taggedWithTier(tier, requestContext{"aws:ResourceTag/" + iam.ManagedByTagKey: string(defaultNamespace)})
+	return taggedWithTier(tier, requestContext{"aws:ResourceTag/" + naming.ManagedByTagKey: string(defaultNamespace)})
 }
 
 func partRoleOf(tier environment.Tier) requestContext {
 	return taggedWithTier(tier, requestContext{
-		"aws:ResourceTag/" + iam.ManagedByTagKey: string(defaultNamespace),
-		"aws:PrincipalAccount":                   "111122223333",
-		"iam:PermissionsBoundary":                "arn:aws:iam::111122223333:policy/" + defaultNamespace.AppBoundaryNameFor(tier),
+		"aws:ResourceTag/" + naming.ManagedByTagKey: string(defaultNamespace),
+		"aws:PrincipalAccount":                      "111122223333",
+		"iam:PermissionsBoundary":                   "arn:aws:iam::111122223333:policy/" + defaultNamespace.AppBoundaryNameFor(tier),
 	})
 }
 
@@ -730,7 +730,43 @@ func tierResources() []tierResource {
 		{"topic", "sns:DeleteTopic", fixed("arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"), ocelRoleOf},
 		{"topic", "sns:Subscribe", fixed("arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"), ocelRoleOf},
 		{"task", "scheduler:DeleteScheduleGroup", fixed("arn:aws:scheduler:" + region + ":schedule-group/ocel-app-shop-prod-heartbeat"), ocelRoleOf},
+		{"function", "logs:DeleteLogGroup", fixed(appLogGroupARN), ocelRoleOf},
+		{"function", "logs:FilterLogEvents", fixed(appLogGroupARN), ocelRoleOf},
+		{"function", "logs:StartLiveTail", fixed(appLogGroupARN), ocelRoleOf},
+		{"function", "logs:PutRetentionPolicy", fixed(appLogGroupARN), ocelRoleOf},
+		{"network", "ec2:RevokeSecurityGroupIngress", fixed(appSecurityGroupARN), ocelRoleOf},
+		{"network", "ec2:AuthorizeSecurityGroupIngress", fixed(appSecurityGroupARN), ocelRoleOf},
+		{"network", "ec2:DeleteSecurityGroup", fixed(appSecurityGroupARN), ocelRoleOf},
+		{"function network", "ec2:DeleteSubnet", fixed("arn:aws:ec2:" + region + ":subnet/subnet-0123456789abcdef0"), ocelRoleOf},
+		{"function network", "ec2:DeleteRoute", fixed("arn:aws:ec2:" + region + ":route-table/rtb-0123456789abcdef0"), ocelRoleOf},
+		{"function network", "ec2:ReleaseAddress", fixed("arn:aws:ec2:" + region + ":elastic-ip/eipalloc-0123456789abcdef0"), ocelRoleOf},
+		{"function network", "ec2:DeleteNatGateway", fixed("arn:aws:ec2:" + region + ":natgateway/nat-0123456789abcdef0"), ocelRoleOf},
+		{"function network", "ec2:DeleteVpcEndpoints", fixed("arn:aws:ec2:" + region + ":vpc-endpoint/vpce-0123456789abcdef0"), ocelRoleOf},
+		{"container", "application-autoscaling:DeregisterScalableTarget", fixed(appScalableTargetARN), scalingOf},
+		{"container", "application-autoscaling:PutScalingPolicy", fixed(appScalableTargetARN), scalingOf},
+		{"container", "application-autoscaling:UntagResource", fixed(appScalableTargetARN), ocelRoleOf},
+		{"container", "elasticloadbalancing:DeleteTargetGroup", fixed(appTargetGroupARN), ocelRoleOf},
+		{"container", "elasticloadbalancing:ModifyTargetGroup", fixed(appTargetGroupARN), ocelRoleOf},
+		{"container", "elasticloadbalancing:RemoveTags", fixed(appTargetGroupARN), ocelRoleOf},
+		{"containers", "cloudfront:DeleteVpcOrigin", fixed("arn:aws:cloudfront::111122223333:vpcorigin/vo_0123456789abcdef"), ocelRoleOf},
+		{"certs", "acm:DeleteCertificate", fixed(appCertificateARN), ocelRoleOf},
+		{"certs", "acm:RemoveTagsFromCertificate", fixed(appCertificateARN), ocelRoleOf},
 	}
+}
+
+const (
+	appLogGroupARN       = "arn:aws:logs:" + tierResourceAccount + ":log-group:/aws/lambda/ocel-app-shop-prod-web-r1a2b3c4d"
+	appSecurityGroupARN  = "arn:aws:ec2:" + tierResourceAccount + ":security-group/sg-0123456789abcdef0"
+	appScalableTargetARN = "arn:aws:application-autoscaling:" + tierResourceAccount + ":scalable-target/0123456789abcdef0123456789abcdef"
+	appTargetGroupARN    = "arn:aws:elasticloadbalancing:" + tierResourceAccount + ":targetgroup/ocel-app-shop-prod-web-a1b2c3/0123456789abcdef"
+	appCertificateARN    = "arn:aws:acm:" + tierResourceAccount + ":certificate/0a1b2c3d-4e5f-6789-abcd-ef0123456789"
+)
+
+func scalingOf(tier environment.Tier) requestContext {
+	request := ocelRoleOf(tier)
+	request["application-autoscaling:service-namespace"] = "ecs"
+	request["application-autoscaling:scalable-dimension"] = "ecs:service:DesiredCount"
+	return request
 }
 
 func TestADeployCredentialReachesTheResourcesOfOnlyItsOwnTier(t *testing.T) {
@@ -751,7 +787,7 @@ func TestADeployCredentialReachesTheResourcesOfOnlyItsOwnTier(t *testing.T) {
 func TestADeployCredentialCreatesAndRetagsResourcesOnlyForItsOwnTier(t *testing.T) {
 	const region = tierResourceAccount
 	creating := func(tier environment.Tier) requestContext {
-		return requestContext{"aws:RequestTag/" + iam.ManagedByTagKey: string(defaultNamespace), "aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
+		return requestContext{"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace), "aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
 	}
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()
@@ -763,6 +799,15 @@ func TestADeployCredentialCreatesAndRetagsResourcesOnlyForItsOwnTier(t *testing.
 			{"sqs:CreateQueue", "arn:aws:sqs:" + region + ":ocel-app-shop-prod-topic-orders"},
 			{"sns:CreateTopic", "arn:aws:sns:" + region + ":ocel-app-shop-prod-topic-orders"},
 			{"scheduler:CreateScheduleGroup", "arn:aws:scheduler:" + region + ":schedule-group/ocel-app-shop-prod-heartbeat"},
+			{"logs:CreateLogGroup", appLogGroupARN},
+			{"ec2:CreateSecurityGroup", appSecurityGroupARN},
+			{"ec2:CreateSubnet", "arn:aws:ec2:" + region + ":subnet/*"},
+			{"ecs:RegisterTaskDefinition", "arn:aws:ecs:" + region + ":task-definition/ocel-app-shop-prod-web-a1b2c3:1"},
+			{"elasticloadbalancing:CreateTargetGroup", appTargetGroupARN},
+			{"application-autoscaling:TagResource", appScalableTargetARN},
+			{"cloudfront:CreateVpcOrigin", iam.AnyResource},
+			{"acm:RequestCertificate", iam.AnyResource},
+			{"acm:ImportCertificate", appCertificateARN},
 		} {
 			if !allows(t, deployDoc, c.action, c.arn, creating(tier)) {
 				t.Errorf("the %s deploy credential cannot %s tagged for its own tier", tier, c.action)

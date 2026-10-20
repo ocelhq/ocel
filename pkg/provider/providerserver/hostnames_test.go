@@ -445,6 +445,9 @@ func TestAddHostnameBindsTheCertificateItsProviderIssues(t *testing.T) {
 	if hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com"); hostState.Certificate.ID != "cert-for-app" {
 		t.Errorf("recorded certificate = %q, want the one the provider issued", hostState.Certificate.ID)
 	}
+	if tier := vendor.CertificateTier("app.acme.com"); tier != environment.TierProduction {
+		t.Errorf("the certificate for app.acme.com was asked for the %q tier, want production: a hostname serves the production tier, whose credential alone may discard it", tier)
+	}
 }
 
 func TestAddHostnameRefusesWhenNoCertificateCanBeIssued(t *testing.T) {

@@ -114,7 +114,7 @@ const (
 
 func (n Names) RealtimeGateway(project, env string) string {
 	tag := naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: naming.KindRealtime, Name: realtimeInfix}.HashTag(string(n.namespace))
-	gateway, err := naming.PhysicalName{Namespace: string(n.namespace), Project: project, Env: env, Declared: realtimeInfix, Tag: tag}.Fit(MaxServiceNameLength)
+	gateway, err := naming.PhysicalName{Fence: n.AppFence(), Project: project, Env: env, Declared: realtimeInfix, Tag: tag}.Fit(MaxServiceNameLength)
 	if err != nil {
 		panic(err)
 	}
@@ -224,7 +224,7 @@ func untagged(named func(tag string) (string, error)) (string, error) {
 }
 
 func (n Names) fitApp(name naming.PhysicalName, limit int, primitive, service string) (string, error) {
-	name.Namespace = string(n.namespace)
+	name.Fence = n.AppFence()
 	fitted, err := name.Fit(limit)
 	if err != nil {
 		return "", refusal.Refuse(refusal.CodeInvalid,
@@ -395,9 +395,5 @@ func New(namespace provider.Namespace, project string) Names {
 }
 
 func (n Names) mustOcelName(words ...string) string {
-	name, err := naming.OcelName(string(n.namespace), words...)
-	if err != nil {
-		panic(err)
-	}
-	return name
+	return naming.MustUntieredOcelName(string(n.namespace), words...)
 }

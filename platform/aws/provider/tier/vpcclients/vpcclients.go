@@ -25,8 +25,6 @@ const (
 
 	KindSecurityGroup = "AWS::EC2::SecurityGroup"
 
-	managedByTagKey = "ocel:managed-by"
-
 	clientsWord = "vpc-clients"
 )
 
@@ -81,7 +79,7 @@ func Ensure(ctx context.Context, api API, namespace string, tier environment.Tie
 			ResourceType: ec2types.ResourceTypeSecurityGroup,
 			Tags: []ec2types.Tag{
 				{Key: aws.String("Name"), Value: aws.String(name)},
-				{Key: aws.String(managedByTagKey), Value: aws.String(namespace)},
+				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(namespace)},
 				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))},
 			},
 		}},

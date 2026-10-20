@@ -139,7 +139,7 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 }
 
 func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Listener, tags pulumi.StringMap) error {
-	liveness, targets := livenessName(w.namespace, w.tier), naming.Join(naming.WordSeparator, balancer, targetGroupWord)
+	liveness, targets := LivenessName(w.namespace, w.tier), naming.Join(naming.WordSeparator, balancer, targetGroupWord)
 	role, err := awsiam.NewRole(ctx, liveness, &awsiam.RoleArgs{
 		Name:                pulumi.String(liveness),
 		Description:         pulumi.String("Ocel: the role the public front's liveness answer runs as in the " + string(w.tier) + " tier"),

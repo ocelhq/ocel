@@ -15,6 +15,8 @@ import (
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -97,6 +99,7 @@ func cutSuffixFold(s, suffix string) (string, bool) {
 type ACM struct {
 	API       ACMAPI
 	ManagedBy string
+	Tier      environment.Tier
 	Region    string
 	Wait      func(context.Context, time.Duration) error
 	Attempts  int
@@ -162,7 +165,10 @@ func (i ACM) Request(ctx context.Context, hostnames []string) (Certificate, erro
 		SubjectAlternativeNames: alternates,
 		ValidationMethod:        acmtypes.ValidationMethodDns,
 		IdempotencyToken:        aws.String(idempotencyToken(strings.Join(hostnames, ","))),
-		Tags:                    []acmtypes.Tag{{Key: aws.String("ocel:managed-by"), Value: aws.String(i.ManagedBy)}},
+		Tags: []acmtypes.Tag{
+			{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(i.ManagedBy)},
+			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(i.Tier))},
+		},
 	})
 	if err != nil {
 		return Certificate{}, fmt.Errorf("request a certificate for %s in %s: %w", strings.Join(hostnames, ", "), i.Region, err)

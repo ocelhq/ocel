@@ -186,10 +186,10 @@ func Name(ref provider.StackRef, resource, kind string) (string, error) {
 	if !ref.Name.IsInfra() {
 		app = ref.Name.App
 	}
-	return docker.Name{
+	return naming.PhysicalName{
 		Project: ref.Project, Env: ref.Name.Env, App: app, Declared: resource, Kind: kind,
 		Tag: naming.HashTag(ref.Project, ref.Name.Env, app, kind, resource),
-	}.Fit()
+	}.Fit(docker.NameMax)
 }
 
 func (r Spec) Digest() (string, error) {

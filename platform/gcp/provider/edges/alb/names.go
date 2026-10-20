@@ -93,9 +93,5 @@ func Surface(namespace, slug string, tier environment.Tier) string {
 }
 
 func mustOcelName(namespace string, words ...string) string {
-	name, err := naming.OcelName(namespace, words...)
-	if err != nil {
-		panic(err)
-	}
-	return name
+	return naming.MustUntieredOcelName(namespace, words...)
 }

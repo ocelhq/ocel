@@ -1,8 +1,11 @@
 package naming
 
 import (
+	"maps"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func TestSanitizeKeepsTheAlphabet(t *testing.T) {
@@ -214,6 +217,14 @@ func TestTheTierADeployServesIsTaggedAsItsEnvTier(t *testing.T) {
 	tags := c.Tags(TagValues{EnvTier: "preview"})
 	if tags["ocel:env-tier"] != "preview" {
 		t.Errorf("ocel:env-tier = %q, want %q: IAM conditions scope an edge's grants to one tier by this tag", tags["ocel:env-tier"], "preview")
+	}
+}
+
+func TestOcelTagsNameTheNamespaceThatManagesAResourceAndTheTierItServes(t *testing.T) {
+	got := OcelTags("acme", environment.TierPreview)
+	want := map[string]string{"ocel:managed-by": "acme", "ocel:env-tier": "preview"}
+	if !maps.Equal(got, want) {
+		t.Errorf("OcelTags(acme, preview) = %v, want %v: every credential grant on an existing resource checks both", got, want)
 	}
 }
 

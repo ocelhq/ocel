@@ -43,8 +43,6 @@ const (
 	policyName       = "image-optimizer-read"
 
 	lambdaPrincipal = "lambda.amazonaws.com"
-	managedByTagKey = "ocel:managed-by"
-	tierTagKey      = "ocel:env-tier"
 
 	kindRole     = "AWS::IAM::Role"
 	kindLogGroup = "AWS::Logs::LogGroup"
@@ -109,10 +107,6 @@ func Digest(spec Spec) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func tags(spec Spec) map[string]string {
-	return map[string]string{managedByTagKey: spec.Namespace, tierTagKey: string(spec.Tier)}
-}
-
 func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource, error) {
 	names := NamesFor(spec.Namespace, spec.Tier)
 	account, err := accountOf(spec.Boundary)
@@ -138,13 +132,13 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		Service:      lambdaPrincipal,
 		PolicyName:   policyName,
 		Policy:       policy,
-		Tags:         tags(spec),
+		Tags:         naming.OcelTags(spec.Namespace, spec.Tier),
 		UpdatesTrust: spec.UpdatesTrust,
 	})
 	if behind != nil && !errors.Is(behind, stackrecords.ErrPartBehind) {
 		return nil, behind
 	}
-	functionTags := tags(spec)
+	functionTags := naming.OcelTags(spec.Namespace, spec.Tier)
 	functionTags[ComponentTagKey] = ComponentTagValue
 	if err := lambdapart.Ensure(ctx, c.functions(), lambdapart.Function{
 		Name:           names.Function,

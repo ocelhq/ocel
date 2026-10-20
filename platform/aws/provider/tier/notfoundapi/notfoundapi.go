@@ -13,6 +13,7 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -26,9 +27,6 @@ const (
 	StageName = "live"
 
 	routerValue = "api-gateway"
-
-	managedByTagKey = "ocel:managed-by"
-	tierTagKey      = "ocel:env-tier"
 
 	notFoundWord = "not-found"
 
@@ -132,7 +130,7 @@ func Ensure(ctx context.Context, c API, namespace string, tier environment.Tier,
 			Name:                  aws.String(name),
 			Description:           aws.String("Ocel answers 404 from here for every host pointed at this account that no deployment claims."),
 			EndpointConfiguration: &agtypes.EndpointConfiguration{Types: []agtypes.EndpointType{agtypes.EndpointTypeRegional}},
-			Tags:                  map[string]string{managedByTagKey: namespace, tierTagKey: string(tier)},
+			Tags:                  map[string]string{naming.ManagedByTagKey: namespace, naming.EnvTierTagKey: string(tier)},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create REST API %s: %w", name, err)

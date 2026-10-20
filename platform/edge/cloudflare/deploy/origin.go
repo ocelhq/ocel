@@ -21,7 +21,7 @@ import (
 const ownerSeparator = " for "
 
 func formatForwardingOwner(namespace, slug string, tier environment.Tier) string {
-	return naming.NamespaceField(namespace) + fieldSeparator + slug + fieldSeparator + string(tier)
+	return naming.NamespaceField(namespace) + naming.FieldSeparator + slug + naming.FieldSeparator + string(tier)
 }
 
 func formatOwnerComment(owner string) string { return recordComment + ownerSeparator + owner }

@@ -83,11 +83,11 @@ func identityHeadline(present Presentation, ev *streamv1.IdentityEvent) string {
 	if project := ev.GetProject(); project != "" {
 		named = append(named, present.Palette().Bold(project))
 	}
-	if env := envName(ev.GetTier()); env != "" {
+	if word := tierWord(ev.GetTier()); word != "" {
 		if ev.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
-			env = present.Palette().WarningBold(env)
+			word = present.Palette().WarningBold(word)
 		}
-		named = append(named, env)
+		named = append(named, word)
 	}
 	if len(named) == 0 {
 		return ""
@@ -105,7 +105,7 @@ func nonEmpty(values ...string) []string {
 	return kept
 }
 
-func envName(tier environmentv1.Tier) string {
+func tierWord(tier environmentv1.Tier) string {
 	switch tier {
 	case environmentv1.Tier_TIER_PREVIEW:
 		return "preview"

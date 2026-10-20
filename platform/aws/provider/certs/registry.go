@@ -6,6 +6,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -17,6 +19,7 @@ type Deps struct {
 	AWS       aws.Config
 	HTTP      *http.Client
 	Namespace string
+	Tier      environment.Tier
 }
 
 func (d Deps) http() *http.Client {
@@ -51,6 +54,7 @@ func newACM(deps Deps, region string) ACM {
 			o.HTTPClient = deps.http()
 		}),
 		ManagedBy: deps.Namespace,
+		Tier:      deps.Tier,
 		Region:    region,
 		Wait:      waitFor,
 		Attempts:  issueAttempts,

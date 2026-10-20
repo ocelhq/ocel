@@ -7,7 +7,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"ecs:CreateCluster"},
 			Resources: []string{s.ContainerClusterARN()},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -18,7 +18,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"ecs:UntagResource",
 			},
 			Resources: []string{s.ContainerClusterARN()},
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:CreateServiceLinkedRole"},
@@ -42,12 +42,12 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"cloudfront:CreateVpcOrigin"},
 			Resources: []string{iam.AnyResource},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions:   []string{"cloudfront:TagResource"},
 			Resources: []string{iam.ContainerVPCOriginARN},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions: []string{
@@ -59,17 +59,17 @@ func Credential(s iam.Scope) []iam.Statement {
 				"cloudfront:UpdateVpcOrigin",
 			},
 			Resources: []string{iam.ContainerVPCOriginARN},
-			Condition: s.TaggedByOcel(),
+			Condition: s.TaggedByOcelForItsTier(),
 		},
 		{
 			Actions:   []string{"acm:ImportCertificate"},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: s.TaggedOnCreate(),
+			Condition: s.TaggedOnCreateForItsTier(),
 		},
 		{
 			Actions:   []string{"acm:AddTagsToCertificate"},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: iam.MergeConditions(s.TaggedOnCreate(), iam.KeyPairSuppliedByCaller()),
+			Condition: iam.MergeConditions(s.TaggedOnCreateForItsTier(), iam.KeyPairSuppliedByCaller()),
 		},
 	}
 }

@@ -5,7 +5,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
@@ -14,7 +13,7 @@ func TestBothCredentialsMakeAndRemoveTheTagInvalidatorQueueOfOnlyTheirOwnTier(t 
 		return "arn:aws:sqs:us-east-1:111122223333:" + taginvalidator.NamesFor(string(defaultNamespace), tier).Queue
 	}
 	creating := func(tier environment.Tier) requestContext {
-		return requestContext{"aws:RequestTag/" + iam.ManagedByTagKey: string(defaultNamespace), "aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
+		return requestContext{"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace), "aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
 	}
 	for _, tier := range bothTiers {
 		sibling := tier.Sibling()

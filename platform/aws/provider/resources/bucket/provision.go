@@ -119,7 +119,7 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 		return err
 	}
 	tags := component.Tags(at.Kind, "", args.Tags)
-	tags[iam.ManagedByTagKey] = pulumi.String(stack.Namespace)
+	tags[naming.ManagedByTagKey] = pulumi.String(stack.Namespace)
 	tags[naming.EnvTierTagKey] = pulumi.String(string(stack.Tier()))
 
 	bucket, err := s3.NewBucketV2(ctx, name.Pulumi, &s3.BucketV2Args{

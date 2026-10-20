@@ -40,10 +40,10 @@ func TestTheDeployCredentialMakesMovesForwardAndRemovesItsTiersEnvSourceSync(t *
 		schedule := "arn:aws:scheduler:" + at + ":schedule/" + names.ScheduleGroup + "/" + names.Schedule
 		logs := "arn:aws:logs:" + at + ":log-group:" + names.LogGroup
 		creating := requestContext{
-			"aws:RequestTag/" + iam.ManagedByTagKey:  string(defaultNamespace),
-			"aws:RequestTag/" + naming.EnvTierTagKey: string(tier),
-			"aws:PrincipalAccount":                   account,
-			"iam:PermissionsBoundary":                "arn:aws:iam::" + account + ":policy/" + defaultNamespace.AppBoundaryNameFor(tier),
+			"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace),
+			"aws:RequestTag/" + naming.EnvTierTagKey:   string(tier),
+			"aws:PrincipalAccount":                     account,
+			"iam:PermissionsBoundary":                  "arn:aws:iam::" + account + ":policy/" + defaultNamespace.AppBoundaryNameFor(tier),
 		}
 		made := appResourceOf(tier, requestContext{
 			"aws:PrincipalAccount":    account,
