@@ -5,6 +5,7 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/cloud/v1;cloudv1";
 
 import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
+import "console/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 
 enum JobCommand {
@@ -200,6 +201,8 @@ message Job {
   string source_id = 12;
 
   JobInput input = 13;
+
+  console.v1.Deployment report = 14;
 }
 
 message JobInput {

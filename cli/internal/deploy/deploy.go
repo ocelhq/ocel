@@ -49,7 +49,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		return err
 	}
 	if resolved.IsCloud() {
-		return toCloud(ctx, dependencies, cwd, resolved, target, opts, stdin)
+		return toCloud(ctx, dependencies, cwd, resolved, target, opts, stderr, stdin)
 	}
 	if opts.NoWait {
 		return commands.RefuseNoWait()
@@ -149,14 +149,14 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	return err
 }
 
-func toCloud(ctx context.Context, dependencies Dependencies, cwd string, resolved commands.Target, target Target, opts Options, stdin io.Reader) error {
+func toCloud(ctx context.Context, dependencies Dependencies, cwd string, resolved commands.Target, target Target, opts Options, stderr io.Writer, stdin io.Reader) error {
 	switch {
 	case opts.Dry:
 		return commands.NotOnCloud(target.command() + " --dry")
 	case opts.Prebuilt:
 		return commands.NotOnCloud(target.command() + " --prebuilt")
 	}
-	job := commands.CloudJob{Command: target.command(), Tier: target.tier, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, Tag: target.tag, NoWait: opts.NoWait}
+	job := commands.CloudJob{Command: target.command(), Tier: target.tier, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, Tag: target.tag, NoWait: opts.NoWait, Stderr: stderr}
 	if target.isPreview() {
 		env, err := target.environment(dependencies, cwd)
 		if err != nil {
