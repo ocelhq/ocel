@@ -120,7 +120,7 @@ func TestRemovingObjectsTakesEachKindsPrefixFromItsOwnBucketAndNothingBeside(t *
 			release.ObjectKey(naming.ObjectFetchCache, "h.cache.json"), sibling.ObjectKey(naming.ObjectUseCache, "u.json"),
 		},
 	}}
-	scope, err := naming.EnvScope(release.Project, release.Env)
+	scope, err := naming.AppScope(release)
 	if err != nil {
 		t.Fatal(err)
 	}

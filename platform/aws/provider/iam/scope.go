@@ -87,6 +87,15 @@ func (s Scope) AppClusterSnapshotARN() string {
 	return s.tierFenced("arn:aws:rds:*:*:cluster-snapshot:")
 }
 
+func (s Scope) AppTaskDefinitionARN() string {
+	return s.appFenced("arn:aws:ecs:*:*:task-definition/", ":*")
+}
+
+func (s Scope) ContainerTargetGroupARNs() []string {
+	const targetGroups = "arn:aws:elasticloadbalancing:*:*:targetgroup/"
+	return []string{s.appFenced(targetGroups, "/*"), targetGroups + awsports.PublicTargetGroupName(s.Namespace, s.Tier) + "/*"}
+}
+
 func (s Scope) AppQueueARN() string { return s.appFenced("arn:aws:sqs:*:*:", "") }
 
 func (s Scope) AppTopicARN() string { return s.appFenced("arn:aws:sns:*:*:", "") }

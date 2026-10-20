@@ -32,6 +32,11 @@ func Credential(s iam.Scope) []iam.Statement {
 			Condition: iam.PassedTo(iam.ECSTasksPrincipal),
 		},
 		{
+			Actions:   []string{"ecs:RegisterTaskDefinition"},
+			Resources: []string{definitions},
+			Condition: s.TaggedOnCreateForItsTier(),
+		},
+		{
 			Actions:   []string{"ecs:RunTask"},
 			Resources: []string{definitions},
 			Condition: onItsCluster(s),

@@ -47,15 +47,19 @@ func (s *stack) slug() string { return s.state.Slug }
 
 func (s *stack) tier() environment.Tier { return s.state.Tier }
 
-func (s *stack) spec(pointer string) apiSpec {
+func (s *stack) spec(pointer string) (apiSpec, error) {
+	name, err := apiName(s.p.ns, s.slug(), s.tier(), pointer)
+	if err != nil {
+		return apiSpec{}, err
+	}
 	return apiSpec{
-		name:       apiName(s.p.ns, s.slug(), s.tier(), pointer),
+		name:       name,
 		tags:       s.apiTags(pointer),
 		region:     s.own.Region,
 		account:    accountOf(s.own.Role),
 		role:       s.own.Role,
 		edgeBucket: s.own.EdgeBucket,
-	}
+	}, nil
 }
 
 func (s *stack) projectTags() map[string]string {
@@ -110,7 +114,10 @@ func (s *stack) ensureAPI(ctx context.Context, c Clients, pointer string) (strin
 }
 
 func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiSpec, string, error) {
-	spec := s.spec(pointer)
+	spec, err := s.spec(pointer)
+	if err != nil {
+		return apiSpec{}, "", err
+	}
 	id, found, err := s.findAPIFor(ctx, c, pointer)
 	if err != nil {
 		return apiSpec{}, "", err

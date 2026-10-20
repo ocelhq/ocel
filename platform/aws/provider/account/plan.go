@@ -10,7 +10,6 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -103,10 +102,6 @@ func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, re
 	for _, name := range installed {
 		alongside[name] = true
 	}
-	removed := read.refs
-	if removed.bucketTag == "" {
-		removed.bucketTag = naming.NewRandomTag()
-	}
 
 	groups := make([]provider.ChangeGroup, 0, len(order)+2)
 	for _, part := range append(order, "") {
@@ -123,7 +118,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, re
 		stack, ok, err := renderGroup(target, part, partInputs{
 			ns:           read.ns,
 			tier:         read.tier,
-			refs:         removed,
+			refs:         read.refs,
 			alongside:    alongside,
 			variablesKey: broughtVariablesKey(read.Deployed.Outputs),
 		})

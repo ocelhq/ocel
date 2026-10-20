@@ -134,7 +134,7 @@ func (n Names) GateTierSecretPrefix(tier environment.Tier) string {
 	return n.GateSecretPrefix() + naming.TierWord(tier) + naming.WordSeparator
 }
 
-func (n Names) GateSecret(tier environment.Tier, slug string) string {
+func (n Names) GateSecret(tier environment.Tier, slug string) (string, error) {
 	return hashedSecretID(n.GateTierSecretPrefix(tier), []string{slug}, string(n.namespace), string(tier), gateInfix, slug)
 }
 
@@ -144,17 +144,17 @@ func (n Names) RealtimeKeysSecretPrefix(tier environment.Tier) string {
 	return n.RealtimeSecretPrefix() + realtimeKeysInfix + naming.WordSeparator + naming.TierWord(tier) + naming.WordSeparator
 }
 
-func (n Names) RealtimeKeysSecret(tier environment.Tier, project, env string) string {
+func (n Names) RealtimeKeysSecret(tier environment.Tier, project, env string) (string, error) {
 	return hashedSecretID(n.RealtimeKeysSecretPrefix(tier), []string{project, env},
 		string(n.namespace), string(tier), project, env, realtimeInfix, realtimeKeysInfix)
 }
 
-func (n Names) RealtimeSigningSecret(project, env, resource string) string {
+func (n Names) RealtimeSigningSecret(project, env, resource string) (string, error) {
 	return hashedSecretID(n.RealtimeSecretPrefix()+realtimeSigningInfix+naming.WordSeparator, []string{project, env, resource},
 		string(n.namespace), project, env, realtimeInfix, realtimeSigningInfix, resource)
 }
 
-func hashedSecretID(prefix string, readableParts []string, hashed ...string) string {
+func hashedSecretID(prefix string, readableParts []string, hashed ...string) (string, error) {
 	return naming.TaggedName{
 		Head:     strings.TrimSuffix(prefix, naming.WordSeparator),
 		Readable: naming.Join(naming.WordSeparator, readableParts...),

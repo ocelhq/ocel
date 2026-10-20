@@ -18,25 +18,38 @@ const (
 	maxLabelValue = 63
 )
 
-func LabelValue(value string) string {
+func LabelValue(value string) (string, error) {
 	sanitized := naming.Sanitize(value)
 	if len(sanitized) <= maxLabelValue {
-		return sanitized
+		return sanitized, nil
 	}
 	return naming.TaggedName{Readable: sanitized, Tag: naming.HashTag(sanitized)}.Fit(maxLabelValue)
 }
 
-func StackLabels(names Names, ref provider.StackRef) map[string]string {
-	return map[string]string{
-		NamespaceLabel:   LabelValue(string(names.namespace)),
-		TierLabel:        LabelValue(string(ref.Tier)),
-		ProjectLabel:     LabelValue(ref.Project),
-		EnvironmentLabel: LabelValue(ref.Name.Env),
+func StackLabels(names Names, ref provider.StackRef) (map[string]string, error) {
+	labels := map[string]string{}
+	for key, value := range map[string]string{
+		NamespaceLabel:   string(names.namespace),
+		TierLabel:        string(ref.Tier),
+		ProjectLabel:     ref.Project,
+		EnvironmentLabel: ref.Name.Env,
+	} {
+		label, err := LabelValue(value)
+		if err != nil {
+			return nil, err
+		}
+		labels[key] = label
 	}
+	return labels, nil
 }
 
-func LabelsFor(names Names, ref provider.StackRef, kind, resource string) map[string]string {
-	labels := StackLabels(names, ref)
-	labels[kind] = LabelValue(resource)
-	return labels
+func LabelsFor(names Names, ref provider.StackRef, kind, resource string) (map[string]string, error) {
+	labels, err := StackLabels(names, ref)
+	if err != nil {
+		return nil, err
+	}
+	if labels[kind], err = LabelValue(resource); err != nil {
+		return nil, err
+	}
+	return labels, nil
 }

@@ -257,7 +257,7 @@ func TestADeployReportsTheStorageCoordinateItWroteEachAppUnder(t *testing.T) {
 		t.Fatalf("the result reports storage coordinate %q for web, want shop/prod/web/<release token>", coordinate)
 	}
 	key := p.FakeStacks().Shipped(p.FakeStacks().Provisioned()[1].Ref)[0].Ref.Key
-	if parsed, err := naming.ParseObjectKey(key); err != nil || parsed.Coordinate.StorageCoordinate() != coordinate {
+	if !strings.HasPrefix(key, string(naming.ObjectFunction)+"/"+coordinate+"/") {
 		t.Errorf("web's function artifact is %q, want it under the reported coordinate %q", key, coordinate)
 	}
 }

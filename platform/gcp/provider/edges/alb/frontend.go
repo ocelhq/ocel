@@ -73,8 +73,11 @@ func previewWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, projec
 	if base == "" {
 		return nil
 	}
-	entry := previewEntryName(spec.Namespace, base)
-	_, err := certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
+	entry, err := previewEntryName(spec.Namespace, base)
+	if err != nil {
+		return err
+	}
+	_, err = certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
 		Name:         pulumi.String(entry),
 		Project:      pulumi.String(project),
 		Map:          pulumi.String(spec.Names.CertificateMap),

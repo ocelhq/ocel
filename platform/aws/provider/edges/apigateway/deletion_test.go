@@ -32,7 +32,7 @@ func previewAPIs(t *testing.T, w *world, pointers ...string) []string {
 	t.Helper()
 	var ids []string
 	for _, pointer := range pointers {
-		api := w.gateway.named(apiName(defaultNamespace, conformanceSlug, environment.TierPreview, pointer))
+		api := w.gateway.named(must(apiName(defaultNamespace, conformanceSlug, environment.TierPreview, pointer)))
 		if api == nil {
 			t.Fatalf("no REST API for %s; the gateway saw %v", pointer, w.gateway.mutations())
 		}

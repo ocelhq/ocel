@@ -57,32 +57,35 @@ func loadBalancerNames(namespace string, tier environment.Tier, shielded bool) n
 	}
 }
 
-func hostResourceName(namespace string, tier environment.Tier, purpose, scope, hostname string, role ...string) string {
-	name := naming.TaggedName{
+func hostResourceName(namespace string, tier environment.Tier, purpose, scope, hostname string, role ...string) (string, error) {
+	name, err := naming.TaggedName{
 		Head:     naming.OcelName(namespace, tier, string(Kind)),
 		Readable: naming.Join(naming.WordSeparator, scope, naming.SanitizeHost(hostname)),
 		Tag:      naming.HashTag(namespace, string(tier), purpose, scope, hostname),
 	}.Fit(maxResourceName, certRole, negRole)
-	return naming.Join(naming.WordSeparator, append([]string{name}, role...)...)
+	if err != nil {
+		return "", err
+	}
+	return naming.Join(naming.WordSeparator, append([]string{name}, role...)...), nil
 }
 
-func backendName(namespace, slug string, tier environment.Tier, hostname string) string {
+func backendName(namespace, slug string, tier environment.Tier, hostname string) (string, error) {
 	return hostResourceName(namespace, tier, bindingPurpose, slug, hostname)
 }
 
-func entryName(namespace, slug string, tier environment.Tier, hostname string) string {
+func entryName(namespace, slug string, tier environment.Tier, hostname string) (string, error) {
 	return hostResourceName(namespace, tier, bindingPurpose, slug, hostname, certRole)
 }
 
-func negName(namespace, slug string, tier environment.Tier, hostname string) string {
+func negName(namespace, slug string, tier environment.Tier, hostname string) (string, error) {
 	return hostResourceName(namespace, tier, bindingPurpose, slug, hostname, negRole)
 }
 
-func previewEntryName(namespace, baseDomain string) string {
+func previewEntryName(namespace, baseDomain string) (string, error) {
 	return hostResourceName(namespace, environment.TierPreview, previewScope, previewScope, baseDomain, certRole)
 }
 
-func originEntryName(namespace string, tier environment.Tier, baseDomain string) string {
+func originEntryName(namespace string, tier environment.Tier, baseDomain string) (string, error) {
 	return hostResourceName(namespace, tier, originScope, originScope, baseDomain, certRole)
 }
 

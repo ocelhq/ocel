@@ -65,6 +65,10 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	if err != nil {
 		return nil, err
 	}
+	labels, err := names.LabelsFor(named, spec.Ref, names.AppLabel, app.App)
+	if err != nil {
+		return nil, err
+	}
 	values, err := run.MergeValues(app.App, release.RuntimeValues, app.Values.ContainerEnv, own)
 	if err != nil {
 		return nil, err
@@ -81,7 +85,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		Ingress:   run.IngressFor(run.FactsOf(spec.Edge)),
 		Egress:    p.EgressFor(named, spec),
 		Tag:       p.RevisionTag(spec),
-		Labels:    names.LabelsFor(named, spec.Ref, names.AppLabel, app.App),
+		Labels:    labels,
 
 		OpensOnPromotion: true,
 	}

@@ -65,6 +65,10 @@ func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec 
 	}
 	pushAccount := c.PushAccountEmail(spec.Ref.Tier)
 	pushes := map[string]topics.Push{}
+	labels, err := names.StackLabels(c.Names, spec.Ref)
+	if err != nil {
+		return nil, err
+	}
 	deployed := make([]deployedWorker, 0, len(named))
 	for at, worker := range named {
 		ran, err := p.Services.DeployService(ctx, WorkerServing(spec.App.Workers[at], run.Serving{
@@ -73,7 +77,7 @@ func (p *Release) ProvisionWorkers(ctx context.Context, c *gcloud.Clients, spec 
 			Env:       env,
 			Account:   account,
 			Egress:    p.EgressFor(c.Names, spec),
-			Labels:    names.StackLabels(c.Names, spec.Ref),
+			Labels:    labels,
 			Instances: instances,
 		}), progress)
 		if err != nil {

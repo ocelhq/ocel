@@ -57,6 +57,11 @@ func PhysicalName(namespace string, at naming.Coordinate, limit int, childSuffix
 	return at.AppResourceName(namespace, tag).Fit(limit, childSuffixes...)
 }
 
+func RoleName(namespace string, at naming.Coordinate) (Name, error) {
+	physical, err := PhysicalName(namespace, at, MaxRoleNameLen)
+	return NameOf(physical), err
+}
+
 func UntaggedName(namespace string, at naming.Coordinate, limit int, childSuffixes ...string) (string, error) {
 	return at.AppResourceName(namespace, "").FitUntagged(limit, childSuffixes...)
 }

@@ -144,7 +144,7 @@ const (
 	typeKeyValueStore = "AWS::CloudFront::KeyValueStore"
 )
 
-func (p *cloudFront) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *cloudFront) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	var changes []edge.PlanChange
 	if scope.Address != "" {
 		changes = append(changes, edge.PlanChange{
@@ -163,17 +163,17 @@ func (p *cloudFront) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGrou
 		})
 	}
 	if len(changes) == 0 {
-		return nil
+		return nil, nil
 	}
 	return []edge.PlanGroup{{
 		Kind:    edge.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(Kind),
 		Action:  edge.PlanDelete,
 		Changes: changes,
-	}}
+	}}, nil
 }
 
-func (p *cloudFront) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *cloudFront) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup, error) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -186,7 +186,7 @@ func (p *cloudFront) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup
 			Slow:   true,
 		}},
 	}
-	return removed, p.PlanSharedPreviewRemoval()
+	return removed, p.PlanSharedPreviewRemoval(), nil
 }
 
 func (p *cloudFront) PlanSharedPreviewRemoval() edge.PlanGroup {
@@ -334,7 +334,7 @@ func (p *cloudFront) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (p *cloudFront) ProjectOwner(slug string, tier environment.Tier) string {
+func (p *cloudFront) ProjectOwner(slug string, tier environment.Tier) (string, error) {
 	return distributionName(p.ns, slug, tier)
 }
 
@@ -364,7 +364,7 @@ func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, 
 	return "", nil
 }
 
-func distributionName(ns account.Namespace, slug string, tier environment.Tier) string {
+func distributionName(ns account.Namespace, slug string, tier environment.Tier) (string, error) {
 	return surface.Name(ns, slug, tier)
 }
 

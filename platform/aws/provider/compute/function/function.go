@@ -77,7 +77,9 @@ type Bytecode struct {
 }
 
 func (c Bytecode) env() map[string]string {
-	return map[string]string{awsports.CompileCacheEnvVar: "1"}
+	env := naming.StorageEnv(c.Storage, naming.Buckets{naming.StorageArtifacts: c.Bucket})
+	env[awsports.CompileCacheEnvVar] = "1"
+	return env
 }
 
 func bytecodePolicy(c Bytecode) (string, error) {
@@ -191,7 +193,7 @@ type ExecutionRole struct {
 }
 
 func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*awsiam.Role, []pulumi.Resource, error) {
-	name, err := RoleName(r.Namespace, coord)
+	name, err := component.RoleName(r.Namespace, coord)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -247,11 +249,6 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 		Managed:     managed,
 		Policies:    documents,
 	})
-}
-
-func RoleName(namespace string, coord naming.Coordinate) (component.Name, error) {
-	physical, err := component.PhysicalName(namespace, coord, component.MaxRoleNameLen)
-	return component.NameOf(physical), err
 }
 
 func (a Args) LambdaHandler() string {
@@ -382,7 +379,7 @@ func NamesFor(namespace, project string, stack naming.StackName, logicalName str
 	if err != nil {
 		return Names{}, err
 	}
-	role, err := RoleName(namespace, component.AppRoleCoordinate(project, stack))
+	role, err := component.RoleName(namespace, component.AppRoleCoordinate(project, stack))
 	if err != nil {
 		return Names{}, err
 	}

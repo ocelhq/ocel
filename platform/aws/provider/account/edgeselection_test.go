@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -46,9 +47,8 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 func TestReadingABootstrapSeesTheEdgePartInstalledBesideTheCore(t *testing.T) {
 	stamp := Stamp{}
 	api := stubStacksAPI{
-		coreStackName: outputs(map[string]string{
-			outputInfraTier:  string(environment.TierProduction),
-			outputEdgeBucket: "edge-1",
+		coreStackName: coreOutputs(map[string]string{
+			outputInfraTier: string(environment.TierProduction),
 		}).stamped(stamp),
 		defaultNamespace.PartStackName(CloudflareEdgePart, environment.TierProduction): outputs(nil).stamped(stamp),
 	}
@@ -60,7 +60,7 @@ func TestReadingABootstrapSeesTheEdgePartInstalledBesideTheCore(t *testing.T) {
 	if want := []string{CloudflareEdgePart}; !slices.Equal(got.Parts.Names(), want) {
 		t.Errorf("Parts = %v, want %v", got.Parts.Names(), want)
 	}
-	if got.Outputs[outputEdgeBucket] != "edge-1" {
+	if got.Outputs[outputEdgeBucket] != fixtureBucketName(environment.TierProduction, naming.StorageEdge) {
 		t.Errorf("Outputs[%s] = %q, want the core's edge bucket", outputEdgeBucket, got.Outputs[outputEdgeBucket])
 	}
 }

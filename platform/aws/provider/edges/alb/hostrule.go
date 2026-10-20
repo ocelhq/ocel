@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
 const (
@@ -55,6 +56,8 @@ func computeRulePriority(hostname string, attempt int) int32 {
 }
 
 func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname string, actions []elbv2types.Action) (string, error) {
+	ruleTags := naming.OcelTags(s.namespace, s.state.Tier)
+	ruleTags["ocel:project"] = s.state.Slug
 	for attempt := range rulePlacements {
 		created, err := c.Balancers.CreateRule(ctx, &elbv2.CreateRuleInput{
 			ListenerArn: aws.String(listener),
@@ -64,11 +67,7 @@ func (s *stack) placeRule(ctx context.Context, c Clients, listener, hostname str
 				HostHeaderConfig: &elbv2types.HostHeaderConditionConfig{Values: []string{hostname}},
 			}},
 			Actions: actions,
-			Tags: []elbv2types.Tag{
-				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(s.namespace)},
-				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(s.state.Tier))},
-				{Key: aws.String("ocel:project"), Value: aws.String(s.state.Slug)},
-			},
+			Tags:    tags.Sorted(ruleTags, func(key, value *string) elbv2types.Tag { return elbv2types.Tag{Key: key, Value: value} }),
 		})
 		var taken *elbv2types.PriorityInUseException
 		if errors.As(err, &taken) {

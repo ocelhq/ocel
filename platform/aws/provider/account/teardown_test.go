@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 
@@ -167,6 +168,12 @@ func (b *teardownS3) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput,
 	return &s3.DeleteObjectsOutput{Errors: b.refuse}, nil
 }
 
+var (
+	teardownStateBucket    = fixtureBucketName(environment.TierProduction, naming.StorageState)
+	teardownArtifactBucket = fixtureBucketName(environment.TierProduction, naming.StorageArtifacts)
+	teardownCacheBucket    = fixtureBucketName(environment.TierProduction, naming.StorageCache)
+)
+
 var testAppBoundaryARN = "arn:aws:iam::123456789012:policy/" + defaultNamespace.AppBoundaryNameFor(environment.TierProduction)
 
 func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardownS3) {
@@ -174,11 +181,11 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
 		coreStackName: {buckets: map[string]string{
-			outputStateBucket:    "ocel-state",
+			outputStateBucket:    teardownStateBucket,
 			outputStateTable:     fixtureStateTable,
-			outputArtifactBucket: "ocel-artifacts",
-			outputEdgeBucket:     "ocel-edge",
-			outputCacheBucket:    "ocel-cache",
+			outputArtifactBucket: teardownArtifactBucket,
+			outputEdgeBucket:     fixtureBucketName(environment.TierProduction, naming.StorageEdge),
+			outputCacheBucket:    teardownCacheBucket,
 			outputAppBoundaryARN: testAppBoundaryARN,
 		}},
 	}}
@@ -305,7 +312,7 @@ func TestTeardownEmptiesTheBucketsOnlyOnceTheTiersPartsAreGone(t *testing.T) {
 	if len(emptiedFirst) != 0 {
 		t.Errorf("%v were emptied before the tier's parts were removed, so a shared stack's state was gone before its destroy read it, and what its destroy wrote kept the state bucket from being deleted", emptiedFirst)
 	}
-	for _, bucket := range []string{"ocel-state", "ocel-artifacts", "ocel-edge", "ocel-cache"} {
+	for _, bucket := range defaultNamespace.bootstrapBuckets(environment.TierProduction, fixtureBucketTag) {
 		if !slices.Contains(buckets.listed, bucket) {
 			t.Errorf("emptied %v, want %s emptied before the core stack goes", buckets.listed, bucket)
 		}
@@ -346,7 +353,7 @@ func TestTeardownEmptiesEveryPage(t *testing.T) {
 	t.Parallel()
 
 	apis, _, _, buckets := teardownFakes(t)
-	buckets.pages["ocel-state"] = []objectPage{
+	buckets.pages[teardownStateBucket] = []objectPage{
 		{keys: []string{"a"}, truncated: true},
 		{keys: []string{"b"}},
 	}
@@ -366,7 +373,7 @@ func TestTeardownReportsRefusedObjects(t *testing.T) {
 	t.Parallel()
 
 	apis, stacks, ssmc, buckets := teardownFakes(t)
-	buckets.pages["ocel-state"] = []objectPage{{keys: []string{"locked.json"}}}
+	buckets.pages[teardownStateBucket] = []objectPage{{keys: []string{"locked.json"}}}
 	buckets.refuse = []s3types.Error{{
 		Key:     aws.String("locked.json"),
 		Code:    aws.String("AccessDenied"),
@@ -377,7 +384,7 @@ func TestTeardownReportsRefusedObjects(t *testing.T) {
 	if err == nil {
 		t.Fatal("Teardown = nil, want the objects S3 refused to delete reported")
 	}
-	for _, want := range []string{"ocel-state", "locked.json", "legal hold"} {
+	for _, want := range []string{teardownStateBucket, "locked.json", "legal hold"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %v, want it to name %q", err, want)
 		}
@@ -395,14 +402,14 @@ func TestTeardownRetriesAfterAPartialStackDelete(t *testing.T) {
 
 	apis, _, _, buckets := teardownFakes(t)
 	buckets.listErr = map[string]error{
-		"ocel-artifacts": &s3types.NoSuchBucket{},
+		teardownArtifactBucket: &s3types.NoSuchBucket{},
 	}
-	buckets.pages["ocel-state"] = []objectPage{{keys: []string{"state.json"}}}
+	buckets.pages[teardownStateBucket] = []objectPage{{keys: []string{"state.json"}}}
 
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if !slices.Contains(buckets.listed, "ocel-cache") {
+	if !slices.Contains(buckets.listed, teardownCacheBucket) {
 		t.Errorf("listed buckets = %v, want a bucket CloudFormation already deleted to be skipped, not fatal", buckets.listed)
 	}
 }
@@ -459,7 +466,7 @@ func TestTeardownReclaimsTheTierOriginSecret(t *testing.T) {
 		t.Run(string(tc.tier), func(t *testing.T) {
 			t.Parallel()
 
-			stacks := &teardownCFN{stacks: map[string]teardownStack{tc.stack: {}}}
+			stacks := &teardownCFN{stacks: map[string]teardownStack{tc.stack: {buckets: fixtureBucketOutputs(tc.tier)}}}
 			ssmc := newFakeSSM()
 			names, err := TierParamNames(defaultNamespace, tc.tier)
 			if err != nil {
@@ -513,7 +520,7 @@ func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
 func TestTeardownRemovesEachPartStackBeforeCore(t *testing.T) {
 	t.Parallel()
 
-	stacks := map[string]teardownStack{coreStackName: {}}
+	stacks := map[string]teardownStack{coreStackName: {buckets: fixtureBucketOutputs(environment.TierProduction)}}
 	for _, name := range partNames() {
 		stacks[defaultNamespace.PartStackName(name, environment.TierProduction)] = teardownStack{}
 	}
@@ -544,7 +551,7 @@ func TestTeardownLeavesAPartStackThatWasNeverThere(t *testing.T) {
 	t.Parallel()
 
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
-		coreStackName: {},
+		coreStackName: {buckets: fixtureBucketOutputs(environment.TierProduction)},
 		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction): {},
 	}}
 	apis := TeardownAPIs{
@@ -569,7 +576,7 @@ func TestTeardownRemovesAWedgedPartStack(t *testing.T) {
 	t.Parallel()
 
 	stacks := &teardownCFN{stacks: map[string]teardownStack{
-		coreStackName: {},
+		coreStackName: {buckets: fixtureBucketOutputs(environment.TierProduction)},
 		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction): {status: cfntypes.StackStatusRollbackComplete},
 	}}
 	apis := TeardownAPIs{

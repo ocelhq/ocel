@@ -13,14 +13,14 @@ func TestAWildcardAndTheDomainUnderneathItGetNamesOfTheirOwn(t *testing.T) {
 	tier := environment.TierProduction
 	for _, named := range []struct {
 		what string
-		name func(string, string, environment.Tier, string) string
+		name func(string, string, environment.Tier, string) (string, error)
 	}{
 		{"backend service", backendName},
 		{"certificate map entry", entryName},
 		{"serverless neg", negName},
 	} {
-		under := named.name("ocel", "shop", tier, "preview.example.com")
-		wildcard := named.name("ocel", "shop", tier, "*.preview.example.com")
+		under := must(named.name("ocel", "shop", tier, "preview.example.com"))
+		wildcard := must(named.name("ocel", "shop", tier, "*.preview.example.com"))
 		if under == wildcard {
 			t.Errorf("the %s for preview.example.com and for *.preview.example.com is %q for both, and the second bind would take over the first's",
 				named.what, under)
@@ -35,13 +35,13 @@ func TestAHostnameTooLongToNameIsShortenedRatherThanRefusedByCompute(t *testing.
 	tier := environment.TierProduction
 	for _, named := range []struct {
 		what string
-		name func(string, string, environment.Tier, string) string
+		name func(string, string, environment.Tier, string) (string, error)
 	}{
 		{"backend service", backendName},
 		{"certificate map entry", entryName},
 		{"serverless neg", negName},
 	} {
-		got := named.name("northwind-traders-europe-west", "a-long-project-slug", tier, hostname)
+		got := must(named.name("northwind-traders-europe-west", "a-long-project-slug", tier, hostname))
 		if len(got) > maxResourceName {
 			t.Errorf("the %s is named %q, %d characters: Compute refuses a name over %d", named.what, got, len(got), maxResourceName)
 		}
@@ -51,7 +51,7 @@ func TestAHostnameTooLongToNameIsShortenedRatherThanRefusedByCompute(t *testing.
 func TestAnOriginHostsStackIsNamedForItsTierAndHostnameCutAheadOfItsHashTag(t *testing.T) {
 	t.Parallel()
 
-	got := OriginHostStack("checkout-eu-west-staging.a-very-long-customer-subdomain.example.com", environment.TierProduction)
+	got := must(OriginHostStack("checkout-eu-west-staging.a-very-long-customer-subdomain.example.com", environment.TierProduction))
 	if want := "alb-origin-prod-checkout-eu-west-staging-a-very-long-cus-5e1b31"; got != want {
 		t.Errorf("OriginHostStack() = %q, want %q", got, want)
 	}
@@ -69,7 +69,7 @@ func TestEveryStackOfTheLoadBalancerNamesItsTierByItsWord(t *testing.T) {
 		{Target{Tier: environment.TierProduction, Gate: true}, "alb-gate-prod"},
 		{Target{Tier: environment.TierProduction, Slug: "shop"}, "alb-prod-shop"},
 	} {
-		if got := named.target.Name(); got != named.want {
+		if got := must(named.target.Name()); got != named.want {
 			t.Errorf("%+v.Name() = %q, want %q", named.target, got, named.want)
 		}
 	}
@@ -78,14 +78,14 @@ func TestEveryStackOfTheLoadBalancerNamesItsTierByItsWord(t *testing.T) {
 func TestAHostsBackendIsNamedUnderTheNamespaceAndTierAndItsEntryAndNEGAppendToIt(t *testing.T) {
 	t.Parallel()
 
-	backend := backendName("ocel", "shop", environment.TierProduction, "shop.example.com")
+	backend := must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))
 	if !strings.HasPrefix(backend, "ocel-prod-alb-shop-shop-example-com-") {
 		t.Errorf("backendName() = %q, want the namespace, the tier word, the edge, the project and the hostname readable at its start", backend)
 	}
-	if entry := entryName("ocel", "shop", environment.TierProduction, "shop.example.com"); entry != backend+"-cert" {
+	if entry := must(entryName("ocel", "shop", environment.TierProduction, "shop.example.com")); entry != backend+"-cert" {
 		t.Errorf("entryName() = %q, want the backend %q and -cert", entry, backend)
 	}
-	if neg := negName("ocel", "shop", environment.TierProduction, "shop.example.com"); neg != backend+"-neg" {
+	if neg := must(negName("ocel", "shop", environment.TierProduction, "shop.example.com")); neg != backend+"-neg" {
 		t.Errorf("negName() = %q, want the backend %q and -neg", neg, backend)
 	}
 }
@@ -93,8 +93,8 @@ func TestAHostsBackendIsNamedUnderTheNamespaceAndTierAndItsEntryAndNEGAppendToIt
 func TestAProjectAndAHostnameThatSplitTheSameLettersAreTwoBackends(t *testing.T) {
 	t.Parallel()
 
-	one := backendName("ocel", "shop-eu", environment.TierProduction, "example.com")
-	other := backendName("ocel", "shop", environment.TierProduction, "eu.example.com")
+	one := must(backendName("ocel", "shop-eu", environment.TierProduction, "example.com"))
+	other := must(backendName("ocel", "shop", environment.TierProduction, "eu.example.com"))
 	if one == other {
 		t.Errorf("both are served by %q, and one project's bind would take over the other's hostname", one)
 	}

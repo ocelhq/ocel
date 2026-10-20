@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
 const (
@@ -328,17 +329,14 @@ func (s *stack) writeTrustStore(ctx context.Context, c Clients, store string, tr
 	}); err != nil {
 		return "", fmt.Errorf("write the client CAs the load balancer trusts: %w", err)
 	}
-	digestTag := elbv2types.Tag{Key: aws.String(bundleDigestTag), Value: aws.String(digest)}
 	if store == "" {
+		storeTags := naming.OcelTags(s.namespace, s.state.Tier)
+		storeTags[bundleDigestTag] = digest
 		created, err := c.Balancers.CreateTrustStore(ctx, &elbv2.CreateTrustStoreInput{
 			Name:                         aws.String(name),
 			CaCertificatesBundleS3Bucket: aws.String(c.Bucket),
 			CaCertificatesBundleS3Key:    aws.String(key),
-			Tags: []elbv2types.Tag{
-				{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(s.namespace)},
-				{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(s.state.Tier))},
-				digestTag,
-			},
+			Tags:                         tags.Sorted(storeTags, func(key, value *string) elbv2types.Tag { return elbv2types.Tag{Key: key, Value: value} }),
 		})
 		if err != nil {
 			return "", refuseOverTrustQuota(fmt.Errorf("create the trust store %s: %w", name, err), len(trusted))
@@ -362,7 +360,7 @@ func (s *stack) writeTrustStore(ctx context.Context, c Clients, store string, tr
 	}); err != nil {
 		return "", refuseOverTrustQuota(fmt.Errorf("trust the client CAs in %s: %w", name, err), len(trusted))
 	}
-	if _, err := c.Balancers.AddTags(ctx, &elbv2.AddTagsInput{ResourceArns: []string{store}, Tags: []elbv2types.Tag{digestTag}}); err != nil {
+	if _, err := c.Balancers.AddTags(ctx, &elbv2.AddTagsInput{ResourceArns: []string{store}, Tags: []elbv2types.Tag{{Key: aws.String(bundleDigestTag), Value: aws.String(digest)}}}); err != nil {
 		return "", fmt.Errorf("record which client CAs the trust store %s holds: %w", name, err)
 	}
 	return store, nil

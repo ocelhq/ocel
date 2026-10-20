@@ -222,11 +222,11 @@ func TestARealtimeIsShapedAsItsEnvironmentsGatewayTopicKeysAndSigningKey(t *test
 	}
 	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 	want := map[string]bool{
-		"google_cloud_run_v2_service:" + gatewayOf(t, names, "shop", "prod"):                                   true,
-		"google_pubsub_topic:" + gatewayOf(t, names, "shop", "prod"):                                           true,
-		"google_pubsub_subscription:" + gatewayOf(t, names, "shop", "prod"):                                    true,
-		"google_secret_manager_secret:" + names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod"): true,
-		"google_secret_manager_secret:" + names.RealtimeSigningSecret("shop", "prod", "app"):                   true,
+		"google_cloud_run_v2_service:" + gatewayOf(t, names, "shop", "prod"):                                         true,
+		"google_pubsub_topic:" + gatewayOf(t, names, "shop", "prod"):                                                 true,
+		"google_pubsub_subscription:" + gatewayOf(t, names, "shop", "prod"):                                          true,
+		"google_secret_manager_secret:" + must(names.RealtimeKeysSecret(environment.TierProduction, "shop", "prod")): true,
+		"google_secret_manager_secret:" + must(names.RealtimeSigningSecret("shop", "prod", "app")):                   true,
 	}
 	for _, resource := range set.GetResources() {
 		shaped := resource.GetType() + ":" + resource.GetName()

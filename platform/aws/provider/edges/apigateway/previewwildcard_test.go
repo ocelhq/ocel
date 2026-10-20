@@ -26,7 +26,7 @@ const (
 	previewEntry = "conformance-preview-web-r9999zzzz"
 )
 
-var previewAPIName = apiName(defaultNamespace, conformanceSlug, environment.TierPreview, previewPoint)
+var previewAPIName = must(apiName(defaultNamespace, conformanceSlug, environment.TierPreview, previewPoint))
 
 func previewStackSpec() edge.StackSpec {
 	return edge.StackSpec{Version: "v1", Tier: environment.TierPreview, Slug: conformanceSlug, PruneOnly: true}
@@ -481,7 +481,7 @@ func TestDestroyTakesEveryPreviewItRouted(t *testing.T) {
 		if left[host] != nil {
 			t.Errorf("%s is still routed after the stack that served it was destroyed", host)
 		}
-		if w.gateway.named(apiName(defaultNamespace, conformanceSlug, environment.TierPreview, pointer)) != nil {
+		if w.gateway.named(must(apiName(defaultNamespace, conformanceSlug, environment.TierPreview, pointer))) != nil {
 			t.Errorf("the REST API for %s survived the destroy", pointer)
 		}
 	}
@@ -577,4 +577,11 @@ func TestPreviewHostRulesDoNotCollideOnPriority(t *testing.T) {
 	if len(seen) != len(pointers)+1 {
 		t.Errorf("rules = %d, want one per preview plus the catch-all", len(seen))
 	}
+}
+
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
 }

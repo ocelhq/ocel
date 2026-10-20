@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -22,16 +23,16 @@ func TestADistributionNameFitsTheCommentWithoutLosingTheFieldsTheGateReads(t *te
 	t.Parallel()
 
 	ns := account.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
-	slug := strings.Repeat("s", 120)
+	slug := longestSlugNamed(ns)
 
-	name := distributionName(ns, slug, environment.TierProduction)
+	name := must(distributionName(ns, slug, environment.TierProduction))
 	if len(name) > maxDistributionNameLen {
 		t.Fatalf("distributionName is %d characters and CloudFront allows %d, so the comment is cut where it lands: %q", len(name), maxDistributionNameLen, name)
 	}
 	if projects := surface.ProjectsNamed(ns, []string{name}, environment.TierProduction); len(projects) != 1 {
 		t.Fatalf("the gate reads %v out of %q, so this namespace does not see its own project", projects, name)
 	}
-	if other := distributionName(ns, slug[:len(slug)-1]+"t", environment.TierProduction); other == name {
+	if other := must(distributionName(ns, slug[:len(slug)-1]+"t", environment.TierProduction)); other == name {
 		t.Errorf("two projects both mint %q, so each would adopt the other's distribution", name)
 	}
 }
@@ -40,12 +41,12 @@ func TestTheCommentOnADistributionIsTheOwnerAProjectClaims(t *testing.T) {
 	t.Parallel()
 
 	ns := account.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
-	slug := strings.Repeat("s", 120)
+	slug := longestSlugNamed(ns)
 	p := &cloudFront{ns: ns}
 
-	spec := distributionSpec{name: distributionName(ns, slug, environment.TierProduction)}
+	spec := distributionSpec{name: must(distributionName(ns, slug, environment.TierProduction))}
 	comment := aws.ToString(spec.config(nil, "").Comment)
-	if owner := p.ProjectOwner(slug, environment.TierProduction); comment != owner {
+	if owner := must(p.ProjectOwner(slug, environment.TierProduction)); comment != owner {
 		t.Errorf("a distribution reads as owned by %q while the project claims %q, so the project is refused its own domain", comment, owner)
 	}
 }
@@ -90,7 +91,7 @@ func TestTeardownLeavesTheDistributionsAnotherNamespaceFronts(t *testing.T) {
 	if _, err := w.front.CreateDistributionWithTags(ctx, &cloudfront.CreateDistributionWithTagsInput{
 		DistributionConfigWithTags: &cftypes.DistributionConfigWithTags{
 			DistributionConfig: &cftypes.DistributionConfig{
-				Comment: aws.String(distributionName("other", "shop", environment.TierProduction)),
+				Comment: aws.String(must(distributionName("other", "shop", environment.TierProduction))),
 			},
 		},
 	}); err != nil {
@@ -100,4 +101,9 @@ func TestTeardownLeavesTheDistributionsAnotherNamespaceFronts(t *testing.T) {
 	if err := e.Teardown(ctx, environment.TierProduction); err != nil {
 		t.Errorf("Teardown = %v, want nil: shop is fronted by the other namespace's bootstrap, not this one", err)
 	}
+}
+
+func longestSlugNamed(ns account.Namespace) string {
+	head := naming.OcelName(string(ns), environment.TierProduction)
+	return strings.Repeat("s", maxDistributionNameLen-len(head)-len("-")-len("-000000"))
 }

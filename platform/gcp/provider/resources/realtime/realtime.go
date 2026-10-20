@@ -333,9 +333,17 @@ func shapeRealtime(shape component.Shape, declared []provider.Resource) error {
 	secret, _ := bootstrap.Resource{Kind: bootstrap.KindSecret}.Shape(region)
 	for _, resource := range declared {
 		namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
-		tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace), region, secret.Properties)
+		signing, err := names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace)
+		if err != nil {
+			return err
+		}
+		tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, signing, region, secret.Properties)
 	}
-	tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env), region, secret.Properties)
+	keys, err := names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env)
+	if err != nil {
+		return err
+	}
+	tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, keys, region, secret.Properties)
 	gateway, err := names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env)
 	if err != nil {
 		return err

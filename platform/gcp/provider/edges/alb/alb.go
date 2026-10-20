@@ -313,17 +313,25 @@ type claim struct {
 	Owner string `json:"owner"`
 }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
-	return Surface(e.deps.Namespace, slug, tier)
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+	return Surface(e.deps.Namespace, slug, tier), nil
 }
 
-func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	changes := make([]edge.PlanChange, 0, len(scope.Hostnames)*3+1)
 	for _, hostname := range scope.Hostnames {
+		backend, err := backendName(e.deps.Namespace, scope.Slug, scope.Tier, hostname)
+		if err != nil {
+			return nil, err
+		}
+		entry, err := entryName(e.deps.Namespace, scope.Slug, scope.Tier, hostname)
+		if err != nil {
+			return nil, err
+		}
 		changes = append(changes,
 			edge.PlanChange{Kind: "compute.URLMap host rule", Name: hostname, Action: edge.PlanDelete},
-			edge.PlanChange{Kind: "compute.BackendService", Name: backendName(e.deps.Namespace, scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
-			edge.PlanChange{Kind: "certificatemanager.CertificateMapEntry", Name: entryName(e.deps.Namespace, scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
+			edge.PlanChange{Kind: "compute.BackendService", Name: backend, Action: edge.PlanDelete},
+			edge.PlanChange{Kind: "certificatemanager.CertificateMapEntry", Name: entry, Action: edge.PlanDelete},
 		)
 	}
 	changes = append(changes, edge.PlanChange{
@@ -343,19 +351,22 @@ func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 			Reason: "the load balancer this project was balancing by is one per tier and costs " + BaselineCost + ": " +
 				"it stays while another project in the tier is served through it or a hostname is bound to it, and is taken down with the last project otherwise",
 		},
-	}
+	}, nil
 }
 
-func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup) {
-	base := strings.TrimPrefix(wildcard, "*.")
+func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup, err error) {
+	entry, err := previewEntryName(e.deps.Namespace, strings.TrimPrefix(wildcard, "*."))
+	if err != nil {
+		return edge.PlanGroup{}, edge.PlanGroup{}, err
+	}
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{
-			{Kind: "certificatemanager.CertificateMapEntry", Name: previewEntryName(e.deps.Namespace, base), Action: edge.PlanDelete},
+			{Kind: "certificatemanager.CertificateMapEntry", Name: entry, Action: edge.PlanDelete},
 		},
-	}, e.PlanSharedPreviewRemoval()
+	}, e.PlanSharedPreviewRemoval(), nil
 }
 
 func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {

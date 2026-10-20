@@ -173,14 +173,14 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 				App:         "web",
 				Certificate: "projects/acme-prod/locations/global/certificates/shop",
 				Service:     "ocel-shop-prod-web",
-				Backend:     backendName("ocel", "shop", environment.TierProduction, "shop.example.com"),
+				Backend:     must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com")),
 			},
 		}))
 	if err != nil {
 		t.Fatalf("the binding program = %v", err)
 	}
 
-	entry, declaredEntry := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")+"-cert"]
+	entry, declaredEntry := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-cert"]
 	if !declaredEntry {
 		t.Fatalf("the binding declares no certificate map entry; the balancer would serve shop.example.com no certificate. Declared: %v", seen)
 	}
@@ -191,7 +191,7 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 		t.Errorf("the certificate map entry lands in %v, want the tier's own map", got)
 	}
 
-	neg, declaredNEG := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")+"-neg"]
+	neg, declaredNEG := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-neg"]
 	if !declaredNEG {
 		t.Fatalf("the binding declares no serverless neg; nothing would route a request from the load balancer to Cloud Run")
 	}
@@ -203,7 +203,7 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 		t.Errorf("the neg points at %v, want the Cloud Run service the pointer's active record named", neg.Args["cloudRun"])
 	}
 
-	backend, declaredBackend := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")]
+	backend, declaredBackend := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))]
 	if !declaredBackend {
 		t.Fatalf("the binding declares no backend service; Cloud CDN is a backend-service setting and there is nothing to set it on")
 	}
@@ -226,10 +226,10 @@ func TestAHostnameBoundBeforeAnythingWasDeployedDeclaresNoBackendToRouteNowhere(
 	if err != nil {
 		t.Fatalf("the binding program = %v", err)
 	}
-	if _, backed := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")]; backed {
+	if _, backed := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))]; backed {
 		t.Error("the binding declares a backend for a hostname whose app has released no service, and a neg needs one to point at")
 	}
-	if _, certified := seen[backendName("ocel", "shop", environment.TierProduction, "shop.example.com")+"-cert"]; !certified {
+	if _, certified := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-cert"]; !certified {
 		t.Error("the binding declares no certificate for a hostname it can already certify: the certificate outlives the release the backend waits on")
 	}
 }

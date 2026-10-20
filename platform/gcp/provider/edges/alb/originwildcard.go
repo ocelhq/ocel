@@ -175,8 +175,11 @@ func originWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, project
 	if base == "" {
 		return nil
 	}
-	entry := originEntryName(spec.Namespace, spec.Tier, base)
-	_, err := certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
+	entry, err := originEntryName(spec.Namespace, spec.Tier, base)
+	if err != nil {
+		return err
+	}
+	_, err = certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
 		Name:         pulumi.String(entry),
 		Project:      pulumi.String(project),
 		Map:          pulumi.String(spec.Names.CertificateMap),

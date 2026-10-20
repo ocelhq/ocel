@@ -18,6 +18,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
 const (
@@ -84,10 +85,9 @@ func ensureSigningKey(ctx context.Context, keys SigningKeysAPI, managedBy string
 		Name:         aws.String(name),
 		Description:  aws.String("Ocel: the Ed25519 key an app signs its realtime tokens with."),
 		SecretString: aws.String(base64.StdEncoding.EncodeToString(minted)),
-		Tags: []smtypes.Tag{
-			{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(managedBy)},
-			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(tier))},
-		},
+		Tags: tags.Sorted(naming.OcelTags(managedBy, tier), func(key, value *string) smtypes.Tag {
+			return smtypes.Tag{Key: key, Value: value}
+		}),
 	})
 	var exists *smtypes.ResourceExistsException
 	switch {

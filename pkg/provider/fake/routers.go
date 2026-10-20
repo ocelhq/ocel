@@ -297,7 +297,7 @@ func (e *Edge) routerFacts() router.Facts {
 
 const ClaimKind = "Fake::Claim"
 
-func (r Router) planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (r Router) planProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	held := r.edge.listHeldClaims()
 	var changes []edge.PlanChange
 	for _, hostname := range scope.Hostnames {
@@ -306,14 +306,14 @@ func (r Router) planProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 		}
 	}
 	if len(changes) == 0 {
-		return nil
+		return nil, nil
 	}
 	return []edge.PlanGroup{{
 		Kind:    edge.EdgeGroupKind,
 		Name:    edge.OriginGroupName,
 		Action:  edge.PlanDelete,
 		Changes: changes,
-	}}
+	}}, nil
 }
 
 func (r Router) claimPreviewEntry(_ context.Context, claim router.Claim) (edge.Origin, error) {
@@ -330,13 +330,13 @@ func (r Router) disclaimPreviewEntry(_ context.Context, baseDomain string) error
 
 const PreviewEntryClaimKind = "Fake::PreviewEntryClaim"
 
-func (r Router) planPreviewEntryRemoval(wildcard string) []edge.PlanGroup {
+func (r Router) planPreviewEntryRemoval(wildcard string) ([]edge.PlanGroup, error) {
 	return []edge.PlanGroup{{
 		Kind:    edge.EdgeGroupKind,
 		Name:    edge.OriginGroupName,
 		Action:  edge.PlanDelete,
 		Changes: []edge.PlanChange{{Kind: PreviewEntryClaimKind, Name: wildcard, Action: edge.PlanDelete}},
-	}}
+	}}, nil
 }
 
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {

@@ -25,7 +25,7 @@ const previewSweepPage = 50
 
 const previewWildcardAddedWith = "ocel domain use --preview"
 
-func previewWildcardName(baseDomain string) string {
+func previewWildcardName(baseDomain string) (string, error) {
 	return naming.TaggedName{
 		Head:     naming.OcelName(sharedNamespace, environment.TierPreview, naming.WildcardSuffix),
 		Readable: naming.Sanitize(baseDomain),
@@ -134,8 +134,12 @@ func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDom
 	if err != nil {
 		return distributionSpec{}, account.Deployed{}, err
 	}
+	name, err := previewWildcardName(baseDomain)
+	if err != nil {
+		return distributionSpec{}, account.Deployed{}, err
+	}
 	return distributionSpec{
-		name:          previewWildcardName(baseDomain),
+		name:          name,
 		managedBy:     string(p.ns),
 		tier:          environment.TierPreview,
 		assetOrigin:   assetOriginDomain(deployed.Buckets[naming.StorageEdge], c.Region),
@@ -155,7 +159,10 @@ func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	if err != nil {
 		return err
 	}
-	name := previewWildcardName(baseDomain)
+	name, err := previewWildcardName(baseDomain)
+	if err != nil {
+		return err
+	}
 	existing, found, err := findDistribution(ctx, c, name)
 	if err != nil {
 		return err

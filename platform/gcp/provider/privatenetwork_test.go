@@ -22,9 +22,9 @@ import (
 func TestTheFilterForDatabasesOnANetworkMatchesTheNamespaceLabelAStackWrites(t *testing.T) {
 	t.Parallel()
 	namespace := provider.Namespace(strings.Repeat("ocel-", 20) + "end")
-	written := names.StackLabels(names.New(namespace, ""), provider.StackRef{Tier: environment.TierProduction})[names.NamespaceLabel]
+	written := must(names.StackLabels(names.New(namespace, ""), provider.StackRef{Tier: environment.TierProduction}))[names.NamespaceLabel]
 
-	got := network.DatabasesFilter(namespace, environment.TierProduction)
+	got := must(network.DatabasesFilter(namespace, environment.TierProduction))
 
 	if want := "settings.userLabels.ocel-namespace:" + written + " "; !strings.Contains(got, want) {
 		t.Errorf("databasesFilter() = %q, want it to hold %q: the filter reads the label stackLabels writes", got, want)
@@ -34,9 +34,9 @@ func TestTheFilterForDatabasesOnANetworkMatchesTheNamespaceLabelAStackWrites(t *
 func TestTheFilterForStoresOnANetworkMatchesTheLabelsAStackWrites(t *testing.T) {
 	t.Parallel()
 	namespace := provider.Namespace(strings.Repeat("ocel-", 20) + "end")
-	written := names.StackLabels(names.New(namespace, ""), provider.StackRef{Tier: environment.TierProduction})
+	written := must(names.StackLabels(names.New(namespace, ""), provider.StackRef{Tier: environment.TierProduction}))
 
-	got := network.StoresFilter(namespace, environment.TierProduction)
+	got := must(network.StoresFilter(namespace, environment.TierProduction))
 
 	want := "labels.ocel-namespace=" + strconv.Quote(written[names.NamespaceLabel]) + " AND labels.ocel-tier=" + strconv.Quote(written[names.TierLabel])
 	if got != want {

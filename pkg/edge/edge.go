@@ -84,11 +84,11 @@ type Edge interface {
 
 	DomainOwner(ctx context.Context, hostname string) (string, error)
 
-	ProjectOwner(slug string, tier environment.Tier) string
+	ProjectOwner(slug string, tier environment.Tier) (string, error)
 
-	PlanProjectRemoval(scope ProjectScope) []PlanGroup
+	PlanProjectRemoval(scope ProjectScope) ([]PlanGroup, error)
 
-	PlanPreviewWildcardRemoval(wildcard string) (removed, kept PlanGroup)
+	PlanPreviewWildcardRemoval(wildcard string) (removed, kept PlanGroup, err error)
 
 	PlanSharedPreviewRemoval() PlanGroup
 }

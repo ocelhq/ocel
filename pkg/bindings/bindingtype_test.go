@@ -175,14 +175,14 @@ func TestATaskSharesItsNamespaceWithTopics(t *testing.T) {
 
 func TestAKVStoreIsAComponentOfItsOwn(t *testing.T) {
 	kind, bound := KindOf(bindingsv1.BindingType_BINDING_TYPE_KV)
-	if !bound || kind != naming.KindKV || !kind.Valid() || kind.Component() != "kv" {
+	if !bound || kind != naming.KindKV || kind.Component() != "kv" {
 		t.Errorf("KindOf(kv) = %q (bound %v), component %q, want %q with component \"kv\"", kind, bound, kind.Component(), naming.KindKV)
 	}
 }
 
 func TestARealtimeResourceIsAComponentOfItsOwn(t *testing.T) {
 	kind, bound := KindOf(bindingsv1.BindingType_BINDING_TYPE_REALTIME)
-	if !bound || kind != naming.KindRealtime || !kind.Valid() || kind.Component() != "realtime" {
+	if !bound || kind != naming.KindRealtime || kind.Component() != "realtime" {
 		t.Errorf("KindOf(realtime) = %q (bound %v), component %q, want %q with component \"realtime\"", kind, bound, kind.Component(), naming.KindRealtime)
 	}
 }

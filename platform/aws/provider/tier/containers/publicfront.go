@@ -14,17 +14,14 @@ import (
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/acm"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
-	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -139,14 +136,14 @@ func (w *work) runPublicFront(ctx *pulumi.Context, public *ec2.SecurityGroup, su
 }
 
 func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Listener, tags pulumi.StringMap) error {
-	liveness, targets := LivenessName(w.namespace, w.tier), naming.Join(naming.WordSeparator, balancer, targetGroupWord)
-	role, err := awsiam.NewRole(ctx, liveness, &awsiam.RoleArgs{
-		Name:                pulumi.String(liveness),
-		Description:         pulumi.String("Ocel: the role the public front's liveness answer runs as in the " + string(w.tier) + " tier"),
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(lambdaPrincipal)),
-		PermissionsBoundary: pulumi.String(w.boundary),
-		Path:                pulumi.String(w.rolePath),
-		Tags:                tags,
+	liveness, targets := LivenessName(w.namespace, w.tier), awsports.PublicTargetGroupName(w.namespace, w.tier)
+	role, _, err := component.NewAppRole(ctx, component.AppRole{
+		Name:        component.NameOf(liveness),
+		Description: pulumi.String("Ocel: the role the public front's liveness answer runs as in the " + string(w.tier) + " tier"),
+		Principal:   lambdaPrincipal,
+		Boundary:    w.boundary,
+		Path:        w.rolePath,
+		Tags:        w.tags,
 	})
 	if err != nil {
 		return err

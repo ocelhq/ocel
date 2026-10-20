@@ -88,6 +88,7 @@ func NewDispatchHost(app *provider.AppSpec, slug, edgeBucket, imageOptimizerURL 
 			buildIDEnv:    app.BuildID,
 		},
 	}
+	maps.Copy(host.Env, naming.StorageEnv(app.Storage, naming.Buckets{naming.StorageEdge: edgeBucket}))
 	if imageOptimizerURL != "" {
 		host.Env[edge.ImageOptimizerURLVar] = imageOptimizerURL
 	}

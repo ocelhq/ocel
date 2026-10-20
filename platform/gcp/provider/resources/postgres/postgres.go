@@ -263,21 +263,28 @@ func (p *Postgres) Remove(ctx context.Context, ref provider.StackRef, binding pr
 	return instances.remove(ctx, binding, progress)
 }
 
-func (i postgresInstances) labels(database string) map[string]string {
+func (i postgresInstances) labels(database string) (map[string]string, error) {
 	return names.LabelsFor(i.clients.Names, i.ref, names.PostgresLabel, database)
 }
 
-func (i postgresInstances) filter(database string) string {
-	labels := i.labels(database)
+func (i postgresInstances) filter(database string) (string, error) {
+	labels, err := i.labels(database)
+	if err != nil {
+		return "", err
+	}
 	terms := make([]string, 0, len(labels))
 	for _, name := range slices.Sorted(maps.Keys(labels)) {
 		terms = append(terms, "settings.userLabels."+name+":"+labels[name])
 	}
-	return strings.Join(terms, " ")
+	return strings.Join(terms, " "), nil
 }
 
 func (i postgresInstances) findInstance(ctx context.Context, database string) (*sqladmin.DatabaseInstance, error) {
-	listed, err := googleretry.Attempted(ctx, i.sql.Instances.List(i.clients.Project()).Filter(i.filter(database)).Context(ctx).Do)
+	filter, err := i.filter(database)
+	if err != nil {
+		return nil, err
+	}
+	listed, err := googleretry.Attempted(ctx, i.sql.Instances.List(i.clients.Project()).Filter(filter).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("find the Cloud SQL instance postgres %s runs on: %w", database, err)
 	}
@@ -349,7 +356,11 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 	}, nil
 }
 
-func (i postgresInstances) desiredInstance(name string, spec postgresSpec, database string) *sqladmin.DatabaseInstance {
+func (i postgresInstances) desiredInstance(name string, spec postgresSpec, database string) (*sqladmin.DatabaseInstance, error) {
+	labels, err := i.labels(database)
+	if err != nil {
+		return nil, err
+	}
 	project, grows, size := i.clients.Project(), true, cloudSQLSizeOf(i.ref.Tier)
 	return &sqladmin.DatabaseInstance{
 		Name:            name,
@@ -363,7 +374,7 @@ func (i postgresInstances) desiredInstance(name string, spec postgresSpec, datab
 			DataDiskType:        cloudSQLDiskType,
 			DataDiskSizeGb:      cloudSQLDiskGB,
 			StorageAutoResize:   &grows,
-			UserLabels:          i.labels(database),
+			UserLabels:          labels,
 			BackupConfiguration: size.backups(),
 			IpConfiguration: &sqladmin.IpConfiguration{
 				Ipv4Enabled: false,
@@ -380,7 +391,7 @@ func (i postgresInstances) desiredInstance(name string, spec postgresSpec, datab
 			DeletionProtectionEnabled: size.deletionProtection,
 			ForceSendFields:           []string{"DeletionProtectionEnabled"},
 		},
-	}
+	}, nil
 }
 
 func (i postgresInstances) create(ctx context.Context, database string, spec postgresSpec, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
@@ -390,7 +401,11 @@ func (i postgresInstances) create(ctx context.Context, database string, spec pos
 	}
 	gcloud.EnsureProgress(progress).Say("Creating postgres " + database + " as Cloud SQL instance " + name + " in " + i.clients.Region +
 		": a new instance takes several minutes")
-	started, err := googleretry.Attempted(ctx, i.sql.Instances.Insert(i.clients.Project(), i.desiredInstance(name, spec, database)).Context(ctx).Do)
+	desired, err := i.desiredInstance(name, spec, database)
+	if err != nil {
+		return nil, err
+	}
+	started, err := googleretry.Attempted(ctx, i.sql.Instances.Insert(i.clients.Project(), desired).Context(ctx).Do)
 	if err != nil {
 		return nil, fmt.Errorf("create the Cloud SQL instance postgres %s runs on: %w", database, err)
 	}

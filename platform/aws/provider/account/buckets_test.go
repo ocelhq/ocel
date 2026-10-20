@@ -244,6 +244,25 @@ func TestARebootstrapOverBucketsThatShareNoRandomTagIsRefusedRatherThanRenamingT
 	}
 }
 
+func TestReadingABootstrapWhoseBucketsShareNoRandomTagIsRefusedRatherThanPlanningBucketsThatDoNotExist(t *testing.T) {
+	ctx := context.Background()
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	frontedBy(t, &fakeEdge{})
+	if err := Run(ctx, apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, Request{}, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	stacks.mu.Lock()
+	stacks.outputs[coreStackName][outputStateBucket] = "ocel-prod-state"
+	stacks.mu.Unlock()
+
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		groups, _ := PlanRemove(ctx, stacks, newFakeLayers(), newFakeRecords().in, read)
+		t.Fatalf("Read = %v, want an invalid refusal: a removal planned over a new tag lists %d stacks whose buckets do not exist", err, len(groups))
+	}
+}
+
 func TestOnlyTheEdgeBucketAdmitsCloudFrontAndOnlyToItsAssets(t *testing.T) {
 	for _, tier := range bothTiers {
 		t.Run(string(tier), func(t *testing.T) {

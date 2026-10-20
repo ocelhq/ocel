@@ -84,12 +84,23 @@ func (s PulumiStacks) opened(ctx context.Context, target Target) (*pulumi.Automa
 	if err != nil {
 		return nil, provider.StackRef{}, err
 	}
-	config, ref := s.config(clients, buckets[naming.StorageState], target, passphrase)
+	config, ref, err := s.config(clients, buckets[naming.StorageState], target, passphrase)
+	if err != nil {
+		return nil, provider.StackRef{}, err
+	}
 	return pulumi.New(config), ref, nil
 }
 
-func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target Target, passphrase string) (pulumi.Config[Program], provider.StackRef) {
-	project := naming.PulumiProject(target.Prefix())
+func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target Target, passphrase string) (pulumi.Config[Program], provider.StackRef, error) {
+	prefix, err := target.Prefix()
+	if err != nil {
+		return pulumi.Config[Program]{}, provider.StackRef{}, err
+	}
+	name, err := target.Name()
+	if err != nil {
+		return pulumi.Config[Program]{}, provider.StackRef{}, err
+	}
+	project := naming.PulumiProject(prefix)
 	config := pulumi.Config[Program]{
 		Backend: pulumi.Backend{
 			URL:        naming.StateBackendURL(cloudStorageScheme, stateBucket, project),
@@ -105,7 +116,7 @@ func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target
 	if target.Slug == "" {
 		config.Refresh = refreshesTheFront
 	}
-	return config, provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(target.Name())}
+	return config, provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(name)}, nil
 }
 
 func refreshesTheFront(provider.StackRef, pulumi.Operation) bool { return true }

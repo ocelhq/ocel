@@ -71,8 +71,8 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 
 func (e *Edge) DomainOwner(context.Context, string) (string, error) { return "", nil }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
-	return Surface(e.namespace, slug, tier)
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+	return Surface(e.namespace, slug, tier), nil
 }
 
 func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
@@ -88,17 +88,17 @@ func unbindable(what string) error {
 		what, alb.Kind, alb.BaselineCost)
 }
 
-func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	return []edge.PlanGroup{{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanKeep,
 		Reason: "this project is answered on each service's own url, so the release surface's rows are the whole of what serves it",
-	}}
+	}}, nil
 }
 
-func (e *Edge) PlanPreviewWildcardRemoval(string) (removed, kept edge.PlanGroup) {
-	return e.PlanSharedPreviewRemoval(), edge.PlanGroup{}
+func (e *Edge) PlanPreviewWildcardRemoval(string) (removed, kept edge.PlanGroup, err error) {
+	return e.PlanSharedPreviewRemoval(), edge.PlanGroup{}, nil
 }
 
 func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {

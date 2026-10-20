@@ -67,7 +67,7 @@ func TestATeardownSaysWhatItRemovedInSentences(t *testing.T) {
 	if err := Teardown(context.Background(), apis, defaultNamespace, environment.TierProduction, &progress); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if !slices.Contains(progress.Lines(), "INFO Emptying bucket ocel-state") {
+	if !slices.Contains(progress.Lines(), "INFO Emptying bucket "+teardownStateBucket) {
 		t.Errorf("teardown said %v, want each bucket it empties named as a bucket", progress.Lines())
 	}
 	assertSentences(t, progress.Lines())

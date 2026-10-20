@@ -23,11 +23,11 @@ import (
 func TestTheSharedPreviewNameFitsTheCommentCloudFrontAccepts(t *testing.T) {
 	t.Parallel()
 
-	name := previewWildcardName(strings.Repeat("preview-", 30) + ".example.com")
+	name := must(previewWildcardName(strings.Repeat("preview-", 30) + ".example.com"))
 	if len(name) > maxDistributionNameLen {
 		t.Fatalf("previewWildcardName is %d characters and CloudFront allows %d: %q", len(name), maxDistributionNameLen, name)
 	}
-	if other := previewWildcardName(strings.Repeat("preview-", 30) + ".example.net"); other == name {
+	if other := must(previewWildcardName(strings.Repeat("preview-", 30) + ".example.net")); other == name {
 		t.Errorf("two base domains both mint %q, so each would adopt the other's shared distribution", name)
 	}
 }
@@ -120,9 +120,9 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		wildcard := w.front.named(previewWildcardName(previewBase))
+		wildcard := w.front.named(must(previewWildcardName(previewBase)))
 		if wildcard == nil {
-			t.Fatalf("no distribution named %q; the account has %v", previewWildcardName(previewBase), w.front.mutations())
+			t.Fatalf("no distribution named %q; the account has %v", must(previewWildcardName(previewBase)), w.front.mutations())
 		}
 		if front != wildcard.domain {
 			t.Errorf("front = %q, want the distribution's domain name %q", front, wildcard.domain)
@@ -149,7 +149,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if arn := aws.ToString(associated.Items[1].FunctionARN); arn != fakeEmptyBodyARN(environment.TierPreview) {
 			t.Errorf("function association = %q, want the preview empty-body dropper", arn)
 		}
-		if origin := aws.ToString(wildcard.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeEdgeBucket, fakeRegion) {
+		if origin := aws.ToString(wildcard.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakePreviewEdgeBucket, fakeRegion) {
 			t.Errorf("origin = %q, want the preview bootstrap's edge bucket", origin)
 		}
 	})
@@ -180,7 +180,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
-		raised := w.front.named(previewWildcardName(previewBase))
+		raised := w.front.named(must(previewWildcardName(previewBase)))
 
 		spec := previewWildcardSpec()
 		spec.Certificate = "arn:aws:acm:us-east-1:123456789012:certificate/reissued"
@@ -194,7 +194,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if n := len(w.front.distributions); n != 1 {
 			t.Errorf("distributions = %d, want the one wildcard converged rather than a second raised", n)
 		}
-		wildcard := w.front.named(previewWildcardName(previewBase))
+		wildcard := w.front.named(must(previewWildcardName(previewBase)))
 		if arn := aws.ToString(wildcard.config.ViewerCertificate.ACMCertificateArn); arn != spec.Certificate {
 			t.Errorf("viewer certificate = %q, want the re-issued certificate %q", arn, spec.Certificate)
 		}
@@ -210,13 +210,13 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
-		raised := w.front.named(previewWildcardName(previewBase))
+		raised := w.front.named(must(previewWildcardName(previewBase)))
 		raised.config.Aliases = &cftypes.Aliases{Quantity: aws.Int32(0)}
 
 		if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard again: %v", err)
 		}
-		wildcard := w.front.named(previewWildcardName(previewBase))
+		wildcard := w.front.named(must(previewWildcardName(previewBase)))
 		if aliases := wildcard.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
 			t.Errorf("aliases = %v, want %q served again", aliases, previewWild)
 		}
@@ -244,7 +244,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			id:     "E9",
 			domain: "e9.cloudfront.net",
 			etag:   "dist-9",
-			config: &cftypes.DistributionConfig{Comment: aws.String(previewWildcardName(previewBase))},
+			config: &cftypes.DistributionConfig{Comment: aws.String(must(previewWildcardName(previewBase)))},
 		}
 
 		front, err := e.ReconcilePreviewWildcard(context.Background(), previewWildcardSpec())
@@ -300,7 +300,7 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		raised := w.front.named(previewWildcardName(previewBase))
+		raised := w.front.named(must(previewWildcardName(previewBase)))
 		targets := w.invalidationTargets(newInvalidationPartition(environment.TierPreview, ""))
 		if !slices.Equal(targets, []string{raised.id}) {
 			t.Errorf("bootstrap invalidation targets = %v, want the wildcard every preview is served from (%q)", targets, raised.id)
@@ -337,7 +337,7 @@ func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsTh
 		domain: "e9.cloudfront.net",
 		etag:   "dist-9",
 		config: &cftypes.DistributionConfig{
-			Comment: aws.String(previewWildcardName(previewBase)),
+			Comment: aws.String(must(previewWildcardName(previewBase))),
 			DefaultCacheBehavior: &cftypes.DefaultCacheBehavior{
 				FunctionAssociations: &cftypes.FunctionAssociations{
 					Quantity: ptr(int32(1)),
@@ -358,7 +358,7 @@ func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsTh
 	if !strings.Contains(refused.Message, string(other)) {
 		t.Errorf("refusal = %q, want it to name the namespace still serving previews through the shared entry", refused.Message)
 	}
-	if w.front.named(previewWildcardName(previewBase)) == nil {
+	if w.front.named(must(previewWildcardName(previewBase))) == nil {
 		t.Error("the shared preview entry was deleted anyway, so every preview another namespace serves on it now answers nothing")
 	}
 }
@@ -371,7 +371,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
-		raised := w.front.named(previewWildcardName(previewBase))
+		raised := w.front.named(must(previewWildcardName(previewBase)))
 		w.front.calls = nil
 
 		if err := e.DestroyPreviewWildcard(ctx, previewBase); err != nil {
@@ -381,7 +381,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		if made := w.front.mutations(); !slices.Equal(made, want) {
 			t.Errorf("calls = %v, want %v", made, want)
 		}
-		if w.front.named(previewWildcardName(previewBase)) != nil {
+		if w.front.named(must(previewWildcardName(previewBase))) != nil {
 			t.Error("the wildcard distribution is still there after DestroyPreviewWildcard")
 		}
 	})
@@ -440,7 +440,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if published.Origin != fakeEntryHost || published.Release != "d1.f1" {
 			t.Errorf("route = %+v, want the release's root function URL", published)
 		}
-		if published.Assets != assetOriginDomain(fakeEdgeBucket, fakeRegion) || published.AssetPrefix != fakeAssetOriginPath {
+		if published.Assets != assetOriginDomain(fakePreviewEdgeBucket, fakeRegion) || published.AssetPrefix != fakeAssetOriginPath {
 			t.Errorf("route = %+v, want the preview bootstrap's assets", published)
 		}
 		if published.Secret != fakeSecret {
@@ -473,7 +473,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if published.Origin != fakeFront.Host || published.Container != "shop-prod-web-container-r3f8a1c90" {
 			t.Errorf("route = %+v, want the tier front and the container the rule names", published)
 		}
-		wildcard := w.front.named(previewWildcardName(previewBase))
+		wildcard := w.front.named(must(previewWildcardName(previewBase)))
 		if wildcard == nil {
 			t.Fatal("no wildcard distribution exists")
 		}
@@ -487,7 +487,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if _, err := w.edge().ReconcilePreviewWildcard(context.Background(), previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
-		if got := containerFrontOf(w.front.named(previewWildcardName(previewBase)).config); got != fakeFront {
+		if got := containerFrontOf(w.front.named(must(previewWildcardName(previewBase))).config); got != fakeFront {
 			t.Errorf("after a reconcile the wildcard distribution declares %+v, want the tier front kept", got)
 		}
 	})
@@ -601,4 +601,11 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			t.Errorf("routes = %v, want no hostname left pointing at a release the ledger never recorded", slices.Sorted(maps.Keys(routes)))
 		}
 	})
+}
+
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
 }

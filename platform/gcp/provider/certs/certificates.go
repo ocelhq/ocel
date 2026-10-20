@@ -40,17 +40,20 @@ const (
 	authorizationRole = "auth"
 )
 
-func authorizationID(namespace, hostname string) string {
+func authorizationID(namespace, hostname string) (string, error) {
 	return certificateName(namespace, hostname, authorizationRole)
 }
 
-func certificateName(namespace, hostname string, role ...string) string {
-	name := naming.TaggedName{
+func certificateName(namespace, hostname string, role ...string) (string, error) {
+	name, err := naming.TaggedName{
 		Head:     naming.MustUntieredOcelName(namespace, certificateWord),
 		Readable: naming.SanitizeHost(hostname),
 		Tag:      naming.HashTag(namespace, hostname),
 	}.Fit(maxCertificateName, authorizationRole)
-	return naming.Join(naming.WordSeparator, append([]string{name}, role...)...)
+	if err != nil {
+		return "", err
+	}
+	return naming.Join(naming.WordSeparator, append([]string{name}, role...)...), nil
 }
 
 func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostname, "*.") }
@@ -68,7 +71,11 @@ func (p Certificates) Issue(ctx context.Context, req provider.CertificateRequest
 	if err != nil {
 		return provider.Certificate{}, err
 	}
-	name := clients.CertificatesGlobal() + "/certificates/" + certificateName(string(clients.Namespace()), req.Hostname)
+	id, err := certificateName(string(clients.Namespace()), req.Hostname)
+	if err != nil {
+		return provider.Certificate{}, err
+	}
+	name := clients.CertificatesGlobal() + "/certificates/" + id
 	cert := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Manual: req.Current.Manual}
 
 	authorization, err := p.authorized(ctx, clients, req)
@@ -83,7 +90,7 @@ func (p Certificates) Issue(ctx context.Context, req provider.CertificateRequest
 	if err != nil {
 		return cert, err
 	}
-	if err := p.certified(ctx, clients, req, name, authorization.Name); err != nil {
+	if err := p.certified(ctx, clients, req, id, authorization.Name); err != nil {
 		return cert, err
 	}
 	return cert, nil
@@ -98,7 +105,10 @@ func (p Certificates) authorized(
 	if err != nil {
 		return nil, err
 	}
-	id := authorizationID(string(clients.Namespace()), req.Hostname)
+	id, err := authorizationID(string(clients.Namespace()), req.Hostname)
+	if err != nil {
+		return nil, err
+	}
 	name := clients.CertificatesGlobal() + "/dnsAuthorizations/" + id
 	authorization, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
@@ -151,12 +161,13 @@ func (p Certificates) certified(
 	ctx context.Context,
 	clients *gcloud.Clients,
 	req provider.CertificateRequest,
-	name, authorization string,
+	id, authorization string,
 ) error {
 	certificates, err := clients.Certificates()
 	if err != nil {
 		return err
 	}
+	name := clients.CertificatesGlobal() + "/certificates/" + id
 	_, err = googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(name).Context(ctx).Do(call...)
 	})
@@ -177,7 +188,7 @@ func (p Certificates) certified(
 							DnsAuthorizations: []string{authorization},
 						},
 					}).
-					CertificateId(certificateName(string(clients.Namespace()), req.Hostname)).Context(ctx).Do(call...)
+					CertificateId(id).Context(ctx).Do(call...)
 			})
 		if err != nil {
 			return err

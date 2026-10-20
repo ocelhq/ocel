@@ -33,7 +33,7 @@ func testSpec() edge.StackSpec {
 }
 
 func productionAPIName() string {
-	return apiName(defaultNamespace, conformanceSlug, environment.TierProduction, "")
+	return must(apiName(defaultNamespace, conformanceSlug, environment.TierProduction, ""))
 }
 
 func bootstrapped(t *testing.T, w *world) *apiGateway {
@@ -70,7 +70,7 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 			Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
 			Prior:  router.NewStackState(state),
 			Serving: func(pointer string) string {
-				name := apiName(e.ns, state.Slug, state.Tier, pointer)
+				name := must(apiName(e.ns, state.Slug, state.Tier, pointer))
 				w.gateway.mu.Lock()
 				defer w.gateway.mu.Unlock()
 				for _, api := range w.gateway.apis {
@@ -332,15 +332,15 @@ func TestReconcileLeavesTheMethodsItAlreadyOpened(t *testing.T) {
 func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	t.Parallel()
 
-	slugged := apiName(defaultNamespace, "shop-pr1", environment.TierProduction, "")
-	pointed := apiName(defaultNamespace, "shop", environment.TierProduction, "pr1")
+	slugged := must(apiName(defaultNamespace, "shop-pr1", environment.TierProduction, ""))
+	pointed := must(apiName(defaultNamespace, "shop", environment.TierProduction, "pr1"))
 	if slugged == pointed {
 		t.Errorf("apiName is %q for both a slug and a pointer that end the same; two projects would share one API", slugged)
 	}
-	if got, want := apiName(defaultNamespace, "shop", environment.TierProduction, ""), "ocel-prod-shop-"+naming.HashTag("ocel", "production", "shop"); got != want {
+	if got, want := must(apiName(defaultNamespace, "shop", environment.TierProduction, "")), "ocel-prod-shop-"+naming.HashTag("ocel", "production", "shop"); got != want {
 		t.Errorf("apiName = %q, want %q", got, want)
 	}
-	if name := notfoundapi.NameFor(string(defaultNamespace), environment.TierProduction); name == apiName(defaultNamespace, "not-found", environment.TierProduction, "") {
+	if name := notfoundapi.NameFor(string(defaultNamespace), environment.TierProduction); name == must(apiName(defaultNamespace, "not-found", environment.TierProduction, "")) {
 		t.Errorf("the not-found API is named %q, which a project could claim as its own", name)
 	}
 }
@@ -363,10 +363,10 @@ func TestDomainOwnerNamesTheProjectThatOwnsTheHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if owner != e.ProjectOwner(conformanceSlug, environment.TierProduction) {
+	if mine, err := e.ProjectOwner(conformanceSlug, environment.TierProduction); err != nil || owner != mine {
 		t.Errorf("DomainOwner = %q, which %q is not recognised as owning; preflight would report the project's own host as claimed by someone else", owner, conformanceSlug)
 	}
-	if owner == e.ProjectOwner("other", environment.TierProduction) {
+	if theirs, err := e.ProjectOwner("other", environment.TierProduction); err != nil || owner == theirs {
 		t.Errorf("DomainOwner = %q, which another project is recognised as owning", owner)
 	}
 }

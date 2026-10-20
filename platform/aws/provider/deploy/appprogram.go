@@ -115,7 +115,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		Functions: functions,
 		Args:      func(fn function.AppFunction) function.Args { return args[fn.Logical] },
 		Artifacts: artifacts,
-		Env:       function.AppEnv(spec, r.cfg.Buckets, bundle, sessions, r.cfg.StateTable),
+		Env:       function.AppEnv(spec, bundle, sessions, r.cfg.StateTable),
 		ISR:       cache,
 		Bytecode:  bytecode,
 		Dispatch:  dispatch,

@@ -128,7 +128,9 @@ func readCore(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environ
 	d := Deployed{Present: true, Parts: PartSet{}, Buckets: naming.Buckets{}, Outputs: cfn.OutputsOf(core)}
 	var refs stackRefs
 	absorb(&d, &refs, d.Outputs)
-	refs.bucketTag = ns.bootstrapBucketTag(tier, d.Buckets)
+	if refs.bucketTag, err = ns.bootstrapBucketTag(tier, d.Buckets); err != nil {
+		return Deployed{}, stackRefs{}, nil, err
+	}
 	return d, refs, core, nil
 }
 
@@ -159,19 +161,15 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
-	intended := ""
-	if refs.bucketTag != "" {
-		intendedCore, err := target.core(broughtVariablesKey(d.Outputs), refs.bucketTag)
-		if err != nil {
-			return Deployed{}, stackRefs{}, err
-		}
-		intended = cfn.TemplateDigest(intendedCore.body)
+	intendedCore, err := target.core(broughtVariablesKey(d.Outputs), refs.bucketTag)
+	if err != nil {
+		return Deployed{}, stackRefs{}, err
 	}
 	d.Stacks = append(d.Stacks, StackStamp{
 		Name:      target.stackName,
 		Present:   true,
 		Digest:    coreStamp.Digest,
-		Intended:  intended,
+		Intended:  cfn.TemplateDigest(intendedCore.body),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range partRegistry {
@@ -264,11 +262,7 @@ type spec struct {
 }
 
 func (s spec) core(broughtKey, bucketTag string) (partStack, error) {
-	template, err := coreStackTemplate(s.ns, s.tier, broughtKey, bucketTag)
-	if err != nil {
-		return partStack{}, err
-	}
-	return newPartStack(template, nil)
+	return newPartStack(coreStackTemplate(s.ns, s.tier, broughtKey, bucketTag), nil)
 }
 
 func productionBootstrap(ns Namespace) spec {
@@ -590,11 +584,8 @@ func coreVariablesKey(alongside PartSet, brought string) string {
 	return ""
 }
 
-func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey, bucketTag string) (cfn.Template, error) {
-	buckets, err := ns.bootstrapBuckets(tier, bucketTag)
-	if err != nil {
-		return cfn.Template{}, err
-	}
+func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey, bucketTag string) cfn.Template {
+	buckets := ns.bootstrapBuckets(tier, bucketTag)
 	return cfn.Template{
 		Description: coreStackDescription(tier),
 		Resources: []cfn.Resource{
@@ -624,7 +615,7 @@ func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey, bucketTa
 				Value:       string(tier),
 			}},
 		),
-	}, nil
+	}
 }
 
 func coreStackDescription(tier environment.Tier) string {

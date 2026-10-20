@@ -95,10 +95,10 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 }
 
 func TestALabelValueThatFitsIsKeptAndALongerOneIsCutAndTaggedWithItsHash(t *testing.T) {
-	if got := names.LabelValue("feature-login-page-v1"); got != "feature-login-page-v1" {
+	if got := must(names.LabelValue("feature-login-page-v1")); got != "feature-login-page-v1" {
 		t.Errorf("LabelValue() = %q, want a value that fits kept as it is", got)
 	}
-	if got, want := names.LabelValue(strings.Repeat("a", 70)), strings.Repeat("a", 55)+"-6bd5e5"; got != want {
+	if got, want := must(names.LabelValue(strings.Repeat("a", 70))), strings.Repeat("a", 55)+"-6bd5e5"; got != want {
 		t.Errorf("LabelValue() = %q, want %q: the head that fits and the hash tag of the whole value", got, want)
 	}
 }
@@ -108,14 +108,14 @@ func TestALabelValueIsOneGoogleCloudTakes(t *testing.T) {
 	ref := provider.StackRef{Project: "Shop " + strings.Repeat("a", 80), Tier: "production"}
 	ref.Name.Env = "prod"
 
-	labels := names.StackLabels(names.New(provider.Namespace("ocel"), ""), ref)
+	labels := must(names.StackLabels(names.New(provider.Namespace("ocel"), ""), ref))
 
 	for key, value := range labels {
 		if !valid.MatchString(value) {
 			t.Errorf("label %s=%q is not lowercase letters, digits, underscores and dashes of at most 63 characters", key, value)
 		}
 	}
-	if other := names.StackLabels(names.New(provider.Namespace("ocel"), ""), provider.StackRef{Project: "Shop " + strings.Repeat("a", 81)}); other[names.ProjectLabel] == labels[names.ProjectLabel] {
+	if other := must(names.StackLabels(names.New(provider.Namespace("ocel"), ""), provider.StackRef{Project: "Shop " + strings.Repeat("a", 81)})); other[names.ProjectLabel] == labels[names.ProjectLabel] {
 		t.Errorf("two projects cut to one label %q", other[names.ProjectLabel])
 	}
 }

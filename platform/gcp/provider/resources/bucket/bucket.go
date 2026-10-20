@@ -57,10 +57,14 @@ func bucketKey(ref provider.StackRef, bucket string) records.Key {
 	return records.Partition{Tier: ref.Tier, Root: RootBuckets}.Key(ref.Project, ref.Name.Env, bucket)
 }
 
-func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionRequest) appBucket {
+func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionRequest) (appBucket, error) {
 	spec := provider.BucketSpec{}
 	if in.Resource.Bucket != nil {
 		spec = *in.Resource.Bucket
+	}
+	labels, err := names.LabelsFor(clients.Names, in.Ref, names.BucketLabel, in.Resource.Name)
+	if err != nil {
+		return appBucket{}, err
 	}
 	return appBucket{
 		key: bucketKey(in.Ref, in.Resource.Name),
@@ -70,13 +74,13 @@ func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionR
 		emulated: clients.Emulated(),
 		attrs: storage.BucketAttrs{
 			Location:                 clients.Region,
-			Labels:                   names.LabelsFor(clients.Names, in.Ref, names.BucketLabel, in.Resource.Name),
+			Labels:                   labels,
 			UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
 			PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
 			CORS:                     uploadCORS(spec.AllowedOrigins),
 			Lifecycle:                bucketLifecycle(),
 		},
-	}
+	}, nil
 }
 
 func uploadCORS(origins []string) []storage.CORS {
@@ -185,7 +189,11 @@ func (p *Bucket) Provision(ctx context.Context, in resources.ProvisionRequest, p
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	name, err := p.declaredBucket(clients, in).ensure(ctx, p.records, client, clients.Project(), in.Resource.Name, progress)
+	declared, err := p.declaredBucket(clients, in)
+	if err != nil {
+		return provider.Binding{}, err
+	}
+	name, err := declared.ensure(ctx, p.records, client, clients.Project(), in.Resource.Name, progress)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -201,7 +209,11 @@ func (p *Bucket) Plan(ctx context.Context, in resources.ProvisionRequest, _ *pro
 	if err != nil {
 		return "", "", err
 	}
-	return p.declaredBucket(clients, in).plan(ctx, p.records, client, in.Resource.Name)
+	declared, err := p.declaredBucket(clients, in)
+	if err != nil {
+		return "", "", err
+	}
+	return declared.plan(ctx, p.records, client, in.Resource.Name)
 }
 
 func (b appBucket) plan(ctx context.Context, store records.Store, client *storage.Client, declared string) (provider.ChangeAction, string, error) {

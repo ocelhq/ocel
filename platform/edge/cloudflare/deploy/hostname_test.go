@@ -682,7 +682,15 @@ func routedSpec(routed []string, desired ...string) routeSpec {
 }
 
 func ownedSpec(slug string, desired ...string) routeSpec {
-	return routeSpec{desired: desired, owns: projectOwnsScript(defaultNamespace, slug)}
+	return routeSpec{desired: desired, owns: ownsOf(defaultNamespace, slug)}
+}
+
+func ownsOf(namespace, slug string) func(script string) bool {
+	owns, err := projectOwnsScript(namespace, slug)
+	if err != nil {
+		panic(err)
+	}
+	return owns
 }
 
 func assertSet(t *testing.T, what string, got, want []string) {
@@ -1143,7 +1151,11 @@ func TestAHostnameAReconcileRoutedIsOwnedByTheProjectBeforeAnyBindRecordsIt(t *t
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if mine := p.ProjectOwner(spec.Slug, spec.Tier); owner == "" || owner != mine {
+	mine, err := p.ProjectOwner(spec.Slug, spec.Tier)
+	if err != nil {
+		t.Fatalf("ProjectOwner: %v", err)
+	}
+	if owner == "" || owner != mine {
 		t.Errorf("DomainOwner = %q, ProjectOwner = %q: a retried deploy's preflight refuses the project its own hostname", owner, mine)
 	}
 }

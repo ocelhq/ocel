@@ -351,7 +351,9 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, tier e
 	}
 	var mine string
 	if slug := req.GetSlug(); slug != "" {
-		mine = front.ProjectOwner(slug, tier)
+		if mine, err = front.ProjectOwner(slug, tier); err != nil {
+			return nil, err
+		}
 	}
 	claims := make([]*contractv1.DomainClaim, 0, len(req.GetDomains()))
 	for _, hostname := range req.GetDomains() {

@@ -356,7 +356,7 @@ func TestTheCoreStackHoldsTheVariablesTableAndTheKeyStackTheKey(t *testing.T) {
 
 func TestCheckDeployedReadsTheVariablesOutputs(t *testing.T) {
 	t.Run("parses variables outputs", func(t *testing.T) {
-		api := stubStacksAPI{coreStackName: outputs(map[string]string{
+		api := stubStacksAPI{coreStackName: coreOutputs(map[string]string{
 			outputVariablesTable:  "variables-abc",
 			outputVariablesKeyARN: "arn:aws:kms:eu-west-1:123456789012:key/abcd",
 		})}

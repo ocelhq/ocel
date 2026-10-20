@@ -1162,9 +1162,9 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 	t.Parallel()
 
 	front := edgeOver(aMachine(), fake.NewKeyValues())
-	groups := front.PlanProjectRemoval(edge.ProjectScope{
+	groups := must(front.PlanProjectRemoval(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Address: address,
-	})
+	}))
 	if len(groups) != 1 {
 		t.Fatalf("PlanProjectRemoval = %d groups, want one", len(groups))
 	}
@@ -1203,9 +1203,9 @@ func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *t
 	front := edgeOver(m, fake.NewKeyValues())
 
 	kept := map[string]edge.PlanChange{}
-	for _, change := range front.PlanProjectRemoval(edge.ProjectScope{
+	for _, change := range must(front.PlanProjectRemoval(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com", pinned}, Address: address,
-	})[0].Changes {
+	}))[0].Changes {
 		if change.Kind == switchboard.CertificateKind {
 			kept[change.Name] = change
 		}
@@ -1231,7 +1231,10 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 
 	const wildcard = "*.preview.example.com"
 	front := edgeOver(aMachine(), fake.NewKeyValues())
-	removed, kept := front.PlanPreviewWildcardRemoval(wildcard)
+	removed, kept, err := front.PlanPreviewWildcardRemoval(wildcard)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if removed.Action != edge.PlanDelete {
 		t.Errorf("the removed group is actioned %q, want %q: rollingOut the wildcard takes down the route that serves it", removed.Action, edge.PlanDelete)
@@ -1551,7 +1554,7 @@ func TestTheRemovalPlanKeepsABoundHostnamesCertificateUnderTheProxysOwnHandle(t 
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
-	certificate := keptCertificate(t, front.PlanProjectRemoval(edge.ProjectScope{Slug: slug, Tier: environment.TierProduction, Hostnames: []string{bound}}))
+	certificate := keptCertificate(t, must(front.PlanProjectRemoval(edge.ProjectScope{Slug: slug, Tier: environment.TierProduction, Hostnames: []string{bound}})))
 	if certificate.Name != certs.ProxyHandle(bound) {
 		t.Errorf("the plan keeps %q, want the proxy's own handle for %s: the row a teardown shows is the store entry it is declining to touch", certificate.Name, bound)
 	}
@@ -1614,4 +1617,11 @@ func TestAPromotionPassesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t
 	if spec.HealthPath != "/healthz" {
 		t.Errorf("the promotion passes the health path %q, want the record's: a container the box re-creates is handed the path its runtime lets probes through on", spec.HealthPath)
 	}
+}
+
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
 }

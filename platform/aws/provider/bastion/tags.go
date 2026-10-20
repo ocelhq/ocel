@@ -2,8 +2,6 @@ package bastion
 
 import (
 	"fmt"
-	"iter"
-	"maps"
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -13,41 +11,19 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
-func eachOcelTag(namespace string, tier environment.Tier) iter.Seq2[string, string] {
-	tags := naming.OcelTags(namespace, tier)
-	return func(yield func(string, string) bool) {
-		for _, key := range slices.Sorted(maps.Keys(tags)) {
-			if !yield(key, tags[key]) {
-				return
-			}
-		}
-	}
-}
-
 func ecsTagsFor(namespace string, tier environment.Tier) []ecstypes.Tag {
-	var out []ecstypes.Tag
-	for key, value := range eachOcelTag(namespace, tier) {
-		out = append(out, ecstypes.Tag{Key: aws.String(key), Value: aws.String(value)})
-	}
-	return out
+	return tags.Sorted(naming.OcelTags(namespace, tier), func(key, value *string) ecstypes.Tag { return ecstypes.Tag{Key: key, Value: value} })
 }
 
 func iamTagsFor(namespace string, tier environment.Tier) []iamtypes.Tag {
-	var out []iamtypes.Tag
-	for key, value := range eachOcelTag(namespace, tier) {
-		out = append(out, iamtypes.Tag{Key: aws.String(key), Value: aws.String(value)})
-	}
-	return out
+	return tags.Sorted(naming.OcelTags(namespace, tier), func(key, value *string) iamtypes.Tag { return iamtypes.Tag{Key: key, Value: value} })
 }
 
 func ec2TagsFor(namespace string, tier environment.Tier) []ec2types.Tag {
-	var out []ec2types.Tag
-	for key, value := range eachOcelTag(namespace, tier) {
-		out = append(out, ec2types.Tag{Key: aws.String(key), Value: aws.String(value)})
-	}
-	return out
+	return tags.Sorted(naming.OcelTags(namespace, tier), func(key, value *string) ec2types.Tag { return ec2types.Tag{Key: key, Value: value} })
 }
 
 func isManagedByOcel[T any](namespace string, tags []T, keyValue func(T) (*string, *string)) bool {

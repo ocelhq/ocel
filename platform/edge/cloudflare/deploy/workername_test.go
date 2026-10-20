@@ -80,10 +80,10 @@ func TestProjectOwnsScriptReadsOnlyThisNamespacesWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("entryWorkerName: %v", err)
 	}
-	if projectOwnsScript(defaultNamespace, "shop")(theirs) {
+	if ownsOf(defaultNamespace, "shop")(theirs) {
 		t.Errorf("%q reads as this namespace's, so a prune here would take a route off the worker %s deploys", theirs, other)
 	}
-	if !projectOwnsScript(other, "shop")(theirs) {
+	if !ownsOf(other, "shop")(theirs) {
 		t.Errorf("%q does not read as %s's own worker", theirs, other)
 	}
 }
@@ -98,15 +98,15 @@ func TestAProjectOwnsTheEntryWorkersOfBothItsTiersAndNoOtherProjects(t *testing.
 		"ocel-prod-entry-shop":            false,
 		"my-worker":                       false,
 	} {
-		if got := ProjectOwnsWorker(defaultNamespace, "shop", script); got != want {
-			t.Errorf("ProjectOwnsWorker(shop, %q) = %v, want %v", script, got, want)
+		if got, err := ProjectOwnsWorker(defaultNamespace, "shop", script); err != nil || got != want {
+			t.Errorf("ProjectOwnsWorker(shop, %q) = %v, %v, want %v", script, got, err, want)
 		}
-		if got := projectOwnsScript(defaultNamespace, "shop")(script); got != want {
+		if got := ownsOf(defaultNamespace, "shop")(script); got != want {
 			t.Errorf("projectOwnsScript(shop)(%q) = %v, want %v", script, got, want)
 		}
 	}
 	for _, args := range [][3]string{{"", "shop", "ocel-prod-entry-shop-138c36"}, {defaultNamespace, "", "ocel-prod-entry-shop-138c36"}, {defaultNamespace, "shop", ""}} {
-		if ProjectOwnsWorker(args[0], args[1], args[2]) {
+		if owns, err := ProjectOwnsWorker(args[0], args[1], args[2]); err != nil || owns {
 			t.Errorf("ProjectOwnsWorker(%q, %q, %q) = true, want false for an empty argument", args[0], args[1], args[2])
 		}
 	}

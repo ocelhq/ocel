@@ -87,7 +87,7 @@ func TestLivePruningADeploymentRemovesItsCacheEntriesAndKeepsAnothers(t *testing
 		}
 	}
 
-	if err := artifacts.RemoveObjects(ctx, tier, scopeOf(t)(naming.EnvScope(preview.Project, preview.Env)), naming.CoordinateObjectKinds, nil); err != nil {
+	if err := artifacts.RemoveObjects(ctx, tier, scopeOf(t)(naming.AppScope(preview)), naming.CoordinateObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(pr-7) = %v", err)
 	}
 	if has(previewed) {
@@ -151,7 +151,7 @@ func TestLivePruningADeploymentRemovesItsTagRecordsAndKeepsAnothers(t *testing.T
 		}
 	}
 
-	if err := p.Artifacts().RemoveObjects(ctx, tier, scopeOf(t)(naming.EnvScope(preview.Project, preview.Env)), naming.CoordinateObjectKinds, nil); err != nil {
+	if err := p.Artifacts().RemoveObjects(ctx, tier, scopeOf(t)(naming.AppScope(preview)), naming.CoordinateObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(pr-7) = %v", err)
 	}
 	if has(previewed) {

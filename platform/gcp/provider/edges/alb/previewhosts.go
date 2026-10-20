@@ -117,10 +117,14 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 	if err != nil {
 		return Host{}, nil, err
 	}
+	backend, err := backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, host.Hostname)
+	if err != nil {
+		return Host{}, nil, err
+	}
 	served := Host{
 		App:          record.App,
 		Service:      service,
-		Backend:      backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, host.Hostname),
+		Backend:      backend,
 		Pointer:      move.Pointer,
 		StaticRoutes: routes,
 	}

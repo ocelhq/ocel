@@ -133,8 +133,8 @@ func TestEachTiersDistributionRunsItsOwnResolverOnEveryViewerRequest(t *testing.
 	}
 
 	for name, tier := range map[string]environment.Tier{
-		productionDistributionName():     environment.TierProduction,
-		previewWildcardName(previewBase): environment.TierPreview,
+		productionDistributionName():           environment.TierProduction,
+		must(previewWildcardName(previewBase)): environment.TierPreview,
 	} {
 		distribution := w.front.named(name)
 		if distribution == nil {

@@ -176,8 +176,8 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 	return claims[at].Owner, nil
 }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
-	return Surface(slug, tier)
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+	return Surface(slug, tier), nil
 }
 
 func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
@@ -201,7 +201,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	return e.routes.RemovePreviewEntry(ctx, baseDomain)
 }
 
-func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	group := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
@@ -220,7 +220,7 @@ func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 		group.Action = edge.PlanKeep
 		group.Reason = "no hostname claimed"
 	}
-	return []edge.PlanGroup{group}
+	return []edge.PlanGroup{group}, nil
 }
 
 func (e *Edge) certificateKept(hostname string) edge.PlanChange {
@@ -235,7 +235,7 @@ func (e *Edge) certificateKept(hostname string) edge.PlanChange {
 	return edge.PlanChange{Kind: CertificateKind, Name: certs.ProxyHandle(hostname), Action: edge.PlanKeep, Reason: reason}
 }
 
-func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup) {
+func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup, err error) {
 	removed = edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
@@ -245,7 +245,7 @@ func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.P
 			Reason: "proxy route",
 		}},
 	}
-	return removed, e.PlanSharedPreviewRemoval()
+	return removed, e.PlanSharedPreviewRemoval(), nil
 }
 
 func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {

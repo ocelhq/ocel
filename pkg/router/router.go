@@ -57,10 +57,10 @@ type Hooks struct {
 }
 
 type OriginHooks struct {
-	PlanProjectRemoval      func(scope edge.ProjectScope) []edge.PlanGroup
+	PlanProjectRemoval      func(scope edge.ProjectScope) ([]edge.PlanGroup, error)
 	ClaimPreviewEntry       func(ctx context.Context, claim Claim) (edge.Origin, error)
 	DisclaimPreviewEntry    func(ctx context.Context, baseDomain string) error
-	PlanPreviewEntryRemoval func(wildcard string) []edge.PlanGroup
+	PlanPreviewEntryRemoval func(wildcard string) ([]edge.PlanGroup, error)
 }
 
 type Claim struct {

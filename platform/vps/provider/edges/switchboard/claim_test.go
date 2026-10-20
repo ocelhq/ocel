@@ -101,9 +101,9 @@ func TestTheBoxRoutersRemovalPlanNamesTheRouteOfEveryHostnameAnEdgeForwardsToIt(
 	_, front, _ := reconciled(t)
 
 	var routes []string
-	for _, group := range switchboard.NewRouter(front.Edge).Hooks().Origin.PlanProjectRemoval(edge.ProjectScope{
+	for _, group := range must(switchboard.NewRouter(front.Edge).Hooks().Origin.PlanProjectRemoval(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Address: address,
-	}) {
+	})) {
 		for _, change := range group.Changes {
 			if change.Kind == switchboard.RouteKind && change.Action == edge.PlanDelete {
 				routes = append(routes, change.Name)

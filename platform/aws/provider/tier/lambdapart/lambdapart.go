@@ -20,6 +20,7 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
 var pollInterval = 2 * time.Second
@@ -94,7 +95,7 @@ func createRole(ctx context.Context, c IAMAPI, role Role, trust string) error {
 		Path:                     aws.String(role.Path),
 		Description:              aws.String(role.Description),
 		AssumeRolePolicyDocument: aws.String(trust),
-		Tags:                     iamTags(role.Tags),
+		Tags:                     tags.Sorted(role.Tags, func(key, value *string) iamtypes.Tag { return iamtypes.Tag{Key: key, Value: value} }),
 	}
 	if role.Boundary != "" {
 		in.PermissionsBoundary = aws.String(role.Boundary)
@@ -162,14 +163,6 @@ func wrapped(doing string, err error) error {
 		return nil
 	}
 	return fmt.Errorf("%s: %w", doing, err)
-}
-
-func iamTags(tags map[string]string) []iamtypes.Tag {
-	out := make([]iamtypes.Tag, 0, len(tags))
-	for key, value := range tags {
-		out = append(out, iamtypes.Tag{Key: aws.String(key), Value: aws.String(value)})
-	}
-	return out
 }
 
 func Ensure(ctx context.Context, c Clients, fn Function) error {

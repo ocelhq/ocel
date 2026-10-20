@@ -9,7 +9,6 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -129,21 +128,16 @@ func (w *work) run(ctx *pulumi.Context) error {
 		}
 	}
 
-	execution, err := awsiam.NewRole(ctx, executionRoleName(w.namespace, tier), &awsiam.RoleArgs{
-		Name:                pulumi.String(executionRoleName(w.namespace, tier)),
-		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(tier) + " tier"),
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.ECSTasksPrincipal)),
-		PermissionsBoundary: pulumi.String(w.boundary),
-		Path:                pulumi.String(w.rolePath),
-		Tags:                tags,
+	execution, _, err := component.NewAppRole(ctx, component.AppRole{
+		Name:        component.NameOf(executionRoleName(w.namespace, tier)),
+		Description: pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(tier) + " tier"),
+		Principal:   iam.ECSTasksPrincipal,
+		Boundary:    w.boundary,
+		Path:        w.rolePath,
+		Tags:        w.tags,
+		Managed:     []string{ecsTaskExecutionPolicyARN},
 	})
 	if err != nil {
-		return err
-	}
-	if _, err := awsiam.NewRolePolicyAttachment(ctx, component.NameOf(executionRoleName(w.namespace, tier)).Attachment(ecsTaskExecutionPolicyARN), &awsiam.RolePolicyAttachmentArgs{
-		Role:      execution.Name,
-		PolicyArn: pulumi.String(ecsTaskExecutionPolicyARN),
-	}); err != nil {
 		return err
 	}
 

@@ -21,17 +21,15 @@ type Names struct {
 }
 
 func NamesFor(namespace, project string, stack naming.StackName) (Names, error) {
-	return namesAt(namespace, serviceCoordinate(project, stack))
+	return namesAt(namespace, serviceCoordinate(project, stack), component.AppRoleCoordinate(project, stack))
 }
 
-func namesAt(namespace string, service naming.Coordinate) (Names, error) {
+func namesAt(namespace string, service, roleAt naming.Coordinate) (Names, error) {
 	physical, err := component.PhysicalName(namespace, service, maxServiceNameLen)
 	if err != nil {
 		return Names{}, err
 	}
-	roleAt := service
-	roleAt.Kind, roleAt.Name = naming.KindRole, component.AppRoleWord
-	role, err := component.PhysicalName(namespace, roleAt, component.MaxRoleNameLen)
+	role, err := component.RoleName(namespace, roleAt)
 	if err != nil {
 		return Names{}, err
 	}
@@ -40,7 +38,7 @@ func namesAt(namespace string, service naming.Coordinate) (Names, error) {
 		Service:     physical,
 		TargetGroup: group,
 		Rule:        component.NameOf(group).Part(rulePart),
-		Role:        component.NameOf(role),
+		Role:        role,
 	}, nil
 }
 

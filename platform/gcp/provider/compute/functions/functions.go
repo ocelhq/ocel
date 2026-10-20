@@ -67,6 +67,10 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 	if err != nil {
 		return nil, err
 	}
+	labels, err := names.LabelsFor(named, spec.Ref, names.AppLabel, app.App)
+	if err != nil {
+		return nil, err
+	}
 	if next.Serves(app) && app.ISR != nil {
 		if err := next.SeedPrerenders(ctx, p.Objects, spec, progress); err != nil {
 			return nil, err
@@ -114,7 +118,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			Instances:        instances,
 			Egress:           p.EgressFor(named, spec),
 			Tag:              p.RevisionTag(spec),
-			Labels:           names.LabelsFor(named, spec.Ref, names.AppLabel, app.App),
+			Labels:           labels,
 			OpensOnPromotion: !run.FactsOf(spec.Edge).RunsCode,
 		}
 		if next.Serves(app) {

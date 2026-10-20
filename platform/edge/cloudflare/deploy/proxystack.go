@@ -34,7 +34,9 @@ type proxyStack struct {
 
 func (s *proxyStack) State() edge.StackState { return s.state }
 
-func (s *proxyStack) owner() string { return s.x.ProjectOwner(s.state.Slug, s.state.Tier) }
+func (s *proxyStack) owner() string {
+	return formatForwardingOwner(s.x.p.namespace, s.state.Slug, s.state.Tier)
+}
 
 func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
 	if binding.Hostname == "" {

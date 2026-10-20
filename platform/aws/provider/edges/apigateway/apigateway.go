@@ -163,7 +163,7 @@ const (
 	typeDomainName = "AWS::ApiGateway::DomainName"
 )
 
-func (p *apiGateway) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *apiGateway) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	changes := []edge.PlanChange{{
 		Kind:   typeRestAPI,
 		Name:   scope.Slug,
@@ -183,7 +183,7 @@ func (p *apiGateway) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGrou
 		Name:    edge.EdgeGroupName(Kind),
 		Action:  edge.PlanDelete,
 		Changes: changes,
-	}}
+	}}, nil
 }
 
 func restAPIsReason(tier environment.Tier) string {
@@ -194,7 +194,7 @@ func restAPIsReason(tier environment.Tier) string {
 	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
 }
 
-func (p *apiGateway) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *apiGateway) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup, error) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -206,7 +206,7 @@ func (p *apiGateway) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup
 			Reason: "every project's previews are routed through it, and the rules under it go with it",
 		}},
 	}
-	return removed, p.PlanSharedPreviewRemoval()
+	return removed, p.PlanSharedPreviewRemoval(), nil
 }
 
 func (p *apiGateway) PlanSharedPreviewRemoval() edge.PlanGroup {
@@ -341,7 +341,7 @@ func (p *apiGateway) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (p *apiGateway) ProjectOwner(slug string, tier environment.Tier) string {
+func (p *apiGateway) ProjectOwner(slug string, tier environment.Tier) (string, error) {
 	return apiName(p.ns, slug, tier, "")
 }
 
@@ -387,7 +387,7 @@ func (p *apiGateway) DomainOwner(ctx context.Context, hostname string) (string, 
 	return "", nil
 }
 
-func apiName(ns account.Namespace, slug string, tier environment.Tier, pointer string) string {
+func apiName(ns account.Namespace, slug string, tier environment.Tier, pointer string) (string, error) {
 	if p := router.ResolvePointer(pointer); p != router.DefaultPointer {
 		return surface.Name(ns, slug, tier, p)
 	}

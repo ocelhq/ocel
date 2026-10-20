@@ -205,18 +205,13 @@ func TestISREnv(t *testing.T) {
 		}
 	})
 
-	t.Run("says the release revalidates and leaves its location to the base env", func(t *testing.T) {
+	t.Run("says the release revalidates", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		env := cfg.Env()
 
 		if env["OCEL_ISR"] != "1" {
 			t.Errorf("OCEL_ISR = %q, want 1: the runtime installs its cache stores only when told the release revalidates", env["OCEL_ISR"])
-		}
-		for _, key := range []string{"OCEL_EDGE_BUCKET", "OCEL_CACHE_BUCKET", "OCEL_STORAGE_COORDINATE"} {
-			if _, ok := env[key]; ok {
-				t.Errorf("%s = %q, want it left to every function's base env", key, env[key])
-			}
 		}
 		if env["OCEL_STATE_TABLE"] != "state-abc" {
 			t.Errorf("OCEL_STATE_TABLE = %q", env["OCEL_STATE_TABLE"])
@@ -239,13 +234,18 @@ func bytecodeCacheFor(t *testing.T, env, project, app, buildID string) Bytecode 
 }
 
 func TestBytecodeEnv(t *testing.T) {
-	t.Run("says only that the compile cache is on", func(t *testing.T) {
+	t.Run("says the compile cache is on and where it lives", func(t *testing.T) {
 		cfg := bytecodeCacheFor(t, "prod", "proj123", "marketing", "build456")
 
 		env := cfg.env()
 
-		if want := map[string]string{"OCEL_COMPILE_CACHE": "1"}; !maps.Equal(env, want) {
-			t.Errorf("env = %v, want %v: the bucket and coordinate the cache lives under are in every function's base env", env, want)
+		want := map[string]string{
+			"OCEL_COMPILE_CACHE":      "1",
+			"OCEL_ARTIFACTS_BUCKET":   "artifacts-xyz",
+			"OCEL_STORAGE_COORDINATE": "proj123/prod/marketing/" + releaseTokenFor("build456"),
+		}
+		if !maps.Equal(env, want) {
+			t.Errorf("env = %v, want %v", env, want)
 		}
 	})
 }
