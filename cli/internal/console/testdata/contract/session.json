@@ -12,7 +12,8 @@
     "status": 200,
     "body": {
       "session": {
-        "expiresAt": "2026-02-01T03:04:05.678Z"
+        "expiresAt": "2026-02-01T03:04:05.678Z",
+        "activeOrganizationId": "{{organization.id}}"
       },
       "user": {
         "email": "{{user.email}}",

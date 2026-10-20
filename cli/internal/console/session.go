@@ -7,7 +7,8 @@ import (
 
 type Session struct {
 	Session struct {
-		ExpiresAt string `json:"expiresAt"`
+		ExpiresAt            string `json:"expiresAt"`
+		ActiveOrganizationID string `json:"activeOrganizationId"`
 	} `json:"session"`
 	User struct {
 		Email string `json:"email"`

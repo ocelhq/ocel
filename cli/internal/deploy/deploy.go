@@ -40,7 +40,14 @@ type Options struct {
 }
 
 func To(ctx context.Context, dependencies Dependencies, cwd string, target Target, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
-	policy, cfg, err := ensureProject(ctx, dependencies, target.command(), cwd, opts.Yes, opts.Dry, stdout, stdin)
+	resolved, err := dependencies.ResolveTarget(ctx, cwd)
+	if err != nil {
+		return err
+	}
+	if resolved.IsCloud() {
+		return toCloud(ctx, dependencies, resolved, target, opts)
+	}
+	policy, cfg, err := ensureProject(ctx, dependencies, target.command(), cwd, resolved.Project, opts.Yes, opts.Dry, stdout, stdin)
 	if err != nil || cfg == nil {
 		return err
 	}
@@ -125,4 +132,14 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	deployTelemetry.record(dependencies.RecordEvent, err)
 	dependencies.Console.ReportAttempt(ctx, attempt, apps, succeeded, err, stderr)
 	return err
+}
+
+func toCloud(ctx context.Context, dependencies Dependencies, resolved commands.Target, target Target, opts Options) error {
+	switch {
+	case opts.Dry:
+		return commands.NotOnCloud(target.command() + " --dry")
+	case opts.Prebuilt:
+		return commands.NotOnCloud(target.command() + " --prebuilt")
+	}
+	return dependencies.UploadToCloud(ctx, resolved, target.command(), target.tier)
 }

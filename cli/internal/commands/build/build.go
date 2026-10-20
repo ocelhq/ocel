@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -60,9 +61,18 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 }
 
 func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err error) {
-	declared, err := dependencies.LoadProject(ctx, cwd)
+	resolved, err := dependencies.ResolveTarget(ctx, cwd)
 	if err != nil {
 		return err
+	}
+	if resolved.IsCloud() {
+		return dependencies.UploadToCloud(ctx, resolved, "ocel build", environmentv1.Tier_TIER_UNSPECIFIED)
+	}
+	declared := resolved.Project
+	if declared == nil {
+		if declared, err = dependencies.LoadProject(ctx, cwd); err != nil {
+			return err
+		}
 	}
 	if declared.Provider == nil {
 		if _, err := declared.ResolveDeclaredComputes(); err != nil {
