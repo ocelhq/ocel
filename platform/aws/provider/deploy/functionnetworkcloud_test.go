@@ -36,6 +36,10 @@ func (c *functionNetworkCloud) DescribeVpcs(context.Context, *awsec2.DescribeVpc
 	return &awsec2.DescribeVpcsOutput{Vpcs: []ec2types.Vpc{{VpcId: aws.String("vpc-default"), CidrBlock: aws.String(c.vpcCIDR)}}}, nil
 }
 
+func (c *functionNetworkCloud) DescribeAvailabilityZones(context.Context, *awsec2.DescribeAvailabilityZonesInput, ...func(*awsec2.Options)) (*awsec2.DescribeAvailabilityZonesOutput, error) {
+	return &awsec2.DescribeAvailabilityZonesOutput{AvailabilityZones: []ec2types.AvailabilityZone{{ZoneId: aws.String("use1-az1")}, {ZoneId: aws.String("use1-az2")}}}, nil
+}
+
 func (c *functionNetworkCloud) DescribeSubnets(_ context.Context, in *awsec2.DescribeSubnetsInput, _ ...func(*awsec2.Options)) (*awsec2.DescribeSubnetsOutput, error) {
 	c.described.Add(1)
 	if len(in.Filters) != 1 || aws.ToString(in.Filters[0].Name) != "vpc-id" || !slices.Equal(in.Filters[0].Values, []string{"vpc-123"}) {

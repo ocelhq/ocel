@@ -37,6 +37,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/site"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
@@ -79,6 +80,7 @@ type Stacks struct {
 
 	containers      *containers.Stacks
 	functionNetwork *functionnetwork.Stacks
+	network         *network.Stacks
 
 	Statements postgres.StatementsAPI
 }
@@ -106,7 +108,12 @@ func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) 
 	}
 	r.containers = &containers.Stacks{Open: r.openShared}
 	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared}
+	r.network = &network.Stacks{Open: r.openShared}
 	return r
+}
+
+func (r *Stacks) Network() *network.Stacks {
+	return r.network
 }
 
 func (r *Stacks) Containers() *containers.Stacks {
@@ -128,7 +135,9 @@ func (r *Stacks) openShared(ctx context.Context, ref provider.StackRef) (shareds
 		WrittenBy:      owner.cfg.WrittenBy,
 		Namespace:      owner.cfg.Namespace,
 		Region:         owner.cfg.Region,
-		Subnets:        owner.cfg.Network,
+		EC2:            owner.cfg.Network,
+		Quotas:         owner.cfg.Quotas,
+		NetworkCIDR:    owner.cfg.NetworkCIDR,
 		VPCOrigins:     owner.cfg.VPCOrigins,
 		AppBoundaryARN: owner.cfg.AppBoundaryARN,
 		AppRolePath:    owner.cfg.AppRolePath,

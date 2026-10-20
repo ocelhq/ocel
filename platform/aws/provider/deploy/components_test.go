@@ -49,6 +49,10 @@ func (defaultVPCNetwork) DescribeVpcs(context.Context, *awsec2.DescribeVpcsInput
 	return &awsec2.DescribeVpcsOutput{Vpcs: []ec2types.Vpc{{VpcId: aws.String("vpc-default"), CidrBlock: aws.String("172.31.0.0/16")}}}, nil
 }
 
+func (defaultVPCNetwork) DescribeAvailabilityZones(context.Context, *awsec2.DescribeAvailabilityZonesInput, ...func(*awsec2.Options)) (*awsec2.DescribeAvailabilityZonesOutput, error) {
+	return &awsec2.DescribeAvailabilityZonesOutput{AvailabilityZones: []ec2types.AvailabilityZone{{ZoneId: aws.String("use1-az1")}, {ZoneId: aws.String("use1-az2")}}}, nil
+}
+
 func (defaultVPCNetwork) DescribeSubnets(context.Context, *awsec2.DescribeSubnetsInput, ...func(*awsec2.Options)) (*awsec2.DescribeSubnetsOutput, error) {
 	return &awsec2.DescribeSubnetsOutput{}, nil
 }

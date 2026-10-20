@@ -15,14 +15,15 @@ const (
 	AppEventAPIARN         = "arn:aws:appsync:*:*:apis/*"
 	AppChannelNamespaceARN = "arn:aws:appsync:*:*:apis/*/channelNamespace/*"
 
-	AppSecurityGroupARN = "arn:aws:ec2:*:*:security-group/*"
-	AppVPCARN           = "arn:aws:ec2:*:*:vpc/*"
-	AppSubnetARN        = "arn:aws:ec2:*:*:subnet/*"
-	AppElasticIPARN     = "arn:aws:ec2:*:*:elastic-ip/*"
-	AppNATGatewayARN    = "arn:aws:ec2:*:*:natgateway/*"
-	AppRouteTableARN    = "arn:aws:ec2:*:*:route-table/*"
-	AppVPCEndpointARN   = "arn:aws:ec2:*:*:vpc-endpoint/*"
-	AppCertificateARN   = "arn:aws:acm:*:*:certificate/*"
+	AppSecurityGroupARN   = "arn:aws:ec2:*:*:security-group/*"
+	AppVPCARN             = "arn:aws:ec2:*:*:vpc/*"
+	AppSubnetARN          = "arn:aws:ec2:*:*:subnet/*"
+	AppElasticIPARN       = "arn:aws:ec2:*:*:elastic-ip/*"
+	AppNATGatewayARN      = "arn:aws:ec2:*:*:natgateway/*"
+	AppRouteTableARN      = "arn:aws:ec2:*:*:route-table/*"
+	AppVPCEndpointARN     = "arn:aws:ec2:*:*:vpc-endpoint/*"
+	AppInternetGatewayARN = "arn:aws:ec2:*:*:internet-gateway/*"
+	AppCertificateARN     = "arn:aws:acm:*:*:certificate/*"
 
 	ManagedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
 

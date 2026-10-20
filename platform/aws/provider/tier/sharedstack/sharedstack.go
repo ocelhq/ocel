@@ -35,7 +35,9 @@ type Owner struct {
 
 	Namespace      string
 	Region         string
-	Subnets        component.NetworkAPI
+	EC2            component.NetworkAPI
+	Quotas         component.QuotasAPI
+	NetworkCIDR    string
 	VPCOrigins     awsports.VPCOriginsAPI
 	AppBoundaryARN string
 	AppRolePath    string

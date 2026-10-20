@@ -156,7 +156,7 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 	if err != nil {
 		return Network{}, err
 	}
-	if _, err := component.ReadDefaultVPC(ctx, owner.Subnets, owner.Region, "the function network serverless apps reach their databases and caches through"); err != nil {
+	if _, err := component.ReadDefaultVPC(ctx, owner.EC2, owner.Region, "the function network serverless apps reach their databases and caches through"); err != nil {
 		return Network{}, err
 	}
 	if progress != nil {
@@ -165,7 +165,7 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 	var decoded Network
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
-		if decoded, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, owner.Subnets), progress); err != nil {
+		if decoded, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, owner.EC2), progress); err != nil {
 			return nil, err
 		}
 		return listResources(owner.Namespace, tier, decoded), nil

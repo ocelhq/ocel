@@ -45,6 +45,9 @@ type Config struct {
 	WrittenBy provider.WrittenBy
 	Rules     container.RulesAPI
 	Network   component.NetworkAPI
+	Quotas    component.QuotasAPI
+
+	NetworkCIDR string
 
 	VPCOrigins awsports.VPCOriginsAPI
 
