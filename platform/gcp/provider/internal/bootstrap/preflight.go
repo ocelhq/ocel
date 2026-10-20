@@ -293,20 +293,28 @@ func (b Engine) servicesOn(ctx context.Context, apis []string) error {
 		b.Clients.Project(), strings.Join(off, ", "), strings.Join(off, " "), b.Clients.Project())
 }
 
-func (b Engine) Permitted(ctx context.Context, parts []string) error {
+func (b Engine) heldPermissions(ctx context.Context, needed []string) ([]string, error) {
 	service, err := b.Clients.Projects()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	needed := PermissionsFor(parts)
 	var granted []string
 	for asked := range slices.Chunk(needed, testedPermissionsPerRequest) {
 		answer, err := googleretry.Attempted(ctx, service.Projects.TestIamPermissions(b.Clients.Project(),
 			&cloudresourcemanager.TestIamPermissionsRequest{Permissions: asked}).Context(ctx).Do)
 		if err != nil {
-			return fmt.Errorf("ask project %s what this credential may do in it: %w", b.Clients.Project(), err)
+			return nil, fmt.Errorf("ask project %s what this credential may do in it: %w", b.Clients.Project(), err)
 		}
 		granted = append(granted, answer.Permissions...)
+	}
+	return granted, nil
+}
+
+func (b Engine) Permitted(ctx context.Context, parts []string) error {
+	needed := PermissionsFor(parts)
+	granted, err := b.heldPermissions(ctx, needed)
+	if err != nil {
+		return err
 	}
 	var missing []string
 	for _, permission := range needed {
