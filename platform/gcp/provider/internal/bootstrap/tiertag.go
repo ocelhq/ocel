@@ -204,6 +204,9 @@ func (b Engine) untaggedPresence(ctx context.Context, read Survey, target Resour
 }
 
 func (b Engine) ensureTierTag(ctx context.Context, read Survey, target Resource) error {
+	if target.KindOps().taggedAtCreation {
+		return nil
+	}
 	tagged, named, err := b.tierTagged(ctx, read, target)
 	if !named || err != nil {
 		return err
