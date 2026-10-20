@@ -35,6 +35,7 @@ var (
 	nameIsClause     = regexp.MustCompile(`^resource\.name == "([^"]+)"$`)
 	nameStartsClause = regexp.MustCompile(`^resource\.name\.startsWith\("([^"]+)"\)$`)
 	grantedRoles     = regexp.MustCompile(`^api\.getAttribute\('iam\.googleapis\.com/modifiedGrantsByRole', \[\]\)\.hasOnly\(\[(.*)\]\)$`)
+	resourceName     = regexp.MustCompile(`^[a-z][a-z0-9-]*(/[^/\s]+)+$`)
 )
 
 type checkedResource struct {
@@ -127,12 +128,25 @@ func grantableRolesOf(t *testing.T, grant credential.Grant) []string {
 	return roles
 }
 
+func grantReaches(t *testing.T, grant credential.Grant, resource checkedResource) bool {
+	t.Helper()
+	if grant.On != "" {
+		if !resourceName.MatchString(grant.On) {
+			t.Fatalf("%s is granted on %q, which is not a resource name this test can place", grant, grant.On)
+		}
+		if resource.name != grant.On && !strings.HasPrefix(resource.name, grant.On+"/") {
+			return false
+		}
+	}
+	return grant.Condition == nil || conditionAdmits(t, grant.Condition.Expression, resource)
+}
+
 func powersOver(t *testing.T, deploy credential.Deploy, resource checkedResource) map[string]string {
 	t.Helper()
 	predefined := predefinedRoles(t)
 	held := map[string]string{}
 	for _, grant := range deploy.Grants() {
-		if grant.On != "" || grant.Condition != nil && !conditionAdmits(t, grant.Condition.Expression, resource) {
+		if !grantReaches(t, grant, resource) {
 			continue
 		}
 		permissions := grantPermissions(t, predefined, grant)
