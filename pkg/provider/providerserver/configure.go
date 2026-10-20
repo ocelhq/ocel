@@ -27,6 +27,7 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 	if err != nil {
 		return nil, err
 	}
+	h.session.recordEdge(front.Facts())
 	facts := factsProto(p)
 	facts.Edge = edgeFactsProto(front.Facts())
 	return &contractv1.ConfigureResponse{Facts: facts}, nil
@@ -46,7 +47,8 @@ func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 func edgeFactsProto(facts edge.Facts) *contractv1.EdgeFacts {
 	limits := facts.CacheTagLimits
 	return &contractv1.EdgeFacts{
-		RunsCode: facts.RunsCode,
+		RunsCode:        facts.RunsCode,
+		ServesPlainHttp: facts.ServesPlainHTTP,
 		CacheTagLimits: &contractv1.CacheTagLimits{
 			TagBytes:    int64(limits.TagBytes),
 			Tags:        int64(limits.Tags),
