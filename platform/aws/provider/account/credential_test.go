@@ -433,19 +433,48 @@ func TestNoGrantIsConditionedOnTheNamespacesTag(t *testing.T) {
 		}
 	}
 	for _, tier := range bothTiers {
-		for _, statement := range parsePolicy(t, appBoundaryDocument(t, defaultNamespace, tier)).Statement {
-			report("the "+string(tier)+" app boundary", statement.Condition, stringsOf(t, statement.Action, "Action"), stringsOf(t, statement.Resource, "Resource"))
+		templates := map[string]string{"core": coreBody(defaultNamespace, tier, "")}
+		for _, name := range partNames() {
+			templates[name+" part"] = partTemplate(name, tier)
 		}
-		core := coreRolesOf(t, defaultNamespace, tier)
-		for _, id := range slices.Sorted(maps.Keys(core.Resources)) {
-			if core.Resources[id].Type != "AWS::IAM::Role" {
-				continue
-			}
-			for _, statement := range roleStatements(t, core, id) {
-				report("the "+string(tier)+" "+id, statement.Condition, statement.actions(), statement.resources())
+		for template, body := range templates {
+			for id, statements := range policyStatementsOf(t, body) {
+				for _, statement := range statements {
+					report("the "+string(tier)+" "+template+"'s "+id, statement.Condition, statement.actions(), statement.resources())
+				}
 			}
 		}
 	}
+}
+
+func policyStatementsOf(t *testing.T, body string) map[string][]policyStatement {
+	t.Helper()
+	type document struct {
+		Statement []policyStatement `json:"Statement"`
+	}
+	var tmpl struct {
+		Resources map[string]struct {
+			Properties struct {
+				PolicyDocument *document `json:"PolicyDocument"`
+				Policies       []struct {
+					PolicyDocument document `json:"PolicyDocument"`
+				} `json:"Policies"`
+			} `json:"Properties"`
+		} `json:"Resources"`
+	}
+	if err := json.Unmarshal([]byte(body), &tmpl); err != nil {
+		t.Fatalf("parse the template: %v", err)
+	}
+	statements := map[string][]policyStatement{}
+	for id, resource := range tmpl.Resources {
+		if resource.Properties.PolicyDocument != nil {
+			statements[id] = append(statements[id], resource.Properties.PolicyDocument.Statement...)
+		}
+		for _, policy := range resource.Properties.Policies {
+			statements[id] = append(statements[id], policy.PolicyDocument.Statement...)
+		}
+	}
+	return statements
 }
 
 var bothTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
