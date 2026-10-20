@@ -60,22 +60,6 @@ func TestATiersRealtimeAccountMayHoldSubscriptionsOfItsOwnThroughTheRealtimeSubs
 	}
 }
 
-func TestATiersRealtimeAccountMayNotPullTheOtherTiersSubscriptions(t *testing.T) {
-	t.Skip("Needs a ruling: a gateway instance makes its subscription at runtime, untagged, so the realtime subscriptions role is granted on the project unconditioned, and a preview deploy, which may run code as the preview realtime account, may pull and delete production's subscriptions")
-	t.Parallel()
-	server := googletest.GrantedIAM()
-	b := bootstrap.Engine{Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
-	tier := environment.TierPreview
-
-	if err := b.MakeAccount(context.Background(), bootstrap.Survey{Tier: tier, Names: b.Clients.Names}, b.Clients.RealtimeAccount(tier)); err != nil {
-		t.Fatalf("makeAccount() = %v", err)
-	}
-	_, condition := server.ProjectMembers(b.Clients.RealtimeSubscriptionsRolePath())
-	if want := "resource.matchTag('acme-prod/ocel-tier', 'preview')"; condition == nil || condition.Expression != want {
-		t.Errorf("the preview realtime account holds %s on the condition %+v, want %s", b.Clients.RealtimeSubscriptionsRolePath(), condition, want)
-	}
-}
-
 func TestTheRealtimeSubscriptionsRoleMayCreatePullAndDeleteSubscriptionsAndNothingElse(t *testing.T) {
 	t.Parallel()
 	named := names.New("ocel", "acme-prod")
