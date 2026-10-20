@@ -9,7 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -178,8 +180,29 @@ func refuseFullAddresses(ctx context.Context, owner sharedstack.Owner, tier envi
 	if err != nil {
 		return fmt.Errorf("count the elastic IPs this account holds in %s: %w", owner.Region, err)
 	}
-	return component.RefuseFullQuota(ctx, owner.Quotas, component.ElasticIPQuota, owner.Region, len(held.Addresses), natGateways(tier),
+	others := 0
+	for _, address := range held.Addresses {
+		if !isAddressOf(address, owner.Namespace, tier) {
+			others++
+		}
+	}
+	return component.RefuseFullQuota(ctx, owner.Quotas, component.ElasticIPQuota, owner.Region, others, natGateways(tier),
 		"the "+string(tier)+" tier's function network, one elastic IP for each NAT gateway,")
+}
+
+func isAddressOf(address ec2types.Address, namespace string, tier environment.Tier) bool {
+	want := stackTags(namespace, tier)
+	matched := 0
+	for _, tag := range address.Tags {
+		key := aws.ToString(tag.Key)
+		if key == "ocel:project" || key == naming.ManagedByTagKey || key == naming.EnvTierTagKey {
+			if aws.ToString(tag.Value) != want[key] {
+				return false
+			}
+			matched++
+		}
+	}
+	return matched == 3
 }
 
 func (s *Stacks) RecordConsumer(ctx context.Context, ref provider.StackRef) error {

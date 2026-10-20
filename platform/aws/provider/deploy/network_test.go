@@ -332,10 +332,31 @@ func TestTheFunctionNetworkLetsGoOfTheTiersNetworkWhenItsLastAppLeaves(t *testin
 type addressesHeld struct {
 	networkRegion
 	held int
+	own  int
 }
 
 func (a addressesHeld) DescribeAddresses(context.Context, *awsec2.DescribeAddressesInput, ...func(*awsec2.Options)) (*awsec2.DescribeAddressesOutput, error) {
-	return &awsec2.DescribeAddressesOutput{Addresses: make([]ec2types.Address, a.held)}, nil
+	addresses := make([]ec2types.Address, a.held)
+	for range a.own {
+		addresses = append(addresses, ec2types.Address{Tags: []ec2types.Tag{
+			{Key: aws.String("ocel:project"), Value: aws.String(functionnetwork.Slug)},
+			{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(testNamespace)},
+			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(environment.TierProduction))},
+		}})
+	}
+	return &awsec2.DescribeAddressesOutput{Addresses: addresses}, nil
+}
+
+func TestAFunctionNetworkRaisedAgainCountsNoneOfTheElasticIPsItsFailedRaiseHoldsAgainstTheQuota(t *testing.T) {
+	t.Parallel()
+
+	stacks, engine, _ := functionNetworkStacksOver(t, addressesHeld{held: 3, own: 2}, "web")
+	if _, err := stacks.Provision(context.Background(), usingPostgres(t, "web"), progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v, want the function network raised: its own two addresses are the two it needs, beside three others of five", err)
+	}
+	if ran := engine.stacks(); !slices.Contains(ran, functionnetwork.StackRef(environment.TierProduction).Name.String()) {
+		t.Errorf("ran %v, want the function network provisioned", ran)
+	}
 }
 
 func TestAFunctionNetworkTheAccountHasNoElasticIPsLeftForIsRefusedNamingTheQuota(t *testing.T) {
