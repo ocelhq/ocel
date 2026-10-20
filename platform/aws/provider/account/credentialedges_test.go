@@ -80,12 +80,12 @@ func TestEveryCredentialGrantsEveryACMCallACustomHostnameCertificateMakes(t *tes
 	}
 }
 
-func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesOcelTagged(t *testing.T) {
+func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesTaggedForItsTier(t *testing.T) {
 	const certificate = "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234"
 	for purpose, document := range bothCredentials(t) {
 		tier := string(tierOf(purpose))
 		sibling := string(tierOf(purpose).Sibling())
-		requestedByOcel := requestContext{"aws:RequestTag/ocel:managed-by": "ocel", "aws:RequestTag/ocel:env-tier": tier, "acm:CertificateKeyPairOrigin": "AWS_MANAGED"}
+		requestedForItsTier := requestContext{"aws:RequestTag/ocel:env-tier": tier, "acm:CertificateKeyPairOrigin": "AWS_MANAGED"}
 		cases := []struct {
 			name     string
 			action   string
@@ -93,34 +93,29 @@ func TestEveryCredentialRequestsAndDeletesOnlyTheCertificatesOcelTagged(t *testi
 			request  requestContext
 			allowed  bool
 		}{
-			{"requests a certificate tagged as Ocel's", "acm:RequestCertificate", iam.AnyResource, requestedByOcel, true},
-			{"requests a certificate with no Ocel tag", "acm:RequestCertificate", iam.AnyResource, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
+			{"requests a certificate tagged for its tier", "acm:RequestCertificate", iam.AnyResource, requestedForItsTier, true},
+			{"requests a certificate with no tier tag", "acm:RequestCertificate", iam.AnyResource, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
 			{"requests a certificate tagged for the other tier", "acm:RequestCertificate", iam.AnyResource, requestContext{
-				"aws:RequestTag/ocel:managed-by": "ocel",
-				"aws:RequestTag/ocel:env-tier":   sibling,
-				"acm:CertificateKeyPairOrigin":   "AWS_MANAGED",
+				"aws:RequestTag/ocel:env-tier": sibling,
+				"acm:CertificateKeyPairOrigin": "AWS_MANAGED",
 			}, false},
-			{"tags the certificate it requests with Ocel's tag", "acm:AddTagsToCertificate", certificate, requestContext{
-				"aws:RequestTag/ocel:managed-by":  "ocel",
-				"aws:RequestTag/ocel:env-tier":    tier,
-				"aws:ResourceTag/ocel:managed-by": "ocel",
-				"aws:ResourceTag/ocel:env-tier":   tier,
-				"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+			{"tags the certificate it requests with its tier's tag", "acm:AddTagsToCertificate", certificate, requestContext{
+				"aws:RequestTag/ocel:env-tier":  tier,
+				"aws:ResourceTag/ocel:env-tier": tier,
+				"acm:CertificateKeyPairOrigin":  "AWS_MANAGED",
 			}, true},
-			{"tags an ACM-issued certificate Ocel never requested", "acm:AddTagsToCertificate", certificate, requestedByOcel, false},
+			{"tags an ACM-issued certificate not tagged for its tier", "acm:AddTagsToCertificate", certificate, requestedForItsTier, false},
 			{"describes a certificate the account made itself", "acm:DescribeCertificate", certificate, requestContext{}, true},
 			{"lists the account's issued certificates", "acm:ListCertificates", iam.AnyResource, requestContext{}, true},
-			{"deletes an ACM-issued certificate Ocel requested", "acm:DeleteCertificate", certificate, requestContext{
-				"aws:ResourceTag/ocel:managed-by": "ocel",
-				"aws:ResourceTag/ocel:env-tier":   tier,
-				"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+			{"deletes an ACM-issued certificate tagged for its tier", "acm:DeleteCertificate", certificate, requestContext{
+				"aws:ResourceTag/ocel:env-tier": tier,
+				"acm:CertificateKeyPairOrigin":  "AWS_MANAGED",
 			}, true},
 			{"deletes an ACM-issued certificate the other tier requested", "acm:DeleteCertificate", certificate, requestContext{
-				"aws:ResourceTag/ocel:managed-by": "ocel",
-				"aws:ResourceTag/ocel:env-tier":   sibling,
-				"acm:CertificateKeyPairOrigin":    "AWS_MANAGED",
+				"aws:ResourceTag/ocel:env-tier": sibling,
+				"acm:CertificateKeyPairOrigin":  "AWS_MANAGED",
 			}, false},
-			{"deletes an ACM-issued certificate Ocel never requested", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
+			{"deletes an untagged ACM-issued certificate", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "AWS_MANAGED"}, false},
 			{"deletes a certificate the account imported itself", "acm:DeleteCertificate", certificate, requestContext{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"}, false},
 		}
 		for _, c := range cases {
@@ -355,10 +350,7 @@ func TestEveryCredentialFindsAndRemovesOnlyItsOwnTiersFailedVPCOrigins(t *testin
 func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 	const restAPITags = "arn:aws:apigateway:eu-west-1::/tags/arn%3Aaws%3Aapigateway%3Aeu-west-1%3A%3A%2Frestapis%2Fabc123"
 	creating := func(tier environment.Tier) requestContext {
-		return requestContext{
-			"aws:RequestTag/" + naming.ManagedByTagKey: string(defaultNamespace),
-			"aws:RequestTag/" + naming.EnvTierTagKey:   string(tier),
-		}
+		return requestContext{"aws:RequestTag/" + naming.EnvTierTagKey: string(tier)}
 	}
 	for _, tier := range bothTiers {
 		for purpose, document := range credentialsOfTier(t, tier) {
@@ -372,7 +364,6 @@ func TestEveryCredentialFindsRestAPIsByTagAndTagsOnlyItsOwnTiers(t *testing.T) {
 				t.Errorf("the %s %s credential can tag a REST API as the %s tier's", tier, purpose, tier.Sibling())
 			}
 			siblings := creating(tier)
-			siblings["aws:ResourceTag/"+naming.ManagedByTagKey] = string(defaultNamespace)
 			siblings["aws:ResourceTag/"+naming.EnvTierTagKey] = string(tier.Sibling())
 			if allows(t, document, "apigateway:PUT", restAPITags, siblings) {
 				t.Errorf("the %s %s credential can retag the %s tier's REST API as its own", tier, purpose, tier.Sibling())

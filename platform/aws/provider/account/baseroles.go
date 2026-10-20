@@ -30,7 +30,7 @@ func tagInvalidatorRoleResource(ns Namespace, tier environment.Tier) cfn.Resourc
 		Properties: map[string]any{
 			"RoleName":                 names.Role,
 			"Path":                     ns.bootstrapRolePathFor(tier),
-			"Description":              "Execution role for this bootstrap's tag invalidator: the state table's stream, the items naming which fronts it reaches, invalidation on the CloudFront distributions Ocel tagged for this tier, and the seed that signs a purge sent to a Cloudflare front.",
+			"Description":              "Execution role for this bootstrap's tag invalidator: the state table's stream, the items naming which fronts it reaches, invalidation on the CloudFront distributions tagged for this tier, and the seed that signs a purge sent to a Cloudflare front.",
 			"AssumeRolePolicyDocument": iam.AssumeRoleDocument(iam.LambdaPrincipal),
 			"ManagedPolicyArns":        []string{iam.LambdaBasicExecutionPolicyARN},
 			"Policies": []any{map[string]any{

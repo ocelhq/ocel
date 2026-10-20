@@ -135,7 +135,7 @@ func TestTheTagInvalidatorRoleInvalidatesOnlyTheDistributionsTaggedForItsTier(t 
 					continue
 				}
 				if !onlyWhatIsTaggedFor(st.Condition, tier) {
-					t.Errorf("invalidation condition = %v, want it gated on ocel:env-tier being %s, or the invalidator flushes distributions Ocel never tagged for its tier", st.Condition, tier)
+					t.Errorf("invalidation condition = %v, want it gated on ocel:env-tier being %s, or the invalidator flushes distributions not tagged for its tier", st.Condition, tier)
 				}
 			}
 		})

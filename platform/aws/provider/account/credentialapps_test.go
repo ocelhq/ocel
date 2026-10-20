@@ -106,7 +106,7 @@ func TestTheDeployCredentialOwnsTheLogGroupsItCreates(t *testing.T) {
 	for _, resource := range append(productionScope.ContainerLogGroupARNs(), productionScope.FunctionLogGroupARNs()...) {
 		got := logsGrantsOn(grants, resource)
 		if !maps.Equal(got, want) {
-			t.Errorf("the deploy credential grants %v on %s, want exactly %v, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", got, resource, want)
+			t.Errorf("the deploy credential grants %v on %s, want exactly %v, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what is tagged for its tier", got, resource, want)
 		}
 	}
 }
@@ -205,7 +205,7 @@ func TestEveryCredentialScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
 		registered := []string{scope.AppTaskDefinitionARN(), bastion.TaskDefinitionARN(scope.Namespace, scope.Tier)}
 		for _, family := range registered {
 			if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: family, condition: conditionJSON(t, scope.TaggedOnCreateForItsTier())}] {
-				t.Errorf("the %s credential does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", purpose, family)
+				t.Errorf("the %s credential does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as its tier's", purpose, family)
 			}
 		}
 		for _, action := range unscopable {
@@ -259,7 +259,7 @@ func TestTheBootstrapCredentialReachesNoLogGroupBeyondWhatADeployMay(t *testing.
 	}
 }
 
-func TestEveryCredentialTouchesOnlyEventSourceMappingsOfItsTagInvalidatorOrOcelTaggedOnesOfAppWorkers(t *testing.T) {
+func TestEveryCredentialTouchesOnlyEventSourceMappingsOfItsTagInvalidatorOrTheOnesOfAppWorkersTaggedForItsTier(t *testing.T) {
 	ofAppWorkers := map[string]any{"lambda:FunctionArn": productionScope.AppFunctionARN()}
 	for _, tier := range bothTiers {
 		invalidator := "arn:aws:lambda:*:*:function:" + taginvalidator.NamesFor(string(defaultNamespace), tier).Function
@@ -280,7 +280,7 @@ func TestEveryCredentialTouchesOnlyEventSourceMappingsOfItsTagInvalidatorOrOcelT
 					continue
 				}
 				if !allowed[g.condition] {
-					t.Errorf("the %s %s credential grants %s on %s under %s, want it pinned to its own tier's tag invalidator or its own tier's Ocel-tagged mappings of app worker functions", tier, purpose, g.action, g.resource, g.condition)
+					t.Errorf("the %s %s credential grants %s on %s under %s, want it pinned to its own tier's tag invalidator or the mappings of app worker functions tagged for its tier", tier, purpose, g.action, g.resource, g.condition)
 				}
 			}
 		}
@@ -647,7 +647,7 @@ func TestTheDeployCredentialRaisesAndRemovesOnlyItsOwnTiersBacklogAlarmsUnderThe
 	}
 }
 
-func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTaggedIt(t *testing.T) {
+func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereItIsTaggedForItsTier(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	onCreate := conditionJSON(t, productionScope.TaggedOnCreateForItsTier())
 	taggedForItsTier := conditionJSON(t, productionScope.TaggedForItsTier())
@@ -663,7 +663,7 @@ func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTag
 	for action, resources := range creates {
 		for _, resource := range resources {
 			if !grants[grant{action: action, resource: resource, condition: onCreate}] {
-				t.Errorf("the deploy credential does not grant %s on %s with Ocel's tag required on create, so the function network cannot be built or is built untagged", action, resource)
+				t.Errorf("the deploy credential does not grant %s on %s with its tier's tag required on create, so the function network cannot be built or is built untagged", action, resource)
 			}
 		}
 	}
@@ -683,7 +683,7 @@ func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTag
 	for action, resources := range mutations {
 		for _, resource := range resources {
 			if !grants[grant{action: action, resource: resource, condition: taggedForItsTier}] {
-				t.Errorf("the deploy credential does not grant %s on %s limited to what Ocel tagged, so the function network cannot be changed or taken down, or reaches resources it does not own", action, resource)
+				t.Errorf("the deploy credential does not grant %s on %s limited to what is tagged for its tier, so the function network cannot be changed or taken down, or reaches resources it does not own", action, resource)
 			}
 		}
 	}
