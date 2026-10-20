@@ -38,6 +38,7 @@ const (
 	outputKeyPrivateSubnets   = "privateSubnets"
 	outputKeyFunctionSecurity = "functionSecurityGroup"
 	outputKeyClients          = "clientsSecurityGroup"
+	outputKeyPatchDigest      = "patchDigest"
 
 	deleteWait  = "40m"
 	anyIPv4     = "0.0.0.0/0"
@@ -62,6 +63,8 @@ type Network struct {
 	Subnets       []string
 	SecurityGroup string
 	Clients       string
+
+	patchDigest string
 }
 
 var Pending = Network{
@@ -117,7 +120,15 @@ func stackTags(namespace string, tier environment.Tier) map[string]string {
 type Stacks struct {
 	Open    func(context.Context, provider.StackRef) (sharedstack.Owner, error)
 	Network *network.Stacks
+	Patches func(context.Context, environment.Tier) (component.Patches, error)
 	lock    sync.Mutex
+}
+
+func (s *Stacks) patchesFor(ctx context.Context, tier environment.Tier) (component.Patches, error) {
+	if s.Patches == nil {
+		return component.Patches{}, nil
+	}
+	return s.Patches(ctx, tier)
 }
 
 func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Network, bool, error) {
@@ -152,12 +163,29 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 	if err != nil {
 		return Network{}, err
 	}
-	if present {
-		return network, s.claim(ctx, ref)
+	patches, err := s.patchesFor(ctx, tier)
+	if err != nil {
+		return Network{}, err
 	}
 	owner, err := s.Open(ctx, StackRef(tier))
 	if err != nil {
 		return Network{}, err
+	}
+	if present && (patches.IsEmpty() || patches.Digest == network.patchDigest) {
+		if _, err := s.Network.Claim(ctx, StackRef(tier), progress); err != nil {
+			return Network{}, err
+		}
+		return network, s.claim(ctx, ref)
+	}
+	if present {
+		if progress != nil {
+			progress.Say("Applying the transforms that patch the function network of the " + string(tier) + " tier: they differ from the ones it was provisioned with")
+		}
+		repatched, err := s.provision(ctx, owner, StackRef(tier), patches, progress)
+		if err != nil {
+			return Network{}, err
+		}
+		return repatched, s.claim(ctx, ref)
 	}
 	if err := refuseFullAddresses(ctx, owner, tier); err != nil {
 		return Network{}, err
@@ -168,7 +196,7 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 	var decoded Network
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
-		if decoded, err = s.provision(ctx, owner, StackRef(tier), progress); err != nil {
+		if decoded, err = s.provision(ctx, owner, StackRef(tier), patches, progress); err != nil {
 			return nil, err
 		}
 		return listResources(owner.Namespace, tier, decoded), nil
@@ -247,7 +275,7 @@ func (s *Stacks) Remove(ctx context.Context, tier environment.Tier, progress pro
 	return s.Network.Release(ctx, owner.KeyValues, StackRef(tier), progress)
 }
 
-func (s *Stacks) provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, progress progress.Log) (Network, error) {
+func (s *Stacks) provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, patches component.Patches, progress progress.Log) (Network, error) {
 	tier := ref.Tier
 	if err := stackrecords.Write(ctx, owner.KeyValues, tier, Slug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
@@ -259,7 +287,7 @@ func (s *Stacks) provision(ctx context.Context, owner sharedstack.Owner, ref pro
 	if err != nil {
 		return Network{}, err
 	}
-	outputs, err := owner.Automation.Run(ctx, ref, NewProgram(owner.Namespace, tier, placed), provider.Lease{}, progress)
+	outputs, err := owner.Automation.Run(ctx, ref, NewProgram(owner.Namespace, tier, placed, patches), provider.Lease{}, progress)
 	if err != nil {
 		return Network{}, fmt.Errorf("provision the shared function network for the %s tier: %w", tier, err)
 	}

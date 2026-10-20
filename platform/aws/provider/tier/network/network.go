@@ -56,6 +56,7 @@ type Network struct {
 	Isolated      []string `json:"isolated"`
 	PrivateRoutes []string `json:"privateRoutes"`
 	Clients       string   `json:"clients"`
+	PatchDigest   string   `json:"patchDigest,omitempty"`
 }
 
 var Pending = Network{
@@ -91,8 +92,16 @@ func stackTags(namespace string, tier environment.Tier) map[string]string {
 
 type Stacks struct {
 	Open            func(context.Context, provider.StackRef) (sharedstack.Owner, error)
+	Patches         func(context.Context, environment.Tier) (component.Patches, error)
 	PartsByConsumer map[string]string
 	lock            sync.Mutex
+}
+
+func (s *Stacks) patchesFor(ctx context.Context, tier environment.Tier) (component.Patches, error) {
+	if s.Patches == nil {
+		return component.Patches{}, nil
+	}
+	return s.Patches(ctx, tier)
 }
 
 func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Network, bool, error) {
@@ -140,9 +149,18 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 	if err != nil {
 		return Network{}, err
 	}
+	patches, err := s.patchesFor(ctx, tier)
+	if err != nil {
+		return Network{}, err
+	}
 	if present {
 		if err := refuseNewBlock(tier, current, owner.NetworkCIDR); err != nil {
 			return Network{}, err
+		}
+		if !patches.IsEmpty() && patches.Digest != current.PatchDigest {
+			if current, err = s.repatch(ctx, owner, tier, current, patches, progress); err != nil {
+				return Network{}, err
+			}
 		}
 		return current, Shared.Claim(ctx, owner, consumer)
 	}
@@ -167,7 +185,7 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 	var raised Network
 	err = Shared.Raise(ctx, owner, tier, consumer.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
-		if raised, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, zones), progress); err != nil {
+		if raised, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, zones, patches), progress); err != nil {
 			return nil, err
 		}
 		return listResources(owner.Namespace, tier, raised), nil
@@ -176,6 +194,17 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 		return Network{}, err
 	}
 	return raised, Shared.Claim(ctx, owner, consumer)
+}
+
+func (s *Stacks) repatch(ctx context.Context, owner sharedstack.Owner, tier environment.Tier, current Network, patches component.Patches, progress progress.Log) (Network, error) {
+	layout, err := NewLayout(current.CIDR)
+	if err != nil {
+		return Network{}, err
+	}
+	if progress != nil {
+		progress.Say(fmt.Sprintf("Applying the transforms that patch the network of the %s tier: they differ from the ones it was provisioned with", tier))
+	}
+	return provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, current.Zones, patches), progress)
 }
 
 func refuseNewBlock(tier environment.Tier, current Network, configured string) error {

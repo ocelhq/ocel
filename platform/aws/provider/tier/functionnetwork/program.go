@@ -19,11 +19,26 @@ type work struct {
 	tier      environment.Tier
 	network   network.Network
 	tags      map[string]string
+	patches   component.Patches
 }
 
-func NewProgram(namespace string, tier environment.Tier, placed network.Network) component.Program {
-	w := &work{namespace: namespace, tier: tier, network: placed, tags: stackTags(namespace, tier)}
+func NewProgram(namespace string, tier environment.Tier, placed network.Network, patches component.Patches) component.Program {
+	w := &work{namespace: namespace, tier: tier, network: placed, tags: stackTags(namespace, tier), patches: patches}
 	return component.Program{Run: w.run, Tags: w.tags}
+}
+
+const (
+	tokenElasticIP  = "aws:ec2/eip:Eip"
+	tokenNATGateway = "aws:ec2/natGateway:NatGateway"
+)
+
+func ResourceNames(namespace string, tier environment.Tier) map[string][]component.ResourceRef {
+	names := map[string][]component.ResourceRef{}
+	for n := range natGateways(tier) {
+		names["natAddress"] = append(names["natAddress"], component.ResourceRef{Token: tokenElasticIP, Name: component.NameOf(natName(namespace, tier, n)).Part(eipPart)})
+		names["natGateway"] = append(names["natGateway"], component.ResourceRef{Token: tokenNATGateway, Name: natName(namespace, tier, n)})
+	}
+	return names
 }
 
 func (w *work) run(ctx *pulumi.Context) error {
@@ -32,12 +47,16 @@ func (w *work) run(ctx *pulumi.Context) error {
 		return fmt.Errorf("the %s tier's network has %d public subnets and %d private route tables, and its function network needs %d and at least one",
 			w.tier, len(placed.Public), len(placed.PrivateRoutes), natGateways(w.tier))
 	}
+	if err := w.patches.Apply(ctx); err != nil {
+		return err
+	}
 	tier := w.tier
 	tagsFor := func(name string) pulumi.StringMap {
-		tags := pulumi.StringMap{"Name": pulumi.String(name)}
-		for key, value := range w.tags {
+		tags := pulumi.StringMap{}
+		for key, value := range w.patches.TagsOver(w.tags) {
 			tags[key] = pulumi.String(value)
 		}
+		tags["Name"] = pulumi.String(name)
 		return tags
 	}
 
@@ -96,6 +115,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	ctx.Export(outputKeyPrivateSubnets, pulumi.String(subnets))
 	ctx.Export(outputKeyFunctionSecurity, functions.ID().ToStringOutput())
 	ctx.Export(outputKeyClients, pulumi.String(placed.Clients))
+	ctx.Export(outputKeyPatchDigest, pulumi.String(w.patches.Digest))
 	return nil
 }
 
@@ -112,6 +132,7 @@ func decode(outputs auto.OutputMap) (Network, error) {
 	if decoded.Clients, err = component.RequireStringField(fields, Slug, outputKeyClients); err != nil {
 		return Network{}, err
 	}
+	decoded.patchDigest, _ = fields[outputKeyPatchDigest].(string)
 	encoded, err := component.RequireStringField(fields, Slug, outputKeyPrivateSubnets)
 	if err != nil {
 		return Network{}, err

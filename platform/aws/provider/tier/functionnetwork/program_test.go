@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
@@ -30,7 +31,7 @@ var tierNetwork = network.Network{
 func runFunctionNetwork(t *testing.T, namespace string, tier environment.Tier) *inputRecorder {
 	t.Helper()
 	cloud := &inputRecorder{}
-	program := NewProgram(namespace, tier, tierNetwork)
+	program := NewProgram(namespace, tier, tierNetwork, component.Patches{})
 	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(Slug, string(tier)+"--infra", cloud)); err != nil {
 		t.Fatalf("run the function network program: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestTheFunctionNetworkProgramRefusesANetworkWithTooFewPublicSubnetsForItsNA
 
 	short := tierNetwork
 	short.Public = short.Public[:1]
-	program := NewProgram(testNamespace, environment.TierProduction, short)
+	program := NewProgram(testNamespace, environment.TierProduction, short, component.Patches{})
 	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(Slug, "production--infra", &inputRecorder{})); err == nil {
 		t.Fatal("run = nil, want a production function network with one public subnet for two NAT gateways refused")
 	}

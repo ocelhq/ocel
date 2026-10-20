@@ -83,6 +83,9 @@ type Stacks struct {
 	functionNetwork *functionnetwork.Stacks
 	network         *network.Stacks
 
+	tierMu        sync.Mutex
+	tierEvaluated map[environment.Tier]tierPatches
+
 	Statements postgres.StatementsAPI
 }
 
@@ -106,14 +109,16 @@ func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) 
 		served:     function.NewServedApps(),
 		pending:    site.NewPendingSets(),
 		opened:     map[Scope]*release{},
+
+		tierEvaluated: map[environment.Tier]tierPatches{},
 	}
-	r.network = &network.Stacks{Open: r.openShared, PartsByConsumer: map[string]string{
+	r.network = &network.Stacks{Open: r.openShared, Patches: r.networkPatches, PartsByConsumer: map[string]string{
 		containers.Slug:      containers.Part,
 		functionnetwork.Slug: functionnetwork.Part,
 		bastion.ConsumerSlug: bastion.Part,
 	}}
 	r.containers = &containers.Stacks{Open: r.openShared, Network: r.network}
-	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared, Network: r.network}
+	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared, Network: r.network, Patches: r.functionNetworkPatches}
 	return r
 }
 

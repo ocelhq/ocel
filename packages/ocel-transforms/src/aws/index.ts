@@ -46,6 +46,28 @@ export interface AwsResourceArgs {
     parameterGroup: elasticache.ParameterGroupArgs;
     replicationGroup: elasticache.ReplicationGroupArgs;
   };
+  /**
+   * The VPC of the tier, shared by every project deployed to it: one patch
+   * reaches every zone's subnet or route table of the kind it names, and the
+   * NAT gateways and their addresses exist once a serverless app reaches a
+   * database or cache. A rule sees no `env` or `app` for it. Patches from the
+   * projects of one tier must agree: a deploy whose patches differ from the
+   * ones the network carries provisions it again with its own.
+   */
+  network: {
+    vpc: ec2.VpcArgs;
+    internetGateway: ec2.InternetGatewayArgs;
+    publicSubnet: ec2.SubnetArgs;
+    privateSubnet: ec2.SubnetArgs;
+    isolatedSubnet: ec2.SubnetArgs;
+    publicRouteTable: ec2.RouteTableArgs;
+    privateRouteTable: ec2.RouteTableArgs;
+    isolatedRouteTable: ec2.RouteTableArgs;
+    s3Endpoint: ec2.VpcEndpointArgs;
+    dynamodbEndpoint: ec2.VpcEndpointArgs;
+    natGateway: ec2.NatGatewayArgs;
+    natAddress: ec2.EipArgs;
+  };
 }
 
 /** The ocel resource types the AWS provider renders patchable resources for. */
@@ -182,6 +204,41 @@ export const awsOwnedFields = {
       "transitEncryptionMode",
       "userGroupIds",
     ],
+  },
+  network: {
+    vpc: ["cidrBlock", "ipv4IpamPoolId", "ipv4NetmaskLength", "tags"],
+    internetGateway: ["tags", "vpcId"],
+    publicSubnet: [
+      "availabilityZone",
+      "availabilityZoneId",
+      "cidrBlock",
+      "mapPublicIpOnLaunch",
+      "tags",
+      "vpcId",
+    ],
+    privateSubnet: [
+      "availabilityZone",
+      "availabilityZoneId",
+      "cidrBlock",
+      "mapPublicIpOnLaunch",
+      "tags",
+      "vpcId",
+    ],
+    isolatedSubnet: [
+      "availabilityZone",
+      "availabilityZoneId",
+      "cidrBlock",
+      "mapPublicIpOnLaunch",
+      "tags",
+      "vpcId",
+    ],
+    publicRouteTable: ["routes", "tags", "vpcId"],
+    privateRouteTable: ["routes", "tags", "vpcId"],
+    isolatedRouteTable: ["routes", "tags", "vpcId"],
+    s3Endpoint: ["routeTableIds", "serviceName", "tags", "vpcEndpointType", "vpcId"],
+    dynamodbEndpoint: ["routeTableIds", "serviceName", "tags", "vpcEndpointType", "vpcId"],
+    natGateway: ["allocationId", "subnetId", "tags"],
+    natAddress: ["domain", "tags"],
   },
 } as const satisfies OwnedFieldNames;
 

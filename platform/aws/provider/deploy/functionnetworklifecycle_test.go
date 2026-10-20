@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -25,10 +26,10 @@ import (
 
 func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine, records.Store) {
 	t.Helper()
-	return functionNetworkStacksOver(t, defaultVPCNetwork{}, apps...)
+	return functionNetworkStacksOver(t, defaultVPCNetwork{}, nil, apps...)
 }
 
-func functionNetworkStacksOver(t *testing.T, region component.NetworkAPI, apps ...string) (*Stacks, *mockedEngine, records.Store) {
+func functionNetworkStacksOver(t *testing.T, region component.NetworkAPI, pass transform.Pass, apps ...string) (*Stacks, *mockedEngine, records.Store) {
 	t.Helper()
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
@@ -55,6 +56,7 @@ func functionNetworkStacksOver(t *testing.T, region component.NetworkAPI, apps .
 		outputs[key] = value
 	}
 	cfg.Network = region
+	cfg.Transform = pass
 	seedTierNetwork(t, store, "shop-db")
 	engine := &mockedEngine{outputs: outputs, mocks: &inputRecorder{}}
 	return stacksWith(cfg, engine), engine, store
