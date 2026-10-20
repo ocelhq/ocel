@@ -22,9 +22,5 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, mem
 	if err != nil {
 		return nil, err
 	}
-	condition, err := gcloud.ObjectKindsCondition("ocel assets of "+storage.Project+"/"+storage.Env+"/"+storage.App, buckets, app, naming.ObjectAssets, naming.ObjectImageConfig)
-	if err != nil {
-		return nil, err
-	}
-	return []grants.Grant{grants.OnProject(grants.AssetsRole, member, condition)}, nil
+	return grants.OnObjects("ocel assets of "+storage.Project+"/"+storage.Env+"/"+storage.App, buckets, app, grants.AssetsRole, member, naming.ObjectAssets, naming.ObjectImageConfig)
 }

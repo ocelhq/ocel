@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -48,7 +49,7 @@ const (
 
 const TokenCreatorRole = "roles/iam.serviceAccountTokenCreator"
 
-var appGrantedRoles = []string{RecordsRole, TaskRecordsRole, OpeningRole, ObjectsRole, AssetsRole}
+var appGrantedRoles = []string{RecordsRole, TaskRecordsRole}
 
 func ListGrantedRoles(names names.Names) []string {
 	return append(slices.Clone(appGrantedRoles), names.CDNPurgeRolePath())
@@ -84,6 +85,31 @@ func OnProject(role, member string, condition *policy.Condition) Grant {
 
 func On(kind targetKind, name, role, member string) Grant {
 	return Grant{Target: grantTarget{Kind: kind, Name: name}, Role: role, Member: member}
+}
+
+func OnConditioned(kind targetKind, name, role, member string, condition *policy.Condition) Grant {
+	return Grant{Target: grantTarget{Kind: kind, Name: name}, Role: role, Member: member, Condition: condition}
+}
+
+func OnObjects(title string, buckets naming.Buckets, scope naming.StorageScope, role, member string, kinds ...naming.ObjectKind) ([]Grant, error) {
+	var held []string
+	byBucket := map[string][]naming.ObjectKind{}
+	for _, kind := range kinds {
+		bucket := buckets.Holding(kind)
+		if _, seen := byBucket[bucket]; !seen {
+			held = append(held, bucket)
+		}
+		byBucket[bucket] = append(byBucket[bucket], kind)
+	}
+	granted := make([]Grant, 0, len(held))
+	for _, bucket := range held {
+		condition, err := gcloud.ObjectKindsCondition(title, buckets, scope, byBucket[bucket]...)
+		if err != nil {
+			return nil, err
+		}
+		granted = append(granted, OnConditioned(Bucket, bucket, role, member, condition))
+	}
+	return granted, nil
 }
 
 func withoutGrants(grants, taken []Grant) []Grant {

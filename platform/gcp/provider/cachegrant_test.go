@@ -23,17 +23,43 @@ func cachedAt(release naming.Coordinate) provider.StackSpec {
 	return spec
 }
 
-func cacheCondition(edgeBucket, cacheBucket, coordinate string) string {
-	starts := []string{`resource.name.startsWith("projects/_/buckets/` + edgeBucket + `/objects/pages/` + coordinate + `/")`}
+func cacheConditions(edgeBucket, cacheBucket, coordinate string) []string {
+	var starts []string
 	for _, kind := range []string{"fetch-cache", "use-cache", "tag-clock"} {
 		starts = append(starts, `resource.name.startsWith("projects/_/buckets/`+cacheBucket+`/objects/`+kind+"/"+coordinate+`/")`)
 	}
-	return strings.Join(starts, " || ")
+	return []string{
+		strings.Join(starts, " || "),
+		`resource.name.startsWith("projects/_/buckets/` + edgeBucket + `/objects/pages/` + coordinate + `/")`,
+	}
+}
+
+func cacheBindings(member, edgeBucket, cacheBucket, coordinate string) []string {
+	var bound []string
+	for _, condition := range cacheConditions(edgeBucket, cacheBucket, coordinate) {
+		bound = append(bound, grants.ObjectsRole+" "+member+" "+condition)
+	}
+	return bound
+}
+
+func cacheExpressionsOf(server *googletest.IAM, member string) []string {
+	server.Mu.Lock()
+	defer server.Mu.Unlock()
+	var expressions []string
+	for _, policy := range server.BucketPolicies {
+		for _, binding := range policy.Bindings {
+			if binding.Role == grants.ObjectsRole && (member == "" || slices.Contains(binding.Members, member)) {
+				expressions = append(expressions, binding.Condition.Expression)
+			}
+		}
+	}
+	slices.Sort(expressions)
+	return expressions
 }
 
 func cacheBindingsOf(server *googletest.IAM) []string {
 	var bound []string
-	for _, binding := range projectBindingsOf(server) {
+	for _, binding := range bucketBindingsOf(server) {
 		if strings.HasPrefix(binding, grants.ObjectsRole+" ") {
 			bound = append(bound, binding)
 		}
@@ -51,14 +77,19 @@ func TestAnAppsAccountMayUseItsOwnEnvAndAppsCacheKindsAndNoOther(t *testing.T) {
 		t.Fatalf("applyAppGrants() = %v", err)
 	}
 
-	want := grants.ObjectsRole + " " + member + " " + cacheCondition("ocel-prod-edge-k3x9q2", "ocel-prod-cache-k3x9q2", "shop/prod/web")
-	if got := cacheBindingsOf(server); !slices.Equal(got, []string{want}) {
-		t.Errorf("the project's storage bindings = %q, want exactly %q", got, want)
+	want := cacheBindings(member, "ocel-prod-edge-k3x9q2", "ocel-prod-cache-k3x9q2", "shop/prod/web")
+	if got := cacheBindingsOf(server); !slices.Equal(got, want) {
+		t.Errorf("the buckets' storage bindings = %q, want exactly %q", got, want)
 	}
-	for _, binding := range server.Project.Bindings {
-		if binding.Role == grants.ObjectsRole && (binding.Condition == nil || binding.Condition.Title != "ocel cache of shop/prod/web") {
-			t.Errorf("the cache binding's condition = %+v, want the title %q", binding.Condition, "ocel cache of shop/prod/web")
+	for _, policy := range server.BucketPolicies {
+		for _, binding := range policy.Bindings {
+			if binding.Role == grants.ObjectsRole && (binding.Condition == nil || binding.Condition.Title != "ocel cache of shop/prod/web") {
+				t.Errorf("the cache binding's condition = %+v, want the title %q", binding.Condition, "ocel cache of shop/prod/web")
+			}
 		}
+	}
+	if got := projectBindingsOf(server); slices.ContainsFunc(got, func(bound string) bool { return strings.HasPrefix(bound, grants.ObjectsRole+" ") }) {
+		t.Errorf("the project binds %q, and a cache grant on the project is one a deploy could hand itself over the other tier's buckets", got)
 	}
 }
 
@@ -84,11 +115,11 @@ func TestAPreviewEnvsAccountMayUseItsOwnCacheAndNoOtherPreviewEnvsOrProductions(
 	var want []string
 	for _, env := range []string{"pr-7", "pr-8"} {
 		member := "serviceAccount:" + c.AppAccountEmail("shop", env, "web")
-		want = append(want, grants.ObjectsRole+" "+member+" "+cacheCondition("ocel-preview-edge-k3x9q2", "ocel-preview-cache-k3x9q2", "shop/"+env+"/web"))
+		want = append(want, cacheBindings(member, "ocel-preview-edge-k3x9q2", "ocel-preview-cache-k3x9q2", "shop/"+env+"/web")...)
 	}
 	slices.Sort(want)
 	if got := cacheBindingsOf(server); !slices.Equal(got, want) {
-		t.Errorf("the project's storage bindings = %q, want exactly %q: each preview's account reaches its own env's cache in the preview buckets and nothing beside", got, want)
+		t.Errorf("the buckets' storage bindings = %q, want exactly %q: each preview's account reaches its own env's cache in the preview buckets and nothing beside", got, want)
 	}
 }
 
@@ -101,18 +132,10 @@ func TestTheCacheGrantPrefixIsTheOneTheRuntimeWritesUnder(t *testing.T) {
 	}
 	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 
-	var expressions []string
-	for _, binding := range server.Identities().Project.Bindings {
-		if binding.Role == grants.ObjectsRole {
-			expressions = append(expressions, binding.Condition.Expression)
-		}
-	}
-	if len(expressions) != 1 {
-		t.Fatalf("the project's storage bindings = %q, want the one binding of the app's account", expressions)
-	}
+	expressions := cacheExpressionsOf(server.Identities(), "")
 	coordinate := env["OCEL_STORAGE_COORDINATE"]
-	if want := cacheCondition(env["OCEL_EDGE_BUCKET"], env["OCEL_CACHE_BUCKET"], coordinate[:strings.LastIndex(coordinate, "/")]); expressions[0] != want {
-		t.Errorf("the grant is %q, want %q: every cache kind of the release at OCEL_STORAGE_COORDINATE %q", expressions[0], want, coordinate)
+	if want := cacheConditions(env["OCEL_EDGE_BUCKET"], env["OCEL_CACHE_BUCKET"], coordinate[:strings.LastIndex(coordinate, "/")]); !slices.Equal(expressions, want) {
+		t.Errorf("the grants are %q, want %q: every cache kind of the release at OCEL_STORAGE_COORDINATE %q", expressions, want, coordinate)
 	}
 }
 
@@ -138,7 +161,7 @@ func TestARedeployOfAnAppWritesNoPolicy(t *testing.T) {
 func iamWrites(server *googletest.IAM) int {
 	server.Mu.Lock()
 	defer server.Mu.Unlock()
-	return server.Writes + server.AccountWrites + server.TopicWrites + server.QueueWrites
+	return server.Writes + server.AccountWrites + server.TopicWrites + server.QueueWrites + server.BucketWrites
 }
 
 func TestARedeployOfANextAppWritesNoIAMPolicyAtAll(t *testing.T) {
@@ -163,19 +186,6 @@ func TestARedeployOfANextAppWritesNoIAMPolicyAtAll(t *testing.T) {
 	}
 	if got := iamWrites(server) - before; got != 0 {
 		t.Errorf("a redeploy of the same env and app set %d IAM policies, want none: its cache and asset grants are per env and app, not per release", got)
-	}
-}
-
-func TestACachePolicyChangedUnderTheGrantIsReadAgainAndWritten(t *testing.T) {
-	t.Parallel()
-	server := &policyServer{refusals: 1}
-	c := server.open(t)
-
-	if err := applyAppGrants(t, c, cachedAt(cachedRelease())); err != nil {
-		t.Fatalf("applyAppGrants() against a policy that changed once under it = %v", err)
-	}
-	if reads, writes := server.reads.Load(), server.writes.Load(); reads != 2 || writes != 2 {
-		t.Errorf("the grant read %d and wrote %d times, want 2 and 2", reads, writes)
 	}
 }
 
@@ -264,18 +274,10 @@ func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T
 	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
 	account := "serviceAccount:" + server.Created[0].Template.ServiceAccount
 
-	var expressions []string
-	for _, binding := range server.Identities().Project.Bindings {
-		if binding.Role == grants.ObjectsRole && slices.Contains(binding.Members, account) {
-			expressions = append(expressions, binding.Condition.Expression)
-		}
-	}
-	if len(expressions) != 1 {
-		t.Fatalf("the container's account holds the storage bindings %q, want exactly one", expressions)
-	}
+	expressions := cacheExpressionsOf(server.Identities(), account)
 	coordinate := env["OCEL_STORAGE_COORDINATE"]
-	if want := cacheCondition(env["OCEL_EDGE_BUCKET"], env["OCEL_CACHE_BUCKET"], coordinate[:strings.LastIndex(coordinate, "/")]); expressions[0] != want {
-		t.Errorf("the grant is %q, want %q: every cache kind of the release at OCEL_STORAGE_COORDINATE %q", expressions[0], want, coordinate)
+	if want := cacheConditions(env["OCEL_EDGE_BUCKET"], env["OCEL_CACHE_BUCKET"], coordinate[:strings.LastIndex(coordinate, "/")]); !slices.Equal(expressions, want) {
+		t.Errorf("the container's grants are %q, want %q: every cache kind of the release at OCEL_STORAGE_COORDINATE %q", expressions, want, coordinate)
 	}
 	if got := tagRecordBindingsOf(server.Identities()); len(got) != 1 || !strings.Contains(got[0], account) {
 		t.Errorf("the project's tag record bindings = %q, want the one of %s", got, account)

@@ -66,7 +66,7 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 	}
 
 	var reached []string
-	for _, bound := range projectBindingsOf(server) {
+	for _, bound := range slices.Concat(projectBindingsOf(server), keyBindingsOf(server)) {
 		if !strings.Contains(bound, email) {
 			continue
 		}

@@ -39,13 +39,6 @@ func ProjectDatabaseCondition(c *gcloud.Clients, tier environment.Tier, project 
 	}
 }
 
-func ProjectKeyCondition(c *gcloud.Clients, tier environment.Tier, project string) *policy.Condition {
-	return &policy.Condition{
-		Title:      "ocel " + project + " " + string(tier) + " key",
-		Expression: fmt.Sprintf("resource.name == %q", c.Workload().ProjectKeyPath(tier, project)),
-	}
-}
-
 func RecordsCondition(c *gcloud.Clients, tiers ...environment.Tier) *policy.Condition {
 	clauses := []string{fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.Database()))}
 	for _, tier := range tiers {

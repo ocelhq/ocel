@@ -20,6 +20,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 	pubsub "google.golang.org/api/pubsub/v1"
+	storagejson "google.golang.org/api/storage/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -54,6 +55,9 @@ type IAM struct {
 	AccountWrites       int
 	AccountPolicyUnseen int
 	AccountPolicyDenied bool
+
+	BucketPolicies map[string]*storagejson.Policy
+	BucketWrites   int
 
 	TopicPolicies map[string]*pubsub.Policy
 	TopicWrites   int
@@ -139,6 +143,46 @@ func (q delayQueues) SetIamPolicy(_ context.Context, req *iampb.SetIamPolicyRequ
 	return req.GetPolicy(), nil
 }
 
+func (s *IAM) CreateCryptoKey(_ context.Context, req *kmspb.CreateCryptoKeyRequest) (*kmspb.CryptoKey, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	name := req.GetParent() + "/cryptoKeys/" + req.GetCryptoKeyId()
+	if s.keys == nil {
+		s.keys = map[string]bool{}
+	}
+	if s.keys[name] {
+		return nil, status.Error(codes.AlreadyExists, name)
+	}
+	s.keys[name] = true
+	return &kmspb.CryptoKey{Name: name}, nil
+}
+
+func (s *IAM) serveBucketPolicy(w http.ResponseWriter, r *http.Request, bucket string) {
+	current := s.BucketPolicies[bucket]
+	if current == nil {
+		current = &storagejson.Policy{Etag: "CAE=", Version: 1}
+	}
+	switch r.Method {
+	case http.MethodGet:
+		WriteBody(w, current)
+	case http.MethodPut:
+		var asked storagejson.Policy
+		if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if s.BucketPolicies == nil {
+			s.BucketPolicies = map[string]*storagejson.Policy{}
+		}
+		s.BucketWrites++
+		asked.Etag = "CA" + strconv.Itoa(s.BucketWrites)
+		s.BucketPolicies[bucket] = &asked
+		WriteBody(w, &asked)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *IAM) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -177,6 +221,8 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
 		switch {
+		case strings.HasPrefix(path, "/storage/v1/b/") && strings.HasSuffix(path, "/iam"):
+			s.serveBucketPolicy(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/storage/v1/b/"), "/iam"))
 		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/projects/acme-prod/services/"):
 			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": "ENABLED"})
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":

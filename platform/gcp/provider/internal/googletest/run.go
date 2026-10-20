@@ -99,7 +99,8 @@ func (s *Run) Serve(t *testing.T) http.HandlerFunc {
 				s.Secrets = NewSecrets()
 			}
 			s.Secrets.Serve(t, w, r)
-		case strings.HasPrefix(path, "/v1/") && !strings.Contains(path, "/packages/"):
+		case strings.HasPrefix(path, "/v1/") && !strings.Contains(path, "/packages/"),
+			strings.HasPrefix(path, "/storage/v1/b/") && strings.HasSuffix(path, "/iam"):
 			s.Iam.Rest(t)(w, r)
 		case r.Method == http.MethodPost && strings.HasPrefix(path, "/upload/storage/v1/b/"):
 			s.store(t, w, r)

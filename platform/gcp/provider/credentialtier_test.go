@@ -266,3 +266,40 @@ func TestADeployCredentialNamesNothingOfTheOtherTier(t *testing.T) {
 		}
 	}
 }
+
+func TestAPreviewDeployCredentialMayNeitherOpenNorReadWhatProductionKeeps(t *testing.T) {
+	t.Parallel()
+
+	key := names.New("ocel", "acme-prod").TierTagKeyPath()
+	production := map[string]string{key: string(environment.TierProduction)}
+	for _, reached := range []struct {
+		resource checkedResource
+		powers   []string
+	}{
+		{checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/prod-p-6f25da114a"}, []string{"cloudkms.cryptoKeyVersions.useToDecrypt", "cloudkms.cryptoKeys.setIamPolicy"}},
+		{checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"}, []string{"cloudkms.cryptoKeyVersions.useToDecrypt", "cloudkms.cryptoKeyVersions.useToEncrypt"}},
+		{checkedResource{name: "projects/_/buckets/ocel-prod-cache-k3x9q2/objects/fetch-cache/shop/prod/web/x", tags: production}, []string{"storage.objects.get", "storage.buckets.setIamPolicy"}},
+		{checkedResource{name: "projects/acme-prod/secrets/ocel-prod-pulumi-passphrase", tags: production}, []string{"secretmanager.versions.access", "secretmanager.secrets.setIamPolicy"}},
+	} {
+		held := powersOver(t, deployOf(environment.TierPreview), reached.resource)
+		for _, power := range reached.powers {
+			if via, holds := held[power]; holds {
+				t.Errorf("the preview deploy credential holds %s on %s, through %s", power, reached.resource.name, via)
+			}
+		}
+	}
+}
+
+func TestAPreviewDeployCredentialMayNotReadProductionsRecords(t *testing.T) {
+	t.Skip("Needs a ruling: Firestore has no per-database IAM policy, so an app's records grant lives on the project, and modifiedGrantsByRole limits which roles a deploy grants there but not to whom or on what condition: the preview credential can grant itself roles/datastore.user on the whole project")
+	t.Parallel()
+
+	key := names.New("ocel", "acme-prod").TierTagKeyPath()
+	records := checkedResource{name: "projects/acme-prod/databases/ocel-prod-records", tags: map[string]string{key: string(environment.TierProduction)}}
+	held := powersOver(t, deployOf(environment.TierPreview), records)
+	for _, power := range []string{"datastore.entities.get", "datastore.entities.update"} {
+		if via, holds := held[power]; holds {
+			t.Errorf("the preview deploy credential holds %s on production's records, through %s", power, via)
+		}
+	}
+}
