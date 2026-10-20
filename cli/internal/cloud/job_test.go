@@ -190,6 +190,29 @@ func TestWaitForJobKeepsWaitingWhileAJobNeedsInput(t *testing.T) {
 	}
 }
 
+func TestWaitForJobReportsEachNewInputAJobWaitsFor(t *testing.T) {
+	waitingFor := func(id string) jobRead {
+		read := job(cloudv1.JobState_JOB_STATE_INPUT_REQUIRED, cloudv1.JobPhase_JOB_PHASE_BUILD, "")
+		read.job.Input = &cloudv1.JobInput{Id: id, Need: &cloudv1.JobInput_Confirmation{Confirmation: &cloudv1.Confirmation{Question: "Continue?"}}}
+		return read
+	}
+	fake := &fakeJobs{reads: []jobRead{
+		waitingFor("in_1"),
+		waitingFor("in_1"),
+		waitingFor("in_2"),
+		job(cloudv1.JobState_JOB_STATE_SUCCEEDED, cloudv1.JobPhase_JOB_PHASE_BUILD, ""),
+	}}
+	c, _ := newTestClient(serveJobs(t, fake), &staticTokens{})
+
+	var inputs []string
+	if _, err := c.WaitForJob(t.Context(), "job_1", func(j *cloudv1.Job) { inputs = append(inputs, j.GetInput().GetId()) }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(inputs, "|") != "in_1|in_2|" {
+		t.Fatalf("reported inputs %q, want each input once and then the ended job", inputs)
+	}
+}
+
 func TestWaitForJobRidesOutTransientFailuresWithBackoff(t *testing.T) {
 	fake := &fakeJobs{reads: []jobRead{
 		job(cloudv1.JobState_JOB_STATE_RUNNING, 0, ""),

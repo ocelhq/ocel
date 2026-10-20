@@ -224,10 +224,25 @@ func TestInterruptingAnOcelCloudRunStopsWatchingAndLeavesTheJobRunning(t *testin
 	}
 }
 
-func TestAnOcelCloudJobThatNeedsInputOpensItsPageOnceAndKeepsWaiting(t *testing.T) {
+func needingInput(id string, need *cloudv1.JobInput) *cloudv1.Job {
+	need.Id = id
+	return &cloudv1.Job{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_INPUT_REQUIRED, Input: need}
+}
+
+func needingValues(id string, keys ...string) *cloudv1.Job {
+	needed := &cloudv1.VariablesNeeded{Tier: environmentv1.Tier_TIER_PRODUCTION}
+	for _, key := range keys {
+		needed.Variables = append(needed.Variables, &cloudv1.NeededVariable{Key: key})
+	}
+	return needingInput(id, &cloudv1.JobInput{Need: &cloudv1.JobInput_Variables{Variables: needed}})
+}
+
+func TestAnOcelCloudJobThatNeedsInputOpensItsPageOncePerInputAndKeepsWaiting(t *testing.T) {
 	invocation, fake := loggedIn(t)
-	needs := &cloudv1.Job{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_INPUT_REQUIRED}
-	fake.JobReads = []*cloudv1.Job{needs, needs, {Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+	values := needingValues("in_1", "DATABASE_URL", "STRIPE_KEY")
+	running := &cloudv1.Job{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_RUNNING}
+	confirm := needingInput("in_2", &cloudv1.JobInput{Need: &cloudv1.JobInput_Confirmation{Confirmation: &cloudv1.Confirmation{Question: "Continue?"}}})
+	fake.JobReads = []*cloudv1.Job{values, values, running, values, confirm, {Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
 	var opened []string
 
 	out, err := runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{
@@ -239,11 +254,26 @@ func TestAnOcelCloudJobThatNeedsInputOpensItsPageOnceAndKeepsWaiting(t *testing.
 		t.Fatal(err)
 	}
 	jobURL := fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID
-	if !slices.Equal(opened, []string{jobURL}) {
-		t.Fatalf("opened %q, want the job page once", opened)
+	if !slices.Equal(opened, []string{jobURL, jobURL}) {
+		t.Fatalf("opened %q, want the job page once for the values and once for the question", opened)
 	}
-	if !strings.Contains(out, "needs your input") {
-		t.Fatalf("output = %q, want the input asked for", out)
+	for _, want := range []string{"Ocel Cloud needs values for DATABASE_URL and STRIPE_KEY — enter them at " + jobURL, "Ocel Cloud asks: Continue? — answer at " + jobURL} {
+		if strings.Count(out, want) != 1 {
+			t.Errorf("output = %q, want %q said once", out, want)
+		}
+	}
+}
+
+func TestAnOcelCloudJobThatNeedsInputWithNoBrowserSaysWhereAndKeepsWaiting(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	fake.JobReads = []*cloudv1.Job{needingValues("in_1", "DATABASE_URL"), {Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+
+	out, err := runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{Command: "ocel deploy", Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Ocel Cloud needs values for DATABASE_URL — enter them at "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
+		t.Fatalf("output = %q, want the values needed and where to enter them", out)
 	}
 }
 
