@@ -15,7 +15,7 @@ import {
   UNNAMED_CONCERNS,
 } from "./matrix/types";
 import { type Coverage, type Draw, sample } from "./sample";
-import { phasesOf, stepsOf, walksPreviews } from "./steps";
+import { alwaysRedeploys, phasesOf, stepsOf, walksPreviews } from "./steps";
 
 export type RunFilter = {
   concerns: Concern[];
@@ -277,9 +277,7 @@ function checkGaps(gaps: Gap[]) {
 }
 
 function checkReleaseCycle(fixtures: Fixture[], target: TargetName, releaseCycle: boolean) {
-  const redeploying = fixtures
-    .flatMap((one) => cellsOn(one, target))
-    .find((cell) => cell.fixture.redeploys === true || cell.variant.redeploys === true);
+  const redeploying = fixtures.flatMap((one) => cellsOn(one, target)).find(alwaysRedeploys);
   if (redeploying && !releaseCycle) {
     throw new Error(
       `${redeploying.name} redeploys, and ${target} has no release cycle to redeploy it with`,

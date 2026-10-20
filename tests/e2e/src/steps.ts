@@ -83,20 +83,22 @@ export function walksPreviews(
   );
 }
 
+export function alwaysRedeploys({ fixture, variant }: Pick<Cell, "fixture" | "variant">): boolean {
+  return fixture.redeploys === true || variant.redeploys === true;
+}
+
 export function phasesOf(
-  { fixture, variant }: Pick<Cell, "fixture" | "variant">,
+  cell: Pick<Cell, "fixture" | "variant">,
   keep: boolean,
   releaseCycle = true,
   previews = false,
 ): Phase[] {
   const redeploys =
-    fixture.redeploys === true ||
-    variant.redeploys === true ||
-    (fixture.redeploys !== undefined && releaseCycle);
+    alwaysRedeploys(cell) || (cell.fixture.redeploys === "where-releases-are-kept" && releaseCycle);
   return [
     "deploy",
     "verify",
-    ...(fixture.restarts ? (["restart"] as const) : []),
+    ...(cell.fixture.restarts ? (["restart"] as const) : []),
     ...(redeploys ? (["redeploy", "rollback"] as const) : []),
     ...(previews && !keep ? (["preview"] as const) : []),
     ...(keep ? [] : (["destroy"] as const)),
