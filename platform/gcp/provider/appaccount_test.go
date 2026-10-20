@@ -61,6 +61,40 @@ func topicBindingsOf(policy *pubsub.Policy) []*pubsub.Binding {
 	return policy.Bindings
 }
 
+func bucketBindingsOf(server *googletest.IAM) []string {
+	server.Mu.Lock()
+	defer server.Mu.Unlock()
+	var bound []string
+	for _, policy := range server.BucketPolicies {
+		for _, binding := range policy.Bindings {
+			condition := ""
+			if binding.Condition != nil {
+				condition = binding.Condition.Expression
+			}
+			for _, member := range binding.Members {
+				bound = append(bound, binding.Role+" "+member+" "+condition)
+			}
+		}
+	}
+	slices.Sort(bound)
+	return bound
+}
+
+func keyBindingsOf(server *googletest.IAM) []string {
+	server.Mu.Lock()
+	defer server.Mu.Unlock()
+	var bound []string
+	for key, policy := range server.KeyPolicy {
+		for _, binding := range policy.GetBindings() {
+			for _, member := range binding.GetMembers() {
+				bound = append(bound, binding.GetRole()+" "+member+" on "+key)
+			}
+		}
+	}
+	slices.Sort(bound)
+	return bound
+}
+
 func projectBindingsOf(server *googletest.IAM) []string {
 	server.Mu.Lock()
 	defer server.Mu.Unlock()
@@ -175,15 +209,16 @@ func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothin
 	}
 
 	member := "serviceAccount:" + email
-	want := []string{
-		"roles/cloudkms.cryptoKeyDecrypter " + member + ` resource.name == "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/` + ports.ProjectKey(environment.TierProduction, "shop") + `"`,
-		"roles/datastore.viewer " + member + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`,
-	}
+	want := []string{"roles/datastore.viewer " + member + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`}
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
 		t.Errorf("the project binds %q, want exactly %q", got, want)
 	}
-	if len(server.KeyPolicy) != 0 || server.QueueWrites != 0 || server.TopicWrites != 0 {
-		t.Errorf("the key policy, queue and topics were written (%d, %d, %d), and an app that reaches no topics needs none of them", len(server.KeyPolicy), server.QueueWrites, server.TopicWrites)
+	opening := []string{"roles/cloudkms.cryptoKeyDecrypter " + member + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")}
+	if got := keyBindingsOf(server); !slices.Equal(got, opening) {
+		t.Errorf("the keys bind %q, want exactly %q: the project's key holds who may open under it, which only a deploy of its tier may change", got, opening)
+	}
+	if server.QueueWrites != 0 || server.TopicWrites != 0 || server.BucketWrites != 0 {
+		t.Errorf("the queue, topics and buckets were written (%d, %d, %d), and an app that reaches no topics and serves no files needs none of them", server.QueueWrites, server.TopicWrites, server.BucketWrites)
 	}
 	if got := server.Created[0]; got.AccountId != strings.TrimSuffix(email, "@acme-prod.iam.gserviceaccount.com") ||
 		got.ServiceAccount.DisplayName != "ocel shop/api@production (production)" ||

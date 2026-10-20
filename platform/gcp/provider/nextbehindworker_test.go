@@ -119,8 +119,8 @@ func TestANextAppBehindTheWorkerIsGrantedItsCachePrefixAndItsProjectsTagRecords(
 	if _, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := cacheBindingsOf(w.server.Identities()); len(got) != 1 {
-		t.Errorf("storage bindings = %q, want the one over the app's cache prefix", got)
+	if got := cacheBindingsOf(w.server.Identities()); len(got) != 2 {
+		t.Errorf("storage bindings = %q, want the two over the app's cache prefix in the edge and cache buckets", got)
 	}
 	if got := tagRecordBindingsOf(w.server.Identities()); len(got) != 1 {
 		t.Errorf("tag record bindings = %q, want the one over its project's database of runs and tag records: the app's tags live in Firestore", got)

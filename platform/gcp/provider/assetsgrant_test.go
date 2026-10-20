@@ -13,7 +13,7 @@ import (
 
 func assetBindingsOf(server *googletest.IAM) []string {
 	var bound []string
-	for _, binding := range projectBindingsOf(server) {
+	for _, binding := range bucketBindingsOf(server) {
 		if strings.HasPrefix(binding, grants.AssetsRole+" ") {
 			bound = append(bound, binding)
 		}

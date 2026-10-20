@@ -80,7 +80,7 @@ func removeStack(t *testing.T, p *Provider, c *gcloud.Clients, ref provider.Stac
 
 func holdings(server *googletest.IAM, c *gcloud.Clients, member string) []string {
 	var held []string
-	for _, bound := range projectBindingsOf(server) {
+	for _, bound := range slices.Concat(projectBindingsOf(server), bucketBindingsOf(server), keyBindingsOf(server)) {
 		if strings.Contains(bound, member) {
 			held = append(held, bound)
 		}
@@ -213,8 +213,8 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesEveryGrantItsAccountHeld(t 
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c, spec, member := grantedAppAccount(t, server)
-	if got := holdings(server, c, member); len(got) != 7 {
-		t.Fatalf("the account holds %q before removal, want the records, key, runs and tag records, cache, assets, queue and own account grants", got)
+	if got := holdings(server, c, member); len(got) != 8 {
+		t.Fatalf("the account holds %q before removal, want the records, key, runs and tag records, cache in the edge and cache buckets, assets, queue and own account grants", got)
 	}
 	if !slices.Contains(publishersOf(server, resizePath(t, c, spec)), member) {
 		t.Fatalf("resize has publishers %q before removal, want the account in them", publishersOf(server, resizePath(t, c, spec)))
