@@ -22,6 +22,7 @@ var albPartPermissions = []string{
 	"artifactregistry.repositories.create",
 	"artifactregistry.repositories.get",
 	"artifactregistry.repositories.delete",
+	"artifactregistry.repositories.createTagBinding",
 }
 
 var networkPartPermissions = []string{

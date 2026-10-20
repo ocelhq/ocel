@@ -79,6 +79,9 @@ func TestADeployMayBindTheKindsItMakesWhereNoRoleItHoldsAlreadyLetsIt(t *testing
 			t.Errorf("the project records role holds %v, want %s: a deploy tags the databases it makes and untags one before deleting it", bootstrap.NewProjectRecordsRole(names).Permissions, permission)
 		}
 	}
+	if parts := bootstrap.NewPartsRole(names).Permissions; !slices.Contains(parts, "artifactregistry.repositories.createTagBinding") {
+		t.Errorf("the parts role holds %v, want artifactregistry.repositories.createTagBinding: a deploy tags the alb gate plugin repository it makes", parts)
+	}
 	if grant := bootstrap.ProjectPermissionsGrant(); !strings.Contains(grant, "secretmanager.secrets.createTagBinding") || !strings.Contains(grant, "secretmanager.secrets.deleteTagBinding") {
 		t.Errorf("a deploy is granted %q, want the secret tag bindings its realtime secrets' role lacks", grant)
 	}
