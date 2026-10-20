@@ -50,6 +50,30 @@ func TestTaggedNameKeepsAnUnderscoreInItsHead(t *testing.T) {
 	}
 }
 
+func TestATaggedNameFittedWholeKeepsAllOfItsReadablePartUpToTheLimit(t *testing.T) {
+	name := naming.TaggedName{Head: "ocel-prod", Readable: strings.Repeat("s", 20), Tag: "1a2b3c"}
+	got, err := name.FitWhole(41, "dlq")
+	if want := "ocel-prod-" + strings.Repeat("s", 20) + "-1a2b3c"; err != nil || got != want {
+		t.Errorf("FitWhole(41) = %q, %v, want %q", got, err, want)
+	}
+}
+
+func TestATaggedNameThatDoesNotFitWholeIsRefusedRatherThanCut(t *testing.T) {
+	var refused refusal.Refusal
+	for name, c := range map[string]struct {
+		limit    int
+		children []string
+	}{
+		"over the limit":            {limit: 36},
+		"its longest child over it": {limit: 40, children: []string{"x", "dlq"}},
+	} {
+		got, err := naming.TaggedName{Head: "ocel-prod", Readable: strings.Repeat("s", 20), Tag: "1a2b3c"}.FitWhole(c.limit, c.children...)
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+			t.Errorf("%s: FitWhole(%d) = %q, %v, want an invalid refusal", name, c.limit, got, err)
+		}
+	}
+}
+
 func TestTaggedNameWhoseHeadAndTagLeaveNoRoomForItsChildrenIsRefused(t *testing.T) {
 	var refused refusal.Refusal
 	for name, c := range map[string]struct {

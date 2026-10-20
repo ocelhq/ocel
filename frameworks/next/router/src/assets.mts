@@ -18,7 +18,7 @@ export interface AssetBucket {
 
 export interface AssetStoreDeps {
   store?: AssetBucket;
-  storage?: StorageCoordinate;
+  storage: StorageCoordinate;
   basePath?: string;
   static?: Static;
   cache: ResponseCache;
@@ -93,7 +93,7 @@ function plainNotFound(): Response {
 }
 
 function storedAsset(deps: AssetStoreDeps, pathname: string): Promise<AssetObject | null> {
-  if (!deps.store || !deps.storage) return Promise.resolve(null);
+  if (!deps.store) return Promise.resolve(null);
   return deps.store.get(objectKey("assets", deps.storage, pathname));
 }
 
@@ -121,7 +121,7 @@ export async function serveStaticAsset(
   const miss = () =>
     isImmutablePathname(deps, url.pathname) ? plainNotFound() : notFound(deps, locale);
 
-  if (!deps.store || !deps.storage) return miss();
+  if (!deps.store) return miss();
 
   const cached = await deps.cache.match(request);
   if (cached) return cached;

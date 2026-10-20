@@ -24,3 +24,14 @@ func (n TaggedName) Fit(limit int, childSuffixes ...string) (string, error) {
 	}
 	return name, nil
 }
+
+func (n TaggedName) FitWhole(limit int, childSuffixes ...string) (string, error) {
+	longest := longestChildSuffix(childSuffixes)
+	name := strings.Join(nonEmpty([]string{n.Head, n.Readable, n.Tag}), WordSeparator)
+	if len(name)+longest > limit {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"%s does not fit %d characters with %d kept for what is appended to it",
+			name, limit, longest)
+	}
+	return name, nil
+}

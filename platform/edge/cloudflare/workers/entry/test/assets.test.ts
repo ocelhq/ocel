@@ -26,7 +26,7 @@ function bucketServing(
 
 function countingDeps(
   store: AssetBucket | undefined,
-  storage: StorageCoordinate | undefined,
+  storage: StorageCoordinate,
 ): AssetStoreDeps & { puts: number; flush: () => Promise<void> } {
   const real = caches.default;
   const pending: Promise<unknown>[] = [];

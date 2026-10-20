@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
@@ -40,20 +41,22 @@ func DeclareProvider(pctx *sdk.Context, region string, tags map[string]string) e
 	if err != nil {
 		return err
 	}
-	if err := pctx.RegisterResourceTransform(ThroughProvider(declared)); err != nil {
+	if err := pctx.RegisterStackTransformation(ThroughProvider(declared)); err != nil {
 		return err
 	}
 	return pctx.RegisterInvokeTransform(InvokedThroughProvider(declared))
 }
 
-func ThroughProvider(declared sdk.ProviderResource) sdk.ResourceTransform {
-	return func(_ context.Context, args *sdk.ResourceTransformArgs) *sdk.ResourceTransformResult {
-		if !strings.HasPrefix(args.Type, providerTokenPrefix) || args.Opts.Provider != nil {
+func ThroughProvider(declared sdk.ProviderResource) sdk.ResourceTransformation {
+	return func(args *sdk.ResourceTransformationArgs) *sdk.ResourceTransformationResult {
+		if !strings.HasPrefix(args.Type, providerTokenPrefix) {
 			return nil
 		}
-		opts := args.Opts
-		opts.Provider = declared
-		return &sdk.ResourceTransformResult{Props: args.Props, Opts: opts}
+		named, err := sdk.NewResourceOptions(args.Opts...)
+		if err != nil || named.Provider != nil {
+			return nil
+		}
+		return &sdk.ResourceTransformationResult{Props: args.Props, Opts: append(slices.Clone(args.Opts), sdk.Provider(declared))}
 	}
 }
 

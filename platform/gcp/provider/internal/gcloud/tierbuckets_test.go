@@ -129,3 +129,15 @@ func TestForgettingATierBucketLeavesAnotherRunsClaimInPlace(t *testing.T) {
 		t.Errorf("forgetting the recorded name left %v, want no edge bucket recorded", found)
 	}
 }
+
+func TestClientsWithoutARecordStoreRefuseToReadOrClaimATiersBuckets(t *testing.T) {
+	t.Parallel()
+	c := &Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}
+
+	if found, err := c.RecordedTierBuckets(context.Background(), environment.TierProduction); err == nil {
+		t.Errorf("RecordedTierBuckets() without a record store = %v, want an error", found)
+	}
+	if claimed, err := c.ClaimTierBucket(context.Background(), environment.TierProduction, naming.StorageState, func() string { return "ocel-prod-state-k3x9q2" }); err == nil {
+		t.Errorf("ClaimTierBucket() without a record store = %s, want an error", claimed)
+	}
+}

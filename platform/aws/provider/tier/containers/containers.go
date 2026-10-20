@@ -146,10 +146,6 @@ func publicGroupName(namespace string, tier environment.Tier) string {
 	return component.SecurityGroupName(awsports.PublicBalancerName(namespace, tier))
 }
 
-func LivenessName(namespace string, tier environment.Tier) string {
-	return naming.Join(naming.WordSeparator, awsports.PublicBalancerName(namespace, tier), livenessWord)
-}
-
 func stackTags(namespace string, tier environment.Tier) map[string]string {
 	tags := naming.OcelTags(namespace, tier)
 	tags["ocel:project"] = Slug
@@ -367,7 +363,7 @@ func listResources(namespace string, tier environment.Tier, infra Infrastructure
 			provider.PartResource{Kind: kindLoadBalancer, ID: awsports.PublicBalancerName(namespace, tier)},
 			provider.PartResource{Kind: kindSecurityGroup, ID: publicGroupName(namespace, tier)},
 			provider.PartResource{Kind: kindCertificate, ID: nameCertificateHost(awsports.PublicBalancerName(namespace, tier))},
-			provider.PartResource{Kind: kindFunction, ID: LivenessName(namespace, tier)})
+			provider.PartResource{Kind: kindFunction, ID: awsports.PublicLivenessName(namespace, tier)})
 		if infra.LivenessRole != "" {
 			resources = append(resources, provider.PartResource{Kind: kindRole, ID: parseRoleName(infra.LivenessRole)})
 		}

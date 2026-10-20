@@ -34,10 +34,6 @@ type proxyStack struct {
 
 func (s *proxyStack) State() edge.StackState { return s.state }
 
-func (s *proxyStack) owner() string {
-	return formatForwardingOwner(s.x.p.namespace, s.state.Slug, s.state.Tier)
-}
-
 func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
 	if binding.Hostname == "" {
 		return errors.New("binding a domain to the Cloudflare proxy needs a hostname")
@@ -47,14 +43,22 @@ func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding)
 			"the %q edge forwards %s to an origin, and this binding names none: it answers no hostname itself",
 			Kind, binding.Hostname)
 	}
-	return s.x.p.bindOrigin(ctx, &s.state, s.owner(), binding)
+	owner, err := s.x.ProjectOwner(s.state.Slug, s.state.Tier)
+	if err != nil {
+		return err
+	}
+	return s.x.p.bindOrigin(ctx, &s.state, owner, binding)
 }
 
 func (s *proxyStack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from the Cloudflare proxy needs a hostname")
 	}
-	return s.x.p.unbindOrigin(ctx, &s.state, s.owner(), hostname)
+	owner, err := s.x.ProjectOwner(s.state.Slug, s.state.Tier)
+	if err != nil {
+		return err
+	}
+	return s.x.p.unbindOrigin(ctx, &s.state, owner, hostname)
 }
 
 func (s *proxyStack) Destroy(ctx context.Context) error {

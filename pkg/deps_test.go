@@ -87,6 +87,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "router", pattern: "./router/...", open: []string{
 			"github.com/ocelhq/ocel/pkg/edge",
 			"github.com/ocelhq/ocel/pkg/environment",
+			"github.com/ocelhq/ocel/pkg/naming",
 			"github.com/ocelhq/ocel/pkg/progress",
 			"github.com/ocelhq/ocel/pkg/refusal",
 			"github.com/ocelhq/ocel/pkg/router",

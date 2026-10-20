@@ -94,6 +94,29 @@ func TestATierBucketNameAnotherProjectHoldsIsForgottenSoTheNextBootstrapMintsAno
 	}
 }
 
+func TestATierBucketAnEarlierBootstrapMadeKeepsItsRecordedNameWhenTheBootstrapCannotReadIt(t *testing.T) {
+	t.Parallel()
+	b, read, server := bucketBootstrap(t)
+	earlier, err := b.Clients.ClaimTierBucket(context.Background(), read.Tier, naming.StorageState, func() string { return "ocel-prod-state-a1b2c3" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.holding(&raw.Bucket{Name: earlier}, "ocel/bootstrap.json")
+	server.forbiddingReads = true
+	target := tierBucketOf(naming.StorageState)
+
+	err = target.KindOps().Make(context.Background(), b, read, target)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		t.Fatalf("Make() over the state bucket an earlier bootstrap made = %v, want a %s refusal", err, refusal.CodeDenied)
+	}
+	b.Clients.DropTierBucketsRead(read.Tier)
+	recorded, err := b.Clients.RecordedTierBuckets(context.Background(), read.Tier)
+	if err != nil || recorded[naming.StorageState] != earlier {
+		t.Errorf("the state bucket recorded after the refusal = %v, %v, want %s: forgetting it would leave the tier's Pulumi state behind", recorded, err, earlier)
+	}
+}
+
 func TestTakingATiersBucketEmptiesAndDeletesTheRecordedBucketOfItsClassAndNoOther(t *testing.T) {
 	t.Parallel()
 	b, read, server := bucketBootstrap(t)

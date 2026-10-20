@@ -10,6 +10,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
@@ -26,8 +27,19 @@ func (c *countingStacks) DescribeStacks(_ context.Context, in *cloudformation.De
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
 		StackName:   in.StackName,
 		StackStatus: cfntypes.StackStatusCreateComplete,
-		Outputs:     []cfntypes.Output{{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(c.table)}},
+		Outputs: []cfntypes.Output{
+			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(c.table)},
+			bucketOutput("StateBucketName", naming.StorageState),
+			bucketOutput("ArtifactBucketName", naming.StorageArtifacts),
+			bucketOutput("EdgeBucketName", naming.StorageEdge),
+			bucketOutput("CacheBucketName", naming.StorageCache),
+		},
 	}}}, nil
+}
+
+func bucketOutput(key string, class naming.StorageClass) cfntypes.Output {
+	name := account.Namespace("ocel").BootstrapBucketName(environment.TierProduction, class, "k3x9q2")
+	return cfntypes.Output{OutputKey: aws.String(key), OutputValue: aws.String(name)}
 }
 
 func TestTheConnectorRereadsTheBootstrapOnceItsMemoAges(t *testing.T) {

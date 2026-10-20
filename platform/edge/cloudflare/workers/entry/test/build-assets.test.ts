@@ -34,7 +34,7 @@ const record: StoredRecord = {
   storageCoordinate: "p1/prod/web/r00000d02",
   createdAt: 1_000,
   edge: {},
-  buildCoordinates: { "build-1": "p1/prod/web/r00000d01" },
+  buildCoordinates: { "build-1": "p1/prod/web/r00000d01", "build-0": "p1/prod/web" },
 };
 
 const env: Env = {
@@ -44,6 +44,10 @@ const env: Env = {
 };
 
 async function assetKeyRead(url: string): Promise<string | undefined> {
+  return (await serveAsset(url)).key;
+}
+
+async function serveAsset(url: string): Promise<{ key: string | undefined; status: number }> {
   const asked: string[] = [];
   const serve = () => ({
     fetch: async (request: Request) => {
@@ -54,8 +58,8 @@ async function assetKeyRead(url: string): Promise<string | undefined> {
   });
   const ctx = createExecutionContext();
   Object.defineProperty(ctx, "exports", { value: { Serve: serve } });
-  await worker.fetch(new Request(url), env, ctx);
-  return asked.find((key) => key !== routeTableKey());
+  const response = await worker.fetch(new Request(url), env, ctx);
+  return { key: asked.find((key) => key !== routeTableKey()), status: response.status };
 }
 
 describe("an asset request naming the build that linked it", () => {
@@ -75,6 +79,12 @@ describe("an asset request naming the build that linked it", () => {
     expect(
       await assetKeyRead("https://shop.example.com/_next/static/chunks/a.js?dpl=build-9"),
     ).toBe("assets/p1/prod/web/r00000d02/_next/static/chunks/a.js");
+  });
+
+  it("finds nothing for an earlier build whose storage coordinate cannot be read, never the served build's asset", async () => {
+    expect(
+      await serveAsset("https://shop.example.com/_next/static/chunks/a.js?dpl=build-0"),
+    ).toEqual({ key: undefined, status: 404 });
   });
 
   it("reads a path outside the immutable prefixes from the served release whatever dpl names", async () => {

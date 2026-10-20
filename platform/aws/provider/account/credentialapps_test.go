@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
@@ -34,11 +33,11 @@ func TestACredentialManagesOnlyTheFunctionsRolesAndLogGroupsOcelNames(t *testing
 			taginvalidator.NamesFor(ns, tier).Function,
 			imageoptimizer.NamesFor(ns, tier).Function,
 		}
-		functions := append([]string{appFunction, containers.LivenessName(ns, tier)}, tierFunctions...)
+		functions := append([]string{appFunction, awsports.PublicLivenessName(ns, tier)}, tierFunctions...)
 		logGroups := append([]string{appFunction}, tierFunctions...)
 		roles := append(partRolesOf(tier),
 			roleARN+defaultNamespace.AppRolePathFor(tier)+"ocel-app-shop-prod-web-role-r1a2b3c4d",
-			roleARN+defaultNamespace.AppRolePathFor(tier)+containers.LivenessName(ns, tier),
+			roleARN+defaultNamespace.AppRolePathFor(tier)+awsports.PublicLivenessName(ns, tier),
 			roleARN+"/"+bastion.NameFor(ns, tier),
 		)
 		owned := appResourceOf(tier, nil)

@@ -34,7 +34,7 @@ export type ImageCache = (context: ImageCacheContext) => Promise<Response>;
 export interface ImageDeps {
   config: ImageConfig;
   basePath: string;
-  storage?: StorageCoordinate;
+  storage: StorageCoordinate;
   slug: string;
   app: string;
   appBuildId: string;
