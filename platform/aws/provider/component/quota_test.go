@@ -16,6 +16,7 @@ import (
 type fakeQuotas struct {
 	applied  *float64
 	fallback float64
+	unlisted bool
 	asked    []string
 }
 
@@ -29,6 +30,9 @@ func (f *fakeQuotas) GetServiceQuota(_ context.Context, in *servicequotas.GetSer
 
 func (f *fakeQuotas) GetAWSDefaultServiceQuota(_ context.Context, in *servicequotas.GetAWSDefaultServiceQuotaInput, _ ...func(*servicequotas.Options)) (*servicequotas.GetAWSDefaultServiceQuotaOutput, error) {
 	f.asked = append(f.asked, "default "+aws.ToString(in.ServiceCode)+"/"+aws.ToString(in.QuotaCode))
+	if f.unlisted {
+		return nil, &sqtypes.NoSuchResourceException{Message: aws.String("no such quota")}
+	}
 	return &servicequotas.GetAWSDefaultServiceQuotaOutput{Quota: &sqtypes.ServiceQuota{Value: aws.Float64(f.fallback)}}, nil
 }
 
@@ -63,5 +67,14 @@ func TestAQuotaNeverChangedIsReadAtItsAWSDefault(t *testing.T) {
 	}
 	if err := RefuseFullQuota(context.Background(), quotas, VPCQuota, "us-east-1", 4, 2, "the networks"); err == nil {
 		t.Error("RefuseFullQuota() = nil, want 4 + 2 refused past a default of 5")
+	}
+}
+
+func TestAQuotaServiceQuotasHoldsNoValueForIsLeftToAWSToEnforce(t *testing.T) {
+	t.Parallel()
+
+	quotas := &fakeQuotas{unlisted: true}
+	if err := RefuseFullQuota(context.Background(), quotas, VPCQuota, "us-east-1", 40, 1, "the production tier's network"); err != nil {
+		t.Errorf("RefuseFullQuota() = %v, want nothing refused: Service Quotas has neither an applied nor a default value for it here, so AWS refuses the create itself if the account is full", err)
 	}
 }
