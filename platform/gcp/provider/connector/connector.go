@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -294,10 +295,21 @@ func (p Connector) ensureConnectorAccount(ctx context.Context, grants []string, 
 	default:
 		return fmt.Errorf("create the %s service account: %w", names.Connector(), err)
 	}
+	if err := bindOutside(ctx, names); err != nil {
+		return err
+	}
 	if err := p.bindConnectorProject(ctx, true); err != nil {
 		return err
 	}
 	return p.bindConnectorKeys(ctx, keyRolesFor(grants), progress)
+}
+
+func bindOutside(ctx context.Context, clients *gcloud.Clients) error {
+	account, err := clients.ReadAccount(ctx, clients.Connector())
+	if err != nil || account == nil {
+		return cmp.Or(err, fmt.Errorf("the %s service account was made and cannot be read back", clients.Connector()))
+	}
+	return clients.EnsureOutsideTag(ctx, clients.AccountTagged(account.UniqueId))
 }
 
 func keyRolesFor(grants []string) []string {

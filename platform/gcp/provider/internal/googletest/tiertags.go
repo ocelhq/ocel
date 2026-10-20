@@ -31,6 +31,7 @@ type TierTags struct {
 	KeysMade        int
 	ValuesMade      int
 	ValueLookups    int
+	BindingLists    int
 
 	BindingsUnseen int
 	BindingsDenied bool
@@ -57,6 +58,7 @@ func NewTieredTags(t *testing.T) *TierTags {
 	for _, tier := range BothTiers {
 		tags.addValue(key, string(tier))
 	}
+	tags.addValue(key, names.OutsideValue)
 	return tags
 }
 
@@ -201,10 +203,11 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		s.BindingsMade = append(s.BindingsMade, asked.Parent)
 		writeDoneOperation(w, &crm.TagBinding{Name: bindingName(asked.Parent, asked.TagValue), Parent: asked.Parent, TagValue: asked.TagValue})
 	case r.Method == http.MethodGet && path == "tagBindings":
+		s.BindingLists++
 		parent := r.URL.Query().Get("parent")
 		listed := &crm.ListTagBindingsResponse{}
 		for _, value := range s.Bindings[parent] {
-			listed.TagBindings = append(listed.TagBindings, &crm.TagBinding{Name: bindingName(parent, value), Parent: parent, TagValue: value})
+			listed.TagBindings = append(listed.TagBindings, &crm.TagBinding{Name: bindingName(parent, value), Parent: parent, TagValue: value, TagValueNamespacedName: s.namespacedName(value)})
 		}
 		WriteBody(w, listed)
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "tagBindings/"):
@@ -235,6 +238,15 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		t.Errorf("the Resource Manager fake was asked %s %s, which it does not serve", r.Method, r.URL.Path)
 		w.WriteHeader(http.StatusNotImplemented)
 	}
+}
+
+func (s *TierTags) namespacedName(value string) string {
+	for namespaced, held := range s.Values {
+		if held.Name == value {
+			return namespaced
+		}
+	}
+	return ""
 }
 
 func bindingName(parent, value string) string {

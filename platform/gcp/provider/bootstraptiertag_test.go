@@ -111,8 +111,8 @@ func TestATierTagKeyLackingATiersValueIsMendedWithIt(t *testing.T) {
 	if err := b.Provision(ctx, read, tierTagKey, nil); err != nil {
 		t.Fatal(err)
 	}
-	if tags.KeysMade != 0 || tags.ValuesMade != 2 {
-		t.Errorf("mending made %d keys and %d values, want no key and both values", tags.KeysMade, tags.ValuesMade)
+	if tags.KeysMade != 0 || tags.ValuesMade != 3 {
+		t.Errorf("mending made %d keys and %d values, want no key and both tiers' values and the outside value", tags.KeysMade, tags.ValuesMade)
 	}
 }
 
