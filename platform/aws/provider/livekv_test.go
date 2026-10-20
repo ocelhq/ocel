@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -84,6 +85,10 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 	backend := t.TempDir()
 	store := fake.NewKeyValues()
 	stacks := deploy.NewStacks(func(_ context.Context, scope deploy.Scope) (deploy.Config, error) {
+		state := filepath.Join(backend, scope.Slug)
+		if err := os.MkdirAll(state, 0o755); err != nil {
+			return deploy.Config{}, err
+		}
 		return deploy.Config{
 			Namespace:      "ocellive",
 			Tier:           scope.Tier,
@@ -92,7 +97,7 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 			Quotas:         servicequotas.NewFromConfig(a.aws),
 			NetworkCIDR:    liveNetworkCIDR,
 			KeyValues:      store,
-			BackendURL:     "file://" + filepath.Join(backend, scope.Slug),
+			BackendURL:     "file://" + state,
 			Passphrase:     "live-suite",
 			PulumiProject:  naming.PulumiProject(scope.Slug),
 			Parameters:     params,
