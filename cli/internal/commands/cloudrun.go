@@ -108,7 +108,7 @@ func uploadSource(ctx context.Context, phase *run.Span, cfg *project.Project, up
 
 func reportUpload(span *run.Span) func(cloud.Progress) {
 	var mu sync.Mutex
-	var last time.Time
+	last := time.Now()
 	return func(p cloud.Progress) {
 		mu.Lock()
 		defer mu.Unlock()
