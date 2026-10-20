@@ -17,7 +17,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		},
 		{
 			Actions:   []string{"servicequotas:GetServiceQuota"},
-			Resources: []string{component.VPCQuota.ARN(), component.ElasticIPQuota.ARN()},
+			Resources: []string{component.VPCQuota.ARN()},
 		},
 		{
 			Actions:   []string{"servicequotas:GetAWSDefaultServiceQuota"},
