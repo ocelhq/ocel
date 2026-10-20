@@ -733,6 +733,10 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
+        "^(build_id)$": {
+          "default": "",
+          "type": "string"
+        },
         "^(deployment_url)$": {
           "default": "",
           "type": "string"
@@ -744,6 +748,10 @@
       },
       "properties": {
         "app": {
+          "default": "",
+          "type": "string"
+        },
+        "buildId": {
           "default": "",
           "type": "string"
         },

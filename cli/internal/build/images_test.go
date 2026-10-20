@@ -186,6 +186,20 @@ func TestAContainerAppIsBuiltIntoAnImageForTheArchitectureItIsAskedAndNeverHande
 	}
 }
 
+func TestABuildReportsTheBuildIDItRecordedForEachApp(t *testing.T) {
+	cfg := containerProject(t, "")
+	cfg.Slug = "shop"
+
+	built := builtImage(t, cfg)
+	recorded, err := BuildID(cfg.Dir, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := built.BuildIDs["web"]; got != recorded {
+		t.Errorf("the build reported build id %q for web, want the %q it recorded", got, recorded)
+	}
+}
+
 func builtImage(t *testing.T, cfg *project.Project) Output {
 	t.Helper()
 	built, err := tools{

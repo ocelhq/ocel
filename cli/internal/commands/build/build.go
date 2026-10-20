@@ -135,8 +135,17 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 	for _, line := range builtLines(built) {
 		phase.Say(line)
 	}
+	building.SetApps(builtApps(cfg, built))
 	building.Succeed(builtHeadline(built))
 	return nil
+}
+
+func builtApps(cfg *project.Project, built build.Output) []*progressv1.AppResult {
+	apps := make([]*progressv1.AppResult, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		apps = append(apps, &progressv1.AppResult{App: a.Name, Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, BuildId: built.BuildIDs[a.Name]})
+	}
+	return apps
 }
 
 func nothingToBuild(cfg *project.Project) error {
