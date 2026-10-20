@@ -8,7 +8,8 @@ package cloudv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	v11 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	v1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -844,6 +845,7 @@ type Job struct {
 	Result        *JobResult             `protobuf:"bytes,11,opt,name=result,proto3" json:"result,omitempty"`
 	SourceId      string                 `protobuf:"bytes,12,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
 	Input         *JobInput              `protobuf:"bytes,13,opt,name=input,proto3" json:"input,omitempty"`
+	Report        *v1.Deployment         `protobuf:"bytes,14,opt,name=report,proto3" json:"report,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -969,6 +971,13 @@ func (x *Job) GetInput() *JobInput {
 	return nil
 }
 
+func (x *Job) GetReport() *v1.Deployment {
+	if x != nil {
+		return x.Report
+	}
+	return nil
+}
+
 type JobInput struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1061,7 +1070,7 @@ func (*JobInput_Confirmation) isJobInput_Need() {}
 
 type VariablesNeeded struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Tier          v11.Tier               `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Variables     []*NeededVariable      `protobuf:"bytes,2,rep,name=variables,proto3" json:"variables,omitempty"`
 	Groups        []*NeededGroup         `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1098,11 +1107,11 @@ func (*VariablesNeeded) Descriptor() ([]byte, []int) {
 	return file_cloud_v1_job_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *VariablesNeeded) GetTier() v1.Tier {
+func (x *VariablesNeeded) GetTier() v11.Tier {
 	if x != nil {
 		return x.Tier
 	}
-	return v1.Tier(0)
+	return v11.Tier(0)
 }
 
 func (x *VariablesNeeded) GetVariables() []*NeededVariable {
@@ -1798,7 +1807,7 @@ var File_cloud_v1_job_proto protoreflect.FileDescriptor
 
 const file_cloud_v1_job_proto_rawDesc = "" +
 	"\n" +
-	"\x12cloud/v1/job.proto\x12\bcloud.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb0\x01\n" +
+	"\x12cloud/v1/job.proto\x12\bcloud.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1bconsole/v1/deployment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb0\x01\n" +
 	"\n" +
 	"GitContext\x122\n" +
 	"\x06commit\x18\x01 \x01(\tB\x1a\xbaH\x17\xd8\x01\x01r\x122\x10^[0-9a-f]{7,64}$R\x06commit\x125\n" +
@@ -1844,7 +1853,7 @@ const file_cloud_v1_job_proto_rawDesc = "" +
 	"\x15ListJobEventsResponse\x12*\n" +
 	"\x06events\x18\x01 \x03(\v2\x12.cloud.v1.JobEventR\x06events\x12\x12\n" +
 	"\x04more\x18\x02 \x01(\bR\x04more\x12\x1f\n" +
-	"\x03job\x18\x03 \x01(\v2\r.cloud.v1.JobR\x03job\"\x97\x04\n" +
+	"\x03job\x18\x03 \x01(\v2\r.cloud.v1.JobR\x03job\"\xc7\x04\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1862,7 +1871,8 @@ const file_cloud_v1_job_proto_rawDesc = "" +
 	" \x01(\v2\x12.cloud.v1.JobErrorR\x05error\x12+\n" +
 	"\x06result\x18\v \x01(\v2\x13.cloud.v1.JobResultR\x06result\x12\x1b\n" +
 	"\tsource_id\x18\f \x01(\tR\bsourceId\x12(\n" +
-	"\x05input\x18\r \x01(\v2\x12.cloud.v1.JobInputR\x05input\"\xc0\x01\n" +
+	"\x05input\x18\r \x01(\v2\x12.cloud.v1.JobInputR\x05input\x12.\n" +
+	"\x06report\x18\x0e \x01(\v2\x16.console.v1.DeploymentR\x06report\"\xc0\x01\n" +
 	"\bJobInput\x12,\n" +
 	"\x02id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\x02id\x129\n" +
 	"\tvariables\x18\x02 \x01(\v2\x19.cloud.v1.VariablesNeededH\x00R\tvariables\x12<\n" +
@@ -1997,7 +2007,8 @@ var file_cloud_v1_job_proto_goTypes = []any{
 	(*AppBuild)(nil),              // 26: cloud.v1.AppBuild
 	(*JobEvent)(nil),              // 27: cloud.v1.JobEvent
 	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
-	(v1.Tier)(0),                  // 29: common.environment.v1.Tier
+	(*v1.Deployment)(nil),         // 29: console.v1.Deployment
+	(v11.Tier)(0),                 // 30: common.environment.v1.Tier
 }
 var file_cloud_v1_job_proto_depIdxs = []int32{
 	0,  // 0: cloud.v1.StartJobRequest.command:type_name -> cloud.v1.JobCommand
@@ -2017,33 +2028,34 @@ var file_cloud_v1_job_proto_depIdxs = []int32{
 	24, // 14: cloud.v1.Job.error:type_name -> cloud.v1.JobError
 	25, // 15: cloud.v1.Job.result:type_name -> cloud.v1.JobResult
 	15, // 16: cloud.v1.Job.input:type_name -> cloud.v1.JobInput
-	16, // 17: cloud.v1.JobInput.variables:type_name -> cloud.v1.VariablesNeeded
-	19, // 18: cloud.v1.JobInput.confirmation:type_name -> cloud.v1.Confirmation
-	29, // 19: cloud.v1.VariablesNeeded.tier:type_name -> common.environment.v1.Tier
-	17, // 20: cloud.v1.VariablesNeeded.variables:type_name -> cloud.v1.NeededVariable
-	18, // 21: cloud.v1.VariablesNeeded.groups:type_name -> cloud.v1.NeededGroup
-	21, // 22: cloud.v1.RespondJobRequest.variables:type_name -> cloud.v1.VariableValues
-	22, // 23: cloud.v1.VariableValues.values:type_name -> cloud.v1.VariableValue
-	14, // 24: cloud.v1.RespondJobResponse.job:type_name -> cloud.v1.Job
-	26, // 25: cloud.v1.JobResult.builds:type_name -> cloud.v1.AppBuild
-	28, // 26: cloud.v1.JobEvent.time:type_name -> google.protobuf.Timestamp
-	3,  // 27: cloud.v1.JobEvent.level:type_name -> cloud.v1.JobEventLevel
-	2,  // 28: cloud.v1.JobEvent.phase:type_name -> cloud.v1.JobPhase
-	6,  // 29: cloud.v1.JobService.StartJob:input_type -> cloud.v1.StartJobRequest
-	8,  // 30: cloud.v1.JobService.GetJob:input_type -> cloud.v1.GetJobRequest
-	10, // 31: cloud.v1.JobService.CancelJob:input_type -> cloud.v1.CancelJobRequest
-	12, // 32: cloud.v1.JobService.ListJobEvents:input_type -> cloud.v1.ListJobEventsRequest
-	20, // 33: cloud.v1.JobService.RespondJob:input_type -> cloud.v1.RespondJobRequest
-	7,  // 34: cloud.v1.JobService.StartJob:output_type -> cloud.v1.StartJobResponse
-	9,  // 35: cloud.v1.JobService.GetJob:output_type -> cloud.v1.GetJobResponse
-	11, // 36: cloud.v1.JobService.CancelJob:output_type -> cloud.v1.CancelJobResponse
-	13, // 37: cloud.v1.JobService.ListJobEvents:output_type -> cloud.v1.ListJobEventsResponse
-	23, // 38: cloud.v1.JobService.RespondJob:output_type -> cloud.v1.RespondJobResponse
-	34, // [34:39] is the sub-list for method output_type
-	29, // [29:34] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	29, // 17: cloud.v1.Job.report:type_name -> console.v1.Deployment
+	16, // 18: cloud.v1.JobInput.variables:type_name -> cloud.v1.VariablesNeeded
+	19, // 19: cloud.v1.JobInput.confirmation:type_name -> cloud.v1.Confirmation
+	30, // 20: cloud.v1.VariablesNeeded.tier:type_name -> common.environment.v1.Tier
+	17, // 21: cloud.v1.VariablesNeeded.variables:type_name -> cloud.v1.NeededVariable
+	18, // 22: cloud.v1.VariablesNeeded.groups:type_name -> cloud.v1.NeededGroup
+	21, // 23: cloud.v1.RespondJobRequest.variables:type_name -> cloud.v1.VariableValues
+	22, // 24: cloud.v1.VariableValues.values:type_name -> cloud.v1.VariableValue
+	14, // 25: cloud.v1.RespondJobResponse.job:type_name -> cloud.v1.Job
+	26, // 26: cloud.v1.JobResult.builds:type_name -> cloud.v1.AppBuild
+	28, // 27: cloud.v1.JobEvent.time:type_name -> google.protobuf.Timestamp
+	3,  // 28: cloud.v1.JobEvent.level:type_name -> cloud.v1.JobEventLevel
+	2,  // 29: cloud.v1.JobEvent.phase:type_name -> cloud.v1.JobPhase
+	6,  // 30: cloud.v1.JobService.StartJob:input_type -> cloud.v1.StartJobRequest
+	8,  // 31: cloud.v1.JobService.GetJob:input_type -> cloud.v1.GetJobRequest
+	10, // 32: cloud.v1.JobService.CancelJob:input_type -> cloud.v1.CancelJobRequest
+	12, // 33: cloud.v1.JobService.ListJobEvents:input_type -> cloud.v1.ListJobEventsRequest
+	20, // 34: cloud.v1.JobService.RespondJob:input_type -> cloud.v1.RespondJobRequest
+	7,  // 35: cloud.v1.JobService.StartJob:output_type -> cloud.v1.StartJobResponse
+	9,  // 36: cloud.v1.JobService.GetJob:output_type -> cloud.v1.GetJobResponse
+	11, // 37: cloud.v1.JobService.CancelJob:output_type -> cloud.v1.CancelJobResponse
+	13, // 38: cloud.v1.JobService.ListJobEvents:output_type -> cloud.v1.ListJobEventsResponse
+	23, // 39: cloud.v1.JobService.RespondJob:output_type -> cloud.v1.RespondJobResponse
+	35, // [35:40] is the sub-list for method output_type
+	30, // [30:35] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_cloud_v1_job_proto_init() }

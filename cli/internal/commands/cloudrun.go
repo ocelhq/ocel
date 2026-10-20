@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -47,10 +48,17 @@ type CloudJob struct {
 	Preview     *cloudv1.PreviewTarget
 	NoWait      bool
 	OpenBrowser func(url string) error
+	Stderr      io.Writer
 }
 
 func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err error) {
 	cfg := t.Project
+	var ended *cloudv1.Job
+	defer func() {
+		if job.Stderr != nil {
+			i.Console.ReportDeployment(ctx, cfg.Dir, ended.GetReport(), job.Stderr)
+		}
+	}()
 	ctx, running, err := i.Events.Begin(ctx, job.Command, cfg.Dir)
 	if err != nil {
 		return err
@@ -115,10 +123,11 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 		running.Succeed(fmt.Sprintf("Started job %s on Ocel Cloud, and it runs without this terminal: %s", started.GetId(), jobURL))
 		return nil
 	}
-	return waitForJob(ctx, running, phase, jobs, started, jobURL, cfg.Slug, job)
+	ended, err = waitForJob(ctx, running, phase, jobs, started, jobURL, cfg.Slug, job)
+	return err
 }
 
-func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cloud.Client, started *cloudv1.Job, jobURL, slug string, job CloudJob) error {
+func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cloud.Client, started *cloudv1.Job, jobURL, slug string, job CloudJob) (*cloudv1.Job, error) {
 	watching := phase.Child(slug, progress.Title{Started: "Waiting for the job on Ocel Cloud", Ended: "Waited for the job on Ocel Cloud"})
 	var opened string
 	resume := func(string) {}
@@ -157,10 +166,10 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 		watching.End(nil)
 		phase.End(nil)
 		running.Succeed(fmt.Sprintf("Stopped watching job %s, which keeps running on Ocel Cloud: %s", started.GetId(), jobURL))
-		return nil
+		return nil, nil
 	case err != nil:
 		watching.End(err)
-		return fmt.Errorf("%w — follow job %s at %s", err, started.GetId(), jobURL)
+		return nil, fmt.Errorf("%w — follow job %s at %s", err, started.GetId(), jobURL)
 	}
 
 	switch ended.GetState() {
@@ -171,7 +180,7 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 		watching.End(nil)
 		phase.End(nil)
 		running.Succeed(jobHeadline(job.Kind, slug, jobURL))
-		return nil
+		return ended, nil
 	case cloudv1.JobState_JOB_STATE_CANCELED:
 		err = &clierror.Error{
 			Code:  clierror.CodeCloudJobCanceled,
@@ -185,7 +194,7 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 		}
 	}
 	watching.End(err)
-	return err
+	return ended, err
 }
 
 func JobURL(consoleURL, jobID string) string {

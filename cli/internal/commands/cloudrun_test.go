@@ -11,8 +11,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
@@ -195,6 +197,66 @@ func TestAnOcelCloudJobThatFailsFailsTheRunWithItsErrorAndLink(t *testing.T) {
 	}
 	if !strings.Contains(out, "app web failed to build") {
 		t.Fatalf("output = %q, want the failure shown", out)
+	}
+}
+
+func jobReport(outcome consolev1.DeploymentOutcome) *consolev1.Deployment {
+	report := &consolev1.Deployment{
+		Id:          "4bf92f3577b34da6a3ce929d0e0e4736",
+		Kind:        consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY,
+		Outcome:     outcome,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Provider:    &consolev1.Provider{Name: commands.CloudProviderID},
+		Target:      "ocel/cloud",
+		StartedAt:   timestamppb.New(time.Unix(1_800_000_000, 0)),
+		FinishedAt:  timestamppb.New(time.Unix(1_800_000_060, 0)),
+		Trigger:     &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CLI},
+	}
+	if outcome == consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED {
+		report.Promotion = &consolev1.Promotion{Id: "7068ee76eeff4094730614560752fc7b", Seq: 1_800_000_060}
+	} else {
+		report.Error = "app web failed to build"
+	}
+	return report
+}
+
+func TestAnOcelCloudJobThatEndsWithADeploymentReportsItToTheLinkedConsoleProject(t *testing.T) {
+	for _, tc := range []struct {
+		state   cloudv1.JobState
+		outcome consolev1.DeploymentOutcome
+	}{
+		{cloudv1.JobState_JOB_STATE_SUCCEEDED, consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_SUCCEEDED},
+		{cloudv1.JobState_JOB_STATE_FAILED, consolev1.DeploymentOutcome_DEPLOYMENT_OUTCOME_FAILED},
+	} {
+		t.Run(tc.state.String(), func(t *testing.T) {
+			invocation, fake := loggedIn(t)
+			report := jobReport(tc.outcome)
+			fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: tc.state, Report: report, Result: &cloudv1.JobResult{DeploymentId: report.GetId()}}}
+			var stderr bytes.Buffer
+
+			_, _ = runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{Command: "ocel deploy", Tier: environmentv1.Tier_TIER_PRODUCTION, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, Stderr: &stderr})
+
+			reports := fake.ReportedDeployments()
+			if len(reports) != 1 || stderr.Len() != 0 {
+				t.Fatalf("the console received %d reports, stderr=%q, want the job's deployment reported once", len(reports), stderr.String())
+			}
+			if reports[0].GetProjectId() != fake.Projects[0].GetId() || !proto.Equal(reports[0].GetDeployment(), report) {
+				t.Errorf("reported %v, want the job's deployment in the linked project %s", reports[0], fake.Projects[0].GetId())
+			}
+		})
+	}
+}
+
+func TestAnOcelCloudJobThatEndsWithNoDeploymentReportsNothing(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+	var stderr bytes.Buffer
+
+	if _, err := runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{Command: "ocel build", Kind: cloudv1.JobCommand_JOB_COMMAND_BUILD, Stderr: &stderr}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.ReportedDeployments()) != 0 || stderr.Len() != 0 {
+		t.Errorf("reported %v, stderr=%q, want nothing from a job that made no deployment", fake.ReportedDeployments(), stderr.String())
 	}
 }
 
