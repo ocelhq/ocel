@@ -4,6 +4,7 @@ package cli.result.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1";
 
 import "common/environment/v1/environment.proto";
+import "console/v1/console.proto";
 import "google/protobuf/struct.proto";
 import "provider/cost/v1/cost.proto";
 
@@ -475,6 +476,8 @@ message LoginResult {
   string email = 1;
 
   string console_url = 2;
+
+  console.v1.CloudOffer cloud = 3;
 }
 
 message LogoutResult {

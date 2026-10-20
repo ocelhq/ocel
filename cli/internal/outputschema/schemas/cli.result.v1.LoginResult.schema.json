@@ -10,6 +10,9 @@
         }
       },
       "properties": {
+        "cloud": {
+          "$ref": "#/$defs/console.v1.CloudOffer.jsonschema.json"
+        },
         "consoleUrl": {
           "default": "",
           "type": "string"
@@ -20,6 +23,36 @@
         }
       },
       "title": "Login Result",
+      "type": "object"
+    },
+    "console.v1.CloudOffer.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(api_url)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(provider_url)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "apiUrl": {
+          "default": "",
+          "type": "string"
+        },
+        "audience": {
+          "default": "",
+          "type": "string"
+        },
+        "providerUrl": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Cloud Offer",
       "type": "object"
     }
   },
