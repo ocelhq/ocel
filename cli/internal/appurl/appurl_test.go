@@ -96,6 +96,15 @@ func TestAPreviewServedByAnEdgeOverPlainHTTPIsGivenAnHTTPURL(t *testing.T) {
 	}
 }
 
+func TestAPreviewServedByAnEdgeOnAPortOfItsOwnIsGivenAURLNamingThePort(t *testing.T) {
+	t.Parallel()
+
+	urls := appurl.FormatPreviewURLs(map[string]string{"web": "shop-abcdefghijklmnop12345678.preview.ocel.localhost"}, &contractv1.EdgeFacts{ServesPlainHttp: true, UrlPort: 8130})
+	if got, want := urls["web"], "http://shop-abcdefghijklmnop12345678.preview.ocel.localhost:8130"; got != want {
+		t.Errorf("web url = %q, want %q", got, want)
+	}
+}
+
 func TestPrepend(t *testing.T) {
 	t.Parallel()
 

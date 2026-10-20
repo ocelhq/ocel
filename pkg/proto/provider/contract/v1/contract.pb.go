@@ -652,6 +652,7 @@ type EdgeFacts struct {
 	RunsCode        bool                   `protobuf:"varint,1,opt,name=runs_code,json=runsCode,proto3" json:"runs_code,omitempty"`
 	CacheTagLimits  *CacheTagLimits        `protobuf:"bytes,2,opt,name=cache_tag_limits,json=cacheTagLimits,proto3" json:"cache_tag_limits,omitempty"`
 	ServesPlainHttp bool                   `protobuf:"varint,3,opt,name=serves_plain_http,json=servesPlainHttp,proto3" json:"serves_plain_http,omitempty"`
+	UrlPort         uint32                 `protobuf:"varint,4,opt,name=url_port,json=urlPort,proto3" json:"url_port,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -705,6 +706,13 @@ func (x *EdgeFacts) GetServesPlainHttp() bool {
 		return x.ServesPlainHttp
 	}
 	return false
+}
+
+func (x *EdgeFacts) GetUrlPort() uint32 {
+	if x != nil {
+		return x.UrlPort
+	}
+	return 0
 }
 
 type CacheTagLimits struct {
@@ -8125,11 +8133,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0fworker_ceilings\x18\x03 \x03(\v2#.provider.contract.v1.WorkerCeilingR\x0eworkerCeilings\x125\n" +
 	"\x12max_function_bytes\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x10maxFunctionBytes\x12%\n" +
 	"\x0eforwards_ports\x18\b \x01(\bR\rforwardsPorts\x123\n" +
-	"\x04edge\x18\t \x01(\v2\x1f.provider.contract.v1.EdgeFactsR\x04edge\"\xa4\x01\n" +
+	"\x04edge\x18\t \x01(\v2\x1f.provider.contract.v1.EdgeFactsR\x04edge\"\xca\x01\n" +
 	"\tEdgeFacts\x12\x1b\n" +
 	"\truns_code\x18\x01 \x01(\bR\brunsCode\x12N\n" +
 	"\x10cache_tag_limits\x18\x02 \x01(\v2$.provider.contract.v1.CacheTagLimitsR\x0ecacheTagLimits\x12*\n" +
-	"\x11serves_plain_http\x18\x03 \x01(\bR\x0fservesPlainHttp\"\x7f\n" +
+	"\x11serves_plain_http\x18\x03 \x01(\bR\x0fservesPlainHttp\x12$\n" +
+	"\burl_port\x18\x04 \x01(\rB\t\xbaH\x06*\x04\x18\xff\xff\x03R\aurlPort\"\x7f\n" +
 	"\x0eCacheTagLimits\x12$\n" +
 	"\ttag_bytes\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\btagBytes\x12\x1b\n" +
 	"\x04tags\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x04tags\x12*\n" +

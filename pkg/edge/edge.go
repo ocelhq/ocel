@@ -2,7 +2,9 @@ package edge
 
 import (
 	"context"
+	"net"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -62,13 +64,18 @@ type Facts struct {
 	ChecksSignedPasswords bool
 	CredentialScope       string
 	ServesPlainHTTP       bool
+	URLPort               uint16
 }
 
 func (f Facts) FormatURL(hostname string) string {
+	scheme := "https://"
 	if f.ServesPlainHTTP {
-		return "http://" + hostname
+		scheme = "http://"
 	}
-	return "https://" + hostname
+	if f.URLPort == 0 {
+		return scheme + hostname
+	}
+	return scheme + net.JoinHostPort(hostname, strconv.Itoa(int(f.URLPort)))
 }
 
 type Edge interface {

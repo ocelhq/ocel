@@ -49,6 +49,7 @@ func edgeFactsProto(facts edge.Facts) *contractv1.EdgeFacts {
 	return &contractv1.EdgeFacts{
 		RunsCode:        facts.RunsCode,
 		ServesPlainHttp: facts.ServesPlainHTTP,
+		UrlPort:         uint32(facts.URLPort),
 		CacheTagLimits: &contractv1.CacheTagLimits{
 			TagBytes:    int64(limits.TagBytes),
 			Tags:        int64(limits.Tags),
