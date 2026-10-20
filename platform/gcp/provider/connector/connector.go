@@ -167,6 +167,7 @@ func (p Connector) Install(ctx context.Context, install provider.ConnectorInstal
 func buildConnectorServing(names names.Names, region, image, version, publicKey string, config []byte) run.Serving {
 	return run.Serving{
 		Service:   names.Connector(),
+		Shared:    true,
 		Image:     image,
 		Account:   names.ConnectorAccountEmail(),
 		Compute:   provider.ComputeServerless,

@@ -13,6 +13,7 @@ import (
 	runv2 "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -33,6 +34,7 @@ func desiredOf(t *testing.T, s run.Serving) *runv2.GoogleCloudRunV2Service {
 func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 	desired := desiredOf(t, run.Serving{
 		Service: "ocel-shop-prod-web",
+		Tier:    environment.TierProduction,
 		Image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 		Account: "ocel-1a2b3c4d5e@acme.iam.gserviceaccount.com",
 		Compute: provider.ComputeServerless,
@@ -89,6 +91,7 @@ func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T
 func TestARevisionSetsEveryValueTheDeployResolvedInOneOrder(t *testing.T) {
 	desired := desiredOf(t, run.Serving{
 		Service: "ocel-shop-prod-web",
+		Tier:    environment.TierProduction,
 		Image:   "web@sha256:abc",
 		Compute: provider.ComputeServerless,
 		Env:     map[string]string{"DATABASE_URL": "postgres://", "API_KEY": "k"},
@@ -363,7 +366,7 @@ func TestAReleaseOntoAServiceThatServesItsLatestRevisionKeepsServingThatRevision
 func TestAFunctionTheSpecGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 	server := &googletest.Run{}
 
-	released(t, server, run.Serving{Service: "ocel-shop-prod-fn", Compute: provider.ComputeServerless})
+	released(t, server, run.Serving{Tier: environment.TierProduction, Service: "ocel-shop-prod-fn", Compute: provider.ComputeServerless})
 
 	if desired := server.Current(); desired.InvokerIamDisabled {
 		t.Error("a function the plan says has no url may be invoked without an invoker check, " +
@@ -374,7 +377,7 @@ func TestAFunctionTheSpecGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 func TestAFunctionTheSpecGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) {
 	server := &googletest.Run{}
 
-	released(t, server, run.Serving{Service: "ocel-shop-prod-fn", Compute: provider.ComputeServerless, Public: true})
+	released(t, server, run.Serving{Tier: environment.TierProduction, Service: "ocel-shop-prod-fn", Compute: provider.ComputeServerless, Public: true})
 
 	if desired := server.Current(); !desired.InvokerIamDisabled {
 		t.Error("a function the plan gives a url of its own still checks its invoker, and a service nobody may invoke answers nothing")
@@ -388,7 +391,7 @@ func TestAFunctionTheSpecGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) 
 func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
 	server := &googletest.Run{}
 
-	released(t, server, run.Serving{Service: "ocel-shop-prod-app", Compute: provider.ComputeContainer, Health: "/", Public: true})
+	released(t, server, run.Serving{Tier: environment.TierProduction, Service: "ocel-shop-prod-app", Compute: provider.ComputeContainer, Health: "/", Public: true})
 
 	if desired := server.Current(); !desired.InvokerIamDisabled {
 		t.Error("the app's own front still checks its invoker, and nothing else sits between the internet and it")
@@ -399,6 +402,7 @@ func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t 
 	server := &googletest.Run{}
 	first := run.Serving{
 		Service: "ocel-shop-prod-app",
+		Tier:    environment.TierProduction,
 		Image:   "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one",
 		Compute: provider.ComputeContainer,
 		Health:  "/",
@@ -425,6 +429,7 @@ func TestPinningTrafficLeavesWhoMayReachTheServiceAsTheReleaseSetIt(t *testing.T
 	server := &googletest.Run{}
 	behind := run.Serving{
 		Service: "ocel-shop-prod-web",
+		Tier:    environment.TierProduction,
 		Compute: provider.ComputeServerless,
 		Public:  true,
 		Ingress: run.IngressLoadBalancer,
@@ -446,6 +451,7 @@ func TestPinningTrafficLeavesWhoMayReachTheServiceAsTheReleaseSetIt(t *testing.T
 func serves(service string) run.Serving {
 	return run.Serving{
 		Service: service,
+		Tier:    environment.TierProduction,
 		Image:   "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one",
 		Compute: provider.ComputeContainer,
 		Health:  "/",
@@ -820,7 +826,7 @@ func TestAPinThatKeepsConflictingUntilItGivesUpDoesNotClaimToHaveOpenedTheServic
 
 func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 	server := &googletest.Run{}
-	worker := run.Serving{Service: "ocel-shop-prod-worker", Image: "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one", Compute: provider.ComputeServerless}
+	worker := run.Serving{Tier: environment.TierProduction, Service: "ocel-shop-prod-worker", Image: "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one", Compute: provider.ComputeServerless}
 	_, one := released(t, server, worker)
 
 	p := providerServing(server, t)
