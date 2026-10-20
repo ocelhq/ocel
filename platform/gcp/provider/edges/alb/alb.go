@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -23,6 +22,7 @@ const Kind edge.Kind = "alb"
 const BaselineCost = "about $18 a month plus Premium-tier egress"
 
 type Deps struct {
+	Namespace string
 	KeyValues records.Store
 	Stacks    Stacks
 	Routes    Routes
@@ -127,10 +127,11 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 
 func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Log) (LoadBalancer, error) {
 	spec := loadBalancerSpec{
-		Region:  e.deps.Region,
-		Names:   loadBalancerNames(tier, e.deps.Shielded),
-		Tier:    tier,
-		Preview: preview,
+		Namespace: e.deps.Namespace,
+		Region:    e.deps.Region,
+		Names:     loadBalancerNames(e.deps.Namespace, tier, e.deps.Shielded),
+		Tier:      tier,
+		Preview:   preview,
 	}
 	if !e.deps.Shielded {
 		assets, err := e.deps.ReadAssetsBucket(ctx, tier)
@@ -240,10 +241,6 @@ type Host struct {
 	StaticRoutes string `json:"staticRoutes,omitempty"`
 }
 
-func Surface(slug string, tier environment.Tier) string {
-	return naming.Join(naming.FieldSeparator, "ocel", string(Kind), naming.Sanitize(slug), string(tier))
-}
-
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
@@ -316,15 +313,17 @@ type claim struct {
 	Owner string `json:"owner"`
 }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string { return Surface(slug, tier) }
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
+	return Surface(e.deps.Namespace, slug, tier)
+}
 
 func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := make([]edge.PlanChange, 0, len(scope.Hostnames)*3+1)
 	for _, hostname := range scope.Hostnames {
 		changes = append(changes,
 			edge.PlanChange{Kind: "compute.URLMap host rule", Name: hostname, Action: edge.PlanDelete},
-			edge.PlanChange{Kind: "compute.BackendService", Name: backendName(scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
-			edge.PlanChange{Kind: "certificatemanager.CertificateMapEntry", Name: entryName(scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
+			edge.PlanChange{Kind: "compute.BackendService", Name: backendName(e.deps.Namespace, scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
+			edge.PlanChange{Kind: "certificatemanager.CertificateMapEntry", Name: entryName(e.deps.Namespace, scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
 		)
 	}
 	changes = append(changes, edge.PlanChange{
@@ -354,7 +353,7 @@ func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.P
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{
-			{Kind: "certificatemanager.CertificateMapEntry", Name: previewEntryName(base), Action: edge.PlanDelete},
+			{Kind: "certificatemanager.CertificateMapEntry", Name: previewEntryName(e.deps.Namespace, base), Action: edge.PlanDelete},
 		},
 	}, e.PlanSharedPreviewRemoval()
 }

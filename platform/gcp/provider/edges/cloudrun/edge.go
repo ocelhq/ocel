@@ -18,12 +18,13 @@ type Gates interface {
 }
 
 type Edge struct {
-	pins  pin.Pins
-	gates Gates
+	namespace string
+	pins      pin.Pins
+	gates     Gates
 }
 
-func New(pins pin.Pins, gates Gates) *Edge {
-	return &Edge{pins: pins, gates: gates}
+func New(namespace string, pins pin.Pins, gates Gates) *Edge {
+	return &Edge{namespace: namespace, pins: pins, gates: gates}
 }
 
 func (e *Edge) Kind() edge.Kind { return edge.None }
@@ -46,8 +47,8 @@ func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutpu
 
 func (e *Edge) Teardown(context.Context, environment.Tier) error { return nil }
 
-func Surface(slug string, tier environment.Tier) string {
-	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), string(tier))
+func Surface(namespace, slug string, tier environment.Tier) string {
+	return naming.Join(naming.FieldSeparator, naming.NamespaceField(namespace), slug, naming.TierWord(tier))
 }
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -70,7 +71,9 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 
 func (e *Edge) DomainOwner(context.Context, string) (string, error) { return "", nil }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string { return Surface(slug, tier) }
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
+	return Surface(e.namespace, slug, tier)
+}
 
 func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
 	return "", unbindable("a preview wildcard")

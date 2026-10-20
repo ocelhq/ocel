@@ -36,7 +36,7 @@ func projectHash(tier environment.Tier, project string) string {
 }
 
 func ProjectDatabasePrefix(namespace provider.Namespace, tier environment.Tier) string {
-	return string(namespace) + "-" + string(tier) + projectDatabaseInfix
+	return naming.AppFence(string(namespace)) + naming.TierWord(tier) + projectDatabaseInfix
 }
 
 func ProjectDatabase(namespace provider.Namespace, tier environment.Tier, project string) string {
@@ -44,14 +44,14 @@ func ProjectDatabase(namespace provider.Namespace, tier environment.Tier, projec
 }
 
 func ProjectWritableDatabasePrefix(namespace provider.Namespace, tier environment.Tier) string {
-	return string(namespace) + "-" + string(tier) + projectWritableDatabaseInfix
+	return naming.AppFence(string(namespace)) + naming.TierWord(tier) + projectWritableDatabaseInfix
 }
 
 func ProjectWritableDatabase(namespace provider.Namespace, tier environment.Tier, project string) string {
 	return ProjectWritableDatabasePrefix(namespace, tier) + projectHash(tier, project)
 }
 
-func ProjectKeyPrefix(tier environment.Tier) string { return string(tier) + projectKeyInfix }
+func ProjectKeyPrefix(tier environment.Tier) string { return naming.TierWord(tier) + projectKeyInfix }
 
 func ProjectKey(tier environment.Tier, project string) string {
 	return ProjectKeyPrefix(tier) + projectHash(tier, project)

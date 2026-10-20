@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
@@ -98,14 +99,12 @@ func TestAnOriginHostnameIsTheReleaseAndServiceUnderTheTiersOriginBase(t *testin
 	}
 }
 
-func TestAnOriginHostnameFitsOneDNSLabel(t *testing.T) {
+func TestAnOriginHostnameOfTheLongestCloudRunServiceFitsOneDNSLabel(t *testing.T) {
 	t.Parallel()
-	for _, service := range []string{strings.Repeat("s", 37), strings.Repeat("s", 200)} {
-		host := cloudflareorigin.OriginHostname("r0001abcd", service, "o.example.com")
-		label, _, _ := strings.Cut(host, ".")
-		if len(label) > 63 || !strings.HasPrefix(label, "r0001abcd-") {
-			t.Errorf("label %q (%d characters) for a %d-character service, want at most 63 and led by the release", label, len(label), len(service))
-		}
+	service := strings.Repeat("s", names.MaxServiceNameLength)
+	host := cloudflareorigin.OriginHostname("r0001abcd", service, "o.example.com")
+	if label, _, _ := strings.Cut(host, "."); len(label) > 63 || label != "r0001abcd-"+service {
+		t.Errorf("label %q (%d characters) for a %d-character service, want the release and the whole service in at most 63", label, len(label), len(service))
 	}
 }
 

@@ -211,7 +211,11 @@ func (p Functions) Name(ctx context.Context, spec provider.StackSpec) ([]provide
 		}
 		functions = append(functions, provider.Function{Name: fn.Name, Physical: service, IgnoresGate: cloudrun.IgnoresGate(spec, fn)})
 	}
-	return append(functions, release.WorkerFunctions(release.NameWorkers(names, spec))...), nil
+	workers, err := release.NameWorkers(names, spec)
+	if err != nil {
+		return nil, err
+	}
+	return append(functions, release.WorkerFunctions(workers)...), nil
 }
 
 func (p Functions) RemoveRevisions(ctx context.Context, ref provider.StackRef, functions []provider.Function, images provider.ImageStore, progress progress.Log) ([]provider.Function, error) {

@@ -24,48 +24,15 @@ import (
 
 var cloudStorageName = regexp.MustCompile(`^[a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`)
 
-func TestAnAppBucketIsNamedForTheNamespaceProjectEnvironmentAndDeclaredBucket(t *testing.T) {
-	named := names.New("ocel", "acme-prod")
+const appBucketTag = "k3x9q2"
 
-	bucket := named.AppBucket("shop", "prod", "uploads")
-	if !strings.HasPrefix(bucket, "ocel--shop-prod-uploads-") {
-		t.Errorf("AppBucket() = %q, want the namespace, project, environment and bucket readable at its start", bucket)
+func appBucketOf(t *testing.T, named names.Names, env, bucket string) string {
+	t.Helper()
+	name, err := named.AppBucket("shop", env, bucket, appBucketTag)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !cloudStorageName.MatchString(bucket) {
-		t.Errorf("AppBucket() = %q, which Cloud Storage will not take as a bucket name", bucket)
-	}
-	if other := (names.New("ocel", "acme-staging")).AppBucket("shop", "prod", "uploads"); other == bucket {
-		t.Errorf("two Google Cloud projects name the same bucket %q, and a bucket name is global: the second deploy would find the first one's bucket taken", bucket)
-	}
-	if preview := named.AppBucket("shop", "pr-7", "uploads"); preview == bucket {
-		t.Errorf("both environments store into %q, and a preview would write over production's objects", bucket)
-	}
-}
-
-func TestNoAppBucketOfAnotherNamespaceStartsWithThisNamespacesBucketPrefix(t *testing.T) {
-	prefix := names.New("ocel", "acme-prod").AppBucketPrefix()
-	for _, namespace := range []provider.Namespace{"ocel-dev", "ocel-shop", "ocelot"} {
-		other := names.New(namespace, "acme-prod").AppBucket("shop", "prod", "uploads")
-		if strings.HasPrefix(other, prefix) {
-			t.Errorf("namespace %s names its bucket %q, under namespace ocel's prefix %q, so ocel's deploy credential administers it", namespace, other, prefix)
-		}
-	}
-	if own := (names.New("ocel", "acme-prod")).AppBucket("dev", "prod", "uploads"); !strings.HasPrefix(own, prefix) {
-		t.Errorf("AppBucket() = %q, want it under the namespace's prefix %q", own, prefix)
-	}
-}
-
-func TestAnAppBucketWhoseReadableNameRunsLongIsCutToWhatCloudStorageTakes(t *testing.T) {
-	names := names.New("ocel", "acme-prod")
-
-	long := names.AppBucket(strings.Repeat("storefront", 4), "feature-branch-preview", strings.Repeat("user-uploads", 3))
-	if !cloudStorageName.MatchString(long) {
-		t.Errorf("AppBucket() = %q (%d characters), which Cloud Storage will not take as a bucket name", long, len(long))
-	}
-	cut := names.AppBucket(strings.Repeat("storefront", 4), "feature-branch-preview", strings.Repeat("user-uploads", 3)+"-2")
-	if cut == long {
-		t.Errorf("two buckets whose names differ past the cut share %q", long)
-	}
+	return name
 }
 
 func aBucket(spec provider.BucketSpec) resources.ProvisionRequest {
@@ -96,13 +63,16 @@ func TestABucketIsCreatedPrivateInTheRegionAndGrantedToNoAccount(t *testing.T) {
 		t.Fatalf("ProvisionBucket() = %v", err)
 	}
 
-	name := namesOf(t, p).AppBucket("shop", "prod", "uploads")
 	if len(server.created) != 1 {
 		t.Fatalf("Cloud Storage was asked to create %d buckets, want one per declared bucket", len(server.created))
 	}
 	created := server.created[0]
-	if created.Name != name || !strings.EqualFold(created.Location, "europe-west1") {
-		t.Errorf("created %q in %q, want %q in the deploy's region", created.Name, created.Location, name)
+	name := created.Name
+	if tag, named := strings.CutPrefix(name, "ocel-app-shop-prod-uploads-"); !named || !naming.IsRandomTag(tag) || !cloudStorageName.MatchString(name) {
+		t.Errorf("created %q, want it named under the app fence for the project, environment and bucket, with a random tag last", name)
+	}
+	if !strings.EqualFold(created.Location, "europe-west1") {
+		t.Errorf("created %q in %q, want it in the deploy's region", name, created.Location)
 	}
 	if created.IamConfiguration == nil || created.IamConfiguration.UniformBucketLevelAccess == nil || !created.IamConfiguration.UniformBucketLevelAccess.Enabled {
 		t.Error("the bucket is created with object ACLs live, and an ACL on one object would reach past the IAM the deploy grants")
@@ -168,6 +138,20 @@ func TestABucketAlreadyInPlaceIsMendedOnlyWhereItDrifted(t *testing.T) {
 	}
 }
 
+func TestABucketIsNotFoundInTheBucketOfADeclaredNameItStartsWith(t *testing.T) {
+	p, server := servingStorage(t)
+	longer := appBucketOf(t, namesOf(t, p), "prod", "uploads-x")
+	server.holding(&raw.Bucket{Name: longer})
+
+	binding, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil)
+	if err != nil {
+		t.Fatalf("ProvisionBucket() = %v", err)
+	}
+	if len(server.created) != 1 || binding.Properties[provider.PropertyBucket] == longer {
+		t.Errorf("bucket uploads bound %q, want a bucket of its own rather than the one bucket uploads-x stores into", binding.Properties[provider.PropertyBucket])
+	}
+}
+
 func TestABucketNameAnotherAccountHoldsIsRefusedWithWhatToRename(t *testing.T) {
 	p, server := servingStorage(t)
 	server.takenElsewhere = true
@@ -181,7 +165,7 @@ func TestABucketNameAnotherAccountHoldsIsRefusedWithWhatToRename(t *testing.T) {
 
 func TestRemovingABucketDeletesItsObjectsThenTheBucket(t *testing.T) {
 	p, server := servingStorage(t)
-	name := namesOf(t, p).AppBucket("shop", "prod", "uploads")
+	name := appBucketOf(t, namesOf(t, p), "prod", "uploads")
 	server.holding(&raw.Bucket{Name: name}, "avatars/one.png", s3store.SessionKeyPrefix+"sess_1")
 
 	binding := provider.Binding{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{provider.PropertyBucket: name}}
@@ -238,7 +222,7 @@ func TestABucketWhoseLifecycleRulesDriftedPlansAnUpdate(t *testing.T) {
 	if _, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil); err != nil {
 		t.Fatal(err)
 	}
-	server.drift(namesOf(t, p).AppBucket("shop", "prod", "uploads"), func(bucket *raw.Bucket) { bucket.Lifecycle = nil })
+	server.drift(server.created[0].Name, func(bucket *raw.Bucket) { bucket.Lifecycle = nil })
 
 	action, reason := planBucket(t, p, server, provider.BucketSpec{})
 	if action != provider.ActionUpdate || !strings.Contains(reason, "lifecycle rules change") {
@@ -251,7 +235,7 @@ func TestABucketWhosePublicAccessPreventionWasLiftedPlansAnUpdate(t *testing.T) 
 	if _, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil); err != nil {
 		t.Fatal(err)
 	}
-	server.drift(namesOf(t, p).AppBucket("shop", "prod", "uploads"), func(bucket *raw.Bucket) {
+	server.drift(server.created[0].Name, func(bucket *raw.Bucket) {
 		bucket.IamConfiguration = &raw.BucketIamConfiguration{
 			PublicAccessPrevention:   "inherited",
 			UniformBucketLevelAccess: &raw.BucketIamConfigurationUniformBucketLevelAccess{},
@@ -270,7 +254,7 @@ func TestABucketOnAnEmulatorThatKeepsNoAccessConfigurationPlansKeepAndIsNotRewri
 	if _, err := p.bucketHooks().Provision(context.Background(), aBucket(provider.BucketSpec{}), nil); err != nil {
 		t.Fatal(err)
 	}
-	server.drift(namesOf(t, p).AppBucket("shop", "prod", "uploads"), func(bucket *raw.Bucket) { bucket.IamConfiguration = nil })
+	server.drift(server.created[0].Name, func(bucket *raw.Bucket) { bucket.IamConfiguration = nil })
 
 	if action, reason := planBucket(t, p, server, provider.BucketSpec{}); action != provider.ActionKeep {
 		t.Errorf("PlanBucket() = %s %q, want %s: the emulator keeps no access configuration, so a rerun would plan, and make, an update forever", action, reason, provider.ActionKeep)

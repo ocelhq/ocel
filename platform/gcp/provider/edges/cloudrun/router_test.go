@@ -142,7 +142,7 @@ func refusingPins(pins *pinRecorder) func(error) {
 
 func reconciledFront(t *testing.T, pins *pinRecorder, tier environment.Tier) (*cloudrun.Edge, edge.StackState) {
 	t.Helper()
-	front := cloudrun.New(pins, &gateRecorder{})
+	front := cloudrun.New("ocel", pins, &gateRecorder{})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: tier}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
@@ -236,7 +236,7 @@ func TestTheCloudRunRouterBehavesAsEveryRouterMust(t *testing.T) {
 }
 
 func TestTheCloudRunRouterServesEachPreviewDeploymentOnItsOwnUrlAndSaysSo(t *testing.T) {
-	if !cloudrun.NewRouter(cloudrun.New(&pinRecorder{}, &gateRecorder{})).Facts().ServesPreviewDeployments {
+	if !cloudrun.NewRouter(cloudrun.New("ocel", &pinRecorder{}, &gateRecorder{})).Facts().ServesPreviewDeployments {
 		t.Error("Facts() says Cloud Run serves no preview deployment of its own, and each tagged revision answers on its own run.app url")
 	}
 }
@@ -331,7 +331,7 @@ func TestRemovingAPreviewDeploymentUntagsEveryServiceItsDeployTagged(t *testing.
 
 func fronting(t *testing.T, pins *pinRecorder) fake.PromotingStack {
 	t.Helper()
-	front := cloudrun.New(pins, &gateRecorder{})
+	front := cloudrun.New("ocel", pins, &gateRecorder{})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)

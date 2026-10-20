@@ -21,7 +21,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 		namespace string
 		stem      string
 	}{
-		{name: "the namespace a run names", namespace: "j-a1b2c3", stem: "j-a1b2c3"},
+		{name: "the namespace a run names", namespace: "j-a1b2c3-run", stem: "j-a1b2c3-run"},
 		{name: "the default where a run names none", namespace: "", stem: "ocel"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -49,11 +49,11 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			if got, want := names.StateBucket(environment.TierPreview), tc.stem+"-acme-prod-preview-state"; got != want {
 				t.Errorf("StateBucket() = %q, want %q", got, want)
 			}
-			if got, want := names.PassphraseSecret(environment.TierProduction), tc.stem+"-production-pulumi-passphrase"; got != want {
+			if got, want := names.PassphraseSecret(environment.TierProduction), tc.stem+"-prod-pulumi-passphrase"; got != want {
 				t.Errorf("PassphraseSecret() = %q, want %q", got, want)
 			}
 			for tier, want := range map[environment.Tier]string{
-				environment.TierProduction: tc.stem + "-production-cloudflare-edge-credentials",
+				environment.TierProduction: tc.stem + "-prod-cloudflare-edge-credentials",
 				environment.TierPreview:    tc.stem + "-preview-cloudflare-edge-credentials",
 			} {
 				if got := names.EdgeCredentialsSecret(tier, edge.Kind("cloudflare")); got != want {
@@ -61,23 +61,23 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				}
 			}
 			for tier, want := range map[environment.Tier]string{
-				environment.TierProduction: tc.stem + "-production-cloudflare-purge-seed",
+				environment.TierProduction: tc.stem + "-prod-cloudflare-purge-seed",
 				environment.TierPreview:    tc.stem + "-preview-cloudflare-purge-seed",
 			} {
 				if got := names.PurgeSeedSecret(tier, edge.Kind("cloudflare")); got != want {
 					t.Errorf("PurgeSeedSecret(%s) = %q, want %q", tier, got, want)
 				}
 			}
-			if got, want := names.Repository(environment.TierPreview), tc.stem+"-acme-prod-preview"; got != want {
+			if got, want := names.Repository(environment.TierPreview), tc.stem+"-preview-containers"; got != want {
 				t.Errorf("Repository() = %q, want %q", got, want)
 			}
-			if got, want := names.RepositoryPath("europe-west1", environment.TierPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
+			if got, want := names.RepositoryPath("europe-west1", environment.TierPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-preview-containers"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.ProjectWritableDatabasePrefix(environment.TierPreview), tc.stem+"-preview-w-"; got != want || !strings.HasPrefix(names.ProjectWritableDatabase(environment.TierPreview, "shop"), want) {
+			if got, want := names.ProjectWritableDatabasePrefix(environment.TierPreview), tc.stem+"-app-preview-w-"; got != want || !strings.HasPrefix(names.ProjectWritableDatabase(environment.TierPreview, "shop"), want) {
 				t.Errorf("ProjectWritableDatabasePrefix() = %q, want %q naming every preview project's database of runs and tag records", got, want)
 			}
-			if got, want := names.DelayQueue(environment.TierProduction), tc.stem+"-production-delays"; got != want {
+			if got, want := names.DelayQueue(environment.TierProduction), tc.stem+"-prod-delays"; got != want {
 				t.Errorf("DelayQueue() = %q, want %q", got, want)
 			}
 			if got := names.PushAccountEmail(environment.TierProduction); !strings.HasPrefix(got, names.PushAccount(environment.TierProduction)+"@acme-prod.iam.gserviceaccount.com") ||
@@ -121,12 +121,6 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			names:     "-production-state",
 		},
 		{
-			name:      "a namespace too long for the service accounts a tier and an app run as",
-			namespace: strings.Repeat("a", 20),
-			project:   "acme-prod",
-			names:     "service accounts this bootstrap names",
-		},
-		{
 			name:      "a namespace too short for a Firestore database",
 			namespace: "abc",
 			project:   "acme-prod",
@@ -154,11 +148,11 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 	}
 }
 
-func TestTheLongestNamespaceARuntimeAccountLeavesRoomForIsTaken(t *testing.T) {
-	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
+func TestANamespaceLongerThanAServiceAccountIsTakenByItsCompactedField(t *testing.T) {
+	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 30))
 
 	if _, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
-		t.Fatalf("NewProvider() under a 19 character namespace = %v, want it taken: Google gives a service account id 30 characters and the longest tier is 10", err)
+		t.Fatalf("NewProvider() under a 30 character namespace = %v, want it taken: every service account is named for the namespace's 12-character field", err)
 	}
 }
 
@@ -274,13 +268,13 @@ func TestEachTierRunsItsGatewaysAsAnAccountOfItsOwn(t *testing.T) {
 	}
 }
 
-func TestAnAppsAccountIsNamedForItsNamespaceAndAHashOfItsTierProjectEnvironmentAndApp(t *testing.T) {
+func TestAnAppsAccountIsNamedForItsNamespacesAppFenceAndAHashOfItsTierProjectEnvironmentAndApp(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
 	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	account := names.AppAccount(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web")
-	if !regexp.MustCompile(`^a{19}-[0-9a-f]{10}$`).MatchString(account) || !accountID.MatchString(account) {
-		t.Errorf("AppAccount() = %q, want the namespace and ten hex characters in the 30 IAM takes", account)
+	if !regexp.MustCompile(`^aaaaa-[0-9a-f]{6}-app-[0-9a-f]{10}$`).MatchString(account) || !accountID.MatchString(account) {
+		t.Errorf("AppAccount() = %q, want the namespace's app fence and ten hex characters in the 30 IAM takes", account)
 	}
 	if email := names.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web"); email != account+"@acme-prod.iam.gserviceaccount.com" {
 		t.Errorf("AppAccountEmail() = %q, want the account in the project's own domain", email)

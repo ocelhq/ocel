@@ -18,7 +18,7 @@ func NewCDNPurgeEnv(names names.Names, spec provider.StackSpec) map[string]strin
 	if !purgesCloudCDN(spec) {
 		return nil
 	}
-	return map[string]string{cdnURLMapEnvVar: alb.URLMapPath(names.Project(), spec.Ref.Tier)}
+	return map[string]string{cdnURLMapEnvVar: alb.URLMapPath(string(names.Namespace()), names.Project(), spec.Ref.Tier)}
 }
 
 func CDNPurgeGrants(c *gcloud.Clients, spec provider.StackSpec, member string) []grants.Grant {

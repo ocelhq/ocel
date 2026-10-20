@@ -158,8 +158,8 @@ func TestTheEnvSourceSyncBillsOnlyTheRequestsItsScheduleSends(t *testing.T) {
 		t.Fatalf("Shape() = %v", err)
 	}
 	const (
-		sync     = "project:shop/shared:production/google_cloud_run_v2_service:ocel-production-envsourcesync"
-		schedule = "project:shop/shared:production/google_cloud_scheduler_job:ocel-production-envsourcesync"
+		sync     = "project:shop/shared:production/google_cloud_run_v2_service:ocel-prod-env-sync"
+		schedule = "project:shop/shared:production/google_cloud_scheduler_job:ocel-prod-env-sync"
 	)
 	for _, profile := range []costv1.Profile{costv1.Profile_PROFILE_LIGHT, costv1.Profile_PROFILE_HEAVY} {
 		est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})

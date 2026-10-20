@@ -72,7 +72,7 @@ func partShape(read Survey, part string) *provider.PartShape {
 	if part != CloudflareOriginPart {
 		return nil
 	}
-	shape, err := alb.Shape(pricing.EdgeSite{Tier: read.Tier, Region: read.Region})
+	shape, err := alb.Shape(string(read.Names.Namespace()), pricing.EdgeSite{Tier: read.Tier, Region: read.Region})
 	if err != nil {
 		return nil
 	}

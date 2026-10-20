@@ -139,7 +139,11 @@ func (p Containers) Name(ctx context.Context, spec provider.StackSpec) ([]provid
 	if err != nil {
 		return nil, err
 	}
-	workers := release.WorkerContainers(release.NameWorkers(names, spec), spec.App.Image)
+	named, err := release.NameWorkers(names, spec)
+	if err != nil {
+		return nil, err
+	}
+	workers := release.WorkerContainers(named, spec.App.Image)
 	return append([]provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, workers...), nil
 }
 

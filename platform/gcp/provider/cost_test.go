@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -155,7 +154,7 @@ func TestShapeOfADeclaredBucketIsOneStorageBucketInTheEnvironmentThatDeclaresIt(
 			declared = append(declared, r)
 		}
 	}
-	if len(declared) != 1 || !strings.HasPrefix(declared[0].GetName(), "ocel--shop-prod-uploads-") {
+	if len(declared) != 1 || declared[0].GetName() != "ocel-app-shop-prod-uploads" {
 		t.Fatalf("the environment shapes buckets %v, want the one bucket uploads stores into", declared)
 	}
 	if properties := declared[0].GetProperties().AsMap(); properties["location"] != "europe-west1" || properties["storage_class"] != "STANDARD" {

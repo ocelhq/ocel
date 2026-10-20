@@ -30,51 +30,10 @@ const (
 
 var claimedRouting = []string{"hostRules", "pathMatchers"}
 
-type names struct {
-	Address        string
-	NotFound       string
-	AssetsBackend  string
-	AssetsReader   string
-	CertificateMap string
-	URLMap         string
-	Proxy          string
-	Rule           string
-	Trust          string
-	Policy         string
-	RedirectURLMap string
-	HTTPProxy      string
-	HTTPRule       string
-	GatePlugin     string
-	GateExtension  string
-}
-
 func dashed(parts ...string) string { return strings.Join(parts, "-") }
 
-func loadBalancerNames(tier environment.Tier, shielded bool) names {
-	stem := dashed("ocel", string(Kind), string(tier))
-	if shielded {
-		stem = dashed("ocel", string(Kind), shieldedNameSegment, string(tier))
-	}
-	return names{
-		Address:        stem + "-address",
-		NotFound:       stem + "-notfound",
-		AssetsBackend:  stem + "-assets",
-		AssetsReader:   stem + "-reader",
-		CertificateMap: stem + "-certs",
-		URLMap:         stem + "-routes",
-		Proxy:          stem + "-https",
-		Rule:           stem + "-forward",
-		Trust:          stem + "-trust",
-		Policy:         stem + "-mtls",
-		RedirectURLMap: stem + "-redirect",
-		HTTPProxy:      stem + "-http",
-		HTTPRule:       stem + "-forward-http",
-		GatePlugin:     stem + "-gate",
-		GateExtension:  stem + "-gate-edge",
-	}
-}
-
 type loadBalancerSpec struct {
+	Namespace string
 	Region    string
 	Names     names
 	Tier      environment.Tier
@@ -114,7 +73,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, projec
 	if base == "" {
 		return nil
 	}
-	entry := previewEntryName(base)
+	entry := previewEntryName(spec.Namespace, base)
 	_, err := certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
 		Name:         pulumi.String(entry),
 		Project:      pulumi.String(project),

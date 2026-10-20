@@ -142,7 +142,7 @@ func TestEachEnvironmentOfAnAppRunsAsAnAccountOfItsOwn(t *testing.T) {
 func TestAPreviewsAccountHoldsNothingOnAnotherPreviewsBucket(t *testing.T) {
 	t.Parallel()
 	p, c, _, buckets := servingAccountsAndBuckets(t)
-	sevens, eights := c.AppBucket("shop", "pr-7", "uploads"), c.AppBucket("shop", "pr-8", "uploads")
+	sevens, eights := appBucketOf(t, c.Names, "pr-7", "uploads"), appBucketOf(t, c.Names, "pr-8", "uploads")
 	existingBuckets(buckets, sevens, eights)
 	seven := functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{})
 	seven.App.Values.Bindings = []provider.Binding{{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{provider.PropertyBucket: sevens}}}
@@ -165,7 +165,7 @@ func TestAPreviewsAccountHoldsNothingOnAnotherPreviewsBucket(t *testing.T) {
 func TestADeployThatStopsBindingABucketOfAnotherEnvironmentTakesTheGrantOnItAway(t *testing.T) {
 	t.Parallel()
 	p, c, _, buckets := servingAccountsAndBuckets(t)
-	shared := c.AppBucket("shop", "production", "media")
+	shared := appBucketOf(t, c.Names, "production", "media")
 	existingBuckets(buckets, shared)
 	spec := functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{})
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingBucket, Name: "media", Properties: map[string]string{provider.PropertyBucket: shared}}}

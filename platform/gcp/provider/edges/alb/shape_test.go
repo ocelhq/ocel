@@ -51,22 +51,22 @@ func shapedCounts(shaped []pricing.Shaped) map[string]int {
 func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 	t.Parallel()
 
-	spec := loadBalancerSpec{Region: "europe-west1", Names: loadBalancerNames(environment.TierPreview, false),
+	spec := loadBalancerSpec{Namespace: "ocel", Region: "europe-west1", Names: loadBalancerNames("ocel", environment.TierPreview, false),
 		Assets: &tierAssets, Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
 	registered := declaredCounts(t, loadBalancerProgram(spec))
 	maps.Copy(registered, declaredCounts(t, gateProgram(gateSpec{Names: spec.Names, Main: newGateVersion("image", "config")})))
-	shaped := shapedCounts(ShapeLoadBalancer(environment.TierPreview, "preview.example.com"))
+	shaped := shapedCounts(ShapeLoadBalancer("ocel", environment.TierPreview, "preview.example.com"))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("the balancer and gate programs register %v, the shape lists %v", registered, shaped)
 	}
 
 	registered = declaredCounts(t, loadBalancerProgram(frontSpec()))
 	maps.Copy(registered, declaredCounts(t, gateProgram(gateSpec{Names: frontSpec().Names, Main: newGateVersion("image", "config")})))
-	shaped = shapedCounts(ShapeLoadBalancer(environment.TierProduction, ""))
+	shaped = shapedCounts(ShapeLoadBalancer("ocel", environment.TierProduction, ""))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("without a preview base the balancer program registers %v, the shape lists %v", registered, shaped)
 	}
-	for _, s := range ShapeLoadBalancer(environment.TierProduction, "") {
+	for _, s := range ShapeLoadBalancer("ocel", environment.TierProduction, "") {
 		if s.Type == tfGlobalForwardingRule && s.Properties["network_tier"] != premiumTier {
 			t.Errorf("forwarding rule = %v, want the premium tier the program asks for", s.Properties)
 		}
@@ -76,11 +76,11 @@ func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 func TestAPreviewTiersLoadBalancerCachesAndServesStaticFilesFromABackendBucketLikeProduction(t *testing.T) {
 	t.Parallel()
 
-	balancer := ShapeLoadBalancer(environment.TierPreview, "preview.example.com")
+	balancer := ShapeLoadBalancer("ocel", environment.TierPreview, "preview.example.com")
 	if shapedCounts(balancer)[tfBackendBucket] != 1 {
 		t.Errorf("the preview tier's balancer shape lists %v, want the assets backend bucket production has", shapedCounts(balancer))
 	}
-	for _, shaped := range ShapeHosts("shop", environment.TierPreview, []string{"pr-7.preview.example.com"}) {
+	for _, shaped := range ShapeHosts("ocel", "shop", environment.TierPreview, []string{"pr-7.preview.example.com"}) {
 		if shaped.Type == tfBackendService && shaped.Properties["enable_cdn"] != true {
 			t.Errorf("%s = %v, want Cloud CDN on: a preview is cached like production", shaped.Name, shaped.Properties)
 		}
@@ -91,15 +91,15 @@ func TestTheHostShapeMatchesTheBindingProgram(t *testing.T) {
 	t.Parallel()
 
 	hosts := map[string]Host{
-		"shop.example.com":  {Certificate: "cert", Service: "svc-a", Backend: backendName("shop", environment.TierProduction, "shop.example.com")},
-		"admin.example.com": {Certificate: "cert", Service: "svc-b", Backend: backendName("shop", environment.TierProduction, "admin.example.com")},
+		"shop.example.com":  {Certificate: "cert", Service: "svc-a", Backend: backendName("ocel", "shop", environment.TierProduction, "shop.example.com")},
+		"admin.example.com": {Certificate: "cert", Service: "svc-b", Backend: backendName("ocel", "shop", environment.TierProduction, "admin.example.com")},
 	}
 	registered := declaredCounts(t, binding(hosts))
-	shaped := shapedCounts(ShapeHosts("shop", environment.TierProduction, []string{"shop.example.com", "admin.example.com"}))
+	shaped := shapedCounts(ShapeHosts("ocel", "shop", environment.TierProduction, []string{"shop.example.com", "admin.example.com"}))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("the binding program registers %v, the shape lists %v", registered, shaped)
 	}
-	for _, s := range ShapeHosts("shop", environment.TierProduction, []string{"shop.example.com"}) {
+	for _, s := range ShapeHosts("ocel", "shop", environment.TierProduction, []string{"shop.example.com"}) {
 		if s.Type == tfBackendService && s.Properties["enable_cdn"] != true {
 			t.Errorf("a host's backend = %v, want the CDN the program enables", s.Properties)
 		}
@@ -110,8 +110,8 @@ func TestEveryTiersBalancerShapesTheGatePlugin(t *testing.T) {
 	t.Parallel()
 
 	shapes := map[environment.Tier]map[string]int{
-		environment.TierPreview:    shapedCounts(ShapeLoadBalancer(environment.TierPreview, "preview.example.com")),
-		environment.TierProduction: shapedCounts(ShapeLoadBalancer(environment.TierProduction, "")),
+		environment.TierPreview:    shapedCounts(ShapeLoadBalancer("ocel", environment.TierPreview, "preview.example.com")),
+		environment.TierProduction: shapedCounts(ShapeLoadBalancer("ocel", environment.TierProduction, "")),
 	}
 	for tier, shape := range shapes {
 		for _, typ := range []string{tfWasmPlugin, tfLBEdgeExtension} {

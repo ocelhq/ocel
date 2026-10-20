@@ -222,10 +222,10 @@ func (s *networkServer) installed() { s.installedWithout("") }
 func (s *networkServer) installedWithout(policy string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.networks["ocel-production"] = &compute.Network{Name: "ocel-production"}
-	s.subnets["ocel-production"] = &compute.Subnetwork{Name: "ocel-production", IpCidrRange: network.SubnetRange}
-	s.policies["ocel-production-memorystore"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.MemorystoreServiceClass}
-	s.policies["ocel-production-cloudsql"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.CloudSQLServiceClass}
+	s.networks["ocel-prod-network"] = &compute.Network{Name: "ocel-prod-network"}
+	s.subnets["ocel-prod-network"] = &compute.Subnetwork{Name: "ocel-prod-network", IpCidrRange: network.SubnetRange}
+	s.policies["ocel-prod-network-memorystore"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.MemorystoreServiceClass}
+	s.policies["ocel-prod-network-cloudsql"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.CloudSQLServiceClass}
 	delete(s.policies, policy)
-	s.iam["ocel-production"] = &compute.Policy{Bindings: []*compute.Binding{{Role: bootstrap.NetworkUserRole, Members: []string{serviceAgent}}}}
+	s.iam["ocel-prod-network"] = &compute.Policy{Bindings: []*compute.Binding{{Role: bootstrap.NetworkUserRole, Members: []string{serviceAgent}}}}
 }

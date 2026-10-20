@@ -79,9 +79,6 @@ func (p Connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	if err := names.ConnectorFits(); err != nil {
-		return provider.ConnectorTarget{}, err
-	}
 	fingerprint, err := target.Fingerprint("gcp", names.Project(), p.region, string(names.Namespace()))
 	if err != nil {
 		return provider.ConnectorTarget{}, err
@@ -112,9 +109,6 @@ func (p Connector) Install(ctx context.Context, install provider.ConnectorInstal
 	}
 	names, err := p.names(ctx)
 	if err != nil {
-		return provider.ConnectorAddress{}, err
-	}
-	if err := names.ConnectorFits(); err != nil {
 		return provider.ConnectorAddress{}, err
 	}
 	if len(install.Config) == 0 {

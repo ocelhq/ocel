@@ -69,7 +69,7 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 	if err != nil {
 		return err
 	}
-	record := originHostRecord{Slug: host.Slug, Service: host.Service, Tag: host.Tag, Revision: host.Revision, Backend: backendName(host.Slug, host.Tier, host.Hostname)}
+	record := originHostRecord{Slug: host.Slug, Service: host.Service, Tag: host.Tag, Revision: host.Revision, Backend: backendName(e.deps.Namespace, host.Slug, host.Tier, host.Hostname)}
 	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.originHostKey(host.Tier, host.Hostname))
 	if err != nil {
 		return fmt.Errorf("read whether %s is routed on the %s edge: %w", host.Hostname, Kind, err)
@@ -97,7 +97,7 @@ func (e *Edge) RouteOriginHost(ctx context.Context, host OriginHost) error {
 		return err
 	}
 	target := Target{Tier: host.Tier, Slug: host.Slug, Origin: host.Hostname}
-	if _, err := e.deps.Stacks.Up(ctx, target, originHostProgram(e.deps.Region, host, record), progress.Discard()); err != nil {
+	if _, err := e.deps.Stacks.Up(ctx, target, originHostProgram(e.deps.Namespace, e.deps.Region, host, record), progress.Discard()); err != nil {
 		return err
 	}
 	if err := e.deps.Routes.Route(ctx, balancer.URLMap, host.Hostname, record.Backend, nil); err != nil {
@@ -212,10 +212,10 @@ func (e *Edge) UnrouteOriginHost(ctx context.Context, tier environment.Tier, hos
 	return records.Forget(ctx, e.deps.KeyValues, e.originHostKey(tier, hostname))
 }
 
-func originHostProgram(region string, host OriginHost, record originHostRecord) Program {
+func originHostProgram(namespace, region string, host OriginHost, record originHostRecord) Program {
 	return func(ctx *pulumi.Context, project string) error {
 		return servingBackend(ctx, pulumi.String(project), region,
-			negName(host.Slug, host.Tier, host.Hostname),
+			negName(namespace, host.Slug, host.Tier, host.Hostname),
 			Host{Service: host.Service, Tag: host.Tag, Backend: record.Backend}, nil, nil)
 	}
 }

@@ -126,20 +126,20 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_service_account:ocel-345a57cc3f",
+      "id": "project:shop/shared:preview/google_service_account:ocel-preview-realtime",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_service_account",
-      "name": "ocel-345a57cc3f",
+      "name": "ocel-preview-realtime",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_artifact_registry_repository:ocel-acme-prod-preview",
+      "id": "project:shop/shared:preview/google_artifact_registry_repository:ocel-preview-containers",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_artifact_registry_repository",
-      "name": "ocel-acme-prod-preview",
+      "name": "ocel-preview-containers",
       "region": "europe-west1",
       "properties": {
         "format": "DOCKER",
@@ -156,11 +156,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_service_account:ocel-c971a2492c",
+      "id": "project:shop/shared:preview/google_service_account:ocel-preview-push",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_service_account",
-      "name": "ocel-c971a2492c",
+      "name": "ocel-preview-push",
       "region": "europe-west1",
       "properties": {}
     },
@@ -174,11 +174,11 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_service_account:ocel-bf6a3118ee",
+      "id": "project:shop/shared:preview/google_service_account:ocel-preview-env-sync",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_service_account",
-      "name": "ocel-bf6a3118ee",
+      "name": "ocel-preview-env-sync",
       "region": "europe-west1",
       "properties": {}
     },
@@ -205,20 +205,20 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_firestore_database:ocel-preview-v-8650dee75b",
+      "id": "project:shop/shared:preview/google_firestore_database:ocel-app-preview-v-8650dee75b",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_firestore_database",
-      "name": "ocel-preview-v-8650dee75b",
+      "name": "ocel-app-preview-v-8650dee75b",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_cloud_run_v2_service:ocel-preview-envsourcesync",
+      "id": "project:shop/shared:preview/google_cloud_run_v2_service:ocel-preview-env-sync",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_cloud_run_v2_service",
-      "name": "ocel-preview-envsourcesync",
+      "name": "ocel-preview-env-sync",
       "region": "europe-west1",
       "properties": {
         "billed_seconds_per_request": 2,
@@ -245,11 +245,11 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_cloud_scheduler_job:ocel-preview-envsourcesync",
+      "id": "project:shop/shared:preview/google_cloud_scheduler_job:ocel-preview-env-sync",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_cloud_scheduler_job",
-      "name": "ocel-preview-envsourcesync",
+      "name": "ocel-preview-env-sync",
       "region": "europe-west1",
       "properties": {
         "region": "europe-west1",
@@ -257,22 +257,22 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_compute_global_address:ocel-alb-preview-address",
+      "id": "project:shop/shared:preview/google_compute_global_address:ocel-preview-alb-address",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_compute_global_address",
-      "name": "ocel-alb-preview-address",
+      "name": "ocel-preview-alb-address",
       "region": "europe-west1",
       "properties": {
         "address_type": "EXTERNAL"
       }
     },
     {
-      "id": "project:shop/shared:preview/google_compute_backend_service:ocel-alb-preview-notfound",
+      "id": "project:shop/shared:preview/google_compute_backend_service:ocel-preview-alb-notfound",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_compute_backend_service",
-      "name": "ocel-alb-preview-notfound",
+      "name": "ocel-preview-alb-notfound",
       "region": "europe-west1",
       "properties": {
         "enable_cdn": false,
@@ -281,60 +281,60 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_compute_backend_bucket:ocel-alb-preview-assets",
+      "id": "project:shop/shared:preview/google_compute_backend_bucket:ocel-preview-alb-assets",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_compute_backend_bucket",
-      "name": "ocel-alb-preview-assets",
+      "name": "ocel-preview-alb-assets",
       "region": "europe-west1",
       "properties": {
         "enable_cdn": true
       }
     },
     {
-      "id": "project:shop/shared:preview/google_project_iam_member:ocel-alb-preview-reader",
+      "id": "project:shop/shared:preview/google_project_iam_member:ocel-preview-alb-reader",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_project_iam_member",
-      "name": "ocel-alb-preview-reader",
+      "name": "ocel-preview-alb-reader",
       "region": "europe-west1",
       "properties": {
         "role": "roles/storage.objectViewer"
       }
     },
     {
-      "id": "project:shop/shared:preview/google_certificate_manager_certificate_map:ocel-alb-preview-certs",
+      "id": "project:shop/shared:preview/google_certificate_manager_certificate_map:ocel-preview-alb-certs",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_certificate_manager_certificate_map",
-      "name": "ocel-alb-preview-certs",
+      "name": "ocel-preview-alb-certs",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_compute_url_map:ocel-alb-preview-routes",
+      "id": "project:shop/shared:preview/google_compute_url_map:ocel-preview-alb-routes",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_compute_url_map",
-      "name": "ocel-alb-preview-routes",
+      "name": "ocel-preview-alb-routes",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_compute_target_https_proxy:ocel-alb-preview-https",
+      "id": "project:shop/shared:preview/google_compute_target_https_proxy:ocel-preview-alb-https",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_compute_target_https_proxy",
-      "name": "ocel-alb-preview-https",
+      "name": "ocel-preview-alb-https",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_compute_global_forwarding_rule:ocel-alb-preview-forward",
+      "id": "project:shop/shared:preview/google_compute_global_forwarding_rule:ocel-preview-alb-forward",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_compute_global_forwarding_rule",
-      "name": "ocel-alb-preview-forward",
+      "name": "ocel-preview-alb-forward",
       "region": "europe-west1",
       "properties": {
         "load_balancing_scheme": "EXTERNAL_MANAGED",
@@ -343,40 +343,40 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_network_services_wasm_plugin:ocel-alb-preview-gate",
+      "id": "project:shop/shared:preview/google_network_services_wasm_plugin:ocel-preview-alb-gate",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_network_services_wasm_plugin",
-      "name": "ocel-alb-preview-gate",
+      "name": "ocel-preview-alb-gate",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_network_services_lb_edge_extension:ocel-alb-preview-gate-edge",
+      "id": "project:shop/shared:preview/google_network_services_lb_edge_extension:ocel-preview-alb-gate-edge",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_network_services_lb_edge_extension",
-      "name": "ocel-alb-preview-gate-edge",
+      "name": "ocel-preview-alb-gate-edge",
       "region": "europe-west1",
       "properties": {
         "load_balancing_scheme": "EXTERNAL_MANAGED"
       }
     },
     {
-      "id": "project:shop/shared:preview/google_certificate_manager_certificate_map_entry:ocel-alb-preview-preview-cert",
+      "id": "project:shop/shared:preview/google_certificate_manager_certificate_map_entry:ocel-preview-alb-wildcard-preview-e49379-cert",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_certificate_manager_certificate_map_entry",
-      "name": "ocel-alb-preview-preview-cert",
+      "name": "ocel-preview-alb-wildcard-preview-e49379-cert",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/environment:pr-42/app:web/google_cloud_run_v2_service:ocel-shop-pr-42-web-entry-461bda",
+      "id": "project:shop/environment:pr-42/app:web/google_cloud_run_v2_service:ocel-app-shop-pr-42-web-entry-dc8cc1",
       "scope": "project:shop/environment:pr-42/app:web",
       "vendor": "gcp",
       "type": "google_cloud_run_v2_service",
-      "name": "ocel-shop-pr-42-web-entry-461bda",
+      "name": "ocel-app-shop-pr-42-web-entry-dc8cc1",
       "region": "europe-west1",
       "properties": {
         "ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
@@ -399,31 +399,31 @@
       }
     },
     {
-      "id": "project:shop/environment:pr-42/app:web/google_certificate_manager_certificate_map_entry:ocel-alb-shop-preview-shop-example-com-cert",
+      "id": "project:shop/environment:pr-42/app:web/google_certificate_manager_certificate_map_entry:ocel-preview-alb-shop-shop-example-com-f7b335-cert",
       "scope": "project:shop/environment:pr-42/app:web",
       "vendor": "gcp",
       "type": "google_certificate_manager_certificate_map_entry",
-      "name": "ocel-alb-shop-preview-shop-example-com-cert",
+      "name": "ocel-preview-alb-shop-shop-example-com-f7b335-cert",
       "region": "europe-west1",
       "properties": {}
     },
     {
-      "id": "project:shop/environment:pr-42/app:web/google_compute_region_network_endpoint_group:ocel-alb-shop-preview-shop-example-com-neg",
+      "id": "project:shop/environment:pr-42/app:web/google_compute_region_network_endpoint_group:ocel-preview-alb-shop-shop-example-com-f7b335-neg",
       "scope": "project:shop/environment:pr-42/app:web",
       "vendor": "gcp",
       "type": "google_compute_region_network_endpoint_group",
-      "name": "ocel-alb-shop-preview-shop-example-com-neg",
+      "name": "ocel-preview-alb-shop-shop-example-com-f7b335-neg",
       "region": "europe-west1",
       "properties": {
         "network_endpoint_type": "SERVERLESS"
       }
     },
     {
-      "id": "project:shop/environment:pr-42/app:web/google_compute_backend_service:ocel-alb-shop-preview-shop-example-com",
+      "id": "project:shop/environment:pr-42/app:web/google_compute_backend_service:ocel-preview-alb-shop-shop-example-com-f7b335",
       "scope": "project:shop/environment:pr-42/app:web",
       "vendor": "gcp",
       "type": "google_compute_backend_service",
-      "name": "ocel-alb-shop-preview-shop-example-com",
+      "name": "ocel-preview-alb-shop-shop-example-com-f7b335",
       "region": "europe-west1",
       "properties": {
         "enable_cdn": true,
@@ -432,11 +432,11 @@
       }
     },
     {
-      "id": "project:shop/environment:pr-42/app:api/google_cloud_run_v2_service:ocel-shop-pr-42-api-3e2a72",
+      "id": "project:shop/environment:pr-42/app:api/google_cloud_run_v2_service:ocel-app-shop-pr-42-api-80767f",
       "scope": "project:shop/environment:pr-42/app:api",
       "vendor": "gcp",
       "type": "google_cloud_run_v2_service",
-      "name": "ocel-shop-pr-42-api-3e2a72",
+      "name": "ocel-app-shop-pr-42-api-80767f",
       "region": "europe-west1",
       "properties": {
         "ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
@@ -459,11 +459,11 @@
       }
     },
     {
-      "id": "project:shop/environment:pr-42/google_storage_bucket:ocel--shop-pr-42-uploads-9aeaf5ec",
+      "id": "project:shop/environment:pr-42/google_storage_bucket:ocel-app-shop-pr-42-uploads",
       "scope": "project:shop/environment:pr-42",
       "vendor": "gcp",
       "type": "google_storage_bucket",
-      "name": "ocel--shop-pr-42-uploads-9aeaf5ec",
+      "name": "ocel-app-shop-pr-42-uploads",
       "region": "europe-west1",
       "properties": {
         "location": "europe-west1",

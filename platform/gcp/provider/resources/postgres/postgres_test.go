@@ -114,15 +114,15 @@ func TestADatabaseIsOneCloudSQLInstanceReachedPrivatelyOverTheTiersNetwork(t *te
 	}
 	psc := ip.PscConfig
 	if psc == nil || !psc.PscEnabled || !slices.Equal(psc.AllowedConsumerProjects, []string{"acme-prod"}) ||
-		len(psc.PscAutoConnections) != 1 || psc.PscAutoConnections[0].ConsumerNetwork != "projects/acme-prod/global/networks/ocel-production" ||
+		len(psc.PscAutoConnections) != 1 || psc.PscAutoConnections[0].ConsumerNetwork != "projects/acme-prod/global/networks/ocel-prod-network" ||
 		psc.PscAutoConnections[0].ConsumerProject != "acme-prod" {
 		t.Errorf("created private service connect %s, want an endpoint made in the tier's network", googletest.JSON(t, psc))
 	}
 	if settings.UserLabels["ocel-postgres"] != "orders" || settings.UserLabels["ocel-tier"] != "production" || settings.UserLabels["ocel-environment"] != "prod" {
 		t.Errorf("created labels %v, want the tier, environment and database it serves", settings.UserLabels)
 	}
-	if !strings.HasPrefix(sent.Name, "ocel--shop-prod-orders-") {
-		t.Errorf("created instance %q, want it named for the namespace, project, environment and database", sent.Name)
+	if tag, named := strings.CutPrefix(sent.Name, "ocel-app-shop-prod-orders-"); !named || !naming.IsRandomTag(tag) {
+		t.Errorf("created instance %q, want it named under the app fence for the project, environment and database, with a random tag last", sent.Name)
 	}
 
 	instance := sent.Name
@@ -222,7 +222,7 @@ func TestADatabaseOnTheEmulatorIsBoundToTheAddressItsDataPlaneAnswersOn(t *testi
 func TestOnlyTheEmulatorBindsADatabaseToItsPrimaryAddress(t *testing.T) {
 	t.Parallel()
 
-	network := "projects/acme-prod/global/networks/ocel-production"
+	network := "projects/acme-prod/global/networks/ocel-prod-network"
 	instance := &sqladmin.DatabaseInstance{
 		IpAddresses: []*sqladmin.IpMapping{{Type: "PRIMARY", IpAddress: "34.1.2.3"}},
 		Settings: &sqladmin.Settings{IpConfiguration: &sqladmin.IpConfiguration{PscConfig: &sqladmin.PscConfig{
@@ -462,19 +462,5 @@ func TestADatabaseAskingForAnotherMajorVersionThanItRunsIsRefusedAtPlan(t *testi
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Errorf("plan() of version 17 over an instance running 16 = %v, want the %s refusal the provision would give", err, refusal.CodeInvalid)
-	}
-}
-
-func TestNoDatabaseOfAnotherNamespaceIsNamedUnderThisNamespacesPrefix(t *testing.T) {
-	t.Parallel()
-
-	prefix := names.New("ocel", "acme-prod").PostgresInstancePrefix()
-	for _, namespace := range []provider.Namespace{"ocel-dev", "ocel-shop", "ocelot"} {
-		if other := (names.New(namespace, "acme-prod")).PostgresInstance("shop", "prod", "orders"); strings.HasPrefix(other, prefix) {
-			t.Errorf("namespace %s names its instance %q, under namespace ocel's prefix %q, so ocel's deploy credential administers it", namespace, other, prefix)
-		}
-	}
-	if own := (names.New("ocel", "acme-prod")).PostgresInstance("dev", "prod", "orders"); !strings.HasPrefix(own, prefix) {
-		t.Errorf("PostgresInstance() = %q, want it under the namespace's prefix %q", own, prefix)
 	}
 }

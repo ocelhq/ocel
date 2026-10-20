@@ -107,7 +107,10 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 		}
 		for _, worker := range app.Workers {
-			service := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
+			service, err := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
+			if err != nil {
+				return nil, err
+			}
 			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(true, 0, run.RevisionMemory, run.IngressInternal))
 		}
 	}
@@ -127,7 +130,7 @@ func edgeShapes(kind edge.Kind, namespace string, site pricing.EdgeSite) ([]pric
 	if kind != alb.Kind && kind != cloudflare.Kind {
 		return nil, nil
 	}
-	balancer, err := alb.Shape(site)
+	balancer, err := alb.Shape(namespace, site)
 	if err != nil || kind == alb.Kind {
 		return []pricing.EdgeShape{balancer}, err
 	}

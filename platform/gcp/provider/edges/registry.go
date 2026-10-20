@@ -43,10 +43,13 @@ type Registry struct {
 
 var Supported = []edge.Kind{alb.Kind, cloudflare.Kind}
 
-func (e Registry) OpenCloudRun() *cloudrun.Edge { return cloudrun.New(e.Pins, e.Gates) }
+func (e Registry) OpenCloudRun() *cloudrun.Edge {
+	return cloudrun.New(string(e.Namespace), e.Pins, e.Gates)
+}
 
 func (e Registry) OpenALB() *alb.Edge {
 	return alb.New(alb.Deps{
+		Namespace: string(e.Namespace),
 		KeyValues: e.KeyValues,
 		Stacks:    e.Stacks,
 		Routes:    e.Routes,

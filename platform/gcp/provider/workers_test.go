@@ -67,15 +67,24 @@ func TestAWorkerIsNamedApartFromItsAppAndEveryOtherWorker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	media := named.WorkerService("shop", stackrecords.ProductionEnv, "web", "media")
-	ledger := named.WorkerService("shop", stackrecords.ProductionEnv, "web", "ledger")
+	media, err := named.WorkerService("shop", stackrecords.ProductionEnv, "web", "media")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := named.WorkerService("shop", stackrecords.ProductionEnv, "web", "ledger")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if media == app || media == ledger || !strings.Contains(media, "media") || len(media) > names.MaxServiceNameLength {
 		t.Errorf("WorkerService() = %q and %q beside the app's %q, want a service of each worker's own in %d characters", media, ledger, app, names.MaxServiceNameLength)
 	}
-	long := named.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 40))
-	longer := named.WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 41))
-	if len(long) > names.MaxServiceNameLength || long == longer || !names.CloudRunService.MatchString(long) {
-		t.Errorf("WorkerService() of workers too long to spell out = %q and %q, want each cut to %d characters and kept apart by its hash", long, longer, names.MaxServiceNameLength)
+}
+
+func TestAWorkerTooLongForACloudRunServiceIsRefusedRatherThanCut(t *testing.T) {
+	t.Parallel()
+
+	if long, err := names.New("ocel", "acme-prod").WorkerService("shop", stackrecords.ProductionEnv, "web", strings.Repeat("w", 40)); err == nil {
+		t.Errorf("WorkerService() = %q, want a refusal: a worker's name is never cut, and Cloud Run takes %d characters", long, names.MaxServiceNameLength)
 	}
 }
 
@@ -89,7 +98,7 @@ func TestATasksManifestPinsTheTiersQueueAndPublishesDelaysAsTheAppsOwnAccount(t 
 	if tasks.Environment != stackrecords.ProductionEnv || tasks.Topics["resize"].TTL != time.Hour {
 		t.Errorf("tasksManifest() = %+v, want the environment's own runs and the resize topic as deployed", tasks)
 	}
-	if tasks.DelayQueue != "projects/acme-prod/locations/europe-west1/queues/ocel-production-delays" ||
+	if tasks.DelayQueue != "projects/acme-prod/locations/europe-west1/queues/ocel-prod-delays" ||
 		tasks.Account != c.AppAccountEmail(environment.TierProduction, "shop", stackrecords.ProductionEnv, "web") || tasks.PublishURL != "https://pubsub.googleapis.com" {
 		t.Errorf("tasksManifest() = %+v, want the tier's delay queue, the app's own account and Pub/Sub's own url", tasks)
 	}

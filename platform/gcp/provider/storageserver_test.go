@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -52,6 +53,8 @@ func (s *storageServer) serve() http.HandlerFunc {
 		switch {
 		case r.Method == http.MethodPost && path == "b":
 			s.create(w, r)
+		case r.Method == http.MethodGet && path == "b":
+			s.listBuckets(w, r.URL.Query().Get("prefix"))
 		case len(parts) == 2 && parts[0] == "b":
 			s.bucket(w, r, parts[1])
 		case len(parts) == 3 && parts[2] == "iam":
@@ -160,6 +163,16 @@ func (s *storageServer) list(w http.ResponseWriter, bucket string) {
 	listed := &raw.Objects{Kind: "storage#objects"}
 	for _, name := range s.objects[bucket] {
 		listed.Items = append(listed.Items, &raw.Object{Name: name, Bucket: bucket})
+	}
+	googletest.WriteBody(w, listed)
+}
+
+func (s *storageServer) listBuckets(w http.ResponseWriter, prefix string) {
+	listed := &raw.Buckets{Kind: "storage#buckets"}
+	for _, name := range slices.Sorted(maps.Keys(s.buckets)) {
+		if strings.HasPrefix(name, prefix) {
+			listed.Items = append(listed.Items, s.buckets[name])
+		}
 	}
 	googletest.WriteBody(w, listed)
 }

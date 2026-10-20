@@ -69,7 +69,7 @@ func TestTheShieldedLoadBalancerAnswersTheOriginWildcardOnItsOwnCertificate(t *t
 	if address != shieldedAddress {
 		t.Errorf("address = %q, want the shielded balancer's %q", address, shieldedAddress)
 	}
-	entry, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))[originEntryName(environment.TierProduction, originBase)]
+	entry, declared := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))[originEntryName("ocel", environment.TierProduction, originBase)]
 	if !declared {
 		t.Fatal("the shielded program enters no certificate for the origin wildcard")
 	}
@@ -180,7 +180,7 @@ func TestEveryRaiseOfTheShieldedLoadBalancerKeepsTheOriginWildcard(t *testing.T)
 	if _, err := shielded.trustClaim(ctx, environment.TierProduction, "shop.example.org", []string{otherZonePull}); err != nil {
 		t.Fatal(err)
 	}
-	if _, kept := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))[originEntryName(environment.TierProduction, originBase)]; !kept {
+	if _, kept := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))[originEntryName("ocel", environment.TierProduction, originBase)]; !kept {
 		t.Error("a raise for another hostname's trust dropped the origin wildcard's certificate map entry")
 	}
 }
@@ -251,7 +251,7 @@ func TestADestroyOfTheOriginWildcardThatFailedToRaiseTheLoadBalancerFinishesOnTh
 		t.Fatalf("the second destroy = %v", err)
 	}
 
-	if _, left := w.declarations(stack)[originEntryName(environment.TierProduction, originBase)]; left {
+	if _, left := w.declarations(stack)[originEntryName("ocel", environment.TierProduction, originBase)]; left {
 		t.Error("the shielded program still enters the origin wildcard after the retried destroy")
 	}
 	if _, record, err := shielded.readTrust(ctx, environment.TierProduction); err != nil {
@@ -273,7 +273,7 @@ func TestDestroyingTheOriginWildcardTakesItsEntryAndTrustOff(t *testing.T) {
 	if err := shielded.DestroyOriginWildcard(ctx, environment.TierProduction); err != nil {
 		t.Fatalf("DestroyOriginWildcard = %v", err)
 	}
-	if _, left := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))[originEntryName(environment.TierProduction, originBase)]; left {
+	if _, left := w.declarations(ShieldedLoadBalancerStack(environment.TierProduction))[originEntryName("ocel", environment.TierProduction, originBase)]; left {
 		t.Error("the shielded program still enters the origin wildcard")
 	}
 	if _, record, err := shielded.readTrust(ctx, environment.TierProduction); err != nil {

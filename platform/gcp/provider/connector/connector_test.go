@@ -72,12 +72,9 @@ func TestTheConnectorIsNamedForTheNamespaceAndFitsWhatIAMTakes(t *testing.T) {
 	if named.ConnectorAccountEmail() != "ocel-connector@example-project.iam.gserviceaccount.com" {
 		t.Errorf("ConnectorAccountEmail() = %q", named.ConnectorAccountEmail())
 	}
-	if err := named.ConnectorFits(); err != nil {
-		t.Errorf("connectorFits() = %v, want the default namespace to fit", err)
-	}
 	long := names.New("averylongnamespacethatgoeson", "example-project")
-	if err := long.ConnectorFits(); err == nil {
-		t.Errorf("connectorFits() on %q = nil, want it refused before IAM does", long.Connector())
+	if connector := long.Connector(); len(connector) > names.MaxAccountID || !strings.HasPrefix(connector, "avery-") {
+		t.Errorf("Connector() = %q, want the namespace compacted to its field so the account fits the %d IAM takes", connector, names.MaxAccountID)
 	}
 }
 
