@@ -118,7 +118,9 @@ func TestLiveAnAppPinnedTasksTriggersThemThroughItsBindingProxy(t *testing.T) {
 	endpoint := flociEndpoint(t)
 	manifest, store := pinned(t, endpoint)
 	deployment := deploymentOf(manifest)
-	topology := topics.Topology{Names: deployment.Names, Topics: deployment.Declared}
+	topology := topics.Topology{Names: deployment.Names, Topics: deployment.Declared, Tags: topics.TierTags{
+		Remove: func(context.Context, string, func(context.Context) (bool, error)) error { return nil },
+	}}
 	if err := topology.Ensure(context.Background(), deployment.Clients); err != nil {
 		t.Fatal(err)
 	}

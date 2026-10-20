@@ -79,14 +79,11 @@ func (b Engine) MakeTierDatabase(ctx context.Context, tier environment.Tier, id 
 }
 
 func (b Engine) TakeTierDatabase(ctx context.Context, tier environment.Tier, id string) error {
-	if b.Clients.TierTagged() {
+	if err := b.Clients.RemoveTierTagIfFound(ctx, tier, func(ctx context.Context) (gcloud.TaggedResource, bool, error) {
 		present, err := b.databasePresence(ctx, id)
-		if err != nil || !present.Present {
-			return err
-		}
-		if err := b.Clients.RemoveTierTag(ctx, tier, b.Clients.DatabaseTagged(id)); err != nil {
-			return err
-		}
+		return b.Clients.DatabaseTagged(id), present.Present, err
+	}); err != nil {
+		return err
 	}
 	return b.TakeDatabase(ctx, id)
 }

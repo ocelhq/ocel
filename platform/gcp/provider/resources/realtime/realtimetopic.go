@@ -8,6 +8,7 @@ import (
 	pubsub "google.golang.org/api/pubsub/v1"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
@@ -78,14 +79,16 @@ func (r realtimeEnvironment) removeTopic(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = googleretry.Attempted(ctx, service.Projects.Topics.Get(r.topic()).Context(ctx).Do)
-	if googleretry.AnsweredCode(err) == http.StatusNotFound {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read the realtime topic %s: %w", r.topic(), err)
-	}
-	if err := r.clients.RemoveTierTag(ctx, r.ref.Tier, r.clients.PubSubTagged(r.topic())); err != nil {
+	if err := r.clients.RemoveTierTagIfFound(ctx, r.ref.Tier, func(ctx context.Context) (gcloud.TaggedResource, bool, error) {
+		_, err := googleretry.Attempted(ctx, service.Projects.Topics.Get(r.topic()).Context(ctx).Do)
+		if googleretry.AnsweredCode(err) == http.StatusNotFound {
+			return gcloud.TaggedResource{}, false, nil
+		}
+		if err != nil {
+			return gcloud.TaggedResource{}, false, fmt.Errorf("read the realtime topic %s: %w", r.topic(), err)
+		}
+		return r.clients.PubSubTagged(r.topic()), true, nil
+	}); err != nil {
 		return err
 	}
 	_, err = googleretry.Attempted(ctx, service.Projects.Topics.Delete(r.topic()).Context(ctx).Do)

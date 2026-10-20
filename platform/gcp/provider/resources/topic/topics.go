@@ -82,8 +82,11 @@ func topologyOf(c *gcloud.Clients, ref provider.StackRef, declared map[string]*p
 func TierTagsOf(c *gcloud.Clients, tier environment.Tier) topics.TierTags {
 	return topics.TierTags{
 		Inline: c.InlineTierTags(tier),
-		Remove: func(ctx context.Context, path string) error {
-			return c.RemoveTierTag(ctx, tier, c.PubSubTagged(path))
+		Remove: func(ctx context.Context, path string, exists func(context.Context) (bool, error)) error {
+			return c.RemoveTierTagIfFound(ctx, tier, func(ctx context.Context) (gcloud.TaggedResource, bool, error) {
+				found, err := exists(ctx)
+				return c.PubSubTagged(path), found, err
+			})
 		},
 	}
 }

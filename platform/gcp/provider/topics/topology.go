@@ -46,21 +46,20 @@ type Subscriptions struct {
 
 type TierTags struct {
 	Inline map[string]string
-	Remove func(ctx context.Context, path string) error
+	Remove func(ctx context.Context, path string, exists func(context.Context) (bool, error)) error
 }
 
-func (t TierTags) removeFrom(ctx context.Context, path string, read func() error) error {
-	if t.Remove == nil {
-		return nil
+func existing(path string, read func() error) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		err := googleretry.Done(ctx, read)
+		if isAnswered(err, http.StatusNotFound) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("read Pub/Sub %s: %w", path, err)
+		}
+		return true, nil
 	}
-	err := googleretry.Done(ctx, read)
-	if isAnswered(err, http.StatusNotFound) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read Pub/Sub %s: %w", path, err)
-	}
-	return t.Remove(ctx, path)
 }
 
 func PushPath(topic, consumer string) string {
@@ -246,10 +245,10 @@ func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, t
 		if err != nil {
 			return err
 		}
-		if err := t.Tags.removeFrom(ctx, subscription, func() error {
+		if err := t.Tags.Remove(ctx, subscription, existing(subscription, func() error {
 			_, err := service.Projects.Subscriptions.Get(subscription).Context(ctx).Do()
 			return err
-		}); err != nil {
+		})); err != nil {
 			return err
 		}
 		if err := deleteIgnoringMissing(ctx, "subscription "+subscription, func() error {
@@ -389,10 +388,10 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 		if err != nil {
 			return err
 		}
-		if err := t.Tags.removeFrom(ctx, topic, func() error {
+		if err := t.Tags.Remove(ctx, topic, existing(topic, func() error {
 			_, err := service.Projects.Topics.Get(topic).Context(ctx).Do()
 			return err
-		}); err != nil {
+		})); err != nil {
 			return err
 		}
 		if err := deleteIgnoringMissing(ctx, "topic "+topic, func() error {
