@@ -295,7 +295,7 @@ func stateBucketOf(read Survey) Resource {
 }
 
 func databaseOf(read Survey) Resource {
-	return Resource{Kind: KindDatabase, Name: read.Names.Database()}
+	return Resource{Kind: KindDatabase, Name: read.Names.RecordsDatabase(read.Tier)}
 }
 
 func tierTagOf() Resource {

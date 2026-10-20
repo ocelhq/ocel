@@ -25,7 +25,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	s3store "github.com/ocelhq/ocel/platform/s3"
@@ -87,11 +86,6 @@ func NewProvider(options Options) (*Provider, error) {
 		return nil, err
 	}
 	options.Project = namedProject(options.Project)
-	if options.Project != "" {
-		if err := (names.New(namespace, options.Project)).Fit(); err != nil {
-			return nil, err
-		}
-	}
 	return &Provider{
 		options:     options,
 		tokens:      gcloud.ApplicationDefault{},

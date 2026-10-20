@@ -32,7 +32,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			for what, got := range map[string]string{
 				"edge bucket":       names.TierBucket(environment.TierProduction, naming.StorageEdge, "k3x9q2"),
 				"state bucket":      names.TierBucket(environment.TierPreview, naming.StorageState, "k3x9q2"),
-				"record database":   names.Database(),
+				"record database":   names.RecordsDatabase(environment.TierProduction),
 				"key ring":          names.KeyRing(),
 				"passphrase secret": names.PassphraseSecret(environment.TierProduction),
 				"image repository":  names.Repository(environment.TierProduction),
@@ -85,8 +85,11 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				names.PushAccount(environment.TierProduction) == names.PushAccount(environment.TierPreview) || len(names.PushAccount(environment.TierProduction)) > 30 {
 				t.Errorf("PushAccount() = %q (%q), want an account of the tier's own, in 30 characters", names.PushAccount(environment.TierProduction), got)
 			}
-			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
-				t.Errorf("Database() = %q and KeyRing() = %q, want both %q", names.Database(), names.KeyRing(), tc.stem)
+			if got, want := names.RecordsDatabase(environment.TierPreview), tc.stem+"-preview-records"; got != want {
+				t.Errorf("RecordsDatabase(preview) = %q, want %q", got, want)
+			}
+			if names.KeyRing() != tc.stem {
+				t.Errorf("KeyRing() = %q, want %q", names.KeyRing(), tc.stem)
 			}
 		})
 	}
@@ -114,18 +117,6 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			namespace: "Not A Namespace",
 			project:   "acme-prod",
 			names:     provider.NamespaceEnvVar,
-		},
-		{
-			name:      "a namespace too short for a Firestore database",
-			namespace: "abc",
-			project:   "acme-prod",
-			names:     "Firestore",
-		},
-		{
-			name:      "a namespace that reads as a UUID",
-			namespace: "ab2c3d45-6789-4abc-8def-0123456789ab",
-			project:   "acme-prod",
-			names:     "Firestore",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

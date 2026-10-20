@@ -66,7 +66,7 @@ func TestLiveAProjectsRunsAreKeptInItsOwnWritableDatabaseApartFromTheNamespaceRe
 	for database, want := range map[string]bool{
 		ports.ProjectWritableDatabase(clients.Namespace, scope.Tier, scope.Slug): true,
 		ports.ProjectWritableDatabase(clients.Namespace, scope.Tier, "blog"):     false,
-		clients.Database(): false,
+		clients.RecordsDatabase(scope.Tier):                                      false,
 	} {
 		client, err := firestore.NewClientWithDatabase(ctx, clients.Project, database, ports.EmulatorGRPC(clients.Endpoint)...)
 		if err != nil {

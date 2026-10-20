@@ -325,7 +325,7 @@ func (p Connector) bindConnectorProject(ctx context.Context, granting bool) erro
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
 	if err := gcloud.BindProjectRole(ctx, clients, member, connectorRecordsRole, variables.RecordsCondition(clients, environment.TierProduction, environment.TierPreview), granting); err != nil {
-		return fmt.Errorf("let %s read and write the %s database's records and every project's: %w", member, ports.Database(clients.Namespace()), err)
+		return fmt.Errorf("let %s read and write both tiers' records and every project's: %w", member, err)
 	}
 	return nil
 }

@@ -29,9 +29,6 @@ func longestNames() names.Names {
 func TestTheSyncAccountFitsALongNamespaceByItsCompactedField(t *testing.T) {
 	t.Parallel()
 	named := longestNames()
-	if err := named.Fit(); err != nil {
-		t.Fatalf("fit() = %v", err)
-	}
 	accountID := regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])$`)
 	for _, tier := range googletest.BothTiers {
 		account := named.EnvSourceSyncAccount(tier)
@@ -600,7 +597,7 @@ func TestRemovingATierTakesEveryItemItProvisionsAndEndsOnTheStampThenTheDatabase
 	if at(naming.StorageEdge) > at(naming.StorageState) || at(naming.StorageCache) > at(naming.StorageState) {
 		t.Errorf("removal runs %v, want the edge and cache buckets before the state bucket with the stamp", order)
 	}
-	stamp, database := (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.TierBucketStem(tier, naming.StorageState)}).ID(), (bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.Database()}).ID()
+	stamp, database := (bootstrap.Resource{Kind: bootstrap.KindBucket, Name: names.TierBucketStem(tier, naming.StorageState)}).ID(), (bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.RecordsDatabase(tier)}).ID()
 	if !slices.Equal(order[len(order)-2:], []string{stamp, database}) {
 		t.Errorf("removal ends on %v, want the bucket with the stamp and then the database the tier's bucket names are recorded in: "+
 			"a removal stopped part way reads as unfinished while the stamp exists, and finds every bucket left while the database does", order[len(order)-2:])

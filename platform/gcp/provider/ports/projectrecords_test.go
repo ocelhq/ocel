@@ -34,8 +34,8 @@ func TestAProjectsValuesAreKeptInADatabaseOfTheProjectsOwn(t *testing.T) {
 	if databaseOf(t, store, shop) == databaseOf(t, store, blog) {
 		t.Errorf("shop and blog keep their values in one database, and a condition can grant an app no less than a whole database")
 	}
-	if got := databaseOf(t, store, stacks); got != Database("ocel") {
-		t.Errorf("shop's stack records are kept in %q, want the namespace's own %q", got, Database("ocel"))
+	if got, want := databaseOf(t, store, stacks), RecordsDatabase("ocel", environment.TierPreview); got != want {
+		t.Errorf("shop's stack records are kept in %q, want the preview tier's own %q", got, want)
 	}
 }
 

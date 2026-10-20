@@ -55,8 +55,8 @@ func StackResources(names names.Names, tier environment.Tier, emulated bool) []R
 			Note: "the tag every resource of a tier carries its tier's value of, production or preview, which fences a tier's deploy credential to that tier's resources",
 		},
 		{
-			Kind: KindDatabase, Name: names.Database(), Shared: true, Slow: true,
-			Note: "every record this project stores, and both tiers keep theirs in it",
+			Kind: KindDatabase, Name: names.RecordsDatabase(tier), Slow: true,
+			Note: "every record this tier stores, carrying the tier's tag so no other tier's credential reaches it",
 		},
 		{
 			Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageState), Class: naming.StorageState,

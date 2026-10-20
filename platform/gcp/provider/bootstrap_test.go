@@ -318,7 +318,7 @@ func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
 	}
 }
 
-func TestRemovingATierKeepsTheDatabaseItsSiblingShares(t *testing.T) {
+func TestRemovingATierDeletesItsOwnRecordsDatabaseWhileItsSiblingIsInstalled(t *testing.T) {
 	t.Parallel()
 
 	names := names.New("ocel", "acme-prod")
@@ -334,8 +334,11 @@ func TestRemovingATierKeepsTheDatabaseItsSiblingShares(t *testing.T) {
 			actions[taking.Resource.Name] = taking.Action
 		}
 	}
-	if got := actions[names.Database()]; got != provider.ActionKeep {
-		t.Errorf("removing a tier whose sibling is installed does %s to the shared database, want keep", got)
+	if got := actions[names.RecordsDatabase(tier)]; got != provider.ActionDisableThenDelete {
+		t.Errorf("removing a tier whose sibling is installed does %s to the tier's records database, want it deleted: the sibling keeps its records in its own", got)
+	}
+	if _, named := actions[names.RecordsDatabase(tier.Sibling())]; named {
+		t.Errorf("removing the %s tier names the %s tier's records database", tier, tier.Sibling())
 	}
 }
 

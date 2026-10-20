@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"google.golang.org/api/iam/v1"
 )
@@ -30,7 +29,6 @@ const (
 const (
 	maxBucketName        = 63
 	MaxAccountID         = 30
-	minDatabaseID        = 4
 	MaxServiceNameLength = 49
 	maxTaggedLabelLength = 46
 	revisionTagLength    = 9
@@ -39,8 +37,6 @@ const (
 	serviceHashLength       = 6
 	AccountHashDigits       = 10
 )
-
-var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
 
 type Names struct {
 	namespace provider.Namespace
@@ -261,7 +257,9 @@ func (n Names) ConnectorAccountEmail() string {
 
 func (n Names) ConnectorKeySecret() string { return n.Connector() + "-key" }
 
-func (n Names) Database() string { return ports.Database(n.namespace) }
+func (n Names) RecordsDatabase(tier environment.Tier) string {
+	return ports.RecordsDatabase(n.namespace, tier)
+}
 
 func (n Names) KeyRing() string { return ports.KeyRing(n.namespace) }
 
@@ -296,22 +294,6 @@ func (n Names) EdgeCredentialsSecret(tier environment.Tier, kind edge.Kind) stri
 
 func (n Names) PurgeSeedSecret(tier environment.Tier, kind edge.Kind) string {
 	return n.ocelName(tier, string(kind), purgeSeedWord)
-}
-
-func (n Names) Fit() error {
-	if len(n.Database()) < minDatabaseID {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"the %q Firestore database this bootstrap names is %d characters and Firestore takes at least %d.\n"+
-				"Name a longer namespace in %s",
-			n.Database(), len(n.Database()), minDatabaseID, provider.NamespaceEnvVar)
-	}
-	if uuidLike.MatchString(n.Database()) {
-		return refusal.Refuse(refusal.CodeInvalid,
-			"the %q Firestore database this bootstrap names reads as a UUID, and a Firestore database id may not.\n"+
-				"Name a namespace in %s that does not",
-			n.Database(), provider.NamespaceEnvVar)
-	}
-	return nil
 }
 
 const (

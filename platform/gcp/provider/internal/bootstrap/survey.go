@@ -85,19 +85,13 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 		Mending:   map[string]string{},
 		Replacing: map[string]string{},
 	}
-	read.Buckets = naming.Buckets{}
-	sibling := naming.Buckets{}
-	database, err := b.databasePresence(ctx, read.Names.Database())
-	if err != nil {
+	var err error
+	if read.Buckets, err = b.recordedBuckets(ctx, tier); err != nil {
 		return Survey{}, err
 	}
-	if database.Present {
-		if read.Buckets, err = b.Clients.RecordedTierBuckets(ctx, tier); err != nil {
-			return Survey{}, err
-		}
-		if sibling, err = b.Clients.RecordedTierBuckets(ctx, tier.Sibling()); err != nil {
-			return Survey{}, err
-		}
+	sibling, err := b.recordedBuckets(ctx, tier.Sibling())
+	if err != nil {
+		return Survey{}, err
 	}
 	for _, item := range Resources(read.Names, tier, read.Emulated) {
 		found, err := b.PresenceOf(ctx, read, item)
@@ -129,6 +123,14 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 		return Survey{}, err
 	}
 	return read, nil
+}
+
+func (b Engine) recordedBuckets(ctx context.Context, tier environment.Tier) (naming.Buckets, error) {
+	database, err := b.databasePresence(ctx, b.Clients.RecordsDatabase(tier))
+	if err != nil || !database.Present {
+		return naming.Buckets{}, err
+	}
+	return b.Clients.RecordedTierBuckets(ctx, tier)
 }
 
 type stamped struct {

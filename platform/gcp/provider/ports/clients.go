@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -34,7 +36,11 @@ const (
 	credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"
 )
 
-func Database(namespace provider.Namespace) string { return string(namespace) }
+const recordsWord = "records"
+
+func RecordsDatabase(namespace provider.Namespace, tier environment.Tier) string {
+	return naming.OcelName(string(namespace), tier, recordsWord)
+}
 
 func KeyRing(namespace provider.Namespace) string { return string(namespace) }
 
@@ -56,7 +62,7 @@ type Clients struct {
 	Endpoint    string
 	TagEndpoint string
 
-	firestore     memo[*firestore.Client]
+	tierStores    sync.Map
 	projectStores sync.Map
 	runStores     sync.Map
 	tagStores     sync.Map
@@ -68,7 +74,9 @@ type Clients struct {
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }
 
-func (c *Clients) Database() string { return Database(c.Namespace) }
+func (c *Clients) RecordsDatabase(tier environment.Tier) string {
+	return RecordsDatabase(c.Namespace, tier)
+}
 
 func (c *Clients) KeyRing() string { return KeyRing(c.Namespace) }
 
@@ -105,10 +113,11 @@ func Unauthenticated() error {
 	return refusal.Refuse(refusal.CodeDenied, "%s", credentialHint)
 }
 
-func (c *Clients) Firestore() (*firestore.Client, error) {
-	return Opened(c, &c.firestore, "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(
-			context.Background(), c.Project, c.Database(), EmulatorGRPC(c.Endpoint)...)
+func (c *Clients) TierFirestore(tier environment.Tier) (*firestore.Client, error) {
+	database := c.RecordsDatabase(tier)
+	held, _ := c.tierStores.LoadOrStore(database, &memo[*firestore.Client]{})
+	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
+		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, EmulatorGRPC(c.Endpoint)...)
 	})
 }
 

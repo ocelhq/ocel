@@ -29,6 +29,7 @@ import (
 	"google.golang.org/api/serviceusage/v1"
 	sqladmin "google.golang.org/api/sqladmin/v1"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
@@ -286,6 +287,8 @@ func (c *Clients) Workload() *ports.Clients {
 	return workload
 }
 
-func (c *Clients) Firestore() (*firestore.Client, error) { return c.Workload().Firestore() }
+func (c *Clients) TierFirestore(tier environment.Tier) (*firestore.Client, error) {
+	return c.Workload().TierFirestore(tier)
+}
 
 func (c *Clients) KMS() (*kms.KeyManagementClient, error) { return c.Workload().KMS() }
