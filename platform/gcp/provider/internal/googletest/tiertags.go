@@ -108,7 +108,7 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	path := strings.TrimPrefix(r.URL.EscapedPath(), "/v3/")
 	switch {
-	case r.Method == http.MethodPost && path == "projects/"+Project+":testIamPermissions":
+	case r.Method == http.MethodPost && path == "/v1/projects/"+Project+":testIamPermissions":
 		asked := ReadBody[crm.TestIamPermissionsRequest](w, r)
 		if asked == nil {
 			return

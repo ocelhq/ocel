@@ -66,27 +66,21 @@ func (b Engine) readTierTagKey(ctx context.Context) (*crm.TagKey, error) {
 	if err == nil {
 		return key, nil
 	}
-	_, err = b.tagAbsent(ctx, service, err, b.Clients.TierTagKeyPath(), tagKeyReadPermission)
-	return nil, err
+	return nil, b.refuseUnreadableTag(ctx, err, b.Clients.TierTagKeyPath(), tagKeyReadPermission)
 }
 
-func (b Engine) tagAbsent(ctx context.Context, service *crm.Service, err error, path, permission string) (bool, error) {
+func (b Engine) refuseUnreadableTag(ctx context.Context, err error, path, permission string) error {
 	switch {
 	case gcloud.Absent(err):
-		return true, nil
+		return nil
 	case !gcloud.Forbidden(err):
-		return false, fmt.Errorf("read the %s tag: %w", path, err)
+		return fmt.Errorf("read the %s tag: %w", path, err)
 	}
-	project := "projects/" + b.Clients.Project()
-	answer, err := googleretry.Attempted(ctx, service.Projects.TestIamPermissions(project,
-		&crm.TestIamPermissionsRequest{Permissions: []string{permission}}).Context(ctx).Do)
-	if err != nil {
-		return false, fmt.Errorf("ask %s whether this credential may read its tags: %w", project, err)
+	held, err := b.heldPermissions(ctx, []string{permission})
+	if err != nil || slices.Contains(held, permission) {
+		return err
 	}
-	if slices.Contains(answer.Permissions, permission) {
-		return true, nil
-	}
-	return false, refusal.Refuse(refusal.CodeDenied,
+	return refusal.Refuse(refusal.CodeDenied,
 		"this credential lacks %s on project %s, and Google answers a tag it may not read as it answers a tag that does not exist, so whether %s exists is unknown.\n"+
 			"Granting roles/resourcemanager.tagAdmin, which a bootstrap credential holds, covers it",
 		permission, b.Clients.Project(), path)
@@ -104,13 +98,10 @@ func (b Engine) missingTierValues(ctx context.Context) ([]environment.Tier, erro
 		if err == nil {
 			continue
 		}
-		absent, err := b.tagAbsent(ctx, service, err, path, tagValueReadPermission)
-		if err != nil {
+		if err := b.refuseUnreadableTag(ctx, err, path, tagValueReadPermission); err != nil {
 			return nil, err
 		}
-		if absent {
-			missing = append(missing, tier)
-		}
+		missing = append(missing, tier)
 	}
 	return missing, nil
 }

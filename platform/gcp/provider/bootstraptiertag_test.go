@@ -54,7 +54,7 @@ func TestRemovingATierKeepsTheTierTagKeyEveryOtherTierAndNamespaceBindsTo(t *tes
 
 func tierTagEngine(t *testing.T, tags *googletest.TierTags) (bootstrap.Engine, bootstrap.Survey) {
 	t.Helper()
-	clients := tags.Tagged(googletest.Clients("http://127.0.0.1:1"))
+	clients := tags.Tagged(googletest.Clients(tags.URL))
 	return bootstrap.Engine{Clients: clients}, bootstrap.Survey{Tier: environment.TierProduction, Names: clients.Names, Held: map[string]bool{}, Mending: map[string]string{}}
 }
 
