@@ -173,7 +173,7 @@ func WriteEdgeCredentials(ctx context.Context, c *gcloud.Clients, tier environme
 	if err != nil {
 		return fmt.Errorf("marshal the %s edge's bootstrap credentials: %w", kind, err)
 	}
-	if err := c.EnsureSecret(ctx, service, name); err != nil {
+	if err := c.EnsureSecret(ctx, service, tier, name); err != nil {
 		return err
 	}
 	added, err := c.AddSecretVersion(ctx, service, name, payload)
@@ -192,7 +192,7 @@ func ensurePurgeSeed(ctx context.Context, c *gcloud.Clients, tier environment.Ti
 	if _, found, err := c.ReadSecretVersion(ctx, service, name, gcloud.FirstSecretVersion); err != nil || found {
 		return err
 	}
-	if err := c.EnsureSecret(ctx, service, name); err != nil {
+	if err := c.EnsureSecret(ctx, service, tier, name); err != nil {
 		return err
 	}
 	minted := make([]byte, purgeSeedLen)
@@ -268,7 +268,7 @@ func ForgetOffers(ctx context.Context, c *gcloud.Clients, store records.Store, t
 		return err
 	}
 	for _, name := range []string{c.EdgeCredentialsSecret(tier, kind), c.PurgeSeedSecret(tier, kind)} {
-		if err := c.DeleteSecret(ctx, service, name); err != nil {
+		if err := c.DeleteSecret(ctx, service, tier, name); err != nil {
 			return err
 		}
 	}

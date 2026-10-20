@@ -297,9 +297,13 @@ func databaseOf(read Survey) Resource {
 	return Resource{Kind: KindDatabase, Name: read.Names.Database()}
 }
 
+func tierTagOf() Resource {
+	return Resource{Kind: KindTierTag, Name: gcloud.TierTagKey, Shared: true}
+}
+
 func foremostItems(read Survey, items []Resource) []Resource {
-	foremost := make([]Resource, 0, 2)
-	for _, first := range []Resource{databaseOf(read), stateBucketOf(read)} {
+	foremost := make([]Resource, 0, 3)
+	for _, first := range []Resource{tierTagOf(), databaseOf(read), stateBucketOf(read)} {
 		if at := slices.IndexFunc(items, func(each Resource) bool { return each.ID() == first.ID() }); at >= 0 {
 			first = items[at]
 		}
@@ -313,6 +317,9 @@ func (b Engine) Provision(ctx context.Context, read Survey, target Resource, pro
 		if err := target.KindOps().mendOrMake(ctx, b, read, target); err != nil {
 			return err
 		}
+		if err := b.ensureTierTag(ctx, read, target); err != nil {
+			return err
+		}
 		gcloud.EnsureProgress(progress).Say("Mended " + target.phrase() + ": " + mends)
 		return nil
 	}
@@ -321,6 +328,9 @@ func (b Engine) Provision(ctx context.Context, read Survey, target Resource, pro
 		return nil
 	}
 	if err := target.KindOps().Make(ctx, b, read, target); err != nil {
+		return err
+	}
+	if err := b.ensureTierTag(ctx, read, target); err != nil {
 		return err
 	}
 	gcloud.EnsureProgress(progress).Say("Created " + target.phrase())
@@ -527,20 +537,32 @@ func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress prog
 		}
 	}
 	for _, taking := range Removals(read) {
-		if leave := taking.Resource.KindOps().leave; leave != nil {
-			if err := leave(ctx, b, read, taking); err != nil {
-				return err
-			}
+		taken, err := b.RemoveResource(ctx, read, taking)
+		if err != nil {
+			return err
 		}
-		if taking.Action != provider.ActionKeep {
-			var err error
-			if taking.DestroyAfter, err = taking.Resource.KindOps().Take(ctx, b, read, taking.Resource); err != nil {
-				return err
-			}
-		}
-		taking.Report(progress)
+		taken.Report(progress)
 	}
 	return nil
+}
+
+func (b Engine) RemoveResource(ctx context.Context, read Survey, taking Removal) (Removal, error) {
+	if leave := taking.Resource.KindOps().leave; leave != nil {
+		if err := leave(ctx, b, read, taking); err != nil {
+			return Removal{}, err
+		}
+	}
+	if taking.Action == provider.ActionKeep {
+		return taking, nil
+	}
+	if err := b.removeTierTag(ctx, read, taking.Resource); err != nil {
+		return Removal{}, err
+	}
+	var err error
+	if taking.DestroyAfter, err = taking.Resource.KindOps().Take(ctx, b, read, taking.Resource); err != nil {
+		return Removal{}, err
+	}
+	return taking, nil
 }
 
 func (r Removal) Report(progress progress.Log) {

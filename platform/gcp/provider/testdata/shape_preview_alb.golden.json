@@ -33,6 +33,15 @@
   ],
   "resources": [
     {
+      "id": "project:shop/shared:preview/google_tags_tag_key:ocel-tier",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_tags_tag_key",
+      "name": "ocel-tier",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/shared:preview/google_firestore_database:ocel",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

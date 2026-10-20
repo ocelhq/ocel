@@ -28,6 +28,16 @@ type Secrets struct {
 	added   int
 
 	WrittenFirstElsewhere map[string]string
+
+	TierTags      *TierTags
+	InlineTags    map[string]map[string]string
+	DeletedTagged []string
+}
+
+const ProjectNumber = "123456789"
+
+func SecretTagParent(name string) string {
+	return "//secretmanager.googleapis.com/projects/" + ProjectNumber + "/secrets/" + name
 }
 
 func NewSecrets() *Secrets { return &Secrets{Secrets: map[string]*storedSecret{}} }
@@ -51,7 +61,20 @@ func (s *Secrets) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"error":{"code":409,"message":"secret already exists"}}`))
 			return
 		}
+		asked := ReadBody[secretmanager.Secret](w, r)
+		if asked == nil {
+			return
+		}
 		s.Secrets[name] = &storedSecret{}
+		if len(asked.Tags) > 0 {
+			if s.InlineTags == nil {
+				s.InlineTags = map[string]map[string]string{}
+			}
+			s.InlineTags[name] = asked.Tags
+			if s.TierTags != nil {
+				s.TierTags.BindInline(SecretTagParent(name), asked.Tags)
+			}
+		}
 		WriteBody(w, &secretmanager.Secret{Name: name})
 	case r.Method == http.MethodGet && strings.HasSuffix(path, ":getIamPolicy"):
 		secret := s.Secrets[strings.TrimSuffix(path, ":getIamPolicy")]
@@ -131,10 +154,30 @@ func (s *Secrets) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		}
 		secret.versions[at-1].destroyed = true
 		WriteBody(w, &secretmanager.SecretVersion{Name: name + "/versions/" + version, State: "DESTROYED"})
+	case r.Method == http.MethodGet && strings.HasSuffix(path, "/versions/latest"):
+		secret := s.Secrets[strings.TrimSuffix(path, "/versions/latest")]
+		if secret == nil || len(secret.versions) == 0 {
+			secretAbsent(w)
+			return
+		}
+		state := "ENABLED"
+		if secret.versions[len(secret.versions)-1].destroyed {
+			state = "DESTROYED"
+		}
+		WriteBody(w, &secretmanager.SecretVersion{Name: path, State: state})
+	case r.Method == http.MethodGet && !strings.Contains(path, "/") && !strings.Contains(path, ":"):
+		if _, found := s.Secrets[path]; !found {
+			secretAbsent(w)
+			return
+		}
+		WriteBody(w, &secretmanager.Secret{Name: "projects/" + ProjectNumber + "/secrets/" + path})
 	case r.Method == http.MethodDelete:
 		if _, found := s.Secrets[path]; !found {
 			secretAbsent(w)
 			return
+		}
+		if s.TierTags != nil && len(s.TierTags.Bound(SecretTagParent(path))) > 0 {
+			s.DeletedTagged = append(s.DeletedTagged, path)
 		}
 		delete(s.Secrets, path)
 		WriteBody(w, struct{}{})

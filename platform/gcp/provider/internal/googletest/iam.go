@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -66,6 +67,25 @@ type IAM struct {
 	QueuesPurged []string
 
 	DeletedAccounts []string
+
+	TierTags      *TierTags
+	DeletedTagged []string
+}
+
+func UniqueIDOf(account string) string {
+	sum := uint64(1469598103934665603)
+	for _, b := range []byte(account) {
+		sum = (sum ^ uint64(b)) * 1099511628211
+	}
+	return "1" + strconv.FormatUint(sum, 10)
+}
+
+func AccountTagParent(account string) string {
+	return "//iam.googleapis.com/projects/" + Project + "/serviceAccounts/" + UniqueIDOf(account)
+}
+
+func accountIDIn(path string) string {
+	return strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")
 }
 
 type delayQueues struct {
@@ -256,13 +276,16 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 				_, _ = w.Write([]byte(`{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"quota exceeded"}}`))
 			case s.Accounts != nil:
 				s.Accounts[asked.AccountId] = true
-				_, _ = w.Write([]byte(`{"email":"` + asked.AccountId + `@acme-prod.iam.gserviceaccount.com"}`))
+				WriteBody(w, &iam.ServiceAccount{Email: asked.AccountId + "@acme-prod.iam.gserviceaccount.com", UniqueId: UniqueIDOf(asked.AccountId)})
 			default:
 				w.WriteHeader(http.StatusConflict)
 				_, _ = w.Write([]byte(`{"error":{"code":409,"message":"already exists"}}`))
 			}
 		case r.Method == http.MethodDelete && strings.Contains(path, "/serviceAccounts/"):
 			s.DeletedAccounts = append(s.DeletedAccounts, path)
+			if s.TierTags != nil && len(s.TierTags.Bound(AccountTagParent(accountIDIn(path)))) > 0 {
+				s.DeletedTagged = append(s.DeletedTagged, path)
+			}
 			_, _ = w.Write([]byte(`{}`))
 		case s.Accounts != nil && r.Method == http.MethodGet && strings.Contains(path, "/serviceAccounts/") &&
 			!s.Accounts[strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")]:
@@ -270,9 +293,9 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
 		case r.Method == http.MethodGet && s.accountDescriptions[path[strings.LastIndex(path, "/")+1:]] != "":
 			id := strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")
-			_ = json.NewEncoder(w).Encode(&iam.ServiceAccount{Email: id + "@acme-prod.iam.gserviceaccount.com", Description: s.accountDescriptions[path[strings.LastIndex(path, "/")+1:]]})
+			_ = json.NewEncoder(w).Encode(&iam.ServiceAccount{Email: id + "@acme-prod.iam.gserviceaccount.com", UniqueId: UniqueIDOf(id), Description: s.accountDescriptions[path[strings.LastIndex(path, "/")+1:]]})
 		case r.Method == http.MethodGet && strings.Contains(path, "/serviceAccounts/"):
-			_, _ = w.Write([]byte(`{"email":"ocel-production@acme-prod.iam.gserviceaccount.com"}`))
+			WriteBody(w, &iam.ServiceAccount{Email: accountIDIn(path) + "@acme-prod.iam.gserviceaccount.com", UniqueId: UniqueIDOf(accountIDIn(path))})
 		default:
 			t.Errorf("the bootstrap called %s %s, which nothing here serves", r.Method, path)
 			w.WriteHeader(http.StatusNotFound)

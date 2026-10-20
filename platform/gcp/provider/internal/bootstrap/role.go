@@ -51,6 +51,8 @@ var AppAccountsPermissions = []string{
 	"iam.serviceAccounts.get",
 	"iam.serviceAccounts.getIamPolicy",
 	"iam.serviceAccounts.setIamPolicy",
+	"iam.serviceAccounts.createTagBinding",
+	"iam.serviceAccounts.listTagBindings",
 }
 
 type customRole struct {
@@ -198,6 +200,9 @@ var projectRecordsPermissions = []string{
 	"datastore.schemas.update",
 	"cloudkms.cryptoKeys.create",
 	"cloudkms.cryptoKeys.get",
+	"datastore.databases.createTagBinding",
+	"datastore.databases.listTagBindings",
+	"datastore.databases.deleteTagBinding",
 }
 
 func NewProjectRecordsRole(names names.Names) customRole {

@@ -4,6 +4,10 @@
   "profile": "PROFILE_MODERATE",
   "resources": [
     {
+      "resource": "project:shop/shared:production/google_tags_tag_key:ocel-tier",
+      "status": "STATUS_FREE"
+    },
+    {
       "resource": "project:shop/shared:production/google_firestore_database:ocel",
       "status": "STATUS_PRICED",
       "components": [
@@ -599,7 +603,7 @@
   ],
   "coverage": {
     "supported": 16,
-    "free": 21,
+    "free": 22,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
@@ -622,7 +626,8 @@
       "google_project_iam_member",
       "google_secret_manager_secret",
       "google_service_account",
-      "google_storage_bucket"
+      "google_storage_bucket",
+      "google_tags_tag_key"
     ]
   },
   "notes": [

@@ -26,6 +26,7 @@ const (
 )
 
 var bucketKind = KindOps{
+	tagged:    bucketTagged,
 	noun:      "bucket",
 	terraform: cost.StorageBucketType,
 	properties: func(region string, target Resource) map[string]any {
