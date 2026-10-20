@@ -479,19 +479,19 @@ batches of one, a task's own `concurrency` is not enforced (its worker's is), an
 is not atomic. A deploy that changes a topic's `ordered` is refused while any of its consumers is
 kept, since Pub/Sub cannot change a subscription's ordering: rename the consumers to change it.
 
-A deploy also keeps the app's access to the tier's delay queue, and Google cannot narrow that
-grant by condition, so you give the deploy credential the role on exactly that queue, once per
-tier:
+A deploy also keeps the app's access to the tier's delay queue. Cloud Tasks queues take no tag and
+Google cannot narrow that grant by condition, so each tier's deploy credential holds the role on
+its own tier's queue alone:
 
 ```bash
 gcloud tasks queues add-iam-policy-binding ocel-prod-delays \
   --location=europe-west1 --project=my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
+  --member=serviceAccount:deploy-production@my-project.iam.gserviceaccount.com \
   --role=roles/cloudtasks.queueAdmin
 ```
 
-A project with a preview tier needs the same grant for `ocel-preview-delays`. A deploy that
-lacks it is refused, naming it.
+The preview tier's credential takes the same grant on `ocel-preview-delays`. A deploy that lacks
+it is refused, naming it.
 
 ## Realtime
 
@@ -531,185 +531,104 @@ gcloud services enable firestore.googleapis.com storage.googleapis.com \
 
 Apps sign their buckets' urls through `iamcredentials.googleapis.com`.
 
-`ocel bootstrap` makes a tag key, `<project>/ocel-tier`, with the values `production` and
-`preview`, and every resource ocel makes for a tier that Google lets carry a tag is bound to its
-tier's value: its Cloud Run services, service accounts, Pub/Sub topics and subscriptions,
-buckets, secrets, image repositories, Firestore databases and Cloud SQL instances. Every namespace
-and both tiers in the project share the key, and `ocel bootstrap destroy` keeps it: Google
-refuses to delete a value a resource is still bound to. The database both tiers keep their
-records in, the KMS key ring and the connector serve both tiers and carry no value. Memorystore
-instances, Cloud Tasks queues, Cloud Scheduler jobs and KMS keys take no tags.
+### The tier tag
 
-A deploy binds what it makes to its tier's value, which takes `roles/resourcemanager.tagUser`
-on that value alone: a credential holding both values may move a resource from one tier to the
-other. `ocel permissions deploy` prints the grant for each tier.
+A tier is a credential boundary: one project often holds both tiers, and the preview deploy
+credential must neither change nor read what production runs. `ocel bootstrap` makes a tag key,
+`<project>/ocel-tier`, with the values `production`, `preview` and `outside`. Every resource ocel
+makes for a tier that Google lets carry a tag is bound to its tier's value: its Cloud Run
+services, service accounts, Pub/Sub topics and subscriptions, buckets, secrets, image
+repositories, Cloud SQL instances and Firestore databases, the tier's records database among
+them. Each deploy credential holds its roles only on the resources carrying its own tier's value.
+Every namespace and both tiers in the project share the key, and `ocel bootstrap destroy` keeps
+it: Google refuses to delete a value a resource is still bound to.
+
+`ocel bootstrap` also binds `outside` to every service account of the project that ocel does not
+make: the default compute account, the accounts your bootstrap and deploy credentials run as,
+the connector's, and any other. No deploy credential reaches an account carrying `outside`. The
+plan names each account it binds, and removing a tier keeps the bindings. A deploy refuses to run
+while an account ocel does not make carries no `ocel-tier` tag, naming `ocel bootstrap <tier>`:
+a deploy may bind an untagged resource to its own tier, and an untagged account bound that way
+is one it could act as.
+
+### The bootstrap credential
+
+A bootstrap needs `roles/datastore.owner`, `roles/storage.admin`, `roles/cloudkms.admin`,
+`roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.admin`,
+`roles/artifactregistry.admin`, `roles/iam.serviceAccountAdmin`, `roles/iam.serviceAccountUser`,
+`roles/iam.roleAdmin`, `roles/resourcemanager.projectIamAdmin`, `roles/run.admin`,
+`roles/memorystore.admin`, `roles/pubsub.admin`, `roles/cloudscheduler.admin`,
+`roles/logging.viewer`, `roles/resourcemanager.tagAdmin` and `roles/resourcemanager.tagUser`, and,
+to take down the parts deploys added, `roles/compute.networkAdmin`, `roles/cloudsql.viewer` and
+`roles/cloudtasks.admin`. Anything missing is named back to you before anything is created.
+
+### The deploy credential
+
+Give each tier a deploy credential of its own. `ocel permissions deploy` prints the grants of
+each tier's credential for your project and namespace. For the preview tier they are:
+
+- `roles/run.admin`, `roles/pubsub.admin`, `roles/storage.admin`, `roles/secretmanager.admin`,
+  `roles/artifactregistry.admin`, `roles/datastore.owner`, `roles/cloudsql.admin`,
+  `roles/iam.serviceAccountAdmin` and `roles/iam.serviceAccountUser`, each on the condition
+  `resource.matchTag('my-project/ocel-tier', 'preview')` and nothing else.
+- `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the tier's key and its projects' keys, and
+  `roles/cloudkms.admin` on its projects' keys, by name: KMS keys take no tag.
+- `roles/memorystore.admin` and `roles/cloudscheduler.admin` on the project, since Memorystore
+  instances and Cloud Scheduler jobs take no tag, and `roles/logging.viewer`.
+- `roles/cloudtasks.queueAdmin` on the tier's delay queue, and
+  `roles/resourcemanager.tagUser` on the tier's tag value alone.
+- `roles/resourcemanager.projectIamAdmin`, on a condition that lets it grant and revoke
+  `roles/datastore.viewer`, `roles/datastore.user` and the custom role that clears Cloud CDN and
+  no others.
+- The `<namespace with _ for ->_parts` role `ocel bootstrap` makes, unconditioned: it creates the
+  tier's network, subnetwork and service connection policies, which carry no tag.
+- A custom role you make, unconditioned, holding what Google checks against the project itself:
+  creating each kind of resource a deploy makes, listing services, accounts, topics, databases,
+  instances and keys, and reading the project.
+- A custom role you make on the condition `!resource.hasTagKey('my-project/ocel-tier')`, holding
+  only `get`, `createTagBinding` and `listTagBindings` on each kind a deploy binds. A resource a
+  deploy has just made carries no tag until the deploy binds it, and this is what lets it.
+
+A condition holds a comma inside `matchTag`, so pass it from a file:
 
 ```bash
-TIER=production
-VALUE=$(gcloud resource-manager tags values describe my-project/ocel-tier/$TIER --format='value(name)')
-gcloud resource-manager tags values add-iam-policy-binding $VALUE \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/resourcemanager.tagUser
-```
-
-A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
-`roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
-`roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin`,
-`roles/memorystore.admin`, `roles/pubsub.admin`, `roles/cloudscheduler.admin` and
-`roles/logging.viewer`, and the custom roles `ocel bootstrap` keeps for it.
-
-The custom role lets a deploy create the service accounts its apps run as and set who may act as
-them, and nothing else: it holds `iam.serviceAccounts.create`, `.get`, `.getIamPolicy`,
-`.setIamPolicy`, `.createTagBinding` and `.listTagBindings`, and no permission to delete, disable,
-update or key an account.
-`ocel bootstrap` creates it as `projects/<project>/roles/<namespace with _ for ->_app_accounts`, so you
-grant it to the deploy credential after the first bootstrap:
-
-```bash
+cat > preview.yaml <<'EOF'
+title: ocel preview tier
+expression: resource.matchTag('my-project/ocel-tier', 'preview')
+EOF
 gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=projects/my-project/roles/ocel_app_accounts
+  --member=serviceAccount:deploy-preview@my-project.iam.gserviceaccount.com \
+  --role=roles/run.admin --condition-from-file=preview.yaml
 ```
 
-An app that reaches topics, tasks or workers may act as its own account, and so may Cloud Tasks,
-because a delayed message is published as the app that sent it.
-
-The first deploy that needs a part of the bootstrap adds it with one more custom role the
-bootstrap keeps. `<namespace with _ for ->_parts` creates the tier's network, subnetwork and
-service connection policies, uses that network and subnetwork as the policies need, creates the
-repository the load balancer's gate plugin is kept in, and reads whether a service is on. Compute
-Engine, Network Connectivity, Artifact Registry and Service Usage name no resource attribute a
-condition could hold those by, so it is granted unconditioned; it deletes nothing but that
-repository, which the last project behind the load balancer takes down with it.
-
-```bash
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=projects/my-project/roles/ocel_parts --condition=None
-```
-
-`<namespace with _ for ->_project_records` makes the Firestore databases each project keeps its
-values, runs and tag records in, with their indexes and time to live and their tier's tag, and the
-key its values are sealed under. It can also delete the database of a project's runs when the
-project is removed. It is
-granted on a condition naming the `<namespace>-app-prod-v-`, `<namespace>-app-prod-w-` and matching
-`preview` database prefixes and the `prod-p-` and `preview-p-` keys, so it reaches no other database
-or key.
-
-`ocel permissions deploy` prints each grant with its condition for your namespace.
-
-A bootstrap never deletes the role, because Google holds a deleted custom role's id for up to 44
-days and nothing could make it again in that time. A role deleted by hand is undeleted within
-Google's first 7 days, and one whose permissions drifted is put back.
+Google takes a resource's new tag into account for IAM a few seconds after it is bound, so a deploy
+that binds a resource it made waits, for up to about two minutes, until its tier's grants reach
+the resource.
 
 Each app runs as a service account of its own in each environment, which a deploy creates the first
-time the app ships to that environment and grants only what the app's runtime reads: read access to its project's values
-database and decrypt on its project's key (and the same for any project its values reference); for
-a Next app with an incremental cache, or an app that reaches topics, tasks or workers, write access
-to its project's own database of runs and tag records and no other; for an app that reaches topics,
-tasks or workers, the delay queue and its topics; and for a serverless Next app the delay queue. Granting those takes `roles/resourcemanager.projectIamAdmin`, and
-a deploy holds it under a condition that lets it grant and revoke the four roles an app needs and
-the custom role that clears Cloud CDN, and no others:
+time the app ships to that environment and grants only what the app's runtime reads. Its key and
+storage grants are on the resource: decrypt on its project's key and any key its values reference,
+its cache and static files on the tier's buckets, publishing on its topics, enqueuing on the delay
+queue. Firestore databases take no IAM policy of their own, so read access to its project's values
+database and write access to its project's database of runs and tag records are granted on the
+project, on a condition naming that database.
 
-```bash
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/resourcemanager.projectIamAdmin \
-  --condition="title=ocel app grants,expression=api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/datastore.viewer', 'roles/datastore.user', 'roles/cloudkms.cryptoKeyDecrypter', 'roles/storage.objectUser', 'roles/storage.objectViewer', 'projects/my-project/roles/ocel_cdn_purge'])"
-```
-
-A serverless app behind the load balancer that revalidates, a Next app or a Node app whose build declares the `revalidation` need, is also granted that role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map, so the grant covers every URL map of the project.
+A serverless app behind the load balancer that revalidates, a Next app or a Node app whose build declares the `revalidation` need, is also granted the cache purge role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map, so the grant covers every URL map of the project.
 
 Google limits how many service accounts a project may hold, and every app takes one per environment
 it runs in: a deploy that reaches the limit is refused, naming the quota. A deploy never deletes an
 account: `ocel bootstrap <tier>` deletes the account of each app an environment of that tier no
-longer runs, and the
-delay account an earlier version of ocel created for a tier bootstrapped before.
+longer runs.
 
-A deploy also keeps the realtime secrets of its namespace, and nothing else: grant
-`roles/secretmanager.editor` under a condition naming them. Every realtime secret's id
-starts with the namespace and `_realtime-`, and IAM names a secret by the project's number.
+A prune or a destroy untags the images no Cloud Run revision runs any more, and the repository
+deletes an untagged image a week later. A deploy that finds its image already pushed tags it again
+if a prune untagged it since.
 
-```bash
-NUMBER=$(gcloud projects describe my-project --format='value(projectNumber)')
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/secretmanager.editor \
-  --condition="title=ocel realtime secrets,expression=resource.name.startsWith('projects/$NUMBER/secrets/ocel_realtime-')"
-```
+What the tag does not fence yet:
 
-A deploy also keeps the gate secrets of its namespace, and sets who may read each: it
-grants an app's service account `roles/secretmanager.secretAccessor` on its project's gate secret
-alone. Grant `roles/secretmanager.admin` under a condition naming ids that start with the
-namespace and `_gate-`; it reaches no other secret.
-
-```bash
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/secretmanager.admin \
-  --condition="title=ocel gate secrets,expression=resource.name.startsWith('projects/$NUMBER/secrets/ocel_gate-')"
-```
-
-A prune or a destroy untags the images no Cloud Run revision runs any more, and the
-repository deletes an untagged image a week later. A deploy that finds its image already
-pushed tags it again if a prune untagged it since. Artifact Registry takes no condition on
-an image's name, so grant `roles/artifactregistry.repoAdmin` on the two repositories the
-bootstrap makes, one per tier, and nowhere else:
-
-```bash
-for tier in preview prod; do
-  gcloud artifacts repositories add-iam-policy-binding ocel-$tier-containers \
-    --location=europe-west1 --project=my-project \
-    --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-    --role=roles/artifactregistry.repoAdmin
-done
-```
-
-A deploy also creates and deletes the buckets an app declares, and lets the apps that bind them use
-their objects, which is a binding on each bucket and not a project role. Every name a deploy gives
-an app's resources starts with the namespace and `-app-`, so `ocel-app-` for the default namespace.
-No namespace may have `app` as a word between its dashes, so neither another namespace's names nor
-the tier's own buckets start that way: grant `roles/storage.admin` under a condition naming them.
-
-```bash
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/storage.admin \
-  --condition="title=ocel buckets,expression=resource.name.startsWith('projects/_/buckets/ocel-app-')"
-```
-
-Once a tier has its [private network](#private-network), a deploy also creates, changes and
-deletes the Cloud SQL instances its databases run on, named the same way: grant
-`roles/cloudsql.admin` under a condition naming them. Cloud SQL names an instance by the
-project's id:
-
-```bash
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=roles/cloudsql.admin \
-  --condition="title=ocel databases,expression=resource.name.startsWith('projects/my-project/instances/ocel-app-')"
-```
-
-Cloud Storage, Cloud SQL and Secret Manager check creating a bucket, an instance or a secret,
-listing instances and reading Cloud SQL's operations against the project, where no name
-condition admits them, and the editor role a deploy holds on its realtime secrets may not bind
-their tier's tag, so a deploy also needs a custom role holding those permissions alone.
-It may create a secret under any name, and writes and deletes only its own; it reads
-the settings of every instance in the project, and changes none of them:
-
-```bash
-gcloud iam roles create ocelDeployCreates --project my-project \
-  --permissions=storage.buckets.create,cloudsql.instances.create,cloudsql.instances.list,cloudsql.instances.get,secretmanager.secrets.create,secretmanager.secrets.createTagBinding,secretmanager.secrets.deleteTagBinding
-gcloud projects add-iam-policy-binding my-project \
-  --member=serviceAccount:deploy@my-project.iam.gserviceaccount.com \
-  --role=projects/my-project/roles/ocelDeployCreates --condition=None
-```
-
-A bootstrap needs those, with `roles/secretmanager.admin` unconditioned in place of the
-realtime grant, plus `roles/datastore.owner`, `roles/storage.admin`,
-`roles/cloudkms.admin`, `roles/artifactregistry.admin`,
-`roles/iam.serviceAccountAdmin`, `roles/iam.roleAdmin`, `roles/resourcemanager.projectIamAdmin`,
-`roles/cloudscheduler.admin`, `roles/resourcemanager.tagAdmin` and `roles/resourcemanager.tagUser`
-for the tier tag, and, to take down the parts deploys added, `roles/compute.networkAdmin`,
-`roles/cloudsql.viewer` and `roles/cloudtasks.admin`. Anything missing is named back to you before
-anything is created.
+- Lists are checked against the project, so a deploy credential can list the other tier's
+  services, accounts, topics, buckets, secrets and databases, and a Cloud Run service's listing
+  holds its environment variables.
+- Memorystore instances and Cloud Scheduler jobs take no tag, and the tier's network carries none.
+- A deploy credential may grant the Firestore roles above on the whole project, to any member.
+- `roles/logging.viewer` reads every log in the project.
