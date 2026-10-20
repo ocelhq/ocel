@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -116,30 +117,23 @@ func (c *Clients) EnsureLatestVersion(ctx context.Context, service *secretmanage
 	return strconv.Itoa(number), nil
 }
 
-func (c *Clients) DestroyUnpinnedVersions(ctx context.Context, service *secretmanager.Service, name string, pinned []string) error {
-	newest := 0
-	kept := map[int]bool{}
-	for _, version := range pinned {
-		number, err := strconv.Atoi(version)
-		if err != nil {
-			return fmt.Errorf("read version %q of the %s secret a revision pins: %w", version, name, err)
-		}
-		kept[number] = true
-		newest = max(newest, number)
+func (c *Clients) ListEnabledVersions(ctx context.Context, service *secretmanager.Service, name string) ([]string, error) {
+	enabled, err := c.enabledVersionsBefore(ctx, service, name, math.MaxInt)
+	if Absent(err) {
+		return nil, nil
 	}
-	older, err := c.enabledVersionsBefore(ctx, service, name, newest)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for _, version := range older {
-		if kept[version.number] {
-			continue
-		}
-		if err := c.destroyVersion(ctx, service, name, version.name); err != nil {
-			return err
-		}
+	versions := make([]string, 0, len(enabled))
+	for _, version := range enabled {
+		versions = append(versions, strconv.Itoa(version.number))
 	}
-	return nil
+	return versions, nil
+}
+
+func (c *Clients) DestroyVersion(ctx context.Context, service *secretmanager.Service, name, version string) error {
+	return c.destroyVersion(ctx, service, name, SecretPath(c.Project(), name)+"/versions/"+version)
 }
 
 func (c *Clients) DestroyVersionsBefore(ctx context.Context, service *secretmanager.Service, name string, kept *secretmanager.SecretVersion) error {

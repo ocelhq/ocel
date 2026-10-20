@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -172,9 +171,6 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 		MaxInstanceRequestConcurrency: int64(s.Concurrency),
 		ExecutionEnvironment:          s.Generation,
 		Labels:                        map[string]string{imageLabel: ImageLabelValue(s.Image)},
-	}
-	if s.Pinned.hasAnyOf(s.Env) {
-		template.Labels[names.ValueOwnerLabel] = s.Pinned.Owner
 	}
 	if s.Egress != nil {
 		template.VpcAccess = &run.GoogleCloudRunV2VpcAccess{

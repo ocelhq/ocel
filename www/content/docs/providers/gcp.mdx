@@ -93,9 +93,11 @@ service reads it from there: the variable references the secret and the version 
 and holds no value. Plain values stay in the service's configuration.
 
 A deploy adds a new version only when the value changed, and each release pins the version it
-shipped with, so rolling back serves the old value again. When a release is retired, its versions
-that no remaining revision pins are destroyed, and a secret no revision pins any more is deleted.
-Destroying the last release of the app in the environment deletes its secrets. Each secret carries
+shipped with, so rolling back serves the old value again. Once a release is destroyed, the next
+release retired in the environment destroys the versions that no remaining release pins. It keeps
+each secret's newest version, which a release still deploying may have just pinned. A secret whose
+key the app dropped stays until the app leaves the environment. Destroying the last release of the
+app in the environment deletes its secrets. Each secret carries
 its tier's `ocel-tier` tag, and only the app's own service account may read it.
 
 ## Next.js

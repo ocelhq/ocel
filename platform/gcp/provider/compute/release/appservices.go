@@ -122,8 +122,11 @@ func (p *Release) RemoveRevisions(ctx context.Context, ref provider.StackRef, go
 			kept = append(kept, at)
 		}
 	}
-	if len(kept) < len(going) {
-		p.pruneValues(ctx, ref, progress)
+	if len(kept) == len(going) {
+		return kept, nil
+	}
+	if err := p.destroyUnpinnedVersions(ctx, ref); err != nil {
+		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left the older versions of app %s's values in environment %s in place, and the next release that retires one tries again: %v", ref.Name.App, ref.Name.Env, err))
 	}
 	return kept, nil
 }

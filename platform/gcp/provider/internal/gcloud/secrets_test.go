@@ -130,20 +130,34 @@ func TestALatestVersionWrittenOverADestroyedOneIsANewVersion(t *testing.T) {
 	}
 }
 
-func TestOnlyVersionsOlderThanTheNewestPinnedAndPinnedByNothingAreDestroyed(t *testing.T) {
+func TestTheEnabledVersionsOfASecretAreListedNewestFirstWithoutTheDestroyedOnes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	clients, service, secrets, _ := taggedSecrets(t)
-	for _, payload := range []string{"one", "two", "three", "four", "five"} {
+	clients, service, _, _ := taggedSecrets(t)
+	for _, payload := range []string{"one", "two", "three"} {
 		if _, err := clients.EnsureLatestVersion(ctx, service, environment.TierPreview, valueSecret, []byte(payload)); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if err := clients.DestroyUnpinnedVersions(ctx, service, valueSecret, []string{"2", "4"}); err != nil {
+	if err := clients.DestroyVersion(ctx, service, valueSecret, "2"); err != nil {
 		t.Fatal(err)
 	}
-	if got := secrets.EnabledVersions(valueSecret); !slices.Equal(got, []int{2, 4, 5}) {
-		t.Errorf("enabled versions = %v, want 2 and 4, which revisions pin, and 5, which is newer than any pin and may be a release's still being made", got)
+	listed, err := clients.ListEnabledVersions(ctx, service, valueSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(listed, []string{"3", "1"}) {
+		t.Errorf("ListEnabledVersions() = %v, want 3 then 1, and never the destroyed 2", listed)
+	}
+}
+
+func TestASecretThatIsNotThereHasNoEnabledVersions(t *testing.T) {
+	t.Parallel()
+	clients, service, _, _ := taggedSecrets(t)
+
+	listed, err := clients.ListEnabledVersions(context.Background(), service, valueSecret)
+	if err != nil || len(listed) != 0 {
+		t.Errorf("ListEnabledVersions() = %v, %v, want none and no error", listed, err)
 	}
 }

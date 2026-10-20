@@ -155,28 +155,30 @@ func TestAnUnchangedSensitiveValueKeepsItsVersionAndAChangedOneIsPinnedAtANewOne
 	}
 }
 
-func TestRetiringAReleaseDestroysTheValueVersionsNoRemainingRevisionPins(t *testing.T) {
+func TestRetiringAReleaseDestroysTheValueVersionsOnlyADestroyedReleasePinned(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	released := newReleasedStacks(p)
 	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
-	first := withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": "one", "RETIRED_KEY": "gone"})
-	one := released.provision(t, first)
+	oldest := withValues(functionRelease("d0", image), map[string]string{"STRIPE_KEY": "zero"})
+	destroyed := withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": "one", "RETIRED_KEY": "gone"})
+	released.provision(t, oldest)
+	released.provision(t, destroyed)
 	active := released.provision(t, withValues(functionRelease("d2", image), map[string]string{"STRIPE_KEY": "two"}))
 	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
+	released.destroy(t, destroyed.Ref)
 
-	if _, err := p.RemoveFunctionRevisions(context.Background(), first.Ref, []provider.Function{one}, nil, &fake.Log{}); err != nil {
-		t.Fatalf("RemoveFunctionRevisions() = %v", err)
-	}
+	released.destroy(t, oldest.Ref)
 
-	stripe := valueSecretOf(t, p, first, "STRIPE_KEY")
-	if enabled := server.Secrets.EnabledVersions(stripe); !slices.Equal(enabled, []int{2}) {
-		t.Errorf("enabled versions of %s = %v, want only 2, which the active release pins", stripe, enabled)
+	stripe := valueSecretOf(t, p, destroyed, "STRIPE_KEY")
+	if enabled := server.Secrets.EnabledVersions(stripe); !slices.Equal(enabled, []int{1, 3}) {
+		t.Errorf("enabled versions of %s = %v, want 2 destroyed, which only destroyed release d1 pinned, and 1 and 3 kept for the releases still recorded", stripe, enabled)
 	}
-	if retired := valueSecretOf(t, p, first, "RETIRED_KEY"); server.Secrets.Has(retired) {
-		t.Errorf("%s is still there, and no remaining release declares or pins it", retired)
+	retired := valueSecretOf(t, p, destroyed, "RETIRED_KEY")
+	if enabled := server.Secrets.EnabledVersions(retired); !slices.Equal(enabled, []int{1}) {
+		t.Errorf("enabled versions of %s = %v, want its newest kept, which a release still deploying may have just pinned", retired, enabled)
 	}
 }
 
@@ -260,6 +262,21 @@ func valueSecretsRecordOf(t *testing.T, p *Provider, spec provider.StackSpec) re
 	return records.Partition{Tier: spec.Ref.Tier, Root: stackrecords.RootBootstrap}.Key("appvaluesecrets", account)
 }
 
+func pinInFlight(t *testing.T, p *Provider, released releasedStacks, spec provider.StackSpec) {
+	t.Helper()
+	ctx := context.Background()
+	if err := stackrecords.Write(ctx, released.store, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name, stackrecords.Stack{Kind: provider.StackApp, App: spec.App.App}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := p.openClients(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.release().PinValues(ctx, c, spec.Ref, spec.App.App, spec.App.Values.Sensitive); err != nil {
+		t.Fatalf("PinValues(%s) = %v", spec.Ref.Name, err)
+	}
+}
+
 func TestDestroyingEveryReleaseOfAnAppEnvironmentLeavesNoRecordOfItsValueSecrets(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
@@ -279,5 +296,70 @@ func TestDestroyingEveryReleaseOfAnAppEnvironmentLeavesNoRecordOfItsValueSecrets
 	key := valueSecretsRecordOf(t, p, first)
 	if recorded, err := released.store.Read(context.Background(), key); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("%s holds %q after every release of its app environment was destroyed, want it gone", key, recorded.Value)
+	}
+}
+
+func TestRetiringAReleaseKeepsTheValueSecretAReleaseStillDeployingJustPinned(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	released := newReleasedStacks(p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
+	retiring := withValues(functionRelease("d0", image), map[string]string{"STRIPE_KEY": "zero"})
+	gone := released.provision(t, retiring)
+	active := released.provision(t, withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": "one"}))
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+	deploying := withValues(functionRelease("d2", image), map[string]string{"STRIPE_KEY": "one", "NEW_KEY": "new"})
+	pinInFlight(t, p, released, deploying)
+
+	if _, err := p.RemoveFunctionRevisions(context.Background(), retiring.Ref, []provider.Function{gone}, nil, &fake.Log{}); err != nil {
+		t.Fatalf("RemoveFunctionRevisions() = %v", err)
+	}
+
+	added := valueSecretOf(t, p, deploying, "NEW_KEY")
+	if enabled := server.Secrets.EnabledVersions(added); !slices.Equal(enabled, []int{1}) {
+		t.Errorf("enabled versions of %s = %v, want 1, which release d2 pinned before its revision was made", added, enabled)
+	}
+}
+
+func TestRetiringAReleaseKeepsTheValueVersionAReleaseStillDeployingJustPinned(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	released := newReleasedStacks(p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
+	retiring := withValues(functionRelease("d0", image), map[string]string{"STRIPE_KEY": "zero"})
+	gone := released.provision(t, retiring)
+	active := released.provision(t, withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": "one"}))
+	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", active.Revision, err)
+	}
+	deploying := withValues(functionRelease("d2", image), map[string]string{"STRIPE_KEY": "two"})
+	pinInFlight(t, p, released, deploying)
+	released.provision(t, withValues(functionRelease("d3", image), map[string]string{"STRIPE_KEY": "three"}))
+
+	if _, err := p.RemoveFunctionRevisions(context.Background(), retiring.Ref, []provider.Function{gone}, nil, &fake.Log{}); err != nil {
+		t.Fatalf("RemoveFunctionRevisions() = %v", err)
+	}
+
+	stripe := valueSecretOf(t, p, deploying, "STRIPE_KEY")
+	if enabled := server.Secrets.EnabledVersions(stripe); !slices.Contains(enabled, 3) {
+		t.Errorf("enabled versions of %s = %v, want 3 kept, which release d2 pinned before its revision was made", stripe, enabled)
+	}
+}
+
+func TestAValueSecretThatWasNeverMadeDoesNotStopTheNextReleaseThatDropsItsKey(t *testing.T) {
+	server := &googletest.Run{Secrets: googletest.NewSecrets()}
+	p := providerServing(server, t)
+	released := newReleasedStacks(p)
+	image := "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:one"
+	refused := withValues(functionRelease("d1", image), map[string]string{"STRIPE_KEY": stripeKey})
+	server.Secrets.ForbiddenCreates = []string{valueSecretOf(t, p, refused, "STRIPE_KEY")}
+	if _, err := released.stacks.Provision(context.Background(), refused, nil); err == nil {
+		t.Fatal("Provision(d1) made a value secret the credential may not create")
+	}
+
+	if _, err := released.stacks.Provision(context.Background(), functionRelease("d2", image), nil); err != nil {
+		t.Errorf("Provision(d2) = %v, want the release that no longer declares STRIPE_KEY to deploy", err)
 	}
 }

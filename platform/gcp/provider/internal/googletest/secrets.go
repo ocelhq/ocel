@@ -28,6 +28,7 @@ type Secrets struct {
 	added   int
 
 	WrittenFirstElsewhere map[string]string
+	ForbiddenCreates      []string
 
 	TierTags      *TierTags
 	InlineTags    map[string]map[string]string
@@ -55,6 +56,11 @@ func (s *Secrets) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 		if payload, raced := s.WrittenFirstElsewhere[name]; raced {
 			delete(s.WrittenFirstElsewhere, name)
 			s.Secrets[name] = &storedSecret{versions: []storedVersion{{payload: base64.StdEncoding.EncodeToString([]byte(payload))}}}
+		}
+		if slices.Contains(s.ForbiddenCreates, name) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"message":"Permission 'secretmanager.secrets.create' denied"}}`))
+			return
 		}
 		if _, taken := s.Secrets[name]; taken {
 			w.WriteHeader(http.StatusConflict)
