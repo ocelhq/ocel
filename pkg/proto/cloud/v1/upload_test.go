@@ -109,9 +109,11 @@ func TestProtovalidateRefusesACommitThatBreaksAManifestRule(t *testing.T) {
 		{name: "the manifest is required", mutate: func(r *cloudv1.CommitSourceRequest) { r.Manifest = nil }},
 		{name: "the manifest lists a file", mutate: func(r *cloudv1.CommitSourceRequest) { r.Manifest.Files = nil }},
 		{
-			name:   "each path is listed once",
-			mutate: func(r *cloudv1.CommitSourceRequest) { r.Manifest.Files[1] = proto.Clone(r.Manifest.Files[0]).(*cloudv1.SourceFile) },
-			rule:   "source_manifest.unique_paths",
+			name: "each path is listed once",
+			mutate: func(r *cloudv1.CommitSourceRequest) {
+				r.Manifest.Files[1] = proto.Clone(r.Manifest.Files[0]).(*cloudv1.SourceFile)
+			},
+			rule: "source_manifest.unique_paths",
 		},
 		{name: "a path is required", mutate: func(r *cloudv1.CommitSourceRequest) { r.Manifest.Files[0].Path = "" }},
 		{name: "a path is relative", mutate: func(r *cloudv1.CommitSourceRequest) { r.Manifest.Files[0].Path = "/etc/passwd" }, rule: "source_file.path"},

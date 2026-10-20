@@ -146,7 +146,7 @@ type remoteErrors struct{ url string }
 func (r remoteErrors) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		resp, err := next(ctx, req)
-		return resp, r.classify(err)
+		return resp, refusalIn(r.classify(err))
 	}
 }
 
