@@ -7,6 +7,7 @@ import {
 } from "@framework/next-cache";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { POSTPONED_LENGTH_HEADER, PPR_SHELL_VARIANT } from "./ppr";
 import type { TagTimes } from "./purge-times";
 
@@ -26,7 +27,7 @@ export interface StoreWindow {
 }
 
 export interface StoreCall {
-  pagesPrefix: string;
+  storageCoordinate: string;
   release: string;
   entryPath: string;
   fallbackPath?: string;
@@ -65,8 +66,9 @@ function parseEntry(body: string): CacheEntryFile | null {
 }
 
 async function readEntry(deps: StoreReadDeps, call: StoreCall, path: string) {
-  const key = entryObjectKey(call.pagesPrefix, cacheKey(path));
-  if (key === null) return null;
+  const coordinate = parseStorageCoordinate(call.storageCoordinate);
+  const key = coordinate && entryObjectKey(coordinate, cacheKey(path));
+  if (!key) return null;
   const object = await deps.source.get(key);
   return object ? parseEntry(await object.text()) : null;
 }

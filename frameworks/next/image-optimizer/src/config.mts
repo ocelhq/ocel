@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 import type { CompiledImageConfig } from "@framework/next-protocol/image";
+import {
+  formatStorageCoordinate,
+  type StorageCoordinate,
+} from "@platform/edge-contract/storage-key";
 import { BootstrapError } from "./errors.mjs";
 import { imageConfigKey } from "./keys.mjs";
 import type { ObjectStore } from "./store.mjs";
@@ -15,17 +19,17 @@ export function resetConfigMemo(): void {
 
 export async function loadImageConfig(
   store: ObjectStore,
-  assetPrefix: string,
+  release: StorageCoordinate,
   configHash: string,
 ): Promise<CompiledImageConfig> {
   if (!/^[0-9a-f]{64}$/.test(configHash)) {
     throw new BootstrapError("configHash is not a sha256 digest", configHash);
   }
-  const memoKey = `${assetPrefix} ${configHash}`;
+  const memoKey = `${formatStorageCoordinate(release)} ${configHash}`;
   const cached = memo.get(memoKey);
   if (cached) return cached;
 
-  const key = imageConfigKey(assetPrefix);
+  const key = imageConfigKey(release);
   let object;
   try {
     object = await store.get(key, CONFIG_LIMIT);

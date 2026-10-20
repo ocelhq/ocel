@@ -15,7 +15,7 @@ import {
   EMPTY_ROUTES,
   type NextRelease,
   servedNextRelease,
-  UNTOKENED_PAGES_PREFIX,
+  UNTOKENED_STORAGE_COORDINATE,
 } from "./next-release";
 
 function nodeRequireChunkFor(entryKey: string): string {
@@ -595,7 +595,7 @@ describe("edge-parented prerenders", () => {
           },
         },
       },
-      record: { pagesPrefix: UNTOKENED_PAGES_PREFIX },
+      record: { storageCoordinate: UNTOKENED_STORAGE_COORDINATE },
       edgeBundle: renderer,
     })(new Request("https://app.example/edge-blog"));
 
@@ -605,7 +605,7 @@ describe("edge-parented prerenders", () => {
   it("still 502s a prerender with neither a Function URL nor an edge entry", async () => {
     const res = await servedNextRelease({
       table: { dispatch: { "/blog": { kind: "prerender", id: "/blog", config: {} } } },
-      record: { pagesPrefix: UNTOKENED_PAGES_PREFIX },
+      record: { storageCoordinate: UNTOKENED_STORAGE_COORDINATE },
     })(new Request("https://app.example/blog"));
 
     expect(res.status).toBe(502);

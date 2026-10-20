@@ -106,6 +106,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		VariablesReferenced: referenced,
 
 		RuntimeLayers: layers,
+		BytecodeCache: p.options.Bytecode.Cache,
 		BytecodeEmbed: p.options.Bytecode.Embed,
 
 		ArtifactRoot:      scope.OutputRoot,

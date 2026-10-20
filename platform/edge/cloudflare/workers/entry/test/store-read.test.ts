@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TagTimes } from "../src/purge-times";
 import { readFromStore, type StoreCall, type StoreReadDeps } from "../src/store-read";
 
-const PREFIX = "pages/p1/prod/web/r1a2b3c4d";
+const COORDINATE = "p1/prod/web/r1a2b3c4d";
 const NOW = 1_800_000_000_000;
 
 function entry(over: Record<string, unknown> = {}, lastModified = NOW - 10_000) {
@@ -50,11 +50,11 @@ function harness(
   };
 }
 
-const key = (path: string) => `${PREFIX}/${path}.cache.json`;
+const key = (path: string) => `pages/${COORDINATE}/${path}.cache.json`;
 
 function call(over: Partial<StoreCall> = {}): StoreCall {
   return {
-    pagesPrefix: PREFIX,
+    storageCoordinate: COORDINATE,
     release: "r1a2b3c4d",
     entryPath: "/blog/a",
     variant: "",
@@ -207,7 +207,7 @@ describe("reading a page from the durable store on a Serve miss", () => {
     const answer = await readFromStore(call(), deps);
 
     expect(answer).toBeNull();
-    expect(reads.every((read) => read.startsWith(`${PREFIX}/`))).toBe(true);
+    expect(reads.every((read) => read.startsWith(`pages/${COORDINATE}/`))).toBe(true);
   });
 
   it("goes to the origin when there is no entry", async () => {

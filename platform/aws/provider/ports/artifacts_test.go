@@ -35,7 +35,11 @@ func TestPruningAReleaseRemovesItsPagesFromTheEdgeBucket(t *testing.T) {
 		}
 	}
 
-	if err := store.RemoveObjects(ctx, environment.TierProduction, pruned, naming.ISRObjectKinds, nil); err != nil {
+	scope, err := naming.ReleaseScope(pruned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveObjects(ctx, environment.TierProduction, scope, naming.ISRObjectKinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(%+v) = %v", pruned, err)
 	}
 

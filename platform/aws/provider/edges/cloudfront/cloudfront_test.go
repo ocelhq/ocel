@@ -179,7 +179,7 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 	return stack
 }
 
-func staged(t *testing.T, stack edge.EdgeStack, url, assets string) router.ReleaseRecord {
+func staged(t *testing.T, stack edge.EdgeStack, url, storage string) router.ReleaseRecord {
 	t.Helper()
 	record := router.ReleaseRecord{
 		App:                  "web",
@@ -187,7 +187,7 @@ func staged(t *testing.T, stack edge.EdgeStack, url, assets string) router.Relea
 		RootFunction:         "/",
 		RootFunctionPhysical: entryFunction,
 		FunctionURLs:         map[string]string{"/": url},
-		AssetPrefix:          assets,
+		StorageCoordinate:    storage,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -221,13 +221,13 @@ func recordFront(t *testing.T, w *world, tier environment.Tier) {
 func stagedContainer(t *testing.T, stack edge.EdgeStack) router.ReleaseRecord {
 	t.Helper()
 	record := router.ReleaseRecord{
-		App:         "web",
-		Release:     "d1.f1",
-		Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
-		Physical:    "shop-prod-web-container-r3f8a1c90",
-		Origin:      "http://" + fakeFront.Host,
-		HealthPath:  "/",
-		AssetPrefix: fakeAssetPrefix,
+		App:               "web",
+		Release:           "d1.f1",
+		Image:             "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
+		Physical:          "shop-prod-web-container-r3f8a1c90",
+		Origin:            "http://" + fakeFront.Host,
+		HealthPath:        "/",
+		StorageCoordinate: fakeStorageCoordinate,
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -465,7 +465,7 @@ func TestPromote(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix+"/")
+		staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
@@ -481,8 +481,8 @@ func TestPromote(t *testing.T) {
 		if published.Assets != assetOriginDomain(fakeEdgeBucket, fakeRegion) {
 			t.Errorf("assets = %q, want the account's edge bucket", published.Assets)
 		}
-		if published.AssetPrefix != "/"+fakeAssetPrefix {
-			t.Errorf("assetPrefix = %q, want %q: CloudFront refuses an origin path that does not start with a slash or that ends with one", published.AssetPrefix, "/"+fakeAssetPrefix)
+		if published.AssetPrefix != fakeAssetOriginPath {
+			t.Errorf("assetPrefix = %q, want %q: CloudFront refuses an origin path that does not start with a slash or that ends with one", published.AssetPrefix, fakeAssetOriginPath)
 		}
 		if published.Stack != productionDistributionName() {
 			t.Errorf("stack = %q, want the stack that owns the hostname (%q)", published.Stack, productionDistributionName())
@@ -579,7 +579,7 @@ func TestPromote(t *testing.T) {
 		w.ssm.secret = account.OriginSecret{Current: fakeSecret, CreatedAt: rotatedAt, Previous: "3f7a9c1e5b2d84600f1a2b3c4d5e6f70-old", RotatedAt: rotatedAt}
 		stack := reconciled(t, w)
 		bound(t, stack)
-		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		record := staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 		record.Release, record.CreatedAt = "d0.f0", rotatedAt.Unix()-1
 		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
@@ -612,7 +612,7 @@ func TestPromote(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
-		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		record := staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 		w.store.updateErr = &kvstypes.AccessDeniedException{Message: aws.String("no")}
 
 		err := openRouter(stack).Stack.MovePointer(context.Background(), router.PointerMove{
@@ -631,7 +631,7 @@ func TestPromote(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 		w.store.conflicts = 2
 
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
@@ -655,7 +655,7 @@ func TestPromote(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
-		staged(t, stack, "", fakeAssetPrefix)
+		staged(t, stack, "", fakeStorageCoordinate)
 
 		err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard())
 		if err == nil {
@@ -671,7 +671,7 @@ func TestPromote(t *testing.T) {
 
 		w := newWorld()
 		stack := reconciled(t, w)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 			t.Fatalf("Promote: %v", err)
@@ -714,7 +714,7 @@ func TestUnbindDomainTakesTheRouteAndTheAlias(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	bound(t, stack)
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}

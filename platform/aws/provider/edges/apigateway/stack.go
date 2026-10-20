@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -212,9 +213,9 @@ func stagePatch(promotionID string, records map[string]router.ReleaseRecord) ([]
 		return nil, fmt.Errorf("promote %s: the release record for %s/%s names no root function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, release, stageName)
 	}
 
-	assets := record.AssetPrefix
-	if assets == "" {
-		assets = unsetVariable
+	assets := unsetVariable
+	if storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate); err == nil {
+		assets = storage.StoragePrefix(naming.ObjectAssets)
 	}
 	return variablePatch(map[string]string{
 		entryVariable:  record.RootFunctionPhysical,

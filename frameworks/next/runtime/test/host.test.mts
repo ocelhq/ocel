@@ -124,23 +124,23 @@ describe("a host the Next runtime starts on", () => {
     newUseCacheStore: async () => ({}) as UseCacheStore,
   };
 
-  test("is refused when the app has a cache prefix and the host installed no cache store", async () => {
+  test("is refused when the app revalidates and the host installed no cache store", async () => {
     const { refuseIncompleteHost } = await import("../src/host.mjs");
 
     const refused = refuseIncompleteHost(
       { newUseCacheStore: stores.newUseCacheStore },
-      { OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d" },
+      { OCEL_ISR: "1" },
     );
 
     expect(refused?.message).toMatch(/installed no cache store/);
   });
 
-  test("is refused when the app has a cache prefix and the host installed no use-cache store", async () => {
+  test("is refused when the app revalidates and the host installed no use-cache store", async () => {
     const { refuseIncompleteHost } = await import("../src/host.mjs");
 
     const refused = refuseIncompleteHost(
       { newCacheStore: stores.newCacheStore },
-      { OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d" },
+      { OCEL_ISR: "1" },
     );
 
     expect(refused?.message).toMatch(/installed no use-cache store/);
@@ -154,18 +154,19 @@ describe("a host the Next runtime starts on", () => {
     expect(refused?.message).toMatch(/installed no dispatcher/);
   });
 
-  test("starts without stores when the app has no cache prefix", async () => {
+  test("starts without stores when the app does not revalidate, wherever its objects live", async () => {
     const { refuseIncompleteHost } = await import("../src/host.mjs");
 
     expect(refuseIncompleteHost({}, {})).toBeUndefined();
+    expect(
+      refuseIncompleteHost({}, { OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d" }),
+    ).toBeUndefined();
   });
 
-  test("starts when it installed every store the app's cache prefix needs", async () => {
+  test("starts when it installed every store a revalidating app needs", async () => {
     const { refuseIncompleteHost } = await import("../src/host.mjs");
 
-    expect(
-      refuseIncompleteHost(stores, { OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d" }),
-    ).toBeUndefined();
+    expect(refuseIncompleteHost(stores, { OCEL_ISR: "1" })).toBeUndefined();
   });
 });
 

@@ -99,7 +99,7 @@ func TestANodeAppSeedsNothing(t *testing.T) {
 	spec := nextSpec()
 	spec.App.Framework = buildoutput.FrameworkNode
 	spec.App.Functions[0].Framework.Name = buildoutput.FrameworkNode
-	spec.App.ISR = &provider.ISRSpec{Coordinate: cachedRelease()}
+	spec.App.ISR = &provider.ISRSpec{}
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}"})

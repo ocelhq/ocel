@@ -120,8 +120,8 @@ func bakedBuilds(t *testing.T, cfg publication, manifest *contractv1.Manifest, b
 			continue
 		}
 		cache := &ISR{
-			Coord:      coord,
-			EdgeBucket: cfg.buckets.Edge, CacheBucket: cfg.buckets.Cache,
+			Coord:   coord,
+			Buckets: naming.Buckets{naming.StorageEdge: cfg.buckets.Edge, naming.StorageCache: cfg.buckets.Cache},
 		}
 		builds.caches[name] = cache
 	}

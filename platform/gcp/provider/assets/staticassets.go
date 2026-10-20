@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -21,33 +20,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 type staticFile struct {
 	src, key string
-}
-
-type staticKeys struct {
-	assets      string
-	imageConfig string
-	app         naming.Coordinate
-}
-
-func newStaticKeys(assetPrefix string) (staticKeys, error) {
-	key, err := naming.ParseObjectKey(assetPrefix)
-	if err != nil || key.Kind != naming.ObjectAssets || key.Rest != "" {
-		return staticKeys{}, refusal.Refuse(refusal.CodeInvalid,
-			"the asset prefix %q is not %s/<project>/<env>/<app>/<release token>, where the router reads a release's static files",
-			assetPrefix, naming.ObjectAssets)
-	}
-	release := key.Coordinate()
-	return staticKeys{
-		assets:      assetPrefix,
-		imageConfig: release.ImageConfigKey(),
-		app:         naming.Coordinate{Project: release.Project, Env: release.Env, App: release.App},
-	}, nil
 }
 
 func servesStaticFiles(spec provider.StackSpec) bool {
@@ -58,12 +35,10 @@ func (p *Store) UploadStaticFiles(ctx context.Context, spec provider.StackSpec, 
 	if !servesStaticFiles(spec) {
 		return nil
 	}
-	keys, err := newStaticKeys(spec.App.AssetPrefix)
-	if err != nil {
-		return err
-	}
+	release := spec.App.Storage
+	imageConfig := release.ImageConfigKey()
 	appRoot := buildoutput.AppRoot(spec.App.OutputRoot, spec.App.App)
-	files, err := staticFilesOf(appRoot, keys)
+	files, err := staticFilesOf(appRoot, release)
 	if err != nil {
 		return err
 	}
@@ -77,7 +52,7 @@ func (p *Store) UploadStaticFiles(ctx context.Context, spec provider.StackSpec, 
 	for _, file := range files {
 		group.Go(func() error {
 			defer functioncode.TakeUploadSlot()()
-			if file.key != keys.imageConfig {
+			if file.key != imageConfig {
 				present, err := p.Has(ctx, provider.ArtifactRef{Tier: spec.Ref.Tier, Key: file.key})
 				if err != nil || present {
 					return err
@@ -88,17 +63,17 @@ func (p *Store) UploadStaticFiles(ctx context.Context, spec provider.StackSpec, 
 				return fmt.Errorf("static file %s: %w", file.key, err)
 			}
 			attrs := storage.ObjectAttrs{ContentType: contenttype.Infer(file.key)}
-			if file.key == keys.imageConfig {
+			if file.key == imageConfig {
 				return p.replaceObject(ctx, spec.Ref.Tier, file.key, attrs, body)
 			}
-			attrs.CacheControl = spec.App.Static.CacheControl("/" + strings.TrimPrefix(file.key, keys.assets+"/"))
+			attrs.CacheControl = spec.App.Static.CacheControl(naming.PathSeparator + strings.TrimPrefix(file.key, release.StoragePrefix(naming.ObjectAssets)))
 			return p.CreateObject(ctx, spec.Ref.Tier, file.key, attrs, body)
 		})
 	}
 	return group.Wait()
 }
 
-func staticFilesOf(appRoot string, keys staticKeys) ([]staticFile, error) {
+func staticFilesOf(appRoot string, release naming.Coordinate) ([]staticFile, error) {
 	dir := filepath.Join(appRoot, edge.StaticAssetDir)
 	rels, err := images.ArtifactFiles(dir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -106,12 +81,12 @@ func staticFilesOf(appRoot string, keys staticKeys) ([]staticFile, error) {
 	}
 	files := make([]staticFile, 0, len(rels)+1)
 	for _, rel := range rels {
-		files = append(files, staticFile{src: filepath.Join(dir, filepath.FromSlash(rel)), key: path.Join(keys.assets, rel)})
+		files = append(files, staticFile{src: filepath.Join(dir, filepath.FromSlash(rel)), key: release.AssetKey(rel)})
 	}
 	config := filepath.Join(appRoot, naming.ImageConfigFile)
 	switch _, err := os.Stat(config); {
 	case err == nil:
-		files = append(files, staticFile{src: config, key: keys.imageConfig})
+		files = append(files, staticFile{src: config, key: release.ImageConfigKey()})
 	case !errors.Is(err, fs.ErrNotExist):
 		return nil, err
 	}

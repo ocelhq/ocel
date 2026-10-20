@@ -24,7 +24,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	w := newWorld()
 	stack := reconciled(t, w)
 	bound(t, stack)
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestRemovingAPreviewPointerLeavesTheHostnamesProductionBoundServing(t *test
 	w := newWorld()
 	stack := reconciled(t, w)
 	bound(t, stack)
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestDomainOwnerAsksTheRouteStoreBeforeListingTheAccount(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	bound(t, stack)
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestUnbindDomainOnAStateThatNamesNoStoreTakesTheRouteFromTheInstalledBootst
 		t.Fatalf("Reconcile: %v", err)
 	}
 	bound(t, stack)
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
@@ -566,7 +566,7 @@ func TestBindDomainAfterAPromotionServesThePromotedRelease(t *testing.T) {
 
 	w := newWorld()
 	stack := reconciled(t, w)
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
@@ -603,7 +603,7 @@ func TestAPromotedRouteSendsTheImmutablePrefixesTheBuildNamedToTheBucket(t *test
 		RootFunction:         "/",
 		RootFunctionPhysical: entryFunction,
 		FunctionURLs:         map[string]string{"/": fakeEntryURL},
-		AssetPrefix:          fakeAssetPrefix,
+		StorageCoordinate:    fakeStorageCoordinate,
 		Static:               &edge.Static{ImmutablePrefixes: []string{"/docs/_next/static/"}},
 	}
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {

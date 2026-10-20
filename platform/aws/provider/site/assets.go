@@ -22,10 +22,6 @@ func assetHeaders(static *edge.Static, rel string) objectHeaders {
 	return objectHeaders{contentType: contenttype.Infer(rel), cacheControl: static.CacheControl("/" + rel)}
 }
 
-func appAssetPrefix(c naming.Coordinate) string {
-	return c.AssetPrefix()
-}
-
 type assetUpload struct {
 	key, src string
 	to       []uploadTarget

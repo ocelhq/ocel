@@ -107,7 +107,7 @@ func staticObject(name, cacheControl string, metadata map[string]string) *raw.Ob
 func releaseRoutes(release string) alb.StaticRoutes {
 	return alb.StaticRoutes{
 		Backend:    "ocel-alb-production-assets",
-		Objects:    "/assets/production/shop/web/" + release + "/assets",
+		Objects:    "/assets/shop/prod/web/" + release + "/",
 		Immutable:  []string{"/_next/static/"},
 		Revalidate: []string{"/_next/static/live/"},
 	}
@@ -119,14 +119,14 @@ func TestCopyingImmutableFilesGivesTheTargetReleaseTheFilesOnlyTheSourceUploaded
 	t.Parallel()
 
 	p, server := servingObjects(t,
-		staticObject("assets/production/shop/web/r1/assets/_next/static/chunks/a1.js", immutableCache, nil),
-		staticObject("assets/production/shop/web/r2/assets/_next/static/chunks/b2.js", immutableCache, nil),
+		staticObject("assets/shop/prod/web/r1/_next/static/chunks/a1.js", immutableCache, nil),
+		staticObject("assets/shop/prod/web/r2/_next/static/chunks/b2.js", immutableCache, nil),
 	)
 	if err := p.objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
 		t.Fatalf("CopyImmutableFiles = %v", err)
 	}
 
-	copied := server.object("assets/production/shop/web/r2/assets/_next/static/chunks/a1.js")
+	copied := server.object("assets/shop/prod/web/r2/_next/static/chunks/a1.js")
 	if copied == nil {
 		t.Fatal("r2 holds no a1.js, want r1's chunk copied under r2's prefix: a page r1 rendered may be answered while the url map already rewrites onto r2")
 	}
@@ -142,10 +142,10 @@ func TestCopyingImmutableFilesSkipsWhatTheTargetHoldsWhatTheSourceCopiedAndWhatM
 	t.Parallel()
 
 	p, server := servingObjects(t,
-		staticObject("assets/production/shop/web/r1/assets/_next/static/chunks/shared.js", immutableCache, nil),
-		staticObject("assets/production/shop/web/r2/assets/_next/static/chunks/shared.js", immutableCache, nil),
-		staticObject("assets/production/shop/web/r1/assets/_next/static/chunks/old.js", immutableCache, map[string]string{assets.CopiedFromKey: "/assets/production/shop/web/r0/assets"}),
-		staticObject("assets/production/shop/web/r1/assets/_next/static/live/feed.json", "no-cache", nil),
+		staticObject("assets/shop/prod/web/r1/_next/static/chunks/shared.js", immutableCache, nil),
+		staticObject("assets/shop/prod/web/r2/_next/static/chunks/shared.js", immutableCache, nil),
+		staticObject("assets/shop/prod/web/r1/_next/static/chunks/old.js", immutableCache, map[string]string{assets.CopiedFromKey: "/assets/shop/prod/web/r0/"}),
+		staticObject("assets/shop/prod/web/r1/_next/static/live/feed.json", "no-cache", nil),
 	)
 	if err := p.objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
 		t.Fatalf("CopyImmutableFiles = %v", err)

@@ -1,6 +1,5 @@
-import { readReleaseToken } from "@platform/edge-contract/purge";
 import type { ReleaseRecord } from "@platform/edge-contract/release-record";
-import { parseObjectKey } from "@platform/edge-contract/storage-key";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { matchesSecret } from "./auth";
 
 export interface SqlStore {
@@ -10,7 +9,7 @@ export interface SqlStore {
 
 export interface StoredRecord extends ReleaseRecord {
   edge?: unknown;
-  buildAssets?: Record<string, string>;
+  buildCoordinates?: Record<string, string>;
 }
 
 export interface PointerMove {
@@ -71,7 +70,7 @@ export function ensureSchema(store: SqlStore): void {
        pointer TEXT NOT NULL,
        app TEXT NOT NULL,
        build_id TEXT NOT NULL,
-       asset_prefix TEXT NOT NULL,
+       storage_coordinate TEXT NOT NULL,
        release_token TEXT NOT NULL,
        seq INTEGER NOT NULL,
        PRIMARY KEY (pointer, app, build_id)
@@ -136,7 +135,7 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
         pointer,
         record.app,
         record.release,
-        JSON.stringify(withBuildAssets(record, recordBuild(store, pointer, record))),
+        JSON.stringify(withBuildCoordinates(record, recordBuild(store, pointer, record))),
       );
     }
     store.sql.exec(`DELETE FROM labels WHERE pointer = ?`, pointer);
@@ -160,7 +159,7 @@ export function movePointer(store: SqlStore, move: PointerMove): PointerMoveOutc
 }
 
 function coreJson(record: StoredRecord): string {
-  const { edge: _edge, buildAssets: _buildAssets, ...core } = record;
+  const { edge: _edge, buildCoordinates: _buildCoordinates, ...core } = record;
   return JSON.stringify(core, (_key, value: unknown) =>
     value !== null && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
@@ -185,15 +184,16 @@ function recordBuild(
   record: StoredRecord,
 ): Record<string, string> {
   store.sql.exec(
-    `INSERT INTO builds (pointer, app, build_id, asset_prefix, release_token, seq)
+    `INSERT INTO builds (pointer, app, build_id, storage_coordinate, release_token, seq)
      VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM builds))
      ON CONFLICT(pointer, app, build_id) DO UPDATE SET
-       asset_prefix = excluded.asset_prefix, release_token = excluded.release_token, seq = excluded.seq`,
+       storage_coordinate = excluded.storage_coordinate, release_token = excluded.release_token,
+       seq = excluded.seq`,
     pointer,
     record.app,
     record.buildId,
-    record.assetPrefix,
-    readReleaseToken(record.pagesPrefix) ?? "",
+    record.storageCoordinate,
+    parseStorageCoordinate(record.storageCoordinate)?.release ?? "",
   );
   store.sql.exec(
     `DELETE FROM builds WHERE pointer = ? AND app = ? AND NOT EXISTS (
@@ -204,20 +204,23 @@ function recordBuild(
     record.app,
   );
   const rows = store.sql
-    .exec<{ build_id: string; asset_prefix: string }>(
-      `SELECT build_id, asset_prefix FROM builds
+    .exec<{ build_id: string; storage_coordinate: string }>(
+      `SELECT build_id, storage_coordinate FROM builds
        WHERE pointer = ? AND app = ? AND build_id != ? ORDER BY seq`,
       pointer,
       record.app,
       record.buildId,
     )
     .toArray();
-  return Object.fromEntries(rows.map((row) => [row.build_id, row.asset_prefix]));
+  return Object.fromEntries(rows.map((row) => [row.build_id, row.storage_coordinate]));
 }
 
-function withBuildAssets(record: StoredRecord, buildAssets: Record<string, string>): StoredRecord {
-  const { buildAssets: _, ...rest } = record;
-  return Object.keys(buildAssets).length === 0 ? rest : { ...rest, buildAssets };
+function withBuildCoordinates(
+  record: StoredRecord,
+  buildCoordinates: Record<string, string>,
+): StoredRecord {
+  const { buildCoordinates: _, ...rest } = record;
+  return Object.keys(buildCoordinates).length === 0 ? rest : { ...rest, buildCoordinates };
 }
 
 export function removePointer(store: SqlStore, pointer: string): void {
@@ -291,21 +294,21 @@ export type ServedRecordResult<Record = StoredRecord> =
   | { kind: "not-served" }
   | { kind: "forgotten" };
 
-export function readServedRecord(store: SqlStore, pagesPrefix: string): ServedRecordResult {
+export function readServedRecord(store: SqlStore, storageCoordinate: string): ServedRecordResult {
   const row = store.sql
     .exec<{ data: string }>(
-      `SELECT data FROM served WHERE json_extract(data, '$.pagesPrefix') = ? LIMIT 1`,
-      pagesPrefix,
+      `SELECT data FROM served WHERE json_extract(data, '$.storageCoordinate') = ? LIMIT 1`,
+      storageCoordinate,
     )
     .toArray()[0];
   if (row) return { kind: "record", record: JSON.parse(row.data) as StoredRecord };
-  const pages = parseObjectKey(pagesPrefix);
-  if (pages?.kind !== "pages" || pages.rest !== "") return { kind: "not-served" };
+  const coordinate = parseStorageCoordinate(storageCoordinate);
+  if (coordinate === undefined) return { kind: "not-served" };
   const kept = store.sql
     .exec(
       `SELECT 1 FROM kept WHERE app = ? AND release_token = ? LIMIT 1`,
-      pages.app,
-      pages.release,
+      coordinate.app,
+      coordinate.release,
     )
     .toArray();
   return kept.length > 0 ? { kind: "not-served" } : { kind: "forgotten" };

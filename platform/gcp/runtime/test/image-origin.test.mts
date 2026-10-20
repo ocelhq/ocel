@@ -56,7 +56,7 @@ beforeAll(async () => {
     OCEL_NEXT_ROUTE_TABLE: join(dir, "routing.json"),
     OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
     OCEL_STORAGE_ENDPOINT: stored.endpoint,
-    OCEL_ASSET_PREFIX: assetPrefix,
+    OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
   };
 });
 

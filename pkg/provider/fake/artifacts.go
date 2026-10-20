@@ -61,14 +61,15 @@ func (a *Artifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemoveObjects(_ context.Context, tier environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, progress progress.Log) error {
-	if scope.Project == "" {
-		return refusal.Refuse(refusal.CodeInvalid, "a scope naming no project names every project's objects")
-	}
+func (a *Artifacts) RemoveObjects(_ context.Context, tier environment.Tier, scope naming.StorageScope, kinds []naming.ObjectKind, progress progress.Log) error {
 	prefixes := make([]string, len(kinds))
 	for i, kind := range kinds {
-		prefixes[i] = scope.StoragePrefix(kind)
-		a.journal.note("remove " + prefixes[i])
+		prefix, err := scope.Prefix(kind)
+		if err != nil {
+			return err
+		}
+		prefixes[i] = prefix
+		a.journal.note("remove " + prefix)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()

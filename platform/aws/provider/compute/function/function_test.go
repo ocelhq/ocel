@@ -204,28 +204,23 @@ func TestFunctionEnv(t *testing.T) {
 	})
 
 	t.Run("a node runtime function with no isr still takes the bytecode cache", func(t *testing.T) {
-		cache := Bytecode{Bucket: "artifacts-xyz", Prefix: "bytecode/proj/prod/api/API1"}
+		cache := Bytecode{Bucket: "artifacts-xyz", Storage: storageCoordinate("prod", "proj", "api", fixedRelease(t))}
 
 		env := Env(map[string]string{}, Args{Handler: "index.mjs"}, nil, &cache)
 
-		if got := env["OCEL_BYTECODE_PREFIX"]; got != cache.Prefix {
-			t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", got, cache.Prefix)
+		if got := env["OCEL_COMPILE_CACHE"]; got != "1" {
+			t.Errorf("OCEL_COMPILE_CACHE = %q, want 1", got)
 		}
-		if got := env["OCEL_BYTECODE_BUCKET"]; got != cache.Bucket {
-			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want %q", got, cache.Bucket)
-		}
-		if _, ok := env["OCEL_STORAGE_COORDINATE"]; ok {
-			t.Error("OCEL_STORAGE_COORDINATE is set on a function with no ISR")
+		if _, ok := env["OCEL_ISR"]; ok {
+			t.Error("OCEL_ISR is set on a function with no ISR")
 		}
 	})
 
-	t.Run("has no bytecode cache where the spec names none", func(t *testing.T) {
+	t.Run("has no compile cache where the config turns none on", func(t *testing.T) {
 		env := Env(map[string]string{}, Args{Handler: "index.mjs"}, nil, nil)
 
-		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
-			if _, ok := env[key]; ok {
-				t.Errorf("%s = %q, want it unset for an app the spec gives no cache", key, env[key])
-			}
+		if value, ok := env["OCEL_COMPILE_CACHE"]; ok {
+			t.Errorf("OCEL_COMPILE_CACHE = %q, want it unset for an app the config gives no cache", value)
 		}
 	})
 
@@ -249,7 +244,7 @@ func TestAFunctionsEnvCountsResourcesVariablesAndTheRuntimeTogether(t *testing.T
 
 		env := Env(base, Args{Handler: "src/server.js"}, &site.ISR{Coord: storageCoordinate("prod", "proj", "web", deployedAs("B1").Token())}, nil)
 
-		for _, key := range []string{"OCEL_RESOURCE_POSTGRES_main", "POSTHOG_ID", "OCEL_HANDLER", "AWS_LAMBDA_EXEC_WRAPPER", "OCEL_STORAGE_COORDINATE"} {
+		for _, key := range []string{"OCEL_RESOURCE_POSTGRES_main", "POSTHOG_ID", "OCEL_HANDLER", "AWS_LAMBDA_EXEC_WRAPPER", "OCEL_ISR"} {
 			if _, ok := env[key]; !ok {
 				t.Errorf("env is missing %s; the budget would be charged against less than is deployed", key)
 			}

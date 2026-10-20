@@ -13,8 +13,8 @@ import (
 func staticRecord(build string) router.ReleaseRecord {
 	return router.ReleaseRecord{
 		App: "web", Framework: "next", Release: build, RootFunctionPhysical: "ocel-shop-prod-web",
-		Revisions:   map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-" + build},
-		AssetPrefix: "assets/shop/prod/web/" + build,
+		Revisions:         map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-" + build},
+		StorageCoordinate: "shop/prod/web/r000000" + build,
 		Static: &edge.Static{
 			ImmutablePrefixes:      []string{"/_next/static/"},
 			MustRevalidatePrefixes: []string{"/_next/static/live/"},
@@ -25,7 +25,7 @@ func staticRecord(build string) router.ReleaseRecord {
 func staticRoutesFor(build string) *StaticRoutes {
 	return &StaticRoutes{
 		Backend:    assetsBackend,
-		Objects:    "/assets/shop/prod/web/" + build,
+		Objects:    "/assets/shop/prod/web/r000000" + build + "/",
 		Immutable:  []string{"/_next/static/"},
 		Revalidate: []string{"/_next/static/live/"},
 	}
@@ -109,7 +109,7 @@ func TestAReleaseOfTheSameAppOnAnotherServiceLeavesAHostnamesStaticRoutesAlone(t
 	other := staticRecord("b2")
 	other.RootFunctionPhysical = "ocel-shop-staging-web"
 	other.Revisions = map[string]string{"ocel-shop-staging-web": "ocel-shop-staging-web-b2"}
-	other.AssetPrefix = "assets/shop/staging/web/b2"
+	other.StorageCoordinate = "shop/staging/web/r000000b2"
 	stage(t, stack, other)
 	promote(t, stack, "p2", "b2")
 

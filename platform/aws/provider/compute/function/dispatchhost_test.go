@@ -68,7 +68,7 @@ func plannedEnv(t *testing.T, cfg testConfig, app *contractv1.ManifestApp, front
 		Edge:     front,
 		App:      &provider.AppSpec{App: app.GetName(), Values: plannedValues(app)},
 	}
-	return AppEnv(spec, variables.Bundle{}, bucket.Sessions{}, cfg.StateTable)
+	return AppEnv(spec, nil, variables.Bundle{}, bucket.Sessions{}, cfg.StateTable)
 }
 
 func routedCoordinate(t *testing.T) naming.Coordinate {
@@ -107,13 +107,13 @@ func servingSpec(t *testing.T, cfg testConfig, app, runtime string, coord naming
 		Recorded: true,
 		Edge:     cfg.Edge,
 		App: &provider.AppSpec{
-			App:         app,
-			Framework:   runtime,
-			BuildID:     "d1",
-			Routing:     serving.OriginDispatch,
-			Guard:       serving.Guard,
-			AssetPrefix: serving.AssetPrefix,
-			Static:      serving.Static,
+			App:       app,
+			Framework: runtime,
+			BuildID:   "d1",
+			Routing:   serving.OriginDispatch,
+			Guard:     serving.Guard,
+			Storage:   coord,
+			Static:    serving.Static,
 		},
 	}
 }
@@ -132,7 +132,6 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
-	coord := routedCoordinate(t)
 	host := newDispatchHostFor(t, cfg)
 	if host == nil {
 		t.Fatal("dispatch host = none, want the root function to host dispatch")
@@ -142,8 +141,6 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 	}
 	want := map[string]string{
 		routeTableEnv:             routeTableInTask,
-		edgeBucketEnv:             "edge-bucket",
-		assetPrefixEnv:            appAssetPrefix(coord),
 		slugEnv:                   "shop",
 		appNameEnv:                "web",
 		"OCEL_BUILD_ID":           "d1",
@@ -152,6 +149,39 @@ func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 	for key, value := range want {
 		if host.Env[key] != value {
 			t.Errorf("entry env %s = %q, want %q", key, host.Env[key], value)
+		}
+	}
+	for _, key := range []string{"OCEL_ASSET_PREFIX", "OCEL_EDGE_BUCKET"} {
+		if value, told := host.Env[key]; told {
+			t.Errorf("entry env %s = %q, want none: every function's base env names the edge bucket and the storage coordinate the asset prefix derives from", key, value)
+		}
+	}
+}
+
+func TestEveryFunctionIsToldItsStorageCoordinateAndTheBucketOfEachClass(t *testing.T) {
+	t.Parallel()
+
+	spec := provider.StackSpec{
+		Kind:     provider.StackApp,
+		Recorded: true,
+		App:      &provider.AppSpec{App: "web", Storage: routedCoordinate(t)},
+	}
+	buckets := naming.Buckets{naming.StorageState: "state-1", naming.StorageArtifacts: "artifacts-1", naming.StorageEdge: "edge-1", naming.StorageCache: "cache-1"}
+	env := AppEnv(spec, buckets, variables.Bundle{}, bucket.Sessions{}, "")
+
+	for key, want := range map[string]string{
+		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r3f8a1c90",
+		"OCEL_ARTIFACTS_BUCKET":   "artifacts-1",
+		"OCEL_EDGE_BUCKET":        "edge-1",
+		"OCEL_CACHE_BUCKET":       "cache-1",
+	} {
+		if env[key] != want {
+			t.Errorf("%s = %q, want %q", key, env[key], want)
+		}
+	}
+	for key, value := range env {
+		if value == "state-1" {
+			t.Errorf("%s names the state bucket, which no app code reads", key)
 		}
 	}
 }
@@ -168,12 +198,9 @@ func TestTheRootFunctionReadsOnlyItsOwnReleasesAssetsOutOfTheEdgeBucket(t *testi
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 		t.Fatalf("policy is not valid JSON: %v", err)
 	}
-	want := []string{"arn:aws:s3:::edge-bucket/" + appAssetPrefix(routedCoordinate(t)) + "/*"}
+	want := []string{"arn:aws:s3:::edge-bucket/assets/shop/prod/web/r3f8a1c90/*"}
 	if len(doc.Statement) != 1 || !slices.Equal(doc.Statement[0].Resource, want) || !slices.Equal(doc.Statement[0].Action, []string{"s3:GetObject"}) {
 		t.Errorf("asset read policy = %s, want s3:GetObject on %v alone", raw, want)
-	}
-	if !strings.HasPrefix(appAssetPrefix(routedCoordinate(t)), "assets/") {
-		t.Errorf("the asset prefix %q is not under assets/, the one kind the root function serves", appAssetPrefix(routedCoordinate(t)))
 	}
 }
 
@@ -344,7 +371,7 @@ func TestAnOriginBehindACachingEdgeIsToldItsRelease(t *testing.T) {
 			Ref:      provider.StackRef{Name: naming.AppStack("production", "web", token)},
 			Edge:     fakeEdgeOf(kind),
 			App:      &provider.AppSpec{App: "web"},
-		}, variables.Bundle{}, bucket.Sessions{}, "")
+		}, nil, variables.Bundle{}, bucket.Sessions{}, "")
 
 		if env[edge.ReleaseTokenVar] != token.String() {
 			t.Errorf("%s = %q behind %s, want %q", edge.ReleaseTokenVar, env[edge.ReleaseTokenVar], kind, token)
@@ -361,7 +388,7 @@ func TestAContainerAppCloudflareForwardsToTheLoadBalancerIsToldNoEdgeCachesItsRe
 		Ref:      provider.StackRef{Name: naming.AppStack("production", "web", naming.NewReleaseToken("b1", "f1"))},
 		Edge:     fakeEdgeOf(cloudflare.Kind),
 		App:      &provider.AppSpec{App: "web", Compute: provider.ComputeContainer, Router: alb.Kind},
-	}, variables.Bundle{}, bucket.Sessions{}, "")
+	}, nil, variables.Bundle{}, bucket.Sessions{}, "")
 
 	for _, name := range []string{edge.EdgeCacheVar, edge.ReleaseTokenVar, edge.CacheTagPurgeVar} {
 		if value, set := env[name]; set {
@@ -378,12 +405,12 @@ func TestAnAppWithAnOcelRouteTableIsToldWhereItsFunctionsFindIt(t *testing.T) {
 		Recorded: true,
 		Edge:     fakeEdgeOf(cloudfront.Kind),
 		App:      &provider.AppSpec{App: "web", OcelRouteTable: &provider.RoutingSpec{RootFunction: "index"}},
-	}, variables.Bundle{}, bucket.Sessions{}, "")
+	}, nil, variables.Bundle{}, bucket.Sessions{}, "")
 
 	if want := "/var/task/" + edge.OcelRouteTableFile; env[edge.OcelRouteTableVar] != want {
 		t.Errorf("%s = %q, want %q: the route table is bundled at the root of each function", edge.OcelRouteTableVar, env[edge.OcelRouteTableVar], want)
 	}
-	plain := AppEnv(provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}, variables.Bundle{}, bucket.Sessions{}, "")
+	plain := AppEnv(provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}, nil, variables.Bundle{}, bucket.Sessions{}, "")
 	if _, told := plain[edge.OcelRouteTableVar]; told {
 		t.Errorf("%s is set for an app with no route table", edge.OcelRouteTableVar)
 	}
@@ -412,7 +439,7 @@ func TestAppEnvNamesTheRouterItsAppPromotesThroughAndNotItsEdge(t *testing.T) {
 			Recorded: true,
 			Edge:     fakeEdgeOf(cloudfront.Kind),
 			App:      &provider.AppSpec{App: "web", Router: kind},
-		}, variables.Bundle{}, bucket.Sessions{}, "")
+		}, nil, variables.Bundle{}, bucket.Sessions{}, "")
 	}
 
 	if env := routed("relay"); env["OCEL_ROUTER_KIND"] != "relay" {

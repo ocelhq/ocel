@@ -14,13 +14,17 @@ import (
 
 const bucketResourcePrefix = "projects/_/buckets/"
 
-func ObjectKindsCondition(title string, buckets names.TierBuckets, scope naming.Coordinate, kinds ...naming.ObjectKind) *policy.Condition {
+func ObjectKindsCondition(title string, buckets names.TierBuckets, scope naming.StorageScope, kinds ...naming.ObjectKind) (*policy.Condition, error) {
 	starts := make([]string, len(kinds))
 	for i, kind := range kinds {
-		objects := bucketResourcePrefix + buckets.Of(kind.Class()) + "/objects/" + scope.StoragePrefix(kind)
+		prefix, err := scope.Prefix(kind)
+		if err != nil {
+			return nil, err
+		}
+		objects := bucketResourcePrefix + buckets.Of(kind.Class()) + "/objects/" + prefix
 		starts[i] = fmt.Sprintf("resource.name.startsWith(%q)", objects)
 	}
-	return &policy.Condition{Title: title, Expression: strings.Join(starts, " || ")}
+	return &policy.Condition{Title: title, Expression: strings.Join(starts, " || ")}, nil
 }
 
 func BucketCondition(title, bucket string) *policy.Condition {

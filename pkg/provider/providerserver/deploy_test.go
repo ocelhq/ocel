@@ -252,12 +252,12 @@ func TestADeployReportsTheStorageCoordinateItWroteEachAppUnder(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	coordinate := result.GetApps()[0].GetStoragePrefix()
+	coordinate := result.GetApps()[0].GetStorageCoordinate()
 	if !regexp.MustCompile(`^shop/prod/web/r[0-9a-f]{8}$`).MatchString(coordinate) {
 		t.Fatalf("the result reports storage coordinate %q for web, want shop/prod/web/<release token>", coordinate)
 	}
 	key := p.FakeStacks().Shipped(p.FakeStacks().Provisioned()[1].Ref)[0].Ref.Key
-	if parsed, err := naming.ParseObjectKey(key); err != nil || parsed.Coordinate().StorageCoordinate() != coordinate {
+	if parsed, err := naming.ParseObjectKey(key); err != nil || parsed.Coordinate.StorageCoordinate() != coordinate {
 		t.Errorf("web's function artifact is %q, want it under the reported coordinate %q", key, coordinate)
 	}
 }

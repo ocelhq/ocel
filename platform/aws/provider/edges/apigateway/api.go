@@ -613,7 +613,7 @@ func entryURI(spec apiSpec) string {
 func staticURI(spec apiSpec, prefix string) string {
 	return fmt.Sprintf(
 		"arn:aws:apigateway:%s:s3:path/%s/${stageVariables.%s}%s{proxy}",
-		spec.region, spec.edgeBucket, assetsVariable, prefix,
+		spec.region, spec.edgeBucket, assetsVariable, strings.TrimPrefix(prefix, "/"),
 	)
 }
 

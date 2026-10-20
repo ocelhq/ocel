@@ -23,15 +23,13 @@ const BUCKET_HOST = "assets-bucket.s3.us-east-1.amazonaws.com";
 
 const CERTIFIED_STORE = "https://objects.example.com/ocel-acme-production";
 
-const CERTIFIED_ENTRIES = `${CERTIFIED_STORE}/entries/`;
-
 const objects = new Map<string, string>();
 
 function storedKey(url: string): string | undefined {
   const { host, pathname } = new URL(url);
   if (host === BUCKET_HOST) return decodeURIComponent(pathname.slice(1));
-  if (url.startsWith(CERTIFIED_ENTRIES)) {
-    return decodeURIComponent(url.slice(CERTIFIED_ENTRIES.length));
+  if (url.startsWith(`${CERTIFIED_STORE}/`)) {
+    return decodeURIComponent(url.slice(CERTIFIED_STORE.length + 1));
   }
   return undefined;
 }
@@ -45,9 +43,9 @@ function viaBucket(next: typeof fetch): typeof fetch {
   }) as typeof fetch;
 }
 
-const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
+const storageCoordinate = "p1/prod/web/r1a2b3c4d";
 const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
-const entryKey = `${pagesPrefix}/blog/a.cache.json`;
+const entryKey = `pages/${storageCoordinate}/blog/a.cache.json`;
 
 const record = {
   app: "web",
@@ -55,8 +53,7 @@ const record = {
   release: "build-1~fp1",
   buildId: "build-1",
   functionUrls: { "/blog": `${FN_URL}stage` },
-  assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
-  pagesPrefix,
+  storageCoordinate,
   createdAt: 1,
   edge: {},
 };
@@ -120,7 +117,7 @@ function harness(
   });
   const released = {
     slug: "p1",
-    pagesPrefix,
+    storageCoordinate,
     ...options.release,
   };
   const serve = new Serve(
@@ -165,7 +162,7 @@ function harness(
   return harnessed as unknown as Harness & { request: typeof request };
 }
 
-const fallbackKey = `${pagesPrefix}/blog/[id].cache.json`;
+const fallbackKey = `pages/${storageCoordinate}/blog/[id].cache.json`;
 
 async function seed(entry: object | null, key = entryKey): Promise<void> {
   if (entry) objects.set(key, JSON.stringify(entry));
@@ -219,12 +216,12 @@ describe("Serve answering a miss from the durable store", () => {
     expect(h.originCalls).toEqual([]);
   });
 
-  it("answers the stored page from under the entries prefix of a store an origin reached by client certificate holds", async () => {
+  it("answers the stored page from the store of an origin reached by client certificate", async () => {
     await seed(storedEntry());
     const { binding, sent } = certificateBinding();
     const h = harness({
       env: {
-        ...storeOrigin({ url: CERTIFIED_STORE, holdsEntries: true, entriesPrefix: "entries/" }),
+        ...storeOrigin({ url: CERTIFIED_STORE, holdsEntries: true }),
         OCEL_ORIGIN_CLIENT_CERTIFICATE: binding,
       },
     }) as Used;
@@ -460,13 +457,13 @@ describe("Serve answering a pages router path the build did not prerender", () =
 
   it("answers the generated page, not the fallback, once the build's store holds it", async () => {
     await seed(lazyFallback(), fallbackKey);
-    await seed(storedEntry(), `${pagesPrefix}/blog/9.cache.json`);
+    await seed(storedEntry(), `pages/${storageCoordinate}/blog/9.cache.json`);
     const h = lazy();
 
     const response = await h.fetchOrigin(() => h.serve.fetch(h.request("blog/9")));
 
     expect(await response.text()).toBe("<html>from the store</html>");
-    objects.delete(`${pagesPrefix}/blog/9.cache.json`);
+    objects.delete(`pages/${storageCoordinate}/blog/9.cache.json`);
   });
 
   it("renders the page's data request at the origin, which generates the page", async () => {

@@ -102,7 +102,7 @@ func previewRoutes(t *testing.T, w *world) map[string]route {
 func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(ctx, router.PointerMove{Pointer: pointer, Hosts: listPreviewHosts(pointer), Promotion: router.Promotion{
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
@@ -440,7 +440,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if published.Origin != fakeEntryHost || published.Release != "d1.f1" {
 			t.Errorf("route = %+v, want the release's root function URL", published)
 		}
-		if published.Assets != assetOriginDomain(fakeEdgeBucket, fakeRegion) || published.AssetPrefix != "/"+fakeAssetPrefix {
+		if published.Assets != assetOriginDomain(fakeEdgeBucket, fakeRegion) || published.AssetPrefix != fakeAssetOriginPath {
 			t.Errorf("route = %+v, want the preview bootstrap's assets", published)
 		}
 		if published.Secret != fakeSecret {
@@ -512,7 +512,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		_, stack := previewing(t, w)
 		w.store.updateErr = errors.New("the store is closed")
 
-		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		record := staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 		err := openRouter(stack).Stack.MovePointer(context.Background(), router.PointerMove{
 			Pointer:   previewPointer,
 			Hosts:     listPreviewHosts(previewPointer),
@@ -565,7 +565,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 	t.Run("a deployment's hostname keeps its release after the preview moves on", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 		deployment := router.FormatDeploymentPointer(previewPointer, "preview-d1")
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: deployment, Hosts: listPreviewHosts("deployment1"), Promotion: router.Promotion{
 			PromotionID: "preview-d1",
@@ -587,7 +587,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 	t.Run("a ledger that refuses a first promotion leaves no hostname behind", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 		w.dynamo.putErr = errors.New("the table is closed")
 
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Pointer: previewPointer, Hosts: listPreviewHosts(previewPointer), Promotion: router.Promotion{

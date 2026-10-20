@@ -28,8 +28,9 @@ func (p *Store) CopyImmutableFiles(ctx context.Context, tier environment.Tier, f
 	if err != nil {
 		return err
 	}
-	source, target := strings.TrimPrefix(from.Objects, "/"), strings.TrimPrefix(to.Objects, "/")
-	for _, prefix := range from.Immutable {
+	source, target := strings.TrimPrefix(from.Objects, naming.PathSeparator), strings.TrimPrefix(to.Objects, naming.PathSeparator)
+	for _, immutable := range from.Immutable {
+		prefix := strings.TrimPrefix(immutable, naming.PathSeparator)
 		own, err := listImmutableFiles(ctx, bucket, source+prefix, true)
 		if err != nil {
 			return err
@@ -41,7 +42,7 @@ func (p *Store) CopyImmutableFiles(ctx context.Context, tier environment.Tier, f
 		group, ctx := errgroup.WithContext(ctx)
 		group.SetLimit(functioncode.UploadConcurrency)
 		for _, rel := range slices.Sorted(maps.Keys(own)) {
-			if _, present := held[rel]; present || revalidated(from.Revalidate, prefix+rel) {
+			if _, present := held[rel]; present || revalidated(from.Revalidate, immutable+rel) {
 				continue
 			}
 			group.Go(func() error {

@@ -39,13 +39,14 @@ import (
 )
 
 const (
-	fakeStateTable  = "ocel-state"
-	fakeEdgeBucket  = "ocel-prod-edge-k3x9q2"
-	fakeRegion      = "eu-west-1"
-	fakeSecret      = "3f7a9c1e5b2d84600f1a2b3c4d5e6f70"
-	fakeEntryURL    = "https://abcdef0123456789.lambda-url.eu-west-1.on.aws/"
-	fakeEntryHost   = "abcdef0123456789.lambda-url.eu-west-1.on.aws"
-	fakeAssetPrefix = "production/conformance/web/d1.f1/assets"
+	fakeStateTable        = "ocel-state"
+	fakeEdgeBucket        = "ocel-prod-edge-k3x9q2"
+	fakeRegion            = "eu-west-1"
+	fakeSecret            = "3f7a9c1e5b2d84600f1a2b3c4d5e6f70"
+	fakeEntryURL          = "https://abcdef0123456789.lambda-url.eu-west-1.on.aws/"
+	fakeEntryHost         = "abcdef0123456789.lambda-url.eu-west-1.on.aws"
+	fakeStorageCoordinate = "conformance/prod/web/r1a2b3c4d"
+	fakeAssetOriginPath   = "/assets/conformance/prod/web/r1a2b3c4d"
 )
 
 type trail struct {

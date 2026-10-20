@@ -41,11 +41,11 @@ func TestTheFunctionsOfADeployReadTheEdgeFactsTheDeployReadAndNotTheStoreAgain(t
 		return p.release().ReadEdgeFacts(ctx, spec)
 	}}, p: p}
 
-	_, err = wrapped.Provision(t.Context(), isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Coordinate: cachedRelease()}), nil)
+	_, err = wrapped.Provision(t.Context(), isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{}), nil)
 	if err != nil {
 		t.Fatalf("Provision = %v, want the functions handed what the deploy already read", err)
 	}
-	if want := edge.DerivePurgeSecret(seed, pagesPrefix); seen.PurgeSecret != want {
+	if want := edge.DerivePurgeSecret(seed, storageCoordinate); seen.PurgeSecret != want {
 		t.Errorf("purge secret the functions saw = %q, want %q", seen.PurgeSecret, want)
 	}
 }
@@ -55,7 +55,7 @@ func TestEdgeFactsReadForOneStackAreNotHandedToAnother(t *testing.T) {
 	h := newOffersHarness(t)
 	adoptTheWorker(t, h)
 	p := programming(h)
-	spec := isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{Coordinate: cachedRelease()})
+	spec := isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{})
 	other := spec
 	other.Ref.Project = "blog"
 	ctx := release.WithEdgeFacts(t.Context(), other, release.EdgeFacts{PurgeSecret: "not-this-stacks"})

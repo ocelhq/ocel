@@ -158,18 +158,6 @@ func TestAServiceThatRoutesNothingUploadsNoStaticFiles(t *testing.T) {
 	}
 }
 
-func TestAStaticFilesAssetPrefixThatIsNotAReleasesAssetsIsRefused(t *testing.T) {
-	server := &googletest.Run{}
-	p := providerServing(server, t)
-	root := plantStatic(t, map[string]string{"static/logo.svg": "<svg/>"})
-	spec := staticSpec()
-	spec.App.AssetPrefix = "files/shop/prod/web/r1a2b3c4d"
-
-	if _, err := p.ProvisionFunctions(context.Background(), builtAt(spec, root), nil); err == nil {
-		t.Fatal("ProvisionFunctions() = nil, want a refusal: the router reads assets under the prefix of the assets kind")
-	}
-}
-
 func TestANextServiceIsToldTheBucketItsStaticFilesLiveIn(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)

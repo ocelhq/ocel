@@ -45,7 +45,7 @@ func TestAThrottledStoreIsWaitedOutRatherThanGivenUpOn(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 		w.store.throttles = 2
 
 		if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {

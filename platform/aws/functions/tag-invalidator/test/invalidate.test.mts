@@ -1,15 +1,17 @@
 import { createHmac } from "node:crypto";
 import { derivePurgeSecret, purgeSignatureHeader } from "@platform/edge-contract/purge";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { invalidateAll } from "../src/invalidate.mjs";
 import type { Raises } from "../src/records.mjs";
 import { pathsPerInvalidation } from "../src/tags.mjs";
 
 const TABLE = "ocel-state";
 const TIER = "production";
-const PREFIX = "pages/acme/prod/web/r0a1b2c3d";
 const RELEASE = "r0a1b2c3d";
+const COORDINATE = { project: "acme", env: "prod", app: "web", release: RELEASE };
+const BUILD = "acme/prod/web/r0a1b2c3d";
+const API = { project: "acme", env: "prod", app: "api", release: "r1111111a" };
 const PROJECT = "routers#cloudfront#acme";
 const WILDCARD = "routers#cloudfront";
 
@@ -57,16 +59,22 @@ function named(name: string): Error {
   return error;
 }
 
-function raiseOf(tags: string[], sequenceNumbers: string[], raisedAt = 1_000) {
+function raiseOf(
+  tags: string[],
+  sequenceNumbers: string[],
+  raisedAt = 1_000,
+  coordinate: StorageCoordinate = COORDINATE,
+) {
   return {
+    coordinate,
     tags,
     entries: tags.map((tag) => ({ tag, mode: "purge" as const, raisedAt })),
     sequenceNumbers,
   };
 }
 
-function raises(tags: string[], prefix = PREFIX): Raises {
-  return new Map([[prefix, raiseOf(tags, ["seq-1"])]]);
+function raises(tags: string[]): Raises {
+  return new Map([[BUILD, raiseOf(tags, ["seq-1"])]]);
 }
 
 function invalidator(dynamo: FakeDynamo, cloudfront: FakeCloudFront) {
@@ -140,8 +148,8 @@ it("reaches the wildcard for a project that names no front of its own", async ()
 
 it("reads the targets once for a batch that raises the same project twice", async () => {
   const both: Raises = new Map([
-    [PREFIX, raiseOf(["products"], ["seq-1"])],
-    ["pages/acme/prod/api/r1111111a", raiseOf(["cart"], ["seq-2"])],
+    [BUILD, raiseOf(["products"], ["seq-1"])],
+    ["acme/prod/api/r1111111a", raiseOf(["cart"], ["seq-2"], 1_000, API)],
   ]);
 
   await invalidateAll(invalidator(dynamo, cloudfront), both);
@@ -175,7 +183,7 @@ it("names a batch by what it contains, so a redrive re-sends nothing new", async
 });
 
 it("names a later raise of the same tag differently, so it is not swallowed", async () => {
-  const later: Raises = new Map([[PREFIX, raiseOf(["products"], ["seq-2"])]]);
+  const later: Raises = new Map([[BUILD, raiseOf(["products"], ["seq-2"])]]);
 
   await invalidateAll(invalidator(dynamo, cloudfront), raises(["products"]));
   const before = cloudfront.calls[0].InvalidationBatch.CallerReference;
@@ -291,20 +299,6 @@ it("fails the records of a build CloudFront refused", async () => {
   expect(failed).toEqual(["seq-1"]);
 });
 
-it("says so, and invents no target, for a prefix it cannot read", async () => {
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-  const failed = await invalidateAll(
-    invalidator(dynamo, cloudfront),
-    raises(["products"], "nonsense"),
-  );
-
-  expect(failed).toEqual([]);
-  expect(dynamo.reads).toEqual([]);
-  expect(cloudfront.calls).toEqual([]);
-  expect(warn.mock.calls.flat().join(" ")).toContain("nonsense");
-});
-
 describe("the Cloudflare target", () => {
   const CLOUDFLARE_PROJECT = "routers#cloudflare#acme";
   const PURGE_URL = "https://acme-prod.sub.workers.dev/.ocel/purge";
@@ -357,7 +351,7 @@ describe("the Cloudflare target", () => {
       cloudflareInvalidator(),
       new Map([
         [
-          PREFIX,
+          BUILD,
           {
             ...raiseOf([], ["seq-1"]),
             entries: [{ tag: "_N_T_/blog/a", mode: "purge", raisedAt: 5_000 }],
@@ -371,11 +365,11 @@ describe("the Cloudflare target", () => {
     const sent = workers.sent[0]!;
     expect(sent.url).toBe(PURGE_URL);
     expect(sent.body).toEqual({
-      pagesPrefix: PREFIX,
+      storageCoordinate: BUILD,
       mode: "purge",
       tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
     });
-    const secret = await derivePurgeSecret(SEED, PREFIX);
+    const secret = await derivePurgeSecret(SEED, COORDINATE);
     expect(sent.signature).toBe(
       createHmac("sha256", secret).update(JSON.stringify(sent.body)).digest("hex"),
     );
@@ -399,18 +393,20 @@ describe("the Cloudflare target", () => {
       ]),
     );
     const both: Raises = new Map([
-      [PREFIX, raiseOf(["a"], ["seq-1"])],
-      ["pages/acme/prod/api/r1111111a", raiseOf(["b"], ["seq-2"])],
+      [BUILD, raiseOf(["a"], ["seq-1"])],
+      ["acme/prod/api/r1111111a", raiseOf(["b"], ["seq-2"], 1_000, API)],
     ]);
 
     await invalidateAll(cloudflareInvalidator(), both);
 
-    expect(workers.sent.map((sent) => `${sent.body.pagesPrefix} ${sent.url}`).sort()).toEqual([
-      `pages/acme/prod/api/r1111111a ${PURGE_URL}`,
-      "pages/acme/prod/api/r1111111a https://acme-staging.sub.workers.dev/.ocel/purge",
-      `${PREFIX} ${PURGE_URL}`,
-      `${PREFIX} https://acme-staging.sub.workers.dev/.ocel/purge`,
-    ]);
+    expect(workers.sent.map((sent) => `${sent.body.storageCoordinate} ${sent.url}`).sort()).toEqual(
+      [
+        `acme/prod/api/r1111111a ${PURGE_URL}`,
+        "acme/prod/api/r1111111a https://acme-staging.sub.workers.dev/.ocel/purge",
+        `${BUILD} ${PURGE_URL}`,
+        `${BUILD} https://acme-staging.sub.workers.dev/.ocel/purge`,
+      ],
+    );
     expect(seedReads).toBe(1);
   });
 

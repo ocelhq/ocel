@@ -45,8 +45,6 @@ const (
 	artifactExpirationDays     = 30
 	artifactAbortMultipartDays = 7
 
-	CacheObjectLifetimeDays = 30
-
 	stateNoncurrentDays     = 7
 	stateAbortMultipartDays = 7
 )
@@ -900,7 +898,7 @@ func cacheBucketResource(name string) cfn.Resource {
 		Properties: bucketProperties(name, map[string]any{
 			"Id":                             "expire-cache",
 			"Status":                         "Enabled",
-			"ExpirationInDays":               CacheObjectLifetimeDays,
+			"ExpirationInDays":               naming.CacheObjectLifetimeDays,
 			"AbortIncompleteMultipartUpload": map[string]any{"DaysAfterInitiation": artifactAbortMultipartDays},
 		}),
 	}

@@ -22,8 +22,7 @@ type ReleaseRecord struct {
 	RouteTable           *RouteTableLocation `json:"routeTable,omitempty"`
 	Static               *edge.Static        `json:"static,omitempty"`
 	FunctionURLs         map[string]string   `json:"functionUrls"`
-	AssetPrefix          string              `json:"assetPrefix"`
-	PagesPrefix          string              `json:"pagesPrefix"`
+	StorageCoordinate    string              `json:"storageCoordinate"`
 	Prerenders           bool                `json:"prerenders,omitempty"`
 	CreatedAt            int64               `json:"createdAt"`
 	EdgeBundle           *EdgeBundle         `json:"edgeBundle,omitempty"`

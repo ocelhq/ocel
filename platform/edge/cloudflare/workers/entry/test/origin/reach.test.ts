@@ -146,22 +146,22 @@ describe("the origin's throttle", () => {
 describe("the origin's store", () => {
   const key = "pages/p1/prod/web/r9a0c0e00/blog/a.cache.json";
 
-  it("reads a page entry under the entries prefix of a store that holds entries", async () => {
+  it("reads a page entry at its own key from a store that holds entries", async () => {
     const wire = capturing();
-    const { entries } = openOrigin(storeOrigin({ holdsEntries: true, entriesPrefix: "entries/" }));
+    const { entries } = openOrigin(storeOrigin({ holdsEntries: true }));
 
     const read = await withGlobalFetch(wire.fetch, async () => (await entries?.get(key))?.text());
 
     expect(read).toBe("origin");
     expect(wire.calls.map((call) => call.url)).toEqual([
-      `https://objects.example.com/ocel-acme-production/entries/${key}`,
+      `https://objects.example.com/ocel-acme-production/${key}`,
     ]);
     expect(wire.calls[0].headers.get("authorization")).toMatch(
       /^AWS4-HMAC-SHA256 Credential=GOOG1EXAMPLEACCESSID\/\d{8}\/auto\/s3\/aws4_request, /,
     );
   });
 
-  it("reads page entries at the store's root when it names no entries prefix", async () => {
+  it("reads page entries at their own keys from an AWS origin's edge bucket", async () => {
     const wire = capturing();
     const { entries } = openOrigin({ OCEL_ORIGIN: awsOrigin({ bucket: "assets" }) });
 

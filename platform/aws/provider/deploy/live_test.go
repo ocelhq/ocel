@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/aws/provider/site"
 )
@@ -71,7 +72,7 @@ func TestAppExecutionRole(t *testing.T) {
 	t.Run("is granted the bootstrap's variables key", func(t *testing.T) {
 		t.Parallel()
 
-		caches := map[string]*site.ISR{"web": {EdgeBucket: "edge", CacheBucket: "cache"}}
+		caches := map[string]*site.ISR{"web": {Buckets: naming.Buckets{naming.StorageEdge: "edge", naming.StorageCache: "cache"}}}
 
 		role := appExecutionRole(Config{Namespace: testNamespace, VariablesKeyARN: productionVariablesKeyARN}, "web", caches, nil, variables.Bundle{}, nil, nil, false, nil)
 		if role.Variables.KeyARN != productionVariablesKeyARN {

@@ -48,11 +48,11 @@ export interface EdgeRuntime {
 export function createReleaseEdgeInvoker(
   runtime: EdgeRuntime,
   store: EdgeObjectStore,
-  record: Pick<ServedRecord, "pagesPrefix" | "releaseFingerprint" | "edge">,
+  record: Pick<ServedRecord, "storageCoordinate" | "releaseFingerprint" | "edge">,
   code: ServedCode,
 ): EdgeInvoker {
   return createEdgeInvoker(runtime.loader, code, store, {
-    scope: record.pagesPrefix,
+    scope: record.storageCoordinate,
     env: record.edge.env,
     envelope: record.edge.envelope,
     envelopeKey: runtime.envelopeKey,

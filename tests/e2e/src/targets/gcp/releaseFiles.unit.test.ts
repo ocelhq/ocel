@@ -10,7 +10,7 @@ const listed = {
           {
             env: [
               { name: "GREETING", value: "journey-hello" },
-              { name: "OCEL_ASSET_PREFIX", value: "assets/shop/prod/web/r0123abcd" },
+              { name: "OCEL_STORAGE_COORDINATE", value: "shop/prod/web/r0123abcd" },
             ],
           },
         ],
@@ -21,12 +21,12 @@ const listed = {
 };
 
 describe("the files a release uploaded", () => {
-  it("live under the asset prefix the service's current template is told", () => {
+  it("live under the assets of the storage coordinate the service's current template is told", () => {
     expect(assetPrefixOf(listed, "ocel-shop-prod-web")).toBe("assets/shop/prod/web/r0123abcd");
   });
 
-  it("cannot be found for a service that is told no asset prefix", () => {
-    expect(() => assetPrefixOf(listed, "ocel-shop-prod-api")).toThrow(/OCEL_ASSET_PREFIX/);
+  it("cannot be found for a service that is told no storage coordinate", () => {
+    expect(() => assetPrefixOf(listed, "ocel-shop-prod-api")).toThrow(/OCEL_STORAGE_COORDINATE/);
   });
 
   it("are read from the tier's edge bucket under the release's asset prefix", () => {

@@ -54,7 +54,7 @@ if (!existsSync(resultPath)) {
   fail(`${resultPath} not found — run this from the deployed app's directory, after a deploy`);
 }
 const result = JSON.parse(readFileSync(resultPath, "utf8"));
-const coordinate = storageCoordinate(result.apps?.[0]?.storagePrefix);
+const coordinate = storageCoordinate(result.apps?.[0]?.storageCoordinate);
 if (!coordinate) {
   fail(`${resultPath} records no storage coordinate for its app: ${JSON.stringify(result)}`);
 }

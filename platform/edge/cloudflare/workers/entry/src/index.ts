@@ -4,8 +4,8 @@ import type { AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin, originImagePath } from "@framework/next-router/image";
 import type { CompiledRouteTable } from "@platform/edge-contract/ocel-route-table";
 import type { OriginImages } from "@platform/edge-contract/origin-reach";
-import { readReleaseToken } from "@platform/edge-contract/purge";
-import { readAssetPrefix } from "./build-assets";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
+import { readAssetPrefix, recordAssetPrefix } from "./build-assets";
 import { withClientAddress } from "./client-address";
 import { domainApp } from "./domains";
 import {
@@ -171,14 +171,14 @@ function newReleaseServing(
   releases: ReleaseLookup,
   app: string,
 ): Serving | undefined {
-  const release = readReleaseToken(record.pagesPrefix);
+  const release = parseStorageCoordinate(record.storageCoordinate)?.release;
   if (release === undefined) return undefined;
   return newServing(base, {
     host: releases.host.toLowerCase(),
     app,
     release,
     slug: releases.slug,
-    pagesPrefix: record.pagesPrefix,
+    storageCoordinate: record.storageCoordinate,
   });
 }
 
@@ -231,7 +231,7 @@ function routedDeps(
     functionUrls: record.functionUrls,
     assetStore: {
       ...base.assetStore,
-      assetPrefix: record.assetPrefix,
+      assetPrefix: recordAssetPrefix(record),
       basePath: manifest.basePath,
       ...(record.static ? { static: record.static } : {}),
     },

@@ -159,9 +159,14 @@ func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadC
 	return out.Body, nil
 }
 
-func (a Artifacts) RemoveObjects(ctx context.Context, tier environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, progress progress.Log) error {
-	if scope.Project == "" {
-		return refusal.Refuse(refusal.CodeInvalid, "a scope naming no project names every project's objects")
+func (a Artifacts) RemoveObjects(ctx context.Context, tier environment.Tier, scope naming.StorageScope, kinds []naming.ObjectKind, progress progress.Log) error {
+	prefixes := make([]string, len(kinds))
+	for i, kind := range kinds {
+		prefix, err := scope.Prefix(kind)
+		if err != nil {
+			return err
+		}
+		prefixes[i] = prefix
 	}
 	buckets, err := a.buckets(ctx, tier)
 	if err != nil {
@@ -169,17 +174,16 @@ func (a Artifacts) RemoveObjects(ctx context.Context, tier environment.Tier, sco
 	}
 	var errs []error
 	var swept []string
-	for _, kind := range kinds {
+	for i, kind := range kinds {
 		bucket := buckets.Holding(kind)
 		if bucket == "" {
 			continue
 		}
-		prefix := scope.StoragePrefix(kind)
-		if err := a.sweep(ctx, a.S3, bucket, prefix); err != nil {
+		if err := a.sweep(ctx, a.S3, bucket, prefixes[i]); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		swept = append(swept, prefix)
+		swept = append(swept, prefixes[i])
 	}
 	if progress != nil && len(errs) == 0 && len(swept) > 0 {
 		progress.Say(fmt.Sprintf("Removed the %s objects under %s", tier, strings.Join(swept, ", ")))

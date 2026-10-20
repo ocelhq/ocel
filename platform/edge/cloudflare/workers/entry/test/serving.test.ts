@@ -29,7 +29,7 @@ const scope = {
   app: "web",
   release: "r0a1b2c3d",
   slug: "p1",
-  pagesPrefix: "pages/p1/prod/web/r0a1b2c3d",
+  storageCoordinate: "p1/prod/web/r0a1b2c3d",
 };
 const groups = [{ mode: "purge" as const, tags: ["r0a1b2c3d|a"] }];
 
@@ -41,7 +41,7 @@ describe("the serving of one release", () => {
 
     expect(raised).toEqual([
       {
-        scope: { slug: "p1", pagesPrefix: "pages/p1/prod/web/r0a1b2c3d" },
+        scope: { slug: "p1", storageCoordinate: "p1/prod/web/r0a1b2c3d" },
         mode: "purge",
         tags: [{ tag: "r0a1b2c3d|a", raisedAt: 9_000 }],
       },

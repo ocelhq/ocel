@@ -324,7 +324,7 @@ func TestAPromotedPreviewRouteNamesTheSlugTheResolverReadsItsGateUnder(t *testin
 func TestAPromotedProductionRouteNamesTheSlugTheResolverReadsItsGateUnder(t *testing.T) {
 	w := newWorld()
 	stack := reconcileGated(t, bootstrapped(t, w), environment.TierProduction, &shopGate)
-	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	staged(t, stack, fakeEntryURL, fakeStorageCoordinate)
 	if err := openRouter(stack).MovePointer(context.Background(), router.PointerMove{Promotion: promotion()}, progress.Discard()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}

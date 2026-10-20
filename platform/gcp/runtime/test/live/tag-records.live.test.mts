@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { type StorageCoordinate, storagePrefix } from "@platform/edge-contract/storage-key";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Firestore, newFirestore } from "../../src/next/firestore.mjs";
 import { newFirestoreTagRecords } from "../../src/next/tag-records.mjs";
@@ -9,13 +10,18 @@ const maxDeletesPerCommit = 500;
 describe("tag records against a live backend", () => {
   let backend: Backend;
   let firestore: Firestore;
-  const written: { pagesPrefix: string; tag: string }[] = [];
+  const written: { release: StorageCoordinate; tag: string }[] = [];
 
-  const prefixOf = () => `pages/live/prod/web/r${randomBytes(4).toString("hex")}`;
+  const releaseOf = (): StorageCoordinate => ({
+    project: "live",
+    env: "prod",
+    app: "web",
+    release: `r${randomBytes(4).toString("hex")}`,
+  });
 
-  const instanceOn = (pagesPrefix: string, tags: string[]) => {
-    for (const tag of tags) written.push({ pagesPrefix, tag });
-    return newFirestoreTagRecords(firestore, pagesPrefix);
+  const instanceOn = (release: StorageCoordinate, tags: string[]) => {
+    for (const tag of tags) written.push({ release, tag });
+    return newFirestoreTagRecords(firestore, release);
   };
 
   beforeAll(async () => {
@@ -30,8 +36,10 @@ describe("tag records against a live backend", () => {
   afterAll(async () => {
     if (backend === undefined) return;
     if (firestore !== undefined) {
-      const names = written.map(({ pagesPrefix, tag }) => {
-        const id = createHash("sha256").update(`${pagesPrefix}/${tag}`).digest("hex");
+      const names = written.map(({ release, tag }) => {
+        const id = createHash("sha256")
+          .update(`${storagePrefix("pages", release)}${tag}`)
+          .digest("hex");
         return `${firestore.database}/documents/tags/${id}`;
       });
       for (let from = 0; from < names.length; from += maxDeletesPerCommit) {
@@ -44,9 +52,9 @@ describe("tag records against a live backend", () => {
   });
 
   it("reads on one instance a tag another instance published", async () => {
-    const pagesPrefix = prefixOf();
-    const a = instanceOn(pagesPrefix, ["products"]);
-    const b = instanceOn(pagesPrefix, []);
+    const release = releaseOf();
+    const a = instanceOn(release, ["products"]);
+    const b = instanceOn(release, []);
     const expired = Date.now();
 
     await a.publish("products", { expired });
@@ -58,8 +66,8 @@ describe("tag records against a live backend", () => {
   });
 
   it("keeps the larger time when a later publish carries a smaller one", async () => {
-    const pagesPrefix = prefixOf();
-    const tags = instanceOn(pagesPrefix, ["products"]);
+    const release = releaseOf();
+    const tags = instanceOn(release, ["products"]);
 
     await tags.publish("products", { expired: 5 });
     await tags.publish("products", { expired: 3 });
@@ -71,8 +79,8 @@ describe("tag records against a live backend", () => {
   });
 
   it("answers from a cursor only what was written after it", async () => {
-    const pagesPrefix = prefixOf();
-    const tags = instanceOn(pagesPrefix, ["products", "late"]);
+    const release = releaseOf();
+    const tags = instanceOn(release, ["products", "late"]);
 
     await tags.publish("products", { expired: 1 });
     await new Promise((resolve) => setTimeout(resolve, 2500));
@@ -87,9 +95,9 @@ describe("tag records against a live backend", () => {
     expect(Object.keys(second.records)).not.toContain("products");
   });
 
-  it("never reads the tags of another deployment's prefix", async () => {
-    const mine = instanceOn(prefixOf(), ["products"]);
-    const theirs = instanceOn(prefixOf(), []);
+  it("never reads the tags of another release", async () => {
+    const mine = instanceOn(releaseOf(), ["products"]);
+    const theirs = instanceOn(releaseOf(), []);
 
     await mine.publish("products", { expired: 1 });
     const read = await theirs.read(null);

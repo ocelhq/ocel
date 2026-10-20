@@ -124,7 +124,6 @@ function readStore(value: unknown): OriginStore | undefined {
     url,
     region: readText(store, "region", what),
     holdsEntries: store.holdsEntries,
-    entriesPrefix: readOptionalText(store, "entriesPrefix", what),
     accessKeyId: readText(store, "accessKeyId", what),
     secretAccessKey: readText(store, "secretAccessKey", what),
   };

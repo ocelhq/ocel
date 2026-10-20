@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -20,16 +21,20 @@ func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) *StaticR
 		record.Static == nil || len(record.Static.ImmutablePrefixes) == 0 {
 		return nil
 	}
+	storage, err := naming.ParseStorageCoordinate(record.StorageCoordinate)
+	if err != nil {
+		return nil
+	}
 	return &StaticRoutes{
 		Backend:    balancer.AssetsBackend,
-		Objects:    "/" + record.AssetPrefix,
+		Objects:    naming.PathSeparator + storage.StoragePrefix(naming.ObjectAssets),
 		Immutable:  record.Static.ImmutablePrefixes,
 		Revalidate: record.Static.MustRevalidatePrefixes,
 	}
 }
 
 func hasUploadedStaticFiles(record router.ReleaseRecord) bool {
-	return record.Framework == buildoutput.FrameworkNext && record.Physical == "" && record.AssetPrefix != ""
+	return record.Framework == buildoutput.FrameworkNext && record.Physical == ""
 }
 
 func encodeStaticRoutes(record router.ReleaseRecord, balancer LoadBalancer) (string, error) {

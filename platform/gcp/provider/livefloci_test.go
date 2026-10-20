@@ -171,7 +171,7 @@ func TestLiveRemovingAScopeLeavesEveryKindItDoesNotName(t *testing.T) {
 		}
 	}
 
-	if err := artifacts.RemoveObjects(ctx, tier, swept, kinds, nil); err != nil {
+	if err := artifacts.RemoveObjects(ctx, tier, scopeOf(t)(naming.ReleaseScope(swept)), kinds, nil); err != nil {
 		t.Fatalf("RemoveObjects(%+v) = %v", swept, err)
 	}
 
@@ -187,7 +187,7 @@ func TestLiveRemovingAScopeLeavesEveryKindItDoesNotName(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
-		_ = artifacts.RemoveObjects(ctx, tier, naming.Coordinate{Project: "conformance"}, naming.CoordinateObjectKinds, nil)
+		_ = artifacts.RemoveObjects(ctx, tier, scopeOf(t)(naming.ProjectScope("conformance")), naming.CoordinateObjectKinds, nil)
 	})
 }
 
@@ -204,7 +204,7 @@ func TestLiveRemovingAScopeNamingNoProjectIsRefusedRatherThanSweepingTheBucket(t
 	}
 
 	var refused refusal.Refusal
-	err := artifacts.RemoveObjects(ctx, environment.TierProduction, naming.Coordinate{}, naming.CoordinateObjectKinds, nil)
+	err := artifacts.RemoveObjects(ctx, environment.TierProduction, naming.StorageScope{}, naming.CoordinateObjectKinds, nil)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("RemoveObjects() of an empty scope = %v, want an %s refusal: it names every project's objects", err, refusal.CodeInvalid)
 	}

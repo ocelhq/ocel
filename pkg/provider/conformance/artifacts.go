@@ -76,7 +76,7 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 				t.Fatal(err)
 			}
 		}
-		if err := artifacts.RemoveObjects(ctx, ref.Tier, removed, naming.CoordinateObjectKinds, nil); err != nil {
+		if err := artifacts.RemoveObjects(ctx, ref.Tier, releaseScope(t, removed), naming.CoordinateObjectKinds, nil); err != nil {
 			t.Fatalf("RemoveObjects() = %v", err)
 		}
 		if present, err := artifacts.Has(ctx, gone); err != nil || present {
@@ -99,7 +99,7 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 				t.Fatal(err)
 			}
 		}
-		if err := artifacts.RemoveObjects(ctx, environment.TierPreview, removed, []naming.ObjectKind{naming.ObjectAssets}, nil); err != nil {
+		if err := artifacts.RemoveObjects(ctx, environment.TierPreview, releaseScope(t, removed), []naming.ObjectKind{naming.ObjectAssets}, nil); err != nil {
 			t.Fatalf("RemoveObjects() = %v", err)
 		}
 		opened, err := artifacts.Open(ctx, production)
@@ -110,14 +110,45 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 	})
 
 	t.Run("RemoveObjects of a scope containing nothing is not an error", func(t *testing.T) {
-		if err := artifacts.RemoveObjects(ctx, ref.Tier, conformanceRelease(t.Name()), naming.CoordinateObjectKinds, nil); err != nil {
+		if err := artifacts.RemoveObjects(ctx, ref.Tier, releaseScope(t, conformanceRelease(t.Name())), naming.CoordinateObjectKinds, nil); err != nil {
 			t.Fatalf("RemoveObjects() of a scope nothing was written under = %v, want nil", err)
+		}
+	})
+
+	t.Run("RemoveObjects of an app's scope takes its every release and leaves its neighbours", func(t *testing.T) {
+		removed := conformanceRelease(t.Name())
+		removed.Project = "conformance-app"
+		other := removed
+		other.Release = naming.NewReleaseToken(t.Name()+"-other", "")
+		neighbour := removed
+		neighbour.App = "admin"
+		gone := []provider.ArtifactRef{{Tier: ref.Tier, Key: removed.AssetKey("bundle")}, {Tier: ref.Tier, Key: other.AssetKey("bundle")}}
+		kept := provider.ArtifactRef{Tier: ref.Tier, Key: neighbour.AssetKey("bundle")}
+		for _, at := range append(gone, kept) {
+			if err := artifacts.Put(ctx, at, bytes.NewReader(body)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		scope, err := naming.AppScope(removed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := artifacts.RemoveObjects(ctx, ref.Tier, scope, []naming.ObjectKind{naming.ObjectAssets}, nil); err != nil {
+			t.Fatalf("RemoveObjects() = %v", err)
+		}
+		for _, at := range gone {
+			if present, err := artifacts.Has(ctx, at); err != nil || present {
+				t.Errorf("Has(%s) of a release of the app removed = %v, %v, want false", at.Key, present, err)
+			}
+		}
+		if present, err := artifacts.Has(ctx, kept); err != nil || !present {
+			t.Errorf("Has(%s) of a neighbouring app = %v, %v, want it still stored", kept.Key, present, err)
 		}
 	})
 
 	t.Run("RemoveObjects of a scope naming no project is refused", func(t *testing.T) {
 		var refused refusal.Refusal
-		if err := artifacts.RemoveObjects(ctx, ref.Tier, naming.Coordinate{}, naming.CoordinateObjectKinds, nil); !errors.As(err, &refused) {
+		if err := artifacts.RemoveObjects(ctx, ref.Tier, naming.StorageScope{}, naming.CoordinateObjectKinds, nil); !errors.As(err, &refused) {
 			t.Fatalf("RemoveObjects() of an empty scope = %v, want a refusal: it names every project's objects", err)
 		}
 	})
@@ -125,6 +156,15 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 
 func conformanceRelease(name string) naming.Coordinate {
 	return naming.Coordinate{Project: "conformance", Env: "prod", App: "web", Name: "api", Release: naming.NewReleaseToken(name, "")}
+}
+
+func releaseScope(t *testing.T, release naming.Coordinate) naming.StorageScope {
+	t.Helper()
+	scope, err := naming.ReleaseScope(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scope
 }
 
 func runStorelessArtifactStore(t *testing.T, artifacts provider.ArtifactStore, ref provider.ArtifactRef) {
@@ -169,7 +209,11 @@ func runStorelessArtifactStore(t *testing.T, artifacts provider.ArtifactStore, r
 
 	t.Run("RemoveObjects of any scope, including one nothing wrote under, is nil", func(t *testing.T) {
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			for _, scope := range []naming.Coordinate{{Project: "conformance"}, conformanceRelease(t.Name())} {
+			project, err := naming.ProjectScope("conformance")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, scope := range []naming.StorageScope{project, releaseScope(t, conformanceRelease(t.Name()))} {
 				if err := artifacts.RemoveObjects(ctx, tier, scope, naming.CoordinateObjectKinds, nil); err != nil {
 					t.Errorf("RemoveObjects(%s, %+v) = %v, want nil: teardown sweeps it on every destroy and every preview reap", tier, scope, err)
 				}

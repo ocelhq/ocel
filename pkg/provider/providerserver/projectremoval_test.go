@@ -467,7 +467,7 @@ func TestRemoveProjectRemovesEveryKindOfObjectUnderTheProjectAndNothingNarrower(
 
 	var want, removed []string
 	for _, kind := range naming.CoordinateObjectKinds {
-		want = append(want, "remove "+naming.Coordinate{Project: "shop"}.StoragePrefix(kind))
+		want = append(want, "remove "+string(kind)+"/shop/")
 	}
 	for _, entry := range vendor.Journal() {
 		if strings.HasPrefix(entry, "remove ") {

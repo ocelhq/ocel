@@ -20,7 +20,7 @@ func TestAKeyOfNoKindOcelStoresIsRefusedBeforeTheBucketIsReached(t *testing.T) {
 }
 
 func TestRemovingObjectsOfAScopeNamingNoProjectIsRefused(t *testing.T) {
-	err := Store{}.RemoveObjects(context.Background(), environment.TierProduction, naming.Coordinate{Env: "prod"}, naming.CoordinateObjectKinds, nil)
+	err := Store{}.RemoveObjects(context.Background(), environment.TierProduction, naming.StorageScope{}, naming.CoordinateObjectKinds, nil)
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("RemoveObjects() of a scope naming no project = %v, want an invalid-input refusal", err)
 	}

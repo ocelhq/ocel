@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -62,6 +63,7 @@ type Config struct {
 
 	RuntimeLayers map[string]string
 
+	BytecodeCache bool
 	BytecodeEmbed bool
 
 	ArtifactRoot   string
@@ -138,6 +140,10 @@ func (c Config) containerTarget() container.Target {
 
 func (c Config) workerTarget() worker.Target {
 	return worker.Target{Namespace: c.Namespace, Tier: c.Tier, StateTable: c.stateTable()}
+}
+
+func (c Config) storageBuckets() naming.Buckets {
+	return naming.Buckets{naming.StorageArtifacts: c.ArtifactBucket, naming.StorageEdge: c.EdgeBucket, naming.StorageCache: c.CacheBucket}
 }
 
 func (c Config) buckets() site.Buckets {

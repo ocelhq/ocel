@@ -7,7 +7,13 @@ import type { OriginThrottle } from "@framework/next-router/retry";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import { type Invoke, invalidatesByCacheTag } from "@framework/node-runtime/host";
 import { withRouterHeader } from "@framework/node-runtime/router-header";
+import { assetPrefix, readStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { uncachedResponses } from "./uncached-responses.mjs";
+
+function releaseAssetPrefix(env: NodeJS.ProcessEnv): string {
+  const coordinate = readStorageCoordinate(env);
+  return coordinate ? assetPrefix(coordinate) : "";
+}
 
 export interface DispatchHost {
   manifest: NextRouteTable;
@@ -132,7 +138,7 @@ export function readDispatchHost(
     slug: env.OCEL_SLUG ?? "",
     app: env.OCEL_APP ?? manifest.appName ?? "",
     appBuildId: env.OCEL_BUILD_ID ?? "",
-    assetPrefix: env.OCEL_ASSET_PREFIX ?? "",
+    assetPrefix: releaseAssetPrefix(env),
     ...(env[staticRulesVar] ? { static: parseStaticRules(env[staticRulesVar]) } : {}),
     ...(access.assetBucket ? { assetBucket: access.assetBucket } : {}),
     ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),

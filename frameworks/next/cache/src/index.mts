@@ -46,12 +46,12 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function entryObjectKey(pagesPrefix: string, key: string): string | null {
+export function entryObjectKey(coordinate: StorageCoordinate, key: string): string | null {
   if (key === "" || key.startsWith("/") || key.includes("\\")) return null;
   for (const segment of key.split("/")) {
     if (segment === "." || segment === "..") return null;
   }
-  return `${pagesPrefix}/${key}.cache.json`;
+  return objectKey("pages", coordinate, `${key}.cache.json`);
 }
 
 export function tagsOf(value: Record<string, any>, ctx: any): string[] {

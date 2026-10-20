@@ -53,8 +53,8 @@ func bound(t *testing.T, stack edge.EdgeStack, hostname, app string) {
 	}
 }
 
-func releasePrefix(release int) string {
-	return fmt.Sprintf("pages/shop/prod/web/r%08d", release)
+func releaseCoordinate(release int) string {
+	return fmt.Sprintf("shop/prod/web/r%08d", release)
 }
 
 func stagedRelease(t *testing.T, stack edge.EdgeStack, app, build string, release int, framework string) {
@@ -62,8 +62,8 @@ func stagedRelease(t *testing.T, stack edge.EdgeStack, app, build string, releas
 	physical := "ocel-shop-prod-" + app
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.ReleaseRecord{
 		App: app, Release: build, Physical: physical, Framework: framework,
-		PagesPrefix: strings.Replace(releasePrefix(release), "/web/", "/"+app+"/", 1),
-		Revisions:   map[string]string{physical: physical + "-" + build},
+		StorageCoordinate: strings.Replace(releaseCoordinate(release), "/web/", "/"+app+"/", 1),
+		Revisions:         map[string]string{physical: physical + "-" + build},
 	}); err != nil {
 		t.Fatalf("PutStaged(%s/%s) = %v", app, build, err)
 	}
@@ -74,8 +74,8 @@ func stagedFunctionRelease(t *testing.T, stack edge.EdgeStack, app, build string
 	entry := "ocel-shop-prod-" + app
 	if err := openRouter(stack).Ledger.PutStaged(context.Background(), router.ReleaseRecord{
 		App: app, Release: build, RootFunctionPhysical: entry, Framework: framework,
-		PagesPrefix: strings.Replace(releasePrefix(release), "/web/", "/"+app+"/", 1),
-		Revisions:   map[string]string{entry: entry + "-" + build},
+		StorageCoordinate: strings.Replace(releaseCoordinate(release), "/web/", "/"+app+"/", 1),
+		Revisions:         map[string]string{entry: entry + "-" + build},
 	}); err != nil {
 		t.Fatalf("PutStaged(%s/%s) = %v", app, build, err)
 	}
@@ -246,7 +246,7 @@ func TestADeploymentPointerRecordsNoRelease(t *testing.T) {
 	t.Parallel()
 
 	_, w, shared := reconciled(t)
-	records := map[string]router.ReleaseRecord{"web": {App: "web", Framework: buildoutput.FrameworkNext, PagesPrefix: releasePrefix(1), Physical: "ocel-shop-prod-web", Revisions: map[string]string{"ocel-shop-prod-web": "rev-1"}}}
+	records := map[string]router.ReleaseRecord{"web": {App: "web", Framework: buildoutput.FrameworkNext, StorageCoordinate: releaseCoordinate(1), Physical: "ocel-shop-prod-web", Revisions: map[string]string{"ocel-shop-prod-web": "rev-1"}}}
 	move := router.PointerMove{Pointer: router.FormatDeploymentPointer("pr-7", "p1"), Records: records}
 	if err := (routerStack{s: shared.(*stack)}).MovePointer(context.Background(), move, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer = %v", err)
@@ -290,19 +290,18 @@ func TestAPurgeThatFailsWarnsWithTheCommandToClearItAndLeavesThePromotionServed(
 	}
 }
 
-func TestAReleaseTagIsTheReleaseTokenOfThePagesPrefix(t *testing.T) {
+func TestAReleaseTagIsTheReleaseTokenOfTheStorageCoordinate(t *testing.T) {
 	t.Parallel()
 
-	for prefix, want := range map[string]string{
-		"pages/shop/prod/web/r1a2b3c4d":        "r1a2b3c4d",
-		"pages/shop/prod/web/r1a2b3c4d/x.json": "",
-		"assets/shop/prod/web/r1a2b3c4d":       "",
-		"pages/shop/prod/web/rXYZ":             "",
-		"production/shop/web/r1a2b3c4d/isr":    "",
-		"":                                     "",
+	for coordinate, want := range map[string]string{
+		"shop/prod/web/r1a2b3c4d":        "r1a2b3c4d",
+		"shop/prod/web/r1a2b3c4d/x.json": "",
+		"shop/prod/web/rXYZ":             "",
+		"shop/prod/web":                  "",
+		"":                               "",
 	} {
-		if got := readReleaseTag(router.ReleaseRecord{PagesPrefix: prefix}); got != want {
-			t.Errorf("readReleaseTag(%q) = %q, want %q", prefix, got, want)
+		if got := readReleaseTag(router.ReleaseRecord{StorageCoordinate: coordinate}); got != want {
+			t.Errorf("readReleaseTag(%q) = %q, want %q", coordinate, got, want)
 		}
 	}
 }
@@ -426,7 +425,7 @@ func TestAPreviewPromotionClearsOnlyThePreviewHostnamesItServes(t *testing.T) {
 	stagedRelease(t, stack, "web", "b0", 1, "")
 	promoted(t, stack, progress.Discard(), "p0", "", map[string]string{"web": "b0"})
 	if err := openRouter(stack).Ledger.PutStaged(ctx, router.ReleaseRecord{
-		App: "web", Release: "b1", Physical: "shop--pr-7", PagesPrefix: releasePrefix(2),
+		App: "web", Release: "b1", Physical: "shop--pr-7", StorageCoordinate: releaseCoordinate(2),
 		Revisions: map[string]string{"shop--pr-7": "shop--pr-7-b1"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)

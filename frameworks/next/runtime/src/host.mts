@@ -18,7 +18,7 @@ const hostKey = Symbol.for("ocel.next.host.v1");
 
 const slots = globalThis as Record<symbol, NextHost | (() => NextHost) | undefined>;
 
-const storageCoordinateVar = "OCEL_STORAGE_COORDINATE";
+const isrVar = "OCEL_ISR";
 
 export function installNextHost(host: NextHost): void {
   slots[hostKey] = host;
@@ -45,8 +45,9 @@ export function getNextHost(): NextHost {
 
 export function refuseIncompleteHost(host: NextHost, env: NodeJS.ProcessEnv): Error | undefined {
   const missing: string[] = [];
-  if (env[storageCoordinateVar] && !host.newCacheStore) missing.push("cache store");
-  if (env[storageCoordinateVar] && !host.newUseCacheStore) missing.push("use-cache store");
+  const revalidates = env[isrVar] === "1";
+  if (revalidates && !host.newCacheStore) missing.push("cache store");
+  if (revalidates && !host.newUseCacheStore) missing.push("use-cache store");
   if (dispatchesAtOrigin(env) && !host.newDispatchInvoke) missing.push("dispatcher");
   if (missing.length === 0) return undefined;
   return new Error(`ocel: the Next runtime's host installed no ${missing.join(", no ")}`);

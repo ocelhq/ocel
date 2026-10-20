@@ -5,16 +5,16 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 type ISR struct {
 	Coord     naming.Coordinate
 	Namespace string
 
-	EdgeBucket  string
-	CacheBucket string
-	Table       string
-	TableARN    string
+	Buckets  naming.Buckets
+	Table    string
+	TableARN string
 
 	PurgeSecret string
 }
@@ -30,20 +30,17 @@ func (c ISR) TagNamespace() string {
 }
 
 func (c ISR) Env() map[string]string {
-	env := map[string]string{
-		"OCEL_EDGE_BUCKET":        c.EdgeBucket,
-		"OCEL_CACHE_BUCKET":       c.CacheBucket,
-		"OCEL_STORAGE_COORDINATE": c.Coord.StorageCoordinate(),
-		"OCEL_STATE_TABLE":        c.Table,
-		"OCEL_ISR_TAG_NAMESPACE":  c.TagNamespace(),
+	return map[string]string{
+		processenv.ISREnvVar:     "1",
+		"OCEL_STATE_TABLE":       c.Table,
+		"OCEL_ISR_TAG_NAMESPACE": c.TagNamespace(),
 	}
-	return env
 }
 
 func (c ISR) Policy() (string, error) {
 	namespace := c.TagNamespace()
 	if namespace == "" {
-		return "", fmt.Errorf("the isr cache in %s and %s has no coordinate, so neither its objects nor its tag items can be scoped to this app", c.EdgeBucket, c.CacheBucket)
+		return "", fmt.Errorf("the isr cache in %s and %s has no coordinate, so neither its objects nor its tag items can be scoped to this app", c.Buckets[naming.StorageEdge], c.Buckets[naming.StorageCache])
 	}
 	objects := make([]string, len(naming.ISRObjectKinds))
 	for i, kind := range naming.ISRObjectKinds {
@@ -75,13 +72,6 @@ func (c ISR) Policy() (string, error) {
 	return string(out), nil
 }
 
-func (c ISR) bucketOf(kind naming.ObjectKind) string {
-	if kind.Class() == naming.StorageEdge {
-		return c.EdgeBucket
-	}
-	return c.CacheBucket
-}
-
 func (c ISR) objectARN(kind naming.ObjectKind) string {
-	return fmt.Sprintf("arn:aws:s3:::%s/%s*", c.bucketOf(kind), c.Coord.StoragePrefix(kind))
+	return fmt.Sprintf("arn:aws:s3:::%s/%s*", c.Buckets.Holding(kind), c.Coord.StoragePrefix(kind))
 }

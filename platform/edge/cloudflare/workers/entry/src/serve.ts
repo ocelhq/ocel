@@ -11,12 +11,8 @@ import { asSegmentPayload, isSegmentPrefetch } from "@framework/next-router/segm
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
 import { edgeCacheTagHeader } from "@platform/edge-contract/edge-cache";
 import type { OriginImages } from "@platform/edge-contract/origin-reach";
-import {
-  type PurgeMode,
-  purgeHeader,
-  readPurge,
-  readReleaseToken,
-} from "@platform/edge-contract/purge";
+import { type PurgeMode, purgeHeader, readPurge } from "@platform/edge-contract/purge";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { createReleaseEdgeInvoker, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { newPurgeQueuePort, openPurgeQueue } from "./exports";
@@ -119,11 +115,12 @@ function parseRenderRelease(header: string | null): RenderRelease | undefined {
   if (header === null) return undefined;
   try {
     const parsed = JSON.parse(header) as Partial<RenderRelease>;
-    if (typeof parsed.slug !== "string" || typeof parsed.pagesPrefix !== "string") return undefined;
+    if (typeof parsed.slug !== "string" || typeof parsed.storageCoordinate !== "string")
+      return undefined;
     const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t) => typeof t === "string") : [];
     return {
       slug: parsed.slug,
-      pagesPrefix: parsed.pagesPrefix,
+      storageCoordinate: parsed.storageCoordinate,
       tags,
       ...(parsed.sharesFallbackShell === true && { sharesFallbackShell: true }),
       ...(parsed.honoursAppCacheHeaders === true && { honoursAppCacheHeaders: true }),
@@ -220,9 +217,12 @@ async function readRenderRecord(
   if (!render) return undefined;
   const served = await env.RELEASES.readServedRecord({
     slug: render.slug,
-    pagesPrefix: render.pagesPrefix,
+    storageCoordinate: render.storageCoordinate,
   });
-  if (served.kind !== "record" || readReleaseToken(served.record.pagesPrefix) !== release) {
+  if (
+    served.kind !== "record" ||
+    parseStorageCoordinate(served.record.storageCoordinate)?.release !== release
+  ) {
     return undefined;
   }
   return { record: served.record, render };
@@ -374,7 +374,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     ) {
       return respondMiss();
     }
-    const scope = { slug: found.render.slug, pagesPrefix: found.render.pagesPrefix };
+    const scope = { slug: found.render.slug, storageCoordinate: found.render.storageCoordinate };
     const render = () =>
       this.renderAtOrigin(request, { host, release, scope, keyedUrl, honoursAppCacheHeaders });
     if (variant === PPR_SHELL_VARIANT) {
@@ -458,7 +458,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     if (!source) return null;
     return readFromStore(
       {
-        pagesPrefix: render.pagesPrefix,
+        storageCoordinate: render.storageCoordinate,
         release,
         entryPath: entry.path,
         fallbackPath: sharedShell ? undefined : entry.fallbackPath,

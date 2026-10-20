@@ -40,10 +40,10 @@ async function signed(
   });
 }
 
-const PREFIX = "pages/p1/prod/web/r0a1b2c3d";
+const COORDINATE = "p1/prod/web/r0a1b2c3d";
 
 const raise = {
-  pagesPrefix: PREFIX,
+  storageCoordinate: COORDINATE,
   mode: "purge",
   tags: [{ tag: "_N_T_/blog/a", raisedAt: 1_000 }],
 };
@@ -58,11 +58,11 @@ function deps(): PurgeGatewayPorts {
   return {
     slug: "p1",
     now: () => 1_000_000,
-    async readServed(pagesPrefix) {
+    async readServed(storageCoordinate) {
       if (storeDown) throw new Error("releases store is down");
-      const record = served[pagesPrefix];
+      const record = served[storageCoordinate];
       if (record) return { kind: "record", record };
-      return kept.includes(pagesPrefix) ? { kind: "not-served" } : { kind: "forgotten" };
+      return kept.includes(storageCoordinate) ? { kind: "not-served" } : { kind: "forgotten" };
     },
     queue: {
       async raise(scope, mode, tags) {
@@ -75,7 +75,7 @@ function deps(): PurgeGatewayPorts {
 
 beforeEach(() => {
   raised = [];
-  served = { [PREFIX]: { edge: { purgeSecret: SECRET } } };
+  served = { [COORDINATE]: { edge: { purgeSecret: SECRET } } };
   kept = [];
   storeDown = false;
   warnings = [];
@@ -106,7 +106,7 @@ describe("answering a signed purge request", () => {
     expect(response.status).toBe(202);
     expect(raised).toEqual([
       {
-        scope: { slug: "p1", pagesPrefix: PREFIX },
+        scope: { slug: "p1", storageCoordinate: COORDINATE },
         mode: "purge",
         tags: [{ tag: "r0a1b2c3d|_N_T_/blog/a", raisedAt: 1_000 }],
       },
@@ -258,9 +258,9 @@ describe("answering a signed purge request", () => {
 
 describe("refusing a purge request", () => {
   it("answers 204 for a release that is not served, since nothing caches under it", async () => {
-    kept = ["pages/p1/prod/web/r0000000a"];
+    kept = ["p1/prod/web/r0000000a"];
     const response = await answerPurge(
-      await signed({ ...raise, pagesPrefix: "pages/p1/prod/web/r0000000a" }),
+      await signed({ ...raise, storageCoordinate: "p1/prod/web/r0000000a" }),
       deps(),
     );
 
@@ -270,7 +270,7 @@ describe("refusing a purge request", () => {
 
   it("answers 204 for a release no pointer serves or keeps, since nothing ever caches under it again", async () => {
     const response = await answerPurge(
-      await signed({ ...raise, pagesPrefix: "pages/p1/prod/web/r0000000a" }),
+      await signed({ ...raise, storageCoordinate: "p1/prod/web/r0000000a" }),
       deps(),
     );
 
@@ -321,7 +321,7 @@ describe("refusing a purge request", () => {
   });
 
   it("answers 401 when the served release has no purge secret to check against", async () => {
-    served[PREFIX] = { edge: {} };
+    served[COORDINATE] = { edge: {} };
 
     const response = await answerPurge(await signed(raise), deps());
 
@@ -336,19 +336,28 @@ describe("refusing a purge request", () => {
   });
 
   it.each([
-    ["no pages prefix", { mode: "purge", tags: [] }],
-    ["a release's name for its pages prefix", { release: "build-1~fp1", mode: "purge", tags: [] }],
+    ["no storage coordinate", { mode: "purge", tags: [] }],
     [
-      "a pages prefix naming no release",
-      { pagesPrefix: "pages/p1/prod/web", mode: "purge", tags: [] },
+      "a release's name for its storage coordinate",
+      { release: "build-1~fp1", mode: "purge", tags: [] },
     ],
-    ["an unknown mode", { pagesPrefix: PREFIX, mode: "obliterate", tags: [] }],
-    ["tags that are not a list", { pagesPrefix: PREFIX, mode: "purge", tags: "a" }],
-    ["a tag with no raisedAt", { pagesPrefix: PREFIX, mode: "purge", tags: [{ tag: "a" }] }],
-    ["an empty tag", { pagesPrefix: PREFIX, mode: "purge", tags: [{ tag: "", raisedAt: 1 }] }],
+    [
+      "a storage coordinate naming no release",
+      { storageCoordinate: "p1/prod/web", mode: "purge", tags: [] },
+    ],
+    ["an unknown mode", { storageCoordinate: COORDINATE, mode: "obliterate", tags: [] }],
+    ["tags that are not a list", { storageCoordinate: COORDINATE, mode: "purge", tags: "a" }],
+    [
+      "a tag with no raisedAt",
+      { storageCoordinate: COORDINATE, mode: "purge", tags: [{ tag: "a" }] },
+    ],
+    [
+      "an empty tag",
+      { storageCoordinate: COORDINATE, mode: "purge", tags: [{ tag: "", raisedAt: 1 }] },
+    ],
     [
       "a raisedAt that is not finite",
-      { pagesPrefix: PREFIX, mode: "purge", tags: [{ tag: "a", raisedAt: null }] },
+      { storageCoordinate: COORDINATE, mode: "purge", tags: [{ tag: "a", raisedAt: null }] },
     ],
   ])("answers 400 for %s", async (_name, body) => {
     const response = await answerPurge(await signed(body), deps());

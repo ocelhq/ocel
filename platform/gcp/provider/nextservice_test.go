@@ -41,6 +41,7 @@ func nextSpec() provider.StackSpec {
 			BuildID:      "dpl_7",
 			Compute:      provider.ComputeServerless,
 			Router:       "cloudrun",
+			Storage:      cachedRelease(),
 			Functions: []provider.FunctionSpec{{
 				Name:      "bundle-0",
 				Route:     "bundle-0",
@@ -129,8 +130,7 @@ func cachedRelease() naming.Coordinate {
 func routedNextSpec() provider.StackSpec {
 	spec := nextSpec()
 	spec.App.Routing = &provider.RoutingSpec{RootFunction: "bundle-0", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(`{"rootFunction":"bundle-0"}`)}}
-	spec.App.ISR = &provider.ISRSpec{Coordinate: cachedRelease(), TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
-	spec.App.AssetPrefix = "assets/shop/prod/web/r1a2b3c4d"
+	spec.App.ISR = &provider.ISRSpec{TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"}
 	return spec
 }
 
@@ -138,12 +138,12 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldWhatItRoutesBy(t *testing.T) 
 	env := googletest.EnvOf(releasedNext(t, routedNextSpec()))
 
 	for name, want := range map[string]string{
-		"OCEL_NEXT_ROUTE_TABLE": "/ocel/app/" + edge.NextRouteTableFile,
-		"OCEL_ASSET_PREFIX":     "assets/shop/prod/web/r1a2b3c4d",
-		"OCEL_SLUG":             "shop",
-		"OCEL_APP":              "web",
-		"OCEL_BUILD_ID":         "dpl_7",
-		"OCEL_ROUTER_KIND":      "cloudrun",
+		"OCEL_NEXT_ROUTE_TABLE":   "/ocel/app/" + edge.NextRouteTableFile,
+		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r1a2b3c4d",
+		"OCEL_SLUG":               "shop",
+		"OCEL_APP":                "web",
+		"OCEL_BUILD_ID":           "dpl_7",
+		"OCEL_ROUTER_KIND":        "cloudrun",
 	} {
 		if got := env[name]; got != want {
 			t.Errorf("the Next service reads %s=%q, want %q", name, got, want)
@@ -159,6 +159,9 @@ func TestANextServiceIsToldWhereItsIncrementalCacheLives(t *testing.T) {
 	}
 	if got := env["OCEL_ISR_TAG_NAMESPACE"]; got != "PROJECT#shop#STACK#prod--web--r1#TAG#" {
 		t.Errorf("the Next service reads OCEL_ISR_TAG_NAMESPACE=%q, want the namespace its spec names", got)
+	}
+	if got := env["OCEL_ISR"]; got != "1" {
+		t.Errorf("the Next service reads OCEL_ISR=%q, want 1: its runtime installs a cache store only when told the release revalidates", got)
 	}
 }
 
@@ -184,12 +187,31 @@ func TestANextServiceIsToldTheEdgeAndCacheBucketsItsEntriesLiveIn(t *testing.T) 
 	}
 }
 
-func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T) {
+func TestANextServiceWithoutAnIncrementalCacheIsToldNoCache(t *testing.T) {
 	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
-	for _, name := range []string{"OCEL_CACHE_BUCKET", "OCEL_STORAGE_COORDINATE", "OCEL_STORAGE_ENDPOINT"} {
+	for _, name := range []string{"OCEL_ISR", "OCEL_ISR_TAG_NAMESPACE", "OCEL_TAG_DATABASE", "OCEL_STORAGE_ENDPOINT"} {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service with no incremental cache reads %s=%q", name, got)
+		}
+	}
+}
+
+func TestEveryNextServiceIsToldTheStorageCoordinateAndTheBucketsOfItsRelease(t *testing.T) {
+	env := googletest.EnvOf(releasedNext(t, nextSpec()))
+
+	for name, want := range map[string]string{
+		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r1a2b3c4d",
+		"OCEL_EDGE_BUCKET":        "ocel-prod-edge-k3x9q2",
+		"OCEL_CACHE_BUCKET":       "ocel-prod-cache-k3x9q2",
+	} {
+		if got := env[name]; got != want {
+			t.Errorf("a Next service reads %s=%q, want %q whether or not it caches or routes", name, got, want)
+		}
+	}
+	for _, name := range []string{"OCEL_ASSET_PREFIX", "OCEL_ARTIFACTS_BUCKET"} {
+		if got, told := env[name]; told {
+			t.Errorf("a Next service reads %s=%q, want none: its runtime derives every prefix from the coordinate, and GCP keeps no artifacts bucket", name, got)
 		}
 	}
 }
@@ -197,7 +219,7 @@ func TestANextServiceWithoutAnIncrementalCacheIsToldNoCacheLocation(t *testing.T
 func TestANextServiceThatRoutesNothingIsToldNoRoutingManifest(t *testing.T) {
 	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
-	for _, name := range []string{"OCEL_NEXT_ROUTE_TABLE", "OCEL_STORAGE_COORDINATE", "OCEL_ASSET_PREFIX"} {
+	for _, name := range []string{"OCEL_NEXT_ROUTE_TABLE"} {
 		if got, told := env[name]; told {
 			t.Errorf("a Next service whose spec routes nothing reads %s=%q", name, got)
 		}
@@ -373,7 +395,8 @@ func nextContainerSpec() provider.StackSpec {
 			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 			HealthCheckPath: "/",
 			Instances:       provider.Instances{Min: 1, Max: 1},
-			ISR:             &provider.ISRSpec{Coordinate: cachedRelease(), TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
+			Storage:         cachedRelease(),
+			ISR:             &provider.ISRSpec{TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
 		},
 	}
 }

@@ -21,8 +21,7 @@ const record = {
   rootFunction: "/",
   routeTable: { format: "next", key: routeTableKey() },
   functionUrls: { "/": "https://abc.lambda-url.eu-west-2.on.aws/" },
-  assetPrefix: "assets/p1/prod/web/r00000d01",
-  pagesPrefix: "pages/p1/prod/web/r00000d01",
+  storageCoordinate: "p1/prod/web/r00000d01",
   createdAt: 1_000,
   edge: {},
 };
@@ -170,7 +169,7 @@ describe("the gateway serving a prerender", () => {
     ...record,
     routeTable: { format: "next", key: prerenderTableKey },
     release: "deploy-1~f1",
-    pagesPrefix: "pages/p1/prod/web/r0a1b2c3d",
+    storageCoordinate: "p1/prod/web/r0a1b2c3d",
   };
   const table: NextRouteTable = {
     rootFunction: "/",
@@ -217,7 +216,7 @@ describe("the gateway serving a prerender", () => {
     return { origin, ctx: contextWithExports({ Serve: serve }) };
   }
 
-  it("serves the prerender through Serve, keyed by the release token of its pages prefix", async () => {
+  it("serves the prerender through Serve, keyed by the release token of its storage coordinate", async () => {
     const { origin, ctx } = ctxServing();
 
     const response = await worker.fetch(

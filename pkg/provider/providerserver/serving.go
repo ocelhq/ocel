@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -31,7 +30,6 @@ type AppServingInput struct {
 	Coordinate        naming.Coordinate
 	EdgeRunsCode      bool
 	EdgeSignsForwards bool
-	CachesBytecode    bool
 }
 
 type AppServing struct {
@@ -41,8 +39,6 @@ type AppServing struct {
 	EdgeRouteTable *provider.EdgeRouteTable
 	Guard          *provider.OriginGuard
 	ISR            *provider.ISRSpec
-	Bytecode       *provider.BytecodeSpec
-	AssetPrefix    string
 	Static         *edge.Static
 	Prerenders     bool
 }
@@ -59,10 +55,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if err != nil {
 		return AppServing{}, err
 	}
-	facts := AppServing{AssetPrefix: q.Coordinate.AssetPrefix()}
-	if q.CachesBytecode {
-		facts.Bytecode = &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.StoragePrefix(naming.ObjectBytecode))}
-	}
+	var facts AppServing
 	if present {
 		facts.RootFunction = hosting.RootFunction
 		facts.Static = hosting.Static
@@ -73,7 +66,6 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	}
 	if uses.Revalidation {
 		facts.ISR = &provider.ISRSpec{
-			Coordinate:   q.Coordinate,
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
 		_, facts.Prerenders = hosting.Needs[edge.NeedEdgeCache]
@@ -163,10 +155,6 @@ func refuseOcelRouteTable(app string, hosting buildoutput.Hosting, raw []byte) e
 			edge.OcelRouteTableFile, app, buildoutput.HostingFile, edge.NeedRevalidation)
 	}
 	return nil
-}
-
-func withoutSlash(prefix string) string {
-	return strings.TrimSuffix(prefix, naming.PathSeparator)
 }
 
 func locateRouteTable(coordinate naming.Coordinate, routing *provider.RoutingSpec) (*provider.EdgeRouteTable, error) {

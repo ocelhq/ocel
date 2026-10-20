@@ -287,7 +287,7 @@ func (f *fakeFunctionCode) GetFunctionConfiguration(context.Context, *lambda.Get
 	}, nil
 }
 
-const embedTestCacheKey = "prod/p/web/B1/bytecode/fn/node24.3.1-arm64.tar.gz"
+const embedTestBytecodeKey = "bytecode/p/prod/web/r1a2b3c4d/fn/node24.3.1-arm64.tar.gz"
 
 func embedTestPass(t *testing.T, putter *fakePutter, code *fakeFunctionCode, invoker *fakeInvoke) (embedPass, func() string) {
 	t.Helper()
@@ -310,20 +310,20 @@ func embedTestPass(t *testing.T, putter *fakePutter, code *fakeFunctionCode, inv
 	log, out := collectLog()
 	return embedPass{
 		objects: &fakeObjects{objects: map[string][]byte{
-			"assets/" + embedTestCacheKey: gzipped.Bytes(),
-			"artifacts/p/web/abc123.zip":  zipped,
+			"artifacts/" + embedTestBytecodeKey: gzipped.Bytes(),
+			"artifacts/p/web/abc123.zip":        zipped,
 		}},
 		store:  putter,
 		code:   code,
 		invoke: invoker,
 		targets: []embedTarget{{
-			App:          "web",
-			LogicalName:  "web_bundle",
-			FunctionName: "ocel-web-1",
-			Artifact:     Artifact{Bucket: "artifacts", Key: "p/web/abc123.zip"},
-			CacheBucket:  "assets",
-			CacheKey:     embedTestCacheKey,
-			TreeBytes:    1 << 20,
+			App:             "web",
+			LogicalName:     "web_bundle",
+			FunctionName:    "ocel-web-1",
+			Artifact:        Artifact{Bucket: "artifacts", Key: "p/web/abc123.zip"},
+			ArtifactsBucket: "artifacts",
+			BytecodeKey:     embedTestBytecodeKey,
+			TreeBytes:       1 << 20,
 		}},
 		bundleDeadline: time.Minute,
 		updateWait:     embedUpdateWait,
@@ -623,7 +623,7 @@ func TestAnEmbedIsLeftAloneUnlessTheProjectAsksForOneWhateverTheOperatorsShell(t
 	t.Setenv("OCEL_BYTECODE_CACHE", "1")
 	var progress fake.Log
 	served := NewServedApps()
-	served.Record(&Clients{}, "web", []string{"web_index"}, &Bytecode{Bucket: "b", Prefix: "p"})
+	served.Record(&Clients{}, "web", []string{"web_index"}, &Bytecode{Bucket: "b"})
 	served.Realize("web_index", "ocel-web-1")
 	served.warmed("ocel-web-1", warmReply{Key: "k"})
 

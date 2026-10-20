@@ -9,7 +9,7 @@ import {
   edgeCacheTagHeader,
   readEdgeCacheMode,
 } from "@platform/edge-contract/edge-cache";
-import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
+import { readStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 
@@ -29,8 +29,8 @@ export interface OriginShaping extends RevalidatingRoutes {
   tagsPerObject: number;
 }
 
-export function releaseOf(storageCoordinate: string | undefined): string | null {
-  return parseStorageCoordinate(storageCoordinate ?? "")?.release ?? null;
+export function releaseOf(env: NodeJS.ProcessEnv): string | null {
+  return readStorageCoordinate(env)?.release ?? null;
 }
 
 export function revalidatingRoutes(config: LauncherConfig): RevalidatingRoutes {
@@ -60,7 +60,7 @@ export function originShaping(
   return {
     ...routes,
     edgeCachesOnlyMarked: cachesOnlyMarked(mode),
-    release: invalidatesByCacheTag(env) ? releaseOf(env.OCEL_STORAGE_COORDINATE) : null,
+    release: invalidatesByCacheTag(env) ? releaseOf(env) : null,
     tagsPerObject,
   };
 }

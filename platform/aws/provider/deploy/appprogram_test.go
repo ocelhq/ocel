@@ -33,6 +33,7 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	cfg.Env = "prod"
 	cfg.AppRolePath = componenttest.AppRolePath
 	cfg.ArtifactBucket = "artifacts-bucket"
+	cfg.BytecodeCache = true
 	cfg.StateTable = "ocel-state"
 	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
 
@@ -53,11 +54,10 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 				{Name: "fn--web--entry", ArtifactDir: writeTree(t, map[string]string{"index.js": "the entry"})},
 				{Name: "fn--web--admin", Route: "/admin", ArtifactDir: writeTree(t, map[string]string{"index.js": "the admin"})},
 			},
-			Routing:     &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
-			ISR:         &provider.ISRSpec{Coordinate: coord, TagNamespace: "tag:shop"},
-			Bytecode:    &provider.BytecodeSpec{Prefix: bytecodePrefixOf(coord)},
-			AssetPrefix: coord.AssetPrefix(),
-			Static:      nextStatic,
+			Routing: &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
+			ISR:     &provider.ISRSpec{TagNamespace: "tag:shop"},
+			Storage: coord,
+			Static:  nextStatic,
 		},
 	}
 	return cfg, spec
@@ -96,12 +96,50 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 	if entry["OCEL_ISR_TAG_NAMESPACE"] != spec.App.ISR.TagNamespace {
 		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want the namespace the spec passed", entry["OCEL_ISR_TAG_NAMESPACE"])
 	}
+	for key, want := range map[string]string{
+		"OCEL_ARTIFACTS_BUCKET": "artifacts-bucket",
+		"OCEL_EDGE_BUCKET":      "edge-bucket",
+		"OCEL_ISR":              "1",
+		"OCEL_COMPILE_CACHE":    "1",
+	} {
+		if entry[key] != want {
+			t.Errorf("%s = %q, want %q", key, entry[key], want)
+		}
+	}
+	for _, key := range []string{"OCEL_ASSET_PREFIX", "OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
+		if value, told := entry[key]; told {
+			t.Errorf("%s = %q, want none: the runtime derives every prefix from the storage coordinate", key, value)
+		}
+	}
 	var siblings map[string]string
 	if err := json.Unmarshal([]byte(entry["OCEL_FUNCTION_URLS"]), &siblings); err != nil {
 		t.Fatalf("OCEL_FUNCTION_URLS = %q, want a routeId-to-URL object: %v", entry["OCEL_FUNCTION_URLS"], err)
 	}
 	if len(siblings) != 1 || siblings["/admin"] == "" {
 		t.Errorf("sibling urls = %v, want the sibling the spec's routes name", siblings)
+	}
+}
+
+func TestAnAppWhoseConfigCachesNoBytecodeIsToldNoCompileCache(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := appStackSpec(t)
+	cfg.BytecodeCache = false
+	work, err := releasing(t, cfg).appWork(spec, nil, nil, variables.Bundle{}, stagedOf(spec))
+	if err != nil {
+		t.Fatalf("appWork() = %v", err)
+	}
+	rec := &inputRecorder{}
+	program := func(pctx *pulumi.Context) error { return work.run(pctx, nil) }
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
+		t.Fatalf("run the app program: %v", err)
+	}
+	entry := functionEnvOf(t, rec, namedFunction(spec.Ref.Name, "fn--web--entry"))
+	if value, told := entry["OCEL_COMPILE_CACHE"]; told {
+		t.Errorf("OCEL_COMPILE_CACHE = %q, want none: the project's options turn on no compile cache", value)
+	}
+	if work.functions.Bytecode != nil {
+		t.Errorf("bytecode = %+v, want none", work.functions.Bytecode)
 	}
 }
 
@@ -230,8 +268,8 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 	if fn.App != "web" || fn.Logical != "fn--web--entry" {
 		t.Errorf("realized %+v, want the app and logical name the spec named", fn)
 	}
-	if fn.Bytecode == nil || fn.Bytecode.Prefix != spec.App.Bytecode.Prefix {
-		t.Errorf("bytecode = %+v, want the cache prefix the spec passed", fn.Bytecode)
+	if fn.Bytecode == nil || fn.Bytecode.Bucket != "artifacts-bucket" || fn.Bytecode.Storage != spec.App.Storage {
+		t.Errorf("bytecode = %+v, want the cache the config turns on, in the artifacts bucket under the release's coordinate", fn.Bytecode)
 	}
 	if err := release.served.Warm(context.Background(), []string{"shop-prod-web-entry"}, progress.Discard()); err != nil {
 		t.Errorf("Warm() with no invoker configured = %v, want it to pass over", err)
@@ -257,7 +295,7 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
 	spec := provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}
 
-	env := function.AppEnv(spec, variables.Bundle{}, bucket.Sessions{}, "")
+	env := function.AppEnv(spec, nil, variables.Bundle{}, bucket.Sessions{}, "")
 
 	if got, set := env[processenv.PhaseEnvVar]; set {
 		t.Errorf("%s = %q, want a release that provisions to name no phase at all", processenv.PhaseEnvVar, got)

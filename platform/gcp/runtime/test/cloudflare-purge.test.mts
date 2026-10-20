@@ -7,7 +7,8 @@ import { newCloudflarePurge } from "../src/cache/cloudflare-purge.mjs";
 import { withCdnPurge } from "../src/next/tag-records.mjs";
 
 const url = "https://shop-prod.acct.workers.dev/.ocel/purge";
-const pagesPrefix = "pages/shop/prod/web/r1a2b3c4d";
+const coordinate = { project: "shop", env: "prod", app: "web", release: "r1a2b3c4d" };
+const storageCoordinate = "shop/prod/web/r1a2b3c4d";
 const secret = "write-secret";
 const raisedAt = 1_700_000_000_000;
 
@@ -29,7 +30,7 @@ function expired(...tags: string[]): Map<string, TagRecord> {
 function purger(s: ReturnType<typeof stub>) {
   return newCloudflarePurge({
     url,
-    pagesPrefix,
+    coordinate,
     secret,
     now: () => raisedAt + 10,
     fetch: s.fetch,
@@ -42,7 +43,7 @@ function bodiesOf(s: ReturnType<typeof stub>): unknown[] {
   return s.calls.map((call) => JSON.parse(String(call.init.body)));
 }
 
-test("an expired tag is purged at the worker under its release's ISR prefix, signed with the deploy's secret", async () => {
+test("an expired tag is purged at the worker under its release's storage coordinate, signed with the deploy's secret", async () => {
   const s = stub();
 
   await purger(s)(expired("posts", "_N_T_/blog/a"));
@@ -53,7 +54,7 @@ test("an expired tag is purged at the worker under its release's ISR prefix, sig
   expect(call.init.method).toBe("POST");
   const body = String(call.init.body);
   expect(JSON.parse(body)).toEqual({
-    pagesPrefix,
+    storageCoordinate,
     mode: "purge",
     tags: [
       { tag: "posts", raisedAt },
@@ -71,7 +72,7 @@ test("a tag revalidated stale-while-revalidate is invalidated, raised when it we
   await purger(s)(new Map([["posts", { stale: raisedAt, expired: raisedAt + 31_536_000_000 }]]));
 
   expect(bodiesOf(s)).toEqual([
-    { pagesPrefix, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
+    { storageCoordinate, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
   ]);
 });
 
@@ -86,8 +87,8 @@ test("expired and stale tags revalidated together go as a purge and an invalidat
   );
 
   expect(bodiesOf(s)).toEqual([
-    { pagesPrefix, mode: "purge", tags: [{ tag: "cart", raisedAt }] },
-    { pagesPrefix, mode: "invalidate", tags: [{ tag: "posts", raisedAt: raisedAt + 5 }] },
+    { storageCoordinate, mode: "purge", tags: [{ tag: "cart", raisedAt }] },
+    { storageCoordinate, mode: "invalidate", tags: [{ tag: "posts", raisedAt: raisedAt + 5 }] },
   ]);
 });
 
@@ -118,7 +119,9 @@ test("a tag gone stale and later expired is purged, raised when it expired", asy
 
   await purger(s)(new Map([["posts", { stale: raisedAt - 5_000, expired: raisedAt }]]));
 
-  expect(bodiesOf(s)).toEqual([{ pagesPrefix, mode: "purge", tags: [{ tag: "posts", raisedAt }] }]);
+  expect(bodiesOf(s)).toEqual([
+    { storageCoordinate, mode: "purge", tags: [{ tag: "posts", raisedAt }] },
+  ]);
 });
 
 test("a published tag is purged once it has been published, and not before", async () => {
@@ -143,6 +146,6 @@ test("revalidateTag with the max profile reaches the worker as an invalidate", a
   await withCdnPurge(publish, purger(s))("posts", { stale: raisedAt, expired: raisedAt + 1_000 });
 
   expect(bodiesOf(s)).toEqual([
-    { pagesPrefix, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
+    { storageCoordinate, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
   ]);
 });

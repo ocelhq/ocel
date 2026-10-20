@@ -264,8 +264,10 @@ describe("Serve reading an object where the origin has no asset bucket", () => {
 describe("Serve fetching from the origin", () => {
   const originProps: ServeProps = RENDER_PROPS;
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
-  const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
-  const renderRelease = { [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", pagesPrefix }) };
+  const storageCoordinate = "p1/prod/web/r1a2b3c4d";
+  const renderRelease = {
+    [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", storageCoordinate }),
+  };
   const originRequest = (path: string, origin = FN_URL) =>
     new Request(buildOriginCall(`${origin}${path}`, coordinates).url, { headers: renderRelease });
   const servedRecords = (record: object | null) => ({
@@ -277,8 +279,7 @@ describe("Serve fetching from the origin", () => {
     release: "build-1~fp1",
     buildId: "build-1",
     functionUrls: { "/blog": `${FN_URL}stage` },
-    assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
-    pagesPrefix,
+    storageCoordinate,
     createdAt: 1,
     edge: {},
   };
@@ -320,7 +321,7 @@ describe("Serve fetching from the origin", () => {
   });
 
   it("fetches nothing for a release that is not served, or is not the one the call is keyed under", async () => {
-    for (const record of [null, { ...originRecord, pagesPrefix: "pages/p1/prod/web/r9f8e7d6c" }]) {
+    for (const record of [null, { ...originRecord, storageCoordinate: "p1/prod/web/r9f8e7d6c" }]) {
       const wire = s3Answering(() => new Response("page"));
 
       const response = await withGlobalFetch(wire.fetch, () =>
@@ -432,7 +433,7 @@ describe("Serve fetching from the origin", () => {
     const nodeRelease = {
       [RENDER_RELEASE_HEADER]: JSON.stringify({
         slug: "p1",
-        pagesPrefix,
+        storageCoordinate,
         tags: [],
         honoursAppCacheHeaders: true,
       }),
@@ -691,7 +692,7 @@ describe("Serve fetching from the origin", () => {
 
 describe("Serve rendering an edge-runtime prerender", () => {
   const coordinates = { host: "shop.example.com", app: "web", release: "r1a2b3c4d" };
-  const pagesPrefix = "pages/p1/prod/web/r1a2b3c4d";
+  const storageCoordinate = "p1/prod/web/r1a2b3c4d";
   const bundleKey = "bundles/p1/prod/web/r1a2b3c4d/bundle.json";
   const edgeRecord = {
     app: "web",
@@ -699,8 +700,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
     release: "build-1~fp1",
     buildId: "build-1",
     functionUrls: {},
-    assetPrefix: "assets/p1/prod/web/r1a2b3c4d",
-    pagesPrefix,
+    storageCoordinate,
     createdAt: 1,
     edge: {
       purgeSecret: "s3cr3t",
@@ -710,7 +710,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
 
   function edgeServe(answer: () => Response, record: object | null = edgeRecord) {
     const rendered: { entryKey: string; request: Request }[] = [];
-    const served: { slug: string; pagesPrefix: string }[] = [];
+    const served: { slug: string; storageCoordinate: string }[] = [];
     const loader = {
       get: () => ({
         getEntrypoint: (_name: unknown, options: { props: { entryKey: string } }) => ({
@@ -722,7 +722,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
       }),
     };
     const releases = {
-      readServedRecord: async (args: { slug: string; pagesPrefix: string }) => {
+      readServedRecord: async (args: { slug: string; storageCoordinate: string }) => {
         served.push(args);
         return record ? { kind: "record", record } : { kind: "not-served" };
       },
@@ -742,7 +742,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
     const call = buildEdgeCall(`https://shop.example.com${path}`, coordinates, "app/edge-blog");
     return new Request(call.url, {
       headers: {
-        [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", pagesPrefix, tags }),
+        [RENDER_RELEASE_HEADER]: JSON.stringify({ slug: "p1", storageCoordinate, tags }),
         "x-ocel-entry": "app/edge-blog/page",
       },
     });
@@ -756,7 +756,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
 
     const response = await serve.fetch(edgeRequest("/blog?page=2"));
 
-    expect(served).toEqual([{ slug: "p1", pagesPrefix }]);
+    expect(served).toEqual([{ slug: "p1", storageCoordinate }]);
     expect(rendered.map(({ entryKey }) => entryKey)).toEqual(["app/edge-blog"]);
     expect(rendered[0].request.url).toBe("https://shop.example.com/blog?page=2");
     expect(rendered[0].request.headers.has(RENDER_RELEASE_HEADER)).toBe(false);
@@ -816,7 +816,7 @@ describe("Serve rendering an edge-runtime prerender", () => {
   it("renders nothing from a record of another release than the one it is keyed under", async () => {
     const { serve, rendered } = edgeServe(cacheable, {
       ...edgeRecord,
-      pagesPrefix: "pages/p1/prod/web/r9f8e7d6c",
+      storageCoordinate: "p1/prod/web/r9f8e7d6c",
     });
 
     const response = await serve.fetch(edgeRequest("/blog"));

@@ -76,15 +76,12 @@ type Args struct {
 }
 
 type Bytecode struct {
-	Bucket string
-	Prefix string
+	Bucket  string
+	Storage naming.Coordinate
 }
 
 func (c Bytecode) env() map[string]string {
-	return map[string]string{
-		"OCEL_BYTECODE_BUCKET": c.Bucket,
-		"OCEL_BYTECODE_PREFIX": c.Prefix,
-	}
+	return map[string]string{awsports.CompileCacheEnvVar: "1"}
 }
 
 func bytecodePolicy(c Bytecode) (string, error) {
@@ -94,7 +91,7 @@ func bytecodePolicy(c Bytecode) (string, error) {
 			map[string]any{
 				"Effect":   "Allow",
 				"Action":   []string{"s3:GetObject", "s3:PutObject"},
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s*", c.Bucket, c.Storage.StoragePrefix(naming.ObjectBytecode)),
 			},
 		},
 	}
@@ -112,7 +109,7 @@ func assetReadPolicy(h *DispatchHost) (string, error) {
 			map[string]any{
 				"Effect":   "Allow",
 				"Action":   []string{"s3:GetObject"},
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", h.EdgeBucket, h.AssetPrefix),
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s*", h.EdgeBucket, h.Storage.StoragePrefix(naming.ObjectAssets)),
 			},
 		},
 	}

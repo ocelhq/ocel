@@ -115,7 +115,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		Functions: functions,
 		Args:      func(fn function.AppFunction) function.Args { return args[fn.Logical] },
 		Artifacts: artifacts,
-		Env:       function.AppEnv(spec, bundle, sessions, r.cfg.StateTable),
+		Env:       function.AppEnv(spec, r.cfg.storageBuckets(), bundle, sessions, r.cfg.StateTable),
 		ISR:       cache,
 		Bytecode:  bytecode,
 		Dispatch:  dispatch,
@@ -162,7 +162,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 
 	r.served.Record(r.cfg.functionClients(), app.App, logical, bytecode)
 
-	sets, delivery, err := site.ReadAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, appCoordinate(spec), app, bundle, cache)
+	sets, delivery, err := site.ReadAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, spec.App.Storage, app, bundle, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -207,35 +207,23 @@ func (r *release) isrCache(spec provider.StackSpec) *site.ISR {
 		return nil
 	}
 	cache := &site.ISR{
-		Coord:       appCoordinate(spec),
-		Namespace:   isr.TagNamespace,
-		EdgeBucket:  r.cfg.EdgeBucket,
-		CacheBucket: r.cfg.CacheBucket,
-		Table:       r.cfg.StateTable,
-		TableARN:    r.cfg.StateTableARN,
+		Coord:     spec.App.Storage,
+		Namespace: isr.TagNamespace,
+		Buckets:   r.cfg.storageBuckets(),
+		Table:     r.cfg.StateTable,
+		TableARN:  r.cfg.StateTableARN,
 	}
 	if r.cfg.buckets().CanEdgeRead() && r.cfg.PurgeSeed != "" {
-		cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Coordinate.PagesPrefix())
+		cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.Storage.StorageCoordinate())
 	}
 	return cache
 }
 
-func appCoordinate(spec provider.StackSpec) naming.Coordinate {
-	stack := spec.Ref.Name
-	return naming.Coordinate{
-		Project: naming.Sanitize(spec.Ref.Project),
-		Env:     stack.Env,
-		App:     stack.App,
-		Release: stack.Release,
-	}
-}
-
 func (r *release) bytecodeCache(spec provider.StackSpec) *function.Bytecode {
-	bytecode := spec.App.Bytecode
-	if bytecode == nil {
+	if !r.cfg.BytecodeCache {
 		return nil
 	}
-	return &function.Bytecode{Bucket: r.cfg.ArtifactBucket, Prefix: bytecode.Prefix}
+	return &function.Bytecode{Bucket: r.cfg.ArtifactBucket, Storage: spec.App.Storage}
 }
 
 func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.StackResult, error) {

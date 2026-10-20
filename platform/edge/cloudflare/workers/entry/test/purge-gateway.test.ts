@@ -5,6 +5,7 @@ import {
   purgePath,
   purgeSignatureHeader,
 } from "@platform/edge-contract/purge";
+import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/index";
 import type { RaisedTag } from "../src/purge-backlog";
@@ -13,8 +14,8 @@ import { awsOrigin, makeRecord } from "./origin-deps";
 import { contextWithExports, purgeQueuesAnswering } from "./worker-context";
 
 const SEED = "seed-1";
-const PAGES_PREFIX = "pages/p1/prod/web/r0a1b2c3d";
-const SECRET = await derivePurgeSecret(SEED, PAGES_PREFIX);
+const STORAGE_COORDINATE = "p1/prod/web/r0a1b2c3d";
+const SECRET = await derivePurgeSecret(SEED, parseStorageCoordinate(STORAGE_COORDINATE)!);
 const WORKERS_DEV = "https://web.acct.workers.dev";
 
 async function sign(body: string): Promise<string> {
@@ -43,14 +44,14 @@ async function purgeRequestTo(url: string, body: unknown = raise): Promise<Reque
 }
 
 const raise = {
-  pagesPrefix: PAGES_PREFIX,
+  storageCoordinate: STORAGE_COORDINATE,
   mode: "purge",
   tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
 };
 
 let raised: { name: string; mode: PurgeMode; tags: RaisedTag[] }[];
 let appReads: number;
-let servedReads: { slug: string; pagesPrefix: string }[];
+let servedReads: { slug: string; storageCoordinate: string }[];
 let heldGate: string | undefined;
 
 function binding(): ReleasesBinding {
@@ -63,13 +64,13 @@ function binding(): ReleasesBinding {
     readLabelRecord: answer,
     async readServedRecord(args) {
       servedReads.push(args);
-      return args.pagesPrefix === PAGES_PREFIX
+      return args.storageCoordinate === STORAGE_COORDINATE
         ? {
             kind: "record",
             record: makeRecord({
               app: "web",
               release: "build-1~fp1",
-              pagesPrefix: PAGES_PREFIX,
+              storageCoordinate: STORAGE_COORDINATE,
               edge: { purgeSecret: SECRET },
             }),
           }
@@ -108,7 +109,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p1", pagesPrefix: PAGES_PREFIX }]);
+    expect(servedReads).toEqual([{ slug: "p1", storageCoordinate: STORAGE_COORDINATE }]);
     expect(raised).toEqual([
       {
         name: "p1",
@@ -125,9 +126,13 @@ describe("the gateway answering a purge on its workers.dev host", () => {
         worker.fetch(new Request(url, init), envWith(), ctx)) as typeof fetch,
     };
 
-    await postPurge(sender, `${WORKERS_DEV}${purgePath}`, SECRET, PAGES_PREFIX, [
-      { tag: "_N_T_/blog/a", mode: "invalidate", raisedAt: 5_000 },
-    ]);
+    await postPurge(
+      sender,
+      `${WORKERS_DEV}${purgePath}`,
+      SECRET,
+      parseStorageCoordinate(STORAGE_COORDINATE)!,
+      [{ tag: "_N_T_/blog/a", mode: "invalidate", raisedAt: 5_000 }],
+    );
 
     expect(raised).toEqual([
       {
@@ -140,7 +145,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
 
   it("answers 204 for a release that is not served and raises nothing", async () => {
     const response = await worker.fetch(
-      await purgeRequest(WORKERS_DEV, { ...raise, pagesPrefix: "pages/p1/prod/web/r0000000a" }),
+      await purgeRequest(WORKERS_DEV, { ...raise, storageCoordinate: "p1/prod/web/r0000000a" }),
       envWith(),
       contextWithQueue(),
     );
@@ -187,7 +192,7 @@ describe("the shared preview entry answering a purge on its workers.dev host", (
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p2", pagesPrefix: PAGES_PREFIX }]);
+    expect(servedReads).toEqual([{ slug: "p2", storageCoordinate: STORAGE_COORDINATE }]);
     expect(raised).toEqual([
       {
         name: "p2",
@@ -216,7 +221,7 @@ describe("the shared preview entry answering a purge on its workers.dev host", (
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p1", pagesPrefix: PAGES_PREFIX }]);
+    expect(servedReads).toEqual([{ slug: "p1", storageCoordinate: STORAGE_COORDINATE }]);
   });
 });
 

@@ -347,12 +347,20 @@ func (s *shippedArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (s *shippedArtifacts) RemoveObjects(_ context.Context, _ environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, _ progress.Log) error {
+func (s *shippedArtifacts) RemoveObjects(_ context.Context, _ environment.Tier, scope naming.StorageScope, kinds []naming.ObjectKind, _ progress.Log) error {
+	prefixes := make([]string, len(kinds))
+	for i, kind := range kinds {
+		prefix, err := scope.Prefix(kind)
+		if err != nil {
+			return err
+		}
+		prefixes[i] = conformanceArtifactBucket + "/" + prefix
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for at := range s.objects {
-		for _, kind := range kinds {
-			if strings.HasPrefix(at, conformanceArtifactBucket+"/"+scope.StoragePrefix(kind)) {
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(at, prefix) {
 				delete(s.objects, at)
 			}
 		}

@@ -25,7 +25,10 @@ func TestArtifactsRemoveObjectsLeavesTheRest(t *testing.T) {
 
 	ctx := context.Background()
 	artifacts := fake.NewArtifacts()
-	scope := naming.Coordinate{Project: "shop", Env: "pr-7"}
+	scope, err := naming.AppScope(naming.Coordinate{Project: "shop", Env: "pr-7", App: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	kept := provider.ArtifactRef{Tier: environment.TierProduction, Key: "fn/shop/prod/web/r1a2b3c4d/api/1.zip"}
 	removed := provider.ArtifactRef{Tier: environment.TierProduction, Key: "fn/shop/pr-7/web/r1a2b3c4d/api/1.zip"}
 	otherKind := provider.ArtifactRef{Tier: environment.TierProduction, Key: "assets/shop/pr-7/web/r1a2b3c4d/app.js"}
@@ -164,7 +167,11 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing
 	if err := bootstrap.Remove(ctx, environment.TierProduction, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	if err := artifacts.RemoveObjects(ctx, environment.TierProduction, naming.Coordinate{Project: "shop"}, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets}, progress); err != nil {
+	shop, err := naming.ProjectScope("shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.RemoveObjects(ctx, environment.TierProduction, shop, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets}, progress); err != nil {
 		t.Fatalf("RemoveObjects() = %v", err)
 	}
 

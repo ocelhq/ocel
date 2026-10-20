@@ -4,6 +4,7 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -11,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
-func AppEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Sessions, stateTable string) map[string]string {
+func AppEnv(spec provider.StackSpec, buckets naming.Buckets, bundle variables.Bundle, sessions bucket.Sessions, stateTable string) map[string]string {
 	app := spec.App
-	env := map[string]string{}
+	env := naming.StorageEnv(app.Storage, buckets)
 	if app.Router != "" {
 		env[routerKindEnv] = string(app.Router)
 	}

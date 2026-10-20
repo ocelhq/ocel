@@ -38,7 +38,6 @@ const (
 	timeoutSeconds   = 20
 	threadpoolSize   = 4
 	retentionDays    = 14
-	bucketEnvVar     = "OCEL_EDGE_BUCKET"
 	threadpoolEnvVar = "UV_THREADPOOL_SIZE"
 	policyName       = "image-optimizer-read"
 
@@ -150,7 +149,7 @@ func Ensure(ctx context.Context, c Clients, spec Spec) ([]provider.PartResource,
 		TimeoutSeconds: timeoutSeconds,
 		Role:           "arn:aws:iam::" + account + ":role" + spec.RolePath + names.Role,
 		Code:           payloads.ImageOptimizer().Bytes,
-		Variables:      map[string]string{bucketEnvVar: spec.EdgeBucket, threadpoolEnvVar: strconv.Itoa(threadpoolSize)},
+		Variables:      map[string]string{naming.StorageEdge.BucketVar(): spec.EdgeBucket, threadpoolEnvVar: strconv.Itoa(threadpoolSize)},
 		LogGroup:       names.LogGroup,
 		RetentionDays:  retentionDays,
 		Tags:           functionTags,

@@ -89,9 +89,7 @@ async function boot(): Promise<void> {
   const freshOnly = servesOnlyFresh(process.env);
   const edgeCachesOnlyMarked = cachesOnlyMarked(readEdgeCacheMode(process.env));
   const purgeRelease =
-    invalidatesByCacheTag(process.env) && edgeCachesOnlyMarked
-      ? releaseOf(process.env.OCEL_STORAGE_COORDINATE)
-      : null;
+    invalidatesByCacheTag(process.env) && edgeCachesOnlyMarked ? releaseOf(process.env) : null;
 
   const invoke: Invoke = (req, res, ocel) => {
     noteRscRequest(req.headers);

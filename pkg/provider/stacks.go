@@ -101,12 +101,11 @@ type AppSpec struct {
 	EdgeRouteTable *EdgeRouteTable
 	Guard          *OriginGuard
 	ISR            *ISRSpec
-	Bytecode       *BytecodeSpec
 	Gate           *gate.Gate
 
-	AssetPrefix string
-	Static      *edge.Static
-	OutputRoot  string
+	Storage    naming.Coordinate
+	Static     *edge.Static
+	OutputRoot string
 
 	Proxied bool
 
@@ -128,13 +127,8 @@ type OriginGuard struct {
 }
 
 type ISRSpec struct {
-	Coordinate   naming.Coordinate
 	TagNamespace string
 	PurgeURL     string
-}
-
-type BytecodeSpec struct {
-	Prefix string
 }
 
 type AppValues struct {

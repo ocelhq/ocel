@@ -307,8 +307,7 @@ describe("the gate on a project's production worker", () => {
     framework: "next",
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": FN_URL },
-    assetPrefix: "assets/p1/prod/web/r00000d01",
-    pagesPrefix: "pages/p1/prod/web/r00000d01",
+    storageCoordinate: "p1/prod/web/r00000d01",
   });
   const table: NextRouteTable = {
     rootFunction: "/",

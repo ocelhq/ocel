@@ -18,8 +18,7 @@ export interface ReleaseRecord {
   routeTable?: RouteTableLocation;
   static?: Static;
   functionUrls: Record<string, string>;
-  assetPrefix: string;
-  pagesPrefix: string;
+  storageCoordinate: string;
   prerenders?: boolean;
   createdAt: number;
   edgeBundle?: EdgeBundle;

@@ -47,7 +47,6 @@ type OriginStore struct {
 	URL             string `json:"url"`
 	Region          string `json:"region"`
 	HoldsEntries    bool   `json:"holdsEntries"`
-	EntriesPrefix   string `json:"entriesPrefix,omitempty"`
 	AccessKeyID     string `json:"accessKeyId"`
 	SecretAccessKey string `json:"secretAccessKey"`
 }
@@ -89,9 +88,6 @@ func (o OriginReach) RefuseIncomplete() error {
 	}
 	if store := o.Store; store != nil && (store.URL == "" || store.Region == "" || store.AccessKeyID == "" || store.SecretAccessKey == "") {
 		errs = append(errs, errors.New("the origin names a store for the edge to read, without its URL, region and key"))
-	}
-	if store := o.Store; store != nil && store.EntriesPrefix != "" && !store.HoldsEntries {
-		errs = append(errs, errors.New("the origin names where its store keeps cached entries, and says the store holds none"))
 	}
 	if o.Throttle.Status == 0 {
 		errs = append(errs, errors.New("the origin names no status its throttled answers carry, so the edge could not tell a throttle from the app's own answer"))

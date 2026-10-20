@@ -30,7 +30,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 		t.Fatal(err)
 	}
 	bundle := variables.Bundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
-	spec.App.EdgeRouteTable = edgeRouteTable(appCoordinate(spec).RouteTableKey("ab"))
+	spec.App.EdgeRouteTable = edgeRouteTable(spec.App.Storage.RouteTableKey("ab"))
 
 	release := releasing(t, cfg)
 	work, err := release.appWork(spec, nil, nil, bundle, stagedOf(spec))
@@ -50,7 +50,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeApp() = %v", err)
 	}
-	if want := appEdgeBundleKey(appCoordinate(spec)); result.EdgeBundleKey != want {
+	if want := appEdgeBundleKey(spec.App.Storage); result.EdgeBundleKey != want {
 		t.Errorf("EdgeBundleKey = %q, want %q: the record the edge loads code by names the key only the vendor's upload knows",
 			result.EdgeBundleKey, want)
 	}
@@ -61,7 +61,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.PurgeSecret != edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Coordinate.PagesPrefix()) {
+	if result.PurgeSecret != edge.DerivePurgeSecret(cfg.PurgeSeed, "shop/prod/web/r3f8a1c90") {
 		t.Errorf("PurgeSecret = %q, want the secret the edge accepts a purge signed with", result.PurgeSecret)
 	}
 }
@@ -101,7 +101,7 @@ func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testi
 
 	release := releasing(t, cfg)
 	got := release.secrets(component.Program{Secrets: release.appSecrets(spec)})
-	for _, want := range []string{"origin-now", "origin-before", "a-seed", edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Coordinate.PagesPrefix())} {
+	for _, want := range []string{"origin-now", "origin-before", "a-seed", edge.DerivePurgeSecret(cfg.PurgeSeed, "shop/prod/web/r3f8a1c90")} {
 		if !slices.Contains(got, want) {
 			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)
 		}

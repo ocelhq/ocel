@@ -52,7 +52,7 @@ export interface StoredEntryCall {
 
 export interface RenderRelease {
   slug: string;
-  pagesPrefix: string;
+  storageCoordinate: string;
   tags: string[];
   sharesFallbackShell?: boolean;
   honoursAppCacheHeaders?: boolean;

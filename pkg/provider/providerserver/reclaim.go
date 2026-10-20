@@ -71,11 +71,9 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, teardown pro
 		if stack.IsInfra() {
 			return errors.Join(errs...)
 		}
-		scope := releaseScope(slug, pointer, stack.App, stack.Release)
-		if kinds := reclaimedKinds(scope, elsewhere, here); len(kinds) > 0 {
-			if err := p.Artifacts().RemoveObjects(ctx, environment.TierPreview, scope, kinds, progress); err != nil {
-				errs = append(errs, fmt.Errorf("remove the objects of %s release %s: %w", stack.App, stack.Release, err))
-			}
+		storage := releaseStorage(slug, pointer, stack.App, stack.Release)
+		if err := removeReleaseObjects(ctx, p, environment.TierPreview, storage, reclaimedKinds(storage, elsewhere, here), progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove the objects of %s release %s: %w", stack.App, stack.Release, err))
 		}
 		return errors.Join(errs...)
 	})...)
@@ -85,7 +83,7 @@ type ReclaimTarget struct {
 	App     string
 	Release provider.Release
 	Stack   naming.StackName
-	Scope   naming.Coordinate
+	Storage naming.Coordinate
 	Kinds   []naming.ObjectKind
 }
 
@@ -110,13 +108,13 @@ func ReclaimTargets(slug, env string, removed []router.ReleaseRecord, surviving,
 			continue
 		}
 		token := release.Token()
-		scope := releaseScope(slug, env, record.App, token)
+		storage := releaseStorage(slug, env, record.App, token)
 		targets = append(targets, ReclaimTarget{
 			App:     record.App,
 			Release: release,
 			Stack:   naming.AppStack(env, record.App, token),
-			Scope:   scope,
-			Kinds:   reclaimedKinds(scope, elsewhere, here),
+			Storage: storage,
+			Kinds:   reclaimedKinds(storage, elsewhere, here),
 		})
 	}
 	return targets, refused, errors.Join(errs...)
@@ -126,12 +124,23 @@ func isRetainedContainer(containersRetained bool, image string) bool {
 	return containersRetained && image != ""
 }
 
-func releaseScope(slug, env, app string, release naming.ReleaseToken) naming.Coordinate {
+func releaseStorage(slug, env, app string, release naming.ReleaseToken) naming.Coordinate {
 	return naming.Coordinate{Project: naming.Sanitize(slug), Env: env, App: app, Release: release}
 }
 
-func reclaimedKinds(scope naming.Coordinate, elsewhere, here map[appRelease]bool) []naming.ObjectKind {
-	released := appRelease{app: scope.App, release: scope.Release.String()}
+func removeReleaseObjects(ctx context.Context, p provider.Provider, tier environment.Tier, storage naming.Coordinate, kinds []naming.ObjectKind, progress progress.Log) error {
+	if len(kinds) == 0 {
+		return nil
+	}
+	scope, err := naming.ReleaseScope(storage)
+	if err != nil {
+		return err
+	}
+	return p.Artifacts().RemoveObjects(ctx, tier, scope, kinds, progress)
+}
+
+func reclaimedKinds(storage naming.Coordinate, elsewhere, here map[appRelease]bool) []naming.ObjectKind {
+	released := appRelease{app: storage.App, release: storage.Release.String()}
 	switch {
 	case !elsewhere[released]:
 		return naming.CoordinateObjectKinds
@@ -223,10 +232,8 @@ func destroyReclaimTarget(ctx context.Context, p provider.Provider, teardown pro
 	if err := stackrecords.Forget(ctx, p.KeyValues(), tier, slug, target.Stack); err != nil {
 		errs = append(errs, err)
 	}
-	if len(target.Kinds) > 0 {
-		if err := p.Artifacts().RemoveObjects(ctx, tier, target.Scope, target.Kinds, progress); err != nil {
-			errs = append(errs, fmt.Errorf("remove the objects of %s release %s: %w", target.App, target.Release, err))
-		}
+	if err := removeReleaseObjects(ctx, p, tier, target.Storage, target.Kinds, progress); err != nil {
+		errs = append(errs, fmt.Errorf("remove the objects of %s release %s: %w", target.App, target.Release, err))
 	}
 	return errors.Join(errs...)
 }
@@ -279,7 +286,7 @@ func (r *deployRun) reclaimProvisioned(ctx context.Context, progress progress.Lo
 			App:     entry.App,
 			Release: entry.Release,
 			Stack:   entry.Stack,
-			Scope:   appCoordinate(r.spec, entry.App, entry.Release.Token()),
+			Storage: appCoordinate(r.spec, entry.App, entry.Release.Token()),
 			Kinds:   naming.CoordinateObjectKinds,
 		})
 	}

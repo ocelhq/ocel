@@ -1,7 +1,7 @@
 import { bearer, type Where } from "./store";
 
 const STORAGE = "https://storage.googleapis.com/storage/v1";
-const ASSET_PREFIX_ENV = "OCEL_ASSET_PREFIX";
+const STORAGE_COORDINATE_ENV = "OCEL_STORAGE_COORDINATE";
 const PRODUCTION_EDGE_WORDS = "prod-edge";
 const RANDOM_TAG = /^[0-9a-z]{6}$/;
 
@@ -33,15 +33,15 @@ export function assetPrefixOf(body: unknown, service: string): string {
   const found = ((body as Listing).services ?? []).find(
     (each) => (each.name ?? "").split("/").pop() === service,
   );
-  const prefix = (found?.template?.containers ?? [])
+  const coordinate = (found?.template?.containers ?? [])
     .flatMap((container) => container.env ?? [])
-    .find((variable) => variable.name === ASSET_PREFIX_ENV)?.value;
-  if (!prefix) {
+    .find((variable) => variable.name === STORAGE_COORDINATE_ENV)?.value;
+  if (!coordinate) {
     throw new Error(
-      `${service} is told no ${ASSET_PREFIX_ENV}, so nothing says where its release's files were uploaded`,
+      `${service} is told no ${STORAGE_COORDINATE_ENV}, so nothing says where its release's files were uploaded`,
     );
   }
-  return prefix;
+  return `assets/${coordinate}`;
 }
 
 export function releaseObjectUrl(bucket: string, assetPrefix: string, path: string): string {

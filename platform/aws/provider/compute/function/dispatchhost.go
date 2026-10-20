@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -16,8 +17,6 @@ const (
 	routerKindEnv        = "OCEL_ROUTER_KIND"
 	routeTableEnv        = "OCEL_NEXT_ROUTE_TABLE"
 	functionURLsEnv      = "OCEL_FUNCTION_URLS"
-	edgeBucketEnv        = "OCEL_EDGE_BUCKET"
-	assetPrefixEnv       = "OCEL_ASSET_PREFIX"
 	slugEnv              = "OCEL_SLUG"
 	appNameEnv           = "OCEL_APP"
 	buildIDEnv           = "OCEL_BUILD_ID"
@@ -30,7 +29,7 @@ const (
 type DispatchHost struct {
 	RootFunction      string
 	EdgeBucket        string
-	AssetPrefix       string
+	Storage           naming.Coordinate
 	ImageOptimizerURL string
 	Env               map[string]string
 }
@@ -77,22 +76,17 @@ func NewDispatchHost(app *provider.AppSpec, slug, edgeBucket, imageOptimizerURL 
 	if routing == nil {
 		return nil
 	}
-	prefix := app.AssetPrefix
 	host := &DispatchHost{
 		RootFunction:      routing.RootFunction,
 		EdgeBucket:        edgeBucket,
-		AssetPrefix:       prefix,
+		Storage:           app.Storage,
 		ImageOptimizerURL: imageOptimizerURL,
 		Env: map[string]string{
-			routeTableEnv:  routeTableInTask,
-			assetPrefixEnv: prefix,
-			slugEnv:        slug,
-			appNameEnv:     app.App,
-			buildIDEnv:     app.BuildID,
+			routeTableEnv: routeTableInTask,
+			slugEnv:       slug,
+			appNameEnv:    app.App,
+			buildIDEnv:    app.BuildID,
 		},
-	}
-	if edgeBucket != "" {
-		host.Env[edgeBucketEnv] = edgeBucket
 	}
 	if imageOptimizerURL != "" {
 		host.Env[edge.ImageOptimizerURLVar] = imageOptimizerURL

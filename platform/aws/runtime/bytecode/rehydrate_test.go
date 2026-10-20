@@ -369,7 +369,7 @@ func (blockingGet) getObject(ctx context.Context, _, _ string) (io.ReadCloser, i
 
 func TestBytecodeRehydrate(t *testing.T) {
 	t.Run("targets the dir compile cache env declares", func(t *testing.T) {
-		t.Setenv(prefixEnvVar, "ocel")
+		compileCacheOn(t)
 		env := Env()
 		if len(env) != 1 || env[0] != "NODE_COMPILE_CACHE="+compileCacheDir {
 			t.Fatalf("Env() = %v, want exactly [NODE_COMPILE_CACHE=%s]", env, compileCacheDir)

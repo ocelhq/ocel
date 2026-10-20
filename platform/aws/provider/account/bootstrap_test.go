@@ -315,7 +315,7 @@ func TestEachBootstrapBucketAgesOutWhatItsDataClassOutlives(t *testing.T) {
 			}{
 				{"ArtifactBucket", 30, "a deployed function keeps its own copy of the code staged for it"},
 				{"EdgeBucket", 0, "what an edge serves goes with the release that wrote it, never on a timer"},
-				{"CacheBucket", CacheObjectLifetimeDays, "an entry no release rewrote in that long is one nothing reads"},
+				{"CacheBucket", naming.CacheObjectLifetimeDays, "an entry no release rewrote in that long is one nothing reads"},
 			} {
 				expires, abortsAfter := lifecycleOf(t, tier, tc.id)
 				if expires != tc.expires {

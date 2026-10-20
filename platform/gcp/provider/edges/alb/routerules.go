@@ -6,6 +6,7 @@ import (
 
 	"google.golang.org/api/compute/v1"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -29,7 +30,7 @@ func routeRulesOf(clients *gcloud.Clients, dynamic string, routes *StaticRoutes)
 			Priority:    int64(len(rules)),
 			MatchRules:  []*compute.HttpRouteRuleMatch{{PrefixMatch: prefix}},
 			Service:     clients.BucketLink(routes.Backend),
-			RouteAction: &compute.HttpRouteAction{UrlRewrite: &compute.UrlRewrite{PathPrefixRewrite: routes.Objects + prefix}},
+			RouteAction: &compute.HttpRouteAction{UrlRewrite: &compute.UrlRewrite{PathPrefixRewrite: routes.Objects + strings.TrimPrefix(prefix, naming.PathSeparator)}},
 		})
 	}
 	return rules

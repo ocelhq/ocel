@@ -43,7 +43,7 @@ func deployedManifest() *contractv1.Manifest {
 func TestADeployedAppRecordsWhatTheManifestBuiltAndTheProviderMadeLive(t *testing.T) {
 	t.Parallel()
 	results := []*progressv1.AppResult{
-		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Release: webRelease, Urls: []string{"https://shop.example.com"}, StoragePrefix: "prod/shop/web/r0123abcd/"},
+		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Release: webRelease, Urls: []string{"https://shop.example.com"}, StorageCoordinate: "shop/prod/web/r0123abcd"},
 		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Release: "a1b2c3d4e5f60718~0123456789ab"},
 	}
 
@@ -56,7 +56,7 @@ func TestADeployedAppRecordsWhatTheManifestBuiltAndTheProviderMadeLive(t *testin
 			BuildId: "3f7c1b9a5e2d4c8f", Release: webRelease,
 			Urls: []string{"https://shop.example.com"}, Hostnames: []string{"shop.example.com"},
 			Outcome:          consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
-			FrameworkBuildId: "fw-web", StoragePrefix: "prod/shop/web/r0123abcd/",
+			FrameworkBuildId: "fw-web", StorageCoordinate: "shop/prod/web/r0123abcd",
 		},
 		{
 			Name: "api", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,

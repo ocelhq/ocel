@@ -823,6 +823,9 @@ importers:
       '@framework/next-protocol':
         specifier: workspace:*
         version: link:../../../../frameworks/next/protocol
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../edge/contract
     devDependencies:
       '@types/node':
         specifier: ^24

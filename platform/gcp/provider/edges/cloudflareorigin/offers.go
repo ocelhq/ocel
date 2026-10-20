@@ -50,7 +50,7 @@ type Offers struct {
 	KeyValues   records.Store
 }
 
-func (p Offers) ReadPurgeSecret(ctx context.Context, tier environment.Tier, kind edge.Kind, pagesPrefix string) (string, error) {
+func (p Offers) ReadPurgeSecret(ctx context.Context, tier environment.Tier, kind edge.Kind, storageCoordinate string) (string, error) {
 	c, err := p.OpenClients(ctx)
 	if err != nil {
 		return "", err
@@ -62,7 +62,7 @@ func (p Offers) ReadPurgeSecret(ctx context.Context, tier environment.Tier, kind
 	if err != nil {
 		return "", err
 	}
-	return edge.DerivePurgeSecret(seed, pagesPrefix), nil
+	return edge.DerivePurgeSecret(seed, storageCoordinate), nil
 }
 
 func (c EdgeCredentials) hasAssetStoreKey() bool {
