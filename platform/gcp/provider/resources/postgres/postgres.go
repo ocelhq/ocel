@@ -320,6 +320,9 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 	if err := refuseVersionChange(resource.Name, spec, current); err != nil {
 		return provider.Binding{}, err
 	}
+	if err := i.clients.EnsureTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name)); err != nil {
+		return provider.Binding{}, err
+	}
 	if current, err = i.resize(ctx, resource.Name, current, progress); err != nil {
 		return provider.Binding{}, err
 	}
@@ -660,6 +663,9 @@ func (i postgresInstances) remove(ctx context.Context, binding provider.Binding,
 	}
 	if current != nil {
 		if err := i.unprotect(ctx, binding.Name, current); err != nil {
+			return err
+		}
+		if err := i.clients.RemoveTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name)); err != nil {
 			return err
 		}
 		gcloud.EnsureProgress(progress).Say("Removing postgres " + binding.Name + ", its Cloud SQL instance " + current.Name + " and its data")
