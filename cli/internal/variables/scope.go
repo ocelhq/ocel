@@ -18,6 +18,7 @@ type Scope struct {
 	Tier        environmentv1.Tier
 	Environment string
 	Browser     bool
+	Job         bool
 	Bindings    []BindingVariables
 	OtherTiers  []BindingVariables
 	EnvSource   EnvSource

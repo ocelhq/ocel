@@ -138,6 +138,9 @@ func TestInsideAJobVariablesLeftUnresolvedOnOcelCloudFailTheDeployAsMissing(t *t
 	if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeVariablesMissing || !strings.Contains(got.GetMessage(), "Ocel Cloud") {
 		t.Errorf("run error = %v, want %s saying Ocel Cloud gave no values", got, clierror.CodeVariablesMissing)
 	}
+	if message := err.Error(); !strings.Contains(message, "Fill them in: run `ocel deploy` again and enter them on its job page") || strings.Contains(message, "ocel env") {
+		t.Errorf("err = %v, want it to send the values to the job page of a deploy run again, not to ocel env", err)
+	}
 }
 
 func TestInsideAJobYesIsRefusedBecauseOcelCloudAnswersEveryConfirmation(t *testing.T) {
