@@ -120,14 +120,14 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 	if err != nil {
 		return err
 	}
-	if _, err := ensure(ctx, i.api, i.target, i.managedBy, repository); err != nil {
+	if _, err := i.ensure(ctx, repository); err != nil {
 		return err
 	}
 	pushErr := i.pushed.Push(ctx, push, progress)
 	if pushErr == nil {
 		return nil
 	}
-	created, err := ensure(ctx, i.api, i.target, i.managedBy, repository)
+	created, err := i.ensure(ctx, repository)
 	if err != nil || !created && !missingRepository(pushErr) {
 		return pushErr
 	}
@@ -167,20 +167,20 @@ func repositoryOf(target provider.RegistryTarget, imageRef string) (string, erro
 	return repository, nil
 }
 
-func ensure(ctx context.Context, api ECRAPI, target provider.RegistryTarget, managedBy, name string) (bool, error) {
-	repository, inside := strings.CutPrefix(name, target.Namespace+naming.PathSeparator)
+func (i ecrImages) ensure(ctx context.Context, name string) (bool, error) {
+	repository, inside := strings.CutPrefix(name, i.target.Namespace+naming.PathSeparator)
 	if !inside {
-		return false, fmt.Errorf("the image repository %s is outside %s, the only repositories a credential of this tier may create", name, target.Namespace)
+		return false, fmt.Errorf("the image repository %s is outside %s, the only repositories a credential of this tier may create", name, i.target.Namespace)
 	}
 	project, ok := images.RegistryRepositoryProject(repository)
 	if !ok {
 		return false, fmt.Errorf("the image repository %s names no project, so no credential limited to a project could ever delete its images", name)
 	}
 	tags := []ecrtypes.Tag{
-		{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(managedBy)},
+		{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(i.managedBy)},
 		{Key: aws.String(ProjectTag), Value: aws.String(project)},
 	}
-	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
+	_, err := i.api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
 		RepositoryName:             aws.String(name),
 		ImageTagMutability:         ecrtypes.ImageTagMutabilityImmutable,
 		ImageScanningConfiguration: &ecrtypes.ImageScanningConfiguration{ScanOnPush: true},
@@ -188,7 +188,7 @@ func ensure(ctx context.Context, api ECRAPI, target provider.RegistryTarget, man
 	})
 	var exists *ecrtypes.RepositoryAlreadyExistsException
 	if errors.As(err, &exists) {
-		return false, tagRepository(ctx, api, name, tags)
+		return false, tagRepository(ctx, i.api, name, tags)
 	}
 	if err != nil {
 		return false, fmt.Errorf("create the image repository %s: %w", name, err)
