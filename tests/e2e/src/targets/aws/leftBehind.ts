@@ -56,6 +56,6 @@ export function refuseWhatDestroyLeft(
     return undefined;
   }
   return new Error(
-    `ocel destroy production removed ${slug}, its namespace's only project, and left its production tier holding ${left.join(", and ")}`,
+    `ocel projects destroy removed ${slug}, its namespace's only project, and left its production tier holding ${left.join(", and ")}`,
   );
 }

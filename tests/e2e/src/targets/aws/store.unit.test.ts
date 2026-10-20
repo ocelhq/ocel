@@ -12,7 +12,6 @@ import {
 const TABLES: Record<string, string> = {
   VariablesTableName: "ocel-variables",
   StateBucketName: "ocel-statebucket",
-  ArtifactBucketName: "ocel-artifacts",
 };
 
 const VARIABLES_TABLE = TABLES.VariablesTableName as string;
@@ -122,38 +121,40 @@ describe("releaseLocks", () => {
 });
 
 describe("listTrustStoreObjects", () => {
-  it("lists only the objects kept for the production tier's trust store in the namespace's artifact bucket", async () => {
-    const { cli, calls } = cliOver((args) =>
-      describeStacks(args)
-        ? tableAsked(args)
-        : JSON.stringify(["ocel/trust/production/client-cas.json"]),
-    );
-    assert.deepEqual(await awsStore(undefined, cli, "j-9-deploy-go").listTrustStoreObjects(), [
-      "ocel/trust/production/client-cas.json",
+  it("lists the trust store's records and its lease in the namespace's production state bucket, and nothing else", async () => {
+    const { cli, calls } = cliOver((args) => {
+      if (describeStacks(args)) {
+        return tableAsked(args);
+      }
+      return args.includes("trust/")
+        ? JSON.stringify(["trust/client-cas.json"])
+        : JSON.stringify(["leases/trust/client-cas.lease"]);
+    });
+    assert.deepEqual(await awsStore(undefined, cli, "j-9-next").listTrustStoreObjects(), [
+      "trust/client-cas.json",
+      "leases/trust/client-cas.lease",
     ]);
     assert.ok(
-      calls.filter(describeStacks).every((args) => args.includes("j-9-deploy-go-bootstrap")),
+      calls.filter(describeStacks).every((args) => args.includes("j-9-next-prod-bootstrap")),
     );
     assert.deepEqual(
       calls.filter((args) => args[0] === "s3api"),
-      [
-        [
-          "s3api",
-          "list-objects-v2",
-          "--bucket",
-          "ocel-artifacts",
-          "--prefix",
-          "ocel/trust/production/",
-          "--query",
-          "Contents[].Key",
-          "--output",
-          "json",
-        ],
-      ],
+      ["trust/", "leases/trust/"].map((prefix) => [
+        "s3api",
+        "list-objects-v2",
+        "--bucket",
+        "ocel-statebucket",
+        "--prefix",
+        prefix,
+        "--query",
+        "Contents[].Key",
+        "--output",
+        "json",
+      ]),
     );
   });
 
-  it("lists none when the prefix holds no object", async () => {
+  it("lists none when no prefix holds an object", async () => {
     const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : "null"));
     assert.deepEqual(await awsStore(undefined, cli).listTrustStoreObjects(), []);
   });
@@ -169,9 +170,9 @@ describe("listTrustStoreObjects", () => {
     assert.equal(calls.filter((args) => args[0] === "s3api").length, 0);
   });
 
-  it("refuses when the bootstrap publishes no artifact bucket", async () => {
+  it("refuses when the bootstrap publishes no state bucket", async () => {
     const { cli } = cliOver(() => "None");
-    await assert.rejects(awsStore(undefined, cli).listTrustStoreObjects(), /ArtifactBucketName/);
+    await assert.rejects(awsStore(undefined, cli).listTrustStoreObjects(), /StateBucketName/);
   });
 });
 

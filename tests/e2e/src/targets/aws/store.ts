@@ -107,9 +107,7 @@ async function queryPartition(
 
 const STATE_BUCKET_OUTPUT = "StateBucketName";
 
-const ARTIFACT_BUCKET_OUTPUT = "ArtifactBucketName";
-
-const PRODUCTION_TRUST_STORE_PREFIX = "ocel/trust/production/";
+const TRUST_STORE_PREFIXES = ["trust/", "leases/trust/"];
 
 async function bootstrapOutput(
   cli: Cli,
@@ -195,25 +193,29 @@ export function awsStore(
       const bucket = await bootstrapOutput(
         cli,
         stack,
-        ARTIFACT_BUCKET_OUTPUT,
+        STATE_BUCKET_OUTPUT,
         "what is kept for the load balancer's trust store cannot be listed",
       );
       if (!bucket) {
         return [];
       }
-      const raw = await cli([
-        "s3api",
-        "list-objects-v2",
-        "--bucket",
-        bucket,
-        "--prefix",
-        PRODUCTION_TRUST_STORE_PREFIX,
-        "--query",
-        "Contents[].Key",
-        "--output",
-        "json",
-      ]);
-      return (JSON.parse(raw || "null") as string[] | null) ?? [];
+      const found: string[] = [];
+      for (const prefix of TRUST_STORE_PREFIXES) {
+        const raw = await cli([
+          "s3api",
+          "list-objects-v2",
+          "--bucket",
+          bucket,
+          "--prefix",
+          prefix,
+          "--query",
+          "Contents[].Key",
+          "--output",
+          "json",
+        ]);
+        found.push(...((JSON.parse(raw || "null") as string[] | null) ?? []));
+      }
+      return found;
     },
   };
 }

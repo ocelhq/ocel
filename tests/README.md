@@ -30,7 +30,7 @@ of each framework it reaches; `fixture()` refuses any other concern or app, and 
 cannot do is a gap in `e2e/src/matrix/gaps.ts`. Compute is a variant: on `aws` the
 `container` (behind CloudFront) and `cloudflare-container` variants run an app as a
 container, and walk a second release and a rollback in whatever fixture lists them. On a real
-`aws` account, each cell's `ocel destroy production` must leave its namespace's production
+`aws` account, each cell's `ocel projects destroy` must leave its namespace's production
 tier with no part that retires with its last user and nothing kept for a load balancer's trust store.
 The harness starts nothing but the `ocel`
 binary; bring up what the target needs first. For `dev` that is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store, and the

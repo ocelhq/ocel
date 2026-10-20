@@ -55,28 +55,24 @@ describe("refuseWhatDestroyLeft", () => {
 
   it("names each part left in the tier the destroyed project was the only user of", () => {
     expect(refuseWhatDestroyLeft("j-1-deploy-go", ["containers"], [])?.message).toBe(
-      "ocel destroy production removed j-1-deploy-go, its namespace's only project, and left its production tier holding containers, which retires with its last user",
+      "ocel projects destroy removed j-1-deploy-go, its namespace's only project, and left its production tier holding containers, which retires with its last user",
     );
   });
 
   it("names each object left that the load balancer's trust store is kept with", () => {
     expect(
-      refuseWhatDestroyLeft(
-        "j-1-deploy-go",
-        [],
-        ["ocel/trust/production/client-cas.json", "ocel/trust/production/client-cas.pem"],
-      )?.message,
+      refuseWhatDestroyLeft("j-1-deploy-go", [], ["trust/client-cas.json", "trust/client-cas.pem"])
+        ?.message,
     ).toBe(
-      "ocel destroy production removed j-1-deploy-go, its namespace's only project, and left its production tier holding ocel/trust/production/client-cas.json and ocel/trust/production/client-cas.pem, kept for the load balancer's trust store",
+      "ocel projects destroy removed j-1-deploy-go, its namespace's only project, and left its production tier holding trust/client-cas.json and trust/client-cas.pem, kept for the load balancer's trust store",
     );
   });
 
   it("names a lease left on the trust store without calling it a client CA", () => {
     expect(
-      refuseWhatDestroyLeft("j-1-deploy-go", [], ["ocel/trust/production/client-cas.lease"])
-        ?.message,
+      refuseWhatDestroyLeft("j-1-deploy-go", [], ["leases/trust/client-cas.lease"])?.message,
     ).toBe(
-      "ocel destroy production removed j-1-deploy-go, its namespace's only project, and left its production tier holding ocel/trust/production/client-cas.lease, kept for the load balancer's trust store",
+      "ocel projects destroy removed j-1-deploy-go, its namespace's only project, and left its production tier holding leases/trust/client-cas.lease, kept for the load balancer's trust store",
     );
   });
 
@@ -85,10 +81,10 @@ describe("refuseWhatDestroyLeft", () => {
       refuseWhatDestroyLeft(
         "j-1-deploy-go",
         ["containers", "function-network"],
-        ["ocel/trust/production/client-cas.json"],
+        ["trust/client-cas.json"],
       )?.message,
     ).toBe(
-      "ocel destroy production removed j-1-deploy-go, its namespace's only project, and left its production tier holding containers and function-network, which retire with their last user, and ocel/trust/production/client-cas.json, kept for the load balancer's trust store",
+      "ocel projects destroy removed j-1-deploy-go, its namespace's only project, and left its production tier holding containers and function-network, which retire with their last user, and trust/client-cas.json, kept for the load balancer's trust store",
     );
   });
 });
