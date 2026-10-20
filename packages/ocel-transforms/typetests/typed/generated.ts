@@ -128,3 +128,23 @@ export const ownedRolePolicies = defineTransform({
     },
   },
 });
+
+export const networkWrittenDown = defineTransform({
+  aws: {
+    network: {
+      vpc: { enableNetworkAddressUsageMetrics: true },
+      privateSubnet: { enableResourceNameDnsARecordOnLaunch: true },
+    },
+  },
+});
+
+export const networkFromBinding = defineTransform({
+  aws: {
+    network: {
+      vpc: {
+        // @ts-expect-error the network belongs to every project of the tier, so no project's binding fills it
+        ipv6IpamPoolId: bindings.postgres.orders.host,
+      },
+    },
+  },
+});
