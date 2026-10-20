@@ -194,6 +194,11 @@ func (s *Transcript) dnsRecords(ev *streamv1.RunEvent) {
 }
 
 func (s *Transcript) wait(waiting *streamv1.WaitingEvent) {
+	if waiting.GetInput() != nil {
+		s.waitingOnPage = true
+		s.printBlock(jobInputLines(waiting, s.present.Palette()))
+		return
+	}
 	if waiting.GetMissing() == nil && waiting.GetUrl() == "" {
 		return
 	}
