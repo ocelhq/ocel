@@ -36,6 +36,7 @@ type Request struct {
 	RecordWants      bool
 	DryRun           bool
 	Registry         *contractv1.ImageRegistry
+	Identity         *contractv1.Identity
 
 	CheckPreviewRoute bool
 	CheckForwarding   bool
@@ -43,6 +44,9 @@ type Request struct {
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
 	read, err := Read(ctx, provider, cfg, req)
+	if err == nil && req.Identity != nil {
+		read.Response.Identity = req.Identity
+	}
 	if err == nil {
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
 		err = RefuseUnready(read.Response, provider, cfg, req)

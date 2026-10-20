@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	providercontract "github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -95,43 +96,57 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 			return nil, readiness.Preflight{}, err
 		}
 	}
-	provider, err := i.start(ctx, check, cfg, opts, cloud)
+	provider, identity, err := i.start(ctx, check, cfg, opts, cloud)
 	if err != nil {
 		return nil, readiness.Preflight{}, err
 	}
 	if req.Require == readiness.None {
 		return provider, readiness.Preflight{}, nil
 	}
+	req.Identity = identity
 	read, err := readiness.Check(ctx, check, provider, cfg, req)
 	return provider, read, err
 }
 
-func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions, cloud *CloudTarget) (*providerprocess.Provider, error) {
+func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions, cloud *CloudTarget) (*providerprocess.Provider, *contractv1.Identity, error) {
 	if cloud == nil {
 		loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
 		provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, executables.ChoosePinning(opts.DryRun))
 		loading.End(err)
-		return provider, err
+		return provider, nil, err
 	}
-	if provider := i.CloudSessions.find(check.Run(), cfg); provider != nil {
-		return provider, nil
+	if open := i.CloudSessions.find(check.Run(), cfg); open != nil {
+		return open.provider, open.identity, nil
 	}
 	opening := check.Child(CloudProviderID, progress.Title{Started: "Opening a session on Ocel Cloud", Ended: "Opened a session on Ocel Cloud"})
-	provider, err := i.startOnCloud(ctx, check, cfg, cloud)
+	open, err := i.openOnCloud(ctx, check, cfg, cloud)
 	opening.End(err)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	i.CloudSessions.keep(check.Run(), cfg, provider)
-	return provider, nil
+	i.CloudSessions.keep(check.Run(), cfg, open)
+	return open.provider, open.identity, nil
 }
 
-func (i Invocation) startOnCloud(ctx context.Context, check *run.Span, cfg *project.Project, cloud *CloudTarget) (*providerprocess.Provider, error) {
+func (i Invocation) openOnCloud(ctx context.Context, check *run.Span, cfg *project.Project, cloud *CloudTarget) (*openCloudSession, error) {
 	if cloud.Offer.ProviderURL == "" {
 		return nil, &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("%s offers Ocel Cloud and names no provider URL for it, so only `ocel deploy`, `ocel preview up` and `ocel build` reach it, as jobs: name a provider in this project's config to run this against your own account", cloud.ConsoleURL)}
 	}
-	tokens := console.NewCloudTokens(console.New(cloud.ConsoleURL), cloud.Credentials.AccessToken)
-	return providerprocess.StartRemote(ctx, cfg, check, i.Questions, providerprocess.Remote{Name: CloudProviderID, URL: cloud.Offer.ProviderURL, Tokens: tokens})
+	client := console.New(cloud.ConsoleURL)
+	session := cloud.Credentials.AccessToken
+	org, err := pickCloudOrganization(ctx, client, session, cfg.Dir, cloud.ConsoleURL)
+	if err != nil {
+		return nil, err
+	}
+	if err := client.SetActiveOrganization(ctx, session, org.ID); err != nil {
+		return nil, fmt.Errorf("make %s your active organization in %s: %w", org.Name, cloud.ConsoleURL, err)
+	}
+	tokens := console.NewCloudTokens(client, session)
+	provider, err := providerprocess.StartRemote(ctx, cfg, check, i.Questions, providerprocess.Remote{Name: CloudProviderID, URL: cloud.Offer.ProviderURL, Tokens: tokens})
+	if err != nil {
+		return nil, err
+	}
+	return &openCloudSession{provider: provider, identity: cloudIdentity(org, cloud)}, nil
 }
 
 type ProviderRun struct {
