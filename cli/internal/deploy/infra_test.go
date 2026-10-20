@@ -134,7 +134,7 @@ func TestInfraProvisionedInARunIsNotProvisionedAgainForTheSameResources(t *testi
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestInfraProvisioningRenewsItsLeaseWhileItsDeployBuilds(t *testing.T) {
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestStoppingLeaseRenewalCancelsARenewalTheProviderNeverAnswers(t *testing.T
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestABuildWhoseLeaseRenewalIsRefusedStopsAndSaysTheLeaseWasLost(t *testing.
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
+	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
