@@ -9,6 +9,7 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 )
 
 type MissingError struct {
@@ -51,6 +52,29 @@ func (r *MissingError) Variables() *streamv1.MissingVariables {
 		groups = append(groups, &streamv1.MissingGroup{Key: group, Description: groupDescription(r.Groups, group)})
 	}
 	return &streamv1.MissingVariables{Cells: cells, Remedy: r.remedy(), Groups: groups}
+}
+
+func (r *MissingError) Needed() *cloudv1.VariablesNeeded {
+	missing := r.Variables()
+	needed := &cloudv1.VariablesNeeded{Tier: r.Scope.Tier}
+	for _, cell := range missing.GetCells() {
+		needed.Variables = append(needed.Variables, &cloudv1.NeededVariable{
+			Key:         cell.GetKey(),
+			Folder:      cell.GetFolder(),
+			Secret:      r.definition(cell.GetKey()).GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
+			Description: cell.GetDescription(),
+			Reason:      cell.GetReason(),
+			Group:       cell.GetGroup(),
+		})
+	}
+	for _, group := range missing.GetGroups() {
+		needed.Groups = append(needed.Groups, &cloudv1.NeededGroup{Key: group.GetKey(), Description: group.GetDescription()})
+	}
+	return needed
+}
+
+func (r *MissingError) SetInStore() bool {
+	return !r.Scope.EnvSource.OwnsValues() || r.Scope.EnvSource.areCredentials(r.Problems)
 }
 
 func (r *MissingError) Description(key string) string {

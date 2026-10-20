@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -43,7 +45,8 @@ type deployRun struct {
 
 	prebuilt bool
 	dry      bool
-	canFill  bool
+	browser  bool
+	job      *jobinput.Answers
 
 	declarations *variables.Declarations
 	phase        *run.Span
@@ -71,7 +74,8 @@ func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project
 		preBuild:       findPreBuild(cfg, env),
 		prebuilt:       opts.Prebuilt,
 		dry:            opts.Dry,
-		canFill:        !opts.Dry && browser,
+		browser:        browser,
+		job:            dependencies.JobAnswers,
 	}
 }
 
@@ -155,7 +159,7 @@ func appList(cfg *project.Project) string {
 func (d *deployRun) buildWithVariables(ctx context.Context) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	declarations, err := d.readDeclarations(ctx)
 	var refusal *variables.MissingError
-	if errors.As(err, &refusal) && d.canFill {
+	if errors.As(err, &refusal) && d.fills(refusal) {
 		if err := d.fill(ctx, declarations, refusal); err != nil {
 			return nil, nil, err
 		}
@@ -166,7 +170,7 @@ func (d *deployRun) buildWithVariables(ctx context.Context) (*contractv1.Manifes
 	}
 	manifest, inline, err := d.attempt(ctx, declarations, 0)
 
-	if !errors.As(err, &refusal) || !d.canFill {
+	if !errors.As(err, &refusal) || !d.fills(refusal) {
 		return manifest, inline, err
 	}
 	if err := d.fill(ctx, declarations, refusal); err != nil {
@@ -208,7 +212,20 @@ func (d *deployRun) attempt(ctx context.Context, declarations *variables.Declara
 	return manifest, inline, err
 }
 
+func (d *deployRun) fills(refusal *variables.MissingError) bool {
+	if d.dry {
+		return false
+	}
+	if d.job != nil {
+		return refusal.SetInStore()
+	}
+	return d.browser
+}
+
 func (d *deployRun) fill(ctx context.Context, declarations *variables.Declarations, refusal *variables.MissingError) error {
+	if d.job != nil {
+		return d.fillOnCloud(ctx, declarations, refusal)
+	}
 	editor, err := d.dependencies.ServeVariableEditor(ctx, d.cfg, d.provider, d.tier(), declarations, d.recovery(refusal))
 	if err != nil {
 		return err
@@ -235,6 +252,30 @@ func (d *deployRun) fill(ctx context.Context, declarations *variables.Declaratio
 	}
 }
 
+func (d *deployRun) fillOnCloud(ctx context.Context, declarations *variables.Declarations, refusal *variables.MissingError) error {
+	for {
+		waiting := d.span.Trace(d.cfg.Slug, "await_human_input")
+		resolved, err := d.job.Resolve(ctx, d.span, refusal.Needed(), refusal.Variables())
+		waiting.End(err)
+		if err != nil {
+			return err
+		}
+		if !resolved {
+			return &clierror.Error{Code: clierror.CodeVariablesMissing, Cause: &unresolvedRefusal{refusal: refusal}}
+		}
+		for _, problem := range refusal.Problems {
+			declarations.ClearProblems(variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+		}
+		if err := declarations.Prefetch(ctx); err != nil {
+			return err
+		}
+		err = declarations.RefuseIncomplete()
+		if !errors.As(err, &refusal) {
+			return err
+		}
+	}
+}
+
 func (d *deployRun) recovery(refusal *variables.MissingError) *variableeditor.Recovery {
 	missing := make([]variables.Cell, 0, len(refusal.Problems))
 	for _, problem := range refusal.Problems {
@@ -258,3 +299,19 @@ func (e *abandonedRefusal) Detail() string { return variableeditor.AbandonedMess
 func (e *abandonedRefusal) Unwrap() []error {
 	return []error{e.refusal, variableeditor.ErrAbandoned}
 }
+
+const unresolvedMessage = "Ocel Cloud resumed the job without the values."
+
+type unresolvedRefusal struct {
+	refusal *variables.MissingError
+}
+
+func (e *unresolvedRefusal) Error() string {
+	return e.refusal.Error() + "\n\n" + e.Detail()
+}
+
+func (e *unresolvedRefusal) Variables() *streamv1.MissingVariables { return e.refusal.Variables() }
+
+func (e *unresolvedRefusal) Detail() string { return unresolvedMessage }
+
+func (e *unresolvedRefusal) Unwrap() error { return e.refusal }
