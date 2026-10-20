@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
 
@@ -233,6 +234,32 @@ func TestTheNetworksSecurityGroupDescribesItselfInTheCharactersAWSAccepts(t *tes
 					t.Errorf("%s is described %q, which AWS refuses: a security group and its rules take only %s", name, description, accepted)
 				}
 			}
+		}
+	}
+}
+
+func TestTheNetworksChangeGroupListsEveryResourceItsRaiseCreates(t *testing.T) {
+	t.Parallel()
+
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		cloud := runNetwork(t, "acme", tier)
+		var created []string
+		cloud.mu.Lock()
+		for key := range cloud.resources {
+			created = append(created, key)
+		}
+		cloud.mu.Unlock()
+		var planned []string
+		for _, change := range NewChangeGroup("acme", tier).Changes {
+			if change.Action != provider.ActionCreate {
+				t.Errorf("the %s network's group plans %s %s as %s, want it created", tier, change.Kind, change.Name, change.Action)
+			}
+			planned = append(planned, change.Kind+"::"+change.Name)
+		}
+		slices.Sort(created)
+		slices.Sort(planned)
+		if !slices.Equal(planned, created) {
+			t.Errorf("the %s network's group plans\n %v\nand its raise creates\n %v\nwant the plan to be the diff the raise runs", tier, planned, created)
 		}
 	}
 }
