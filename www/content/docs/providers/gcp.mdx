@@ -517,6 +517,14 @@ long as the project's `_Default` log bucket does: 30 days unless you've changed 
 with [`ocel logs`](/docs/cli/logs), which also lists the Cloud Logging quotas a read or a tail
 shares.
 
+Every revision of a tier's Cloud Run service carries the `ocel-tier` label, and Cloud Run copies a
+revision's labels onto each entry it writes: requests, stdout, stderr and system logs.
+`ocel bootstrap <tier>` makes a log view of the tier's entries, `<namespace>-<tier>-logs`, on the
+`_Default` bucket, filtered to `resource.type="cloud_run_revision" AND labels."ocel-tier"="<tier>"`,
+and `ocel logs` reads and tails through it. Audit logs and entries of anything but Cloud Run are
+outside the view. A service deployed before its revisions carried the label is released again on
+the next deploy.
+
 ## What to grant
 
 Turn the services on once:
@@ -526,7 +534,7 @@ gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
   iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com \
   iamcredentials.googleapis.com pubsub.googleapis.com cloudtasks.googleapis.com \
-  cloudresourcemanager.googleapis.com --project my-project
+  cloudresourcemanager.googleapis.com logging.googleapis.com --project my-project
 ```
 
 Apps sign their buckets' urls through `iamcredentials.googleapis.com`.
@@ -551,7 +559,8 @@ A bootstrap needs `roles/datastore.owner`, `roles/storage.admin`, `roles/cloudkm
 `roles/artifactregistry.admin`, `roles/iam.serviceAccountAdmin`, `roles/iam.serviceAccountUser`,
 `roles/iam.roleAdmin`, `roles/resourcemanager.projectIamAdmin`, `roles/run.admin`,
 `roles/memorystore.admin`, `roles/pubsub.admin`, `roles/cloudscheduler.admin`,
-`roles/logging.viewer`, `roles/resourcemanager.tagAdmin` and `roles/resourcemanager.tagUser`, and,
+`roles/logging.viewer`, `roles/logging.configWriter`, `roles/resourcemanager.tagAdmin` and
+`roles/resourcemanager.tagUser`, and,
 to take down the parts deploys added, `roles/compute.networkAdmin`, `roles/cloudsql.viewer` and
 `roles/cloudtasks.admin`. Anything missing is named back to you before anything is created.
 
@@ -571,7 +580,8 @@ each tier's credential for your project and namespace. For the preview tier they
 - `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the tier's key and its projects' keys, and
   `roles/cloudkms.admin` on its projects' keys, by name: KMS keys take no tag.
 - `roles/memorystore.admin` and `roles/cloudscheduler.admin` on the project, since Memorystore
-  instances and Cloud Scheduler jobs take no tag, and `roles/logging.viewer`.
+  instances and Cloud Scheduler jobs take no tag.
+- `roles/logging.viewAccessor` on the tier's log view alone.
 - `roles/cloudtasks.queueAdmin` on the tier's delay queue, and
   `roles/resourcemanager.tagUser` on the tier's tag value alone.
 - `roles/resourcemanager.projectIamAdmin`, on a condition that lets it grant and revoke
@@ -628,4 +638,3 @@ the tag does not fence:
   holds its environment variables.
 - Memorystore instances and Cloud Scheduler jobs take no tag, and the tier's network carries none.
 - A deploy credential may grant the Firestore roles above on the whole project, to any member.
-- `roles/logging.viewer` reads every log in the project.
