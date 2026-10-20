@@ -15,6 +15,7 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	crm "google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/cloudscheduler/v1"
 	"google.golang.org/api/compute/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
@@ -73,6 +74,8 @@ type Clients struct {
 	sql           Memo[*sqladmin.Service]
 	principal     Memo[string]
 	projects      Memo[*cloudresourcemanager.Service]
+	globalTags    Memo[*crm.Service]
+	regionalTags  Memo[*crm.Service]
 	logs          Memo[*logging.Client]
 	numberLock    sync.Mutex
 	projectNumber int64
