@@ -58,3 +58,23 @@ func TestNumberPicksTheWordThatAgreesWithACount(t *testing.T) {
 		t.Errorf("Number(3) = %q, want them", got)
 	}
 }
+
+func TestBytesNamesASizeInBinaryUnits(t *testing.T) {
+	t.Parallel()
+
+	cases := map[uint64]string{
+		0:             "0 B",
+		1023:          "1023 B",
+		1024:          "1.0 KiB",
+		1536:          "1.5 KiB",
+		512 << 20:     "512.0 MiB",
+		2 << 30:       "2.0 GiB",
+		5 << 40:       "5.0 TiB",
+		(1 << 20) - 1: "1024.0 KiB",
+	}
+	for n, want := range cases {
+		if got := english.Bytes(n); got != want {
+			t.Errorf("Bytes(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

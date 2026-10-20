@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -102,6 +103,15 @@ var behaviours = map[PackageManager]behaviour{
 		build:      byName(func(l Location) string { return fmt.Sprintf("bun run --filter %s build", l.Package.Name) }),
 		start:      func(l Location) string { return l.inAppDir("bun run start") },
 	},
+}
+
+func Lockfiles() []string {
+	var names []string
+	for _, m := range behaviours {
+		names = append(names, m.lockfiles...)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func byName(command func(Location) string) func(Location) string {
