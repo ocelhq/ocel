@@ -180,12 +180,12 @@ func (s Scope) TaggedOnCreateForItsTier() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 
-func (s Scope) TaggedByOcelForItsTier() map[string]any {
+func (s Scope) TaggedForItsTier() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 
-func (s Scope) RetaggedByOcelOnlyAsItsTier() map[string]any {
-	return MergeConditions(s.TaggedByOcelForItsTier(), s.RetaggedOnlyAsItsTier())
+func (s Scope) RetaggedOnlyWithinItsTier() map[string]any {
+	return MergeConditions(s.TaggedForItsTier(), s.RetaggedOnlyAsItsTier())
 }
 
 func (s Scope) InvokesTheTagInvalidator() map[string]any {

@@ -95,13 +95,13 @@ func TestTheDeployCredentialOwnsTheLogGroupsItCreates(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	want := map[string]string{
 		"logs:CreateLogGroup":      conditionJSON(t, productionScope.TaggedOnCreateForItsTier()),
-		"logs:DeleteLogGroup":      conditionJSON(t, productionScope.TaggedByOcelForItsTier()),
-		"logs:FilterLogEvents":     conditionJSON(t, productionScope.TaggedByOcelForItsTier()),
-		"logs:ListTagsForResource": conditionJSON(t, productionScope.TaggedByOcelForItsTier()),
-		"logs:PutRetentionPolicy":  conditionJSON(t, productionScope.TaggedByOcelForItsTier()),
-		"logs:StartLiveTail":       conditionJSON(t, productionScope.TaggedByOcelForItsTier()),
-		"logs:TagResource":         conditionJSON(t, productionScope.TaggedByOcelForItsTier()),
-		"logs:UntagResource":       conditionJSON(t, productionScope.TaggedByOcelForItsTier()),
+		"logs:DeleteLogGroup":      conditionJSON(t, productionScope.TaggedForItsTier()),
+		"logs:FilterLogEvents":     conditionJSON(t, productionScope.TaggedForItsTier()),
+		"logs:ListTagsForResource": conditionJSON(t, productionScope.TaggedForItsTier()),
+		"logs:PutRetentionPolicy":  conditionJSON(t, productionScope.TaggedForItsTier()),
+		"logs:StartLiveTail":       conditionJSON(t, productionScope.TaggedForItsTier()),
+		"logs:TagResource":         conditionJSON(t, productionScope.TaggedForItsTier()),
+		"logs:UntagResource":       conditionJSON(t, productionScope.TaggedForItsTier()),
 	}
 	for _, resource := range append(productionScope.ContainerLogGroupARNs(), productionScope.FunctionLogGroupARNs()...) {
 		got := logsGrantsOn(grants, resource)
@@ -319,7 +319,7 @@ func TestTheDeployCredentialMakesAndRemovesOnlyTheQueuesTopicsAndSchedulesOfApps
 func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	onCreate := conditionJSON(t, iam.ScalesECSServices(productionScope.TaggedOnCreateForItsTier()))
-	tagged := conditionJSON(t, iam.ScalesECSServices(productionScope.TaggedByOcelForItsTier()))
+	tagged := conditionJSON(t, iam.ScalesECSServices(productionScope.TaggedForItsTier()))
 	want := []grant{
 		{action: "application-autoscaling:RegisterScalableTarget", resource: iam.ScalableTargetARN, condition: onCreate},
 		{action: "application-autoscaling:RegisterScalableTarget", resource: iam.ScalableTargetARN, condition: tagged},
@@ -327,8 +327,8 @@ func TestTheDeployCredentialScalesOnlyTheECSServicesItTagged(t *testing.T) {
 		{action: "application-autoscaling:PutScalingPolicy", resource: iam.ScalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:DeleteScalingPolicy", resource: iam.ScalableTargetARN, condition: tagged},
 		{action: "application-autoscaling:TagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedOnCreateForItsTier())},
-		{action: "application-autoscaling:TagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
-		{action: "application-autoscaling:UntagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
+		{action: "application-autoscaling:TagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedForItsTier())},
+		{action: "application-autoscaling:UntagResource", resource: iam.ScalableTargetARN, condition: conditionJSON(t, productionScope.TaggedForItsTier())},
 		{action: "cloudwatch:PutMetricAlarm", resource: productionScope.ScalingAlarmARN(), condition: "null"},
 		{action: "cloudwatch:DeleteAlarms", resource: productionScope.ScalingAlarmARN(), condition: "null"},
 		{action: "iam:CreateServiceLinkedRole", resource: iam.ECSScalingLinkedRoleARN, condition: conditionJSON(t, iam.LinkedRoleFor("ecs.application-autoscaling.amazonaws.com"))},
@@ -628,13 +628,13 @@ func TestACredentialPassesTheBastionTaskRoleOfOnlyItsOwnTierToECS(t *testing.T) 
 func TestTheDeployCredentialRaisesAndRemovesOnlyItsOwnTiersBacklogAlarmsUnderTheAppScope(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	ofItsTier := conditionJSON(t, productionScope.TaggedOnlyAsItsTier())
-	byOcel := conditionJSON(t, productionScope.TaggedByOcelForItsTier())
+	taggedForItsTier := conditionJSON(t, productionScope.TaggedForItsTier())
 	for action, condition := range map[string]string{
 		"cloudwatch:PutMetricAlarm":      ofItsTier,
 		"cloudwatch:TagResource":         ofItsTier,
-		"cloudwatch:DeleteAlarms":        byOcel,
-		"cloudwatch:UntagResource":       byOcel,
-		"cloudwatch:ListTagsForResource": byOcel,
+		"cloudwatch:DeleteAlarms":        taggedForItsTier,
+		"cloudwatch:UntagResource":       taggedForItsTier,
+		"cloudwatch:ListTagsForResource": taggedForItsTier,
 	} {
 		if wanted := (grant{action: action, resource: productionScope.AppAlarmARN(), condition: condition}); !grants[wanted] {
 			t.Errorf("the deploy credential does not grant %s on %s under %s: a container worker at no tasks is started by an alarm on its queues, and the other tier's alarms are not its own", action, productionScope.AppAlarmARN(), condition)
@@ -650,7 +650,7 @@ func TestTheDeployCredentialRaisesAndRemovesOnlyItsOwnTiersBacklogAlarmsUnderThe
 func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTaggedIt(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	onCreate := conditionJSON(t, productionScope.TaggedOnCreateForItsTier())
-	byOcel := conditionJSON(t, productionScope.TaggedByOcelForItsTier())
+	taggedForItsTier := conditionJSON(t, productionScope.TaggedForItsTier())
 	unscoped := conditionJSON(t, nil)
 
 	creates := map[string][]string{
@@ -682,7 +682,7 @@ func TestTheDeployCredentialBuildsAndTearsDownTheFunctionNetworkOnlyWhereOcelTag
 	}
 	for action, resources := range mutations {
 		for _, resource := range resources {
-			if !grants[grant{action: action, resource: resource, condition: byOcel}] {
+			if !grants[grant{action: action, resource: resource, condition: taggedForItsTier}] {
 				t.Errorf("the deploy credential does not grant %s on %s limited to what Ocel tagged, so the function network cannot be changed or taken down, or reaches resources it does not own", action, resource)
 			}
 		}

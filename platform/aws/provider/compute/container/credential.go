@@ -28,7 +28,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"ecs:UpdateService",
 			},
 			Resources: []string{s.ContainerServiceARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"application-autoscaling:RegisterScalableTarget"},
@@ -43,7 +43,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"application-autoscaling:RegisterScalableTarget",
 			},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: iam.ScalesECSServices(s.TaggedByOcelForItsTier()),
+			Condition: iam.ScalesECSServices(s.TaggedForItsTier()),
 		},
 		{
 			Actions:   []string{"application-autoscaling:TagResource"},
@@ -53,7 +53,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"application-autoscaling:TagResource", "application-autoscaling:UntagResource"},
 			Resources: []string{iam.ScalableTargetARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions: []string{

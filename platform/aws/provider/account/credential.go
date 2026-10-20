@@ -233,12 +233,12 @@ func ProvisionCredential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"iam:DeleteRolePermissionsBoundary"},
 			Resources: s.AppBoundaryRoles(),
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:UpdateAssumeRolePolicy"},
 			Resources: s.PartRoles,
-			Condition: iam.MergeConditions(s.TaggedByOcelForItsTier(), s.WithinAppBoundary()),
+			Condition: iam.MergeConditions(s.TaggedForItsTier(), s.WithinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
@@ -270,12 +270,12 @@ func ProvisionCredential(s iam.Scope) []iam.Statement {
 				"iam:UpdateRole",
 			},
 			Resources: s.BootstrapRoles,
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: s.BootstrapRoles,
-			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.TaggedByOcelForItsTier()),
+			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.TaggedForItsTier()),
 		},
 		{
 			Actions:   []string{"ssm:AddTagsToResource", "ssm:PutParameter"},

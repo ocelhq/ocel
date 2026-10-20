@@ -19,7 +19,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"sqs:UntagQueue",
 			},
 			Resources: []string{s.AppQueueARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"sns:CreateTopic", "sns:TagResource"},
@@ -36,7 +36,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"sns:UntagResource",
 			},
 			Resources: []string{s.AppTopicARN()},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions: []string{

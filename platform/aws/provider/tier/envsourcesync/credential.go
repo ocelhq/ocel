@@ -21,7 +21,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"scheduler:UntagResource",
 			},
 			Resources: []string{s.EnvSourceSyncScheduleGroup},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions: []string{

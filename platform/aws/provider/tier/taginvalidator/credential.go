@@ -35,7 +35,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"sqs:DeleteQueue", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:SetQueueAttributes"},
 			Resources: []string{s.TagInvalidatorQueue},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 	}
 }

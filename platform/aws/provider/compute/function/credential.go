@@ -29,12 +29,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"lambda:UpdateFunctionUrlConfig",
 			},
 			Resources: s.FunctionARNs(),
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"lambda:TagResource"},
 			Resources: s.FunctionARNs(),
-			Condition: s.RetaggedByOcelOnlyAsItsTier(),
+			Condition: s.RetaggedOnlyWithinItsTier(),
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
@@ -54,12 +54,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"iam:UpdateRole",
 			},
 			Resources: s.AppBoundaryRoles(),
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"iam:TagRole"},
 			Resources: s.AppBoundaryRoles(),
-			Condition: s.RetaggedByOcelOnlyAsItsTier(),
+			Condition: s.RetaggedOnlyWithinItsTier(),
 		},
 		{
 			Actions: []string{
@@ -68,12 +68,12 @@ func Credential(s iam.Scope) []iam.Statement {
 				"iam:PutRolePolicy",
 			},
 			Resources: s.AppBoundaryRoles(),
-			Condition: iam.MergeConditions(s.TaggedByOcelForItsTier(), s.WithinAppBoundary()),
+			Condition: iam.MergeConditions(s.TaggedForItsTier(), s.WithinAppBoundary()),
 		},
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: s.AppBoundaryRoles(),
-			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.WithinAppBoundary(), s.TaggedByOcelForItsTier()),
+			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.WithinAppBoundary(), s.TaggedForItsTier()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},
@@ -106,7 +106,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"logs:UntagResource",
 			},
 			Resources: append(s.ContainerLogGroupARNs(), s.FunctionLogGroupARNs()...),
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"logs:DescribeLogGroups"},

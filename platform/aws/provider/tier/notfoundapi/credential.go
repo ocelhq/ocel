@@ -17,7 +17,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"apigateway:GET", "apigateway:POST", "apigateway:PUT"},
 			Resources: []string{iam.RestAPIResourcesARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 	}
 }
@@ -27,7 +27,7 @@ func ReclaimCredential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"apigateway:DELETE"},
 			Resources: []string{iam.RestAPIResourcesARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 	}
 }

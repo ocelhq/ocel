@@ -32,7 +32,7 @@ func credential(s iam.Scope) []iam.Statement {
 				"s3:UntagResource",
 			},
 			Resources: []string{s.AppBucketARN()},
-			Condition: iam.MergeConditions(iam.InCallerAccount(), s.TaggedByOcelForItsTier()),
+			Condition: iam.MergeConditions(iam.InCallerAccount(), s.TaggedForItsTier()),
 		},
 	}
 }

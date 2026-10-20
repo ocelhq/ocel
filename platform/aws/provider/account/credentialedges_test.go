@@ -16,11 +16,11 @@ import (
 func TestTheDeployCredentialAnswersAndShieldsThePublicFrontOnlyOnWhatItTagged(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	want := []grant{
-		{action: "elasticloadbalancing:AddListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
-		{action: "elasticloadbalancing:RemoveListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
+		{action: "elasticloadbalancing:AddListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedForItsTier())},
+		{action: "elasticloadbalancing:RemoveListenerCertificates", resource: productionScope.ContainerListenerARNs()[1], condition: conditionJSON(t, productionScope.TaggedForItsTier())},
 		{action: "elasticloadbalancing:CreateTrustStore", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedOnCreateForItsTier())},
-		{action: "elasticloadbalancing:ModifyTrustStore", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
-		{action: "elasticloadbalancing:AddTags", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedByOcelForItsTier())},
+		{action: "elasticloadbalancing:ModifyTrustStore", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedForItsTier())},
+		{action: "elasticloadbalancing:AddTags", resource: productionScope.ContainerTrustStoreARN(), condition: conditionJSON(t, productionScope.TaggedForItsTier())},
 	}
 	for _, wanted := range want {
 		if !grants[wanted] {
@@ -39,9 +39,9 @@ func TestEveryCredentialChangesOnlyTheCertificatesItTagged(t *testing.T) {
 				"StringEquals":         map[string]any{"aws:RequestTag/ocel:env-tier": string(scope.Tier)},
 				"StringEqualsIfExists": map[string]any{"acm:CertificateKeyPairOrigin": "CUSTOMER_PROVIDED"},
 			})}: true,
-			{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:          true,
-			{action: "acm:RemoveTagsFromCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:     true,
-			{action: "acm:DeleteCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedByOcelForItsTier())}:             true,
+			{action: "acm:AddTagsToCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedForItsTier())}:                true,
+			{action: "acm:RemoveTagsFromCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedForItsTier())}:           true,
+			{action: "acm:DeleteCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.TaggedForItsTier())}:                   true,
 			{action: "acm:DescribeCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.UnevaluatedOrTaggedForItsTier())}:    true,
 			{action: "acm:ListTagsForCertificate", resource: iam.AppCertificateARN, condition: conditionJSON(t, scope.UnevaluatedOrTaggedForItsTier())}: true,
 			{action: "acm:ListCertificates", resource: iam.AnyResource, condition: conditionJSON(t, nil)}:                                               true,
@@ -230,7 +230,7 @@ func TestTheDeployCredentialCreatesARestAPIOnlyTaggedAsItsOwnTiers(t *testing.T)
 	}
 }
 
-func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *testing.T) {
+func TestTheDeployCredentialManagesOnlyTheDistributionsTaggedForItsTier(t *testing.T) {
 	const distribution = "arn:aws:cloudfront::111122223333:distribution/E2QWRUHAPOMQZL"
 	tags := func(prefix, managedBy, tier string) requestContext {
 		request := requestContext{}
@@ -256,10 +256,10 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *tes
 		}
 		created := tags("aws:RequestTag/", string(defaultNamespace), string(tier))
 		if !allows(t, deployDoc, "cloudfront:CreateDistribution", iam.AnyResource, created) {
-			t.Errorf("the %s deploy credential cannot create a distribution tagged as Ocel's and its own tier's", tier)
+			t.Errorf("the %s deploy credential cannot create a distribution tagged as its own tier's", tier)
 		}
 		if !allows(t, deployDoc, "cloudfront:TagResource", distribution, created) {
-			t.Errorf("the %s deploy credential cannot tag the distribution it creates as Ocel's and its own tier's", tier)
+			t.Errorf("the %s deploy credential cannot tag the distribution it creates as its own tier's", tier)
 		}
 		for name, request := range map[string]requestContext{
 			"untagged":                     tags("aws:RequestTag/", "", ""),
@@ -280,7 +280,7 @@ func TestTheDeployCredentialManagesOnlyTheDistributionsOcelTagsForItsTier(t *tes
 		}
 		for _, action := range onExisting {
 			if !allows(t, deployDoc, action, distribution, tags("aws:ResourceTag/", string(defaultNamespace), string(tier))) {
-				t.Errorf("the %s deploy credential cannot call %s on a distribution Ocel tagged for its tier", tier, action)
+				t.Errorf("the %s deploy credential cannot call %s on a distribution tagged for its tier", tier, action)
 			}
 			for name, request := range map[string]requestContext{
 				"untagged":                     tags("aws:ResourceTag/", "", ""),
@@ -345,7 +345,7 @@ func TestEveryCredentialFindsAndRemovesOnlyItsOwnTiersFailedVPCOrigins(t *testin
 			}
 			for _, action := range []string{"cloudfront:GetVpcOrigin", "cloudfront:DeleteVpcOrigin", "cloudfront:ListTagsForResource"} {
 				if !allows(t, document, action, vpcOrigin, tagged(string(defaultNamespace), tier)) {
-					t.Errorf("the %s %s credential cannot call %s on a VPC origin Ocel tagged for its tier", tier, purpose, action)
+					t.Errorf("the %s %s credential cannot call %s on a VPC origin tagged for its tier", tier, purpose, action)
 				}
 				for name, request := range map[string]requestContext{
 					"untagged":                     {},

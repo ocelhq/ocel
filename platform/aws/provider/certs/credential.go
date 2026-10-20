@@ -16,7 +16,7 @@ func Credential(s iam.Scope) []iam.Statement {
 				"acm:RemoveTagsFromCertificate",
 			},
 			Resources: []string{iam.AppCertificateARN},
-			Condition: s.TaggedByOcelForItsTier(),
+			Condition: s.TaggedForItsTier(),
 		},
 		{
 			Actions:   []string{"acm:DescribeCertificate", "acm:ListTagsForCertificate"},
