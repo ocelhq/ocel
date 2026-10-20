@@ -74,7 +74,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	cfg := deploy.Config{
 		Namespace:      string(p.namespace),
 		Region:         p.aws.Region,
-		BackendURL:     stateBackendURL(deployed.StateBucket, scope.Slug),
+		BackendURL:     stateBackendURL(deployed.Buckets[naming.StorageState], scope.Slug),
 		Passphrase:     params.Passphrase,
 		PulumiProject:  naming.PulumiProject(scope.Slug),
 		Parameters:     ssm.NewFromConfig(p.aws),
@@ -110,9 +110,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		BytecodeEmbed: p.options.Bytecode.Embed,
 
 		ArtifactRoot:      scope.OutputRoot,
-		ArtifactBucket:    deployed.ArtifactBucket,
-		EdgeBucket:        deployed.EdgeBucket,
-		CacheBucket:       deployed.CacheBucket,
+		Buckets:           deployed.Buckets,
 		ImageOptimizerURL: optimizer,
 
 		Objects:     s3.NewFromConfig(p.aws),
@@ -148,14 +146,16 @@ func (p *Provider) requireBootstrapped(deployed account.Deployed, tier environme
 	if !deployed.Present {
 		return refusal.Refuse(refusal.CodeNotReady, "the %s tier has no Ocel bootstrap; run `%s`", tier, command)
 	}
+	for _, class := range account.BootstrapStorageClasses {
+		if deployed.Buckets[class] == "" {
+			return refusal.Refuse(refusal.CodeNotReady,
+				"account bootstrap is present but its %s bucket is missing (a partial rollback?); re-run `%s`", class, command)
+		}
+	}
 	for _, missing := range []struct {
 		value string
 		what  string
 	}{
-		{deployed.StateBucket, "state bucket"},
-		{deployed.ArtifactBucket, "artifact bucket"},
-		{deployed.EdgeBucket, "edge bucket"},
-		{deployed.CacheBucket, "cache bucket"},
 		{deployed.StateTable, "state table"},
 		{deployed.VariablesTable, "variable store"},
 	} {

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -336,10 +337,10 @@ func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	if slugged == pointed {
 		t.Errorf("apiName is %q for both a slug and a pointer that end the same; two projects would share one API", slugged)
 	}
-	if got := apiName(defaultNamespace, "shop", environment.TierProduction, ""); got != "ocel--shop--prod" {
-		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
+	if got, want := apiName(defaultNamespace, "shop", environment.TierProduction, ""), "ocel-prod-shop-"+naming.HashTag("ocel", "production", "shop"); got != want {
+		t.Errorf("apiName = %q, want %q", got, want)
 	}
-	if name := notfoundapi.NameFor(string(defaultNamespace), environment.TierProduction); strings.Contains(name, "--") {
+	if name := notfoundapi.NameFor(string(defaultNamespace), environment.TierProduction); name == apiName(defaultNamespace, "not-found", environment.TierProduction, "") {
 		t.Errorf("the not-found API is named %q, which a project could claim as its own", name)
 	}
 }

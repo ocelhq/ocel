@@ -31,12 +31,8 @@ type ContainerFront struct {
 	Host      string `json:"host"`
 }
 
-func TieredName(namespace string, tier environment.Tier, words ...string) string {
-	return naming.Join(naming.WordSeparator, append([]string{naming.NamespaceField(namespace), naming.TierWord(tier)}, words...)...)
-}
-
 func ContainerClusterName(namespace string, tier environment.Tier) string {
-	return TieredName(namespace, tier, containersWord)
+	return naming.OcelName(namespace, tier, containersWord)
 }
 
 func ContainerLogGroupName(namespace string, tier environment.Tier) string {
@@ -44,7 +40,7 @@ func ContainerLogGroupName(namespace string, tier environment.Tier) string {
 }
 
 func PublicBalancerName(namespace string, tier environment.Tier) string {
-	return TieredName(namespace, tier, publicWord)
+	return naming.OcelName(namespace, tier, publicWord)
 }
 
 func ContainerFrontKey(tier environment.Tier) records.Key {

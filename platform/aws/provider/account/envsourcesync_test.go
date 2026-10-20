@@ -98,11 +98,12 @@ func TestTheDeployCredentialMakesMovesForwardAndRemovesItsTiersEnvSourceSync(t *
 func TestTheBootstrapCredentialKeepsNoGrantOnlyAStackMadeEnvSourceSyncNeeded(t *testing.T) {
 	for _, tier := range bothTiers {
 		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
+		core, _ := defaultNamespace.StackNameFor(tier)
 		for g := range grantsOf(t, bootstrapDoc) {
-			if strings.HasPrefix(g.action, "scheduler:") && strings.Contains(g.resource, defaultNamespace.CoreStackName()) {
+			if strings.HasPrefix(g.action, "scheduler:") && strings.Contains(g.resource, core) {
 				t.Errorf("the %s bootstrap credential grants %s on %s, a schedule group no bootstrap stack makes", tier, g.action, g.resource)
 			}
-			if strings.Contains(g.action, "EventInvokeConfig") && strings.Contains(g.resource, defaultNamespace.CoreStackName()) {
+			if strings.Contains(g.action, "EventInvokeConfig") && strings.Contains(g.resource, core) {
 				t.Errorf("the %s bootstrap credential grants %s on %s, a function no bootstrap stack configures", tier, g.action, g.resource)
 			}
 		}

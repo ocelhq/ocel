@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -445,8 +446,8 @@ func TestRunPreview(t *testing.T) {
 			t.Errorf("the second bootstrap submitted %d unchanged templates, want %d: a re-run must converge, not re-provision", stacks.noops, want)
 		}
 		for _, name := range stacks.stacks() {
-			if !strings.HasSuffix(name, "-preview") {
-				t.Errorf("a preview bootstrap touched %s, want only preview-suffixed stacks", name)
+			if !strings.HasPrefix(name, "ocel-preview-") {
+				t.Errorf("a preview bootstrap touched %s, want only the preview tier's stacks", name)
 			}
 		}
 
@@ -497,7 +498,7 @@ func TestRunDefaultEdge(t *testing.T) {
 			if err != nil {
 				t.Errorf("CheckDeployed inside the edge bootstrap: %v", err)
 			}
-			sawCore = deployed.EdgeBucket != ""
+			sawCore = deployed.Buckets[naming.StorageEdge] != ""
 		}}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 

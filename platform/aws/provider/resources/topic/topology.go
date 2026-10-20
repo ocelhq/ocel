@@ -27,6 +27,8 @@ const (
 	snsServicePrincipal         = "sns.amazonaws.com"
 	outputKeyTopicQueues        = "queues"
 	outputKeyTopicARN           = "topic"
+	queuePolicyPart             = "policy"
+	subscriptionPart            = "subscription"
 )
 
 var WorkerCeilings = []provider.WorkerCeiling{
@@ -213,14 +215,14 @@ func Register(ctx *pulumi.Context, topic Topic, visibility func(queue Queue) int
 		policy := pulumi.All(created.Arn, snsTopic.Arn).ApplyT(func(arns []any) (string, error) {
 			return snsDeliveryPolicy(fmt.Sprint(arns[0]), fmt.Sprint(arns[1]))
 		}).(pulumi.StringOutput)
-		allowed, err := sqs.NewQueuePolicy(ctx, queue.Name+"/policy", &sqs.QueuePolicyArgs{
+		allowed, err := sqs.NewQueuePolicy(ctx, component.NameOf(queue.Name).Part(queuePolicyPart), &sqs.QueuePolicyArgs{
 			QueueUrl: created.Url,
 			Policy:   policy,
 		})
 		if err != nil {
 			return err
 		}
-		if _, err := sns.NewTopicSubscription(ctx, queue.Name+"/subscription", &sns.TopicSubscriptionArgs{
+		if _, err := sns.NewTopicSubscription(ctx, component.NameOf(queue.Name).Part(subscriptionPart), &sns.TopicSubscriptionArgs{
 			Topic:              snsTopic.Arn,
 			Protocol:           pulumi.String("sqs"),
 			Endpoint:           created.Arn,

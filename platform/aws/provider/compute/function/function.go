@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -57,9 +56,6 @@ const (
 	bytecodeCachePolicy = "bytecode-cache"
 	assetReadPolicyName = "asset-read"
 	dispatchPolicyName  = "dispatch-invoke"
-	bindingPolicyWord   = "binding"
-	TasksPolicyName     = "tasks"
-	VariablesPolicyName = "variables-read"
 
 	urlPart = "url"
 )
@@ -178,7 +174,6 @@ type Artifact struct {
 
 type ExecutionRole struct {
 	Namespace string
-	App       string
 	Tags      map[string]string
 	Cache     *site.ISR
 	Bytecode  *Bytecode
@@ -191,75 +186,67 @@ type ExecutionRole struct {
 	BindingPolicies []iam.BindingPolicy
 
 	TasksPolicy string
+
+	Policies map[string]string
 }
 
-func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*awsiam.Role, error) {
-	if r.Boundary == "" {
-		return nil, fmt.Errorf("mint the execution role for %s: this deploy resolved no app boundary, and a role made without one is capped by nothing", r.App)
-	}
-	physical, err := component.PhysicalName(r.Namespace, coord, component.MaxRoleNameLen)
+func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*awsiam.Role, []pulumi.Resource, error) {
+	name, err := RoleName(r.Namespace, coord)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	name := component.NameOf(physical)
-	role, err := awsiam.NewRole(ctx, name.Pulumi, &awsiam.RoleArgs{
-		Name:                name.AWS,
-		Description:         component.Describe(coord, "execution role for this app's functions"),
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(iam.LambdaPrincipal)),
-		PermissionsBoundary: pulumi.String(r.Boundary),
-		Path:                pulumi.String(r.Path),
-		Tags:                component.Tags(coord.Kind, "", r.Tags),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if _, err := component.AttachManagedPolicy(ctx, name, role, iam.LambdaBasicExecutionPolicyARN); err != nil {
-		return nil, err
-	}
+	managed := []string{iam.LambdaBasicExecutionPolicyARN}
 	if r.VPCAccess {
-		if _, err := component.AttachManagedPolicy(ctx, name, role, iam.LambdaVPCAccessPolicyARN); err != nil {
-			return nil, err
-		}
+		managed = append(managed, iam.LambdaVPCAccessPolicyARN)
 	}
-	documents := map[string]string{}
+	documents := map[string]pulumi.StringInput{}
 	if r.Cache != nil {
-		if documents[isrCachePolicy], err = r.Cache.Policy(); err != nil {
-			return nil, err
+		document, err := r.Cache.Policy()
+		if err != nil {
+			return nil, nil, err
 		}
+		documents[isrCachePolicy] = pulumi.String(document)
 	}
 	if r.Bytecode != nil {
-		if documents[bytecodeCachePolicy], err = bytecodePolicy(*r.Bytecode); err != nil {
-			return nil, err
+		document, err := bytecodePolicy(*r.Bytecode)
+		if err != nil {
+			return nil, nil, err
 		}
+		documents[bytecodeCachePolicy] = pulumi.String(document)
 	}
 	if r.Dispatch != nil && r.Dispatch.EdgeBucket != "" {
-		if documents[assetReadPolicyName], err = assetReadPolicy(r.Dispatch); err != nil {
-			return nil, err
+		document, err := assetReadPolicy(r.Dispatch)
+		if err != nil {
+			return nil, nil, err
 		}
+		documents[assetReadPolicyName] = pulumi.String(document)
 	}
 	for _, binding := range r.BindingPolicies {
-		documents[BindingPolicyName(binding.Binding)] = binding.Policy
+		documents[component.BindingPolicyName(binding.Binding)] = pulumi.String(binding.Policy)
 	}
 	if r.TasksPolicy != "" {
-		documents[TasksPolicyName] = r.TasksPolicy
+		documents[component.TasksPolicyName] = pulumi.String(r.TasksPolicy)
+	}
+	for policy, document := range r.Policies {
+		documents[policy] = pulumi.String(document)
 	}
 	variablesPolicy, err := variables.ReadPolicy(r.Variables)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if variablesPolicy != "" {
-		documents[VariablesPolicyName] = variablesPolicy
+		documents[component.VariablesPolicyName] = pulumi.String(variablesPolicy)
 	}
-	for _, policy := range slices.Sorted(maps.Keys(documents)) {
-		if _, err := component.NewRolePolicy(ctx, name, role, policy, pulumi.String(documents[policy])); err != nil {
-			return nil, err
-		}
-	}
-	return role, nil
-}
-
-func BindingPolicyName(binding string) string {
-	return naming.Join(naming.WordSeparator, bindingPolicyWord, binding)
+	return component.NewAppRole(ctx, component.AppRole{
+		Name:        name,
+		Description: component.Describe(coord, "execution role for this app's functions"),
+		Principal:   iam.LambdaPrincipal,
+		Boundary:    r.Boundary,
+		Path:        r.Path,
+		Tags:        r.Tags,
+		Managed:     managed,
+		Policies:    documents,
+	})
 }
 
 func RoleName(namespace string, coord naming.Coordinate) (component.Name, error) {
@@ -385,31 +372,47 @@ type functionRef struct {
 	ARN pulumi.StringOutput
 }
 
-func Name(namespace, project string, stack naming.StackName, logicalName string) (component.Name, error) {
-	physical, err := component.PhysicalName(namespace, Coordinate(project, stack, logicalName), component.MaxLambdaNameLen)
-	return component.NameOf(physical), err
+type Names struct {
+	Function component.Name
+	Role     component.Name
 }
 
-func ResourceNames(namespace, project string, stack naming.StackName, logicalName string) (map[string][]component.ResourceRef, error) {
-	name, err := Name(namespace, project, stack, logicalName)
+func NamesFor(namespace, project string, stack naming.StackName, logicalName string) (Names, error) {
+	function, err := component.PhysicalName(namespace, Coordinate(project, stack, logicalName), component.MaxLambdaNameLen)
 	if err != nil {
-		return nil, err
+		return Names{}, err
 	}
 	role, err := RoleName(namespace, component.AppRoleCoordinate(project, stack))
 	if err != nil {
-		return nil, err
+		return Names{}, err
 	}
+	return Names{Function: component.NameOf(function), Role: role}, nil
+}
+
+func (n Names) Surfaces() map[string][]component.ResourceRef {
 	var urlPermissions []component.ResourceRef
 	for _, permission := range functionurl.Public() {
-		urlPermissions = append(urlPermissions, component.ResourceRef{Token: component.TokenLambdaPermission, Name: urlPermissionName(name, permission)})
+		urlPermissions = append(urlPermissions, component.ResourceRef{Token: component.TokenLambdaPermission, Name: urlPermissionName(n.Function, permission)})
 	}
 	return map[string][]component.ResourceRef{
-		"lambda":        {{Token: component.TokenLambdaFunction, Name: name.Pulumi}},
-		"url":           {{Token: component.TokenLambdaFunctionURL, Name: name.Part(urlPart)}},
+		"lambda":        {n.Lambda()},
+		"url":           {n.URL()},
 		"urlPermission": urlPermissions,
-		"logGroup":      {{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(name).Pulumi}},
-		"role":          {{Token: component.TokenIAMRole, Name: role.Pulumi}},
-	}, nil
+		"logGroup":      {n.LogGroup()},
+		"role":          {{Token: component.TokenIAMRole, Name: n.Role.Pulumi}},
+	}
+}
+
+func (n Names) Lambda() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenLambdaFunction, Name: n.Function.Pulumi}
+}
+
+func (n Names) URL() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenLambdaFunctionURL, Name: n.Function.Part(urlPart)}
+}
+
+func (n Names) LogGroup() component.ResourceRef {
+	return component.ResourceRef{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(n.Function).Pulumi}
 }
 
 func urlPermissionName(function component.Name, permission functionurl.Permission) string {

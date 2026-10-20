@@ -2,13 +2,11 @@ package apigateway
 
 import (
 	"context"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 )
 
@@ -21,10 +19,9 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	name, _ := strings.CutSuffix(aws.ToString(in.StackName), "-"+string(environment.TierPreview))
 	var outputs []cfntypes.Output
-	switch name {
-	case coreStackName:
+	switch aws.ToString(in.StackName) {
+	case coreStackName, previewCoreStackName:
 		outputs = []cfntypes.Output{
 			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
 			{OutputKey: aws.String("EdgeBucketName"), OutputValue: aws.String(fakeEdgeBucket)},

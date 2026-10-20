@@ -121,7 +121,7 @@ func bakedBuilds(t *testing.T, cfg publication, manifest *contractv1.Manifest, b
 		}
 		cache := &ISR{
 			Coord:   coord,
-			Buckets: naming.Buckets{naming.StorageEdge: cfg.buckets.Edge, naming.StorageCache: cfg.buckets.Cache},
+			Buckets: cfg.buckets.Buckets,
 		}
 		builds.caches[name] = cache
 	}
@@ -207,13 +207,34 @@ func entryPuts(puts []string) []string {
 	return out
 }
 
+func TestEachReleasesPrerenderSetDiffersEvenWithNoEntriesSoEachReleaseSeedsItsTagClock(t *testing.T) {
+	root := writeTree(t, map[string]string{"apps/web/next-route-table.json": `{"buildId":"BID","appName":"web"}`})
+	b := Buckets{Buckets: edgeAndCache, Objects: &fakeArtifactStore{exists: map[string]bool{}}}
+	digests := map[string]string{}
+	for _, release := range []string{"r1a2b3c4d", "r5e6f7a8b"} {
+		token, err := naming.ParseReleaseToken(release)
+		if err != nil {
+			t.Fatal(err)
+		}
+		coord := naming.Coordinate{Project: "proj", Env: "prod", App: "web", Release: token}
+		set, err := prerenderAssetSet(b, root, "web", &ISR{Coord: coord, Buckets: b.Buckets})
+		if err != nil || set == nil {
+			t.Fatalf("prerenderAssetSet(%s) = %v, %v, want a set that seeds the tag clock", release, set, err)
+		}
+		digests[set.digest] = release
+	}
+	if len(digests) != 2 {
+		t.Errorf("two releases with no prerendered entries share the prerender set digest %v: the set is pushed only when its inputs change, so the second release never seeds its own tag clock", digests)
+	}
+}
+
 func TestUploadPrerenderAssets(t *testing.T) {
 	t.Parallel()
 
 	t.Run("uploads each app under its own prefix", func(t *testing.T) {
 		t.Parallel()
 		f := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: twoAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: f}}
+		cfg := publication{root: twoAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: f}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -239,7 +260,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("seeds the page entries into the edge bucket and the tag snapshots into the cache bucket", func(t *testing.T) {
 		t.Parallel()
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: twoAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset, EdgeHoldsKey: true}}
+		cfg := publication{root: twoAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: asset, EdgeHoldsKey: true}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -268,10 +289,10 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("an edge holding no key to the edge bucket leaves the entries in it untagged", func(t *testing.T) {
+	t.Run("an edge holding no key to the edge bucket still finds the page entries in it", func(t *testing.T) {
 		t.Parallel()
 		f := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: twoAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: f}}
+		cfg := publication{root: twoAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: f}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -285,14 +306,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 				t.Errorf("%s went to bucket %q, want the edge bucket", key, f.buckets[i])
 			}
 		}
-		if len(f.taggings) != 0 {
-			t.Errorf("taggings = %v, want none where no edge reads the bucket", f.taggings)
-		}
 	})
 
 	t.Run("seeds the genesis tag snapshot", func(t *testing.T) {
 		store := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: twoAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: store}}
+		cfg := publication{root: twoAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: store}}
 
 		before := time.Now().UnixMilli()
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -327,7 +345,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("keeps an existing snapshot", func(t *testing.T) {
 		t.Parallel()
 		store := &fakeArtifactStore{exists: map[string]bool{kindKeyFor("tag-clock", "web", testBuildID, "tag-clock.json"): true}}
-		cfg := publication{root: twoAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: store}}
+		cfg := publication{root: twoAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: store}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -344,7 +362,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("seeds one snapshot per app", func(t *testing.T) {
 		t.Parallel()
 		f := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: twoAppTree(t), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: f}}
+		cfg := publication{root: twoAppTree(t), buckets: Buckets{Buckets: edgeAndCache, Objects: f}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -363,7 +381,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	t.Run("no Next app", func(t *testing.T) {
 		t.Parallel()
 		f := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: t.TempDir(), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: f}}
+		cfg := publication{root: t.TempDir(), buckets: Buckets{Buckets: edgeAndCache, Objects: f}}
 		manifest := &contractv1.Manifest{Slug: "proj"}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, manifest)); err != nil {
@@ -381,7 +399,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			"apps/web/functions/index.func/function-config.json": `{"id":"/"}`,
 		})
 		f := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: root, buckets: Buckets{Edge: "edge", Cache: "cache", Objects: f}}
+		cfg := publication{root: root, buckets: Buckets{Buckets: edgeAndCache, Objects: f}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -414,7 +432,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		})
 
 		f := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: root, buckets: Buckets{Edge: "edge", Cache: "cache", Objects: f}}
+		cfg := publication{root: root, buckets: Buckets{Buckets: edgeAndCache, Objects: f}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -436,44 +454,6 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("tags no entry, page or fetch, when the edge reads the edge bucket with its own key", func(t *testing.T) {
-		t.Parallel()
-		hash := "a1b2c3"
-		root := writeTree(t, map[string]string{
-			"apps/web/next-route-table.json":               `{"buildId":"WEB1"}`,
-			"apps/web/cache/index.cache.json":              `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
-			"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
-		})
-		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: root, buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset, EdgeHoldsKey: true}}
-
-		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
-			t.Fatalf("uploadPrerenderAssets: %v", err)
-		}
-
-		if len(asset.taggings) != 0 {
-			t.Errorf("taggings = %v, want none: an edge reads a page entry because it sits in the edge bucket", asset.taggings)
-		}
-	})
-
-	t.Run("tags nothing when the edge holds no key to the edge bucket", func(t *testing.T) {
-		t.Parallel()
-		root := writeTree(t, map[string]string{
-			"apps/web/next-route-table.json":  `{"buildId":"WEB1"}`,
-			"apps/web/cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
-		})
-		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: root, buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset}}
-
-		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
-			t.Fatalf("uploadPrerenderAssets: %v", err)
-		}
-
-		if len(asset.taggings) != 0 {
-			t.Errorf("taggings = %v, want none", asset.taggings)
-		}
-	})
-
 	t.Run("a fetch entry lands in the cache bucket beside a page in the edge bucket", func(t *testing.T) {
 		t.Parallel()
 		hash := "a1b2c3"
@@ -483,7 +463,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 		})
 		asset := &fakeArtifactStore{exists: map[string]bool{}}
-		cfg := publication{root: root, buckets: Buckets{Edge: "edge", Cache: "cache", Objects: asset, EdgeHoldsKey: true}}
+		cfg := publication{root: root, buckets: Buckets{Buckets: edgeAndCache, Objects: asset, EdgeHoldsKey: true}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)

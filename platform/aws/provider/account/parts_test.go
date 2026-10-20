@@ -14,8 +14,8 @@ func TestAPartsStackIsNamedAfterThePartAndItsTier(t *testing.T) {
 		tier environment.Tier
 		want string
 	}{
-		{environment.TierProduction, "ocel-bootstrap-cloudflare-edge"},
-		{environment.TierPreview, "ocel-bootstrap-cloudflare-edge-preview"},
+		{environment.TierProduction, "ocel-prod-bootstrap-cloudflare-edge"},
+		{environment.TierPreview, "ocel-preview-bootstrap-cloudflare-edge"},
 	} {
 		f, ok := partNamed(CloudflareEdgePart)
 		if !ok {

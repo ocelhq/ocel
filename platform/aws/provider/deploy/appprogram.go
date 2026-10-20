@@ -45,7 +45,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	if err != nil {
 		return err
 	}
-	role, err := function.NewRole(pctx, w.roleCoord, w.role)
+	role, _, err := function.NewRole(pctx, w.roleCoord, w.role)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	sessions := bucket.NewSessions(project, stack.Env, r.cfg.StateTableARN)
 	staged := functioncode.Refs(uploads)
 
-	dispatch := function.NewDispatchHost(spec.App, r.cfg.Slug, r.cfg.EdgeBucket, r.cfg.ImageOptimizerURL)
+	dispatch := function.NewDispatchHost(spec.App, r.cfg.Slug, r.cfg.Buckets[naming.StorageEdge], r.cfg.ImageOptimizerURL)
 	guard, err := function.NewOriginGuard(spec.App, r.cfg.Tier, r.cfg.OriginSecret, r.cfg.PreviousOriginSecret)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		Functions: functions,
 		Args:      func(fn function.AppFunction) function.Args { return args[fn.Logical] },
 		Artifacts: artifacts,
-		Env:       function.AppEnv(spec, r.cfg.storageBuckets(), bundle, sessions, r.cfg.StateTable),
+		Env:       function.AppEnv(spec, r.cfg.Buckets, bundle, sessions, r.cfg.StateTable),
 		ISR:       cache,
 		Bytecode:  bytecode,
 		Dispatch:  dispatch,
@@ -136,7 +136,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	}
 	role := function.ExecutionRole{
 		Namespace: r.cfg.Namespace,
-		App:       app.App, Cache: cache, Bytecode: bytecode,
+		Cache:     cache, Bytecode: bytecode,
 		Variables: variables.Reader{KeyARN: r.cfg.VariablesKeyARN}, Boundary: r.cfg.AppBoundaryARN, Path: r.cfg.AppRolePath,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
@@ -209,7 +209,7 @@ func (r *release) isrCache(spec provider.StackSpec) *site.ISR {
 	cache := &site.ISR{
 		Coord:     spec.App.Storage,
 		Namespace: isr.TagNamespace,
-		Buckets:   r.cfg.storageBuckets(),
+		Buckets:   r.cfg.Buckets,
 		Table:     r.cfg.StateTable,
 		TableARN:  r.cfg.StateTableARN,
 	}
@@ -223,7 +223,7 @@ func (r *release) bytecodeCache(spec provider.StackSpec) *function.Bytecode {
 	if !r.cfg.BytecodeCache {
 		return nil
 	}
-	return &function.Bytecode{Bucket: r.cfg.ArtifactBucket, Storage: spec.App.Storage}
+	return &function.Bytecode{Bucket: r.cfg.Buckets[naming.StorageArtifacts], Storage: spec.App.Storage}
 }
 
 func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.StackResult, error) {
@@ -255,7 +255,7 @@ func (r *release) decodeApp(work *appWork, outputs auto.OutputMap) (provider.Sta
 }
 
 func appExecutionRole(cfg Config, app string, caches map[string]*site.ISR, bytecode map[string]*function.Bytecode, bundle variables.Bundle, tags map[string]string, policies []iam.BindingPolicy, vpcAccess bool, dispatch *function.DispatchHost) function.ExecutionRole {
-	role := function.ExecutionRole{Namespace: cfg.Namespace, App: app, Cache: caches[app], Bytecode: bytecode[app], Variables: variables.Reader{KeyARN: cfg.VariablesKeyARN}, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
+	role := function.ExecutionRole{Namespace: cfg.Namespace, Cache: caches[app], Bytecode: bytecode[app], Variables: variables.Reader{KeyARN: cfg.VariablesKeyARN}, Boundary: cfg.AppBoundaryARN, Path: cfg.AppRolePath, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
 	if bundle.HasLive() {
 		role.Variables.TableARN = cfg.VariablesTableARN
 		role.Variables.Referenced = bundle.Referenced

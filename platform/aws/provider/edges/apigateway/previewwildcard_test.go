@@ -19,13 +19,14 @@ import (
 )
 
 const (
-	previewBase    = "preview.example.com"
-	previewCert    = "arn:aws:acm:eu-west-1:123456789012:certificate/preview"
-	previewWild    = "*." + previewBase
-	previewPoint   = "pr1"
-	previewEntry   = "conformance-preview-web-r9999zzzz"
-	previewAPIName = "ocel--conformance--preview--" + previewPoint
+	previewBase  = "preview.example.com"
+	previewCert  = "arn:aws:acm:eu-west-1:123456789012:certificate/preview"
+	previewWild  = "*." + previewBase
+	previewPoint = "pr1"
+	previewEntry = "conformance-preview-web-r9999zzzz"
 )
+
+var previewAPIName = apiName(defaultNamespace, conformanceSlug, environment.TierPreview, previewPoint)
 
 func previewStackSpec() edge.StackSpec {
 	return edge.StackSpec{Version: "v1", Tier: environment.TierPreview, Slug: conformanceSlug, PruneOnly: true}

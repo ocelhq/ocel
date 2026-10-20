@@ -320,10 +320,7 @@ func TestEveryCredentialOpensOnlyTheVariablesKeyOfItsOwnTier(t *testing.T) {
 func TestEveryCredentialReachesOnlyTheStateAndVariablesOfItsOwnTier(t *testing.T) {
 	stack := map[environment.Tier]string{}
 	bucket := func(tier environment.Tier, class naming.StorageClass) string {
-		name, err := defaultNamespace.BootstrapBucketName(tier, class, "1a2b3c")
-		if err != nil {
-			t.Fatal(err)
-		}
+		name := defaultNamespace.BootstrapBucketName(tier, class, "1a2b3c")
 		return "arn:aws:s3:::" + name
 	}
 	for _, tier := range bothTiers {
@@ -624,10 +621,7 @@ func TestABootstrapCredentialMakesAndTagsVariablesKeysOnlyAsItsOwnTiers(t *testi
 
 func TestEveryCredentialReadsTheTagsOfTheObjectsItUploadsToTheArtifactBucket(t *testing.T) {
 	for _, tier := range bothTiers {
-		bucket, err := defaultNamespace.BootstrapBucketName(tier, naming.StorageArtifacts, "abc123")
-		if err != nil {
-			t.Fatal(err)
-		}
+		bucket := defaultNamespace.BootstrapBucketName(tier, naming.StorageArtifacts, "abc123")
 		object := "arn:aws:s3:::" + bucket + "/fn/shop/preview/app/r1a2b3c4d/fn-app-bundle-0/h.zip"
 		for purpose, document := range credentialsOfTier(t, tier) {
 			if !reaches(t, document, "s3:GetObjectTagging", object) {
@@ -640,15 +634,9 @@ func TestEveryCredentialReadsTheTagsOfTheObjectsItUploadsToTheArtifactBucket(t *
 func TestTheBootstrapCredentialTurnsABACOnAndTagsItsOwnTiersBuckets(t *testing.T) {
 	for _, tier := range bothTiers {
 		bootstrapDoc, _ := renderedCredentialsOf(t, tier)
-		for _, class := range bootstrapStorageClasses {
-			own, err := defaultNamespace.BootstrapBucketName(tier, class, "abc123")
-			if err != nil {
-				t.Fatal(err)
-			}
-			other, err := defaultNamespace.BootstrapBucketName(tier.Sibling(), class, "abc123")
-			if err != nil {
-				t.Fatal(err)
-			}
+		for _, class := range BootstrapStorageClasses {
+			own := defaultNamespace.BootstrapBucketName(tier, class, "abc123")
+			other := defaultNamespace.BootstrapBucketName(tier.Sibling(), class, "abc123")
 			for _, action := range []string{"s3:PutBucketAbac", "s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource"} {
 				if !reaches(t, bootstrapDoc, action, "arn:aws:s3:::"+own) {
 					t.Errorf("the %s bootstrap credential cannot %s on %s: CloudFormation tags a bucket with TagResource, the only tagging call S3 takes once ABAC is on", tier, action, own)
@@ -665,10 +653,7 @@ func TestTheBootstrapCredentialTurnsABACOnAndTagsItsOwnTiersBuckets(t *testing.T
 }
 
 func TestNoCredentialTagsAnObjectInTheEdgeBucket(t *testing.T) {
-	bucket, err := defaultNamespace.BootstrapBucketName(environment.TierProduction, naming.StorageEdge, "abc123")
-	if err != nil {
-		t.Fatal(err)
-	}
+	bucket := defaultNamespace.BootstrapBucketName(environment.TierProduction, naming.StorageEdge, "abc123")
 	object := "arn:aws:s3:::" + bucket + "/assets/shop/prod/web/r1a2b3c4d/app.js"
 	for purpose, document := range credentialsOfTier(t, environment.TierProduction) {
 		if reaches(t, document, "s3:PutObjectTagging", object) {

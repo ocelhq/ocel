@@ -1,10 +1,12 @@
 package component
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
@@ -49,8 +51,12 @@ func TestANameThatCannotFitIsRefusedNamingTheResourceAndTheLimit(t *testing.T) {
 	if err == nil {
 		t.Fatal("a worker whose declared name alone overruns Lambda's limit was named rather than refused")
 	}
-	if !strings.Contains(err.Error(), "worker "+at.Name) || !strings.Contains(err.Error(), "64") {
+	if !strings.Contains(err.Error(), at.Name) || !strings.Contains(err.Error(), "64") {
 		t.Errorf("refusal %q, want it to name the worker and Lambda's 64 characters", err)
+	}
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("err = %v, want an invalid-input refusal", err)
 	}
 }
 
@@ -74,25 +80,25 @@ func TestAChildIsItsParentPlusItsSuffixAndAPartIsNamedUnderIt(t *testing.T) {
 	}
 }
 
-func TestARandomlyTaggedNamesHeadLeavesRoomForTheTagAndItsChildren(t *testing.T) {
+func TestAnUntaggedNameLeavesRoomForItsRandomTagAndItsChildren(t *testing.T) {
 	t.Parallel()
 
 	at := ResourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
-	head, err := RandomTaggedHead("ocel", at, 63, "completer")
+	head, err := UntaggedName("ocel", at, 63, "completer")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := "ocel-app-shop-prod-uploads"; head != want {
-		t.Errorf("RandomTaggedHead = %q, want %q", head, want)
+		t.Errorf("UntaggedName = %q, want %q", head, want)
 	}
 
 	long := ResourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "bucket--uploads", naming.KindBucket)
-	head, err = RandomTaggedHead("ocel", long, 63, "completer")
+	head, err = UntaggedName("ocel", long, 63, "completer")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := len(head + "-" + naming.NewRandomTag() + "-completer"); got > 63 {
-		t.Errorf("RandomTaggedHead = %q leaves its completer %d characters, over S3's 63", head, got)
+		t.Errorf("UntaggedName = %q leaves its completer %d characters, over S3's 63", head, got)
 	}
 }
 

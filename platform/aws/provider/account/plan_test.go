@@ -377,7 +377,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 	ctx := context.Background()
 	stacks := newFakeCFN()
-	core := defaultNamespace.CoreStackName()
+	core, _ := defaultNamespace.StackNameFor(environment.TierProduction)
 	part := defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction)
 	for _, name := range []string{core, part} {
 		stacks.templates[name] = "Resources: {}"

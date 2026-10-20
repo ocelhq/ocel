@@ -28,7 +28,7 @@ func functionNetworkStacks(t *testing.T, apps ...string) (*Stacks, *mockedEngine
 	cfg.ArtifactRoot = siblingAppRoot(t, apps...)
 	cfg.Env = "prod"
 	cfg.Tier = environment.TierProduction
-	cfg.ArtifactBucket = "artifacts-bucket"
+	cfg.Buckets[naming.StorageArtifacts] = "artifacts-bucket"
 	cfg.StateTable = "ocel-state"
 	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
 	cfg.BackendURL = "s3://ocel-state/shop"

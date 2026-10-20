@@ -5,16 +5,15 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 func mustGroupID(t *testing.T, project, logicalName string) string {
 	t.Helper()
-	id, err := groupID("ocel", component.ResourceCoordinate(project, "prod", logicalName, naming.KindKV))
+	names, err := NamesFor(testStack(project), logicalName, "valkey9")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return id
+	return names.Group
 }
 
 func TestLongSlugsStayDistinct(t *testing.T) {
@@ -37,23 +36,47 @@ func TestAStoreIsNamedUnderTheAppFenceWithinTheReplicationGroupIDElastiCacheAcce
 	t.Parallel()
 
 	if got := mustGroupID(t, "shop", "kv--cache"); got != testGroup {
-		t.Errorf("groupID = %q, want %q", got, testGroup)
+		t.Errorf("NamesFor(...).Group = %q, want %q", got, testGroup)
 	}
 
 	long := mustGroupID(t, strings.Repeat("p", 30), "kv--"+strings.Repeat("c", 10))
 	if len(long) > maxReplicationGroupIDLen {
-		t.Errorf("groupID = %q, %d characters, want <= %d", long, len(long), maxReplicationGroupIDLen)
+		t.Errorf("NamesFor(...).Group = %q, %d characters, want <= %d", long, len(long), maxReplicationGroupIDLen)
 	}
 	if strings.Contains(long, "--") || strings.HasSuffix(long, "-") {
-		t.Errorf("groupID = %q, want no doubled or trailing hyphen ElastiCache refuses", long)
+		t.Errorf("NamesFor(...).Group = %q, want no doubled or trailing hyphen ElastiCache refuses", long)
 	}
 }
 
 func TestAStoreWhoseNameCannotFitIsRefused(t *testing.T) {
 	t.Parallel()
 
-	_, err := groupID("ocel", component.ResourceCoordinate("shop", "prod", "kv--"+strings.Repeat("c", 30), naming.KindKV))
+	_, err := NamesFor(testStack("shop"), "kv--"+strings.Repeat("c", 30), "valkey9")
 	if err == nil || !strings.Contains(err.Error(), "40") {
-		t.Errorf("groupID = %v, want a refusal naming ElastiCache's 40 characters", err)
+		t.Errorf("NamesFor(...).Group = %v, want a refusal naming ElastiCache's 40 characters", err)
+	}
+}
+
+func TestAStoresSurfacesNameTheResourcesItIsBuiltFrom(t *testing.T) {
+	t.Parallel()
+
+	names, err := NamesFor(testStack("shop"), "kv--cache", "valkey9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"replicationGroup": testGroup,
+		"subnetGroup":      testGroup + "-subnets",
+		"parameterGroup":   testGroup + "-valkey9",
+		"securityGroup":    testGroup + "-sg",
+	}
+	surfaces := names.Surfaces()
+	if len(surfaces) != len(want) {
+		t.Errorf("Surfaces = %v, want exactly %v", surfaces, want)
+	}
+	for surface, name := range want {
+		if refs := surfaces[surface]; len(refs) != 1 || refs[0].Name != name {
+			t.Errorf("Surfaces()[%q] = %v, want the one resource %q", surface, refs, name)
+		}
 	}
 }

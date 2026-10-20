@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +32,7 @@ const (
 	postgresMasterUsername       = "ocel"
 	postgresDatabaseName         = "ocel"
 
-	finalSnapshotTimeLayout = "20060102150405"
+	finalSnapshotStampChars = 7
 )
 
 type clusterArgs struct {
@@ -88,29 +89,35 @@ func finalSnapshotIdentifier(cluster string, protected bool, now time.Time) pulu
 	if !protected {
 		return nil
 	}
-	return pulumi.String(cluster + naming.WordSeparator + finalSnapshotWord + naming.WordSeparator + now.UTC().Format(finalSnapshotTimeLayout))
+	return pulumi.String(finalSnapshotName(cluster, now))
+}
+
+func finalSnapshotName(cluster string, now time.Time) string {
+	return cluster + naming.WordSeparator + finalSnapshotSuffix(now)
+}
+
+func finalSnapshotSuffix(now time.Time) string {
+	stamp := strconv.FormatInt(now.Unix(), 36)
+	return finalSnapshotWord + naming.WordSeparator + strings.Repeat("0", max(0, finalSnapshotStampChars-len(stamp))) + stamp
 }
 
 func ClusterName(namespace string, tier environment.Tier, at naming.Coordinate) (string, error) {
-	tierField := naming.TierWord(tier) + naming.WordSeparator
-	fitted, err := component.PhysicalName(namespace, at, maxRDSIdentifierLen-len(tierField), instanceSuffix)
-	if err != nil {
-		return "", err
-	}
-	fence := naming.AppFence(namespace)
-	return fence + tierField + strings.TrimPrefix(fitted, fence), nil
+	name := at.AppResourceName(namespace, at.HashTag(namespace))
+	name.Qualifier = naming.TierWord(tier)
+	return name.Fit(maxRDSIdentifierLen, instanceSuffix, subnetsSuffix, component.SecurityGroupSuffix, finalSnapshotSuffix(time.Unix(0, 0)))
 }
 
 func register(ctx *pulumi.Context, stack component.Stack, logicalName string, args clusterArgs) error {
 	at := component.ResourceCoordinate(stack.Project, stack.Env, logicalName, naming.KindDatabase)
 	network := stack.Network
-	name, err := ClusterName(stack.Namespace, args.Tier, at)
+	names, err := NamesFor(stack, logicalName)
 	if err != nil {
 		return err
 	}
+	name := names.Cluster
 
 	securityGroup, err := component.NewVPCSecurityGroup(ctx, at, component.VPCSecurityGroup{
-		Owner:   name,
+		Name:    names.SecurityGroup,
 		Subject: "the " + at.Name + " database",
 		Engine:  "Postgres",
 		Port:    args.Port,
@@ -131,9 +138,8 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 		return err
 	}
 
-	subnets := name + naming.WordSeparator + subnetsSuffix
-	subnetGroup, err := rds.NewSubnetGroup(ctx, subnets, &rds.SubnetGroupArgs{
-		Name:        pulumi.String(subnets),
+	subnetGroup, err := rds.NewSubnetGroup(ctx, names.Subnets, &rds.SubnetGroupArgs{
+		Name:        pulumi.String(names.Subnets),
 		Description: component.CapDescription(at.Description("subnet group placing the "+at.Name+" database in the VPC's subnets"), component.MaxSubnetGroupDescriptionLen),
 		SubnetIds:   pulumi.ToStringArray(network.SubnetIDs),
 		Tags:        component.Tags(at.Kind, "", args.Tags),
@@ -167,9 +173,8 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 		return err
 	}
 
-	member := name + naming.WordSeparator + instanceSuffix
-	instance, err := rds.NewClusterInstance(ctx, member, &rds.ClusterInstanceArgs{
-		Identifier:         pulumi.String(member),
+	instance, err := rds.NewClusterInstance(ctx, names.Instance, &rds.ClusterInstanceArgs{
+		Identifier:         pulumi.String(names.Instance),
 		ClusterIdentifier:  cluster.ID(),
 		Engine:             rds.EngineType(args.Engine),
 		EngineVersion:      cluster.EngineVersion,

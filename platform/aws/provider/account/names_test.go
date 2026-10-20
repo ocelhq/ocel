@@ -96,36 +96,36 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 	}
 }
 
-func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
+func TestEveryOcelOwnedNameIsTheNamespaceFieldThenTheTierWord(t *testing.T) {
 	want := map[string]string{
-		"core stack":             "ocel-bootstrap",
-		"preview core stack":     "ocel-bootstrap-preview",
-		"part stack":             "ocel-bootstrap-cloudflare-edge",
-		"preview part stack":     "ocel-bootstrap-cloudflare-edge-preview",
-		"passphrase param":       "/ocel/pulumi/passphrase",
-		"edge user":              "ocel-edge",
-		"preview edge user":      "ocel-edge-preview",
-		"app boundary":           "ocel-boundary",
-		"preview app boundary":   "ocel-boundary-preview",
-		"origin secret":          "/ocel/origin/secret",
-		"preview origin secret":  "/ocel/origin/secret-preview",
-		"edge param prefix":      "/ocel/edge/cloudflare",
-		"preview edge params":    "/ocel/edge/cloudflare-preview",
-		"variables key alias":    "alias/ocel-variables-prod",
-		"edge invoke role":       "ocel-edge-invoke",
-		"preview invoke role":    "ocel-edge-invoke-preview",
+		"core stack":             "ocel-prod-bootstrap",
+		"preview core stack":     "ocel-preview-bootstrap",
+		"part stack":             "ocel-prod-bootstrap-cloudflare-edge",
+		"preview part stack":     "ocel-preview-bootstrap-cloudflare-edge",
+		"passphrase param":       "/ocel/pulumi/prod/passphrase",
+		"edge user":              "ocel-prod-edge",
+		"preview edge user":      "ocel-preview-edge",
+		"app boundary":           "ocel-prod-boundary",
+		"preview app boundary":   "ocel-preview-boundary",
+		"origin secret":          "/ocel/origin/prod/secret",
+		"preview origin secret":  "/ocel/origin/preview/secret",
+		"edge param prefix":      "/ocel/edge/prod/cloudflare",
+		"preview edge params":    "/ocel/edge/preview/cloudflare",
+		"variables key alias":    "alias/ocel-prod-variables",
+		"edge invoke role":       "ocel-prod-edge-invoke",
+		"preview invoke role":    "ocel-preview-edge-invoke",
 		"not found api":          "ocel-prod-not-found",
-		"image optimizer":        "ocel-optimizer",
-		"preview optimizer":      "ocel-optimizer-preview",
+		"image optimizer":        "ocel-prod-optimizer",
+		"preview optimizer":      "ocel-preview-optimizer",
 		"tag invalidator":        "ocel-preview-invalidator",
 		"invalidator queue":      "ocel-prod-invalidator",
-		"routes store":           "ocel-routes",
-		"preview routes store":   "ocel-routes-preview",
-		"resolver":               "ocel-resolver-preview",
-		"empty body function":    "ocel-empty-body",
-		"cache policy":           "ocel-cache",
-		"headers policy":         "ocel-headers",
-		"asset access":           "ocel-assets",
+		"routes store":           "ocel-prod-routes",
+		"preview routes store":   "ocel-preview-routes",
+		"resolver":               "ocel-preview-resolver",
+		"empty body function":    "ocel-prod-empty-body",
+		"cache policy":           "ocel-prod-cache",
+		"headers policy":         "ocel-prod-headers",
+		"asset access":           "ocel-prod-assets",
 		"cache policy name":      "ocel-edge-cache",
 		"app role path":          "/ocel/prod/app/",
 		"env sync":               "ocel-prod-env-sync",
@@ -163,7 +163,22 @@ func TestEveryNameContainsTheNamespace(t *testing.T) {
 	}
 }
 
-func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
+func TestALongNamespaceIsNamedByItsTwelveCharacterField(t *testing.T) {
+	long := Namespace("j-1874-deploy-next-cloudflare")
+	for what, got := range namesOf(t, long) {
+		if strings.Contains(got, string(long)) {
+			t.Errorf("the %s is %q, which spells out the whole namespace rather than its field", what, got)
+		}
+		if !strings.Contains(got, "j-187-") {
+			t.Errorf("the %s is %q and does not contain the namespace's field", what, got)
+		}
+	}
+	if got, want := namesOf(t, long)["core stack"], naming.NamespaceField(string(long))+"-prod-bootstrap"; got != want {
+		t.Errorf("core stack = %q, want %q", got, want)
+	}
+}
+
+func TestEveryNameFitsAWSAtTheLongestNamespace(t *testing.T) {
 	limits := map[string]int{
 		"core stack":             128,
 		"preview core stack":     128,
@@ -208,7 +223,6 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 	}
 
 	longest := Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
-	tight := false
 	for what, got := range namesOf(t, longest) {
 		limit, known := limits[what]
 		if !known {
@@ -217,12 +231,6 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		if len(got) > limit {
 			t.Errorf("at the longest namespace the %s is %d characters, and AWS allows %d", what, len(got), limit)
 		}
-		if len(got) == limit {
-			tight = true
-		}
-	}
-	if !tight {
-		t.Errorf("no name reaches its AWS limit at a namespace of %d characters, so the bound is shorter than it needs to be", provider.MaxNamespaceLength)
 	}
 }
 

@@ -57,7 +57,7 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 		arrive:  make(chan struct{}, len(apps)*uploadConcurrency*4),
 		release: make(chan struct{}),
 	}
-	cfg := publication{root: staticAssetApps(t, apps, uploadConcurrency), buckets: Buckets{Edge: "edge", Cache: "cache", Objects: uploader, EdgeHoldsKey: true}}
+	cfg := publication{root: staticAssetApps(t, apps, uploadConcurrency), buckets: Buckets{Buckets: edgeAndCache, Objects: uploader, EdgeHoldsKey: true}}
 
 	var group sync.WaitGroup
 	failures := make([]error, len(apps))

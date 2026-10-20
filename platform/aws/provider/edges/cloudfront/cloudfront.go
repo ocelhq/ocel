@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -299,7 +300,7 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	own.StateTable = deployed.StateTable
-	own.EdgeBucket = deployed.EdgeBucket
+	own.EdgeBucket = deployed.Buckets[naming.StorageEdge]
 	own.Region = c.Region
 	own.ShieldsOrigin = p.options.ShieldsOrigin()
 	own.Function = set.functionARN
@@ -364,7 +365,7 @@ func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, 
 }
 
 func distributionName(ns account.Namespace, slug string, tier environment.Tier) string {
-	return surface.Fitted(maxDistributionNameLen, ns, slug, tier)
+	return surface.Name(ns, slug, tier)
 }
 
 func assetOriginDomain(bucket, region string) string {

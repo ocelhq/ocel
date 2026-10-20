@@ -33,8 +33,8 @@ func New(artifacts component.Artifacts) component.Component {
 		},
 		Credential: credential,
 		Transform: func(at component.Stack, declared provider.Resource) (component.Transformable, error) {
-			names, err := resourceNames(at, declared.Name)
-			return component.Transformable{Kind: transformKind, Names: names}, err
+			names, err := NamesFor(at, declared.Name)
+			return component.Transformable{Kind: transformKind, Names: names.Surfaces()}, err
 		},
 		Shape: shape,
 	}

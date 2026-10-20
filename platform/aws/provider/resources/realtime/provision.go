@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/appsync"
-	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -83,18 +82,15 @@ func registerRealtime(ctx *pulumi.Context, stack component.Stack, args realtimeA
 	name := component.NameOf(physical)
 	authorizerName := name.Child(authorizerSuffix)
 
-	role, err := awsiam.NewRole(ctx, authorizerName.Pulumi, &awsiam.RoleArgs{
-		Name:                authorizerName.AWS,
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy("lambda.amazonaws.com")),
-		Description:         pulumi.String(at.Description("execution role for the realtime authorizer")),
-		PermissionsBoundary: pulumi.String(args.BoundaryARN),
-		Path:                pulumi.String(args.RolePath),
-		Tags:                component.Tags(naming.KindRole, "", nil),
+	role, _, err := component.NewAppRole(ctx, component.AppRole{
+		Name:        authorizerName,
+		Description: pulumi.String(at.Description("execution role for the realtime authorizer")),
+		Principal:   iam.LambdaPrincipal,
+		Boundary:    args.BoundaryARN,
+		Path:        args.RolePath,
+		Managed:     []string{iam.LambdaBasicExecutionPolicyARN},
 	})
 	if err != nil {
-		return err
-	}
-	if _, err := component.AttachManagedPolicy(ctx, authorizerName, role, iam.LambdaBasicExecutionPolicyARN); err != nil {
 		return err
 	}
 
@@ -167,7 +163,7 @@ func registerRealtime(ctx *pulumi.Context, stack component.Stack, args realtimeA
 	readsOwnAPI := api.ApiArn.ApplyT(func(arn string) (string, error) {
 		return iam.InlinePolicy([]string{"appsync:GetApi"}, []string{arn}, nil)
 	}).(pulumi.StringOutput)
-	if _, err := component.NewRolePolicy(ctx, authorizerName, role, authorizerReadsAPIPolicy, readsOwnAPI); err != nil {
+	if _, err := component.NewRolePolicy(ctx, authorizerName, role.Name, authorizerReadsAPIPolicy, readsOwnAPI); err != nil {
 		return err
 	}
 

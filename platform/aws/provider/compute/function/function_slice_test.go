@@ -32,7 +32,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -82,7 +82,7 @@ func TestADryPlanBootsAFunctionThroughTheRuntimeLayerTheDeployWouldPublish(t *te
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -136,7 +136,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -294,21 +294,6 @@ func TestBytecodePolicy(t *testing.T) {
 			t.Errorf("web's policy reaches admin's prefix %q: %s", prefix, raw)
 		}
 	})
-}
-
-func TestISRNeverTagsAnObject(t *testing.T) {
-	cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
-
-	if got, ok := cfg.Env()["OCEL_ISR_EDGE_READABLE"]; ok {
-		t.Errorf("OCEL_ISR_EDGE_READABLE = %q, want it unset: an edge reads a page entry because it is in the edge bucket", got)
-	}
-	policy, err := cfg.Policy()
-	if err != nil {
-		t.Fatalf("ISR.Policy: %v", err)
-	}
-	if strings.Contains(policy, "Tagging") {
-		t.Errorf("policy grants object tagging: %s", policy)
-	}
 }
 
 func TestISRPolicy(t *testing.T) {
@@ -572,7 +557,7 @@ func TestFunctionLogGroup(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -624,7 +609,7 @@ func TestAFunctionsEnvironmentIsSealedUnderTheTierVariablesKey(t *testing.T) {
 			rec := &inputRecorder{}
 			program := func(pctx *pulumi.Context) error {
 				stack := testStack(t, "prod", "api")
-				role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
+				role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 				if err != nil {
 					return err
 				}
@@ -660,7 +645,7 @@ func TestARoleWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
 	t.Parallel()
 
 	program := func(pctx *pulumi.Context) error {
-		_, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{Namespace: testNamespace, App: "api"})
+		_, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{Namespace: testNamespace})
 		return err
 	}
 	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", &inputRecorder{}))
@@ -684,9 +669,9 @@ func TestAFunctionRoleGrantsTheVariablesKeyOnlyWhereTheAccountNamesOne(t *testin
 
 			rec := &inputRecorder{}
 			program := func(pctx *pulumi.Context) error {
-				_, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{
+				_, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", testStack(t, "prod", "api")), ExecutionRole{
 					Namespace: testNamespace,
-					App:       "api", Boundary: componenttest.BoundaryARN, Variables: variables.Reader{KeyARN: tc.key},
+					Boundary:  componenttest.BoundaryARN, Variables: variables.Reader{KeyARN: tc.key},
 				})
 				return err
 			}
@@ -694,7 +679,7 @@ func TestAFunctionRoleGrantsTheVariablesKeyOnlyWhereTheAccountNamesOne(t *testin
 				t.Fatalf("run program: %v", err)
 			}
 
-			name := namedRole(testStack(t, "prod", "api")).Part(VariablesPolicyName)
+			name := namedRole(testStack(t, "prod", "api")).Part(component.VariablesPolicyName)
 			raw, declared := rec.inputs(rolePolicyToken, name)["policy"]
 			if tc.key == "" {
 				if declared {

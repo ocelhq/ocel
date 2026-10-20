@@ -96,11 +96,11 @@ func artifacts() ports.Artifacts {
 
 type tierBuckets struct{}
 
-func (tierBuckets) Buckets(_ context.Context, tier environment.Tier) (ports.Buckets, error) {
-	return ports.Buckets{
-		Artifacts: "ocel-artifacts-" + string(tier),
-		Edge:      "ocel-edge-" + string(tier),
-		Cache:     "ocel-cache-" + string(tier),
+func (tierBuckets) Buckets(_ context.Context, tier environment.Tier) (naming.Buckets, error) {
+	return naming.Buckets{
+		naming.StorageArtifacts: "ocel-artifacts-" + string(tier),
+		naming.StorageEdge:      "ocel-edge-" + string(tier),
+		naming.StorageCache:     "ocel-cache-" + string(tier),
 	}, nil
 }
 

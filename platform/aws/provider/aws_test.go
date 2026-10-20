@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -22,7 +24,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
@@ -377,7 +378,7 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 func TestTheALBKeepsItsTrustRecordInTheStateBucketWhichExpiresNoCurrentObject(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
-		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts"}}, nil
+		return account.Reading{Deployed: account.Deployed{Present: true, Buckets: naming.Buckets{naming.StorageState: "state", naming.StorageArtifacts: "artifacts"}}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -395,12 +396,10 @@ func TestBucketsAreTheTiersArtifactEdgeAndCacheBucketsWhateverEdgesAreInstalled(
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
 		return account.Reading{Deployed: account.Deployed{
-			ArtifactBucket: "functions",
-			EdgeBucket:     "edge",
-			CacheBucket:    "cache",
 			Parts: account.PartSet{
 				account.CloudflareEdgePart: true,
 			},
+			Buckets: naming.Buckets{naming.StorageArtifacts: "functions", naming.StorageEdge: "edge", naming.StorageCache: "cache"},
 		}}, nil
 	}); err != nil {
 		t.Fatal(err)
@@ -410,7 +409,7 @@ func TestBucketsAreTheTiersArtifactEdgeAndCacheBucketsWhateverEdgesAreInstalled(
 	if err != nil {
 		t.Fatalf("Buckets error = %v", err)
 	}
-	if want := (awsports.Buckets{Artifacts: "functions", Edge: "edge", Cache: "cache"}); buckets != want {
+	if want := (naming.Buckets{naming.StorageArtifacts: "functions", naming.StorageEdge: "edge", naming.StorageCache: "cache"}); !maps.Equal(buckets, want) {
 		t.Fatalf("Buckets() = %+v, want %+v: the ISR entries an edge reads live in the edge bucket, and no edge keeps a store of its own", buckets, want)
 	}
 }
@@ -429,12 +428,9 @@ func TestBootstrapReadyWithoutAVariablesKey(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	deployed := account.Deployed{
 		Present:        true,
-		StateBucket:    "state",
-		ArtifactBucket: "artifacts",
-		EdgeBucket:     "edge",
-		CacheBucket:    "cache",
 		StateTable:     "state-table",
 		VariablesTable: "variables-table",
+		Buckets:        naming.Buckets{naming.StorageState: "state", naming.StorageArtifacts: "artifacts", naming.StorageEdge: "edge", naming.StorageCache: "cache"},
 	}
 
 	if err := p.requireBootstrapped(deployed, environment.TierProduction); err != nil {

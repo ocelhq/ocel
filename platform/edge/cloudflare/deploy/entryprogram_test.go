@@ -33,7 +33,7 @@ func programmed() *edge.Program {
 	return &edge.Program{
 		Origin: signedReach(),
 		ReleasesStore: edge.ReleasesStore{
-			Name:                "ocel-releases-store-preview",
+			Name:                "ocel-preview-releases-store",
 			Endpoint:            "https://store.example",
 			BootstrapCredential: "store-cred",
 		},
@@ -106,7 +106,7 @@ func TestTheSharedPreviewEntryProgramBindsTheStoreWorkerAndTheBaseDomain(t *test
 	if built.name != previewEntryScript {
 		t.Errorf("name = %q, want %q", built.name, previewEntryScript)
 	}
-	if built.worker.Services[genericStoreBinding] != "ocel-releases-store-preview" {
+	if built.worker.Services[genericStoreBinding] != "ocel-preview-releases-store" {
 		t.Errorf("Services = %v, want the preview store bound", built.worker.Services)
 	}
 	for name, want := range map[string]string{

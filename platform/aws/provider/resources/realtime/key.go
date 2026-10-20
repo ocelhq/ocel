@@ -37,7 +37,7 @@ type SigningKeysAPI interface {
 }
 
 func signingKeyPath(root string, tier environment.Tier, project, env string) string {
-	return strings.Join([]string{root, string(tier), project, env}, "/")
+	return strings.Join([]string{root, naming.TierWord(tier), project, env}, "/")
 }
 
 func SigningKeySecret(root string, tier environment.Tier, project, env, logicalName string) string {

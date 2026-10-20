@@ -295,7 +295,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 			rec := &inputRecorder{}
 			stack := testStack(t, "prod", "api")
 			program := func(pctx *pulumi.Context) error {
-				role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "api", Boundary: componenttest.BoundaryARN})
+				role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN})
 				if err != nil {
 					return err
 				}

@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -56,11 +56,11 @@ type Names struct {
 }
 
 func NamesFor(namespace string, tier environment.Tier) Names {
-	function := awsports.TieredName(namespace, tier, syncWord)
+	function := naming.OcelName(namespace, tier, syncWord)
 	return Names{
 		Function:      function,
 		Role:          function,
-		ScheduleRole:  awsports.TieredName(namespace, tier, syncWord, scheduleWord),
+		ScheduleRole:  naming.OcelName(namespace, tier, syncWord, scheduleWord),
 		LogGroup:      "/aws/lambda/" + function,
 		ScheduleGroup: function,
 		Schedule:      function,

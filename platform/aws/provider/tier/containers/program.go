@@ -140,7 +140,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := awsiam.NewRolePolicyAttachment(ctx, executionRoleName(w.namespace, tier)+partSeparator+ecsTaskExecutionPolicyName, &awsiam.RolePolicyAttachmentArgs{
+	if _, err := awsiam.NewRolePolicyAttachment(ctx, component.NameOf(executionRoleName(w.namespace, tier)).Attachment(ecsTaskExecutionPolicyARN), &awsiam.RolePolicyAttachmentArgs{
 		Role:      execution.Name,
 		PolicyArn: pulumi.String(ecsTaskExecutionPolicyARN),
 	}); err != nil {

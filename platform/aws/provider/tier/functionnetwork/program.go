@@ -144,7 +144,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	gateways := make([]*ec2.NatGateway, 0, natGateways(tier))
 	for n := range min(natGateways(tier), len(placed.Public)) {
 		nat := natName(w.namespace, tier, n)
-		address, err := ec2.NewEip(ctx, nat+partSeparator+"eip", &ec2.EipArgs{
+		address, err := ec2.NewEip(ctx, component.NameOf(nat).Part(eipPart), &ec2.EipArgs{
 			Domain: pulumi.String("vpc"),
 			Tags:   tagsFor(nat),
 		})
@@ -173,7 +173,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 		if err != nil {
 			return err
 		}
-		if _, err := ec2.NewRoute(ctx, routesName+partSeparator+"nat", &ec2.RouteArgs{
+		if _, err := ec2.NewRoute(ctx, component.NameOf(routesName).Part(natPart), &ec2.RouteArgs{
 			RouteTableId:         routes.ID(),
 			DestinationCidrBlock: pulumi.String(anyIPv4),
 			NatGatewayId:         gateways[min(i, len(gateways)-1)].ID(),
@@ -191,7 +191,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 		if err != nil {
 			return err
 		}
-		if _, err := ec2.NewRouteTableAssociation(ctx, routesName+partSeparator+subnetName, &ec2.RouteTableAssociationArgs{
+		if _, err := ec2.NewRouteTableAssociation(ctx, component.NameOf(routesName).Part(subnetName), &ec2.RouteTableAssociationArgs{
 			RouteTableId: routes.ID(),
 			SubnetId:     subnet.ID(),
 		}); err != nil {
@@ -213,7 +213,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 		}
 	}
 
-	group := nameFor(w.namespace, tier, securityGroupWord)
+	group := component.SecurityGroupName(nameFor(w.namespace, tier))
 	functions, err := ec2.NewSecurityGroup(ctx, group, &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(group),
 		Description: pulumi.String("Ocel: the functions in the " + string(tier) + " class that reach a VPC-only resource run as"),

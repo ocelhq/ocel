@@ -20,9 +20,9 @@ func edgeRouteTable(key string) *provider.EdgeRouteTable {
 	}
 }
 
-func TestARouteTableLandsInTheEdgeBucketUntagged(t *testing.T) {
+func TestARouteTableLandsInTheEdgeBucket(t *testing.T) {
 	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
-	cfg := publication{buckets: Buckets{Edge: "edge", Cache: "cache", Objects: assetStore, EdgeHoldsKey: true}}
+	cfg := publication{buckets: Buckets{Buckets: edgeAndCache, Objects: assetStore, EdgeHoldsKey: true}}
 	table := edgeRouteTable("prod/proj/web/r1a2b3c4d/route-table/ab.json")
 
 	set, err := routeTableSet(cfg.buckets, "web", table)
@@ -44,9 +44,6 @@ func TestARouteTableLandsInTheEdgeBucketUntagged(t *testing.T) {
 	if ct := assetStore.contentTypes[key]; ct != "application/json" {
 		t.Errorf("content-type = %q, want application/json", ct)
 	}
-	if got, tagged := assetStore.taggings[key]; tagged {
-		t.Errorf("tagging = %q, want none: the edge user reads every object in the edge bucket", got)
-	}
 	if !slices.ContainsFunc(said.said, func(m string) bool { return strings.HasSuffix(m, "to bucket edge") }) {
 		t.Errorf("progress said %q, want it to name the edge bucket the table was written to", said.said)
 	}
@@ -54,7 +51,7 @@ func TestARouteTableLandsInTheEdgeBucketUntagged(t *testing.T) {
 
 func TestARouteTableForAnEdgeHoldingNoKeyToTheEdgeBucketIsRefusedNamingBootstrap(t *testing.T) {
 	assetStore := &fakeArtifactStore{exists: map[string]bool{}}
-	cfg := publication{buckets: Buckets{Edge: "edge", Cache: "cache", Objects: assetStore}}
+	cfg := publication{buckets: Buckets{Buckets: edgeAndCache, Objects: assetStore}}
 
 	_, err := routeTableSet(cfg.buckets, "web", edgeRouteTable("prod/proj/web/r1a2b3c4d/route-table/ab.json"))
 

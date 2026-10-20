@@ -86,7 +86,7 @@ func (s *stack) clients(ctx context.Context) (Clients, error) {
 		return c, err
 	}
 	s.own.StateTable = deployed.StateTable
-	s.own.EdgeBucket = deployed.EdgeBucket
+	s.own.EdgeBucket = deployed.Buckets[naming.StorageEdge]
 	s.own.Region = c.Region
 	s.own.Function = set.functionARN
 	s.own.EmptyBodyFunction = set.emptyBodyFunctionARN

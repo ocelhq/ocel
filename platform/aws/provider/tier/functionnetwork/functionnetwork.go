@@ -40,11 +40,11 @@ const (
 	anyIPv4     = "0.0.0.0/0"
 	stackTagKey = "ocel:stack"
 
-	functionsWord     = "functions"
-	securityGroupWord = "sg"
-	privateWord       = "private"
-	partSeparator     = "/"
-	endpointType      = "Gateway"
+	functionsWord = "functions"
+	privateWord   = "private"
+	eipPart       = "eip"
+	natPart       = "nat"
+	endpointType  = "Gateway"
 )
 
 var endpointServices = []string{"s3", "dynamodb"}
@@ -102,7 +102,7 @@ func StackRef(tier environment.Tier) provider.StackRef {
 }
 
 func nameFor(namespace string, tier environment.Tier, parts ...string) string {
-	return awsports.TieredName(namespace, tier, append([]string{functionsWord}, parts...)...)
+	return naming.OcelName(namespace, tier, append([]string{functionsWord}, parts...)...)
 }
 
 func stackTags(namespace string, tier environment.Tier) map[string]string {

@@ -13,6 +13,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -31,7 +32,7 @@ type ParametersAPI interface {
 }
 
 func kvTokenPath(root string, tier environment.Tier, project, env string) string {
-	return strings.Join([]string{root, string(tier), project, env}, "/")
+	return strings.Join([]string{root, naming.TierWord(tier), project, env}, "/")
 }
 
 func TokenParameter(root string, tier environment.Tier, project, env, logicalName string) string {

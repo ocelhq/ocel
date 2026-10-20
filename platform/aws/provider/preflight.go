@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -39,7 +40,7 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	}
 	if err := p.resolveRuntimeLayers(ctx, pre, func(apis account.APIs, deployed account.Deployed) (map[string]string, error) {
 		return account.EnsureRuntimeLayers(ctx, apis, p.namespace, pre.Deploy.Tier,
-			account.RuntimeLayerRequest{ArtifactBucket: deployed.ArtifactBucket, StateTable: deployed.StateTable}, pre.Progress)
+			account.RuntimeLayerRequest{ArtifactBucket: deployed.Buckets[naming.StorageArtifacts], StateTable: deployed.StateTable}, pre.Progress)
 	}); err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 
@@ -10,50 +11,84 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
+const (
+	TasksPolicyName     = "tasks"
+	VariablesPolicyName = "variables-read"
+	bindingPolicyWord   = "binding"
+)
+
+func BindingPolicyName(binding string) string {
+	return naming.Join(naming.WordSeparator, bindingPolicyWord, binding)
+}
+
 type PolicyStatement struct {
 	Actions   []string
 	Resources []pulumi.StringInput
 	Condition map[string]any
 }
 
-func NewServiceRole(ctx *pulumi.Context, name Name, description, servicePrincipal, boundaryARN, rolePath string, tags map[string]string, statements map[string]PolicyStatement) (*awsiam.Role, error) {
-	role, err := awsiam.NewRole(ctx, name.Pulumi, &awsiam.RoleArgs{
-		Name:                name.AWS,
-		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(servicePrincipal)),
-		Description:         pulumi.String(description),
-		PermissionsBoundary: pulumi.String(boundaryARN),
-		Path:                pulumi.String(rolePath),
-		Tags:                Tags(naming.KindRole, "", tags),
-	})
-	if err != nil {
-		return nil, err
+func (stmt PolicyStatement) Document() pulumi.StringOutput {
+	resources := make([]any, len(stmt.Resources))
+	for i, r := range stmt.Resources {
+		resources[i] = r
 	}
-	for _, stmtName := range slices.Sorted(maps.Keys(statements)) {
-		stmt := statements[stmtName]
-		actions, condition := stmt.Actions, stmt.Condition
-		resourceInputs := make([]any, len(stmt.Resources))
-		for i, r := range stmt.Resources {
-			resourceInputs[i] = r
+	return pulumi.All(resources...).ApplyT(func(vs []any) (string, error) {
+		named := make([]string, len(vs))
+		for i, v := range vs {
+			named[i], _ = v.(string)
 		}
-		policyJSON := pulumi.All(resourceInputs...).ApplyT(func(vs []any) (string, error) {
-			resources := make([]string, len(vs))
-			for i, v := range vs {
-				resources[i], _ = v.(string)
-			}
-			return iam.InlinePolicy(actions, resources, condition)
-		}).(pulumi.StringOutput)
-
-		if _, err := NewRolePolicy(ctx, name, role, stmtName, policyJSON); err != nil {
-			return nil, err
-		}
-	}
-	return role, nil
+		return iam.InlinePolicy(stmt.Actions, named, stmt.Condition)
+	}).(pulumi.StringOutput)
 }
 
-func NewRolePolicy(ctx *pulumi.Context, roleName Name, role *awsiam.Role, policy string, document pulumi.StringInput, opts ...pulumi.ResourceOption) (*awsiam.RolePolicy, error) {
+type AppRole struct {
+	Name        Name
+	Description pulumi.StringInput
+	Principal   string
+	Boundary    string
+	Path        string
+	Tags        map[string]string
+	Managed     []string
+	Policies    map[string]pulumi.StringInput
+}
+
+func NewAppRole(ctx *pulumi.Context, r AppRole) (*awsiam.Role, []pulumi.Resource, error) {
+	if r.Boundary == "" {
+		return nil, nil, fmt.Errorf("mint the role %s: this deploy resolved no app boundary, and a role made without one is capped by nothing", r.Name.Pulumi)
+	}
+	role, err := awsiam.NewRole(ctx, r.Name.Pulumi, &awsiam.RoleArgs{
+		Name:                r.Name.AWS,
+		Description:         r.Description,
+		AssumeRolePolicy:    pulumi.String(iam.AssumeRolePolicy(r.Principal)),
+		PermissionsBoundary: pulumi.String(r.Boundary),
+		Path:                pulumi.String(r.Path),
+		Tags:                Tags(naming.KindRole, "", r.Tags),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	granted := make([]pulumi.Resource, 0, len(r.Managed)+len(r.Policies))
+	for _, policyARN := range r.Managed {
+		attached, err := AttachManagedPolicy(ctx, r.Name, role, policyARN)
+		if err != nil {
+			return nil, nil, err
+		}
+		granted = append(granted, attached)
+	}
+	for _, policy := range slices.Sorted(maps.Keys(r.Policies)) {
+		created, err := NewRolePolicy(ctx, r.Name, role.Name, policy, r.Policies[policy])
+		if err != nil {
+			return nil, nil, err
+		}
+		granted = append(granted, created)
+	}
+	return role, granted, nil
+}
+
+func NewRolePolicy(ctx *pulumi.Context, roleName Name, role pulumi.StringInput, policy string, document pulumi.StringInput, opts ...pulumi.ResourceOption) (*awsiam.RolePolicy, error) {
 	return awsiam.NewRolePolicy(ctx, roleName.Part(policy), &awsiam.RolePolicyArgs{
 		Name:   pulumi.String(policy),
-		Role:   role.Name,
+		Role:   role,
 		Policy: document,
 	}, opts...)
 }

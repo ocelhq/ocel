@@ -133,11 +133,11 @@ func writeTree(t *testing.T, files map[string]string) string {
 }
 
 func namedFunction(stack naming.StackName, logical string) component.Name {
-	name, err := Name(testNamespace, "shop", stack, logical)
+	names, err := NamesFor(testNamespace, "shop", stack, logical)
 	if err != nil {
 		panic(err)
 	}
-	return name
+	return names.Function
 }
 
 func namedRole(stack naming.StackName) component.Name {
@@ -148,11 +148,11 @@ func namedRole(stack naming.StackName) component.Name {
 	return name
 }
 
-func mustResourceNames(t *testing.T, stack naming.StackName, logical string) map[string][]component.ResourceRef {
+func mustSurfaces(t *testing.T, stack naming.StackName, logical string) map[string][]component.ResourceRef {
 	t.Helper()
-	names, err := ResourceNames(testNamespace, "shop", stack, logical)
+	names, err := NamesFor(testNamespace, "shop", stack, logical)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return names
+	return names.Surfaces()
 }

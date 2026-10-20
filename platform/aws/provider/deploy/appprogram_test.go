@@ -32,7 +32,7 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.Env = "prod"
 	cfg.AppRolePath = componenttest.AppRolePath
-	cfg.ArtifactBucket = "artifacts-bucket"
+	cfg.Buckets[naming.StorageArtifacts] = "artifacts-bucket"
 	cfg.BytecodeCache = true
 	cfg.StateTable = "ocel-state"
 	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"

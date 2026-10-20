@@ -188,12 +188,12 @@ func TestOnlyTheKeysOfTheStageBeingDeployedAreListed(t *testing.T) {
 
 	keys := newFakeSigningKeys()
 	for _, name := range []string{
-		"ocel/realtime/production/shop/prod/realtime--app",
-		"ocel/realtime/production/shop/prod/realtime--chat",
-		"ocel/realtime/production/shop/prod/realtime--live",
-		"ocel/realtime/production/shop/production/realtime--app",
+		"ocel/realtime/prod/shop/prod/realtime--app",
+		"ocel/realtime/prod/shop/prod/realtime--chat",
+		"ocel/realtime/prod/shop/prod/realtime--live",
+		"ocel/realtime/prod/shop/production/realtime--app",
 		"ocel/realtime/preview/shop/prod/realtime--app",
-		"ocel/realtime/production/shopfront/prod/realtime--app",
+		"ocel/realtime/prod/shopfront/prod/realtime--app",
 	} {
 		keys.values[name] = "x"
 	}
@@ -201,7 +201,7 @@ func TestOnlyTheKeysOfTheStageBeingDeployedAreListed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listSigningKeys() = %v", err)
 	}
-	want := []string{"ocel/realtime/production/shop/prod/realtime--app", "ocel/realtime/production/shop/prod/realtime--chat", "ocel/realtime/production/shop/prod/realtime--live"}
+	want := []string{"ocel/realtime/prod/shop/prod/realtime--app", "ocel/realtime/prod/shop/prod/realtime--chat", "ocel/realtime/prod/shop/prod/realtime--live"}
 	if !slices.Equal(listed, want) {
 		t.Errorf("listSigningKeys() = %v, want %v and no other stage's", listed, want)
 	}

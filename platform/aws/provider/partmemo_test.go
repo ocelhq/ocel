@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -61,7 +62,7 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 	p := NewProvider(Options{Region: "eu-west-2"}, nil, cfg, defaultNamespace)
 	p.writtenBy = "1.0.0"
 	if _, err := p.deployed.resolve(production, func() (account.Reading, error) {
-		return account.Reading{Deployed: account.Deployed{Present: true, StateBucket: "state", ArtifactBucket: "artifacts", StateTable: "state-table", VariablesTable: "variables", EdgeBucket: "edge", CacheBucket: "cache", AppBoundaryARN: "arn:aws:iam::111122223333:policy/boundary"}}, nil
+		return account.Reading{Deployed: account.Deployed{Present: true, StateTable: "state-table", VariablesTable: "variables", AppBoundaryARN: "arn:aws:iam::111122223333:policy/boundary", Buckets: naming.Buckets{naming.StorageState: "state", naming.StorageArtifacts: "artifacts", naming.StorageEdge: "edge", naming.StorageCache: "cache"}}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}

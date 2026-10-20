@@ -70,12 +70,11 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 		EdgeUser:            "arn:aws:iam::*:user/" + edgeUser,
 		PassphraseParameter: iam.ParameterARNPrefix + n.PassphraseParamFor(tier),
 		OriginParameter:     iam.ParameterARNPrefix + origin,
-		KVTokens:            iam.ParameterARNPrefix + n.KVTokenRoot() + "/" + string(tier) + "/*",
-		SigningKeys:         "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/" + string(tier) + "/*",
+		KVTokens:            iam.ParameterARNPrefix + n.KVTokenRoot() + "/" + naming.TierWord(tier) + "/*",
+		SigningKeys:         "arn:aws:secretsmanager:*:*:secret:" + n.SigningKeyRoot() + "/" + naming.TierWord(tier) + "/*",
 	}
-	for _, class := range bootstrapStorageClasses {
-		untagged, _ := n.BootstrapBucketName(tier, class, "")
-		named := "arn:aws:s3:::" + untagged + naming.WordSeparator + anyBucketTag
+	for _, class := range BootstrapStorageClasses {
+		named := "arn:aws:s3:::" + n.BootstrapBucketName(tier, class, anyBucketTag)
 		s.BootstrapBuckets = append(s.BootstrapBuckets, named)
 		s.BootstrapObjects = append(s.BootstrapObjects, named+"/*")
 	}

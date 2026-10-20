@@ -458,8 +458,8 @@ func TestReleasesStoreParamFor(t *testing.T) {
 		tier environment.Tier
 		want string
 	}{
-		{environment.TierProduction, "/ocel/edge/fake/releases-store"},
-		{environment.TierPreview, "/ocel/edge/fake-preview/releases-store"},
+		{environment.TierProduction, "/ocel/edge/prod/fake/releases-store"},
+		{environment.TierPreview, "/ocel/edge/preview/fake/releases-store"},
 	} {
 		got, err := ReleasesStoreParamFor(defaultNamespace, tc.tier, "fake")
 		if err != nil {
@@ -575,8 +575,8 @@ func TestEachTierKeepsItsPurgeSeedUnderItsOwnEdgeParameter(t *testing.T) {
 		tier environment.Tier
 		want string
 	}{
-		{environment.TierProduction, "/ocel/edge/fake/purge-seed"},
-		{environment.TierPreview, "/ocel/edge/fake-preview/purge-seed"},
+		{environment.TierProduction, "/ocel/edge/prod/fake/purge-seed"},
+		{environment.TierPreview, "/ocel/edge/preview/fake/purge-seed"},
 	} {
 		got, err := PurgeSeedParamFor(defaultNamespace, tc.tier, "fake")
 		if err != nil {

@@ -255,7 +255,7 @@ func routedConfig(t *testing.T, kind edge.Kind) Config {
 	return Config{
 		Namespace:         testNamespace,
 		ArtifactRoot:      routedArtifactRoot(t),
-		EdgeBucket:        "edge-bucket",
+		Buckets:           naming.Buckets{naming.StorageEdge: "edge-bucket"},
 		ImageOptimizerURL: "https://optimizer.lambda-url.us-east-1.on.aws/",
 		RuntimeLayers:     testRuntimeLayers(),
 		Slug:              "shop",
@@ -304,18 +304,18 @@ func queueNames(t *testing.T, topic, consumer string, fifo bool) queues.QueueNam
 }
 
 func namedFunction(stack naming.StackName, logical string) string {
-	name, err := function.Name(testNamespace, "shop", stack, logical)
+	names, err := function.NamesFor(testNamespace, "shop", stack, logical)
 	if err != nil {
 		panic(err)
 	}
-	return name.Pulumi
+	return names.Function.Pulumi
 }
 
 func mustFunctionNames(t *testing.T, stack naming.StackName, logical string) map[string][]component.ResourceRef {
 	t.Helper()
-	names, err := function.ResourceNames(testNamespace, "shop", stack, logical)
+	names, err := function.NamesFor(testNamespace, "shop", stack, logical)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return names
+	return names.Surfaces()
 }

@@ -41,16 +41,14 @@ const (
 	kindCertificate   = "AWS::CertificateManager::Certificate"
 	kindFunction      = "AWS::Lambda::Function"
 
-	securityGroupWord = "sg"
-	executionWord     = "exec"
-	certificateWord   = "certificate"
-	httpWord          = "http"
-	httpsWord         = "https"
-	invokeWord        = "invoke"
-	partSeparator     = "/"
-	targetGroupWord   = "tg"
-	tasksWord         = "tasks"
-	livenessWord      = "liveness"
+	executionWord   = "exec"
+	certificateWord = "certificate"
+	httpWord        = "http"
+	httpsWord       = "https"
+	invokeWord      = "invoke"
+	targetGroupWord = "tg"
+	tasksWord       = "tasks"
+	livenessWord    = "liveness"
 )
 
 var Shared = sharedstack.Stack{
@@ -134,11 +132,11 @@ func nameFor(namespace string, tier environment.Tier, parts ...string) string {
 }
 
 func frontGroupName(namespace string, tier environment.Tier) string {
-	return nameFor(namespace, tier, securityGroupWord)
+	return component.SecurityGroupName(nameFor(namespace, tier))
 }
 
 func tasksGroupName(namespace string, tier environment.Tier) string {
-	return nameFor(namespace, tier, tasksWord, securityGroupWord)
+	return component.SecurityGroupName(nameFor(namespace, tier, tasksWord))
 }
 
 func executionRoleName(namespace string, tier environment.Tier) string {
@@ -146,7 +144,7 @@ func executionRoleName(namespace string, tier environment.Tier) string {
 }
 
 func publicGroupName(namespace string, tier environment.Tier) string {
-	return naming.Join(naming.WordSeparator, awsports.PublicBalancerName(namespace, tier), securityGroupWord)
+	return component.SecurityGroupName(awsports.PublicBalancerName(namespace, tier))
 }
 
 func LivenessName(namespace string, tier environment.Tier) string {

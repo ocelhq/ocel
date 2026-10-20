@@ -235,7 +235,7 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
@@ -497,7 +497,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, App: "web", Boundary: componenttest.BoundaryARN, Dispatch: host})
+		role, _, err := NewRole(pctx, component.AppRoleCoordinate("shop", stack), ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}

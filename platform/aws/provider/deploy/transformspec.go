@@ -41,14 +41,14 @@ func transformStackSpec(ctx context.Context, namespace string, pass transform.Pa
 	var candidates []transformCandidate
 
 	if app := spec.App; app != nil && app.Compute == provider.ComputeContainer {
-		names, err := container.ResourceNames(namespace, project, stack)
+		names, err := container.NamesFor(namespace, project, stack)
 		if err != nil {
 			return nil, err
 		}
 		req.Resources = append(req.Resources, transform.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
 		candidates = append(candidates, transformCandidate{
 			key:   resourceKey{Type: transformTypeContainer, Name: app.App},
-			names: names,
+			names: names.Surfaces(),
 		})
 	} else if app != nil {
 		for _, spec := range app.Functions {
@@ -95,13 +95,13 @@ func transformStackSpec(ctx context.Context, namespace string, pass transform.Pa
 }
 
 func functionCandidate(namespace, project string, stack naming.StackName, name string) (transformCandidate, error) {
-	names, err := function.ResourceNames(namespace, project, stack, name)
+	names, err := function.NamesFor(namespace, project, stack, name)
 	if err != nil {
 		return transformCandidate{}, err
 	}
 	return transformCandidate{
 		key:   resourceKey{Type: transformTypeFunction, Name: name},
-		names: names,
+		names: names.Surfaces(),
 		check: func(name string, patches map[string]map[string]any) error {
 			return checkVPCConfig(name, patches["lambda"])
 		},

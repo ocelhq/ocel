@@ -86,7 +86,8 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.EdgeBucket, deployed.CacheBucket} {
+	for _, class := range account.BootstrapStorageClasses {
+		bucket := deployed.Buckets[class]
 		if bucket == "" {
 			t.Fatalf("the stack names no bucket for one of its outputs: %+v", deployed)
 		}

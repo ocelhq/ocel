@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const (
@@ -33,7 +33,7 @@ const (
 )
 
 func NameFor(namespace string, tier environment.Tier) string {
-	return awsports.TieredName(namespace, tier, word)
+	return naming.OcelName(namespace, tier, word)
 }
 
 type Spec struct {

@@ -9,5 +9,6 @@ import (
 var (
 	defaultNamespace = account.Namespace(provider.DefaultNamespace)
 
-	coreStackName, _ = defaultNamespace.StackNameFor(environment.TierProduction)
+	coreStackName, _        = defaultNamespace.StackNameFor(environment.TierProduction)
+	previewCoreStackName, _ = defaultNamespace.StackNameFor(environment.TierPreview)
 )

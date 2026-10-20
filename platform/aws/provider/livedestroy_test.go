@@ -66,7 +66,8 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	if status := a.stackStatus(t, coreStackName); status != "" && status != "DELETE_COMPLETE" {
 		t.Errorf("%s is in state %q after Remove(), want it gone", coreStackName, status)
 	}
-	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.EdgeBucket, deployed.CacheBucket} {
+	for _, class := range account.BootstrapStorageClasses {
+		bucket := deployed.Buckets[class]
 		if a.bucketExists(t, bucket) {
 			t.Errorf("%s still answers after Remove(), and a destroy leaves no bytes behind", bucket)
 		}

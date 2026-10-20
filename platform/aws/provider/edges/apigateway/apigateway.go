@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -313,7 +314,7 @@ func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	own.StateTable = deployed.StateTable
-	own.EdgeBucket = deployed.EdgeBucket
+	own.EdgeBucket = deployed.Buckets[naming.StorageEdge]
 	own.Role = role
 	own.Region = c.Region
 

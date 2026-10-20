@@ -290,12 +290,12 @@ func TestEveryResourceOfAStoreIsTaggedWithTheStoresDeclaredName(t *testing.T) {
 
 func pulumiNames(t *testing.T, project string) map[string]string {
 	t.Helper()
-	names, err := resourceNames(testStack(project), "kv--cache", "valkey9")
+	names, err := NamesFor(testStack(project), "kv--cache", "valkey9")
 	if err != nil {
 		t.Fatal(err)
 	}
 	byToken := map[string]string{}
-	for _, refs := range names {
+	for _, refs := range names.Surfaces() {
 		byToken[refs[0].Token] = refs[0].Name
 	}
 	return byToken

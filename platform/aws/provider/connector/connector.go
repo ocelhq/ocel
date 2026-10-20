@@ -18,6 +18,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -52,7 +53,9 @@ const (
 	heartbeatEvery = "rate(1 minute)"
 )
 
-func StackName(ns account.Namespace) string { return string(ns) + "-connector" }
+func StackName(ns account.Namespace) string {
+	return naming.MustUntieredOcelName(string(ns), "connector")
+}
 
 func KeyParameter(ns account.Namespace) string { return "/" + string(ns) + "/connector/key" }
 

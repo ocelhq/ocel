@@ -1,4 +1,5 @@
 import { HARNESS_PREFIX } from "../../identity";
+import { namespaceField } from "./namespace";
 import { runIdOf } from "./runs";
 import type { Cli } from "./store";
 
@@ -7,11 +8,11 @@ export type PolicyKind = "cache-policy" | "response-headers-policy";
 export type EdgePolicy = { kind: PolicyKind; id: string; name: string };
 
 const NAME_SUFFIXES: Record<PolicyKind, string[]> = {
-  "cache-policy": ["-cache-preview", "-cache"],
-  "response-headers-policy": ["-headers-preview", "-headers"],
+  "cache-policy": ["-preview-cache", "-prod-cache"],
+  "response-headers-policy": ["-preview-headers", "-prod-headers"],
 };
 
-export function namespaceOfPolicy(policy: EdgePolicy): string | undefined {
+export function namespaceFieldOfPolicy(policy: EdgePolicy): string | undefined {
   if (!policy.name.startsWith(HARNESS_PREFIX)) {
     return undefined;
   }
@@ -20,11 +21,10 @@ export function namespaceOfPolicy(policy: EdgePolicy): string | undefined {
 }
 
 export function orphanedPolicies(policies: EdgePolicy[], namespaces: Set<string>): EdgePolicy[] {
+  const fields = new Set([...namespaces].map(namespaceField));
   return policies.filter((policy) => {
-    const namespace = namespaceOfPolicy(policy);
-    return (
-      namespace !== undefined && runIdOf(policy.name) !== undefined && !namespaces.has(namespace)
-    );
+    const field = namespaceFieldOfPolicy(policy);
+    return field !== undefined && runIdOf(policy.name) !== undefined && !fields.has(field);
   });
 }
 

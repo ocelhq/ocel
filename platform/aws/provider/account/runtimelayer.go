@@ -76,7 +76,7 @@ func runtimeLayerPrefix(ns Namespace, tier environment.Tier, archToken string) s
 }
 
 func runtimeLayerGroupName(ns Namespace, tier environment.Tier) string {
-	return suffixed(tier, string(ns)+"-runtime")
+	return ns.name(tier, "runtime")
 }
 
 func shippedRuntimeLayers() (map[string]payloads.Payload, error) {

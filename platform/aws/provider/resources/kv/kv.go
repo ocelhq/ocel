@@ -52,8 +52,8 @@ func New(tokens Tokens) component.Component {
 			if err != nil {
 				return component.Transformable{}, err
 			}
-			names, err := resourceNames(at, declared.Name, args.Family)
-			return component.Transformable{Kind: transformKind, Names: names, Check: func(name string, patches map[string]map[string]any) error {
+			names, err := NamesFor(at, declared.Name, args.Family)
+			return component.Transformable{Kind: transformKind, Names: names.Surfaces(), Check: func(name string, patches map[string]map[string]any) error {
 				return checkKVNodeCount(name, patches["replicationGroup"])
 			}}, err
 		},
