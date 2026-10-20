@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -37,6 +38,7 @@ type Options struct {
 	Yes      bool
 	Dry      bool
 	Prebuilt bool
+	NoWait   bool
 }
 
 func To(ctx context.Context, dependencies Dependencies, cwd string, target Target, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -45,7 +47,10 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		return err
 	}
 	if resolved.IsCloud() {
-		return toCloud(ctx, dependencies, resolved, target, opts)
+		return toCloud(ctx, dependencies, cwd, resolved, target, opts, stdin)
+	}
+	if opts.NoWait {
+		return commands.RefuseNoWait()
 	}
 	policy, cfg, err := ensureProject(ctx, dependencies, target.command(), cwd, resolved.Project, opts.Yes, opts.Dry, stdout, stdin)
 	if err != nil || cfg == nil {
@@ -134,12 +139,24 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	return err
 }
 
-func toCloud(ctx context.Context, dependencies Dependencies, resolved commands.Target, target Target, opts Options) error {
+func toCloud(ctx context.Context, dependencies Dependencies, cwd string, resolved commands.Target, target Target, opts Options, stdin io.Reader) error {
 	switch {
 	case opts.Dry:
 		return commands.NotOnCloud(target.command() + " --dry")
 	case opts.Prebuilt:
 		return commands.NotOnCloud(target.command() + " --prebuilt")
 	}
-	return dependencies.UploadToCloud(ctx, resolved, target.command(), target.tier)
+	job := commands.CloudJob{Command: target.command(), Tier: target.tier, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, Tag: target.tag, NoWait: opts.NoWait}
+	if target.isPreview() {
+		env, err := target.environment(dependencies, cwd)
+		if err != nil {
+			return err
+		}
+		job.Kind = cloudv1.JobCommand_JOB_COMMAND_PREVIEW_UP
+		job.Preview = &cloudv1.PreviewTarget{Name: env.GetIdentity(), Label: env.GetLabel(), Persistent: target.persistent}
+	}
+	if dependencies.IsBrowserReachable(stdin) {
+		job.OpenBrowser = dependencies.OpenBrowser
+	}
+	return dependencies.RunOnCloud(ctx, resolved, job)
 }

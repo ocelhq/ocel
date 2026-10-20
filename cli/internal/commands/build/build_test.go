@@ -50,7 +50,7 @@ export default {
 	}
 	dependencies.Events = run.NewBus(time.Now)
 	clitest.AttachTerminalSink(dependencies.Invocation, &bytes.Buffer{})
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
 	if len(handed["api"]) != 1 || handed["api"][0] != source {
@@ -83,7 +83,7 @@ export default {
 		var stdout bytes.Buffer
 		dependencies.Events = run.NewBus(time.Now)
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runBuild(context.Background(), dependencies, root); err != nil {
+		if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 
@@ -132,7 +132,7 @@ export default {
 		var stdout bytes.Buffer
 		dependencies.Events = run.NewBus(time.Now)
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runBuild(context.Background(), dependencies, root); err != nil {
+		if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 			t.Fatalf("runBuild: %v", err)
 		}
 
@@ -162,7 +162,7 @@ export default { slug: "test-app" };
 		var stdout bytes.Buffer
 		dependencies.Events = run.NewBus(time.Now)
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runBuild(context.Background(), dependencies, root); err == nil {
+		if err := runBuild(context.Background(), dependencies, root, options{}, nil); err == nil {
 			t.Fatal("runBuild err = nil, want the build to fail")
 		}
 		if !strings.Contains(stdout.String(), "✗ Build failed in ") || !strings.Contains(stdout.String(), "boom: app build failed") {
@@ -192,7 +192,7 @@ func TestBuildRefusesAFunctionAppWhoseDirectorySaysNothingAboutWhatItIsBuiltWith
 	var out strings.Builder
 	clitest.AttachTerminalSink(dependencies.Invocation, &out)
 
-	err := runBuild(context.Background(), dependencies, root)
+	err := runBuild(context.Background(), dependencies, root, options{}, nil)
 	if err == nil {
 		t.Fatal("runBuild = nil error, want the app refused: its provider runs it serverless, and nothing says what web's functions are built with")
 	}
@@ -217,7 +217,7 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 		return build.Output{}, nil
 	}
 
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
 	if built == nil || !built.Apps[0].RunsOn(provider.ComputeContainer) {
@@ -242,7 +242,7 @@ export default {
 		return build.Output{}, nil
 	}
 
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
 	if got, want := env["web"].Env[processenv.NextPublicURLEnvVar], "https://shop.acme.com"; got != want {
@@ -278,7 +278,7 @@ export default {
 		return build.Output{}, nil
 	}
 
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
 	if want := []string{"NEXT_PUBLIC_API_URL", processenv.NextPublicURLEnvVar}; !slices.Equal(env["web"].PublicKeys, want) {
@@ -304,7 +304,7 @@ func TestBuildOfANextAppWithDeclaredComputesSucceedsWithoutCredentials(t *testin
 		return build.Output{}, nil
 	}
 
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 		t.Fatalf("runBuild: %v, want the build to read the provider's facts without asking who is signed in", err)
 	}
 	if host.MaxFunctionBytes != 200<<20 {
@@ -330,7 +330,7 @@ export default {
 		return build.Output{}, nil
 	}
 
-	err := runBuild(context.Background(), dependencies, root)
+	err := runBuild(context.Background(), dependencies, root, options{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "no provider configured") {
 		t.Fatalf("runBuild = %v, want web refused: a Next function app is built against its provider's facts, and none is configured", err)
 	}
@@ -357,7 +357,7 @@ export default {
 		return build.Output{}, nil
 	}
 
-	err := runBuild(context.Background(), dependencies, root)
+	err := runBuild(context.Background(), dependencies, root, options{}, nil)
 	if err == nil {
 		t.Fatal("runBuild = nil error, want web refused: nothing says whether it deploys as functions or as an image")
 	}
@@ -386,7 +386,7 @@ export default {
 
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, nil)
-	if err := runBuild(context.Background(), dependencies, root); err != nil {
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "dist")); err == nil {

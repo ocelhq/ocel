@@ -24,6 +24,8 @@
     "console.not_logged_in",
     "console.not_linked",
     "cloud.unsupported",
+    "cloud.job_failed",
+    "cloud.job_canceled",
     "---Runs---",
     "interrupted",
     "dev.command_failed",

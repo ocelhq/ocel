@@ -4,7 +4,7 @@ description: "Build every app in your project without deploying."
 ---
 
 ```bash
-ocel build
+ocel build [flags]
 ```
 
 Build every app in your project without deploying: a serverless app's functions
@@ -15,6 +15,14 @@ Express, Fastify and Hono servers are bundled, so only what the entrypoint impor
 reaches the function: static directories, view templates and files read at run
 time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency
 tree instead.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--no-wait` | `bool` | `false` | On Ocel Cloud, start the job, print its link and return without waiting for it to end |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
 
 ## Behaviour
 

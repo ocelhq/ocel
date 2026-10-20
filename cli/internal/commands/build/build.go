@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -35,10 +36,16 @@ type Dependencies struct {
 	commands.Invocation
 	BuildApps           func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error)
 	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
+	OpenBrowser         func(url string) error
+}
+
+type options struct {
+	noWait bool
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
-	return commands.DeclareRunEvents(commands.DeclareMutating(&cobra.Command{
+	var opts options
+	cmd := &cobra.Command{
 		Use:   "build",
 		Short: "Build every app in your project without deploying",
 		Long: "Build every app in your project without deploying: a serverless app's functions\n" +
@@ -55,18 +62,27 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runBuild(cmd.Context(), dependencies, cwd)
+			return runBuild(cmd.Context(), dependencies, cwd, opts, cmd.InOrStdin())
 		},
-	}))
+	}
+	commands.AddNoWaitFlag(cmd, &opts.noWait)
+	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
-func runBuild(ctx context.Context, dependencies Dependencies, cwd string) (err error) {
+func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts options, stdin io.Reader) (err error) {
 	resolved, err := dependencies.ResolveTarget(ctx, cwd)
 	if err != nil {
 		return err
 	}
 	if resolved.IsCloud() {
-		return dependencies.UploadToCloud(ctx, resolved, "ocel build", environmentv1.Tier_TIER_UNSPECIFIED)
+		job := commands.CloudJob{Command: "ocel build", Tier: environmentv1.Tier_TIER_UNSPECIFIED, Kind: cloudv1.JobCommand_JOB_COMMAND_BUILD, NoWait: opts.noWait}
+		if dependencies.IsBrowserReachable(stdin) {
+			job.OpenBrowser = dependencies.OpenBrowser
+		}
+		return dependencies.RunOnCloud(ctx, resolved, job)
+	}
+	if opts.noWait {
+		return commands.RefuseNoWait()
 	}
 	declared := resolved.Project
 	if declared == nil {
