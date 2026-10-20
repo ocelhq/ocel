@@ -149,7 +149,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 	group := component.SecurityGroupName(w.name(clientsWord))
 	clients, err := ec2.NewSecurityGroup(ctx, group, &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(group),
-		Description: pulumi.String("Ocel " + string(w.tier) + ": what joins it may reach the tier's databases and caches; it admits nothing itself"),
+		Description: pulumi.String("Ocel " + string(w.tier) + ": what joins it may reach the databases and caches of the tier; it admits nothing itself"),
 		VpcId:       vpc.ID(),
 		Ingress:     ec2.SecurityGroupIngressArray{},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
