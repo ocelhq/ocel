@@ -24,7 +24,7 @@ func (g Grant) String() string {
 		line += ", on " + resourceNamed(g.On)
 	case g.Condition != nil:
 		line += ", on the condition " + g.Condition.Expression
-	case g.Why != "":
+	default:
 		line += ", unconditioned"
 	}
 	if g.Why != "" {

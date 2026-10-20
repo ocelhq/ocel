@@ -61,7 +61,7 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/cloudtasks.admin") {
 		t.Errorf("a bootstrap credential is granted %v, want roles/cloudtasks.admin: removing a bootstrap purges its delay queue", bootstrap.BootstrapRoles())
 	}
-	for _, want := range []string{deploy.Tiered(credential.TopicsRole).String(), credential.SchedulesRole} {
+	for _, want := range []string{deploy.Tiered(credential.TopicsRole).String(), deploy.Schedules().String()} {
 		if !slices.Contains(lines, want) {
 			t.Errorf("a deploy credential is granted\n%s\nwant %s: a deploy makes and removes topics, subscriptions and schedules", strings.Join(lines, "\n"), want)
 		}

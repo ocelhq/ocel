@@ -84,10 +84,10 @@ func TestThePrivateNetworkChecksItsServicesAndADeployCredentialMayAddIt(t *testi
 		}
 	}
 	lines := credential.Lines(deployOf(environment.TierProduction).Grants())
-	if !slices.Contains(lines, "roles/memorystore.admin") {
+	if !slices.Contains(lines, deployOf(environment.TierProduction).Stores().String()) {
 		t.Errorf("a deploy credential is granted\n%s\nwant roles/memorystore.admin: a deploy creates, reshapes and deletes stores, and Memorystore takes no tag", strings.Join(lines, "\n"))
 	}
-	if slices.Contains(lines, "roles/cloudsql.admin") {
+	if slices.ContainsFunc(lines, func(line string) bool { return strings.HasPrefix(line, "roles/cloudsql.admin, unconditioned") }) {
 		t.Errorf("a deploy credential is granted\n%s\nwith roles/cloudsql.admin over every Cloud SQL instance in the project", strings.Join(lines, "\n"))
 	}
 }

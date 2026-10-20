@@ -143,6 +143,18 @@ func (d Deploy) Queue() Grant {
 	return Grant{Role: QueueRole, On: d.Names.DelayQueuePath(d.Region, d.Tier)}
 }
 
+func (d Deploy) Stores() Grant {
+	return Grant{Role: StoresRole, Why: "Memorystore instances take no tag, so no condition holds one tier's stores apart"}
+}
+
+func (d Deploy) Schedules() Grant {
+	return Grant{Role: SchedulesRole, Why: "Cloud Scheduler jobs take no tag, so no condition holds one tier's jobs apart"}
+}
+
+func (d Deploy) Logs() Grant {
+	return Grant{Role: LogsRole, Why: "no log view selects one tier's entries: a Cloud Run entry names its service and revision and no tier"}
+}
+
 func (d Deploy) Parts() Grant {
 	return Grant{
 		Role: d.Names.PartsRolePath(),
@@ -169,9 +181,9 @@ func (d Deploy) Grants() []Grant {
 	return append(grants,
 		d.Sealing(),
 		d.ProjectKeys(),
-		Grant{Role: StoresRole},
-		Grant{Role: SchedulesRole},
-		Grant{Role: LogsRole},
+		d.Stores(),
+		d.Schedules(),
+		d.Logs(),
 		d.Queue(),
 		d.TagValue(),
 		d.AppGrants(),
