@@ -48,7 +48,30 @@ func placementOf(built bool, released *int) bastionPlacement {
 			return bastion.Bastion{}, errors.New("the bastion's task role needs the app boundary of its tier, and none is named")
 		},
 		isBuilt: func(context.Context) (bool, error) { return built, nil },
+		remove:  func(context.Context) error { return nil },
 		release: func(context.Context) error { *released++; return nil },
+	}
+}
+
+func TestAPortForwardWhoseBastionWasNeverBuiltRemovesWhatItMadeInTheNetworkBeforeLettingGoOfIt(t *testing.T) {
+	var steps []string
+	placement := placementOf(false, new(int))
+	placement.remove = func(context.Context) error { steps = append(steps, "remove"); return nil }
+	placement.release = func(context.Context) error { steps = append(steps, "release"); return nil }
+	if _, err := placement.place(context.Background()); err == nil {
+		t.Fatal("place() = nil, want the reconcile error")
+	}
+	if !slices.Equal(steps, []string{"remove", "release"}) {
+		t.Errorf("steps = %v, want the security group a failed reconcile left in the VPC removed before the network is let go: an orphaned group keeps the VPC from being deleted", steps)
+	}
+
+	steps = nil
+	placement.remove = func(context.Context) error { steps = append(steps, "remove"); return errors.New("DependencyViolation") }
+	if _, err := placement.place(context.Background()); err == nil {
+		t.Fatal("place() = nil, want the reconcile and removal errors")
+	}
+	if !slices.Equal(steps, []string{"remove"}) {
+		t.Errorf("steps = %v, want the network kept while what the bastion made in it is still there", steps)
 	}
 }
 
