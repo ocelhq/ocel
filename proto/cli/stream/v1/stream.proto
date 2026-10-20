@@ -4,6 +4,7 @@ package cli.stream.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1";
 
 import "buf/validate/validate.proto";
+import "cloud/v1/job.proto";
 import "common/environment/v1/environment.proto";
 import "common/progress/v1/progress.proto";
 
@@ -106,6 +107,20 @@ message RunSummary {
   RunError error = 16;
 
   repeated Assumption assumed = 17;
+
+  CloudJob cloud_job = 18;
+}
+
+message CloudJob {
+  string id = 1;
+
+  string url = 2;
+
+  cloud.v1.JobState state = 3;
+
+  cloud.v1.JobResult result = 4;
+
+  cloud.v1.JobError error = 5;
 }
 
 message RunError {
