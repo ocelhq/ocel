@@ -479,8 +479,14 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := d.declareScaling(ctx, physical, service, group, tags); err != nil {
+	target, err := d.declareScalableTarget(ctx, physical, service, tags)
+	if err != nil {
 		return err
+	}
+	if d.scales() {
+		if err := d.scaleOnRequests(ctx, physical, target, group); err != nil {
+			return err
+		}
 	}
 	ctx.Export(d.App, pulumi.Map{
 		OutputKeyURL:      pulumi.String(d.readServiceURL()),
@@ -491,11 +497,11 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 
 func (d *Definition) scales() bool { return d.Instances.Max > d.Instances.Min }
 
-func (d *Definition) declareScaling(ctx *pulumi.Context, physical string, service *ecs.Service, group *lb.TargetGroup, tags pulumi.StringMap) error {
+func (d *Definition) declareScalableTarget(ctx *pulumi.Context, physical string, service *ecs.Service, tags pulumi.StringMap) (*appautoscaling.Target, error) {
 	clusterARN, err := arn.Parse(d.Infra.Cluster)
 	cluster, found := strings.CutPrefix(clusterARN.Resource, "cluster/")
 	if err != nil || !found {
-		return fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so %s's service has no scalable target to name", d.Infra.Cluster, d.App)
+		return nil, fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so %s's service has no scalable target to name", d.Infra.Cluster, d.App)
 	}
 	targetTags := pulumi.StringMap{
 		minInstancesTag: pulumi.String(strconv.Itoa(d.Instances.Min)),
@@ -503,7 +509,7 @@ func (d *Definition) declareScaling(ctx *pulumi.Context, physical string, servic
 	}
 	maps.Copy(targetTags, tags)
 	resourceID := pulumi.Sprintf("service/%s/%s", cluster, service.Name)
-	target, err := appautoscaling.NewTarget(ctx, physical+component.PartSeparator+scalingPart, &appautoscaling.TargetArgs{
+	return appautoscaling.NewTarget(ctx, physical+component.PartSeparator+scalingPart, &appautoscaling.TargetArgs{
 		ServiceNamespace:  pulumi.String(ScalingNamespace),
 		ScalableDimension: pulumi.String(ScalingDimension),
 		ResourceId:        resourceID,
@@ -511,9 +517,9 @@ func (d *Definition) declareScaling(ctx *pulumi.Context, physical string, servic
 		MaxCapacity:       pulumi.Int(d.Instances.Max),
 		Tags:              targetTags,
 	}, pulumi.IgnoreChanges([]string{"minCapacity", "maxCapacity"}))
-	if err != nil || !d.scales() {
-		return err
-	}
+}
+
+func (d *Definition) scaleOnRequests(ctx *pulumi.Context, physical string, target *appautoscaling.Target, group *lb.TargetGroup) error {
 	balancer, err := parseBalancerSuffix(d.readListenerArn())
 	if err != nil {
 		return err
