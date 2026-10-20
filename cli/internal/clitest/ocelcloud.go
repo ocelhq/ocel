@@ -56,6 +56,7 @@ type FakeOcelCloud struct {
 	OnJobRead     func(*cloudv1.Job)
 	Canceled      []string
 	Events        []*consolev1.RecordEnvironmentEventRequest
+	Reports       []*consolev1.ReportRequest
 }
 
 func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
@@ -143,6 +144,26 @@ func (f *FakeOcelCloud) RecordEnvironmentEvent(_ context.Context, req *consolev1
 	defer f.mu.Unlock()
 	f.Events = append(f.Events, req)
 	return &consolev1.RecordEnvironmentEventResponse{}, nil
+}
+
+func (f *FakeOcelCloud) Report(_ context.Context, req *consolev1.ReportRequest) (*consolev1.ReportResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Reports = append(f.Reports, req)
+	return &consolev1.ReportResponse{}, nil
+}
+
+func (f *FakeOcelCloud) ReportedDeployments() []*consolev1.ReportRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*consolev1.ReportRequest(nil), f.Reports...)
+}
+
+func (f *FakeOcelCloud) Link(t *testing.T, dir string) {
+	t.Helper()
+	if err := console.WriteLink(dir, console.Link{APIURL: f.ConsoleURL, OrganizationID: "org_1", ProjectID: FixtureConsoleProjectID, ProjectName: FixtureSlug}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (f *FakeOcelCloud) RecordedEvents() []*consolev1.RecordEnvironmentEventRequest {

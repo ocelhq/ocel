@@ -15,6 +15,7 @@ func (p ProviderRun) NewAttempt(ctx context.Context, kind consolev1.DeploymentKi
 	return &deployreport.Attempt{
 		Kind:        kind,
 		Project:     cfg,
+		Provider:    p.providerName(cfg),
 		Environment: env,
 		Target:      deployreport.ReadTarget(ctx, p.Provider),
 		TraceID:     p.Run.TraceID(),
@@ -30,4 +31,11 @@ func (p ProviderRun) readSource(dir string) *consolev1.Source {
 		return p.job.Source()
 	}
 	return deployreport.ReadSource(dir, os.Getenv)
+}
+
+func (p ProviderRun) providerName(cfg *project.Project) string {
+	if p.cloud != nil {
+		return CloudProviderID
+	}
+	return providerID(cfg)
 }

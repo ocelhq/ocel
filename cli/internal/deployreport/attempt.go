@@ -16,6 +16,7 @@ const maxErrorRunes = 4000
 type Attempt struct {
 	Kind        consolev1.DeploymentKind
 	Project     *project.Project
+	Provider    string
 	Environment *environmentv1.Environment
 	Target      string
 	TraceID     string
@@ -59,7 +60,7 @@ func (a Attempt) deployment(finishedAt time.Time, apps []*consolev1.App) *consol
 		Id:          a.TraceID,
 		Kind:        a.Kind,
 		Environment: a.Environment,
-		Provider:    &consolev1.Provider{Name: providerName(a.Project)},
+		Provider:    &consolev1.Provider{Name: a.Provider},
 		Target:      a.Target,
 		StartedAt:   timestamppb.New(a.StartedAt),
 		FinishedAt:  timestamppb.New(finishedAt),
@@ -73,13 +74,6 @@ func (a Attempt) deployment(finishedAt time.Time, apps []*consolev1.App) *consol
 		deployment.Edge = &consolev1.Edge{Kind: string(kind)}
 	}
 	return deployment
-}
-
-func providerName(cfg *project.Project) string {
-	if cfg.Provider == nil {
-		return ""
-	}
-	return cfg.Provider.ID
 }
 
 func lastRunes(text string, limit int) string {
