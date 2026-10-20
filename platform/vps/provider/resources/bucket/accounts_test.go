@@ -109,6 +109,33 @@ func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
 	}
 }
 
+func TestRevokingAnAccountTheStoreNoLongerHoldsIsNotAFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs a real store")
+	}
+	store := enginetest.SharedObjectStore(t)
+	aSignedStore(t, store, "revoked-bucket")
+	account := Account{
+		AccessKeyID: AccountKey("shop", "prod", "revoked"),
+		SecretKey:   "an-app-secret",
+		Buckets:     []string{"revoked-bucket"},
+	}
+	if err := anAccountOn(t, store, account); err != nil {
+		t.Fatalf("the store granted the app no account of its own: %v", err)
+	}
+	account.Store, account.Endpoint, account.Region = store.Name, store.Inside, store.Region
+	account.RootKeyID, account.RootSecret = store.AccessKeyID, store.SecretKey
+	for _, attempt := range []string{"first", "second"} {
+		script, err := accountScript(account, account.revoking(), time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command("sh", "-c", script).CombinedOutput(); err != nil {
+			t.Errorf("the %s revoke of %s = %v: %s, want an account already gone taken as revoked", attempt, account.AccessKeyID, err, strings.TrimSpace(string(out)))
+		}
+	}
+}
+
 func TestGrantingTheSameAppTwiceLimitsItToWhatItDeclaresNow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs a real store")

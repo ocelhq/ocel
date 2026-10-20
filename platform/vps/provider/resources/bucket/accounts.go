@@ -166,7 +166,7 @@ func (a Account) revoking() adminCall {
 		what:   "delete store account " + a.AccessKeyID,
 		method: http.MethodDelete, action: "delete-service-account",
 		query: "accessKey=" + url.QueryEscape(a.AccessKeyID),
-		allow: []string{"200", "204", "404"},
+		allow: []string{"200", "204", "400", "404"},
 	}
 }
 
