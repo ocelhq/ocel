@@ -83,7 +83,7 @@ afterEach(async () => {
     "OCEL_STATE_TABLE",
     "OCEL_ISR_TAG_NAMESPACE",
     "OCEL_ISR_BUCKET",
-    "OCEL_ISR_PREFIX",
+    "OCEL_STORAGE_COORDINATE",
   ]) {
     delete process.env[v];
   }
@@ -417,7 +417,7 @@ test("reports having synced only once a sync has succeeded", async () => {
 
 test("shares one clock between module graphs built for the same release", async () => {
   const store = fakeStore();
-  const first = await load(store, { OCEL_ISR_PREFIX: "prod/proj/app/BID" });
+  const first = await load(store, { OCEL_STORAGE_COORDINATE: "proj/prod/app/r0a1b2c3d" });
   await first.handler.updateTags(["products"]);
 
   vi.resetModules();
@@ -430,7 +430,7 @@ test("shares one clock between module graphs built for the same release", async 
 test("keys a shared clock by the release alone, not by any variable of the host's store", async () => {
   const store = fakeStore();
   const { handler } = await load(store, {
-    OCEL_ISR_PREFIX: "prod/proj/app/BID",
+    OCEL_STORAGE_COORDINATE: "proj/prod/app/r0a1b2c3d",
     OCEL_STATE_TABLE: "state",
   });
   await handler.updateTags(["products"]);
@@ -444,11 +444,11 @@ test("keys a shared clock by the release alone, not by any variable of the host'
 
 test("refuses to adopt a shared clock built for a different release", async () => {
   const store = fakeStore();
-  const { handler } = await load(store, { OCEL_ISR_PREFIX: "prod/proj/app/BID" });
+  const { handler } = await load(store, { OCEL_STORAGE_COORDINATE: "proj/prod/app/r0a1b2c3d" });
   await handler.updateTags(["products"]);
 
   vi.resetModules();
-  process.env.OCEL_ISR_PREFIX = "prod/proj/app/OTHER";
+  process.env.OCEL_STORAGE_COORDINATE = "proj/prod/app/r0f0f0f0f";
   const other = (await import("../src/tag-clock.mjs")).tagClock;
 
   expect(await other.getExpiration(["products"])).toBe(0);

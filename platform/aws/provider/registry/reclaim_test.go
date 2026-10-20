@@ -28,7 +28,7 @@ const (
 func ref(tag string) string { return registryAt + "/" + shopWeb + ":" + tag }
 
 func anECRTarget() provider.RegistryTarget {
-	return provider.RegistryTarget{Server: registryAt, Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	return provider.RegistryTarget{Server: registryAt, Namespace: "ocel", Username: "AWS", Password: "tok3n"}
 }
 
 func (f *fakeECR) DescribeImages(_ context.Context, in *ecr.DescribeImagesInput, _ ...func(*ecr.Options)) (*ecr.DescribeImagesOutput, error) {
@@ -178,7 +178,7 @@ func TestReconcilingKeepsTheImageTheReleaseRunsAndEveryOneARecordedReleaseRuns(t
 	api.tagged = map[string][]string{shopWeb: {"sha256-new", "sha256-kept", "sha256-leaked"}}
 	api.pushedAt = pushedLongAgo("sha256-new", "sha256-kept", "sha256-leaked")
 
-	removed, err := Reconcile(context.Background(), api, ref("sha256-new"), recordedAs(map[string]bool{ref("sha256-kept"): true}), now)
+	removed, err := Reconcile(context.Background(), api, "ocel", ref("sha256-new"), recordedAs(map[string]bool{ref("sha256-kept"): true}), now)
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
@@ -195,7 +195,7 @@ func TestReconcilingAnImageOfAnotherRegistryTouchesNothing(t *testing.T) {
 	api.tagged = map[string][]string{shopWeb: {"sha256-old"}}
 	api.pushedAt = pushedLongAgo("sha256-old")
 
-	removed, err := Reconcile(context.Background(), api, "ghcr.io/acme/shop.web:sha256-new", recordedAs(nil), now)
+	removed, err := Reconcile(context.Background(), api, "ocel", "ghcr.io/acme/shop.web:sha256-new", recordedAs(nil), now)
 	if err != nil || len(removed) != 0 || api.deleteCalls != 0 {
 		t.Errorf("Reconcile() = %v, %v with %d deletes, want nothing: the project's own registry is not this account's to prune", removed, err, api.deleteCalls)
 	}
@@ -364,7 +364,7 @@ func TestAReconcileLeavesAnImageARecordNamesByTheTimeItDeletes(t *testing.T) {
 		return map[string]bool{ref("sha256-recorded-since"): true}, nil
 	}
 
-	removed, err := Reconcile(context.Background(), api, ref("sha256-new"), recorded, now)
+	removed, err := Reconcile(context.Background(), api, "ocel", ref("sha256-new"), recorded, now)
 	if err != nil || len(removed) != 0 {
 		t.Errorf("Reconcile() = %v, %v, want nothing removed: the image a record names by the time of the delete stays", removed, err)
 	}

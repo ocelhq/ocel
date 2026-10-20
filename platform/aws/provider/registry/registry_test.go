@@ -125,7 +125,7 @@ func TestResolveMintsALoginAndCreatesNothing(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{token: "AWS:tok3n", endpoint: "https://123456789012.dkr.ecr.us-east-1.amazonaws.com"}
-	target, err := Resolve(context.Background(), api)
+	target, err := Resolve(context.Background(), api, "ocel")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -135,16 +135,16 @@ func TestResolveMintsALoginAndCreatesNothing(t *testing.T) {
 	if target.Server != "123456789012.dkr.ecr.us-east-1.amazonaws.com" {
 		t.Errorf("Server = %q, want the proxy endpoint without its scheme, which is what a docker push addresses", target.Server)
 	}
-	if target.Namespace != Namespace || target.Username != "AWS" || target.Password != "tok3n" {
-		t.Errorf("target = %v, want namespace %q and the login ECR minted", target, Namespace)
+	if target.Namespace != "ocel" || target.Username != "AWS" || target.Password != "tok3n" {
+		t.Errorf("target = %v, want namespace ocel and the login ECR minted", target)
 	}
 	if got := target.ImageRef("web", "sha256-abc"); got != "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-abc" {
 		t.Errorf("Coordinate = %q, want the repository a push creates", got)
 	}
-	if !Owns(target) {
+	if !Owns(target, "ocel") {
 		t.Error("Owns() = false for the target Resolve minted, so its pushes would never create the repository")
 	}
-	if Owns(provider.RegistryTarget{Server: "ghcr.io", Username: "me", Password: "x"}) {
+	if Owns(provider.RegistryTarget{Server: "ghcr.io", Username: "me", Password: "x"}, "ocel") {
 		t.Error("Owns() = true for a registry the project named, whose repositories are not this provider's to create")
 	}
 }
@@ -153,7 +153,7 @@ func TestResolveRefusesALoginItCannotSplit(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{token: "no-separator", endpoint: "https://x.dkr.ecr.us-east-1.amazonaws.com"}
-	if _, err := Resolve(context.Background(), api); err == nil {
+	if _, err := Resolve(context.Background(), api, "ocel"); err == nil {
 		t.Fatal("Resolve accepted a login that is not user:password, which nothing can push with")
 	}
 }
@@ -161,7 +161,7 @@ func TestResolveRefusesALoginItCannotSplit(t *testing.T) {
 func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 	t.Parallel()
 
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
 	for coordinate, want := range map[string]string{
 		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-abc":              "ocel/web",
 		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/api@sha256:" + digest64("0"): "ocel/api",
@@ -176,10 +176,10 @@ func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 	}
 
 	api := &fakeECR{existing: []string{"ocel/shop.api"}}
-	if created, err := ensure(context.Background(), api, "ocel/shop.api"); err != nil || created || len(api.created) != 0 {
+	if created, err := ensure(context.Background(), api, "ocel", "ocel/shop.api"); err != nil || created || len(api.created) != 0 {
 		t.Errorf("ensure of an existing repository = %v, %v, created %v; want a no-op", created, err, api.created)
 	}
-	if created, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/shop.web"}) {
+	if created, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil || !created || !slices.Equal(api.created, []string{"ocel/shop.web"}) {
 		t.Errorf("ensure of a new repository = %v, %v, created %v; want it created immutable under the namespace", created, err, api.created)
 	}
 }
@@ -222,8 +222,8 @@ func (f *fakeECR) BatchDeleteImage(_ context.Context, in *ecr.BatchDeleteImageIn
 }
 
 func anECRStore(api *fakeECR) provider.ImageStore {
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
-	return Images(target, api)
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
+	return Images(target, api, "ocel")
 }
 
 const shopWebRef = "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/shop.web:sha256-abc"
@@ -291,7 +291,7 @@ func TestAPushWhoseRepositoryADestroyDeletedMidwayCreatesItAgainAndPushesAgain(t
 
 	api := &fakeECR{}
 	pushed := &pushedOnceRepositoryReturns{api: api}
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
 	store := ecrImages{api: api, target: target, pushed: pushed}
 
 	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err != nil {
@@ -320,7 +320,7 @@ func TestAPushWhoseRepositoryAnotherDeployRecreatedMidwayPushesAgain(t *testing.
 
 	api := &fakeECR{existing: []string{"ocel/shop.web"}}
 	pushed := &pushedOnceAnotherDeployRecreates{}
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
 	store := ecrImages{api: api, target: target, pushed: pushed}
 
 	if err := store.Push(context.Background(), provider.ImagePush{App: "web", ImageRef: shopWebRef}, progress.Discard()); err != nil {
@@ -337,7 +337,7 @@ func TestAPushThatFailsWhileItsRepositoryStandsIsNotRetried(t *testing.T) {
 	api := &fakeECR{}
 	failing := fake.NewImages()
 	failing.FailPushes(errors.New("denied"))
-	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	target := provider.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: "ocel", Username: "AWS", Password: "tok3n"}
 	store := ecrImages{api: api, target: target, pushed: failing}
 	api.existing = []string{"ocel/shop.web"}
 
@@ -353,7 +353,7 @@ func TestARepositoryAPushCreatesIsTaggedWithTheProjectItsImagesBelongTo(t *testi
 	t.Parallel()
 
 	api := &fakeECR{}
-	if _, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil {
+	if _, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
@@ -366,7 +366,7 @@ func TestARepositoryAPushFindsInPlaceIsTaggedWithTheProjectItsImagesBelongTo(t *
 	t.Parallel()
 
 	api := &fakeECR{existing: []string{"ocel/shop.web"}}
-	if _, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil {
+	if _, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
@@ -385,7 +385,7 @@ func TestARepositoryInPlaceAlreadyTaggedWithItsProjectIsNotTaggedAgain(t *testin
 		{Key: aws.String("ocel:project"), Value: aws.String("shop")},
 		{Key: aws.String("ocel:managed-by"), Value: aws.String("ocel")},
 	}}}
-	if _, err := ensure(context.Background(), api, "ocel/shop.web"); err != nil {
+	if _, err := ensure(context.Background(), api, "ocel", "ocel/shop.web"); err != nil {
 		t.Fatalf("ensure() = %v", err)
 	}
 
@@ -398,7 +398,7 @@ func TestAPushIntoARepositoryItMayNotTagWithItsProjectFails(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{existing: []string{"ocel/shop.web"}, tagErr: errors.New("AccessDeniedException: not authorized to perform ecr:TagResource")}
-	_, err := ensure(context.Background(), api, "ocel/shop.web")
+	_, err := ensure(context.Background(), api, "ocel", "ocel/shop.web")
 
 	if err == nil {
 		t.Fatal("ensure() = nil for a repository it could not tag with its project: no credential could ever delete the images pushed there")
@@ -409,7 +409,7 @@ func TestARepositoryNamingNoProjectIsNeverCreated(t *testing.T) {
 	t.Parallel()
 
 	api := &fakeECR{}
-	if _, err := ensure(context.Background(), api, "ocel/web"); err == nil {
+	if _, err := ensure(context.Background(), api, "ocel", "ocel/web"); err == nil {
 		t.Error("ensure(ocel/web) = nil: a repository with no project to tag it with is one no project-tagged principal may ever clean")
 	}
 	if len(api.created) != 0 {

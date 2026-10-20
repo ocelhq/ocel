@@ -190,7 +190,7 @@ func registryOf(cfg Config) component.Registry {
 		Artifacts:   component.Artifacts{Objects: cfg.Objects, Bucket: cfg.ArtifactBucket},
 		Clusters:    cfg.Clusters,
 		KVTokens:    kv.Tokens{Parameters: cfg.Parameters, Root: cfg.KVTokenRoot},
-		SigningKeys: realtime.Keys{SigningKeys: cfg.SigningKeys, Root: cfg.SigningKeyRoot},
+		SigningKeys: realtime.Keys{SigningKeys: cfg.SigningKeys, Root: cfg.SigningKeyRoot, ManagedBy: cfg.Namespace},
 	})
 }
 
@@ -303,7 +303,7 @@ func (r *release) secrets(program component.Program) []string {
 func (r *release) appSecrets(spec provider.StackSpec) []string {
 	secrets := slices.Collect(maps.Values(spec.App.Values.Sensitive))
 	if r.cfg.PurgeSeed != "" && spec.App.ISR != nil {
-		secrets = append(secrets, edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.ISR.Prefix))
+		secrets = append(secrets, edge.DerivePurgeSecret(r.cfg.PurgeSeed, spec.App.ISR.Coordinate.PagesPrefix()))
 	}
 	return secrets
 }

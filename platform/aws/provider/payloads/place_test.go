@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	fixtureBucket = "ocel-artifacts-test"
-	fixturePrefix = "ocel-runtime-layer"
-	fixtureLabel  = "runtime layer"
+	fixtureBucket      = "ocel-artifacts-test"
+	fixturePayloadName = "runtime-layer"
+	fixtureLabel       = "runtime layer"
 )
 
 type fakeObjectStore struct {
@@ -90,7 +90,7 @@ func fixturePayload() Payload {
 }
 
 func placeFixture(store ObjectStore) (Placement, error) {
-	return Place(context.Background(), store, fixtureBucket, fixturePrefix, fixtureLabel, fixturePayload())
+	return Place(context.Background(), store, fixtureBucket, fixturePayloadName, fixtureLabel, fixturePayload())
 }
 
 func TestPlace(t *testing.T) {
@@ -104,8 +104,8 @@ func TestPlace(t *testing.T) {
 		if at.Bucket != fixtureBucket {
 			t.Errorf("uploaded into %q, want the account's own artifact bucket", at.Bucket)
 		}
-		if want := Key(fixturePrefix, fixturePayload().SHA256); at.Key != want {
-			t.Errorf("key = %q, want %q — content-addressed on the embedded digest", at.Key, want)
+		if want := "payloads/runtime-layer/" + fixturePayload().SHA256 + ".zip"; at.Key != want {
+			t.Errorf("key = %q, want %q — the payloads kind, content-addressed on the embedded digest", at.Key, want)
 		}
 		if !bytes.Equal(store.objects[at.Key], fixturePayload().Bytes) {
 			t.Error("the account stores bytes other than the embedded payload")
@@ -131,7 +131,7 @@ func TestPlace(t *testing.T) {
 
 	t.Run("skips a payload S3 verified against the digest", func(t *testing.T) {
 		store := newFakeObjectStore()
-		store.putVerified(Key(fixturePrefix, fixturePayload().SHA256), fixturePayload().Bytes)
+		store.putVerified(Key(fixturePayloadName, fixturePayload().SHA256), fixturePayload().Bytes)
 
 		at, err := placeFixture(store)
 		if err != nil {
@@ -149,7 +149,7 @@ func TestPlace(t *testing.T) {
 	})
 
 	t.Run("distrusts bytes at the payload's key", func(t *testing.T) {
-		key := Key(fixturePrefix, fixturePayload().SHA256)
+		key := Key(fixturePayloadName, fixturePayload().SHA256)
 		planted := []byte("MZ\x90\x00 an executable nobody reviewed")
 
 		for _, tc := range []struct {
@@ -178,7 +178,7 @@ func TestPlace(t *testing.T) {
 	})
 
 	t.Run("refuses without somewhere to put it", func(t *testing.T) {
-		if _, err := Place(context.Background(), newFakeObjectStore(), "", fixturePrefix, fixtureLabel, fixturePayload()); err == nil {
+		if _, err := Place(context.Background(), newFakeObjectStore(), "", fixturePayloadName, fixtureLabel, fixturePayload()); err == nil {
 			t.Error("uploaded into no bucket at all")
 		}
 		if _, err := placeFixture(nil); err == nil {

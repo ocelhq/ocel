@@ -117,8 +117,8 @@ func deleteTags(ctx context.Context, api ECRAPI, target provider.RegistryTarget,
 	return removed, nil
 }
 
-func Reconcile(ctx context.Context, api ECRAPI, imageRef string, recorded Recorded, pushedBefore time.Time) ([]string, error) {
-	target, err := Resolve(ctx, api)
+func Reconcile(ctx context.Context, api ECRAPI, namespace, imageRef string, recorded Recorded, pushedBefore time.Time) ([]string, error) {
+	target, err := Resolve(ctx, api, namespace)
 	if err != nil {
 		return nil, err
 	}

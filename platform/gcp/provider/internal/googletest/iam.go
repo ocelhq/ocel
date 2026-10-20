@@ -305,7 +305,7 @@ func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 	server.Start()
 	t.Cleanup(server.Close)
 	t.Cleanup(grpcServer.Stop)
-	return &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
+	return WithTierBuckets(&gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL})
 }
 
 func (s *IAM) ProjectMembers(role string) ([]string, *cloudresourcemanager.Expr) {

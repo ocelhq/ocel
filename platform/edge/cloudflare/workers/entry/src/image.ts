@@ -59,7 +59,11 @@ export function workersCacheImage(deps: WorkersCacheImageDeps): ImageCache {
       context.digest,
     );
     const served = buildServeRequest(url);
-    const release: RenderRelease = { slug: serving.slug, isrPrefix: serving.isrPrefix, tags: [] };
+    const release: RenderRelease = {
+      slug: serving.slug,
+      pagesPrefix: serving.pagesPrefix,
+      tags: [],
+    };
     served.headers.set(RENDER_RELEASE_HEADER, JSON.stringify(release));
     const call: ImageCall = { payload: context.payload, minimumCacheTTL: context.minimumCacheTTL };
     served.headers.set(IMAGE_CALL_HEADER, asciiJson(call));

@@ -15,17 +15,17 @@ import (
 
 const singleRequestUploadLimit = 32 << 20
 
-func (p *Store) CreateObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte) error {
-	return p.writeObject(ctx, tier, store, key, attrs, body, &storage.Conditions{DoesNotExist: true})
+func (p *Store) CreateObject(ctx context.Context, tier environment.Tier, key string, attrs storage.ObjectAttrs, body []byte) error {
+	return p.writeObject(ctx, tier, key, attrs, body, &storage.Conditions{DoesNotExist: true})
 }
 
-func (p *Store) replaceObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte) error {
-	return p.writeObject(ctx, tier, store, key, attrs, body, nil)
+func (p *Store) replaceObject(ctx context.Context, tier environment.Tier, key string, attrs storage.ObjectAttrs, body []byte) error {
+	return p.writeObject(ctx, tier, key, attrs, body, nil)
 }
 
-func (p *Store) writeObject(ctx context.Context, tier environment.Tier, store, key string, attrs storage.ObjectAttrs, body []byte, conditions *storage.Conditions) error {
+func (p *Store) writeObject(ctx context.Context, tier environment.Tier, key string, attrs storage.ObjectAttrs, body []byte, conditions *storage.Conditions) error {
 	objects := p
-	object, err := objects.object(ctx, provider.ArtifactRef{Tier: tier, Bucket: store, Key: key})
+	object, err := objects.object(ctx, provider.ArtifactRef{Tier: tier, Key: key})
 	if err != nil {
 		return err
 	}
@@ -47,5 +47,5 @@ func (p *Store) writeObject(ctx context.Context, tier environment.Tier, store, k
 	case err == nil, errors.As(err, &failure) && failure.Code == http.StatusPreconditionFailed:
 		return nil
 	}
-	return objects.storeless(ctx, tier, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
+	return fmt.Errorf("upload %s: %w", object.ObjectName(), err)
 }

@@ -229,8 +229,8 @@ func TestFunctionEnv(t *testing.T) {
 		if got := env["OCEL_BYTECODE_BUCKET"]; got != cache.Bucket {
 			t.Errorf("OCEL_BYTECODE_BUCKET = %q, want %q", got, cache.Bucket)
 		}
-		if _, ok := env["OCEL_ISR_PREFIX"]; ok {
-			t.Error("OCEL_ISR_PREFIX is set on a function with no ISR")
+		if _, ok := env["OCEL_STORAGE_COORDINATE"]; ok {
+			t.Error("OCEL_STORAGE_COORDINATE is set on a function with no ISR")
 		}
 	})
 
@@ -247,7 +247,7 @@ func TestFunctionEnv(t *testing.T) {
 	t.Run("leaves base untouched", func(t *testing.T) {
 		base := map[string]string{"OCEL_RESOURCE_BUCKET_uploads": "{}"}
 
-		Env(base, Args{Handler: "src/server.js"}, &site.ISR{Prefix: "prod/proj/web/B1"}, nil)
+		Env(base, Args{Handler: "src/server.js"}, &site.ISR{Coord: storageCoordinate("prod", "proj", "web", deployedAs("B1").Token())}, nil)
 
 		if got := slices.Sorted(maps.Keys(base)); !slices.Equal(got, []string{"OCEL_RESOURCE_BUCKET_uploads"}) {
 			t.Errorf("base keys = %v, want only OCEL_RESOURCE_BUCKET_uploads", got)
@@ -262,9 +262,9 @@ func TestAFunctionsEnvCountsResourcesVariablesAndTheRuntimeTogether(t *testing.T
 			"POSTHOG_ID":                  "ph-123",
 		}
 
-		env := Env(base, Args{Handler: "src/server.js"}, &site.ISR{Prefix: "prod/proj/web/B1"}, nil)
+		env := Env(base, Args{Handler: "src/server.js"}, &site.ISR{Coord: storageCoordinate("prod", "proj", "web", deployedAs("B1").Token())}, nil)
 
-		for _, key := range []string{"OCEL_RESOURCE_POSTGRES_main", "POSTHOG_ID", "OCEL_HANDLER", "AWS_LAMBDA_EXEC_WRAPPER", "OCEL_ISR_PREFIX"} {
+		for _, key := range []string{"OCEL_RESOURCE_POSTGRES_main", "POSTHOG_ID", "OCEL_HANDLER", "AWS_LAMBDA_EXEC_WRAPPER", "OCEL_STORAGE_COORDINATE"} {
 			if _, ok := env[key]; !ok {
 				t.Errorf("env is missing %s; the budget would be charged against less than is deployed", key)
 			}

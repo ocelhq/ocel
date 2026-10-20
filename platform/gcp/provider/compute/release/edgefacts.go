@@ -42,5 +42,5 @@ func (p *Release) readEdgePurgeSecret(ctx context.Context, spec provider.StackSp
 	if !next.SignsEdgePurges(spec) {
 		return "", nil
 	}
-	return p.Offers.ReadPurgeSecret(ctx, spec.Ref.Tier, spec.Edge.Kind(), spec.App.ISR.Prefix)
+	return p.Offers.ReadPurgeSecret(ctx, spec.Ref.Tier, spec.Edge.Kind(), spec.App.ISR.Coordinate.PagesPrefix())
 }

@@ -15,6 +15,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -23,7 +24,7 @@ const CopiedFromKey = "ocel-copied-from"
 
 func (p *Store) CopyImmutableFiles(ctx context.Context, tier environment.Tier, from, to alb.StaticRoutes) error {
 	objects := p
-	bucket, err := objects.bucket(ctx, tier)
+	bucket, err := objects.bucket(ctx, tier, naming.ObjectAssets)
 	if err != nil {
 		return err
 	}
@@ -31,11 +32,11 @@ func (p *Store) CopyImmutableFiles(ctx context.Context, tier environment.Tier, f
 	for _, prefix := range from.Immutable {
 		own, err := listImmutableFiles(ctx, bucket, source+prefix, true)
 		if err != nil {
-			return objects.storeless(ctx, tier, err)
+			return err
 		}
 		held, err := listImmutableFiles(ctx, bucket, target+prefix, false)
 		if err != nil {
-			return objects.storeless(ctx, tier, err)
+			return err
 		}
 		group, ctx := errgroup.WithContext(ctx)
 		group.SetLimit(functioncode.UploadConcurrency)
@@ -49,7 +50,7 @@ func (p *Store) CopyImmutableFiles(ctx context.Context, tier environment.Tier, f
 			})
 		}
 		if err := group.Wait(); err != nil {
-			return objects.storeless(ctx, tier, err)
+			return err
 		}
 	}
 	return nil

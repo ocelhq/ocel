@@ -36,10 +36,10 @@ const contentionBackoffCeilingMs = 2000;
 
 export function newFirestoreTagRecords(
   firestore: Firestore,
-  isrPrefix: string,
+  pagesPrefix: string,
   options: TagRecordsOptions = {},
 ): TagRecords {
-  const prefix = `${isrPrefix}/`;
+  const prefix = `${pagesPrefix}/`;
   const commitLagAllowanceMs = options.commitLagAllowanceMs ?? 2000;
   const rewriteAttempts = options.rewriteAttempts ?? 3;
   const contentionRounds = options.contentionRounds ?? 8;

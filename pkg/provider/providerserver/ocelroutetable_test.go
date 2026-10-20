@@ -68,7 +68,7 @@ func TestAnAppWithAnOcelRouteTableAsksForTheRevalidationItsBuildDeclares(t *test
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
 	}
-	if facts.ISR == nil || facts.ISR.Prefix == "" || facts.ISR.TagNamespace == "" {
+	if facts.ISR == nil || facts.ISR.Coordinate.Release.IsZero() || facts.ISR.TagNamespace == "" {
 		t.Errorf("ISR = %+v, want the ledger a revalidating node build writes tags through", facts.ISR)
 	}
 }

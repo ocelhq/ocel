@@ -61,7 +61,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.PurgeSecret != edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix) {
+	if result.PurgeSecret != edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Coordinate.PagesPrefix()) {
 		t.Errorf("PurgeSecret = %q, want the secret the edge accepts a purge signed with", result.PurgeSecret)
 	}
 }
@@ -101,7 +101,7 @@ func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testi
 
 	release := releasing(t, cfg)
 	got := release.secrets(component.Program{Secrets: release.appSecrets(spec)})
-	for _, want := range []string{"origin-now", "origin-before", "a-seed", edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Prefix)} {
+	for _, want := range []string{"origin-now", "origin-before", "a-seed", edge.DerivePurgeSecret(cfg.PurgeSeed, spec.App.ISR.Coordinate.PagesPrefix())} {
 		if !slices.Contains(got, want) {
 			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)
 		}

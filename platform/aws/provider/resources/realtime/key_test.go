@@ -122,7 +122,7 @@ func TestARealtimeResourceWithNoKeyMintsAnEd25519SeedKeptTaggedInSecretsManager(
 	t.Parallel()
 
 	keys := newFakeSigningKeys()
-	seed, err := ensureSigningKey(t.Context(), keys, environment.TierProduction, "ocel/realtime/shop/prod/realtime--app")
+	seed, err := ensureSigningKey(t.Context(), keys, "acme", environment.TierProduction, "ocel/realtime/shop/prod/realtime--app")
 	if err != nil {
 		t.Fatalf("ensureSigningKey() = %v", err)
 	}
@@ -130,12 +130,12 @@ func TestARealtimeResourceWithNoKeyMintsAnEd25519SeedKeptTaggedInSecretsManager(
 		t.Errorf("the secret holds %x, want the minted seed %x", got, seed)
 	}
 	if !slices.ContainsFunc(keys.tags["ocel/realtime/shop/prod/realtime--app"], func(tag smtypes.Tag) bool {
-		return aws.ToString(tag.Key) == "ocel:managed-by" && aws.ToString(tag.Value) == "ocel"
+		return aws.ToString(tag.Key) == "ocel:managed-by" && aws.ToString(tag.Value) == "acme"
 	}) {
-		t.Errorf("the secret is tagged %v, want ocel:managed-by=ocel so the deploy credentials may delete it", keys.tags["ocel/realtime/shop/prod/realtime--app"])
+		t.Errorf("the secret is tagged %v, want ocel:managed-by=acme, the namespace whose deploy credentials may delete it", keys.tags["ocel/realtime/shop/prod/realtime--app"])
 	}
 
-	again, err := ensureSigningKey(t.Context(), keys, environment.TierProduction, "ocel/realtime/shop/prod/realtime--app")
+	again, err := ensureSigningKey(t.Context(), keys, "acme", environment.TierProduction, "ocel/realtime/shop/prod/realtime--app")
 	if err != nil || !slices.Equal(again, seed) || keys.creates != 1 {
 		t.Errorf("a second ensureSigningKey() = %x, %v after %d creates, want the kept seed and no second create", again, err, keys.creates)
 	}
@@ -151,7 +151,7 @@ func TestAKeyAConcurrentDeployCreatedFirstIsTheOneKept(t *testing.T) {
 		keys.values[name] = winner
 		keys.mu.Unlock()
 	}
-	seed, err := ensureSigningKey(t.Context(), keys, environment.TierProduction, "ocel/realtime/shop/prod/realtime--app")
+	seed, err := ensureSigningKey(t.Context(), keys, "acme", environment.TierProduction, "ocel/realtime/shop/prod/realtime--app")
 	if err != nil {
 		t.Fatalf("ensureSigningKey() = %v", err)
 	}
@@ -178,7 +178,7 @@ func TestAKeyThatIsNoSeedIsRefusedRatherThanSignedWith(t *testing.T) {
 
 	keys := newFakeSigningKeys()
 	keys.values["ocel/realtime/shop/prod/realtime--app"] = "not-a-seed"
-	if _, err := ensureSigningKey(t.Context(), keys, environment.TierProduction, "ocel/realtime/shop/prod/realtime--app"); err == nil || !strings.Contains(err.Error(), "ocel/realtime/shop/prod/realtime--app") {
+	if _, err := ensureSigningKey(t.Context(), keys, "acme", environment.TierProduction, "ocel/realtime/shop/prod/realtime--app"); err == nil || !strings.Contains(err.Error(), "ocel/realtime/shop/prod/realtime--app") {
 		t.Errorf("ensureSigningKey() = %v, want a refusal naming the secret", err)
 	}
 }

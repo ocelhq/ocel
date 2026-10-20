@@ -10,7 +10,7 @@ import {
 import { noteTags } from "../src/origin-tags.mjs";
 import { launcherConfig } from "../test-support/next-project-fixture.mjs";
 
-const prefix = "prod/shop/web/r0a1b2c3d/isr";
+const coordinate = "shop/prod/web/r0a1b2c3d";
 
 function manifest(
   cache: Parameters<typeof launcherConfig>[0] = {},
@@ -68,7 +68,7 @@ function shaping(
     {
       OCEL_EDGE_CACHE: "all",
       OCEL_CACHE_TAG_PURGE: "1",
-      OCEL_ISR_PREFIX: prefix,
+      OCEL_STORAGE_COORDINATE: coordinate,
       ...env,
       ...extra,
     } as NodeJS.ProcessEnv,
@@ -154,21 +154,22 @@ test("leaves the tag header off a front that invalidates by nothing", () => {
   expect(headers["cache-tag"]).toBeUndefined();
 });
 
-test("reads the release out of the isr prefix", () => {
-  expect(releaseOf(prefix)).toBe("r0a1b2c3d");
+test("reads the release out of the storage coordinate", () => {
+  expect(releaseOf(coordinate)).toBe("r0a1b2c3d");
 });
 
-test("refuses a release from a prefix that is absent or shaped differently", () => {
+test("refuses a release from a coordinate that is absent or shaped differently", () => {
   expect(releaseOf(undefined)).toBeNull();
   expect(releaseOf("")).toBeNull();
-  expect(releaseOf("prod/shop/web/r0a1b2c3d")).toBeNull();
-  expect(releaseOf("prod/shop/web/r0a1b2c3d/bytecode")).toBeNull();
-  expect(releaseOf("prod/shop/web/deadbeef/isr")).toBeNull();
-  expect(releaseOf("prod/shop/web/rZZZZZZZZ/isr")).toBeNull();
+  expect(releaseOf("shop/prod/web")).toBeNull();
+  expect(releaseOf("shop/prod/web/r0a1b2c3d/bytecode")).toBeNull();
+  expect(releaseOf("prod/shop/web/r0a1b2c3d/isr")).toBeNull();
+  expect(releaseOf("shop/prod/web/deadbeef")).toBeNull();
+  expect(releaseOf("shop/prod/web/rZZZZZZZZ")).toBeNull();
 });
 
-test("leaves the tag header off when the prefix names no release", () => {
-  const headers = serve(shaping({ OCEL_ISR_PREFIX: "" }), "/isr", fakeRes(), {
+test("leaves the tag header off when the coordinate names no release", () => {
+  const headers = serve(shaping({ OCEL_STORAGE_COORDINATE: "" }), "/isr", fakeRes(), {
     tags: ["products"],
   });
 

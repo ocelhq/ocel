@@ -13,19 +13,16 @@ import (
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-const (
-	Namespace  = "ocel"
-	ProjectTag = "ocel:project"
-)
+const ProjectTag = "ocel:project"
 
 const (
-	ecrUsername   = "AWS"
-	managedByTag  = "ocel:managed-by"
-	managedByOcel = "ocel"
+	ecrUsername  = "AWS"
+	managedByTag = "ocel:managed-by"
 )
 
 type ECRAPI interface {
@@ -39,7 +36,11 @@ type ECRAPI interface {
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
-func Resolve(ctx context.Context, api ECRAPI) (provider.RegistryTarget, error) {
+func RepositoriesARN(namespace string) string {
+	return "arn:aws:ecr:*:*:repository/" + naming.NamespaceField(namespace) + "/*"
+}
+
+func Resolve(ctx context.Context, api ECRAPI, namespace string) (provider.RegistryTarget, error) {
 	out, err := api.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
 	if err != nil {
 		return provider.RegistryTarget{}, fmt.Errorf("mint a login for this account's image registry: %w", err)
@@ -66,28 +67,29 @@ func Resolve(ctx context.Context, api ECRAPI) (provider.RegistryTarget, error) {
 	}
 	return provider.RegistryTarget{
 		Server:    server,
-		Namespace: Namespace,
+		Namespace: naming.NamespaceField(namespace),
 		Username:  username,
 		Password:  password,
 	}, nil
 }
 
-func Owns(target provider.RegistryTarget) bool {
-	return target.Username == ecrUsername && target.Namespace == Namespace
+func Owns(target provider.RegistryTarget, namespace string) bool {
+	return target.Username == ecrUsername && target.Namespace == naming.NamespaceField(namespace)
 }
 
 type ecrImages struct {
-	api    ECRAPI
-	target provider.RegistryTarget
-	pushed provider.ImageStore
+	api       ECRAPI
+	target    provider.RegistryTarget
+	pushed    provider.ImageStore
+	managedBy string
 }
 
-func Images(target provider.RegistryTarget, api ECRAPI) provider.ImageStore {
-	return ecrImages{api: api, target: target, pushed: images.RegistryStore(target)}
+func Images(target provider.RegistryTarget, api ECRAPI, namespace string) provider.ImageStore {
+	return ecrImages{api: api, target: target, pushed: images.RegistryStore(target), managedBy: namespace}
 }
 
 func IsInRegistry(target provider.RegistryTarget, imageRef string) bool {
-	return strings.HasPrefix(imageRef, target.Server+"/")
+	return strings.HasPrefix(imageRef, target.Server+"/"+target.Namespace+"/")
 }
 
 func (i ecrImages) String() string {
@@ -109,14 +111,14 @@ func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress p
 	if err != nil {
 		return err
 	}
-	if _, err := ensure(ctx, i.api, repository); err != nil {
+	if _, err := ensure(ctx, i.api, i.managedBy, repository); err != nil {
 		return err
 	}
 	pushErr := i.pushed.Push(ctx, push, progress)
 	if pushErr == nil {
 		return nil
 	}
-	created, err := ensure(ctx, i.api, repository)
+	created, err := ensure(ctx, i.api, i.managedBy, repository)
 	if err != nil || !created && !missingRepository(pushErr) {
 		return pushErr
 	}
@@ -156,13 +158,14 @@ func repositoryOf(target provider.RegistryTarget, imageRef string) (string, erro
 	return repository, nil
 }
 
-func ensure(ctx context.Context, api ECRAPI, name string) (bool, error) {
-	project, ok := images.RegistryRepositoryProject(strings.TrimPrefix(name, Namespace+"/"))
+func ensure(ctx context.Context, api ECRAPI, managedBy, name string) (bool, error) {
+	_, repository, _ := strings.Cut(name, "/")
+	project, ok := images.RegistryRepositoryProject(repository)
 	if !ok {
 		return false, fmt.Errorf("the image repository %s names no project, so no credential limited to a project could ever delete its images", name)
 	}
 	tags := []ecrtypes.Tag{
-		{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)},
+		{Key: aws.String(managedByTag), Value: aws.String(managedBy)},
 		{Key: aws.String(ProjectTag), Value: aws.String(project)},
 	}
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{

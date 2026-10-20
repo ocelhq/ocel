@@ -2,16 +2,18 @@ package registry
 
 import (
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 const (
 	principalProjectKey = "aws:PrincipalTag/" + ProjectTag
 	principalProject    = "${" + principalProjectKey + "}"
-
-	repositoryARN                 = "arn:aws:ecr:*:*:repository/" + Namespace + "/*"
-	principalProjectRepositoryARN = "arn:aws:ecr:*:*:repository/" + Namespace + "/" + principalProject + images.ProjectSeparator + "*"
 )
+
+func principalProjectRepositoriesARN(namespace string) string {
+	return "arn:aws:ecr:*:*:repository/" + naming.NamespaceField(namespace) + "/" + principalProject + images.ProjectSeparator + "*"
+}
 
 func principalUntagged() map[string]any {
 	return map[string]any{"Null": map[string]any{principalProjectKey: "true"}}
@@ -33,7 +35,7 @@ func taggedForAProject() map[string]any {
 	return map[string]any{"Null": map[string]any{"aws:RequestTag/" + ProjectTag: "false"}}
 }
 
-func Credential(iam.Scope) []iam.Statement {
+func Credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
 			Actions:   []string{"ecr:GetAuthorizationToken"},
@@ -52,27 +54,27 @@ func Credential(iam.Scope) []iam.Statement {
 				"ecr:PutImage",
 				"ecr:UploadLayerPart",
 			},
-			Resources: []string{repositoryARN},
+			Resources: []string{RepositoriesARN(s.Namespace)},
 			Condition: iam.InCallerAccount(),
 		},
 		{
 			Actions:   []string{"ecr:CreateRepository", "ecr:TagResource"},
-			Resources: []string{principalProjectRepositoryARN},
+			Resources: []string{principalProjectRepositoriesARN(s.Namespace)},
 			Condition: iam.MergeConditions(iam.InCallerAccount(), taggedForPrincipalProject()),
 		},
 		{
 			Actions:   []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"},
-			Resources: []string{principalProjectRepositoryARN},
+			Resources: []string{principalProjectRepositoriesARN(s.Namespace)},
 			Condition: iam.MergeConditions(iam.InCallerAccount(), ofPrincipalProject()),
 		},
 		{
 			Actions:   []string{"ecr:CreateRepository", "ecr:TagResource"},
-			Resources: []string{repositoryARN},
+			Resources: []string{RepositoriesARN(s.Namespace)},
 			Condition: iam.MergeConditions(iam.InCallerAccount(), principalUntagged(), taggedForAProject()),
 		},
 		{
 			Actions:   []string{"ecr:BatchDeleteImage", "ecr:DeleteRepository"},
-			Resources: []string{repositoryARN},
+			Resources: []string{RepositoriesARN(s.Namespace)},
 			Condition: iam.MergeConditions(iam.InCallerAccount(), principalUntagged(), ofAProject()),
 		},
 	}

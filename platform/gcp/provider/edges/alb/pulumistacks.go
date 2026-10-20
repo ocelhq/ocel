@@ -80,15 +80,19 @@ func (s PulumiStacks) opened(ctx context.Context, target Target) (*pulumi.Automa
 	if err != nil {
 		return nil, provider.StackRef{}, err
 	}
-	config, ref := s.config(clients, target, passphrase)
+	buckets, err := clients.TierBuckets(ctx, target.Tier)
+	if err != nil {
+		return nil, provider.StackRef{}, err
+	}
+	config, ref := s.config(clients, buckets.State, target, passphrase)
 	return pulumi.New(config), ref, nil
 }
 
-func (s PulumiStacks) config(clients *gcloud.Clients, target Target, passphrase string) (pulumi.Config[Program], provider.StackRef) {
+func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target Target, passphrase string) (pulumi.Config[Program], provider.StackRef) {
 	project := naming.PulumiProject(target.Prefix())
 	config := pulumi.Config[Program]{
 		Backend: pulumi.Backend{
-			URL:        naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Tier), project),
+			URL:        naming.StateBackendURL(cloudStorageScheme, stateBucket, project),
 			Passphrase: passphrase,
 			Project:    project,
 			Env: map[string]string{

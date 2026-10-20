@@ -42,11 +42,26 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_storage_bucket:ocel-acme-prod-preview",
+      "id": "project:shop/shared:preview/google_storage_bucket:ocel-preview-state",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_storage_bucket",
-      "name": "ocel-acme-prod-preview",
+      "name": "ocel-preview-state",
+      "region": "europe-west1",
+      "properties": {
+        "location": "europe-west1",
+        "storage_class": "STANDARD",
+        "versioning": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/google_storage_bucket:ocel-preview-edge",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_storage_bucket",
+      "name": "ocel-preview-edge",
       "region": "europe-west1",
       "properties": {
         "location": "europe-west1",
@@ -57,17 +72,17 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_storage_bucket:ocel-acme-prod-preview-state",
+      "id": "project:shop/shared:preview/google_storage_bucket:ocel-preview-cache",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_storage_bucket",
-      "name": "ocel-acme-prod-preview-state",
+      "name": "ocel-preview-cache",
       "region": "europe-west1",
       "properties": {
         "location": "europe-west1",
         "storage_class": "STANDARD",
         "versioning": {
-          "enabled": true
+          "enabled": false
         }
       }
     },

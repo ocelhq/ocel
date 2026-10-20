@@ -24,8 +24,12 @@ const (
 	assetReaderDescription = "the identity an edge that runs code reads a tier's static files as, through an HMAC key, and nothing else"
 )
 
-func assetReaderCondition(c *gcloud.Clients, tier environment.Tier) *policy.Condition {
-	return gcloud.ObjectPrefixCondition(c, "ocel "+string(c.Namespace())+" "+string(tier)+" assets", tier, provider.StoreAssets+"/")
+func assetReaderCondition(ctx context.Context, c *gcloud.Clients, tier environment.Tier) (*policy.Condition, error) {
+	buckets, err := c.TierBuckets(ctx, tier)
+	if err != nil {
+		return nil, err
+	}
+	return gcloud.BucketCondition("ocel "+string(c.Namespace())+" "+string(tier)+" assets", buckets.Edge), nil
 }
 
 func RaiseAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) error {
@@ -34,8 +38,12 @@ func RaiseAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Ti
 		return err
 	}
 	member := "serviceAccount:" + c.AssetReaderAccountEmail(tier)
+	condition, err := assetReaderCondition(ctx, c, tier)
+	if err != nil {
+		return err
+	}
 	if err := gcloud.UntilVisible(ctx, func() error {
-		return gcloud.BindProjectRole(ctx, c, member, grants.AssetsRole, assetReaderCondition(c, tier), true)
+		return gcloud.BindProjectRole(ctx, c, member, grants.AssetsRole, condition, true)
 	}); err != nil {
 		return err
 	}
@@ -109,7 +117,11 @@ func TakeAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tie
 		return err
 	}
 	member := "serviceAccount:" + c.AssetReaderAccountEmail(tier)
-	if err := gcloud.BindProjectRole(ctx, c, member, grants.AssetsRole, assetReaderCondition(c, tier), false); err != nil {
+	condition, err := assetReaderCondition(ctx, c, tier)
+	if err != nil {
+		return err
+	}
+	if err := gcloud.BindProjectRole(ctx, c, member, grants.AssetsRole, condition, false); err != nil {
 		return err
 	}
 	_, err = c.DeleteAccount(ctx, c.AssetReaderAccount(tier))

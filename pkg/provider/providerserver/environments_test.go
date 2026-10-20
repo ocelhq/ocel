@@ -539,7 +539,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	release := releaseOf(t, releaseFor(1))
 	inOrder(t, vendor.Journal(),
 		"destroy "+naming.AppStack("pr-7", "web", release).String(),
-		"remove-prefix "+(naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: release}).StoragePrefix(),
+		"remove "+(naming.Coordinate{Project: "shop", Env: "pr-7", App: "web", Release: release}).StoragePrefix(naming.ObjectFunction),
 		"destroy "+outlived.String(),
 		"destroy "+naming.InfraStack("pr-7").String(),
 		"forget "+name.String())

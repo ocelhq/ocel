@@ -5,15 +5,15 @@ import {
   type TagSnapshotBucket,
 } from "./tag-snapshot-bucket.mjs";
 
-const prefix = "prod/proj/app/r3f8a1c9d/isr";
-const snapshotKey = `${prefix}/tag-clock.json`;
+const coordinate = "proj/prod/app/r3f8a1c9d";
+const snapshotKey = `tag-clock/${coordinate}/tag-clock.json`;
 const genesis = { version: 1, deployedAt: 100, generatedAt: 100, records: {} };
 
 let bucket: TagSnapshotBucket;
 
 beforeEach(() => {
   process.env.OCEL_ISR_BUCKET = "assets";
-  process.env.OCEL_ISR_PREFIX = prefix;
+  process.env.OCEL_STORAGE_COORDINATE = coordinate;
   serveS3From(() => bucket);
 });
 

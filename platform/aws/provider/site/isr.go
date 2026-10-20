@@ -12,7 +12,6 @@ type ISR struct {
 	Namespace string
 
 	Bucket   string
-	Prefix   string
 	Table    string
 	TableARN string
 
@@ -33,10 +32,10 @@ func (c ISR) TagNamespace() string {
 
 func (c ISR) Env() map[string]string {
 	env := map[string]string{
-		"OCEL_ISR_BUCKET":        c.Bucket,
-		"OCEL_ISR_PREFIX":        c.Prefix,
-		"OCEL_STATE_TABLE":       c.Table,
-		"OCEL_ISR_TAG_NAMESPACE": c.TagNamespace(),
+		"OCEL_ISR_BUCKET":         c.Bucket,
+		"OCEL_STORAGE_COORDINATE": c.Coord.StorageCoordinate(),
+		"OCEL_STATE_TABLE":        c.Table,
+		"OCEL_ISR_TAG_NAMESPACE":  c.TagNamespace(),
 	}
 	if c.EdgeReadable {
 		env["OCEL_ISR_EDGE_READABLE"] = "1"
@@ -47,13 +46,17 @@ func (c ISR) Env() map[string]string {
 func (c ISR) Policy() (string, error) {
 	namespace := c.TagNamespace()
 	if namespace == "" {
-		return "", fmt.Errorf("isr cache under %q has no coordinate, so its tag items cannot be scoped to this app", c.Prefix)
+		return "", fmt.Errorf("the isr cache in %s has no coordinate, so neither its objects nor its tag items can be scoped to this app", c.Bucket)
+	}
+	objects := make([]string, len(naming.ISRObjectKinds))
+	for i, kind := range naming.ISRObjectKinds {
+		objects[i] = c.objectARN(c.Coord.StoragePrefix(kind))
 	}
 	statements := []any{
 		map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"s3:GetObject", "s3:PutObject"},
-			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
+			"Resource": objects,
 		},
 		map[string]any{
 			"Effect":   "Allow",
@@ -71,7 +74,7 @@ func (c ISR) Policy() (string, error) {
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"s3:PutObjectTagging"},
-			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/cache/*", c.Bucket, c.Prefix),
+			"Resource": c.objectARN(c.Coord.StoragePrefix(naming.ObjectPages)),
 		})
 	}
 
@@ -81,4 +84,8 @@ func (c ISR) Policy() (string, error) {
 		return "", fmt.Errorf("render isr policy: %w", err)
 	}
 	return string(out), nil
+}
+
+func (c ISR) objectARN(prefix string) string {
+	return fmt.Sprintf("arn:aws:s3:::%s/%s*", c.Bucket, prefix)
 }

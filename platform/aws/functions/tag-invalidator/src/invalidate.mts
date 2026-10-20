@@ -181,13 +181,13 @@ async function purgeCloudflareTargets(
   inv: Invalidator,
   readSeed: () => Promise<string>,
   urls: readonly string[],
-  isrPrefix: string,
+  pagesPrefix: string,
   raise: Raise,
 ): Promise<void> {
   if (urls.length === 0 || inv.cloudflare === undefined) return;
-  const secret = await derivePurgeSecret(await readSeed(), isrPrefix);
+  const secret = await derivePurgeSecret(await readSeed(), pagesPrefix);
   const results = await Promise.allSettled(
-    urls.map((url) => postPurge(inv.cloudflare!, url, secret, isrPrefix, raise.entries)),
+    urls.map((url) => postPurge(inv.cloudflare!, url, secret, pagesPrefix, raise.entries)),
   );
   const refused: unknown[] = [];
   results.forEach((result, i) => {
@@ -209,13 +209,13 @@ async function invalidateOne(
   inv: Invalidator,
   readSeed: () => Promise<string>,
   targets: ProjectTargets,
-  coordinate: { release: string; isrPrefix: string },
+  coordinate: { release: string; pagesPrefix: string },
   raise: Raise,
 ): Promise<void> {
   await settleEvery(
     [
       invalidateCloudFront(inv, targets.cloudfront, coordinate.release, raise),
-      purgeCloudflareTargets(inv, readSeed, targets.cloudflare, coordinate.isrPrefix, raise),
+      purgeCloudflareTargets(inv, readSeed, targets.cloudflare, coordinate.pagesPrefix, raise),
     ],
     "some fronts refused this invalidation",
   );
@@ -243,11 +243,11 @@ export async function invalidateAll(inv: Invalidator, raises: Raises): Promise<s
   const readSeed = () => (seed ??= inv.cloudflare!.readSeed());
 
   const results = await settledPool(builds.length, buildsAtOnce, async (i) => {
-    const [isrPrefix, raise] = builds[i]!;
-    const coordinate = coordinateOf(isrPrefix);
+    const [pagesPrefix, raise] = builds[i]!;
+    const coordinate = coordinateOf(pagesPrefix);
     if (coordinate === null) {
       console.warn(
-        `ocel: ${isrPrefix} names no project and release, so the tags it raises reach no front`,
+        `ocel: ${pagesPrefix} names no project and release, so the tags it raises reach no front`,
       );
       return;
     }
@@ -258,13 +258,13 @@ export async function invalidateAll(inv: Invalidator, raises: Raises): Promise<s
       projectTargets = readTargets(inv, project);
       targets.set(project, projectTargets);
     }
-    await invalidateOne(inv, readSeed, await projectTargets, { release, isrPrefix }, raise);
+    await invalidateOne(inv, readSeed, await projectTargets, { release, pagesPrefix }, raise);
   });
 
-  return builds.flatMap(([isrPrefix, raise], i) => {
+  return builds.flatMap(([pagesPrefix, raise], i) => {
     const result = results[i]!;
     if (result.status === "fulfilled") return [];
-    console.error(`ocel: invalidating ${isrPrefix} failed`, result.reason);
+    console.error(`ocel: invalidating ${pagesPrefix} failed`, result.reason);
     return raise.sequenceNumbers;
   });
 }

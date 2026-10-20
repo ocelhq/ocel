@@ -1,6 +1,7 @@
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { type CacheEntryFile, entryObjectKey } from "@framework/next-cache";
 import type { CacheStore } from "@framework/next-runtime/cache-store";
+import { pagesPrefix, objectKey as storageKey } from "@platform/edge-contract/storage-key";
 import {
   edgeReadable,
   edgeReadableTagging,
@@ -8,13 +9,14 @@ import {
   type ObjectStore,
   providerObjectStore,
   readBodyText,
-  requireEnv,
+  requireStorageCoordinate,
 } from "./object-store.mjs";
 
 const EDGE_SERVED_KINDS = new Set(["APP_PAGE", "PAGES", "APP_ROUTE"]);
 
 export function newAwsCacheStore(): CacheStore {
-  const prefix = requireEnv("OCEL_ISR_PREFIX");
+  const coordinate = requireStorageCoordinate();
+  const prefix = pagesPrefix(coordinate);
 
   const provider = providerObjectStore();
 
@@ -27,7 +29,7 @@ export function newAwsCacheStore(): CacheStore {
     }
     return addressed;
   };
-  const fetchKey = (hash: string) => `${prefix}/fetch-cache/${hash}.cache.json`;
+  const fetchKey = (hash: string) => storageKey("fetch-cache", coordinate, `${hash}.cache.json`);
 
   async function read(from: ObjectStore, key: string): Promise<CacheEntryFile | null> {
     try {

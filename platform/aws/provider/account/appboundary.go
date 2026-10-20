@@ -138,7 +138,7 @@ func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string)
 				{Actions: []string{"ecr:GetAuthorizationToken"}, Resources: []string{iam.AnyResource}},
 				{
 					Actions:   []string{"ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"},
-					Resources: []string{"arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"},
+					Resources: []string{registry.RepositoriesARN(string(ns))},
 				},
 			}),
 		},

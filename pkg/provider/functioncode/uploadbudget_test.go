@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -46,7 +47,7 @@ func (s *countingStore) Open(context.Context, provider.ArtifactRef) (io.ReadClos
 	return nil, os.ErrNotExist
 }
 
-func (s *countingStore) RemovePrefix(context.Context, environment.Tier, string, progress.Log) error {
+func (s *countingStore) RemoveObjects(context.Context, environment.Tier, naming.Coordinate, []naming.ObjectKind, progress.Log) error {
 	return nil
 }
 

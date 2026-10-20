@@ -42,7 +42,7 @@
       "monthlyUsage": "0.54"
     },
     {
-      "resource": "project:shop/shared:production/google_storage_bucket:ocel-acme-prod-production",
+      "resource": "project:shop/shared:production/google_storage_bucket:ocel-prod-state",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -80,7 +80,45 @@
       "monthlyUsage": "0.29"
     },
     {
-      "resource": "project:shop/shared:production/google_storage_bucket:ocel-acme-prod-production-state",
+      "resource": "project:shop/shared:production/google_storage_bucket:ocel-prod-edge",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GiB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.02",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GiB-month",
+          "rateRef": "gcp/storage/standard"
+        },
+        {
+          "name": "Class A operations",
+          "unit": "operations",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 operations",
+          "rateRef": "gcp/storage/class-a"
+        },
+        {
+          "name": "Class B operations",
+          "unit": "operations",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 operations",
+          "rateRef": "gcp/storage/class-b"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.29"
+    },
+    {
+      "resource": "project:shop/shared:production/google_storage_bucket:ocel-prod-cache",
       "status": "STATUS_PRICED",
       "components": [
         {
@@ -536,12 +574,12 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "68.52",
-      "monthlyUsage": "8.79"
+      "monthlyUsage": "9.08"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "18.59",
-      "monthlyUsage": "2.25"
+      "monthlyUsage": "2.54"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -560,7 +598,7 @@
     }
   ],
   "coverage": {
-    "supported": 15,
+    "supported": 16,
     "free": 21,
     "supportedTypes": [
       "google_artifact_registry_repository",
@@ -596,5 +634,5 @@
     "a Cloud Run service billed per instance is priced for every hour an instance lives, idle ones included: Cloud Run keeps an instance up to 15 minutes after its last request, so traffic that never pauses that long keeps one alive all month"
   ],
   "monthlyFixed": "68.52",
-  "monthlyUsage": "8.79"
+  "monthlyUsage": "9.08"
 }

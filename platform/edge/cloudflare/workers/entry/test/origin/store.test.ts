@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { openStore } from "../../src/origin/store";
 import { withGlobalFetch } from "../origin-deps";
 
-const key = "prod/p1/web/r9source0/isr/cache/blog/a.cache.json";
+const key = "pages/p1/prod/web/r9a0c0e00/blog/a.cache.json";
 
 const awsBucket: OriginStore = {
   url: "https://assets.s3.eu-west-2.amazonaws.com",

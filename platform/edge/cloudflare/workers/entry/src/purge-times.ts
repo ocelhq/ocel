@@ -11,7 +11,7 @@ export type TagTimes = Record<string, TagTime>;
 
 export interface ReleaseScope {
   slug: string;
-  isrPrefix: string;
+  pagesPrefix: string;
 }
 
 export interface RecordedRelease extends ReleaseScope {
@@ -46,7 +46,7 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
      CREATE TABLE IF NOT EXISTS recorded_releases (
        release TEXT PRIMARY KEY,
        slug TEXT NOT NULL,
-       isr_prefix TEXT NOT NULL,
+       pages_prefix TEXT NOT NULL,
        checked_at INTEGER NOT NULL
      );
      CREATE INDEX IF NOT EXISTS recorded_releases_by_check
@@ -67,12 +67,12 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
       const column = mode === "purge" ? "purged_at" : "invalidated_at";
       storage.transactionSync(() => {
         sql.exec(
-          `INSERT INTO recorded_releases (release, slug, isr_prefix, checked_at)
+          `INSERT INTO recorded_releases (release, slug, pages_prefix, checked_at)
            VALUES (?, ?, ?, ?)
            ON CONFLICT(release) DO NOTHING`,
           release.release,
           release.slug,
-          release.isrPrefix,
+          release.pagesPrefix,
           Date.now(),
         );
         for (const { tag, raisedAt } of tags) raiseTime(column, tag, raisedAt);
@@ -100,14 +100,14 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
     },
     readReleasesCheckedBefore(at, limit) {
       return sql
-        .exec<{ release: string; slug: string; isr_prefix: string }>(
-          `SELECT release, slug, isr_prefix FROM recorded_releases
+        .exec<{ release: string; slug: string; pages_prefix: string }>(
+          `SELECT release, slug, pages_prefix FROM recorded_releases
            WHERE checked_at < ? ORDER BY checked_at LIMIT ?`,
           at,
           limit,
         )
         .toArray()
-        .map((row) => ({ release: row.release, slug: row.slug, isrPrefix: row.isr_prefix }));
+        .map((row) => ({ release: row.release, slug: row.slug, pagesPrefix: row.pages_prefix }));
     },
     markChecked(release, at) {
       sql.exec(`UPDATE recorded_releases SET checked_at = ? WHERE release = ?`, at, release);

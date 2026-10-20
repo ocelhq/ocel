@@ -171,14 +171,14 @@ function newReleaseServing(
   releases: ReleaseLookup,
   app: string,
 ): Serving | undefined {
-  const release = readReleaseToken(record.isrPrefix);
+  const release = readReleaseToken(record.pagesPrefix);
   if (release === undefined) return undefined;
   return newServing(base, {
     host: releases.host.toLowerCase(),
     app,
     release,
     slug: releases.slug,
-    isrPrefix: record.isrPrefix,
+    pagesPrefix: record.pagesPrefix,
   });
 }
 

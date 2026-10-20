@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
@@ -43,7 +44,7 @@ func (p *policyServer) open(t *testing.T) *gcloud.Clients {
 		}
 	}))
 	t.Cleanup(server.Close)
-	return &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
+	return googletest.WithTierBuckets(&gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL})
 }
 
 func TestAPolicyChangedUnderTheGrantIsReReadAndWrittenAgain(t *testing.T) {

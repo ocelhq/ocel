@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
-const routeTableKey = "prod/shop/web/r1a2b3c4d/route-table/ab.json"
+const routeTableKey = "route-tables/shop/prod/web/r1a2b3c4d/ab.json"
 
 func routedSpec(key string) provider.StackSpec {
 	return provider.StackSpec{
@@ -42,7 +42,7 @@ func TestADeployRoutedByAnEdgeRouteTablePutsItAtItsKeyInTheTiersAssetsStoreAndAn
 	if names := uploadNames(uploads); len(names) != 1 {
 		t.Fatalf("the deploy uploaded %v, want only the route table", names)
 	}
-	put := uploadNamed(t, uploads, provider.StoreAssets+"/"+routeTableKey)
+	put := uploadNamed(t, uploads, routeTableKey)
 	if string(put.Body) != string(spec.App.EdgeRouteTable.Table) {
 		t.Errorf("uploaded body = %q, want the table verbatim", put.Body)
 	}

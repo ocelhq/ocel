@@ -86,7 +86,11 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	}
 	if next.Serves(app) {
 		served = next.FillContainerDefaults(served)
-		if served.Env, err = run.MergeValues(app.App, release.NextValues, values, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
+		buckets, err := c.TierBuckets(ctx, spec.Ref.Tier)
+		if err != nil {
+			return nil, err
+		}
+		if served.Env, err = run.MergeValues(app.App, release.NextValues, values, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, buckets, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
 			return nil, err
 		}
 	}

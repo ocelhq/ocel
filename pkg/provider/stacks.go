@@ -128,7 +128,7 @@ type OriginGuard struct {
 }
 
 type ISRSpec struct {
-	Prefix       string
+	Coordinate   naming.Coordinate
 	TagNamespace string
 	PurgeURL     string
 }

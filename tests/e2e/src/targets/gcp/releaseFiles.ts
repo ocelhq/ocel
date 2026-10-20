@@ -1,9 +1,9 @@
-import { PRODUCTION_TIER } from "./names";
 import { bearer, type Where } from "./store";
 
 const STORAGE = "https://storage.googleapis.com/storage/v1";
 const ASSET_PREFIX_ENV = "OCEL_ASSET_PREFIX";
-const ASSETS_STORE = "assets";
+const PRODUCTION_EDGE_WORDS = "prod-edge";
+const RANDOM_TAG = /^[0-9a-z]{6}$/;
 
 type Listing = {
   services?: Array<{
@@ -12,8 +12,21 @@ type Listing = {
   }>;
 };
 
-export function tierBucket(namespace: string, project: string): string {
-  return `${namespace}-${project}-${PRODUCTION_TIER}`;
+export function edgeBucketPrefix(namespace: string): string {
+  return `${namespace}-${PRODUCTION_EDGE_WORDS}-`;
+}
+
+export function edgeBucketIn(buckets: string[], namespace: string): string {
+  const prefix = edgeBucketPrefix(namespace);
+  const found = buckets.filter(
+    (name) => name.startsWith(prefix) && RANDOM_TAG.test(name.slice(prefix.length)),
+  );
+  if (found.length !== 1) {
+    throw new Error(
+      `want the one production edge bucket named ${prefix}<random tag>, found ${found.join(", ") || "none"}`,
+    );
+  }
+  return found[0]!;
 }
 
 export function assetPrefixOf(body: unknown, service: string): string {
@@ -32,7 +45,7 @@ export function assetPrefixOf(body: unknown, service: string): string {
 }
 
 export function releaseObjectUrl(bucket: string, assetPrefix: string, path: string): string {
-  const name = `${ASSETS_STORE}/${assetPrefix}${path}`;
+  const name = `${assetPrefix}${path}`;
   return `${STORAGE}/b/${bucket}/o/${encodeURIComponent(name)}?alt=media`;
 }
 

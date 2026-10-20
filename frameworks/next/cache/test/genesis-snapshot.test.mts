@@ -37,6 +37,8 @@ describe("the deploy's genesis snapshot", () => {
   });
 
   it("is addressed at the key the deploy writes it to", () => {
-    expect(tagSnapshotKey("prod/proj/web/BID")).toBe("prod/proj/web/BID/tag-clock.json");
+    expect(tagSnapshotKey({ project: "proj", env: "prod", app: "web", release: "r1a2b3c4d" })).toBe(
+      "tag-clock/proj/prod/web/r1a2b3c4d/tag-clock.json",
+    );
   });
 });

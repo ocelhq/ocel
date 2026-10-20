@@ -19,14 +19,11 @@ type servedRelease struct {
 }
 
 func readReleaseTag(record router.ReleaseRecord) string {
-	segments := strings.Split(record.IsrPrefix, "/")
-	if len(segments) != 5 || segments[4] != "isr" {
+	key, err := naming.ParseObjectKey(record.PagesPrefix)
+	if err != nil || key.Kind != naming.ObjectPages || key.Rest != "" {
 		return ""
 	}
-	if _, err := naming.ParseReleaseToken(segments[3]); err != nil {
-		return ""
-	}
-	return segments[3]
+	return key.Release.String()
 }
 
 func isReleaseTagged(record router.ReleaseRecord) bool {

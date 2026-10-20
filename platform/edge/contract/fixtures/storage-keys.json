@@ -1,0 +1,94 @@
+{
+  "keys": [
+    {
+      "key": "fn/shop/prod/web/r1a2b3c4d/api/5e1f.zip",
+      "kind": "fn",
+      "project": "shop",
+      "env": "prod",
+      "app": "web",
+      "release": "r1a2b3c4d",
+      "rest": "api/5e1f.zip"
+    },
+    {
+      "key": "assets/shop/pr-7/web/r1a2b3c4d/_next/static/chunks/app.js",
+      "kind": "assets",
+      "project": "shop",
+      "env": "pr-7",
+      "app": "web",
+      "release": "r1a2b3c4d",
+      "rest": "_next/static/chunks/app.js"
+    },
+    {
+      "key": "pages/shop/prod/web/r1a2b3c4d/index.cache.json",
+      "kind": "pages",
+      "project": "shop",
+      "env": "prod",
+      "app": "web",
+      "release": "r1a2b3c4d",
+      "rest": "index.cache.json"
+    },
+    {
+      "key": "tag-clock/shop/prod/web/r1a2b3c4d/tag-clock.json",
+      "kind": "tag-clock",
+      "project": "shop",
+      "env": "prod",
+      "app": "web",
+      "release": "r1a2b3c4d",
+      "rest": "tag-clock.json"
+    },
+    {
+      "key": "pages/shop/prod/web/r1a2b3c4d",
+      "kind": "pages",
+      "project": "shop",
+      "env": "prod",
+      "app": "web",
+      "release": "r1a2b3c4d",
+      "rest": ""
+    }
+  ],
+  "prefixes": [
+    {
+      "kind": "use-cache",
+      "coordinate": { "project": "shop" },
+      "prefix": "use-cache/shop/"
+    },
+    {
+      "kind": "use-cache",
+      "coordinate": { "project": "shop", "env": "pr-7" },
+      "prefix": "use-cache/shop/pr-7/"
+    },
+    {
+      "kind": "use-cache",
+      "coordinate": { "project": "shop", "env": "pr-7", "app": "web" },
+      "prefix": "use-cache/shop/pr-7/web/"
+    },
+    {
+      "kind": "use-cache",
+      "coordinate": { "project": "shop", "env": "pr-7", "app": "web", "release": "r1a2b3c4d" },
+      "prefix": "use-cache/shop/pr-7/web/r1a2b3c4d/"
+    }
+  ],
+  "coordinates": [
+    {
+      "value": "shop/prod/web/r1a2b3c4d",
+      "coordinate": { "project": "shop", "env": "prod", "app": "web", "release": "r1a2b3c4d" }
+    }
+  ],
+  "invalidCoordinates": ["shop/prod/web", "shop/prod/web/r1a2b3c4d/extra", "shop/prod/web/release1", "Shop/prod/web/r1a2b3c4d", ""],
+  "invalid": [
+    "isr/shop/prod/web/r1a2b3c4d/index.cache.json",
+    "payloads/upload-completer/5e1f.zip",
+    "pages/shop/prod/web/r1a2b3c4z/index.cache.json",
+    "pages/shop/prod/web/1a2b3c4d/index.cache.json",
+    "assets/shop/prod/web/r1a2b3c4d/../../other/r1a2b3c4d/x",
+    "assets/shop/prod/web/r1a2b3c4d/./x",
+    "assets/shop//web/r1a2b3c4d/x",
+    "assets/shop/prod/web/r1a2b3c4d/",
+    "assets/shop/prod/web/r1a2b3c4d/_next//x",
+    "assets/shop/prod/web",
+    "assets/Shop/prod/web/r1a2b3c4d/x",
+    "assets/shop/prod--x/web/r1a2b3c4d/x",
+    "prod/shop/web/r1a2b3c4d/assets/x",
+    ""
+  ]
+}

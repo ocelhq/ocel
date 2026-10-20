@@ -21,7 +21,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
-    isrPrefix: "prod/p1/web/build-1",
+    pagesPrefix: "pages/p1/prod/web/build-1",
     createdAt: 1_000,
     edge: {},
     ...over,
@@ -301,8 +301,8 @@ describe("resolveRelease", () => {
 
   it("keeps caches independent across projects sharing one binding", async () => {
     const records: Record<string, StoredRecord> = {
-      acme: makeRecord({ isrPrefix: "prev/acme/web/build-1" }),
-      globex: makeRecord({ isrPrefix: "prev/globex/web/build-1" }),
+      acme: makeRecord({ pagesPrefix: "prev/acme/web/build-1" }),
+      globex: makeRecord({ pagesPrefix: "prev/globex/web/build-1" }),
     };
     const binding = answerEveryRecordWith(async (args) => {
       const record = records[args.slug];

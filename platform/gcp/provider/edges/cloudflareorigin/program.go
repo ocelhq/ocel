@@ -35,17 +35,19 @@ func (p Offers) Program(ctx context.Context, req provider.EdgeProgramRequest) (e
 	if !credentials.hasAssetStoreKey() {
 		return edge.Program{}, notBootstrapped(req.Tier, req.Kind, "no asset-store credential")
 	}
+	buckets, err := c.TierBuckets(ctx, req.Tier)
+	if err != nil {
+		return edge.Program{}, err
+	}
 	return edge.Program{
 		Origin: edge.OriginReach{
 			Reach: edge.Reach{Kind: edge.ReachClientCertificate, Certificate: adopted.ClientCertificate.ID},
 			// TODO: serve ISR entries from the store at the edge (HoldsEntries) once the edge
 			// reads with a per-project identity. The asset-store key belongs to one account per
-			// tier, so widening it to cache/ would let each project's worker read every other
-			// project's entries, and entries live at cache/<project>/<app>/<env>/..., which
-			// EntriesPrefix plus the record's key cannot name.
+			// tier and reads the whole edge bucket, so each project's worker can already read
+			// every other project's pages entries.
 			Store: &edge.OriginStore{
-				URL:             bucket.GoogleStorage + "/" + url.PathEscape(c.Bucket(req.Tier)),
-				Prefix:          provider.StoreAssets + "/",
+				URL:             bucket.GoogleStorage + "/" + url.PathEscape(buckets.Edge),
 				Region:          storeSigningRegion,
 				AccessKeyID:     credentials.AssetStoreAccessKeyID,
 				SecretAccessKey: credentials.AssetStoreSecretAccessKey,

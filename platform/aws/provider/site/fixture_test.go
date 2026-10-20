@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -81,10 +80,6 @@ func storageCoordinate(env, slug, app string, release naming.ReleaseToken) namin
 		App:     naming.Sanitize(app),
 		Release: release,
 	}
-}
-
-func isrPrefixOf(c naming.Coordinate) string {
-	return strings.TrimSuffix(c.ISRPrefix(), naming.PathSeparator)
 }
 
 var liveVariables = variables.Store{

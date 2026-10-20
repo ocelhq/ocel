@@ -14,8 +14,9 @@ const (
 )
 
 type Deps struct {
-	AWS  aws.Config
-	HTTP *http.Client
+	AWS       aws.Config
+	HTTP      *http.Client
+	Namespace string
 }
 
 func (d Deps) http() *http.Client {
@@ -49,9 +50,10 @@ func newACM(deps Deps, region string) ACM {
 			o.Region = region
 			o.HTTPClient = deps.http()
 		}),
-		Region:   region,
-		Wait:     waitFor,
-		Attempts: issueAttempts,
-		Every:    issueEvery,
+		ManagedBy: deps.Namespace,
+		Region:    region,
+		Wait:      waitFor,
+		Attempts:  issueAttempts,
+		Every:     issueEvery,
 	}
 }

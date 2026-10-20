@@ -21,7 +21,7 @@ import {
 } from "../src/purge.mjs";
 
 const URL = "https://acme-prod.sub.workers.dev/.ocel/purge";
-const PREFIX = "prod/acme/web/r0a1b2c3d/isr";
+const PREFIX = "pages/acme/prod/web/r0a1b2c3d";
 const SEED = "seed-1";
 
 interface Sent {
@@ -61,27 +61,27 @@ beforeEach(() => {
 });
 
 describe("derivePurgeSecret", () => {
-  it("is the HMAC of the release's ISR prefix under the seed, in hex", async () => {
+  it("is the HMAC of the release's pages prefix under the seed, in hex", async () => {
     const expected = createHmac("sha256", SEED).update(PREFIX).digest("hex");
 
     expect(await derivePurgeSecret(SEED, PREFIX)).toBe(expected);
   });
 
   it("is the secret the Go edge contract derives from the same seed and prefix", async () => {
-    const { seed, isrPrefix, secret } = purgeSecretFixture;
+    const { seed, pagesPrefix, secret } = purgeSecretFixture;
 
-    expect(await derivePurgeSecret(seed, isrPrefix)).toBe(secret);
+    expect(await derivePurgeSecret(seed, pagesPrefix)).toBe(secret);
   });
 
   it("differs per prefix and per seed", async () => {
     const secret = await derivePurgeSecret(SEED, PREFIX);
-    expect(secret).not.toBe(await derivePurgeSecret(SEED, "prod/acme/web/r9/isr"));
+    expect(secret).not.toBe(await derivePurgeSecret(SEED, "pages/acme/prod/web/r9abcdef0"));
     expect(secret).not.toBe(await derivePurgeSecret("seed-2", PREFIX));
   });
 });
 
 describe("signPurge and verifyPurge", () => {
-  const body = JSON.stringify({ isrPrefix: PREFIX, mode: "purge", tags: [] });
+  const body = JSON.stringify({ pagesPrefix: PREFIX, mode: "purge", tags: [] });
   const bytes = new TextEncoder().encode(body);
 
   it("signs a body with the HMAC of it under the secret, in hex", async () => {
@@ -111,14 +111,16 @@ describe("signPurge and verifyPurge", () => {
 });
 
 describe("readReleaseToken", () => {
-  it("is the release token segment of a release's ISR prefix", () => {
+  it("is the release token of a release's pages prefix", () => {
     expect(readReleaseToken(PREFIX)).toBe("r0a1b2c3d");
   });
 
-  it("is nothing for a prefix that is not a release's ISR prefix", () => {
-    expect(readReleaseToken("prod/acme/web/r0a1b2c3d")).toBeUndefined();
-    expect(readReleaseToken("prod/acme/web/r0a1b2c3d/assets")).toBeUndefined();
-    expect(readReleaseToken("prod/acme//r0a1b2c3d/isr")).toBeUndefined();
+  it("is nothing for a prefix that is not a release's pages prefix", () => {
+    expect(readReleaseToken("pages/acme/prod/web")).toBeUndefined();
+    expect(readReleaseToken("assets/acme/prod/web/r0a1b2c3d")).toBeUndefined();
+    expect(readReleaseToken("pages/acme/prod/web/r0a1b2c3d/index.cache.json")).toBeUndefined();
+    expect(readReleaseToken("pages/acme//web/r0a1b2c3d")).toBeUndefined();
+    expect(readReleaseToken("prod/acme/web/r0a1b2c3d/isr")).toBeUndefined();
     expect(readReleaseToken("")).toBeUndefined();
   });
 });
@@ -174,7 +176,7 @@ describe("purgeHeaderFor", () => {
 describe("postPurge", async () => {
   const secret = await derivePurgeSecret(SEED, PREFIX);
 
-  it("posts the release's ISR prefix, the mode and each tag with its raisedAt, signed over the body", async () => {
+  it("posts the release's pages prefix, the mode and each tag with its raisedAt, signed over the body", async () => {
     await postPurge(sender(), URL, secret, PREFIX, [
       { tag: "products", mode: "purge", raisedAt: 100 },
     ]);
@@ -183,7 +185,7 @@ describe("postPurge", async () => {
     const sent = worker.sent[0]!;
     expect(sent.url).toBe(URL);
     expect(JSON.parse(sent.body)).toEqual({
-      isrPrefix: PREFIX,
+      pagesPrefix: PREFIX,
       mode: "purge",
       tags: [{ tag: "products", raisedAt: 100 }],
     });

@@ -38,7 +38,7 @@ const (
 	timeout = 30
 
 	reservedConcurrency = 10
-	codePrefix          = "connector"
+	codePayload         = "connector"
 	codeAbort           = 7
 
 	outputBucket    = "CodeBucketName"
@@ -177,7 +177,7 @@ func Install(ctx context.Context, apis APIs, ns account.Namespace, bundle Bundle
 	if err != nil {
 		return Installation{}, err
 	}
-	at, err := payloads.Place(ctx, apis.Objects, bucket, codePrefix, "connector", archived)
+	at, err := payloads.Place(ctx, apis.Objects, bucket, codePayload, "connector", archived)
 	if err != nil {
 		return Installation{}, err
 	}

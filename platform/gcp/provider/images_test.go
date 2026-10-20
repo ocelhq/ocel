@@ -25,7 +25,7 @@ func pushing(t *testing.T, endpoint string) *Provider {
 		tokens:    handedToken("ya29.stub"),
 		endpoint:  endpoint,
 		namespace: names.Namespace(),
-		resolved:  &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint},
+		resolved:  googletest.WithTierBuckets(&gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint}),
 		records:   fake.NewKeyValues(),
 	}
 }

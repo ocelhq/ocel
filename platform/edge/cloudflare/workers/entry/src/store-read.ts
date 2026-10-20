@@ -26,7 +26,7 @@ export interface StoreWindow {
 }
 
 export interface StoreCall {
-  isrPrefix: string;
+  pagesPrefix: string;
   release: string;
   entryPath: string;
   fallbackPath?: string;
@@ -65,7 +65,7 @@ function parseEntry(body: string): CacheEntryFile | null {
 }
 
 async function readEntry(deps: StoreReadDeps, call: StoreCall, path: string) {
-  const key = entryObjectKey(call.isrPrefix, cacheKey(path));
+  const key = entryObjectKey(call.pagesPrefix, cacheKey(path));
   if (key === null) return null;
   const object = await deps.source.get(key);
   return object ? parseEntry(await object.text()) : null;

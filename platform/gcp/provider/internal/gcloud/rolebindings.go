@@ -4,15 +4,30 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
-func ObjectPrefixCondition(c *Clients, title string, tier environment.Tier, prefix string) *policy.Condition {
+const bucketResourcePrefix = "projects/_/buckets/"
+
+func ObjectKindsCondition(title string, buckets names.TierBuckets, scope naming.Coordinate, kinds ...naming.ObjectKind) *policy.Condition {
+	starts := make([]string, len(kinds))
+	for i, kind := range kinds {
+		objects := bucketResourcePrefix + buckets.Of(kind.Class()) + "/objects/" + scope.StoragePrefix(kind)
+		starts[i] = fmt.Sprintf("resource.name.startsWith(%q)", objects)
+	}
+	return &policy.Condition{Title: title, Expression: strings.Join(starts, " || ")}
+}
+
+func BucketCondition(title, bucket string) *policy.Condition {
+	name := bucketResourcePrefix + bucket
 	return &policy.Condition{
 		Title:      title,
-		Expression: fmt.Sprintf("resource.name.startsWith(%q)", "projects/_/buckets/"+c.Bucket(tier)+"/objects/"+prefix),
+		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)", name, name+"/objects/"),
 	}
 }
 

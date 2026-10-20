@@ -66,6 +66,7 @@ type deployRun struct {
 	spanEvents   *spanEvents
 	manifest     *contractv1.Manifest
 	spec         provider.DeploySpec
+	managedBy    string
 	lifecycle    stackrecords.Lifecycle
 	spans        deploySpans
 
@@ -165,6 +166,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		spanEvents:   newSpanEvents(sender),
 		manifest:     req.GetManifest(),
 		spec:         spec,
+		managedBy:    h.session.managedBy(),
 		lifecycle:    readPreviewLifecycle(req.GetEnvironment()),
 		selection:    req.GetEdge(),
 		builtAlias:   req.GetAliasToken(),

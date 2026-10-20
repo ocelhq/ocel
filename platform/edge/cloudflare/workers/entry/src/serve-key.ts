@@ -1,3 +1,5 @@
+import { parseObjectKey as parseStorageKey } from "@platform/edge-contract/storage-key";
+
 export interface ObjectProps {
   kind: "object";
   host: string;
@@ -50,7 +52,7 @@ export interface StoredEntryCall {
 
 export interface RenderRelease {
   slug: string;
-  isrPrefix: string;
+  pagesPrefix: string;
   tags: string[];
   sharesFallbackShell?: boolean;
   honoursAppCacheHeaders?: boolean;
@@ -66,8 +68,6 @@ export interface ServeCall {
 
 const SERVE_ORIGIN = "https://serve.ocel.invalid";
 
-const STORAGE_PREFIX_SEGMENTS = 4;
-
 const VISITOR_CREDENTIAL_HEADERS = ["cookie", "authorization"] as const;
 
 const CACHE_KEYED_HEADERS = [
@@ -82,23 +82,16 @@ const CACHE_KEYED_HEADERS = [
   "x-method-override",
 ] as const;
 
-function isReleaseObjectPath(segments: readonly string[]): boolean {
-  return (
-    segments.length > STORAGE_PREFIX_SEGMENTS &&
-    !segments.some((segment) => segment === "" || segment === "." || segment === "..")
-  );
-}
-
 export function isReleaseObjectKey(key: string): boolean {
-  return isReleaseObjectPath(key.split("/"));
+  return (parseStorageKey(key)?.rest ?? "") !== "";
 }
 
 export function parseKeyRelease(key: string): { app: string; release: string } {
-  const segments = key.split("/");
-  if (!isReleaseObjectPath(segments)) {
+  const parsed = parseStorageKey(key);
+  if (parsed === undefined || parsed.rest === "") {
     throw new Error(`ocel: ${key} lies outside a release's storage prefix`);
   }
-  return { app: segments[2], release: segments[3] };
+  return { app: parsed.app, release: parsed.release };
 }
 
 export function encodeKeyPath(key: string): string {

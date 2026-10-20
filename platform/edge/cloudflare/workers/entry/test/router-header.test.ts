@@ -14,7 +14,7 @@ const originRecord: StoredRecord = {
   rootFunction: "api",
   functionUrls: { api: FN_URL },
   assetPrefix: "",
-  isrPrefix: "",
+  pagesPrefix: "",
   createdAt: 1_000,
   edge: {},
 };

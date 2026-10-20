@@ -148,7 +148,7 @@ beforeAll(async () => {
   process.env.OCEL_CACHE_TAG_PURGE = "1";
   process.env.OCEL_EDGE_CACHE = "marked";
 
-  process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
+  process.env.OCEL_STORAGE_COORDINATE = "shop/prod/web/r0a1b2c3d";
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = launcherPath;
   await import("../src/next/entrypoint.mjs");

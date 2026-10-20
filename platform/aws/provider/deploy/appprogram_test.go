@@ -55,9 +55,9 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 				{Name: "fn--web--admin", Route: "/admin", ArtifactDir: writeTree(t, map[string]string{"index.js": "the admin"})},
 			},
 			Routing:     &provider.RoutingSpec{RootFunction: "fn--web--entry", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}},
-			ISR:         &provider.ISRSpec{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
-			Bytecode:    &provider.BytecodeSpec{Prefix: "shop/prod/web/r1/bytecode"},
-			AssetPrefix: coord.AssetKey(""),
+			ISR:         &provider.ISRSpec{Coordinate: coord, TagNamespace: "tag:shop"},
+			Bytecode:    &provider.BytecodeSpec{Prefix: bytecodePrefixOf(coord)},
+			AssetPrefix: coord.AssetPrefix(),
 			Static:      nextStatic,
 		},
 	}
@@ -91,8 +91,8 @@ func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 	if entry["OCEL_BUILD_ID"] != "d1" {
 		t.Errorf("OCEL_BUILD_ID = %q, want the build the spec named", entry["OCEL_BUILD_ID"])
 	}
-	if entry["OCEL_ISR_PREFIX"] != spec.App.ISR.Prefix {
-		t.Errorf("OCEL_ISR_PREFIX = %q, want the ledger prefix the spec passed", entry["OCEL_ISR_PREFIX"])
+	if want := "shop/prod/web/" + spec.Ref.Name.Release.String(); entry["OCEL_STORAGE_COORDINATE"] != want {
+		t.Errorf("OCEL_STORAGE_COORDINATE = %q, want %q, the release the spec passed", entry["OCEL_STORAGE_COORDINATE"], want)
 	}
 	if entry["OCEL_ISR_TAG_NAMESPACE"] != spec.App.ISR.TagNamespace {
 		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want the namespace the spec passed", entry["OCEL_ISR_TAG_NAMESPACE"])
@@ -270,7 +270,7 @@ func stagedOf(spec provider.StackSpec) []functioncode.Upload {
 	for _, function := range spec.App.Functions {
 		staged = append(staged, functioncode.Upload{
 			Name: function.Name,
-			Ref:  provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: function.Name + ".zip"},
+			Ref:  provider.ArtifactRef{Key: "fn/shop/prod/web/r1a2b3c4d/" + function.Name + "/1.zip"},
 		})
 	}
 	return staged

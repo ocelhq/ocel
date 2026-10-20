@@ -31,11 +31,11 @@ const record: StoredRecord = {
   routeTable: { format: "next", key: routeTableKey() },
   static: { immutablePrefixes: ["/_next/static/"] },
   functionUrls: { "/": "https://abc.lambda-url.eu-west-2.on.aws/" },
-  assetPrefix: "prod/p1/web/deploy-2/assets",
-  isrPrefix: "prod/p1/web/deploy-2/isr",
+  assetPrefix: "assets/p1/prod/web/r00000d02",
+  pagesPrefix: "pages/p1/prod/web/r00000d02",
   createdAt: 1_000,
   edge: {},
-  buildAssets: { "build-1": "prod/p1/web/deploy-1/assets" },
+  buildAssets: { "build-1": "assets/p1/prod/web/r00000d01" },
 };
 
 const env: Env = {
@@ -63,24 +63,24 @@ describe("an asset request naming the build that linked it", () => {
   it("reads an immutable asset from the prefix of the earlier build its dpl names", async () => {
     expect(
       await assetKeyRead("https://shop.example.com/_next/static/chunks/a.js?dpl=build-1"),
-    ).toBe("prod/p1/web/deploy-1/assets/_next/static/chunks/a.js");
+    ).toBe("assets/p1/prod/web/r00000d01/_next/static/chunks/a.js");
   });
 
   it("reads from the served release's prefix when dpl names the build it serves", async () => {
     expect(
       await assetKeyRead("https://shop.example.com/_next/static/chunks/a.js?dpl=build-2"),
-    ).toBe("prod/p1/web/deploy-2/assets/_next/static/chunks/a.js");
+    ).toBe("assets/p1/prod/web/r00000d02/_next/static/chunks/a.js");
   });
 
   it("reads from the served release's prefix when dpl names a build the pointer never served", async () => {
     expect(
       await assetKeyRead("https://shop.example.com/_next/static/chunks/a.js?dpl=build-9"),
-    ).toBe("prod/p1/web/deploy-2/assets/_next/static/chunks/a.js");
+    ).toBe("assets/p1/prod/web/r00000d02/_next/static/chunks/a.js");
   });
 
   it("reads a path outside the immutable prefixes from the served release whatever dpl names", async () => {
     expect(await assetKeyRead("https://shop.example.com/robots.txt?dpl=build-1")).toBe(
-      "prod/p1/web/deploy-2/assets/robots.txt",
+      "assets/p1/prod/web/r00000d02/robots.txt",
     );
   });
 });

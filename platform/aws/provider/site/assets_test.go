@@ -64,11 +64,11 @@ func edgeReadingConfig(root string, asset *fakeArtifactStore) publication {
 }
 
 func publishedImageConfig(key string) bool {
-	return strings.HasSuffix(key, "/"+naming.ImageConfigFile) && !strings.Contains(key, "/assets/")
+	return strings.HasPrefix(key, "image-config/") && strings.HasSuffix(key, "/"+naming.ImageConfigFile)
 }
 
 func assetPrefixFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "assets"
+	return strings.TrimSuffix(kindKeyFor("assets", app, buildID, ""), "/")
 }
 
 func assetKeyFor(app, buildID, rest string) string {
@@ -76,7 +76,7 @@ func assetKeyFor(app, buildID, rest string) string {
 }
 
 func imageConfigKeyFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "image-config.json"
+	return kindKeyFor("image-config", app, buildID, "image-config.json")
 }
 
 func TestAppAssetPrefix(t *testing.T) {
@@ -85,9 +85,6 @@ func TestAppAssetPrefix(t *testing.T) {
 	want := assetPrefixFor("web", testBuildID)
 	if got != want {
 		t.Errorf("appAssetPrefix = %q, want %q", got, want)
-	}
-	if config := imageConfigKeyFor("web", testBuildID); !strings.HasPrefix(config, strings.TrimSuffix(got, "assets")) {
-		t.Errorf("image config %q does not sit beside the assets under one release prefix %q", config, got)
 	}
 }
 

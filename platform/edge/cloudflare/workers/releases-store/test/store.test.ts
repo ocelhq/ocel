@@ -23,7 +23,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     routeTable: { format: "next", key: "prod/p1/web/route-table.json" },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
-    isrPrefix: "prod/p1/web/build-1",
+    pagesPrefix: "pages/p1/prod/web/build-1",
     createdAt: 1_000,
     ...over,
   };
@@ -184,7 +184,7 @@ describe("movePointer", () => {
     const admin = makePointerMove({
       pointer: "pr-42",
       promotionId: "promo-preview",
-      records: [makeRecord({ app: "admin", isrPrefix: "prod/p1/admin/build-1" })],
+      records: [makeRecord({ app: "admin", pagesPrefix: "pages/p1/prod/admin/build-1" })],
     });
     expect(await store.movePointer(admin)).toEqual({ kind: "moved" });
   });
@@ -376,17 +376,19 @@ describe("removePointer", () => {
 });
 
 describe("the builds a pointer served before", () => {
+  const token = (n: number) => `r${String(n).padStart(8, "0")}`;
+
   const build = (n: number, over: Partial<StoredRecord> = {}) =>
     makeRecord({
       release: `deploy-${n}`,
       buildId: `build-${n}`,
-      assetPrefix: `prod/p1/web/r${n}/assets`,
-      isrPrefix: `prod/p1/web/r${n}/isr`,
+      assetPrefix: `assets/p1/prod/web/${token(n)}`,
+      pagesPrefix: `pages/p1/prod/web/${token(n)}`,
       ...over,
     });
 
   const keptThrough = (n: number): KeptRelease[] =>
-    Array.from({ length: n }, (_, i) => ({ app: "web", releaseToken: `r${i + 1}` }));
+    Array.from({ length: n }, (_, i) => ({ app: "web", releaseToken: token(i + 1) }));
 
   async function promote(
     store: ReturnType<typeof storeStub>,
@@ -416,7 +418,10 @@ describe("the builds a pointer served before", () => {
       kind: "record",
       record: {
         buildId: "build-3",
-        buildAssets: { "build-1": "prod/p1/web/r1/assets", "build-2": "prod/p1/web/r2/assets" },
+        buildAssets: {
+          "build-1": "assets/p1/prod/web/r00000001",
+          "build-2": "assets/p1/prod/web/r00000002",
+        },
       },
     });
   });
@@ -425,7 +430,7 @@ describe("the builds a pointer served before", () => {
     const store = storeStub();
     await promote(
       store,
-      [build(1), build(1, { app: "admin", assetPrefix: "prod/p1/admin/r1/assets" })],
+      [build(1), build(1, { app: "admin", assetPrefix: "assets/p1/prod/admin/r00000001" })],
       1,
     );
     await store.movePointer(
@@ -437,7 +442,7 @@ describe("the builds a pointer served before", () => {
 
     expect(served).toMatchObject({
       kind: "record",
-      record: { buildAssets: { "build-1": "prod/p1/web/r1/assets" } },
+      record: { buildAssets: { "build-1": "assets/p1/prod/web/r00000001" } },
     });
   });
 
@@ -462,7 +467,7 @@ describe("the builds a pointer served before", () => {
 
     expect(served).toMatchObject({
       kind: "record",
-      record: { buildAssets: { "build-2": "prod/p1/web/r2/assets" } },
+      record: { buildAssets: { "build-2": "assets/p1/prod/web/r00000002" } },
     });
     expect(served.kind === "record" && served.record.buildAssets).not.toHaveProperty("build-1");
   });

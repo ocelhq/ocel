@@ -35,7 +35,7 @@ func uploadNames(uploads []googletest.Upload) []string {
 	return names
 }
 
-func TestANextDeploySeedsUnderTheCacheStoreProjectFirst(t *testing.T) {
+func TestANextDeploySeedsItsPagesAndFetchCacheKindFirst(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}", "fetch-cache/abc": "x"})
@@ -47,7 +47,7 @@ func TestANextDeploySeedsUnderTheCacheStoreProjectFirst(t *testing.T) {
 	uploads := server.Stored()
 	names := uploadNames(uploads)
 	slices.Sort(names)
-	want := []string{"cache/shop/web/prod/r1/isr/cache/index.cache.json", "cache/shop/web/prod/r1/isr/fetch-cache/abc"}
+	want := []string{"fetch-cache/shop/prod/web/r1a2b3c4d/abc", "pages/shop/prod/web/r1a2b3c4d/index.cache.json"}
 	if !slices.Equal(names, want) {
 		t.Errorf("the deploy uploaded %v, want the two entries and no tag file", names)
 	}
@@ -64,8 +64,8 @@ func TestANextDeploySeedsUnderTheCacheStoreProjectFirst(t *testing.T) {
 
 func TestARedeployOfTheSameReleaseKeepsTheEntriesItHas(t *testing.T) {
 	server := &googletest.Run{Present: map[string]bool{
-		"cache/shop/web/prod/r1/isr/cache/index.cache.json": true,
-		"cache/shop/web/prod/r1/isr/fetch-cache/abc":        true,
+		"pages/shop/prod/web/r1a2b3c4d/index.cache.json": true,
+		"fetch-cache/shop/prod/web/r1a2b3c4d/abc":        true,
 	}}
 	p := providerServing(server, t)
 	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}", "fetch-cache/abc": "x"})
@@ -99,7 +99,7 @@ func TestANodeAppSeedsNothing(t *testing.T) {
 	spec := nextSpec()
 	spec.App.Framework = buildoutput.FrameworkNode
 	spec.App.Functions[0].Framework.Name = buildoutput.FrameworkNode
-	spec.App.ISR = &provider.ISRSpec{Prefix: "prod/shop/web/r1/isr"}
+	spec.App.ISR = &provider.ISRSpec{Coordinate: cachedRelease()}
 	server := &googletest.Run{}
 	p := providerServing(server, t)
 	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}"})

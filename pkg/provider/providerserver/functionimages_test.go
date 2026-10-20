@@ -98,8 +98,8 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 	}
 
 	for _, ref := range p.Artifacts().(*fake.Artifacts).Keys() {
-		if ref.Bucket == provider.StoreFunctions {
-			t.Errorf("the deploy uploaded %s to the function store, want the image to be the only thing shipped", ref.Key)
+		if kind, _ := naming.ParseObjectKind(ref.Key); kind == naming.ObjectFunction {
+			t.Errorf("the deploy uploaded the function artifact %s, want the image to be the only thing shipped", ref.Key)
 		}
 	}
 

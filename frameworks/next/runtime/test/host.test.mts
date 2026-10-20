@@ -129,7 +129,7 @@ describe("a host the Next runtime starts on", () => {
 
     const refused = refuseIncompleteHost(
       { newUseCacheStore: stores.newUseCacheStore },
-      { OCEL_ISR_PREFIX: "app/isr" },
+      { OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d" },
     );
 
     expect(refused?.message).toMatch(/installed no cache store/);
@@ -140,7 +140,7 @@ describe("a host the Next runtime starts on", () => {
 
     const refused = refuseIncompleteHost(
       { newCacheStore: stores.newCacheStore },
-      { OCEL_ISR_PREFIX: "app/isr" },
+      { OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d" },
     );
 
     expect(refused?.message).toMatch(/installed no use-cache store/);
@@ -163,7 +163,9 @@ describe("a host the Next runtime starts on", () => {
   test("starts when it installed every store the app's cache prefix needs", async () => {
     const { refuseIncompleteHost } = await import("../src/host.mjs");
 
-    expect(refuseIncompleteHost(stores, { OCEL_ISR_PREFIX: "app/isr" })).toBeUndefined();
+    expect(
+      refuseIncompleteHost(stores, { OCEL_STORAGE_COORDINATE: "shop/prod/web/r0a1b2c3d" }),
+    ).toBeUndefined();
   });
 });
 

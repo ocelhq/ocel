@@ -1,5 +1,6 @@
 import { readReleaseToken } from "@platform/edge-contract/purge";
 import type { ReleaseRecord } from "@platform/edge-contract/release-record";
+import { parseObjectKey } from "@platform/edge-contract/storage-key";
 import { matchesSecret } from "./auth";
 
 export interface SqlStore {
@@ -192,7 +193,7 @@ function recordBuild(
     record.app,
     record.buildId,
     record.assetPrefix,
-    readReleaseToken(record.isrPrefix) ?? "",
+    readReleaseToken(record.pagesPrefix) ?? "",
   );
   store.sql.exec(
     `DELETE FROM builds WHERE pointer = ? AND app = ? AND NOT EXISTS (
@@ -290,19 +291,22 @@ export type ServedRecordResult<Record = StoredRecord> =
   | { kind: "not-served" }
   | { kind: "forgotten" };
 
-export function readServedRecord(store: SqlStore, isrPrefix: string): ServedRecordResult {
+export function readServedRecord(store: SqlStore, pagesPrefix: string): ServedRecordResult {
   const row = store.sql
     .exec<{ data: string }>(
-      `SELECT data FROM served WHERE json_extract(data, '$.isrPrefix') = ? LIMIT 1`,
-      isrPrefix,
+      `SELECT data FROM served WHERE json_extract(data, '$.pagesPrefix') = ? LIMIT 1`,
+      pagesPrefix,
     )
     .toArray()[0];
   if (row) return { kind: "record", record: JSON.parse(row.data) as StoredRecord };
-  const releaseToken = readReleaseToken(isrPrefix);
-  if (releaseToken === undefined) return { kind: "not-served" };
-  const app = isrPrefix.split("/")[2];
+  const pages = parseObjectKey(pagesPrefix);
+  if (pages?.kind !== "pages" || pages.rest !== "") return { kind: "not-served" };
   const kept = store.sql
-    .exec(`SELECT 1 FROM kept WHERE app = ? AND release_token = ? LIMIT 1`, app, releaseToken)
+    .exec(
+      `SELECT 1 FROM kept WHERE app = ? AND release_token = ? LIMIT 1`,
+      pages.app,
+      pages.release,
+    )
     .toArray();
   return kept.length > 0 ? { kind: "not-served" } : { kind: "forgotten" };
 }

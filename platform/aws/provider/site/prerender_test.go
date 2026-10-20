@@ -119,11 +119,9 @@ func bakedBuilds(t *testing.T, cfg publication, manifest *contractv1.Manifest, b
 		if app.GetFramework().GetName() != buildoutput.FrameworkNext {
 			continue
 		}
-		prefix := isrPrefixOf(coord)
 		cache := &ISR{
 			Coord:  coord,
 			Bucket: cfg.buckets.Assets,
-			Prefix: prefix,
 		}
 		if cfg.buckets.CanEdgeRead() {
 			cache.EdgeReadable = true
@@ -198,16 +196,8 @@ func releaseTokenFor(buildID string) string {
 	return deployedAs(buildID).Token().String()
 }
 
-func storagePrefixFor(env, slug, app, buildID string) string {
-	return env + "/" + slug + "/" + app + "/" + releaseTokenFor(buildID) + "/"
-}
-
-func isrPrefixFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "isr"
-}
-
-func isrKeyFor(app, buildID, rest string) string {
-	return isrPrefixFor(app, buildID) + "/" + rest
+func kindKeyFor(kind, app, buildID, rest string) string {
+	return kind + "/proj/prod/" + app + "/" + releaseTokenFor(buildID) + "/" + rest
 }
 
 func entryPuts(puts []string) []string {
@@ -235,9 +225,9 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := entryPuts(f.puts)
 		slices.Sort(got)
 		want := []string{
-			isrKeyFor("admin", testBuildID, "cache/dash.cache.json"),
-			isrKeyFor("admin", testBuildID, "cache/users.cache.json"),
-			isrKeyFor("web", testBuildID, "cache/index.cache.json"),
+			kindKeyFor("pages", "admin", testBuildID, "dash.cache.json"),
+			kindKeyFor("pages", "admin", testBuildID, "users.cache.json"),
+			kindKeyFor("pages", "web", testBuildID, "index.cache.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -261,11 +251,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := append([]string(nil), asset.puts...)
 		slices.Sort(got)
 		want := []string{
-			isrKeyFor("admin", testBuildID, "cache/dash.cache.json"),
-			isrKeyFor("admin", testBuildID, "cache/users.cache.json"),
-			isrKeyFor("admin", testBuildID, "tag-clock.json"),
-			isrKeyFor("web", testBuildID, "cache/index.cache.json"),
-			isrKeyFor("web", testBuildID, "tag-clock.json"),
+			kindKeyFor("pages", "admin", testBuildID, "dash.cache.json"),
+			kindKeyFor("pages", "admin", testBuildID, "users.cache.json"),
+			kindKeyFor("pages", "web", testBuildID, "index.cache.json"),
+			kindKeyFor("tag-clock", "admin", testBuildID, "tag-clock.json"),
+			kindKeyFor("tag-clock", "web", testBuildID, "tag-clock.json"),
 		}
 		if !slices.Equal(got, want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -309,7 +299,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		}
 		after := time.Now().UnixMilli()
 
-		for _, key := range []string{isrKeyFor("web", testBuildID, "tag-clock.json"), isrKeyFor("admin", testBuildID, "tag-clock.json")} {
+		for _, key := range []string{kindKeyFor("tag-clock", "web", testBuildID, "tag-clock.json"), kindKeyFor("tag-clock", "admin", testBuildID, "tag-clock.json")} {
 			body, ok := store.putBodies[key]
 			if !ok {
 				t.Fatalf("no snapshot seeded at %q; puts = %v", key, store.puts)
@@ -335,17 +325,17 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("keeps an existing snapshot", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeArtifactStore{exists: map[string]bool{isrKeyFor("web", testBuildID, "tag-clock.json"): true}}
+		store := &fakeArtifactStore{exists: map[string]bool{kindKeyFor("tag-clock", "web", testBuildID, "tag-clock.json"): true}}
 		cfg := publication{root: twoAppTree(t), buckets: Buckets{Assets: "assets", Objects: store}}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		if _, ok := store.putBodies[isrKeyFor("web", testBuildID, "tag-clock.json")]; ok {
+		if _, ok := store.putBodies[kindKeyFor("tag-clock", "web", testBuildID, "tag-clock.json")]; ok {
 			t.Error("an existing snapshot was overwritten, want it left as the publisher last wrote it")
 		}
-		if _, ok := store.putBodies[isrKeyFor("admin", testBuildID, "tag-clock.json")]; !ok {
+		if _, ok := store.putBodies[kindKeyFor("tag-clock", "admin", testBuildID, "tag-clock.json")]; !ok {
 			t.Error("the other app's snapshot was not seeded; one refusal must not stop the rest")
 		}
 	})
@@ -432,8 +422,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 		got := entryPuts(f.puts)
 		slices.Sort(got)
 		want := []string{
-			isrKeyFor("web", testBuildID, "cache/blog/post.cache.json"),
-			isrKeyFor("web", testBuildID, "cache/index.cache.json"),
+			kindKeyFor("pages", "web", testBuildID, "blog/post.cache.json"),
+			kindKeyFor("pages", "web", testBuildID, "index.cache.json"),
 		}
 		if len(got) != len(want) {
 			t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -460,11 +450,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		page := isrKeyFor("web", testBuildID, "cache/index.cache.json")
+		page := kindKeyFor("pages", "web", testBuildID, "index.cache.json")
 		if got := asset.taggings[page]; got != wantEdgeReadableTagging {
 			t.Errorf("page entry %s tagging = %q, want %q", page, got, wantEdgeReadableTagging)
 		}
-		fetch := isrKeyFor("web", testBuildID, "fetch-cache/") + hash + ".cache.json"
+		fetch := kindKeyFor("fetch-cache", "web", testBuildID, "") + hash + ".cache.json"
 		if got, tagged := asset.taggings[fetch]; tagged {
 			t.Errorf("fetch entry %s tagging = %q, want none: the data cache is never edge-readable", fetch, got)
 		}
@@ -503,7 +493,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
 		}
 
-		fetch := isrKeyFor("web", testBuildID, "fetch-cache/") + hash + ".cache.json"
+		fetch := kindKeyFor("fetch-cache", "web", testBuildID, "") + hash + ".cache.json"
 		if !slices.Contains(asset.puts, fetch) {
 			t.Fatalf("asset bucket got %v, want the fetch entry %s", asset.puts, fetch)
 		}

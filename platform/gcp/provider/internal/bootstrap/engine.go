@@ -13,6 +13,7 @@ import (
 	"cloud.google.com/go/storage"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -222,9 +223,14 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 		return err
 	}
 
-	stampBucket := Resource{Kind: KindBucket, Name: read.Names.Bucket(req.Tier)}
+	stampBucket := stateBucketOf(read)
 	if err := b.Provision(ctx, read, stampItem(items, stampBucket), progress); err != nil {
 		return err
+	}
+	if read.StateBucket == "" {
+		if read.StateBucket, err = b.stateBucket(ctx, req.Tier); err != nil {
+			return err
+		}
 	}
 	if err := b.dropParts(ctx, read, req, progress); err != nil {
 		return err
@@ -283,6 +289,10 @@ func RefuseReplacements(read Survey, items []Resource) error {
 		read.Tier, strings.Join(replaced, "; "))
 }
 
+func stateBucketOf(read Survey) Resource {
+	return Resource{Kind: KindBucket, Name: read.Names.UntaggedTierBucket(read.Tier, naming.StorageState), Class: naming.StorageState}
+}
+
 func stampItem(items []Resource, stampBucket Resource) Resource {
 	if at := slices.IndexFunc(items, func(each Resource) bool { return each.ID() == stampBucket.ID() }); at >= 0 {
 		return items[at]
@@ -318,7 +328,7 @@ func (b Engine) stampWith(ctx context.Context, read Survey, written Stamp, gener
 	if err != nil {
 		return 0, fmt.Errorf("write %s: %w", StampObject, err)
 	}
-	object := client.Bucket(read.Names.Bucket(read.Tier)).Object(StampObject).If(onlyWriter(generation))
+	object := client.Bucket(read.StateBucket).Object(StampObject).If(onlyWriter(generation))
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write(append(body, '\n')); err != nil {
 		writer.Close()
@@ -345,11 +355,11 @@ func (b Engine) stampRefusal(ctx context.Context, read Survey, err error) error 
 	return refusal.Refuse(refusal.CodeBusy,
 		"%s wrote %s in %s while this run was writing it, and two bootstraps of the same tier interleaving leave a stack neither of them describes.\n"+
 			"Wait for that run to finish, then try again",
-		writerNamed(read.Stamp.Writer), StampObject, read.Names.Bucket(read.Tier))
+		writerNamed(read.Stamp.Writer), StampObject, read.StateBucket)
 }
 
 func (b Engine) writerNow(ctx context.Context, read Survey) string {
-	now, err := b.stamped(ctx, read.Names.Bucket(read.Tier))
+	now, err := b.stamped(ctx, read.StateBucket)
 	if err != nil || !now.present {
 		return read.Stamp.Writer
 	}
@@ -431,7 +441,7 @@ var removalOrder = []Kind{
 }
 
 func Removals(read Survey) []Removal {
-	stampBucket := Resource{Kind: KindBucket, Name: read.Names.Bucket(read.Tier)}
+	stampBucket := stateBucketOf(read)
 	rank := func(target Resource) int {
 		if target.ID() == stampBucket.ID() {
 			return len(removalOrder)
@@ -467,6 +477,7 @@ func deleting(read Survey, target Resource) Removal {
 
 func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	defer b.Surveyed.forget(tier)
+	defer b.Clients.ForgetTierBuckets(tier)
 	read, err := b.survey(ctx, tier)
 	if err != nil {
 		return err
@@ -475,7 +486,7 @@ func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress prog
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s still stores the state of %s, and removing the bucket a stack is recorded in strands what that stack provisioned.\n"+
 				"Run `%s` in every project deployed here first",
-			read.Names.StateBucket(tier), read.stateOf, destroyIn(tier))
+			read.StateBucket, read.stateOf, destroyIn(tier))
 	}
 	if err := b.partsFree(ctx, tier, read.Stamp.Parts); err != nil {
 		return err

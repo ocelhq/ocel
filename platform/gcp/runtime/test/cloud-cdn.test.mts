@@ -149,11 +149,11 @@ test("a service told no release adds no tag", () => {
 });
 
 test("a service whose edge purges nothing by tag is told no release", () => {
-  expect(cloudCdnRelease({ OCEL_ISR_PREFIX: `production/shop/web/${release}/isr` })).toBeNull();
+  expect(cloudCdnRelease({ OCEL_STORAGE_COORDINATE: `shop/prod/web/${release}` })).toBeNull();
   expect(
     cloudCdnRelease({
       OCEL_CACHE_TAG_PURGE: "1",
-      OCEL_ISR_PREFIX: `production/shop/web/${release}/isr`,
+      OCEL_STORAGE_COORDINATE: `shop/prod/web/${release}`,
     }),
   ).toBe(release);
 });

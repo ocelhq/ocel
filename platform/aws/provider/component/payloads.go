@@ -14,9 +14,9 @@ type Artifacts struct {
 	Bucket  string
 }
 
-func PlacePayload(ctx context.Context, artifacts Artifacts, tier environment.Tier, keyPrefix, what string, payload payloads.Payload) (payloads.Placement, error) {
+func PlacePayload(ctx context.Context, artifacts Artifacts, tier environment.Tier, name, what string, payload payloads.Payload) (payloads.Placement, error) {
 	if artifacts.Bucket == "" {
 		return payloads.Placement{}, fmt.Errorf("no artifact bucket to place the %s into; re-run `%s`", what, provider.BootstrapCommand(tier))
 	}
-	return payloads.Place(ctx, artifacts.Objects, artifacts.Bucket, keyPrefix, what, payload)
+	return payloads.Place(ctx, artifacts.Objects, artifacts.Bucket, name, what, payload)
 }

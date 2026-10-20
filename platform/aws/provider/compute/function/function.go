@@ -411,12 +411,12 @@ func ResourceNames(project string, stack naming.StackName, logicalName string) m
 }
 
 func FindArtifact(buckets site.Buckets, ref provider.ArtifactRef) (Artifact, error) {
-	bucket, err := buckets.Find(ref.Bucket)
-	if err != nil {
-		return Artifact{}, err
-	}
 	if ref.Key == "" {
 		return Artifact{}, fmt.Errorf("no code was uploaded for it")
+	}
+	bucket, err := buckets.Find(ref.Key)
+	if err != nil {
+		return Artifact{}, err
 	}
 	return Artifact{Bucket: bucket, Key: ref.Key}, nil
 }

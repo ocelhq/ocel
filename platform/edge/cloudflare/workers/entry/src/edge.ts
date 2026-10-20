@@ -1,4 +1,5 @@
 import { type EdgeBundle, edgeBundleVersion } from "@platform/edge-contract/edge-bundle";
+import { parseObjectKey } from "@platform/edge-contract/storage-key";
 import type { ServedCode, ServedRecord } from "./served-record";
 import { renderWorkersShim, WORKERS_SHIM_MODULE } from "./workers-shim";
 
@@ -25,17 +26,13 @@ export interface EdgeVariables {
 
 const BUNDLE_FILE = "bundle.json";
 
-const BUNDLE_DIR = "edge";
-
 export function ownBundleKey(bundleKey: string, slug: string, app: string): boolean {
-  const segments = bundleKey.split("/");
+  const parsed = parseObjectKey(bundleKey);
   return (
-    segments.length === 6 &&
-    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..") &&
-    segments[1] === slug &&
-    segments[2] === app &&
-    segments[4] === BUNDLE_DIR &&
-    segments[5] === BUNDLE_FILE
+    parsed?.kind === "bundles" &&
+    parsed.project === slug &&
+    parsed.app === app &&
+    parsed.rest === BUNDLE_FILE
   );
 }
 
@@ -51,11 +48,11 @@ export interface EdgeRuntime {
 export function createReleaseEdgeInvoker(
   runtime: EdgeRuntime,
   store: EdgeObjectStore,
-  record: Pick<ServedRecord, "isrPrefix" | "releaseFingerprint" | "edge">,
+  record: Pick<ServedRecord, "pagesPrefix" | "releaseFingerprint" | "edge">,
   code: ServedCode,
 ): EdgeInvoker {
   return createEdgeInvoker(runtime.loader, code, store, {
-    scope: record.isrPrefix,
+    scope: record.pagesPrefix,
     env: record.edge.env,
     envelope: record.edge.envelope,
     envelopeKey: runtime.envelopeKey,

@@ -138,7 +138,7 @@ func (r *deployRun) infraStack(ctx context.Context, undeclared []*contractv1.Man
 		Kind:      provider.StackInfra,
 		Lease:     r.hold.lease(),
 		Edge:      r.front,
-		Tags:      infraTags(r.spec),
+		Tags:      infraTags(r.managedBy, r.spec),
 		Resources: resources,
 		Bindings:  r.publishedBindings(),
 	}, infraHeld{holds: holds, digest: digest}, nil
@@ -254,7 +254,7 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 		Lease:    r.hold.lease(),
 		Recorded: recorded,
 		Edge:     r.front,
-		Tags:     appTags(r.spec, entry),
+		Tags:     appTags(r.managedBy, r.spec, entry),
 		Images:   images,
 		Bindings: r.publishedBindings(),
 		App: &provider.AppSpec{

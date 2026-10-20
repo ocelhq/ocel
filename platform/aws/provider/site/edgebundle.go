@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -17,18 +16,12 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
-const edgeKind = "edge"
-
-func appEdgePrefix(c naming.Coordinate) string {
-	return c.StoragePrefix() + edgeKind
-}
-
 func appEdgeBundleKey(c naming.Coordinate) string {
-	return path.Join(appEdgePrefix(c), "bundle.json")
+	return c.BundleKey("bundle.json")
 }
 
 func appEdgeSealedKey(c naming.Coordinate) string {
-	return path.Join(appEdgePrefix(c), variables.EdgeSealedFile)
+	return c.BundleKey(variables.EdgeSealedFile)
 }
 
 func readEdgeBundle(root, app string) ([]byte, bool, error) {

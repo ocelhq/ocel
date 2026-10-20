@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ServeFetch } from "../src/index";
 import { parseRenderCall } from "../src/serve-key";
 import { countingLoader, edgeBundle } from "./edge-bundle";
-import { servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
+import { servedNextRelease, UNTOKENED_PAGES_PREFIX } from "./next-release";
 import { type FakeServing, fakeServing } from "./serving-deps";
 
 const ENTRY_HEADER = "x-ocel-entry";
@@ -308,7 +308,7 @@ describe("a prerender whose parent renders on the edge", () => {
       table: { dispatch: { "/edge-blog": over.target ?? edgeTarget } },
       record: {
         functionUrls: over.functionUrls ?? {},
-        ...(over.throughServe === false && { isrPrefix: UNTOKENED_ISR_PREFIX }),
+        ...(over.throughServe === false && { pagesPrefix: UNTOKENED_PAGES_PREFIX }),
       },
       edgeBundle: renderer,
       loader,

@@ -98,7 +98,7 @@ func stageFunction(spec provider.StackSpec, fn provider.FunctionSpec, overlay ma
 	}
 	return Upload{
 		Name:   fn.Name,
-		Ref:    provider.ArtifactRef{Tier: spec.Ref.Tier, Bucket: provider.StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
+		Ref:    provider.ArtifactRef{Tier: spec.Ref.Tier, Key: coordinate.FunctionArtifactKey(sum)},
 		Path:   path,
 		Digest: sum,
 	}, nil

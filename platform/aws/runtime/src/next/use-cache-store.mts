@@ -9,9 +9,10 @@ import {
   tagSnapshotKey,
 } from "@framework/next-cache";
 import type { TagSnapshotRead, UseCacheStore } from "@framework/next-runtime/use-cache-store";
+import { objectKey as storageKey } from "@platform/edge-contract/storage-key";
 import { newDynamoDBClient, newS3Client } from "../cache/sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
-import { isNotFound, readBodyText, requireEnv } from "./object-store.mjs";
+import { isNotFound, readBodyText, requireEnv, requireStorageCoordinate } from "./object-store.mjs";
 
 function objectName(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -25,12 +26,12 @@ export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
   const table = requireEnv("OCEL_STATE_TABLE");
   const tagNamespace = requireEnv("OCEL_ISR_TAG_NAMESPACE");
   const bucket = requireEnv("OCEL_ISR_BUCKET");
-  const prefix = requireEnv("OCEL_ISR_PREFIX");
+  const coordinate = requireStorageCoordinate();
 
   const ddb = newDynamoDBClient();
   const s3 = newS3Client();
 
-  const objectKey = (key: string) => `${prefix}/use-cache/${objectName(key)}.json`;
+  const objectKey = (key: string) => storageKey("use-cache", coordinate, `${objectName(key)}.json`);
 
   async function readTagSnapshot(etag: string | null): Promise<TagSnapshotRead> {
     let out;
@@ -38,7 +39,7 @@ export function newAwsUseCacheStore(publish: PublishTag): UseCacheStore {
       out = await s3.send(
         new GetObjectCommand({
           Bucket: bucket,
-          Key: tagSnapshotKey(prefix),
+          Key: tagSnapshotKey(coordinate),
           ...(etag !== null ? { IfNoneMatch: etag } : {}),
         }),
       );

@@ -21,8 +21,8 @@ const record = {
   rootFunction: "/",
   routeTable: { format: "next", key: routeTableKey() },
   functionUrls: { "/": "https://abc.lambda-url.eu-west-2.on.aws/" },
-  assetPrefix: "prod/p1/web/deploy-1/assets",
-  isrPrefix: "prod/p1/web/deploy-1/isr",
+  assetPrefix: "assets/p1/prod/web/r00000d01",
+  pagesPrefix: "pages/p1/prod/web/r00000d01",
   createdAt: 1_000,
   edge: {},
 };
@@ -56,7 +56,7 @@ describe("the gateway reading a release's immutable objects", () => {
     expect(asked).toEqual([
       {
         key: routeTableKey(),
-        props: { kind: "object", host: "shop.example.com", app: "web", release: "deploy-1" },
+        props: { kind: "object", host: "shop.example.com", app: "web", release: "r00000d01" },
       },
     ]);
     expect(response.status).toBe(503);
@@ -107,7 +107,7 @@ describe("the gateway on an origin whose bucket an HMAC key reads", () => {
 
     expect(asked.map(({ key }) => key)).toEqual([
       routeTableKey(),
-      "prod/p1/web/deploy-1/assets/_next/static/app.js",
+      "assets/p1/prod/web/r00000d01/_next/static/app.js",
     ]);
     expect(wire.calls).toHaveLength(0);
     expect(await response.text()).toBe("chunk");
@@ -170,7 +170,7 @@ describe("the gateway serving a prerender", () => {
     ...record,
     routeTable: { format: "next", key: prerenderTableKey },
     release: "deploy-1~f1",
-    isrPrefix: "prod/p1/web/r0a1b2c3d/isr",
+    pagesPrefix: "pages/p1/prod/web/r0a1b2c3d",
   };
   const table: NextRouteTable = {
     rootFunction: "/",
@@ -217,7 +217,7 @@ describe("the gateway serving a prerender", () => {
     return { origin, ctx: contextWithExports({ Serve: serve }) };
   }
 
-  it("serves the prerender through Serve, keyed by the release token of its ISR prefix", async () => {
+  it("serves the prerender through Serve, keyed by the release token of its pages prefix", async () => {
     const { origin, ctx } = ctxServing();
 
     const response = await worker.fetch(

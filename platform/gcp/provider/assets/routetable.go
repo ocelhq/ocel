@@ -21,9 +21,9 @@ func (p *Store) PutEdgeRouteTable(ctx context.Context, spec provider.StackSpec, 
 			"%s is routed at the edge by its route table, and its stack names no edge to keep it", spec.App.App)
 	}
 	table := spec.App.EdgeRouteTable
-	gcloud.EnsureProgress(runProgress).Say("Uploading " + spec.App.App + "'s route table to the " + provider.StoreAssets + " store")
+	gcloud.EnsureProgress(runProgress).Say("Uploading " + spec.App.App + "'s route table")
 	attrs := storage.ObjectAttrs{ContentType: "application/json"}
-	if err := p.CreateObject(ctx, spec.Ref.Tier, provider.StoreAssets, table.Location.Key, attrs, table.Table); err != nil {
+	if err := p.CreateObject(ctx, spec.Ref.Tier, table.Location.Key, attrs, table.Table); err != nil {
 		return "", fmt.Errorf("upload %s's route table: %w", spec.App.App, err)
 	}
 	return table.Location.Key, nil

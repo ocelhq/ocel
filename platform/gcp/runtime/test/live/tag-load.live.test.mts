@@ -10,7 +10,7 @@ const maxDeletesPerCommit = 500;
 describe("a burst of tag publishes against a live backend", () => {
   let backend: Backend;
   let database: string;
-  const isrPrefix = `live/${randomBytes(6).toString("hex")}/isr`;
+  const pagesPrefix = `pages/live/prod/web/r${randomBytes(4).toString("hex")}`;
   let tags: string[] = [];
 
   beforeAll(async () => {
@@ -27,7 +27,7 @@ describe("a burst of tag publishes against a live backend", () => {
         metadataOrigin: backend.metadataOrigin,
       });
       const names = tags.map((tag) => {
-        const id = createHash("sha256").update(`${isrPrefix}/${tag}`).digest("hex");
+        const id = createHash("sha256").update(`${pagesPrefix}/${tag}`).digest("hex");
         return `${database}/documents/tags/${id}`;
       });
       for (let from = 0; from < names.length; from += maxDeletesPerCommit) {
@@ -48,7 +48,7 @@ describe("a burst of tag publishes against a live backend", () => {
             endpoint: backend.firestoreEndpoint,
             metadataOrigin: backend.metadataOrigin,
           }),
-          isrPrefix,
+          pagesPrefix,
         ),
       wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       durationMs: 15_000,

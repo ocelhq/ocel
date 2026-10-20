@@ -21,7 +21,7 @@ import (
 func testUploadCompleter() payloads.Placement {
 	return payloads.Placement{
 		Bucket: "ocel-artifacts",
-		Key:    payloads.Key(UploadCompleterKeyPrefix, "d0d0"),
+		Key:    payloads.Key(UploadCompleterPayload, "d0d0"),
 		SHA256: "d0d0",
 	}
 }

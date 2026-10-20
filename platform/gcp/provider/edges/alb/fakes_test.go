@@ -24,7 +24,7 @@ const notFoundBackend = "ocel-alb-production-notfound"
 
 const assetsBackend = "ocel-alb-production-assets"
 
-var tierAssets = AssetsBucket{Name: "ocel-acme-prod-production", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"}
+var tierAssets = AssetsBucket{Name: "ocel-prod-edge-k3x9q2", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"}
 
 const backendToken = "gcp:compute/backendService:BackendService"
 

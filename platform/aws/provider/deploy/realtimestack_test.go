@@ -142,7 +142,7 @@ func TestProvisioningRealtimePlacesTheAuthorizerItDeclares(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	at := payloads.At("ocel-artifacts", realtime.AuthorizerKeyPrefix, payloads.RealtimeAuthorizer())
+	at := payloads.At("ocel-artifacts", realtime.AuthorizerPayload, payloads.RealtimeAuthorizer())
 	if !slices.Contains(uploader.puts, at.Key) {
 		t.Errorf("uploaded %v, want the realtime authorizer placed at %s", uploader.puts, at.Key)
 	}

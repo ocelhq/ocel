@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -21,7 +22,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 		namespace string
 		stem      string
 	}{
-		{name: "the namespace a run names", namespace: "j-a1b2c3-run", stem: "j-a1b2c3-run"},
+		{name: "the namespace a run names", namespace: "j-shop7", stem: "j-shop7"},
 		{name: "the default where a run names none", namespace: "", stem: "ocel"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -29,8 +30,8 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 
 			names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 			for what, got := range map[string]string{
-				"artifact bucket":   names.Bucket(environment.TierProduction),
-				"state bucket":      names.StateBucket(environment.TierPreview),
+				"edge bucket":       names.TierBucket(environment.TierProduction, naming.StorageEdge, "k3x9q2"),
+				"state bucket":      names.TierBucket(environment.TierPreview, naming.StorageState, "k3x9q2"),
 				"record database":   names.Database(),
 				"key ring":          names.KeyRing(),
 				"passphrase secret": names.PassphraseSecret(environment.TierProduction),
@@ -43,11 +44,11 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 					t.Errorf("the %s is %q, want it derived from namespace %q", what, got, tc.stem)
 				}
 			}
-			if got, want := names.Bucket(environment.TierProduction), tc.stem+"-acme-prod-production"; got != want {
-				t.Errorf("Bucket() = %q, want %q", got, want)
+			if got, want := names.TierBucket(environment.TierProduction, naming.StorageEdge, "k3x9q2"), tc.stem+"-prod-edge-k3x9q2"; got != want {
+				t.Errorf("TierBucket(production, edge) = %q, want %q", got, want)
 			}
-			if got, want := names.StateBucket(environment.TierPreview), tc.stem+"-acme-prod-preview-state"; got != want {
-				t.Errorf("StateBucket() = %q, want %q", got, want)
+			if got, want := names.TierBucket(environment.TierPreview, naming.StorageState, "k3x9q2"), tc.stem+"-preview-state-k3x9q2"; got != want {
+				t.Errorf("TierBucket(preview, state) = %q, want %q", got, want)
 			}
 			if got, want := names.PassphraseSecret(environment.TierProduction), tc.stem+"-prod-pulumi-passphrase"; got != want {
 				t.Errorf("PassphraseSecret() = %q, want %q", got, want)
@@ -113,12 +114,6 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			namespace: "Not A Namespace",
 			project:   "acme-prod",
 			names:     provider.NamespaceEnvVar,
-		},
-		{
-			name:      "a namespace and project too long for a bucket",
-			namespace: strings.Repeat("a", provider.MaxNamespaceLength),
-			project:   "acme-prod-" + strings.Repeat("b", 20),
-			names:     "-production-state",
 		},
 		{
 			name:      "a namespace too short for a Firestore database",

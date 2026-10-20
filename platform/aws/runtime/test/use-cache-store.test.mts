@@ -7,7 +7,7 @@ beforeEach(() => {
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#";
   process.env.OCEL_ISR_BUCKET = "assets";
-  process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
+  process.env.OCEL_STORAGE_COORDINATE = "proj/prod/app/r3f8a1c9d";
 });
 
 afterEach(() => {
@@ -68,7 +68,7 @@ test("writes entries to the provider's bucket", async () => {
 
   expect(built[0].endpoint).toBeUndefined();
   expect(sent[0].Bucket).toBe("assets");
-  expect(sent[0].Key).toMatch(/^prod\/proj\/app\/BID\/use-cache\//);
+  expect(sent[0].Key).toMatch(/^use-cache\/proj\/prod\/app\/r3f8a1c9d\//);
 });
 
 test("writes a tag record under the monotonic guard", async () => {
@@ -188,7 +188,7 @@ test("hashes the cache key into a legal object name under the build prefix", asy
   await store.writeEntry(cacheKey, envelope);
 
   expect(sends[0].Bucket).toBe("assets");
-  expect(sends[0].Key).toMatch(/^prod\/proj\/app\/BID\/use-cache\/[0-9a-f]{64}\.json$/);
+  expect(sends[0].Key).toMatch(/^use-cache\/proj\/prod\/app\/r3f8a1c9d\/[0-9a-f]{64}\.json$/);
   expect(sends[0].Key).not.toContain("binary");
 });
 
@@ -263,7 +263,7 @@ test("reads the whole tag clock from one object under the build's prefix", async
 
   expect(sends).toHaveLength(1);
   expect(sends[0].Bucket).toBe("assets");
-  expect(sends[0].Key).toBe("prod/proj/app/BID/tag-clock.json");
+  expect(sends[0].Key).toBe("tag-clock/proj/prod/app/r3f8a1c9d/tag-clock.json");
   expect(sends[0].IfNoneMatch).toBeUndefined();
   expect(read).toEqual({
     status: "fresh",

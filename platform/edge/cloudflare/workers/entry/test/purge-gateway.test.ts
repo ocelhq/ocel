@@ -13,8 +13,8 @@ import { awsOrigin, makeRecord } from "./origin-deps";
 import { contextWithExports, purgeQueuesAnswering } from "./worker-context";
 
 const SEED = "seed-1";
-const ISR_PREFIX = "production/p1/web/r0a1b2c3d/isr";
-const SECRET = await derivePurgeSecret(SEED, ISR_PREFIX);
+const PAGES_PREFIX = "pages/p1/prod/web/r0a1b2c3d";
+const SECRET = await derivePurgeSecret(SEED, PAGES_PREFIX);
 const WORKERS_DEV = "https://web.acct.workers.dev";
 
 async function sign(body: string): Promise<string> {
@@ -43,14 +43,14 @@ async function purgeRequestTo(url: string, body: unknown = raise): Promise<Reque
 }
 
 const raise = {
-  isrPrefix: ISR_PREFIX,
+  pagesPrefix: PAGES_PREFIX,
   mode: "purge",
   tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
 };
 
 let raised: { name: string; mode: PurgeMode; tags: RaisedTag[] }[];
 let appReads: number;
-let servedReads: { slug: string; isrPrefix: string }[];
+let servedReads: { slug: string; pagesPrefix: string }[];
 let heldGate: string | undefined;
 
 function binding(): ReleasesBinding {
@@ -63,13 +63,13 @@ function binding(): ReleasesBinding {
     readLabelRecord: answer,
     async readServedRecord(args) {
       servedReads.push(args);
-      return args.isrPrefix === ISR_PREFIX
+      return args.pagesPrefix === PAGES_PREFIX
         ? {
             kind: "record",
             record: makeRecord({
               app: "web",
               release: "build-1~fp1",
-              isrPrefix: ISR_PREFIX,
+              pagesPrefix: PAGES_PREFIX,
               edge: { purgeSecret: SECRET },
             }),
           }
@@ -108,7 +108,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p1", isrPrefix: ISR_PREFIX }]);
+    expect(servedReads).toEqual([{ slug: "p1", pagesPrefix: PAGES_PREFIX }]);
     expect(raised).toEqual([
       {
         name: "p1",
@@ -125,7 +125,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
         worker.fetch(new Request(url, init), envWith(), ctx)) as typeof fetch,
     };
 
-    await postPurge(sender, `${WORKERS_DEV}${purgePath}`, SECRET, ISR_PREFIX, [
+    await postPurge(sender, `${WORKERS_DEV}${purgePath}`, SECRET, PAGES_PREFIX, [
       { tag: "_N_T_/blog/a", mode: "invalidate", raisedAt: 5_000 },
     ]);
 
@@ -140,7 +140,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
 
   it("answers 204 for a release that is not served and raises nothing", async () => {
     const response = await worker.fetch(
-      await purgeRequest(WORKERS_DEV, { ...raise, isrPrefix: "production/p1/web/r0000000a/isr" }),
+      await purgeRequest(WORKERS_DEV, { ...raise, pagesPrefix: "pages/p1/prod/web/r0000000a" }),
       envWith(),
       contextWithQueue(),
     );
@@ -187,7 +187,7 @@ describe("the shared preview entry answering a purge on its workers.dev host", (
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p2", isrPrefix: ISR_PREFIX }]);
+    expect(servedReads).toEqual([{ slug: "p2", pagesPrefix: PAGES_PREFIX }]);
     expect(raised).toEqual([
       {
         name: "p2",
@@ -216,7 +216,7 @@ describe("the shared preview entry answering a purge on its workers.dev host", (
     );
 
     expect(response.status).toBe(202);
-    expect(servedReads).toEqual([{ slug: "p1", isrPrefix: ISR_PREFIX }]);
+    expect(servedReads).toEqual([{ slug: "p1", pagesPrefix: PAGES_PREFIX }]);
   });
 });
 

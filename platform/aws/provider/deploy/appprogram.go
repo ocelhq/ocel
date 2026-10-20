@@ -201,14 +201,13 @@ func (r *release) isrCache(spec provider.StackSpec) *site.ISR {
 		Coord:     appCoordinate(spec),
 		Namespace: isr.TagNamespace,
 		Bucket:    r.cfg.AssetBucket,
-		Prefix:    isr.Prefix,
 		Table:     r.cfg.StateTable,
 		TableARN:  r.cfg.StateTableARN,
 	}
 	if r.cfg.buckets().CanEdgeRead() {
 		cache.EdgeReadable = true
 		if r.cfg.PurgeSeed != "" {
-			cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Prefix)
+			cache.PurgeSecret = edge.DerivePurgeSecret(r.cfg.PurgeSeed, isr.Coordinate.PagesPrefix())
 		}
 	}
 	return cache

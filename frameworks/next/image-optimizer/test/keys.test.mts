@@ -2,11 +2,11 @@ import { describe, expect, test } from "vitest";
 import { BootstrapError } from "../src/errors.mjs";
 import { assetKey, assetPath, imageConfigKey, releaseAssetPrefix } from "../src/keys.mjs";
 
-const PREFIX = "prod/proj1/web/r3f8a1c9d/assets";
+const PREFIX = "assets/proj1/prod/web/r3f8a1c9d";
 
 describe("config key", () => {
-  test("is the release's own sibling of the assets, never under them", () => {
-    expect(imageConfigKey(PREFIX)).toBe("prod/proj1/web/r3f8a1c9d/image-config.json");
+  test("is the release's image config, never under its assets", () => {
+    expect(imageConfigKey(PREFIX)).toBe("image-config/proj1/prod/web/r3f8a1c9d/image-config.json");
     expect(imageConfigKey(PREFIX).startsWith(PREFIX)).toBe(false);
   });
 });
@@ -55,15 +55,19 @@ describe("asset prefix", () => {
     expect(releaseAssetPrefix(PREFIX)).toBe(PREFIX);
   });
 
-  test("refuses a prefix that does not end in the assets segment", () => {
-    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d")).toThrow(BootstrapError);
-    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d/isr")).toThrow(BootstrapError);
+  test("refuses a prefix that is not one release's assets", () => {
+    expect(() => releaseAssetPrefix("assets/proj1/prod/web")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("pages/proj1/prod/web/r3f8a1c9d")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("assets/proj1/prod/web/r3f8a1c9d/logo.png")).toThrow(
+      BootstrapError,
+    );
+    expect(() => releaseAssetPrefix("prod/proj1/web/r3f8a1c9d/assets")).toThrow(BootstrapError);
   });
 
   test("refuses a traversal in any segment", () => {
-    expect(() => releaseAssetPrefix("prod/proj1/web/../assets")).toThrow(BootstrapError);
-    expect(() => releaseAssetPrefix("prod/proj1/web/.../assets")).toThrow(BootstrapError);
-    expect(() => releaseAssetPrefix("prod//web/r3f8a1c9d/assets")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("assets/proj1/prod/../r3f8a1c9d")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("assets/proj1/prod/.../r3f8a1c9d")).toThrow(BootstrapError);
+    expect(() => releaseAssetPrefix("assets/proj1//web/r3f8a1c9d")).toThrow(BootstrapError);
   });
 
   test("refuses a missing or empty prefix", () => {

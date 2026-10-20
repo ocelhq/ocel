@@ -144,7 +144,7 @@ describe("the origin's throttle", () => {
 });
 
 describe("the origin's store", () => {
-  const key = "prod/p1/web/r9source0/isr/cache/blog/a.cache.json";
+  const key = "pages/p1/prod/web/r9a0c0e00/blog/a.cache.json";
 
   it("reads a page entry under the entries prefix of a store that holds entries", async () => {
     const wire = capturing();

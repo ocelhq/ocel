@@ -4,7 +4,6 @@ import (
 	"maps"
 	"path"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -12,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/assets"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
@@ -30,15 +28,14 @@ const (
 	slugEnvVar              = "OCEL_SLUG"
 	appNameEnvVar           = "OCEL_APP"
 	buildIDEnvVar           = "OCEL_BUILD_ID"
-	isrPrefixEnvVar         = "OCEL_ISR_PREFIX"
+	storageCoordinateEnvVar = "OCEL_STORAGE_COORDINATE"
 	isrTagNamespaceEnvVar   = "OCEL_ISR_TAG_NAMESPACE"
-	isrBucketEnvVar         = "OCEL_ISR_BUCKET"
-	isrObjectPrefixEnvVar   = "OCEL_ISR_OBJECT_PREFIX"
+	CacheBucketEnvVar       = "OCEL_CACHE_BUCKET"
 	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
 	TagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
 	purgeSecretEnvVar       = "OCEL_PURGE_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
-	AssetBucketEnvVar       = "OCEL_ASSET_BUCKET"
+	EdgeBucketEnvVar        = "OCEL_EDGE_BUCKET"
 	imageEndpointEnvVar     = "OCEL_IMAGE_ENDPOINT"
 )
 
@@ -70,7 +67,8 @@ func RefuseGuardWithoutShieldingEdge(spec provider.StackSpec) error {
 }
 
 type nextCache struct {
-	bucket          string
+	edgeBucket      string
+	cacheBucket     string
 	tagDatabase     string
 	storageEndpoint string
 	tagEndpoint     string
@@ -96,7 +94,7 @@ func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, ca
 			env[edge.OriginSignedVar] = "1"
 		}
 		env[RouteTableEnvVar] = routeTableInImage
-		env[AssetBucketEnvVar] = cache.bucket
+		env[EdgeBucketEnvVar] = cache.edgeBucket
 		if cache.storageEndpoint != "" {
 			env[storageEndpointEnvVar] = cache.storageEndpoint
 		}
@@ -117,10 +115,10 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	if isr == nil {
 		return env
 	}
-	env[isrPrefixEnvVar] = isr.Prefix
+	env[storageCoordinateEnvVar] = isr.Coordinate.StorageCoordinate()
 	env[isrTagNamespaceEnvVar] = isr.TagNamespace
-	env[isrBucketEnvVar] = cache.bucket
-	env[isrObjectPrefixEnvVar] = strings.TrimSuffix(assets.CacheObjectName(isr.Prefix+"/"), "/")
+	env[EdgeBucketEnvVar] = cache.edgeBucket
+	env[CacheBucketEnvVar] = cache.cacheBucket
 	env[TagDatabaseEnvVar] = cache.tagDatabase
 	if cache.purgeSecret != "" {
 		env[purgeSecretEnvVar] = cache.purgeSecret
@@ -150,10 +148,11 @@ func FillContainerDefaults(s run.Serving) run.Serving {
 	return s
 }
 
-func NewCache(names names.Names, ref provider.StackRef, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
+func NewCache(names names.Names, buckets names.TierBuckets, ref provider.StackRef, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
 	return nextCache{
 		purgeSecret:     purgeSecret,
-		bucket:          names.Bucket(ref.Tier),
+		edgeBucket:      buckets.Edge,
+		cacheBucket:     buckets.Cache,
 		tagDatabase:     "projects/" + names.Project() + "/databases/" + names.ProjectWritableDatabase(ref.Tier, ref.Project),
 		storageEndpoint: storageEndpoint,
 		tagEndpoint:     tagEndpoint,

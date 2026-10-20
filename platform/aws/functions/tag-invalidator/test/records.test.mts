@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import { coordinateOf, raisesOf, type StreamRecord } from "../src/records.mjs";
 
-const PREFIX = "prod/acme/web/r3f8a1c9d/isr";
+const PREFIX = "pages/acme/prod/web/r3f8a1c9d";
 
 let nextSequence = 0;
 
 function tagRecord(
   tag: string,
   attrs: Record<string, { S?: string; N?: string }>,
-  namespace = tagNamespace(PREFIX)!,
+  namespace = tagNamespace({ project: "acme", env: "prod", app: "web", release: "r3f8a1c9d" })!,
   writtenAt = 1_000,
 ): StreamRecord {
   return {
@@ -30,16 +30,21 @@ function tagRecord(
 
 describe("raisesOf", () => {
   it("groups a batch by the build each record belongs to", () => {
-    const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr")!;
+    const other = tagNamespace({
+      project: "acme",
+      env: "prod",
+      app: "admin",
+      release: "rbbbbbbbb",
+    })!;
     const raises = raisesOf([
       tagRecord("cart", { expired: { N: "100" } }),
       tagRecord("home", { stale: { N: "200" } }),
       tagRecord("cart", { expired: { N: "300" } }, other),
     ]);
 
-    expect([...raises.keys()].sort()).toEqual(["prod/acme/admin/rbbbbbbbb/isr", PREFIX]);
+    expect([...raises.keys()].sort()).toEqual(["pages/acme/prod/admin/rbbbbbbbb", PREFIX]);
     expect(raises.get(PREFIX)!.tags).toEqual(["cart", "home"]);
-    expect(raises.get("prod/acme/admin/rbbbbbbbb/isr")!.tags).toEqual(["cart"]);
+    expect(raises.get("pages/acme/prod/admin/rbbbbbbbb")!.tags).toEqual(["cart"]);
   });
 
   it("names a tag once however many records raised it", () => {
@@ -163,7 +168,9 @@ describe("coordinateOf", () => {
     expect(coordinateOf(PREFIX)).toEqual({ project: "acme", release: "r3f8a1c9d" });
   });
 
-  it("reads nothing from a prefix that is not one", () => {
-    expect(coordinateOf("prod/acme/web")).toBeNull();
+  it("reads nothing from a prefix that is not one release's pages", () => {
+    expect(coordinateOf("pages/acme/prod/web")).toBeNull();
+    expect(coordinateOf("assets/acme/prod/web/r3f8a1c9d")).toBeNull();
+    expect(coordinateOf("prod/acme/web/r3f8a1c9d/isr")).toBeNull();
   });
 });

@@ -23,7 +23,7 @@ func assetHeaders(static *edge.Static, rel string) objectHeaders {
 }
 
 func appAssetPrefix(c naming.Coordinate) string {
-	return c.AssetKey("")
+	return c.AssetPrefix()
 }
 
 type assetUpload struct {

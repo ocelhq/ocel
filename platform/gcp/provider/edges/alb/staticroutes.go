@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -23,7 +22,7 @@ func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) *StaticR
 	}
 	return &StaticRoutes{
 		Backend:    balancer.AssetsBackend,
-		Objects:    "/" + provider.StoreAssets + "/" + record.AssetPrefix,
+		Objects:    "/" + record.AssetPrefix,
 		Immutable:  record.Static.ImmutablePrefixes,
 		Revalidate: record.Static.MustRevalidatePrefixes,
 	}

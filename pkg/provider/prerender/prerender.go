@@ -4,21 +4,29 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"path"
 	"path/filepath"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const (
-	EntrySegment       = "cache"
-	FetchSegment       = "fetch-cache"
 	TagSnapshotVersion = 1
-	tagSnapshotSuffix  = "/tag-clock.json"
+	tagSnapshotFile    = "tag-clock.json"
 )
 
+var seedDirs = []struct {
+	dir  string
+	kind naming.ObjectKind
+}{
+	{dir: "cache", kind: naming.ObjectPages},
+	{dir: "fetch-cache", kind: naming.ObjectFetchCache},
+}
+
 type Seed struct {
-	Key, Path, Segment string
-	Size               int64
+	Key, Path string
+	Kind      naming.ObjectKind
+	Size      int64
 }
 
 type TagSnapshot struct {
@@ -33,10 +41,10 @@ type TagRecord struct {
 	Expired int64 `json:"expired,omitempty"`
 }
 
-func Seeds(appRoot, isrPrefix string) ([]Seed, error) {
+func Seeds(appRoot string, release naming.Coordinate) ([]Seed, error) {
 	var seeds []Seed
-	for _, segment := range []string{EntrySegment, FetchSegment} {
-		dir := filepath.Join(appRoot, segment)
+	for _, seeded := range seedDirs {
+		dir := filepath.Join(appRoot, seeded.dir)
 		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -53,10 +61,10 @@ func Seeds(appRoot, isrPrefix string) ([]Seed, error) {
 				return err
 			}
 			seeds = append(seeds, Seed{
-				Key:     path.Join(isrPrefix, segment, filepath.ToSlash(rel)),
-				Path:    p,
-				Segment: segment,
-				Size:    info.Size(),
+				Key:  release.ObjectKey(seeded.kind, filepath.ToSlash(rel)),
+				Path: p,
+				Kind: seeded.kind,
+				Size: info.Size(),
 			})
 			return nil
 		})
@@ -77,4 +85,6 @@ func GenesisTagSnapshot(at time.Time) TagSnapshot {
 	}
 }
 
-func TagSnapshotKey(isrPrefix string) string { return isrPrefix + tagSnapshotSuffix }
+func TagSnapshotKey(release naming.Coordinate) string {
+	return release.ObjectKey(naming.ObjectTagClock, tagSnapshotFile)
+}

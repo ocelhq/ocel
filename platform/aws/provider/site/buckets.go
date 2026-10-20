@@ -1,10 +1,8 @@
 package site
 
 import (
-	"fmt"
-
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -24,12 +22,13 @@ func (b Buckets) CanEdgeRead() bool {
 	return b.CanStoreAssets() && b.EdgeHoldsKey
 }
 
-func (b Buckets) Find(store string) (string, error) {
-	switch store {
-	case provider.StoreFunctions:
-		return b.Artifacts, nil
-	case provider.StoreAssets:
-		return b.Assets, nil
+func (b Buckets) Find(key string) (string, error) {
+	kind, err := naming.ParseObjectKind(key)
+	if err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("this provider keeps no %q store", store)
+	if kind == naming.ObjectFunction || kind == naming.ObjectPayloads {
+		return b.Artifacts, nil
+	}
+	return b.Assets, nil
 }

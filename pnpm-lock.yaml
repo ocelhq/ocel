@@ -448,6 +448,9 @@ importers:
       '@framework/next-protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../platform/edge/contract
       ipaddr.js:
         specifier: ^2.4.0
         version: 2.4.0
@@ -1643,6 +1646,10 @@ importers:
         version: 5.9.3
 
   tests/next-compat:
+    dependencies:
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../platform/edge/contract
     devDependencies:
       vitest:
         specifier: ^4.1.9

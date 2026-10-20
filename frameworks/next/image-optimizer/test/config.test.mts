@@ -132,7 +132,7 @@ describe("memoization", () => {
     const store = storeWithConfig(config);
     const hash = configHash(config);
     await loadImageConfig(store, ASSET_PREFIX, hash);
-    await expect(loadImageConfig(store, "prod/proj1/web/r0000000/assets", hash)).rejects.toThrow(
+    await expect(loadImageConfig(store, "assets/proj1/prod/web/r00000000", hash)).rejects.toThrow(
       /no image config at/,
     );
   });

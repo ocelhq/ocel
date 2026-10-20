@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
 import type { UseCacheStore } from "@framework/next-runtime/use-cache-store";
+import { objectKey, type StorageCoordinate } from "@platform/edge-contract/storage-key";
 import type { CloudStorage } from "./cloud-storage.mjs";
 import type { TagRecords } from "./tag-records.mjs";
 
 export function newGcpUseCacheStore(
   storage: CloudStorage,
-  objectPrefix: string,
+  coordinate: StorageCoordinate,
   tags: TagRecords,
 ): UseCacheStore {
   const entryName = (key: string) =>
-    `${objectPrefix}/use-cache/${createHash("sha256").update(key).digest("hex")}.json`;
+    objectKey("use-cache", coordinate, `${createHash("sha256").update(key).digest("hex")}.json`);
   return {
     async readEntry(key) {
       const object = await storage.read(entryName(key));

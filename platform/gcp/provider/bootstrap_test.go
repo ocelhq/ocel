@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -141,35 +143,85 @@ func TestRemovingAKeyDestroysEveryVersionItStillHas(t *testing.T) {
 func TestABucketIsCreatedUnderUniformAccessWithPublicAccessPrevented(t *testing.T) {
 	t.Parallel()
 
-	attrs := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Name: "ocel-acme-prod-production-state", Versioned: true})
-	if !attrs.UniformBucketLevelAccess.Enabled {
-		t.Error("the bucket is created with object ACLs live, and an ACL on one object would reach past the IAM the bootstrap grants")
-	}
-	if attrs.PublicAccessPrevention != storage.PublicAccessPreventionEnforced {
-		t.Errorf("the bucket is created under public access prevention %v, want it enforced: an allUsers grant would publish every artifact and stack state in it",
-			attrs.PublicAccessPrevention)
-	}
-	if !attrs.VersioningEnabled || attrs.Location != "europe-west1" {
-		t.Errorf("the bucket is created as %+v, want the versioning and location the item names kept", attrs)
+	for _, class := range names.TierStorageClasses {
+		attrs := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Class: class})
+		if !attrs.UniformBucketLevelAccess.Enabled {
+			t.Errorf("the %s bucket is created with object ACLs live, and an ACL on one object would reach past the IAM the bootstrap grants", class)
+		}
+		if attrs.PublicAccessPrevention != storage.PublicAccessPreventionEnforced {
+			t.Errorf("the %s bucket is created under public access prevention %v, want it enforced: an allUsers grant would publish every object and stack state in it",
+				class, attrs.PublicAccessPrevention)
+		}
+		if attrs.Location != "europe-west1" {
+			t.Errorf("the %s bucket is created in %q, want the region the bootstrap names", class, attrs.Location)
+		}
 	}
 }
 
-func TestABucketThatDriftedOpenIsMended(t *testing.T) {
+func TestTheStateBucketKeepsAReplacedVersionAWeekAndNoLonger(t *testing.T) {
 	t.Parallel()
 
+	attrs := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Class: naming.StorageState})
+	if !attrs.VersioningEnabled {
+		t.Error("the state bucket is created unversioned, so a bad state write is unrecoverable")
+	}
+	want := []storage.LifecycleRule{{
+		Action:    storage.LifecycleAction{Type: storage.DeleteAction},
+		Condition: storage.LifecycleCondition{DaysSinceNoncurrentTime: 7},
+	}}
+	if !reflect.DeepEqual(attrs.Lifecycle.Rules, want) {
+		t.Errorf("the state bucket's lifecycle = %+v, want %+v: a version replaced by every deploy would otherwise be billed forever", attrs.Lifecycle.Rules, want)
+	}
+}
+
+func TestTheCacheBucketDeletesAnObjectThirtyDaysAfterItsLastWrite(t *testing.T) {
+	t.Parallel()
+
+	attrs := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Class: naming.StorageCache})
+	want := []storage.LifecycleRule{{
+		Action:    storage.LifecycleAction{Type: storage.DeleteAction},
+		Condition: storage.LifecycleCondition{AgeInDays: 30},
+	}}
+	if !reflect.DeepEqual(attrs.Lifecycle.Rules, want) || attrs.VersioningEnabled {
+		t.Errorf("the cache bucket is created as versioned=%t with lifecycle %+v, want unversioned with %+v: a rewrite makes a new object, so its age counts from the last write",
+			attrs.VersioningEnabled, attrs.Lifecycle.Rules, want)
+	}
+}
+
+func TestTheEdgeBucketDeletesNothingByAge(t *testing.T) {
+	t.Parallel()
+
+	attrs := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Class: naming.StorageEdge})
+	if len(attrs.Lifecycle.Rules) != 0 || attrs.VersioningEnabled {
+		t.Errorf("the edge bucket is created as versioned=%t with lifecycle %+v, want neither: a release's static files live as long as the release", attrs.VersioningEnabled, attrs.Lifecycle.Rules)
+	}
+}
+
+func TestABucketThatDriftedIsMended(t *testing.T) {
+	t.Parallel()
+
+	made := bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket, Class: naming.StorageCache})
 	for name, tc := range map[string]struct {
 		existing *storage.BucketAttrs
 		mends    bool
 	}{
-		"the bucket this bootstrap made": {existing: bootstrap.BucketAttrs("europe-west1", bootstrap.Resource{Kind: bootstrap.KindBucket})},
+		"the bucket this bootstrap made": {existing: made},
 		"one whose access went back to ACLs": {
-			existing: &storage.BucketAttrs{PublicAccessPrevention: storage.PublicAccessPreventionEnforced},
+			existing: &storage.BucketAttrs{PublicAccessPrevention: storage.PublicAccessPreventionEnforced, Lifecycle: made.Lifecycle},
 			mends:    true,
 		},
 		"one that may be granted to allUsers": {
 			existing: &storage.BucketAttrs{
 				UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
 				PublicAccessPrevention:   storage.PublicAccessPreventionInherited,
+				Lifecycle:                made.Lifecycle,
+			},
+			mends: true,
+		},
+		"one whose lifecycle was cleared": {
+			existing: &storage.BucketAttrs{
+				UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
+				PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
 			},
 			mends: true,
 		},
@@ -177,14 +229,14 @@ func TestABucketThatDriftedOpenIsMended(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			found := bootstrap.BucketPresenceOf(tc.existing, false)
+			found := bootstrap.BucketPresenceOf(tc.existing, naming.StorageCache, false)
 			if !found.Present {
 				t.Error("a bucket that exists reads as absent, and the bootstrap would try to create it again")
 			}
 			if mends := found.Mends != ""; mends != tc.mends {
 				t.Errorf("bucketPresenceOf() mends %q, want mending=%t: what the survey does not report, the apply does not do", found.Mends, tc.mends)
 			}
-			if emulated := bootstrap.BucketPresenceOf(tc.existing, true); emulated.Mends != "" {
+			if emulated := bootstrap.BucketPresenceOf(tc.existing, naming.StorageCache, true); emulated.Mends != "" {
 				t.Errorf("bucketPresenceOf() under the emulator mends %q, and the emulator keeps no access configuration to mend", emulated.Mends)
 			}
 		})
@@ -199,8 +251,8 @@ func TestEveryBootstrapRemovalStepSaysWhatItTookOrKeptAndWhy(t *testing.T) {
 		want    string
 	}{
 		{
-			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindBucket, Name: "ocel-acme-prod-production"}, Action: provider.ActionDelete},
-			want:    "INFO Removed bucket ocel-acme-prod-production",
+			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindBucket, Name: "ocel-prod-edge"}, Action: provider.ActionDelete},
+			want:    "INFO Removed bucket ocel-prod-edge",
 		},
 		{
 			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: "ocel"}, Action: provider.ActionDisableThenDelete},

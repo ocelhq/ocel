@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func storelessRef() provider.ArtifactRef {
-	return provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"}
+	return provider.ArtifactRef{Tier: environment.TierProduction, Key: "fn/shop/prod/web/r1a2b3c4d/api/bundle.zip"}
 }
 
 func TestTheStorelessStoreRefusesAWriteItCannotHonour(t *testing.T) {
@@ -60,14 +61,14 @@ func TestTheStorelessStoreAnswersHasWithAPlainFalse(t *testing.T) {
 	}
 }
 
-func TestTheStorelessStoreSweepsAnyPrefixWithoutComplaint(t *testing.T) {
+func TestTheStorelessStoreSweepsAnyScopeWithoutComplaint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, prefix := range []string{"", "shop/prod/", "shop/nothing-was-ever-written-here/"} {
-			if err := (NoArtifacts{}).RemovePrefix(ctx, tier, prefix, nil); err != nil {
-				t.Errorf("RemovePrefix(%s, %q) = %v, want nil: teardown sweeps it on every destroy and every preview reap", tier, prefix, err)
+		for _, scope := range []naming.Coordinate{{}, {Project: "shop", Env: "prod"}, {Project: "shop", Env: "nothing-was-ever-written-here"}} {
+			if err := (NoArtifacts{}).RemoveObjects(ctx, tier, scope, naming.CoordinateObjectKinds, nil); err != nil {
+				t.Errorf("RemoveObjects(%s, %+v) = %v, want nil: teardown sweeps it on every destroy and every preview reap", tier, scope, err)
 			}
 		}
 	}

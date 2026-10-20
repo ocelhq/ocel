@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/prerender"
@@ -35,19 +36,19 @@ func prerenderAssetSet(b Buckets, root, app string, cache *ISR) (*AssetSet, erro
 		return nil, nil
 	}
 
-	seeds, err := prerender.Seeds(appArtifactRoot(root, app), cache.Prefix)
+	seeds, err := prerender.Seeds(appArtifactRoot(root, app), cache.Coord)
 	if err != nil {
 		return nil, err
 	}
 
 	var uploads []prerenderUpload
 	manifest := newSetManifest()
-	targets := map[string]uploadTarget{
-		prerender.EntrySegment: entryTarget(b),
-		prerender.FetchSegment: {up: b.Objects, bucket: b.Assets, tier: b.Tier},
+	targets := map[naming.ObjectKind]uploadTarget{
+		naming.ObjectPages:      entryTarget(b),
+		naming.ObjectFetchCache: {up: b.Objects, bucket: b.Assets, tier: b.Tier},
 	}
 	for _, seed := range seeds {
-		to := targets[seed.Segment]
+		to := targets[seed.Kind]
 		uploads = append(uploads, prerenderUpload{key: seed.Key, src: seed.Path, to: to})
 		manifest.add(to.bucket, seed.Key, seed.Size)
 	}
@@ -120,7 +121,7 @@ func seedTagSnapshot(ctx context.Context, b Buckets, cache *ISR, at time.Time) e
 	}
 
 	for _, target := range snapshotTargets(b) {
-		key := prerender.TagSnapshotKey(cache.Prefix)
+		key := prerender.TagSnapshotKey(cache.Coord)
 		_, err := target.up.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:      aws.String(target.bucket),
 			Key:         aws.String(key),

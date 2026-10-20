@@ -78,7 +78,7 @@ func TestForgettingAStackRemovesTheImagesItRanFromTheProjectsRegistryThatNoOther
 	recordImage(t, store, environment.TierPreview, "shop", other, projectRegistryImage("sha256-shared"))
 	pushed := fake.NewImages()
 
-	err := forgetImages(context.Background(), store, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", pushed, progress.Discard())
+	err := forgetImages(context.Background(), store, &repositoryECR{}, "ocel", provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", pushed, progress.Discard())
 	if err != nil {
 		t.Fatalf("forgetImages() = %v", err)
 	}
@@ -98,7 +98,7 @@ func TestAProjectRegistryThatRefusesARemovalDoesNotFailTheDestroy(t *testing.T) 
 	refused.FailRemovals(errors.New("UNSUPPORTED"))
 	said := &fake.Log{}
 
-	err := forgetImages(context.Background(), store, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", refused, said)
+	err := forgetImages(context.Background(), store, &repositoryECR{}, "ocel", provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: own}, "web", refused, said)
 
 	if err != nil {
 		t.Errorf("forgetImages() = %v, want the destroy to finish: a registry that never deletes would otherwise block every retry", err)
@@ -129,7 +129,7 @@ func TestForgettingAStackThatRanNoImageListsNoOtherStack(t *testing.T) {
 	recordImage(t, store, environment.TierPreview, "shop", imageless)
 	counted := &countedEntries{Store: store}
 
-	err := forgetImages(context.Background(), counted, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: imageless}, "web", nil, progress.Discard())
+	err := forgetImages(context.Background(), counted, &repositoryECR{}, "ocel", provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: imageless}, "web", nil, progress.Discard())
 	if err != nil {
 		t.Fatalf("forgetImages() = %v", err)
 	}
@@ -184,7 +184,7 @@ func TestForgettingAStackWhoseReleaseFailedRemovesTheImageItPushed(t *testing.T)
 	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, projectRegistryImage("sha256-failed"))
 	pushed := fake.NewImages()
 
-	err := forgetImages(context.Background(), store, &repositoryECR{}, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", pushed, progress.Discard())
+	err := forgetImages(context.Background(), store, &repositoryECR{}, "ocel", provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", pushed, progress.Discard())
 	if err != nil {
 		t.Fatalf("forgetImages() = %v", err)
 	}
@@ -260,12 +260,12 @@ func TestAReclaimHandedTheECRStoreDeletesTheRepositoryItEmpties(t *testing.T) {
 	failed := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
 	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, "ecr/ocel/shop.web:sha256-failed")
 	api := &repositoryECR{tags: []string{"sha256-failed"}}
-	target, err := registry.Resolve(context.Background(), api)
+	target, err := registry.Resolve(context.Background(), api, "ocel")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = forgetImages(context.Background(), store, api, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", registry.Images(target, api), progress.Discard())
+	err = forgetImages(context.Background(), store, api, "ocel", provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", registry.Images(target, api, "ocel"), progress.Discard())
 	if err != nil {
 		t.Fatalf("forgetImages() = %v", err)
 	}
@@ -284,12 +284,12 @@ func TestAReclaimHandedAWrappedECRStoreStillDeletesTheRepositoryItEmpties(t *tes
 	failed := naming.AppStack("pr-7", "web", naming.NewReleaseToken("b1", ""))
 	recordReleaseAboutToRun(t, store, environment.TierPreview, "shop", failed, "ecr/ocel/shop.web:sha256-failed")
 	api := &repositoryECR{tags: []string{"sha256-failed"}}
-	target, err := registry.Resolve(context.Background(), api)
+	target, err := registry.Resolve(context.Background(), api, "ocel")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = forgetImages(context.Background(), store, api, provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", wrappedImages{registry.Images(target, api)}, progress.Discard())
+	err = forgetImages(context.Background(), store, api, "ocel", provider.StackRef{Project: "shop", Tier: environment.TierPreview, Name: failed}, "web", wrappedImages{registry.Images(target, api, "ocel")}, progress.Discard())
 	if err != nil {
 		t.Fatalf("forgetImages() = %v", err)
 	}
@@ -325,7 +325,7 @@ func TestTwoPreviewsSharingAnImageDestroyedTogetherLeaveNeitherTheImageNorItsRep
 	recordImage(t, store, second.Tier, second.Project, second.Name, "ecr/ocel/shop.web:sha256-shared")
 	api := &repositoryECR{tags: []string{"sha256-shared"}}
 	destroy := func(store records.Store, ref provider.StackRef) {
-		if err := forgetImages(ctx, store, api, ref, "web", nil, progress.Discard()); err != nil {
+		if err := forgetImages(ctx, store, api, "ocel", ref, "web", nil, progress.Discard()); err != nil {
 			t.Errorf("forgetImages(%s) = %v", ref.Name, err)
 		}
 		if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
@@ -350,11 +350,11 @@ func TestAForgetThatFailsAfterDroppingItsImagesStillLeavesThemForARetry(t *testi
 	recordImage(t, store, ref.Tier, ref.Project, ref.Name, "ecr/ocel/shop.web:sha256-own")
 	api := &repositoryECR{tags: []string{"sha256-own"}, refusal: errors.New("ecr:BatchDeleteImage is not granted")}
 
-	if err := forgetImages(ctx, store, api, ref, "web", nil, progress.Discard()); err == nil {
+	if err := forgetImages(ctx, store, api, "ocel", ref, "web", nil, progress.Discard()); err == nil {
 		t.Fatal("forgetImages() = nil though ECR refused the delete")
 	}
 	api.refusal = nil
-	if err := forgetImages(ctx, store, api, ref, "web", nil, progress.Discard()); err != nil {
+	if err := forgetImages(ctx, store, api, "ocel", ref, "web", nil, progress.Discard()); err != nil {
 		t.Fatalf("forgetImages() on the retry = %v", err)
 	}
 

@@ -8,8 +8,9 @@ import {
   type TagSnapshotStore,
   tagSnapshotKey,
 } from "@framework/next-cache";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 import { newS3Client } from "../cache/sdk-clients.mjs";
-import { isNotFound, requireEnv } from "./object-store.mjs";
+import { isNotFound, requireEnv, requireStorageCoordinate } from "./object-store.mjs";
 
 export interface S3Like {
   send(command: any): Promise<any>;
@@ -35,11 +36,11 @@ export class S3TagSnapshotStore implements TagSnapshotStore {
     private readonly s3: S3Like,
     private readonly commands: S3Commands,
     private readonly bucket: string,
-    private readonly isrPrefix: string,
+    private readonly coordinate: StorageCoordinate,
   ) {}
 
   private get key(): string {
-    return tagSnapshotKey(this.isrPrefix);
+    return tagSnapshotKey(this.coordinate);
   }
 
   async read(): Promise<StoredTagSnapshot | null> {
@@ -85,7 +86,7 @@ export function newAwsTagPublisher(): PublishTag {
       newS3Client(),
       { GetObjectCommand, PutObjectCommand },
       requireEnv("OCEL_ISR_BUCKET"),
-      requireEnv("OCEL_ISR_PREFIX"),
+      requireStorageCoordinate(),
     ),
   );
 }

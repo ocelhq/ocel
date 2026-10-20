@@ -302,8 +302,8 @@ func (s *shippedArtifacts) write(at string, blob []byte) {
 }
 
 func (s *shippedArtifacts) at(ref provider.ArtifactRef) (string, error) {
-	if ref.Bucket != provider.StoreFunctions {
-		return "", fmt.Errorf("this run keeps no %q store", ref.Bucket)
+	if kind, err := naming.ParseObjectKind(ref.Key); err != nil || kind != naming.ObjectFunction {
+		return "", fmt.Errorf("this run keeps no object %q", ref.Key)
 	}
 	return conformanceArtifactBucket + "/" + ref.Key, nil
 }
@@ -346,12 +346,14 @@ func (s *shippedArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ environment.Tier, prefix string, _ progress.Log) error {
+func (s *shippedArtifacts) RemoveObjects(_ context.Context, _ environment.Tier, scope naming.Coordinate, kinds []naming.ObjectKind, _ progress.Log) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for at := range s.objects {
-		if strings.HasPrefix(at, conformanceArtifactBucket+"/"+prefix) {
-			delete(s.objects, at)
+		for _, kind := range kinds {
+			if strings.HasPrefix(at, conformanceArtifactBucket+"/"+scope.StoragePrefix(kind)) {
+				delete(s.objects, at)
+			}
 		}
 	}
 	return nil
@@ -441,7 +443,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 		t.Fatalf("Provision() = %v", err)
 	}
 
-	at := payloads.At("ocel-artifacts", bucket.UploadCompleterKeyPrefix, payloads.UploadCompleter())
+	at := payloads.At("ocel-artifacts", bucket.UploadCompleterPayload, payloads.UploadCompleter())
 	if !slices.Contains(uploader.puts, at.Key) {
 		t.Errorf("uploaded %v, want the upload completer placed at %s", uploader.puts, at.Key)
 	}

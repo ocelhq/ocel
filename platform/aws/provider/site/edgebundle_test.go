@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -24,7 +25,7 @@ func edgeAppTree(t *testing.T) string {
 }
 
 func edgeBundleKeyFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "edge/bundle.json"
+	return kindKeyFor("bundles", app, buildID, "bundle.json")
 }
 
 func TestAppEdgeBundleKey(t *testing.T) {
@@ -34,7 +35,7 @@ func TestAppEdgeBundleKey(t *testing.T) {
 	if got != want {
 		t.Errorf("appEdgeBundleKey = %q, want %q", got, want)
 	}
-	if !strings.HasPrefix(got, appEdgePrefix(coord)+"/") {
+	if !strings.HasPrefix(got, coord.StoragePrefix(naming.ObjectBundles)) {
 		t.Errorf("key %q must live under the release's own prune-able prefix", got)
 	}
 	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", deployedAs("d2").Token())); other == got {
@@ -182,7 +183,7 @@ func edgeBuilds(t *testing.T, cfg publication, manifest *contractv1.Manifest) ap
 }
 
 func edgeSealedKeyFor(app, buildID string) string {
-	return storagePrefixFor("prod", "proj", app, buildID) + "edge/sealed.bin"
+	return kindKeyFor("bundles", app, buildID, "sealed.bin")
 }
 
 func edgeStoreConfig(t *testing.T, store *fakeArtifactStore) publication {

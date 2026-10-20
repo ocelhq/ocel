@@ -24,7 +24,7 @@ const (
 )
 
 func testRealtimeAuthorizer() payloads.Placement {
-	return payloads.Placement{Bucket: "ocel-artifacts", Key: payloads.Key(AuthorizerKeyPrefix, "a0a0"), SHA256: "a0a0"}
+	return payloads.Placement{Bucket: "ocel-artifacts", Key: payloads.Key(AuthorizerPayload, "a0a0"), SHA256: "a0a0"}
 }
 
 func testRealtimeArgs() realtimeArgs {

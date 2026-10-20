@@ -8,7 +8,7 @@ import { pathsPerInvalidation } from "../src/tags.mjs";
 
 const TABLE = "ocel-state";
 const TIER = "production";
-const PREFIX = "prod/acme/web/r0a1b2c3d/isr";
+const PREFIX = "pages/acme/prod/web/r0a1b2c3d";
 const RELEASE = "r0a1b2c3d";
 const PROJECT = "routers#cloudfront#acme";
 const WILDCARD = "routers#cloudfront";
@@ -141,7 +141,7 @@ it("reaches the wildcard for a project that names no front of its own", async ()
 it("reads the targets once for a batch that raises the same project twice", async () => {
   const both: Raises = new Map([
     [PREFIX, raiseOf(["products"], ["seq-1"])],
-    ["prod/acme/api/r1111111a/isr", raiseOf(["cart"], ["seq-2"])],
+    ["pages/acme/prod/api/r1111111a", raiseOf(["cart"], ["seq-2"])],
   ]);
 
   await invalidateAll(invalidator(dynamo, cloudfront), both);
@@ -371,7 +371,7 @@ describe("the Cloudflare target", () => {
     const sent = workers.sent[0]!;
     expect(sent.url).toBe(PURGE_URL);
     expect(sent.body).toEqual({
-      isrPrefix: PREFIX,
+      pagesPrefix: PREFIX,
       mode: "purge",
       tags: [{ tag: "_N_T_/blog/a", raisedAt: 5_000 }],
     });
@@ -400,14 +400,14 @@ describe("the Cloudflare target", () => {
     );
     const both: Raises = new Map([
       [PREFIX, raiseOf(["a"], ["seq-1"])],
-      ["prod/acme/api/r1111111a/isr", raiseOf(["b"], ["seq-2"])],
+      ["pages/acme/prod/api/r1111111a", raiseOf(["b"], ["seq-2"])],
     ]);
 
     await invalidateAll(cloudflareInvalidator(), both);
 
-    expect(workers.sent.map((sent) => `${sent.body.isrPrefix} ${sent.url}`).sort()).toEqual([
-      `prod/acme/api/r1111111a/isr ${PURGE_URL}`,
-      "prod/acme/api/r1111111a/isr https://acme-staging.sub.workers.dev/.ocel/purge",
+    expect(workers.sent.map((sent) => `${sent.body.pagesPrefix} ${sent.url}`).sort()).toEqual([
+      `pages/acme/prod/api/r1111111a ${PURGE_URL}`,
+      "pages/acme/prod/api/r1111111a https://acme-staging.sub.workers.dev/.ocel/purge",
       `${PREFIX} ${PURGE_URL}`,
       `${PREFIX} https://acme-staging.sub.workers.dev/.ocel/purge`,
     ]);

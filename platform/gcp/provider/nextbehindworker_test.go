@@ -47,10 +47,10 @@ func TestANextServiceBehindTheWorkerIsToldItsTagDatabaseAndThePurgeSecretItSigns
 	if _, told := env["OCEL_ISR_WRITER_URL"]; told {
 		t.Errorf("OCEL_ISR_WRITER_URL = %q, want none: no worker keeps this service's pages", env["OCEL_ISR_WRITER_URL"])
 	}
-	if want := edge.DerivePurgeSecret(w.seed, w.spec.App.ISR.Prefix); env["OCEL_PURGE_SECRET"] != want {
+	if want := edge.DerivePurgeSecret(w.seed, "pages/shop/prod/web/r1a2b3c4d"); env["OCEL_PURGE_SECRET"] != want {
 		t.Errorf("OCEL_PURGE_SECRET = %q, want the deployment's derived secret", env["OCEL_PURGE_SECRET"])
 	}
-	for _, name := range []string{"OCEL_TAG_DATABASE", "OCEL_ISR_PREFIX", "OCEL_ISR_TAG_NAMESPACE", "OCEL_ISR_BUCKET", "OCEL_ISR_OBJECT_PREFIX"} {
+	for _, name := range []string{"OCEL_TAG_DATABASE", "OCEL_STORAGE_COORDINATE", "OCEL_ISR_TAG_NAMESPACE", "OCEL_EDGE_BUCKET", "OCEL_CACHE_BUCKET"} {
 		if env[name] == "" {
 			t.Errorf("the service is told no %s, and its pages and tags live in Cloud Storage and Firestore", name)
 		}
@@ -137,7 +137,7 @@ func TestPrerenderSeedsBehindTheWorkerAllGoToCloudStorage(t *testing.T) {
 
 	got := uploadNames(w.server.Stored())
 	slices.Sort(got)
-	want := []string{"cache/shop/web/prod/r1/isr/cache/blog/post.cache.json", "cache/shop/web/prod/r1/isr/fetch-cache/abc"}
+	want := []string{"fetch-cache/shop/prod/web/r1a2b3c4d/abc", "pages/shop/prod/web/r1a2b3c4d/blog/post.cache.json"}
 	if !slices.Equal(got, want) {
 		t.Errorf("Cloud Storage received %v, want the page entry and the fetch entry both, since nothing else keeps a page", got)
 	}

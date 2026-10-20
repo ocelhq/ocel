@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"cloud.google.com/go/firestore"
 	firestoreadmin "google.golang.org/api/firestore/v1"
@@ -56,31 +55,22 @@ func tagLayout() variables.Layout {
 	return layout
 }
 
-func tagRecordsProject(prefix string) (string, bool) {
-	segments := strings.Split(strings.TrimSuffix(prefix, "/"), "/")
-	if len(segments) < 2 || naming.Validate("project", segments[1]) != nil {
-		return "", false
-	}
-	return segments[1], true
-}
-
-func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, prefix string, log progress.Log) error {
-	project, named := tagRecordsProject(prefix)
-	if !named {
+func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, scope naming.Coordinate, log progress.Log) error {
+	if naming.Validate("project", scope.Project) != nil {
 		return nil
 	}
 	resolved, err := a.p.openClients(ctx)
 	if err != nil {
 		return err
 	}
-	store, err := resolved.Workload().TagRecordsFirestore(tier, project)
+	store, err := resolved.Workload().TagRecordsFirestore(tier, scope.Project)
 	if err != nil {
 		return err
 	}
-	start := strings.TrimSuffix(prefix, "/") + "/"
+	prefix := scope.StoragePrefix(naming.ObjectPages)
 	records := store.Collection(tagCollection).
-		Where(tagPrefixField, ">=", start).
-		Where(tagPrefixField, "<", start+"\uf8ff").
+		Where(tagPrefixField, ">=", prefix).
+		Where(tagPrefixField, "<", prefix+"\uf8ff").
 		Select().Documents(ctx)
 	defer records.Stop()
 
@@ -121,7 +111,7 @@ func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, 
 	}
 	if removed > 0 {
 		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Removed %d tag records under %s from Firestore database %s",
-			removed, prefix, resolved.ProjectWritableDatabase(tier, project)))
+			removed, prefix, resolved.ProjectWritableDatabase(tier, scope.Project)))
 	}
 	return nil
 }

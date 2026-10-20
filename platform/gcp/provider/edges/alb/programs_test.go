@@ -94,7 +94,7 @@ func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
 	}
 
 	bucket := seen["ocel-prod-alb-assets"]
-	if got := bucket.Args["bucketName"]; got != "ocel-acme-prod-production" {
+	if got := bucket.Args["bucketName"]; got != "ocel-prod-edge-k3x9q2" {
 		t.Errorf("the backend bucket reads %v, want the tier's own bucket", got)
 	}
 	if got := bucket.Args["enableCdn"]; got != true {
@@ -109,7 +109,7 @@ func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
 	}
 }
 
-func TestTheLoadBalancersServiceAgentListsTheTiersBucketAndReadsOnlyTheStaticFilesOfReleases(t *testing.T) {
+func TestTheLoadBalancersServiceAgentListsAndReadsTheTiersEdgeBucketAndNoOther(t *testing.T) {
 	t.Parallel()
 
 	seen, err := declared(loadBalancerProgram(frontSpec()))
@@ -126,13 +126,11 @@ func TestTheLoadBalancersServiceAgentListsTheTiersBucketAndReadsOnlyTheStaticFil
 	}
 	condition, _ := grant.Args["condition"].(map[string]any)
 	expression, _ := condition["expression"].(string)
-	want := `resource.name == "projects/_/buckets/ocel-acme-prod-production" || ` +
-		`(resource.name.startsWith("projects/_/buckets/ocel-acme-prod-production/objects/assets/") && ` +
-		`resource.name.extract("projects/_/buckets/ocel-acme-prod-production/objects/assets/{release}/assets/") != "")`
+	want := `resource.name == "projects/_/buckets/ocel-prod-edge-k3x9q2" || ` +
+		`resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/")`
 	if expression != want {
-		t.Errorf("the grant is conditioned on %q, want %q: the agent lists the bucket, so a missing file is a 404, "+
-			"and reads only the files under a release's assets/, not the function bundles, route tables and image config beside them, "+
-			"with only the functions IAM supports on resource.name", expression, want)
+		t.Errorf("the grant is conditioned on %q, want %q: the agent lists the edge bucket, so a missing file is a 404, "+
+			"and reads what it holds, which is only what an edge may serve, with only the functions IAM supports on resource.name", expression, want)
 	}
 }
 

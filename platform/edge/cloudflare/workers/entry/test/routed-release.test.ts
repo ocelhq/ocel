@@ -4,7 +4,7 @@ import type { ImageConfig } from "@framework/next-router/image";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ResolveBase, resolveServe, type ServeFetch } from "../src/index";
 import type { ReleasesBinding, StoredRecord } from "../src/releases";
-import { servedNextRelease, UNTOKENED_ISR_PREFIX } from "./next-release";
+import { servedNextRelease, UNTOKENED_PAGES_PREFIX } from "./next-release";
 import { answerEveryRecordWith, capturing } from "./origin-deps";
 import { resolveBase } from "./resolve-base";
 import {
@@ -35,7 +35,7 @@ function makeRecord(over: Partial<StoredRecord> = {}): StoredRecord {
     routeTable: { format: "next", key: routeTableKey() },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "build-1",
-    isrPrefix: "prod/p1/web/build-1",
+    pagesPrefix: "pages/p1/prod/web/build-1",
     createdAt: 1_000,
     edge: {},
     ...over,
@@ -80,7 +80,7 @@ describe("a routed release", () => {
     const record = makeRecord({
       edge: {
         code: {
-          bundleKey: "prod/other/web/build-1/edge/bundle.json",
+          bundleKey: "bundles/other/prod/web/r00000b01/bundle.json",
           loaderId: "e1",
           compatDate: "2026-03-10",
           compatFlags: [],
@@ -97,7 +97,7 @@ describe("a routed release", () => {
     const record = makeRecord({
       edge: {
         code: {
-          bundleKey: "prod/p1/web/build-1/edge/bundle.json",
+          bundleKey: "bundles/p1/prod/web/r00000b01/bundle.json",
           loaderId: "e1",
           compatDate: "2026-03-10",
           compatFlags: [],
@@ -140,7 +140,7 @@ describe("a routed release", () => {
     "/blog": { kind: "prerender", id: "/blog", config: {} },
   };
 
-  it("serves prerenders through Serve under the release token its ISR prefix names", async () => {
+  it("serves prerenders through Serve under the release token its pages prefix names", async () => {
     const served = fakeServing();
     const serve = servedNextRelease({
       table: { dispatch: prerender },
@@ -166,14 +166,14 @@ describe("a routed release", () => {
     expect(served.calls[0].coordinates.release).not.toBe("build-1~abc");
   });
 
-  it("leaves prerenders to the origin when the ISR prefix names no release token", async () => {
+  it("leaves prerenders to the origin when the pages prefix names no release token", async () => {
     const served = fakeServing();
     const wire = capturing();
     const serve = servedNextRelease({
       table: { dispatch: prerender },
       record: {
         functionUrls: { "/blog": "https://fn.example.com" },
-        isrPrefix: UNTOKENED_ISR_PREFIX,
+        pagesPrefix: UNTOKENED_PAGES_PREFIX,
       },
       serve: served.serving.serve,
       fetch: wire.fetch,
@@ -317,7 +317,7 @@ describe("the route table of a routed deployment", () => {
 
   it("answers 503 for a key outside the route tables' shape", async () => {
     const errors = silencedErrors();
-    const key = "prod/p1/web/deploy-1/edge/bundle.json";
+    const key = "bundles/p1/prod/web/r00000d01/bundle.json";
     const store = objectStoreHolding({ [key]: TABLE });
 
     const served = await answered(store, makeRecord({ routeTable: { format: "next", key } }));
@@ -396,7 +396,7 @@ describe("the image origin of a routed deployment", () => {
   function imageRelease(base: Partial<ResolveBase>) {
     return servedNextRelease({
       table: { rootFunction: "bundle-0", images, assetHashes: { "/a.png": "a-hash" } },
-      record: { functionUrls: { "bundle-0": entryUrl }, isrPrefix: UNTOKENED_ISR_PREFIX },
+      record: { functionUrls: { "bundle-0": entryUrl }, pagesPrefix: UNTOKENED_PAGES_PREFIX },
       base,
     });
   }
@@ -446,7 +446,7 @@ describe("the image origin of a routed deployment", () => {
       },
       record: {
         functionUrls: { "bundle-0": entryUrl, "/api/og": "https://og.fn.example" },
-        isrPrefix: UNTOKENED_ISR_PREFIX,
+        pagesPrefix: UNTOKENED_PAGES_PREFIX,
       },
       base: {
         originFetch: (async () =>

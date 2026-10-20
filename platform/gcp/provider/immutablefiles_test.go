@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
-const tierBucket = "ocel-acme-prod-production"
+const tierBucket = "ocel-prod-edge-k3x9q2"
 
 type objectsServer struct {
 	mu      sync.Mutex

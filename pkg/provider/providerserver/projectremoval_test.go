@@ -454,7 +454,7 @@ func TestRemoveProjectOnThePreviewTierForgetsEveryPreviewsEnvironmentRecord(t *t
 	}
 }
 
-func TestRemoveProjectRetiresTheISRPrefixOfEveryReleaseBeforeSweepingTheProject(t *testing.T) {
+func TestRemoveProjectRemovesEveryKindOfObjectUnderTheProjectAndNothingNarrower(t *testing.T) {
 	client, vendor := deployedProject(t)
 
 	stream, err := client.RemoveProject(context.Background(), projectRequest())
@@ -465,18 +465,18 @@ func TestRemoveProjectRetiresTheISRPrefixOfEveryReleaseBeforeSweepingTheProject(
 		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
 	}
 
-	var want []string
-	for _, spec := range vendor.FakeStacks().Provisioned() {
-		if spec.App == nil {
-			continue
+	var want, removed []string
+	for _, kind := range naming.CoordinateObjectKinds {
+		want = append(want, "remove "+naming.Coordinate{Project: "shop"}.StoragePrefix(kind))
+	}
+	for _, entry := range vendor.Journal() {
+		if strings.HasPrefix(entry, "remove ") {
+			removed = append(removed, entry)
 		}
-		coordinate := naming.Coordinate{Project: "shop", Env: spec.Ref.Name.Env, App: spec.Ref.Name.App, Release: spec.Ref.Name.Release}
-		want = append(want, "remove-prefix "+coordinate.ISRPrefix())
 	}
-	if len(want) == 0 {
-		t.Fatal("the deploy provisioned no app stack to remove")
+	if !slices.Equal(removed, want) {
+		t.Errorf("RemoveProject() removed %v, want %v: the project's prefix of each kind covers every env and release in the tier", removed, want)
 	}
-	inOrder(t, vendor.Journal(), append(want, "remove-prefix "+naming.Coordinate{Project: "shop", Env: stackrecords.ProductionEnv}.StoragePrefix())...)
 }
 
 func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {

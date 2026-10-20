@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 func repoRoot(t *testing.T) string {
@@ -47,21 +49,27 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
-func TestABuildsCacheAndFetchCacheFilesBecomeSeedsUnderTheAppsISRPrefix(t *testing.T) {
+func seedRelease() naming.Coordinate {
+	return naming.Coordinate{Project: "shop", Env: "prod", App: "web", Release: naming.NewReleaseToken("b1", "")}
+}
+
+func TestABuildsCacheAndFetchCacheFilesBecomeSeedsOfThePagesAndFetchCacheKinds(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "cache", "blog.cache.json"), "12345")
 	writeFile(t, filepath.Join(root, "cache", "nested", "a.cache.json"), "123")
 	writeFile(t, filepath.Join(root, "fetch-cache", "abc"), "1")
 
-	got, err := Seeds(root, "p")
+	release := seedRelease()
+	got, err := Seeds(root, release)
 	if err != nil {
 		t.Fatalf("Seeds() = %v", err)
 	}
 
+	at := "/shop/prod/web/" + release.Release.String() + "/"
 	want := []Seed{
-		{Key: "p/cache/blog.cache.json", Path: filepath.Join(root, "cache", "blog.cache.json"), Segment: EntrySegment, Size: 5},
-		{Key: "p/cache/nested/a.cache.json", Path: filepath.Join(root, "cache", "nested", "a.cache.json"), Segment: EntrySegment, Size: 3},
-		{Key: "p/fetch-cache/abc", Path: filepath.Join(root, "fetch-cache", "abc"), Segment: FetchSegment, Size: 1},
+		{Key: "pages" + at + "blog.cache.json", Path: filepath.Join(root, "cache", "blog.cache.json"), Kind: naming.ObjectPages, Size: 5},
+		{Key: "pages" + at + "nested/a.cache.json", Path: filepath.Join(root, "cache", "nested", "a.cache.json"), Kind: naming.ObjectPages, Size: 3},
+		{Key: "fetch-cache" + at + "abc", Path: filepath.Join(root, "fetch-cache", "abc"), Kind: naming.ObjectFetchCache, Size: 1},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Seeds() = %+v, want %+v", got, want)
@@ -69,7 +77,7 @@ func TestABuildsCacheAndFetchCacheFilesBecomeSeedsUnderTheAppsISRPrefix(t *testi
 }
 
 func TestAnAppWithNoPrerenderOutputHasNoSeeds(t *testing.T) {
-	got, err := Seeds(t.TempDir(), "p")
+	got, err := Seeds(t.TempDir(), seedRelease())
 	if err != nil {
 		t.Fatalf("Seeds() = %v", err)
 	}
@@ -91,12 +99,19 @@ func TestTheGenesisTagSnapshotMatchesTheFormatThePublishersRead(t *testing.T) {
 
 func TestTheTagSnapshotKeyMatchesTheEdgeContract(t *testing.T) {
 	var contract struct {
-		TagSnapshotSuffix string `json:"tagSnapshotSuffix"`
+		TagSnapshotKey string `json:"tagSnapshotKey"`
+		TagNamespace   struct {
+			StorageCoordinate string `json:"storageCoordinate"`
+		} `json:"tagNamespace"`
 	}
 	if err := json.Unmarshal(nextCacheFixture(t, "edge-contract.json"), &contract); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := TagSnapshotKey("x"), "x"+contract.TagSnapshotSuffix; got != want {
-		t.Errorf("TagSnapshotKey(%q) = %q, want %q", "x", got, want)
+	release, err := naming.ParseStorageCoordinate(contract.TagNamespace.StorageCoordinate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := TagSnapshotKey(release); got != contract.TagSnapshotKey {
+		t.Errorf("TagSnapshotKey() = %q, want %q", got, contract.TagSnapshotKey)
 	}
 }

@@ -66,7 +66,7 @@ func (h *assetStoreHarness) assetBindings() []string {
 	return bound
 }
 
-func TestBootstrappingAnEdgeThatRunsCodeMintsAnAccountThatReadsTheAssetsStoreAndNothingElse(t *testing.T) {
+func TestBootstrappingAnEdgeThatRunsCodeMintsAnAccountThatReadsTheEdgeBucketAndNothingElse(t *testing.T) {
 	t.Parallel()
 	h := newAssetStoreHarness(t)
 
@@ -77,7 +77,8 @@ func TestBootstrappingAnEdgeThatRunsCodeMintsAnAccountThatReadsTheAssetsStoreAnd
 		t.Fatalf("the bootstrap created %v, want the one account %s", h.iam.Created, account)
 	}
 	want := grants.AssetsRole + " serviceAccount:" + h.clients.AssetReaderAccountEmail(environment.TierProduction) +
-		` resource.name.startsWith("projects/_/buckets/` + h.clients.Bucket(environment.TierProduction) + `/objects/assets/")`
+		` resource.name == "projects/_/buckets/ocel-prod-edge-k3x9q2"` +
+		` || resource.name.startsWith("projects/_/buckets/ocel-prod-edge-k3x9q2/objects/")`
 	if got := h.assetBindings(); !slices.Equal(got, []string{want}) {
 		t.Errorf("the project's asset bindings = %q, want exactly %q", got, want)
 	}

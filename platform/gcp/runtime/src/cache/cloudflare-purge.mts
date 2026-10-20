@@ -4,13 +4,13 @@ import type { PurgeTags } from "./cdn-purge.mjs";
 
 export interface CloudflarePurgeOptions extends Partial<PurgeSender> {
   url: string;
-  isrPrefix: string;
+  pagesPrefix: string;
   secret: string;
   now?: () => number;
 }
 
 export function newCloudflarePurge(options: CloudflarePurgeOptions): PurgeTags {
-  const { url, isrPrefix, secret } = options;
+  const { url, pagesPrefix, secret } = options;
   const sender: PurgeSender = {
     fetch: options.fetch ?? globalThis.fetch,
     sleep: options.sleep,
@@ -23,7 +23,7 @@ export function newCloudflarePurge(options: CloudflarePurgeOptions): PurgeTags {
       sender,
       url,
       secret,
-      isrPrefix,
+      pagesPrefix,
       [...tags].flatMap(([tag, record]) => readPurgeEntry(tag, record, at) ?? []),
     );
   };

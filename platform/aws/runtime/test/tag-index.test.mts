@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isGuardRejection,
-  isrPrefixOf,
+  parseTagNamespace,
   tagNamespace,
   tagRecordUpdate,
   tagSortKey,
@@ -82,60 +82,57 @@ function release(seed: number): string {
   return out;
 }
 
-describe("isrPrefixOf", () => {
-  it("round-trips every prefix tagNamespace can be given", () => {
+const acme = { project: "acme", env: "prod", app: "web", release: "r3f8a1c9d" };
+
+describe("parseTagNamespace", () => {
+  it("round-trips every coordinate tagNamespace can be given", () => {
     for (let seed = 0; seed < 512; seed++) {
-      const prefix = [
-        ...[seed, seed * 7 + 1, seed * 13 + 2].map(slug),
-        release(seed * 31 + 3),
-        "isr",
-      ].join("/");
-      const namespace = tagNamespace(prefix);
+      const [project, env, app] = [seed, seed * 7 + 1, seed * 13 + 2].map(slug);
+      const coordinate = {
+        project: project!,
+        env: env!,
+        app: app!,
+        release: release(seed * 31 + 3),
+      };
+      const namespace = tagNamespace(coordinate);
       expect(namespace).not.toBeNull();
-      expect(isrPrefixOf(namespace!)).toBe(prefix);
+      expect(parseTagNamespace(namespace!)).toEqual(coordinate);
     }
   });
 
   it("round-trips the shape the deploy actually produces", () => {
-    expect(tagNamespace("prod/acme/web/r3f8a1c9d/isr")).toBe(
-      "PROJECT#acme#STACK#prod--web--r3f8a1c9d#TAG#",
-    );
-    expect(isrPrefixOf("PROJECT#acme#STACK#prod--web--r3f8a1c9d#TAG#")).toBe(
-      "prod/acme/web/r3f8a1c9d/isr",
-    );
+    expect(tagNamespace(acme)).toBe("PROJECT#acme#STACK#prod--web--r3f8a1c9d#TAG#");
+    expect(parseTagNamespace("PROJECT#acme#STACK#prod--web--r3f8a1c9d#TAG#")).toEqual(acme);
   });
 
-  it("refuses a prefix that is not one release's ISR objects", () => {
-    expect(tagNamespace("prod/acme/web/r3f8a1c9d")).toBeNull();
-    expect(tagNamespace("prod/acme/web/r3f8a1c9d/assets")).toBeNull();
-    expect(tagNamespace("prod/acme/web/r3f8a1c9d/isr/cache")).toBeNull();
-    expect(tagNamespace("prod/acme//r3f8a1c9d/isr")).toBeNull();
-    expect(tagNamespace("")).toBeNull();
+  it("refuses a coordinate that is not one release", () => {
+    expect(tagNamespace({ ...acme, release: "r3f8" })).toBeNull();
+    expect(tagNamespace({ ...acme, env: "" })).toBeNull();
   });
 
   it("refuses a field that would forge a stack boundary or a key token", () => {
-    expect(tagNamespace("prod/acme/web--admin/r3f8a1c9d/isr")).toBeNull();
-    expect(tagNamespace("prod/acme/web#TAG#x/r3f8a1c9d/isr")).toBeNull();
+    expect(tagNamespace({ ...acme, app: "web--admin" })).toBeNull();
+    expect(tagNamespace({ ...acme, app: "web#TAG#x" })).toBeNull();
   });
 
   it("refuses a partition that is not a tag namespace", () => {
-    expect(isrPrefixOf("UPLOAD#abc")).toBeNull();
-    expect(isrPrefixOf("")).toBeNull();
-    expect(isrPrefixOf("TAG#")).toBeNull();
-    expect(isrPrefixOf("PROJECT#acme")).toBeNull();
-    expect(isrPrefixOf("PROJECT#acme#CLASS#production")).toBeNull();
-    expect(isrPrefixOf("PROJECT#acme#STACK#prod--web--r3f8a1c9d")).toBeNull();
+    expect(parseTagNamespace("UPLOAD#abc")).toBeNull();
+    expect(parseTagNamespace("")).toBeNull();
+    expect(parseTagNamespace("TAG#")).toBeNull();
+    expect(parseTagNamespace("PROJECT#acme")).toBeNull();
+    expect(parseTagNamespace("PROJECT#acme#CLASS#production")).toBeNull();
+    expect(parseTagNamespace("PROJECT#acme#STACK#prod--web--r3f8a1c9d")).toBeNull();
   });
 
   it("refuses a namespace that is not exactly the release's stack", () => {
-    expect(isrPrefixOf("PROJECT#acme#STACK#prod--web#TAG#")).toBeNull();
-    expect(isrPrefixOf("PROJECT#acme#STACK#prod--web--r3f8a1c9d--extra#TAG#")).toBeNull();
-    expect(isrPrefixOf("PROJECT##STACK#prod--web--r3f8a1c9d#TAG#")).toBeNull();
-    expect(isrPrefixOf("PROJECT#acme#STACK#--web--r3f8a1c9d#TAG#")).toBeNull();
+    expect(parseTagNamespace("PROJECT#acme#STACK#prod--web#TAG#")).toBeNull();
+    expect(parseTagNamespace("PROJECT#acme#STACK#prod--web--r3f8a1c9d--extra#TAG#")).toBeNull();
+    expect(parseTagNamespace("PROJECT##STACK#prod--web--r3f8a1c9d#TAG#")).toBeNull();
+    expect(parseTagNamespace("PROJECT#acme#STACK#--web--r3f8a1c9d#TAG#")).toBeNull();
   });
 
   it("refuses a whole tag partition key, which contains the tag as well", () => {
-    expect(isrPrefixOf(`${tagNamespace("prod/acme/web/r3f8a1c9d/isr")!}cart#42`)).toBeNull();
-    expect(isrPrefixOf(`${tagNamespace("prod/acme/web/r3f8a1c9d/isr")!}cart`)).toBeNull();
+    expect(parseTagNamespace(`${tagNamespace(acme)!}cart#42`)).toBeNull();
+    expect(parseTagNamespace(`${tagNamespace(acme)!}cart`)).toBeNull();
   });
 });

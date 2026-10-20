@@ -2,7 +2,7 @@ import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import type { EdgeObjectStore } from "../src/edge";
 
 export function routeTableKey(slug = "p1", digest = "a".repeat(64)): string {
-  return `prod/${slug}/web/deploy-1/route-table/${digest}.json`;
+  return `route-tables/${slug}/prod/web/r00000d01/${digest}.json`;
 }
 
 let tables = 0;

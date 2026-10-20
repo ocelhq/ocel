@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -22,7 +23,7 @@ func (NoArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadClo
 	return nil, refusal.Refuse(refusal.CodeInvalid, "this provider keeps no artifact store, so there is no artifact at %s", ref.Key)
 }
 
-func (NoArtifacts) RemovePrefix(context.Context, environment.Tier, string, progress.Log) error {
+func (NoArtifacts) RemoveObjects(context.Context, environment.Tier, naming.Coordinate, []naming.ObjectKind, progress.Log) error {
 	return nil
 }
 

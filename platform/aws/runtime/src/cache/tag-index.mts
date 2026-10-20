@@ -1,4 +1,5 @@
 import type { TagRecord } from "@platform/edge-contract/purge";
+import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
 
 export type TagAttribute = { S: string } | { N: string };
 
@@ -47,33 +48,25 @@ export function isGuardRejection(err: any): boolean {
   return err?.name === "ConditionalCheckFailedException";
 }
 
-const KIND = "isr";
 const KEY = "#";
 const FIELD = "--";
 const SLUG = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const RELEASE = /^r[0-9a-f]{8}$/;
 
-function coordinate(
-  env: string,
-  project: string,
-  app: string,
-  release: string,
-): [string, string, string, string] | null {
-  if (![env, project, app].every((f) => SLUG.test(f) && !f.includes(FIELD))) return null;
-  return RELEASE.test(release) ? [env, project, app, release] : null;
+function isRelease({ project, env, app, release }: StorageCoordinate): boolean {
+  return (
+    [env, project, app].every((f) => SLUG.test(f) && !f.includes(FIELD)) && RELEASE.test(release)
+  );
 }
 
-export function tagNamespace(isrPrefix: string): string | null {
-  const segments = isrPrefix.split("/");
-  if (segments.length !== 5 || segments[4] !== KIND) return null;
-  const facts = coordinate(segments[0]!, segments[1]!, segments[2]!, segments[3]!);
-  if (facts === null) return null;
-  const [env, project, app, release] = facts;
+export function tagNamespace(coordinate: StorageCoordinate): string | null {
+  if (!isRelease(coordinate)) return null;
+  const { project, env, app, release } = coordinate;
   const stack = [env, app, release].join(FIELD);
   return `PROJECT${KEY}${project}${KEY}STACK${KEY}${stack}${KEY}TAG${KEY}`;
 }
 
-export function isrPrefixOf(namespace: string): string | null {
+export function parseTagNamespace(namespace: string): StorageCoordinate | null {
   const tokens = namespace.split(KEY);
   if (tokens.length !== 6) return null;
   if (tokens[0] !== "PROJECT" || tokens[2] !== "STACK" || tokens[4] !== "TAG" || tokens[5] !== "") {
@@ -81,8 +74,6 @@ export function isrPrefixOf(namespace: string): string | null {
   }
   const fields = tokens[3]!.split(FIELD);
   if (fields.length !== 3) return null;
-  const facts = coordinate(fields[0]!, tokens[1]!, fields[1]!, fields[2]!);
-  if (facts === null) return null;
-  const [env, project, app, release] = facts;
-  return [env, project, app, release, KIND].join("/");
+  const coordinate = { project: tokens[1]!, env: fields[0]!, app: fields[1]!, release: fields[2]! };
+  return isRelease(coordinate) ? coordinate : null;
 }

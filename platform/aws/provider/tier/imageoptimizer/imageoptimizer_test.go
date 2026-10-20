@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
+	"slices"
 	"testing"
 
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
@@ -68,14 +68,14 @@ func TestEnsureMakesAnOptimizerTheDeployCredentialMayMakeUnderTheAppBoundary(t *
 			t.Fatal(err)
 		}
 	}
-	reads := false
+	var reads []string
 	for _, statement := range policy.Statement {
 		if statement.Action == "s3:GetObject" {
-			reads = strings.Contains(strings.Join(anyStrings(statement.Resource), " "), testBucketARN+"/*/assets/*")
+			reads = anyStrings(statement.Resource)
 		}
 	}
-	if !reads {
-		t.Errorf("role policy %+v, want it to read the asset bucket's assets", policy)
+	if want := []string{testBucketARN + "/assets/*", testBucketARN + "/image-config/*"}; !slices.Equal(reads, want) {
+		t.Errorf("role reads %v, want exactly %v: the asset and image-config kinds", reads, want)
 	}
 	fn, ok := account.Functions[names.Function]
 	if !ok {
