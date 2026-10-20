@@ -33,6 +33,7 @@ type TierTags struct {
 	BindingsUnseen int
 	BindingsDenied bool
 	ValuesAbsent   bool
+	Denied         []string
 
 	next int
 }
@@ -106,9 +107,21 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	path := strings.TrimPrefix(r.URL.EscapedPath(), "/v3/")
 	switch {
+	case r.Method == http.MethodPost && path == "projects/"+Project+":testIamPermissions":
+		asked := ReadBody[crm.TestIamPermissionsRequest](w, r)
+		if asked == nil {
+			return
+		}
+		granted := &crm.TestIamPermissionsResponse{}
+		for _, permission := range asked.Permissions {
+			if !slices.Contains(s.Denied, permission) {
+				granted.Permissions = append(granted.Permissions, permission)
+			}
+		}
+		WriteBody(w, granted)
 	case r.Method == http.MethodGet && path == "tagKeys/namespaced":
 		key := s.Keys[r.URL.Query().Get("name")]
-		if key == nil {
+		if key == nil || slices.Contains(s.Denied, "resourcemanager.tagKeys.get") {
 			writeDenied(w)
 			return
 		}
@@ -116,7 +129,7 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "tagValues/namespaced":
 		s.ValueLookups++
 		value := s.Values[r.URL.Query().Get("name")]
-		if value == nil || s.ValuesAbsent {
+		if value == nil || s.ValuesAbsent || slices.Contains(s.Denied, "resourcemanager.tagValues.get") {
 			writeDenied(w)
 			return
 		}
