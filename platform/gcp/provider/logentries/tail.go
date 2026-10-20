@@ -44,12 +44,12 @@ type Notice struct {
 	Count  int
 }
 
-func Tail(ctx context.Context, client *logging.Client, project string, q Query, emit func([]Event) error, notice func(Notice) error) error {
+func Tail(ctx context.Context, client *logging.Client, view string, q Query, emit func([]Event) error, notice func(Notice) error) error {
 	if len(q.Sources) == 0 {
 		return nil
 	}
 	req := &loggingpb.TailLogEntriesRequest{
-		ResourceNames: []string{"projects/" + project},
+		ResourceNames: []string{view},
 		Filter:        tailFilter(q),
 		BufferWindow:  durationpb.New(bufferWindow),
 	}
@@ -58,9 +58,9 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 		if backfilled != nil {
 			return nil
 		}
-		events, err := listSince(ctx, client, project, q)
+		events, err := listSince(ctx, client, view, q)
 		if err != nil {
-			return fmt.Errorf("read log entries of project %s from %s: %w", project, q.Since.Format(time.RFC3339Nano), err)
+			return fmt.Errorf("read log entries through the log view %s from %s: %w", view, q.Since.Format(time.RFC3339Nano), err)
 		}
 		backfilled = map[string]bool{}
 		for _, event := range events {
@@ -102,13 +102,13 @@ func Tail(ctx context.Context, client *logging.Client, project string, q Query, 
 			}
 			continue
 		}
-		return fmt.Errorf("tail log entries of project %s: %w", project, err)
+		return fmt.Errorf("tail log entries through the log view %s: %w", view, err)
 	}
 }
 
-func listSince(ctx context.Context, client *logging.Client, project string, q Query) ([]Event, error) {
+func listSince(ctx context.Context, client *logging.Client, view string, q Query) ([]Event, error) {
 	entries := client.ListLogEntries(ctx, &loggingpb.ListLogEntriesRequest{
-		ResourceNames: []string{"projects/" + project},
+		ResourceNames: []string{view},
 		Filter:        filter(Query{Sources: q.Sources, Since: q.Since, Contains: q.Contains}),
 		OrderBy:       "timestamp asc",
 		PageSize:      maxPageSize,
