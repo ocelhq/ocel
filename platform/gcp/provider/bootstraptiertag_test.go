@@ -199,6 +199,9 @@ func TestTheTiersPassphraseSecretCarriesItsTiersTagFromItsCreation(t *testing.T)
 	if got := tags.Bound(googletest.SecretTagParent(target.Name)); !slices.Equal(got, []string{tags.ValueOf(environment.TierPreview)}) {
 		t.Errorf("the passphrase secret carries %v, want the preview value once", got)
 	}
+	if tags.BindingsAsked != 0 {
+		t.Errorf("Resource Manager was asked for %d bindings, want none: the secret carried its tag from its creation", tags.BindingsAsked)
+	}
 }
 
 func TestRemovingATiersPassphraseSecretRemovesItsTagBeforeTheSecret(t *testing.T) {

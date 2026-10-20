@@ -34,6 +34,9 @@ func TestAProjectsDatabaseOfATierCarriesItsTiersTagFromItsCreation(t *testing.T)
 	if got := tags.Bound(googletest.DatabaseTagParent(id)); !slices.Equal(got, []string{tags.ValueOf(environment.TierPreview)}) {
 		t.Errorf("the database carries %v, want the preview value once", got)
 	}
+	if tags.BindingsAsked != 1 {
+		t.Errorf("Resource Manager was asked for %d bindings, want one, for the database found already made: the new one carried its tag from its creation", tags.BindingsAsked)
+	}
 }
 
 func TestTheDatabaseBothTiersShareCarriesNoTierTag(t *testing.T) {
@@ -42,7 +45,7 @@ func TestTheDatabaseBothTiersShareCarriesNoTierTag(t *testing.T) {
 	b, databases, tags := taggedDatabases(t)
 	read := bootstrap.Survey{Tier: environment.TierProduction, Names: b.Clients.Names, Project: googletest.Project, Region: googletest.Region}
 
-	if err := b.MakeDatabase(ctx, read, b.Clients.Database(), nil); err != nil {
+	if err := b.MakeDatabase(ctx, read, b.Clients.Database()); err != nil {
 		t.Fatal(err)
 	}
 	if len(databases.InlineTags) != 0 || len(tags.BindingsMade) != 0 {

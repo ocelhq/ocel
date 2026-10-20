@@ -41,6 +41,36 @@ func TestEveryTopicAndSubscriptionOfATierCarriesItsTiersTagFromItsCreation(t *te
 			t.Errorf("%s was created with tags %v, want acme-prod/ocel-tier: production", path, got)
 		}
 	}
+	if fake.TierTags.BindingsAsked != 0 {
+		t.Errorf("Resource Manager was asked for %d bindings, want none: each topic and subscription carried its tag from its creation", fake.TierTags.BindingsAsked)
+	}
+}
+
+func TestATopicAndSubscriptionFoundAlreadyMadeAreBoundToTheirTiersValue(t *testing.T) {
+	ctx := context.Background()
+	fake, workload, tags := taggedPubSub(t)
+	names := topics.Names{Namespace: "ocel", Scope: scopeOf(t)}
+	untaggedAtCreation := tags
+	untaggedAtCreation.Inline = nil
+	if err := (topics.Topology{Names: names, Topics: ordersAndResize(), Tags: untaggedAtCreation}).Ensure(ctx, workload); err != nil {
+		t.Fatal(err)
+	}
+	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app"), Tags: untaggedAtCreation}).Ensure(ctx, workload); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := (topics.Topology{Names: names, Topics: ordersAndResize(), Tags: tags}).Ensure(ctx, workload); err != nil {
+		t.Fatal(err)
+	}
+	if err := (topics.Subscriptions{Names: names, Topics: ordersAndResize(), Pushes: pushesTo("https://worker.run.app"), Tags: tags}).Ensure(ctx, workload); err != nil {
+		t.Fatal(err)
+	}
+	found := slices.Concat(fake.Created, []string{topics.TopicPath("acme-prod", topicOf(t, names, "orders")), topics.TopicPath("acme-prod", topicOf(t, names, "resize"))})
+	for _, path := range found {
+		if got := fake.TierTags.Bound(googletest.PubSubTagParent(path)); !slices.Equal(got, []string{fake.TierTags.ValueOf(environment.TierProduction)}) {
+			t.Errorf("%s, found already made, carries %v, want the production value", path, got)
+		}
+	}
 }
 
 func TestRemovingATopologyRemovesEachInlineTagBeforeItsTopicOrSubscription(t *testing.T) {

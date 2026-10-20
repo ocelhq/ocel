@@ -55,6 +55,8 @@ type KindOps struct {
 	Take    func(ctx context.Context, b Engine, read Survey, target Resource) (time.Duration, error)
 	taken   func(r Removal) string
 	tagged  func(ctx context.Context, b Engine, read Survey, target Resource) (gcloud.TaggedResource, bool, error)
+
+	taggedAtCreation bool
 }
 
 var kinds map[Kind]KindOps

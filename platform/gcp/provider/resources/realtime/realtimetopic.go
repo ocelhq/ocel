@@ -67,7 +67,11 @@ func (r realtimeEnvironment) ensureTopic(ctx context.Context) error {
 	}
 	topic := &pubsub.Topic{Labels: labels, Tags: r.clients.InlineTierTags(r.ref.Tier)}
 	_, err = googleretry.Attempted(ctx, service.Projects.Topics.Create(r.topic(), topic).Context(ctx).Do)
-	if err != nil && googleretry.AnsweredCode(err) != http.StatusConflict {
+	if googleretry.AnsweredCode(err) == http.StatusConflict {
+		if err := r.clients.EnsureTierTag(ctx, r.ref.Tier, r.clients.PubSubTagged(r.topic())); err != nil {
+			return err
+		}
+	} else if err != nil {
 		return fmt.Errorf("create the realtime topic %s: %w", r.topic(), err)
 	}
 	_, err = policy.Edit(ctx, resource, r.topicGrants())
