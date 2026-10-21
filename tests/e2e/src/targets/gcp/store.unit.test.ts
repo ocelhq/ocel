@@ -20,18 +20,37 @@ import {
   servicesIn,
   servicesOf,
   strayServices,
+  switchedOnAPIs,
 } from "./store";
 
-describe("the apis a bootstrap wants on", () => {
-  it("are the ones the provider refuses without", async () => {
-    const go = await readFile(
-      path.join(repoRoot, "platform", "gcp", "provider", "internal", "bootstrap", "resources.go"),
-      "utf8",
-    );
+const providerSource = (...at: string[]) =>
+  readFile(path.join(repoRoot, "platform", "gcp", "provider", ...at), "utf8");
+
+const quoted = (listed: string | undefined) =>
+  [...(listed ?? "").matchAll(/"([^"]+)"/g)].map((one) => one[1]);
+
+describe("the apis the floci lane switches on", () => {
+  it("are the ones the provider's bootstrap refuses without", async () => {
+    const go = await providerSource("internal", "bootstrap", "resources.go");
     const listed = go.match(/var BootstrapAPIs = \[\]string\{([^}]*)\}/);
     expect(listed).not.toBeNull();
-    const declared = [...(listed?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((one) => one[1]);
-    expect(declared).toEqual(BOOTSTRAP_APIS);
+    expect(quoted(listed?.[1])).toEqual(BOOTSTRAP_APIS);
+  });
+
+  it("are the ones each part the lane adds and each deploy refuses without", async () => {
+    const parts = await providerSource("internal", "bootstrap", "resourcepart.go");
+    const sync = await providerSource("envsource", "part.go");
+    const deploy = await providerSource("preflight.go");
+    const partAPIs = [...parts.matchAll(/APIs:\s*\[\]string\{([^}]*)\}/g)].flatMap((one) =>
+      quoted(one[1]),
+    );
+    const syncAPIs = quoted(sync.match(/var SyncAPIs = \[\]string\{([^}]*)\}/)?.[1]);
+    const deployAPIs = quoted(deploy.match(/const \(([^)]*)\)/)?.[1]);
+    expect(syncAPIs.length).toBeGreaterThan(0);
+    expect(deployAPIs.length).toBeGreaterThan(0);
+
+    const declared = new Set([...BOOTSTRAP_APIS, ...partAPIs, ...syncAPIs, ...deployAPIs]);
+    expect(new Set(switchedOnAPIs())).toEqual(declared);
   });
 });
 

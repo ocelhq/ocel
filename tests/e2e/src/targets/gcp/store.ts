@@ -103,21 +103,29 @@ export function reachable(uri: string, endpoint: string | undefined): string {
 export const BOOTSTRAP_APIS = [
   "firestore.googleapis.com",
   "storage.googleapis.com",
-  "cloudkms.googleapis.com",
   "secretmanager.googleapis.com",
   "artifactregistry.googleapis.com",
   "iam.googleapis.com",
-  "run.googleapis.com",
-  "cloudscheduler.googleapis.com",
-  "iamcredentials.googleapis.com",
-  "pubsub.googleapis.com",
-  "cloudtasks.googleapis.com",
   "cloudresourcemanager.googleapis.com",
   "logging.googleapis.com",
 ];
 
+const PART_APIS = [
+  "cloudkms.googleapis.com",
+  "pubsub.googleapis.com",
+  "cloudtasks.googleapis.com",
+  "run.googleapis.com",
+  "cloudscheduler.googleapis.com",
+];
+
+const DEPLOY_APIS = ["run.googleapis.com", "iamcredentials.googleapis.com"];
+
+export function switchedOnAPIs(): string[] {
+  return [...new Set([...BOOTSTRAP_APIS, ...PART_APIS, ...DEPLOY_APIS])];
+}
+
 export async function switchOn(endpoint: string, project: string): Promise<void> {
-  for (const api of BOOTSTRAP_APIS) {
+  for (const api of switchedOnAPIs()) {
     const at = `${endpoint}/v1/projects/${project}/services/${api}:enable`;
     const answered = await fetch(at, {
       method: "POST",
