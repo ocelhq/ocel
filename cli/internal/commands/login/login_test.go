@@ -3,12 +3,14 @@ package login
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
@@ -129,6 +131,14 @@ func (d *describedConsole) Describe(context.Context, *consolev1.DescribeRequest)
 	return &consolev1.DescribeResponse{ConsoleVersion: "1.0.0", Cloud: d.cloud}, nil
 }
 
+type unreadableConsole struct {
+	consolev1connect.UnimplementedConsoleServiceHandler
+}
+
+func (unreadableConsole) Describe(context.Context, *consolev1.DescribeRequest) (*consolev1.DescribeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnavailable, errors.New("the console is restarting"))
+}
+
 func serveDeviceLogin(t *testing.T, describe consolev1connect.ConsoleServiceHandler) string {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -223,6 +233,32 @@ func TestLoginAsJSONSaysWhetherTheConsoleOffersOcelCloud(t *testing.T) {
 		clitest.DecodeResultInto(t, stdout.String(), &got)
 		if !proto.Equal(got.GetCloud(), offered) {
 			t.Errorf("login result = %v, want the offer %v", &got, offered)
+		}
+	})
+
+	t.Run("a console that offers none, and one whose offer cannot be read", func(t *testing.T) {
+		for _, tc := range []struct {
+			describe  consolev1connect.ConsoleServiceHandler
+			wantError bool
+		}{
+			{describe: &describedConsole{}},
+			{describe: unreadableConsole{}, wantError: true},
+		} {
+			t.Setenv(console.URLEnvVar, serveDeviceLogin(t, tc.describe))
+			dependencies := newTestDependencies()
+			dependencies.Presentation = clitest.ResolveJSONPresentation
+			dependencies.LoadCredentials = func() (console.Credentials, error) { return console.Credentials{}, console.ErrNotLoggedIn }
+			dependencies.SaveCredentials = func(console.Credentials) (console.CredentialStore, error) { return console.KeyringStore, nil }
+
+			var stdout bytes.Buffer
+			if err := run(context.Background(), dependencies, false, strings.NewReader(""), &stdout, &bytes.Buffer{}); err != nil {
+				t.Fatal(err)
+			}
+			var got resultv1.LoginResult
+			clitest.DecodeResultInto(t, stdout.String(), &got)
+			if got.GetCloud() != nil || (got.GetCloudError() != "") != tc.wantError {
+				t.Errorf("login result = %v, want no offer, with an error only when the offer could not be read: %t", &got, tc.wantError)
+			}
 		}
 	})
 
