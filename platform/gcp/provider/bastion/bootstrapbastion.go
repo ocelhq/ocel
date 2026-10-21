@@ -3,6 +3,8 @@ package bastion
 import (
 	"context"
 
+	runv2 "google.golang.org/api/run/v2"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -15,10 +17,19 @@ import (
 
 const reasonBastionOnDemand = "a build's port forwards made it on first use, so the bootstrap's own list does not name it"
 
+var bastionAPIs = []string{"run.googleapis.com"}
+
+func readBastion(ctx context.Context, b bootstrap.Engine, tier environment.Tier) (*runv2.GoogleCloudRunV2Service, error) {
+	off, err := b.ListServicesOff(ctx, bastionAPIs)
+	if err != nil || len(off) > 0 {
+		return nil, err
+	}
+	return Bastion{clients: b.Clients}.read(ctx, tier)
+}
+
 func bastionRemovals(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]provider.Change, error) {
-	at := Bastion{clients: b.Clients}
 	var changes []provider.Change
-	service, err := at.read(ctx, tier)
+	service, err := readBastion(ctx, b, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +47,15 @@ func bastionRemovals(ctx context.Context, b bootstrap.Engine, tier environment.T
 }
 
 func removeBastion(ctx context.Context, b bootstrap.Engine, tier environment.Tier, progress progress.Log) error {
-	return Bastion{clients: b.Clients, tearDown: b.TearDown}.remove(ctx, tier, progress)
+	at := Bastion{clients: b.Clients, tearDown: b.TearDown}
+	off, err := b.ListServicesOff(ctx, bastionAPIs)
+	if err != nil {
+		return err
+	}
+	if len(off) > 0 {
+		return at.removeAccount(ctx, tier, progress)
+	}
+	return at.remove(ctx, tier, progress)
 }
 
 const (
@@ -53,7 +72,7 @@ var Part = bootstrap.RemovablePart{
 }
 
 func describeBastionPart(ctx context.Context, b bootstrap.Engine, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-	service, err := Bastion{clients: b.Clients}.read(ctx, tier)
+	service, err := readBastion(ctx, b, tier)
 	if err != nil || service == nil {
 		return provider.BootstrapPart{}, false, err
 	}
