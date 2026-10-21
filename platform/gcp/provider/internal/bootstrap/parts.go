@@ -31,6 +31,7 @@ type Part struct {
 	Shape       []pricing.Shaped
 	Removals    []provider.Change
 	Make        func(ctx context.Context) error
+	Replace     func(ctx context.Context) error
 	Claim       func(ctx context.Context, project string) error
 	Users       func(ctx context.Context) ([]string, error)
 	RefuseInUse func(ctx context.Context, removal PartRemoval) error
@@ -57,10 +58,14 @@ func (b Engine) listDeployedParts(tier environment.Tier) []Part {
 }
 
 func (b Engine) EnsurePart(ctx context.Context, tier environment.Tier, project string, want Part) error {
-	return stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, b.partWork(tier, project, want))
+	return stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, b.partWork(tier, project, want, false))
 }
 
-func (b Engine) partWork(tier environment.Tier, project string, want Part) stackrecords.PartWork {
+func (b Engine) partWork(tier environment.Tier, project string, want Part, replacing bool) stackrecords.PartWork {
+	makePart := want.Make
+	if replacing && want.Replace != nil {
+		makePart = want.Replace
+	}
 	return stackrecords.PartWork{
 		Name:      want.Name,
 		WrittenBy: string(b.WrittenBy),
@@ -70,7 +75,7 @@ func (b Engine) partWork(tier environment.Tier, project string, want Part) stack
 			if err := b.RefuseServicesOff(ctx, want.APIs); err != nil {
 				return nil, err
 			}
-			if err := want.Make(ctx); err != nil {
+			if err := makePart(ctx); err != nil {
 				return nil, fmt.Errorf("add the %s part of the %s bootstrap: %w", want.Name, tier, err)
 			}
 			return want.Resources, nil
@@ -218,7 +223,7 @@ func (b Engine) RemoveParts(ctx context.Context, tier environment.Tier, progress
 	return nil
 }
 
-func (b Engine) RepairParts(ctx context.Context, tier environment.Tier) ([]string, error) {
+func (b Engine) RepairParts(ctx context.Context, tier environment.Tier, replacing bool) ([]string, error) {
 	var works []stackrecords.PartWork
 	for _, each := range b.Removable {
 		if each.Work != nil {
@@ -226,16 +231,16 @@ func (b Engine) RepairParts(ctx context.Context, tier environment.Tier) ([]strin
 		}
 	}
 	for _, each := range b.listDeployedParts(tier) {
-		works = append(works, b.partWork(tier, "", each))
+		works = append(works, b.partWork(tier, "", each, replacing))
 	}
 	return stackrecords.RepairBootstrapParts(ctx, b.Records, tier, works)
 }
 
 func (b Engine) AddParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {
-	return b.ensureParts(ctx, pre.Deploy.Tier, pre.Deploy.Slug, names)
+	return b.ensureParts(ctx, pre.Deploy.Tier, pre.Deploy.Slug, names, false)
 }
 
-func (b Engine) ensureParts(ctx context.Context, tier environment.Tier, project string, names []string) error {
+func (b Engine) ensureParts(ctx context.Context, tier environment.Tier, project string, names []string, replacing bool) error {
 	for _, want := range b.listDeployedParts(tier) {
 		if !slices.Contains(names, want.Name) {
 			continue
@@ -245,7 +250,7 @@ func (b Engine) ensureParts(ctx context.Context, tier environment.Tier, project 
 				return err
 			}
 		}
-		if err := b.EnsurePart(ctx, tier, project, want); err != nil {
+		if err := stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, b.partWork(tier, project, want, replacing)); err != nil {
 			return err
 		}
 	}

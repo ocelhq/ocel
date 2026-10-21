@@ -82,7 +82,7 @@ var frontedParts = []string{KeysPart, EdgeBucketPart}
 
 func (b Engine) raiseParts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if len(b.fronted(req.Parts)) > 0 {
-		if err := b.ensureParts(ctx, req.Tier, "", frontedParts); err != nil {
+		if err := b.ensureParts(ctx, req.Tier, "", frontedParts, !req.RefuseReplacements); err != nil {
 			return err
 		}
 	}

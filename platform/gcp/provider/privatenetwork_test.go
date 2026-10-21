@@ -311,7 +311,7 @@ func TestABootstrapMakesARecordedPrivateNetworkAgainWhenItWasTakenDownByHand(t *
 	recordingNetwork(t, &b)
 	ctx := context.Background()
 
-	repaired, err := b.RepairParts(ctx, environment.TierProduction)
+	repaired, err := b.RepairParts(ctx, environment.TierProduction, false)
 	if err != nil {
 		t.Fatalf("repairParts() = %v", err)
 	}

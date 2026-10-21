@@ -173,24 +173,32 @@ func RolesCovering(parts []string) []string {
 	return roles
 }
 
-func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
+func (b Engine) listServicesOff(ctx context.Context, apis []string) ([]string, error) {
+	if len(apis) == 0 {
+		return nil, nil
+	}
 	service, err := b.Clients.Services()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var off []string
 	for _, api := range apis {
 		name := "projects/" + b.Clients.Project() + "/services/" + api
 		apiService, err := googleretry.Attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {
-			return fmt.Errorf("read whether %s is on in project %s: %w", api, b.Clients.Project(), err)
+			return nil, fmt.Errorf("read whether %s is on in project %s: %w", api, b.Clients.Project(), err)
 		}
 		if apiService.State != EnabledService {
 			off = append(off, api)
 		}
 	}
-	if len(off) == 0 {
-		return nil
+	return off, nil
+}
+
+func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
+	off, err := b.listServicesOff(ctx, apis)
+	if err != nil || len(off) == 0 {
+		return err
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"project %s has %s switched off, and ocel provisions resources rather than switching on the services that host them.\n"+
