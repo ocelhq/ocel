@@ -1,0 +1,11 @@
+syntax = "proto3";
+package cloud.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/cloud/v1;cloudv1";
+
+message VersionUnserved {
+  repeated string served = 1;
+}
+
+message SessionEnded {
+}

@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	"github.com/ocelhq/ocel/pkg/proto/cloud/v1/cloudv1connect"
 )
@@ -31,6 +32,8 @@ const (
 	slowestUpload     = 1 << 20
 	maxErrorBody      = 512
 )
+
+const VersionHeader = "Ocel-Version"
 
 type TokenSource interface {
 	Ensure(ctx context.Context) (string, error)
@@ -65,6 +68,7 @@ func (c *Client) bearer() connect.UnaryInterceptorFunc {
 				return nil, err
 			}
 			req.Header().Set("Authorization", "Bearer "+token)
+			req.Header().Set(VersionHeader, version.Version)
 			return next(ctx, req)
 		}
 	}

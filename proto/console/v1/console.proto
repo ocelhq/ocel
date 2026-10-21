@@ -27,6 +27,7 @@ message DescribeResponse {
 
 message IssueCloudTokenRequest {
   repeated string scopes = 1 [(buf.validate.field).repeated = {
+    min_items: 1
     max_items: 32
     unique: true
     items: {
@@ -37,10 +38,16 @@ message IssueCloudTokenRequest {
       }
     }
   }];
+
+  string organization_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
 }
 
 message IssueCloudTokenResponse {
-  string token = 1;
+  string token = 1 [debug_redact = true];
 
   google.protobuf.Timestamp expires_at = 2;
 }

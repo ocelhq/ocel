@@ -7,7 +7,12 @@
       "Authorization": "Bearer {{session.token}}",
       "Content-Type": "application/json"
     },
-    "body": {}
+    "body": {
+      "scopes": [
+        "cloud.apps.read"
+      ],
+      "organizationId": "{{organization.id}}"
+    }
   },
   "response": {
     "status": 200,

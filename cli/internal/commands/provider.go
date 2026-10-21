@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -138,10 +139,7 @@ func (i Invocation) openOnCloud(ctx context.Context, check *run.Span, cfg *proje
 	if err != nil {
 		return nil, err
 	}
-	if err := client.SetActiveOrganization(ctx, session, org.ID); err != nil {
-		return nil, fmt.Errorf("make %s your active organization in %s: %w", org.Name, cloud.ConsoleURL, err)
-	}
-	tokens := console.NewCloudTokens(client, session)
+	tokens := console.NewCloudTokens(client, session, org.ID, cloudv1.Scope_SCOPE_APPS_READ, cloudv1.Scope_SCOPE_APPS_WRITE)
 	provider, err := providerprocess.StartRemote(ctx, cfg, check, i.Questions, providerprocess.Remote{Name: CloudProviderID, URL: cloud.Offer.ProviderURL, Tokens: tokens})
 	if err != nil {
 		return nil, err

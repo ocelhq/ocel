@@ -89,11 +89,10 @@ func failure(code connect.Code) jobRead {
 
 func startBuild() *cloudv1.StartJobRequest {
 	return &cloudv1.StartJobRequest{
-		ProjectId:  "proj_1",
-		Slug:       "shop",
-		Command:    cloudv1.JobCommand_JOB_COMMAND_BUILD,
-		SourceId:   strings.Repeat("ab", 32),
-		CliVersion: "dev",
+		ProjectId: "proj_1",
+		Slug:      "shop",
+		Command:   cloudv1.JobCommand_JOB_COMMAND_BUILD,
+		SourceId:  strings.Repeat("ab", 32),
 	}
 }
 

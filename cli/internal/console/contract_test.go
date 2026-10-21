@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/consolecontract"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 )
 
 var contractBinding = consolecontract.Binding{Values: map[string]string{
@@ -64,12 +65,12 @@ var contractCalls = map[string]contractCall{
 		return asProtoJSON(c.Describe(ctx))
 	}},
 	"cloud-token": {send: func(ctx context.Context, c *Client, values map[string]string) (any, error) {
-		decoded, err := c.IssueCloudToken(ctx, values["session.token"], nil)
+		decoded, err := c.IssueCloudToken(ctx, values["session.token"], values["organization.id"], []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_READ})
 		return decoded, err
 	}},
 	"cloud-token-without-session": {
-		send: func(ctx context.Context, c *Client, _ map[string]string) (any, error) {
-			_, err := c.IssueCloudToken(ctx, "", nil)
+		send: func(ctx context.Context, c *Client, values map[string]string) (any, error) {
+			_, err := c.IssueCloudToken(ctx, "", values["organization.id"], []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_READ})
 			return nil, err
 		},
 		refused: func(err error) bool { return connect.CodeOf(err) == connect.CodeUnauthenticated },

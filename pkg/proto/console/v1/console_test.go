@@ -8,17 +8,22 @@ import (
 )
 
 func validIssueCloudTokenRequest() *consolev1.IssueCloudTokenRequest {
-	return &consolev1.IssueCloudTokenRequest{Scopes: []string{"jobs:write"}}
+	return &consolev1.IssueCloudTokenRequest{OrganizationId: "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79", Scopes: []string{"cloud.apps.read"}}
 }
 
 func TestProtovalidateAcceptsEveryCloudTokenRequestTheCLICanSend(t *testing.T) {
 	requireAccepted(t, "a describe", &consolev1.DescribeRequest{})
-	requireAccepted(t, "the default scopes", &consolev1.IssueCloudTokenRequest{})
-	requireAccepted(t, "named scopes", &consolev1.IssueCloudTokenRequest{Scopes: []string{"jobs:write", "source.upload"}})
+	requireAccepted(t, "one scope", validIssueCloudTokenRequest())
+	scopes := validIssueCloudTokenRequest()
+	scopes.Scopes = []string{"cloud.apps.read", "cloud.apps.write", "cloud.variables.write"}
+	requireAccepted(t, "several scopes", scopes)
 }
 
-func TestProtovalidateRefusesACloudTokenRequestWithAMalformedScope(t *testing.T) {
+func TestProtovalidateRefusesACloudTokenRequestWithAMalformedScopeOrNoOrganization(t *testing.T) {
 	requireRefusals(t, validIssueCloudTokenRequest, []refusal[*consolev1.IssueCloudTokenRequest]{
+		{name: "an organization is named", mutate: func(r *consolev1.IssueCloudTokenRequest) { r.OrganizationId = "" }},
+		{name: "an organization id is URL-safe", mutate: func(r *consolev1.IssueCloudTokenRequest) { r.OrganizationId = "../org_2" }},
+		{name: "a scope is named", mutate: func(r *consolev1.IssueCloudTokenRequest) { r.Scopes = nil }},
 		{name: "a scope is not empty", mutate: func(r *consolev1.IssueCloudTokenRequest) { r.Scopes = []string{""} }},
 		{name: "a scope is lower case", mutate: func(r *consolev1.IssueCloudTokenRequest) { r.Scopes = []string{"Jobs"} }},
 		{name: "a scope has no spaces", mutate: func(r *consolev1.IssueCloudTokenRequest) { r.Scopes = []string{"jobs write"} }},

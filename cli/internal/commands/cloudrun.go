@@ -26,7 +26,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
-	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -91,7 +90,7 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 	}
 
 	upload := running.Phase(progressv1.Phase_PHASE_BUILD)
-	jobs := cloud.New(t.Cloud.Offer.APIURL, console.NewCloudTokens(client, session))
+	jobs := cloud.New(t.Cloud.Offer.APIURL, console.NewCloudTokens(client, session, org.ID, cloudv1.Scope_SCOPE_APPS_READ, cloudv1.Scope_SCOPE_APPS_WRITE))
 	sourceID, projectPath, err := uploadSource(ctx, upload, cfg, jobs)
 	upload.End(err)
 	if err != nil {
@@ -105,7 +104,6 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 		Slug:        cfg.Slug,
 		Command:     job.Kind,
 		SourceId:    sourceID,
-		CliVersion:  version.Version,
 		Git:         readGitContext(cfg.Dir),
 		Tag:         job.Tag,
 		Preview:     job.Preview,
@@ -115,7 +113,7 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 		starting.End(err)
 		return err
 	}
-	jobURL := JobURL(t.Cloud.ConsoleURL, started.GetId())
+	jobURL := JobURL(t.Cloud.ConsoleURL, started.GetId(), org.ID)
 	starting.End(nil)
 	phase.Say(fmt.Sprintf("Job %s · follow it at %s", started.GetId(), jobURL))
 	running.SetCloudJob(summarizeJob(started, jobURL))
@@ -199,8 +197,8 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 	return ended, err
 }
 
-func JobURL(consoleURL, jobID string) string {
-	return strings.TrimRight(consoleURL, "/") + "/cloud/jobs/" + url.PathEscape(jobID)
+func JobURL(consoleURL, jobID, organizationID string) string {
+	return strings.TrimRight(consoleURL, "/") + "/cloud/jobs/" + url.PathEscape(jobID) + "?" + url.Values{"org": {organizationID}}.Encode()
 }
 
 func jobPhase(kind cloudv1.JobCommand) progressv1.Phase {
@@ -392,11 +390,11 @@ func pickCloudOrganization(ctx context.Context, client *console.Client, session,
 }
 
 func linkCloudProject(ctx context.Context, check *run.Span, client *console.Client, session string, cfg *project.Project, org *console.Organization, consoleURL string) (*console.Link, error) {
-	if err := client.SetActiveOrganization(ctx, session, org.ID); err != nil {
-		return nil, fmt.Errorf("make %s your active organization in %s: %w", org.Name, consoleURL, err)
-	}
 	if link, err := console.ReadLink(cfg.Dir, consoleURL); err != nil || link != nil {
 		return link, err
+	}
+	if err := client.SetActiveOrganization(ctx, session, org.ID); err != nil {
+		return nil, fmt.Errorf("make %s your active organization in %s: %w", org.Name, consoleURL, err)
 	}
 	selected, err := findOrCreateProject(ctx, check, client, session, cfg.Slug, org)
 	if err != nil {

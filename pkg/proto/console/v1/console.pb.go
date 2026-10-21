@@ -180,10 +180,11 @@ func (x *DescribeResponse) GetCloud() *CloudOffer {
 }
 
 type IssueCloudTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scopes        []string               `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Scopes         []string               `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	OrganizationId string                 `protobuf:"bytes,2,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *IssueCloudTokenRequest) Reset() {
@@ -221,6 +222,13 @@ func (x *IssueCloudTokenRequest) GetScopes() []string {
 		return x.Scopes
 	}
 	return nil
+}
+
+func (x *IssueCloudTokenRequest) GetOrganizationId() string {
+	if x != nil {
+		return x.OrganizationId
+	}
+	return ""
 }
 
 type IssueCloudTokenResponse struct {
@@ -290,11 +298,12 @@ const file_console_v1_console_proto_rawDesc = "" +
 	"\x10DescribeResponse\x12'\n" +
 	"\x0fconsole_version\x18\x01 \x01(\tR\x0econsoleVersion\x12\"\n" +
 	"\fcapabilities\x18\x02 \x03(\tR\fcapabilities\x12,\n" +
-	"\x05cloud\x18\x03 \x01(\v2\x16.console.v1.CloudOfferR\x05cloud\"U\n" +
-	"\x16IssueCloudTokenRequest\x12;\n" +
-	"\x06scopes\x18\x01 \x03(\tB#\xbaH \x92\x01\x1d\x10 \x18\x01\"\x17r\x15\x10\x01\x18@2\x0f^[a-z0-9._:-]+$R\x06scopes\"j\n" +
-	"\x17IssueCloudTokenResponse\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +
+	"\x05cloud\x18\x03 \x01(\v2\x16.console.v1.CloudOfferR\x05cloud\"\x9e\x01\n" +
+	"\x16IssueCloudTokenRequest\x12=\n" +
+	"\x06scopes\x18\x01 \x03(\tB%\xbaH\"\x92\x01\x1f\b\x01\x10 \x18\x01\"\x17r\x15\x10\x01\x18@2\x0f^[a-z0-9._:-]+$R\x06scopes\x12E\n" +
+	"\x0forganization_id\x18\x02 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\x0eorganizationId\"o\n" +
+	"\x17IssueCloudTokenResponse\x12\x19\n" +
+	"\x05token\x18\x01 \x01(\tB\x03\x80\x01\x01R\x05token\x129\n" +
 	"\n" +
 	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xb3\x01\n" +
 	"\x0eConsoleService\x12E\n" +
