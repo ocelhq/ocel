@@ -125,15 +125,15 @@ func (s *savedCredentials) save(creds Credentials) (CredentialStore, error) {
 	return KeyringStore, nil
 }
 
-func TestResolveCloudOfferDescribesTheConsoleAtMostOncePerHourForAStoredLogin(t *testing.T) {
+func TestResolveCloudOfferDescribesTheConsoleAtMostOnceEveryFiveMinutesForAStoredLogin(t *testing.T) {
 	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 
-	t.Run("a cached offer younger than an hour is answered without asking the console", func(t *testing.T) {
+	t.Run("a cached offer younger than five minutes is answered without asking the console", func(t *testing.T) {
 		service := &consoleService{describe: offering("https://new.example.test")}
 		url := serveConsole(t, service)
 		t.Setenv(URLEnvVar, "")
 		cached := &CloudOffer{APIURL: "https://cached.example.test", Audience: "ocel-cloud"}
-		creds := Credentials{AccessToken: "tok", APIURL: url, Store: KeyringStore, Cloud: cached, CloudFetchedAt: now.Add(-59 * time.Minute)}
+		creds := Credentials{AccessToken: "tok", APIURL: url, Store: KeyringStore, Cloud: cached, CloudFetchedAt: now.Add(-4 * time.Minute)}
 		saved := &savedCredentials{stored: creds}
 		offers := NewCloudOffers(saved.load, saved.save)
 		offers.now = func() time.Time { return now }
@@ -147,11 +147,11 @@ func TestResolveCloudOfferDescribesTheConsoleAtMostOncePerHourForAStoredLogin(t 
 		}
 	})
 
-	t.Run("an offer an hour old is asked for again and saved with the login", func(t *testing.T) {
+	t.Run("an offer five minutes old, which the console may have withdrawn, is asked for again and saved with the login", func(t *testing.T) {
 		service := &consoleService{describe: offering("https://new.example.test")}
 		url := serveConsole(t, service)
 		t.Setenv(URLEnvVar, "")
-		creds := Credentials{AccessToken: "tok", APIURL: url, Email: "ada@example.com", Store: KeyringStore, CloudFetchedAt: now.Add(-time.Hour)}
+		creds := Credentials{AccessToken: "tok", APIURL: url, Email: "ada@example.com", Store: KeyringStore, CloudFetchedAt: now.Add(-5 * time.Minute)}
 		saved := &savedCredentials{stored: creds}
 		offers := NewCloudOffers(saved.load, saved.save)
 		offers.now = func() time.Time { return now }

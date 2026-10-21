@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
 
-const cloudOfferTTL = time.Hour
+const cloudOfferTTL = 5 * time.Minute
 
 type CloudOffer struct {
 	APIURL      string `json:"api_url"`
