@@ -29,7 +29,12 @@ const (
 	reasonSyncOnDemand = "the tier's first scheduled env source made it, so the bootstrap's own list does not name it"
 )
 
-var SyncAPIs = []string{"run.googleapis.com", "cloudscheduler.googleapis.com"}
+const (
+	runAPI       = "run.googleapis.com"
+	schedulerAPI = "cloudscheduler.googleapis.com"
+)
+
+var SyncAPIs = []string{runAPI, schedulerAPI}
 
 func syncDigest(b bootstrap.Engine, tier environment.Tier) string {
 	s := SyncServing(b, tier)
@@ -138,21 +143,29 @@ func describeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier env
 }
 
 func envSourceSyncRemovals(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]provider.Change, error) {
+	off, err := b.ListServicesOff(ctx, SyncAPIs)
+	if err != nil {
+		return nil, err
+	}
 	name := b.Clients.EnvSourceSync(tier)
 	var changes []provider.Change
-	schedule, err := schedulePresence(ctx, b, tier, name)
-	if err != nil {
-		return nil, err
+	if !slices.Contains(off, schedulerAPI) {
+		schedule, err := readSchedule(ctx, b, name)
+		if err != nil {
+			return nil, err
+		}
+		if schedule != nil {
+			changes = append(changes, provider.Change{Kind: string(bootstrap.KindSchedule), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
+		}
 	}
-	if schedule.Present {
-		changes = append(changes, provider.Change{Kind: string(bootstrap.KindSchedule), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
-	}
-	service, err := readService(ctx, b, name)
-	if err != nil {
-		return nil, err
-	}
-	if service != nil {
-		changes = append(changes, provider.Change{Kind: string(bootstrap.KindService), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
+	if !slices.Contains(off, runAPI) {
+		service, err := readService(ctx, b, name)
+		if err != nil {
+			return nil, err
+		}
+		if service != nil {
+			changes = append(changes, provider.Change{Kind: string(bootstrap.KindService), Name: name, Action: provider.ActionDelete, Reason: reasonSyncOnDemand})
+		}
 	}
 	account, err := b.AccountPresence(ctx, tier, b.Clients.EnvSourceSyncAccount(tier))
 	if err != nil {
@@ -165,21 +178,34 @@ func envSourceSyncRemovals(ctx context.Context, b bootstrap.Engine, tier environ
 }
 
 func removeEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier, progress progress.Log) error {
-	name := b.Clients.EnvSourceSync(tier)
-	if err := gcloud.TakeSchedule(ctx, b.Clients, name); err != nil {
-		return err
-	}
-	service, err := readService(ctx, b, name)
+	off, err := b.ListServicesOff(ctx, SyncAPIs)
 	if err != nil {
 		return err
 	}
-	if service != nil {
-		if err := takeService(ctx, b, name); err != nil {
+	name := b.Clients.EnvSourceSync(tier)
+	if !slices.Contains(off, schedulerAPI) {
+		if err := gcloud.TakeSchedule(ctx, b.Clients, name); err != nil {
 			return err
 		}
-		gcloud.EnsureProgress(progress).Say("Removed the env source sync " + name)
+	}
+	if !slices.Contains(off, runAPI) {
+		if err := takeSyncService(ctx, b, name, progress); err != nil {
+			return err
+		}
 	}
 	return b.TakeAccount(ctx, tier, b.Clients.EnvSourceSyncAccount(tier))
+}
+
+func takeSyncService(ctx context.Context, b bootstrap.Engine, name string, progress progress.Log) error {
+	service, err := readService(ctx, b, name)
+	if err != nil || service == nil {
+		return err
+	}
+	if err := takeService(ctx, b, name); err != nil {
+		return err
+	}
+	gcloud.EnsureProgress(progress).Say("Removed the env source sync " + name)
+	return nil
 }
 
 func ServiceProperties(region string) map[string]any {

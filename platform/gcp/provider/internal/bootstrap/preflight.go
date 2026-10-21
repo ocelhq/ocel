@@ -173,7 +173,7 @@ func RolesCovering(parts []string) []string {
 	return roles
 }
 
-func (b Engine) listServicesOff(ctx context.Context, apis []string) ([]string, error) {
+func (b Engine) ListServicesOff(ctx context.Context, apis []string) ([]string, error) {
 	if len(apis) == 0 {
 		return nil, nil
 	}
@@ -196,7 +196,7 @@ func (b Engine) listServicesOff(ctx context.Context, apis []string) ([]string, e
 }
 
 func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
-	off, err := b.listServicesOff(ctx, apis)
+	off, err := b.ListServicesOff(ctx, apis)
 	if err != nil || len(off) == 0 {
 		return err
 	}

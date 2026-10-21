@@ -90,7 +90,11 @@ func forgetSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.
 			return gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, variables.RecordsCondition(b.Clients, tier), false)
 		},
 		func() error {
-			_, err := gcloud.BindKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, nil)
+			off, err := b.ListServicesOff(ctx, bootstrap.Keys.APIs)
+			if err != nil || len(off) > 0 {
+				return err
+			}
+			_, err = gcloud.BindKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, nil)
 			return err
 		},
 	)
@@ -254,17 +258,25 @@ func sameSchedule(current, desired *cloudscheduler.Job, emulated bool) bool {
 		(current.RetryConfig == nil || current.RetryConfig.RetryCount == 0)
 }
 
-func schedulePresence(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) (bootstrap.Presence, error) {
+func readSchedule(ctx context.Context, b bootstrap.Engine, name string) (*cloudscheduler.Job, error) {
 	service, err := b.Clients.Scheduler()
 	if err != nil {
-		return bootstrap.Presence{}, err
+		return nil, err
 	}
 	current, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Get(gcloud.SchedulePath(b.Clients, name)).Context(ctx).Do)
 	if gcloud.Absent(err) {
-		return bootstrap.Presence{}, nil
+		return nil, nil
 	}
 	if err != nil {
-		return bootstrap.Presence{}, fmt.Errorf("read the Cloud Scheduler job %s: %w", name, err)
+		return nil, fmt.Errorf("read the Cloud Scheduler job %s: %w", name, err)
+	}
+	return current, nil
+}
+
+func schedulePresence(ctx context.Context, b bootstrap.Engine, tier environment.Tier, name string) (bootstrap.Presence, error) {
+	current, err := readSchedule(ctx, b, name)
+	if err != nil || current == nil {
+		return bootstrap.Presence{}, err
 	}
 	called, err := readService(ctx, b, name)
 	if err != nil {
