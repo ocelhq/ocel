@@ -13,6 +13,7 @@
         "$TURBO_ROOT$/pkg/provider/namespace.go",
         "$TURBO_ROOT$/pkg/environment/tier.go",
         "$TURBO_ROOT$/pkg/stackrecords/environments.go",
+        "$TURBO_ROOT$/proto/realtime/vectors.json",
         "$TURBO_ROOT$/tests/fixtures/**",
         "$TURBO_ROOT$/tests/fronts/**"
       ]
