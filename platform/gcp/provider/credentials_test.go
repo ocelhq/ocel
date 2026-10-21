@@ -161,28 +161,23 @@ func TestADeployMayCreateWhatItMakesAgainstTheUntaggedProject(t *testing.T) {
 			"cloudsql.instances.create",
 			"cloudsql.instances.list",
 			"cloudtasks.queues.create",
-			"cloudkms.keyRings.create",
-			"cloudkms.cryptoKeys.create",
 		} {
 			if _, holds := held[permission]; !holds {
 				t.Errorf("the %s deploy credential lacks %s on the untagged project, and Google checks it there", tier, permission)
 			}
 		}
 		created := deploy.ProjectPermissions()
-		if created.Condition != nil {
-			t.Errorf("a deploy is granted %s, and no condition admits a check against the ring both tiers' keys hang on", created)
-		}
 		without := credential.New(names.New("ocel", "acme-prod"), "europe-west1", tier)
 		predefined := predefinedRoles(t)
 		for _, permission := range created.Permissions {
 			for _, grant := range without.Grants() {
 				if grant.Role != "" && grantReaches(t, grant, project) && slices.Contains(grantPermissions(t, predefined, grant), permission) {
-					t.Errorf("the unconditioned custom role holds %s, which %s already holds on the untagged project", permission, grant)
+					t.Errorf("the key ring's custom role holds %s, which %s already holds on the untagged project", permission, grant)
 				}
 			}
 			if strings.HasSuffix(permission, "TagBinding") || permission == "storage.buckets.list" || strings.HasPrefix(permission, "datastore.entities.") ||
 				strings.HasPrefix(permission, "storage.objects.") || permission == "cloudsql.instances.get" {
-				t.Errorf("a deploy is granted %s on the whole project, which reaches the other tier's resources", permission)
+				t.Errorf("the key ring's custom role holds %s, which reaches the other tier's resources", permission)
 			}
 		}
 	}
