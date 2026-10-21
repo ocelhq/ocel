@@ -65,6 +65,7 @@ func TestTheFirstScheduledEnvSourceMakesTheKeysTheSyncSealsUnderAndLetsTheSyncSe
 func syncPartBootstrap(t *testing.T) (*googletest.Sync, bootstrap.Engine) {
 	t.Helper()
 	server := googletest.NewSync()
+	server.Accounts = map[string]bool{}
 	b := syncOpened(server, t)
 	b.Records = fake.NewKeyValues()
 	return server, b
@@ -239,6 +240,52 @@ func TestRemovingATierTakesItsEnvSourceSyncAndAPlanToRemoveItListsIt(t *testing.
 		t.Errorf("schedulePresence() after removal = %+v, %v, want it gone", found, err)
 	}
 	if !slices.ContainsFunc(server.DeletedAccounts, func(path string) bool { return strings.Contains(path, "/"+b.Clients.EnvSourceSyncAccount(tier)+"@") }) {
+		t.Errorf("removal deleted the accounts %v, want the sync's own among them", server.DeletedAccounts)
+	}
+}
+
+func TestRemovingATierTakesAnEnvSourceSyncThatHasNoPartRecord(t *testing.T) {
+	t.Parallel()
+	server, b := syncPartBootstrap(t)
+	ctx := context.Background()
+	tier := environment.TierProduction
+	name := b.Clients.EnvSourceSync(tier)
+	if err := Ensure(ctx, b, tier, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	if err := stackrecords.ForgetBootstrapPart(ctx, b.Records, tier, PartName); err != nil {
+		t.Fatal(err)
+	}
+
+	changes, err := envSourceSyncRemovals(ctx, b, tier)
+	if err != nil || len(changes) != 3 {
+		t.Errorf("envSourceSyncRemovals() of a sync with no part record = %v, %v, want its schedule, service and account deleted", changes, err)
+	}
+	if err := removeEnvSourceSync(ctx, b, tier, nil); err != nil {
+		t.Fatalf("removeEnvSourceSync() = %v", err)
+	}
+	if found, err := schedulePresence(ctx, b, tier, name); err != nil || found.Present {
+		t.Errorf("schedulePresence() after removing the tier = %+v, %v, want the schedule gone: it calls the sync every minute", found, err)
+	}
+	if server.Service(b.Clients.ServicePath(name)) != nil {
+		t.Error("the sync service outlived its tier")
+	}
+}
+
+func TestRemovingATierWhoseSyncNeverHadAKeyTakesItsAccount(t *testing.T) {
+	t.Parallel()
+	server, b := syncPartBootstrap(t)
+	ctx := context.Background()
+	tier := environment.TierPreview
+	account := b.Clients.EnvSourceSyncAccount(tier)
+	if err := ensureSyncAccount(ctx, b, tier); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := removeEnvSourceSync(ctx, b, tier, nil); err != nil {
+		t.Fatalf("removeEnvSourceSync() of a sync whose tier has no key = %v", err)
+	}
+	if !slices.ContainsFunc(server.DeletedAccounts, func(path string) bool { return strings.Contains(path, "/"+account+"@") }) {
 		t.Errorf("removal deleted the accounts %v, want the sync's own among them", server.DeletedAccounts)
 	}
 }
