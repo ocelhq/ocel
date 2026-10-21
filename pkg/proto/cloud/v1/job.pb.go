@@ -1786,7 +1786,6 @@ func (x *AppBuild) GetBuildId() string {
 	return ""
 }
 
-// The builder derives each event from the `--json` stream (cli.stream.v1.RunEvent) of the `ocel` run the job runs.
 type JobEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`

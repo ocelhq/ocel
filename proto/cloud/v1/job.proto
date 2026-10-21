@@ -337,7 +337,6 @@ message AppBuild {
   string build_id = 2;
 }
 
-// The builder derives each event from the `--json` stream (cli.stream.v1.RunEvent) of the `ocel` run the job runs.
 message JobEvent {
   uint64 seq = 1;
 
