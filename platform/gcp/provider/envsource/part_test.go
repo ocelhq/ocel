@@ -289,3 +289,24 @@ func TestRemovingATierWhoseSyncNeverHadAKeyTakesItsAccount(t *testing.T) {
 		t.Errorf("removal deleted the accounts %v, want the sync's own among them", server.DeletedAccounts)
 	}
 }
+
+func TestRemovingATierWithAServiceTheSyncNeedsSwitchedOffTakesWhatIsLeftOfTheSync(t *testing.T) {
+	t.Parallel()
+	for _, off := range []string{"cloudscheduler.googleapis.com", "run.googleapis.com", "cloudkms.googleapis.com"} {
+		t.Run(off, func(t *testing.T) {
+			t.Parallel()
+			server, b := syncPartBootstrap(t)
+			server.ServicesOff = []string{off}
+			ctx := context.Background()
+			tier := environment.TierProduction
+
+			changes, err := envSourceSyncRemovals(ctx, b, tier)
+			if err != nil || len(changes) != 0 {
+				t.Errorf("envSourceSyncRemovals() with %s off and no sync made = %v, %v, want nothing to remove", off, changes, err)
+			}
+			if err := removeEnvSourceSync(ctx, b, tier, nil); err != nil {
+				t.Errorf("removeEnvSourceSync() with %s off = %v, want the tier removed: no sync can stand where it is off", off, err)
+			}
+		})
+	}
+}

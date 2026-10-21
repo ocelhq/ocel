@@ -32,7 +32,7 @@ func (b Engine) SurveyReplacedParts(ctx context.Context, base Survey) (ReplacedP
 		if len(items) == 0 {
 			continue
 		}
-		off, err := b.listServicesOff(ctx, each.APIs)
+		off, err := b.ListServicesOff(ctx, each.APIs)
 		if err != nil {
 			return nil, err
 		}

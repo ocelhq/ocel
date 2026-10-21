@@ -77,6 +77,8 @@ type IAM struct {
 
 	TierTags      *TierTags
 	DeletedTagged []string
+
+	ServicesOff []string
 }
 
 func UniqueIDOf(account string) string {
@@ -293,7 +295,11 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 		case strings.HasPrefix(path, "/storage/v1/b/") && strings.HasSuffix(path, "/iam"):
 			s.serveBucketPolicy(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/storage/v1/b/"), "/iam"))
 		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/projects/acme-prod/services/"):
-			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": "ENABLED"})
+			state := "ENABLED"
+			if slices.Contains(s.ServicesOff, strings.TrimPrefix(path, "/v1/projects/acme-prod/services/")) {
+				state = "DISABLED"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": state})
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
 			_, _ = w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
@@ -426,7 +432,7 @@ func (s *IAM) Open(t *testing.T) *gcloud.Clients {
 
 func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 	t.Helper()
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(s.refuseCallsToServicesOff))
 	kmspb.RegisterKeyManagementServiceServer(grpcServer, s)
 	iampb.RegisterIAMPolicyServer(grpcServer, s)
 	cloudtaskspb.RegisterCloudTasksServer(grpcServer, delayQueues{server: s})
@@ -434,6 +440,10 @@ func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			grpcServer.ServeHTTP(w, r)
+			return
+		}
+		if api := restAPI(r.URL.Path); slices.Contains(s.ServicesOff, api) {
+			writeServiceDisabled(w, api)
 			return
 		}
 		rest(w, r)
@@ -445,6 +455,42 @@ func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 	t.Cleanup(server.Close)
 	t.Cleanup(grpcServer.Stop)
 	return WithTierBuckets(&gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL})
+}
+
+func restAPI(path string) string {
+	switch {
+	case strings.HasPrefix(path, "/v2/"):
+		return "run.googleapis.com"
+	case strings.HasPrefix(path, "/v1/") && strings.Contains(path, "/jobs"):
+		return "cloudscheduler.googleapis.com"
+	}
+	return ""
+}
+
+func grpcAPI(method string, req any) string {
+	asked, policy := req.(interface{ GetResource() string })
+	if strings.HasPrefix(method, "/google.cloud.kms.v1.") || policy && strings.Contains(asked.GetResource(), "/keyRings/") {
+		return "cloudkms.googleapis.com"
+	}
+	return ""
+}
+
+func serviceDisabled(api string) string {
+	return api + " has not been used in project " + Project + " before or it is disabled"
+}
+
+func writeServiceDisabled(w http.ResponseWriter, api string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"` + serviceDisabled(api) + `.",` +
+		`"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED"}]}}`))
+}
+
+func (s *IAM) refuseCallsToServicesOff(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	if api := grpcAPI(info.FullMethod, req); api != "" && slices.Contains(s.ServicesOff, api) {
+		return nil, status.Error(codes.PermissionDenied, serviceDisabled(api))
+	}
+	return handler(ctx, req)
 }
 
 func (s *IAM) ProjectMembers(role string) ([]string, *cloudresourcemanager.Expr) {
