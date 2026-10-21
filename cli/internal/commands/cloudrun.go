@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -115,12 +116,13 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 	}
 	jobURL := JobURL(t.Cloud.ConsoleURL, started.GetId(), org.ID)
 	starting.End(nil)
-	phase.Say(fmt.Sprintf("Job %s · follow it at %s", started.GetId(), jobURL))
+	printedID := terminal.EscapeControls(started.GetId())
+	phase.Say(fmt.Sprintf("Job %s · follow it at %s", printedID, jobURL))
 	running.SetCloudJob(summarizeJob(started, jobURL))
 
 	if job.NoWait {
 		phase.End(nil)
-		running.Succeed(fmt.Sprintf("Started job %s on Ocel Cloud, and it runs without this terminal: %s", started.GetId(), jobURL))
+		running.Succeed(fmt.Sprintf("Started job %s on Ocel Cloud, and it runs without this terminal: %s", printedID, jobURL))
 		return nil
 	}
 	ended, err = waitForJob(ctx, running, phase, jobs, started, jobURL, cfg.Slug, job)
@@ -129,6 +131,7 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 
 func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cloud.Client, started *cloudv1.Job, jobURL, slug string, job CloudJob) (*cloudv1.Job, error) {
 	watching := phase.Child(slug, progress.Title{Started: "Waiting for the job on Ocel Cloud", Ended: "Waited for the job on Ocel Cloud"})
+	printedID := terminal.EscapeControls(started.GetId())
 	var opened string
 	resume := func(string) {}
 	ended, err := jobs.WaitForJob(ctx, started.GetId(), func(read *cloudv1.Job) {
@@ -166,11 +169,11 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 		watching.Say("Stopped watching; the job keeps running on Ocel Cloud")
 		watching.End(nil)
 		phase.End(nil)
-		running.Succeed(fmt.Sprintf("Stopped watching job %s, which keeps running on Ocel Cloud: %s", started.GetId(), jobURL))
+		running.Succeed(fmt.Sprintf("Stopped watching job %s, which keeps running on Ocel Cloud: %s", printedID, jobURL))
 		return nil, nil
 	case err != nil:
 		watching.End(err)
-		return nil, fmt.Errorf("%w — follow job %s at %s", err, started.GetId(), jobURL)
+		return nil, fmt.Errorf("%w — follow job %s at %s", err, printedID, jobURL)
 	}
 
 	switch ended.GetState() {
@@ -185,13 +188,13 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 	case cloudv1.JobState_JOB_STATE_CANCELED:
 		err = &clierror.Error{
 			Code:  clierror.CodeCloudJobCanceled,
-			Cause: fmt.Errorf("job %s was canceled on Ocel Cloud before it finished: %s", started.GetId(), jobURL),
+			Cause: fmt.Errorf("job %s was canceled on Ocel Cloud before it finished: %s", printedID, jobURL),
 		}
 	default:
 		failure := ended.GetError()
 		err = &clierror.Error{
 			Code:  clierror.CodeCloudJobFailed,
-			Cause: fmt.Errorf("job %s failed on Ocel Cloud with %s: %s — its log is at %s", started.GetId(), cmp.Or(failure.GetCode(), "no error code"), cmp.Or(failure.GetMessage(), "no message"), jobURL),
+			Cause: fmt.Errorf("job %s failed on Ocel Cloud with %s: %s — its log is at %s", printedID, terminal.EscapeControls(cmp.Or(failure.GetCode(), "no error code")), terminal.EscapeControls(cmp.Or(failure.GetMessage(), "no message")), jobURL),
 		}
 	}
 	watching.End(err)
@@ -211,7 +214,7 @@ func jobPhase(kind cloudv1.JobCommand) progressv1.Phase {
 
 func jobHeadline(ended *cloudv1.Job, kind cloudv1.JobCommand, slug, jobURL string) string {
 	if kind != cloudv1.JobCommand_JOB_COMMAND_BUILD && !deployedAnything(ended) {
-		return cmp.Or(ended.GetStep(), "Deployed nothing of "+slug+" on Ocel Cloud") + " · job " + jobURL
+		return cmp.Or(terminal.EscapeControls(ended.GetStep()), "Deployed nothing of "+slug+" on Ocel Cloud") + " · job " + jobURL
 	}
 	switch kind {
 	case cloudv1.JobCommand_JOB_COMMAND_BUILD:
@@ -230,7 +233,7 @@ func deployedAnything(job *cloudv1.Job) bool {
 func describeJob(job *cloudv1.Job) string {
 	switch {
 	case job.GetStep() != "":
-		return job.GetStep()
+		return terminal.EscapeControls(job.GetStep())
 	case job.GetState() == cloudv1.JobState_JOB_STATE_QUEUED:
 		return "Waiting for a builder"
 	case job.GetPhase() != cloudv1.JobPhase_JOB_PHASE_UNSPECIFIED:
@@ -266,6 +269,9 @@ func jobResultLines(result *cloudv1.JobResult) []string {
 	}
 	if id := result.GetDeploymentId(); id != "" {
 		lines = append(lines, "Deployment "+id)
+	}
+	for i, line := range lines {
+		lines[i] = terminal.EscapeControls(line)
 	}
 	return lines
 }
