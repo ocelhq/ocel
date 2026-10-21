@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -12,9 +13,12 @@ import (
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/artifactregistry/v1"
+	"google.golang.org/api/cloudresourcemanager/v1"
+	storagejson "google.golang.org/api/storage/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -419,6 +423,96 @@ func TestABootstrapRepairingARecordedKeysPartMintsANewPrimaryOnlyWithConsent(t *
 	}
 	if want := []string{gcloud.KeyPath(b.Clients, string(tier))}; !slices.Equal(server.Minted, want) {
 		t.Errorf("minted versions of %v, want one of %v", server.Minted, want)
+	}
+}
+
+func bootstrappingOver(t *testing.T, server *googletest.IAM, installed ...string) bootstrap.Engine {
+	t.Helper()
+	rest := server.Rest(t)
+	clients := server.Serve(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/projects/"+googletest.Project+":testIamPermissions":
+			if asked := googletest.ReadBody[cloudresourcemanager.TestIamPermissionsRequest](w, r); asked != nil {
+				googletest.WriteBody(w, &cloudresourcemanager.TestIamPermissionsResponse{Permissions: asked.Permissions})
+			}
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/upload/storage/v1/b/"):
+			googletest.WriteBody(w, &storagejson.Object{Name: bootstrap.StampObject, Generation: 1})
+		default:
+			rest(w, r)
+		}
+	})
+	b := composed(bootstrap.Engine{
+		Clients:  clients,
+		Records:  fake.NewKeyValues(),
+		Surveyed: &bootstrap.Surveys{},
+		Edges:    &frontRegistry{front: &countingFront{installed: true}},
+	})
+	b.SweepAccounts = func(context.Context, bootstrap.Engine, provider.BootstrapRequest, progress.Log) error { return nil }
+	read := surveyed(installed...)
+	read.Region, read.Emulated, read.Held = clients.Region, true, map[string]bool{}
+	for _, item := range bootstrap.Resources(read.Names, read.Tier, read.Emulated) {
+		read.Held[item.ID()] = true
+	}
+	b.Surveyed.Remember(read)
+	return b
+}
+
+func destroyingTheTierKey(t *testing.T) (bootstrap.Engine, *googletest.IAM) {
+	t.Helper()
+	server := googletest.GrantedIAM()
+	b := bootstrappingOver(t, server)
+	server.Destroyed = map[string]bool{gcloud.KeyPath(b.Clients, string(environment.TierProduction)): true}
+	return b, server
+}
+
+func TestABootstrapPlanShowsTheKeysPartReplacingADestroyedTierKeyNoPartRecordNames(t *testing.T) {
+	t.Parallel()
+	b, _ := destroyingTheTierKey(t)
+
+	plan, err := b.Plan(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+
+	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
+		return group.Part == bootstrap.KeysPart && slices.ContainsFunc(group.Changes, func(change provider.Change) bool {
+			return change.Name == string(environment.TierProduction) && change.Action == provider.ActionReplace
+		})
+	}) {
+		t.Errorf("Plan() = %+v, want the keys part replacing the production key, so the consent it asks for covers it", plan.Groups)
+	}
+}
+
+func TestABootstrapRefusingReplacementsRefusesToReplaceADestroyedTierKeyBeforeItProvisionsAnything(t *testing.T) {
+	t.Parallel()
+	b, server := destroyingTheTierKey(t)
+
+	err := b.Apply(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, RefuseReplacements: true}, nil)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "KMS key production") || !strings.Contains(refused.Message, "--yes") {
+		t.Fatalf("Apply() refusing replacements = %v, want a refusal naming the KMS key it would replace and --yes", err)
+	}
+	if len(server.Minted) != 0 {
+		t.Errorf("Apply() refusing replacements minted %v, want nothing", server.Minted)
+	}
+}
+
+func TestABootstrapConsentingToReplacementsMintsANewPrimaryForADestroyedTierKeyNoPartRecordNames(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	tier := environment.TierProduction
+	b, server := destroyingTheTierKey(t)
+
+	if err := b.Apply(ctx, provider.BootstrapRequest{Tier: tier}, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+
+	if want := []string{gcloud.KeyPath(b.Clients, string(tier))}; !slices.Equal(server.Minted, want) {
+		t.Errorf("`ocel bootstrap production --yes` minted versions of %v, want one of %v", server.Minted, want)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, bootstrap.KeysPart); err != nil || !present {
+		t.Errorf("the keys part is recorded %t, %v after the bootstrap replaced its key, want it recorded", present, err)
 	}
 }
 

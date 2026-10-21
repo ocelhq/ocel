@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -540,6 +541,37 @@ func TestTheEdgeBucketAndKeysAreNotRemovedWhileAnInstalledFrontReadsThem(t *test
 		}
 		if groups, err := b.PlanRemovedParts(ctx, tier, []string{part}, false, nil); err != nil || len(groups) != 1 {
 			t.Errorf("PlanRemovedParts(%s) with no front installed = %+v, %v, want it planned", part, groups, err)
+		}
+	}
+}
+
+func TestABootstrapRemovingTheEdgeBucketOrKeysUnderAnInstalledFrontIsRefusedByItsPlanAndItsApply(t *testing.T) {
+	t.Parallel()
+	tier := environment.TierProduction
+	for _, part := range []string{bootstrap.KeysPart, bootstrap.EdgeBucketPart} {
+		for step, run := range map[string]func(context.Context, bootstrap.Engine, provider.BootstrapRequest) error{
+			"Plan": func(ctx context.Context, b bootstrap.Engine, req provider.BootstrapRequest) error {
+				_, err := b.Plan(ctx, req)
+				return err
+			},
+			"Apply": func(ctx context.Context, b bootstrap.Engine, req provider.BootstrapRequest) error {
+				return b.Apply(ctx, req, nil)
+			},
+		} {
+			t.Run(part+"/"+step, func(t *testing.T) {
+				t.Parallel()
+				b := bootstrappingOver(t, googletest.GrantedIAM(), bootstrap.CloudflareOriginPart)
+				if err := stackrecords.MarkBootstrapPartReady(t.Context(), b.Records, tier, part, stackrecords.BootstrapPart{}); err != nil {
+					t.Fatal(err)
+				}
+
+				err := run(t.Context(), b, provider.BootstrapRequest{Tier: tier, Parts: []string{bootstrap.CloudflareOriginPart}, Remove: []string{part}})
+
+				var refused refusal.Refusal
+				if !errors.As(err, &refused) || !strings.Contains(refused.Message, "--remove "+bootstrap.CloudflareOriginPart) {
+					t.Errorf("%s() removing %s while the %s front is installed = %v, want a refusal naming the removal that takes the front with it", step, part, bootstrap.CloudflareOriginPart, err)
+				}
+			})
 		}
 	}
 }
