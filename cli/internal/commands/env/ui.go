@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -36,7 +37,7 @@ func newUICommand(dependencies Dependencies) *cobra.Command {
 }
 
 func runEnvUI(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env ui", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE, cloudv1.Scope_SCOPE_VARIABLES_REVEAL}, stdin, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		declarations, err := discoverVariables(ctx, cfg, provider, opts, run)
 		if err != nil {
 			return err

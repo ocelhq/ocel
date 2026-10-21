@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -175,7 +176,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 			check.Say(fmt.Sprintf("nothing of %s in %s", slug, readiness.TierName(tier)))
 			continue
 		}
-		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, Cloud: resolved.Cloud})
+		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, Cloud: resolved.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}})
 		if err != nil {
 			check.End(err)
 			return nil, err
@@ -245,7 +246,9 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 
 func readRemovalTarget(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, slug string) (removalTarget, error) {
 	cfg := resolved.Project
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, accountOptions(resolved))
+	open := accountOptions(resolved)
+	open.CloudScopes = []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, open)
 	if err != nil {
 		return removalTarget{}, err
 	}

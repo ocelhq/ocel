@@ -65,6 +65,7 @@ type FakeOcelCloud struct {
 	Created       []*consolev1.CreateProjectRequest
 	ActivatedOrgs []string
 	TokenOrgs     []string
+	TokenScopes   [][]string
 	Committed     *cloudv1.SourceManifest
 	CloudBearers  []string
 	Started       []*cloudv1.StartJobRequest
@@ -208,6 +209,7 @@ func (f *FakeOcelCloud) IssueCloudToken(_ context.Context, req *consolev1.IssueC
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.TokenOrgs = append(f.TokenOrgs, req.GetOrganizationId())
+	f.TokenScopes = append(f.TokenScopes, req.GetScopes())
 	return &consolev1.IssueCloudTokenResponse{Token: FakeCloudToken, ExpiresAt: timestamppb.New(time.Now().Add(time.Hour))}, nil
 }
 

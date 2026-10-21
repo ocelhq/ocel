@@ -3,6 +3,7 @@ package domain
 import (
 	"bytes"
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
@@ -20,5 +21,13 @@ func TestDomainLsReadsTheHostnamesOcelCloudServesThroughTheProviderItServes(t *t
 	}
 	if len(project.Remote.Calls()) == 0 {
 		t.Fatal("Ocel Cloud's provider was never called")
+	}
+	requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+}
+
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+	t.Helper()
+	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
+		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)
 	}
 }

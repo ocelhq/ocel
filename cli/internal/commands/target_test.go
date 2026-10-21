@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -216,6 +218,48 @@ func TestACommandThatRunsOnOcelCloudOpensASessionOnTheProviderOcelCloudServes(t 
 	calls := project.Remote.Calls()
 	if len(calls) != 2 || !strings.HasSuffix(calls[0].Procedure, "/Configure") || calls[0].Authorization != "Bearer "+clitest.FakeCloudToken {
 		t.Fatalf("calls = %+v, want Configure and the call, with the token the console issued", calls)
+	}
+}
+
+func TestASessionOnOcelCloudHoldsTheScopesItsCommandDeclaresAndIsReusedOnlyWhereTheyReach(t *testing.T) {
+	project := clitest.SetUpCloudProject(t)
+	invocation := clitest.NewInvocation()
+	project.LogIn(&invocation)
+	target, err := invocation.ResolveTarget(t.Context(), project.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reading := commands.OpenOptions{Cloud: target.Cloud}
+	writing := commands.OpenOptions{Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}}
+	err = invocation.WithProvider(t.Context(), target.Project, "ocel test", reading, func(ctx context.Context, p commands.ProviderRun) error {
+		for _, opts := range []commands.OpenOptions{writing, reading, writing} {
+			provider, _, err := invocation.OpenProvider(ctx, p.Check, target.Project, opts)
+			if err != nil {
+				return err
+			}
+			if err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+				_, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: target.Project.Slug})
+				return err
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{{"cloud.apps.read"}, {"cloud.apps.read", "cloud.apps.write"}}
+	if !slices.EqualFunc(project.Cloud.TokenScopes, want, slices.Equal) {
+		t.Fatalf("tokens issued with scopes %v, want %v: a reading session, then one writing session the later opens reuse", project.Cloud.TokenScopes, want)
+	}
+	sessions := map[string]bool{}
+	for _, call := range project.Remote.Calls() {
+		sessions[call.Session] = true
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("opened %d sessions, want 2", len(sessions))
 	}
 }
 

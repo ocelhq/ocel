@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,6 +43,7 @@ func TestPreviewLsRmAndPruneRunOnOcelCloudThroughTheProviderItServes(t *testing.
 		if !strings.Contains(stdout.String(), identity) {
 			t.Fatalf("stdout = %q, want %s listed", stdout.String(), identity)
 		}
+		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
 	})
 
 	t.Run("rm tears down the current branch's preview and records it in the linked console project", func(t *testing.T) {
@@ -62,6 +64,7 @@ func TestPreviewLsRmAndPruneRunOnOcelCloudThroughTheProviderItServes(t *testing.
 		if len(events) != 1 || events[0].GetEvent().GetKind() != consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || events[0].GetEvent().GetEnvironment().GetIdentity() != identity {
 			t.Fatalf("events = %v, want the preview's removal recorded", events)
 		}
+		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
 	})
 
 	t.Run("prune reaches Ocel Cloud", func(t *testing.T) {
@@ -74,5 +77,13 @@ func TestPreviewLsRmAndPruneRunOnOcelCloudThroughTheProviderItServes(t *testing.
 		if !strings.Contains(stdout.String(), "Pruned the promotions of preview") {
 			t.Fatalf("stdout = %q, want the prune reported", stdout.String())
 		}
+		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
 	})
+}
+
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+	t.Helper()
+	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
+		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)
+	}
 }

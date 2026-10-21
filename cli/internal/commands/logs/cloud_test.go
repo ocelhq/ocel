@@ -2,6 +2,7 @@ package logs
 
 import (
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,6 +30,7 @@ func TestLogsReadsAndTailsTheAppsOcelCloudRunsThroughTheProviderItServes(t *test
 		if len(project.Remote.Calls()) == 0 {
 			t.Fatal("Ocel Cloud's provider was never called")
 		}
+		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
 	})
 
 	t.Run("tail", func(t *testing.T) {
@@ -42,4 +44,11 @@ func TestLogsReadsAndTailsTheAppsOcelCloudRunsThroughTheProviderItServes(t *test
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+	t.Helper()
+	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
+		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)
+	}
 }
