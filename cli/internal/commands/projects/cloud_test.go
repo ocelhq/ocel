@@ -26,6 +26,7 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		if got.err != nil || !strings.Contains(got.stdout, clitest.FixtureSlug) {
 			t.Fatalf("err = %v, stdout = %q, want %s listed", got.err, got.stdout, clitest.FixtureSlug)
 		}
+		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
 	})
 
 	t.Run("a run names the organization, the console and the person, as a deploy does", func(t *testing.T) {
@@ -61,6 +62,7 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		if got.err != nil || !strings.Contains(got.stdout, "pr-1") {
 			t.Fatalf("err = %v, stdout = %q, want the preview environments shown", got.err, got.stdout)
 		}
+		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
 	})
 
 	t.Run("destroy takes both tiers behind the typed name and records it in the linked console project", func(t *testing.T) {
@@ -84,9 +86,17 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		if len(sessions) != 1 {
 			t.Fatalf("opened %d sessions on Ocel Cloud, want the one run open one", len(sessions))
 		}
+		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
 		events := project.Cloud.RecordedEvents()
 		if len(events) != 2 || events[0].GetEvent().GetKind() != consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED {
 			t.Fatalf("events = %v, want each tier's destroy recorded", events)
 		}
 	})
+}
+
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+	t.Helper()
+	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
+		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)
+	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -26,15 +27,22 @@ func withCommand(cmd *cobra.Command, dependencies Dependencies, run func(context
 
 type variablesKeyOffer struct{ stdin io.Reader }
 
-func withEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
-	return runWithEnvProvider(ctx, dependencies, cwd, opts, command, nil, stderr, drive)
+func withEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, scopes []cloudv1.Scope, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
+	return runWithEnvProvider(ctx, dependencies, cwd, opts, command, scopes, nil, stderr, drive)
 }
 
-func withEnvProviderOfferingVariablesKey(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, stdin io.Reader, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
-	return runWithEnvProvider(ctx, dependencies, cwd, opts, command, &variablesKeyOffer{stdin: stdin}, stderr, drive)
+func withEnvProviderOfferingVariablesKey(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, scopes []cloudv1.Scope, stdin io.Reader, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
+	return runWithEnvProvider(ctx, dependencies, cwd, opts, command, scopes, &variablesKeyOffer{stdin: stdin}, stderr, drive)
 }
 
-func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
+func revealScopes(opts envOptions) []cloudv1.Scope {
+	if opts.reveal {
+		return []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_REVEAL}
+	}
+	return nil
+}
+
+func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, command string, scopes []cloudv1.Scope, keyOffer *variablesKeyOffer, stderr io.Writer, drive func(context.Context, *run.Run, *providerprocess.Provider, *project.Project, *contractv1.PreflightResponse) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -43,7 +51,7 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 		return err
 	}
 	cfg := target.Project
-	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier(), Cloud: target.Cloud}
+	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier(), Cloud: target.Cloud, CloudScopes: scopes}
 	if keyOffer != nil {
 		open.Intent = commands.UseVariablesKey
 		open.Policy = consent.NewPolicy(command, false, dependencies.CanAsk(keyOffer.stdin), stderr, keyOffer.stdin)

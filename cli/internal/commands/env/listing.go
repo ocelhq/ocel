@@ -22,7 +22,7 @@ import (
 )
 
 func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ls", stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ls", nil, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		definitions, groups, err := declaredVariables(ctx, dependencies, cfg, provider, "", opts, run)
 		if err != nil {
 			return err

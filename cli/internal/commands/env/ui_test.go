@@ -28,7 +28,7 @@ import (
 
 func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, provider *providerprocess.Provider, values variables.Store) error) {
 	t.Helper()
-	err := withEnvProvider(context.Background(), newTestDependencies(), root, opts, "ocel env", io.Discard, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	err := withEnvProvider(context.Background(), newTestDependencies(), root, opts, "ocel env", nil, io.Discard, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		return drive(ctx, cfg.Slug, provider, variables.Store{
 			Provider: provider,
 			Project:  cfg,
@@ -198,7 +198,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 
 func withEditor(t *testing.T, root string, drive func(s *variableeditor.Session)) {
 	t.Helper()
-	err := withEnvProvider(context.Background(), newTestDependencies(), root, envOptions{}, "ocel env ui", io.Discard, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	err := withEnvProvider(context.Background(), newTestDependencies(), root, envOptions{}, "ocel env ui", nil, io.Discard, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		declarations, err := discoverVariables(ctx, cfg, provider, envOptions{}, run)
 		if err != nil {
 			return err

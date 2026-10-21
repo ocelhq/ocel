@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -79,7 +80,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	}
 
 	var report *consolev1.Deployment
-	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, Cloud: target.Cloud}, func(ctx context.Context, p commands.ProviderRun) (err error) {
+	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
 		var attempt *deployreport.Attempt
 		var succeeded *consolev1.Deployment

@@ -501,6 +501,9 @@ func TestAnOcelCloudRunDeploysUnderTheActiveOrganizationOrAsksForOne(t *testing.
 		if !strings.Contains(out, "/cloud/jobs/"+clitest.FakeCloudJobID+"?org=org_1") {
 			t.Fatalf("output = %q, want the job page naming org_1", out)
 		}
+		if want := []string{"cloud.apps.read", "cloud.apps.write"}; len(fake.TokenScopes) == 0 || slices.ContainsFunc(fake.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
+			t.Fatalf("tokens issued with scopes %v, want each with exactly %v", fake.TokenScopes, want)
+		}
 	})
 
 	t.Run("none active", func(t *testing.T) {

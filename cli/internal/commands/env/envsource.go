@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -70,7 +71,7 @@ func deployCommand(opts envOptions) string {
 }
 
 func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env sync", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env sync", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		synced, err := variables.Store{Provider: provider, Project: cfg, Tier: opts.tier()}.SyncRegisteredEnvSource(ctx)
 		if err != nil {
 			return err
@@ -91,7 +92,7 @@ func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts
 }
 
 func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env source", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env source", nil, stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err

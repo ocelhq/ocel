@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -25,7 +26,7 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return err
 		}
 	}
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ref", stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env ref", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
 		definitions, _, err := declaredVariables(ctx, dependencies, cfg, provider, key, opts, run)
 		if err != nil {
 			return err
@@ -52,7 +53,7 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 }
 
 func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env refs", stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env refs", nil, stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
