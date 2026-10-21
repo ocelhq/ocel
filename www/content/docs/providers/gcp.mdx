@@ -563,10 +563,10 @@ for `topics`, `cloudscheduler.googleapis.com` for `env-source-sync`, and those
 ### The tier tag
 
 `ocel bootstrap` makes a tag key, `<project>/ocel-tier`, with the values `production` and
-`preview`. Every resource ocel makes for a tier that Google lets carry a tag is bound to its tier's
-value: its Cloud Run services, service accounts, Pub/Sub topics, its consumers' push subscriptions,
-buckets, secrets, image repositories, Cloud SQL instances and Firestore databases, the tier's
-records database among them. Each deploy credential holds its tag-fenced roles on the resources
+`preview`. Every resource a deploy or bootstrap makes for a tier that Google lets carry a tag is
+bound to its tier's value: its Cloud Run services, service accounts, Pub/Sub topics, its
+consumers' push subscriptions, buckets, secrets, image repositories, Cloud SQL instances and
+Firestore databases, the tier's records database among them. Each deploy credential holds its tag-fenced roles on the resources
 carrying its own tier's value or none, so none of those roles reaches a resource carrying the
 other tier's. That keeps each tier's deploys to their own resources, and within one project it is
 best effort: [sharing one project between tiers](#sharing-one-project-between-tiers) lists what it
