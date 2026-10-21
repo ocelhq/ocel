@@ -506,8 +506,9 @@ kept, since Pub/Sub cannot change a subscription's ordering: rename the consumer
 
 A deploy also keeps the app's access to the tier's delay queue. Cloud Tasks queues take no tag and
 Google cannot narrow the grant to a queue that does not exist yet, so each tier's deploy credential
-holds `roles/cloudtasks.queueAdmin` on the project, which reaches the other tier's queue too. A deploy
-that lacks it is refused, naming it.
+holds `roles/cloudtasks.queueAdmin` on the project; see
+[sharing one project between tiers](#sharing-one-project-between-tiers). A deploy that lacks it is
+refused, naming it.
 
 ## Realtime
 
@@ -523,8 +524,8 @@ environment's Pub/Sub topic: it makes the subscription when it starts and delete
 and a subscription left by an instance that was killed expires a day after its last pull. Sockets
 on an older revision keep receiving while it drains. The tier's realtime account may publish on and
 subscribe to its environment's topic, and holds `roles/pubsub.editor` on the project, on its tier's
-condition, to make, pull and delete subscriptions. Its instances make their subscriptions untagged,
-so that role reaches every subscription in the project.
+condition, to make, pull and delete subscriptions. Its instances make their subscriptions untagged;
+see [sharing one project between tiers](#sharing-one-project-between-tiers).
 
 ## Logs
 
@@ -561,16 +562,16 @@ for `topics`, `cloudscheduler.googleapis.com` for `env-source-sync`, and those
 
 ### The tier tag
 
-A tier is a credential boundary: one project often holds both tiers, and the preview deploy
-credential must neither change nor read what production runs. `ocel bootstrap` makes a tag key,
-`<project>/ocel-tier`, with the values `production` and `preview`. Every resource ocel
-makes for a tier that Google lets carry a tag is bound to its tier's value: its Cloud Run
-services, service accounts, Pub/Sub topics and subscriptions, buckets, secrets, image
-repositories, Cloud SQL instances and Firestore databases, the tier's records database among
-them. Each deploy credential holds its tag-fenced roles on the resources carrying its own tier's
-value or none, and no grant it holds reaches a resource carrying the other tier's.
-Every namespace and both tiers in the project share the key, and `ocel bootstrap destroy` keeps
-it: Google refuses to delete a value a resource is still bound to.
+`ocel bootstrap` makes a tag key, `<project>/ocel-tier`, with the values `production` and
+`preview`. Every resource ocel makes for a tier that Google lets carry a tag is bound to its tier's
+value: its Cloud Run services, service accounts, Pub/Sub topics, its consumers' push subscriptions,
+buckets, secrets, image repositories, Cloud SQL instances and Firestore databases, the tier's
+records database among them. Each deploy credential holds its tag-fenced roles on the resources
+carrying its own tier's value or none, so none of those roles reaches a resource carrying the
+other tier's. That keeps each tier's deploys to their own resources, and within one project it is
+best effort: [sharing one project between tiers](#sharing-one-project-between-tiers) lists what it
+leaves in reach. Every namespace and both tiers in the project share the key, and
+`ocel bootstrap destroy` keeps it: Google refuses to delete a value a resource is still bound to.
 
 ### The bootstrap credential
 
@@ -595,10 +596,11 @@ each tier's credential for your project and namespace. For the preview tier they
   `roles/artifactregistry.admin`, `roles/datastore.owner`, `roles/cloudsql.admin`,
   `roles/iam.serviceAccountAdmin` and `roles/iam.serviceAccountUser`, each on the condition
   `!resource.hasTagKey('my-project/ocel-tier') || resource.matchTag('my-project/ocel-tier', 'preview')`:
-  a resource carrying the preview value, or no `ocel-tier` value at all. A resource carrying
-  `production` is out of its reach. The project carries no `ocel-tier` value, so these roles
-  also hold what Google checks against the project: creating each kind of resource a deploy
-  makes, listing them, and reading the project.
+  a resource carrying the preview value, or no `ocel-tier` value at all
+  ([sharing one project between tiers](#sharing-one-project-between-tiers) lists what that leaves in
+  reach). A resource carrying `production` is out of these roles' reach. The project carries no
+  `ocel-tier` value, so these roles also hold what Google checks against the project: creating
+  each kind of resource a deploy makes, listing them, and reading the project.
 - `roles/cloudkms.cryptoKeyEncrypterDecrypter` and `roles/cloudkms.admin` on the tier's key and
   its projects' keys, by name: KMS keys take no tag.
 - `roles/memorystore.admin` and `roles/cloudscheduler.admin` on the project, since Memorystore
@@ -640,7 +642,7 @@ queue. Firestore databases take no IAM policy of their own, so read access to it
 database and write access to its project's database of runs and tag records are granted on the
 project, on a condition naming that database.
 
-A serverless app behind the load balancer that revalidates, a Next app or a Node app whose build declares the `revalidation` need, is also granted the cache purge role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map, so the grant covers every URL map of the project.
+A serverless app behind the load balancer that revalidates, a Next app or a Node app whose build declares the `revalidation` need, is also granted the cache purge role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map; see [sharing one project between tiers](#sharing-one-project-between-tiers).
 
 Google limits how many service accounts a project may hold, and every app takes one per environment
 it runs in: a deploy that reaches the limit is refused, naming the quota. A deploy never deletes an
@@ -659,22 +661,34 @@ someone who holds a tier's credential and sets out to misuse it. These are accep
 
 - **Firestore.** Firestore has no per-database IAM, so a deploy credential may grant itself
   `roles/datastore.user` on the project and read or write the other tier's records and project
-  databases. Values stay sealed under KMS keys, which are fenced by name.
-- **Realtime subscriptions.** Gateway instances make their subscriptions at runtime, untagged, so
-  a preview deploy can run code as the preview realtime account and pull or delete production's.
+  databases. Values stay sealed under KMS keys, which are held apart by name.
+- **Realtime subscriptions.** Gateway instances make their subscriptions at runtime, untagged, and
+  the tier's realtime account holds `roles/pubsub.editor` on the project on its tier's condition,
+  so a preview deploy can run code as the preview realtime account and pull or delete
+  production's subscriptions.
 - **Untagged resources.** A resource carrying no `ocel-tier` value, whoever made it, is in reach of
   both tiers' deploy credentials: a foreign secret, bucket, Cloud Run service, repository or
   account, or the `(default)` Firestore database.
-- **A fresh resource.** A resource a deploy has just made carries no tag until Google applies its
-  tier's binding, up to about 90 seconds, and is in reach of both tiers until then.
+- **A fresh resource.** Secrets, Pub/Sub topics and push subscriptions, Cloud SQL instances and
+  Firestore databases carry their tier's value from the moment they are made. A service account,
+  bucket or image repository is bound to it right after it is made, and a new Cloud Run service
+  only once its first rollout finishes. Until then it is in reach of both tiers, and if the deploy
+  fails before binding it, it stays untagged until a later deploy binds it.
 - **Lists.** Lists are checked against the project, so a deploy credential lists the other tier's
   services, accounts, topics, buckets, secrets and databases.
 - **Env values.** A Cloud Run service's listing holds its environment variables, sensitive values
   too, so any credential that may list the project's Cloud Run services reads them.
-- **Memorystore and Cloud Scheduler.** Their instances and jobs take no tag, so their roles are
-  on the project, and the tier's network carries none either.
-- **Grants and queues.** A deploy credential may grant `roles/pubsub.editor` on the whole project
-  to any member, the parts role may set the policy of any subnetwork, and
-  `roles/cloudtasks.queueAdmin` reaches the other tier's delay queue.
+- **Memorystore, Cloud Scheduler and Cloud Tasks.** Their instances, jobs and queues take no tag,
+  so their roles are on the project: `roles/cloudtasks.queueAdmin` reaches the other tier's delay
+  queue, and the Memorystore and Cloud Scheduler roles the other tier's stores and jobs.
+- **The tier's network.** The network, its subnetwork and its service connection policies carry
+  no tag, and the parts role is unconditioned, so a deploy credential may use any network and
+  subnetwork in the project and set any subnetwork's policy (`compute.subnetworks.setIamPolicy`).
+  A preview deploy could attach a service to production's network.
+- **Grants.** A deploy credential may grant `roles/pubsub.editor` and the cache purge role on the
+  whole project, to any member.
+- **Cache purges.** The cache purge role holds `compute.urlMaps.invalidateCache`, which Google
+  cannot scope to one URL map, so an app granted it may clear the cache of every URL map in the
+  project.
 
 For complete isolation, give each tier a project of its own.

@@ -33,20 +33,26 @@ A hostname nobody can guess is not access control, so keep production secrets ou
 
 ## Tiers and namespaces
 
-A **tier** is a credential boundary: each tier is deployed with a credential of its own, which
-reaches that tier's resources and not the other's.
+A **tier** is a credential boundary: each tier is deployed with a credential of its own, whose
+grants are held to that tier's resources as far as each cloud lets them be.
 
-- **On AWS**, every grant a deploy holds is conditioned on the `ocel:env-tier` tag of the
-  resource, each tier pushes to ECR repositories of its own, and a deploy adopts only a
-  certificate its own tier requested or one you brought.
-- **On Google Cloud**, every resource carries the `ocel-tier` Resource Manager tag, and a tier's
-  deploy credential holds its roles on its own tier's value. Within one project that is best
-  effort; see [sharing one project between tiers](/docs/providers/gcp#sharing-one-project-between-tiers).
+- **On AWS**, a deploy's grants on resources are held to its tier by a tier-named ARN or the
+  `ocel:env-tier` tag of the resource, so each tier pushes to ECR repositories of its own and
+  adopts only a certificate its own tier requested or one you brought. A few reads and lists are
+  account-wide, such as ECR's login token, `ec2:DescribeRegions` and `acm:ListCertificates`.
+- **On Google Cloud**, ocel binds the `ocel-tier` Resource Manager tag to every resource that can
+  carry one, and most of a deploy credential's roles hold on its own tier's value or on a resource
+  with no value. Within one project that is best effort: KMS keys are held apart by name, some
+  roles are on the whole project, and some resources carry no tag. See
+  [sharing one project between tiers](/docs/providers/gcp#sharing-one-project-between-tiers).
 
 A **namespace** is lighter: every name ocel gives a resource starts with it, so two namespaces in
-one account never collide, and tearing one down never touches another's. It is `ocel` unless you
-set `OCEL_NAMESPACE`, and is meant for CI and advanced setups that run several installations side
-by side. It is never a credential boundary: a deploy credential reaches every namespace of its tier.
+one account never collide, and tearing one down never touches another's. On Google Cloud the
+`ocel-tier` tag key is the exception: every namespace in the project shares it, and tearing one
+down keeps it. A namespace is `ocel` unless you set `OCEL_NAMESPACE`, and is meant for CI and
+advanced setups that run several installations side by side. It is never a credential boundary.
+`ocel permissions deploy` prints a credential per namespace, but the grants it holds by tier tag
+reach every namespace of its tier.
 
 ## Variables
 
