@@ -217,7 +217,7 @@ func (d *deployRun) fills(refusal *variables.MissingError) bool {
 		return false
 	}
 	if d.job != nil {
-		return refusal.SetInStore()
+		return refusal.IsStoredByOcel()
 	}
 	return d.browser
 }
