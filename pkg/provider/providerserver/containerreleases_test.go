@@ -105,6 +105,49 @@ func TestARollbackWhoseReleasesCannotBeScaledUpLeavesThePointerOnThePromotionItS
 	}
 }
 
+func TestARollbackThatFailsAfterItsReleasesScaledUpSchedulesThemToScaleDownAfterTheWindow(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1", "p2")
+	scaling := (&containerScaling{}).installOn(vendor)
+	relayPlane(vendor).FailNextPointerMove(errors.New("the data plane is down"))
+
+	if _, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"}); err == nil {
+		t.Fatal("Rollback() succeeded, want it refused once the pointer failed to move")
+	}
+
+	want := provider.DemotedReleases{
+		Slug:     "shop",
+		Tier:     environment.TierProduction,
+		Env:      "prod",
+		Previous: []provider.AppRelease{webRelease(t, releaseFor(0))},
+	}
+	got := scaling.readScaledDown()
+	if len(got) != 1 || !sameDemoted(got[0], want) {
+		t.Errorf("the failed rollback scaled down %+v, want %+v: p1's release, scaled up for nothing, kept for the window, and p2's, which still serves, untouched", got, want)
+	}
+}
+
+func TestARollbackThatFailsAfterItsReleasesScaledUpWarnsWhenScalingThemBackDownFails(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1", "p2")
+	(&containerScaling{downErr: errors.New("throttled")}).installOn(vendor)
+	relayPlane(vendor).FailNextPointerMove(errors.New("the data plane is down"))
+
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"})
+	if err == nil || !strings.Contains(err.Error(), "the data plane is down") {
+		t.Fatalf("Rollback() = %v, want it refused with why the pointer did not move", err)
+	}
+
+	warned := strings.Join(rolled.warnings(), "\n")
+	if !strings.Contains(warned, "throttled") || !strings.Contains(warned, "the next promotion retries") {
+		t.Errorf("warnings = %q, want one naming the failure and that the next promotion retries it", warned)
+	}
+}
+
 func TestARollbackScalesDownTheReleaseItReplacedAfterTheWindowAndEveryOlderReleaseNow(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")

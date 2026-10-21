@@ -61,21 +61,32 @@ func promote(ctx context.Context, l projectLedger, releases *provider.ContainerR
 	if err := scaleUpPromoted(ctx, releases, l, req, progress); err != nil {
 		return nil, err
 	}
+	dropped, kept, err := servePromotion(ctx, l, req, routers, moves, progress)
+	if err != nil {
+		scaleDownUnserved(ctx, releases, l, req, progress)
+		return dropped, err
+	}
+	scaleDownDemoted(ctx, releases, l, req, kept, progress)
+	return dropped, nil
+}
+
+func servePromotion(ctx context.Context, l projectLedger, req promoteRequest, routers []appRouter, moves []router.PointerMove, progress progress.Log) ([]ledger.RecordedPromotion, []router.Promotion, error) {
+	pointer, promoted := req.pointer, req.promotion
 	if req.confirm != nil {
 		if err := req.confirm(ctx); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	dropped, err := req.record(ctx, l)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := l.RewriteRecords(ctx, promoted); err != nil {
-		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, nil))
+		return dropped, nil, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, nil))
 	}
 	kept, err := readKeptPromotions(ctx, l, pointer)
 	if err != nil {
-		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, nil))
+		return dropped, nil, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, nil))
 	}
 	for i, routed := range routers {
 		moves[i].Kept = kept
@@ -88,10 +99,9 @@ func promote(ctx context.Context, l projectLedger, releases *provider.ContainerR
 		if errors.As(err, &unserved) {
 			moved = routers[:i]
 		}
-		return dropped, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, moved))
+		return dropped, nil, errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, moved))
 	}
-	scaleDownDemoted(ctx, releases, l, req, kept, progress)
-	return dropped, nil
+	return dropped, kept, nil
 }
 
 func newRecordContext(ctx context.Context) (context.Context, context.CancelFunc) {
