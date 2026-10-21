@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/cloud"
 	"github.com/ocelhq/ocel/cli/internal/commands"
@@ -43,6 +44,7 @@ type FakeRemoteProvider struct {
 	serves   string
 	tenants  map[string]string
 	sessions map[string]remoteSession
+	ended    map[string]bool
 	calls    []RemoteCall
 	protos   []int
 }
@@ -79,6 +81,7 @@ func newFakeRemoteProvider(p *fake.Provider) *FakeRemoteProvider {
 		serves:   version.Version,
 		tenants:  map[string]string{FakeCloudToken: "org_1"},
 		sessions: map[string]remoteSession{},
+		ended:    map[string]bool{},
 	}
 }
 
@@ -92,6 +95,15 @@ func (f *FakeRemoteProvider) GrantTenant(token, tenant string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.tenants[token] = tenant
+}
+
+func (f *FakeRemoteProvider) EndSessions() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for id := range f.sessions {
+		f.ended[id] = true
+	}
+	clear(f.sessions)
 }
 
 func (f *FakeRemoteProvider) Calls() []RemoteCall {
@@ -131,15 +143,19 @@ func (f *FakeRemoteProvider) admit(call RemoteCall) (http.Handler, error) {
 	case !strings.HasPrefix(call.Authorization, "Bearer ") || !known:
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("the token is not one Ocel Cloud issued"))
 	case call.Version != f.serves:
-		return nil, f.versionUnserved(call.Version)
+		return nil, refusalWith(connect.CodeFailedPrecondition, fmt.Sprintf("this Ocel Cloud serves ocel %s, and was called by ocel %s", f.serves, call.Version), &cloudv1.VersionUnserved{Served: []string{f.serves}})
 	case !sessionIDPattern.MatchString(call.Session):
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is no session id", call.Session))
 	}
 	session, open := f.sessions[call.Session]
 	if !open {
-		if !strings.HasSuffix(call.Procedure, "/Configure") {
+		switch {
+		case f.ended[call.Session] && !strings.HasSuffix(call.Procedure, "/Configure"):
+			return nil, refusalWith(connect.CodeFailedPrecondition, "this session has ended", &cloudv1.SessionEnded{})
+		case !strings.HasSuffix(call.Procedure, "/Configure"):
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("a session opens with Configure"))
 		}
+		delete(f.ended, call.Session)
 		session = remoteSession{tenant: tenant, handler: providerserver.ConformanceMux(providerserver.Config{
 			Version: version.Version,
 			New: func(context.Context, provider.Settings) (provider.Provider, error) {
@@ -154,9 +170,9 @@ func (f *FakeRemoteProvider) admit(call RemoteCall) (http.Handler, error) {
 	return session.handler, nil
 }
 
-func (f *FakeRemoteProvider) versionUnserved(called string) error {
-	refused := connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this Ocel Cloud serves ocel %s, and was called by ocel %s", f.serves, called))
-	detail, err := connect.NewErrorDetail(&cloudv1.VersionUnserved{Served: []string{f.serves}})
+func refusalWith(code connect.Code, message string, typed proto.Message) error {
+	refused := connect.NewError(code, errors.New(message))
+	detail, err := connect.NewErrorDetail(typed)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}

@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -22,6 +23,15 @@ func RefusalOf(apiURL string, err *connect.Error) *clierror.Error {
 		return &clierror.Error{Code: clierror.CodeCloudTokenRefused, Hint: "ocel login", Cause: wireerror.Error{Message: fmt.Sprintf("Ocel Cloud at %s refuses the token the console issued (%s): run `ocel login` and run this again", apiURL, err.Message()), Wire: err}}
 	}
 	return nil
+}
+
+func IsSessionEnded(err error) bool {
+	var wire *connect.Error
+	if !errors.As(err, &wire) {
+		return false
+	}
+	_, ended := detailOf[*cloudv1.SessionEnded](wire)
+	return ended
 }
 
 func detailOf[T any](err *connect.Error) (T, bool) {

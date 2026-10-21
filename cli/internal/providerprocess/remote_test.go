@@ -220,6 +220,47 @@ func TestARemoteProviderRedirectedToAnotherHostIsNeverSentTheToken(t *testing.T)
 	}
 }
 
+func TestARemoteSessionOcelCloudEndedIsConfiguredAgainAndTheCallRetriedOnce(t *testing.T) {
+	ctx, _ := remoteSpan(t)
+	for name, call := range map[string]func(*providerprocess.Provider) error{
+		"a unary call": func(p *providerprocess.Provider) error { return listEnvironments(ctx, p) },
+		"a variable store call": func(p *providerprocess.Provider) error {
+			store, err := p.VariableStore()
+			if err != nil {
+				return err
+			}
+			_, err = store.ListValues(ctx, &variablestorev1.ListValuesRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Slug: "shop"})
+			return err
+		},
+		"a stream": func(p *providerprocess.Provider) error {
+			_, err := providerprocess.Stream(ctx, p, "RemoveStalePromotions", &contractv1.RemoveStalePromotionsRequest{Slug: "shop", Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}}, contractv1connect.ProviderServiceClient.RemoveStalePromotions)
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := clitest.ServeRemoteProvider(t, fake.NewForProject(fake.Options{}))
+			p, err := startRemote(t, server, remoteProject(t), &issuedTokens{tokens: []string{clitest.FakeCloudToken}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			server.EndSessions()
+
+			if err := call(p); err != nil {
+				t.Fatalf("err = %v, want the call to succeed on the session opened again", err)
+			}
+			calls := server.Calls()
+			if len(calls) != 4 || !strings.HasSuffix(calls[2].Procedure, "/Configure") || calls[3].Procedure != calls[1].Procedure {
+				t.Fatalf("calls = %+v, want Configure, the refused call, Configure again and the call retried", calls)
+			}
+			for _, call := range calls {
+				if call.Session != calls[0].Session {
+					t.Fatalf("calls = %+v, want every call on the session first opened", calls)
+				}
+			}
+		})
+	}
+}
+
 func TestARemoteSessionCalledWithAnotherOrganizationsTokenFailsInOcelCloudsWords(t *testing.T) {
 	server := clitest.ServeRemoteProvider(t, fake.NewForProject(fake.Options{}))
 	server.GrantTenant("other-org-token", "org_2")
