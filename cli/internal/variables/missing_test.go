@@ -383,8 +383,8 @@ func TestAJobAsksForMissingValuesOnlyWhereOcelStoresThem(t *testing.T) {
 		{name: "ocel stores the env source's credentials", source: doppler, problems: []*resourcesv1.VariableProblem{missing("DOPPLER_TOKEN", "")}, want: true},
 	} {
 		refusal := &variables.MissingError{Problems: tc.problems, Scope: variables.Scope{EnvSource: tc.source}}
-		if got := refusal.SetInStore(); got != tc.want {
-			t.Errorf("%s: SetInStore() = %t, want %t", tc.name, got, tc.want)
+		if got := refusal.IsStoredByOcel(); got != tc.want {
+			t.Errorf("%s: IsStoredByOcel() = %t, want %t", tc.name, got, tc.want)
 		}
 	}
 }

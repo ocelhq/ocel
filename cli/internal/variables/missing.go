@@ -73,7 +73,7 @@ func (r *MissingError) Needed() *cloudv1.VariablesNeeded {
 	return needed
 }
 
-func (r *MissingError) SetInStore() bool {
+func (r *MissingError) IsStoredByOcel() bool {
 	return !r.Scope.EnvSource.OwnsValues() || r.Scope.EnvSource.areCredentials(r.Problems)
 }
 
@@ -91,7 +91,7 @@ func (r *MissingError) definition(key string) *resourcesv1.VariableDefinition {
 }
 
 func (r *MissingError) remedy() string {
-	if r.Scope.Job && r.SetInStore() {
+	if r.Scope.Job && r.IsStoredByOcel() {
 		rerun := "ocel deploy"
 		if r.Scope.isPreview() {
 			rerun = strings.TrimSpace("ocel preview up " + r.Scope.Environment)
