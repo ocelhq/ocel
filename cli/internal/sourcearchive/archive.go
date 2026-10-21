@@ -103,7 +103,7 @@ func Walk(root string) (*Archive, error) {
 		return nil, err
 	}
 	w := walker{root: root, docker: docker}
-	patterns, err := readGitExclude(root)
+	patterns, err := readExcludes(root)
 	if err != nil {
 		return nil, err
 	}
@@ -158,10 +158,14 @@ func (w *walker) dir(segments []string, inherited []gitignore.Pattern) error {
 				return err
 			}
 		case mode.IsRegular():
-			if strings.HasPrefix(name, envFilePrefix) {
+			if !alwaysUploaded(name) && (ignored.Match(child, false) || w.dockerExcludes(rel, false)) {
 				continue
 			}
-			if !alwaysUploaded(name) && (ignored.Match(child, false) || w.dockerExcludes(rel, false)) {
+			secret, err := isSecret(name, childAbs)
+			if err != nil {
+				return err
+			}
+			if secret {
 				continue
 			}
 			w.entries = append(w.entries, entry{rel: rel, abs: childAbs, size: uint64(info.Size()), executable: mode&0o111 != 0})
@@ -246,8 +250,12 @@ func readGitignore(file string, domain []string) ([]gitignore.Pattern, error) {
 	return patterns, nil
 }
 
-func readGitExclude(root string) ([]gitignore.Pattern, error) {
-	return readGitignore(filepath.Join(root, gitEntry, "info", "exclude"), nil)
+func readExcludes(root string) ([]gitignore.Pattern, error) {
+	local, err := readGitignore(filepath.Join(root, gitEntry, "info", "exclude"), nil)
+	if err != nil {
+		return nil, err
+	}
+	return slices.Concat(credentialPatterns, local), nil
 }
 
 func readDockerignore(root string) (*patternmatcher.PatternMatcher, error) {
