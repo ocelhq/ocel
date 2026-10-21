@@ -75,6 +75,7 @@ func (a *Answers) ask(ctx context.Context, holder Holder, waiting *streamv1.Wait
 	resume := holder.Hold(waiting)
 	answer, err := a.await(ctx, id)
 	if err != nil {
+		resume("the input went unanswered")
 		return nil, err
 	}
 	resume("answered on Ocel Cloud")

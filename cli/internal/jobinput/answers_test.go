@@ -171,3 +171,41 @@ func TestACanceledRunStopsWaitingForTheAnswer(t *testing.T) {
 		t.Errorf("Confirm() error = %v, want context.Canceled", err)
 	}
 }
+
+func TestAnAskThatFailsStillResumesTheHeldJob(t *testing.T) {
+	t.Parallel()
+
+	for name, fail := range map[string]func(h *holds) (io.Reader, context.Context){
+		"an answer that is not one": func(h *holds) (io.Reader, context.Context) {
+			stdin, write := io.Pipe()
+			answering(t, h, write, func(string) string { return "yes" })
+			return stdin, context.Background()
+		},
+		"stdin ending": func(*holds) (io.Reader, context.Context) {
+			return strings.NewReader(""), context.Background()
+		},
+		"a canceled run": func(h *holds) (io.Reader, context.Context) {
+			stdin, _ := io.Pipe()
+			ctx, cancel := context.WithCancel(context.Background())
+			go func() {
+				h.next(t)
+				cancel()
+			}()
+			return stdin, ctx
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := newHolds()
+			stdin, ctx := fail(h)
+			if _, err := jobinput.New(stdin).Confirm(ctx, h, "", "Continue?"); err == nil {
+				t.Fatal("Confirm() error = nil, want the ask failed")
+			}
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if len(h.resumed) != 1 {
+				t.Errorf("resumed %d times, want once, so the job leaves waiting", len(h.resumed))
+			}
+		})
+	}
+}
