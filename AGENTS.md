@@ -20,18 +20,22 @@ CI runs everything a change reaches, once, on the pull request. No agent runs it
 
 ## About Ocel
 
-**Ocel deploys apps to your own cloud.** Three pieces, each building on the one before —
-the CLI works on its own; the SDK and console do not.
+**Ocel deploys apps.** Ocel is the deployment engine: three pieces, each building on the one
+before — the CLI works on its own; the SDK and console do not.
 
-- **CLI** — deploys apps. Point it at a project and it builds, provisions and ships into
-  your own provider account, with as little configuration as possible.
+- **CLI** — deploys apps. Point it at a project and it builds, provisions and ships to a
+  target, with as little configuration as possible.
 - **SDK** — adds infrastructure resources. Cloud primitives are function calls in app code,
   and the call _is_ the provisioning step, so there is no separate wiring to keep in sync.
   Proto-backed and language-neutral.
-- **Console** — provides the UI over both.
+- **Console** — provides the UI over both: a view into what the CLI did and where it landed.
 
-**Not a cloud, and not managed anything.** Infrastructure lands in the customer's own account
-under their billing and access; the hosted side is an optional control plane.
+**Targets.** A target is where a deploy lands. A provider target is the customer's own account
+(AWS, GCP, a VPS), under their billing and access. **Ocel Cloud** is the zero-config managed
+target: a project that names no provider deploys there when the console it is logged in to
+offers it, with nothing but the CLI installed. Ocel Cloud is one target among others, never
+the default for a project that names a provider, and the open-source engine never depends
+on it: its implementation is private, its contracts (`proto/cloud/v1`) are public.
 
 ## Trust > Ops > Product > Polish
 
@@ -56,8 +60,9 @@ which are tooling.
 - **`packages/`** — everything published to npm, and nothing else. `@ocel/*` is public
   API; nothing internal may claim it.
 - **`console/`** — only `console/github`, the app that posts this repo's previews, until
-  the console's git integration replaces it. The console itself, Ocel's hosted control
-  plane, lives in github.com/ocelhq/console. Never call it a cloud.
+  the console's git integration replaces it. The console itself, the UI over
+  Ocel, lives in github.com/ocelhq/console. Never call the console a cloud; Ocel Cloud is a
+  target the console may offer, not the console.
 - **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
   has its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
   lands here as a sibling. No import crosses from one vendor into another.
