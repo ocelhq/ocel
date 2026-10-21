@@ -12,18 +12,17 @@ const projectID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79"
 
 func validStartBuild() *cloudv1.StartJobRequest {
 	return &cloudv1.StartJobRequest{
-		ProjectId:  projectID,
-		Slug:       "shop",
-		Command:    cloudv1.JobCommand_JOB_COMMAND_BUILD,
-		SourceId:   digest,
-		CliVersion: "0.4.1",
-		Git:        &cloudv1.GitContext{Commit: "0a1b2c3d4e5f", Branch: "feat/cart", Dirty: true, PullRequest: 12},
+		ProjectId: projectID,
+		Slug:      "shop",
+		Command:   cloudv1.JobCommand_JOB_COMMAND_BUILD,
+		SourceId:  digest,
+		Git:       &cloudv1.GitContext{Commit: "0a1b2c3d4e5f", Branch: "feat/cart", Dirty: true, PullRequest: 12},
 	}
 }
 
 func TestProtovalidateAcceptsEveryJobRequestTheCLICanSend(t *testing.T) {
 	requireAccepted(t, "a build", validStartBuild())
-	requireAccepted(t, "a build outside git", &cloudv1.StartJobRequest{ProjectId: projectID, Slug: "shop", Command: cloudv1.JobCommand_JOB_COMMAND_BUILD, SourceId: digest, CliVersion: "dev"})
+	requireAccepted(t, "a build outside git", &cloudv1.StartJobRequest{ProjectId: projectID, Slug: "shop", Command: cloudv1.JobCommand_JOB_COMMAND_BUILD, SourceId: digest})
 
 	deploy := validStartBuild()
 	deploy.Command, deploy.Tag = cloudv1.JobCommand_JOB_COMMAND_DEPLOY, "v1.2.0"
@@ -53,9 +52,6 @@ func TestProtovalidateRefusesAStartThatBreaksAJobRule(t *testing.T) {
 		{name: "a command is named", mutate: func(r *cloudv1.StartJobRequest) { r.Command = cloudv1.JobCommand_JOB_COMMAND_UNSPECIFIED }},
 		{name: "a command is one this contract defines", mutate: func(r *cloudv1.StartJobRequest) { r.Command = 99 }},
 		{name: "a source id is a sha256", mutate: func(r *cloudv1.StartJobRequest) { r.SourceId = "src_1" }},
-		{name: "a CLI version is required", mutate: func(r *cloudv1.StartJobRequest) { r.CliVersion = "" }},
-		{name: "a CLI version is no flag", mutate: func(r *cloudv1.StartJobRequest) { r.CliVersion = "--debug" }},
-		{name: "a CLI version has no space", mutate: func(r *cloudv1.StartJobRequest) { r.CliVersion = "1.0 --yes" }},
 		{name: "a commit is hex", mutate: func(r *cloudv1.StartJobRequest) { r.Git.Commit = "HEAD" }},
 		{name: "a branch has no control character", mutate: func(r *cloudv1.StartJobRequest) { r.Git.Branch = "main\n--yes" }},
 		{name: "a branch is at most 256 characters", mutate: func(r *cloudv1.StartJobRequest) { r.Git.Branch = strings.Repeat("b", 257) }},
@@ -148,5 +144,30 @@ func TestProtovalidateRefusesAnInputOrAnswerThatBreaksAJobRule(t *testing.T) {
 		{name: "a value has a key", mutate: func(r *cloudv1.RespondJobRequest) { r.GetVariables().Values[0].Key = "" }},
 		{name: "a value's key has no control character", mutate: func(r *cloudv1.RespondJobRequest) { r.GetVariables().Values[0].Key = "DB\nURL" }},
 		{name: "a value's folder has no fragment", mutate: func(r *cloudv1.RespondJobRequest) { r.GetVariables().Values[1].Folder = "/apps/web#x" }},
+	})
+}
+
+func validJobContext() *cloudv1.JobContext {
+	return &cloudv1.JobContext{
+		JobId:        "job_01JABCDEF",
+		Slug:         "shop",
+		Git:          &cloudv1.GitContext{Commit: "0a1b2c3d4e5f", Branch: "feat/cart", Dirty: true, PullRequest: 12},
+		PreviewLabel: "pr-12",
+	}
+}
+
+func TestProtovalidateAcceptsEveryJobContextABuilderCanWrite(t *testing.T) {
+	requireAccepted(t, "a preview's job", validJobContext())
+	requireAccepted(t, "a job outside git", &cloudv1.JobContext{JobId: "job_01JABCDEF", Slug: "shop"})
+}
+
+func TestProtovalidateRefusesAJobContextThatBreaksAJobRule(t *testing.T) {
+	requireRefusals(t, validJobContext, []refusal[*cloudv1.JobContext]{
+		{name: "a job id is required", mutate: func(r *cloudv1.JobContext) { r.JobId = "" }},
+		{name: "a job id is URL-safe", mutate: func(r *cloudv1.JobContext) { r.JobId = "job/../2" }},
+		{name: "a slug is required", mutate: func(r *cloudv1.JobContext) { r.Slug = "" }},
+		{name: "a slug is a DNS label", mutate: func(r *cloudv1.JobContext) { r.Slug = "Shop_1" }},
+		{name: "a commit is hex", mutate: func(r *cloudv1.JobContext) { r.Git.Commit = "HEAD" }},
+		{name: "a preview label is a DNS label", mutate: func(r *cloudv1.JobContext) { r.PreviewLabel = "PR 12" }},
 	})
 }

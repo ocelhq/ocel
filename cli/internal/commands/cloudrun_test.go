@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/cli/internal/version"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -82,7 +81,7 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndRunsAJob(t *
 	if !strings.Contains(out, "Ocel Cloud") || !strings.Contains(out, "Acme Inc") || !strings.Contains(out, "127.0.0.1") {
 		t.Fatalf("output = %q, want the target named: Ocel Cloud, the organization and the console", out)
 	}
-	jobURL := fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID
+	jobURL := fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "?org=org_1"
 	if !strings.Contains(out, jobURL) {
 		t.Fatalf("output = %q, want the console's job page %s", out, jobURL)
 	}
@@ -99,7 +98,7 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndRunsAJob(t *
 	if got := fake.CommittedPaths(); !slices.Equal(got, []string{"index.js", "ocel.json"}) {
 		t.Fatalf("committed %q, want the source without .env or .ocel", got)
 	}
-	want := &cloudv1.StartJobRequest{ProjectId: link.ProjectID, Slug: "shop", Command: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, SourceId: clitest.FakeCloudSourceID, CliVersion: version.Version}
+	want := &cloudv1.StartJobRequest{ProjectId: link.ProjectID, Slug: "shop", Command: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, SourceId: clitest.FakeCloudSourceID}
 	if len(fake.Started) != 1 || !proto.Equal(fake.Started[0], want) {
 		t.Fatalf("started %v, want %v", fake.Started, want)
 	}
@@ -132,7 +131,7 @@ func TestAnOcelCloudJobsLinkIsALineOfItsOwnThatNoFoldedGroupHides(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	link := "INFO  [deploy] Job " + clitest.FakeCloudJobID + " · follow it at " + fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "\n"
+	link := "INFO  [deploy] Job " + clitest.FakeCloudJobID + " · follow it at " + fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "?org=org_1" + "\n"
 	at := strings.Index(out, link)
 	if at < 0 || strings.Count(out[:at], "::group::") != strings.Count(out[:at], "::endgroup::") {
 		t.Fatalf("output = %q, want %q outside every group", out, link)
@@ -190,7 +189,7 @@ func TestAnOcelCloudJobThatFailsFailsTheRunWithItsErrorAndLink(t *testing.T) {
 	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudJobFailed {
 		t.Fatalf("err = %v, want %s", err, clierror.CodeCloudJobFailed)
 	}
-	for _, want := range []string{"build.failed", "app web failed to build", fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID} {
+	for _, want := range []string{"build.failed", "app web failed to build", fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "?org=org_1"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("err = %v, want %q named", err, want)
 		}
@@ -272,7 +271,7 @@ func TestAnOcelCloudDeployThatDeployedNothingEndsWithTheJobsNoticeNotDeployed(t 
 	if strings.Contains(out, "Deployed shop") {
 		t.Fatalf("output = %q, want no claim of a deployment from a job that deployed nothing", out)
 	}
-	if !strings.Contains(out, notice+" · job "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
+	if !strings.Contains(out, notice+" · job "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID+"?org=org_1") {
 		t.Fatalf("output = %q, want the job's notice and its link", out)
 	}
 }
@@ -296,7 +295,7 @@ func TestAnOcelCloudRunWithNoWaitReturnsOnceTheJobStarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, clitest.FakeCloudJobID) || !strings.Contains(out, fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
+	if !strings.Contains(out, clitest.FakeCloudJobID) || !strings.Contains(out, fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID+"?org=org_1") {
 		t.Fatalf("output = %q, want the job id and its link", out)
 	}
 	if len(fake.Started) != 1 {
@@ -315,7 +314,7 @@ func TestInterruptingAnOcelCloudRunStopsWatchingAndLeavesTheJobRunning(t *testin
 	if err != nil {
 		t.Fatalf("err = %v, want stopping to watch to succeed", err)
 	}
-	if !strings.Contains(out, "keeps running") || !strings.Contains(out, fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID) {
+	if !strings.Contains(out, "keeps running") || !strings.Contains(out, fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID+"?org=org_1") {
 		t.Fatalf("output = %q, want the job named still running, with its link", out)
 	}
 	if len(fake.Canceled) != 0 {
@@ -352,7 +351,7 @@ func TestAnOcelCloudJobThatNeedsInputOpensItsPageOncePerInputAndKeepsWaiting(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	jobURL := fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID
+	jobURL := fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "?org=org_1"
 	if !slices.Equal(opened, []string{jobURL, jobURL}) {
 		t.Fatalf("opened %q, want the job page once for the values and once for the question", opened)
 	}
@@ -375,7 +374,7 @@ func TestAnOcelCloudJobThatNeedsInputWithNoBrowserSaysWhereAndKeepsWaiting(t *te
 		t.Fatal(err)
 	}
 	asked := strings.Index(out, "✗ DATABASE_URL")
-	page := strings.Index(out, "Fill them in on Ocel Cloud at:\n\n    "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID+"\n")
+	page := strings.Index(out, "Fill them in on Ocel Cloud at:\n\n    "+fake.ConsoleURL+"/cloud/jobs/"+clitest.FakeCloudJobID+"?org=org_1"+"\n")
 	waited := strings.Index(out, "Waited for the job")
 	if asked < 0 || page < asked || waited < page {
 		t.Fatalf("output = %q, want the values needed and where to enter them, before the wait ends", out)
@@ -403,7 +402,7 @@ func TestAnOcelCloudJobWaitingForInputHoldsTheRunOnItsPageUntilTheInputIsAnswere
 		}
 	}
 	want := &streamv1.WaitingEvent{
-		Url:     fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID,
+		Url:     fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "?org=org_1",
 		Missing: &streamv1.MissingVariables{Cells: []*streamv1.MissingVariable{{Key: "DATABASE_URL"}}},
 		Input:   values.GetInput(),
 	}
@@ -428,7 +427,7 @@ func TestTheJSONSummaryOfAnOcelCloudRunNamesTheJob(t *testing.T) {
 	summary := events[len(events)-1].GetSummary()
 	want := &streamv1.CloudJob{
 		Id:     clitest.FakeCloudJobID,
-		Url:    fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID,
+		Url:    fake.ConsoleURL + "/cloud/jobs/" + clitest.FakeCloudJobID + "?org=org_1",
 		State:  cloudv1.JobState_JOB_STATE_SUCCEEDED,
 		Result: &cloudv1.JobResult{Urls: []string{"https://shop.ocel.app"}},
 	}
@@ -477,6 +476,30 @@ func TestAnOcelCloudRunDeploysUnderTheActiveOrganizationOrAsksForOne(t *testing.
 		}
 		if !slices.Equal(fake.ActivatedOrgs, []string{"org_2"}) {
 			t.Fatalf("activated %v, want org_2", fake.ActivatedOrgs)
+		}
+	})
+
+	t.Run("a linked organization other than the active one", func(t *testing.T) {
+		invocation, fake := loggedIn(t)
+		fake.Organizations, fake.ActiveOrg = two, "org_2"
+		root := t.TempDir()
+		clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop"}`)
+		if err := console.WriteLink(root, console.Link{APIURL: fake.ConsoleURL, OrganizationID: "org_1", ProjectID: clitest.FixtureConsoleProjectID, ProjectName: "shop"}); err != nil {
+			t.Fatal(err)
+		}
+		fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+		out, err := runOnCloud(t, invocation, root, "ocel deploy")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(fake.ActivatedOrgs) != 0 {
+			t.Fatalf("activated %v, want the console's active organization left alone", fake.ActivatedOrgs)
+		}
+		if len(fake.TokenOrgs) == 0 || slices.ContainsFunc(fake.TokenOrgs, func(org string) bool { return org != "org_1" }) {
+			t.Fatalf("tokens issued for %v, want each for org_1, the linked organization", fake.TokenOrgs)
+		}
+		if !strings.Contains(out, "/cloud/jobs/"+clitest.FakeCloudJobID+"?org=org_1") {
+			t.Fatalf("output = %q, want the job page naming org_1", out)
 		}
 	})
 

@@ -7,6 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
@@ -17,26 +20,35 @@ type CloudToken struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-func (c *Client) IssueCloudToken(ctx context.Context, accessToken string, scopes []string) (CloudToken, error) {
-	issued, err := c.consoleService(accessToken).IssueCloudToken(ctx, &consolev1.IssueCloudTokenRequest{Scopes: scopes})
+func (c *Client) IssueCloudToken(ctx context.Context, accessToken, organizationID string, scopes []cloudv1.Scope) (CloudToken, error) {
+	issued, err := c.consoleService(accessToken).IssueCloudToken(ctx, &consolev1.IssueCloudTokenRequest{OrganizationId: organizationID, Scopes: ScopeClaims(scopes)})
 	if err != nil {
 		return CloudToken{}, fmt.Errorf("have %s issue an Ocel Cloud token: %w", c.baseURL, err)
 	}
 	return CloudToken{Token: issued.GetToken(), ExpiresAt: issued.GetExpiresAt().AsTime()}, nil
 }
 
+func ScopeClaims(scopes []cloudv1.Scope) []string {
+	claims := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		claims = append(claims, proto.GetExtension(scope.Descriptor().Values().ByNumber(scope.Number()).Options(), cloudv1.E_Claim).(string))
+	}
+	return claims
+}
+
 type CloudTokens struct {
-	client  *Client
-	session string
-	scopes  []string
-	now     func() time.Time
+	client       *Client
+	session      string
+	organization string
+	scopes       []cloudv1.Scope
+	now          func() time.Time
 
 	mu   sync.Mutex
 	held CloudToken
 }
 
-func NewCloudTokens(client *Client, session string, scopes ...string) *CloudTokens {
-	return &CloudTokens{client: client, session: session, scopes: slices.Clone(scopes), now: time.Now}
+func NewCloudTokens(client *Client, session, organizationID string, scopes ...cloudv1.Scope) *CloudTokens {
+	return &CloudTokens{client: client, session: session, organization: organizationID, scopes: slices.Clone(scopes), now: time.Now}
 }
 
 func (t *CloudTokens) Ensure(ctx context.Context) (string, error) {
@@ -45,7 +57,7 @@ func (t *CloudTokens) Ensure(ctx context.Context) (string, error) {
 	if t.held.ExpiresAt.Sub(t.now()) > cloudTokenMargin {
 		return t.held.Token, nil
 	}
-	issued, err := t.client.IssueCloudToken(ctx, t.session, t.scopes)
+	issued, err := t.client.IssueCloudToken(ctx, t.session, t.organization, t.scopes)
 	if err != nil {
 		return "", err
 	}

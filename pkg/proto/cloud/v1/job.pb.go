@@ -322,6 +322,74 @@ func (x *GitContext) GetPullRequest() uint32 {
 	return 0
 }
 
+type JobContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Git           *GitContext            `protobuf:"bytes,3,opt,name=git,proto3" json:"git,omitempty"`
+	PreviewLabel  string                 `protobuf:"bytes,4,opt,name=preview_label,json=previewLabel,proto3" json:"preview_label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobContext) Reset() {
+	*x = JobContext{}
+	mi := &file_cloud_v1_job_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobContext) ProtoMessage() {}
+
+func (x *JobContext) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_job_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobContext.ProtoReflect.Descriptor instead.
+func (*JobContext) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *JobContext) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *JobContext) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *JobContext) GetGit() *GitContext {
+	if x != nil {
+		return x.Git
+	}
+	return nil
+}
+
+func (x *JobContext) GetPreviewLabel() string {
+	if x != nil {
+		return x.PreviewLabel
+	}
+	return ""
+}
+
 type PreviewTarget struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -333,7 +401,7 @@ type PreviewTarget struct {
 
 func (x *PreviewTarget) Reset() {
 	*x = PreviewTarget{}
-	mi := &file_cloud_v1_job_proto_msgTypes[1]
+	mi := &file_cloud_v1_job_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -345,7 +413,7 @@ func (x *PreviewTarget) String() string {
 func (*PreviewTarget) ProtoMessage() {}
 
 func (x *PreviewTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[1]
+	mi := &file_cloud_v1_job_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -358,7 +426,7 @@ func (x *PreviewTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewTarget.ProtoReflect.Descriptor instead.
 func (*PreviewTarget) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{1}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *PreviewTarget) GetName() string {
@@ -388,7 +456,6 @@ type StartJobRequest struct {
 	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
 	Command       JobCommand             `protobuf:"varint,3,opt,name=command,proto3,enum=cloud.v1.JobCommand" json:"command,omitempty"`
 	SourceId      string                 `protobuf:"bytes,4,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
-	CliVersion    string                 `protobuf:"bytes,5,opt,name=cli_version,json=cliVersion,proto3" json:"cli_version,omitempty"`
 	Git           *GitContext            `protobuf:"bytes,6,opt,name=git,proto3" json:"git,omitempty"`
 	Tag           string                 `protobuf:"bytes,7,opt,name=tag,proto3" json:"tag,omitempty"`
 	Preview       *PreviewTarget         `protobuf:"bytes,8,opt,name=preview,proto3" json:"preview,omitempty"`
@@ -399,7 +466,7 @@ type StartJobRequest struct {
 
 func (x *StartJobRequest) Reset() {
 	*x = StartJobRequest{}
-	mi := &file_cloud_v1_job_proto_msgTypes[2]
+	mi := &file_cloud_v1_job_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +478,7 @@ func (x *StartJobRequest) String() string {
 func (*StartJobRequest) ProtoMessage() {}
 
 func (x *StartJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[2]
+	mi := &file_cloud_v1_job_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +491,7 @@ func (x *StartJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartJobRequest.ProtoReflect.Descriptor instead.
 func (*StartJobRequest) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{2}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StartJobRequest) GetProjectId() string {
@@ -451,13 +518,6 @@ func (x *StartJobRequest) GetCommand() JobCommand {
 func (x *StartJobRequest) GetSourceId() string {
 	if x != nil {
 		return x.SourceId
-	}
-	return ""
-}
-
-func (x *StartJobRequest) GetCliVersion() string {
-	if x != nil {
-		return x.CliVersion
 	}
 	return ""
 }
@@ -499,7 +559,7 @@ type StartJobResponse struct {
 
 func (x *StartJobResponse) Reset() {
 	*x = StartJobResponse{}
-	mi := &file_cloud_v1_job_proto_msgTypes[3]
+	mi := &file_cloud_v1_job_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -511,7 +571,7 @@ func (x *StartJobResponse) String() string {
 func (*StartJobResponse) ProtoMessage() {}
 
 func (x *StartJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[3]
+	mi := &file_cloud_v1_job_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -524,7 +584,7 @@ func (x *StartJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartJobResponse.ProtoReflect.Descriptor instead.
 func (*StartJobResponse) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{3}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StartJobResponse) GetJob() *Job {
@@ -543,7 +603,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_cloud_v1_job_proto_msgTypes[4]
+	mi := &file_cloud_v1_job_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -555,7 +615,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[4]
+	mi := &file_cloud_v1_job_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -568,7 +628,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{4}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetJobRequest) GetJobId() string {
@@ -587,7 +647,7 @@ type GetJobResponse struct {
 
 func (x *GetJobResponse) Reset() {
 	*x = GetJobResponse{}
-	mi := &file_cloud_v1_job_proto_msgTypes[5]
+	mi := &file_cloud_v1_job_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -599,7 +659,7 @@ func (x *GetJobResponse) String() string {
 func (*GetJobResponse) ProtoMessage() {}
 
 func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[5]
+	mi := &file_cloud_v1_job_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -612,7 +672,7 @@ func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
 func (*GetJobResponse) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{5}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetJobResponse) GetJob() *Job {
@@ -631,7 +691,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_cloud_v1_job_proto_msgTypes[6]
+	mi := &file_cloud_v1_job_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -643,7 +703,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[6]
+	mi := &file_cloud_v1_job_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -656,7 +716,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{6}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CancelJobRequest) GetJobId() string {
@@ -675,7 +735,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_cloud_v1_job_proto_msgTypes[7]
+	mi := &file_cloud_v1_job_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -687,7 +747,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[7]
+	mi := &file_cloud_v1_job_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -700,7 +760,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{7}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CancelJobResponse) GetJob() *Job {
@@ -721,7 +781,7 @@ type ListJobEventsRequest struct {
 
 func (x *ListJobEventsRequest) Reset() {
 	*x = ListJobEventsRequest{}
-	mi := &file_cloud_v1_job_proto_msgTypes[8]
+	mi := &file_cloud_v1_job_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -733,7 +793,7 @@ func (x *ListJobEventsRequest) String() string {
 func (*ListJobEventsRequest) ProtoMessage() {}
 
 func (x *ListJobEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[8]
+	mi := &file_cloud_v1_job_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -746,7 +806,7 @@ func (x *ListJobEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobEventsRequest) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{8}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListJobEventsRequest) GetJobId() string {
@@ -781,7 +841,7 @@ type ListJobEventsResponse struct {
 
 func (x *ListJobEventsResponse) Reset() {
 	*x = ListJobEventsResponse{}
-	mi := &file_cloud_v1_job_proto_msgTypes[9]
+	mi := &file_cloud_v1_job_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -793,7 +853,7 @@ func (x *ListJobEventsResponse) String() string {
 func (*ListJobEventsResponse) ProtoMessage() {}
 
 func (x *ListJobEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[9]
+	mi := &file_cloud_v1_job_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -806,7 +866,7 @@ func (x *ListJobEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobEventsResponse) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{9}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListJobEventsResponse) GetEvents() []*JobEvent {
@@ -852,7 +912,7 @@ type Job struct {
 
 func (x *Job) Reset() {
 	*x = Job{}
-	mi := &file_cloud_v1_job_proto_msgTypes[10]
+	mi := &file_cloud_v1_job_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +924,7 @@ func (x *Job) String() string {
 func (*Job) ProtoMessage() {}
 
 func (x *Job) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[10]
+	mi := &file_cloud_v1_job_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +937,7 @@ func (x *Job) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Job.ProtoReflect.Descriptor instead.
 func (*Job) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{10}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Job) GetId() string {
@@ -992,7 +1052,7 @@ type JobInput struct {
 
 func (x *JobInput) Reset() {
 	*x = JobInput{}
-	mi := &file_cloud_v1_job_proto_msgTypes[11]
+	mi := &file_cloud_v1_job_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1004,7 +1064,7 @@ func (x *JobInput) String() string {
 func (*JobInput) ProtoMessage() {}
 
 func (x *JobInput) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[11]
+	mi := &file_cloud_v1_job_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1017,7 +1077,7 @@ func (x *JobInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobInput.ProtoReflect.Descriptor instead.
 func (*JobInput) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{11}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *JobInput) GetId() string {
@@ -1079,7 +1139,7 @@ type VariablesNeeded struct {
 
 func (x *VariablesNeeded) Reset() {
 	*x = VariablesNeeded{}
-	mi := &file_cloud_v1_job_proto_msgTypes[12]
+	mi := &file_cloud_v1_job_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1091,7 +1151,7 @@ func (x *VariablesNeeded) String() string {
 func (*VariablesNeeded) ProtoMessage() {}
 
 func (x *VariablesNeeded) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[12]
+	mi := &file_cloud_v1_job_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1104,7 +1164,7 @@ func (x *VariablesNeeded) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariablesNeeded.ProtoReflect.Descriptor instead.
 func (*VariablesNeeded) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{12}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *VariablesNeeded) GetTier() v11.Tier {
@@ -1142,7 +1202,7 @@ type NeededVariable struct {
 
 func (x *NeededVariable) Reset() {
 	*x = NeededVariable{}
-	mi := &file_cloud_v1_job_proto_msgTypes[13]
+	mi := &file_cloud_v1_job_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1154,7 +1214,7 @@ func (x *NeededVariable) String() string {
 func (*NeededVariable) ProtoMessage() {}
 
 func (x *NeededVariable) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[13]
+	mi := &file_cloud_v1_job_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1167,7 +1227,7 @@ func (x *NeededVariable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NeededVariable.ProtoReflect.Descriptor instead.
 func (*NeededVariable) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{13}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *NeededVariable) GetKey() string {
@@ -1222,7 +1282,7 @@ type NeededGroup struct {
 
 func (x *NeededGroup) Reset() {
 	*x = NeededGroup{}
-	mi := &file_cloud_v1_job_proto_msgTypes[14]
+	mi := &file_cloud_v1_job_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1234,7 +1294,7 @@ func (x *NeededGroup) String() string {
 func (*NeededGroup) ProtoMessage() {}
 
 func (x *NeededGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[14]
+	mi := &file_cloud_v1_job_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1247,7 +1307,7 @@ func (x *NeededGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NeededGroup.ProtoReflect.Descriptor instead.
 func (*NeededGroup) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{14}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *NeededGroup) GetKey() string {
@@ -1274,7 +1334,7 @@ type Confirmation struct {
 
 func (x *Confirmation) Reset() {
 	*x = Confirmation{}
-	mi := &file_cloud_v1_job_proto_msgTypes[15]
+	mi := &file_cloud_v1_job_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1286,7 +1346,7 @@ func (x *Confirmation) String() string {
 func (*Confirmation) ProtoMessage() {}
 
 func (x *Confirmation) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[15]
+	mi := &file_cloud_v1_job_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1299,7 +1359,7 @@ func (x *Confirmation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Confirmation.ProtoReflect.Descriptor instead.
 func (*Confirmation) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{15}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Confirmation) GetFinding() string {
@@ -1331,7 +1391,7 @@ type RespondJobRequest struct {
 
 func (x *RespondJobRequest) Reset() {
 	*x = RespondJobRequest{}
-	mi := &file_cloud_v1_job_proto_msgTypes[16]
+	mi := &file_cloud_v1_job_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1343,7 +1403,7 @@ func (x *RespondJobRequest) String() string {
 func (*RespondJobRequest) ProtoMessage() {}
 
 func (x *RespondJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[16]
+	mi := &file_cloud_v1_job_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1356,7 +1416,7 @@ func (x *RespondJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondJobRequest.ProtoReflect.Descriptor instead.
 func (*RespondJobRequest) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{16}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RespondJobRequest) GetJobId() string {
@@ -1423,7 +1483,7 @@ type VariableValues struct {
 
 func (x *VariableValues) Reset() {
 	*x = VariableValues{}
-	mi := &file_cloud_v1_job_proto_msgTypes[17]
+	mi := &file_cloud_v1_job_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1495,7 @@ func (x *VariableValues) String() string {
 func (*VariableValues) ProtoMessage() {}
 
 func (x *VariableValues) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[17]
+	mi := &file_cloud_v1_job_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1508,7 @@ func (x *VariableValues) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariableValues.ProtoReflect.Descriptor instead.
 func (*VariableValues) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{17}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *VariableValues) GetValues() []*VariableValue {
@@ -1469,7 +1529,7 @@ type VariableValue struct {
 
 func (x *VariableValue) Reset() {
 	*x = VariableValue{}
-	mi := &file_cloud_v1_job_proto_msgTypes[18]
+	mi := &file_cloud_v1_job_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1481,7 +1541,7 @@ func (x *VariableValue) String() string {
 func (*VariableValue) ProtoMessage() {}
 
 func (x *VariableValue) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[18]
+	mi := &file_cloud_v1_job_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1494,7 +1554,7 @@ func (x *VariableValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariableValue.ProtoReflect.Descriptor instead.
 func (*VariableValue) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{18}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *VariableValue) GetKey() string {
@@ -1527,7 +1587,7 @@ type RespondJobResponse struct {
 
 func (x *RespondJobResponse) Reset() {
 	*x = RespondJobResponse{}
-	mi := &file_cloud_v1_job_proto_msgTypes[19]
+	mi := &file_cloud_v1_job_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1539,7 +1599,7 @@ func (x *RespondJobResponse) String() string {
 func (*RespondJobResponse) ProtoMessage() {}
 
 func (x *RespondJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[19]
+	mi := &file_cloud_v1_job_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1552,7 +1612,7 @@ func (x *RespondJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondJobResponse.ProtoReflect.Descriptor instead.
 func (*RespondJobResponse) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{19}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RespondJobResponse) GetJob() *Job {
@@ -1572,7 +1632,7 @@ type JobError struct {
 
 func (x *JobError) Reset() {
 	*x = JobError{}
-	mi := &file_cloud_v1_job_proto_msgTypes[20]
+	mi := &file_cloud_v1_job_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1584,7 +1644,7 @@ func (x *JobError) String() string {
 func (*JobError) ProtoMessage() {}
 
 func (x *JobError) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[20]
+	mi := &file_cloud_v1_job_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1597,7 +1657,7 @@ func (x *JobError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobError.ProtoReflect.Descriptor instead.
 func (*JobError) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{20}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *JobError) GetCode() string {
@@ -1625,7 +1685,7 @@ type JobResult struct {
 
 func (x *JobResult) Reset() {
 	*x = JobResult{}
-	mi := &file_cloud_v1_job_proto_msgTypes[21]
+	mi := &file_cloud_v1_job_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1637,7 +1697,7 @@ func (x *JobResult) String() string {
 func (*JobResult) ProtoMessage() {}
 
 func (x *JobResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[21]
+	mi := &file_cloud_v1_job_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1650,7 +1710,7 @@ func (x *JobResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobResult.ProtoReflect.Descriptor instead.
 func (*JobResult) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{21}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *JobResult) GetUrls() []string {
@@ -1684,7 +1744,7 @@ type AppBuild struct {
 
 func (x *AppBuild) Reset() {
 	*x = AppBuild{}
-	mi := &file_cloud_v1_job_proto_msgTypes[22]
+	mi := &file_cloud_v1_job_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1696,7 +1756,7 @@ func (x *AppBuild) String() string {
 func (*AppBuild) ProtoMessage() {}
 
 func (x *AppBuild) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[22]
+	mi := &file_cloud_v1_job_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1709,7 +1769,7 @@ func (x *AppBuild) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppBuild.ProtoReflect.Descriptor instead.
 func (*AppBuild) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{22}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *AppBuild) GetApp() string {
@@ -1740,7 +1800,7 @@ type JobEvent struct {
 
 func (x *JobEvent) Reset() {
 	*x = JobEvent{}
-	mi := &file_cloud_v1_job_proto_msgTypes[23]
+	mi := &file_cloud_v1_job_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1752,7 +1812,7 @@ func (x *JobEvent) String() string {
 func (*JobEvent) ProtoMessage() {}
 
 func (x *JobEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_job_proto_msgTypes[23]
+	mi := &file_cloud_v1_job_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1765,7 +1825,7 @@ func (x *JobEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobEvent.ProtoReflect.Descriptor instead.
 func (*JobEvent) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_job_proto_rawDescGZIP(), []int{23}
+	return file_cloud_v1_job_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *JobEvent) GetSeq() uint64 {
@@ -1813,29 +1873,33 @@ const file_cloud_v1_job_proto_rawDesc = "" +
 	"\x06commit\x18\x01 \x01(\tB\x1a\xbaH\x17\xd8\x01\x01r\x122\x10^[0-9a-f]{7,64}$R\x06commit\x125\n" +
 	"\x06branch\x18\x02 \x01(\tB\x1d\xbaH\x1ar\x18\x18\x80\x022\x13^[^\\x00-\\x1f\\x7f]*$R\x06branch\x12\x14\n" +
 	"\x05dirty\x18\x03 \x01(\bR\x05dirty\x12!\n" +
-	"\fpull_request\x18\x04 \x01(\rR\vpullRequest\"\xac\x01\n" +
+	"\fpull_request\x18\x04 \x01(\rR\vpullRequest\"\xf0\x01\n" +
+	"\n" +
+	"JobContext\x123\n" +
+	"\x06job_id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\x05jobId\x125\n" +
+	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12&\n" +
+	"\x03git\x18\x03 \x01(\v2\x14.cloud.v1.GitContextR\x03git\x12N\n" +
+	"\rpreview_label\x18\x04 \x01(\tB)\xbaH&\xd8\x01\x01r!\x18?2\x1d^[a-z][a-z0-9]*(-[a-z0-9]+)*$R\fpreviewLabel\"\xac\x01\n" +
 	"\rPreviewTarget\x12:\n" +
 	"\x04name\x18\x01 \x01(\tB&\xbaH#r!\x18?2\x1d^[a-z][a-z0-9]*(-[a-z0-9]+)*$R\x04name\x12\x1e\n" +
 	"\n" +
 	"persistent\x18\x02 \x01(\bR\n" +
 	"persistent\x12?\n" +
-	"\x05label\x18\x03 \x01(\tB)\xbaH&\xd8\x01\x01r!\x18?2\x1d^[a-z][a-z0-9]*(-[a-z0-9]+)*$R\x05label\"\x88\t\n" +
+	"\x05label\x18\x03 \x01(\tB)\xbaH&\xd8\x01\x01r!\x18?2\x1d^[a-z][a-z0-9]*(-[a-z0-9]+)*$R\x05label\"\xd1\b\n" +
 	"\x0fStartJobRequest\x12;\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\tprojectId\x125\n" +
 	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12:\n" +
 	"\acommand\x18\x03 \x01(\x0e2\x14.cloud.v1.JobCommandB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\acommand\x122\n" +
-	"\tsource_id\x18\x04 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\bsourceId\x12H\n" +
-	"\vcli_version\x18\x05 \x01(\tB'\xbaH$r\"\x18\x80\x012\x1d^[0-9A-Za-z][0-9A-Za-z.+_-]*$R\n" +
-	"cliVersion\x12&\n" +
+	"\tsource_id\x18\x04 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\bsourceId\x12&\n" +
 	"\x03git\x18\x06 \x01(\v2\x14.cloud.v1.GitContextR\x03git\x12,\n" +
 	"\x03tag\x18\a \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x121\n" +
 	"\apreview\x18\b \x01(\v2\x17.cloud.v1.PreviewTargetR\apreview\x12\xb4\x03\n" +
 	"\fproject_path\x18\t \x01(\tB\x90\x03\xbaH\x8c\x03\xba\x01\x83\x03\n" +
 	"\x16start_job.project_path\x12\xc6\x01a project path is empty for the source root, or relative and slash-separated: every segment must be non-empty and neither \".\" nor \"..\", and the path may contain no backslash and no control character\x1a\x9f\x01this == '' || (this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]'))r\x03\x18\x80 R\vprojectPath:\x86\x02\xbaH\x82\x02\x1a\x93\x01\n" +
 	"%start_job.preview_only_for_preview_up\x12@a preview target is given for a preview up job, and only for one\x1a(has(this.preview) == (this.command == 3)\x1aj\n" +
-	"\x1dstart_job.tag_only_for_deploy\x12$a tag is given only for a deploy job\x1a#this.tag == '' || this.command == 2\"3\n" +
+	"\x1dstart_job.tag_only_for_deploy\x12$a tag is given only for a deploy job\x1a#this.tag == '' || this.command == 2J\x04\b\x05\x10\x06R\vcli_version\"3\n" +
 	"\x10StartJobResponse\x12\x1f\n" +
 	"\x03job\x18\x01 \x01(\v2\r.cloud.v1.JobR\x03job\"D\n" +
 	"\rGetJobRequest\x123\n" +
@@ -1976,86 +2040,88 @@ func file_cloud_v1_job_proto_rawDescGZIP() []byte {
 }
 
 var file_cloud_v1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_cloud_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_cloud_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_cloud_v1_job_proto_goTypes = []any{
 	(JobCommand)(0),               // 0: cloud.v1.JobCommand
 	(JobState)(0),                 // 1: cloud.v1.JobState
 	(JobPhase)(0),                 // 2: cloud.v1.JobPhase
 	(JobEventLevel)(0),            // 3: cloud.v1.JobEventLevel
 	(*GitContext)(nil),            // 4: cloud.v1.GitContext
-	(*PreviewTarget)(nil),         // 5: cloud.v1.PreviewTarget
-	(*StartJobRequest)(nil),       // 6: cloud.v1.StartJobRequest
-	(*StartJobResponse)(nil),      // 7: cloud.v1.StartJobResponse
-	(*GetJobRequest)(nil),         // 8: cloud.v1.GetJobRequest
-	(*GetJobResponse)(nil),        // 9: cloud.v1.GetJobResponse
-	(*CancelJobRequest)(nil),      // 10: cloud.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),     // 11: cloud.v1.CancelJobResponse
-	(*ListJobEventsRequest)(nil),  // 12: cloud.v1.ListJobEventsRequest
-	(*ListJobEventsResponse)(nil), // 13: cloud.v1.ListJobEventsResponse
-	(*Job)(nil),                   // 14: cloud.v1.Job
-	(*JobInput)(nil),              // 15: cloud.v1.JobInput
-	(*VariablesNeeded)(nil),       // 16: cloud.v1.VariablesNeeded
-	(*NeededVariable)(nil),        // 17: cloud.v1.NeededVariable
-	(*NeededGroup)(nil),           // 18: cloud.v1.NeededGroup
-	(*Confirmation)(nil),          // 19: cloud.v1.Confirmation
-	(*RespondJobRequest)(nil),     // 20: cloud.v1.RespondJobRequest
-	(*VariableValues)(nil),        // 21: cloud.v1.VariableValues
-	(*VariableValue)(nil),         // 22: cloud.v1.VariableValue
-	(*RespondJobResponse)(nil),    // 23: cloud.v1.RespondJobResponse
-	(*JobError)(nil),              // 24: cloud.v1.JobError
-	(*JobResult)(nil),             // 25: cloud.v1.JobResult
-	(*AppBuild)(nil),              // 26: cloud.v1.AppBuild
-	(*JobEvent)(nil),              // 27: cloud.v1.JobEvent
-	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
-	(*v1.Deployment)(nil),         // 29: console.v1.Deployment
-	(v11.Tier)(0),                 // 30: common.environment.v1.Tier
+	(*JobContext)(nil),            // 5: cloud.v1.JobContext
+	(*PreviewTarget)(nil),         // 6: cloud.v1.PreviewTarget
+	(*StartJobRequest)(nil),       // 7: cloud.v1.StartJobRequest
+	(*StartJobResponse)(nil),      // 8: cloud.v1.StartJobResponse
+	(*GetJobRequest)(nil),         // 9: cloud.v1.GetJobRequest
+	(*GetJobResponse)(nil),        // 10: cloud.v1.GetJobResponse
+	(*CancelJobRequest)(nil),      // 11: cloud.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),     // 12: cloud.v1.CancelJobResponse
+	(*ListJobEventsRequest)(nil),  // 13: cloud.v1.ListJobEventsRequest
+	(*ListJobEventsResponse)(nil), // 14: cloud.v1.ListJobEventsResponse
+	(*Job)(nil),                   // 15: cloud.v1.Job
+	(*JobInput)(nil),              // 16: cloud.v1.JobInput
+	(*VariablesNeeded)(nil),       // 17: cloud.v1.VariablesNeeded
+	(*NeededVariable)(nil),        // 18: cloud.v1.NeededVariable
+	(*NeededGroup)(nil),           // 19: cloud.v1.NeededGroup
+	(*Confirmation)(nil),          // 20: cloud.v1.Confirmation
+	(*RespondJobRequest)(nil),     // 21: cloud.v1.RespondJobRequest
+	(*VariableValues)(nil),        // 22: cloud.v1.VariableValues
+	(*VariableValue)(nil),         // 23: cloud.v1.VariableValue
+	(*RespondJobResponse)(nil),    // 24: cloud.v1.RespondJobResponse
+	(*JobError)(nil),              // 25: cloud.v1.JobError
+	(*JobResult)(nil),             // 26: cloud.v1.JobResult
+	(*AppBuild)(nil),              // 27: cloud.v1.AppBuild
+	(*JobEvent)(nil),              // 28: cloud.v1.JobEvent
+	(*timestamppb.Timestamp)(nil), // 29: google.protobuf.Timestamp
+	(*v1.Deployment)(nil),         // 30: console.v1.Deployment
+	(v11.Tier)(0),                 // 31: common.environment.v1.Tier
 }
 var file_cloud_v1_job_proto_depIdxs = []int32{
-	0,  // 0: cloud.v1.StartJobRequest.command:type_name -> cloud.v1.JobCommand
-	4,  // 1: cloud.v1.StartJobRequest.git:type_name -> cloud.v1.GitContext
-	5,  // 2: cloud.v1.StartJobRequest.preview:type_name -> cloud.v1.PreviewTarget
-	14, // 3: cloud.v1.StartJobResponse.job:type_name -> cloud.v1.Job
-	14, // 4: cloud.v1.GetJobResponse.job:type_name -> cloud.v1.Job
-	14, // 5: cloud.v1.CancelJobResponse.job:type_name -> cloud.v1.Job
-	27, // 6: cloud.v1.ListJobEventsResponse.events:type_name -> cloud.v1.JobEvent
-	14, // 7: cloud.v1.ListJobEventsResponse.job:type_name -> cloud.v1.Job
-	0,  // 8: cloud.v1.Job.command:type_name -> cloud.v1.JobCommand
-	1,  // 9: cloud.v1.Job.state:type_name -> cloud.v1.JobState
-	2,  // 10: cloud.v1.Job.phase:type_name -> cloud.v1.JobPhase
-	28, // 11: cloud.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	28, // 12: cloud.v1.Job.started_at:type_name -> google.protobuf.Timestamp
-	28, // 13: cloud.v1.Job.ended_at:type_name -> google.protobuf.Timestamp
-	24, // 14: cloud.v1.Job.error:type_name -> cloud.v1.JobError
-	25, // 15: cloud.v1.Job.result:type_name -> cloud.v1.JobResult
-	15, // 16: cloud.v1.Job.input:type_name -> cloud.v1.JobInput
-	29, // 17: cloud.v1.Job.report:type_name -> console.v1.Deployment
-	16, // 18: cloud.v1.JobInput.variables:type_name -> cloud.v1.VariablesNeeded
-	19, // 19: cloud.v1.JobInput.confirmation:type_name -> cloud.v1.Confirmation
-	30, // 20: cloud.v1.VariablesNeeded.tier:type_name -> common.environment.v1.Tier
-	17, // 21: cloud.v1.VariablesNeeded.variables:type_name -> cloud.v1.NeededVariable
-	18, // 22: cloud.v1.VariablesNeeded.groups:type_name -> cloud.v1.NeededGroup
-	21, // 23: cloud.v1.RespondJobRequest.variables:type_name -> cloud.v1.VariableValues
-	22, // 24: cloud.v1.VariableValues.values:type_name -> cloud.v1.VariableValue
-	14, // 25: cloud.v1.RespondJobResponse.job:type_name -> cloud.v1.Job
-	26, // 26: cloud.v1.JobResult.builds:type_name -> cloud.v1.AppBuild
-	28, // 27: cloud.v1.JobEvent.time:type_name -> google.protobuf.Timestamp
-	3,  // 28: cloud.v1.JobEvent.level:type_name -> cloud.v1.JobEventLevel
-	2,  // 29: cloud.v1.JobEvent.phase:type_name -> cloud.v1.JobPhase
-	6,  // 30: cloud.v1.JobService.StartJob:input_type -> cloud.v1.StartJobRequest
-	8,  // 31: cloud.v1.JobService.GetJob:input_type -> cloud.v1.GetJobRequest
-	10, // 32: cloud.v1.JobService.CancelJob:input_type -> cloud.v1.CancelJobRequest
-	12, // 33: cloud.v1.JobService.ListJobEvents:input_type -> cloud.v1.ListJobEventsRequest
-	20, // 34: cloud.v1.JobService.RespondJob:input_type -> cloud.v1.RespondJobRequest
-	7,  // 35: cloud.v1.JobService.StartJob:output_type -> cloud.v1.StartJobResponse
-	9,  // 36: cloud.v1.JobService.GetJob:output_type -> cloud.v1.GetJobResponse
-	11, // 37: cloud.v1.JobService.CancelJob:output_type -> cloud.v1.CancelJobResponse
-	13, // 38: cloud.v1.JobService.ListJobEvents:output_type -> cloud.v1.ListJobEventsResponse
-	23, // 39: cloud.v1.JobService.RespondJob:output_type -> cloud.v1.RespondJobResponse
-	35, // [35:40] is the sub-list for method output_type
-	30, // [30:35] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	4,  // 0: cloud.v1.JobContext.git:type_name -> cloud.v1.GitContext
+	0,  // 1: cloud.v1.StartJobRequest.command:type_name -> cloud.v1.JobCommand
+	4,  // 2: cloud.v1.StartJobRequest.git:type_name -> cloud.v1.GitContext
+	6,  // 3: cloud.v1.StartJobRequest.preview:type_name -> cloud.v1.PreviewTarget
+	15, // 4: cloud.v1.StartJobResponse.job:type_name -> cloud.v1.Job
+	15, // 5: cloud.v1.GetJobResponse.job:type_name -> cloud.v1.Job
+	15, // 6: cloud.v1.CancelJobResponse.job:type_name -> cloud.v1.Job
+	28, // 7: cloud.v1.ListJobEventsResponse.events:type_name -> cloud.v1.JobEvent
+	15, // 8: cloud.v1.ListJobEventsResponse.job:type_name -> cloud.v1.Job
+	0,  // 9: cloud.v1.Job.command:type_name -> cloud.v1.JobCommand
+	1,  // 10: cloud.v1.Job.state:type_name -> cloud.v1.JobState
+	2,  // 11: cloud.v1.Job.phase:type_name -> cloud.v1.JobPhase
+	29, // 12: cloud.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	29, // 13: cloud.v1.Job.started_at:type_name -> google.protobuf.Timestamp
+	29, // 14: cloud.v1.Job.ended_at:type_name -> google.protobuf.Timestamp
+	25, // 15: cloud.v1.Job.error:type_name -> cloud.v1.JobError
+	26, // 16: cloud.v1.Job.result:type_name -> cloud.v1.JobResult
+	16, // 17: cloud.v1.Job.input:type_name -> cloud.v1.JobInput
+	30, // 18: cloud.v1.Job.report:type_name -> console.v1.Deployment
+	17, // 19: cloud.v1.JobInput.variables:type_name -> cloud.v1.VariablesNeeded
+	20, // 20: cloud.v1.JobInput.confirmation:type_name -> cloud.v1.Confirmation
+	31, // 21: cloud.v1.VariablesNeeded.tier:type_name -> common.environment.v1.Tier
+	18, // 22: cloud.v1.VariablesNeeded.variables:type_name -> cloud.v1.NeededVariable
+	19, // 23: cloud.v1.VariablesNeeded.groups:type_name -> cloud.v1.NeededGroup
+	22, // 24: cloud.v1.RespondJobRequest.variables:type_name -> cloud.v1.VariableValues
+	23, // 25: cloud.v1.VariableValues.values:type_name -> cloud.v1.VariableValue
+	15, // 26: cloud.v1.RespondJobResponse.job:type_name -> cloud.v1.Job
+	27, // 27: cloud.v1.JobResult.builds:type_name -> cloud.v1.AppBuild
+	29, // 28: cloud.v1.JobEvent.time:type_name -> google.protobuf.Timestamp
+	3,  // 29: cloud.v1.JobEvent.level:type_name -> cloud.v1.JobEventLevel
+	2,  // 30: cloud.v1.JobEvent.phase:type_name -> cloud.v1.JobPhase
+	7,  // 31: cloud.v1.JobService.StartJob:input_type -> cloud.v1.StartJobRequest
+	9,  // 32: cloud.v1.JobService.GetJob:input_type -> cloud.v1.GetJobRequest
+	11, // 33: cloud.v1.JobService.CancelJob:input_type -> cloud.v1.CancelJobRequest
+	13, // 34: cloud.v1.JobService.ListJobEvents:input_type -> cloud.v1.ListJobEventsRequest
+	21, // 35: cloud.v1.JobService.RespondJob:input_type -> cloud.v1.RespondJobRequest
+	8,  // 36: cloud.v1.JobService.StartJob:output_type -> cloud.v1.StartJobResponse
+	10, // 37: cloud.v1.JobService.GetJob:output_type -> cloud.v1.GetJobResponse
+	12, // 38: cloud.v1.JobService.CancelJob:output_type -> cloud.v1.CancelJobResponse
+	14, // 39: cloud.v1.JobService.ListJobEvents:output_type -> cloud.v1.ListJobEventsResponse
+	24, // 40: cloud.v1.JobService.RespondJob:output_type -> cloud.v1.RespondJobResponse
+	36, // [36:41] is the sub-list for method output_type
+	31, // [31:36] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_cloud_v1_job_proto_init() }
@@ -2063,11 +2129,11 @@ func file_cloud_v1_job_proto_init() {
 	if File_cloud_v1_job_proto != nil {
 		return
 	}
-	file_cloud_v1_job_proto_msgTypes[11].OneofWrappers = []any{
+	file_cloud_v1_job_proto_msgTypes[12].OneofWrappers = []any{
 		(*JobInput_Variables)(nil),
 		(*JobInput_Confirmation)(nil),
 	}
-	file_cloud_v1_job_proto_msgTypes[16].OneofWrappers = []any{
+	file_cloud_v1_job_proto_msgTypes[17].OneofWrappers = []any{
 		(*RespondJobRequest_Variables)(nil),
 		(*RespondJobRequest_Confirmed)(nil),
 	}
@@ -2077,7 +2143,7 @@ func file_cloud_v1_job_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cloud_v1_job_proto_rawDesc), len(file_cloud_v1_job_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   24,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

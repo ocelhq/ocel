@@ -59,6 +59,29 @@ message GitContext {
   uint32 pull_request = 4;
 }
 
+message JobContext {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  string slug = 2 [(buf.validate.field).string = {
+    max_len: 63
+    pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+  }];
+
+  GitContext git = 3;
+
+  string preview_label = 4 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {
+      max_len: 63
+      pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    }
+  }];
+}
+
 message PreviewTarget {
   string name = 1 [(buf.validate.field).string = {
     max_len: 63
@@ -77,6 +100,9 @@ message PreviewTarget {
 }
 
 message StartJobRequest {
+  reserved 5;
+  reserved "cli_version";
+
   option (buf.validate.message).cel = {
     id: "start_job.preview_only_for_preview_up"
     message: "a preview target is given for a preview up job, and only for one"
@@ -105,11 +131,6 @@ message StartJobRequest {
   }];
 
   string source_id = 4 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
-
-  string cli_version = 5 [(buf.validate.field).string = {
-    max_len: 128
-    pattern: "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
-  }];
 
   GitContext git = 6;
 

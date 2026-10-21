@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
@@ -17,15 +18,17 @@ func TestCloudTokensReuseATokenOnlyWhileItHasMoreThanAMinuteLeft(t *testing.T) {
 
 	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 	var scopes []string
+	var organization string
 	service := &consoleService{}
 	service.issue = func(req *consolev1.IssueCloudTokenRequest) (*consolev1.IssueCloudTokenResponse, error) {
 		scopes = req.GetScopes()
+		organization = req.GetOrganizationId()
 		return &consolev1.IssueCloudTokenResponse{
 			Token:     fmt.Sprintf("cloud-%d", service.issued.Load()),
 			ExpiresAt: timestamppb.New(now.Add(5 * time.Minute)),
 		}, nil
 	}
-	tokens := NewCloudTokens(New(serveConsole(t, service)), "session", "jobs:write")
+	tokens := NewCloudTokens(New(serveConsole(t, service)), "session", "org_1", cloudv1.Scope_SCOPE_APPS_READ, cloudv1.Scope_SCOPE_APPS_WRITE)
 	tokens.now = func() time.Time { return now }
 
 	first, err := tokens.Ensure(context.Background())
@@ -35,8 +38,11 @@ func TestCloudTokensReuseATokenOnlyWhileItHasMoreThanAMinuteLeft(t *testing.T) {
 	if bearer := service.authorized.Load(); bearer != "Bearer session" {
 		t.Errorf("Authorization = %q, want the console session", bearer)
 	}
-	if !slices.Equal(scopes, []string{"jobs:write"}) {
-		t.Errorf("scopes = %v, want [jobs:write]", scopes)
+	if !slices.Equal(scopes, []string{"cloud.apps.read", "cloud.apps.write"}) {
+		t.Errorf("scopes = %v, want the claims of apps read and write", scopes)
+	}
+	if organization != "org_1" {
+		t.Errorf("organization = %q, want the organization the run picked", organization)
 	}
 
 	now = now.Add(3*time.Minute + 59*time.Second)

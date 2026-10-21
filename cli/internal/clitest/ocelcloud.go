@@ -48,6 +48,7 @@ type FakeOcelCloud struct {
 	Projects      []*consolev1.Project
 	Created       []*consolev1.CreateProjectRequest
 	ActivatedOrgs []string
+	TokenOrgs     []string
 	Blobs         map[string][]byte
 	Committed     *cloudv1.SourceManifest
 	CloudBearers  []string
@@ -172,7 +173,10 @@ func (f *FakeOcelCloud) RecordedEvents() []*consolev1.RecordEnvironmentEventRequ
 	return append([]*consolev1.RecordEnvironmentEventRequest(nil), f.Events...)
 }
 
-func (f *FakeOcelCloud) IssueCloudToken(context.Context, *consolev1.IssueCloudTokenRequest) (*consolev1.IssueCloudTokenResponse, error) {
+func (f *FakeOcelCloud) IssueCloudToken(_ context.Context, req *consolev1.IssueCloudTokenRequest) (*consolev1.IssueCloudTokenResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.TokenOrgs = append(f.TokenOrgs, req.GetOrganizationId())
 	return &consolev1.IssueCloudTokenResponse{Token: FakeCloudToken, ExpiresAt: timestamppb.New(time.Now().Add(time.Hour))}, nil
 }
 
