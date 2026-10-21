@@ -25,11 +25,11 @@ the docs:
 
 ## Product Purpose
 
-Ocel deploys apps to your own cloud. Point the CLI at a project and it builds,
-provisions, and ships into the customer's own provider account with as little
-configuration as possible. Infrastructure lands under the customer's billing and
-access. Ocel is not a cloud and not managed anything. The hosted console is an
-optional control plane, never called a cloud.
+Ocel deploys apps. Ocel is the deployment engine: point the CLI at a project and it
+builds, provisions, and ships to a target with as little configuration as possible.
+A provider target is the customer's own account, under their billing and access.
+Ocel Cloud is the zero-config managed target, for a project that names no provider.
+The console is the UI over Ocel, never called a cloud; it may offer Ocel Cloud.
 
 `www` exists so a developer can understand what Ocel is, get an app running in their
 own account, and find the reference they need without having to search for it.

@@ -18,7 +18,9 @@ goes under **Needs a ruling** in the PR, and a maintainer decides.
 | vendor state | what a vendor keeps for itself through a run | bare `state` |
 | origin | the cloud an app runs in | |
 | edge | what serves and routes requests in front of an origin | |
-| console | Ocel's optional hosted control plane | a cloud |
+| console | the optional UI over Ocel: a view into what the CLI did and where it landed, which may offer Ocel Cloud | a cloud, Ocel Cloud |
+| target | where a deploy lands: a provider in the customer's own account, or Ocel Cloud | an origin, an environment |
+| Ocel Cloud | the zero-config managed target a console may offer: a project that names no provider deploys there as a remote job, with only the CLI installed | the console, a provider the customer configures, the default for a project that names a provider |
 | runtime | the layer between an app's code and the target it runs on, which turns Ocel's contracts into that target's implementation; also the code shipped alongside it | the language or framework an app is written in |
 | framework | what a build targets: a language (`go`, `python`, `rust`, `node`) or a JS framework (`next`); one field, never split into language and runtime, since every JS framework implies node | a runtime |
 | hosting | what a build states for whoever serves it, in `hosting.json`: its version, framework, root function, route table, static rules and needs | a serve descriptor |
