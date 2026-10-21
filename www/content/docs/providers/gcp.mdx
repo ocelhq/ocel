@@ -579,8 +579,9 @@ each tier's credential for your project and namespace. For the preview tier they
   no others.
 - The `<namespace with _ for ->_parts` role `ocel bootstrap` makes, unconditioned: it creates the
   tier's network, subnetwork and service connection policies, which carry no tag.
-- A custom role you make, unconditioned, holding `cloudkms.cryptoKeys.create` and
-  `cloudkms.cryptoKeys.list`: Cloud KMS checks both against the key ring both tiers share, and
+- A custom role you make, holding `cloudkms.cryptoKeys.create` and `cloudkms.cryptoKeys.list`,
+  on the condition that the resource is Ocel's key ring by name: Cloud KMS checks both against
+  the ring, which both tiers share, so another key ring in the project is out of its reach.
   `roles/cloudkms.admin` on that ring would hand over the ring's policy, which every key in it
   inherits.
 

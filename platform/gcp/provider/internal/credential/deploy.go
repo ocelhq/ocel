@@ -70,7 +70,11 @@ func (d Deploy) Tiered(role string) Grant {
 func (d Deploy) ProjectPermissions() Grant {
 	return Grant{
 		Permissions: projectPermissions,
-		Why:         "Cloud KMS checks creating and listing a key against the key ring both tiers share, and a name condition admitting the ring to roles/cloudkms.admin would give away the ring's policy, which every key in it inherits",
+		Condition: &policy.Condition{
+			Title:      "ocel key ring",
+			Expression: fmt.Sprintf("resource.name == %q", d.keyRingPath()),
+		},
+		Why: "roles/cloudkms.admin on the key ring both tiers share would give away the ring's policy, which every key in it inherits",
 	}
 }
 
