@@ -90,12 +90,30 @@ func TestWithNoConfigALoginToOcelCloudRunsTheDirectoryAsAProjectNamedAfterIt(t *
 	}
 
 	loggedOut(&invocation)
-	if target, err := invocation.ResolveTarget(t.Context(), root); err != nil || target.IsCloud() || target.Project != nil {
-		t.Fatalf("logged out: target = %+v, err = %v, want nothing resolved so the run reports the missing config", target, err)
+	var coded *clierror.Error
+	if target, err := invocation.ResolveTarget(t.Context(), root); !errors.As(err, &coded) || coded.Code != clierror.CodeProjectNoConfig || target.Project != nil {
+		t.Fatalf("logged out: target = %+v, err = %v, want the missing config reported", target, err)
 	}
 }
 
-func TestATypeScriptConfigWithoutNodeRunsOnOcelCloudOnlyWhenItNamesNoProvider(t *testing.T) {
+func TestATargetThatCannotBeReadIsRefusedAsTheRunReadsIt(t *testing.T) {
+	invocation, _ := loggedIn(t)
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop", "nope": true}`)
+
+	target, err := invocation.ResolveTarget(t.Context(), root)
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeProjectInvalidConfig || target.Project != nil {
+		t.Fatalf("target = %+v, err = %v, want the invalid config refused", target, err)
+	}
+
+	invocation.ConfigPath = func() string { return filepath.Join(root, "missing.json") }
+	if _, err := invocation.ResolveTarget(t.Context(), root); err == nil || !strings.Contains(err.Error(), "missing.json") {
+		t.Fatalf("err = %v, want the --config that names nothing refused", err)
+	}
+}
+
+func TestATypeScriptConfigWithoutNodeRunsOnOcelCloudOnlyAsTheConsoleProjectItIsLinkedTo(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, tt := range []struct {
 		name      string
@@ -106,7 +124,8 @@ func TestATypeScriptConfigWithoutNodeRunsOnOcelCloudOnlyWhenItNamesNoProvider(t 
 	}{
 		{name: "a config that mentions a provider is never guessed at", config: `export default { slug: "shop", provider: { aws: {} } };`},
 		{name: "a linked project takes the console project's name", config: `export default { slug: "shop" };`, link: "Shop Front", wantCloud: true, wantSlug: "shop-front"},
-		{name: "an unlinked project is named after its directory", config: `export default { slug: "shop" };`, wantCloud: true, wantSlug: "web"},
+		{name: "an unlinked project is not named after its directory", config: `export default { slug: "shop" };`},
+		{name: "a project linked to a name that makes no slug is not guessed at", config: `export default { slug: "shop" };`, link: "!!!"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			invocation, fake := loggedIn(t)
@@ -118,14 +137,14 @@ func TestATypeScriptConfigWithoutNodeRunsOnOcelCloudOnlyWhenItNamesNoProvider(t 
 				}
 			}
 			target, err := invocation.ResolveTarget(t.Context(), root)
+			if !tt.wantCloud {
+				if err == nil || !strings.Contains(err.Error(), "install node, or write ocel.json or ocel.yaml") || target.IsCloud() {
+					t.Fatalf("target = %+v, err = %v, want a refusal that names node and the configs that need none", target, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
-			}
-			if target.IsCloud() != tt.wantCloud {
-				t.Fatalf("cloud = %v, want %v", target.IsCloud(), tt.wantCloud)
-			}
-			if !tt.wantCloud {
-				return
 			}
 			if target.Project.Slug != tt.wantSlug || !strings.Contains(target.Derived, "ocel.config.ts needs node") {
 				t.Fatalf("slug = %q, derived = %q, want %s and why", target.Project.Slug, target.Derived, tt.wantSlug)
@@ -174,14 +193,15 @@ func TestACommandThatRunsOnOcelCloudOpensASessionOnTheProviderOcelCloudServes(t 
 	invocation := clitest.NewInvocation()
 	project.LogIn(&invocation)
 
-	cfg, err := invocation.LoadTargetProject(t.Context(), project.Root)
+	target, err := invocation.ResolveTarget(t.Context(), project.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := target.Project
 	if cfg.Slug != clitest.FixtureSlug || cfg.HasProvider() {
 		t.Fatalf("project = %+v, want the unconfigured directory named after itself", cfg)
 	}
-	err = invocation.WithProvider(t.Context(), cfg, "ocel preview ls", commands.OpenOptions{RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(t.Context(), cfg, "ocel preview ls", commands.OpenOptions{Cloud: target.Cloud}, func(ctx context.Context, p commands.ProviderRun) error {
 		if p.Provider.Name() != commands.CloudProviderID {
 			t.Errorf("provider = %q, want %q", p.Provider.Name(), commands.CloudProviderID)
 		}
@@ -203,12 +223,12 @@ func TestACommandThatDoesNotRunOnOcelCloudRefusesItWithoutOpeningASession(t *tes
 	project := clitest.SetUpCloudProject(t)
 	invocation := clitest.NewInvocation()
 	project.LogIn(&invocation)
-	cfg, err := invocation.LoadTargetProject(t.Context(), project.Root)
+	target, err := invocation.ResolveTarget(t.Context(), project.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = invocation.WithProvider(t.Context(), cfg, "ocel bindings ls", commands.OpenOptions{}, func(context.Context, commands.ProviderRun) error {
+	err = invocation.WithProvider(t.Context(), target.Project, "ocel bindings ls", commands.OpenOptions{}, func(context.Context, commands.ProviderRun) error {
 		t.Fatal("opened a provider")
 		return nil
 	})
@@ -226,12 +246,12 @@ func TestAConsoleOfferingOcelCloudWithNoProviderURLRefusesACommandThatRunsOnIt(t
 	project.Cloud.ProviderURL = ""
 	invocation := clitest.NewInvocation()
 	project.LogIn(&invocation)
-	cfg, err := invocation.LoadTargetProject(t.Context(), project.Root)
+	target, err := invocation.ResolveTarget(t.Context(), project.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = invocation.WithProvider(t.Context(), cfg, "ocel preview ls", commands.OpenOptions{RunsOnCloud: true}, func(context.Context, commands.ProviderRun) error {
+	err = invocation.WithProvider(t.Context(), target.Project, "ocel preview ls", commands.OpenOptions{Cloud: target.Cloud}, func(context.Context, commands.ProviderRun) error {
 		t.Fatal("opened a provider")
 		return nil
 	})

@@ -87,11 +87,6 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 		return commands.RefuseNoWait()
 	}
 	declared := resolved.Project
-	if declared == nil {
-		if declared, err = dependencies.LoadProject(ctx, cwd); err != nil {
-			return err
-		}
-	}
 	if declared.Provider == nil {
 		if _, err := declared.ResolveDeclaredComputes(); err != nil {
 			return fmt.Errorf("%w: give each a `compute` under `apps`, or name the provider in %s", err, filepath.Base(declared.Path))

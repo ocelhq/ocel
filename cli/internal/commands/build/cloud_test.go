@@ -44,6 +44,7 @@ func TestBuildRefusesNoWaitWhenTheProjectDoesNotRunOnOcelCloud(t *testing.T) {
 	dependencies := newTestDependencies()
 	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop", "apps": [{"name": "api", "path": ".", "framework": "node", "compute": "serverless"}]}`)
+	clitest.WriteFile(t, filepath.Join(root, "index.ts"), "export {}\n")
 
 	err := runBuild(t.Context(), dependencies, root, options{noWait: true}, strings.NewReader(""))
 	if err == nil || !strings.Contains(err.Error(), "--no-wait") {

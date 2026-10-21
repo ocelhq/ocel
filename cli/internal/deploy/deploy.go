@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -44,7 +45,10 @@ type Options struct {
 }
 
 func To(ctx context.Context, dependencies Dependencies, cwd string, target Target, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
-	resolved, err := dependencies.ResolveTarget(ctx, cwd)
+	policy, resolved, err := ensureTarget(ctx, dependencies, target.command(), cwd, opts.Yes, opts.Dry, stdout, stdin)
+	if prerequisite.IsDeclined(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -57,10 +61,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	if opts.Yes && dependencies.JobAnswers != nil {
 		return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("`%s` runs inside an Ocel Cloud job, where the console answers every confirmation, so --yes would consent for a person nobody asked: drop it", target.command())}
 	}
-	policy, cfg, err := ensureProject(ctx, dependencies, target.command(), cwd, resolved.Project, opts.Yes, opts.Dry, stdout, stdin)
-	if err != nil || cfg == nil {
-		return err
-	}
+	cfg := resolved.Project
 	env, err := target.environment(dependencies, cwd)
 	if err != nil {
 		return err

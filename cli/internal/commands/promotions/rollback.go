@@ -60,10 +60,11 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
-	cfg, err := invocation.LoadTargetProject(ctx, cwd)
+	target, err := invocation.ResolveTarget(ctx, cwd)
 	if err != nil {
 		return err
 	}
+	cfg := target.Project
 
 	policy := consent.NewPlanPolicy("ocel rollback", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
 	policy.DryRun = opts.dry
@@ -78,7 +79,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	}
 
 	var report *consolev1.Deployment
-	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) (err error) {
+	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, Cloud: target.Cloud}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
 		var attempt *deployreport.Attempt
 		var succeeded *consolev1.Deployment

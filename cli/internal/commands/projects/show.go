@@ -57,15 +57,16 @@ func newShowCommand(invocation commands.Invocation) *cobra.Command {
 }
 
 func runShow(ctx context.Context, invocation commands.Invocation, opts showOptions, stdout io.Writer) error {
-	cfg, err := loadProject(ctx, invocation)
+	target, err := resolveTarget(ctx, invocation)
 	if err != nil {
 		return err
 	}
+	cfg := target.Project
 	slug := cmp.Or(opts.slug, cfg.Slug)
 	req := &contractv1.DescribeProjectRequest{Slug: slug}
 	var described *contractv1.DescribeProjectResponse
 	var identity *contractv1.Identity
-	err = invocation.WithProvider(ctx, cfg, showCommand, accountOptions(), func(ctx context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(ctx, cfg, showCommand, accountOptions(target), func(ctx context.Context, p commands.ProviderRun) error {
 		identity = p.Preflight.Response.GetIdentity()
 		span := p.Check.Child(slug, progress.Reading.Title("what Ocel created for "+slug))
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {

@@ -65,9 +65,9 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 	return project.PreviewBaseDomain(host), nil
 }
 
-func readDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) error {
-	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, RunsOnCloud: true}, func(ctx context.Context, p commands.ProviderRun) error {
-		span := p.Check.Child(cfg.Slug, reading)
+func readDomain(ctx context.Context, invocation commands.Invocation, target commands.Target, command string, tier environmentv1.Tier, reading progress.Title, read func(context.Context, contractv1connect.ProviderServiceClient) error) error {
+	return invocation.WithProvider(ctx, target.Project, command, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Cloud: target.Cloud}, func(ctx context.Context, p commands.ProviderRun) error {
+		span := p.Check.Child(target.Project.Slug, reading)
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error { return read(ctx, client) })
 		span.End(err)
 		return err

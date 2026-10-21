@@ -51,17 +51,17 @@ func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Proje
 	return project.Load(ctx, cwd, i.ConfigPath())
 }
 
-func (i Invocation) EnsureProject(ctx context.Context, cwd string, policy consent.Policy) (*project.Project, error) {
-	var cfg *project.Project
+func (i Invocation) EnsureTarget(ctx context.Context, cwd string, policy consent.Policy) (Target, error) {
+	var target Target
 	preamble := i.Events.Preamble(ctx)
 	err := i.Setups.Ensure(ctx, policy, preamble, func(ctx context.Context) (err error) {
-		cfg, err = i.LoadProject(ctx, cwd)
+		target, err = i.ResolveTarget(ctx, cwd)
 		return err
 	})
 	if prerequisite.IsDeclined(err) {
 		preamble.Say(err.Error())
 	}
-	return cfg, err
+	return target, err
 }
 
 func (i Invocation) LoadOptionalProject(ctx context.Context, cwd string) (*project.Project, error) {
