@@ -300,9 +300,6 @@ func readGitContext(dir string) *cloudv1.GitContext {
 func uploadSource(ctx context.Context, phase *run.Span, cfg *project.Project, uploader *cloud.Client) (sourceID, projectPath string, err error) {
 	reading := phase.Child(cfg.Slug, progress.Reading.Title("the source"))
 	archive, err := sourcearchive.Pack(cfg.Dir)
-	if err == nil && len(archive.Manifest.GetFiles()) == 0 {
-		err = fmt.Errorf("%s holds no file to upload once what is ignored is left out", cfg.Dir)
-	}
 	if err != nil {
 		reading.End(err)
 		return "", "", err
@@ -474,5 +471,5 @@ func AddNoWaitFlag(cmd *cobra.Command, into *bool) {
 }
 
 func RefuseNoWait() error {
-	return fmt.Errorf("--%s leaves a job running on Ocel Cloud, and this project does not run on Ocel Cloud: it runs here, with no job to leave running", noWaitFlag)
+	return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("--%s leaves a job running on Ocel Cloud, and this project does not run on Ocel Cloud: it runs here, with no job to leave running", noWaitFlag)}
 }
