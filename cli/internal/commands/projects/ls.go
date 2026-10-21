@@ -43,13 +43,14 @@ func listProjects(invocation commands.Invocation) func(*cobra.Command, []string)
 }
 
 func runList(ctx context.Context, invocation commands.Invocation, stdout io.Writer) error {
-	cfg, err := loadProject(ctx, invocation)
+	target, err := resolveTarget(ctx, invocation)
 	if err != nil {
 		return err
 	}
+	cfg := target.Project
 	var listed *contractv1.ListProjectsResponse
 	var identity *contractv1.Identity
-	err = invocation.WithProvider(ctx, cfg, listCommand, accountOptions(), func(ctx context.Context, p commands.ProviderRun) error {
+	err = invocation.WithProvider(ctx, cfg, listCommand, accountOptions(target), func(ctx context.Context, p commands.ProviderRun) error {
 		identity = p.Preflight.Response.GetIdentity()
 		span := p.Check.Child(cfg.Slug, progress.Reading.Title("the projects in this account"))
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {

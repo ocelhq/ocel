@@ -194,7 +194,7 @@ func TestWithProviderEndsADeclinedSetupAsARunThatChangedNothing(t *testing.T) {
 	}
 }
 
-func TestEnsureProjectSetsUpAMissingConfigAndLoadsIt(t *testing.T) {
+func TestEnsureTargetSetsUpAMissingConfigAndLoadsIt(t *testing.T) {
 	dir := t.TempDir()
 	invocation := clitest.NewInvocation()
 	invocation.Setups = prerequisite.Setups{prerequisite.Project: {
@@ -206,18 +206,18 @@ func TestEnsureProjectSetsUpAMissingConfigAndLoadsIt(t *testing.T) {
 	var asked strings.Builder
 	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &asked}
 
-	cfg, err := invocation.EnsureProject(context.Background(), dir, policy)
+	target, err := invocation.EnsureTarget(context.Background(), dir, policy)
 	if err != nil {
-		t.Fatalf("EnsureProject err = %v, want the project set up and loaded", err)
+		t.Fatalf("EnsureTarget err = %v, want the project set up and loaded", err)
 	}
-	if cfg.Slug != "shop" {
-		t.Errorf("slug = %q, want the project the setup wrote", cfg.Slug)
+	if target.Project.Slug != "shop" {
+		t.Errorf("slug = %q, want the project the setup wrote", target.Project.Slug)
 	}
 
 	t.Run("a declined setup is reported as one", func(t *testing.T) {
 		policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &asked}
-		if _, err := invocation.EnsureProject(context.Background(), t.TempDir(), policy); !prerequisite.IsDeclined(err) {
-			t.Errorf("EnsureProject err = %v, want the decline", err)
+		if _, err := invocation.EnsureTarget(context.Background(), t.TempDir(), policy); !prerequisite.IsDeclined(err) {
+			t.Errorf("EnsureTarget err = %v, want the decline", err)
 		}
 	})
 }

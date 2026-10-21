@@ -34,11 +34,11 @@ const (
 )
 
 type OpenOptions struct {
-	Intent      Intent
-	Tier        environmentv1.Tier
-	Policy      consent.Policy
-	DryRun      bool
-	RunsOnCloud bool
+	Intent Intent
+	Tier   environmentv1.Tier
+	Policy consent.Policy
+	DryRun bool
+	Cloud  *CloudTarget
 }
 
 func (i Intent) requirement() readiness.Requirement {
@@ -74,14 +74,7 @@ func (o OpenOptions) request(cfg *project.Project) readiness.Request {
 }
 
 func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
-	var cloud *CloudTarget
-	if opts.RunsOnCloud {
-		var err error
-		if cloud, err = i.ResolveProvider(ctx, cfg, "", opts); err != nil {
-			return nil, readiness.Preflight{}, err
-		}
-	}
-	provider, read, err := i.openChecked(ctx, check, cfg, opts, cloud)
+	provider, read, err := i.openChecked(ctx, check, cfg, opts)
 	if err != nil && provider != nil {
 		provider.Close()
 		return nil, readiness.Preflight{}, err
@@ -89,7 +82,7 @@ func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *proj
 	return provider, read, err
 }
 
-func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions, cloud *CloudTarget) (*providerprocess.Provider, readiness.Preflight, error) {
+func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
 	req := opts.request(cfg)
 	if opts.Intent.deploys() {
 		var err error
@@ -97,7 +90,7 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 			return nil, readiness.Preflight{}, err
 		}
 	}
-	provider, identity, err := i.start(ctx, check, cfg, opts, cloud)
+	provider, identity, err := i.start(ctx, check, cfg, opts)
 	if err != nil {
 		return nil, readiness.Preflight{}, err
 	}
@@ -109,8 +102,8 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 	return provider, read, err
 }
 
-func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions, cloud *CloudTarget) (*providerprocess.Provider, *contractv1.Identity, error) {
-	if cloud == nil {
+func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, *contractv1.Identity, error) {
+	if opts.Cloud == nil {
 		loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
 		provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, executables.ChoosePinning(opts.DryRun))
 		loading.End(err)
@@ -120,7 +113,7 @@ func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Pro
 		return open.provider, open.identity, nil
 	}
 	opening := check.Child(CloudProviderID, progress.Title{Started: "Opening a session on Ocel Cloud", Ended: "Opened a session on Ocel Cloud"})
-	open, err := i.openOnCloud(ctx, check, cfg, cloud)
+	open, err := i.openOnCloud(ctx, check, cfg, opts.Cloud)
 	opening.End(err)
 	if err != nil {
 		return nil, nil, err
@@ -159,9 +152,10 @@ type ProviderRun struct {
 }
 
 func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, command string, opts OpenOptions, work func(context.Context, ProviderRun) error) (err error) {
-	cloud, err := i.ResolveProvider(ctx, cfg, command, opts)
-	if err != nil {
-		return err
+	if opts.Cloud == nil {
+		if _, err := i.RequireProvider(ctx, cfg, command); err != nil {
+			return err
+		}
 	}
 	ctx, running, err := i.Events.Begin(ctx, command, cfg.Dir)
 	if err != nil {
@@ -182,11 +176,13 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 		if provider != nil {
 			provider.Close()
 			provider = nil
-			if loaded, err = i.reloadProject(ctx, cfg, cloud); err != nil {
+			reloaded, err := i.ResolveTarget(ctx, cfg.Dir)
+			if err != nil {
 				return err
 			}
+			loaded = reloaded.Project
 		}
-		provider, preflight, err = i.openChecked(ctx, check, loaded, opts, cloud)
+		provider, preflight, err = i.openChecked(ctx, check, loaded, opts)
 		return err
 	})
 	if prerequisite.IsDeclined(err) {
@@ -198,19 +194,9 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 		check.End(err)
 		return err
 	}
-	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded, job: i.BuilderJob, cloud: cloud})
+	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded, job: i.BuilderJob, cloud: opts.Cloud})
 	check.End(err)
 	return err
-}
-
-func (i Invocation) reloadProject(ctx context.Context, cfg *project.Project, cloud *CloudTarget) (*project.Project, error) {
-	if cloud != nil {
-		return i.LoadTargetProject(ctx, cfg.Dir)
-	}
-	if i.BuilderJob != nil {
-		return i.BuilderJob.loadProject(ctx, cfg.Dir, i.ConfigPath())
-	}
-	return project.Load(ctx, cfg.Dir, cfg.Path)
 }
 
 func providerID(cfg *project.Project) string {

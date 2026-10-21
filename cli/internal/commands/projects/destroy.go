@@ -100,10 +100,11 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, opts destro
 	if err != nil {
 		return err
 	}
-	cfg, err := loadProject(ctx, invocation)
+	resolved, err := resolveTarget(ctx, invocation)
 	if err != nil {
 		return err
 	}
+	cfg := resolved.Project
 	slug := cmp.Or(opts.slug, cfg.Slug)
 	bypass, notice, err := consent.Bypass{
 		Noun:        "project",
@@ -121,7 +122,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, opts destro
 	policy.DryRun = opts.dry
 	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
 
-	destroyed, err := destroyProject(ctx, invocation, cfg, slug, tiers, policy, notice)
+	destroyed, err := destroyProject(ctx, invocation, resolved, slug, tiers, policy, notice)
 	if slug == cfg.Slug {
 		for _, event := range destroyed {
 			invocation.Console.ReportEnvironmentEvent(ctx, cfg.Dir, event, stderr)
@@ -130,9 +131,12 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, opts destro
 	return err
 }
 
-func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *project.Project, slug string, tiers []environmentv1.Tier, policy consent.Policy, bypassNotice string) (destroyed []*consolev1.EnvironmentEvent, err error) {
-	if _, err := invocation.ResolveProvider(ctx, cfg, policy.Command, accountOptions()); err != nil {
-		return nil, err
+func destroyProject(ctx context.Context, invocation commands.Invocation, resolved commands.Target, slug string, tiers []environmentv1.Tier, policy consent.Policy, bypassNotice string) (destroyed []*consolev1.EnvironmentEvent, err error) {
+	cfg := resolved.Project
+	if !resolved.IsCloud() {
+		if _, err := cfg.RequireProvider(); err != nil {
+			return nil, err
+		}
 	}
 	if err := policy.Refuse(); err != nil {
 		return nil, err
@@ -148,7 +152,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	target, err := readRemovalTarget(ctx, invocation, check, cfg, slug)
+	target, err := readRemovalTarget(ctx, invocation, check, resolved, slug)
 	if err != nil {
 		check.End(err)
 		return nil, err
@@ -171,7 +175,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 			check.Say(fmt.Sprintf("nothing of %s in %s", slug, readiness.TierName(tier)))
 			continue
 		}
-		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, RunsOnCloud: true})
+		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, Cloud: resolved.Cloud})
 		if err != nil {
 			check.End(err)
 			return nil, err
@@ -239,8 +243,9 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, cfg *pr
 	return destroyed, nil
 }
 
-func readRemovalTarget(ctx context.Context, invocation commands.Invocation, check *run.Span, cfg *project.Project, slug string) (removalTarget, error) {
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, accountOptions())
+func readRemovalTarget(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, slug string) (removalTarget, error) {
+	cfg := resolved.Project
+	provider, _, err := invocation.OpenProvider(ctx, check, cfg, accountOptions(resolved))
 	if err != nil {
 		return removalTarget{}, err
 	}

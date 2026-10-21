@@ -4,24 +4,14 @@ import (
 	"context"
 	"io"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
-	"github.com/ocelhq/ocel/cli/internal/prerequisite"
-	"github.com/ocelhq/ocel/cli/internal/project"
 )
 
-func ensureProject(ctx context.Context, dependencies Dependencies, command, cwd string, loaded *project.Project, yes, dry bool, stdout io.Writer, stdin io.Reader) (consent.Policy, *project.Project, error) {
+func ensureTarget(ctx context.Context, dependencies Dependencies, command, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) (consent.Policy, commands.Target, error) {
 	policy := consent.NewPolicy(command, yes, dependencies.CanAsk(stdin), stdout, stdin)
 	policy.DryRun = dry
 	policy.Job = dependencies.JobAnswers
-	if err := policy.Refuse(); err != nil {
-		return policy, nil, err
-	}
-	if loaded != nil {
-		return policy, loaded, nil
-	}
-	cfg, err := dependencies.EnsureProject(ctx, cwd, policy)
-	if prerequisite.IsDeclined(err) {
-		return policy, nil, nil
-	}
-	return policy, cfg, err
+	target, err := dependencies.EnsureTarget(ctx, cwd, policy)
+	return policy, target, err
 }

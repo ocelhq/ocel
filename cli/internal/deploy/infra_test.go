@@ -134,10 +134,11 @@ func TestInfraProvisionedInARunIsNotProvisionedAgainForTheSameResources(t *testi
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
+	policy, target, err := ensureTarget(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := target.Project
 	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
 	uploads := declaration.Resource{Name: "uploads", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Bucket: &resourcesv1.BucketConfig{}, Source: "src/files.ts:1"}
 
@@ -166,10 +167,11 @@ func TestInfraProvisioningRenewsItsLeaseWhileItsDeployBuilds(t *testing.T) {
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
+	policy, target, err := ensureTarget(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := target.Project
 	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
 	renewals := func() []*contractv1.RenewDeployLeaseRequest {
 		return clitest.RequestsTo[*contractv1.RenewDeployLeaseRequest](t, fixture.Requests, contractv1connect.ProviderServiceRenewDeployLeaseProcedure)
@@ -208,10 +210,11 @@ func TestStoppingLeaseRenewalCancelsARenewalTheProviderNeverAnswers(t *testing.T
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
+	policy, target, err := ensureTarget(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := target.Project
 	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
 	entered, unanswered := make(chan struct{}), make(chan struct{})
 	defer close(unanswered)
@@ -262,10 +265,11 @@ func TestABuildWhoseLeaseRenewalIsRefusedStopsAndSaysTheLeaseWasLost(t *testing.
 	var stdout bytes.Buffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
 	ctx := context.Background()
-	policy, cfg, err := ensureProject(ctx, dependencies, "ocel deploy", fixture.Root, nil, true, false, &stdout, strings.NewReader(""))
+	policy, target, err := ensureTarget(ctx, dependencies, "ocel deploy", fixture.Root, true, false, &stdout, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := target.Project
 	orders := declaration.Resource{Name: "orders", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "src/db.ts:1"}
 	var stopped bool
 	var lost error

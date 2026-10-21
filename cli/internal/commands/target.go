@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -31,87 +33,70 @@ func (t Target) IsCloud() bool {
 }
 
 func (i Invocation) ResolveTarget(ctx context.Context, cwd string) (Target, error) {
-	if i.BuilderJob != nil {
-		cfg, err := i.LoadProject(ctx, cwd)
-		return Target{Project: cfg}, err
-	}
 	configPath, err := project.FindConfig(cwd, i.ConfigPath())
 	if err != nil {
-		return Target{}, nil
+		return Target{}, err
 	}
-	if configPath != "" && (!project.IsTypeScript(configPath) || isNodeOnPath()) {
-		cfg, err := i.LoadProject(ctx, cwd)
-		if err != nil || cfg.HasProvider() {
-			return Target{Project: cfg}, nil
+	if configPath != "" && project.IsTypeScript(configPath) && !isNodeOnPath() && !mentionsProvider(configPath) {
+		if target, err := i.resolveLinkedWithoutNode(ctx, configPath); err != nil || target.IsCloud() {
+			return target, err
 		}
-		cloud, err := i.cloudTarget(ctx)
-		return Target{Project: cfg, Cloud: cloud}, err
 	}
+	cfg, err := i.LoadProject(ctx, cwd)
+	var missing project.NoConfigError
+	if errors.As(err, &missing) {
+		return i.resolveUnconfigured(ctx, cwd, err)
+	}
+	if err != nil || cfg.HasProvider() {
+		return Target{Project: cfg}, err
+	}
+	cloud, err := i.cloudTarget(ctx)
+	return Target{Project: cfg, Cloud: cloud}, err
+}
 
+func (i Invocation) resolveUnconfigured(ctx context.Context, cwd string, missing error) (Target, error) {
+	cloud, err := i.cloudTarget(ctx)
+	if err != nil || cloud == nil {
+		return Target{}, cmp.Or(err, missing)
+	}
+	dir, err := filepath.Abs(cwd)
+	if err != nil {
+		return Target{}, err
+	}
+	slug := project.DeriveSlug(filepath.Base(dir))
+	if err := project.ValidateSlug(slug); err != nil {
+		return Target{}, fmt.Errorf("no slug can be named after %s: %w — run `ocel init` to write a config that names one", dir, err)
+	}
+	derived := fmt.Sprintf("No %s here, so this runs as %s, named after this directory", english.Or([]string{project.DefaultFileName, project.YAMLFileName, project.TSFileName}), slug)
+	return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: derived}, nil
+}
+
+func (i Invocation) resolveLinkedWithoutNode(ctx context.Context, configPath string) (Target, error) {
 	cloud, err := i.cloudTarget(ctx)
 	if err != nil || cloud == nil {
 		return Target{}, err
 	}
-	if configPath == "" {
-		dir, err := filepath.Abs(cwd)
-		if err != nil {
-			return Target{}, err
-		}
-		slug, err := deriveSlug(dir)
-		if err != nil {
-			return Target{}, err
-		}
-		return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("No %s here, so this runs as %s, named after this directory", english.Or([]string{project.DefaultFileName, project.YAMLFileName, project.TSFileName}), slug)}, nil
-	}
-	if mentionsProvider(configPath) {
-		return Target{}, nil
-	}
 	dir := filepath.Dir(configPath)
-	base := filepath.Base(configPath)
-	if link, err := console.ReadLink(dir, cloud.ConsoleURL); err == nil && link != nil && project.DeriveSlug(link.ProjectName) != "" {
-		slug := project.DeriveSlug(link.ProjectName)
-		return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, the console project this directory is linked to", base, slug)}, nil
-	}
-	slug, err := deriveSlug(dir)
-	if err != nil {
+	link, err := console.ReadLink(dir, cloud.ConsoleURL)
+	if err != nil || link == nil {
 		return Target{}, err
 	}
-	return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, named after this directory", base, slug)}, nil
-}
-
-func (i Invocation) LoadTargetProject(ctx context.Context, cwd string) (*project.Project, error) {
-	target, err := i.ResolveTarget(ctx, cwd)
-	if err != nil {
-		return nil, err
+	slug := project.DeriveSlug(link.ProjectName)
+	if project.ValidateSlug(slug) != nil {
+		return Target{}, nil
 	}
-	if target.IsCloud() || target.Project != nil && target.Project.HasProvider() {
-		return target.Project, nil
-	}
-	return i.LoadProject(ctx, cwd)
+	derived := fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, the console project this directory is linked to", filepath.Base(configPath), slug)
+	return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: derived}, nil
 }
 
 func (i Invocation) RequireProvider(ctx context.Context, cfg *project.Project, command string) (*project.Provider, error) {
-	if _, err := i.ResolveProvider(ctx, cfg, command, OpenOptions{}); err != nil {
-		return nil, err
-	}
-	return cfg.Provider, nil
-}
-
-func (i Invocation) ResolveProvider(ctx context.Context, cfg *project.Project, command string, opts OpenOptions) (*CloudTarget, error) {
 	if cfg.HasProvider() {
-		return nil, nil
+		return cfg.Provider, nil
 	}
-	cloud, err := i.cloudTarget(ctx)
-	switch {
-	case cloud != nil && !opts.RunsOnCloud:
+	if cloud, _ := i.cloudTarget(ctx); cloud != nil {
 		return nil, NotOnCloud(command)
-	case cloud != nil:
-		return cloud, nil
-	case err != nil && opts.RunsOnCloud:
-		return nil, err
 	}
-	_, err = cfg.RequireProvider()
-	return nil, err
+	return cfg.RequireProvider()
 }
 
 func NotOnCloud(command string) error {
@@ -138,14 +123,6 @@ func (i Invocation) cloudTarget(ctx context.Context) (*CloudTarget, error) {
 		return nil, nil
 	}
 	return &CloudTarget{ConsoleURL: consoleURL, Credentials: creds, Offer: *offer}, nil
-}
-
-func deriveSlug(dir string) (string, error) {
-	slug := project.DeriveSlug(filepath.Base(dir))
-	if err := project.ValidateSlug(slug); err != nil {
-		return "", fmt.Errorf("no slug can be named after %s: %w — run `ocel init` to write a config that names one", dir, err)
-	}
-	return slug, nil
 }
 
 func isNodeOnPath() bool {

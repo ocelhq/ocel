@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -48,16 +47,16 @@ func workingDirectory() (string, error) {
 	return cwd, nil
 }
 
-func loadProject(ctx context.Context, invocation commands.Invocation) (*project.Project, error) {
+func resolveTarget(ctx context.Context, invocation commands.Invocation) (commands.Target, error) {
 	cwd, err := workingDirectory()
 	if err != nil {
-		return nil, err
+		return commands.Target{}, err
 	}
-	return invocation.LoadTargetProject(ctx, cwd)
+	return invocation.ResolveTarget(ctx, cwd)
 }
 
-func accountOptions() commands.OpenOptions {
-	return commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION, RunsOnCloud: true}
+func accountOptions(target commands.Target) commands.OpenOptions {
+	return commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION, Cloud: target.Cloud}
 }
 
 func identityHeader(identity *contractv1.Identity, before []string, after ...string) string {

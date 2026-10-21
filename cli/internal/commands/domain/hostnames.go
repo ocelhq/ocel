@@ -25,24 +25,24 @@ import (
 )
 
 func runDomainList(ctx context.Context, invocation commands.Invocation, cwd string, opts domainOptions, stdout io.Writer) error {
-	cfg, err := invocation.LoadTargetProject(ctx, cwd)
+	target, err := invocation.ResolveTarget(ctx, cwd)
 	if err != nil {
 		return err
 	}
 
 	asJSON := invocation.Presentation(stdout).Format == terminal.FormatJSON
 	if !opts.preview {
-		resp, err := listProductionHostnames(ctx, invocation, cfg)
+		resp, err := listProductionHostnames(ctx, invocation, target)
 		if err != nil {
 			return err
 		}
 		if asJSON {
 			return terminal.WriteResultJSON(stdout, domainListResult(resp))
 		}
-		renderBoundHostnames(stdout, resp, filepath.Base(cfg.Path))
+		renderBoundHostnames(stdout, resp, filepath.Base(target.Project.Path))
 		return nil
 	}
-	resp, err := listGlobalPreviewDomain(ctx, invocation, cfg)
+	resp, err := listGlobalPreviewDomain(ctx, invocation, target)
 	if err != nil {
 		return err
 	}
@@ -72,8 +72,9 @@ func previewDomainResult(resp *contractv1.GetPreviewWildcardResponse) *resultv1.
 	}
 }
 
-func listProductionHostnames(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (resp *contractv1.GetHostnameStatusResponse, err error) {
-	err = readDomain(ctx, invocation, cfg, "ocel domain ls", environmentv1.Tier_TIER_PRODUCTION, progress.Reading.Title("the hostnames this project serves"),
+func listProductionHostnames(ctx context.Context, invocation commands.Invocation, target commands.Target) (resp *contractv1.GetHostnameStatusResponse, err error) {
+	cfg := target.Project
+	err = readDomain(ctx, invocation, target, "ocel domain ls", environmentv1.Tier_TIER_PRODUCTION, progress.Reading.Title("the hostnames this project serves"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
@@ -197,8 +198,8 @@ func runDomainRemove(ctx context.Context, invocation commands.Invocation, cwd, h
 	})
 }
 
-func listGlobalPreviewDomain(ctx context.Context, invocation commands.Invocation, cfg *project.Project) (resp *contractv1.GetPreviewWildcardResponse, err error) {
-	err = readDomain(ctx, invocation, cfg, "ocel domain ls", environmentv1.Tier_TIER_PREVIEW, progress.Reading.Title("the global preview domain"),
+func listGlobalPreviewDomain(ctx context.Context, invocation commands.Invocation, target commands.Target) (resp *contractv1.GetPreviewWildcardResponse, err error) {
+	err = readDomain(ctx, invocation, target, "ocel domain ls", environmentv1.Tier_TIER_PREVIEW, progress.Reading.Title("the global preview domain"),
 		func(ctx context.Context, client contractv1connect.ProviderServiceClient) (err error) {
 			resp, err = client.GetPreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 			return err

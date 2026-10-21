@@ -111,15 +111,16 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 	if err != nil {
 		return err
 	}
-	cfg, err := dependencies.LoadTargetProject(ctx, cwd)
+	target, err := dependencies.ResolveTarget(ctx, cwd)
 	if err != nil {
 		return err
 	}
+	cfg := target.Project
 	query.request.Slug, query.request.Edge, query.request.Apps = cfg.Slug, cfg.EdgeSelection(), apps
 
 	present := dependencies.Presentation(stdout)
 	mode.json = present.Format == terminal.FormatJSON
-	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: query.request.GetEnvironment().GetTier(), RunsOnCloud: true}
+	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: query.request.GetEnvironment().GetTier(), Cloud: target.Cloud}
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		out := newOutput(stdout, present, mode, newNotices(stderr, dependencies.Presentation(stderr).Palette(), p.Check.Warn))
