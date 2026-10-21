@@ -3,6 +3,7 @@ package sourcearchive_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 )
@@ -370,7 +372,7 @@ func TestWalkRefusesAFileOverTheCeilingAndNamesIt(t *testing.T) {
 	write(t, root, map[string]string{"a.ts": "x"})
 	sparse(t, filepath.Join(root, "data", "dump.sql"), sourcearchive.MaxFileBytes+1)
 	_, err := sourcearchive.Walk(root)
-	if err == nil || !strings.Contains(err.Error(), "data/dump.sql") || !strings.Contains(err.Error(), "512.0 MiB") {
+	if refusalCode(err) != clierror.CodeCloudSourceInvalid || !strings.Contains(err.Error(), "data/dump.sql") || !strings.Contains(err.Error(), "512.0 MiB") {
 		t.Fatalf("err = %v, want a refusal naming data/dump.sql and the ceiling", err)
 	}
 }
@@ -382,7 +384,7 @@ func TestWalkRefusesASourceOverTheTotalCeilingAndNamesTheBiggestFiles(t *testing
 		sparse(t, filepath.Join(root, "blobs", name), sourcearchive.MaxFileBytes-int64(i))
 	}
 	_, err := sourcearchive.Walk(root)
-	if err == nil || !strings.Contains(err.Error(), "2.0 GiB") || !strings.Contains(err.Error(), "blobs/one.bin") || strings.Contains(err.Error(), "a.ts") {
+	if refusalCode(err) != clierror.CodeCloudSourceInvalid || !strings.Contains(err.Error(), "2.0 GiB") || !strings.Contains(err.Error(), "blobs/one.bin") || strings.Contains(err.Error(), "a.ts") {
 		t.Fatalf("err = %v, want a refusal naming the ceiling and the five biggest files", err)
 	}
 }
@@ -469,5 +471,40 @@ func TestWalkRefusesWhenGitCannotReadItsOwnConfig(t *testing.T) {
 	_, err := sourcearchive.Walk(root)
 	if err == nil || !strings.Contains(err.Error(), "core.excludesFile") || !strings.Contains(err.Error(), "bad config") {
 		t.Fatalf("err = %v, want git's own complaint about its config", err)
+	}
+}
+
+func refusalCode(err error) string {
+	var coded *clierror.Error
+	if errors.As(err, &coded) {
+		return coded.Code
+	}
+	return ""
+}
+
+func TestWalkRefusesASourceOcelCloudWouldNotAcceptBeforeAnyUpload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows refuses these file names")
+	}
+	for _, tt := range []struct {
+		name  string
+		files map[string]string
+		names string
+	}{
+		{name: "a path with a backslash", files: map[string]string{`src/a\b.ts`: "x", "main.ts": "x"}, names: `src/a\\b.ts`},
+		{name: "a path with a control character", files: map[string]string{"notes\x01.txt": "x"}, names: `notes\x01.txt`},
+		{name: "no file at all", files: map[string]string{".env": "SECRET=1"}, names: "0 files"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			write(t, root, tt.files)
+			_, err := sourcearchive.Walk(root)
+			if code := refusalCode(err); code != clierror.CodeCloudSourceInvalid {
+				t.Fatalf("err = %v (code %q), want %s", err, code, clierror.CodeCloudSourceInvalid)
+			}
+			if !strings.Contains(err.Error(), tt.names) {
+				t.Fatalf("err = %v, want it to name %s", err, tt.names)
+			}
+		})
 	}
 }
