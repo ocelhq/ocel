@@ -49,7 +49,7 @@ func StartRemote(ctx context.Context, cfg *project.Project, span *run.Span, ques
 	if err != nil {
 		return nil, err
 	}
-	session, err := newSessionID()
+	sessionID, err := newSessionID()
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +57,16 @@ func StartRemote(ctx context.Context, cfg *project.Project, span *run.Span, ques
 	if httpClient == nil {
 		httpClient = newRemoteHTTPClient()
 	}
+	session := &remoteSession{}
 	t := &remoteTransport{
-		clients: newClients(httpClient, strings.TrimRight(remote.URL, "/"), MaxMessageBytes, cloud.Headers{Tokens: remote.Tokens, Session: session}, wireerror.Interceptor(func(err *connect.Error) *clierror.Error {
+		clients: newClients(httpClient, strings.TrimRight(remote.URL, "/"), MaxMessageBytes, session, cloud.Headers{Tokens: remote.Tokens, Session: sessionID}, wireerror.Interceptor(func(err *connect.Error) *clierror.Error {
 			return cmp.Or(cloud.RefusalOf(remote.URL, err), providerRefusal(err))
 		})),
 		http: httpClient,
+	}
+	session.configure = func(ctx context.Context) error {
+		_, err := configure(ctx, t.clients.provider, remote.Name, config, cfg.EdgeSelection())
+		return err
 	}
 	if t.facts, err = configure(ctx, t.clients.provider, remote.Name, config, cfg.EdgeSelection()); err != nil {
 		return nil, err
