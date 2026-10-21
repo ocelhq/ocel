@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -171,15 +172,41 @@ func TestWaitForJobReportsEachChangeAndReturnsTheEndedJob(t *testing.T) {
 			if strings.Join(steps, "|") != strings.Join(want, "|") {
 				t.Fatalf("reported %q, want %q", steps, want)
 			}
-			if len(*slept) != 5 {
-				t.Fatalf("waited %d times, want once between each of the 6 reads", len(*slept))
+			waits := *slept
+			if len(waits) != 5 {
+				t.Fatalf("waited %d times, want once between each of the 6 reads", len(waits))
 			}
-			for _, d := range *slept {
-				if d != pollEvery {
-					t.Fatalf("waited %s between reads, want %s", d, pollEvery)
+			for _, i := range []int{0, 2, 4} {
+				if waits[i] != pollEvery {
+					t.Fatalf("waited %s after read %d showed a change, want %s", waits[i], i+1, pollEvery)
+				}
+			}
+			for _, i := range []int{1, 3} {
+				if waits[i] <= pollEvery {
+					t.Fatalf("waited %s after read %d showed no change, want longer than %s", waits[i], i+1, pollEvery)
 				}
 			}
 		})
+	}
+}
+
+func TestWaitForJobPollsLessOftenWhileAJobShowsNoChangeUpToACap(t *testing.T) {
+	reads := slices.Repeat([]jobRead{job(cloudv1.JobState_JOB_STATE_RUNNING, cloudv1.JobPhase_JOB_PHASE_BUILD, "Building web")}, 10)
+	reads = append(reads, job(cloudv1.JobState_JOB_STATE_RUNNING, cloudv1.JobPhase_JOB_PHASE_BUILD, "Building api"), job(cloudv1.JobState_JOB_STATE_SUCCEEDED, 0, ""))
+	c, slept := newTestClient(serveJobs(t, &fakeJobs{reads: reads}), &staticTokens{})
+
+	if _, err := c.WaitForJob(t.Context(), "job_1", func(*cloudv1.Job) {}); err != nil {
+		t.Fatal(err)
+	}
+	waits := *slept
+	if len(waits) != 11 || waits[0] != pollEvery || waits[10] != pollEvery {
+		t.Fatalf("waited %v, want %s after each change", waits, pollEvery)
+	}
+	for i, d := range waits[1:10] {
+		ceiling := min(pollEvery<<(i+1), maxPollBackoff)
+		if d < ceiling/2 || d >= ceiling {
+			t.Fatalf("unchanged read %d waited %s, want within [%s, %s)", i+1, d, ceiling/2, ceiling)
+		}
 	}
 }
 
