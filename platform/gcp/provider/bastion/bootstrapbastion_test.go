@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 func TestAPlanToRemoveATierListsTheBastionItsForwardsMadeAndNothingWhenItMadeNone(t *testing.T) {
@@ -75,5 +76,25 @@ func TestRemovingTheBastionByNamePlansItsServiceAndAccountAndTakesThemDown(t *te
 	}
 	if h.run.Serving() != nil {
 		t.Error("the bastion service outlived its removal")
+	}
+}
+
+func TestATierWithCloudRunOffDescribesPlansAndRemovesNoBastion(t *testing.T) {
+	t.Parallel()
+	server := googletest.GrantedIAM()
+	server.Accounts = map[string]bool{}
+	server.ServicesOff = []string{"run.googleapis.com"}
+	b := bootstrap.Engine{Clients: server.Open(t)}
+	ctx := context.Background()
+	tier := environment.TierProduction
+
+	if changes, err := bastionRemovals(ctx, b, tier); err != nil || len(changes) != 0 {
+		t.Errorf("bastionRemovals() with Cloud Run off = %v, %v, want nothing to remove", changes, err)
+	}
+	if err := removeBastion(ctx, b, tier, nil); err != nil {
+		t.Errorf("removeBastion() with Cloud Run off = %v, want the tier removed: no bastion can stand where Cloud Run is off", err)
+	}
+	if _, present, err := describeBastionPart(ctx, b, tier); err != nil || present {
+		t.Errorf("describeBastionPart() with Cloud Run off = %t, %v, want no bastion described", present, err)
 	}
 }
