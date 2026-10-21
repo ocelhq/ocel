@@ -66,11 +66,11 @@ func TestRemovingTheBastionByNamePlansItsServiceAndAccountAndTakesThemDown(t *te
 	b := bootstrap.Engine{Clients: h.b.clients, TearDown: h.b.tearDown, Records: fake.NewKeyValues(), Removable: []bootstrap.RemovablePart{Part}}
 	ctx := context.Background()
 
-	groups, err := b.PlanRemovedParts(ctx, environment.TierProduction, []string{PartName}, false)
+	groups, err := b.PlanRemovedParts(ctx, environment.TierProduction, []string{PartName}, false, nil)
 	if err != nil || len(groups) != 1 || groups[0].Part != PartName || groups[0].Action != provider.ActionDelete || len(groups[0].Changes) != 2 {
 		t.Fatalf("planRemovedParts() = %+v, %v, want the bastion part deleted with its service and account", groups, err)
 	}
-	if err := b.RemoveNamedParts(ctx, environment.TierProduction, []string{PartName}, false, nil); err != nil {
+	if err := b.RemoveNamedParts(ctx, environment.TierProduction, []string{PartName}, false, nil, nil); err != nil {
 		t.Fatalf("removeNamedParts() = %v", err)
 	}
 	if h.run.Serving() != nil {

@@ -183,6 +183,9 @@ func (p ResourcePart) listUsers(ctx context.Context, b Engine, tier environment.
 }
 
 func (p ResourcePart) refuseInUse(ctx context.Context, b Engine, tier environment.Tier, removal PartRemoval) error {
+	if err := p.refuseReadByFronts(b, tier, removal); err != nil {
+		return err
+	}
 	users, err := p.listUsers(ctx, b, tier)
 	if err != nil || len(users) == 0 {
 		return err
@@ -197,6 +200,17 @@ func (p ResourcePart) refuseInUse(ctx context.Context, b Engine, tier environmen
 		"%s are still recorded in tier %s, and the %s part holds the keys their values are sealed under: taking it down loses every one of them.\n"+
 			"Destroy those projects in the tier, then run `%s` again",
 		strings.Join(users, ", "), tier, p.Name, removal.Retry)
+}
+
+func (p ResourcePart) refuseReadByFronts(b Engine, tier environment.Tier, removal PartRemoval) error {
+	fronts := b.fronted(removal.Fronts)
+	if len(fronts) == 0 || !slices.Contains(frontedParts, p.Name) {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"the %s part of tier %s reads the %s part, and taking it down leaves that front reading what is gone.\n"+
+			"Run `%s --remove %s --remove %s` to take both down, or leave the %s part in place",
+		fronts[0].Name, tier, p.Name, provider.BootstrapCommand(tier), fronts[0].Name, p.Name, p.Name)
 }
 
 func (b Engine) surveyItems(ctx context.Context, tier environment.Tier, items []Resource) (Survey, error) {

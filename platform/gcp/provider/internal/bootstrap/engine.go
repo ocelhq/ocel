@@ -182,7 +182,7 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 			added = append(added, group)
 		}
 	}
-	removed, err := b.PlanRemovedParts(ctx, req.Tier, named, req.Force)
+	removed, err := b.PlanRemovedParts(ctx, req.Tier, named, req.Force, InstalledParts(CredentialParts(), read.Stamp.Parts, req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -253,7 +253,7 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 	if err := b.dropParts(ctx, read, req, progress); err != nil {
 		return err
 	}
-	if err := b.RemoveNamedParts(ctx, req.Tier, named, req.Force, progress); err != nil {
+	if err := b.RemoveNamedParts(ctx, req.Tier, named, req.Force, InstalledParts(CredentialParts(), read.Stamp.Parts, req), progress); err != nil {
 		return err
 	}
 

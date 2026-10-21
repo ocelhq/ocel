@@ -50,11 +50,11 @@ func TestRemovingThePrivateNetworkByNamePlansItsResourcesAndTakesThemDown(t *tes
 	recordingNetwork(t, &b)
 	ctx := context.Background()
 
-	groups, err := b.PlanRemovedParts(ctx, environment.TierProduction, []string{network.PartName}, false)
+	groups, err := b.PlanRemovedParts(ctx, environment.TierProduction, []string{network.PartName}, false, nil)
 	if err != nil || len(groups) != 1 || groups[0].Part != network.PartName || groups[0].Action != provider.ActionDelete || len(groups[0].Changes) != 4 {
 		t.Fatalf("planRemovedParts() = %+v, %v, want the network part deleted with its four resources", groups, err)
 	}
-	if err := b.RemoveNamedParts(ctx, environment.TierProduction, []string{network.PartName}, false, nil); err != nil {
+	if err := b.RemoveNamedParts(ctx, environment.TierProduction, []string{network.PartName}, false, nil, nil); err != nil {
 		t.Fatalf("removeNamedParts() = %v", err)
 	}
 	if len(server.networks) != 0 || len(server.policies) != 0 {
@@ -71,7 +71,7 @@ func TestRemovingThePrivateNetworkByNameWhileAStoreIsOnItIsRefusedBeforeAnyPlan(
 	stores.Holding(connectedStore, storeLabels(environment.TierProduction))
 	recordingNetwork(t, &b)
 
-	_, err := b.PlanRemovedParts(context.Background(), environment.TierProduction, []string{network.PartName}, true)
+	_, err := b.PlanRemovedParts(context.Background(), environment.TierProduction, []string{network.PartName}, true, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "ocel-shop-prod-cache-abc123") || !strings.Contains(refused.Message, "`ocel bootstrap production --remove private-network`") {
 		t.Errorf("a forced planRemovedParts() with a store on the network = %v, want a refusal naming the store and the removal to run again once it is gone: --force never cuts a store off", err)

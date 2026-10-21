@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
@@ -517,5 +518,28 @@ func TestABootstrapProvisioningNoLoadBalancerChecksNoLoadBalancerPermission(t *t
 		return role == "roles/compute.loadBalancerAdmin" || strings.HasPrefix(role, "roles/certificatemanager.")
 	}) {
 		t.Errorf("the refusal for a plain bootstrap names %v, and a role for a front nothing provisions is one more than the credential needs", bootstrap.RolesCovering(nil))
+	}
+}
+
+func TestTheEdgeBucketAndKeysAreNotRemovedWhileAnInstalledFrontReadsThem(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tier := environment.TierProduction
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues()})
+	for _, part := range []string{bootstrap.KeysPart, bootstrap.EdgeBucketPart} {
+		if err := stackrecords.MarkBootstrapPartReady(ctx, b.Records, tier, part, stackrecords.BootstrapPart{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, part := range []string{bootstrap.KeysPart, bootstrap.EdgeBucketPart} {
+		_, err := b.PlanRemovedParts(ctx, tier, []string{part}, true, []string{bootstrap.CloudflareOriginPart})
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || !strings.Contains(refused.Message, "--remove "+bootstrap.CloudflareOriginPart) {
+			t.Errorf("PlanRemovedParts(%s) while the %s front is installed = %v, want a refusal naming the removal that takes the front with it", part, bootstrap.CloudflareOriginPart, err)
+		}
+		if groups, err := b.PlanRemovedParts(ctx, tier, []string{part}, false, nil); err != nil || len(groups) != 1 {
+			t.Errorf("PlanRemovedParts(%s) with no front installed = %+v, %v, want it planned", part, groups, err)
+		}
 	}
 }
