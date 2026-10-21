@@ -13,7 +13,7 @@ import (
 
 const (
 	pollEvery          = 1500 * time.Millisecond
-	maxPollBackoff     = 15 * time.Second
+	maxPollBackoff     = 10 * time.Second
 	maxUnreachableWait = 2 * time.Minute
 )
 
@@ -49,15 +49,16 @@ func IsJobEnded(state cloudv1.JobState) bool {
 func (c *Client) WaitForJob(ctx context.Context, jobID string, changed func(*cloudv1.Job)) (*cloudv1.Job, error) {
 	var last *cloudv1.Job
 	var unreachable time.Duration
-	failures := 0
+	unchanged := 0
 	for {
 		job, err := c.getJob(ctx, jobID)
-		wait := pollEvery
 		switch {
 		case err == nil:
-			unreachable, failures = 0, 0
+			unreachable = 0
+			unchanged++
 			if last == nil || job.GetState() != last.GetState() || job.GetPhase() != last.GetPhase() || job.GetStep() != last.GetStep() || job.GetInput().GetId() != last.GetInput().GetId() {
 				changed(job)
+				unchanged = 0
 			}
 			last = job
 			if IsJobEnded(job.GetState()) {
@@ -68,8 +69,10 @@ func (c *Client) WaitForJob(ctx context.Context, jobID string, changed func(*clo
 		case !isTransient(err):
 			return last, fmt.Errorf("read job %s from Ocel Cloud at %s: %w", jobID, c.apiURL, err)
 		default:
-			failures++
-			wait = pollBackoff(failures)
+			unchanged++
+		}
+		wait := pollBackoff(unchanged)
+		if err != nil {
 			if unreachable+wait > maxUnreachableWait {
 				return last, fmt.Errorf("%s could not be reached for %s, and job %s keeps running on Ocel Cloud: %w", c.apiURL, unreachable.Round(time.Second), jobID, err)
 			}
@@ -102,7 +105,10 @@ func isTransient(err error) bool {
 	return false
 }
 
-func pollBackoff(failures int) time.Duration {
-	ceiling := min(pollEvery<<min(failures, 4), maxPollBackoff)
+func pollBackoff(unchanged int) time.Duration {
+	if unchanged == 0 {
+		return pollEvery
+	}
+	ceiling := min(pollEvery<<min(unchanged, 4), maxPollBackoff)
 	return ceiling/2 + rand.N(ceiling/2)
 }
