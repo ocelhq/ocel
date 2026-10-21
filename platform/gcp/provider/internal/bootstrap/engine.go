@@ -405,6 +405,10 @@ type Removal struct {
 	DestroyAfter time.Duration
 }
 
+func (r Removal) change(name string) provider.Change {
+	return provider.Change{Kind: string(r.Resource.Kind), Name: name, Action: r.Action, Reason: r.Reason, Slow: r.Resource.Slow}
+}
+
 func (b Engine) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
 	read, err := b.survey(ctx, tier)
 	if err != nil {
@@ -440,13 +444,7 @@ func (b Engine) PlanRemove(ctx context.Context, tier environment.Tier) (provider
 		stack.Changes = append(stack.Changes, changes...)
 	}
 	for _, taking := range Removals(read) {
-		change := provider.Change{
-			Kind:   string(taking.Resource.Kind),
-			Name:   read.named(taking.Resource),
-			Action: taking.Action,
-			Reason: taking.Reason,
-			Slow:   taking.Resource.Slow,
-		}
+		change := taking.change(read.named(taking.Resource))
 		if taking.Resource.KindOps().parameter {
 			params.Changes = append(params.Changes, change)
 			continue

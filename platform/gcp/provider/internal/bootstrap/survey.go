@@ -74,8 +74,8 @@ func (s Survey) current(items []Resource) bool {
 	return true
 }
 
-func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, error) {
-	read := Survey{
+func (b Engine) newSurvey(tier environment.Tier) Survey {
+	return Survey{
 		Tier:      tier,
 		Names:     b.Clients.Names,
 		Project:   b.Clients.Project(),
@@ -85,18 +85,13 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 		Mending:   map[string]string{},
 		Replacing: map[string]string{},
 	}
-	var err error
-	if read.Buckets, err = b.recordedBuckets(ctx, tier); err != nil {
-		return Survey{}, err
-	}
-	sibling, err := b.recordedBuckets(ctx, tier.Sibling())
-	if err != nil {
-		return Survey{}, err
-	}
-	for _, item := range Resources(read.Names, tier, read.Emulated) {
+}
+
+func (b Engine) surveyPresence(ctx context.Context, read Survey, items []Resource) error {
+	for _, item := range items {
 		found, err := b.PresenceOf(ctx, read, item)
 		if err != nil {
-			return Survey{}, err
+			return err
 		}
 		read.Held[item.ID()] = found.Present
 		if found.Mends != "" {
@@ -105,6 +100,22 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 		if found.Replaces != "" {
 			read.Replacing[item.ID()] = found.Replaces
 		}
+	}
+	return nil
+}
+
+func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, error) {
+	read := b.newSurvey(tier)
+	var err error
+	if read.Buckets, err = b.recordedBuckets(ctx, tier); err != nil {
+		return Survey{}, err
+	}
+	sibling, err := b.recordedBuckets(ctx, tier.Sibling())
+	if err != nil {
+		return Survey{}, err
+	}
+	if err := b.surveyPresence(ctx, read, Resources(read.Names, tier, read.Emulated)); err != nil {
+		return Survey{}, err
 	}
 
 	stampedSibling, err := b.stamped(ctx, sibling[naming.StorageState])

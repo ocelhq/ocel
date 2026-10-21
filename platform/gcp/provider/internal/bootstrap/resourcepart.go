@@ -147,13 +147,13 @@ func (p ResourcePart) For(b Engine, tier environment.Tier) Part {
 }
 
 func plannedRemovals(items []Resource) []provider.Change {
+	held := Survey{Held: map[string]bool{}}
+	for _, item := range items {
+		held.Held[item.ID()] = true
+	}
 	changes := make([]provider.Change, 0, len(items))
 	for _, item := range slices.Backward(items) {
-		taking := Removal{Resource: item, Action: provider.ActionDelete}
-		if removal := item.KindOps().removal; removal != nil {
-			taking = removal(Survey{}, item)
-		}
-		changes = append(changes, provider.Change{Kind: string(item.Kind), Name: item.Name, Action: taking.Action, Reason: taking.Reason, Slow: taking.Resource.Slow})
+		changes = append(changes, Removing(held, item).change(item.Name))
 	}
 	return changes
 }
@@ -195,32 +195,13 @@ func (p ResourcePart) refuseInUse(ctx context.Context, b Engine, tier environmen
 }
 
 func (b Engine) surveyItems(ctx context.Context, tier environment.Tier, items []Resource) (Survey, error) {
-	read := Survey{
-		Tier:      tier,
-		Names:     b.Clients.Names,
-		Project:   b.Clients.Project(),
-		Region:    b.Clients.Region,
-		Emulated:  b.Clients.Emulated(),
-		Held:      map[string]bool{},
-		Mending:   map[string]string{},
-		Replacing: map[string]string{},
-	}
+	read := b.newSurvey(tier)
 	var err error
 	if read.Buckets, err = b.Clients.RecordedTierBuckets(ctx, tier); err != nil {
 		return Survey{}, err
 	}
-	for _, item := range items {
-		found, err := b.PresenceOf(ctx, read, item)
-		if err != nil {
-			return Survey{}, err
-		}
-		read.Held[item.ID()] = found.Present
-		if found.Mends != "" {
-			read.Mending[item.ID()] = found.Mends
-		}
-		if found.Replaces != "" {
-			read.Replacing[item.ID()] = found.Replaces
-		}
+	if err := b.surveyPresence(ctx, read, items); err != nil {
+		return Survey{}, err
 	}
 	return read, nil
 }
