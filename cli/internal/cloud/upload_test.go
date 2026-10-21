@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -402,6 +403,33 @@ func TestRetryAfterReadsSecondsAndDates(t *testing.T) {
 		ceiling := min(firstBackoff<<(attempt-1), maxBackoff)
 		if got := backoff(attempt, 0); got < ceiling/2 || got >= ceiling {
 			t.Fatalf("attempt %d waits %v, want within [%v, %v)", attempt, got, ceiling/2, ceiling)
+		}
+	}
+}
+
+func TestUploadNeverSendsTheTokenToAnotherHostABlobIsRedirectedTo(t *testing.T) {
+	elsewhere := &fakeCloud{}
+	moved, err := url.Parse(serve(t, elsewhere).URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved.Host = "localhost:" + moved.Port()
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, moved.String()+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(redirecting.Close)
+	source := memorySource{"a.ts": "alpha"}
+	c, _ := newTestClient(redirecting, &staticTokens{})
+
+	_ = c.Send(t.Context(), source, Planned{Missing: source.Blobs()}, nil)
+	elsewhere.mu.Lock()
+	defer elsewhere.mu.Unlock()
+	if len(elsewhere.bearers) == 0 {
+		t.Fatal("the redirect was never followed")
+	}
+	for _, bearer := range elsewhere.bearers {
+		if bearer != "" {
+			t.Fatalf("the other host was sent %q, want no token", bearer)
 		}
 	}
 }
