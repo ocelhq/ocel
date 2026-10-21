@@ -39,6 +39,14 @@ func TestACodedErrorBecomesARunErrorWithItsCodeHintRetryAndDocsPage(t *testing.T
 	}
 }
 
+func TestACodedErrorNamingAnotherCodesPageLinksThatPage(t *testing.T) {
+	got := clierror.NewRunError(&clierror.Error{Code: "cloud.job_failed", DocsCode: "cloud.builder", Cause: errors.New("the builder stopped")})
+
+	if got.GetCode() != "cloud.job_failed" || got.GetDocsUrl() != "https://ocel.dev/docs/errors/cloud.builder" {
+		t.Fatalf("run error = %s, want cloud.job_failed linking cloud.builder's page", protojson.Format(got))
+	}
+}
+
 func TestAWrappedCodedErrorKeepsItsCodeAndTheWholeWrappedMessage(t *testing.T) {
 	got := clierror.NewRunError(fmt.Errorf("reading project: %w", &clierror.Error{Code: "project.no_config", Cause: errors.New("no ocel.json")}))
 
