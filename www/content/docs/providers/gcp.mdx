@@ -519,9 +519,10 @@ shares.
 
 Every revision of a tier's Cloud Run service carries the `ocel-tier` label, and Cloud Run copies a
 revision's labels onto each entry it writes: requests, stdout, stderr and system logs.
-`ocel bootstrap <tier>` makes a log view of the tier's entries, `<namespace>-<tier>-logs`, on the
-`_Default` bucket, filtered to `resource.type="cloud_run_revision" AND labels."ocel-tier"="<tier>"`,
-and `ocel logs` reads and tails through it. Audit logs and entries of anything but Cloud Run are
+`ocel bootstrap <tier>` makes a log view of the tier's entries on the `_Default` bucket,
+`<namespace>-prod-logs` or `<namespace>-preview-logs`, filtered to
+`resource.type="cloud_run_revision" AND labels."ocel-tier"="production"` (or `"preview"`), and
+`ocel logs` reads and tails through it. Audit logs and entries of anything but Cloud Run are
 outside the view. A service deployed before its revisions carried the label is released again on
 the next deploy.
 
