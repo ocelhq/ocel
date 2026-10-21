@@ -138,9 +138,6 @@ func describeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier env
 }
 
 func envSourceSyncRemovals(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]provider.Change, error) {
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, PartName); err != nil || !present {
-		return nil, err
-	}
 	name := b.Clients.EnvSourceSync(tier)
 	var changes []provider.Change
 	schedule, err := schedulePresence(ctx, b, tier, name)
@@ -168,9 +165,6 @@ func envSourceSyncRemovals(ctx context.Context, b bootstrap.Engine, tier environ
 }
 
 func removeEnvSourceSync(ctx context.Context, b bootstrap.Engine, tier environment.Tier, progress progress.Log) error {
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, PartName); err != nil || !present {
-		return err
-	}
 	name := b.Clients.EnvSourceSync(tier)
 	if err := gcloud.TakeSchedule(ctx, b.Clients, name); err != nil {
 		return err
