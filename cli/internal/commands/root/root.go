@@ -1,11 +1,13 @@
 package root
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -65,10 +67,14 @@ type flags struct {
 }
 
 func (f *flags) explicitConfigPath() string {
-	if f.config != "" {
-		return f.config
+	given := cmp.Or(f.config, os.Getenv(commands.ConfigEnvVar))
+	if given == "" {
+		return ""
 	}
-	return os.Getenv(commands.ConfigEnvVar)
+	if abs, err := filepath.Abs(given); err == nil {
+		return abs
+	}
+	return given
 }
 
 func (f *flags) readFromFlagsOrEnv(cmd *cobra.Command) error {

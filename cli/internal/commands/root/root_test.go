@@ -550,26 +550,38 @@ func TestTheConfigFlagWinsOverTheConfigEnvironmentVariable(t *testing.T) {
 		}
 	})
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	t.Run("the env alone is honoured", func(t *testing.T) {
 		t.Setenv("OCEL_CONFIG", "from-env.ts")
 		set := &flags{config: ""}
-		if got := set.explicitConfigPath(); got != "from-env.ts" {
-			t.Errorf("explicitConfigPath() = %q, want %q", got, "from-env.ts")
+		if got, want := set.explicitConfigPath(), filepath.Join(cwd, "from-env.ts"); got != want {
+			t.Errorf("explicitConfigPath() = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("the flag alone is honoured", func(t *testing.T) {
 		set := &flags{config: "from-flag.ts"}
-		if got := set.explicitConfigPath(); got != "from-flag.ts" {
-			t.Errorf("explicitConfigPath() = %q, want %q", got, "from-flag.ts")
+		if got, want := set.explicitConfigPath(), filepath.Join(cwd, "from-flag.ts"); got != want {
+			t.Errorf("explicitConfigPath() = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("the flag wins over the env", func(t *testing.T) {
 		t.Setenv("OCEL_CONFIG", "from-env.ts")
 		set := &flags{config: "from-flag.ts"}
-		if got := set.explicitConfigPath(); got != "from-flag.ts" {
+		if got, want := set.explicitConfigPath(), filepath.Join(cwd, "from-flag.ts"); got != want {
 			t.Errorf("explicitConfigPath() = %q, want --config to win over OCEL_CONFIG", got)
+		}
+	})
+
+	t.Run("an absolute path stays as given", func(t *testing.T) {
+		set := &flags{config: "/code/shop/ocel.json"}
+		if got := set.explicitConfigPath(); got != "/code/shop/ocel.json" {
+			t.Errorf("explicitConfigPath() = %q, want the absolute path as given", got)
 		}
 	})
 }
@@ -580,6 +592,7 @@ func TestConfigFlagPathThatNamesNothingRefuses(t *testing.T) {
 export default { slug: "test-app" };
 `)
 
+	t.Chdir(root)
 	set := &flags{config: filepath.Join(".", "nope.ts")}
 	_, err := mustNewInvocation(t, set).LoadProject(context.Background(), root)
 	if err == nil {
