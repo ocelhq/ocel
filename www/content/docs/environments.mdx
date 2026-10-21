@@ -38,12 +38,15 @@ grants are held to that tier's resources as far as each cloud lets them be.
 
 - **On AWS**, a deploy's grants on resources are held to its tier by a tier-named ARN or the
   `ocel:env-tier` tag of the resource, so each tier pushes to ECR repositories of its own and
-  adopts only a certificate its own tier requested or one you brought. A few reads and lists are
-  account-wide, such as ECR's login token, `ec2:DescribeRegions` and `acm:ListCertificates`.
-- **On Google Cloud**, ocel binds the `ocel-tier` Resource Manager tag to every resource that can
-  carry one, and most of a deploy credential's roles hold on its own tier's value or on a resource
-  with no value. Within one project that is best effort: KMS keys are held apart by name, some
-  roles are on the whole project, and some resources carry no tag. See
+  adopts only a certificate its own tier requested or one you brought. A few actions are
+  account-wide: reads and lists such as ECR's login token, `ec2:DescribeRegions` and
+  `acm:ListCertificates`, and `ecs:DeregisterTaskDefinition`.
+- **On Google Cloud**, ocel binds the `ocel-tier` Resource Manager tag to every resource a deploy
+  or bootstrap makes that can carry one. A deploy credential's roles on Cloud Run, Pub/Sub, Cloud
+  Storage, Secret Manager, Artifact Registry, Firestore, Cloud SQL and service accounts hold on a
+  resource carrying its own tier's value or no value. Within one project that is best effort: KMS
+  keys are held apart by name, some roles are on the whole project, and some resources carry no
+  tag. See
   [sharing one project between tiers](/docs/providers/gcp#sharing-one-project-between-tiers).
 
 A **namespace** is lighter: every name ocel gives a resource starts with it, so two namespaces in
@@ -51,8 +54,9 @@ one account never collide, and tearing one down never touches another's. On Goog
 `ocel-tier` tag key is the exception: every namespace in the project shares it, and tearing one
 down keeps it. A namespace is `ocel` unless you set `OCEL_NAMESPACE`, and is meant for CI and
 advanced setups that run several installations side by side. It is never a credential boundary.
-`ocel permissions deploy` prints a credential per namespace, but the grants it holds by tier tag
-reach every namespace of its tier.
+`ocel permissions deploy` prints a credential per namespace. On Google Cloud the grants it holds by
+tier tag reach every namespace of its tier; on AWS only those on resources whose ARN names no
+namespace do, such as certificates and CloudFront distributions.
 
 ## Variables
 
