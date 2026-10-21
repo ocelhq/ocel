@@ -28,6 +28,25 @@ func scaleUpPromoted(ctx context.Context, hooks *provider.ContainerReleaseHooks,
 	return hooks.ScaleUp(ctx, provider.PromotedReleases{Slug: l.slug, Tier: l.tier, Env: envFor(l.tier, req.pointer), Releases: releases}, progress)
 }
 
+func scaleDownUnserved(ctx context.Context, hooks *provider.ContainerReleaseHooks, l projectLedger, req promoteRequest, progress progress.Log) {
+	if hooks == nil || req.rollsBackTo == "" {
+		return
+	}
+	ctx, stop := newRecordContext(ctx)
+	defer stop()
+	active, _, err := l.ReadActive(ctx, req.pointer)
+	var unserved []provider.AppRelease
+	if err == nil {
+		unserved, err = listAppReleases(listDemoted(active, req.promotion))
+	}
+	if err == nil && len(unserved) > 0 {
+		err = hooks.ScaleDown(ctx, provider.DemotedReleases{Slug: l.slug, Tier: l.tier, Env: envFor(l.tier, req.pointer), Previous: unserved}, progress)
+	}
+	if err != nil {
+		progress.Warn(fmt.Sprintf("Promotion %s does not serve, but scaling back down the releases it scaled up failed, and they keep running until the next promotion retries: %v", req.promotion.PromotionID, err))
+	}
+}
+
 func scaleDownDemoted(ctx context.Context, hooks *provider.ContainerReleaseHooks, l projectLedger, req promoteRequest, kept []router.Promotion, progress progress.Log) {
 	if hooks == nil {
 		return
