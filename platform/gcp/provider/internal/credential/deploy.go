@@ -74,7 +74,11 @@ func (d Deploy) Tiered(role string) Grant {
 func (d Deploy) ProjectPermissions() Grant {
 	return Grant{
 		Permissions: projectPermissions,
-		Why:         "Cloud KMS checks making and reading the key ring, and making and listing the keys on it, against the ring both tiers' keys hang on, which no tier tag fences",
+		Condition: &policy.Condition{
+			Title:      "ocel key ring or a location to make it in",
+			Expression: fmt.Sprintf("resource.name == %q || resource.type == %q", d.keyRingPath(), "cloud.googleapis.com/Location"),
+		},
+		Why: "Cloud KMS checks making a key ring against its location, whose name holds no ring, and roles/cloudkms.admin on the ring both tiers share would give away the ring's policy, which every key in it inherits",
 	}
 }
 

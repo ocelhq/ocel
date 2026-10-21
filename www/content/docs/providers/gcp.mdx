@@ -612,11 +612,13 @@ each tier's credential for your project and namespace. For the preview tier they
 - The `<namespace with _ for ->_parts` role `ocel bootstrap` makes, unconditioned: it creates the
   tier's network, subnetwork and service connection policies, which carry no tag, and grants
   Cloud Run's agent on the subnetwork.
-- A custom role you make, unconditioned, holding `cloudkms.keyRings.create`,
-  `cloudkms.keyRings.get`, `cloudkms.cryptoKeys.create` and `cloudkms.cryptoKeys.list`: Cloud KMS
-  checks making and reading the key ring, and making and listing its keys, against the ring both
-  tiers share, and `roles/cloudkms.admin` on that ring would hand over the ring's policy, which
-  every key in it inherits.
+- A custom role you make, holding `cloudkms.keyRings.create`, `cloudkms.keyRings.get`,
+  `cloudkms.cryptoKeys.create` and `cloudkms.cryptoKeys.list`, on a condition admitting Ocel's key
+  ring by name or a location: Cloud KMS checks reading the ring, and making and listing its keys,
+  against the ring, which both tiers share, so another key ring in the project is out of its
+  reach. It checks making a ring against the location, whose name holds no ring.
+  `roles/cloudkms.admin` on the ring would hand over the ring's policy, which every key in it
+  inherits.
 
 A condition holds a comma inside `matchTag`, so pass it from a file:
 

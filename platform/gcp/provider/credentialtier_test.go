@@ -31,12 +31,19 @@ var (
 	untaggedClause   = regexp.MustCompile(`^!resource\.hasTagKey\('([^']+)'\)$`)
 	nameIsClause     = regexp.MustCompile(`^resource\.name == "([^"]+)"$`)
 	nameStartsClause = regexp.MustCompile(`^resource\.name\.startsWith\("([^"]+)"\)$`)
+	typeIsClause     = regexp.MustCompile(`^resource\.type == "([^"]+)"$`)
 	grantedRoles     = regexp.MustCompile(`^api\.getAttribute\('iam\.googleapis\.com/modifiedGrantsByRole', \[\]\)\.hasOnly\(\[(.*)\]\)$`)
 	resourceName     = regexp.MustCompile(`^[a-z][a-z0-9-]*(/[^/\s]+)+$`)
 )
 
+const (
+	keyRingType  = "cloudkms.googleapis.com/KeyRing"
+	locationType = "cloud.googleapis.com/Location"
+)
+
 type checkedResource struct {
 	name string
+	kind string
 	tags map[string]string
 }
 
@@ -98,6 +105,10 @@ func conditionAdmits(t *testing.T, expression string, resource checkedResource) 
 			}
 		case nameStartsClause.MatchString(clause):
 			if strings.HasPrefix(resource.name, nameStartsClause.FindStringSubmatch(clause)[1]) {
+				return true
+			}
+		case typeIsClause.MatchString(clause):
+			if resource.kind == typeIsClause.FindStringSubmatch(clause)[1] {
 				return true
 			}
 		case grantedRoles.MatchString(clause):
@@ -333,21 +344,32 @@ func TestTheProjectPermissionsRoleHoldsOnlyWhatNoTieredRoleHoldsOnTheUntaggedPro
 	}
 }
 
-func TestADeployCredentialMakesAndListsKeysOnOcelsKeyRingAndNoOther(t *testing.T) {
+func TestADeployCredentialReadsOcelsKeyRingAndMakesAndListsItsKeysAndNoOtherRings(t *testing.T) {
 	t.Parallel()
 
-	ours := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel"}
-	foreign := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/payroll"}
+	ours := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel", kind: keyRingType}
+	foreign := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/payroll", kind: keyRingType}
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		onOurs := grantedOver(t, deployOf(tier), ours)
 		onForeign := grantedOver(t, deployOf(tier), foreign)
-		for _, permission := range []string{"cloudkms.cryptoKeys.create", "cloudkms.cryptoKeys.list"} {
+		for _, permission := range []string{"cloudkms.keyRings.get", "cloudkms.cryptoKeys.create", "cloudkms.cryptoKeys.list"} {
 			if _, holds := onOurs[permission]; !holds {
-				t.Errorf("the %s deploy credential holds no %s on %s: Cloud KMS checks it against the ring a project's key is made on", tier, permission, ours.name)
+				t.Errorf("the %s deploy credential holds no %s on %s: Cloud KMS checks it against the ring itself", tier, permission, ours.name)
 			}
 			if via, holds := onForeign[permission]; holds {
 				t.Errorf("the %s deploy credential holds %s on %s, a key ring Ocel never made, through %s", tier, permission, foreign.name, via)
 			}
+		}
+	}
+}
+
+func TestADeployCredentialMayMakeOcelsKeyRingInItsLocation(t *testing.T) {
+	t.Parallel()
+
+	location := checkedResource{name: "projects/acme-prod/locations/europe-west1", kind: locationType}
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		if _, holds := grantedOver(t, deployOf(tier), location)["cloudkms.keyRings.create"]; !holds {
+			t.Errorf("the %s deploy credential holds no cloudkms.keyRings.create on %s: Cloud KMS checks making a ring against the location it is made in, so the keys part could not make it", tier, location.name)
 		}
 	}
 }
