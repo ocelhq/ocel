@@ -2,6 +2,21 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md",
+        "$TURBO_ROOT$/platform/gcp/provider/internal/bootstrap/resources.go",
+        "$TURBO_ROOT$/platform/gcp/provider/internal/names/labels.go",
+        "$TURBO_ROOT$/platform/gcp/provider/internal/names/namespace.go",
+        "$TURBO_ROOT$/platform/gcp/provider/resources/kv/kv.go",
+        "$TURBO_ROOT$/pkg/provider/namespace.go",
+        "$TURBO_ROOT$/pkg/environment/tier.go",
+        "$TURBO_ROOT$/pkg/stackrecords/environments.go",
+        "$TURBO_ROOT$/tests/fixtures/**",
+        "$TURBO_ROOT$/tests/fronts/**"
+      ]
+    },
     "e2e:aws": {
       "cache": false,
       "env": ["OCEL_E2E_*"],
