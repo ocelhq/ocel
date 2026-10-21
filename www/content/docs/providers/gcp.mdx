@@ -79,7 +79,8 @@ or not the `keys` part is still recorded.
 `ocel bootstrap production --remove <part>` takes one part down, `cloudflare-origin` included, and
 refuses while a project here uses it unless you pass `--force`; the next deploy that needs a part a
 deploy adds adds it back. `--force` never takes `private-network` down while a kv store or database
-is on it, or `alb` while a hostname is bound to it: remove those first.
+is on it, `alb` while a hostname is bound to it, or `edge-bucket` and `keys` while `cloudflare-origin`
+is installed and reads them: remove those first, or the front in the same run.
 
 A project that declares a topic or task, or whose build revalidates, also gets a Firestore
 database of its own in each tier, `<namespace>-app-prod-w-<hash>` in production and

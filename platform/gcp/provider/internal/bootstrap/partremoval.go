@@ -23,12 +23,13 @@ type RemovablePart struct {
 }
 
 type PartRemoval struct {
-	Force bool
-	Retry string
+	Force  bool
+	Retry  string
+	Fronts []string
 }
 
-func namedRemoval(tier environment.Tier, name string, force bool) PartRemoval {
-	return PartRemoval{Force: force, Retry: provider.BootstrapCommand(tier) + " --remove " + name}
+func namedRemoval(tier environment.Tier, name string, force bool, fronts []string) PartRemoval {
+	return PartRemoval{Force: force, Retry: provider.BootstrapCommand(tier) + " --remove " + name, Fronts: fronts}
 }
 
 func (b Engine) Parts() []provider.Part {
@@ -58,13 +59,13 @@ type plannedRemoval struct {
 	group     provider.ChangeGroup
 }
 
-func (b Engine) planNamedRemovals(ctx context.Context, tier environment.Tier, names []string, force bool) ([]plannedRemoval, error) {
+func (b Engine) planNamedRemovals(ctx context.Context, tier environment.Tier, names []string, force bool, fronts []string) ([]plannedRemoval, error) {
 	var planned []plannedRemoval
 	for _, each := range b.Removable {
 		if !slices.Contains(names, each.Name) {
 			continue
 		}
-		removal, present, err := b.planNamedRemoval(ctx, tier, each, force)
+		removal, present, err := b.planNamedRemoval(ctx, tier, each, force, fronts)
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +76,7 @@ func (b Engine) planNamedRemovals(ctx context.Context, tier environment.Tier, na
 	return planned, nil
 }
 
-func (b Engine) planNamedRemoval(ctx context.Context, tier environment.Tier, each RemovablePart, force bool) (plannedRemoval, bool, error) {
+func (b Engine) planNamedRemoval(ctx context.Context, tier environment.Tier, each RemovablePart, force bool, fronts []string) (plannedRemoval, bool, error) {
 	if each.Deployed == nil {
 		changes, err := each.Plan(ctx, b, tier)
 		if err != nil || len(changes) == 0 {
@@ -95,15 +96,15 @@ func (b Engine) planNamedRemoval(ctx context.Context, tier environment.Tier, eac
 		return plannedRemoval{}, false, err
 	}
 	if deployed.RefuseInUse != nil {
-		if err := deployed.RefuseInUse(ctx, namedRemoval(tier, each.Name, force)); err != nil {
+		if err := deployed.RefuseInUse(ctx, namedRemoval(tier, each.Name, force, fronts)); err != nil {
 			return plannedRemoval{}, false, err
 		}
 	}
 	return plannedRemoval{removable: each, deployed: deployed, group: b.removalGroup(tier, deployed)}, true, nil
 }
 
-func (b Engine) PlanRemovedParts(ctx context.Context, tier environment.Tier, names []string, force bool) ([]provider.ChangeGroup, error) {
-	planned, err := b.planNamedRemovals(ctx, tier, names, force)
+func (b Engine) PlanRemovedParts(ctx context.Context, tier environment.Tier, names []string, force bool, fronts []string) ([]provider.ChangeGroup, error) {
+	planned, err := b.planNamedRemovals(ctx, tier, names, force, fronts)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +115,8 @@ func (b Engine) PlanRemovedParts(ctx context.Context, tier environment.Tier, nam
 	return groups, nil
 }
 
-func (b Engine) RemoveNamedParts(ctx context.Context, tier environment.Tier, names []string, force bool, progress progress.Log) error {
-	planned, err := b.planNamedRemovals(ctx, tier, names, force)
+func (b Engine) RemoveNamedParts(ctx context.Context, tier environment.Tier, names []string, force bool, fronts []string, progress progress.Log) error {
+	planned, err := b.planNamedRemovals(ctx, tier, names, force, fronts)
 	if err != nil {
 		return err
 	}

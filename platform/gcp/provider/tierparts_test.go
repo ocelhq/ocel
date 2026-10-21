@@ -264,7 +264,7 @@ func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *
 	if err := b.RefusePartsInUse(ctx, tier); !errors.As(err, &refused) || !strings.Contains(refused.Message, "shop") || !strings.Contains(refused.Message, "ocel bootstrap destroy production") {
 		t.Errorf("RefusePartsInUse() while shop uses the realtime part = %v, want a refusal naming shop and the destroy to run again", err)
 	}
-	if _, err := b.PlanRemovedParts(ctx, tier, []string{bootstrap.RealtimePart}, true); !errors.As(err, &refused) || !strings.Contains(refused.Message, "--remove "+bootstrap.RealtimePart) {
+	if _, err := b.PlanRemovedParts(ctx, tier, []string{bootstrap.RealtimePart}, true, nil); !errors.As(err, &refused) || !strings.Contains(refused.Message, "--remove "+bootstrap.RealtimePart) {
 		t.Errorf("PlanRemovedParts() of the realtime part while shop uses it = %v, want a refusal naming the removal to run again", err)
 	}
 	described, err := b.ListDescribedParts(ctx, tier)
@@ -278,7 +278,7 @@ func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *
 	if err := b.RefusePartsInUse(ctx, tier); err != nil {
 		t.Errorf("RefusePartsInUse() once no project uses the realtime part = %v, want it free to remove", err)
 	}
-	groups, err := b.PlanRemovedParts(ctx, tier, []string{bootstrap.RealtimePart}, false)
+	groups, err := b.PlanRemovedParts(ctx, tier, []string{bootstrap.RealtimePart}, false, nil)
 	if err != nil || len(groups) != 1 || groups[0].Action != provider.ActionDelete || len(groups[0].Changes) != 1 {
 		t.Errorf("PlanRemovedParts() of the unused realtime part = %+v, %v, want its account deleted", groups, err)
 	}

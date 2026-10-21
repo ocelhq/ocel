@@ -303,7 +303,7 @@ func TestRemovingTheALBPartTakesDownALoadBalancerWhoseTeardownFailed(t *testing.
 	ctx := context.Background()
 	tier := environment.TierProduction
 
-	if err := b.RemoveNamedParts(ctx, tier, []string{albpart.PartName}, false, nil); err != nil {
+	if err := b.RemoveNamedParts(ctx, tier, []string{albpart.PartName}, false, nil, nil); err != nil {
 		t.Fatalf("removeNamedParts(%s) = %v", albpart.PartName, err)
 	}
 	if !slices.Equal(front.torn, []environment.Tier{tier}) {
