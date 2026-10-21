@@ -8,24 +8,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func FormatProductionURLs(cfg *project.Project) map[string]string {
 	return byApp(cfg, cfg.Domains.Production, func(app project.App) []string {
 		return app.ProductionDomains
 	})
-}
-
-func FormatPreviewURLs(hostnames map[string]string, served *contractv1.EdgeFacts) map[string]string {
-	front := edge.Facts{ServesPlainHTTP: served.GetServesPlainHttp(), URLPort: uint16(served.GetUrlPort())}
-	urls := make(map[string]string, len(hostnames))
-	for app, hostname := range hostnames {
-		if hostname != "" {
-			urls[app] = front.FormatURL(hostname)
-		}
-	}
-	return urls
 }
 
 func byApp(cfg *project.Project, projectHosts []string, declared func(project.App) []string) map[string]string {

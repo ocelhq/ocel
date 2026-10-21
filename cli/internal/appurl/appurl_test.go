@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestProduction(t *testing.T) {
@@ -70,39 +69,6 @@ func TestProduction(t *testing.T) {
 			t.Errorf("api url = %q, want none: nothing serves api, so an url would name a host that answers for web", got)
 		}
 	})
-}
-
-func TestPreviewServesEachAppOnTheAliasTheProviderAnswered(t *testing.T) {
-	t.Parallel()
-
-	urls := appurl.FormatPreviewURLs(map[string]string{
-		"web": "pr-1-web-abcdefghijklmnop12345678.preview.acme.com",
-		"api": "",
-	}, nil)
-	if got, want := urls["web"], "https://pr-1-web-abcdefghijklmnop12345678.preview.acme.com"; got != want {
-		t.Errorf("web url = %q, want %q", got, want)
-	}
-	if got, ok := urls["api"]; ok {
-		t.Errorf("api url = %q, want none: nothing answered a hostname for it", got)
-	}
-}
-
-func TestAPreviewServedByAnEdgeOverPlainHTTPIsGivenAnHTTPURL(t *testing.T) {
-	t.Parallel()
-
-	urls := appurl.FormatPreviewURLs(map[string]string{"web": "shop-abcdefghijklmnop12345678.preview.ocel.localhost"}, &contractv1.EdgeFacts{ServesPlainHttp: true})
-	if got, want := urls["web"], "http://shop-abcdefghijklmnop12345678.preview.ocel.localhost"; got != want {
-		t.Errorf("web url = %q, want %q", got, want)
-	}
-}
-
-func TestAPreviewServedByAnEdgeOnAPortOfItsOwnIsGivenAURLNamingThePort(t *testing.T) {
-	t.Parallel()
-
-	urls := appurl.FormatPreviewURLs(map[string]string{"web": "shop-abcdefghijklmnop12345678.preview.ocel.localhost"}, &contractv1.EdgeFacts{ServesPlainHttp: true, UrlPort: 8130})
-	if got, want := urls["web"], "http://shop-abcdefghijklmnop12345678.preview.ocel.localhost:8130"; got != want {
-		t.Errorf("web url = %q, want %q", got, want)
-	}
 }
 
 func TestPrepend(t *testing.T) {

@@ -648,13 +648,11 @@ func (x *ProviderFacts) GetEdge() *EdgeFacts {
 }
 
 type EdgeFacts struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RunsCode        bool                   `protobuf:"varint,1,opt,name=runs_code,json=runsCode,proto3" json:"runs_code,omitempty"`
-	CacheTagLimits  *CacheTagLimits        `protobuf:"bytes,2,opt,name=cache_tag_limits,json=cacheTagLimits,proto3" json:"cache_tag_limits,omitempty"`
-	ServesPlainHttp bool                   `protobuf:"varint,3,opt,name=serves_plain_http,json=servesPlainHttp,proto3" json:"serves_plain_http,omitempty"`
-	UrlPort         uint32                 `protobuf:"varint,4,opt,name=url_port,json=urlPort,proto3" json:"url_port,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RunsCode       bool                   `protobuf:"varint,1,opt,name=runs_code,json=runsCode,proto3" json:"runs_code,omitempty"`
+	CacheTagLimits *CacheTagLimits        `protobuf:"bytes,2,opt,name=cache_tag_limits,json=cacheTagLimits,proto3" json:"cache_tag_limits,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *EdgeFacts) Reset() {
@@ -699,20 +697,6 @@ func (x *EdgeFacts) GetCacheTagLimits() *CacheTagLimits {
 		return x.CacheTagLimits
 	}
 	return nil
-}
-
-func (x *EdgeFacts) GetServesPlainHttp() bool {
-	if x != nil {
-		return x.ServesPlainHttp
-	}
-	return false
-}
-
-func (x *EdgeFacts) GetUrlPort() uint32 {
-	if x != nil {
-		return x.UrlPort
-	}
-	return 0
 }
 
 type CacheTagLimits struct {
@@ -4951,8 +4935,8 @@ func (x *EnsurePreviewAliasRequest) GetDry() bool {
 
 type EnsurePreviewAliasResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Hostnames     map[string]string      `protobuf:"bytes,1,rep,name=hostnames,proto3" json:"hostnames,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	Urls          map[string]string      `protobuf:"bytes,3,rep,name=urls,proto3" json:"urls,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4987,18 +4971,18 @@ func (*EnsurePreviewAliasResponse) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{66}
 }
 
-func (x *EnsurePreviewAliasResponse) GetHostnames() map[string]string {
-	if x != nil {
-		return x.Hostnames
-	}
-	return nil
-}
-
 func (x *EnsurePreviewAliasResponse) GetToken() string {
 	if x != nil {
 		return x.Token
 	}
 	return ""
+}
+
+func (x *EnsurePreviewAliasResponse) GetUrls() map[string]string {
+	if x != nil {
+		return x.Urls
+	}
+	return nil
 }
 
 type ForgetPreviewAliasRequest struct {
@@ -8133,12 +8117,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0fworker_ceilings\x18\x03 \x03(\v2#.provider.contract.v1.WorkerCeilingR\x0eworkerCeilings\x125\n" +
 	"\x12max_function_bytes\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x10maxFunctionBytes\x12%\n" +
 	"\x0eforwards_ports\x18\b \x01(\bR\rforwardsPorts\x123\n" +
-	"\x04edge\x18\t \x01(\v2\x1f.provider.contract.v1.EdgeFactsR\x04edge\"\xca\x01\n" +
+	"\x04edge\x18\t \x01(\v2\x1f.provider.contract.v1.EdgeFactsR\x04edge\"x\n" +
 	"\tEdgeFacts\x12\x1b\n" +
 	"\truns_code\x18\x01 \x01(\bR\brunsCode\x12N\n" +
-	"\x10cache_tag_limits\x18\x02 \x01(\v2$.provider.contract.v1.CacheTagLimitsR\x0ecacheTagLimits\x12*\n" +
-	"\x11serves_plain_http\x18\x03 \x01(\bR\x0fservesPlainHttp\x12$\n" +
-	"\burl_port\x18\x04 \x01(\rB\t\xbaH\x06*\x04\x18\xff\xff\x03R\aurlPort\"\x7f\n" +
+	"\x10cache_tag_limits\x18\x02 \x01(\v2$.provider.contract.v1.CacheTagLimitsR\x0ecacheTagLimits\"\x7f\n" +
 	"\x0eCacheTagLimits\x12$\n" +
 	"\ttag_bytes\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\btagBytes\x12\x1b\n" +
 	"\x04tags\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x04tags\x12*\n" +
@@ -8481,13 +8463,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x05token\x18\x03 \x01(\tB\x15\xbaH\x12r\x102\x0e^[a-z2-7]{16}$R\x05token\x12\x12\n" +
 	"\x04apps\x18\x04 \x03(\tR\x04apps\x12\x18\n" +
 	"\adomains\x18\x05 \x03(\tR\adomains\x12\x10\n" +
-	"\x03dry\x18\x06 \x01(\bR\x03dry\"\xcf\x01\n" +
-	"\x1aEnsurePreviewAliasResponse\x12]\n" +
-	"\thostnames\x18\x01 \x03(\v2?.provider.contract.v1.EnsurePreviewAliasResponse.HostnamesEntryR\thostnames\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\x1a<\n" +
-	"\x0eHostnamesEntry\x12\x10\n" +
+	"\x03dry\x18\x06 \x01(\bR\x03dry\"\xcc\x01\n" +
+	"\x1aEnsurePreviewAliasResponse\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\x12N\n" +
+	"\x04urls\x18\x03 \x03(\v2:.provider.contract.v1.EnsurePreviewAliasResponse.UrlsEntryR\x04urls\x1a7\n" +
+	"\tUrlsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc5\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02R\thostnames\"\xc5\x01\n" +
 	"\x19ForgetPreviewAliasRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x12+\n" +
@@ -8953,7 +8935,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*ForwardPortsResponse)(nil),            // 119: provider.contract.v1.ForwardPortsResponse
 	(*BindingProxy)(nil),                    // 120: provider.contract.v1.BindingProxy
 	nil,                                     // 121: provider.contract.v1.ProjectEnvironment.ReleasesEntry
-	nil,                                     // 122: provider.contract.v1.EnsurePreviewAliasResponse.HostnamesEntry
+	nil,                                     // 122: provider.contract.v1.EnsurePreviewAliasResponse.UrlsEntry
 	nil,                                     // 123: provider.contract.v1.PreflightRequest.DomainAppsEntry
 	nil,                                     // 124: provider.contract.v1.PreflightResponse.ContainerArchsEntry
 	nil,                                     // 125: provider.contract.v1.Promotion.ReleasesEntry
@@ -9086,7 +9068,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	71,  // 103: provider.contract.v1.GetEnvironmentResponse.environment:type_name -> provider.contract.v1.PreviewEnvironment
 	141, // 104: provider.contract.v1.PreviewEnvironment.lifecycle:type_name -> common.environment.v1.Lifecycle
 	138, // 105: provider.contract.v1.EnsurePreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
-	122, // 106: provider.contract.v1.EnsurePreviewAliasResponse.hostnames:type_name -> provider.contract.v1.EnsurePreviewAliasResponse.HostnamesEntry
+	122, // 106: provider.contract.v1.EnsurePreviewAliasResponse.urls:type_name -> provider.contract.v1.EnsurePreviewAliasResponse.UrlsEntry
 	138, // 107: provider.contract.v1.ForgetPreviewAliasRequest.environment:type_name -> common.environment.v1.Environment
 	127, // 108: provider.contract.v1.GetProtectionRequest.tier:type_name -> common.environment.v1.Tier
 	53,  // 109: provider.contract.v1.GetProtectionRequest.edge:type_name -> provider.contract.v1.EdgeSelection
