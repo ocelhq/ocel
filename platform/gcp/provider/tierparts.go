@@ -40,10 +40,11 @@ func tierAccounts(registry component.Registry) []bootstrap.Account {
 func tierFronts() bootstrap.FrontParts { return cloudflareorigin.FrontParts }
 
 type deployUse struct {
-	deploy provider.DeploySpec
-	front  edge.Kind
-	usages []provider.AppUsage
-	uses   []buildoutput.Uses
+	deploy    provider.DeploySpec
+	front     edge.Kind
+	resources []provider.Resource
+	usages    []provider.AppUsage
+	uses      []buildoutput.Uses
 }
 
 func (u deployUse) parts() []component.Part {
@@ -61,11 +62,12 @@ func (u deployUse) parts() []component.Part {
 }
 
 func (u deployUse) seals() bool {
-	return u.deploy.Tier == environment.TierPreview || u.front == alb.Kind || isFronted(u.front) || u.opensValues()
+	return u.deploy.Tier == environment.TierPreview || u.front == alb.Kind || isFronted(u.front) || u.sealsProjectValues()
 }
 
-func (u deployUse) opensValues() bool {
-	return slices.ContainsFunc(u.deploy.Apps, opensSecrets) ||
+func (u deployUse) sealsProjectValues() bool {
+	return len(u.resources) > 0 ||
+		slices.ContainsFunc(u.deploy.Apps, opensSecrets) ||
 		slices.ContainsFunc(u.usages, func(usage provider.AppUsage) bool { return len(usage.Grants) > 0 })
 }
 

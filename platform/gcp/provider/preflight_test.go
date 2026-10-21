@@ -30,8 +30,9 @@ func declaringAStore(memory int64) provider.DeployPreflight {
 	}
 }
 
-func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneNeedsNoPart(t *testing.T) {
+func TestAPublicBucketIsRefusedBeforeAnythingIsReadAndAPrivateOneIsAdmitted(t *testing.T) {
 	p := pushing(t, servingOnlyEnabledAPIs(t))
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
 	declaring := func(spec provider.BucketSpec) provider.DeployPreflight {
 		return provider.DeployPreflight{
 			Deploy:    provider.DeploySpec{Tier: environment.TierProduction},

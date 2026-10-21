@@ -42,9 +42,9 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		tree.Add(shared, string(gcloud.Vendor), shaped.Type, item.Name, region, shaped.Properties)
 	}
-	use := deployUse{deploy: req.Deploy, front: req.Edge, usages: req.Usages, uses: req.Uses}
+	use := deployUse{deploy: req.Deploy, front: req.Edge, resources: req.Resources, usages: req.Usages, uses: req.Uses}
 	owned := []bootstrap.Resource{{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}}
-	if use.opensValues() || slices.ContainsFunc(req.Resources, func(resource provider.Resource) bool { return resource.Type == provider.BindingPostgres }) {
+	if use.sealsProjectValues() {
 		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)})
 	}
 	if topic.DeclaresTopics(req.Resources) || slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {

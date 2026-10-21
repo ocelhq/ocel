@@ -85,7 +85,7 @@ func (p *Provider) partsUsedBy(pre provider.DeployPreflight) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, part := range (deployUse{deploy: pre.Deploy, front: pre.Edge, usages: pre.Apps, uses: pre.Uses}).parts() {
+	for _, part := range (deployUse{deploy: pre.Deploy, front: pre.Edge, resources: pre.Resources, usages: pre.Apps, uses: pre.Uses}).parts() {
 		if !slices.Contains(used, part.Name) {
 			used = append(used, part.Name)
 		}

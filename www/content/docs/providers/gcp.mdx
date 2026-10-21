@@ -62,7 +62,7 @@ credential, and shows in its plan as added on first use:
 
 | Part | Holds | Added by the first deploy that |
 | --- | --- | --- |
-| `keys` | the key ring and the tier's KMS key | seals a value: a preview, a secret or a binding, a database, or a deploy behind the `alb` or Cloudflare edge |
+| `keys` | the key ring and the tier's KMS key | seals a value: a preview, a secret, a granted binding, any declared resource, whose binding is sealed when it is published, or a deploy behind the `alb` or Cloudflare edge |
 | `edge-bucket` | the tier's [edge bucket](#buckets-of-a-tier) | ships a Next app, or deploys behind the `alb` or Cloudflare edge |
 | `cache-bucket` | the tier's [cache bucket](#buckets-of-a-tier) | ships a Next app, or a build that revalidates |
 | `private-network` | the tier's [network](#private-network) | declares a database or kv store |
