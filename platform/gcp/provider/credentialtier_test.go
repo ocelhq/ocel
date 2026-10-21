@@ -332,3 +332,22 @@ func TestTheProjectPermissionsRoleHoldsOnlyWhatNoTieredRoleHoldsOnTheUntaggedPro
 		}
 	}
 }
+
+func TestADeployCredentialMakesAndListsKeysOnOcelsKeyRingAndNoOther(t *testing.T) {
+	t.Parallel()
+
+	ours := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel"}
+	foreign := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/payroll"}
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		onOurs := grantedOver(t, deployOf(tier), ours)
+		onForeign := grantedOver(t, deployOf(tier), foreign)
+		for _, permission := range []string{"cloudkms.cryptoKeys.create", "cloudkms.cryptoKeys.list"} {
+			if _, holds := onOurs[permission]; !holds {
+				t.Errorf("the %s deploy credential holds no %s on %s: Cloud KMS checks it against the ring a project's key is made on", tier, permission, ours.name)
+			}
+			if via, holds := onForeign[permission]; holds {
+				t.Errorf("the %s deploy credential holds %s on %s, a key ring Ocel never made, through %s", tier, permission, foreign.name, via)
+			}
+		}
+	}
+}
