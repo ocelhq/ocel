@@ -34,6 +34,7 @@
     "cloud.job_canceled",
     "cloud.upgrade_required",
     "cloud.source_invalid",
+    "cloud.job_context_invalid",
     "---Runs---",
     "interrupted",
     "dev.command_failed",

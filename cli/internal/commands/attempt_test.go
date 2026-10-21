@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 )
 
 func TestInsideAnOcelCloudJobADeploysSourceIsTheOneTheJobWasStartedWith(t *testing.T) {
-	p := ProviderRun{job: &BuilderJob{ID: "job_1", GitCommit: "0123abc", GitBranch: "feature/login", GitDirty: "false"}}
+	p := ProviderRun{job: &BuilderJob{ID: "job_1", Git: &cloudv1.GitContext{Commit: "0123abc", Branch: "feature/login"}}}
 
 	source := p.readSource(t.TempDir())
 	if source.GetCommit() != "0123abc" || source.GetBranch() != "feature/login" || source.GetDirty() {

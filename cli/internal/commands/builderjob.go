@@ -3,69 +3,80 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 
+	"buf.build/go/protovalidate"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/executables"
-	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
 const (
-	CloudJobEnvVar            = "OCEL_CLOUD_JOB"
-	CloudSlugEnvVar           = "OCEL_CLOUD_SLUG"
-	CloudPreviewLabelEnvVar   = "OCEL_CLOUD_PREVIEW_LABEL"
-	CloudGitCommitEnvVar      = "OCEL_CLOUD_GIT_COMMIT"
-	CloudGitBranchEnvVar      = "OCEL_CLOUD_GIT_BRANCH"
-	CloudGitDirtyEnvVar       = "OCEL_CLOUD_GIT_DIRTY"
-	CloudGitPullRequestEnvVar = "OCEL_CLOUD_GIT_PR"
-	CloudProviderID           = "ocel"
+	CloudJobContextEnvVar = "OCEL_CLOUD_JOB_CONTEXT"
+	CloudProviderID       = "ocel"
 )
-
-var gitCommitPattern = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 
 type BuilderJob struct {
 	ID           string
 	Slug         string
 	ProvidersDir string
 	PreviewLabel string
-
-	GitCommit      string
-	GitBranch      string
-	GitDirty       string
-	GitPullRequest string
+	Git          *cloudv1.GitContext
 }
 
-func ReadBuilderJob(getenv func(string) string) *BuilderJob {
-	id := getenv(CloudJobEnvVar)
-	if id == "" {
-		return nil
+func ReadBuilderJob(getenv func(string) string) (*BuilderJob, error) {
+	path := getenv(CloudJobContextEnvVar)
+	if path == "" {
+		return nil, nil
 	}
-	return &BuilderJob{
-		ID: id, Slug: getenv(CloudSlugEnvVar), ProvidersDir: getenv(executables.OverrideEnvVar),
-		PreviewLabel: getenv(CloudPreviewLabelEnvVar),
-		GitCommit:    getenv(CloudGitCommitEnvVar), GitBranch: getenv(CloudGitBranchEnvVar), GitDirty: getenv(CloudGitDirtyEnvVar), GitPullRequest: getenv(CloudGitPullRequestEnvVar),
+	encoded, err := os.ReadFile(path)
+	if err != nil {
+		return nil, refuseJobContext(fmt.Errorf("%s is set, so this runs inside an Ocel Cloud job, and its context could not be read: %w", CloudJobContextEnvVar, err))
 	}
+	var job cloudv1.JobContext
+	if err := protojson.Unmarshal(encoded, &job); err != nil {
+		return nil, refuseJobContext(fmt.Errorf("%s, named by %s, is not an Ocel Cloud job's context: %w", path, CloudJobContextEnvVar, err))
+	}
+	if err := protovalidate.Validate(&job); err != nil {
+		return nil, refuseJobContext(fmt.Errorf("%s, named by %s, holds an Ocel Cloud job's context that is not valid: %w", path, CloudJobContextEnvVar, err))
+	}
+	providers := getenv(executables.OverrideEnvVar)
+	if providers == "" {
+		return nil, refuseJobContext(fmt.Errorf("this runs inside Ocel Cloud job %s, which spawns the provider %s from %s, and %s is not set", job.GetJobId(), CloudProviderID, executables.OverrideEnvVar, executables.OverrideEnvVar))
+	}
+	return &BuilderJob{ID: job.GetJobId(), Slug: job.GetSlug(), ProvidersDir: providers, PreviewLabel: job.GetPreviewLabel(), Git: job.GetGit()}, nil
+}
+
+func refuseJobContext(err error) error {
+	return &clierror.Error{Code: clierror.CodeCloudJobContextInvalid, Cause: err}
 }
 
 func (j *BuilderJob) Source() *consolev1.Source {
-	if j.GitCommit == "" {
+	if j.Git.GetCommit() == "" {
 		return nil
 	}
-	dirty, _ := strconv.ParseBool(j.GitDirty)
-	return &consolev1.Source{Commit: j.GitCommit, Branch: j.GitBranch, Dirty: dirty}
+	return &consolev1.Source{Commit: j.Git.GetCommit(), Branch: j.Git.GetBranch(), Dirty: j.Git.GetDirty()}
 }
 
 func (j *BuilderJob) ReadGitBranch(string) (string, error) {
-	if j.GitBranch == "" {
-		return "", fmt.Errorf("job %s on Ocel Cloud was started with no git branch in %s, so no branch names this preview: name it, as in `ocel preview up <name>`", j.ID, CloudGitBranchEnvVar)
+	if j.Git.GetBranch() == "" {
+		return "", fmt.Errorf("job %s on Ocel Cloud was started with no git branch, so no branch names this preview: name it, as in `ocel preview up <name>`", j.ID)
 	}
-	return j.GitBranch, nil
+	return j.Git.GetBranch(), nil
 }
 
-func (j *BuilderJob) DiscoverPRNumber() string { return j.GitPullRequest }
+func (j *BuilderJob) DiscoverPRNumber() string {
+	if j.Git.GetPullRequest() == 0 {
+		return ""
+	}
+	return strconv.FormatUint(uint64(j.Git.GetPullRequest()), 10)
+}
 
 func (j *BuilderJob) loadProject(ctx context.Context, cwd, explicitPath string) (*project.Project, error) {
 	configPath, err := project.FindConfig(cwd, explicitPath)
@@ -87,39 +98,14 @@ func (j *BuilderJob) loadProject(ctx context.Context, cwd, explicitPath string) 
 }
 
 func (j *BuilderJob) adopt(cfg *project.Project) (*project.Project, error) {
-	if err := j.refuseInvalid(); err != nil {
-		return nil, err
-	}
 	if cfg.HasProvider() {
-		return nil, fmt.Errorf("this runs inside Ocel Cloud job %s, and %s names the provider %q: a project that deploys to Ocel Cloud names none", j.ID, filepath.Base(cfg.Path), cfg.Provider.ID)
+		return nil, &clierror.Error{Code: clierror.CodeProjectInvalidConfig, Hint: "provider",
+			Cause: fmt.Errorf("this runs inside Ocel Cloud job %s, and %s names the provider %q: a project that deploys to Ocel Cloud names none", j.ID, filepath.Base(cfg.Path), cfg.Provider.ID)}
 	}
 	if cfg.Slug != j.Slug {
-		return nil, fmt.Errorf("job %s on Ocel Cloud was started for the project %s, and %s names %s", j.ID, j.Slug, filepath.Base(cfg.Path), cfg.Slug)
+		return nil, &clierror.Error{Code: clierror.CodeProjectInvalidConfig, Hint: "slug",
+			Cause: fmt.Errorf("job %s on Ocel Cloud was started for the project %s, and %s names %s", j.ID, j.Slug, filepath.Base(cfg.Path), cfg.Slug)}
 	}
 	cfg.Provider = &project.Provider{ID: CloudProviderID}
 	return cfg, nil
-}
-
-func (j *BuilderJob) refuseInvalid() error {
-	if err := project.ValidateSlug(j.Slug); err != nil {
-		return fmt.Errorf("%s is set, so this runs inside an Ocel Cloud job, and %s does not name the project's slug: %w", CloudJobEnvVar, CloudSlugEnvVar, err)
-	}
-	if j.ProvidersDir == "" {
-		return fmt.Errorf("%s is set, so this runs inside an Ocel Cloud job, which spawns the provider %s from %s, and %s is not set", CloudJobEnvVar, CloudProviderID, executables.OverrideEnvVar, executables.OverrideEnvVar)
-	}
-	if j.PreviewLabel != "" {
-		if err := previewid.ValidateLabel(j.PreviewLabel); err != nil {
-			return fmt.Errorf("%s does not name the preview's label: %w", CloudPreviewLabelEnvVar, err)
-		}
-	}
-	if j.GitCommit != "" && !gitCommitPattern.MatchString(j.GitCommit) {
-		return fmt.Errorf("%s is %q, which is not a git commit: give it the commit's hex object name", CloudGitCommitEnvVar, j.GitCommit)
-	}
-	if _, err := strconv.ParseBool(j.GitDirty); j.GitDirty != "" && err != nil {
-		return fmt.Errorf("%s is %q, which is neither true nor false", CloudGitDirtyEnvVar, j.GitDirty)
-	}
-	if _, err := strconv.ParseUint(j.GitPullRequest, 10, 32); j.GitPullRequest != "" && err != nil {
-		return fmt.Errorf("%s is %q, which is not a pull request's number", CloudGitPullRequestEnvVar, j.GitPullRequest)
-	}
-	return nil
 }

@@ -5,18 +5,20 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -126,21 +128,17 @@ func gitCheckout(t *testing.T, branch string, detached bool) string {
 
 func builderEnv(t *testing.T, started *cloudv1.StartJobRequest) func(string) string {
 	t.Helper()
-	env := map[string]string{
-		commands.CloudJobEnvVar:  clitest.FakeCloudJobID,
-		commands.CloudSlugEnvVar: started.GetSlug(),
+	encoded, err := protojson.Marshal(&cloudv1.JobContext{
+		JobId: clitest.FakeCloudJobID, Slug: started.GetSlug(), PreviewLabel: started.GetPreview().GetLabel(), Git: started.GetGit(),
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if label := started.GetPreview().GetLabel(); label != "" {
-		env[commands.CloudPreviewLabelEnvVar] = label
+	path := filepath.Join(t.TempDir(), "job.json")
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if git := started.GetGit(); git != nil {
-		env[commands.CloudGitCommitEnvVar] = git.GetCommit()
-		env[commands.CloudGitBranchEnvVar] = git.GetBranch()
-		env[commands.CloudGitDirtyEnvVar] = strconv.FormatBool(git.GetDirty())
-		if pr := git.GetPullRequest(); pr != 0 {
-			env[commands.CloudGitPullRequestEnvVar] = strconv.FormatUint(uint64(pr), 10)
-		}
-	}
+	env := map[string]string{commands.CloudJobContextEnvVar: path, executables.OverrideEnvVar: t.TempDir()}
 	return func(name string) string { return env[name] }
 }
 
@@ -218,7 +216,11 @@ func TestAPreviewOnOcelCloudIsTheSameEnvironmentInTheJobAsOnTheMachineThatStarte
 			}
 
 			builder := newTestDependencies()
-			builder.BuilderJob = commands.ReadBuilderJob(builderEnv(t, started))
+			job, err := commands.ReadBuilderJob(builderEnv(t, started))
+			if err != nil {
+				t.Fatal(err)
+			}
+			builder.BuilderJob = job
 			builder.ReadGitBranch, builder.DiscoverPRNumber = builder.BuilderJob.ReadGitBranch, builder.BuilderJob.DiscoverPRNumber
 			inJob, err := Preview(started.GetPreview().GetName(), started.GetPreview().GetPersistent()).environment(builder, t.TempDir())
 			if err != nil {

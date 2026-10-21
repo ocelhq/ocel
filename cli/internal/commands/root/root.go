@@ -149,7 +149,7 @@ func newCommand() *command {
 	}
 	rootCmd := c.root
 	set := &flags{}
-	invocation := newInvocation(c.bus, set)
+	invocation, jobErr := newInvocation(c.bus, set)
 	invocation.Setups = prerequisite.Setups{}
 	invocation.RecordEvent = c.recordEvent
 	c.isSkillInstalled = func() bool { return isSkillInstalled(set.explicitConfigPath()) }
@@ -174,6 +174,9 @@ func newCommand() *command {
 		c.invoked = cmd
 		if err := set.readFromFlagsOrEnv(cmd); err != nil {
 			return err
+		}
+		if jobErr != nil {
+			return jobErr
 		}
 		if !isShellCompletion(cmd) {
 			telemetry.PrintBannerOnce(cmd.ErrOrStderr(), telemetry.Resolve(telemetry.WriteKey, telemetry.Endpoint))
@@ -275,8 +278,9 @@ func isShellCompletion(cmd *cobra.Command) bool {
 	return cmd.Name() == cobra.ShellCompRequestCmd || cmd.Name() == cobra.ShellCompNoDescRequestCmd
 }
 
-func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
+func newInvocation(bus *run.Bus, set *flags) (commands.Invocation, error) {
 	isJSON := func() bool { return set.json }
+	job, err := commands.ReadBuilderJob(os.Getenv)
 	invocation := commands.Invocation{
 		Events:          bus,
 		Presentation:    set.presentation,
@@ -288,12 +292,12 @@ func newInvocation(bus *run.Bus, set *flags) commands.Invocation {
 		Console:       deployreport.Console{LoadCredentials: console.LoadCredentials},
 		CloudOffer:    console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
 		CloudSessions: commands.NewCloudSessions(),
-		BuilderJob:    commands.ReadBuilderJob(os.Getenv),
+		BuilderJob:    job,
 	}
 	if invocation.BuilderJob != nil {
 		invocation.Console, invocation.CloudOffer = deployreport.Console{}, nil
 		invocation.JobAnswers = jobinput.New(os.Stdin)
 		invocation.Questions.Job = invocation.JobAnswers
 	}
-	return invocation
+	return invocation, err
 }

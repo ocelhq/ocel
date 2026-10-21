@@ -1,0 +1,10 @@
+---
+title: cloud.job_context_invalid
+description: The CLI runs inside an Ocel Cloud job whose context it cannot read.
+---
+
+`OCEL_CLOUD_JOB_CONTEXT` is set, so the CLI runs inside a job Ocel Cloud started, and the job's context is missing, is not valid, or names no providers to spawn through `OCEL_PROVIDERS_DIR`. Ocel Cloud writes that context and sets both variables for every job, so the fault is Ocel Cloud's, not your project's. The message says which part is at fault.
+
+## Fix
+
+Start the job again with the same command. If it fails the same way, report it with the job's URL. Outside Ocel Cloud, unset `OCEL_CLOUD_JOB_CONTEXT`.

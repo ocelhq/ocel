@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
@@ -21,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
@@ -583,7 +581,7 @@ export default { slug: "test-app" };
 `)
 
 	set := &flags{config: filepath.Join(".", "nope.ts")}
-	_, err := newInvocation(run.NewBus(time.Now), set).LoadProject(context.Background(), root)
+	_, err := mustNewInvocation(t, set).LoadProject(context.Background(), root)
 	if err == nil {
 		t.Fatal("LoadProject err = nil, want a refusal for a --config path that names nothing")
 	}
