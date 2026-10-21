@@ -267,7 +267,7 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 		return provider.RefusalError(refusal.Refuse(refusal.CodeUnsupported, "simulated provider runs no serverless app"))
 	case "unsupported-deploy-result":
 		return stream.Send(&progressv1.OperationEvent{
-			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Error: "unimplemented: simulated provider runs no worker", ConnectCode: "unimplemented"}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Error: "simulated provider runs no worker", ConnectCode: "unimplemented"}},
 		})
 	case "hang-deploy":
 		time.Sleep(30 * time.Second)

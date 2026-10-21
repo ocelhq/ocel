@@ -47,17 +47,16 @@ func newClients(httpClient *http.Client, baseURL string, maxMessageBytes int, in
 
 func configure(ctx context.Context, client contractv1connect.ProviderServiceClient, name string, config *contractv1.ProviderConfig, edge *contractv1.EdgeSelection) (*contractv1.ProviderFacts, error) {
 	configured, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: config, Edge: edge})
-	if err != nil {
-		var rejected *connect.Error
-		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
-			if code, named := provider.RefusedCode(err); named && code == refusal.CodeUnknownOption {
-				return nil, fmt.Errorf("the config configures provider %q with options it does not accept: %s", name, rejected.Message())
-			}
-			return nil, fmt.Errorf("provider %q refuses the config it was given: %s", name, rejected.Message())
-		}
+	switch {
+	case err == nil:
+		return configured.GetFacts(), nil
+	case connect.CodeOf(err) != connect.CodeInvalidArgument:
 		return nil, fmt.Errorf("provider: configure the provider session: %w", err)
 	}
-	return configured.GetFacts(), nil
+	if code, named := provider.RefusedCode(err); named && code == refusal.CodeUnknownOption {
+		return nil, fmt.Errorf("the config configures provider %q with options it does not accept: %w", name, err)
+	}
+	return nil, fmt.Errorf("provider %q refuses the config it was given: %w", name, err)
 }
 
 type streamCall[Req any] func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
@@ -89,7 +88,7 @@ func driveStream(t transport, rpc string, stream *connect.ServerStreamForClient[
 			if result.GetSuccess() {
 				return result, nil
 			}
-			return result, &OperationFailedError{Message: result.GetError(), ConnectCode: result.GetConnectCode()}
+			return result, failedOperation(result)
 		}
 	}
 

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/cli/internal/wireerror"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -92,8 +93,7 @@ func (e *VersionMismatchError) Error() string {
 }
 
 type OperationFailedError struct {
-	Message     string
-	ConnectCode string
+	Message string
 }
 
 func (e *OperationFailedError) Error() string {
@@ -312,7 +312,7 @@ func (r *Process) dial(ready localrpc.Readiness) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.network, r.address = network, address
-	r.clients = newClients(httpClient, "https://localhost", r.maxMessageBytes)
+	r.clients = newClients(httpClient, "https://localhost", r.maxMessageBytes, wireerror.Interceptor(providerRefusal))
 	return nil
 }
 
