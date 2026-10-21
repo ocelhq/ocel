@@ -79,8 +79,9 @@ func TestADeployRefusesNoWaitWhenTheProjectDoesNotRunOnOcelCloud(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop", "provider": {"fake": {}}}`)
 
 	err := To(t.Context(), dependencies, root, Production(""), Options{NoWait: true}, io.Discard, io.Discard, strings.NewReader(""))
-	if err == nil || !strings.Contains(err.Error(), "--no-wait") {
-		t.Fatalf("err = %v, want --no-wait refused", err)
+	var coded *clierror.Error
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeUsage || !strings.Contains(err.Error(), "--no-wait") {
+		t.Fatalf("err = %v, want --no-wait refused as a usage error", err)
 	}
 }
 
