@@ -138,10 +138,6 @@ message EdgeFacts {
   bool runs_code = 1;
 
   CacheTagLimits cache_tag_limits = 2;
-
-  bool serves_plain_http = 3;
-
-  uint32 url_port = 4 [(buf.validate.field).uint32.lte = 65535];
 }
 
 message CacheTagLimits {
@@ -771,9 +767,12 @@ message EnsurePreviewAliasRequest {
 }
 
 message EnsurePreviewAliasResponse {
-  map<string, string> hostnames = 1;
+  reserved 1;
+  reserved "hostnames";
 
   string token = 2;
+
+  map<string, string> urls = 3;
 }
 
 message ForgetPreviewAliasRequest {

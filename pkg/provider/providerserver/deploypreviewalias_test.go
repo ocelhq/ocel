@@ -33,7 +33,7 @@ func dryEnsurePreviewAlias(t *testing.T, client contractv1connect.ProviderServic
 	if err != nil {
 		t.Fatalf("EnsurePreviewAlias: %v", err)
 	}
-	return ensured.GetHostnames()
+	return ensured.GetUrls()
 }
 
 func TestADryEnsurePreviewAliasOfANewPreviewAnswersNoHostnameAndRecordsNothing(t *testing.T) {
@@ -60,7 +60,7 @@ func TestADryEnsurePreviewAliasOfADeployedPreviewAnswersTheAliasItIsServedOn(t *
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	if got, want := dryEnsurePreviewAlias(t, client)["web"], strings.TrimPrefix(servedURLs(result)[0], "https://"); got != want {
+	if got, want := dryEnsurePreviewAlias(t, client)["web"], servedURLs(result)[0]; got != want {
 		t.Errorf("a dry EnsurePreviewAlias of a deployed preview answered %q, want %q, the alias it is served on", got, want)
 	}
 }
@@ -197,7 +197,7 @@ func TestForgetPreviewAliasKeepsAPreviewAnotherRunAssignedOrADeployClaimed(t *te
 	}
 }
 
-func TestEnsurePreviewAliasAnswersTheHostnamesThePreviewDeployIsServedOn(t *testing.T) {
+func TestEnsurePreviewAliasAnswersTheURLsThePreviewDeployIsServedOn(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 	previewBootstrapped(t, client)
@@ -212,16 +212,16 @@ func TestEnsurePreviewAliasAnswersTheHostnamesThePreviewDeployIsServedOn(t *test
 	if err != nil {
 		t.Fatalf("EnsurePreviewAlias: %v", err)
 	}
-	hostname := ensured.GetHostnames()["web"]
-	if !strings.HasPrefix(hostname, "pr-7-abcdefghijklmnop") {
-		t.Fatalf("EnsurePreviewAlias = %v, want web on pr-7 and the token the CLI minted", ensured.GetHostnames())
+	url := ensured.GetUrls()["web"]
+	if !strings.HasPrefix(url, "https://pr-7-abcdefghijklmnop") {
+		t.Fatalf("EnsurePreviewAlias = %v, want web on pr-7 and the token the CLI minted", ensured.GetUrls())
 	}
 
 	result, _ := deploy(t, client, previewRequest())
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if want := []string{"https://" + hostname}; !slices.Equal(servedURLs(result), want) {
+	if want := []string{url}; !slices.Equal(servedURLs(result), want) {
 		t.Errorf("the deploy announced %v, want %v: the build baked in the alias it was answered", servedURLs(result), want)
 	}
 
@@ -235,8 +235,8 @@ func TestEnsurePreviewAliasAnswersTheHostnamesThePreviewDeployIsServedOn(t *test
 	if err != nil {
 		t.Fatalf("EnsurePreviewAlias again: %v", err)
 	}
-	if again.GetHostnames()["web"] != hostname {
-		t.Errorf("EnsurePreviewAlias again = %v, want the alias the preview already has", again.GetHostnames())
+	if again.GetUrls()["web"] != url {
+		t.Errorf("EnsurePreviewAlias again = %v, want the alias the preview already has", again.GetUrls())
 	}
 	if again.GetToken() != "abcdefghijklmnop" {
 		t.Errorf("EnsurePreviewAlias again answered the token %q, want abcdefghijklmnop, the one the preview was created with, for its deploy to carry", again.GetToken())

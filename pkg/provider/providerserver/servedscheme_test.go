@@ -6,19 +6,35 @@ import (
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
-func TestAnEdgeServingPlainHTTPHasItsHostnamesAnnouncedListedAndStatedAsHTTP(t *testing.T) {
+func ensuredPreviewURL(t *testing.T, client contractv1connect.ProviderServiceClient) string {
+	t.Helper()
+	ensured, err := client.EnsurePreviewAlias(context.Background(), &contractv1.EnsurePreviewAliasRequest{
+		Slug:        "shop",
+		Environment: previewRequest().GetEnvironment(),
+		Token:       "abcdefghijklmnop",
+		Apps:        []string{"web"},
+		Domains:     []string{"*.preview.example"},
+	})
+	if err != nil {
+		t.Fatalf("EnsurePreviewAlias: %v", err)
+	}
+	return ensured.GetUrls()["web"]
+}
+
+func TestAnEdgeServingPlainHTTPHasItsPreviewAnsweredAnnouncedAndListedAsHTTP(t *testing.T) {
 	builtProject(t)
 	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).ServesPlainHTTP(true)
-	client, facts := configuredProvider(t, "1.0.0", vendor)
-	if !facts.GetEdge().GetServesPlainHttp() {
-		t.Errorf("Configure() edge facts = %v, want them to say the edge serves plain HTTP", facts.GetEdge())
-	}
+	client, _ := configuredProvider(t, "1.0.0", vendor)
 	bootstrappedOverRPC(t, client)
 	previewBootstrapped(t, client)
+	if url := ensuredPreviewURL(t, client); !strings.HasPrefix(url, "http://pr-7-") {
+		t.Errorf("EnsurePreviewAlias answered %q, want an http:// URL of the preview", url)
+	}
 
 	result, _ := deploy(t, client, previewRequest())
 	if !result.GetSuccess() {
@@ -39,18 +55,18 @@ func TestAnEdgeServingPlainHTTPHasItsHostnamesAnnouncedListedAndStatedAsHTTP(t *
 	}
 }
 
-func TestAnEdgeServingOnAPortOfItsOwnHasItsHostnamesAnnouncedAndListedWithThePort(t *testing.T) {
+func TestAnEdgeServingOnAPortOfItsOwnHasItsPreviewAnsweredAnnouncedAndListedWithThePort(t *testing.T) {
 	builtProject(t)
 	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
 	front := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
 	front.ServesPlainHTTP(true)
 	front.ServesOnPort(8130)
-	client, facts := configuredProvider(t, "1.0.0", vendor)
-	if facts.GetEdge().GetUrlPort() != 8130 {
-		t.Errorf("Configure() edge facts = %v, want them to name port 8130", facts.GetEdge())
-	}
+	client, _ := configuredProvider(t, "1.0.0", vendor)
 	bootstrappedOverRPC(t, client)
 	previewBootstrapped(t, client)
+	if url := ensuredPreviewURL(t, client); !strings.HasPrefix(url, "http://pr-7-") || !strings.HasSuffix(url, ":8130") {
+		t.Errorf("EnsurePreviewAlias answered %q, want the preview's http:// URL on port 8130", url)
+	}
 
 	result, _ := deploy(t, client, previewRequest())
 	if !result.GetSuccess() {

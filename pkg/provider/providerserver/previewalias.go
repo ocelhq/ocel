@@ -52,9 +52,10 @@ func (h *handlers) EnsurePreviewAlias(ctx context.Context, req *contractv1.Ensur
 	if token == "" {
 		return &contractv1.EnsurePreviewAliasResponse{}, nil
 	}
-	resp := &contractv1.EnsurePreviewAliasResponse{Hostnames: make(map[string]string, len(hosts)), Token: token}
+	front := h.session.edgeFacts()
+	resp := &contractv1.EnsurePreviewAliasResponse{Urls: make(map[string]string, len(hosts)), Token: token}
 	for _, host := range hosts {
-		resp.Hostnames[host.App] = host.Hostname
+		resp.Urls[host.App] = front.FormatURL(host.Hostname)
 	}
 	return resp, nil
 }
