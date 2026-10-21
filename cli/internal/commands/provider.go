@@ -135,13 +135,12 @@ func (i Invocation) openOnCloud(ctx context.Context, check *run.Span, cfg *proje
 	if cloud.Offer.ProviderURL == "" {
 		return nil, &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("%s offers Ocel Cloud and names no provider URL for it, so only `ocel deploy`, `ocel preview up` and `ocel build` reach it, as jobs: name a provider in this project's config to run this against your own account", cloud.ConsoleURL)}
 	}
-	client := console.New(cloud.ConsoleURL)
-	session := cloud.Credentials.AccessToken
-	org, err := pickCloudOrganization(ctx, client, session, cfg.Dir, cloud.ConsoleURL)
+	account := NewConsoleAccount(cloud.ConsoleURL, cloud.Credentials.AccessToken)
+	org, err := pickCloudOrganization(ctx, account, cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
-	tokens := console.NewCloudTokens(client, session, org.ID, scopes...)
+	tokens := console.NewCloudTokens(account.Client, account.Session, org.ID, scopes...)
 	provider, err := providerprocess.StartRemote(ctx, cfg, check, i.Questions, providerprocess.Remote{Name: CloudProviderID, URL: cloud.Offer.ProviderURL, Tokens: tokens})
 	if err != nil {
 		return nil, err

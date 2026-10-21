@@ -67,9 +67,8 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 	defer running.End(&err)
 
 	check := running.Phase(progressv1.Phase_PHASE_CHECK)
-	client := console.New(t.Cloud.ConsoleURL)
-	session := t.Cloud.Credentials.AccessToken
-	org, err := pickCloudOrganization(ctx, client, session, cfg.Dir, t.Cloud.ConsoleURL)
+	account := NewConsoleAccount(t.Cloud.ConsoleURL, t.Cloud.Credentials.AccessToken)
+	org, err := pickCloudOrganization(ctx, account, cfg.Dir)
 	if err != nil {
 		check.End(err)
 		return err
@@ -84,14 +83,14 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 	if t.Derived != "" {
 		check.Say(t.Derived)
 	}
-	link, err := linkCloudProject(ctx, check, client, session, cfg, org, t.Cloud.ConsoleURL)
+	link, err := linkCloudProject(ctx, check, account, cfg, org)
 	check.End(err)
 	if err != nil {
 		return err
 	}
 
 	upload := running.Phase(progressv1.Phase_PHASE_BUILD)
-	jobs := cloud.New(t.Cloud.Offer.APIURL, console.NewCloudTokens(client, session, org.ID, cloudv1.Scope_SCOPE_APPS_READ, cloudv1.Scope_SCOPE_APPS_WRITE))
+	jobs := cloud.New(t.Cloud.Offer.APIURL, console.NewCloudTokens(account.Client, account.Session, org.ID, cloudv1.Scope_SCOPE_APPS_READ, cloudv1.Scope_SCOPE_APPS_WRITE))
 	sourceID, projectPath, err := uploadSource(ctx, upload, cfg, jobs)
 	upload.End(err)
 	if err != nil {
@@ -354,92 +353,61 @@ func reportUpload(span *run.Span) func(cloud.Progress) {
 	}
 }
 
-func pickCloudOrganization(ctx context.Context, client *console.Client, session, projectDir, consoleURL string) (*console.Organization, error) {
-	orgs, err := client.ListOrganizations(ctx, session)
+func pickCloudOrganization(ctx context.Context, account ConsoleAccount, projectDir string) (*console.Organization, error) {
+	orgs, err := account.ListOrganizations(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list your organizations in %s: %w", consoleURL, err)
+		return nil, err
 	}
-	if len(orgs) == 0 {
-		return nil, fmt.Errorf("you belong to no organization in %s yet — create one there first", consoleURL)
-	}
-	find := func(id string) *console.Organization {
-		for i := range orgs {
-			if orgs[i].ID == id {
-				return &orgs[i]
-			}
-		}
-		return nil
-	}
-	link, err := console.ReadLink(projectDir, consoleURL)
+	link, err := console.ReadLink(projectDir, account.URL)
 	if err != nil {
 		return nil, err
 	}
 	if link != nil {
-		if org := find(link.OrganizationID); org != nil {
+		if org := FindOrganization(orgs, func(org console.Organization) bool { return org.ID == link.OrganizationID }); org != nil {
 			return org, nil
 		}
 		return nil, fmt.Errorf("this directory is linked to %s in an organization you no longer belong to — run `ocel link` to link it again", link.ProjectName)
 	}
-	if read, err := client.GetSession(ctx, session); err == nil && read != nil {
-		if org := find(read.Session.ActiveOrganizationID); org != nil {
+	if read, err := account.Client.GetSession(ctx, account.Session); err == nil && read != nil {
+		if org := FindOrganization(orgs, func(org console.Organization) bool { return org.ID == read.Session.ActiveOrganizationID }); org != nil {
 			return org, nil
 		}
 	}
 	if len(orgs) == 1 {
 		return &orgs[0], nil
 	}
-	slugs := make([]string, 0, len(orgs))
-	for _, org := range orgs {
-		slugs = append(slugs, org.Slug)
-	}
 	return nil, clierror.NewInputRequired(
-		fmt.Errorf("you belong to %d organizations in %s and none is active — run `ocel link --org <slug>` to pick the one this project deploys under: %s", len(orgs), consoleURL, strings.Join(slugs, ", ")),
+		fmt.Errorf("you belong to %d organizations in %s and none is active — run `ocel link --org <slug>` to pick the one this project deploys under: %s", len(orgs), account.URL, OrganizationSlugs(orgs)),
 		"ocel link --org <slug>",
 	)
 }
 
-func linkCloudProject(ctx context.Context, check *run.Span, client *console.Client, session string, cfg *project.Project, org *console.Organization, consoleURL string) (*console.Link, error) {
-	if link, err := console.ReadLink(cfg.Dir, consoleURL); err != nil || link != nil {
+func linkCloudProject(ctx context.Context, check *run.Span, account ConsoleAccount, cfg *project.Project, org *console.Organization) (*console.Link, error) {
+	if link, err := console.ReadLink(cfg.Dir, account.URL); err != nil || link != nil {
 		return link, err
 	}
-	if err := client.SetActiveOrganization(ctx, session, org.ID); err != nil {
-		return nil, fmt.Errorf("make %s your active organization in %s: %w", org.Name, consoleURL, err)
-	}
-	selected, err := findOrCreateProject(ctx, check, client, session, cfg.Slug, org)
+	selected, err := findOrCreateProject(ctx, check, account, cfg.Slug, org)
 	if err != nil {
 		return nil, err
 	}
-	link := console.Link{
-		APIURL:         consoleURL,
-		OrganizationID: org.ID,
-		ProjectID:      selected.GetId(),
-		ProjectName:    selected.GetName(),
-	}
-	if err := console.WriteLink(cfg.Dir, link); err != nil {
+	link, err := account.WriteLink(cfg.Dir, org, selected)
+	if err != nil {
 		return nil, err
 	}
-	check.Say(fmt.Sprintf("Linked this directory to %s (%s)", selected.GetSlug(), org.Name))
+	check.Say(LinkedMessage(org, selected))
 	return &link, nil
 }
 
-func findOrCreateProject(ctx context.Context, check *run.Span, client *console.Client, session, slug string, org *console.Organization) (*consolev1.Project, error) {
+func findOrCreateProject(ctx context.Context, check *run.Span, account ConsoleAccount, slug string, org *console.Organization) (*consolev1.Project, error) {
 	find := func() (*consolev1.Project, error) {
-		projects, err := client.ListProjects(ctx, session)
-		if err != nil {
-			return nil, fmt.Errorf("list the projects in %s: %w", org.Name, err)
-		}
-		for _, p := range projects {
-			if p.GetSlug() == slug {
-				return p, nil
-			}
-		}
-		return nil, nil
+		projects, err := account.ListProjects(ctx, org)
+		return FindProject(projects, slug), err
 	}
 	if found, err := find(); err != nil || found != nil {
 		return found, err
 	}
 	creating := check.Child(slug, progress.Creating.Title("the project in "+org.Name))
-	created, err := client.CreateProject(ctx, session, slug, slug)
+	created, err := account.Client.CreateProject(ctx, account.Session, slug, slug)
 	if console.IsConflict(err) {
 		created, err = find()
 		if err == nil && created == nil {
