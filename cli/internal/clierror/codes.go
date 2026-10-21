@@ -75,3 +75,14 @@ func Codes() []string {
 		CodeDevCommandFailed,
 	}
 }
+
+func CloudCodes() []string {
+	return []string{
+		"cloud.timeout",
+		"cloud.interrupted",
+		"cloud.builder",
+		"cloud.source",
+		"cloud.run",
+		"cloud.preview_limit",
+	}
+}

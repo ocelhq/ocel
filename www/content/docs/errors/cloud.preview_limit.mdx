@@ -1,0 +1,10 @@
+---
+title: cloud.preview_limit
+description: The project runs as many preview environments as the organization's plan allows.
+---
+
+Ocel Cloud runs a number of preview environments of each project at once, set by the organization's plan, and refuses a new preview beyond it. A preview that already runs deploys again freely. The message begins with this code, names the plan, its limit and the previews that run.
+
+## Fix
+
+Remove a preview you no longer need with `ocel preview rm`, or upgrade the organization's plan in the console, then run the command again.

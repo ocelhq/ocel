@@ -1,0 +1,10 @@
+---
+title: cloud.source
+description: Ocel Cloud could not unpack the source the CLI uploaded.
+---
+
+Before a job runs, Ocel Cloud unpacks the source the CLI uploaded and finds the project in it. It could not: a file of the source could not be written, a symbolic link points outside the source, or the source has no directory where the job was started for the project. The CLI reports the job as [`cloud.job_failed`](/docs/errors/cloud.job_failed), naming this code and what was wrong.
+
+## Fix
+
+Fix what the message names in the project's directory, such as a symbolic link that leaves it, and run the command again from the project's directory.
