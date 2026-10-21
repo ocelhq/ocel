@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/environment"
+	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -130,7 +131,7 @@ func (f *FakeRemoteProvider) admit(call RemoteCall) (http.Handler, error) {
 	case !strings.HasPrefix(call.Authorization, "Bearer ") || !known:
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("the token is not one Ocel Cloud issued"))
 	case call.Version != f.serves:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("cloud.version_mismatch: this Ocel Cloud serves ocel %s, and was called by ocel %s", f.serves, call.Version))
+		return nil, f.versionUnserved(call.Version)
 	case !sessionIDPattern.MatchString(call.Session):
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is no session id", call.Session))
 	}
@@ -151,6 +152,16 @@ func (f *FakeRemoteProvider) admit(call RemoteCall) (http.Handler, error) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this session belongs to another organization"))
 	}
 	return session.handler, nil
+}
+
+func (f *FakeRemoteProvider) versionUnserved(called string) error {
+	refused := connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this Ocel Cloud serves ocel %s, and was called by ocel %s", f.serves, called))
+	detail, err := connect.NewErrorDetail(&cloudv1.VersionUnserved{Served: []string{f.serves}})
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	refused.AddDetail(detail)
+	return refused
 }
 
 type CloudProject struct {

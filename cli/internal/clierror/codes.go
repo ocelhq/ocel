@@ -30,9 +30,10 @@ const (
 	CodeCloudUnsupported           = "cloud.unsupported"
 	CodeCloudJobFailed             = "cloud.job_failed"
 	CodeCloudJobCanceled           = "cloud.job_canceled"
-	CodeCloudUpgradeRequired       = "cloud.upgrade_required"
 	CodeCloudSourceInvalid         = "cloud.source_invalid"
 	CodeCloudJobContextInvalid     = "cloud.job_context_invalid"
+	CodeCloudVersionUnserved       = "cloud.version_unserved"
+	CodeCloudTokenRefused          = "cloud.token_refused"
 	CodeDoctorChecksFailed         = "doctor.checks_failed"
 	CodeDevCommandFailed           = "dev.command_failed"
 )
@@ -66,9 +67,10 @@ func Codes() []string {
 		CodeCloudUnsupported,
 		CodeCloudJobFailed,
 		CodeCloudJobCanceled,
-		CodeCloudUpgradeRequired,
 		CodeCloudSourceInvalid,
 		CodeCloudJobContextInvalid,
+		CodeCloudVersionUnserved,
+		CodeCloudTokenRefused,
 		CodeDoctorChecksFailed,
 		CodeDevCommandFailed,
 	}

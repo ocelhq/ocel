@@ -1,0 +1,10 @@
+---
+title: cloud.token_refused
+description: Ocel Cloud refused the token the console issued for this command.
+---
+
+The project deploys to Ocel Cloud, so the CLI had the console issue a short-lived Ocel Cloud token for the organization, and Ocel Cloud answered that the token speaks for no one it trusts. You are logged in to the console; the token it issued is the one refused. When Ocel Cloud cannot check a token, because the console is out of its reach, the command fails as unavailable instead, and a job keeps being watched.
+
+## Fix
+
+Run `ocel login`, then run the command again.

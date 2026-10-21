@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cloud"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/cli/internal/wireerror"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -25,8 +24,6 @@ import (
 )
 
 const (
-	versionMismatchPrefix = "cloud.version_mismatch:"
-
 	remotePingAfter   = 30 * time.Second
 	remotePingTimeout = 15 * time.Second
 )
@@ -62,7 +59,7 @@ func StartRemote(ctx context.Context, cfg *project.Project, span *run.Span, ques
 	}
 	t := &remoteTransport{
 		clients: newClients(httpClient, strings.TrimRight(remote.URL, "/"), MaxMessageBytes, cloud.Headers{Tokens: remote.Tokens, Session: session}, wireerror.Interceptor(func(err *connect.Error) *clierror.Error {
-			return cmp.Or(cloudRefusal(remote.URL, err), providerRefusal(err))
+			return cmp.Or(cloud.RefusalOf(remote.URL, err), providerRefusal(err))
 		})),
 		http: httpClient,
 	}
@@ -104,13 +101,3 @@ func (t *remoteTransport) Facts() *contractv1.ProviderFacts { return t.facts }
 func (t *remoteTransport) explainLost(err error) error { return err }
 
 func (t *remoteTransport) Close() { t.http.CloseIdleConnections() }
-
-func cloudRefusal(url string, err *connect.Error) *clierror.Error {
-	switch {
-	case err.Code() == connect.CodeFailedPrecondition && strings.HasPrefix(err.Message(), versionMismatchPrefix):
-		return &clierror.Error{Code: clierror.CodeCloudUpgradeRequired, Cause: fmt.Errorf("ocel %s is a release Ocel Cloud at %s no longer serves — upgrade ocel and run this again: %s", version.Version, url, strings.TrimSpace(strings.TrimPrefix(err.Message(), versionMismatchPrefix)))}
-	case err.Code() == connect.CodeUnauthenticated:
-		return &clierror.Error{Code: clierror.CodeConsoleNotLoggedIn, Cause: fmt.Errorf("the token the console issued is not one Ocel Cloud at %s accepts — run `ocel login` and run this again: %s", url, err.Message())}
-	}
-	return nil
-}
