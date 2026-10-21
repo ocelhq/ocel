@@ -1,6 +1,7 @@
 package clierror
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -13,6 +14,7 @@ import (
 
 type Error struct {
 	Code      string
+	DocsCode  string
 	Message   string
 	Hint      string
 	Retryable bool
@@ -49,7 +51,7 @@ func NewRunError(err error) *streamv1.RunError {
 	}
 	if isPublishedCode(coded.Code) {
 		runError.Code = coded.Code
-		runError.DocsUrl = proto.String(FormatErrorPage(coded.Code))
+		runError.DocsUrl = proto.String(FormatErrorPage(cmp.Or(coded.DocsCode, coded.Code)))
 	}
 	return runError
 }

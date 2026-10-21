@@ -230,6 +230,17 @@ func TestWhatOcelCloudSaysOfAJobReachesTheTerminalWithItsControlCharactersEscape
 	})
 }
 
+func TestAnOcelCloudJobThatFailsWithACodeOfOcelCloudsOwnLinksThatCodesPage(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_FAILED, Error: &cloudv1.JobError{Code: "cloud.builder", Message: "the builder stopped"}}}
+
+	_, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+	got := clierror.NewRunError(err)
+	if got.GetCode() != clierror.CodeCloudJobFailed || got.GetDocsUrl() != clierror.FormatErrorPage("cloud.builder") {
+		t.Fatalf("run error = %v, want %s linking cloud.builder's page", got, clierror.CodeCloudJobFailed)
+	}
+}
+
 func jobReport(outcome consolev1.DeploymentOutcome) *consolev1.Deployment {
 	report := &consolev1.Deployment{
 		Id:          "4bf92f3577b34da6a3ce929d0e0e4736",

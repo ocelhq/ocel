@@ -192,9 +192,14 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 		}
 	default:
 		failure := ended.GetError()
+		var docs string
+		if slices.Contains(clierror.CloudCodes(), failure.GetCode()) {
+			docs = failure.GetCode()
+		}
 		err = &clierror.Error{
-			Code:  clierror.CodeCloudJobFailed,
-			Cause: fmt.Errorf("job %s failed on Ocel Cloud with %s: %s — its log is at %s", printedID, terminal.EscapeControls(cmp.Or(failure.GetCode(), "no error code")), terminal.EscapeControls(cmp.Or(failure.GetMessage(), "no message")), jobURL),
+			Code:     clierror.CodeCloudJobFailed,
+			DocsCode: docs,
+			Cause:    fmt.Errorf("job %s failed on Ocel Cloud with %s: %s — its log is at %s", printedID, terminal.EscapeControls(cmp.Or(failure.GetCode(), "no error code")), terminal.EscapeControls(cmp.Or(failure.GetMessage(), "no message")), jobURL),
 		}
 	}
 	watching.End(err)
