@@ -215,6 +215,9 @@ func TakeProjectRecords(ctx context.Context, b bootstrap.Engine, tier environmen
 }
 
 func takeProjectKeys(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+	if on, err := bootstrap.Keys.HasAPIsOn(ctx, b); err != nil || !on {
+		return err
+	}
 	client, err := b.Clients.KMS()
 	if err != nil {
 		return err

@@ -103,6 +103,11 @@ func DeployedParts() []ResourcePart {
 	return []ResourcePart{Keys, EdgeBucket, CacheBucket, Realtime, Topics}
 }
 
+func (p ResourcePart) HasAPIsOn(ctx context.Context, b Engine) (bool, error) {
+	off, err := b.ListServicesOff(ctx, p.APIs)
+	return len(off) == 0, err
+}
+
 func (p ResourcePart) Items(names names.Names, tier environment.Tier) []Resource {
 	return p.items(names, tier)
 }

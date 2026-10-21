@@ -90,8 +90,8 @@ func forgetSyncWrites(ctx context.Context, b bootstrap.Engine, tier environment.
 			return gcloud.BindProjectRole(ctx, b.Clients, member, syncRecordsRole, variables.RecordsCondition(b.Clients, tier), false)
 		},
 		func() error {
-			off, err := b.ListServicesOff(ctx, bootstrap.Keys.APIs)
-			if err != nil || len(off) > 0 {
+			on, err := bootstrap.Keys.HasAPIsOn(ctx, b)
+			if err != nil || !on {
 				return err
 			}
 			_, err = gcloud.BindKeyRoles(ctx, b.Clients, tier, member, SyncKeyRoles, nil)

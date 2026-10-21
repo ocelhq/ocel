@@ -49,6 +49,9 @@ func storesOf(b bootstrap.Engine) projectStores {
 			return true, nil
 		},
 		keyExists: func(ctx context.Context, name string) (bool, error) {
+			if on, err := bootstrap.Keys.HasAPIsOn(ctx, b); err != nil || !on {
+				return false, err
+			}
 			client, err := b.Clients.KMS()
 			if err != nil {
 				return false, err
@@ -66,6 +69,9 @@ func storesOf(b bootstrap.Engine) projectStores {
 		},
 		takeDatabase: b.TakeTierDatabase,
 		takeKey: func(ctx context.Context, name string) error {
+			if on, err := bootstrap.Keys.HasAPIsOn(ctx, b); err != nil || !on {
+				return err
+			}
 			_, err := b.TakeKey(ctx, name)
 			return err
 		},
