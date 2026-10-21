@@ -35,10 +35,12 @@ const (
 	dockerignoreName = ".dockerignore"
 	envFilePrefix    = ".env"
 	configPrefix     = "ocel."
+	cargoOutput      = "target"
+	virtualenvMarker = "pyvenv.cfg"
 	offendersNamed   = 5
 )
 
-var neverUploaded = []string{gitEntry, buildoutput.StateDir, "node_modules", "target", ".venv", "venv", "__pycache__"}
+var neverUploaded = []string{gitEntry, buildoutput.StateDir, "node_modules", "__pycache__"}
 
 var lockfiles = append(workspace.Lockfiles(), "Cargo.lock", "go.sum", "uv.lock", "poetry.lock", "Pipfile.lock")
 
@@ -133,6 +135,7 @@ func (w *walker) dir(segments []string, inherited []gitignore.Pattern) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", abs, err)
 	}
+	besideCargoManifest := slices.ContainsFunc(listed, func(listing os.DirEntry) bool { return listing.Name() == cargoManifest })
 	for _, listing := range listed {
 		name := listing.Name()
 		if slices.Contains(neverUploaded, name) {
@@ -148,7 +151,7 @@ func (w *walker) dir(segments []string, inherited []gitignore.Pattern) error {
 		mode := info.Mode()
 		switch {
 		case mode.IsDir():
-			if ignored.Match(child, true) || w.dockerExcludes(rel, true) {
+			if isToolOutput(childAbs, name, besideCargoManifest) || ignored.Match(child, true) || w.dockerExcludes(rel, true) {
 				continue
 			}
 			if err := w.dir(child, patterns); err != nil {
@@ -205,6 +208,14 @@ func (w *walker) symlinkTarget(rel, abs string) (string, error) {
 		return "", fmt.Errorf("the symlink %s points at %s, outside %s: replace it with the file, or ignore it in %s", rel, target, w.root, gitignoreName)
 	}
 	return target, nil
+}
+
+func isToolOutput(dir, name string, besideCargoManifest bool) bool {
+	if name == cargoOutput && besideCargoManifest {
+		return true
+	}
+	_, err := os.Lstat(filepath.Join(dir, virtualenvMarker))
+	return err == nil
 }
 
 func alwaysUploaded(name string) bool {
