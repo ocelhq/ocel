@@ -414,6 +414,37 @@ func TestAnOcelCloudJobWaitingForInputHoldsTheRunOnItsPageUntilTheInputIsAnswere
 	}
 }
 
+func TestARunThatStopsWatchingAJobWaitingForInputResumesTheWait(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	invocation.Presentation = clitest.ResolveJSONPresentation
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	fake.JobReads = []*cloudv1.Job{needingValues("in_1", "DATABASE_URL")}
+	reads := 0
+	fake.OnJobRead = func(*cloudv1.Job) {
+		if reads++; reads == 2 {
+			cancel()
+		}
+	}
+
+	out, err := runJobOnCloud(t, ctx, invocation, writeShop(t), commands.CloudJob{Command: "ocel deploy", Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY})
+	if err != nil {
+		t.Fatalf("err = %v, want stopping to watch to succeed", err)
+	}
+	held := false
+	for _, ev := range clitest.RunEvents(t, out) {
+		switch {
+		case ev.GetWaiting() != nil:
+			held = true
+		case ev.GetResumed() != nil:
+			held = false
+		}
+	}
+	if held {
+		t.Fatalf("output = %q, want every wait the run held resumed before it ended", out)
+	}
+}
+
 func TestTheJSONSummaryOfAnOcelCloudRunNamesTheJob(t *testing.T) {
 	invocation, fake := loggedIn(t)
 	invocation.Presentation = clitest.ResolveJSONPresentation
