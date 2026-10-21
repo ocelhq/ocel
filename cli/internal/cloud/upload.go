@@ -16,7 +16,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
-	"github.com/ocelhq/ocel/cli/internal/version"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	"github.com/ocelhq/ocel/pkg/proto/cloud/v1/cloudv1connect"
 )
@@ -33,45 +32,25 @@ const (
 	maxErrorBody      = 512
 )
 
-const VersionHeader = "Ocel-Version"
-
-type TokenSource interface {
-	Ensure(ctx context.Context) (string, error)
-}
-
 type Client struct {
-	apiURL string
-	http   *http.Client
-	tokens TokenSource
-	upload cloudv1connect.UploadServiceClient
-	jobs   cloudv1connect.JobServiceClient
-	sleep  func(ctx context.Context, d time.Duration) error
+	apiURL  string
+	http    *http.Client
+	headers Headers
+	upload  cloudv1connect.UploadServiceClient
+	jobs    cloudv1connect.JobServiceClient
+	sleep   func(ctx context.Context, d time.Duration) error
 }
 
 func New(apiURL string, tokens TokenSource) *Client {
 	c := &Client{
-		apiURL: strings.TrimRight(apiURL, "/"),
-		http:   &http.Client{},
-		tokens: tokens,
-		sleep:  sleep,
+		apiURL:  strings.TrimRight(apiURL, "/"),
+		http:    &http.Client{},
+		headers: Headers{Tokens: tokens},
+		sleep:   sleep,
 	}
-	c.upload = cloudv1connect.NewUploadServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.bearer()))
-	c.jobs = cloudv1connect.NewJobServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.bearer()))
+	c.upload = cloudv1connect.NewUploadServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.headers))
+	c.jobs = cloudv1connect.NewJobServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.headers))
 	return c
-}
-
-func (c *Client) bearer() connect.UnaryInterceptorFunc {
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			token, err := c.tokens.Ensure(ctx)
-			if err != nil {
-				return nil, err
-			}
-			req.Header().Set("Authorization", "Bearer "+token)
-			req.Header().Set(VersionHeader, version.Version)
-			return next(ctx, req)
-		}
-	}
 }
 
 type Progress struct {
@@ -155,17 +134,10 @@ func (c *Client) Commit(ctx context.Context, manifest *cloudv1.SourceManifest) (
 	return committed.GetSourceId(), nil
 }
 
-// put sends one blob as PUT {api_url}/v1/blobs/{digest}: the raw bytes as the body and the
-// Ocel Cloud token as a bearer. Ocel Cloud hashes the body, refuses one that does not match
-// the digest, and answers 2xx once the blob is stored for the caller's tenant, or already was.
 func (c *Client) put(ctx context.Context, source Source, blob sourcearchive.Blob, tally *tally) error {
 	err := c.retry(ctx, func(ctx context.Context) (asked time.Duration, err error) {
 		ctx, cancel := context.WithTimeout(ctx, callTimeout+time.Duration(blob.Size/slowestUpload)*time.Second)
 		defer cancel()
-		token, err := c.tokens.Ensure(ctx)
-		if err != nil {
-			return 0, err
-		}
 		body, err := source.Open(blob.Digest)
 		if err != nil {
 			return 0, err
@@ -182,7 +154,9 @@ func (c *Client) put(ctx context.Context, source Source, blob sourcearchive.Blob
 			return 0, err
 		}
 		req.ContentLength = int64(blob.Size)
-		req.Header.Set("Authorization", "Bearer "+token)
+		if err := c.headers.set(ctx, req.Header); err != nil {
+			return 0, err
+		}
 		req.Header.Set("Content-Type", "application/octet-stream")
 		resp, err := c.http.Do(req)
 		if err != nil {

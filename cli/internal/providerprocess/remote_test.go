@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/cloud"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -58,7 +59,7 @@ func remoteProject(t *testing.T) *project.Project {
 	return project.NewUnconfigured(dir, "shop")
 }
 
-func startRemote(t *testing.T, server *clitest.FakeRemoteProvider, cfg *project.Project, tokens providerprocess.TokenSource) (*providerprocess.Provider, error) {
+func startRemote(t *testing.T, server *clitest.FakeRemoteProvider, cfg *project.Project, tokens cloud.TokenSource) (*providerprocess.Provider, error) {
 	t.Helper()
 	ctx, span := remoteSpan(t)
 	p, err := providerprocess.StartRemote(ctx, cfg, span, providerprocess.Questions{}, providerprocess.Remote{Name: "ocel", URL: server.URL, Tokens: tokens})
@@ -191,6 +192,31 @@ func TestARemoteProviderServingAnotherReleaseFailsWithCloudUpgradeRequired(t *te
 	var coded *clierror.Error
 	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUpgradeRequired {
 		t.Fatalf("open err = %v, want cloud.upgrade_required", err)
+	}
+}
+
+func TestARemoteProviderRedirectedToAnotherHostIsNeverSentTheToken(t *testing.T) {
+	elsewhere := clitest.ServeRemoteProvider(t, fake.NewForProject(fake.Options{}))
+	target, err := url.Parse(elsewhere.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.Host = "localhost:" + target.Port()
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.String()+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(redirecting.Close)
+	ctx, span := remoteSpan(t)
+
+	_, _ = providerprocess.StartRemote(ctx, remoteProject(t), span, providerprocess.Questions{}, providerprocess.Remote{Name: "ocel", URL: redirecting.URL, Tokens: &issuedTokens{tokens: []string{clitest.FakeCloudToken}}})
+	calls := elsewhere.Calls()
+	if len(calls) == 0 {
+		t.Fatal("the redirect was never followed")
+	}
+	for _, call := range calls {
+		if call.Authorization != "" {
+			t.Fatalf("call = %+v, want the other host sent no token", call)
+		}
 	}
 }
 

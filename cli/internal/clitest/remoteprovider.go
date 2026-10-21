@@ -15,8 +15,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/cloud"
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -109,8 +109,8 @@ func (f *FakeRemoteProvider) serve(w http.ResponseWriter, r *http.Request) {
 	call := RemoteCall{
 		Procedure:     r.URL.Path,
 		Authorization: r.Header.Get("Authorization"),
-		Version:       r.Header.Get(providerprocess.VersionHeader),
-		Session:       r.Header.Get(providerprocess.SessionHeader),
+		Version:       r.Header.Get(cloud.VersionHeader),
+		Session:       r.Header.Get(cloud.SessionHeader),
 	}
 	f.mu.Lock()
 	f.calls = append(f.calls, call)

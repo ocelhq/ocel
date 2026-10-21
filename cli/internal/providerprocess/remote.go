@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/cloud"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -23,23 +24,16 @@ import (
 )
 
 const (
-	VersionHeader = "Ocel-Version"
-	SessionHeader = "Ocel-Session"
-
 	versionMismatchPrefix = "cloud.version_mismatch:"
 
 	remotePingAfter   = 30 * time.Second
 	remotePingTimeout = 15 * time.Second
 )
 
-type TokenSource interface {
-	Ensure(ctx context.Context) (string, error)
-}
-
 type Remote struct {
 	Name       string
 	URL        string
-	Tokens     TokenSource
+	Tokens     cloud.TokenSource
 	HTTPClient *http.Client
 }
 
@@ -65,14 +59,9 @@ func StartRemote(ctx context.Context, cfg *project.Project, span *run.Span, ques
 	if httpClient == nil {
 		httpClient = newRemoteHTTPClient()
 	}
-	headed := &http.Client{
-		Transport:     sessionHeaders{next: transportOf(httpClient), tokens: remote.Tokens, session: session},
-		CheckRedirect: httpClient.CheckRedirect,
-		Jar:           httpClient.Jar,
-	}
 	t := &remoteTransport{
-		clients: newClients(headed, strings.TrimRight(remote.URL, "/"), MaxMessageBytes, remoteErrors{url: remote.URL}),
-		http:    headed,
+		clients: newClients(httpClient, strings.TrimRight(remote.URL, "/"), MaxMessageBytes, cloud.Headers{Tokens: remote.Tokens, Session: session}, remoteErrors{url: remote.URL}),
+		http:    httpClient,
 	}
 	if t.facts, err = configure(ctx, t.clients.provider, remote.Name, config, cfg.EdgeSelection()); err != nil {
 		return nil, err
@@ -85,13 +74,6 @@ func newRemoteHTTPClient() *http.Client {
 	base := http.DefaultTransport.(*http.Transport).Clone()
 	base.HTTP2 = &http.HTTP2Config{SendPingTimeout: remotePingAfter, PingTimeout: remotePingTimeout}
 	return &http.Client{Transport: base}
-}
-
-func transportOf(c *http.Client) http.RoundTripper {
-	if c.Transport == nil {
-		return http.DefaultTransport
-	}
-	return c.Transport
 }
 
 func newSessionID() (string, error) {
@@ -119,27 +101,6 @@ func (t *remoteTransport) Facts() *contractv1.ProviderFacts { return t.facts }
 func (t *remoteTransport) explainLost(err error) error { return err }
 
 func (t *remoteTransport) Close() { t.http.CloseIdleConnections() }
-
-type sessionHeaders struct {
-	next    http.RoundTripper
-	tokens  TokenSource
-	session string
-}
-
-func (h sessionHeaders) RoundTrip(req *http.Request) (*http.Response, error) {
-	token, err := h.tokens.Ensure(req.Context())
-	if err != nil {
-		if req.Body != nil {
-			req.Body.Close()
-		}
-		return nil, fmt.Errorf("issue a token for Ocel Cloud: %w", err)
-	}
-	req = req.Clone(req.Context())
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set(VersionHeader, version.Version)
-	req.Header.Set(SessionHeader, h.session)
-	return h.next.RoundTrip(req)
-}
 
 type remoteErrors struct{ url string }
 
