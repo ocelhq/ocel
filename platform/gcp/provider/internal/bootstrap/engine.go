@@ -173,7 +173,7 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	replacedParts, err := b.SurveyReplacedParts(ctx, read)
+	replacedParts, err := b.SurveyReplacedParts(ctx, read, named)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -231,7 +231,7 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 	if err := b.preflight(ctx, read, req.Parts); err != nil {
 		return err
 	}
-	replacedParts, err := b.SurveyReplacedParts(ctx, read)
+	replacedParts, err := b.SurveyReplacedParts(ctx, read, named)
 	if err != nil {
 		return err
 	}

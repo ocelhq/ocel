@@ -382,7 +382,7 @@ func TestTheBootstrapARefusedDeployNamesReplacesATierKeyWhosePartIsNotRecorded(t
 		t.Fatalf("the keys part is recorded after the refusal: %t, %v, want no record, so only the bootstrap's own survey finds the key", present, err)
 	}
 
-	replaced, err := b.SurveyReplacedParts(ctx, bootstrap.Survey{Tier: tier})
+	replaced, err := b.SurveyReplacedParts(ctx, bootstrap.Survey{Tier: tier}, nil)
 	if err != nil {
 		t.Fatalf("SurveyReplacedParts() = %v", err)
 	}
@@ -513,6 +513,35 @@ func TestABootstrapConsentingToReplacementsMintsANewPrimaryForADestroyedTierKeyN
 	}
 	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, bootstrap.KeysPart); err != nil || !present {
 		t.Errorf("the keys part is recorded %t, %v after the bootstrap replaced its key, want it recorded", present, err)
+	}
+}
+
+func TestABootstrapRemovingTheKeysPartNeitherPlansNorRefusesNorMakesReplacingItsDestroyedKey(t *testing.T) {
+	t.Parallel()
+	tier := environment.TierProduction
+	removing := provider.BootstrapRequest{Tier: tier, Remove: []string{bootstrap.KeysPart}}
+
+	b, _ := destroyingTheTierKey(t)
+	plan, err := b.Plan(t.Context(), removing)
+	if err != nil {
+		t.Fatalf("Plan() removing keys = %v", err)
+	}
+	if at := slices.IndexFunc(plan.Groups, func(group provider.ChangeGroup) bool { return group.Part == bootstrap.KeysPart }); at >= 0 {
+		t.Errorf("Plan() removing keys plans %+v, want no keys part replaced by the run that removes it", plan.Groups[at])
+	}
+
+	for _, consented := range []bool{false, true} {
+		b, server := destroyingTheTierKey(t)
+		removing.RefuseReplacements = !consented
+		if err := b.Apply(t.Context(), removing, nil); err != nil {
+			t.Errorf("Apply() removing keys (consented %t) = %v, want nothing refused: the run replaces nothing it removes", consented, err)
+		}
+		if len(server.Minted) != 0 {
+			t.Errorf("Apply() removing keys (consented %t) minted %v, want nothing: the run removes the keys part", consented, server.Minted)
+		}
+		if _, present, err := stackrecords.ReadBootstrapPart(t.Context(), b.Records, tier, bootstrap.KeysPart); err != nil || present {
+			t.Errorf("the keys part is recorded %t, %v after a run removing it, want no record", present, err)
+		}
 	}
 }
 
