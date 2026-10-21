@@ -138,7 +138,7 @@ var bootstrapRoles = []string{
 	"roles/compute.networkAdmin",
 	"roles/cloudsql.viewer",
 	"roles/cloudtasks.admin",
-	"roles/logging.viewer",
+	"roles/logging.viewAccessor",
 	"roles/logging.configWriter",
 	"roles/resourcemanager.tagAdmin",
 	gcloud.TierTagUserRole,
