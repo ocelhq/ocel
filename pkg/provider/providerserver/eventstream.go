@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -247,10 +248,18 @@ func failureResult(err error) *progressv1.OperationEvent {
 		Level: progressv1.Level_LEVEL_ERROR,
 		Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 			Success:     false,
-			Error:       err.Error(),
+			Error:       messageOf(err),
 			ConnectCode: refusedWith(err),
 		}},
 	}
+}
+
+func messageOf(err error) string {
+	var rpcErr *connect.Error
+	if !errors.As(err, &rpcErr) {
+		return err.Error()
+	}
+	return strings.Replace(err.Error(), rpcErr.Error(), rpcErr.Message(), 1)
 }
 
 func refusedWith(err error) string {
