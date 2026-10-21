@@ -81,25 +81,7 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 }
 
 func (p *Provider) partsUsedBy(pre provider.DeployPreflight) ([]string, error) {
-	used, err := p.components().Preflight(pre.Resources)
-	if err != nil {
-		return nil, err
-	}
-	for _, part := range (deployUse{deploy: pre.Deploy, front: pre.Edge, resources: pre.Resources, usages: pre.Apps, uses: pre.Uses}).parts() {
-		if !slices.Contains(used, part.Name) {
-			used = append(used, part.Name)
-		}
-	}
-	if pre.Edge == alb.Kind {
-		used = append(used, albpart.PartName)
-	}
-	var ordered []string
-	for _, each := range tierParts() {
-		if slices.Contains(used, each.Name) {
-			ordered = append(ordered, each.Name)
-		}
-	}
-	return ordered, nil
+	return newDeployUse(pre).partNames(p.components())
 }
 
 func deployAPIs(pre provider.DeployPreflight) []string {
