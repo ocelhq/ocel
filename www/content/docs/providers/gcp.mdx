@@ -559,10 +559,12 @@ A bootstrap needs `roles/datastore.owner`, `roles/storage.admin`, `roles/cloudkm
 `roles/artifactregistry.admin`, `roles/iam.serviceAccountAdmin`, `roles/iam.serviceAccountUser`,
 `roles/iam.roleAdmin`, `roles/resourcemanager.projectIamAdmin`, `roles/run.admin`,
 `roles/memorystore.admin`, `roles/pubsub.admin`, `roles/cloudscheduler.admin`,
-`roles/logging.viewer`, `roles/logging.configWriter`, `roles/resourcemanager.tagAdmin` and
+`roles/logging.viewAccessor`, `roles/logging.configWriter`, `roles/resourcemanager.tagAdmin` and
 `roles/resourcemanager.tagUser`, and,
 to take down the parts deploys added, `roles/compute.networkAdmin`, `roles/cloudsql.viewer` and
 `roles/cloudtasks.admin`. Anything missing is named back to you before anything is created.
+`roles/logging.viewAccessor` is held on the project, so `ocel logs` run with the bootstrap
+credential reads through both tiers' log views.
 
 ### The deploy credential
 

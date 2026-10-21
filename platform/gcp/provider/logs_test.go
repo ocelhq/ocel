@@ -146,7 +146,7 @@ func TestEachCredentialIsGrantedTheRoleThatReadsLogEntries(t *testing.T) {
 		t.Fatalf("NewProvider() = %v", err)
 	}
 
-	for purpose, role := range map[edge.CredentialPurpose]string{edge.PurposeDeploy: "roles/logging.viewAccessor", edge.PurposeBootstrap: "roles/logging.viewer"} {
+	for purpose, role := range map[edge.CredentialPurpose]string{edge.PurposeDeploy: "roles/logging.viewAccessor", edge.PurposeBootstrap: "roles/logging.viewAccessor"} {
 		document, err := p.Credentials().Permissions(purpose, environment.TierProduction)
 		if err != nil {
 			t.Fatalf("Permissions(%s) error = %v", purpose, err)
@@ -154,7 +154,7 @@ func TestEachCredentialIsGrantedTheRoleThatReadsLogEntries(t *testing.T) {
 		if !slices.ContainsFunc(strings.Split(document.Document, "\n"), func(line string) bool {
 			return line == role || strings.HasPrefix(line, role+", ")
 		}) {
-			t.Errorf("the %s credential is granted %q, want %s among them: a log read lists Cloud Logging entries", purpose, document.Document, role)
+			t.Errorf("the %s credential is granted %q, want %s among them: a log read lists Cloud Logging entries through the tier's log view", purpose, document.Document, role)
 		}
 	}
 }
