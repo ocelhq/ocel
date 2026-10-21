@@ -56,7 +56,7 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	if loadErr == nil && !force && sameConsole(existing.APIURL, apiURL) {
 		offer, err := console.NewCloudOffers(dependencies.LoadCredentials, dependencies.SaveCredentials).Resolve(ctx, existing)
 		if asJSON {
-			return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: existing.Email, ConsoleUrl: apiURL, Cloud: cloudOfferProto(offer)})
+			return terminal.WriteResultJSON(out, loginResult(existing.Email, apiURL, offer, err))
 		}
 		fmt.Fprintf(out, "Already logged in as %s at %s. Pass --force to log in again.\n", identity(existing), apiURL)
 		printCloudOffer(out, apiURL, offer, err)
@@ -111,7 +111,7 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	}
 
 	if asJSON {
-		return terminal.WriteResultJSON(out, &resultv1.LoginResult{Email: creds.Email, ConsoleUrl: apiURL, Cloud: cloudOfferProto(offer)})
+		return terminal.WriteResultJSON(out, loginResult(creds.Email, apiURL, offer, offerErr))
 	}
 	fmt.Fprintf(out, "%s Logged in as %s\n", p.PassMark(), identity(creds))
 	if store == console.FileStore {
@@ -121,11 +121,15 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	return nil
 }
 
-func cloudOfferProto(offer *console.CloudOffer) *consolev1.CloudOffer {
-	if offer == nil {
-		return nil
+func loginResult(email, apiURL string, offer *console.CloudOffer, offerErr error) *resultv1.LoginResult {
+	result := &resultv1.LoginResult{Email: email, ConsoleUrl: apiURL}
+	switch {
+	case offerErr != nil:
+		result.CloudError = offerErr.Error()
+	case offer != nil:
+		result.Cloud = &consolev1.CloudOffer{ApiUrl: offer.APIURL, ProviderUrl: offer.ProviderURL, Audience: offer.Audience}
 	}
-	return &consolev1.CloudOffer{ApiUrl: offer.APIURL, ProviderUrl: offer.ProviderURL, Audience: offer.Audience}
+	return result
 }
 
 func printCloudOffer(out io.Writer, apiURL string, offer *console.CloudOffer, err error) {

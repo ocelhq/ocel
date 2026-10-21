@@ -478,6 +478,8 @@ message LoginResult {
   string console_url = 2;
 
   console.v1.CloudOffer cloud = 3;
+
+  string cloud_error = 4;
 }
 
 message LogoutResult {

@@ -3246,6 +3246,7 @@ type LoginResult struct {
 	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
 	ConsoleUrl    string                 `protobuf:"bytes,2,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
 	Cloud         *v12.CloudOffer        `protobuf:"bytes,3,opt,name=cloud,proto3" json:"cloud,omitempty"`
+	CloudError    string                 `protobuf:"bytes,4,opt,name=cloud_error,json=cloudError,proto3" json:"cloud_error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3299,6 +3300,13 @@ func (x *LoginResult) GetCloud() *v12.CloudOffer {
 		return x.Cloud
 	}
 	return nil
+}
+
+func (x *LoginResult) GetCloudError() string {
+	if x != nil {
+		return x.CloudError
+	}
+	return ""
 }
 
 type LogoutResult struct {
@@ -4761,12 +4769,14 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\x06groups\x18\x01 \x03(\v2\x1e.cli.result.v1.PermissionGroupR\x06groups\"_\n" +
 	"\x0fPermissionGroup\x12\x18\n" +
 	"\aheading\x18\x01 \x01(\tR\aheading\x122\n" +
-	"\bdocument\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\bdocument\"r\n" +
+	"\bdocument\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\bdocument\"\x93\x01\n" +
 	"\vLoginResult\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1f\n" +
 	"\vconsole_url\x18\x02 \x01(\tR\n" +
 	"consoleUrl\x12,\n" +
-	"\x05cloud\x18\x03 \x01(\v2\x16.console.v1.CloudOfferR\x05cloud\"V\n" +
+	"\x05cloud\x18\x03 \x01(\v2\x16.console.v1.CloudOfferR\x05cloud\x12\x1f\n" +
+	"\vcloud_error\x18\x04 \x01(\tR\n" +
+	"cloudError\"V\n" +
 	"\fLogoutResult\x12\x1d\n" +
 	"\n" +
 	"logged_out\x18\x01 \x01(\bR\tloggedOut\x12'\n" +
