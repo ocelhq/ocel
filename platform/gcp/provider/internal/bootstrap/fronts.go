@@ -78,14 +78,12 @@ func (b Engine) eachFront(parts []string, visit func(provider.Part, edge.Edge) e
 	return nil
 }
 
-var frontedParts = []ResourcePart{Keys, EdgeBucket}
+var frontedParts = []string{KeysPart, EdgeBucketPart}
 
 func (b Engine) raiseParts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if len(b.fronted(req.Parts)) > 0 {
-		for _, each := range frontedParts {
-			if err := b.EnsurePart(ctx, req.Tier, "", each.For(b, req.Tier)); err != nil {
-				return err
-			}
+		if err := b.ensureParts(ctx, req.Tier, "", frontedParts); err != nil {
+			return err
 		}
 	}
 	return b.RaiseFronts(ctx, req, progress)
@@ -95,17 +93,7 @@ func (b Engine) PlanFrontedParts(ctx context.Context, req provider.BootstrapRequ
 	if len(b.fronted(req.Parts)) == 0 {
 		return nil, nil
 	}
-	var groups []provider.ChangeGroup
-	for _, each := range frontedParts {
-		group, planned, err := b.planPart(ctx, req.Tier, each.For(b, req.Tier))
-		if err != nil {
-			return nil, err
-		}
-		if planned {
-			groups = append(groups, group)
-		}
-	}
-	return groups, nil
+	return b.PlanParts(ctx, req.Tier, frontedParts)
 }
 
 func (b Engine) summaryOf(name string) string {

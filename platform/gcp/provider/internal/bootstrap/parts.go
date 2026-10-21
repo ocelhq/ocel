@@ -232,17 +232,20 @@ func (b Engine) RepairParts(ctx context.Context, tier environment.Tier) ([]strin
 }
 
 func (b Engine) AddParts(ctx context.Context, pre provider.DeployPreflight, names []string) error {
-	tier := pre.Deploy.Tier
+	return b.ensureParts(ctx, pre.Deploy.Tier, pre.Deploy.Slug, names)
+}
+
+func (b Engine) ensureParts(ctx context.Context, tier environment.Tier, project string, names []string) error {
 	for _, want := range b.listDeployedParts(tier) {
 		if !slices.Contains(names, want.Name) {
 			continue
 		}
 		if want.Claim != nil {
-			if err := want.Claim(ctx, pre.Deploy.Slug); err != nil {
+			if err := want.Claim(ctx, project); err != nil {
 				return err
 			}
 		}
-		if err := b.EnsurePart(ctx, tier, pre.Deploy.Slug, want); err != nil {
+		if err := b.EnsurePart(ctx, tier, project, want); err != nil {
 			return err
 		}
 	}
