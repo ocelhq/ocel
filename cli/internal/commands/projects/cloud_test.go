@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -44,8 +45,11 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 				t.Fatalf("run = %q, stdout = %q, want %q named as a deploy names it", got.run, got.stdout, want)
 			}
 		}
-		if activated := project.Cloud.ActivatedOrgs; len(activated) != 1 || activated[0] != "org_1" {
-			t.Fatalf("activated %v, want the linked project's organization made active before a token is issued", activated)
+		if activated := project.Cloud.ActivatedOrgs; len(activated) != 0 {
+			t.Fatalf("activated %v, want the console's active organization left alone", activated)
+		}
+		if orgs := project.Cloud.TokenOrgs; len(orgs) == 0 || slices.ContainsFunc(orgs, func(org string) bool { return org != "org_1" }) {
+			t.Fatalf("tokens issued for %v, want each for org_1, the linked project's organization", orgs)
 		}
 	})
 
