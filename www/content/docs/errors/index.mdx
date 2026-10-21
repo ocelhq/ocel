@@ -57,6 +57,19 @@ A failure with no code reports `internal`. It has no page, because it means Ocel
 | [`cloud.version_unserved`](/docs/errors/cloud.version_unserved) | Ocel Cloud does not serve this release of the CLI. |
 | [`cloud.token_refused`](/docs/errors/cloud.token_refused) | Ocel Cloud refused the token the console issued for this command. |
 
+## Ocel Cloud jobs
+
+A job that fails on Ocel Cloud ends the command with [`cloud.job_failed`](/docs/errors/cloud.job_failed), and its message names the job's own code: one of the CLI's codes above, from the run inside the job, or one of these, from Ocel Cloud itself.
+
+| Code | Meaning |
+| --- | --- |
+| [`cloud.timeout`](/docs/errors/cloud.timeout) | The job ran on Ocel Cloud longer than a job may, and was stopped. |
+| [`cloud.interrupted`](/docs/errors/cloud.interrupted) | Ocel Cloud stopped while the job ran. |
+| [`cloud.builder`](/docs/errors/cloud.builder) | Ocel Cloud could not run the job. |
+| [`cloud.source`](/docs/errors/cloud.source) | Ocel Cloud could not unpack the source the CLI uploaded. |
+| [`cloud.run`](/docs/errors/cloud.run) | The ocel run inside the job failed without naming an error code. |
+| [`cloud.preview_limit`](/docs/errors/cloud.preview_limit) | The project runs as many preview environments as the organization's plan allows. |
+
 ## Runs
 
 | Code | Meaning |

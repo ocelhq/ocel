@@ -50,8 +50,19 @@ func TestEveryPublishedCodeHasADocsPageItsDocsURLPointsAt(t *testing.T) {
 	}
 }
 
+func TestEveryCodeOcelCloudReportsHasADocsPage(t *testing.T) {
+	for _, code := range clierror.CloudCodes() {
+		if _, err := os.Stat(filepath.Join(errorPagesDir, code+".mdx")); err != nil {
+			t.Errorf("Ocel Cloud's code %q has no docs page: %v", code, err)
+		}
+	}
+}
+
 func TestEveryDocsPageNamesAPublishedCode(t *testing.T) {
 	published := registeredCodes()
+	for _, code := range clierror.CloudCodes() {
+		published[code] = true
+	}
 	entries, err := os.ReadDir(errorPagesDir)
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +73,7 @@ func TestEveryDocsPageNamesAPublishedCode(t *testing.T) {
 			continue
 		}
 		if code := strings.TrimSuffix(name, ".mdx"); !published[code] {
-			t.Errorf("%s documents %q, which the CLI never raises", name, code)
+			t.Errorf("%s documents %q, which neither the CLI nor Ocel Cloud reports", name, code)
 		}
 	}
 }

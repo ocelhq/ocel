@@ -1,0 +1,10 @@
+---
+title: cloud.builder
+description: Ocel Cloud could not run the job.
+---
+
+The job never ran to its end, because Ocel Cloud's builder failed to start or run it: the failure is Ocel Cloud's own, not the project's. The CLI reports the job as [`cloud.job_failed`](/docs/errors/cloud.job_failed), naming this code and the builder's message.
+
+## Fix
+
+Run the command again. If it keeps failing, report the job's id and message to the operator of your Ocel Cloud.

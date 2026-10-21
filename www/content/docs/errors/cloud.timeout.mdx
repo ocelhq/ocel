@@ -1,0 +1,10 @@
+---
+title: cloud.timeout
+description: The job ran on Ocel Cloud longer than a job may, and was stopped.
+---
+
+Ocel Cloud gives each job a fixed time to run, waiting for input included, and stops a job that runs past it. The CLI reports the job as [`cloud.job_failed`](/docs/errors/cloud.job_failed), naming this code and how long the job ran.
+
+## Fix
+
+Open the job's page in the console and read its log for the step that ran long. Answer a job that waits for input promptly, then run the command again.

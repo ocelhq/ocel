@@ -1,0 +1,10 @@
+---
+title: cloud.run
+description: The ocel run inside the job failed without naming an error code.
+---
+
+Each job runs `ocel` inside Ocel Cloud's builder, and that run failed, or ended, without a code of its own: it crashed, or exited before it reported how it ended. A run that fails with a code reports that code instead. The CLI reports the job as [`cloud.job_failed`](/docs/errors/cloud.job_failed), naming this code and the end of the run's output.
+
+## Fix
+
+Open the job's page in the console and read its log for the cause, fix it, and run the command again.
