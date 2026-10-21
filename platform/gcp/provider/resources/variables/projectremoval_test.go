@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -98,5 +99,26 @@ func TestRemovingAProjectLeavesNeitherOfItsDatabasesNorItsKeyBehind(t *testing.T
 	}
 	if changes, err := planRemoveProject(context.Background(), engine, held.stores(), tier, "shop"); err != nil || len(changes) != 0 {
 		t.Errorf("removing shop again plans %v, %v, want nothing left to take", changes, err)
+	}
+}
+
+func TestRemovingAProjectOrItsTierWithCloudKMSOffAsksForNoKey(t *testing.T) {
+	t.Parallel()
+	server := googletest.GrantedIAM()
+	server.ServicesOff = []string{"cloudkms.googleapis.com"}
+	b := bootstrap.Engine{Clients: server.Open(t)}
+	ctx := context.Background()
+	tier := environment.TierProduction
+	key := ports.ProjectKey(tier, "shop")
+	stores := storesOf(b)
+
+	if held, err := stores.keyExists(ctx, key); err != nil || held {
+		t.Errorf("keyExists(%s) with Cloud KMS off = %t, %v, want no key: none can be made while it is off", key, held, err)
+	}
+	if err := stores.takeKey(ctx, key); err != nil {
+		t.Errorf("takeKey(%s) with Cloud KMS off = %v, want the project removed", key, err)
+	}
+	if err := takeProjectKeys(ctx, b, tier); err != nil {
+		t.Errorf("takeProjectKeys() with Cloud KMS off = %v, want the tier removed", err)
 	}
 }
