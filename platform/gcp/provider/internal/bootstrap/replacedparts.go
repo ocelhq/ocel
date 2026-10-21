@@ -24,10 +24,13 @@ func (p ResourcePart) replaceable(b Engine, tier environment.Tier) []Resource {
 	return items
 }
 
-func (b Engine) SurveyReplacedParts(ctx context.Context, base Survey) (ReplacedParts, error) {
+func (b Engine) SurveyReplacedParts(ctx context.Context, base Survey, removing []string) (ReplacedParts, error) {
 	tier := base.Tier
 	var replaced ReplacedParts
 	for _, each := range DeployedParts() {
+		if slices.Contains(removing, each.Name) {
+			continue
+		}
 		items := each.replaceable(b, tier)
 		if len(items) == 0 {
 			continue
