@@ -163,7 +163,7 @@ func declaringATaskOf(project string) provider.DeployPreflight {
 func TestADryDeployDeclaringATaskPlansItsProjectsWritableDatabaseAndMakesNothing(t *testing.T) {
 	database := ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")
 	p := failingOnAnyCall(t)
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics)
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics, bootstrap.Keys)
 	if planned := plannedBy(t, p, declaringATaskOf("shop")); !plansWritableDatabase(planned, database) {
 		t.Errorf("a dry deploy declaring a task planned %+v, want %s created", planned, database)
 	}
@@ -171,7 +171,7 @@ func TestADryDeployDeclaringATaskPlansItsProjectsWritableDatabaseAndMakesNothing
 
 func TestTheFirstDeployDeclaringATaskMakesItsProjectsWritableDatabaseAndAnotherProjectsIsStillPlanned(t *testing.T) {
 	p, _ := deployingNetworks(t)
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics)
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics, bootstrap.Keys)
 
 	if err := p.ApplyPreflight(context.Background(), declaringATaskOf("shop")); err != nil {
 		t.Fatalf("ApplyPreflight() = %v", err)

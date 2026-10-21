@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -123,15 +124,15 @@ func TestADeployAddsThePartsWhatItDeclaresAndShipsNeedOnFirstUse(t *testing.T) {
 	}{
 		"a realtime channel": {
 			pre:  provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction}, Resources: []provider.Resource{{Name: "chat", Type: provider.BindingRealtime}}},
-			want: []string{bootstrap.RealtimePart},
+			want: []string{bootstrap.RealtimePart, bootstrap.KeysPart},
 		},
 		"a topic": {
 			pre:  provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction}, Resources: []provider.Resource{{Name: "orders", Type: provider.BindingTopic, Topic: &provider.TopicSpec{}}}},
-			want: []string{bootstrap.TopicsPart},
+			want: []string{bootstrap.TopicsPart, bootstrap.KeysPart},
 		},
 		"a task": {
 			pre:  declaringATask(),
-			want: []string{bootstrap.TopicsPart},
+			want: []string{bootstrap.TopicsPart, bootstrap.KeysPart},
 		},
 		"a database": {
 			pre:  declaringADatabase("17"),
@@ -139,7 +140,11 @@ func TestADeployAddsThePartsWhatItDeclaresAndShipsNeedOnFirstUse(t *testing.T) {
 		},
 		"a kv store": {
 			pre:  declaringAStore(1 << 30),
-			want: []string{network.PartName},
+			want: []string{network.PartName, bootstrap.KeysPart},
+		},
+		"a bucket": {
+			pre:  provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction}, Resources: []provider.Resource{{Name: "uploads", Type: provider.BindingBucket}}},
+			want: []string{bootstrap.KeysPart},
 		},
 		"a secret value": {
 			pre:  deployingApps(environment.TierProduction, secret),
@@ -202,9 +207,34 @@ func TestADryDeployOfARealtimeChannelPlansTheRealtimePartAndMakesNothing(t *test
 		t.Fatalf("PlanPreflight() = %v", err)
 	}
 	account := namesOf(t, p).RealtimeAccount(environment.TierProduction)
-	if len(plan.Groups) != 1 || plan.Groups[0].Part != bootstrap.RealtimePart || plan.Groups[0].Action != provider.ActionCreate ||
-		len(plan.Groups[0].Changes) != 1 || plan.Groups[0].Changes[0].Name != account || !strings.HasPrefix(plan.Groups[0].Reason, "added on first use") {
+	at := slices.IndexFunc(plan.Groups, func(group provider.ChangeGroup) bool { return group.Part == bootstrap.RealtimePart })
+	if at < 0 || plan.Groups[at].Action != provider.ActionCreate ||
+		len(plan.Groups[at].Changes) != 1 || plan.Groups[at].Changes[0].Name != account || !strings.HasPrefix(plan.Groups[at].Reason, "added on first use") {
 		t.Errorf("a dry deploy of a realtime channel planned %+v, want the %s part added on first use with the %s account", plan.Groups, bootstrap.RealtimePart, account)
+	}
+}
+
+func TestADeployDeclaringAResourcePlansTheKeysItsPublishedBindingIsSealedUnder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tier := environment.TierProduction
+	pre := provider.DeployPreflight{
+		Deploy:    provider.DeploySpec{Tier: tier, Slug: "shop", Apps: []provider.AppEntry{shippingApp("api", buildoutput.FrameworkGo)}},
+		Resources: []provider.Resource{{Name: "uploads", Type: provider.BindingBucket}},
+	}
+	p, server := sealingWithNoKeys(t)
+	parts, err := p.partsUsedBy(pre)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Cipher().Seal(ctx, tier, seal.BindToProject("shop", "binding", string(tier), "production", "uploads"), []byte(`{"bucket":"b"}`)); err != nil {
+		t.Fatalf("Seal() of the bucket's published binding = %v", err)
+	}
+	if !server.HasKeyRing(gcloud.KeyRingPath(p.resolved)) || !server.HasKey(gcloud.KeyPath(p.resolved, string(tier))) {
+		t.Fatal("publishing the bucket's binding made no key ring or tier key, so this test proves nothing")
+	}
+	if !slices.Contains(parts, bootstrap.KeysPart) {
+		t.Errorf("partsUsedBy() of a deploy declaring a bucket = %v, want the keys part its published binding's seal adds, so the plan, the record and the price name it", parts)
 	}
 }
 

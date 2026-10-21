@@ -121,9 +121,9 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 
 	counts := typeCounts(set)
 	if counts["google_cloud_run_v2_service"] != 3 || counts["google_cloud_scheduler_job"] != 1 || counts["google_storage_bucket"] != 2 || counts["google_compute_global_forwarding_rule"] != 0 ||
-		counts["google_kms_crypto_key"] != 0 || counts["google_service_account"] != 0 {
+		counts["google_kms_key_ring"] != 1 || counts["google_kms_crypto_key"] != 2 || counts["google_service_account"] != 0 {
 		t.Errorf("counts = %v, want the two apps' services and the env source sync's with its schedule, the state bucket and the one uploads stores into, "+
-			"and no load balancer, key or account: a node app and a container served direct, opening no value, add no part", counts)
+			"the key ring with the tier's key and shop's, which the binding uploads publishes is sealed under, and no load balancer or account", counts)
 	}
 	for _, r := range set.GetResources() {
 		if r.GetVendor() != "gcp" || r.GetRegion() != "europe-west1" {
