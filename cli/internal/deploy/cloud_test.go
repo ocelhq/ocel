@@ -85,23 +85,25 @@ func TestADeployRefusesNoWaitWhenTheProjectDoesNotRunOnOcelCloud(t *testing.T) {
 }
 
 func TestADeployToOcelCloudRefusesWhatOnlyALocalDeployDoes(t *testing.T) {
-	for flag, opts := range map[string]Options{"--dry": {Dry: true}, "--prebuilt": {Prebuilt: true}} {
-		t.Run(flag, func(t *testing.T) {
-			fake := clitest.ServeOcelCloud(t)
-			dependencies := newTestDependencies()
-			fake.LogIn(&dependencies.Invocation)
-			root := t.TempDir()
-			clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop"}`)
+	for _, target := range []Target{Production(""), Preview("feature", false)} {
+		for flag, opts := range map[string]Options{"--dry": {Dry: true}, "--prebuilt": {Prebuilt: true}, "--yes": {Yes: true}} {
+			t.Run(target.command()+" "+flag, func(t *testing.T) {
+				fake := clitest.ServeOcelCloud(t)
+				dependencies := newTestDependencies()
+				fake.LogIn(&dependencies.Invocation)
+				root := t.TempDir()
+				clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop"}`)
 
-			err := To(t.Context(), dependencies, root, Production(""), opts, io.Discard, io.Discard, strings.NewReader(""))
-			var coded *clierror.Error
-			if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), flag) {
-				t.Fatalf("err = %v, want %s refused on Ocel Cloud", err, flag)
-			}
-			if fake.Committed != nil {
-				t.Fatal("uploaded the source of a run it refused")
-			}
-		})
+				err := To(t.Context(), dependencies, root, target, opts, io.Discard, io.Discard, strings.NewReader(""))
+				var coded *clierror.Error
+				if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), flag) {
+					t.Fatalf("err = %v, want %s refused on Ocel Cloud", err, flag)
+				}
+				if fake.Committed != nil || len(fake.Started) != 0 {
+					t.Fatal("uploaded the source of a run it refused, or started its job")
+				}
+			})
+		}
 	}
 }
 
