@@ -199,6 +199,37 @@ func TestAnOcelCloudJobThatFailsFailsTheRunWithItsErrorAndLink(t *testing.T) {
 	}
 }
 
+func TestWhatOcelCloudSaysOfAJobReachesTheTerminalWithItsControlCharactersEscaped(t *testing.T) {
+	const clear = "\x1b[2J"
+	t.Run("a job that succeeds", func(t *testing.T) {
+		invocation, fake := loggedIn(t)
+		fake.JobReads = []*cloudv1.Job{
+			{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_RUNNING, Step: "Building" + clear},
+			{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED, Result: &cloudv1.JobResult{
+				Urls:         []string{"https://shop.ocel.app" + clear},
+				Builds:       []*cloudv1.AppBuild{{App: "web" + clear, BuildId: "b1" + clear}},
+				DeploymentId: "d1" + clear,
+			}},
+		}
+		out, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out, "\x1b") || !strings.Contains(out, `Building\u001b[2J`) || !strings.Contains(out, `https://shop.ocel.app\u001b[2J`) {
+			t.Fatalf("output = %q, want each escape Ocel Cloud sent shown escaped", out)
+		}
+	})
+
+	t.Run("a job that fails", func(t *testing.T) {
+		invocation, fake := loggedIn(t)
+		fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_FAILED, Error: &cloudv1.JobError{Code: "build.failed" + clear, Message: "app web failed" + clear}}}
+		_, err := runOnCloud(t, invocation, writeShop(t), "ocel deploy")
+		if err == nil || strings.Contains(err.Error(), "\x1b") || !strings.Contains(err.Error(), `app web failed\u001b[2J`) {
+			t.Fatalf("err = %q, want the failure with its escapes shown escaped", err)
+		}
+	})
+}
+
 func jobReport(outcome consolev1.DeploymentOutcome) *consolev1.Deployment {
 	report := &consolev1.Deployment{
 		Id:          "4bf92f3577b34da6a3ce929d0e0e4736",
