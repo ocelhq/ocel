@@ -36,6 +36,7 @@ type fakeCloud struct {
 	bearers    []string
 	refuse     map[string][]int
 	retryAfter string
+	refused    error
 	inFlight   atomic.Int32
 	peak       atomic.Int32
 }
@@ -66,6 +67,9 @@ func (f *fakeCloud) Missing(_ context.Context, req *cloudv1.MissingRequest) (*cl
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked = append(f.asked, req.GetDigests())
+	if f.refused != nil {
+		return nil, f.refused
+	}
 	var missing []string
 	for _, digest := range req.GetDigests() {
 		if _, ok := f.stored[digest]; !ok {
@@ -78,6 +82,9 @@ func (f *fakeCloud) Missing(_ context.Context, req *cloudv1.MissingRequest) (*cl
 func (f *fakeCloud) CommitSource(_ context.Context, req *cloudv1.CommitSourceRequest) (*cloudv1.CommitSourceResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.refused != nil {
+		return nil, f.refused
+	}
 	for _, file := range req.GetManifest().GetFiles() {
 		if _, ok := f.stored[file.GetDigest()]; file.GetDigest() != "" && !ok {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s is missing", file.GetDigest()))

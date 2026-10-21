@@ -162,7 +162,7 @@ func TestARemoteProviderAsksForATokenOnEveryCallSoAnExpiredOneIsReplaced(t *test
 	}
 }
 
-func TestARemoteProviderServingAnotherReleaseFailsWithCloudUpgradeRequired(t *testing.T) {
+func TestARemoteProviderServingAnotherReleaseFailsAsUnservedNamingTheReleaseItServes(t *testing.T) {
 	server := clitest.ServeRemoteProvider(t, fake.NewForProject(fake.Options{}))
 	tokens := &issuedTokens{tokens: []string{clitest.FakeCloudToken}}
 
@@ -182,16 +182,16 @@ func TestARemoteProviderServingAnotherReleaseFailsWithCloudUpgradeRequired(t *te
 		t.Run(name, func(t *testing.T) {
 			err := call()
 			var coded *clierror.Error
-			if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUpgradeRequired || !strings.Contains(err.Error(), "upgrade ocel") || !strings.Contains(err.Error(), "serves ocel 9.9.9") {
-				t.Fatalf("err = %v, want cloud.upgrade_required in Ocel Cloud's words", err)
+			if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudVersionUnserved || !strings.Contains(err.Error(), "serves ocel 9.9.9, not ocel "+version.Version) {
+				t.Fatalf("err = %v, want %s naming the release Ocel Cloud serves", err, clierror.CodeCloudVersionUnserved)
 			}
 		})
 	}
 
 	_, err = startRemote(t, server, remoteProject(t), tokens)
 	var coded *clierror.Error
-	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUpgradeRequired {
-		t.Fatalf("open err = %v, want cloud.upgrade_required", err)
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudVersionUnserved {
+		t.Fatalf("open err = %v, want %s", err, clierror.CodeCloudVersionUnserved)
 	}
 }
 
@@ -235,13 +235,26 @@ func TestARemoteSessionCalledWithAnotherOrganizationsTokenFailsInOcelCloudsWords
 	}
 }
 
-func TestARemoteProviderRejectingTheTokenFailsWithConsoleNotLoggedIn(t *testing.T) {
+func TestARemoteProviderRefusingTheTokenFailsAsRefusedAndSaysToLogInAgain(t *testing.T) {
 	server := clitest.ServeRemoteProvider(t, fake.NewForProject(fake.Options{}))
 
 	_, err := startRemote(t, server, remoteProject(t), &issuedTokens{tokens: []string{"forged"}})
 	var coded *clierror.Error
-	if !errors.As(err, &coded) || coded.Code != clierror.CodeConsoleNotLoggedIn || !strings.Contains(err.Error(), "ocel login") {
-		t.Fatalf("err = %v, want console.not_logged_in naming ocel login", err)
+	if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudTokenRefused || coded.Hint != "ocel login" || !strings.Contains(err.Error(), "ocel login") {
+		t.Fatalf("err = %v, want %s naming ocel login", err, clierror.CodeCloudTokenRefused)
+	}
+}
+
+func TestARemoteProviderUnableToCheckTheTokenNeverSaysToLogInAgain(t *testing.T) {
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = connect.NewErrorWriter().Write(w, r, connect.NewError(connect.CodeUnavailable, errors.New("the console's keys are out of reach")))
+	}))
+	t.Cleanup(refusing.Close)
+	ctx, span := remoteSpan(t)
+
+	_, err := providerprocess.StartRemote(ctx, remoteProject(t), span, providerprocess.Questions{}, providerprocess.Remote{Name: "ocel", URL: refusing.URL, Tokens: &issuedTokens{tokens: []string{clitest.FakeCloudToken}}})
+	if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeProviderUnavailable || !got.GetRetryable() || strings.Contains(got.GetMessage(), "ocel login") {
+		t.Fatalf("run error = %v, want a retryable %s that never says to log in", got, clierror.CodeProviderUnavailable)
 	}
 }
 

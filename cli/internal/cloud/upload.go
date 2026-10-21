@@ -15,7 +15,9 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
+	"github.com/ocelhq/ocel/cli/internal/wireerror"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	"github.com/ocelhq/ocel/pkg/proto/cloud/v1/cloudv1connect"
 )
@@ -48,8 +50,11 @@ func New(apiURL string, tokens TokenSource) *Client {
 		headers: Headers{Tokens: tokens},
 		sleep:   sleep,
 	}
-	c.upload = cloudv1connect.NewUploadServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.headers))
-	c.jobs = cloudv1connect.NewJobServiceClient(c.http, c.apiURL, connect.WithInterceptors(c.headers))
+	interceptors := connect.WithInterceptors(c.headers, wireerror.Interceptor(func(err *connect.Error) *clierror.Error {
+		return RefusalOf(c.apiURL, err)
+	}))
+	c.upload = cloudv1connect.NewUploadServiceClient(c.http, c.apiURL, interceptors)
+	c.jobs = cloudv1connect.NewJobServiceClient(c.http, c.apiURL, interceptors)
 	return c
 }
 

@@ -29,6 +29,7 @@ type fakeJobs struct {
 	mu       sync.Mutex
 	started  []*cloudv1.StartJobRequest
 	refuse   []connect.Code
+	refused  error
 	reads    []jobRead
 	asked    []string
 	canceled int
@@ -47,6 +48,9 @@ func (f *fakeJobs) StartJob(_ context.Context, req *cloudv1.StartJobRequest) (*c
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.started = append(f.started, req)
+	if f.refused != nil {
+		return nil, f.refused
+	}
 	if len(f.refuse) > 0 {
 		code := f.refuse[0]
 		f.refuse = f.refuse[1:]
@@ -59,6 +63,9 @@ func (f *fakeJobs) GetJob(_ context.Context, req *cloudv1.GetJobRequest) (*cloud
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked = append(f.asked, req.GetJobId())
+	if f.refused != nil {
+		return nil, f.refused
+	}
 	if len(f.reads) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("the script ran out"))
 	}
