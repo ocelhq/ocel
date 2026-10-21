@@ -3,6 +3,7 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -576,5 +577,29 @@ func TestRefusedRequestNamesAnInvalidArgument(t *testing.T) {
 	}
 	if refusedRequest(errors.New("no")) {
 		t.Error("refusedRequest() = true for a plain error, which ends the run rather than refusing the request")
+	}
+}
+
+func TestAFailedResultCarriesARefusalsOwnWordsWithoutItsConnectCode(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+
+	refused := provider.RefusalError(refusal.Refuse(refusal.CodeUnsupported, "this provider runs no serverless app"))
+	for _, err := range []error{refused, fmt.Errorf("deploy web: %w", refused)} {
+		if err := sender.fail(err); err != nil {
+			t.Fatalf("fail(%v) = %v, want nil", err, err)
+		}
+	}
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+
+	events := stream.recorded()
+	for i, want := range []string{"this provider runs no serverless app", "deploy web: this provider runs no serverless app"} {
+		if got := events[i].GetResult().GetError(); got != want {
+			t.Errorf("result %d error = %q, want %q", i, got, want)
+		}
 	}
 }
