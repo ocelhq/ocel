@@ -156,6 +156,7 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 			_ = job.OpenBrowser(jobURL)
 		}
 	})
+	resume("this run stopped watching the job")
 	if ended == nil {
 		ended = started
 	}
