@@ -6,11 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -325,6 +329,40 @@ func TestAnAppOfOneProjectMayWriteNoRunOrTagRecordOfAnotherProjectNorItsOwnValue
 		}
 		if strings.Contains(database, `/databases/`+ports.ProjectDatabase("ocel", tier, "shop")+`"`) {
 			t.Errorf("shop's app may write %s, the database its values are kept in", database)
+		}
+	}
+}
+
+func TestARevalidatingNodeBuildIsGrantedNoPagesAndNothingOnAnEdgeBucketItsDeployNeverAdds(t *testing.T) {
+	t.Parallel()
+	tier := environment.TierProduction
+	pre := provider.DeployPreflight{
+		Deploy: provider.DeploySpec{Tier: tier, Apps: []provider.AppEntry{shippingApp("api", buildoutput.FrameworkNode)}},
+		Uses:   []buildoutput.Uses{{Revalidation: true}},
+	}
+	parts, err := pushing(t, "").partsUsedBy(pre)
+	if err != nil || slices.Contains(parts, bootstrap.EdgeBucketPart) {
+		t.Fatalf("partsUsedBy() of a revalidating node build on the direct edge = %v, %v, want no edge bucket", parts, err)
+	}
+
+	c := &gcloud.Clients{Names: googletest.Names, Region: googletest.Region, Records: fake.NewKeyValues()}
+	cache := googletest.TierBuckets(tier)[naming.StorageCache]
+	if _, err := c.ClaimTierBucket(context.Background(), tier, naming.StorageCache, func() string { return cache }); err != nil {
+		t.Fatal(err)
+	}
+	spec := cachedAt(cachedRelease())
+	spec.App.Framework = buildoutput.FrameworkNode
+	granted, err := cacheGrants(context.Background(), c, spec, "serviceAccount:api@acme-prod.iam.gserviceaccount.com")
+	if err != nil {
+		t.Fatalf("cacheGrants() = %v", err)
+	}
+	for _, grant := range granted {
+		if grant.Target.Kind != grants.Bucket {
+			continue
+		}
+		if grant.Target.Name != cache || strings.Contains(grant.Condition.Expression, "/objects/pages/") {
+			t.Errorf("cacheGrants() of a node build grants %s on bucket %q (%s), want only its cache kinds in %s: only a Next app reads prerendered pages",
+				grant.Role, grant.Target.Name, grant.Condition.Expression, cache)
 		}
 	}
 }
