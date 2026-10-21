@@ -47,6 +47,34 @@ type deployUse struct {
 	uses      []buildoutput.Uses
 }
 
+func newDeployUse(pre provider.DeployPreflight) deployUse {
+	return deployUse{deploy: pre.Deploy, front: pre.Edge, resources: pre.Resources, usages: pre.Apps, uses: pre.Uses}
+}
+
+func newShapeUse(req provider.ShapeRequest) deployUse {
+	return deployUse{deploy: req.Deploy, front: req.Edge, resources: req.Resources, usages: req.Usages, uses: req.Uses}
+}
+
+func (u deployUse) partNames(registry component.Registry) ([]string, error) {
+	used, err := registry.Preflight(u.resources)
+	if err != nil {
+		return nil, err
+	}
+	for _, part := range u.parts() {
+		used = append(used, part.Name)
+	}
+	if u.front == alb.Kind {
+		used = append(used, albpart.PartName)
+	}
+	var ordered []string
+	for _, each := range tierParts() {
+		if slices.Contains(used, each.Name) {
+			ordered = append(ordered, each.Name)
+		}
+	}
+	return ordered, nil
+}
+
 func (u deployUse) parts() []component.Part {
 	var used []component.Part
 	if u.seals() {

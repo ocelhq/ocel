@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -42,14 +41,12 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 		tree.Add(shared, string(gcloud.Vendor), shaped.Type, item.Name, region, shaped.Properties)
 	}
-	use := deployUse{deploy: req.Deploy, front: req.Edge, resources: req.Resources, usages: req.Usages, uses: req.Uses}
+	use := newShapeUse(req)
 	owned := []bootstrap.Resource{{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}}
 	if use.sealsProjectValues() {
 		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)})
 	}
-	if topic.DeclaresTopics(req.Resources) || slices.ContainsFunc(req.Deploy.Apps, func(app provider.AppEntry) bool {
-		return app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext
-	}) {
+	if topic.DeclaresTopics(req.Resources) || slices.ContainsFunc(req.Deploy.Apps, servesNext) {
 		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.ProjectWritableDatabase(req.Deploy.Tier, req.Deploy.Slug)})
 	}
 	for _, owned := range owned {
@@ -79,7 +76,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
 		memory := run.RevisionMemory
-		if app.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext {
+		if servesNext(app) {
 			memory = run.FormatMemoryLimit(next.MemoryMB)
 		}
 		if app.Compute() == provider.ComputeContainer {
@@ -98,7 +95,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(app.Manifest.GetFramework().GetName() != buildoutput.FrameworkNext, 0, memory, ingress))
+				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(!servesNext(app), 0, memory, ingress))
 			}
 		}
 		for _, shape := range shapes {
