@@ -15,10 +15,12 @@ import (
 	"slices"
 	"strings"
 
+	"buf.build/go/protovalidate"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/moby/patternmatcher"
 	"github.com/moby/patternmatcher/ignorefile"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -113,7 +115,14 @@ func Walk(root string) (*Archive, error) {
 	if err := refuseOversized(root, w.entries); err != nil {
 		return nil, err
 	}
-	return digest(root, w.entries)
+	archive, err := digest(root, w.entries)
+	if err != nil {
+		return nil, err
+	}
+	if err := refuseInvalidManifest(root, archive.Manifest); err != nil {
+		return nil, err
+	}
+	return archive, nil
 }
 
 type walker struct {
@@ -281,15 +290,37 @@ func refuseOversized(root string, entries []entry) error {
 		}
 	}
 	if len(oversized) > 0 {
-		return fmt.Errorf("%s %s over the %s a source file may be: ignore %s in %s or %s",
+		return sourceInvalid(fmt.Errorf("%s %s over the %s a source file may be: ignore %s in %s or %s",
 			english.And(named(biggest(oversized))), english.Number(len(oversized), "is", "are"), english.Bytes(MaxFileBytes),
-			english.Number(len(oversized), "it", "them"), gitignoreName, dockerignoreName)
+			english.Number(len(oversized), "it", "them"), gitignoreName, dockerignoreName))
 	}
 	if total > MaxTotalBytes {
-		return fmt.Errorf("the source under %s is %s, over the %s an upload may be; the biggest files are %s: ignore what the build does not need in %s or %s",
-			root, english.Bytes(total), english.Bytes(MaxTotalBytes), english.And(named(biggest(entries))), gitignoreName, dockerignoreName)
+		return sourceInvalid(fmt.Errorf("the source under %s is %s, over the %s an upload may be; the biggest files are %s: ignore what the build does not need in %s or %s",
+			root, english.Bytes(total), english.Bytes(MaxTotalBytes), english.And(named(biggest(entries))), gitignoreName, dockerignoreName))
 	}
 	return nil
+}
+
+func refuseInvalidManifest(root string, manifest *cloudv1.SourceManifest) error {
+	err := protovalidate.Validate(manifest)
+	var invalid *protovalidate.ValidationError
+	if !errors.As(err, &invalid) {
+		return err
+	}
+	files := manifest.GetFiles()
+	broken := make([]string, 0, offendersNamed)
+	for _, violation := range invalid.Violations[:min(len(invalid.Violations), offendersNamed)] {
+		if field := violation.Proto.GetField().GetElements(); len(field) > 1 {
+			broken = append(broken, fmt.Sprintf("%q: %s", files[field[0].GetIndex()].GetPath(), violation.Proto.GetMessage()))
+		} else {
+			broken = append(broken, fmt.Sprintf("%s: %s", english.Count(len(files), "file"), violation.Proto.GetMessage()))
+		}
+	}
+	return sourceInvalid(fmt.Errorf("the source under %s breaks a limit Ocel Cloud sets: %s", root, strings.Join(broken, "; ")))
+}
+
+func sourceInvalid(cause error) error {
+	return &clierror.Error{Code: clierror.CodeCloudSourceInvalid, Cause: cause}
 }
 
 func biggest(entries []entry) []entry {

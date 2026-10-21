@@ -33,6 +33,7 @@
     "cloud.job_failed",
     "cloud.job_canceled",
     "cloud.upgrade_required",
+    "cloud.source_invalid",
     "---Runs---",
     "interrupted",
     "dev.command_failed",
