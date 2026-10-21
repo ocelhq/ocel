@@ -268,6 +268,18 @@ func TestConfigure(t *testing.T) {
 		}
 	})
 
+	t.Run("a refused config fails with the code of its kind", func(t *testing.T) {
+		t.Parallel()
+
+		for _, mode := range []string{"reject-config", "refuse-config"} {
+			config := fakeOptionsConfig(t, map[string]any{"sizee": "large"})
+			r, _ := spawnFake(t, mode, LaunchSpec{ProviderConfig: config, ProviderName: "fake", ReadyTimeout: 5 * time.Second})
+			if got := clierror.NewRunError(r.Ready(context.Background())).GetCode(); got != clierror.CodeProviderInvalidRequest {
+				t.Errorf("%s: code = %q, want %s", mode, got, clierror.CodeProviderInvalidRequest)
+			}
+		}
+	})
+
 	t.Run("the provider is told the edge the project selects, and answers that edge's facts", func(t *testing.T) {
 		t.Parallel()
 

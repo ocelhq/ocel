@@ -55,9 +55,9 @@ func (p *Provider) Close() { p.transport.Close() }
 func (p *Provider) callAnswering(ctx context.Context, call func(transport) error) error {
 	err := call(p.transport)
 	if confirmed, err := p.questions.answer(ctx, p.transport, err); !confirmed {
-		return refusalIn(err)
+		return err
 	}
-	return refusalIn(call(p.transport))
+	return call(p.transport)
 }
 
 func (p *Provider) Call(ctx context.Context, call func(contractv1connect.ProviderServiceClient) error) error {

@@ -11,12 +11,13 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -33,17 +34,6 @@ func (r refusingProvider) ListEnvironments(context.Context, *contractv1.ListEnvi
 	return nil, r.refused
 }
 
-func (r refusingProvider) RemoveEnvironment(_ context.Context, _ *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	code := ""
-	if c := connect.CodeOf(r.refused); c != connect.CodeInternal {
-		code = c.String()
-	}
-	return stream.Send(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
-		Error:       r.refused.Error(),
-		ConnectCode: code,
-	}}})
-}
-
 func refusedBy(t *testing.T, refused error) *providerprocess.Provider {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -57,6 +47,19 @@ func refusedBy(t *testing.T, refused error) *providerprocess.Provider {
 	}
 	t.Cleanup(p.Close)
 	return p
+}
+
+func bootstrapRefusedBy(t *testing.T, refused error) error {
+	t.Helper()
+	fakeProvider := fake.NewForProject(fake.Options{})
+	fakeProvider.FakeBootstrap().RefusePlan(refused)
+	p, err := startRemote(t, clitest.ServeRemoteProvider(t, fakeProvider), remoteProject(t), &issuedTokens{tokens: []string{clitest.FakeCloudToken}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, _ := remoteSpan(t)
+	_, err = providerprocess.Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION}, contractv1connect.ProviderServiceClient.Bootstrap)
+	return err
 }
 
 func TestAProviderRefusalFailsWithTheCodeOfItsKindInTheProvidersOwnWords(t *testing.T) {
@@ -77,14 +80,10 @@ func TestAProviderRefusalFailsWithTheCodeOfItsKindInTheProvidersOwnWords(t *test
 		"unavailable": {refused: connect.NewError(connect.CodeUnavailable, errors.New(words)), code: clierror.CodeProviderUnavailable, retryable: true, wire: "unavailable"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			p := refusedBy(t, tc.refused)
 			ctx, _ := remoteSpan(t)
 			for call, err := range map[string]error{
-				"unary": listEnvironments(ctx, p),
-				"streamed": func() error {
-					_, err := providerprocess.Stream(ctx, p, "RemoveEnvironment", &contractv1.RemoveEnvironmentRequest{Slug: "shop", Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "feat-x"}}, contractv1connect.ProviderServiceClient.RemoveEnvironment)
-					return err
-				}(),
+				"unary":    listEnvironments(ctx, refusedBy(t, tc.refused)),
+				"streamed": bootstrapRefusedBy(t, tc.refused),
 			} {
 				got := clierror.NewRunError(err)
 				if got.GetCode() != tc.code || got.GetRetryable() != tc.retryable {
@@ -102,13 +101,12 @@ func TestAProviderRefusalFailsWithTheCodeOfItsKindInTheProvidersOwnWords(t *test
 }
 
 func TestAProviderFailingInternallyStaysAnInternalError(t *testing.T) {
-	p := refusedBy(t, connect.NewError(connect.CodeInternal, errors.New("the provider broke")))
+	broke := connect.NewError(connect.CodeInternal, errors.New("the provider broke"))
 	ctx, _ := remoteSpan(t)
-	if got := clierror.NewRunError(listEnvironments(ctx, p)); got.GetCode() != "internal" {
+	if got := clierror.NewRunError(listEnvironments(ctx, refusedBy(t, broke))); got.GetCode() != "internal" {
 		t.Fatalf("code = %q, want internal", got.GetCode())
 	}
-	_, err := providerprocess.Stream(ctx, p, "RemoveEnvironment", &contractv1.RemoveEnvironmentRequest{Slug: "shop", Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "feat-x"}}, contractv1connect.ProviderServiceClient.RemoveEnvironment)
-	if got := clierror.NewRunError(err); got.GetCode() != "internal" || !strings.Contains(got.GetMessage(), "the provider broke") {
+	if got := clierror.NewRunError(bootstrapRefusedBy(t, broke)); got.GetCode() != "internal" || !strings.Contains(got.GetMessage(), "the provider broke") {
 		t.Fatalf("streamed = %v, want internal in the provider's words", got)
 	}
 }
