@@ -21,6 +21,7 @@ var secretKind = KindOps{
 	noun:             "secret",
 	terraform:        cost.SecretManagerSecretType,
 	parameter:        true,
+	replaceable:      true,
 	properties: func(string, Resource) map[string]any {
 		return map[string]any{"replication": map[string]any{"auto": map[string]any{}}}
 	},

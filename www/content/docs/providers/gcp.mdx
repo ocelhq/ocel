@@ -73,7 +73,9 @@ credential, and shows in its plan as added on first use:
 
 Each part checks the APIs it needs when it is added. `ocel bootstrap status`
 lists each of these parts, who added it, which projects use it and what it costs idle, and
-`ocel bootstrap production` makes each recorded part again if it was changed or deleted by hand.
+`ocel bootstrap production` makes each recorded part again if it was changed or deleted by hand,
+and with `--yes` gives the tier's key a new primary version when its primary was destroyed, whether
+or not the `keys` part is still recorded.
 `ocel bootstrap production --remove <part>` takes one part down, `cloudflare-origin` included, and
 refuses while a project here uses it unless you pass `--force`; the next deploy that needs a part a
 deploy adds adds it back. `--force` never takes `private-network` down while a kv store or database

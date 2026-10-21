@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -365,15 +366,58 @@ func TestADeployAddingTheKeysPartRefusesToReplaceATierKeyWhosePrimaryIsDestroyed
 	}
 }
 
-func TestABootstrapThatConsentsMintsANewPrimaryForATierKeyWhosePrimaryIsDestroyed(t *testing.T) {
+func TestTheBootstrapARefusedDeployNamesReplacesATierKeyWhosePartIsNotRecorded(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
+	tier := environment.TierProduction
 	b, server := replacingTheTierKey(t)
-	b.ReplacementsConsented = true
-
-	if err := b.EnsurePart(t.Context(), environment.TierProduction, "", bootstrap.Keys.For(b, environment.TierProduction)); err != nil {
-		t.Fatalf("EnsurePart() with consent = %v", err)
+	if err := b.EnsurePart(ctx, tier, "shop", bootstrap.Keys.For(b, tier)); err == nil || !strings.Contains(err.Error(), "`ocel bootstrap production --yes`") {
+		t.Fatalf("the deploy's EnsurePart() = %v, want the refusal naming the consenting bootstrap", err)
 	}
-	if want := []string{gcloud.KeyPath(b.Clients, string(environment.TierProduction))}; !slices.Equal(server.Minted, want) {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, bootstrap.KeysPart); err != nil || present {
+		t.Fatalf("the keys part is recorded after the refusal: %t, %v, want no record, so only the bootstrap's own survey finds the key", present, err)
+	}
+
+	replaced, err := b.SurveyReplacedParts(ctx, bootstrap.Survey{Tier: tier})
+	if err != nil {
+		t.Fatalf("SurveyReplacedParts() = %v", err)
+	}
+	if !slices.Equal(replaced.Names(), []string{bootstrap.KeysPart}) || !slices.ContainsFunc(replaced.Replacing(), func(phrase string) bool { return strings.Contains(phrase, "KMS key production") }) {
+		t.Fatalf("SurveyReplacedParts() names %v replacing %v, want the keys part replacing KMS key production", replaced.Names(), replaced.Replacing())
+	}
+	planned := replaced.Planned(b)
+	if len(planned) != 1 || planned[0].Part != bootstrap.KeysPart || !slices.ContainsFunc(planned[0].Changes, func(change provider.Change) bool {
+		return change.Name == string(tier) && change.Action == provider.ActionReplace
+	}) {
+		t.Errorf("the bootstrap plans %+v, want the keys part replacing the production key, so the consent covers it", planned)
+	}
+	if err := b.ReplaceParts(ctx, tier, replaced); err != nil {
+		t.Fatalf("ReplaceParts() = %v", err)
+	}
+	if want := []string{gcloud.KeyPath(b.Clients, string(tier))}; !slices.Equal(server.Minted, want) {
+		t.Errorf("`ocel bootstrap production --yes` minted versions of %v, want one of %v", server.Minted, want)
+	}
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, bootstrap.KeysPart); err != nil || !present {
+		t.Errorf("the keys part is recorded %t, %v after the bootstrap replaced its key, want it recorded", present, err)
+	}
+}
+
+func TestABootstrapRepairingARecordedKeysPartMintsANewPrimaryOnlyWithConsent(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	tier := environment.TierProduction
+	b, server := replacingTheTierKey(t)
+	if err := stackrecords.MarkBootstrapPartReady(ctx, b.Records, tier, bootstrap.KeysPart, stackrecords.BootstrapPart{WrittenBy: string(b.WrittenBy)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := b.RepairParts(ctx, tier, false); err == nil || len(server.Minted) != 0 {
+		t.Errorf("RepairParts() without consent = %v and minted %v, want a refusal and nothing minted", err, server.Minted)
+	}
+	if _, err := b.RepairParts(ctx, tier, true); err != nil {
+		t.Fatalf("RepairParts() with consent = %v", err)
+	}
+	if want := []string{gcloud.KeyPath(b.Clients, string(tier))}; !slices.Equal(server.Minted, want) {
 		t.Errorf("minted versions of %v, want one of %v", server.Minted, want)
 	}
 }

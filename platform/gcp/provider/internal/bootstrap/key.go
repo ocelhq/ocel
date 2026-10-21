@@ -22,8 +22,9 @@ const (
 )
 
 var keyKind = KindOps{
-	noun:      "KMS key",
-	terraform: cost.KMSCryptoKeyType,
+	noun:        "KMS key",
+	terraform:   cost.KMSCryptoKeyType,
+	replaceable: true,
 	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		key, err := b.readKey(ctx, target.Name)
 		return KeyPresenceOf(key), err

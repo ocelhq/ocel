@@ -46,6 +46,7 @@ type KindOps struct {
 	emulatorSkips bool
 	emulatorKeeps string
 	parameter     bool
+	replaceable   bool
 
 	survey  func(ctx context.Context, b Engine, read Survey, target Resource) (Presence, error)
 	Make    func(ctx context.Context, b Engine, read Survey, target Resource) error

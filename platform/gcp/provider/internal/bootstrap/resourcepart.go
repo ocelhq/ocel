@@ -124,8 +124,12 @@ func (p ResourcePart) Removable() RemovablePart {
 	}
 }
 
+func (p ResourcePart) provisionedItems(b Engine, tier environment.Tier) []Resource {
+	return slices.DeleteFunc(p.items(b.Clients.Names, tier), func(each Resource) bool { return !provisioned(each, b.Clients.Emulated()) })
+}
+
 func (p ResourcePart) For(b Engine, tier environment.Tier) Part {
-	items := slices.DeleteFunc(p.items(b.Clients.Names, tier), func(each Resource) bool { return !provisioned(each, b.Clients.Emulated()) })
+	items := p.provisionedItems(b, tier)
 	part := Part{
 		Name:     p.Name,
 		Summary:  p.Summary,
@@ -133,7 +137,8 @@ func (p ResourcePart) For(b Engine, tier environment.Tier) Part {
 		Retires:  p.Retires,
 		Shape:    p.Shape(b.Clients.Names, tier, b.Clients.Region),
 		Removals: plannedRemovals(items),
-		Make:     func(ctx context.Context) error { return b.makeItems(ctx, tier, items) },
+		Make:     func(ctx context.Context) error { return b.makeItems(ctx, tier, items, false) },
+		Replace:  func(ctx context.Context) error { return b.makeItems(ctx, tier, items, true) },
 		Remove:   func(ctx context.Context) error { return b.removeItems(ctx, tier, items) },
 		Users:    func(ctx context.Context) ([]string, error) { return p.listUsers(ctx, b, tier) },
 		RefuseInUse: func(ctx context.Context, removal PartRemoval) error {
@@ -206,12 +211,12 @@ func (b Engine) surveyItems(ctx context.Context, tier environment.Tier, items []
 	return read, nil
 }
 
-func (b Engine) makeItems(ctx context.Context, tier environment.Tier, items []Resource) error {
+func (b Engine) makeItems(ctx context.Context, tier environment.Tier, items []Resource, replacing bool) error {
 	read, err := b.surveyItems(ctx, tier, items)
 	if err != nil {
 		return err
 	}
-	if !b.ReplacementsConsented {
+	if !replacing {
 		if err := RefuseReplacements(read, items, "run `"+provider.BootstrapCommand(tier)+" --yes`"); err != nil {
 			return err
 		}

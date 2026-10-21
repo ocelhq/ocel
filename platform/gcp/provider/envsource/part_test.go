@@ -113,7 +113,7 @@ func TestABootstrapResumesAnEnvSourceSyncSchedulePausedByHand(t *testing.T) {
 	}
 	server.Change(func() { server.Schedules[path].State = gcloud.SchedulePaused })
 
-	repaired, err := b.RepairParts(ctx, tier)
+	repaired, err := b.RepairParts(ctx, tier, false)
 	if err != nil {
 		t.Fatalf("repairParts() = %v", err)
 	}
@@ -140,7 +140,7 @@ func TestABootstrapLeavesACurrentEnvSourceSyncAsItIs(t *testing.T) {
 	}
 	pushes, patches := len(server.Pushed), len(server.Patched)
 
-	if _, err := b.RepairParts(ctx, tier); err != nil {
+	if _, err := b.RepairParts(ctx, tier, false); err != nil {
 		t.Fatalf("repairParts() = %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestABootstrapAddsNoEnvSourceSyncNoScheduledEnvSourceAdded(t *testing.T) {
 	server, b := syncPartBootstrap(t)
 	tier := environment.TierProduction
 
-	if repaired, err := b.RepairParts(context.Background(), tier); err != nil || len(repaired) != 0 {
+	if repaired, err := b.RepairParts(context.Background(), tier, false); err != nil || len(repaired) != 0 {
 		t.Fatalf("repairParts() = %v, %v, want nothing made", repaired, err)
 	}
 	if server.Service(b.Clients.ServicePath(b.Clients.EnvSourceSync(tier))) != nil {

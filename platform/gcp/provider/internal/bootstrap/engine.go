@@ -43,12 +43,11 @@ type Engine struct {
 	DeployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
 	TearDown       func(ctx context.Context, service string, progress progress.Log) error
 
-	Removable             []RemovablePart
-	ReplacementsConsented bool
-	Accounts              []Account
-	FrontParts            FrontParts
-	TakeRecords           func(ctx context.Context, b Engine, tier environment.Tier) error
-	SweepAccounts         func(ctx context.Context, b Engine, req provider.BootstrapRequest, progress progress.Log) error
+	Removable     []RemovablePart
+	Accounts      []Account
+	FrontParts    FrontParts
+	TakeRecords   func(ctx context.Context, b Engine, tier environment.Tier) error
+	SweepAccounts func(ctx context.Context, b Engine, req provider.BootstrapRequest, progress progress.Log) error
 }
 
 func (b Engine) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
@@ -174,6 +173,15 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	replacedParts, err := b.SurveyReplacedParts(ctx, read)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	for _, group := range replacedParts.Planned(b) {
+		if !slices.ContainsFunc(added, func(each provider.ChangeGroup) bool { return each.Part == group.Part }) {
+			added = append(added, group)
+		}
+	}
 	removed, err := b.PlanRemovedParts(ctx, req.Tier, named, req.Force)
 	if err != nil {
 		return provider.Plan{}, err
@@ -220,14 +228,17 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 	}
 	defer b.Surveyed.forget(req.Tier)
 	items := Resources(read.Names, req.Tier, read.Emulated)
-	b.ReplacementsConsented = !req.RefuseReplacements
-	if req.RefuseReplacements {
-		if err := RefuseReplacements(read, items, "re-run with --yes"); err != nil {
-			return err
-		}
-	}
 	if err := b.preflight(ctx, read, req.Parts); err != nil {
 		return err
+	}
+	replacedParts, err := b.SurveyReplacedParts(ctx, read)
+	if err != nil {
+		return err
+	}
+	if req.RefuseReplacements {
+		if err := refuseReplacing(req.Tier, slices.Concat(replacedIn(read, items), replacedParts.Replacing()), "re-run with --yes"); err != nil {
+			return err
+		}
 	}
 
 	foremost := foremostItems(read, items)
@@ -264,6 +275,11 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 			return err
 		}
 	}
+	if !req.RefuseReplacements {
+		if err := b.ReplaceParts(ctx, req.Tier, replacedParts); err != nil {
+			return err
+		}
+	}
 	if err := b.raiseParts(ctx, req, progress); err != nil {
 		return err
 	}
@@ -274,7 +290,7 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 	if err := b.SweepAccounts(ctx, b, req, progress); err != nil {
 		return err
 	}
-	repaired, err := b.RepairParts(ctx, req.Tier)
+	repaired, err := b.RepairParts(ctx, req.Tier, !req.RefuseReplacements)
 	for _, part := range repaired {
 		gcloud.EnsureProgress(progress).Say("Checked the " + part + " part against this build, mending any drift")
 	}
@@ -282,18 +298,26 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 }
 
 func RefuseReplacements(read Survey, items []Resource, consent string) error {
+	return refuseReplacing(read.Tier, replacedIn(read, items), consent)
+}
+
+func replacedIn(read Survey, items []Resource) []string {
 	var replaced []string
 	for _, item := range items {
 		if reason := read.replaces(item); reason != "" {
 			replaced = append(replaced, item.phrase()+": "+reason)
 		}
 	}
+	return replaced
+}
+
+func refuseReplacing(tier environment.Tier, replaced []string, consent string) error {
 	if len(replaced) == 0 {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"bootstrapping the %s tier would replace %s\nRestore what it would replace, or %s to replace it",
-		read.Tier, strings.Join(replaced, "; "), consent)
+		tier, strings.Join(replaced, "; "), consent)
 }
 
 func stateBucketOf(read Survey) Resource {
