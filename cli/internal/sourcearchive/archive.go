@@ -250,14 +250,6 @@ func readGitignore(file string, domain []string) ([]gitignore.Pattern, error) {
 	return patterns, nil
 }
 
-func readExcludes(root string) ([]gitignore.Pattern, error) {
-	local, err := readGitignore(filepath.Join(root, gitEntry, "info", "exclude"), nil)
-	if err != nil {
-		return nil, err
-	}
-	return slices.Concat(credentialPatterns, local), nil
-}
-
 func readDockerignore(root string) (*patternmatcher.PatternMatcher, error) {
 	file := filepath.Join(root, dockerignoreName)
 	opened, err := os.Open(file)

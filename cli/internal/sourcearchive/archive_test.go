@@ -401,3 +401,73 @@ func TestWalkSkipsSpecialFiles(t *testing.T) {
 		t.Fatalf("uploaded %q, want only a.ts", got)
 	}
 }
+
+func TestWalkHonoursTheUsersGlobalGitExcludes(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		config map[string]string
+		xdg    bool
+		files  map[string]string
+		want   []string
+	}{
+		{
+			name:   "the file core.excludesFile names",
+			config: map[string]string{".gitconfig": "[core]\n\texcludesFile = ~/global-ignore\n", "global-ignore": "*.log\n"},
+			xdg:    true,
+			files:  map[string]string{"debug.log": "x", "main.go": "x"},
+			want:   []string{"main.go"},
+		},
+		{
+			name:   "git's ignore under XDG_CONFIG_HOME when core.excludesFile is unset",
+			config: map[string]string{"xdg/git/ignore": "scratch/\n"},
+			xdg:    true,
+			files:  map[string]string{"scratch/a": "x", "main.go": "x"},
+			want:   []string{"main.go"},
+		},
+		{
+			name:   "git's ignore under ~/.config when XDG_CONFIG_HOME is unset too",
+			config: map[string]string{".config/git/ignore": "scratch/\n"},
+			files:  map[string]string{"scratch/a": "x", "main.go": "x"},
+			want:   []string{"main.go"},
+		},
+		{
+			name:   "a .gitignore includes again what the global excludes leave out",
+			config: map[string]string{"xdg/git/ignore": "*.log\n"},
+			xdg:    true,
+			files:  map[string]string{".gitignore": "!keep.log\n", "keep.log": "x", "drop.log": "x"},
+			want:   []string{".gitignore", "keep.log"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			write(t, home, tt.config)
+			t.Setenv("HOME", home)
+			t.Setenv("XDG_CONFIG_HOME", "")
+			if tt.xdg {
+				t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+			}
+			root := t.TempDir()
+			write(t, root, tt.files)
+			archive, err := sourcearchive.Walk(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := paths(archive); !slices.Equal(got, tt.want) {
+				t.Fatalf("uploaded %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWalkRefusesWhenGitCannotReadItsOwnConfig(t *testing.T) {
+	home := t.TempDir()
+	write(t, home, map[string]string{".gitconfig": "[core\n"})
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	root := t.TempDir()
+	write(t, root, map[string]string{"main.go": "x"})
+	_, err := sourcearchive.Walk(root)
+	if err == nil || !strings.Contains(err.Error(), "core.excludesFile") || !strings.Contains(err.Error(), "bad config") {
+		t.Fatalf("err = %v, want git's own complaint about its config", err)
+	}
+}
