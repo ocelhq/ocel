@@ -212,7 +212,6 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 
 func labelTier(service *run.GoogleCloudRunV2Service, s Serving) {
 	if s.Shared {
-		delete(service.Labels, names.TierLabel)
 		return
 	}
 	if service.Labels == nil {

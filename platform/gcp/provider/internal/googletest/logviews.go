@@ -15,8 +15,6 @@ import (
 type LogViews struct {
 	Mu      sync.Mutex
 	Views   map[string]*logging.LogView
-	Created []string
-	Patched []string
 	Deleted []string
 }
 
@@ -39,7 +37,6 @@ func (v *LogViews) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		v.Views[asked.Name] = asked
-		v.Created = append(v.Created, asked.Name)
 		WriteBody(w, asked)
 	case v.Views[name] == nil:
 		WriteNotFound(w)
@@ -53,7 +50,6 @@ func (v *LogViews) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("updateMask") == "filter" {
 			v.Views[name].Filter = asked.Filter
 		}
-		v.Patched = append(v.Patched, name)
 		WriteBody(w, v.Views[name])
 	case r.Method == http.MethodDelete:
 		delete(v.Views, name)
