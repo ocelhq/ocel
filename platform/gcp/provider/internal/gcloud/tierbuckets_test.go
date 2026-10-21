@@ -100,6 +100,20 @@ func TestATierMissingTheBucketACallerNeedsIsRefusedAsNotBootstrappedAndReadAgain
 	}
 }
 
+func TestATierMissingABucketADeployAddsAdvisesTheDeployOrTheRepairOfARecordedPart(t *testing.T) {
+	t.Parallel()
+	c, _ := clientsWithoutStorage(t)
+
+	_, err := c.TierBuckets(context.Background(), environment.TierProduction, naming.StorageEdge)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
+		t.Fatalf("TierBuckets(edge) of a tier without its edge bucket = %v, want a refusal", err)
+	}
+	if strings.Contains(refused.Message, "to add the parts") || !strings.Contains(refused.Message, "ocel bootstrap status") || !strings.Contains(refused.Message, "`ocel bootstrap production`") {
+		t.Errorf("the refusal says %q, want it to name a deploy that ships what the bucket holds, and `ocel bootstrap production` only for a part `ocel bootstrap status` lists: a plain bootstrap adds no part nothing recorded", refused.Message)
+	}
+}
+
 func TestTwoBootstrapsClaimingOneClassesBucketBothGetTheNameClaimedFirst(t *testing.T) {
 	t.Parallel()
 	c, _ := clientsWithoutStorage(t)

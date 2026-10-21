@@ -69,7 +69,7 @@ func (c *Clients) TierBuckets(ctx context.Context, tier environment.Tier, classe
 			c.DropTierBucketsRead(tier)
 			return nil, refusal.Refuse(refusal.CodeNotReady,
 				"Google Cloud project %s records no %s bucket of the %s tier yet, and the first deploy that ships what it holds adds it.\n"+
-					"Deploy to the %s tier, or run `%s` to add the parts its deploys use, then try again",
+					"Deploy what needs it to the %s tier; if `ocel bootstrap status` lists the part that holds it, run `%s` to make that part again, then try again",
 				c.Project(), class, tier, tier, provider.BootstrapCommand(tier))
 		}
 	}
