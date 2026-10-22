@@ -18,7 +18,8 @@ import {
 
 const VALIDATION_LABEL = "_acme-challenge.";
 const OWNER_SEPARATOR = " for ";
-const OWNER_FIELD_SEPARATOR = "--";
+const ORIGIN_SEPARATOR = " on ";
+const OWNER_PROJECT = /^.+?-(?:prod|preview)-(.+)-[0-9a-f]{6}$/;
 const OCEL_CERTIFICATE_TYPE = "origin-ecc";
 const OCEL_CERTIFICATE_ORGANIZATION = "ocel";
 const ORGANIZATION_ATTRIBUTE = [0x06, 0x03, 0x55, 0x04, 0x0a];
@@ -82,13 +83,15 @@ function isWrittenFor(record: DnsRecord, cell: Cell, slug: string): boolean {
   if (record.proxied !== isProxiedFor(cell) || record.comment === null) {
     return false;
   }
-  if (record.comment === OCEL_RECORD_COMMENT) {
+  if (record.comment.startsWith(OCEL_RECORD_COMMENT + ORIGIN_SEPARATOR)) {
     return true;
   }
   const owner = record.comment.startsWith(OCEL_RECORD_COMMENT + OWNER_SEPARATOR)
     ? record.comment.slice(OCEL_RECORD_COMMENT.length + OWNER_SEPARATOR.length)
     : "";
-  return owner.split(OWNER_FIELD_SEPARATOR).includes(slug);
+  const [project = ""] = owner.split(ORIGIN_SEPARATOR);
+  const readable = OWNER_PROJECT.exec(project)?.[1];
+  return readable !== undefined && slug.startsWith(readable);
 }
 
 function isRequestedByOcel(csr: string): boolean {

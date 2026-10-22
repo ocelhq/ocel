@@ -113,7 +113,7 @@ func TestAForwardedProductionHostnameMovedOntoTheWorkerIsServedByTheEntryWorkerA
 	if len(m.deletedRoutes) != 0 || len(m.deletedRecords) != 0 {
 		t.Errorf("deleted routes %v and records %v, want both repointed in place so the hostname answers throughout the move", m.deletedRoutes, m.deletedRecords)
 	}
-	if len(m.existingRecords) != 1 || m.existingRecords[0]["proxied"] != true || m.existingRecords[0]["comment"] != recordComment || m.existingRecords[0]["content"] == albAddress {
+	if len(m.existingRecords) != 1 || m.existingRecords[0]["proxied"] != true || m.existingRecords[0]["comment"] != formatWriterComment(testOrigin) || m.existingRecords[0]["content"] == albAddress {
 		t.Errorf("the zone holds records %v, want one proxied record no longer forwarding to %s and naming no forwarding owner", m.existingRecords, albAddress)
 	}
 	if got := s.State(); len(got.Records) != 0 || got.Addresses["api.app.com"] != "" {
@@ -214,6 +214,71 @@ func TestUnbindingAPreviewHostForwardedToAnOriginRemovesItsRecordAndItsRoute(t *
 	}
 }
 
+func TestUnbindingAHostnameAnotherOriginNowForwardsLeavesItsRouteAndRecord(t *testing.T) {
+	m := zoneMock()
+	theirs := mustFormatForwardingOwner(defaultNamespace, otherOrigin, "acme-web", environment.TierProduction)
+	m.existingRoutes = []map[string]any{{"id": "theirs", "pattern": "api.app.com/*", "script": ""}}
+	m.existingRecords = []map[string]any{
+		{"id": "forward", "name": "api.app.com", "type": "CNAME", "content": albAddress, "proxied": true, "comment": formatOwnerComment(theirs)},
+	}
+	s := originStack(t, m, environment.TierProduction)
+	s.state.Bind("api.app.com")
+	s.state.RecordWrites([]edge.Record{{Name: "api.app.com", Type: edge.RecordTypeCNAME, Value: albAddress, Proxied: true}})
+
+	if err := s.UnbindDomain(t.Context(), "api.app.com"); err != nil {
+		t.Fatalf("UnbindDomain: %v", err)
+	}
+
+	if len(m.deletedRoutes) != 0 || len(m.deletedRecords) != 0 {
+		t.Errorf("deleted routes %v and records %v, want the route and record %s forwards api.app.com with left in place", m.deletedRoutes, m.deletedRecords, otherOrigin)
+	}
+	if got := s.State(); len(got.Bound) != 0 || len(got.Records) != 0 {
+		t.Errorf("the stack still records bound %v and records %v, want api.app.com released here", got.Bound, got.Records)
+	}
+}
+
+func TestAHostnameAnotherOriginServesIsRefusedWhenBoundWithAnOrigin(t *testing.T) {
+	m := zoneMock()
+	theirs, err := entryWorkerName(defaultNamespace, otherOrigin, "acme-web", environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.existingRoutes = []map[string]any{{"id": "theirs", "pattern": "api.app.com/*", "script": theirs}}
+	m.scriptSettings = map[string]map[string]any{theirs: {"tags": []any{otherOrigin.scriptTag()}}}
+	s := originStack(t, m, environment.TierProduction)
+
+	err = s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}})
+	if err == nil || !strings.Contains(err.Error(), otherOrigin.String()) || !strings.Contains(err.Error(), "one hostname belongs to one origin") {
+		t.Fatalf("BindDomain over %s's route = %v, want it refused naming that origin", otherOrigin, err)
+	}
+	if strings.Contains(err.Error(), "remove that route") {
+		t.Errorf("BindDomain = %v, want no advice to remove a route another origin serves from", err)
+	}
+	if len(m.repointedRoutes) != 0 || len(m.createdRecords) != 0 {
+		t.Errorf("repointed %v and created %v, want %s's hostname left alone", m.repointedRoutes, m.createdRecords, otherOrigin)
+	}
+}
+
+func TestAHostnameAnotherOriginNowForwardsIsNotTakenOntoTheWorkerFromStackStateAlone(t *testing.T) {
+	m := zoneMock()
+	theirs := formatOwnerComment(mustFormatForwardingOwner(defaultNamespace, otherOrigin, "acme-web", environment.TierProduction))
+	m.existingRoutes = []map[string]any{{"id": "theirs", "pattern": "api.app.com/*", "script": ""}}
+	m.existingRecords = []map[string]any{
+		{"id": "forward", "name": "api.app.com", "type": "CNAME", "content": albAddress, "proxied": true, "comment": theirs},
+	}
+	s := originStack(t, m, environment.TierProduction)
+	s.state.Bind("api.app.com")
+	s.state.RecordWrites([]edge.Record{{Name: "api.app.com", Type: edge.RecordTypeCNAME, Value: albAddress, Proxied: true}})
+
+	err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com"})
+	if err == nil || !strings.Contains(err.Error(), otherOrigin.String()) {
+		t.Fatalf("BindDomain onto the worker = %v, want it refused naming %s, which forwards api.app.com", err, otherOrigin)
+	}
+	if len(m.repointedRoutes) != 0 || len(m.updatedRecords) != 0 {
+		t.Errorf("repointed routes %v and updated records %v, want %s's route and record left forwarding api.app.com", m.repointedRoutes, m.updatedRecords, otherOrigin)
+	}
+}
+
 func TestTheRouteThatRunsNoWorkerNamesNoOwnerInPlaceOfTheRecordThatForwardsTheHost(t *testing.T) {
 	m := zoneMock()
 	s := originStack(t, m, environment.TierPreview)
@@ -225,7 +290,7 @@ func TestTheRouteThatRunsNoWorkerNamesNoOwnerInPlaceOfTheRecordThatForwardsTheHo
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if want := formatForwardingOwner(defaultNamespace, "acme-web", environment.TierPreview); owner != want {
+	if want := mustFormatForwardingOwner(defaultNamespace, testOrigin, "acme-web", environment.TierPreview); owner != want {
 		t.Errorf("DomainOwner = %q, want %q, the owner the forwarding record names", owner, want)
 	}
 }

@@ -106,7 +106,7 @@ func TestTheCloudflareProxyWritesOneProxiedRecordToTheOriginItForwardsTo(t *test
 
 func TestTheCloudflareProxyRepointsAHostnameItForwardsTwiceAtOneRecordAndDeletesTheOther(t *testing.T) {
 	m := proxyZoneMock()
-	owned := formatOwnerComment(formatForwardingOwner(defaultNamespace, "acme", environment.TierProduction))
+	owned := formatOwnerComment(mustFormatForwardingOwner(defaultNamespace, testOrigin, "acme", environment.TierProduction))
 	m.existingRecords = []map[string]any{
 		{"id": "first", "name": "shop.app.com", "type": "A", "content": "198.51.100.4", "proxied": true, "comment": owned},
 		{"id": "second", "name": "shop.app.com", "type": "A", "content": "198.51.100.4", "proxied": true, "comment": owned},
@@ -183,7 +183,7 @@ func TestTheCloudflareProxyRefusesAHostnameAnotherProjectForwards(t *testing.T) 
 	m := proxyZoneMock()
 	m.existingRecords = []map[string]any{{
 		"id": "other", "name": "shop.app.com", "type": "A", "content": "192.0.2.1", "proxied": true,
-		"comment": formatOwnerComment(formatForwardingOwner(defaultNamespace, "other", environment.TierProduction)),
+		"comment": formatOwnerComment(mustFormatForwardingOwner(defaultNamespace, testOrigin, "other", environment.TierProduction)),
 	}}
 	front, stack := reconciledProxy(t, m)
 
@@ -198,8 +198,71 @@ func TestTheCloudflareProxyRefusesAHostnameAnotherProjectForwards(t *testing.T) 
 		t.Errorf("deleted %v, want another project's record left in place", m.deletedRecords)
 	}
 	owner, err := front.DomainOwner(context.Background(), "shop.app.com")
-	if err != nil || owner != formatForwardingOwner(defaultNamespace, "other", environment.TierProduction) {
+	if err != nil || owner != mustFormatForwardingOwner(defaultNamespace, testOrigin, "other", environment.TierProduction) {
 		t.Errorf("DomainOwner = %q, %v, want the project that forwards it", owner, err)
+	}
+}
+
+func TestTheCloudflareProxyRefusesAHostnameTheSameProjectForwardsOnAnotherOrigin(t *testing.T) {
+	m := proxyZoneMock()
+	theirs := mustFormatForwardingOwner(defaultNamespace, otherOrigin, "acme", environment.TierProduction)
+	m.existingRecords = []map[string]any{{
+		"id": "other-origin", "name": "shop.app.com", "type": "A", "content": "192.0.2.1", "proxied": true,
+		"comment": formatOwnerComment(theirs),
+	}}
+	front, stack := reconciledProxy(t, m)
+
+	err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}})
+	if err == nil || !strings.Contains(err.Error(), otherOrigin.String()) || !strings.Contains(err.Error(), "one hostname belongs to one origin") {
+		t.Fatalf("BindDomain over acme's forward on %s = %v, want it refused naming that origin", otherOrigin, err)
+	}
+	if len(m.updatedRecords) != 0 || len(m.createdRecords) != 0 {
+		t.Errorf("updated %v and created %v, want %s's record neither adopted nor repointed", m.updatedRecords, m.createdRecords, otherOrigin)
+	}
+	if err := stack.UnbindDomain(context.Background(), "shop.app.com"); err != nil {
+		t.Fatalf("UnbindDomain: %v", err)
+	}
+	if len(m.deletedRecords) != 0 {
+		t.Errorf("deleted %v, want %s's record left in place", m.deletedRecords, otherOrigin)
+	}
+	owner, err := front.DomainOwner(context.Background(), "shop.app.com")
+	mine, _ := front.ProjectOwner(context.Background(), "acme", environment.TierProduction)
+	if err != nil || owner != theirs || owner == mine {
+		t.Errorf("DomainOwner = %q, %v, want %q, which acme on this origin (%q) does not own", owner, err, theirs, mine)
+	}
+}
+
+func TestTheCloudflareProxyRefusesAHostnameAnotherOriginsDNSWriterWrote(t *testing.T) {
+	m := proxyZoneMock()
+	m.existingRecords = []map[string]any{{
+		"id": "other-origin", "name": "shop.app.com", "type": "A", "content": "192.0.2.1", "proxied": true,
+		"comment": formatWriterComment(otherOrigin),
+	}}
+	_, stack := reconciledProxy(t, m)
+
+	err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}})
+	if err == nil || !strings.Contains(err.Error(), otherOrigin.String()) || !strings.Contains(err.Error(), "one hostname belongs to one origin") {
+		t.Fatalf("BindDomain over a record %s wrote = %v, want it refused naming that origin", otherOrigin, err)
+	}
+	if len(m.updatedRecords) != 0 || len(m.deletedRecords) != 0 {
+		t.Errorf("updated %v and deleted %v, want %s's record left alone", m.updatedRecords, m.deletedRecords, otherOrigin)
+	}
+}
+
+func TestTheCloudflareProxyAdoptsARecordThisOriginsDNSWriterWrote(t *testing.T) {
+	m := proxyZoneMock()
+	m.existingRecords = []map[string]any{{
+		"id": "written", "name": "shop.app.com", "type": "AAAA", "content": edge.ProxyPlaceholder, "proxied": true,
+		"comment": formatWriterComment(testOrigin),
+	}}
+	_, stack := reconciledProxy(t, m)
+
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}}); err != nil {
+		t.Fatalf("BindDomain over a record this origin wrote: %v", err)
+	}
+	want := formatOwnerComment(mustFormatForwardingOwner(defaultNamespace, testOrigin, "acme", environment.TierProduction))
+	if len(m.existingRecords) != 1 || m.existingRecords[0]["content"] != "198.51.100.4" || m.existingRecords[0]["comment"] != want {
+		t.Errorf("the zone holds %v, want the record repointed at the origin and owned by acme on %s", m.existingRecords, testOrigin)
 	}
 }
 
@@ -319,6 +382,36 @@ func TestTheCloudflareProxyForwardsTheSharedPreviewWildcardToTheOriginItsRouterC
 	}
 	if len(m.deletedRecords) != 1 {
 		t.Errorf("deleted %v, want the wildcard's proxied record", m.deletedRecords)
+	}
+}
+
+func TestTheCloudflareProxyRefusesThePreviewWildcardAnotherOriginForwards(t *testing.T) {
+	m := proxyZoneMock()
+	m.certificatePacks = []map[string]any{activePack("app.com", "*.preview.app.com")}
+	theirs := formatPreviewForwardingOwner(otherOrigin)
+	m.existingRecords = []map[string]any{{
+		"id": "other-origin", "name": "*.preview.app.com", "type": "A", "content": "192.0.2.1", "proxied": true,
+		"comment": formatOwnerComment(theirs),
+	}}
+	front := m.proxy(t)
+	ctx := context.Background()
+
+	_, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{BaseDomain: "preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}})
+	if err == nil || !strings.Contains(err.Error(), otherOrigin.String()) {
+		t.Fatalf("ReconcilePreviewWildcard over %s's wildcard = %v, want it refused naming that origin", otherOrigin, err)
+	}
+	if len(m.updatedRecords) != 0 || len(m.createdRecords) != 0 {
+		t.Errorf("updated %v and created %v, want %s's wildcard record left forwarding to its origin", m.updatedRecords, m.createdRecords, otherOrigin)
+	}
+	owner, err := front.DomainOwner(ctx, "*.preview.app.com")
+	if err != nil || owner != theirs {
+		t.Errorf("DomainOwner(*.preview.app.com) = %q, %v, want %q: the wildcard is %s's preview entry, not this origin's", owner, err, theirs, otherOrigin)
+	}
+	if err := front.DestroyPreviewWildcard(ctx, "preview.app.com"); err != nil {
+		t.Fatalf("DestroyPreviewWildcard: %v", err)
+	}
+	if len(m.deletedRecords) != 0 {
+		t.Errorf("deleted %v, want %s's wildcard record left in place", m.deletedRecords, otherOrigin)
 	}
 }
 

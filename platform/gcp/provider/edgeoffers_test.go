@@ -167,7 +167,12 @@ func TestABootstrapRefusesAWorkerReofferedWithoutACredentialItNeverStored(t *tes
 	if code := refusalCode(err); code != refusal.CodeInvalid {
 		t.Fatalf("adopt = %v, want an invalid refusal", err)
 	}
-	for _, mentioned := range []string{"ocel-releases-store", h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind)} {
+	for _, mentioned := range []string{
+		"ocel-releases-store",
+		h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind),
+		"a prior bootstrap of this origin set that credential and failed before storing it",
+		"secret " + h.clients.EdgeCredentialsSecret(environment.TierProduction, cloudflareKind) + " was deleted",
+	} {
 		if !strings.Contains(err.Error(), mentioned) {
 			t.Errorf("refusal %q does not name %q", err, mentioned)
 		}

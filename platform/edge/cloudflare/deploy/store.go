@@ -139,7 +139,7 @@ func (s *stack) removePointerRecords(ctx context.Context, pointer string) error 
 	return err
 }
 
-var errStoreIdentityTaken = errors.New("the releases store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this tier's edge to reset the store")
+var errStoreIdentityTaken = errors.New("the releases store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or this project's state was lost. A re-bootstrap keeps the store and every identity in it; only tearing this tier down with `ocel bootstrap destroy`, which refuses while anything is still deployed there, deletes them")
 
 func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred, secret string) error {
 	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", map[string]string{"secret": secret}, nil)

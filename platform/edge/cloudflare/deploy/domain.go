@@ -34,7 +34,10 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := s.p.requireTLSCover(ctx, zoneID, zoneName, binding.Hostname); err != nil {
 		return err
 	}
-	forwarded := s.isForwarded(binding.Hostname)
+	forwarded, err := s.isStillForwarded(ctx, zoneID, binding.Hostname)
+	if err != nil {
+		return err
+	}
 	owns, err := s.p.projectOwnsScript(ctx, s.state.Slug)
 	if err != nil {
 		return err
@@ -43,7 +46,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		ownsProjectScript := owns
 		owns = func(script string) bool { return script == "" || ownsProjectScript(script) }
 	}
-	if err := s.p.ensureRoute(ctx, s.p.routeSnapshot(), zoneID, routePattern(binding.Hostname), script, routeSpec{owns: owns}); err != nil {
+	if err := s.p.ensureRoute(ctx, s.p.routeSnapshot(), accountID, zoneID, routePattern(binding.Hostname), script, routeSpec{owns: owns}); err != nil {
 		return err
 	}
 	if forwarded {

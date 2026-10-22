@@ -322,9 +322,10 @@ func adoptReleasesStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tie
 func edgeCredUnrecorded(kind edge.Kind, surface, scriptName, paramName string) error {
 	return fmt.Errorf(
 		"the %s edge reoffered its %s %q without a bootstrap credential, meaning it still has the one it was given, "+
-			"but %s stores none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
-			"back, so delete the bootstrap credential set on %q at the %s edge and re-run bootstrap to mint a fresh one",
-		kind, surface, scriptName, paramName, scriptName, kind)
+			"but %s stores none: a prior bootstrap of this origin set that credential and failed before storing it, "+
+			"or %s was deleted since. It cannot be read back, so delete the bootstrap credential set on %q at the %s "+
+			"edge and re-run bootstrap to mint a fresh one",
+		kind, surface, scriptName, paramName, paramName, scriptName, kind)
 }
 
 func ReadReleasesStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (ReleasesStore, error) {

@@ -550,6 +550,11 @@ func TestAdoptReleasesStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		if !strings.Contains(err.Error(), "ocel-releases-store") || !strings.Contains(err.Error(), namesFor(environment.TierProduction, "fake").releasesStoreParam) {
 			t.Errorf("error = %v, want it to name the worker and the parameter that stores nothing", err)
 		}
+		for _, cause := range []string{"a prior bootstrap of this origin set that credential and failed before storing it", namesFor(environment.TierProduction, "fake").releasesStoreParam + " was deleted"} {
+			if !strings.Contains(err.Error(), cause) {
+				t.Errorf("error = %v, want it to name %q as a cause: the store is this origin's own, so no other origin set its credential", err, cause)
+			}
+		}
 		if _, stored := ssmc.params[namesFor(environment.TierProduction, "fake").releasesStoreParam]; stored {
 			t.Error("a credential-less store was written despite the refusal")
 		}

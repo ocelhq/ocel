@@ -17,8 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 )
 
-const recordComment = "managed by ocel"
-
 const automaticTTL = 300 * time.Second
 
 type recordAPI interface {
@@ -40,6 +38,9 @@ type dnsRecords struct {
 	named     string
 	origin    func(context.Context) (OriginScope, error)
 
+	originMu       sync.Mutex
+	resolvedOrigin *OriginScope
+
 	mu   sync.Mutex
 	seen []edge.Zone
 }
@@ -53,6 +54,20 @@ func NewDNS(zone string, origin func(context.Context) (OriginScope, error)) edge
 		named:     zone,
 		origin:    origin,
 	}
+}
+
+func (w *dnsRecords) originScope(ctx context.Context) (OriginScope, error) {
+	w.originMu.Lock()
+	defer w.originMu.Unlock()
+	if w.resolvedOrigin != nil {
+		return *w.resolvedOrigin, nil
+	}
+	scope, err := resolveOrigin(ctx, w.origin)
+	if err != nil {
+		return OriginScope{}, err
+	}
+	w.resolvedOrigin = &scope
+	return scope, nil
 }
 
 func (w *dnsRecords) TTL() time.Duration {
@@ -81,6 +96,13 @@ func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
 }
 
 func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
+	if len(records) == 0 {
+		return []edge.Record{}, nil
+	}
+	origin, err := w.originScope(ctx)
+	if err != nil {
+		return nil, err
+	}
 	written := make([]edge.Record, 0, len(records))
 	for _, want := range records {
 		zone, err := w.zoneFor(ctx, want.Name)
@@ -91,7 +113,7 @@ func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func
 		if err != nil {
 			return written, err
 		}
-		ours, err := w.ensure(ctx, zone, want, live, say)
+		ours, err := w.ensure(ctx, zone, origin, want, live, say)
 		if err != nil {
 			return written, err
 		}
@@ -102,13 +124,14 @@ func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func
 	return written, nil
 }
 
-func (w *dnsRecords) ensure(ctx context.Context, zone edge.Zone, want edge.Record, live []dns.RecordResponse, say func(string)) (bool, error) {
+func (w *dnsRecords) ensure(ctx context.Context, zone edge.Zone, origin OriginScope, want edge.Record, live []dns.RecordResponse, say func(string)) (bool, error) {
+	comment := formatWriterComment(origin)
 	var mine, foreign *dns.RecordResponse
 	for i := range live {
 		if !isAddressRecord(live[i].Type) {
 			continue
 		}
-		if live[i].Comment == recordComment {
+		if live[i].Comment == comment {
 			mine = &live[i]
 			break
 		}
@@ -121,17 +144,17 @@ func (w *dnsRecords) ensure(ctx context.Context, zone edge.Zone, want edge.Recor
 		if mine.Content == want.Value && string(mine.Type) == string(want.Type) && mine.Proxied == want.Proxied {
 			return true, nil
 		}
-		if err := w.replace(ctx, zone.ID, mine.ID, want); err != nil {
+		if err := w.replace(ctx, zone.ID, mine.ID, want, comment); err != nil {
 			return false, err
 		}
 		return true, nil
 	case foreign != nil:
 		if !serves(*foreign, want) && say != nil {
-			say(foreignRecordWarning(want, *foreign))
+			say(foreignRecordWarning(want, *foreign, origin))
 		}
 		return false, nil
 	}
-	body, err := recordBody(want)
+	body, err := recordBody(want, comment)
 	if err != nil {
 		return false, err
 	}
@@ -151,15 +174,18 @@ func serves(rec dns.RecordResponse, want edge.Record) bool {
 	return string(rec.Type) == string(want.Type) && rec.Content == want.Value
 }
 
-func foreignRecordWarning(want edge.Record, rec dns.RecordResponse) string {
+func foreignRecordWarning(want edge.Record, rec dns.RecordResponse, origin OriginScope) string {
+	if held, written := parseRecordComment(rec.Comment); written && held.origin != origin {
+		return fmt.Sprintf("%s already has a %s record that origin %s wrote, pointing at %s, and one hostname belongs to one origin, so this deployment will not serve it — release %s on %s first", want.Name, rec.Type, held.origin, rec.Content, want.Name, held.origin)
+	}
 	if want.Proxied {
 		return fmt.Sprintf("%s already has a DNS record ocel did not write and it is not proxied through Cloudflare, so the worker route under it will never fire — set that record to proxied (orange cloud), or delete it and deploy again", want.Name)
 	}
 	return fmt.Sprintf("%s already has a %s record ocel did not write pointing at %s, so this deployment will not serve it — repoint it at %s, or delete it and deploy again", want.Name, rec.Type, rec.Content, want.Value)
 }
 
-func (w *dnsRecords) replace(ctx context.Context, zoneID, recordID string, want edge.Record) error {
-	body, err := recordBody(want)
+func (w *dnsRecords) replace(ctx context.Context, zoneID, recordID string, want edge.Record, comment string) error {
+	body, err := recordBody(want, comment)
 	if err != nil {
 		return err
 	}
@@ -177,7 +203,7 @@ type recordParam interface {
 	dns.RecordUpdateParamsBodyUnion
 }
 
-func recordBody(want edge.Record) (recordParam, error) {
+func recordBody(want edge.Record, comment string) (recordParam, error) {
 	switch want.Type {
 	case edge.RecordTypeCNAME:
 		return dns.CNAMERecordParam{
@@ -186,7 +212,7 @@ func recordBody(want edge.Record) (recordParam, error) {
 			Content: cf.F(want.Value),
 			Proxied: cf.F(want.Proxied),
 			TTL:     cf.F(dns.TTL(1)),
-			Comment: cf.F(recordComment),
+			Comment: cf.F(comment),
 		}, nil
 	case edge.RecordTypeA:
 		return dns.ARecordParam{
@@ -195,7 +221,7 @@ func recordBody(want edge.Record) (recordParam, error) {
 			Content: cf.F(want.Value),
 			Proxied: cf.F(want.Proxied),
 			TTL:     cf.F(dns.TTL(1)),
-			Comment: cf.F(recordComment),
+			Comment: cf.F(comment),
 		}, nil
 	case edge.RecordTypeAAAA:
 		return dns.AAAARecordParam{
@@ -204,13 +230,21 @@ func recordBody(want edge.Record) (recordParam, error) {
 			Content: cf.F(want.Value),
 			Proxied: cf.F(want.Proxied),
 			TTL:     cf.F(dns.TTL(1)),
-			Comment: cf.F(recordComment),
+			Comment: cf.F(comment),
 		}, nil
 	}
 	return nil, fmt.Errorf("write DNS record %s: %q is no record type this writer knows", want, want.Type)
 }
 
 func (w *dnsRecords) Delete(ctx context.Context, records []edge.Record) error {
+	if len(records) == 0 {
+		return nil
+	}
+	origin, err := w.originScope(ctx)
+	if err != nil {
+		return err
+	}
+	comment := formatWriterComment(origin)
 	for _, written := range records {
 		zone, err := w.zoneFor(ctx, written.Name)
 		if err != nil {
@@ -221,7 +255,7 @@ func (w *dnsRecords) Delete(ctx context.Context, records []edge.Record) error {
 			return err
 		}
 		for _, rec := range live {
-			if rec.Content != written.Value || string(rec.Type) != string(written.Type) {
+			if rec.Comment != comment || rec.Content != written.Value || string(rec.Type) != string(written.Type) {
 				continue
 			}
 			if _, err := w.records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zone.ID)}); err != nil {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/dns"
@@ -14,24 +13,23 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const ownerSeparator = " for "
-
-func formatForwardingOwner(namespace, slug string, tier environment.Tier) string {
-	return naming.NamespaceField(namespace) + naming.FieldSeparator + slug + naming.FieldSeparator + string(tier)
+func (p *cloudflare) forwardingOwner(ctx context.Context, slug string, tier environment.Tier) (string, error) {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return "", err
+	}
+	return formatForwardingOwner(p.namespace, origin, slug, tier)
 }
 
-func formatOwnerComment(owner string) string { return recordComment + ownerSeparator + owner }
-
-func parseCommentOwner(comment string) (owner string, written bool) {
-	if comment == recordComment {
-		return "", true
+func (p *cloudflare) previewForwardingOwner(ctx context.Context) (string, error) {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return "", err
 	}
-	owner, written = strings.CutPrefix(comment, recordComment+ownerSeparator)
-	return owner, written && owner != ""
+	return formatPreviewForwardingOwner(origin), nil
 }
 
 func newProxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) {
@@ -151,24 +149,23 @@ func (p *cloudflare) listAddressRecords(ctx context.Context, zoneID, hostname st
 }
 
 func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, want edge.Record) error {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return err
+	}
 	live, err := p.listAddressRecords(ctx, zoneID, want.Name)
 	if err != nil {
 		return err
 	}
 	for _, rec := range live {
-		held, written := parseCommentOwner(rec.Comment)
-		switch {
-		case !written:
-			return fmt.Errorf("%s already has a %s record ocel did not write, pointing at %s — delete it, and ocel writes the proxied record that forwards %s through Cloudflare", want.Name, rec.Type, rec.Content, want.Name)
-		case held != "" && held != owner:
-			return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname is served by one project: release it there with `ocel domain remove` first", want.Name, held)
+		if rec.Comment != formatOwnerComment(owner) && rec.Comment != formatWriterComment(origin) {
+			return refuseHeldRecord(want.Name, rec, origin)
 		}
 	}
-	body, err := recordBody(want)
+	body, err := recordBody(want, formatOwnerComment(owner))
 	if err != nil {
 		return err
 	}
-	body = withOwnerComment(body, owner)
 	if len(live) == 0 {
 		if _, err := p.client.DNS.Records.New(ctx, dns.RecordNewParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
 			return fmt.Errorf("write DNS record %s: %w", want, err)
@@ -190,19 +187,17 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 	return errors.Join(errs...)
 }
 
-func withOwnerComment(body recordParam, owner string) recordParam {
-	switch typed := body.(type) {
-	case dns.ARecordParam:
-		typed.Comment = cf.F(formatOwnerComment(owner))
-		return typed
-	case dns.AAAARecordParam:
-		typed.Comment = cf.F(formatOwnerComment(owner))
-		return typed
-	case dns.CNAMERecordParam:
-		typed.Comment = cf.F(formatOwnerComment(owner))
-		return typed
+func refuseHeldRecord(hostname string, rec dns.RecordResponse, origin OriginScope) error {
+	held, written := parseRecordComment(rec.Comment)
+	switch {
+	case !written:
+		return fmt.Errorf("%s already has a %s record ocel did not write, pointing at %s — delete it, and ocel writes the proxied record that forwards %s through Cloudflare", hostname, rec.Type, rec.Content, hostname)
+	case held.origin != origin && held.owner != "":
+		return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname belongs to one origin: release it on %s with `ocel domain remove` first", hostname, held.owner, held.origin)
+	case held.origin != origin:
+		return fmt.Errorf("%s already has a %s record that origin %s wrote, pointing at %s, and one hostname belongs to one origin: release it on %s first", hostname, rec.Type, held.origin, rec.Content, held.origin)
 	}
-	return body
+	return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname is served by one project: release it there with `ocel domain remove` first", hostname, held.owner)
 }
 
 func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, hostname string) error {
@@ -212,7 +207,7 @@ func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, host
 	}
 	var errs []error
 	for _, rec := range live {
-		if held, _ := parseCommentOwner(rec.Comment); held != owner {
+		if rec.Comment != formatOwnerComment(owner) {
 			continue
 		}
 		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
@@ -222,19 +217,31 @@ func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, host
 	return errors.Join(errs...)
 }
 
+func (p *cloudflare) isForwardedBy(ctx context.Context, zoneID, owner, hostname string) (bool, error) {
+	live, err := p.listAddressRecords(ctx, zoneID, hostname)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(live, func(rec dns.RecordResponse) bool { return rec.Comment == formatOwnerComment(owner) }), nil
+}
+
 func (p *cloudflare) unforwardRecords(ctx context.Context, zoneID, owner, hostname string) error {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return err
+	}
 	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
 		return err
 	}
-	body, err := recordBody(edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true})
+	body, err := recordBody(edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}, formatWriterComment(origin))
 	if err != nil {
 		return err
 	}
 	var errs []error
 	rewritten := false
 	for _, rec := range live {
-		if held, _ := parseCommentOwner(rec.Comment); held != owner {
+		if rec.Comment != formatOwnerComment(owner) {
 			continue
 		}
 		if rewritten {
@@ -252,14 +259,23 @@ func (p *cloudflare) unforwardRecords(ctx context.Context, zoneID, owner, hostna
 }
 
 func (p *cloudflare) readForwardedOwner(ctx context.Context, zoneID, hostname string) (string, error) {
+	shared, err := p.previewForwardingOwner(ctx)
+	if err != nil {
+		return "", err
+	}
 	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
 		return "", err
 	}
 	for _, rec := range live {
-		if held, _ := parseCommentOwner(rec.Comment); held != "" && rec.Proxied {
-			return held, nil
+		held, written := parseRecordComment(rec.Comment)
+		switch {
+		case !written || held.owner == "" || !rec.Proxied:
+			continue
+		case held.owner == shared:
+			return edge.PreviewEntryOwner, nil
 		}
+		return held.owner, nil
 	}
 	return "", nil
 }

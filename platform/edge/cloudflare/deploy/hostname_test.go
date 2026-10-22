@@ -758,7 +758,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
+					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
 				},
 			},
 			script:   "ocel-preview",
@@ -776,7 +776,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "other", "pattern": "x.app.com/*", "script": "someone-else"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
+					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
 				},
 			},
 			script:        "ocel-prod",
@@ -858,7 +858,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "unnamed", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
 				},
 			},
 			script:        "ocel-preview",
@@ -987,6 +987,62 @@ func TestAttachingARouteHeldByAForeignWorkerSinceTheListingFails(t *testing.T) {
 	}
 	if len(m.repointedRoutes) != 0 {
 		t.Errorf("repointed routes = %v, want a foreign route left in place", m.repointedRoutes)
+	}
+}
+
+func TestARouteAnotherOriginDeployedIsRefusedNamingThatOrigin(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		host, subject string
+	}{
+		{host: "shop.app.com", subject: "one hostname belongs to one origin"},
+		{host: "*.preview.app.com", subject: "one preview base domain belongs to one origin"},
+	} {
+		t.Run(tc.host, func(t *testing.T) {
+			t.Parallel()
+
+			theirs, err := entryWorkerName(defaultNamespace, otherOrigin, "shop", environment.TierProduction)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := &cfMock{
+				zoneID: "zone1", zoneName: "app.com",
+				existingRoutes: []map[string]any{{"id": "theirs", "pattern": routePattern(tc.host), "script": theirs}},
+				scriptSettings: map[string]map[string]any{theirs: {"tags": []any{otherOrigin.scriptTag()}}},
+			}
+			up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
+
+			err = m.provider(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", tc.host), nil)
+			if err == nil || !strings.Contains(err.Error(), otherOrigin.String()) || !strings.Contains(err.Error(), tc.subject) {
+				t.Fatalf("reconcileWorkerRoutes err = %v, want a refusal naming %s and saying %q", err, otherOrigin, tc.subject)
+			}
+			if len(m.repointedRoutes) != 0 || len(m.deletedRoutes) != 0 {
+				t.Errorf("repointed %v and deleted %v, want %s's route left in place", m.repointedRoutes, m.deletedRoutes, otherOrigin)
+			}
+		})
+	}
+}
+
+func TestARouteThatRunsNoWorkerIsRefusedNamingTheProjectThatForwardsIt(t *testing.T) {
+	t.Parallel()
+
+	theirs := mustFormatForwardingOwner(defaultNamespace, otherOrigin, "shop", environment.TierProduction)
+	m := &cfMock{
+		zoneID: "zone1", zoneName: "app.com",
+		existingRoutes: []map[string]any{{"id": "forwarded", "pattern": "shop.app.com/*", "script": ""}},
+		existingRecords: []map[string]any{
+			{"id": "forward", "name": "shop.app.com", "type": "A", "content": "192.0.2.1", "proxied": true, "comment": formatOwnerComment(theirs)},
+		},
+	}
+	up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
+
+	err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil)
+	if err == nil || !strings.Contains(err.Error(), theirs) {
+		t.Fatalf("reconcileWorkerRoutes err = %v, want a refusal naming %q, the project that forwards shop.app.com", err, theirs)
+	}
+	if len(m.repointedRoutes) != 0 {
+		t.Errorf("repointed %v, want the route left forwarding shop.app.com", m.repointedRoutes)
 	}
 }
 
@@ -1157,6 +1213,32 @@ func TestRouteOwner(t *testing.T) {
 			},
 			hostname: "*.preview.app.com",
 			want:     "ocel-preview-32da6c-shared-entry",
+		},
+		{
+			name: "a worker another origin deployed answers as itself on that origin",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "shop.app.com/*", "script": "ocel-prod-32da6c-entry-shop-abc123"},
+				},
+				scriptSettings: map[string]map[string]any{"ocel-prod-32da6c-entry-shop-abc123": {"tags": []any{otherOrigin.scriptTag()}}},
+			},
+			hostname: "shop.app.com",
+			want:     "ocel-prod-32da6c-entry-shop-abc123 on " + otherOrigin.String(),
+		},
+		{
+			name: "a worker this origin deployed answers as itself",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "shop.app.com/*", "script": "ocel-prod-4c73ed-entry-shop-abc123"},
+				},
+				scriptSettings: map[string]map[string]any{"ocel-prod-4c73ed-entry-shop-abc123": {"tags": []any{testOrigin.scriptTag()}}},
+			},
+			hostname: "shop.app.com",
+			want:     "ocel-prod-4c73ed-entry-shop-abc123",
 		},
 		{
 			name:     "a pattern no worker owns is unclaimed",
