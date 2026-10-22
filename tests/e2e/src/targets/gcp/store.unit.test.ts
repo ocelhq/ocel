@@ -29,6 +29,16 @@ const providerSource = (...at: string[]) =>
 const quoted = (listed: string | undefined) =>
   [...(listed ?? "").matchAll(/"([^"]+)"/g)].map((one) => one[1]);
 
+const named = (go: string, listed: string | undefined) =>
+  (listed ?? "")
+    .split(",")
+    .map((one) => one.trim())
+    .filter(Boolean)
+    .map(
+      (one) =>
+        quoted(one)[0] ?? quoted(go.match(new RegExp(`\\b${one}\\s*=\\s*("[^"]+")`))?.[1])[0],
+    );
+
 describe("the apis the floci lane switches on", () => {
   it("are the ones the provider's bootstrap refuses without", async () => {
     const go = await providerSource("internal", "bootstrap", "resources.go");
@@ -44,7 +54,7 @@ describe("the apis the floci lane switches on", () => {
     const partAPIs = [...parts.matchAll(/APIs:\s*\[\]string\{([^}]*)\}/g)].flatMap((one) =>
       quoted(one[1]),
     );
-    const syncAPIs = quoted(sync.match(/var SyncAPIs = \[\]string\{([^}]*)\}/)?.[1]);
+    const syncAPIs = named(sync, sync.match(/var SyncAPIs = \[\]string\{([^}]*)\}/)?.[1]);
     const deployAPIs = quoted(deploy.match(/const \(([^)]*)\)/)?.[1]);
     expect(syncAPIs.length).toBeGreaterThan(0);
     expect(deployAPIs.length).toBeGreaterThan(0);
