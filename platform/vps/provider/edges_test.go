@@ -102,6 +102,42 @@ func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *te
 	}
 }
 
+func TestABoxWhoseBootstrapNeverMintedAnOriginIDRemovesItsCloudflareProxyWithNothingToDo(t *testing.T) {
+	for name, accountID := range map[string]string{"with CLOUDFLARE_ACCOUNT_ID set": "acct", "with CLOUDFLARE_ACCOUNT_ID unset": ""} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(provider.NamespaceEnvVar, "staging")
+			t.Setenv("CLOUDFLARE_ACCOUNT_ID", accountID)
+			t.Setenv("CLOUDFLARE_API_TOKEN", "")
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Errorf("%s %s reached Cloudflare, want nothing asked of an account this box's proxy never bootstrapped against", r.Method, r.URL.Path)
+				http.Error(w, `{"success":false,"errors":[{"code":1,"message":"not served"}]}`, http.StatusInternalServerError)
+			}))
+			t.Cleanup(api.Close)
+			t.Setenv("CLOUDFLARE_BASE_URL", api.URL+"/")
+			machine := &box{}
+			written, err := routing.WriteRoutingTable(boxapi.RoutingTable{Grace: routing.DrainWindow})
+			if err != nil {
+				t.Fatal(err)
+			}
+			machine.routingDoc = string(written)
+			p := over(machine)
+			p.Recording(fake.NewKeyValues())
+			front, err := p.Edges().Open(cloudflare.Kind, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			planned, err := front.Hooks().PlanRemoveBootstrap(t.Context(), environment.TierProduction)
+			if err != nil || len(planned) != 0 {
+				t.Errorf("PlanRemoveBootstrap() = %+v, %v, want nothing planned: a box whose first bootstrap failed before minting its origin id never bootstrapped the proxy", planned, err)
+			}
+			if err := front.Teardown(t.Context(), environment.TierProduction); err != nil {
+				t.Errorf("Teardown() = %v, want nothing to tear down, so `ocel bootstrap destroy` reaches the box", err)
+			}
+		})
+	}
+}
+
 func cloudflareZones(t *testing.T) {
 	t.Helper()
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

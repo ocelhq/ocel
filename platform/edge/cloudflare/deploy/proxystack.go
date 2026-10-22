@@ -12,7 +12,7 @@ import (
 )
 
 func (x *Proxy) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	if _, err := x.p.tierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack"); err != nil {
+	if _, err := x.p.readTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack"); err != nil {
 		return nil, err
 	}
 	next := prior
@@ -46,7 +46,7 @@ func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding)
 			"the %q edge forwards %s to an origin, and this binding names none: it answers no hostname itself",
 			Kind, binding.Hostname)
 	}
-	names, err := s.x.p.names(ctx)
+	names, err := s.x.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding)
 	if err != nil {
 		return err
 	}
-	accountID, err := s.x.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
+	accountID, err := s.x.p.readTierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
 	if err != nil {
 		return err
 	}
@@ -69,11 +69,11 @@ func (s *proxyStack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from the Cloudflare proxy needs a hostname")
 	}
-	names, err := s.x.p.names(ctx)
+	names, err := s.x.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}
-	accountID, err := s.x.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
+	accountID, err := s.x.p.readTierAccount(ctx, s.state.Tier, fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
 	if err != nil {
 		return err
 	}
@@ -93,11 +93,11 @@ func (s *proxyStack) unbindDomain(ctx context.Context, names originNames, accoun
 }
 
 func (s *proxyStack) Destroy(ctx context.Context) error {
-	accountID, err := s.x.p.tierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack")
+	accountID, err := s.x.p.readTierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack")
 	if err != nil {
 		return err
 	}
-	names, err := s.x.p.names(ctx)
+	names, err := s.x.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}

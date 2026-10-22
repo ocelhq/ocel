@@ -107,11 +107,11 @@ func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	accountID, err := p.tierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack")
+	accountID, err := p.readTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack")
 	if err != nil {
 		return nil, err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -283,11 +283,11 @@ func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, st
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
-	accountID, err := s.p.tierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack")
+	accountID, err := s.p.readTierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack")
 	if err != nil {
 		return err
 	}
-	names, err := s.p.names(ctx)
+	names, err := s.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}

@@ -7,11 +7,11 @@ import (
 )
 
 func (x *Proxy) DomainOwner(ctx context.Context, hostname string) (string, error) {
-	accountID, err := x.p.anyTierAccount(ctx, "read what Cloudflare forwards")
+	accountID, err := x.p.readAnyTierAccount(ctx, "read what Cloudflare forwards")
 	if err != nil {
 		return "", err
 	}
-	names, err := x.p.names(ctx)
+	names, err := x.p.resolveNames(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -27,7 +27,7 @@ func (x *Proxy) DomainOwner(ctx context.Context, hostname string) (string, error
 }
 
 func (x *Proxy) ProjectOwner(ctx context.Context, slug string, tier environment.Tier) (string, error) {
-	names, err := x.p.names(ctx)
+	names, err := x.p.resolveNames(ctx)
 	if err != nil {
 		return "", err
 	}

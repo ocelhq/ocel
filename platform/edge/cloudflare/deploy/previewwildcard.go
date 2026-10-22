@@ -32,7 +32,7 @@ func (p *cloudflare) readSharedPreviewPurgeURL(ctx context.Context, accountID st
 }
 
 func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
-	accountID, err := p.tierAccount(ctx, environment.TierPreview, "reconcile the shared preview entry worker")
+	accountID, err := p.readTierAccount(ctx, environment.TierPreview, "reconcile the shared preview entry worker")
 	if err != nil {
 		return "", err
 	}
@@ -41,7 +41,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 		return "", errors.New("the shared preview entry worker needs a base domain to serve")
 	}
 
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -70,12 +70,12 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 }
 
 func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
-	accountID, err := p.tierAccount(ctx, environment.TierPreview, "destroy the shared preview entry worker")
+	accountID, err := p.readTierAccount(ctx, environment.TierPreview, "destroy the shared preview entry worker")
 	if err != nil {
 		return err
 	}
 
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}

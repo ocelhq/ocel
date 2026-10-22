@@ -10,11 +10,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-const tierRecordName = "bootstrap"
+const tierRecordName = "tier"
 
 type tierRecord struct {
 	AccountID              string         `json:"accountId"`
 	ClientCertificateZones []recordedZone `json:"clientCertificateZones,omitempty"`
+}
+
+func (r tierRecord) isEmpty() bool {
+	return r.AccountID == "" && len(r.ClientCertificateZones) == 0
 }
 
 type recordedZone struct {

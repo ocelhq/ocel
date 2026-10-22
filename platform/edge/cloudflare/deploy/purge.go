@@ -12,7 +12,7 @@ import (
 const hostnamesPerPurge = 100
 
 func (p *cloudflare) purgeHostnames(ctx context.Context, hostnames []string) error {
-	accountID, err := p.anyTierAccount(ctx, "purge what Cloudflare cached")
+	accountID, err := p.readAnyTierAccount(ctx, "purge what Cloudflare cached")
 	if err != nil {
 		return err
 	}

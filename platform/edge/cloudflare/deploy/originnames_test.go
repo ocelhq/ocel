@@ -10,7 +10,7 @@ var (
 func TestAnEdgeOpenedWithoutANamespaceNamesNothing(t *testing.T) {
 	t.Parallel()
 
-	if names, err := newCloudflare("", fixedOrigin(testOrigin), Options{}).names(t.Context()); err == nil {
+	if names, err := newCloudflare("", fixedOrigin(testOrigin), Options{}).resolveNames(t.Context()); err == nil {
 		t.Errorf("names() = %+v, want an error: a name without its namespace reaches whatever another namespace deployed", names)
 	}
 }
@@ -18,7 +18,7 @@ func TestAnEdgeOpenedWithoutANamespaceNamesNothing(t *testing.T) {
 func TestAnEdgeNamesWhatItKeepsForTheNamespaceAndOriginItWasOpenedFor(t *testing.T) {
 	t.Parallel()
 
-	names, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).names(t.Context())
+	names, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).resolveNames(t.Context())
 	if err != nil {
 		t.Fatalf("names(): %v", err)
 	}

@@ -178,7 +178,7 @@ func readEmbeddedCA(certificatePEM string) (string, bool) {
 }
 
 func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, tier environment.Tier, hostname string) error {
-	accountID, err := p.tierAccount(ctx, tier, "read whether Cloudflare can forward "+hostname+" to its origin with a client certificate")
+	accountID, err := p.readTierAccount(ctx, tier, "read whether Cloudflare can forward "+hostname+" to its origin with a client certificate")
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, tier e
 	if err := p.requireStrictOrigin(ctx, zone); err != nil {
 		return err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, tier e
 }
 
 func (p *cloudflare) ensureClientCertificates(ctx context.Context, tier environment.Tier, hostname string) ([]string, error) {
-	accountID, err := p.tierAccount(ctx, tier, "read the client certificate Cloudflare presents to this origin")
+	accountID, err := p.readTierAccount(ctx, tier, "read the client certificate Cloudflare presents to this origin")
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (p *cloudflare) ensureClientCertificates(ctx context.Context, tier environm
 	if err != nil {
 		return nil, err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +296,7 @@ func (p *cloudflare) keepFirstUpload(ctx context.Context, owner certificateOwner
 }
 
 func (p *cloudflare) presentClientCertificates(ctx context.Context, tier environment.Tier, hostname string) error {
-	accountID, err := p.tierAccount(ctx, tier, "present this origin's client certificate for "+hostname)
+	accountID, err := p.readTierAccount(ctx, tier, "present this origin's client certificate for "+hostname)
 	if err != nil {
 		return err
 	}
@@ -304,7 +304,7 @@ func (p *cloudflare) presentClientCertificates(ctx context.Context, tier environ
 	if err != nil {
 		return err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}

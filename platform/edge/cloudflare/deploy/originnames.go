@@ -13,7 +13,7 @@ type originNames struct {
 	origin    OriginScope
 }
 
-func (p *cloudflare) names(ctx context.Context) (originNames, error) {
+func (p *cloudflare) resolveNames(ctx context.Context) (originNames, error) {
 	if p.namespace == "" {
 		return originNames{}, errors.New("the cloudflare edge was opened without a bootstrap namespace, so it cannot name the workers and certificates this origin keeps in the account")
 	}

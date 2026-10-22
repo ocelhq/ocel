@@ -2,6 +2,7 @@ package edges
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -16,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type Registry struct {
@@ -40,7 +42,21 @@ type Registry struct {
 var Supported = []edge.Kind{alb.Kind, cloudflare.Kind}
 
 func (e Registry) Cloudflare() cloudflare.Origin {
-	return cloudflare.Origin{Scope: e.cloudflareScope, Records: e.KeyValues}
+	origin := cloudflare.Origin{Scope: e.cloudflareScope}
+	if e.KeyValues != nil {
+		origin.Records = cloudflareRecords{Store: e.KeyValues}
+	}
+	return origin
+}
+
+type cloudflareRecords struct{ records.Store }
+
+func (s cloudflareRecords) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	entry, err := s.Store.Read(ctx, key)
+	if errors.Is(err, ports.ErrNoRecordsDatabase) {
+		return records.Entry{}, records.ErrNotFound
+	}
+	return entry, err
 }
 
 func (e Registry) cloudflareScope(context.Context) (cloudflare.OriginScope, error) {

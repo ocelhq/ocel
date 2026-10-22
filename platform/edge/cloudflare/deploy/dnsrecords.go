@@ -83,7 +83,7 @@ func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func
 	if len(records) == 0 {
 		return []edge.Record{}, nil
 	}
-	accountID, err := w.anyTierAccount(ctx, writingDNSRecords)
+	accountID, err := w.readAnyTierAccount(ctx, writingDNSRecords)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (w *dnsRecords) Delete(ctx context.Context, records []edge.Record) error {
 	if len(records) == 0 {
 		return nil
 	}
-	accountID, err := w.anyTierAccount(ctx, writingDNSRecords)
+	accountID, err := w.readAnyTierAccount(ctx, writingDNSRecords)
 	if err != nil {
 		return err
 	}
