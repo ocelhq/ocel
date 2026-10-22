@@ -58,6 +58,11 @@ var bucketKind = KindOps{
 		if bucket == "" {
 			return 0, nil
 		}
+		if target.Class == naming.StorageState {
+			if err := b.refuseLiveStacks(ctx, read, bucket); err != nil {
+				return 0, err
+			}
+		}
 		if err := b.takeBucket(ctx, bucket); err != nil {
 			return 0, err
 		}

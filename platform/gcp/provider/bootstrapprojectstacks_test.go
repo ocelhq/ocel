@@ -3,6 +3,7 @@ package gcp
 import (
 	"errors"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -90,5 +91,39 @@ func TestATiersDestroyIsRefusedNamingAProjectStackStillLiveInItsStateBucket(t *t
 				t.Errorf("RefuseProjectStacks() listed the state bucket %d times, want once", listed)
 			}
 		})
+	}
+}
+
+func TestTakingTheStateBucketIsRefusedNamingAStackOfTheTiersOwnStillLiveInIt(t *testing.T) {
+	t.Parallel()
+	b, read, server := stateBucketHolding(t, theTiersOwnStacks()...)
+	target := tierBucketOf(naming.StorageState)
+
+	var refused refusal.Refusal
+	_, err := target.KindOps().Take(t.Context(), b, read, target)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Take() = %v, want a %s refusal: a stack whose state is still live was never torn down, and deleting its state strands what it provisioned", err, refusal.CodeNotReady)
+	}
+	if !strings.Contains(refused.Message, "ocel-alb-front-prod/alb-front-prod--infra") {
+		t.Errorf("Take() refused with %q, want it to name the live stack", refused.Message)
+	}
+	if len(server.removed) != 0 || len(server.deleted) != 0 {
+		t.Errorf("Take() removed objects %v and buckets %v, want neither", server.removed, server.deleted)
+	}
+	if listed := server.objectListings(); listed != 1 {
+		t.Errorf("Take() listed the state bucket %d times, want once", listed)
+	}
+}
+
+func TestTakingTheStateBucketEmptiesItWhenOnlyPulumisBookkeepingOutlivesItsStacks(t *testing.T) {
+	t.Parallel()
+	b, read, server := stateBucketHolding(t, pulumiBookkeeping("ocel-alb-front-prod", "alb-front-prod--infra")...)
+	target := tierBucketOf(naming.StorageState)
+
+	if _, err := target.KindOps().Take(t.Context(), b, read, target); err != nil {
+		t.Fatalf("Take() = %v, want the bucket emptied and deleted", err)
+	}
+	if want := []string{read.Buckets[naming.StorageState]}; !slices.Equal(server.deleted, want) {
+		t.Errorf("Take() deleted %v, want %v", server.deleted, want)
 	}
 }
