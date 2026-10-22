@@ -27,12 +27,44 @@ type elevating struct {
 	front    edge.Edge
 }
 
+func (e elevating) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
+	plan, err := e.Bootstrap.Plan(ctx, req)
+	if err != nil || e.front == nil {
+		return plan, err
+	}
+	bootstrap := e.front.Hooks().PlanBootstrap
+	if bootstrap == nil {
+		return plan, nil
+	}
+	planned, err := bootstrap(ctx, req.Tier)
+	if err != nil {
+		return provider.Plan{}, fmt.Errorf("plan the %s edge bootstrap: %w", e.front.Kind(), err)
+	}
+	if len(planned) == 0 {
+		return plan, nil
+	}
+	group, err := bootstrapplan.EdgeGroup(e.front.Kind(), "", planned)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	plan.Groups = append(plan.Groups, group)
+	return plan, nil
+}
+
 func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}
-	if err := e.Bootstrap.Apply(ctx, req, progress); err != nil || e.served == nil {
+	if err := e.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err
+	}
+	if e.front != nil {
+		if _, err := e.front.Bootstrap(ctx, req.Tier); err != nil {
+			return fmt.Errorf("bootstrap the %s edge for tier %s: %w", e.front.Kind(), req.Tier, err)
+		}
+	}
+	if e.served == nil {
+		return nil
 	}
 	return e.served(ctx, req.Tier)
 }

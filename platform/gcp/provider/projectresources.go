@@ -6,7 +6,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
@@ -27,7 +26,7 @@ func (p *Provider) ListProjectResources(ctx context.Context, req provider.Projec
 			listed = append(listed, p.albHostResources(host)...)
 		}
 	}
-	workers, err := cloudflare.ListProjectResources(ctx, string(p.namespace), edges.CloudflareOrigin(p.options.Project), req)
+	workers, err := cloudflare.ListProjectResources(ctx, string(p.namespace), p.edges().Cloudflare(), req)
 	if err != nil {
 		return nil, err
 	}

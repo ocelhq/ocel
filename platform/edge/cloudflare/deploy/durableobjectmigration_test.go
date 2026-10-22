@@ -40,7 +40,7 @@ func settingsProvider(t *testing.T, status int, body string) *cloudflare {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", resolvedOrigin: resolvedOrigin{Origin: fixedOrigin(testOrigin)}, client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

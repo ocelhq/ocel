@@ -8,7 +8,7 @@ import (
 )
 
 func (p *cloudflare) describeBootstrap(ctx context.Context, tier environment.Tier) ([]edge.BootstrapPart, error) {
-	accountID, err := bootstrapCredentials()
+	accountID, err := p.bootstrapCredentials(ctx, tier, "read the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}

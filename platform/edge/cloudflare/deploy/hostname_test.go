@@ -669,7 +669,7 @@ func (m *cfMock) store() *fake.KeyValues {
 
 func (m *cfMock) provider(t *testing.T) *cloudflare {
 	srv := m.server(t)
-	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), keyValues: m.store(), client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", resolvedOrigin: resolvedOrigin{Origin: Origin{Scope: fixedOrigin(testOrigin).Scope, Records: m.store()}}, client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}
@@ -987,7 +987,7 @@ func (m *cfMock) providerRetryingAsDeployed(t *testing.T) *cloudflare {
 	srv := m.server(t)
 	clock := &fakeClock{at: time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)}
 	policy := apiRetryPolicy{budget: rateLimitBudget, wait: clock.wait, jitter: func() float64 { return 1 }, now: clock.now}
-	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: policy.newClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+	return &cloudflare{namespace: "ocel", resolvedOrigin: resolvedOrigin{Origin: fixedOrigin(testOrigin)}, client: policy.newClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
 }
 
 func TestAttachingARouteWhoseResponseIsLostSucceedsWhenTheReplayFindsTheRouteHeld(t *testing.T) {

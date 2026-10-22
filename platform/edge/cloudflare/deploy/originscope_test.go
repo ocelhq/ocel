@@ -16,8 +16,8 @@ var (
 	otherOrigin = OriginScope{Vendor: "gcp", ID: "acme-shop"}
 )
 
-func fixedOrigin(origin OriginScope) func(context.Context) (OriginScope, error) {
-	return func(context.Context) (OriginScope, error) { return origin, nil }
+func fixedOrigin(origin OriginScope) Origin {
+	return Origin{Scope: func(context.Context) (OriginScope, error) { return origin, nil }}
 }
 
 var scriptTagPattern = regexp.MustCompile(`^[a-z0-9._-]+$`)
@@ -76,12 +76,12 @@ func TestAnOriginThatNamesNoVendorOrNoIDNamesNothing(t *testing.T) {
 		if name, err := previewEntryScriptNameFor(defaultNamespace, origin); err == nil {
 			t.Errorf("previewEntryScriptNameFor(%v) = %q, want an error", origin, name)
 		}
-		p := newCloudflare(defaultNamespace, fixedOrigin(origin), nil, Options{})
+		p := newCloudflare(defaultNamespace, fixedOrigin(origin), Options{})
 		if _, err := p.originScope(t.Context()); err == nil {
 			t.Errorf("originScope() of an edge opened for %v = nil error, want it refused", origin)
 		}
 	}
-	if _, err := newCloudflare(defaultNamespace, nil, nil, Options{}).originScope(t.Context()); err == nil {
+	if _, err := newCloudflare(defaultNamespace, Origin{}, Options{}).originScope(t.Context()); err == nil {
 		t.Error("originScope() of an edge opened with no origin = nil error, want it refused")
 	}
 }
@@ -90,7 +90,7 @@ func TestAnOriginThatCannotBeReadNamesNothing(t *testing.T) {
 	t.Parallel()
 
 	unread := errors.New("sts: no credentials")
-	p := newCloudflare(defaultNamespace, func(context.Context) (OriginScope, error) { return OriginScope{}, unread }, nil, Options{})
+	p := newCloudflare(defaultNamespace, Origin{Scope: func(context.Context) (OriginScope, error) { return OriginScope{}, unread }}, Options{})
 	if _, err := p.ProjectOwner(t.Context(), "shop", environment.TierProduction); !errors.Is(err, unread) {
 		t.Errorf("ProjectOwner() = %v, want the error reading the origin", err)
 	}
@@ -160,7 +160,7 @@ func TestEveryWorkerAnOriginUploadsCarriesItsOrigin(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	p := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), nil, Options{})
+	p := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{})
 	planned, err := p.bootstrapWorkers(ctx, environment.TierPreview)
 	if err != nil {
 		t.Fatal(err)

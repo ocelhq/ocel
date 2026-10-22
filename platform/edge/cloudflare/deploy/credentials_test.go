@@ -40,11 +40,11 @@ func TestVerifyingCredentialsAsksCloudflareForTheAccountUnlessTheChecksAreSkippe
 
 func TestAnEdgeSkipsItsChecksOnlyWhenTheEnvironmentSaysSo(t *testing.T) {
 	t.Setenv(processenv.SkipChecksEnvVar, "1")
-	if !newCloudflare("ocel", fixedOrigin(testOrigin), nil, Options{}).skipChecks {
+	if !newCloudflare("ocel", fixedOrigin(testOrigin), Options{}).skipChecks {
 		t.Errorf("an edge opened with %s=1 runs its checks, want them skipped", processenv.SkipChecksEnvVar)
 	}
 	t.Setenv(processenv.SkipChecksEnvVar, "")
-	if newCloudflare("ocel", fixedOrigin(testOrigin), nil, Options{}).skipChecks {
+	if newCloudflare("ocel", fixedOrigin(testOrigin), Options{}).skipChecks {
 		t.Errorf("an edge opened without %s skips its checks, want them run", processenv.SkipChecksEnvVar)
 	}
 }
@@ -76,7 +76,7 @@ func TestCredentialPermissionsListsWhatEachPurposeMints(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			doc, err := New("ocel", fixedOrigin(testOrigin), nil, Options{}).Hooks().DescribeCredentialPermissions(tc.purpose)
+			doc, err := New("ocel", fixedOrigin(testOrigin), Options{}).Hooks().DescribeCredentialPermissions(tc.purpose)
 			if err != nil {
 				t.Fatalf("DescribeCredentialPermissions(%v) error = %v", tc.purpose, err)
 			}
@@ -96,7 +96,7 @@ func TestCredentialPermissionsListsWhatEachPurposeMints(t *testing.T) {
 		})
 	}
 
-	if _, err := New("ocel", fixedOrigin(testOrigin), nil, Options{}).Hooks().DescribeCredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
+	if _, err := New("ocel", fixedOrigin(testOrigin), Options{}).Hooks().DescribeCredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
 		t.Errorf("DescribeCredentialPermissions(admin) err = %v, want it to name the purpose it was asked for", err)
 	}
 }
@@ -106,7 +106,7 @@ func verifiedAgainst(t *testing.T, answers ...answer) error {
 	t.Setenv(envAccountID, "acct-1")
 	t.Setenv(envAPIToken, "test")
 	client, _, _ := scriptedClient(t, answers...)
-	_, err := (&cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: client}).verifyCredentials(context.Background())
+	_, err := (&cloudflare{namespace: "ocel", resolvedOrigin: resolvedOrigin{Origin: fixedOrigin(testOrigin)}, client: client}).verifyCredentials(context.Background())
 	return err
 }
 
@@ -131,7 +131,7 @@ func TestVerifyCredentialsReturnsTheCancellationOfACheckItWasStoppedFrom(t *test
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := tc.ctx()
 			defer cancel()
-			_, err := (&cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: client}).verifyCredentials(ctx)
+			_, err := (&cloudflare{namespace: "ocel", resolvedOrigin: resolvedOrigin{Origin: fixedOrigin(testOrigin)}, client: client}).verifyCredentials(ctx)
 			var refused refusal.Refusal
 			if !errors.Is(err, tc.want) || errors.As(err, &refused) {
 				t.Errorf("verifyCredentials() error = %#v, want %v itself, not a refusal that says Cloudflare could not be reached", err, tc.want)
@@ -187,7 +187,7 @@ func TestUnsetCredentialsAreRefusedNamingEveryVariableAndWhereToSetThem(t *testi
 		check func(context.Context) error
 	}{
 		{"the edge", func(ctx context.Context) error {
-			_, err := New("ocel", fixedOrigin(testOrigin), nil, Options{}).Hooks().VerifyCredentials(ctx)
+			_, err := New("ocel", fixedOrigin(testOrigin), Options{}).Hooks().VerifyCredentials(ctx)
 			return err
 		}},
 		{"the DNS writer", func(ctx context.Context) error {

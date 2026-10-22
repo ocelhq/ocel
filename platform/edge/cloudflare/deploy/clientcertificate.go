@@ -180,7 +180,7 @@ func readEmbeddedCA(certificatePEM string) (string, bool) {
 }
 
 func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, tier environment.Tier, hostname string) error {
-	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "read whether Cloudflare can forward "+hostname+" to its origin with a client certificate")
+	zoneID, zoneName, err := p.resolveHostnameZone(ctx, tier, hostname, "read whether Cloudflare can forward "+hostname+" to its origin with a client certificate")
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, tier e
 }
 
 func (p *cloudflare) ensureClientCertificates(ctx context.Context, tier environment.Tier, hostname string) ([]string, error) {
-	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "read the client certificate Cloudflare presents to this origin")
+	zoneID, zoneName, err := p.resolveHostnameZone(ctx, tier, hostname, "read the client certificate Cloudflare presents to this origin")
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func (p *cloudflare) keepFirstUpload(ctx context.Context, tier environment.Tier,
 }
 
 func (p *cloudflare) presentClientCertificates(ctx context.Context, tier environment.Tier, hostname string) error {
-	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "present this origin's client certificate for "+hostname)
+	zoneID, zoneName, err := p.resolveHostnameZone(ctx, tier, hostname, "present this origin's client certificate for "+hostname)
 	if err != nil {
 		return err
 	}
@@ -403,8 +403,8 @@ func (p *cloudflare) writeAssociation(ctx context.Context, zoneID, zoneName stri
 	return nil
 }
 
-func (p *cloudflare) resolveHostnameZone(ctx context.Context, hostname, doing string) (id, name string, err error) {
-	accountID, err := requireAccountID(doing)
+func (p *cloudflare) resolveHostnameZone(ctx context.Context, tier environment.Tier, hostname, doing string) (id, name string, err error) {
+	accountID, err := p.requireTierAccount(ctx, tier, doing)
 	if err != nil {
 		return "", "", err
 	}

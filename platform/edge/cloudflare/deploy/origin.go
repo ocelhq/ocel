@@ -48,7 +48,7 @@ func newProxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) 
 }
 
 func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, owner string, binding edge.DomainBinding) error {
-	accountID, err := requireAccountID(fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
+	accountID, err := p.requireTierAccount(ctx, state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (p *cloudflare) forwardOrigin(ctx context.Context, accountID, owner, hostna
 }
 
 func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, owner, hostname string) error {
-	accountID, err := requireAccountID(fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
+	accountID, err := p.requireTierAccount(ctx, state.Tier, fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
 	if err != nil {
 		return err
 	}

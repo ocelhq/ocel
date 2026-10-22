@@ -372,7 +372,7 @@ func TestHashAsset(t *testing.T) {
 func TestPropagationIsTheRecordCacheWindow(t *testing.T) {
 	t.Parallel()
 
-	p := Router{p: &cloudflare{}}
+	p := Router{}
 	if !p.Facts().CachesRecords {
 		t.Fatal("Facts().CachesRecords = false, but the entry worker serves a promotion from a cached record for RECORD_TTL_MS")
 	}
@@ -384,7 +384,7 @@ func TestPropagationIsTheRecordCacheWindow(t *testing.T) {
 func TestTheRouterReachesFunctionsAndContainers(t *testing.T) {
 	t.Parallel()
 
-	facts := Router{p: &cloudflare{}}.Facts()
+	facts := Router{}.Facts()
 	if !facts.ReachesFunctions || !facts.ReachesContainers {
 		t.Errorf("Facts() = %+v, want a router that reaches functions and containers: the entry worker forwards a container's release to the origin its record names", facts)
 	}
@@ -425,14 +425,14 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 			t.Setenv(envAccountID, tc.accountID)
 			t.Setenv(envAPIToken, tc.apiToken)
 
-			if err := tc.call(t.Context(), New("ocel", fixedOrigin(testOrigin), nil, Options{})); err == nil {
+			if err := tc.call(t.Context(), New("ocel", fixedOrigin(testOrigin), Options{})); err == nil {
 				t.Fatal("expected an error when the environment names no credential")
 			}
 		})
 	}
 
 	t.Run("the edge checks its credentials and its plan", func(t *testing.T) {
-		hooks := New("ocel", fixedOrigin(testOrigin), nil, Options{}).Hooks()
+		hooks := New("ocel", fixedOrigin(testOrigin), Options{}).Hooks()
 		if hooks.VerifyCredentials == nil {
 			t.Error("the cloudflare edge checks no credentials, so a preflight cannot say whether its token answers")
 		}
@@ -487,7 +487,7 @@ func TestTeardown(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := New("ocel", fixedOrigin(testOrigin), nil, Options{}).Teardown(t.Context(), environment.TierProduction); err == nil {
+		if err := New("ocel", fixedOrigin(testOrigin), Options{}).Teardown(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("Teardown without an account id err = nil, want an error")
 		}
 	})
@@ -496,7 +496,7 @@ func TestTeardown(t *testing.T) {
 func TestCloudflareCachesResponses(t *testing.T) {
 	t.Parallel()
 
-	if !New("ocel", fixedOrigin(testOrigin), nil, Options{}).Facts().CachesResponses {
+	if !New("ocel", fixedOrigin(testOrigin), Options{}).Facts().CachesResponses {
 		t.Error("Facts().CachesResponses = false, but Workers Cache stores an origin's responses and revalidates them itself")
 	}
 }
@@ -504,7 +504,7 @@ func TestCloudflareCachesResponses(t *testing.T) {
 func TestCloudflareInvalidatesByCacheTag(t *testing.T) {
 	t.Parallel()
 
-	if !New("ocel", fixedOrigin(testOrigin), nil, Options{}).Facts().InvalidatesByCacheTag {
+	if !New("ocel", fixedOrigin(testOrigin), Options{}).Facts().InvalidatesByCacheTag {
 		t.Error("Facts().InvalidatesByCacheTag = false, but Serve purges what it cached by the tags its origin stamps")
 	}
 }
@@ -512,7 +512,7 @@ func TestCloudflareInvalidatesByCacheTag(t *testing.T) {
 func TestTheCloudflareWorkerShieldsItsOrigin(t *testing.T) {
 	t.Parallel()
 
-	if !New("ocel", fixedOrigin(testOrigin), nil, Options{}).Facts().ShieldsOrigin {
+	if !New("ocel", fixedOrigin(testOrigin), Options{}).Facts().ShieldsOrigin {
 		t.Error("Facts().ShieldsOrigin = false, but nothing reaches an origin behind the worker without what the worker presents it")
 	}
 }

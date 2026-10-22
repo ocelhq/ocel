@@ -30,7 +30,7 @@ func newCloudflaredConnector() edge.TunnelConnector {
 func newTunnel(id string) edge.Tunnel { return edge.Tunnel{ID: id, Address: id + tunnelDomain} }
 
 func (p *cloudflare) ensureTunnel(ctx context.Context, name string) (edge.Tunnel, error) {
-	accountID, err := requireAccountID("open the tunnel " + name)
+	accountID, err := p.requireBootstrappedAccount(ctx, "open the tunnel "+name)
 	if err != nil {
 		return edge.Tunnel{}, err
 	}
@@ -70,7 +70,7 @@ func (p *cloudflare) findTunnel(ctx context.Context, accountID, name string) (st
 }
 
 func (p *cloudflare) configureTunnel(ctx context.Context, id, service string) error {
-	accountID, err := requireAccountID("configure the tunnel " + id)
+	accountID, err := p.requireBootstrappedAccount(ctx, "configure the tunnel "+id)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (p *cloudflare) configureTunnel(ctx context.Context, id, service string) er
 }
 
 func (p *cloudflare) readTunnelToken(ctx context.Context, id string) (string, error) {
-	accountID, err := requireAccountID("read the token of the tunnel " + id)
+	accountID, err := p.requireBootstrappedAccount(ctx, "read the token of the tunnel "+id)
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +99,7 @@ func (p *cloudflare) readTunnelToken(ctx context.Context, id string) (string, er
 }
 
 func (p *cloudflare) deleteTunnel(ctx context.Context, id string) error {
-	accountID, err := requireAccountID("delete the tunnel " + id)
+	accountID, err := p.requireBootstrappedAccount(ctx, "delete the tunnel "+id)
 	if err != nil {
 		return err
 	}

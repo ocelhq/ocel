@@ -58,7 +58,7 @@ func testStoreWorker() workerScript {
 
 func entryOf(t *testing.T, spec edge.StackSpec) entryProgram {
 	t.Helper()
-	built, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), nil, Options{}).buildEntryProgram(t.Context(), spec.Tier, spec.Slug, spec.Program)
+	built, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), spec.Tier, spec.Slug, spec.Program)
 	if err != nil {
 		t.Fatalf("buildEntryProgram: %v", err)
 	}
@@ -827,7 +827,7 @@ func TestDestroy(t *testing.T) {
 			t.Fatalf("Destroy: %v", err)
 		}
 		assertSet(t, "deleted scripts", m.deletedScripts, []string{"ocel-prod-4c73ed-entry-acme-web-750baa"})
-		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
+		if _, err := routerStackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
@@ -860,7 +860,7 @@ func TestDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("Destroy err = nil, want a store that cannot be read to fail the teardown loudly")
 		}
-		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).readServedPromotion(t.Context(), ""); err != nil {
+		if _, err := routerStackOn(p, testState(store.URL, "s3cr3t")).readServedPromotion(t.Context(), ""); err != nil {
 			t.Errorf("reading the pointer after a refused Destroy: %v, want the instance still keeping the record of what was deployed", err)
 		}
 	})
@@ -877,7 +877,7 @@ func TestDestroy(t *testing.T) {
 		if err := stackOn(p, state).Destroy(t.Context()); err == nil {
 			t.Fatal("Destroy err = nil, want the worker that survived reported")
 		}
-		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err != nil {
+		if _, err := routerStackOn(p, state).readServedPromotion(t.Context(), ""); err != nil {
 			t.Errorf("reading the pointer after a failed Destroy: %v, want the instance still naming the worker left behind", err)
 		}
 	})

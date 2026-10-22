@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
 )
 
@@ -27,7 +28,7 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		if err != nil {
 			return nil, err
 		}
-		return boxProxy{Proxy: cloudflare.NewProxy(namespace.String(), e.provider.cloudflareOrigin, e.provider.keyValues, decoded), box: e.provider.box()}, nil
+		return boxProxy{Proxy: cloudflare.NewProxy(namespace.String(), e.provider.cloudflareOrigin(), decoded), box: e.provider.box()}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"edge %q is not supported: leave `provider.vps.edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
@@ -71,12 +72,21 @@ func (p *Provider) box() *switchboard.Edge {
 	})
 }
 
-func (p *Provider) cloudflareOrigin(ctx context.Context) (cloudflare.OriginScope, error) {
-	id, err := p.routing.EnsureOriginID(ctx)
+func (p *Provider) cloudflareOrigin() cloudflare.Origin {
+	return cloudflare.Origin{Scope: p.cloudflareScope, Records: p.keyValues}
+}
+
+func (p *Provider) cloudflareScope(ctx context.Context) (cloudflare.OriginScope, error) {
+	table, err := p.routing.Read(ctx)
 	if err != nil {
 		return cloudflare.OriginScope{}, err
 	}
-	return cloudflare.OriginScope{Vendor: string(Vendor), ID: id}, nil
+	if table.OriginID == "" {
+		return cloudflare.OriginScope{}, refusal.Refuse(refusal.CodeNotReady,
+			"%s on %s holds no origin id, which names everything this box's origin owns in Cloudflare and which the box's bootstrap mints\nRun `ocel bootstrap` for this box's tier",
+			boxapi.RoutingTablePath, p.host.Named())
+	}
+	return cloudflare.OriginScope{Vendor: string(Vendor), ID: table.OriginID}, nil
 }
 
 func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {

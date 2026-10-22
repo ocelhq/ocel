@@ -12,5 +12,5 @@ func (p *Provider) ListProjectResources(ctx context.Context, req provider.Projec
 	if err != nil {
 		return nil, err
 	}
-	return cloudflare.ListProjectResources(ctx, namespace.String(), p.cloudflareOrigin, req)
+	return cloudflare.ListProjectResources(ctx, namespace.String(), p.cloudflareOrigin(), req)
 }

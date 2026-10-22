@@ -20,13 +20,13 @@ func TestEdgeSchemaIsCommitted(t *testing.T) {
 }
 
 func TestTheEdgeReachesItsOriginThroughATunnelOnlyWhenItsOptionsAskForOne(t *testing.T) {
-	if NewProxy("ocel", fixedOrigin(testOrigin), nil, Options{}).Facts().TunnelsToOrigin {
+	if NewProxy("ocel", fixedOrigin(testOrigin), Options{}).Facts().TunnelsToOrigin {
 		t.Error("the proxy with no options reaches its origin through a tunnel, want at its address")
 	}
-	if !NewProxy("ocel", fixedOrigin(testOrigin), nil, Options{Tunnel: true}).Facts().TunnelsToOrigin {
+	if !NewProxy("ocel", fixedOrigin(testOrigin), Options{Tunnel: true}).Facts().TunnelsToOrigin {
 		t.Error("the proxy set to tunnel reaches its origin at its address, want through a tunnel")
 	}
-	if !New("ocel", fixedOrigin(testOrigin), nil, Options{Tunnel: true}).Facts().TunnelsToOrigin {
+	if !New("ocel", fixedOrigin(testOrigin), Options{Tunnel: true}).Facts().TunnelsToOrigin {
 		t.Error("the worker edge set to tunnel reports no tunnel, and the provider must see it to refuse one it cannot run")
 	}
 }

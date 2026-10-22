@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -19,7 +20,7 @@ func (x *Proxy) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewW
 			"the %q edge forwards %s to an origin, and this reconcile names none: it answers no preview itself",
 			Kind, wildcard)
 	}
-	accountID, err := requireAccountID(fmt.Sprintf("forward %s through Cloudflare", wildcard))
+	accountID, err := x.p.requireTierAccount(ctx, environment.TierPreview, fmt.Sprintf("forward %s through Cloudflare", wildcard))
 	if err != nil {
 		return "", err
 	}
@@ -38,7 +39,7 @@ func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) e
 	if wildcard == "" {
 		return nil
 	}
-	accountID, err := requireAccountID(fmt.Sprintf("stop forwarding %s through Cloudflare", wildcard))
+	accountID, err := x.p.requireTierAccount(ctx, environment.TierPreview, fmt.Sprintf("stop forwarding %s through Cloudflare", wildcard))
 	if err != nil {
 		return err
 	}

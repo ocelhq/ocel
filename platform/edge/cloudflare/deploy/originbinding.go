@@ -34,7 +34,7 @@ func (s *stack) isStillForwarded(ctx context.Context, zoneID, hostname string) (
 }
 
 func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) error {
-	accountID, err := requireAccountID(fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
+	accountID, err := s.p.requireTierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 }
 
 func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
-	accountID, err := requireAccountID(fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
+	accountID, err := s.p.requireTierAccount(ctx, s.state.Tier, fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
 	if err != nil {
 		return err
 	}

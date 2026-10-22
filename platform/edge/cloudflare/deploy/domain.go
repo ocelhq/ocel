@@ -84,7 +84,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 }
 
 func (s *stack) entryWorker(ctx context.Context, verb string) (accountID, scriptName string, err error) {
-	accountID, err = requireAccountID(fmt.Sprintf("%s a domain on the Cloudflare edge", verb))
+	accountID, err = s.p.requireTierAccount(ctx, s.state.Tier, fmt.Sprintf("%s a domain on the Cloudflare edge", verb))
 	if err != nil {
 		return "", "", err
 	}

@@ -320,7 +320,7 @@ func TestTheRouteThatRunsNoWorkerNamesNoOwnerInPlaceOfTheRecordThatForwardsTheHo
 
 func TestTheWorkerEdgesTokenMayEditTheZonesClientCertificatesAndReadItsSSLMode(t *testing.T) {
 	for _, purpose := range []edge.CredentialPurpose{edge.PurposeBootstrap, edge.PurposeDeploy} {
-		document, err := New(defaultNamespace, fixedOrigin(testOrigin), nil, Options{}).Hooks().DescribeCredentialPermissions(purpose)
+		document, err := New(defaultNamespace, fixedOrigin(testOrigin), Options{}).Hooks().DescribeCredentialPermissions(purpose)
 		if err != nil {
 			t.Fatalf("DescribeCredentialPermissions(%s): %v", purpose, err)
 		}

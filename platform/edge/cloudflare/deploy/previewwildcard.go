@@ -43,7 +43,7 @@ func (p *cloudflare) readSharedPreviewPurgeURL(ctx context.Context, accountID, s
 }
 
 func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
-	accountID, err := requireAccountID("reconcile the shared preview entry worker")
+	accountID, err := p.requireTierAccount(ctx, environment.TierPreview, "reconcile the shared preview entry worker")
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +77,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 }
 
 func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
-	accountID, err := requireAccountID("destroy the shared preview entry worker")
+	accountID, err := p.requireTierAccount(ctx, environment.TierPreview, "destroy the shared preview entry worker")
 	if err != nil {
 		return err
 	}

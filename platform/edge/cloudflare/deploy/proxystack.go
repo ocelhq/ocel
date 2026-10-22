@@ -11,7 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (x *Proxy) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+func (x *Proxy) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	if _, err := x.p.requireTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack"); err != nil {
+		return nil, err
+	}
 	next := prior
 	next.Slug, next.Tier = spec.Slug, spec.Tier
 	next.PreviewBase = ""
@@ -62,6 +65,9 @@ func (s *proxyStack) UnbindDomain(ctx context.Context, hostname string) error {
 }
 
 func (s *proxyStack) Destroy(ctx context.Context) error {
+	if _, err := s.x.p.requireTierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack"); err != nil {
+		return err
+	}
 	var errs []error
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {

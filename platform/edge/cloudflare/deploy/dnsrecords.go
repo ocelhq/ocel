@@ -36,38 +36,30 @@ type dnsRecords struct {
 
 	accountID string
 	named     string
-	origin    func(context.Context) (OriginScope, error)
-
-	originMu       sync.Mutex
-	resolvedOrigin *OriginScope
+	resolvedOrigin
 
 	mu   sync.Mutex
 	seen []edge.Zone
 }
 
-func NewDNS(zone string, origin func(context.Context) (OriginScope, error)) edge.DNSRecords {
+func NewDNS(zone string, origin Origin) edge.DNSRecords {
 	client := newAPIClient()
 	return &dnsRecords{
-		records:   client.DNS.Records,
-		zones:     client.Zones,
-		accountID: readAccountID(),
-		named:     zone,
-		origin:    origin,
+		records:        client.DNS.Records,
+		zones:          client.Zones,
+		accountID:      readAccountID(),
+		named:          zone,
+		resolvedOrigin: resolvedOrigin{Origin: origin},
 	}
 }
 
-func (w *dnsRecords) originScope(ctx context.Context) (OriginScope, error) {
-	w.originMu.Lock()
-	defer w.originMu.Unlock()
-	if w.resolvedOrigin != nil {
-		return *w.resolvedOrigin, nil
+const writingDNSRecords = "write DNS records in Cloudflare"
+
+func (w *dnsRecords) refuseUnusableAccount(ctx context.Context) error {
+	if w.accountID == "" {
+		return fmt.Errorf("%s is not set; it is required to %s", envAccountID, writingDNSRecords)
 	}
-	scope, err := resolveOrigin(ctx, w.origin)
-	if err != nil {
-		return OriginScope{}, err
-	}
-	w.resolvedOrigin = &scope
-	return scope, nil
+	return w.refuseUnbootstrappedAccount(ctx, w.accountID, writingDNSRecords)
 }
 
 func (w *dnsRecords) TTL() time.Duration {
@@ -98,6 +90,9 @@ func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
 func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
 	if len(records) == 0 {
 		return []edge.Record{}, nil
+	}
+	if err := w.refuseUnusableAccount(ctx); err != nil {
+		return nil, err
 	}
 	origin, err := w.originScope(ctx)
 	if err != nil {
@@ -240,6 +235,9 @@ func (w *dnsRecords) Delete(ctx context.Context, records []edge.Record) error {
 	if len(records) == 0 {
 		return nil
 	}
+	if err := w.refuseUnusableAccount(ctx); err != nil {
+		return err
+	}
 	origin, err := w.originScope(ctx)
 	if err != nil {
 		return err
@@ -293,9 +291,6 @@ func (w *dnsRecords) zoneFor(ctx context.Context, hostname string) (edge.Zone, e
 }
 
 func (w *dnsRecords) ownedZones(ctx context.Context) ([]edge.Zone, error) {
-	if w.accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to write DNS records in Cloudflare", envAccountID)
-	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.seen != nil {
