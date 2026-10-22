@@ -145,7 +145,13 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	bootstrap := elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}
 	if kind == edge.None {
 		bootstrap.served = p.refuseServingPortsClosedFromOutside
+		return bootstrap, nil
 	}
+	front, err := edges{provider: p}.Open(kind, nil)
+	if err != nil {
+		return nil, err
+	}
+	bootstrap.front = front
 	return bootstrap, nil
 }
 

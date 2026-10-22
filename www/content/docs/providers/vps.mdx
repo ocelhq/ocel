@@ -276,7 +276,8 @@ per hostname naming `resolver`, plus an http redirect, at priority 1000000 and w
   it retries only on its next config change: fix DNS, then restart Traefik.
 - Traefik turns `;` in a query into `&` unless each entry point sets
   `http.encodeQuerySemicolons: true`.
-- Behind Cloudflare, rotate the zone's client certificate before it expires.
+- Behind Cloudflare, rotate the box's client certificate before it expires (ten years from
+  when it was minted).
 
 ### Behind your Caddy
 

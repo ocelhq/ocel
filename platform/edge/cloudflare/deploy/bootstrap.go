@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -37,10 +38,14 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	if err != nil {
 		return err
 	}
+	var errs []error
 	if err := p.deleteScript(ctx, accountID, storeScript); err != nil {
-		return fmt.Errorf("delete worker %q: %w", storeScript, err)
+		errs = append(errs, fmt.Errorf("delete worker %q: %w", storeScript, err))
 	}
-	return nil
+	if err := p.deleteClientCertificates(ctx, tier); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 type bootstrapWorker struct {

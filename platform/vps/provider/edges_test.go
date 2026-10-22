@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/routing"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -70,10 +72,13 @@ func TestTheCloudflareProxyOpenedWithTunnelSetReachesTheBoxThroughATunnel(t *tes
 
 func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, "staging")
-	p := vps.ProviderOver(
-		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
-		func(context.Context) (ssh.Conn, error) { return nil, errors.New("no box is reached to open an edge") },
-	)
+	machine := &box{}
+	written, err := routing.WriteRoutingTable(boxapi.RoutingTable{Grace: routing.DrainWindow, OriginID: "k3j9x0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	machine.routingDoc = string(written)
+	p := over(machine)
 
 	front, err := p.Edges().Open(cloudflare.Kind, nil)
 	if err != nil {
@@ -85,7 +90,7 @@ func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *te
 	}
 	want, err := cloudflare.NewProxy("staging", func(context.Context) (cloudflare.OriginScope, error) {
 		return cloudflare.OriginScope{Vendor: "vps", ID: "k3j9x0"}, nil
-	}, cloudflare.Options{}).ProjectOwner(t.Context(), "shop", environment.TierProduction)
+	}, nil, cloudflare.Options{}).ProjectOwner(t.Context(), "shop", environment.TierProduction)
 	if err != nil {
 		t.Fatalf("ProjectOwner: %v", err)
 	}

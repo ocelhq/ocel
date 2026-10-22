@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -38,6 +39,8 @@ type Deps struct {
 	StateBucket func(ctx context.Context, tier environment.Tier) (string, error)
 
 	CloudflareOrigin func(ctx context.Context) (cloudflare.OriginScope, error)
+
+	KeyValues records.Store
 }
 
 var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error){
@@ -46,7 +49,7 @@ var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error)
 		if err != nil {
 			return nil, err
 		}
-		return cloudflare.New(string(deps.Namespace), deps.CloudflareOrigin, decoded), nil
+		return cloudflare.New(string(deps.Namespace), deps.CloudflareOrigin, deps.KeyValues, decoded), nil
 	},
 	cloudfront.Kind: constructWithOptions(cloudfront.Kind, func(deps Deps, options cloudfront.Options) edge.Edge {
 		return cloudfront.New(deps.Namespace, deps.EnsurePart, cloudfront.FromConfig(deps.AWS), options)

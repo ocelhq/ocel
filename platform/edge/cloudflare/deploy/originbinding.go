@@ -85,12 +85,15 @@ func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
 	return s.p.unbindOrigin(ctx, &s.state, owner, hostname)
 }
 
-func (s *stack) stopForwarding(ctx context.Context, zoneID, hostname string) error {
+func (s *stack) stopForwarding(ctx context.Context, zoneID, zoneName, hostname string) error {
 	owner, err := s.forwardingOwner(ctx)
 	if err != nil {
 		return err
 	}
 	if err := s.p.unforwardRecords(ctx, zoneID, owner, hostname); err != nil {
+		return err
+	}
+	if err := s.p.releaseClientCertificate(ctx, zoneID, zoneName, hostname); err != nil {
 		return err
 	}
 	s.state.PublishAddress(hostname, "")

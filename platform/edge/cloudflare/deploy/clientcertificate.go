@@ -1,7 +1,6 @@
 package cloudflare
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -10,16 +9,20 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/dns"
 	"github.com/cloudflare/cloudflare-go/v4/origin_tls_client_auth"
-	"github.com/cloudflare/cloudflare-go/v4/zones"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -29,11 +32,20 @@ const (
 	clientCertificateName     = "ocel origin pull"
 	clientCAName              = "ocel origin pull CA"
 	embeddedIssuerPrefix      = "data:application/pkix-cert;base64,"
-	globalOriginPullsSetting  = "tls_client_auth"
-	settingOn                 = "on"
+	maxZoneClientCertificates = 10
 )
 
-var heldStatuses = []string{"initializing", "pending_deployment", "active"}
+var (
+	heldStatuses     = []string{"initializing", "pending_deployment", "active"}
+	releasedStatuses = []string{"pending_deletion", "deleted", "deletion_timed_out"}
+)
+
+type certificateOwner struct {
+	origin OriginScope
+	tier   environment.Tier
+}
+
+func (o certificateOwner) String() string { return string(o.tier) + " of origin " + o.origin.String() }
 
 type zoneClientCertificate struct {
 	ID          string    `json:"id"`
@@ -49,23 +61,93 @@ func (c zoneClientCertificate) isUploadedBefore(other zoneClientCertificate) boo
 	return c.ID < other.ID
 }
 
-func readClientCAs(zoneName string, held []zoneClientCertificate) ([]string, error) {
-	authorities := make([]string, 0, len(held))
-	for _, certificate := range held {
-		authority, err := readClientCA(zoneName, certificate)
-		if err != nil {
-			return nil, err
-		}
-		authorities = append(authorities, authority)
+func (c zoneClientCertificate) readOwner() (certificateOwner, bool) {
+	return readCertificateOwner(c.Certificate)
+}
+
+func readCertificateOwner(certificatePEM string) (certificateOwner, bool) {
+	block, _ := pem.Decode([]byte(certificatePEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return certificateOwner{}, false
 	}
-	slices.Sort(authorities)
-	return slices.Compact(authorities), nil
+	presented, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return certificateOwner{}, false
+	}
+	readable, named := strings.CutPrefix(presented.Subject.CommonName, clientCertificateName+" ")
+	if !named || len(presented.Subject.OrganizationalUnit) != 1 {
+		return certificateOwner{}, false
+	}
+	origin, named := parseOriginScope(readable)
+	return certificateOwner{origin: origin, tier: environment.Tier(presented.Subject.OrganizationalUnit[0])}, named
+}
+
+type zoneClientCertificates struct {
+	zoneName string
+	owner    certificateOwner
+	held     []zoneClientCertificate
+}
+
+func (z zoneClientCertificates) own() []zoneClientCertificate {
+	return slices.DeleteFunc(slices.Clone(z.held), func(c zoneClientCertificate) bool {
+		owner, named := c.readOwner()
+		return !named || owner != z.owner
+	})
+}
+
+func (z zoneClientCertificates) current() (zoneClientCertificate, bool) {
+	own := z.own()
+	if len(own) == 0 {
+		return zoneClientCertificate{}, false
+	}
+	return slices.MinFunc(own, func(a, b zoneClientCertificate) int {
+		if a.isUploadedBefore(b) {
+			return -1
+		}
+		return 1
+	}), true
+}
+
+func (z zoneClientCertificates) isOriginsCertificate(association origin_tls_client_auth.AuthenticatedOriginPull) bool {
+	if association.CERTID == "" {
+		return false
+	}
+	if owner, named := readCertificateOwner(association.Certificate); named {
+		return owner.origin == z.owner.origin
+	}
+	return slices.ContainsFunc(z.held, func(c zoneClientCertificate) bool {
+		owner, named := c.readOwner()
+		return c.ID == association.CERTID && named && owner.origin == z.owner.origin
+	})
+}
+
+func (z zoneClientCertificates) refuseFull() error {
+	if _, held := z.current(); held || len(z.held) < maxZoneClientCertificates {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"zone %s holds %d per-hostname client certificates, as many as Cloudflare allows in one zone, and none is the one the %s presents: delete one no hostname uses (SSL/TLS > Origin Server > Authenticated Origin Pulls), or forward the hostname through another zone, and deploy again",
+		z.zoneName, len(z.held), z.owner)
+}
+
+func (z zoneClientCertificates) refuseForeignAssociation(hostname string, association origin_tls_client_auth.AuthenticatedOriginPull) error {
+	if association.CERTID == "" || z.isOriginsCertificate(association) || slices.Contains(releasedStatuses, string(association.CERTStatus)) {
+		return nil
+	}
+	if owner, named := readCertificateOwner(association.Certificate); named {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"Cloudflare presents origin %s's client certificate for %s, and that origin trusts no other: one hostname belongs to one origin, so release it on %s first",
+			owner.origin, hostname, owner.origin)
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"Cloudflare presents the client certificate %s for %s, which ocel did not mint, and the origin behind it may trust no other: remove that hostname's association (SSL/TLS > Origin Server > Authenticated Origin Pulls) and deploy again",
+		association.CERTID, hostname)
 }
 
 func readClientCA(zoneName string, held zoneClientCertificate) (string, error) {
 	authority, ok := readEmbeddedCA(held.Certificate)
 	if !ok {
-		return "", refuseUnreadableCA(zoneName, held.ID)
+		return "", fmt.Errorf("read the CA the client certificate %s of zone %s chains to: it embeds none ocel can read", held.ID, zoneName)
 	}
 	return authority, nil
 }
@@ -94,19 +176,10 @@ func readEmbeddedCA(certificatePEM string) (string, bool) {
 		}
 		return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), true
 	}
-	if bytes.Equal(presented.RawIssuer, presented.RawSubject) && presented.CheckSignature(presented.SignatureAlgorithm, presented.RawTBSCertificate, presented.Signature) == nil {
-		return string(pem.EncodeToMemory(block)), true
-	}
 	return "", false
 }
 
-func refuseUnreadableCA(zoneName, id string) error {
-	return refusal.Refuse(refusal.CodeInvalid,
-		"zone %s presents the client certificate %s to origins, and ocel cannot read the CA it chains to, so no origin can be told to trust it: delete it (SSL/TLS > Origin Server > Authenticated Origin Pulls) so ocel uploads one of its own, or upload a self-signed one, and deploy again",
-		zoneName, id)
-}
-
-func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, hostname string) error {
+func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, tier environment.Tier, hostname string) error {
 	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "read whether Cloudflare can forward "+hostname+" to its origin with a client certificate")
 	if err != nil {
 		return err
@@ -114,123 +187,218 @@ func (p *cloudflare) refuseUnreadyClientCertificates(ctx context.Context, hostna
 	if err := p.requireStrictOrigin(ctx, zoneID, zoneName); err != nil {
 		return err
 	}
-	if _, err := p.client.OriginTLSClientAuth.Settings.Get(ctx, origin_tls_client_auth.SettingGetParams{ZoneID: cf.F(zoneID)}); err != nil {
-		return refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("read whether zone %s presents a client certificate to origins", zoneName), err)
+	certificates, err := p.readZoneClientCertificates(ctx, tier, zoneID, zoneName)
+	if err != nil {
+		return err
 	}
-	return nil
+	if err := certificates.refuseFull(); err != nil {
+		return err
+	}
+	association, err := p.readAssociation(ctx, zoneID, zoneName, hostname)
+	if err != nil {
+		return err
+	}
+	return certificates.refuseForeignAssociation(hostname, association)
 }
 
-func (p *cloudflare) ensureClientCertificates(ctx context.Context, hostname string) ([]string, error) {
-	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "read the client certificates Cloudflare presents to origins")
+func (p *cloudflare) ensureClientCertificates(ctx context.Context, tier environment.Tier, hostname string) ([]string, error) {
+	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "read the client certificate Cloudflare presents to this origin")
 	if err != nil {
 		return nil, err
 	}
-	pulls, err := p.readOriginPulls(ctx, zoneID, zoneName)
+	current, _, err := p.ensureOwnClientCertificate(ctx, tier, zoneID, zoneName)
 	if err != nil {
 		return nil, err
 	}
-	held, err := p.listClientCertificates(ctx, zoneID, zoneName)
+	authority, err := readClientCA(zoneName, current)
 	if err != nil {
 		return nil, err
 	}
-	if err := pulls.refuseShared(zoneName, len(held) > 0); err != nil {
-		return nil, err
-	}
-	if len(held) > 0 {
-		return readClientCAs(zoneName, held)
-	}
-	certificate, key, err := mintClientCertificate(zoneName, time.Now(), clientCertificateLifetime)
+	return []string{authority}, nil
+}
+
+func (p *cloudflare) ensureOwnClientCertificate(ctx context.Context, tier environment.Tier, zoneID, zoneName string) (zoneClientCertificate, zoneClientCertificates, error) {
+	certificates, err := p.readZoneClientCertificates(ctx, tier, zoneID, zoneName)
 	if err != nil {
-		return nil, err
+		return zoneClientCertificate{}, zoneClientCertificates{}, err
 	}
-	uploaded, err := p.client.OriginTLSClientAuth.New(ctx, origin_tls_client_auth.OriginTLSClientAuthNewParams{
+	if current, held := certificates.current(); held {
+		return current, certificates, nil
+	}
+	if err := certificates.refuseFull(); err != nil {
+		return zoneClientCertificate{}, zoneClientCertificates{}, err
+	}
+	if err := p.recordClientCertificateZone(ctx, tier, recordedZone{ID: zoneID, Name: zoneName}); err != nil {
+		return zoneClientCertificate{}, zoneClientCertificates{}, err
+	}
+	certificate, key, err := mintClientCertificate(certificates.owner.origin.String(), []string{string(tier)}, zoneName, time.Now(), clientCertificateLifetime)
+	if err != nil {
+		return zoneClientCertificate{}, zoneClientCertificates{}, err
+	}
+	uploaded, err := p.client.OriginTLSClientAuth.Hostnames.Certificates.New(ctx, origin_tls_client_auth.HostnameCertificateNewParams{
 		ZoneID:      cf.F(zoneID),
 		Certificate: cf.F(certificate),
 		PrivateKey:  cf.F(key),
 	})
 	if err != nil {
-		return nil, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("upload the client certificate zone %s presents to origins", zoneName), err)
+		return zoneClientCertificate{}, zoneClientCertificates{}, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("upload the client certificate the %s presents in zone %s", certificates.owner, zoneName), err)
 	}
-	return p.keepFirstUpload(ctx, zoneID, zoneName, uploaded.ID)
+	return p.keepFirstUpload(ctx, tier, zoneID, zoneName, zoneClientCertificate{ID: uploaded.ID, Certificate: certificate, Status: string(uploaded.Status), UploadedOn: uploaded.UploadedOn})
 }
 
-func (p *cloudflare) keepFirstUpload(ctx context.Context, zoneID, zoneName, uploadedID string) ([]string, error) {
-	held, err := p.listClientCertificates(ctx, zoneID, zoneName)
+func (p *cloudflare) keepFirstUpload(ctx context.Context, tier environment.Tier, zoneID, zoneName string, uploaded zoneClientCertificate) (zoneClientCertificate, zoneClientCertificates, error) {
+	certificates, err := p.readZoneClientCertificates(ctx, tier, zoneID, zoneName)
+	if err != nil {
+		return zoneClientCertificate{}, zoneClientCertificates{}, err
+	}
+	if !slices.ContainsFunc(certificates.held, func(listed zoneClientCertificate) bool { return listed.ID == uploaded.ID }) {
+		certificates.held = append(certificates.held, uploaded)
+	}
+	current, _ := certificates.current()
+	if current.ID == uploaded.ID {
+		return current, certificates, nil
+	}
+	if _, err := p.client.OriginTLSClientAuth.Hostnames.Certificates.Delete(ctx, uploaded.ID, origin_tls_client_auth.HostnameCertificateDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+		return zoneClientCertificate{}, zoneClientCertificates{}, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("delete the client certificate this run uploaded to zone %s after another run of the %s uploaded one first", zoneName, certificates.owner), err)
+	}
+	certificates.held = slices.DeleteFunc(certificates.held, func(listed zoneClientCertificate) bool { return listed.ID == uploaded.ID })
+	return current, certificates, nil
+}
+
+func (p *cloudflare) presentClientCertificates(ctx context.Context, tier environment.Tier, hostname string) error {
+	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "present this origin's client certificate for "+hostname)
+	if err != nil {
+		return err
+	}
+	current, certificates, err := p.ensureOwnClientCertificate(ctx, tier, zoneID, zoneName)
+	if err != nil {
+		return err
+	}
+	association, err := p.readAssociation(ctx, zoneID, zoneName, hostname)
+	if err != nil {
+		return err
+	}
+	if association.CERTID == current.ID && association.Enabled {
+		return nil
+	}
+	if err := certificates.refuseForeignAssociation(hostname, association); err != nil {
+		return err
+	}
+	return p.writeAssociation(ctx, zoneID, zoneName, origin_tls_client_auth.HostnameUpdateParamsConfig{
+		Hostname: cf.F(hostname),
+		CERTID:   cf.F(current.ID),
+		Enabled:  cf.F(true),
+	}, fmt.Sprintf("present the client certificate of the %s for %s", certificates.owner, hostname))
+}
+
+func (p *cloudflare) releaseClientCertificate(ctx context.Context, zoneID, zoneName, hostname string) error {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return err
+	}
+	forwarded, err := p.isForwardedByOrigin(ctx, zoneID, origin, hostname)
+	if err != nil || forwarded {
+		return err
+	}
+	held, err := p.listZoneClientCertificates(ctx, zoneID, zoneName)
+	if err != nil {
+		return err
+	}
+	certificates := zoneClientCertificates{zoneName: zoneName, owner: certificateOwner{origin: origin}, held: held}
+	association, err := p.readAssociation(ctx, zoneID, zoneName, hostname)
+	if err != nil || !certificates.isOriginsCertificate(association) {
+		return err
+	}
+	return p.writeAssociation(ctx, zoneID, zoneName, origin_tls_client_auth.HostnameUpdateParamsConfig{
+		Hostname: cf.F(hostname),
+		CERTID:   cf.F(association.CERTID),
+		Enabled:  cf.Null[bool](),
+	}, fmt.Sprintf("stop presenting origin %s's client certificate for %s", certificates.owner.origin, hostname))
+}
+
+func (p *cloudflare) isForwardedByOrigin(ctx context.Context, zoneID string, origin OriginScope, hostname string) (bool, error) {
+	live, err := p.listAddressRecords(ctx, zoneID, hostname)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(live, func(rec dns.RecordResponse) bool {
+		held, written := parseRecordComment(rec.Comment)
+		return written && held.owner != "" && held.origin == origin
+	}), nil
+}
+
+type zonedClientCertificate struct {
+	zoneID, zoneName string
+	held             zoneClientCertificate
+}
+
+func (p *cloudflare) listTierClientCertificates(ctx context.Context, tier environment.Tier) ([]zonedClientCertificate, error) {
+	zones, err := p.readClientCertificateZones(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
-	ours := slices.IndexFunc(held, func(listed zoneClientCertificate) bool { return listed.ID == uploadedID })
-	if ours < 0 {
-		return readClientCAs(zoneName, held)
+	var found []zonedClientCertificate
+	for _, zone := range zones {
+		certificates, err := p.readZoneClientCertificates(ctx, tier, zone.ID, zone.Name)
+		if err != nil {
+			return nil, err
+		}
+		for _, held := range certificates.own() {
+			found = append(found, zonedClientCertificate{zoneID: zone.ID, zoneName: zone.Name, held: held})
+		}
 	}
-	anotherUploadedFirst := slices.ContainsFunc(held, func(listed zoneClientCertificate) bool { return listed.isUploadedBefore(held[ours]) })
-	if !anotherUploadedFirst {
-		return readClientCAs(zoneName, held)
-	}
-	if _, err := p.client.OriginTLSClientAuth.Delete(ctx, uploadedID, origin_tls_client_auth.OriginTLSClientAuthDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
-		return nil, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("delete the client certificate this run uploaded to zone %s after another run uploaded one first", zoneName), err)
-	}
-	return readClientCAs(zoneName, slices.Delete(held, ours, ours+1))
+	return found, nil
 }
 
-func (p *cloudflare) presentClientCertificates(ctx context.Context, hostname string) error {
-	zoneID, zoneName, err := p.resolveHostnameZone(ctx, hostname, "turn on the client certificate Cloudflare presents to origins")
+func (p *cloudflare) planRemoveClientCertificates(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
+	found, err := p.listTierClientCertificates(ctx, tier)
+	if err != nil {
+		return nil, err
+	}
+	changes := make([]edge.PlanChange, 0, len(found))
+	for _, zoned := range found {
+		changes = append(changes, edge.PlanChange{
+			Kind: kindOriginPullCertificate, Name: zoned.zoneName + "/" + zoned.held.ID, Action: edge.PlanDelete,
+			Reason: "the client certificate this origin presents for the tier's hostnames in the zone",
+		})
+	}
+	return changes, nil
+}
+
+func (p *cloudflare) deleteClientCertificates(ctx context.Context, tier environment.Tier) error {
+	found, err := p.listTierClientCertificates(ctx, tier)
 	if err != nil {
 		return err
 	}
-	pulls, err := p.readOriginPulls(ctx, zoneID, zoneName)
-	if err != nil {
-		return err
+	var errs []error
+	for _, zoned := range found {
+		if _, err := p.client.OriginTLSClientAuth.Hostnames.Certificates.Delete(ctx, zoned.held.ID, origin_tls_client_auth.HostnameCertificateDeleteParams{ZoneID: cf.F(zoned.zoneID)}); err != nil {
+			errs = append(errs, refuseZoneCertificatesFailure(zoned.zoneName, fmt.Sprintf("delete the client certificate %s this origin presents for tier %s in zone %s", zoned.held.ID, tier, zoned.zoneName), err))
+		}
 	}
-	if pulls.ZoneLevel {
-		return nil
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
-	if err := pulls.refuseShared(zoneName, true); err != nil {
-		return err
-	}
-	if _, err := p.client.OriginTLSClientAuth.Settings.Update(ctx, origin_tls_client_auth.SettingUpdateParams{
-		ZoneID:  cf.F(zoneID),
-		Enabled: cf.F(true),
-	}); err != nil {
-		return refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("turn on zone-level authenticated origin pulls for %s", zoneName), err)
-	}
-	return nil
+	return p.forgetClientCertificateZones(ctx, tier)
 }
 
-type originPulls struct {
-	ZoneLevel bool
-	Global    bool
-}
-
-func (p *cloudflare) readOriginPulls(ctx context.Context, zoneID, zoneName string) (originPulls, error) {
-	zoneLevel, err := p.client.OriginTLSClientAuth.Settings.Get(ctx, origin_tls_client_auth.SettingGetParams{ZoneID: cf.F(zoneID)})
-	if err != nil {
-		return originPulls{}, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("read whether zone %s presents a client certificate to origins", zoneName), err)
-	}
-	global, err := p.client.Zones.Settings.Get(ctx, globalOriginPullsSetting, zones.SettingGetParams{ZoneID: cf.F(zoneID)})
-	if err != nil {
-		return originPulls{}, fmt.Errorf("read whether zone %s presents Cloudflare's shared client certificate to origins: %w", zoneName, err)
-	}
-	var read struct {
-		Value string `json:"value"`
-	}
-	if err := json.Unmarshal([]byte(global.JSON.RawJSON()), &read); err != nil {
-		return originPulls{}, fmt.Errorf("read whether zone %s presents Cloudflare's shared client certificate to origins: %w", zoneName, err)
-	}
-	return originPulls{ZoneLevel: zoneLevel.Enabled, Global: read.Value == settingOn}, nil
-}
-
-func (o originPulls) refuseShared(zoneName string, holdsOwn bool) error {
-	const fix = "make every origin you run in it trust a client certificate of your own uploaded to the zone (SSL/TLS > Origin Server > Authenticated Origin Pulls), turn zone-level authenticated origin pulls on, and deploy again"
+func (p *cloudflare) readAssociation(ctx context.Context, zoneID, zoneName, hostname string) (origin_tls_client_auth.AuthenticatedOriginPull, error) {
+	association, err := p.client.OriginTLSClientAuth.Hostnames.Get(ctx, hostname, origin_tls_client_auth.HostnameGetParams{ZoneID: cf.F(zoneID)})
 	switch {
-	case o.ZoneLevel && !holdsOwn:
-		return refusal.Refuse(refusal.CodeInvalid,
-			"zone %s presents Cloudflare's shared client certificate to origins: zone-level authenticated origin pulls are on and the zone holds no certificate of its own, and an origin in it may trust only that one: "+fix,
-			zoneName)
-	case !o.ZoneLevel && o.Global:
-		return refusal.Refuse(refusal.CodeInvalid,
-			"zone %s presents Cloudflare's shared client certificate to origins: global authenticated origin pulls are on and zone-level ones are off, and turning zone-level ones on would switch every origin in it to the zone's own certificate at once: "+fix,
-			zoneName)
+	case hasStatus(err, http.StatusNotFound):
+		return origin_tls_client_auth.AuthenticatedOriginPull{}, nil
+	case err != nil:
+		return origin_tls_client_auth.AuthenticatedOriginPull{}, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("read which client certificate zone %s presents for %s", zoneName, hostname), err)
+	}
+	return *association, nil
+}
+
+func (p *cloudflare) writeAssociation(ctx context.Context, zoneID, zoneName string, config origin_tls_client_auth.HostnameUpdateParamsConfig, doing string) error {
+	if _, err := p.client.OriginTLSClientAuth.Hostnames.Update(ctx, origin_tls_client_auth.HostnameUpdateParams{
+		ZoneID: cf.F(zoneID),
+		Config: cf.F([]origin_tls_client_auth.HostnameUpdateParamsConfig{config}),
+	}); err != nil {
+		return refuseZoneCertificatesFailure(zoneName, doing, err)
 	}
 	return nil
 }
@@ -243,8 +411,23 @@ func (p *cloudflare) resolveHostnameZone(ctx context.Context, hostname, doing st
 	return p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 }
 
-func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID, zoneName string) ([]zoneClientCertificate, error) {
-	listed := p.client.OriginTLSClientAuth.ListAutoPaging(ctx, origin_tls_client_auth.OriginTLSClientAuthListParams{ZoneID: cf.F(zoneID)})
+func (p *cloudflare) readZoneClientCertificates(ctx context.Context, tier environment.Tier, zoneID, zoneName string) (zoneClientCertificates, error) {
+	if err := refuseUnknownTier("client certificates", tier); err != nil {
+		return zoneClientCertificates{}, err
+	}
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return zoneClientCertificates{}, err
+	}
+	held, err := p.listZoneClientCertificates(ctx, zoneID, zoneName)
+	if err != nil {
+		return zoneClientCertificates{}, err
+	}
+	return zoneClientCertificates{zoneName: zoneName, owner: certificateOwner{origin: origin, tier: tier}, held: held}, nil
+}
+
+func (p *cloudflare) listZoneClientCertificates(ctx context.Context, zoneID, zoneName string) ([]zoneClientCertificate, error) {
+	listed := p.client.OriginTLSClientAuth.Hostnames.Certificates.ListAutoPaging(ctx, origin_tls_client_auth.HostnameCertificateListParams{ZoneID: cf.F(zoneID)})
 	var held []zoneClientCertificate
 	for listed.Next() {
 		var read zoneClientCertificate
@@ -256,13 +439,13 @@ func (p *cloudflare) listClientCertificates(ctx context.Context, zoneID, zoneNam
 		}
 	}
 	if err := listed.Err(); err != nil {
-		return nil, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("list the client certificates zone %s presents to origins", zoneName), err)
+		return nil, refuseZoneCertificatesFailure(zoneName, fmt.Sprintf("list the per-hostname client certificates of zone %s", zoneName), err)
 	}
 	return held, nil
 }
 
-func mintClientCertificate(subject string, now time.Time, lifetime time.Duration) (certificate, key string, err error) {
-	authorityKey, authority, err := mintClientCA(subject, now, lifetime)
+func mintClientCertificate(subject string, units []string, dnsName string, now time.Time, lifetime time.Duration) (certificate, key string, err error) {
+	authorityKey, authority, err := mintClientCA(subject, units, now, lifetime)
 	if err != nil {
 		return "", "", err
 	}
@@ -276,8 +459,8 @@ func mintClientCertificate(subject string, now time.Time, lifetime time.Duration
 	}
 	template := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: clientCertificateName + " " + subject},
-		DNSNames:              []string{subject},
+		Subject:               pkix.Name{CommonName: clientCertificateName + " " + subject, OrganizationalUnit: units},
+		DNSNames:              []string{dnsName},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(lifetime),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -298,7 +481,7 @@ func mintClientCertificate(subject string, now time.Time, lifetime time.Duration
 	return certificate, key, nil
 }
 
-func mintClientCA(subject string, now time.Time, lifetime time.Duration) (*rsa.PrivateKey, *x509.Certificate, error) {
+func mintClientCA(subject string, units []string, now time.Time, lifetime time.Duration) (*rsa.PrivateKey, *x509.Certificate, error) {
 	private, err := rsa.GenerateKey(rand.Reader, clientCertificateBits)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate the client certificate CA's key: %w", err)
@@ -309,7 +492,7 @@ func mintClientCA(subject string, now time.Time, lifetime time.Duration) (*rsa.P
 	}
 	template := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: clientCAName + " " + subject},
+		Subject:               pkix.Name{CommonName: clientCAName + " " + subject, OrganizationalUnit: units},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(lifetime),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,

@@ -42,7 +42,7 @@ func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) e
 	if err != nil {
 		return err
 	}
-	zoneID, _, err := x.p.resolveZone(ctx, accountID, baseDomain)
+	zoneID, zoneName, err := x.p.resolveZone(ctx, accountID, baseDomain)
 	if err != nil {
 		return err
 	}
@@ -50,5 +50,8 @@ func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) e
 	if err != nil {
 		return err
 	}
-	return x.p.dropForwardRecords(ctx, zoneID, owner, wildcard)
+	if err := x.p.dropForwardRecords(ctx, zoneID, owner, wildcard); err != nil {
+		return err
+	}
+	return x.p.releaseClientCertificate(ctx, zoneID, zoneName, wildcard)
 }

@@ -24,6 +24,7 @@ func (p *Provider) edgeDeps() edges.Deps {
 		Namespace:        p.namespace,
 		EnsurePart:       p.ensurePartNamed,
 		CloudflareOrigin: p.cloudflareOrigin,
+		KeyValues:        p.KeyValues(),
 		StateBucket: func(ctx context.Context, tier environment.Tier) (string, error) {
 			deployed, err := p.bootstrapped(ctx, tier)
 			if err != nil {

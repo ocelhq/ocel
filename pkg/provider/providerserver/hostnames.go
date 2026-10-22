@@ -278,7 +278,7 @@ func (d *hostnames) refreshOriginClaim(ctx context.Context, target ConfiguredHos
 	if err != nil || origin == nil {
 		return false, err
 	}
-	why, err := readOriginClaimStaleness(ctx, d.front, target.Hostname, d.tunnel, hostState, time.Now())
+	why, err := readOriginClaimStaleness(ctx, d.front, d.tier, target.Hostname, d.tunnel, hostState, time.Now())
 	if err != nil {
 		return false, err
 	}
@@ -310,7 +310,7 @@ func (d *hostnames) claimRouterOrigin(ctx context.Context, target ConfiguredHost
 		Certificate: hostState.Certificate.ID, CertificateRequested: hostState.Certificate.Requested,
 		Tunnel: d.tunnel,
 	}
-	claimed, err := claimOrigin(ctx, d.front, claim, routed.Claim, d.reserveOriginCertificate(target.Hostname, *hostState))
+	claimed, err := claimOrigin(ctx, d.front, d.tier, claim, routed.Claim, d.reserveOriginCertificate(target.Hostname, *hostState))
 	return claimed, errors.Join(err, d.adopt(kind, routed))
 }
 

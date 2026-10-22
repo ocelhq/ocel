@@ -128,6 +128,29 @@ func TestAForwardedProductionHostnameMovedOntoTheWorkerIsServedByTheEntryWorkerA
 	}
 }
 
+func TestAForwardedHostnameMovedOntoTheWorkerNoLongerPresentsTheOriginsClientCertificate(t *testing.T) {
+	m := zoneMock()
+	s := originStack(t, m, environment.TierProduction)
+	certificates := s.p.Hooks().ClientCertificates
+	if _, err := certificates.Ensure(t.Context(), environment.TierProduction, "api.app.com"); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if err := certificates.Present(t.Context(), environment.TierProduction, "api.app.com"); err != nil {
+		t.Fatalf("Present: %v", err)
+	}
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com", Origin: &edge.Origin{Address: albAddress, Certified: true}}); err != nil {
+		t.Fatalf("BindDomain with an origin: %v", err)
+	}
+
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "api.app.com"}); err != nil {
+		t.Fatalf("BindDomain onto the worker: %v", err)
+	}
+
+	if len(m.associations) != 0 || len(m.deletedClientCertificates) != 0 {
+		t.Errorf("associations %v left and deleted %v, want the hostname's association dropped and the origin's certificate kept", m.associations, m.deletedClientCertificates)
+	}
+}
+
 func TestAProductionHostnameBoundWithAnOriginUnderAWildcardWorkerRouteGetsAnExactRouteThatRunsNoWorker(t *testing.T) {
 	m := zoneMock()
 	m.existingRoutes = []map[string]any{{"id": "wildcard", "pattern": "*.app.com/*", "script": "user-wildcard"}}
@@ -297,7 +320,7 @@ func TestTheRouteThatRunsNoWorkerNamesNoOwnerInPlaceOfTheRecordThatForwardsTheHo
 
 func TestTheWorkerEdgesTokenMayEditTheZonesClientCertificatesAndReadItsSSLMode(t *testing.T) {
 	for _, purpose := range []edge.CredentialPurpose{edge.PurposeBootstrap, edge.PurposeDeploy} {
-		document, err := New(defaultNamespace, fixedOrigin(testOrigin), Options{}).Hooks().DescribeCredentialPermissions(purpose)
+		document, err := New(defaultNamespace, fixedOrigin(testOrigin), nil, Options{}).Hooks().DescribeCredentialPermissions(purpose)
 		if err != nil {
 			t.Fatalf("DescribeCredentialPermissions(%s): %v", purpose, err)
 		}

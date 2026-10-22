@@ -301,13 +301,13 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("an edge presents only a client certificate whose CA its origins were told to trust", func(t *testing.T) {
-		e, _ := suite.New(t)
+		e, spec := suite.New(t)
 		certificates := e.Hooks().ClientCertificates
 		if certificates == nil {
 			t.Skip("this edge presents no client certificate to its origins")
 		}
 		ctx := context.Background()
-		trusted, err := certificates.Ensure(ctx, suite.Hostname)
+		trusted, err := certificates.Ensure(ctx, spec.Tier, suite.Hostname)
 		if err != nil {
 			t.Fatalf("Ensure(%q): %v", suite.Hostname, err)
 		}
@@ -317,10 +317,10 @@ func Run(t *testing.T, suite Suite) {
 		for _, authority := range trusted {
 			requireClientCA(t, authority)
 		}
-		if err := certificates.Present(ctx, suite.Hostname); err != nil {
+		if err := certificates.Present(ctx, spec.Tier, suite.Hostname); err != nil {
 			t.Fatalf("Present(%q): %v", suite.Hostname, err)
 		}
-		presented, err := certificates.Ensure(ctx, suite.Hostname)
+		presented, err := certificates.Ensure(ctx, spec.Tier, suite.Hostname)
 		if err != nil {
 			t.Fatalf("Ensure(%q) once presented: %v", suite.Hostname, err)
 		}
@@ -330,7 +330,7 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("an edge that presents a client certificate finds a hostname ready that its zone forwards with one", func(t *testing.T) {
-		e, _ := suite.New(t)
+		e, spec := suite.New(t)
 		certificates := e.Hooks().ClientCertificates
 		if certificates == nil {
 			t.Skip("this edge presents no client certificate to its origins")
@@ -338,7 +338,7 @@ func Run(t *testing.T, suite Suite) {
 		if certificates.RefuseUnready == nil {
 			t.Fatal("the edge names no RefuseUnready, so a deploy learns a zone cannot forward its hostname only when it attaches it, after provisioning every stack")
 		}
-		if err := certificates.RefuseUnready(context.Background(), suite.Hostname); err != nil {
+		if err := certificates.RefuseUnready(context.Background(), spec.Tier, suite.Hostname); err != nil {
 			t.Fatalf("RefuseUnready(%q) = %v, want the hostname ready", suite.Hostname, err)
 		}
 	})

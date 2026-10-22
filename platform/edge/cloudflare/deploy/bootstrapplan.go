@@ -53,7 +53,11 @@ func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.T
 	if err != nil {
 		return nil, err
 	}
-	return state.removals(), nil
+	certificates, err := p.planRemoveClientCertificates(ctx, tier)
+	if err != nil {
+		return nil, err
+	}
+	return append(state.removals(), certificates...), nil
 }
 
 func (p *cloudflare) adoption(ctx context.Context, tier environment.Tier) (edge.Adoption, error) {

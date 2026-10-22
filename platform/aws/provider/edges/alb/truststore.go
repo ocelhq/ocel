@@ -81,7 +81,7 @@ func refuseNonAuthorities(hostname string, authorities []string) error {
 		}
 		if !parsed.IsCA {
 			return refusal.Refuse(refusal.CodeInvalid,
-				"the edge presents a client certificate to %s that chains to %q, which is no CA, and the load balancer's trust store holds only CAs: delete that certificate from the zone (SSL/TLS > Origin Server > Authenticated Origin Pulls) so ocel uploads one of its own, and deploy again",
+				"the edge presents a client certificate to %s that chains to %q, which is no CA, and the load balancer's trust store holds only CAs",
 				hostname, parsed.Subject.String())
 		}
 	}
@@ -372,7 +372,7 @@ func refuseOverTrustQuota(err error, trusted int) error {
 	switch {
 	case errors.As(err, &invalid):
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the load balancer's trust store refused the %d client CAs the hostnames behind it trust, and it holds at most as many as the quota %s allows: raise it in Service Quotas (Elastic Load Balancing), or delete the client certificates your Cloudflare zones no longer present, and deploy again (%v)",
+			"the load balancer's trust store refused the %d client CAs the hostnames behind it trust, and it holds at most as many as the quota %s allows: raise it in Service Quotas (Elastic Load Balancing), or forward its hostnames through fewer zones, each of which adds one, and deploy again (%v)",
 			trusted, caQuota, err)
 	case errors.As(err, &stores):
 		return refusal.Refuse(refusal.CodeInvalid,
