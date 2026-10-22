@@ -33,7 +33,7 @@ func liveCheckpoint(project, stack string) string {
 
 func theTiersOwnStacks() []string {
 	var objects []string
-	for _, project := range []string{"ocel-alb-front-prod", "ocel-alb-gate-prod", "ocel-alb-front-shielded-prod"} {
+	for _, project := range []string{"ocel-alb-front-prod", "ocel-alb-gate-prod"} {
 		stack := strings.TrimPrefix(project, "ocel-") + "--infra"
 		objects = append(objects, liveCheckpoint(project, stack))
 		objects = append(objects, pulumiBookkeeping(project, stack)...)

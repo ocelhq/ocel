@@ -119,7 +119,6 @@ func ListTierProjects(tier environment.Tier) []string {
 	return []string{
 		naming.PulumiProject(LoadBalancerStack(tier)),
 		naming.PulumiProject(GateStack(tier)),
-		naming.PulumiProject(ShieldedLoadBalancerStack(tier)),
 	}
 }
 
