@@ -377,6 +377,9 @@ export default defineConfig({
 }
 ```
 
+A `cloudflare-origin` bootstrap credential also holds `roles/storage.hmacKeyAdmin` for the HMAC
+key the worker reads the `edge-bucket` part with.
+
 The `alb` edge's load balancer needs two more services on:
 
 ```bash
