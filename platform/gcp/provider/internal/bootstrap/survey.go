@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -87,18 +89,41 @@ func (b Engine) newSurvey(tier environment.Tier) Survey {
 	}
 }
 
+const surveyReadsAtOnce = 8
+
+func runReadsAtOnce(ctx context.Context, reads ...func(context.Context) error) error {
+	failed := make([]error, len(reads))
+	var group errgroup.Group
+	group.SetLimit(surveyReadsAtOnce)
+	for i, read := range reads {
+		group.Go(func() error {
+			failed[i] = read(ctx)
+			return nil
+		})
+	}
+	_ = group.Wait()
+	return cmp.Or(failed...)
+}
+
 func (b Engine) surveyPresence(ctx context.Context, read Survey, items []Resource) error {
-	for _, item := range items {
-		found, err := b.PresenceOf(ctx, read, item)
-		if err != nil {
+	found := make([]Presence, len(items))
+	reads := make([]func(context.Context) error, len(items))
+	for i, item := range items {
+		reads[i] = func(ctx context.Context) (err error) {
+			found[i], err = b.PresenceOf(ctx, read, item)
 			return err
 		}
-		read.Held[item.ID()] = found.Present
-		if found.Mends != "" {
-			read.Mending[item.ID()] = found.Mends
+	}
+	if err := runReadsAtOnce(ctx, reads...); err != nil {
+		return err
+	}
+	for i, item := range items {
+		read.Held[item.ID()] = found[i].Present
+		if found[i].Mends != "" {
+			read.Mending[item.ID()] = found[i].Mends
 		}
-		if found.Replaces != "" {
-			read.Replacing[item.ID()] = found.Replaces
+		if found[i].Replaces != "" {
+			read.Replacing[item.ID()] = found[i].Replaces
 		}
 	}
 	return nil
@@ -110,29 +135,36 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 	if read.Buckets, err = b.recordedBuckets(ctx, tier); err != nil {
 		return Survey{}, err
 	}
-	sibling, err := b.recordedBuckets(ctx, tier.Sibling())
+	stateBucket := read.Buckets[naming.StorageState]
+	var sibling, own stamped
+	var stack string
+	err = runReadsAtOnce(ctx,
+		func(ctx context.Context) error {
+			buckets, err := b.recordedBuckets(ctx, tier.Sibling())
+			if err != nil {
+				return err
+			}
+			sibling, err = b.stamped(ctx, buckets[naming.StorageState])
+			return err
+		},
+		func(ctx context.Context) error {
+			return b.surveyPresence(ctx, read, Resources(read.Names, tier, read.Emulated))
+		},
+		func(ctx context.Context) (err error) {
+			own, err = b.stamped(ctx, stateBucket)
+			return err
+		},
+		func(ctx context.Context) (err error) {
+			stack, err = b.stateIn(ctx, stateBucket)
+			return err
+		},
+	)
 	if err != nil {
 		return Survey{}, err
 	}
-	if err := b.surveyPresence(ctx, read, Resources(read.Names, tier, read.Emulated)); err != nil {
-		return Survey{}, err
-	}
-
-	stampedSibling, err := b.stamped(ctx, sibling[naming.StorageState])
-	if err != nil {
-		return Survey{}, err
-	}
-	read.Sibling = stampedSibling.present
-
-	own, err := b.stamped(ctx, read.Buckets[naming.StorageState])
-	if err != nil {
-		return Survey{}, err
-	}
+	read.Sibling = sibling.present
 	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
-
-	if read.stateOf, err = b.stateIn(ctx, read.Buckets[naming.StorageState]); err != nil {
-		return Survey{}, err
-	}
+	read.stateOf = stack
 	return read, nil
 }
 
