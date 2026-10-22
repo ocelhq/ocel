@@ -27,7 +27,7 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		if err != nil {
 			return nil, err
 		}
-		return boxProxy{Proxy: cloudflare.NewProxy(namespace.String(), decoded), box: e.provider.box()}, nil
+		return boxProxy{Proxy: cloudflare.NewProxy(namespace.String(), e.provider.cloudflareOrigin, decoded), box: e.provider.box()}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"edge %q is not supported: leave `provider.vps.edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
@@ -69,6 +69,14 @@ func (p *Provider) box() *switchboard.Edge {
 		Tunnels:    p.findTunnelHooks,
 		ReadGate:   newRecordedGate(p.keyValues, p.cipher),
 	})
+}
+
+func (p *Provider) cloudflareOrigin(ctx context.Context) (cloudflare.OriginScope, error) {
+	id, err := p.routing.EnsureOriginID(ctx)
+	if err != nil {
+		return cloudflare.OriginScope{}, err
+	}
+	return cloudflare.OriginScope{Vendor: string(Vendor), ID: id}, nil
 }
 
 func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {

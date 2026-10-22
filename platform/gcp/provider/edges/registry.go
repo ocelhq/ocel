@@ -39,6 +39,12 @@ type Registry struct {
 
 var Supported = []edge.Kind{alb.Kind, cloudflare.Kind}
 
+func CloudflareOrigin(project string) func(context.Context) (cloudflare.OriginScope, error) {
+	return func(context.Context) (cloudflare.OriginScope, error) {
+		return cloudflare.OriginScope{Vendor: string(gcloud.Vendor), ID: project}, nil
+	}
+}
+
 func (e Registry) OpenCloudRun() *cloudrun.Edge {
 	return cloudrun.New(string(e.Namespace), e.Pins, e.Gates)
 }
@@ -81,7 +87,7 @@ func (e Registry) Open(kind edge.Kind, options provider.Options) (edge.Edge, err
 		if err != nil {
 			return nil, err
 		}
-		return cloudflare.New(string(e.Namespace), decoded), nil
+		return cloudflare.New(string(e.Namespace), CloudflareOrigin(e.Project), decoded), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge: leave `provider.gcp.edge` out, and each service answers on the url Cloud Run gives it, "+

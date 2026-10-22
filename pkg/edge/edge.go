@@ -84,7 +84,7 @@ type Edge interface {
 
 	DomainOwner(ctx context.Context, hostname string) (string, error)
 
-	ProjectOwner(slug string, tier environment.Tier) (string, error)
+	ProjectOwner(ctx context.Context, slug string, tier environment.Tier) (string, error)
 
 	PlanProjectRemoval(scope ProjectScope) ([]PlanGroup, error)
 

@@ -23,7 +23,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if binding.Origin != nil {
 		return s.bindForwarded(ctx, binding)
 	}
-	accountID, script, err := s.entryWorker("bind")
+	accountID, script, err := s.entryWorker(ctx, "bind")
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return err
 	}
 	forwarded := s.isForwarded(binding.Hostname)
-	owns, err := projectOwnsScript(s.p.namespace, s.state.Slug)
+	owns, err := s.p.projectOwnsScript(ctx, s.state.Slug)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if s.isForwarded(hostname) {
 		return s.unbindForwarded(ctx, hostname)
 	}
-	accountID, script, err := s.entryWorker("unbind")
+	accountID, script, err := s.entryWorker(ctx, "unbind")
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	return nil
 }
 
-func (s *stack) entryWorker(verb string) (accountID, scriptName string, err error) {
+func (s *stack) entryWorker(ctx context.Context, verb string) (accountID, scriptName string, err error) {
 	accountID, err = requireAccountID(fmt.Sprintf("%s a domain on the Cloudflare edge", verb))
 	if err != nil {
 		return "", "", err
@@ -89,8 +89,12 @@ func (s *stack) entryWorker(verb string) (accountID, scriptName string, err erro
 	if scriptName == "" {
 		return "", "", fmt.Errorf("stack %q records no entry worker to %s a domain on — deploy it first", s.state.Slug, verb)
 	}
-	if scriptName == previewEntryScript {
-		return "", "", fmt.Errorf("stack %q is served by the shared preview entry worker %q, which answers for every project, so no single project's domain may be bound to it", s.state.Slug, previewEntryScript)
+	shared, err := s.p.previewEntryScript(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	if scriptName == shared {
+		return "", "", fmt.Errorf("stack %q is served by the shared preview entry worker %q, which answers for every project, so no single project's domain may be bound to it", s.state.Slug, shared)
 	}
 	return accountID, scriptName, nil
 }

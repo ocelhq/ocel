@@ -180,7 +180,7 @@ describe("the gateway answering a purge on its workers.dev host", () => {
 });
 
 describe("the shared preview entry answering a purge on its workers.dev host", () => {
-  const SHARED = "https://ocel-preview-entry.acct.workers.dev";
+  const SHARED = "https://ocel-preview-4c73ed-shared-entry.acct.workers.dev";
   const sharedEnv = () =>
     envWith({ OCEL_SLUG: undefined, OCEL_PREVIEW: "1", OCEL_PREVIEW_GLOBAL: "1" });
 

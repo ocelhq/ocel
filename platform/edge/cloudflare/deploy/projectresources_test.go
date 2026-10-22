@@ -10,6 +10,31 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
+func listProjectResources(t *testing.T, req provider.ProjectResourcesRequest) []provider.PhysicalResource {
+	t.Helper()
+	listed, err := ListProjectResources(t.Context(), defaultNamespace, fixedOrigin(testOrigin), req)
+	if err != nil {
+		t.Fatalf("ListProjectResources: %v", err)
+	}
+	return listed
+}
+
+func TestAProjectListsNoEntryWorkerAnotherOriginNamed(t *testing.T) {
+	t.Parallel()
+
+	theirs, err := entryWorkerName(defaultNamespace, otherOrigin, "shop", environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := listProjectResources(t, provider.ProjectResourcesRequest{
+		Project: "shop", Tier: environment.TierProduction, EdgeKind: Kind,
+		EdgeStack: recordedStack(t, "shop", environment.TierProduction, private{EntryWorker: theirs}),
+	})
+	if len(got) != 0 {
+		t.Errorf("ListProjectResources = %+v, want none: %s is %s's worker", got, theirs, otherOrigin)
+	}
+}
+
 func recordedStack(t *testing.T, slug string, tier environment.Tier, own private) edge.StackState {
 	t.Helper()
 	raw, err := json.Marshal((&stack{state: edge.StackState{Slug: slug, Tier: tier}, own: own}).State())
@@ -25,7 +50,7 @@ func recordedStack(t *testing.T, slug string, tier environment.Tier, own private
 
 func ownEntryWorker(t *testing.T, slug string, tier environment.Tier) string {
 	t.Helper()
-	name, err := entryWorkerName(defaultNamespace, slug, tier)
+	name, err := entryWorkerName(defaultNamespace, testOrigin, slug, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +71,7 @@ func TestProjectResourcesNameTheWorkerScriptsTheProjectRunsOnCloudflare(t *testi
 		{environment.TierProduction, ownEntryWorker(t, "shop", environment.TierProduction)},
 		{environment.TierPreview, ownEntryWorker(t, "shop", environment.TierPreview)},
 	} {
-		got := ListProjectResources(defaultNamespace, provider.ProjectResourcesRequest{
+		got := listProjectResources(t, provider.ProjectResourcesRequest{
 			Tier:      tc.tier,
 			Project:   "shop",
 			EdgeKind:  Kind,
@@ -61,12 +86,12 @@ func TestProjectResourcesNameTheWorkerScriptsTheProjectRunsOnCloudflare(t *testi
 
 func TestProjectResourcesNameNoWorkerTheProjectDoesNotOwn(t *testing.T) {
 	for name, state := range map[string]edge.StackState{
-		"shared preview entry": recordedStack(t, "shop", environment.TierPreview, private{EntryWorker: previewEntryScript}),
+		"shared preview entry": recordedStack(t, "shop", environment.TierPreview, private{EntryWorker: previewEntryScriptName}),
 		"prune-only stack":     recordedStack(t, "shop", environment.TierPreview, private{EnvelopeKey: "k"}),
 		"proxy stack":          {Slug: "shop", Tier: environment.TierProduction, Bound: []string{"shop.example.com"}},
 		"another project":      recordedStack(t, "shop", environment.TierProduction, private{EntryWorker: ownEntryWorker(t, "cart", environment.TierProduction)}),
 	} {
-		got := ListProjectResources(defaultNamespace, provider.ProjectResourcesRequest{
+		got := listProjectResources(t, provider.ProjectResourcesRequest{
 			Tier:      state.Tier,
 			Project:   "shop",
 			EdgeKind:  Kind,
@@ -83,7 +108,7 @@ func TestProjectResourcesNameTheDNSRecordsOcelWroteInACloudflareZone(t *testing.
 		{Name: "shop.example.com", Type: edge.RecordTypeCNAME, Value: "d123.cloudfront.net"},
 		{Name: "www.shop.example.com", Type: edge.RecordTypeA, Value: "203.0.113.7"},
 	}
-	got := ListProjectResources(defaultNamespace, provider.ProjectResourcesRequest{
+	got := listProjectResources(t, provider.ProjectResourcesRequest{
 		Tier:           environment.TierProduction,
 		Project:        "shop",
 		EdgeKind:       "cloudfront",
@@ -100,7 +125,7 @@ func TestProjectResourcesNameTheDNSRecordsOcelWroteInACloudflareZone(t *testing.
 }
 
 func TestProjectResourcesOfAProjectAnotherEdgeServesAreNone(t *testing.T) {
-	got := ListProjectResources(defaultNamespace, provider.ProjectResourcesRequest{
+	got := listProjectResources(t, provider.ProjectResourcesRequest{
 		Tier:           environment.TierProduction,
 		Project:        "shop",
 		EdgeKind:       "cloudfront",
@@ -115,7 +140,7 @@ func TestProjectResourcesOfAProjectAnotherEdgeServesAreNone(t *testing.T) {
 
 func TestProjectResourcesLinkToNoDashboardPageCloudflareDocumentsNoURLFor(t *testing.T) {
 	t.Setenv(envAccountID, "0123456789abcdef0123456789abcdef")
-	got := ListProjectResources(defaultNamespace, provider.ProjectResourcesRequest{
+	got := listProjectResources(t, provider.ProjectResourcesRequest{
 		Tier:           environment.TierProduction,
 		Project:        "shop",
 		EdgeKind:       Kind,
@@ -138,7 +163,7 @@ func TestProjectResourcesNameTheProxiedRecordsACloudflareProxyStackHolds(t *test
 		{Name: "shop.example.com", Type: edge.RecordTypeA, Value: "203.0.113.7", Proxied: true},
 		{Name: "www.shop.example.com", Type: edge.RecordTypeA, Value: "203.0.113.7", Proxied: true},
 	}
-	got := ListProjectResources(defaultNamespace, provider.ProjectResourcesRequest{
+	got := listProjectResources(t, provider.ProjectResourcesRequest{
 		Tier:           environment.TierProduction,
 		Project:        "shop",
 		EdgeKind:       Kind,

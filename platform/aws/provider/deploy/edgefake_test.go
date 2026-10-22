@@ -99,7 +99,7 @@ func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string,
 	return f.bound[hostname], nil
 }
 
-func (f *recordingEdge) ProjectOwner(slug string, _ environment.Tier) (string, error) {
+func (f *recordingEdge) ProjectOwner(_ context.Context, slug string, _ environment.Tier) (string, error) {
 	return slug, nil
 }
 

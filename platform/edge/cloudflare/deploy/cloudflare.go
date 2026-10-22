@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -46,16 +47,22 @@ type cloudflare struct {
 	namespace string
 	options   Options
 
+	origin         func(context.Context) (OriginScope, error)
+	originMu       sync.Mutex
+	resolvedOrigin *OriginScope
+
 	skipChecks bool
 
 	zoneMu    sync.Mutex
 	zonesSeen map[string]zoneRef
 }
 
-func New(namespace string, options Options) edge.Edge { return newCloudflare(namespace, options) }
+func New(namespace string, origin func(context.Context) (OriginScope, error), options Options) edge.Edge {
+	return newCloudflare(namespace, origin, options)
+}
 
-func newCloudflare(namespace string, options Options) *cloudflare {
-	return &cloudflare{client: newAPIClient(), namespace: namespace, options: options, skipChecks: processenv.SkipChecks()}
+func newCloudflare(namespace string, origin func(context.Context) (OriginScope, error), options Options) *cloudflare {
+	return &cloudflare{client: newAPIClient(), namespace: namespace, origin: origin, options: options, skipChecks: processenv.SkipChecks()}
 }
 
 func (p *cloudflare) Kind() edge.Kind { return Kind }

@@ -36,6 +36,8 @@ type Deps struct {
 	EnsurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error)
 
 	StateBucket func(ctx context.Context, tier environment.Tier) (string, error)
+
+	CloudflareOrigin func(ctx context.Context) (cloudflare.OriginScope, error)
 }
 
 var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error){
@@ -44,7 +46,7 @@ var constructors = map[edge.Kind]func(Deps, provider.Options) (edge.Edge, error)
 		if err != nil {
 			return nil, err
 		}
-		return cloudflare.New(string(deps.Namespace), decoded), nil
+		return cloudflare.New(string(deps.Namespace), deps.CloudflareOrigin, decoded), nil
 	},
 	cloudfront.Kind: constructWithOptions(cloudfront.Kind, func(deps Deps, options cloudfront.Options) edge.Edge {
 		return cloudfront.New(deps.Namespace, deps.EnsurePart, cloudfront.FromConfig(deps.AWS), options)

@@ -48,10 +48,10 @@ func TestProjectResourcesNameTheWorkersACloudflareEdgeRuns(t *testing.T) {
 
 	listed := listProjectResources(t, provider.ProjectResourcesRequest{
 		Tier: environment.TierProduction, Project: "shop", EdgeKind: cloudflare.Kind,
-		EdgeStack: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Private: edge.Own(map[string]string{"entryWorker": "ocel-prod-entry-shop-138c36"})},
+		EdgeStack: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Private: edge.Own(map[string]string{"entryWorker": "ocel-prod-bc35fb-entry-shop-301003"})},
 	})
 
-	want := []provider.PhysicalResource{{Kind: "cloudflare:worker", ID: "ocel-prod-entry-shop-138c36", Location: "global"}}
+	want := []provider.PhysicalResource{{Kind: "cloudflare:worker", ID: "ocel-prod-bc35fb-entry-shop-301003", Location: "global"}}
 	if !slices.Equal(listed, want) {
 		t.Errorf("ListProjectResources() = %+v, want %+v", listed, want)
 	}

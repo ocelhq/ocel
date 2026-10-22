@@ -855,7 +855,7 @@ func (e *Edge) OwnersUnreadable(err error) {
 	e.unreadable = err
 }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+func (e *Edge) ProjectOwner(_ context.Context, slug string, tier environment.Tier) (string, error) {
 	return "ocel-" + slug + "-" + string(tier), nil
 }
 

@@ -159,6 +159,9 @@ func encodeScript(worker workerScript, metadata map[string]any) ([]byte, string,
 	metadata["compatibility_date"] = compatDate
 	metadata["compatibility_flags"] = compatFlags
 	metadata["observability"] = observability()
+	if len(worker.Tags) > 0 {
+		metadata["tags"] = worker.Tags
+	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return nil, "", fmt.Errorf("marshal %s worker metadata: %w", worker.Main.Name, err)

@@ -56,8 +56,8 @@ func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.T
 	return state.removals(), nil
 }
 
-func (p *cloudflare) adoption(_ context.Context, tier environment.Tier) (edge.Adoption, error) {
-	workers, err := bootstrapWorkers(p.namespace, tier)
+func (p *cloudflare) adoption(ctx context.Context, tier environment.Tier) (edge.Adoption, error) {
+	workers, err := p.bootstrapWorkers(ctx, tier)
 	if err != nil {
 		return edge.Adoption{}, err
 	}
@@ -104,7 +104,7 @@ type bootstrapState struct {
 }
 
 func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
-	planned, err := bootstrapWorkers(p.namespace, tier)
+	planned, err := p.bootstrapWorkers(ctx, tier)
 	if err != nil {
 		return bootstrapState{}, err
 	}
@@ -252,6 +252,11 @@ func settingsCurrent(settings *workers.ScriptScriptAndVersionSettingGetResponse,
 	slices.Sort(wanted)
 	if !slices.Equal(deployed, wanted) {
 		return false
+	}
+	for _, tag := range b.worker.Tags {
+		if !slices.Contains(settings.Tags, tag) {
+			return false
+		}
 	}
 	current := deployedBindings(settings)
 	for _, want := range b.bindings() {

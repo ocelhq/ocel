@@ -23,18 +23,31 @@ const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 
 const secretBytes = 32
 
-func storeScriptNameFor(namespace string, tier environment.Tier) (string, error) {
-	return accountNameFor("releases store", namespace, tier, "releases-store")
+const releasesStoreStem = "releases-store"
+
+func storeScriptNameFor(namespace string, origin OriginScope, tier environment.Tier) (string, error) {
+	return accountNameFor("releases store", namespace, origin, tier, releasesStoreStem)
 }
 
-func accountNameFor(what, namespace string, tier environment.Tier, stem string) (string, error) {
+func (p *cloudflare) storeScriptName(ctx context.Context, tier environment.Tier) (string, error) {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return "", err
+	}
+	return storeScriptNameFor(p.namespace, origin, tier)
+}
+
+func accountNameFor(what, namespace string, origin OriginScope, tier environment.Tier, stem string) (string, error) {
 	if namespace == "" {
 		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this tier depends on", what)
+	}
+	if err := origin.refuseIncomplete(what); err != nil {
+		return "", err
 	}
 	if err := refuseUnknownTier(what, tier); err != nil {
 		return "", err
 	}
-	return naming.OcelName(namespace, tier, stem), nil
+	return naming.OcelName(namespace, tier, origin.tag(), stem), nil
 }
 
 func refuseUnknownTier(what string, tier environment.Tier) error {
@@ -119,7 +132,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if err != nil {
 		return nil, err
 	}
-	program, err := p.buildEntryProgram(spec.Tier, spec.Slug, spec.Program)
+	program, err := p.buildEntryProgram(ctx, spec.Tier, spec.Slug, spec.Program)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +207,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return openedAsDeployed(prior)
 	}
 
-	if spec.PruneOnly && program.name == previewEntryScript {
+	if spec.PruneOnly && program.shared {
 		return nil, fmt.Errorf("prune-only stack may not target the shared preview entry worker %q", program.name)
 	}
 
@@ -207,7 +220,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 	}
 
-	owns, err := projectOwnsScript(p.namespace, slug)
+	owns, err := p.projectOwnsScript(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +335,7 @@ func (s *stack) stackWorkers(ctx context.Context) ([]string, error) {
 	if s.p.namespace == "" || s.state.Slug == "" || s.state.Tier == "" {
 		return named, nil
 	}
-	conventional, err := entryWorkerName(s.p.namespace, s.state.Slug, s.state.Tier)
+	conventional, err := s.p.entryWorkerName(ctx, s.state.Slug, s.state.Tier)
 	if err != nil {
 		return nil, err
 	}

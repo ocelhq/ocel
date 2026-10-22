@@ -47,6 +47,7 @@ type RoutingTable struct {
 	Tunnel          *Tunnel       `json:"tunnel,omitempty"`
 	Retired         []Tunnel      `json:"retired,omitempty"`
 	Gates           []OwnedGate   `json:"gates,omitempty"`
+	OriginID        string        `json:"originId,omitempty"`
 }
 
 type Claim struct {

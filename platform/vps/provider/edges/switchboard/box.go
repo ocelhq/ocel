@@ -176,7 +176,7 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 	return claims[at].Owner, nil
 }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+func (e *Edge) ProjectOwner(_ context.Context, slug string, tier environment.Tier) (string, error) {
 	return Surface(slug, tier), nil
 }
 

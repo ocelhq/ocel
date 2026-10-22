@@ -363,10 +363,10 @@ func TestDomainOwnerNamesTheProjectThatOwnsTheHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if mine, err := e.ProjectOwner(conformanceSlug, environment.TierProduction); err != nil || owner != mine {
+	if mine, err := e.ProjectOwner(t.Context(), conformanceSlug, environment.TierProduction); err != nil || owner != mine {
 		t.Errorf("DomainOwner = %q, which %q is not recognised as owning; preflight would report the project's own host as claimed by someone else", owner, conformanceSlug)
 	}
-	if theirs, err := e.ProjectOwner("other", environment.TierProduction); err != nil || owner == theirs {
+	if theirs, err := e.ProjectOwner(t.Context(), "other", environment.TierProduction); err != nil || owner == theirs {
 		t.Errorf("DomainOwner = %q, which another project is recognised as owning", owner)
 	}
 }

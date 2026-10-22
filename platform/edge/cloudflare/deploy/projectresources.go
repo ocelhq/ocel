@@ -1,6 +1,8 @@
 package cloudflare
 
 import (
+	"context"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -11,10 +13,14 @@ const (
 	resourceLocation      = "global"
 )
 
-func ListProjectResources(namespace string, req provider.ProjectResourcesRequest) []provider.PhysicalResource {
+func ListProjectResources(ctx context.Context, namespace string, origin func(context.Context) (OriginScope, error), req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
 	var resources []provider.PhysicalResource
 	if req.EdgeKind == Kind {
-		if script, ok := projectEntryWorker(namespace, req); ok {
+		script, ok, err := projectEntryWorker(ctx, namespace, origin, req)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			resources = append(resources, provider.PhysicalResource{Kind: resourceKindWorker, ID: script, Location: resourceLocation})
 		}
 	}
@@ -34,17 +40,21 @@ func ListProjectResources(namespace string, req provider.ProjectResourcesRequest
 		listed[id] = true
 		resources = append(resources, provider.PhysicalResource{Kind: resourceKindDNSRecord, ID: id, Location: resourceLocation})
 	}
-	return resources
+	return resources, nil
 }
 
-func projectEntryWorker(namespace string, req provider.ProjectResourcesRequest) (string, bool) {
+func projectEntryWorker(ctx context.Context, namespace string, origin func(context.Context) (OriginScope, error), req provider.ProjectResourcesRequest) (string, bool, error) {
 	var own private
 	if err := req.EdgeStack.Private.Into(&own); err != nil || own.EntryWorker == "" {
-		return "", false
+		return "", false, nil
 	}
-	conventional, err := entryWorkerName(namespace, req.Project, req.Tier)
-	if err != nil || own.EntryWorker != conventional {
-		return "", false
+	scope, err := resolveOrigin(ctx, origin)
+	if err != nil {
+		return "", false, err
 	}
-	return own.EntryWorker, true
+	conventional, err := entryWorkerName(namespace, scope, req.Project, req.Tier)
+	if err != nil {
+		return "", false, err
+	}
+	return own.EntryWorker, own.EntryWorker == conventional, nil
 }

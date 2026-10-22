@@ -13,6 +13,8 @@ type workerScript struct {
 	CachedEntrypoints []string
 
 	DurableObjects []string
+
+	Tags []string
 }
 
 type workerModule struct {

@@ -196,7 +196,7 @@ func Run(t *testing.T, suite Suite) {
 		}
 		suite.binds(t, stack)
 
-		mine, err := e.ProjectOwner(spec.Slug, spec.Tier)
+		mine, err := e.ProjectOwner(ctx, spec.Slug, spec.Tier)
 		if err != nil {
 			t.Fatalf("ProjectOwner: %v", err)
 		}

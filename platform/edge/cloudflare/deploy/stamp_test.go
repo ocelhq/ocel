@@ -39,7 +39,7 @@ func TestSpecStampShape(t *testing.T) {
 		},
 		{
 			typ:  reflect.TypeFor[entryProgram](),
-			want: []string{"name", "store", "worker"},
+			want: []string{"name", "shared", "store", "worker"},
 		},
 		{
 			typ: reflect.TypeFor[stampedSpec](),
@@ -51,7 +51,7 @@ func TestSpecStampShape(t *testing.T) {
 		},
 		{
 			typ:  reflect.TypeFor[workerScript](),
-			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "DurableObjects", "LoaderBinding", "Main", "Modules", "Secrets", "Services", "Variables"},
+			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "DurableObjects", "LoaderBinding", "Main", "Modules", "Secrets", "Services", "Tags", "Variables"},
 		},
 		{
 			typ:  reflect.TypeFor[workerModule](),

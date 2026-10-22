@@ -101,7 +101,7 @@ func newPurgeHarness(t *testing.T) *purgeHarness {
 		}
 	}
 	ctx := context.Background()
-	p := newCloudflare("ocel", Options{})
+	p := newCloudflare("ocel", fixedOrigin(testOrigin), Options{})
 	accountID := readAccountID()
 	secret := randomHex(t, 32)
 	up := upload{

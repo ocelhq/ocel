@@ -58,7 +58,7 @@ func testStoreWorker() workerScript {
 
 func entryOf(t *testing.T, spec edge.StackSpec) entryProgram {
 	t.Helper()
-	built, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(spec.Tier, spec.Slug, spec.Program)
+	built, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), spec.Tier, spec.Slug, spec.Program)
 	if err != nil {
 		t.Fatalf("buildEntryProgram: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestReconcile(t *testing.T) {
 		}
 		want := testState(store.URL, "s3cr3t")
 		want.Private = edge.Own(private{EntryWorker: entryOf(t, spec).name, EnvelopeKey: testEnvelopeKey, Routed: []string{"*.preview.app.com"}})
-		want.PurgeURL = "https://ocel-preview-entry-acme-web-35d5bf.acct-sub.workers.dev" + purgePath
+		want.PurgeURL = "https://ocel-preview-4c73ed-entry-acme-web-626529.acct-sub.workers.dev" + purgePath
 		if !state.Equal(want) {
 			t.Errorf("state = %+v, want prior plus the worker a domain binds to and the purge URL it answers at (%+v)", state, want)
 		}
@@ -325,7 +325,7 @@ func TestReconcile(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview-entry-acme-web-35d5bf"},
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview-4c73ed-entry-acme-web-626529"},
 			{"id": "other", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "someone-else"},
 		}
 
@@ -388,7 +388,7 @@ func TestReconcile(t *testing.T) {
 		if !m.subdomainOn[entryOf(t, spec).name] {
 			t.Errorf("workers.dev subdomain of %s = off, want on: the origin purges through it", entryOf(t, spec).name)
 		}
-		if want := "https://ocel-preview-entry-acme-web-35d5bf.acct-sub.workers.dev" + purgePath; state.PurgeURL != want {
+		if want := "https://ocel-preview-4c73ed-entry-acme-web-626529.acct-sub.workers.dev" + purgePath; state.PurgeURL != want {
 			t.Errorf("PurgeURL = %q, want %q", state.PurgeURL, want)
 		}
 	})
@@ -418,7 +418,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if want := "https://" + previewEntryScript + ".acct-sub.workers.dev" + purgePath + "?project=acme-web"; state.PurgeURL != want {
+		if want := "https://" + previewEntryScriptName + ".acct-sub.workers.dev" + purgePath + "?project=acme-web"; state.PurgeURL != want {
 			t.Errorf("PurgeURL = %q, want %q", state.PurgeURL, want)
 		}
 		if len(m.subdomainCalls) != 0 {
@@ -486,7 +486,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("second Reconcile: %v", err)
 		}
 
-		if want := "https://ocel-preview-entry-acme-web-35d5bf.acct-sub.workers.dev" + purgePath; retried.PurgeURL != want {
+		if want := "https://ocel-preview-4c73ed-entry-acme-web-626529.acct-sub.workers.dev" + purgePath; retried.PurgeURL != want {
 			t.Errorf("PurgeURL = %q, want %q: the worker is deployed and answers purges there", retried.PurgeURL, want)
 		}
 	})
@@ -497,7 +497,7 @@ func TestReconcile(t *testing.T) {
 		p := m.provider(t)
 		spec := pruneOnlySpec(store.URL, "v2")
 		served := testState(store.URL, "s3cr3t")
-		served.PurgeURL = "https://ocel-preview-entry-acme-web-35d5bf.acct-sub.workers.dev" + purgePath
+		served.PurgeURL = "https://ocel-preview-4c73ed-entry-acme-web-626529.acct-sub.workers.dev" + purgePath
 		if _, err := reconcileState(t, p, spec, served); err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
@@ -614,9 +614,9 @@ func TestReconcile(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview-entry-acme-web-35d5bf"},
-			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-prod-entry-acme-web-d328f8"},
-			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScript},
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview-4c73ed-entry-acme-web-626529"},
+			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-prod-4c73ed-entry-acme-web-750baa"},
+			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScriptName},
 			{"id": "other", "pattern": "pr-3-abc1234567.preview.app.com/*", "script": "someone-else"},
 		}
 		p := m.provider(t)
@@ -667,9 +667,9 @@ func TestReconcile(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview-entry-acme-web-35d5bf"},
-			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-prod-entry-acme-web-d328f8"},
-			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScript},
+			{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview-4c73ed-entry-acme-web-626529"},
+			{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-prod-4c73ed-entry-acme-web-750baa"},
+			{"id": "entry", "pattern": "*.preview.ocel.app/*", "script": previewEntryScriptName},
 		}
 		p := m.provider(t)
 		p.skipChecks = true
@@ -818,12 +818,12 @@ func TestDestroy(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 		state := testState(store.URL, "s3cr3t")
-		state.Private = edge.Own(private{EntryWorker: "ocel-prod-entry-acme-web-d328f8"})
+		state.Private = edge.Own(private{EntryWorker: "ocel-prod-4c73ed-entry-acme-web-750baa"})
 
 		if err := stackOn(p, state).Destroy(t.Context()); err != nil {
 			t.Fatalf("Destroy: %v", err)
 		}
-		assertSet(t, "deleted scripts", m.deletedScripts, []string{"ocel-prod-entry-acme-web-d328f8"})
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{"ocel-prod-4c73ed-entry-acme-web-750baa"})
 		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
 		}
@@ -867,7 +867,7 @@ func TestDestroy(t *testing.T) {
 
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
-		m.refuseScriptDeletes = map[string]bool{"ocel-prod-entry-acme-web-d328f8": true}
+		m.refuseScriptDeletes = map[string]bool{"ocel-prod-4c73ed-entry-acme-web-750baa": true}
 		p := m.provider(t)
 		state := testState(store.URL, "s3cr3t")
 

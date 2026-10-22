@@ -8,23 +8,22 @@ import (
 
 const entryWorker = "entry"
 
-func Shape(namespace string, site pricing.EdgeSite) (pricing.EdgeShape, error) {
-	store, err := storeScriptNameFor(namespace, site.Tier)
-	if err != nil {
+func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
+	if err := refuseUnknownTier("the shape of the cloudflare edge", site.Tier); err != nil {
 		return pricing.EdgeShape{}, err
 	}
 	shape := pricing.EdgeShape{
 		Vendor: cost.Vendor,
 		Shared: []pricing.Shaped{
 			{Name: workersPaidPlan, Type: cost.TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
-			{Name: store, Type: cost.TypeWorkersScript, Properties: durableObjectScript(releasesStoreWorker)},
+			{Name: releasesStoreStem, Type: cost.TypeWorkersScript, Properties: durableObjectScript(releasesStoreWorker)},
 		},
 		Environment: []pricing.Shaped{
 			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: describeEntryScript()},
 		},
 	}
 	if site.Tier == environment.TierPreview {
-		shape.Shared = append(shape.Shared, pricing.Shaped{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: describeEntryScript()})
+		shape.Shared = append(shape.Shared, pricing.Shaped{Name: sharedEntryStem, Type: cost.TypeWorkersScript, Properties: describeEntryScript()})
 	}
 	return shape, nil
 }

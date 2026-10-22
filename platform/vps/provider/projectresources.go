@@ -7,10 +7,10 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-func (p *Provider) ListProjectResources(_ context.Context, req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
+func (p *Provider) ListProjectResources(ctx context.Context, req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
 	namespace, err := provider.NamespaceFromEnv()
 	if err != nil {
 		return nil, err
 	}
-	return cloudflare.ListProjectResources(namespace.String(), req), nil
+	return cloudflare.ListProjectResources(ctx, namespace.String(), p.cloudflareOrigin, req)
 }

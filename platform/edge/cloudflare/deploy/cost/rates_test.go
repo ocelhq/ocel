@@ -16,7 +16,7 @@ import (
 
 func shapedSet(t *testing.T, tier environment.Tier) *costv1.ResourceSet {
 	t.Helper()
-	shape, err := cloudflare.Shape("ocel", pricing.EdgeSite{Slug: "shop", Tier: tier})
+	shape, err := cloudflare.Shape(pricing.EdgeSite{Slug: "shop", Tier: tier})
 	if err != nil {
 		t.Fatal(err)
 	}

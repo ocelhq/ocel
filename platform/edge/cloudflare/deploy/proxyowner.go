@@ -18,6 +18,6 @@ func (x *Proxy) DomainOwner(ctx context.Context, hostname string) (string, error
 	return x.p.readForwardedOwner(ctx, zoneID, hostname)
 }
 
-func (x *Proxy) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+func (x *Proxy) ProjectOwner(_ context.Context, slug string, tier environment.Tier) (string, error) {
 	return formatForwardingOwner(x.p.namespace, slug, tier), nil
 }

@@ -71,7 +71,7 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 
 func (e *Edge) DomainOwner(context.Context, string) (string, error) { return "", nil }
 
-func (e *Edge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+func (e *Edge) ProjectOwner(_ context.Context, slug string, tier environment.Tier) (string, error) {
 	return Surface(e.namespace, slug, tier), nil
 }
 
