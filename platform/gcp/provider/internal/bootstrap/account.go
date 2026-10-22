@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"time"
 
 	"google.golang.org/api/iam/v1"
 
@@ -16,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-const reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
+const reasonUngranted = "this credential may not act as it"
 
 var accountKind = KindOps{
 	tagged:    accountTagged,
@@ -28,8 +27,8 @@ var accountKind = KindOps{
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
 		return b.MakeAccount(ctx, read, target.Name)
 	},
-	Take: func(ctx context.Context, b Engine, read Survey, target Resource) (time.Duration, error) {
-		return 0, b.TakeAccount(ctx, read.Tier, target.Name)
+	Take: func(ctx context.Context, b Engine, read Survey, target Resource) error {
+		return b.TakeAccount(ctx, read.Tier, target.Name)
 	},
 }
 

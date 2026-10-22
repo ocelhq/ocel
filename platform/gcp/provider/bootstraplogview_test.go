@@ -103,13 +103,13 @@ func TestRemovingATierDeletesItsLogView(t *testing.T) {
 	if taking.Action != provider.ActionDelete {
 		t.Fatalf("removing the %s tier plans its log view %s (%s), want it deleted while the other tier is installed: the view is this tier's own", tier, taking.Action, taking.Reason)
 	}
-	if _, err := b.RemoveResource(ctx, read, taking); err != nil {
+	if err := b.RemoveResource(ctx, read, taking); err != nil {
 		t.Fatalf("RemoveResource(log view) = %v", err)
 	}
 	if !slices.Equal(views.Deleted, []string{names.New("ocel", "acme-prod").LogViewPath(tier)}) {
 		t.Errorf("removing the tier deleted %v, want its log view", views.Deleted)
 	}
-	if _, err := view.KindOps().Take(ctx, b, read, view); err != nil {
+	if err := view.KindOps().Take(ctx, b, read, view); err != nil {
 		t.Errorf("Take(a view already gone) = %v, want nothing to do", err)
 	}
 }
@@ -118,8 +118,8 @@ func TestABootstrapCredentialMayMakeAndRemoveATiersLogView(t *testing.T) {
 	t.Parallel()
 
 	for _, permission := range []string{"logging.views.create", "logging.views.get", "logging.views.update", "logging.views.delete"} {
-		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
-			t.Errorf("a bootstrap checks %v, want %s among them: the base makes, mends and removes its tier's log view", bootstrap.BootstrapPermissions, permission)
+		if !slices.Contains(bootstrap.BootstrapGrants.Permissions(), permission) {
+			t.Errorf("a bootstrap checks %v, want %s among them: the base makes, mends and removes its tier's log view", bootstrap.BootstrapGrants.Permissions(), permission)
 		}
 	}
 	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/logging.configWriter") {

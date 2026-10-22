@@ -2,11 +2,11 @@ package alb
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
@@ -15,48 +15,50 @@ const (
 	extensionsRole   = "roles/networkservices.admin"
 )
 
-var roles = []string{loadBalancerRole, certificatesRole, extensionsRole}
-
-func Roles() []string { return slices.Clone(roles) }
-
-var Permissions = []string{
-	"compute.globalAddresses.create",
-	"compute.globalAddresses.delete",
-	"compute.backendServices.create",
-	"compute.backendServices.delete",
-	"compute.backendServices.update",
-	"compute.backendBuckets.create",
-	"compute.backendBuckets.delete",
-	"compute.backendBuckets.update",
-	"compute.backendBuckets.use",
-	"compute.urlMaps.create",
-	"compute.urlMaps.delete",
-	"compute.urlMaps.update",
-	"compute.targetHttpsProxies.create",
-	"compute.targetHttpsProxies.delete",
-	"compute.globalForwardingRules.create",
-	"compute.globalForwardingRules.delete",
-	"compute.regionNetworkEndpointGroups.create",
-	"compute.regionNetworkEndpointGroups.delete",
-	"compute.globalOperations.get",
-	"compute.projects.get",
-	"certificatemanager.certmaps.create",
-	"certificatemanager.certmaps.delete",
-	"certificatemanager.certmaps.get",
-	"certificatemanager.certmapentries.create",
-	"certificatemanager.certmapentries.delete",
-	"certificatemanager.certmapentries.list",
-	"certificatemanager.operations.get",
-	"networkservices.wasmPlugins.create",
-	"networkservices.wasmPlugins.delete",
-	"networkservices.wasmPlugins.get",
-	"networkservices.wasmPlugins.update",
-	"networkservices.wasmPlugins.use",
-	"networkservices.lbEdgeExtensions.create",
-	"networkservices.lbEdgeExtensions.delete",
-	"networkservices.lbEdgeExtensions.get",
-	"networkservices.lbEdgeExtensions.update",
-	"networkservices.operations.get",
+var grants = gcloud.Grants{
+	{Role: loadBalancerRole, Permissions: []string{
+		"compute.globalAddresses.create",
+		"compute.globalAddresses.delete",
+		"compute.backendServices.create",
+		"compute.backendServices.delete",
+		"compute.backendServices.update",
+		"compute.backendBuckets.create",
+		"compute.backendBuckets.delete",
+		"compute.backendBuckets.update",
+		"compute.backendBuckets.use",
+		"compute.urlMaps.create",
+		"compute.urlMaps.delete",
+		"compute.urlMaps.update",
+		"compute.targetHttpsProxies.create",
+		"compute.targetHttpsProxies.delete",
+		"compute.globalForwardingRules.create",
+		"compute.globalForwardingRules.delete",
+		"compute.regionNetworkEndpointGroups.create",
+		"compute.regionNetworkEndpointGroups.delete",
+		"compute.globalOperations.get",
+		"compute.projects.get",
+	}},
+	{Role: certificatesRole, Permissions: []string{
+		"certificatemanager.certmaps.create",
+		"certificatemanager.certmaps.delete",
+		"certificatemanager.certmaps.get",
+		"certificatemanager.certmapentries.create",
+		"certificatemanager.certmapentries.delete",
+		"certificatemanager.certmapentries.list",
+		"certificatemanager.operations.get",
+	}},
+	{Role: extensionsRole, Permissions: []string{
+		"networkservices.wasmPlugins.create",
+		"networkservices.wasmPlugins.delete",
+		"networkservices.wasmPlugins.get",
+		"networkservices.wasmPlugins.update",
+		"networkservices.wasmPlugins.use",
+		"networkservices.lbEdgeExtensions.create",
+		"networkservices.lbEdgeExtensions.delete",
+		"networkservices.lbEdgeExtensions.get",
+		"networkservices.lbEdgeExtensions.update",
+		"networkservices.operations.get",
+	}},
 }
 
 func (e *Edge) credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
@@ -73,6 +75,6 @@ func (e *Edge) credentialPermissions(purpose edge.CredentialPurpose) (edge.Crede
 	}
 	return edge.CredentialDocument{
 		Heading:  fmt.Sprintf("the roles the %s edge adds on project %s, since a %s credential %s", Kind, e.deps.Project, purpose, does),
-		Document: strings.Join(roles, "\n"),
+		Document: strings.Join(grants.Roles(), "\n"),
 	}, nil
 }

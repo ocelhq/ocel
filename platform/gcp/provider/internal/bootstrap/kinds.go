@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -53,7 +52,7 @@ type KindOps struct {
 	mend    func(ctx context.Context, b Engine, read Survey, target Resource) error
 	removal func(read Survey, target Resource) Removal
 	leave   func(ctx context.Context, b Engine, read Survey, taking Removal) error
-	Take    func(ctx context.Context, b Engine, read Survey, target Resource) (time.Duration, error)
+	Take    func(ctx context.Context, b Engine, read Survey, target Resource) error
 	taken   func(r Removal) string
 	tagged  func(ctx context.Context, b Engine, read Survey, target Resource) (gcloud.TaggedResource, bool, error)
 

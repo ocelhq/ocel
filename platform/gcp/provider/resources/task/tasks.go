@@ -37,7 +37,7 @@ func PushPurpose(b bootstrap.Engine, tier environment.Tier) bootstrap.AccountPur
 	return bootstrap.AccountPurpose{
 		DisplayName: "ocel " + string(tier) + " pushes",
 		Description: "the identity Pub/Sub signs each push to a worker of the " + string(tier) + " tier as, and the one alone that may invoke a worker",
-		Ungranted:   "it exists, and Pub/Sub may not sign a push as it, so no worker would ever be reached",
+		Ungranted:   "Pub/Sub may not sign a push as it",
 		Grant:       grantPushSigning,
 		Forget:      forgetPushSigning,
 		Granted:     pushSigningGranted,

@@ -38,8 +38,8 @@ var roleKind = KindOps{
 }
 
 const (
-	ReasonRoleDeleted = "it was deleted, and its bindings grant nothing until it is undeleted"
-	ReasonRoleKept    = "Google holds a deleted custom role's id for up to 44 days, so this role outlives every bootstrap that used it"
+	ReasonRoleDeleted = "it was deleted"
+	ReasonRoleKept    = "Google reserves a deleted role's id for 44 days"
 
 	roleStageGA       = "GA"
 	roleStageDisabled = "DISABLED"
@@ -174,6 +174,6 @@ func NewCDNPurgeRole(names names.Names) customRole {
 		title:       "ocel cache purge (" + string(names.Namespace()) + ")",
 		description: "lets a Next app behind the alb clear its revalidated pages from Cloud CDN, and nothing else",
 		Permissions: []string{"compute.urlMaps.invalidateCache"},
-		DriftReason: "it holds other permissions than clearing Cloud CDN, which is all a Next app behind the alb is granted it for",
+		DriftReason: "its permissions drifted",
 	}
 }

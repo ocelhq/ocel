@@ -190,7 +190,7 @@ func (b Bastion) removeAccount(ctx context.Context, tier environment.Tier, progr
 	}
 	deleted, err := b.clients.DeleteAccount(ctx, tier, b.clients.BastionAccount(tier))
 	if deleted {
-		gcloud.EnsureProgress(progress).Say("Deleted the " + b.clients.BastionAccount(tier) + " service account the bastion ran as")
+		gcloud.EnsureProgress(progress).Say("Deleted the bastion's service account " + b.clients.BastionAccount(tier))
 	}
 	return err
 }

@@ -392,7 +392,7 @@ func TestInstallingAndDroppingAFrontSaysWhichPartAndEdgeForWhichTier(t *testing.
 	}
 
 	want := []string{
-		"INFO Adding the cloudflare-origin part of the production bootstrap: " + b.Parts()[0].Summary,
+		"INFO Adding the cloudflare-origin part of the production bootstrap",
 		"INFO Taking down the alb edge's front for preview: the cloudflare-origin part is being removed",
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
@@ -611,10 +611,11 @@ func TestABootstrapProvisioningNoLoadBalancerChecksNoLoadBalancerPermission(t *t
 			t.Errorf("a bootstrap provisioning no load balancer checks %s, and a credential would be refused for a service it never calls", permission)
 		}
 	}
-	if slices.ContainsFunc(bootstrap.BootstrapRoles(), func(role string) bool {
+	plain := bootstrap.GrantsFor(nil).Roles()
+	if slices.ContainsFunc(plain, func(role string) bool {
 		return role == "roles/compute.loadBalancerAdmin" || strings.HasPrefix(role, "roles/certificatemanager.")
 	}) {
-		t.Errorf("the refusal for a bootstrap names %v, and a role for a front no bootstrap provisions is one more than the credential needs", bootstrap.BootstrapRoles())
+		t.Errorf("the refusal for a plain bootstrap names %v, and a role for a front nothing provisions is one more than the credential needs", plain)
 	}
 }
 

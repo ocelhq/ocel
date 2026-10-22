@@ -104,7 +104,7 @@ func (b Engine) summaryOf(name string) string {
 
 func (b Engine) RaiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	return b.eachFront(req.Parts, func(part provider.Part, front edge.Edge) error {
-		gcloud.EnsureProgress(progress).Say("Adding the " + part.Name + " part of the " + string(req.Tier) + " bootstrap: " + part.Summary)
+		gcloud.EnsureProgress(progress).Say("Adding the " + part.Name + " part of the " + string(req.Tier) + " bootstrap")
 		out, err := front.Bootstrap(ctx, req.Tier)
 		if err != nil {
 			return err
@@ -115,13 +115,11 @@ func (b Engine) RaiseFronts(ctx context.Context, req provider.BootstrapRequest, 
 		if !front.Facts().RunsCode {
 			return nil
 		}
-		gcloud.EnsureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's asset reader (service account and HMAC key) for " + string(req.Tier) +
-			": the edge reads this tier's static files from its bucket as that account")
+		gcloud.EnsureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's asset reader for " + string(req.Tier))
 		if err := b.FrontParts.RaiseAssets(ctx, b, req.Tier, front.Kind()); err != nil {
 			return err
 		}
-		gcloud.EnsureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's origin secret for " + string(req.Tier) +
-			" (Secret Manager): every release the edge reaches demands it before the app runs")
+		gcloud.EnsureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's origin secret for " + string(req.Tier))
 		return b.FrontParts.RaiseOriginSecret(ctx, b, req.Tier, front.Kind(), progress)
 	})
 }

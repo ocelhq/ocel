@@ -56,7 +56,7 @@ func PlannedOriginSecretRemoval(ctx context.Context, c *gcloud.Clients, tier env
 	}
 	change := provider.Change{Kind: string(bootstrap.KindSecret), Name: c.OriginSecret(tier, kind), Action: provider.ActionKeep, Reason: bootstrap.ReasonAbsent}
 	if held {
-		change.Action, change.Reason = provider.ActionDelete, "the secret every release the edge reaches demands before the app runs"
+		change.Action, change.Reason = provider.ActionDelete, ""
 	}
 	return change, nil
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -21,8 +20,8 @@ const (
 )
 
 const (
-	reasonUnlocked = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
-	reasonUnaged   = "its versioning or the lifecycle that deletes what it no longer needs is not the one this bootstrap sets"
+	reasonUnlocked = "it is open to object ACLs or allUsers"
+	reasonUnaged   = "its versioning or lifecycle drifted"
 )
 
 var bucketKind = KindOps{
@@ -53,20 +52,20 @@ var bucketKind = KindOps{
 		}
 		return taking
 	},
-	Take: func(ctx context.Context, b Engine, read Survey, target Resource) (time.Duration, error) {
+	Take: func(ctx context.Context, b Engine, read Survey, target Resource) error {
 		bucket := read.Buckets[target.Class]
 		if bucket == "" {
-			return 0, nil
+			return nil
 		}
 		if target.Class == naming.StorageState {
 			if err := b.refuseLiveStacks(ctx, read, bucket); err != nil {
-				return 0, err
+				return err
 			}
 		}
 		if err := b.takeBucket(ctx, bucket); err != nil {
-			return 0, err
+			return err
 		}
-		return 0, b.Clients.ForgetTierBucket(ctx, read.Tier, target.Class, bucket)
+		return b.Clients.ForgetTierBucket(ctx, read.Tier, target.Class, bucket)
 	},
 }
 

@@ -227,8 +227,8 @@ func TestAPlanSaysWhatABootstrapDoesToTheOriginSecret(t *testing.T) {
 				t.Fatalf("PlannedOriginSecret() = %v", err)
 			}
 			want := provider.Change{Kind: string(bootstrap.KindSecret), Name: h.originSecretName(environment.TierProduction), Action: tc.action}
-			if change.Kind != want.Kind || change.Name != want.Name || change.Action != want.Action || change.Reason == "" {
-				t.Errorf("change = %+v, want %+v with a reason", change, want)
+			if change.Kind != want.Kind || change.Name != want.Name || change.Action != want.Action || (change.Reason == "") != (tc.action == provider.ActionCreate) {
+				t.Errorf("change = %+v, want %+v with a reason unless it is a create", change, want)
 			}
 			if h.secrets.VersionsAdded() != added || (tc.existing == nil && h.secrets.Has(want.Name)) {
 				t.Error("planning wrote the secret")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
@@ -22,7 +21,7 @@ import (
 
 const (
 	reasonEmulated    = "emulator serves one implicit database"
-	reasonUnprotected = "it exists with delete protection off, and one call would take every record it stores with it"
+	reasonUnprotected = "its delete protection is off"
 )
 
 const (
@@ -62,8 +61,8 @@ var databaseKind = KindOps{
 		}
 		return b.TakeRecords(ctx, b, read.Tier)
 	},
-	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) (time.Duration, error) {
-		return 0, b.TakeDatabase(ctx, target.Name)
+	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
+		return b.TakeDatabase(ctx, target.Name)
 	},
 }
 

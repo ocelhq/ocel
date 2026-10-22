@@ -100,7 +100,7 @@ func TestTakingTheStateBucketIsRefusedNamingAStackOfTheTiersOwnStillLiveInIt(t *
 	target := tierBucketOf(naming.StorageState)
 
 	var refused refusal.Refusal
-	_, err := target.KindOps().Take(t.Context(), b, read, target)
+	err := target.KindOps().Take(t.Context(), b, read, target)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Take() = %v, want a %s refusal: a stack whose state is still live was never torn down, and deleting its state strands what it provisioned", err, refusal.CodeNotReady)
 	}
@@ -120,7 +120,7 @@ func TestTakingTheStateBucketEmptiesItWhenOnlyPulumisBookkeepingOutlivesItsStack
 	b, read, server := stateBucketHolding(t, pulumiBookkeeping("ocel-alb-front-prod", "alb-front-prod--infra")...)
 	target := tierBucketOf(naming.StorageState)
 
-	if _, err := target.KindOps().Take(t.Context(), b, read, target); err != nil {
+	if err := target.KindOps().Take(t.Context(), b, read, target); err != nil {
 		t.Fatalf("Take() = %v, want the bucket emptied and deleted", err)
 	}
 	if want := []string{read.Buckets[naming.StorageState]}; !slices.Equal(server.deleted, want) {

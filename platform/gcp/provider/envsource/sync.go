@@ -42,11 +42,11 @@ const (
 	syncBilledSecondsEach = 2
 	syncScheduleMethod    = "POST"
 
-	reasonUnwritable      = "it exists, and it may not write this project's records or seal under the tier key, so the env source sync running as it would write nothing"
-	reasonServiceChanged  = "it runs another env source sync than the one this provider embeds, runs it as another account, or is billed, scaled, cut off or reached otherwise than this bootstrap deploys it"
-	reasonCallersChanged  = "it exists, and the account Cloud Scheduler calls it as may not call it, or another may"
-	reasonScheduleChanged = "it calls the env source sync on another schedule, at another URL or as another account than this bootstrap names"
-	reasonScheduleStopped = "it is paused, disabled by Cloud Scheduler or left by a failed update, so it never calls the env source sync"
+	reasonUnwritable      = "it may not write this project's records or seal under the tier key"
+	reasonServiceChanged  = "it drifted from the env source sync this build deploys"
+	reasonCallersChanged  = "who may call it drifted"
+	reasonScheduleChanged = "its schedule, URL or caller drifted"
+	reasonScheduleStopped = "it is paused, disabled or left by a failed update"
 )
 
 var SyncKeyRoles = []string{syncSealingRole, syncOpeningRole}

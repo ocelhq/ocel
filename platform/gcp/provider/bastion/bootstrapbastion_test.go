@@ -32,7 +32,7 @@ func TestAPlanToRemoveATierListsTheBastionItsForwardsMadeAndNothingWhenItMadeNon
 	for _, change := range changes {
 		kinds = append(kinds, bootstrap.Kind(change.Kind))
 		if change.Action != provider.ActionDelete || change.Reason == "" {
-			t.Errorf("the plan shows %s %q as %q (%q), want a delete with the reason it is not in the bootstrap's own list", change.Kind, change.Name, change.Action, change.Reason)
+			t.Errorf("the plan shows %s %q as %q (%q), want a delete with the reason it exists", change.Kind, change.Name, change.Action, change.Reason)
 		}
 	}
 	if !slices.Equal(kinds, []bootstrap.Kind{bootstrap.KindService, bootstrap.KindServiceAccount}) {
@@ -46,8 +46,9 @@ func TestRemovingATierTakesItsBastionDown(t *testing.T) {
 	h := newBastionHarness(t, target)
 	h.forward(t, target)
 	b := bootstrap.Engine{Clients: h.b.clients, TearDown: h.b.tearDown}
+	log := &fake.Log{}
 
-	if err := removeBastion(context.Background(), b, environment.TierProduction, nil); err != nil {
+	if err := removeBastion(context.Background(), b, environment.TierProduction, log); err != nil {
 		t.Fatalf("removeBastion() = %v", err)
 	}
 
@@ -56,6 +57,9 @@ func TestRemovingATierTakesItsBastionDown(t *testing.T) {
 	}
 	if len(h.run.Identities().DeletedAccounts) != 1 {
 		t.Errorf("deleted accounts = %v, want the bastion's", h.run.Identities().DeletedAccounts)
+	}
+	if want := "INFO Deleted the bastion's service account " + h.b.clients.BastionAccount(environment.TierProduction); !slices.Contains(log.Lines(), want) {
+		t.Errorf("removeBastion() said %q, want %q", log.Lines(), want)
 	}
 }
 

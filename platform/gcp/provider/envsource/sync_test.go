@@ -611,13 +611,13 @@ func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeedsAndTheSyncItsAPIs(t 
 		"iam.serviceAccounts.actAs",
 		"artifactregistry.repositories.uploadArtifacts", "artifactregistry.repositories.downloadArtifacts",
 	} {
-		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
+		if !slices.Contains(bootstrap.BootstrapGrants.Permissions(), permission) {
 			t.Errorf("a bootstrap does not check %s, and the apply would fail at the env source sync", permission)
 		}
 	}
 	for _, role := range []string{"roles/cloudscheduler.admin", "roles/run.admin", "roles/iam.serviceAccountUser", "roles/artifactregistry.admin"} {
-		if !slices.Contains(bootstrap.BootstrapRoles(), role) {
-			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", bootstrap.BootstrapRoles(), role)
+		if covering := bootstrap.GrantsFor(nil).Roles(); !slices.Contains(covering, role) {
+			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", covering, role)
 		}
 	}
 	if !slices.Contains(SyncAPIs, "cloudscheduler.googleapis.com") || !slices.Contains(SyncAPIs, "run.googleapis.com") {

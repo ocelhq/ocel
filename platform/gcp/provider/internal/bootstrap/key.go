@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"time"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
@@ -17,8 +16,8 @@ import (
 )
 
 const (
-	ReasonKeyScheduled = "Cloud KMS destroys each version once the key's scheduled-destruction period passes, 30 days unless the key sets another"
-	ReasonKeyReplaced  = "its primary version is destroyed or scheduled for destruction, and a new primary version replaces it: what the tier sealed under the old one opens again only if that version is restored"
+	ReasonKeyScheduled = "Cloud KMS destroys it after its scheduled-destruction period"
+	ReasonKeyReplaced  = "its primary version is destroyed or scheduled for destruction"
 )
 
 var keyKind = KindOps{
@@ -37,14 +36,11 @@ var keyKind = KindOps{
 		taking.Reason, taking.Resource.Slow = ReasonKeyScheduled, true
 		return taking
 	},
-	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) (time.Duration, error) {
+	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
 		return b.TakeKey(ctx, target.Name)
 	},
 	taken: func(r Removal) string {
-		if r.DestroyAfter == 0 {
-			return "Scheduled every version of " + r.Resource.phrase() + " for destruction, which Cloud KMS carries out after " + formatPeriod(defaultKeyDestroyAfter) + ", its default"
-		}
-		return "Scheduled every version of " + r.Resource.phrase() + " for destruction, which Cloud KMS carries out after " + formatPeriod(r.DestroyAfter) + ", the key's own period"
+		return "Scheduled every version of " + r.Resource.phrase() + " for destruction"
 	},
 }
 
@@ -97,17 +93,17 @@ func (b Engine) makeKey(ctx context.Context, name string) error {
 	return nil
 }
 
-func (b Engine) TakeKey(ctx context.Context, name string) (destroyAfter time.Duration, err error) {
+func (b Engine) TakeKey(ctx context.Context, name string) error {
 	client, err := b.Clients.KMS()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	key, err := b.readKey(ctx, name)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if key == nil {
-		return 0, nil
+		return nil
 	}
 	versions := client.ListCryptoKeyVersions(ctx, &kmspb.ListCryptoKeyVersionsRequest{Parent: gcloud.KeyPath(b.Clients, name)})
 	var listed []*kmspb.CryptoKeyVersion
@@ -117,7 +113,7 @@ func (b Engine) TakeKey(ctx context.Context, name string) (destroyAfter time.Dur
 			break
 		}
 		if err != nil {
-			return 0, fmt.Errorf("list the versions the %s key has: %w", name, err)
+			return fmt.Errorf("list the versions the %s key has: %w", name, err)
 		}
 		listed = append(listed, version)
 	}
@@ -125,10 +121,10 @@ func (b Engine) TakeKey(ctx context.Context, name string) (destroyAfter time.Dur
 		if _, err := googleretry.Called(ctx, func() (*kmspb.CryptoKeyVersion, error) {
 			return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{Name: version})
 		}); err != nil {
-			return 0, fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
+			return fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
 		}
 	}
-	return key.GetDestroyScheduledDuration().AsDuration(), nil
+	return nil
 }
 
 func Destroyable(versions []*kmspb.CryptoKeyVersion) []string {
@@ -140,22 +136,6 @@ func Destroyable(versions []*kmspb.CryptoKeyVersion) []string {
 		}
 	}
 	return named
-}
-
-const defaultKeyDestroyAfter = 30 * 24 * time.Hour
-
-func formatPeriod(d time.Duration) string {
-	const day = 24 * time.Hour
-	switch {
-	case d == day:
-		return "24 hours"
-	case d%day == 0:
-		return fmt.Sprintf("%d days", d/day)
-	case d%time.Hour == 0:
-		return fmt.Sprintf("%d hours", d/time.Hour)
-	default:
-		return d.String()
-	}
 }
 
 func KeyPresenceOf(key *kmspb.CryptoKey) Presence {

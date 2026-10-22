@@ -209,7 +209,7 @@ func TestADryDeployOfARealtimeChannelPlansTheRealtimePartAndMakesNothing(t *test
 	account := namesOf(t, p).RealtimeAccount(environment.TierProduction)
 	at := slices.IndexFunc(plan.Groups, func(group provider.ChangeGroup) bool { return group.Part == bootstrap.RealtimePart })
 	if at < 0 || plan.Groups[at].Action != provider.ActionCreate ||
-		len(plan.Groups[at].Changes) != 1 || plan.Groups[at].Changes[0].Name != account || !strings.HasPrefix(plan.Groups[at].Reason, "added on first use") {
+		len(plan.Groups[at].Changes) != 1 || plan.Groups[at].Changes[0].Name != account || plan.Groups[at].Reason != bootstrap.ReasonFirstUse {
 		t.Errorf("a dry deploy of a realtime channel planned %+v, want the %s part added on first use with the %s account", plan.Groups, bootstrap.RealtimePart, account)
 	}
 }

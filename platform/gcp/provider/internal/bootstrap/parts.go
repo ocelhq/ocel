@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	reasonPartFirstUse = "added on first use: %s"
-	reasonPartBehind   = "made by another build, and this one writes it differently"
-	reasonPartClaimed  = "another run is adding it"
+	ReasonFirstUse    = "added on first use"
+	reasonPartBehind  = "another build wrote it differently"
+	reasonPartClaimed = "another run is adding it"
 )
 
 type Part struct {
@@ -96,7 +96,7 @@ func (b Engine) planPart(ctx context.Context, tier environment.Tier, want Part) 
 		Name:   b.partGroupName(tier, want.Name),
 		Part:   want.Name,
 		Action: provider.ActionCreate,
-		Reason: fmt.Sprintf(reasonPartFirstUse, want.Summary),
+		Reason: ReasonFirstUse,
 	}
 	change := provider.ActionCreate
 	switch {

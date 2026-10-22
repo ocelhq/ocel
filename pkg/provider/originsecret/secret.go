@@ -20,12 +20,9 @@ const (
 )
 
 const (
-	reasonCreated = "the secret the edge presents to reach a release of the tier, which the release demands before the app runs"
-	reasonStale   = "it is older than %d days and is rotated; the one it replaces stays accepted for %d days"
-	reasonRetired = "the secret it replaced %d days ago is retired; a release not re-deployed since stops answering its front"
-
-	reasonRetiredAndStale = "the secret it replaced %d days ago is retired, and it is older than %d days and is rotated in turn; " +
-		"a release not re-deployed since the earlier rotation stops answering its front, and the one this replaces stays accepted for %d days"
+	reasonStale           = "it is older than %d days and is rotated; the one it replaces stays accepted for %d days"
+	reasonRetired         = "the secret it replaced %d days ago is retired; a release not re-deployed since stops answering its front"
+	reasonRetiredAndStale = "it is rotated and the secret it replaced %d days ago is retired; a release not re-deployed since the earlier rotation stops answering its front"
 )
 
 type Secret struct {
@@ -94,9 +91,9 @@ func (s Secret) Renew(now time.Time) (Secret, Renewal, error) {
 func (s Secret) PlanChange(now time.Time) (provider.ChangeAction, string) {
 	switch {
 	case !s.Present():
-		return provider.ActionCreate, reasonCreated
+		return provider.ActionCreate, ""
 	case s.GraceOver(now) && s.Stale(now):
-		return provider.ActionUpdate, fmt.Sprintf(reasonRetiredAndStale, days(now.Sub(s.RotatedAt)), days(MaxAge), days(Grace))
+		return provider.ActionUpdate, fmt.Sprintf(reasonRetiredAndStale, days(now.Sub(s.RotatedAt)))
 	case s.GraceOver(now):
 		return provider.ActionUpdate, fmt.Sprintf(reasonRetired, days(now.Sub(s.RotatedAt)))
 	case s.Stale(now):

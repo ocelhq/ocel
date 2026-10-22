@@ -163,7 +163,7 @@ func TestAPlanSaysWhatABootstrapDoesToTheSecret(t *testing.T) {
 		{"past grace retires", originsecret.Secret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(originsecret.Grace), provider.ActionUpdate,
 			"the secret it replaced 7 days ago is retired; a release not re-deployed since stops answering its front"},
 		{"past grace and old retires and rotates", originsecret.Secret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(originsecret.MaxAge), provider.ActionUpdate,
-			"the secret it replaced 90 days ago is retired, and it is older than 90 days and is rotated in turn; a release not re-deployed since the earlier rotation stops answering its front, and the one this replaces stays accepted for 7 days"},
+			"it is rotated and the secret it replaced 90 days ago is retired; a release not re-deployed since the earlier rotation stops answering its front"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -174,8 +174,8 @@ func TestAPlanSaysWhatABootstrapDoesToTheSecret(t *testing.T) {
 			if tc.reason != "" && reason != tc.reason {
 				t.Errorf("PlanChange() reason = %q, want %q", reason, tc.reason)
 			}
-			if action == provider.ActionCreate && reason == "" {
-				t.Error("a create names no reason, so the plan cannot say what the secret is for")
+			if action == provider.ActionCreate && reason != "" {
+				t.Errorf("PlanChange() reason = %q, want no reason on a create", reason)
 			}
 		})
 	}

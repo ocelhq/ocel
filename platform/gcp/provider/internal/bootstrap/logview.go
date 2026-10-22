@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"google.golang.org/api/logging/v2"
 
@@ -16,7 +15,7 @@ import (
 )
 
 const (
-	reasonLogViewFilter = "its filter selects other entries than this tier's Cloud Run revisions"
+	reasonLogViewFilter = "its filter drifted"
 	logViewFilterField  = "filter"
 )
 
@@ -44,8 +43,8 @@ var logViewKind = KindOps{
 	mend: func(ctx context.Context, b Engine, read Survey, _ Resource) error {
 		return b.filterLogView(ctx, read.Tier)
 	},
-	Take: func(ctx context.Context, b Engine, read Survey, _ Resource) (time.Duration, error) {
-		return 0, b.takeLogView(ctx, read.Tier)
+	Take: func(ctx context.Context, b Engine, read Survey, _ Resource) error {
+		return b.takeLogView(ctx, read.Tier)
 	},
 }
 

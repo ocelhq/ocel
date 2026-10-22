@@ -277,8 +277,7 @@ func restoreUser(ctx context.Context, b bootstrap.Engine, tier environment.Tier,
 }
 
 func sayKept(progress progress.Log, tier environment.Tier, bound []string) {
-	gcloud.EnsureProgress(progress).Say("Kept the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": it still serves " + strings.Join(bound, ", ") +
-		", and it is taken down once nothing is bound to it")
+	gcloud.EnsureProgress(progress).Say("Kept the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": it still serves " + strings.Join(bound, ", "))
 }
 
 func retireLoadBalancer(ctx context.Context, b bootstrap.Engine, tier environment.Tier, retiring records.Revision, users []string) error {

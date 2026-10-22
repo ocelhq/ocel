@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	ReasonTierTagKept     = "every namespace and both tiers of this project bind their resources to its values, and Google refuses to delete a value a resource, even a deleted one, is still bound to"
-	reasonTierValueAbsent = "it lacks the value of a tier, which that tier's resources would carry"
-	reasonUntagged        = "it carries no ocel-tier tag, and the deploy credential is fenced to its tier by that tag"
+	ReasonTierTagKept     = "every namespace and tier of this project binds its values"
+	reasonTierValueAbsent = "it lacks a tier's value"
+	reasonUntagged        = "it carries no ocel-tier tag"
 
 	tagKeyReadPermission   = "resourcemanager.tagKeys.get"
 	tagValueReadPermission = "resourcemanager.tagValues.get"
