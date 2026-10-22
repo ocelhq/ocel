@@ -33,11 +33,18 @@ const (
 )
 
 func (p *cloudflare) planBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
-	accountID, err := p.bootstrapCredentials(ctx, tier, "plan the Cloudflare bootstrap")
+	if _, err := bootstrapCredentials(); err != nil {
+		return nil, err
+	}
+	accountID, err := p.tierAccount(ctx, tier, "plan the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
-	state, err := p.readState(ctx, accountID, tier)
+	names, err := p.names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	state, err := p.readState(ctx, accountID, names, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -45,15 +52,22 @@ func (p *cloudflare) planBootstrap(ctx context.Context, tier environment.Tier) (
 }
 
 func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
-	accountID, err := p.bootstrapCredentials(ctx, tier, "plan removing the Cloudflare bootstrap")
+	if _, err := bootstrapCredentials(); err != nil {
+		return nil, err
+	}
+	accountID, err := p.tierAccount(ctx, tier, "plan removing the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
-	state, err := p.readState(ctx, accountID, tier)
+	names, err := p.names(ctx)
 	if err != nil {
 		return nil, err
 	}
-	certificates, err := p.planRemoveClientCertificates(ctx, tier)
+	state, err := p.readState(ctx, accountID, names, tier)
+	if err != nil {
+		return nil, err
+	}
+	certificates, err := p.planRemoveClientCertificates(ctx, accountID, certificateOwner{origin: names.origin, tier: tier})
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +75,11 @@ func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.T
 }
 
 func (p *cloudflare) adoption(ctx context.Context, tier environment.Tier) (edge.Adoption, error) {
-	workers, err := p.bootstrapWorkers(ctx, tier)
+	names, err := p.names(ctx)
+	if err != nil {
+		return edge.Adoption{}, err
+	}
+	workers, err := names.bootstrapWorkers(tier)
 	if err != nil {
 		return edge.Adoption{}, err
 	}
@@ -103,20 +121,12 @@ func bootstrapCredentials() (string, error) {
 	return accountID, nil
 }
 
-func (p *cloudflare) bootstrapCredentials(ctx context.Context, tier environment.Tier, doing string) (string, error) {
-	accountID, err := bootstrapCredentials()
-	if err != nil {
-		return "", err
-	}
-	return accountID, p.refuseAccountChange(ctx, tier, accountID, doing)
-}
-
 type bootstrapState struct {
 	workers []workerState
 }
 
-func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
-	planned, err := p.bootstrapWorkers(ctx, tier)
+func (p *cloudflare) readState(ctx context.Context, accountID string, names originNames, tier environment.Tier) (bootstrapState, error) {
+	planned, err := names.bootstrapWorkers(tier)
 	if err != nil {
 		return bootstrapState{}, err
 	}
@@ -262,21 +272,13 @@ func settingsCurrent(settings *workers.ScriptScriptAndVersionSettingGetResponse,
 	slices.Sort(deployed)
 	wanted := slices.Clone(compatFlags)
 	slices.Sort(wanted)
-	if !slices.Equal(deployed, wanted) {
-		return false
-	}
-	for _, tag := range b.worker.Tags {
-		if !slices.Contains(settings.Tags, tag) {
-			return false
-		}
-	}
-	current := deployedBindings(settings)
-	for _, want := range b.bindings() {
-		if !slices.Contains(current, want) {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(deployed, wanted) &&
+		containsAll(settings.Tags, b.worker.Tags) &&
+		containsAll(deployedBindings(settings), b.bindings())
+}
+
+func containsAll[T comparable](have, want []T) bool {
+	return !slices.ContainsFunc(want, func(w T) bool { return !slices.Contains(have, w) })
 }
 
 type binding struct {

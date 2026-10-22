@@ -22,7 +22,7 @@ func listProjectResources(t *testing.T, req provider.ProjectResourcesRequest) []
 func TestAProjectListsNoEntryWorkerAnotherOriginNamed(t *testing.T) {
 	t.Parallel()
 
-	theirs, err := entryWorkerName(defaultNamespace, otherOrigin, "shop", environment.TierProduction)
+	theirs, err := otherNames.entryWorker("shop", environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func recordedStack(t *testing.T, slug string, tier environment.Tier, own private
 
 func ownEntryWorker(t *testing.T, slug string, tier environment.Tier) string {
 	t.Helper()
-	name, err := entryWorkerName(defaultNamespace, testOrigin, slug, tier)
+	name, err := testNames.entryWorker(slug, tier)
 	if err != nil {
 		t.Fatal(err)
 	}

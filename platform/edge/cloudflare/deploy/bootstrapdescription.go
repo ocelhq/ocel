@@ -8,14 +8,21 @@ import (
 )
 
 func (p *cloudflare) describeBootstrap(ctx context.Context, tier environment.Tier) ([]edge.BootstrapPart, error) {
-	accountID, err := p.bootstrapCredentials(ctx, tier, "read the Cloudflare bootstrap")
+	if _, err := bootstrapCredentials(); err != nil {
+		return nil, err
+	}
+	accountID, err := p.tierAccount(ctx, tier, "read the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
 	if p.skipChecks {
 		return []edge.BootstrapPart{{Name: "bootstrap", Current: true}}, nil
 	}
-	state, err := p.readState(ctx, accountID, tier)
+	names, err := p.names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	state, err := p.readState(ctx, accountID, names, tier)
 	if err != nil {
 		return nil, err
 	}

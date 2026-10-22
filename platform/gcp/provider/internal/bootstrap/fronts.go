@@ -249,13 +249,6 @@ func AppendMissing(listed, more []string) []string {
 func (b Engine) PlannedFronts(ctx context.Context, tier environment.Tier, parts []string) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	err := b.eachFront(parts, func(part provider.Part, front edge.Edge) error {
-		var planned []edge.PlanChange
-		if plan := front.Hooks().PlanBootstrap; plan != nil {
-			var err error
-			if planned, err = plan(ctx, tier); err != nil {
-				return fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
-			}
-		}
 		var assets []provider.Change
 		if front.Facts().RunsCode {
 			var err error
@@ -263,11 +256,10 @@ func (b Engine) PlannedFronts(ctx context.Context, tier environment.Tier, parts 
 				return fmt.Errorf("plan the %s edge's asset reader and origin secret: %w", front.Kind(), err)
 			}
 		}
-		if len(planned) == 0 && len(assets) == 0 {
-			return nil
+		group, err := bootstrapplan.PlanEdgeBootstrap(ctx, front, tier, part.Name, assets...)
+		if group != nil {
+			groups = append(groups, *group)
 		}
-		group, err := bootstrapplan.EdgeGroup(front.Kind(), part.Name, planned, assets...)
-		groups = append(groups, group)
 		return err
 	})
 	return groups, err
@@ -276,34 +268,18 @@ func (b Engine) PlannedFronts(ctx context.Context, tier environment.Tier, parts 
 func (b Engine) RemovedFronts(ctx context.Context, tier environment.Tier, parts []string) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	err := b.eachFront(parts, func(part provider.Part, front edge.Edge) error {
-		var changes []provider.Change
-		if plan := front.Hooks().PlanRemoveBootstrap; plan != nil {
-			planned, err := plan(ctx, tier)
-			if err != nil {
-				return fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
-			}
-			if changes, err = bootstrapplan.EdgeChanges(front.Kind(), planned); err != nil {
-				return err
-			}
-		}
+		var assets []provider.Change
 		if front.Facts().RunsCode {
-			assets, err := b.FrontParts.PlanAssetsRemoval(ctx, b, tier, front.Kind())
-			if err != nil {
+			var err error
+			if assets, err = b.FrontParts.PlanAssetsRemoval(ctx, b, tier, front.Kind()); err != nil {
 				return fmt.Errorf("plan what removing the %s edge's asset reader and origin secret takes: %w", front.Kind(), err)
 			}
-			changes = append(changes, assets...)
 		}
-		if len(changes) == 0 {
-			return nil
+		group, err := bootstrapplan.PlanEdgeRemoval(ctx, front, tier, part.Name, assets...)
+		if group != nil {
+			groups = append(groups, *group)
 		}
-		groups = append(groups, provider.ChangeGroup{
-			Kind:    edge.EdgeGroupKind,
-			Name:    edge.EdgeGroupName(front.Kind()),
-			Part:    part.Name,
-			Action:  provider.ActionDelete,
-			Changes: changes,
-		})
-		return nil
+		return err
 	})
 	return groups, err
 }

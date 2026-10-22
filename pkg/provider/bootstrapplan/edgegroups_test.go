@@ -1,10 +1,13 @@
 package bootstrapplan_test
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 )
@@ -184,4 +187,100 @@ func TestEdgeGroupFromPlanGroup(t *testing.T) {
 			}
 		}
 	})
+}
+
+type plannedEdge struct {
+	edge.Edge
+	bootstrap []edge.PlanChange
+	removal   []edge.PlanChange
+	err       error
+	hooked    bool
+}
+
+func (e plannedEdge) Kind() edge.Kind { return "cloudflare" }
+
+func (e plannedEdge) Hooks() edge.Hooks {
+	if !e.hooked {
+		return edge.Hooks{}
+	}
+	return edge.Hooks{
+		PlanBootstrap:       func(context.Context, environment.Tier) ([]edge.PlanChange, error) { return e.bootstrap, e.err },
+		PlanRemoveBootstrap: func(context.Context, environment.Tier) ([]edge.PlanChange, error) { return e.removal, e.err },
+	}
+}
+
+func TestAnEdgeThatPlansNothingForItsBootstrapOrItsRemovalAddsNoGroup(t *testing.T) {
+	t.Parallel()
+
+	for name, front := range map[string]plannedEdge{
+		"no plan hooks":                {},
+		"plan hooks that plan nothing": {hooked: true},
+	} {
+		bootstrap, err := bootstrapplan.PlanEdgeBootstrap(t.Context(), front, environment.TierProduction, "cloudflare-edge")
+		if err != nil || bootstrap != nil {
+			t.Errorf("%s: PlanEdgeBootstrap = %+v, %v, want no group", name, bootstrap, err)
+		}
+		removal, err := bootstrapplan.PlanEdgeRemoval(t.Context(), front, environment.TierProduction, "cloudflare-edge")
+		if err != nil || removal != nil {
+			t.Errorf("%s: PlanEdgeRemoval = %+v, %v, want no group", name, removal, err)
+		}
+	}
+}
+
+func TestAnEdgeWhosePlanFailsIsNamedInTheError(t *testing.T) {
+	t.Parallel()
+
+	front := plannedEdge{hooked: true, err: errors.New("the account changed")}
+	if _, err := bootstrapplan.PlanEdgeBootstrap(t.Context(), front, environment.TierProduction, ""); !errors.Is(err, front.err) || !strings.Contains(err.Error(), "plan the cloudflare edge bootstrap") {
+		t.Errorf("PlanEdgeBootstrap = %v, want the edge's error wrapped naming the cloudflare edge bootstrap", err)
+	}
+	if _, err := bootstrapplan.PlanEdgeRemoval(t.Context(), front, environment.TierProduction, ""); !errors.Is(err, front.err) || !strings.Contains(err.Error(), "removing the cloudflare edge bootstrap") {
+		t.Errorf("PlanEdgeRemoval = %v, want the edge's error wrapped naming the cloudflare edge bootstrap", err)
+	}
+}
+
+func TestAnEdgesBootstrapPlanIsOneGroupUnderItsPartWithTheOriginsChangesAfterIt(t *testing.T) {
+	t.Parallel()
+
+	front := plannedEdge{hooked: true, bootstrap: []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-prod-releases-store", Action: edge.PlanCreate}}}
+	reader := provider.Change{Kind: "storage:hmackey", Name: "reader", Action: provider.ActionCreate}
+
+	group, err := bootstrapplan.PlanEdgeBootstrap(t.Context(), front, environment.TierProduction, "cloudflare-edge", reader)
+	if err != nil {
+		t.Fatalf("PlanEdgeBootstrap: %v", err)
+	}
+	if group == nil || group.Kind != edge.EdgeGroupKind || group.Name != "cloudflare/edge" || group.Part != "cloudflare-edge" || group.Action != provider.ActionCreate {
+		t.Fatalf("group = %+v, want the cloudflare edge's group under its part, creating", group)
+	}
+	if len(group.Changes) != 2 || group.Changes[0].Name != "ocel-prod-releases-store" || group.Changes[1] != reader {
+		t.Errorf("changes = %+v, want the edge's worker and then the origin's key", group.Changes)
+	}
+
+	onlyOrigin, err := bootstrapplan.PlanEdgeBootstrap(t.Context(), plannedEdge{}, environment.TierProduction, "cloudflare-edge", reader)
+	if err != nil || onlyOrigin == nil || len(onlyOrigin.Changes) != 1 {
+		t.Errorf("PlanEdgeBootstrap with only the origin's change = %+v, %v, want a group holding it", onlyOrigin, err)
+	}
+}
+
+func TestAnEdgesRemovalPlanIsOneDeletingGroupUnderItsPartWithTheOriginsChangesAfterIt(t *testing.T) {
+	t.Parallel()
+
+	front := plannedEdge{hooked: true, removal: []edge.PlanChange{{Kind: "Cloudflare::OriginPullCertificate", Name: "app.com/ours", Action: edge.PlanDelete}}}
+	reader := provider.Change{Kind: "storage:hmackey", Name: "reader", Action: provider.ActionDelete}
+
+	group, err := bootstrapplan.PlanEdgeRemoval(t.Context(), front, environment.TierProduction, "cloudflare-edge", reader)
+	if err != nil {
+		t.Fatalf("PlanEdgeRemoval: %v", err)
+	}
+	if group == nil || group.Kind != edge.EdgeGroupKind || group.Name != "cloudflare/edge" || group.Part != "cloudflare-edge" || group.Action != provider.ActionDelete {
+		t.Fatalf("group = %+v, want the cloudflare edge's group under its part, deleting", group)
+	}
+	if len(group.Changes) != 2 || group.Changes[0].Name != "app.com/ours" || group.Changes[0].Action != provider.ActionDelete || group.Changes[1] != reader {
+		t.Errorf("changes = %+v, want the edge's certificate and then the origin's key", group.Changes)
+	}
+
+	refused := plannedEdge{hooked: true, removal: []edge.PlanChange{{Kind: "Cloudflare::Worker", Name: "ocel-prod-releases-store", Action: edge.PlanAction("recreate")}}}
+	if _, err := bootstrapplan.PlanEdgeRemoval(t.Context(), refused, environment.TierProduction, ""); err == nil {
+		t.Error("PlanEdgeRemoval took an action no renderer knows")
+	}
 }

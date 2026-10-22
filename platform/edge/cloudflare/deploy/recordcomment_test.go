@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
@@ -12,13 +13,14 @@ import (
 func TestARecordTheDNSWriterWroteNamesTheOriginItWroteItFor(t *testing.T) {
 	t.Parallel()
 
-	if got, want := formatWriterComment(testOrigin), "managed by ocel on aws:123456789012/us-east-1"; got != want {
-		t.Errorf("formatWriterComment = %q, want %q", got, want)
+	if got, want := dnsWriter(testOrigin).comment(), "managed by ocel on aws:123456789012/us-east-1"; got != want {
+		t.Errorf("the DNS writer's comment = %q, want %q", got, want)
 	}
 	for _, origin := range []OriginScope{testOrigin, otherOrigin, {Vendor: "vps", ID: "k3j9x0"}, {Vendor: "gcp", ID: "example.com:shop"}} {
-		read, written := parseRecordComment(formatWriterComment(origin))
-		if !written || read.origin != origin || read.owner != "" {
-			t.Errorf("parseRecordComment(%q) = %+v, %v, want a record %s wrote, forwarded for no one", formatWriterComment(origin), read, written, origin)
+		comment := dnsWriter(origin).comment()
+		read, written := parseRecordOwner(comment)
+		if !written || read != dnsWriter(origin) || read.isForwarding() {
+			t.Errorf("parseRecordOwner(%q) = %+v, %v, want a record %s wrote, forwarded for no one", comment, read, written, origin)
 		}
 	}
 }
@@ -26,21 +28,21 @@ func TestARecordTheDNSWriterWroteNamesTheOriginItWroteItFor(t *testing.T) {
 func TestARecordForwardedForAProjectNamesTheProjectAndItsOrigin(t *testing.T) {
 	t.Parallel()
 
-	owner := mustFormatForwardingOwner(defaultNamespace, testOrigin, "acme", environment.TierProduction)
+	owner := mustForwardingOwner(defaultNamespace, testOrigin, "acme", environment.TierProduction)
 	tag := naming.HashTag(defaultNamespace, "acme", string(environment.TierProduction))
-	if want := "ocel-prod-acme-" + tag + " on aws:123456789012/us-east-1"; owner != want {
-		t.Errorf("formatForwardingOwner = %q, want %q", owner, want)
+	if want := "ocel-prod-acme-" + tag + " on aws:123456789012/us-east-1"; owner.String() != want {
+		t.Errorf("forwardingOwner = %q, want %q", owner, want)
 	}
-	if got, want := formatOwnerComment(owner), "managed by ocel for ocel-prod-acme-"+tag+" on aws:123456789012/us-east-1"; got != want {
-		t.Errorf("formatOwnerComment = %q, want %q", got, want)
+	if got, want := owner.comment(), "managed by ocel for ocel-prod-acme-"+tag+" on aws:123456789012/us-east-1"; got != want {
+		t.Errorf("comment = %q, want %q", got, want)
 	}
-	for _, owner := range []string{owner, formatPreviewForwardingOwner(otherOrigin)} {
-		read, written := parseRecordComment(formatOwnerComment(owner))
-		if !written || read.owner != owner {
-			t.Errorf("parseRecordComment(%q) = %+v, %v, want it forwarded for %q", formatOwnerComment(owner), read, written, owner)
+	for _, owner := range []recordOwner{owner, previewForwardingOwner(otherOrigin)} {
+		read, written := parseRecordOwner(owner.comment())
+		if !written || read != owner {
+			t.Errorf("parseRecordOwner(%q) = %+v, %v, want it forwarded for %q", owner.comment(), read, written, owner)
 		}
 	}
-	if read, _ := parseRecordComment(formatOwnerComment(formatPreviewForwardingOwner(otherOrigin))); read.origin != otherOrigin {
+	if read, _ := parseRecordOwner(previewForwardingOwner(otherOrigin).comment()); read.isOtherOrigin(otherOrigin) {
 		t.Errorf("the preview wildcard %s forwards reads as %s's", otherOrigin, read.origin)
 	}
 }
@@ -49,12 +51,24 @@ func TestTheSameProjectForwardedOnTwoOriginsHasTwoOwners(t *testing.T) {
 	t.Parallel()
 
 	for _, tier := range workerTiers {
-		if mustFormatForwardingOwner(defaultNamespace, testOrigin, "acme", tier) == mustFormatForwardingOwner(defaultNamespace, otherOrigin, "acme", tier) {
+		if mustForwardingOwner(defaultNamespace, testOrigin, "acme", tier).comment() == mustForwardingOwner(defaultNamespace, otherOrigin, "acme", tier).comment() {
 			t.Errorf("acme's %s forward on %s and on %s share one owner, so each would adopt and repoint the other's record", tier, testOrigin, otherOrigin)
 		}
 	}
-	if formatPreviewForwardingOwner(testOrigin) == formatPreviewForwardingOwner(otherOrigin) {
+	if previewForwardingOwner(testOrigin).comment() == previewForwardingOwner(otherOrigin).comment() {
 		t.Errorf("the preview wildcard of %s and of %s share one owner, so each would overwrite the other's", testOrigin, otherOrigin)
+	}
+}
+
+func TestThisOriginsPreviewWildcardIsOwnedByThePreviewEntryAndAnotherOriginsIsNot(t *testing.T) {
+	t.Parallel()
+
+	if got := domainOwner(previewForwardingOwner(testOrigin), testOrigin); got != edge.PreviewEntryOwner {
+		t.Errorf("domainOwner of this origin's preview wildcard = %q, want %q", got, edge.PreviewEntryOwner)
+	}
+	theirs := previewForwardingOwner(otherOrigin)
+	if got := domainOwner(theirs, testOrigin); got != theirs.String() {
+		t.Errorf("domainOwner of %s's preview wildcard = %q, want %q", otherOrigin, got, theirs)
 	}
 }
 
@@ -72,14 +86,14 @@ func TestACommentThatNamesNoOriginWasNotWrittenByAnyOrigin(t *testing.T) {
 		"managed by ocel for  on aws:123",
 		"managed by ocel for ocel--acme--production on aws:123 extra",
 	} {
-		if read, written := parseRecordComment(comment); written {
-			t.Errorf("parseRecordComment(%q) = %+v, want no origin read from it", comment, read)
+		if read, written := parseRecordOwner(comment); written {
+			t.Errorf("parseRecordOwner(%q) = %+v, want no origin read from it", comment, read)
 		}
 	}
 }
 
-func mustFormatForwardingOwner(namespace string, origin OriginScope, slug string, tier environment.Tier) string {
-	owner, err := formatForwardingOwner(namespace, origin, slug, tier)
+func mustForwardingOwner(namespace string, origin OriginScope, slug string, tier environment.Tier) recordOwner {
+	owner, err := originNames{namespace: namespace, origin: origin}.forwardingOwner(slug, tier)
 	if err != nil {
 		panic(err)
 	}
@@ -109,16 +123,16 @@ func everyRecordComment(t *testing.T, namespaces, slugs []string, origins []Orig
 		comments[comment] = from
 	}
 	for _, origin := range origins {
-		add(formatWriterComment(origin), "the DNS writer on "+origin.String())
-		add(formatOwnerComment(formatPreviewForwardingOwner(origin)), "the preview wildcard on "+origin.String())
+		add(dnsWriter(origin).comment(), "the DNS writer on "+origin.String())
+		add(previewForwardingOwner(origin).comment(), "the preview wildcard on "+origin.String())
 		for _, namespace := range namespaces {
 			for _, slug := range slugs {
 				for _, tier := range workerTiers {
-					owner, err := formatForwardingOwner(namespace, origin, slug, tier)
+					owner, err := originNames{namespace: namespace, origin: origin}.forwardingOwner(slug, tier)
 					if err != nil {
-						t.Fatalf("formatForwardingOwner(%q, %s, %q, %s): %v", namespace, origin, slug, tier, err)
+						t.Fatalf("forwardingOwner(%q, %s, %q, %s): %v", namespace, origin, slug, tier, err)
 					}
-					add(formatOwnerComment(owner), fmt.Sprintf("%s's %s forward in %q on %s", slug, tier, namespace, origin))
+					add(owner.comment(), fmt.Sprintf("%s's %s forward in %q on %s", slug, tier, namespace, origin))
 				}
 			}
 		}
@@ -136,23 +150,6 @@ func TestEveryRecordCommentFitsTheCommentAFreeZoneHolds(t *testing.T) {
 		if len(comment) > maxRecordCommentLength {
 			t.Errorf("%q is %d characters, want at most %d: a Free zone refuses a longer comment", comment, len(comment), maxRecordCommentLength)
 		}
-	}
-}
-
-func TestTheLongestForwardOfTheOldFormatNowFits(t *testing.T) {
-	t.Parallel()
-
-	namespace := strings.Repeat("n", naming.MaxNamespaceField)
-	slug := strings.Repeat("s", 63)
-	if old := len("managed by ocel for " + namespace + "--" + slug + "--production"); old != 109 {
-		t.Fatalf("the old worst case is %d characters, want 109", old)
-	}
-	comment := formatOwnerComment(mustFormatForwardingOwner(namespace, testOrigin, slug, environment.TierProduction))
-	if len(comment) > maxRecordCommentLength {
-		t.Errorf("%q is %d characters, want at most %d", comment, len(comment), maxRecordCommentLength)
-	}
-	if read, written := parseRecordComment(comment); !written || read.origin != testOrigin {
-		t.Errorf("parseRecordComment(%q) = %+v, %v, want it read back as written on %s", comment, read, written, testOrigin)
 	}
 }
 

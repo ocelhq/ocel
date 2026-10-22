@@ -67,22 +67,12 @@ func TestAnOriginThatNamesNoVendorOrNoIDNamesNothing(t *testing.T) {
 	t.Parallel()
 
 	for _, origin := range []OriginScope{{}, {Vendor: "aws"}, {ID: "123456789012/us-east-1"}} {
-		if name, err := storeScriptNameFor(defaultNamespace, origin, environment.TierProduction); err == nil {
-			t.Errorf("storeScriptNameFor(%v) = %q, want an error: a name without its origin reaches another origin's store", origin, name)
-		}
-		if name, err := entryWorkerName(defaultNamespace, origin, "shop", environment.TierProduction); err == nil {
-			t.Errorf("entryWorkerName(%v) = %q, want an error", origin, name)
-		}
-		if name, err := previewEntryScriptNameFor(defaultNamespace, origin); err == nil {
-			t.Errorf("previewEntryScriptNameFor(%v) = %q, want an error", origin, name)
-		}
-		p := newCloudflare(defaultNamespace, fixedOrigin(origin), Options{})
-		if _, err := p.originScope(t.Context()); err == nil {
-			t.Errorf("originScope() of an edge opened for %v = nil error, want it refused", origin)
+		if names, err := newCloudflare(defaultNamespace, fixedOrigin(origin), Options{}).names(t.Context()); err == nil {
+			t.Errorf("names() of an edge opened for %v = %+v, want it refused: a name without its origin reaches another origin's store", origin, names)
 		}
 	}
-	if _, err := newCloudflare(defaultNamespace, Origin{}, Options{}).originScope(t.Context()); err == nil {
-		t.Error("originScope() of an edge opened with no origin = nil error, want it refused")
+	if _, err := newCloudflare(defaultNamespace, Origin{}, Options{}).names(t.Context()); err == nil {
+		t.Error("names() of an edge opened with no origin = nil error, want it refused")
 	}
 }
 
@@ -99,27 +89,23 @@ func TestAnOriginThatCannotBeReadNamesNothing(t *testing.T) {
 func TestTwoOriginsNameEveryWorkerApart(t *testing.T) {
 	t.Parallel()
 
-	namesOf := func(origin OriginScope) []string {
+	namesOf := func(origin originNames) []string {
 		var names []string
 		for _, tier := range workerTiers {
-			store, err := storeScriptNameFor(defaultNamespace, origin, tier)
+			store, err := origin.storeScript(tier)
 			if err != nil {
 				t.Fatal(err)
 			}
-			entry, err := entryWorkerName(defaultNamespace, origin, "shop", tier)
+			entry, err := origin.entryWorker("shop", tier)
 			if err != nil {
 				t.Fatal(err)
 			}
 			names = append(names, store, entry)
 		}
-		shared, err := previewEntryScriptNameFor(defaultNamespace, origin)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return append(names, shared)
+		return append(names, origin.sharedPreviewEntry())
 	}
 
-	mine, theirs := namesOf(testOrigin), namesOf(otherOrigin)
+	mine, theirs := namesOf(testNames), namesOf(otherNames)
 	for _, name := range mine {
 		if slices.Contains(theirs, name) {
 			t.Errorf("%s and %s both name %q, so one's deploy or teardown reaches the other's", testOrigin, otherOrigin, name)
@@ -136,11 +122,11 @@ func TestTwoOriginsNameEveryWorkerApart(t *testing.T) {
 func TestTearingOneOriginDownLeavesAnothersStanding(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
-	mine, err := storeScriptNameFor(defaultNamespace, testOrigin, environment.TierProduction)
+	mine, err := testNames.storeScript(environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
-	theirs, err := storeScriptNameFor(defaultNamespace, otherOrigin, environment.TierProduction)
+	theirs, err := otherNames.storeScript(environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,9 +145,7 @@ func TestTearingOneOriginDownLeavesAnothersStanding(t *testing.T) {
 func TestEveryWorkerAnOriginUploadsCarriesItsOrigin(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
-	p := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{})
-	planned, err := p.bootstrapWorkers(ctx, environment.TierPreview)
+	planned, err := testNames.bootstrapWorkers(environment.TierPreview)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +154,7 @@ func TestEveryWorkerAnOriginUploadsCarriesItsOrigin(t *testing.T) {
 		workers[b.scriptName] = b.worker
 	}
 	for _, slug := range []string{"shop", ""} {
-		built, err := p.buildEntryProgram(ctx, environment.TierPreview, slug, previewProgrammed())
+		built, err := buildEntryProgram(testNames, environment.TierPreview, slug, previewProgrammed())
 		if err != nil {
 			t.Fatal(err)
 		}

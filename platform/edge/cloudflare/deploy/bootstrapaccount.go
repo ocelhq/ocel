@@ -2,35 +2,11 @@ package cloudflare
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
-
-const bootstrapAccountRecord = "bootstrap-account"
-
-type bootstrapAccount struct {
-	ID string `json:"id"`
-}
-
-func bootstrapAccountKey(tier environment.Tier) records.Key {
-	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), bootstrapAccountRecord)
-}
-
-func decodeBootstrapAccount(entry records.Entry) (bootstrapAccount, error) {
-	var recorded bootstrapAccount
-	if len(entry.Value) == 0 {
-		return recorded, nil
-	}
-	if err := json.Unmarshal(entry.Value, &recorded); err != nil {
-		return bootstrapAccount{}, fmt.Errorf("read %s: %w", entry.Key, err)
-	}
-	return recorded, nil
-}
 
 func refuseOtherAccount(tier environment.Tier, recorded, accountID, doing string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
@@ -40,6 +16,10 @@ func refuseOtherAccount(tier environment.Tier, recorded, accountID, doing string
 		envAccountID, recorded, accountID, tier, envAccountID, recorded, accountID)
 }
 
+func refuseUnsetAccount(doing string) error {
+	return fmt.Errorf("%s is not set; it is required to %s", envAccountID, doing)
+}
+
 func (o *resolvedOrigin) readBootstrapAccount(ctx context.Context, tier environment.Tier) (string, error) {
 	o.accountsMu.Lock()
 	remembered, held := o.recordedAccounts[tier]
@@ -47,22 +27,14 @@ func (o *resolvedOrigin) readBootstrapAccount(ctx context.Context, tier environm
 	if held {
 		return remembered, nil
 	}
-	store, err := o.requireRecords("read the Cloudflare account tier " + string(tier) + " was bootstrapped against")
+	recorded, err := o.readTierRecord(ctx, tier)
 	if err != nil {
 		return "", err
 	}
-	entry, err := records.ReadOrEmpty(ctx, store, bootstrapAccountKey(tier))
-	if err != nil {
-		return "", fmt.Errorf("read the Cloudflare account tier %s was bootstrapped against: %w", tier, err)
+	if recorded.AccountID != "" {
+		o.rememberAccount(tier, recorded.AccountID)
 	}
-	recorded, err := decodeBootstrapAccount(entry)
-	if err != nil {
-		return "", err
-	}
-	if recorded.ID != "" {
-		o.rememberAccount(tier, recorded.ID)
-	}
-	return recorded.ID, nil
+	return recorded.AccountID, nil
 }
 
 func (o *resolvedOrigin) rememberAccount(tier environment.Tier, accountID string) {
@@ -71,50 +43,44 @@ func (o *resolvedOrigin) rememberAccount(tier environment.Tier, accountID string
 	if o.recordedAccounts == nil {
 		o.recordedAccounts = map[environment.Tier]string{}
 	}
-	if accountID == "" {
-		delete(o.recordedAccounts, tier)
-		return
-	}
 	o.recordedAccounts[tier] = accountID
 }
 
-func (o *resolvedOrigin) refuseAccountChange(ctx context.Context, tier environment.Tier, accountID, doing string) error {
+func (o *resolvedOrigin) forgetAccount(tier environment.Tier) {
+	o.accountsMu.Lock()
+	defer o.accountsMu.Unlock()
+	delete(o.recordedAccounts, tier)
+}
+
+func (o *resolvedOrigin) tierAccount(ctx context.Context, tier environment.Tier, doing string) (string, error) {
+	accountID := readAccountID()
+	if accountID == "" {
+		return "", refuseUnsetAccount(doing)
+	}
 	recorded, err := o.readBootstrapAccount(ctx, tier)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if recorded != "" && recorded != accountID {
-		return refuseOtherAccount(tier, recorded, accountID, doing)
+		return "", refuseOtherAccount(tier, recorded, accountID, doing)
 	}
-	return nil
+	return accountID, nil
 }
 
-func (o *resolvedOrigin) requireTierAccount(ctx context.Context, tier environment.Tier, doing string) (string, error) {
-	accountID, err := requireAccountID(doing)
-	if err != nil {
-		return "", err
+func (o *resolvedOrigin) anyTierAccount(ctx context.Context, doing string) (string, error) {
+	accountID := readAccountID()
+	if accountID == "" {
+		return "", refuseUnsetAccount(doing)
 	}
-	return accountID, o.refuseAccountChange(ctx, tier, accountID, doing)
-}
-
-func (o *resolvedOrigin) requireBootstrappedAccount(ctx context.Context, doing string) (string, error) {
-	accountID, err := requireAccountID(doing)
-	if err != nil {
-		return "", err
-	}
-	return accountID, o.refuseUnbootstrappedAccount(ctx, accountID, doing)
-}
-
-func (o *resolvedOrigin) refuseUnbootstrappedAccount(ctx context.Context, accountID, doing string) error {
 	var other error
 	for _, tier := range workerTiers {
 		recorded, err := o.readBootstrapAccount(ctx, tier)
 		if err != nil {
-			return err
+			return "", err
 		}
 		switch recorded {
 		case accountID:
-			return nil
+			return accountID, nil
 		case "":
 		default:
 			if other == nil {
@@ -122,43 +88,27 @@ func (o *resolvedOrigin) refuseUnbootstrappedAccount(ctx context.Context, accoun
 			}
 		}
 	}
-	return other
+	if other != nil {
+		return "", other
+	}
+	return accountID, nil
 }
 
 func (o *resolvedOrigin) recordBootstrapAccount(ctx context.Context, tier environment.Tier, accountID string) error {
 	doing := fmt.Sprintf("bootstrap tier %s on Cloudflare", tier)
-	store, err := o.requireRecords(doing)
-	if err != nil {
-		return err
-	}
-	err = records.Change(ctx, store, bootstrapAccountKey(tier), func(entry records.Entry) ([]byte, bool, error) {
-		recorded, err := decodeBootstrapAccount(entry)
-		switch {
-		case err != nil:
-			return nil, false, err
-		case recorded.ID == accountID:
-			return nil, false, nil
-		case recorded.ID != "":
-			return nil, false, refuseOtherAccount(tier, recorded.ID, accountID, doing)
+	err := o.changeTierRecord(ctx, tier, doing, func(recorded *tierRecord) (bool, error) {
+		switch recorded.AccountID {
+		case accountID:
+			return false, nil
+		case "":
+			recorded.AccountID = accountID
+			return true, nil
 		}
-		value, err := json.Marshal(bootstrapAccount{ID: accountID})
-		return value, true, err
+		return false, refuseOtherAccount(tier, recorded.AccountID, accountID, doing)
 	})
 	if err != nil {
 		return err
 	}
 	o.rememberAccount(tier, accountID)
-	return nil
-}
-
-func (o *resolvedOrigin) forgetBootstrapAccount(ctx context.Context, tier environment.Tier) error {
-	store, err := o.requireRecords("forget the Cloudflare account tier " + string(tier) + " was bootstrapped against")
-	if err != nil {
-		return err
-	}
-	if err := records.Forget(ctx, store, bootstrapAccountKey(tier)); err != nil {
-		return err
-	}
-	o.rememberAccount(tier, "")
 	return nil
 }

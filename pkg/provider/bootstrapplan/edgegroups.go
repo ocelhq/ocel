@@ -1,9 +1,11 @@
 package bootstrapplan
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -20,6 +22,48 @@ func EdgeGroup(kind edge.Kind, part string, planned []edge.PlanChange, origin ..
 	}
 	group.Action, group.Reason = provider.RollUp(group.Changes)
 	return group, nil
+}
+
+func PlanEdgeBootstrap(ctx context.Context, front edge.Edge, tier environment.Tier, part string, origin ...provider.Change) (*provider.ChangeGroup, error) {
+	var planned []edge.PlanChange
+	if plan := front.Hooks().PlanBootstrap; plan != nil {
+		var err error
+		if planned, err = plan(ctx, tier); err != nil {
+			return nil, fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
+		}
+	}
+	if len(planned) == 0 && len(origin) == 0 {
+		return nil, nil
+	}
+	group, err := EdgeGroup(front.Kind(), part, planned, origin...)
+	if err != nil {
+		return nil, err
+	}
+	return &group, nil
+}
+
+func PlanEdgeRemoval(ctx context.Context, front edge.Edge, tier environment.Tier, part string, origin ...provider.Change) (*provider.ChangeGroup, error) {
+	var planned []edge.PlanChange
+	if plan := front.Hooks().PlanRemoveBootstrap; plan != nil {
+		var err error
+		if planned, err = plan(ctx, tier); err != nil {
+			return nil, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
+		}
+	}
+	if len(planned) == 0 && len(origin) == 0 {
+		return nil, nil
+	}
+	changes, err := EdgeChanges(front.Kind(), planned)
+	if err != nil {
+		return nil, err
+	}
+	return &provider.ChangeGroup{
+		Kind:    edge.EdgeGroupKind,
+		Name:    edge.EdgeGroupName(front.Kind()),
+		Part:    part,
+		Action:  provider.ActionDelete,
+		Changes: append(changes, origin...),
+	}, nil
 }
 
 func EdgeChanges(kind edge.Kind, planned []edge.PlanChange) ([]provider.Change, error) {

@@ -52,7 +52,7 @@ func projectEntryWorker(ctx context.Context, namespace string, origin Origin, re
 	if err != nil {
 		return "", false, err
 	}
-	conventional, err := entryWorkerName(namespace, scope, req.Project, req.Tier)
+	conventional, err := originNames{namespace: namespace, origin: scope}.entryWorker(req.Project, req.Tier)
 	if err != nil {
 		return "", false, err
 	}

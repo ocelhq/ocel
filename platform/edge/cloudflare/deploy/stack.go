@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
@@ -25,29 +24,8 @@ const secretBytes = 32
 
 const releasesStoreStem = "releases-store"
 
-func storeScriptNameFor(namespace string, origin OriginScope, tier environment.Tier) (string, error) {
-	return accountNameFor("releases store", namespace, origin, tier, releasesStoreStem)
-}
-
-func (p *cloudflare) storeScriptName(ctx context.Context, tier environment.Tier) (string, error) {
-	origin, err := p.originScope(ctx)
-	if err != nil {
-		return "", err
-	}
-	return storeScriptNameFor(p.namespace, origin, tier)
-}
-
-func accountNameFor(what, namespace string, origin OriginScope, tier environment.Tier, stem string) (string, error) {
-	if namespace == "" {
-		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this tier depends on", what)
-	}
-	if err := origin.refuseIncomplete(what); err != nil {
-		return "", err
-	}
-	if err := refuseUnknownTier(what, tier); err != nil {
-		return "", err
-	}
-	return naming.OcelName(namespace, tier, origin.tag(), stem), nil
+func (n originNames) storeScript(tier environment.Tier) (string, error) {
+	return n.accountName("releases store", tier, releasesStoreStem)
 }
 
 func refuseUnknownTier(what string, tier environment.Tier) error {
@@ -129,16 +107,20 @@ func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	accountID, err := p.requireTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack")
+	accountID, err := p.tierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack")
 	if err != nil {
 		return nil, err
 	}
-	program, err := p.buildEntryProgram(ctx, spec.Tier, spec.Slug, spec.Program)
+	names, err := p.names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	program, err := buildEntryProgram(names, spec.Tier, spec.Slug, spec.Program)
 	if err != nil {
 		return nil, err
 	}
 	if !spec.PruneOnly {
-		if err := p.refuseBootstrapBehind(ctx, accountID, spec.Tier, bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again"}); err != nil {
+		if err := p.refuseBootstrapBehind(ctx, accountID, names, spec.Tier, bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again"}); err != nil {
 			return nil, err
 		}
 	}
@@ -187,7 +169,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	openedAsDeployed := func(state edge.StackState) (edge.EdgeStack, error) {
 		switch {
 		case spec.GlobalPreview != "":
-			purgeURL, err := p.readSharedPreviewPurgeURL(ctx, accountID, slug)
+			purgeURL, err := p.readSharedPreviewPurgeURL(ctx, accountID, names, slug)
 			if err != nil {
 				return nil, err
 			}
@@ -221,11 +203,11 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 	}
 
-	owns, err := p.projectOwnsScript(ctx, slug)
+	owns, err := names.ownsScript(slug)
 	if err != nil {
 		return nil, err
 	}
-	if err := p.reconcileWorkerRoutes(ctx, genericUp, routeSpec{
+	if err := p.reconcileWorkerRoutes(ctx, names, genericUp, routeSpec{
 		desired:         spec.Domains,
 		bound:           prior.Bound,
 		servedElsewhere: spec.ServedElsewhere,
@@ -244,7 +226,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 			return nil, fmt.Errorf("delete retired generic worker %q: %w", program.name, err)
 		}
 		if spec.GlobalPreview != "" {
-			if purgeURL, err = p.readSharedPreviewPurgeURL(ctx, accountID, slug); err != nil {
+			if purgeURL, err = p.readSharedPreviewPurgeURL(ctx, accountID, names, slug); err != nil {
 				return nil, err
 			}
 		}
@@ -301,20 +283,25 @@ func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, st
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
-	if _, err := s.p.requireTierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack"); err != nil {
+	accountID, err := s.p.tierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack")
+	if err != nil {
+		return err
+	}
+	names, err := s.p.names(ctx)
+	if err != nil {
 		return err
 	}
 	var errs []error
 	for _, hostname := range s.state.Bound {
-		if err := s.UnbindDomain(ctx, hostname); err != nil {
+		if err := s.unbindDomain(ctx, names, accountID, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
 		}
 	}
-	names, err := s.stackWorkers(ctx)
+	workers, err := s.stackWorkers(ctx, names)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
-	if err := s.p.destroyWorkers(ctx, names); err != nil {
+	if err := s.p.destroyWorkers(ctx, accountID, workers); err != nil {
 		return errors.Join(append(errs, err)...)
 	}
 	if err := s.p.destroyInstance(ctx, s.state); err != nil {
@@ -323,7 +310,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (s *stack) stackWorkers(ctx context.Context) ([]string, error) {
+func (s *stack) stackWorkers(ctx context.Context, names originNames) ([]string, error) {
 	if secret := s.state.Secret; secret != "" {
 		if _, res, err := s.p.getVersionStamp(ctx, s.state.Endpoint, s.state.Slug, secret); err != nil {
 			if isUnauthorized(res) {
@@ -336,10 +323,10 @@ func (s *stack) stackWorkers(ctx context.Context) ([]string, error) {
 	if s.own.EntryWorker != "" {
 		named = append(named, s.own.EntryWorker)
 	}
-	if s.p.namespace == "" || s.state.Slug == "" || s.state.Tier == "" {
+	if s.state.Slug == "" || s.state.Tier == "" {
 		return named, nil
 	}
-	conventional, err := s.p.entryWorkerName(ctx, s.state.Slug, s.state.Tier)
+	conventional, err := names.entryWorker(s.state.Slug, s.state.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -349,15 +336,7 @@ func (s *stack) stackWorkers(ctx context.Context) ([]string, error) {
 	return named, nil
 }
 
-func (p *cloudflare) destroyWorkers(ctx context.Context, names []string) error {
-	accountID, err := requireAccountID("destroy the Cloudflare stack")
-	if err != nil {
-		return err
-	}
-	if len(names) == 0 {
-		return nil
-	}
-
+func (p *cloudflare) destroyWorkers(ctx context.Context, accountID string, names []string) error {
 	var errs []error
 	for _, name := range names {
 		if name == "" {

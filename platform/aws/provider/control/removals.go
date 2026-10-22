@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -40,7 +39,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 		return provider.Plan{}, err
 	}
 	for _, front := range fronts {
-		group, err := b.removedEdgeGroup(ctx, tier, front)
+		group, err := bootstrapplan.PlanEdgeRemoval(ctx, front, tier, bootstrapplan.PartFrontingEdge(account.Parts(), front.Kind()))
 		if err != nil {
 			return provider.Plan{}, err
 		}
@@ -92,29 +91,4 @@ func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, de
 		fronts = append(fronts, front)
 	}
 	return fronts, nil
-}
-
-func (b Bootstrap) removedEdgeGroup(ctx context.Context, tier environment.Tier, front edge.Edge) (*provider.ChangeGroup, error) {
-	plan := front.Hooks().PlanRemoveBootstrap
-	if plan == nil {
-		return nil, nil
-	}
-	planned, err := plan(ctx, tier)
-	if err != nil {
-		return nil, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
-	}
-	if len(planned) == 0 {
-		return nil, nil
-	}
-	changes, err := bootstrapplan.EdgeChanges(front.Kind(), planned)
-	if err != nil {
-		return nil, err
-	}
-	return &provider.ChangeGroup{
-		Kind:    edge.EdgeGroupKind,
-		Name:    edge.EdgeGroupName(front.Kind()),
-		Part:    bootstrapplan.PartFrontingEdge(account.Parts(), front.Kind()),
-		Action:  provider.ActionDelete,
-		Changes: changes,
-	}, nil
 }

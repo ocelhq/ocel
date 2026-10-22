@@ -15,8 +15,8 @@ type bootstrapCaller struct {
 	retry  string
 }
 
-func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string, tier environment.Tier, caller bootstrapCaller) error {
-	planned, err := p.bootstrapWorkers(ctx, tier)
+func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string, names originNames, tier environment.Tier, caller bootstrapCaller) error {
+	planned, err := names.bootstrapWorkers(tier)
 	if err != nil {
 		return err
 	}

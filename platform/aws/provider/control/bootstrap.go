@@ -215,27 +215,7 @@ func (b Bootstrap) installedEdgeGroup(ctx context.Context, tier environment.Tier
 	if err != nil {
 		return nil, err
 	}
-	planned, err := plannedBootstrap(ctx, front, tier)
-	if err != nil || len(planned) == 0 {
-		return nil, err
-	}
-	group, err := bootstrapplan.EdgeGroup(kind, bootstrapplan.PartFrontingEdge(account.Parts(), kind), planned)
-	if err != nil {
-		return nil, err
-	}
-	return &group, nil
-}
-
-func plannedBootstrap(ctx context.Context, front edge.Edge, tier environment.Tier) ([]edge.PlanChange, error) {
-	plan := front.Hooks().PlanBootstrap
-	if plan == nil {
-		return nil, nil
-	}
-	planned, err := plan(ctx, tier)
-	if err != nil {
-		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
-	}
-	return planned, nil
+	return bootstrapplan.PlanEdgeBootstrap(ctx, front, tier, bootstrapplan.PartFrontingEdge(account.Parts(), kind))
 }
 
 func (b Bootstrap) severedEdge(ctx context.Context, tier environment.Tier, kind edge.Kind) (*provider.ChangeGroup, error) {
@@ -243,17 +223,17 @@ func (b Bootstrap) severedEdge(ctx context.Context, tier environment.Tier, kind 
 	if err != nil {
 		return nil, err
 	}
-	group, err := b.removedEdgeGroup(ctx, tier, front)
+	part := bootstrapplan.PartFrontingEdge(account.Parts(), kind)
+	group, err := bootstrapplan.PlanEdgeRemoval(ctx, front, tier, part)
 	if err != nil {
 		return nil, err
 	}
-	part := bootstrapplan.PartFrontingEdge(account.Parts(), kind)
 	if group == nil {
-		planned, err := plannedBootstrap(ctx, front, tier)
+		installed, err := bootstrapplan.PlanEdgeBootstrap(ctx, front, tier, part)
 		if err != nil {
 			return nil, err
 		}
-		group = installedEdgeChanges(kind, part, planned)
+		group = installedEdgeChanges(installed)
 	}
 	if group == nil {
 		return nil, nil
@@ -262,15 +242,18 @@ func (b Bootstrap) severedEdge(ctx context.Context, tier environment.Tier, kind 
 	return group, nil
 }
 
-func installedEdgeChanges(kind edge.Kind, part string, planned []edge.PlanChange) *provider.ChangeGroup {
+func installedEdgeChanges(installed *provider.ChangeGroup) *provider.ChangeGroup {
+	if installed == nil {
+		return nil
+	}
 	group := provider.ChangeGroup{
-		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(kind),
-		Part:   part,
+		Kind:   installed.Kind,
+		Name:   installed.Name,
+		Part:   installed.Part,
 		Action: provider.ActionDelete,
 	}
-	for _, change := range planned {
-		if change.Action == edge.PlanCreate {
+	for _, change := range installed.Changes {
+		if change.Action == provider.ActionCreate {
 			continue
 		}
 		group.Changes = append(group.Changes, provider.Change{

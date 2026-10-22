@@ -20,15 +20,19 @@ func (x *Proxy) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewW
 			"the %q edge forwards %s to an origin, and this reconcile names none: it answers no preview itself",
 			Kind, wildcard)
 	}
-	accountID, err := x.p.requireTierAccount(ctx, environment.TierPreview, fmt.Sprintf("forward %s through Cloudflare", wildcard))
+	accountID, err := x.p.tierAccount(ctx, environment.TierPreview, fmt.Sprintf("forward %s through Cloudflare", wildcard))
 	if err != nil {
 		return "", err
 	}
-	owner, err := x.p.previewForwardingOwner(ctx)
+	names, err := x.p.names(ctx)
 	if err != nil {
 		return "", err
 	}
-	if _, err := x.p.forwardOrigin(ctx, accountID, owner, wildcard, *spec.Origin); err != nil {
+	zone, err := x.p.resolveHostnameZone(ctx, accountID, wildcard)
+	if err != nil {
+		return "", err
+	}
+	if _, err := x.p.forwardOrigin(ctx, zone, previewForwardingOwner(names.origin), wildcard, *spec.Origin); err != nil {
 		return "", err
 	}
 	return spec.Origin.Address, nil
@@ -39,20 +43,20 @@ func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) e
 	if wildcard == "" {
 		return nil
 	}
-	accountID, err := x.p.requireTierAccount(ctx, environment.TierPreview, fmt.Sprintf("stop forwarding %s through Cloudflare", wildcard))
+	accountID, err := x.p.tierAccount(ctx, environment.TierPreview, fmt.Sprintf("stop forwarding %s through Cloudflare", wildcard))
 	if err != nil {
 		return err
 	}
-	zoneID, zoneName, err := x.p.resolveZone(ctx, accountID, baseDomain)
+	zone, err := x.p.resolveHostnameZone(ctx, accountID, wildcard)
 	if err != nil {
 		return err
 	}
-	owner, err := x.p.previewForwardingOwner(ctx)
+	names, err := x.p.names(ctx)
 	if err != nil {
 		return err
 	}
-	if err := x.p.dropForwardRecords(ctx, zoneID, owner, wildcard); err != nil {
+	if err := x.p.dropForwardRecords(ctx, zone.zoneID, previewForwardingOwner(names.origin), wildcard); err != nil {
 		return err
 	}
-	return x.p.releaseClientCertificate(ctx, zoneID, zoneName, wildcard)
+	return x.p.releaseClientCertificate(ctx, zone, names.origin, wildcard)
 }

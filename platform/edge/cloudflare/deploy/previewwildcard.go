@@ -12,30 +12,19 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const sharedEntryStem = "shared-entry"
 
-func previewEntryScriptNameFor(namespace string, origin OriginScope) (string, error) {
-	return accountNameFor("the shared preview entry worker", namespace, origin, environment.TierPreview, sharedEntryStem)
-}
-
-func (p *cloudflare) previewEntryScript(ctx context.Context) (string, error) {
-	origin, err := p.originScope(ctx)
-	if err != nil {
-		return "", err
-	}
-	return previewEntryScriptNameFor(p.namespace, origin)
+func (n originNames) sharedPreviewEntry() string {
+	return naming.OcelName(n.namespace, environment.TierPreview, n.origin.tag(), sharedEntryStem)
 }
 
 const purgeProjectParam = "project"
 
-func (p *cloudflare) readSharedPreviewPurgeURL(ctx context.Context, accountID, slug string) (string, error) {
-	shared, err := p.previewEntryScript(ctx)
-	if err != nil {
-		return "", err
-	}
-	workersDev, err := p.subdomainURL(ctx, accountID, shared)
+func (p *cloudflare) readSharedPreviewPurgeURL(ctx context.Context, accountID string, names originNames, slug string) (string, error) {
+	workersDev, err := p.subdomainURL(ctx, accountID, names.sharedPreviewEntry())
 	if err != nil {
 		return "", fmt.Errorf("read the shared preview entry worker's subdomain: %w", err)
 	}
@@ -43,7 +32,7 @@ func (p *cloudflare) readSharedPreviewPurgeURL(ctx context.Context, accountID, s
 }
 
 func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
-	accountID, err := p.requireTierAccount(ctx, environment.TierPreview, "reconcile the shared preview entry worker")
+	accountID, err := p.tierAccount(ctx, environment.TierPreview, "reconcile the shared preview entry worker")
 	if err != nil {
 		return "", err
 	}
@@ -52,11 +41,15 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 		return "", errors.New("the shared preview entry worker needs a base domain to serve")
 	}
 
-	program, err := p.buildEntryProgram(ctx, environment.TierPreview, "", spec.Program)
+	names, err := p.names(ctx)
 	if err != nil {
 		return "", err
 	}
-	if err := p.refuseBootstrapBehind(ctx, accountID, environment.TierPreview, bootstrapCaller{worker: "the shared preview entry worker", retry: "run this again"}); err != nil {
+	program, err := buildEntryProgram(names, environment.TierPreview, "", spec.Program)
+	if err != nil {
+		return "", err
+	}
+	if err := p.refuseBootstrapBehind(ctx, accountID, names, environment.TierPreview, bootstrapCaller{worker: "the shared preview entry worker", retry: "run this again"}); err != nil {
 		return "", err
 	}
 	up := upload{
@@ -67,7 +60,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
 		return "", err
 	}
-	if err := p.reconcileWorkerRoutes(ctx, up, routeSpec{desired: []string{wildcard}}, spec.Warn); err != nil {
+	if err := p.reconcileWorkerRoutes(ctx, names, up, routeSpec{desired: []string{wildcard}}, spec.Warn); err != nil {
 		return "", err
 	}
 	if _, err := p.setSubdomain(ctx, up, true); err != nil {
@@ -77,15 +70,16 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 }
 
 func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
-	accountID, err := p.requireTierAccount(ctx, environment.TierPreview, "destroy the shared preview entry worker")
+	accountID, err := p.tierAccount(ctx, environment.TierPreview, "destroy the shared preview entry worker")
 	if err != nil {
 		return err
 	}
 
-	shared, err := p.previewEntryScript(ctx)
+	names, err := p.names(ctx)
 	if err != nil {
 		return err
 	}
+	shared := names.sharedPreviewEntry()
 	snap := p.routeSnapshot()
 	if err := p.stripPreviewWildcardRoute(ctx, accountID, snap, shared, baseDomain); err != nil {
 		return err

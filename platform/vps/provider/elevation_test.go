@@ -55,41 +55,54 @@ func unelevated(context.Context) error {
 		"ocel-deploy@box.example can neither act as root nor run sudo without a password")
 }
 
+var gatedBoxes = map[string]func(inner *reached, gate func(context.Context) error) provider.Bootstrap{
+	"a box serving on its own ports": func(inner *reached, gate func(context.Context) error) provider.Bootstrap {
+		return vps.Exposed(inner, gate, func(context.Context, environment.Tier) error { return nil })
+	},
+	"a box behind an edge": func(inner *reached, gate func(context.Context) error) provider.Bootstrap {
+		return vps.Fronted(inner, gate, &bootstrappedEdge{applied: inner})
+	},
+}
+
 func TestNothingWritesAsRootWithoutTheGrantToDoIt(t *testing.T) {
 	t.Parallel()
 
-	inner := &reached{}
 	ctx := context.Background()
-	gated := vps.Elevating(inner, unelevated, nil, nil)
 	req := provider.BootstrapRequest{Tier: environment.TierProduction}
+	for name, gatedBox := range gatedBoxes {
+		inner := &reached{}
+		gated := gatedBox(inner, unelevated)
 
-	if err := gated.Apply(ctx, req, progress.Discard()); err == nil {
-		t.Error("Apply() = nil, want a bootstrap refused rather than failing partway through the first sudo it runs")
-	}
-	if err := gated.Remove(ctx, environment.TierProduction, progress.Discard()); err == nil {
-		t.Error("Remove() = nil, want a destroy refused: it takes the accounts and the directories a bootstrap wrote as root")
-	}
-	if inner.applied+inner.removed != 0 {
-		t.Errorf("the host was written to %+v through a login that cannot act as root, want nothing attempted", *inner)
+		if err := gated.Apply(ctx, req, progress.Discard()); err == nil {
+			t.Errorf("%s: Apply() = nil, want a bootstrap refused rather than failing partway through the first sudo it runs", name)
+		}
+		if err := gated.Remove(ctx, environment.TierProduction, progress.Discard()); err == nil {
+			t.Errorf("%s: Remove() = nil, want a destroy refused: it takes the accounts and the directories a bootstrap wrote as root", name)
+		}
+		if inner.applied+inner.removed != 0 {
+			t.Errorf("%s: the host was written to %+v through a login that cannot act as root, want nothing attempted", name, *inner)
+		}
 	}
 }
 
 func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 	t.Parallel()
 
-	inner := &reached{}
 	ctx := context.Background()
-	gated := vps.Elevating(inner, unelevated, nil, nil)
+	for name, gatedBox := range gatedBoxes {
+		inner := &reached{}
+		gated := gatedBox(inner, unelevated)
 
-	if _, err := gated.Plan(ctx, provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil {
-		t.Fatalf("Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap state and known slugs",
-			err)
-	}
-	if _, err := gated.PlanRemove(ctx, environment.TierProduction); err != nil {
-		t.Fatalf("PlanRemove() = %v, want the removal plan drawn for a login that may not run it", err)
-	}
-	if inner.planned != 2 {
-		t.Errorf("the host was planned against %+v, want both questions passed through", *inner)
+		if _, err := gated.Plan(ctx, provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil {
+			t.Fatalf("%s: Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap state and known slugs",
+				name, err)
+		}
+		if _, err := gated.PlanRemove(ctx, environment.TierProduction); err != nil {
+			t.Fatalf("%s: PlanRemove() = %v, want the removal plan drawn for a login that may not run it", name, err)
+		}
+		if inner.planned != 2 {
+			t.Errorf("%s: the host was planned against %+v, want both questions passed through", name, *inner)
+		}
 	}
 }
 
@@ -120,7 +133,7 @@ func TestDestroyingABoxBootstrapBehindAnEdgeTearsThatEdgesTierDownFirst(t *testi
 
 	inner := &reached{}
 	front := &tornDownEdge{removed: inner}
-	gated := vps.Elevating(inner, func(context.Context) error { return nil }, nil, front)
+	gated := vps.Fronted(inner, func(context.Context) error { return nil }, front)
 
 	plan, err := gated.PlanRemove(context.Background(), environment.TierPreview)
 	if err != nil {
@@ -167,7 +180,7 @@ func TestBootstrappingABoxBehindAnEdgeBootstrapsThatEdgesTierAfterTheBox(t *test
 
 	inner := &reached{}
 	front := &bootstrappedEdge{applied: inner}
-	gated := vps.Elevating(inner, func(context.Context) error { return nil }, nil, front)
+	gated := vps.Fronted(inner, func(context.Context) error { return nil }, front)
 
 	if err := gated.Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview}, progress.Discard()); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -182,7 +195,7 @@ func TestABoxBootstrapPlanCarriesItsEdgesRefusal(t *testing.T) {
 
 	inner := &reached{}
 	refused := refusal.Refuse(refusal.CodeInvalid, "this origin bootstrapped its preview tier on Cloudflare against account acct-first")
-	gated := vps.Elevating(inner, unelevated, nil, &bootstrappedEdge{applied: inner, planRefusal: refused})
+	gated := vps.Fronted(inner, unelevated, &bootstrappedEdge{applied: inner, planRefusal: refused})
 
 	_, err := gated.Plan(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview})
 

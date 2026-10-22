@@ -136,7 +136,7 @@ func TestVerifyCredentialsReturnsTheCancellationOfACheckItWasStoppedFrom(t *test
 			if !errors.Is(err, tc.want) || errors.As(err, &refused) {
 				t.Errorf("verifyCredentials() error = %#v, want %v itself, not a refusal that says Cloudflare could not be reached", err, tc.want)
 			}
-			dns := &dnsRecords{zones: client.Zones, accountID: "acct-1"}
+			dns := &dnsRecords{zones: client.Zones}
 			err = dns.VerifyCredentials(ctx)
 			if !errors.Is(err, tc.want) || errors.As(err, &refused) {
 				t.Errorf("dnsRecords.VerifyCredentials() error = %#v, want %v itself", err, tc.want)
