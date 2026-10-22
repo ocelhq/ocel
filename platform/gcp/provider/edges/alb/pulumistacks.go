@@ -3,6 +3,7 @@ package alb
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -51,6 +52,9 @@ func (s PulumiStacks) Destroy(ctx context.Context, target Target, progress progr
 
 func (s PulumiStacks) Outputs(ctx context.Context, target Target) (map[string]string, error) {
 	automation, ref, err := s.opened(ctx, target)
+	if errors.As(err, new(noPassphrase)) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -133,9 +137,9 @@ func (s PulumiStacks) passphrase(ctx context.Context, clients *gcloud.Clients, t
 	})
 	if err != nil {
 		if gcloud.Absent(err) {
-			return "", refusal.Refuse(refusal.CodeNotReady,
+			return "", noPassphrase{refusal.Refusal{Code: refusal.CodeNotReady, Message: fmt.Sprintf(
 				"the %s edge keeps the state of the load balancer it provisions sealed under the %s secret, and this project has none for tier %s: run `ocel bootstrap` for this tier first",
-				Kind, secret, tier)
+				Kind, secret, tier)}}
 		}
 		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", Kind, err)
 	}
@@ -148,5 +152,9 @@ func (s PulumiStacks) passphrase(ctx context.Context, clients *gcloud.Clients, t
 	}
 	return string(passphrase), nil
 }
+
+type noPassphrase struct{ refusal.Refusal }
+
+func (n noPassphrase) Unwrap() error { return n.Refusal }
 
 var _ Stacks = PulumiStacks{}

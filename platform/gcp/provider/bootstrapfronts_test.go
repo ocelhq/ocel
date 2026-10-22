@@ -149,6 +149,28 @@ func TestAPartWhoseFrontNeverCameUpIsReportedAbsentSoTheGateRaisesItAgain(t *tes
 	}
 }
 
+type openedFront struct{ front edge.Edge }
+
+func (r openedFront) Open(edge.Kind, provider.Options) (edge.Edge, error) { return r.front, nil }
+
+func TestAPartStampedBeforeItsTierPassphraseWasMadeIsReportedAbsentSoTheBootstrapCanResume(t *testing.T) {
+	t.Parallel()
+
+	h := newOffersHarness(t)
+	shielded := alb.New(alb.Deps{Stacks: alb.PulumiStacks{OpenClients: googletest.Opener(h.clients)}, Shielded: true})
+	b := composed(bootstrap.Engine{Edges: openedFront{shielded}, Clients: h.clients, Records: h.records})
+
+	described, err := b.Described(context.Background(), surveyed(bootstrap.CloudflareOriginPart))
+	if err != nil {
+		t.Fatalf("Described() = %v, want the part described: a bootstrap that failed after stamping %q and before making the tier's "+
+			"passphrase refuses every later deploy and bootstrap with this, and so can never be resumed", err, bootstrap.CloudflareOriginPart)
+	}
+	if stack, _ := partStack(described, bootstrap.CloudflareOriginPart); stack.Present {
+		t.Errorf("the %q part is reported installed, want it absent: no load balancer state is sealed under a passphrase that was never made",
+			bootstrap.CloudflareOriginPart)
+	}
+}
+
 func TestAPartWhoseFrontIsInstalledIsReportedPresent(t *testing.T) {
 	t.Parallel()
 
