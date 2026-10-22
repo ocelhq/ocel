@@ -72,8 +72,7 @@ func storesOf(b bootstrap.Engine) projectStores {
 			if on, err := bootstrap.Keys.HasAPIsOn(ctx, b); err != nil || !on {
 				return err
 			}
-			_, err := b.TakeKey(ctx, name)
-			return err
+			return b.TakeKey(ctx, name)
 		},
 	}
 }

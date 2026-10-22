@@ -310,7 +310,7 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 
 func TestACloudflareBootstrapChecksTheHMACKeyPermissionsAndAPlainOneDoesNot(t *testing.T) {
 	t.Parallel()
-	for _, permission := range bootstrap.AssetStorePermissions {
+	for _, permission := range bootstrap.AssetStoreGrants.Permissions() {
 		if !slices.Contains(bootstrap.PermissionsFor([]string{bootstrap.CloudflareOriginPart}), permission) {
 			t.Errorf("a %q bootstrap does not check %s, and the apply would fail when it mints the asset reader's key", bootstrap.CloudflareOriginPart, permission)
 		}
@@ -356,6 +356,23 @@ func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReade
 	}
 }
 
+func TestRaisingAFrontThatRunsCodeSaysItKeepsTheAssetReaderAndNotWhatTheReaderDoes(t *testing.T) {
+	t.Parallel()
+	h := newAssetStoreHarness(t)
+	b, registry := frontWithAssetReader(h)
+	progress := &fake.Log{}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}}
+
+	if err := b.RaiseFronts(t.Context(), req, progress); err != nil {
+		t.Fatalf("raiseFronts() = %v", err)
+	}
+
+	want := "INFO Keeping the " + string(registry.front.Kind()) + " edge's asset reader for production"
+	if !slices.Contains(progress.Lines(), want) {
+		t.Errorf("the bootstrap said %q, want %q among it", progress.Lines(), want)
+	}
+}
+
 func TestRaisingAFrontThatRunsNoCodeRaisesNoAssetReader(t *testing.T) {
 	t.Parallel()
 	h := newAssetStoreHarness(t)
@@ -383,6 +400,11 @@ func TestAPlanOfAFrontThatRunsCodeNamesItsAssetReader(t *testing.T) {
 	}
 	if len(groups) != 1 || len(groups[0].Changes) != 3 || groups[0].Action != provider.ActionCreate {
 		t.Fatalf("the plan = %+v, want one edge group that creates the reader's account and key and the edge's origin secret", groups)
+	}
+	for _, change := range groups[0].Changes {
+		if change.Reason != "" {
+			t.Errorf("the plan creates %s %s for %q, want no reason on a create", change.Kind, change.Name, change.Reason)
+		}
 	}
 
 	removed, err := b.RemovedFronts(t.Context(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart})

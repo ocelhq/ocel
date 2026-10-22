@@ -19,103 +19,135 @@ const (
 	testedPermissionsPerRequest = 100
 )
 
-var BootstrapPermissions = []string{
-	"datastore.databases.create",
-	"datastore.databases.get",
-	"datastore.databases.update",
-	"datastore.databases.delete",
-	"datastore.databases.getMetadata",
-	"datastore.operations.get",
-	"datastore.locations.list",
-	"datastore.schemas.create",
-	"datastore.schemas.list",
-	"datastore.schemas.update",
-	"storage.buckets.create",
-	"storage.buckets.delete",
-	"cloudkms.keyRings.create",
-	"cloudkms.keyRings.get",
-	"cloudkms.cryptoKeys.create",
-	"cloudkms.cryptoKeys.get",
-	"cloudkms.cryptoKeyVersions.create",
-	"cloudkms.cryptoKeyVersions.get",
-	"cloudkms.cryptoKeyVersions.destroy",
-	"cloudkms.cryptoKeys.getIamPolicy",
-	"cloudkms.cryptoKeys.setIamPolicy",
-	"secretmanager.secrets.create",
-	"secretmanager.secrets.get",
-	"secretmanager.secrets.delete",
-	"secretmanager.versions.add",
-	"secretmanager.versions.get",
-	"secretmanager.versions.access",
-	"artifactregistry.repositories.create",
-	"artifactregistry.repositories.get",
-	"artifactregistry.repositories.update",
-	"artifactregistry.repositories.delete",
-	"iam.serviceAccounts.create",
-	"iam.serviceAccounts.get",
-	"iam.serviceAccounts.list",
-	"iam.serviceAccounts.delete",
-	"iam.serviceAccounts.getIamPolicy",
-	"iam.serviceAccounts.setIamPolicy",
-	"iam.roles.get",
-	"iam.roles.create",
-	"iam.roles.update",
-	"iam.roles.undelete",
-	"iam.serviceAccounts.actAs",
-	"resourcemanager.projects.getIamPolicy",
-	"resourcemanager.projects.setIamPolicy",
-	"artifactregistry.repositories.uploadArtifacts",
-	"artifactregistry.repositories.downloadArtifacts",
-	"run.services.create",
-	"run.services.get",
-	"run.services.update",
-	"run.services.delete",
-	"run.services.getIamPolicy",
-	"run.services.setIamPolicy",
-	"run.operations.get",
-	gcloud.RunLocationsPermission,
-	"cloudscheduler.jobs.create",
-	"cloudscheduler.jobs.get",
-	"cloudscheduler.jobs.update",
-	"cloudscheduler.jobs.delete",
-	"cloudscheduler.jobs.enable",
-	"cloudtasks.queues.create",
-	"cloudtasks.queues.get",
-	"cloudtasks.queues.purge",
-	"cloudtasks.queues.getIamPolicy",
-	"cloudtasks.queues.setIamPolicy",
-	"resourcemanager.tagKeys.create",
-	"resourcemanager.tagKeys.get",
-	"resourcemanager.tagValues.create",
-	"resourcemanager.tagValues.get",
-	"resourcemanager.tagValueBindings.create",
-	"resourcemanager.tagValueBindings.delete",
-	"storage.buckets.createTagBinding",
-	"storage.buckets.listTagBindings",
-	"iam.serviceAccounts.createTagBinding",
-	"iam.serviceAccounts.listTagBindings",
-	"iam.serviceAccounts.deleteTagBinding",
-	"artifactregistry.repositories.createTagBinding",
-	"artifactregistry.repositories.listTagBindings",
-	"secretmanager.secrets.createTagBinding",
-	"secretmanager.secrets.listTagBindings",
-	"secretmanager.secrets.deleteTagBinding",
-	"run.services.createTagBinding",
-	"run.services.listTagBindings",
-	"datastore.databases.listTagBindings",
-	"datastore.databases.deleteTagBinding",
-	"logging.views.create",
-	"logging.views.get",
-	"logging.views.update",
-	"logging.views.delete",
+var BootstrapGrants = gcloud.Grants{
+	{Role: "roles/datastore.owner", Permissions: []string{
+		"datastore.databases.create",
+		"datastore.databases.get",
+		"datastore.databases.update",
+		"datastore.databases.delete",
+		"datastore.databases.getMetadata",
+		"datastore.operations.get",
+		"datastore.locations.list",
+		"datastore.schemas.create",
+		"datastore.schemas.list",
+		"datastore.schemas.update",
+		"datastore.databases.listTagBindings",
+		"datastore.databases.deleteTagBinding",
+	}},
+	{Role: "roles/storage.admin", Permissions: []string{
+		"storage.buckets.create",
+		"storage.buckets.delete",
+		"storage.buckets.createTagBinding",
+		"storage.buckets.listTagBindings",
+	}},
+	{Role: "roles/cloudkms.admin", Permissions: []string{
+		"cloudkms.keyRings.create",
+		"cloudkms.keyRings.get",
+		"cloudkms.cryptoKeys.create",
+		"cloudkms.cryptoKeys.get",
+		"cloudkms.cryptoKeyVersions.create",
+		"cloudkms.cryptoKeyVersions.get",
+		"cloudkms.cryptoKeyVersions.destroy",
+		"cloudkms.cryptoKeys.getIamPolicy",
+		"cloudkms.cryptoKeys.setIamPolicy",
+	}},
+	{Role: "roles/secretmanager.admin", Permissions: []string{
+		"secretmanager.secrets.create",
+		"secretmanager.secrets.get",
+		"secretmanager.secrets.delete",
+		"secretmanager.versions.add",
+		"secretmanager.versions.get",
+		"secretmanager.versions.access",
+		"secretmanager.secrets.createTagBinding",
+		"secretmanager.secrets.listTagBindings",
+		"secretmanager.secrets.deleteTagBinding",
+	}},
+	{Role: "roles/artifactregistry.admin", Permissions: []string{
+		"artifactregistry.repositories.create",
+		"artifactregistry.repositories.get",
+		"artifactregistry.repositories.update",
+		"artifactregistry.repositories.delete",
+		"artifactregistry.repositories.uploadArtifacts",
+		"artifactregistry.repositories.downloadArtifacts",
+		"artifactregistry.repositories.createTagBinding",
+		"artifactregistry.repositories.listTagBindings",
+	}},
+	{Role: "roles/iam.serviceAccountAdmin", Permissions: []string{
+		"iam.serviceAccounts.create",
+		"iam.serviceAccounts.get",
+		"iam.serviceAccounts.list",
+		"iam.serviceAccounts.delete",
+		"iam.serviceAccounts.getIamPolicy",
+		"iam.serviceAccounts.setIamPolicy",
+		"iam.serviceAccounts.createTagBinding",
+		"iam.serviceAccounts.listTagBindings",
+		"iam.serviceAccounts.deleteTagBinding",
+	}},
+	{Role: "roles/iam.serviceAccountUser", Permissions: []string{
+		"iam.serviceAccounts.actAs",
+	}},
+	{Role: "roles/iam.roleAdmin", Permissions: []string{
+		"iam.roles.get",
+		"iam.roles.create",
+		"iam.roles.update",
+		"iam.roles.undelete",
+	}},
+	{Role: "roles/resourcemanager.projectIamAdmin", Permissions: []string{
+		"resourcemanager.projects.getIamPolicy",
+		"resourcemanager.projects.setIamPolicy",
+	}},
+	{Role: "roles/run.admin", Permissions: []string{
+		"run.services.create",
+		"run.services.get",
+		"run.services.update",
+		"run.services.delete",
+		"run.services.getIamPolicy",
+		"run.services.setIamPolicy",
+		"run.operations.get",
+		gcloud.RunLocationsPermission,
+		"run.services.createTagBinding",
+		"run.services.listTagBindings",
+	}},
+	{Role: "roles/cloudscheduler.admin", Permissions: []string{
+		"cloudscheduler.jobs.create",
+		"cloudscheduler.jobs.get",
+		"cloudscheduler.jobs.update",
+		"cloudscheduler.jobs.delete",
+		"cloudscheduler.jobs.enable",
+	}},
+	{Role: "roles/cloudtasks.admin", Permissions: []string{
+		"cloudtasks.queues.create",
+		"cloudtasks.queues.get",
+		"cloudtasks.queues.purge",
+		"cloudtasks.queues.getIamPolicy",
+		"cloudtasks.queues.setIamPolicy",
+	}},
+	{Role: "roles/resourcemanager.tagAdmin", Permissions: []string{
+		"resourcemanager.tagKeys.create",
+		"resourcemanager.tagKeys.get",
+		"resourcemanager.tagValues.create",
+		"resourcemanager.tagValues.get",
+	}},
+	{Role: gcloud.TierTagUserRole, Permissions: []string{
+		"resourcemanager.tagValueBindings.create",
+		"resourcemanager.tagValueBindings.delete",
+	}},
+	{Role: "roles/logging.configWriter", Permissions: []string{
+		"logging.views.create",
+		"logging.views.get",
+		"logging.views.update",
+		"logging.views.delete",
+	}},
 }
 
-var AssetStorePermissions = []string{
-	"storage.hmacKeys.create",
-	"storage.hmacKeys.list",
-	"storage.hmacKeys.get",
-	"storage.hmacKeys.update",
-	"storage.hmacKeys.delete",
+var AssetStoreGrants = gcloud.Grants{
+	{Role: "roles/storage.hmacKeyAdmin", Permissions: []string{
+		"storage.hmacKeys.create",
+		"storage.hmacKeys.list",
+		"storage.hmacKeys.get",
+		"storage.hmacKeys.update",
+		"storage.hmacKeys.delete",
+	}},
 }
 
 var bootstrapRoles = []string{
@@ -154,13 +186,14 @@ func (b Engine) preflight(ctx context.Context, read Survey, parts []string) erro
 	return b.RegionServed(ctx, read)
 }
 
-func PermissionsFor(parts []string) []string {
-	permissions := slices.Clone(BootstrapPermissions)
+func GrantsFor(parts []string) gcloud.Grants {
 	if slices.Contains(parts, CloudflareOriginPart) {
-		permissions = AppendMissing(permissions, AssetStorePermissions)
+		return slices.Concat(BootstrapGrants, AssetStoreGrants)
 	}
-	return permissions
+	return BootstrapGrants
 }
+
+func PermissionsFor(parts []string) []string { return GrantsFor(parts).Permissions() }
 
 func (b Engine) ListServicesOff(ctx context.Context, apis []string) ([]string, error) {
 	if len(apis) == 0 {
@@ -213,7 +246,8 @@ func (b Engine) heldPermissions(ctx context.Context, needed []string) ([]string,
 }
 
 func (b Engine) Permitted(ctx context.Context, parts []string) error {
-	needed := PermissionsFor(parts)
+	grants := GrantsFor(parts)
+	needed := grants.Permissions()
 	granted, err := b.heldPermissions(ctx, needed)
 	if err != nil {
 		return err
@@ -227,10 +261,8 @@ func (b Engine) Permitted(ctx context.Context, parts []string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	return refusal.Refuse(refusal.CodeDenied,
-		"this credential may not do what a bootstrap of project %s does: it lacks %s.\n"+
-			"Granting %s covers every one of them, but the permissions are what is checked",
-		b.Clients.Project(), strings.Join(missing, ", "), strings.Join(bootstrapRoles, ", "))
+	return refusal.Refuse(refusal.CodeDenied, "this credential lacks %s on project %s; grant it %s",
+		strings.Join(missing, ", "), b.Clients.Project(), strings.Join(grants.RolesGranting(missing), ", "))
 }
 
 func (b Engine) RegionServed(ctx context.Context, read Survey) error {

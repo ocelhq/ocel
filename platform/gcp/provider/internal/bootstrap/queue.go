@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -15,7 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const ReasonQueuePurged = "its waiting messages are deleted and the queue is kept, since Cloud Tasks will not create a queue under a deleted queue's name for 7 days"
+const ReasonQueuePurged = "its waiting messages are deleted, since Cloud Tasks reserves a deleted queue's name for 7 days"
 
 var queueKind = KindOps{
 	noun:      "Cloud Tasks queue",
@@ -33,8 +32,8 @@ var queueKind = KindOps{
 	removal: func(_ Survey, target Resource) Removal {
 		return Removal{Resource: target, Action: provider.ActionUpdate, Reason: ReasonQueuePurged}
 	},
-	Take: func(ctx context.Context, b Engine, read Survey, _ Resource) (time.Duration, error) {
-		return 0, b.purgeDelayQueue(ctx, read.Tier)
+	Take: func(ctx context.Context, b Engine, read Survey, _ Resource) error {
+		return b.purgeDelayQueue(ctx, read.Tier)
 	},
 	taken: func(r Removal) string { return "Purged " + r.Resource.phrase() + ": " + r.Reason },
 }

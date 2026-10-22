@@ -26,7 +26,7 @@ const (
 	PartName             = "env-source-sync"
 	envSourceSyncSummary = "the service Cloud Scheduler calls once a minute to read each scheduled env source of the tier and write what changed, and the identity it runs as"
 
-	reasonSyncOnDemand = "the tier's first scheduled env source made it, so the bootstrap's own list does not name it"
+	reasonSyncOnDemand = "made by the tier's first scheduled env source"
 )
 
 const (

@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
-const reasonBastionOnDemand = "a build's port forwards made it on first use, so the bootstrap's own list does not name it"
+const reasonBastionOnDemand = "made by a build's first port forward"
 
 var bastionAPIs = []string{"run.googleapis.com"}
 

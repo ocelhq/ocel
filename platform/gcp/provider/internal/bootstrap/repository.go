@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"google.golang.org/api/artifactregistry/v1"
 
@@ -14,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-const reasonUnpruned = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
+const reasonUnpruned = "its cleanup policies drifted"
 
 const (
 	DockerImages     = "DOCKER"
@@ -43,8 +42,8 @@ var repositoryKind = KindOps{
 	mend: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
 		return b.pruneRepository(ctx, target.Name)
 	},
-	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) (time.Duration, error) {
-		return 0, b.takeRepository(ctx, target.Name)
+	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
+		return b.takeRepository(ctx, target.Name)
 	},
 }
 

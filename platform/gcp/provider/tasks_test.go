@@ -46,8 +46,8 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 		t.Errorf("the parts role holds %v, want no Cloud Tasks permission: granted on the whole project, it would let a deploy set who may enqueue on any queue", parts)
 	}
 	for _, permission := range []string{"cloudtasks.queues.create", "cloudtasks.queues.purge", "cloudtasks.queues.getIamPolicy", "cloudtasks.queues.setIamPolicy"} {
-		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
-			t.Errorf("a bootstrap checks %v, want %s among them: a bootstrap mends and purges the delay queue", bootstrap.BootstrapPermissions, permission)
+		if !slices.Contains(bootstrap.BootstrapGrants.Permissions(), permission) {
+			t.Errorf("a bootstrap checks %v, want %s among them: a bootstrap mends and purges the delay queue", bootstrap.BootstrapGrants.Permissions(), permission)
 		}
 	}
 	deploy := deployOf(environment.TierProduction)
@@ -150,7 +150,7 @@ func plannedBy(t *testing.T, p *Provider, pre provider.DeployPreflight) []provid
 }
 
 func plansWritableDatabase(planned []provider.ChangeGroup, database string) bool {
-	return len(planned) == 1 && planned[0].Action == provider.ActionCreate && len(planned[0].Changes) == 1 &&
+	return len(planned) == 1 && planned[0].Action == provider.ActionCreate && planned[0].Reason == bootstrap.ReasonFirstUse && len(planned[0].Changes) == 1 &&
 		planned[0].Changes[0].Name == database && planned[0].Changes[0].Action == provider.ActionCreate
 }
 
@@ -194,10 +194,11 @@ func TestRemovingABootstrapPurgesItsDelayQueueAndKeepsIt(t *testing.T) {
 	queue := bootstrap.Resource{Kind: bootstrap.KindQueue, Name: b.Clients.DelayQueue(tier)}
 	read.Held = map[string]bool{queue.ID(): true}
 
-	if taking := bootstrap.Removing(read, queue); taking.Action != provider.ActionUpdate || taking.Reason != bootstrap.ReasonQueuePurged {
-		t.Errorf("removing the delay queue plans %s (%s), want it purged and kept", taking.Action, taking.Reason)
+	want := "its waiting messages are deleted, since Cloud Tasks reserves a deleted queue's name for 7 days"
+	if taking := bootstrap.Removing(read, queue); taking.Action != provider.ActionUpdate || taking.Reason != want {
+		t.Errorf("removing the delay queue plans %s (%s), want %s (%s)", taking.Action, taking.Reason, provider.ActionUpdate, want)
 	}
-	if _, err := queue.KindOps().Take(ctx, b, read, queue); err != nil {
+	if err := queue.KindOps().Take(ctx, b, read, queue); err != nil {
 		t.Fatalf("take(queue) = %v", err)
 	}
 	if !slices.Equal(server.QueuesPurged, []string{b.DelayQueuePath(tier)}) {

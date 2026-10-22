@@ -230,7 +230,7 @@ func TestRemovingATiersPassphraseSecretRemovesItsTagBeforeTheSecret(t *testing.T
 		t.Fatal(err)
 	}
 
-	if _, err := b.RemoveResource(ctx, read, bootstrap.Removal{Resource: target, Action: provider.ActionDelete}); err != nil {
+	if err := b.RemoveResource(ctx, read, bootstrap.Removal{Resource: target, Action: provider.ActionDelete}); err != nil {
 		t.Fatal(err)
 	}
 	if secrets.Has(target.Name) || len(secrets.DeletedTagged) != 0 {

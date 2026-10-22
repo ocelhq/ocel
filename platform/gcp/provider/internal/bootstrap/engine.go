@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"cloud.google.com/go/storage"
 
@@ -27,7 +26,7 @@ import (
 
 const (
 	reasonCurrent = "already current"
-	reasonShared  = "the %s bootstrap is still installed and shares it"
+	reasonShared  = "shared with the %s bootstrap"
 	ReasonAbsent  = "nothing is provisioned here"
 )
 
@@ -196,7 +195,6 @@ func Planned(read Survey, items []Resource) []provider.Change {
 			Kind:   string(item.Kind),
 			Name:   read.named(item),
 			Action: provider.ActionCreate,
-			Reason: item.Note,
 			Slow:   item.Slow,
 		}
 		switch {
@@ -423,10 +421,9 @@ func writerNamed(writer string) string {
 }
 
 type Removal struct {
-	Resource     Resource
-	Action       provider.ChangeAction
-	Reason       string
-	DestroyAfter time.Duration
+	Resource Resource
+	Action   provider.ChangeAction
+	Reason   string
 }
 
 func (r Removal) change(name string) provider.Change {
@@ -561,32 +558,27 @@ func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress prog
 		}
 	}
 	for _, taking := range Removals(read) {
-		taken, err := b.RemoveResource(ctx, read, taking)
-		if err != nil {
+		if err := b.RemoveResource(ctx, read, taking); err != nil {
 			return err
 		}
-		taken.Report(progress)
+		taking.Report(progress)
 	}
 	return nil
 }
 
-func (b Engine) RemoveResource(ctx context.Context, read Survey, taking Removal) (Removal, error) {
+func (b Engine) RemoveResource(ctx context.Context, read Survey, taking Removal) error {
 	if leave := taking.Resource.KindOps().leave; leave != nil {
 		if err := leave(ctx, b, read, taking); err != nil {
-			return Removal{}, err
+			return err
 		}
 	}
 	if taking.Action == provider.ActionKeep {
-		return taking, nil
+		return nil
 	}
 	if err := b.removeTierTag(ctx, read, taking.Resource); err != nil {
-		return Removal{}, err
+		return err
 	}
-	var err error
-	if taking.DestroyAfter, err = taking.Resource.KindOps().Take(ctx, b, read, taking.Resource); err != nil {
-		return Removal{}, err
-	}
-	return taking, nil
+	return taking.Resource.KindOps().Take(ctx, b, read, taking.Resource)
 }
 
 func (r Removal) Report(progress progress.Log) {

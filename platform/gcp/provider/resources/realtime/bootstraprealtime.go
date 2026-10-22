@@ -17,7 +17,7 @@ func Purpose(b bootstrap.Engine, tier environment.Tier) bootstrap.AccountPurpose
 	return bootstrap.AccountPurpose{
 		DisplayName: "ocel " + string(tier) + " realtime",
 		Description: "the identity the realtime gateways of the " + string(tier) + " tier run as, which may read its gateways' keys and hold the Pub/Sub subscriptions its instances hear their topic through, and nothing else",
-		Ungranted:   "it exists, and it may not hold its instances' Pub/Sub subscriptions, so a gateway would never hear its topic",
+		Ungranted:   "it may not hold its gateways' Pub/Sub subscriptions",
 		Grant:       grantRealtimeSubscriptions,
 		Forget:      forgetRealtimeSubscriptions,
 		Granted:     realtimeSubscriptionsGranted,

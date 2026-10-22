@@ -126,7 +126,7 @@ func TestTakingATiersBucketEmptiesAndDeletesTheRecordedBucketOfItsClassAndNoOthe
 	read.Buckets = naming.Buckets{naming.StorageState: "ocel-prod-state-a1b2c3", naming.StorageEdge: "ocel-prod-edge-a1b2c3"}
 	target := tierBucketOf(naming.StorageState)
 
-	if _, err := target.KindOps().Take(context.Background(), b, read, target); err != nil {
+	if err := target.KindOps().Take(context.Background(), b, read, target); err != nil {
 		t.Fatalf("Take() = %v", err)
 	}
 	if want := []string{"ocel-prod-state-a1b2c3"}; !slices.Equal(server.deleted, want) {
@@ -134,7 +134,7 @@ func TestTakingATiersBucketEmptiesAndDeletesTheRecordedBucketOfItsClassAndNoOthe
 	}
 
 	read.Buckets = naming.Buckets{}
-	if _, err := tierBucketOf(naming.StorageCache).KindOps().Take(context.Background(), b, read, tierBucketOf(naming.StorageCache)); err != nil {
+	if err := tierBucketOf(naming.StorageCache).KindOps().Take(context.Background(), b, read, tierBucketOf(naming.StorageCache)); err != nil {
 		t.Errorf("Take() of a class with no bucket recorded = %v, want nothing to do", err)
 	}
 }
@@ -150,7 +150,7 @@ func TestTakingATiersBucketForgetsItsRecordedName(t *testing.T) {
 	read.Buckets = naming.Buckets{naming.StorageCache: recorded}
 	target := tierBucketOf(naming.StorageCache)
 
-	if _, err := target.KindOps().Take(context.Background(), b, read, target); err != nil {
+	if err := target.KindOps().Take(context.Background(), b, read, target); err != nil {
 		t.Fatalf("Take() = %v", err)
 	}
 	b.Clients.DropTierBucketsRead(read.Tier)

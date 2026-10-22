@@ -127,25 +127,17 @@ func TakeAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tie
 
 func PlannedAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
 	account := c.AssetReaderAccount(tier)
-	accountAction, accountReason := provider.ActionCreate, assetReaderDescription
-	present, err := c.AccountExists(ctx, account)
+	accountPresent, err := c.AccountExists(ctx, account)
 	if err != nil {
 		return nil, err
 	}
-	if present {
-		accountAction, accountReason = provider.ActionKeep, provider.ReasonCurrent
-	}
-	keyAction, keyReason := provider.ActionCreate, "the key the edge's worker signs its reads of this tier's static files with"
-	active, err := hasActiveAssetReaderKey(ctx, c, tier, kind)
+	keyActive, err := hasActiveAssetReaderKey(ctx, c, tier, kind)
 	if err != nil {
 		return nil, err
-	}
-	if active {
-		keyAction, keyReason = provider.ActionKeep, provider.ReasonCurrent
 	}
 	return []provider.Change{
-		{Kind: string(bootstrap.KindServiceAccount), Name: account, Action: accountAction, Reason: accountReason},
-		{Kind: assetStoreKeyKind, Name: c.AssetReaderAccountEmail(tier), Action: keyAction, Reason: keyReason},
+		{Kind: string(bootstrap.KindServiceAccount), Name: account, Action: provider.KeepOrCreate(accountPresent)},
+		{Kind: assetStoreKeyKind, Name: c.AssetReaderAccountEmail(tier), Action: provider.KeepOrCreate(keyActive)},
 	}, nil
 }
 
@@ -156,7 +148,7 @@ func PlannedAssetStoreRemoval(ctx context.Context, c *gcloud.Clients, tier envir
 	}
 	for i := range planned {
 		if planned[i].Action == provider.ActionKeep {
-			planned[i].Action, planned[i].Reason = provider.ActionDelete, assetReaderDescription
+			planned[i].Action, planned[i].Reason = provider.ActionDelete, ""
 			continue
 		}
 		planned[i].Action, planned[i].Reason = provider.ActionKeep, bootstrap.ReasonAbsent

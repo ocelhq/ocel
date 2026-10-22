@@ -238,7 +238,7 @@ func takeProjectKeys(ctx context.Context, b bootstrap.Engine, tier environment.T
 		}
 	}
 	for _, name := range named {
-		if _, err := b.TakeKey(ctx, name); err != nil {
+		if err := b.TakeKey(ctx, name); err != nil {
 			return err
 		}
 	}

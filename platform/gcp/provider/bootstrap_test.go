@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
@@ -280,15 +279,7 @@ func TestEveryBootstrapRemovalStepSaysWhatItTookOrKeptAndWhy(t *testing.T) {
 		},
 		{
 			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKey, Name: "production"}, Action: provider.ActionDelete, Reason: bootstrap.ReasonKeyScheduled},
-			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 30 days, its default",
-		},
-		{
-			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKey, Name: "production"}, Action: provider.ActionDelete, Reason: bootstrap.ReasonKeyScheduled, DestroyAfter: 24 * time.Hour},
-			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 24 hours, the key's own period",
-		},
-		{
-			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKey, Name: "production"}, Action: provider.ActionDelete, Reason: bootstrap.ReasonKeyScheduled, DestroyAfter: 7 * 24 * time.Hour},
-			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 7 days, the key's own period",
+			want:    "INFO Scheduled every version of KMS key production for destruction",
 		},
 		{
 			removal: bootstrap.Removal{Resource: bootstrap.Resource{Kind: bootstrap.KindKeyRing, Name: "ocel"}, Action: provider.ActionKeep, Reason: bootstrap.ReasonRingKept},
@@ -552,5 +543,23 @@ func TestABootstrapRefusingReplacementsGoesAheadWhenNothingWouldBeReplaced(t *te
 
 	if err := bootstrap.RefuseReplacements(read, bootstrap.Resources(read.Names, read.Tier, false), "re-run with --yes"); err != nil {
 		t.Errorf("refuseReplacements() over a tier that replaces nothing = %v, want nil: making what is missing and mending what drifted replace nothing", err)
+	}
+}
+
+func TestABootstrapPlanGivesACreateNoReason(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	read := bootstrap.Survey{Tier: tier, Names: names.New("ocel", "acme-prod")}
+	var items []bootstrap.Resource
+	items = append(items, bootstrap.Resources(read.Names, tier, false)...)
+	for _, part := range bootstrap.DeployedParts() {
+		items = append(items, part.Items(read.Names, tier)...)
+	}
+
+	for _, change := range bootstrap.Planned(read, items) {
+		if change.Action != provider.ActionCreate || change.Reason != "" {
+			t.Errorf("the plan shows %s %s as %s (%q), want a create with no reason: the action says what happens", change.Kind, change.Name, change.Action, change.Reason)
+		}
 	}
 }

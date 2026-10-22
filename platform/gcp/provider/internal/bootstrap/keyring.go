@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const ReasonRingKept = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
+const ReasonRingKept = "Google never deletes a key ring"
 
 var keyRingKind = KindOps{
 	noun:      "KMS key ring",

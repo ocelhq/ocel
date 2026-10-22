@@ -66,7 +66,7 @@ func TestARegionFirestoreServesIsAdmitted(t *testing.T) {
 
 func TestABootstrapListsNoBucket(t *testing.T) {
 	t.Parallel()
-	if slices.Contains(bootstrap.BootstrapPermissions, "storage.buckets.list") {
+	if slices.Contains(bootstrap.BootstrapGrants.Permissions(), "storage.buckets.list") {
 		t.Error("a bootstrap checks storage.buckets.list, and it finds no bucket by listing: it records each name before it creates the bucket")
 	}
 }
@@ -77,12 +77,12 @@ func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
 		"resourcemanager.projects.getIamPolicy", "resourcemanager.projects.setIamPolicy",
 		"cloudkms.cryptoKeys.getIamPolicy", "cloudkms.cryptoKeys.setIamPolicy",
 	} {
-		if !slices.Contains(bootstrap.BootstrapPermissions, permission) {
+		if !slices.Contains(bootstrap.BootstrapGrants.Permissions(), permission) {
 			t.Errorf("a bootstrap does not check %s, and the apply would fail at an account's grant", permission)
 		}
 	}
-	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/resourcemanager.projectIamAdmin") {
-		t.Errorf("the refusal names %v, want roles/resourcemanager.projectIamAdmin among them: it is what covers a project policy write", bootstrap.BootstrapRoles())
+	if !slices.Contains(bootstrap.GrantsFor(nil).Roles(), "roles/resourcemanager.projectIamAdmin") {
+		t.Errorf("the refusal names %v, want roles/resourcemanager.projectIamAdmin among them: it is what covers a project policy write", bootstrap.GrantsFor(nil).Roles())
 	}
 }
 
@@ -106,5 +106,88 @@ func TestAProjectOwnerIsPermittedABootstrapThoughOnlyTheBucketsItCreatesGrantItT
 
 	if err := b.Permitted(context.Background(), []string{bootstrap.CloudflareOriginPart}); err != nil {
 		t.Fatalf("permitted: %v", err)
+	}
+}
+
+func withholding(t *testing.T, withheld ...string) *gcloud.Clients {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ Permissions []string }
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode testIamPermissions: %v", err)
+		}
+		granted := slices.DeleteFunc(request.Permissions, func(permission string) bool {
+			return slices.Contains(withheld, permission)
+		})
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string][]string{"permissions": granted})
+	}))
+	t.Cleanup(server.Close)
+	return &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
+}
+
+func TestARefusedCredentialIsToldOnlyWhatItLacksAndTheRolesThatGrantIt(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		parts    []string
+		withheld []string
+		want     string
+	}{
+		{
+			withheld: []string{"storage.buckets.delete"},
+			want:     "this credential lacks storage.buckets.delete on project acme-prod; grant it roles/storage.admin",
+		},
+		{
+			withheld: []string{"storage.buckets.create", "storage.buckets.delete"},
+			want:     "this credential lacks storage.buckets.create, storage.buckets.delete on project acme-prod; grant it roles/storage.admin",
+		},
+		{
+			withheld: []string{"storage.buckets.delete", "iam.serviceAccounts.actAs"},
+			want:     "this credential lacks storage.buckets.delete, iam.serviceAccounts.actAs on project acme-prod; grant it roles/storage.admin, roles/iam.serviceAccountUser",
+		},
+		{
+			parts:    []string{bootstrap.CloudflareOriginPart},
+			withheld: []string{"storage.hmacKeys.create"},
+			want:     "this credential lacks storage.hmacKeys.create on project acme-prod; grant it roles/storage.hmacKeyAdmin",
+		},
+	} {
+		b := composed(bootstrap.Engine{Clients: withholding(t, tc.withheld...)})
+
+		err := b.Permitted(context.Background(), tc.parts)
+
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+			t.Fatalf("permitted() withholding %v = %v, want a %s refusal", tc.withheld, err, refusal.CodeDenied)
+		}
+		if refused.Message != tc.want {
+			t.Errorf("permitted() withholding %v refused with\n%s\nwant\n%s", tc.withheld, refused.Message, tc.want)
+		}
+	}
+}
+
+func TestEveryPermissionABootstrapChecksIsHeldByTheRoleItIsGroupedUnder(t *testing.T) {
+	t.Parallel()
+
+	predefined := predefinedRoles(t)
+	for _, parts := range [][]string{nil, {bootstrap.CloudflareOriginPart}} {
+		for _, grant := range bootstrap.GrantsFor(parts) {
+			held := rolePermissions(t, predefined, grant.Role)
+			for _, permission := range grant.Permissions {
+				if !slices.Contains(held, permission) {
+					t.Errorf("a bootstrap with parts %v groups %s under %s, which does not hold it", parts, permission, grant.Role)
+				}
+			}
+		}
+	}
+}
+
+func TestEveryRoleAPlainBootstrapRefusalCanNameIsOneItsCredentialIsGranted(t *testing.T) {
+	t.Parallel()
+
+	for _, role := range bootstrap.GrantsFor(nil).Roles() {
+		if !slices.Contains(bootstrap.BootstrapRoles(), role) {
+			t.Errorf("a bootstrap groups permissions under %s, and its credential is granted only %v", role, bootstrap.BootstrapRoles())
+		}
 	}
 }

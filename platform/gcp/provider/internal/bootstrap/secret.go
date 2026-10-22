@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"time"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
@@ -13,7 +12,7 @@ import (
 	secretmanager "google.golang.org/api/secretmanager/v1"
 )
 
-const reasonPassphraseReplaced = "its latest version is disabled or destroyed, and a new passphrase replaces it: what was written under the old one opens again only if that version is enabled"
+const reasonPassphraseReplaced = "its latest version is disabled or destroyed"
 
 var secretKind = KindOps{
 	tagged:           secretTagged,
@@ -31,8 +30,8 @@ var secretKind = KindOps{
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
 		return b.makeSecret(ctx, read, target.Name)
 	},
-	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) (time.Duration, error) {
-		return 0, b.takeSecret(ctx, target.Name)
+	Take: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
+		return b.takeSecret(ctx, target.Name)
 	},
 }
 

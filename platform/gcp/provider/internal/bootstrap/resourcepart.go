@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -36,10 +35,7 @@ var EdgeBucket = ResourcePart{
 	Summary: "the bucket this tier's edges and its load balancer serve from: static files, prerendered pages, route tables, edge bundles and image settings",
 	Retires: true,
 	items: func(names names.Names, tier environment.Tier) []Resource {
-		return []Resource{{
-			Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageEdge), Class: naming.StorageEdge,
-			Note: "what this tier's edges and its load balancer may serve: static files, prerendered pages, route tables, edge bundles and image settings",
-		}}
+		return []Resource{{Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageEdge), Class: naming.StorageEdge}}
 	},
 }
 
@@ -48,10 +44,7 @@ var CacheBucket = ResourcePart{
 	Summary: "the bucket an app's fetch and use-cache entries and its tag clock are kept in, which only the app's own code reads back",
 	Retires: true,
 	items: func(names names.Names, tier environment.Tier) []Resource {
-		return []Resource{{
-			Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageCache), Class: naming.StorageCache,
-			Note: fmt.Sprintf("what only an app's own code reads back: its fetch and use-cache entries, each deleted %d days after its last write, and its tag clock, which is kept", naming.CacheObjectLifetimeDays),
-		}}
+		return []Resource{{Kind: KindBucket, Name: names.TierBucketStem(tier, naming.StorageCache), Class: naming.StorageCache}}
 	},
 }
 
@@ -61,8 +54,8 @@ var Keys = ResourcePart{
 	APIs:    []string{"cloudkms.googleapis.com"},
 	items: func(names names.Names, tier environment.Tier) []Resource {
 		return []Resource{
-			{Kind: KindKeyRing, Name: names.KeyRing(), Note: "the ring both tiers' keys hang on, and each project's own keys"},
-			{Kind: KindKey, Name: string(tier), Note: "the key every value this tier stores that belongs to no project is sealed under"},
+			{Kind: KindKeyRing, Name: names.KeyRing()},
+			{Kind: KindKey, Name: string(tier)},
 		}
 	},
 }
@@ -73,10 +66,7 @@ var Realtime = ResourcePart{
 	APIs:    []string{"pubsub.googleapis.com"},
 	Retires: true,
 	items: func(names names.Names, tier environment.Tier) []Resource {
-		return []Resource{{
-			Kind: KindServiceAccount, Name: names.RealtimeAccount(tier),
-			Note: "the identity this tier's realtime gateways run as, which reads its gateways' keys and holds the Pub/Sub subscriptions its instances hear their topic through",
-		}}
+		return []Resource{{Kind: KindServiceAccount, Name: names.RealtimeAccount(tier)}}
 	},
 }
 
@@ -87,14 +77,8 @@ var Topics = ResourcePart{
 	Retires: true,
 	items: func(names names.Names, tier environment.Tier) []Resource {
 		return []Resource{
-			{
-				Kind: KindServiceAccount, Name: names.PushAccount(tier),
-				Note: "the identity Pub/Sub signs each push to a worker of this tier as, which Pub/Sub's agent may sign as",
-			},
-			{
-				Kind: KindQueue, Name: names.DelayQueue(tier),
-				Note: "the queue a delayed message of this tier waits in, which a deploy grants each app that publishes the right to enqueue on",
-			},
+			{Kind: KindServiceAccount, Name: names.PushAccount(tier)},
+			{Kind: KindQueue, Name: names.DelayQueue(tier)},
 		}
 	},
 }
@@ -254,7 +238,7 @@ func (b Engine) removeItems(ctx context.Context, tier environment.Tier, items []
 		return err
 	}
 	for _, item := range slices.Backward(items) {
-		if _, err := b.RemoveResource(ctx, read, Removing(read, item)); err != nil {
+		if err := b.RemoveResource(ctx, read, Removing(read, item)); err != nil {
 			return err
 		}
 	}

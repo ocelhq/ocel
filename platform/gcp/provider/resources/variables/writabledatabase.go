@@ -24,7 +24,6 @@ import (
 
 const (
 	writableDatabasesRecord = "writabledatabases"
-	reasonWritableFirstUse  = "added on first use: the Firestore database project %s's runs and tag records are kept in, which its apps alone may write"
 )
 
 type LayoutField struct {
@@ -69,7 +68,7 @@ func PlanProjectWritableDatabase(ctx context.Context, b bootstrap.Engine, pre pr
 		Kind:    provider.StackGroupKind,
 		Name:    string(gcloud.Vendor) + "/" + b.Clients.Project() + "/" + string(tier) + "/" + database,
 		Action:  provider.ActionCreate,
-		Reason:  fmt.Sprintf(reasonWritableFirstUse, project),
+		Reason:  bootstrap.ReasonFirstUse,
 		Changes: []provider.Change{{Kind: string(bootstrap.KindDatabase), Name: database, Action: provider.ActionCreate}},
 	}, nil
 }
