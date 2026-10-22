@@ -1,11 +1,17 @@
 package alb
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -68,5 +74,45 @@ func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing
 	}
 	if _, err := pulumi.New(config).Workspace(ref, nil); err != nil {
 		t.Errorf("Workspace() for a teardown = %v, want the stack ready to destroy: a teardown has no program to hand it", err)
+	}
+}
+
+func unsealedStacks(t *testing.T) PulumiStacks {
+	t.Helper()
+	secrets := googletest.NewSecrets()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secrets.Serve(t, w, r)
+	}))
+	t.Cleanup(server.Close)
+	return PulumiStacks{OpenClients: googletest.Opener(googletest.Clients(server.URL))}
+}
+
+func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerInstalledOrHostnameBound(t *testing.T) {
+	t.Parallel()
+
+	balancer := New(Deps{Stacks: unsealedStacks(t), Entries: newWorld(), Shielded: true})
+	installed, err := balancer.bootstrapInstalled(context.Background(), environment.TierProduction)
+	if err != nil || installed {
+		t.Errorf("bootstrapInstalled() = %v, %v, want false and no error: no state is sealed under a passphrase that was never made, "+
+			"and refusing leaves a bootstrap that failed before making it unable to be read or resumed", installed, err)
+	}
+	bound, err := balancer.boundHostnames(context.Background(), environment.TierProduction)
+	if err != nil || len(bound) > 0 {
+		t.Errorf("boundHostnames() = %v, %v, want none and no error: no load balancer exists to bind a hostname to", bound, err)
+	}
+}
+
+func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseOrDestroyItsLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	stacks := unsealedStacks(t)
+	target := Target{Tier: environment.TierProduction, Shielded: true}
+	_, raised := stacks.Up(context.Background(), target, nil, progress.Discard())
+	destroyed := stacks.Destroy(context.Background(), target, progress.Discard())
+	for verb, err := range map[string]error{"Up": raised, "Destroy": destroyed} {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+			t.Errorf("%s() = %v, want a %s refusal naming `ocel bootstrap`: it seals state under the passphrase", verb, err, refusal.CodeNotReady)
+		}
 	}
 }
