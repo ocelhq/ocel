@@ -102,17 +102,23 @@ func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerInstalledOrHostnameBou
 	}
 }
 
-func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseOrDestroyItsLoadBalancer(t *testing.T) {
+func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseItsLoadBalancer(t *testing.T) {
 	t.Parallel()
 
-	stacks := unsealedStacks(t)
 	target := Target{Tier: environment.TierProduction, Shielded: true}
-	_, raised := stacks.Up(context.Background(), target, nil, progress.Discard())
-	destroyed := stacks.Destroy(context.Background(), target, progress.Discard())
-	for verb, err := range map[string]error{"Up": raised, "Destroy": destroyed} {
-		var refused refusal.Refusal
-		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-			t.Errorf("%s() = %v, want a %s refusal naming `ocel bootstrap`: it seals state under the passphrase", verb, err, refusal.CodeNotReady)
-		}
+	_, err := unsealedStacks(t).Up(context.Background(), target, nil, progress.Discard())
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Errorf("Up() = %v, want a %s refusal naming `ocel bootstrap`: it seals state under the passphrase", err, refusal.CodeNotReady)
+	}
+}
+
+func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerToDestroy(t *testing.T) {
+	t.Parallel()
+
+	target := Target{Tier: environment.TierProduction, Shielded: true}
+	if err := unsealedStacks(t).Destroy(context.Background(), target, progress.Discard()); err != nil {
+		t.Errorf("Destroy() = %v, want nil: no state is sealed under a passphrase that was never made, and refusing leaves "+
+			"a bootstrap that failed before making it, or a removal retried after deleting it, unable to be removed", err)
 	}
 }

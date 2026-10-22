@@ -171,6 +171,23 @@ func TestAPartStampedBeforeItsTierPassphraseWasMadeIsReportedAbsentSoTheBootstra
 	}
 }
 
+func TestAPartStampedBeforeItsTierPassphraseWasMadeIsRemovedWithNothingToTakeDown(t *testing.T) {
+	t.Parallel()
+
+	h := newOffersHarness(t)
+	shielded := alb.New(alb.Deps{
+		KeyValues: h.records,
+		Stacks:    alb.PulumiStacks{OpenClients: googletest.Opener(h.clients)},
+		Shielded:  true,
+	})
+	b := composed(bootstrap.Engine{Edges: openedFront{shielded}, Clients: h.clients, Records: h.records})
+
+	if err := b.TearFronts(context.Background(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart}); err != nil {
+		t.Errorf("TearFronts() = %v, want nil: no load balancer state is sealed under a passphrase that was never made, and "+
+			"refusing leaves a bootstrap that failed before making it, or a removal retried after deleting it, unable to be removed", err)
+	}
+}
+
 func TestAPartWhoseFrontIsInstalledIsReportedPresent(t *testing.T) {
 	t.Parallel()
 

@@ -44,6 +44,9 @@ func (s PulumiStacks) Up(
 
 func (s PulumiStacks) Destroy(ctx context.Context, target Target, progress progress.Log) error {
 	automation, ref, err := s.opened(ctx, target)
+	if errors.As(err, new(noPassphrase)) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
