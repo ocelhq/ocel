@@ -31,7 +31,7 @@ func (p *cloudflare) destroyInstance(ctx context.Context, state edge.StackState)
 	if state.Secret == "" {
 		return nil
 	}
-	res, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
+	res, err := p.store.request(ctx, state, http.MethodPost, "/destroy", nil, nil)
 	if isUnauthorized(res) {
 		return nil
 	}
@@ -49,13 +49,13 @@ func (p *cloudflare) deleteScript(ctx context.Context, accountID, scriptName str
 	return err
 }
 
-func (s *stack) serveRecords(records map[string]router.ReleaseRecord) ([]servedRecord, error) {
+func (r routerStack) serveRecords(records map[string]router.ReleaseRecord) ([]servedRecord, error) {
 	served := make([]servedRecord, 0, len(records))
 	for _, app := range slices.Sorted(maps.Keys(records)) {
 		record := records[app]
 		envelope := record.Secrets.Envelope
-		if envelope != "" && s.own.wrapsEnvelopes() {
-			wrapped, err := wrapEnvelope(s.own.EnvelopeKey, envelope)
+		if envelope != "" && r.own.wrapsEnvelopes() {
+			wrapped, err := wrapEnvelope(r.own.EnvelopeKey, envelope)
 			if err != nil {
 				return nil, fmt.Errorf("wrap %s's envelope for the worker that serves it: %w", record.App, err)
 			}
@@ -66,7 +66,7 @@ func (s *stack) serveRecords(records map[string]router.ReleaseRecord) ([]servedR
 	return served, nil
 }
 
-func (s *stack) readServedPromotion(ctx context.Context, pointer string) (string, error) {
+func (r routerStack) readServedPromotion(ctx context.Context, pointer string) (string, error) {
 	subpath := "/pointer"
 	if pointer != "" {
 		subpath += "?pointer=" + url.QueryEscape(pointer)
@@ -74,7 +74,7 @@ func (s *stack) readServedPromotion(ctx context.Context, pointer string) (string
 	var out struct {
 		PromotionID *string `json:"promotionId"`
 	}
-	if _, err := s.p.storeRequest(ctx, s.state, http.MethodGet, subpath, nil, &out); err != nil {
+	if _, err := r.store.request(ctx, r.state, http.MethodGet, subpath, nil, &out); err != nil {
 		return "", err
 	}
 	if out.PromotionID == nil {
@@ -121,8 +121,8 @@ type pointerLabel struct {
 	App   string `json:"app"`
 }
 
-func (s *stack) movePointer(ctx context.Context, body pointerMoveBody) (bool, error) {
-	res, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/move-pointer", body, nil)
+func (r routerStack) movePointer(ctx context.Context, body pointerMoveBody) (bool, error) {
+	res, err := r.store.request(ctx, r.state, http.MethodPost, "/move-pointer", body, nil)
 	switch {
 	case res != nil && res.StatusCode == http.StatusConflict:
 		return true, nil
@@ -134,15 +134,15 @@ func (s *stack) movePointer(ctx context.Context, body pointerMoveBody) (bool, er
 	return false, err
 }
 
-func (s *stack) removePointerRecords(ctx context.Context, pointer string) error {
-	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": router.ResolvePointer(pointer)}, nil)
+func (r routerStack) removePointerRecords(ctx context.Context, pointer string) error {
+	_, err := r.store.request(ctx, r.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": router.ResolvePointer(pointer)}, nil)
 	return err
 }
 
 var errStoreIdentityTaken = errors.New("the releases store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or this project's state was lost. A re-bootstrap keeps the store and every identity in it; only tearing this tier down with `ocel bootstrap destroy`, which refuses while anything is still deployed there, deletes them")
 
 func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred, secret string) error {
-	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", map[string]string{"secret": secret}, nil)
+	res, err := p.store.requestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", map[string]string{"secret": secret}, nil)
 	if res != nil && res.StatusCode == http.StatusConflict {
 		return fmt.Errorf("%w: %w", errStoreIdentityTaken, err)
 	}
@@ -153,7 +153,7 @@ func (p *cloudflare) getVersionStamp(ctx context.Context, endpoint, slug, secret
 	var out struct {
 		Version *string `json:"version"`
 	}
-	res, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodGet, "/version-stamp", nil, &out)
+	res, err := p.store.requestTo(ctx, endpoint, slug, secret, http.MethodGet, "/version-stamp", nil, &out)
 	if err != nil {
 		return "", res, err
 	}
@@ -164,15 +164,17 @@ func (p *cloudflare) getVersionStamp(ctx context.Context, endpoint, slug, secret
 }
 
 func (p *cloudflare) putVersionStamp(ctx context.Context, endpoint, slug, secret, version string) error {
-	_, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodPut, "/version-stamp", map[string]string{"version": version}, nil)
+	_, err := p.store.requestTo(ctx, endpoint, slug, secret, http.MethodPut, "/version-stamp", map[string]string{"version": version}, nil)
 	return err
 }
 
-func (p *cloudflare) storeRequest(ctx context.Context, state edge.StackState, method, subpath string, body, out any) (*http.Response, error) {
-	return p.storeRequestTo(ctx, state.Endpoint, state.Slug, state.Secret, method, subpath, body, out)
+type releasesStore struct{ client *http.Client }
+
+func (r releasesStore) request(ctx context.Context, state edge.StackState, method, subpath string, body, out any) (*http.Response, error) {
+	return r.requestTo(ctx, state.Endpoint, state.Slug, state.Secret, method, subpath, body, out)
 }
 
-func (p *cloudflare) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
+func (r releasesStore) requestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("%w: it has no endpoint; bootstrap the edge first", edge.ErrStoreAbsent)
 	}
@@ -192,7 +194,7 @@ func (p *cloudflare) storeRequestTo(ctx context.Context, endpoint, slug, secret,
 	var res *http.Response
 	var err error
 	for attempt := 0; ; attempt++ {
-		res, err = p.storeAttempt(ctx, endpoint, slug, secret, method, subpath, encoded, out)
+		res, err = r.attempt(ctx, endpoint, slug, secret, method, subpath, encoded, out)
 		if attempt == storeMaxAttempts-1 || !storeRetryable(res, err) {
 			return res, err
 		}
@@ -202,7 +204,7 @@ func (p *cloudflare) storeRequestTo(ctx context.Context, endpoint, slug, secret,
 	}
 }
 
-func (p *cloudflare) storeAttempt(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
+func (r releasesStore) attempt(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
 	var reader io.Reader
 	if encoded != nil {
 		reader = bytes.NewReader(encoded)
@@ -216,7 +218,7 @@ func (p *cloudflare) storeAttempt(ctx context.Context, endpoint, slug, secret, m
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	res, err := p.storeClient().Do(req)
+	res, err := r.httpClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call releases store %s %s: %w", method, subpath, err)
 	}
@@ -234,9 +236,9 @@ func (p *cloudflare) storeAttempt(ctx context.Context, endpoint, slug, secret, m
 	return res, nil
 }
 
-func (p *cloudflare) storeClient() *http.Client {
-	if p.store != nil {
-		return p.store
+func (r releasesStore) httpClient() *http.Client {
+	if r.client != nil {
+		return r.client
 	}
 	return http.DefaultClient
 }

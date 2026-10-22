@@ -12,11 +12,9 @@ import (
 
 const moveAttempts = 5
 
-type Router struct{ p *cloudflare }
+type Router struct{ store releasesStore }
 
-func NewRouter(namespace string) Router {
-	return Router{p: newCloudflare(namespace, nil, nil, Options{})}
-}
+func NewRouter() Router { return Router{} }
 
 func (r Router) Kind() router.Kind { return router.Kind(Kind) }
 
@@ -40,20 +38,23 @@ func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router
 }
 
 func (r Router) Open(state router.StackState) (router.Stack, error) {
-	s := &stack{p: r.p, state: state.Edge}
+	s := routerStack{store: r.store, state: state.Edge}
 	if err := state.Edge.Private.Into(&s.own); err != nil {
 		return nil, err
 	}
-	return routerStack{s: s}, nil
+	return s, nil
 }
 
 func (r Router) Hooks() router.Hooks { return router.Hooks{} }
 
-type routerStack struct{ s *stack }
+type routerStack struct {
+	store releasesStore
+	state edge.StackState
+	own   private
+}
 
 func (r routerStack) State() router.StackState {
-	state := r.s.State()
-	return router.NewStackState(state)
+	return router.NewStackState(withOwn(r.state, r.own))
 }
 
 func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
@@ -63,7 +64,7 @@ func (r routerStack) Claim(context.Context, router.Claim) (edge.Origin, error) {
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _ progress.Log) error {
-	records, err := r.s.serveRecords(move.Records)
+	records, err := r.serveRecords(move.Records)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -77,14 +78,14 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, _
 				return router.Unserved{Err: err}
 			}
 		}
-		replaces, err := r.s.readServedPromotion(ctx, move.Pointer)
+		replaces, err := r.readServedPromotion(ctx, move.Pointer)
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
 		if err := move.RefuseInactive(ctx); err != nil {
 			return err
 		}
-		stale, err := r.s.movePointer(ctx, pointerMoveBody{
+		stale, err := r.movePointer(ctx, pointerMoveBody{
 			Pointer:     move.Pointer,
 			Replaces:    replaces,
 			PromotionID: move.Promotion.PromotionID,
@@ -108,7 +109,7 @@ func listPointerLabels(hosts []edge.PreviewHost) []pointerLabel {
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRemoval, _ progress.Log) error {
-	return r.s.removePointerRecords(ctx, removal.Pointer)
+	return r.removePointerRecords(ctx, removal.Pointer)
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }

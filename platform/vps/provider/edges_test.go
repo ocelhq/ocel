@@ -3,12 +3,15 @@ package vps_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -88,13 +91,85 @@ func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *te
 	if err != nil {
 		t.Fatalf("ProjectOwner: %v", err)
 	}
-	want, err := cloudflare.NewProxy("staging", func(context.Context) (cloudflare.OriginScope, error) {
+	want, err := cloudflare.NewProxy("staging", cloudflare.Origin{Scope: func(context.Context) (cloudflare.OriginScope, error) {
 		return cloudflare.OriginScope{Vendor: "vps", ID: "k3j9x0"}, nil
-	}, nil, cloudflare.Options{}).ProjectOwner(t.Context(), "shop", environment.TierProduction)
+	}}, cloudflare.Options{}).ProjectOwner(t.Context(), "shop", environment.TierProduction)
 	if err != nil {
 		t.Fatalf("ProjectOwner: %v", err)
 	}
 	if got != want {
 		t.Errorf("the proxy in front of a box owns shop's records as %q, want %q: it records ownership in the namespace ocel runs in, as it does in front of Google Cloud, not under the box's ssh destination", got, want)
+	}
+}
+
+func cloudflareZones(t *testing.T) {
+	t.Helper()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/zones") {
+			http.Error(w, `{"success":false,"errors":[{"code":1,"message":"not served"}]}`, http.StatusInternalServerError)
+			return
+		}
+		result := `[{"id":"zone-example","name":"example.com"}]`
+		if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+			result = `[]`
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"errors":[],"messages":[],"result":` + result + `,"result_info":{"page":1,"per_page":20,"count":1,"total_count":1,"total_pages":1}}`))
+	}))
+	t.Cleanup(api.Close)
+	t.Setenv("CLOUDFLARE_BASE_URL", api.URL+"/")
+}
+
+func TestReadingWhatTheCloudflareProxyOwnsNeverWritesTheBoxsRoutingTable(t *testing.T) {
+	forwarded := edge.Record{Name: "shop.example.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
+	for name, read := range map[string]func(context.Context, *vps.Provider) error{
+		"ProjectOwner": func(ctx context.Context, p *vps.Provider) error {
+			front, err := p.Edges().Open(cloudflare.Kind, nil)
+			if err != nil {
+				return err
+			}
+			_, err = front.ProjectOwner(ctx, "shop", environment.TierProduction)
+			return err
+		},
+		"DomainOwner": func(ctx context.Context, p *vps.Provider) error {
+			front, err := p.Edges().Open(cloudflare.Kind, nil)
+			if err != nil {
+				return err
+			}
+			_, err = front.DomainOwner(ctx, forwarded.Name)
+			return err
+		},
+		"DNS Delete": func(ctx context.Context, p *vps.Provider) error {
+			records, err := p.DNS().Open(provider.DNSKind(cloudflare.Kind), "", cloudflare.Kind)
+			if err != nil {
+				return err
+			}
+			return records.Delete(ctx, []edge.Record{forwarded})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(provider.NamespaceEnvVar, "staging")
+			t.Setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+			t.Setenv("CLOUDFLARE_API_TOKEN", "tok")
+			cloudflareZones(t)
+			machine := &box{}
+			written, err := routing.WriteRoutingTable(boxapi.RoutingTable{Grace: routing.DrainWindow})
+			if err != nil {
+				t.Fatal(err)
+			}
+			machine.routingDoc = string(written)
+			p := over(machine)
+			p.Recording(fake.NewKeyValues())
+
+			err = read(t.Context(), p)
+
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "ocel bootstrap") {
+				t.Errorf("%s() on a box holding no origin id = %v, want it refused not ready, naming the bootstrap that mints one", name, err)
+			}
+			if machine.routingDoc != string(written) {
+				t.Errorf("%s() rewrote the routing table to\n%s\nwant it untouched: reading what the proxy owns writes nothing on the box", name, machine.routingDoc)
+			}
+		})
 	}
 }

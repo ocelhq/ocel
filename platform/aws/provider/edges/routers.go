@@ -11,7 +11,7 @@ import (
 )
 
 var routerConstructors = map[router.Kind]func(Deps) router.Router{
-	router.Kind(cloudflare.Kind): func(deps Deps) router.Router { return cloudflare.NewRouter(string(deps.Namespace)) },
+	router.Kind(cloudflare.Kind): func(deps Deps) router.Router { return cloudflare.NewRouter() },
 	router.Kind(cloudfront.Kind): func(deps Deps) router.Router {
 		return cloudfront.NewRouter(deps.Namespace, cloudfront.FromConfig(deps.AWS))
 	},

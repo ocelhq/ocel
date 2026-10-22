@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type OriginScope struct {
@@ -121,18 +124,40 @@ func parseOriginTag(tag string) (OriginScope, bool) {
 	return OriginScope{Vendor: decoded[0], ID: strings.Join(decoded[1:], originIDSeparator)}, true
 }
 
-func (p *cloudflare) originScope(ctx context.Context) (OriginScope, error) {
-	p.originMu.Lock()
-	defer p.originMu.Unlock()
-	if p.resolvedOrigin != nil {
-		return *p.resolvedOrigin, nil
+type Origin struct {
+	Scope   func(context.Context) (OriginScope, error)
+	Records records.Store
+}
+
+type resolvedOrigin struct {
+	Origin
+
+	scopeMu sync.Mutex
+	scope   *OriginScope
+
+	accountsMu       sync.Mutex
+	recordedAccounts map[environment.Tier]string
+}
+
+func (o *resolvedOrigin) originScope(ctx context.Context) (OriginScope, error) {
+	o.scopeMu.Lock()
+	defer o.scopeMu.Unlock()
+	if o.scope != nil {
+		return *o.scope, nil
 	}
-	scope, err := resolveOrigin(ctx, p.origin)
+	scope, err := resolveOrigin(ctx, o.Scope)
 	if err != nil {
 		return OriginScope{}, err
 	}
-	p.resolvedOrigin = &scope
+	o.scope = &scope
 	return scope, nil
+}
+
+func (o *resolvedOrigin) requireRecords(doing string) (records.Store, error) {
+	if o.Records == nil {
+		return nil, fmt.Errorf("%s: the cloudflare edge was opened with no record store to keep what this origin records of its tiers", doing)
+	}
+	return o.Records, nil
 }
 
 func resolveOrigin(ctx context.Context, origin func(context.Context) (OriginScope, error)) (OriginScope, error) {

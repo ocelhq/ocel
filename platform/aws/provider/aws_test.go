@@ -185,6 +185,39 @@ func TestBootstrapApplyForgetsWhatItInstalled(t *testing.T) {
 	}
 }
 
+type installingBootstrap struct {
+	stubBootstrap
+	provider *Provider
+	read     *account.Reading
+}
+
+func (s installingBootstrap) Apply(context.Context, provider.BootstrapRequest, progress.Log) error {
+	read, err := s.provider.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{Present: true, StateTable: "installed"}}, nil
+	})
+	*s.read = read
+	return err
+}
+
+func TestAFirstBootstrapApplyReadsTheTierItInstallsThoughItsKeyFoundNoBootstrap(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (account.Reading, error) {
+		return account.Reading{Deployed: account.Deployed{Present: false}}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var read account.Reading
+	if err := (tierBootstrap{Bootstrap: installingBootstrap{provider: p, read: &read}, forget: forgetOf(t, p), key: p.Key}).
+		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if !read.Deployed.Present || read.Deployed.StateTable != "installed" {
+		t.Fatalf("during Apply the provider read %+v, want the tier the bootstrap installed: an edge bootstrap records into the state table the core stack just made", read.Deployed)
+	}
+}
+
 type repairedParts struct {
 	tiers []environment.Tier
 	names []string
@@ -256,7 +289,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	}
 }
 
-func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
+func TestAFailedBootstrapApplyForgetsWhatItReadForItMayHaveWrittenPartOfTheTier(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
@@ -267,8 +300,8 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 	}
 
 	table, passphrase := resolvedAfter(t, p)
-	if table != "before" || passphrase != "before" {
-		t.Fatalf("a failed Apply forgot %q/%q, want what the account still has", table, passphrase)
+	if table != "after" || passphrase != "after" {
+		t.Fatalf("after a failed Apply the provider still remembers %q/%q, want the account read afresh", table, passphrase)
 	}
 }
 

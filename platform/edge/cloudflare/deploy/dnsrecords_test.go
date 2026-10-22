@@ -3,6 +3,7 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,9 +17,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type fakeRecords struct {
+	listed   int
 	existing map[string][]dns.RecordResponse
 	created  []dns.RecordNewParams
 	updated  []string
@@ -26,6 +31,7 @@ type fakeRecords struct {
 }
 
 func (f *fakeRecords) List(_ context.Context, params dns.RecordListParams, _ ...option.RequestOption) (*pagination.V4PagePaginationArray[dns.RecordResponse], error) {
+	f.listed++
 	if params.Page.Value > 1 {
 		return &pagination.V4PagePaginationArray[dns.RecordResponse]{}, nil
 	}
@@ -79,7 +85,9 @@ func newTestWriter(records *fakeRecords, owned []zones.Zone, named string) (*dns
 		records.existing = map[string][]dns.RecordResponse{}
 	}
 	zoneList := &fakeZones{owned: owned}
-	return &dnsRecords{records: records, zones: zoneList, accountID: testAccountID, named: named, origin: fixedOrigin(testOrigin)}, zoneList
+	origin := fixedOrigin(testOrigin)
+	origin.Records = fake.NewKeyValues()
+	return &dnsRecords{records: records, zones: zoneList, accountID: testAccountID, named: named, resolvedOrigin: resolvedOrigin{Origin: origin}}, zoneList
 }
 
 var testZones = []zones.Zone{
@@ -423,6 +431,79 @@ func TestDNSRecordsDeleteRecords(t *testing.T) {
 				if records.deleted[i] != id {
 					t.Errorf("deleted = %v, want %v", records.deleted, tc.want)
 				}
+			}
+		})
+	}
+}
+
+func recordTierAccount(t *testing.T, store records.Store, tier environment.Tier, accountID string) {
+	t.Helper()
+	value, err := json.Marshal(bootstrapAccount{ID: accountID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Write(context.Background(), records.Entry{Key: bootstrapAccountKey(tier), Value: value}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func dnsWrites() map[string]func(context.Context, edge.DNSRecords) error {
+	placeholder := edge.Record{Name: "*.preview.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
+	return map[string]func(context.Context, edge.DNSRecords) error{
+		"Ensure": func(ctx context.Context, w edge.DNSRecords) error {
+			_, err := w.Ensure(ctx, []edge.Record{placeholder}, nil)
+			return err
+		},
+		"Delete": func(ctx context.Context, w edge.DNSRecords) error {
+			return w.Delete(ctx, []edge.Record{placeholder})
+		},
+	}
+}
+
+func TestTheDNSWriterRefusesAnAccountNoTierOfThisOriginWasBootstrappedAgainstBeforeCloudflareIsAsked(t *testing.T) {
+	t.Parallel()
+
+	for name, write := range dnsWrites() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			records := &fakeRecords{}
+			w, zoneList := newTestWriter(records, testZones, "")
+			recordTierAccount(t, w.Records, environment.TierProduction, "acct-first")
+			recordTierAccount(t, w.Records, environment.TierPreview, "acct-first")
+
+			err := write(t.Context(), w)
+
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+				t.Fatalf("%s() = %v, want a refusal (%s) over the account this origin's tiers were bootstrapped against", name, err, refusal.CodeInvalid)
+			}
+			for _, named := range []string{"acct-first", testAccountID, envAccountID} {
+				if !strings.Contains(err.Error(), named) {
+					t.Errorf("refusal %q does not name %s", err, named)
+				}
+			}
+			if len(zoneList.asked) != 0 || records.listed != 0 || len(records.created) != 0 || len(records.deleted) != 0 {
+				t.Errorf("Cloudflare was asked for %d zone lists and %d record lists, and wrote %v and deleted %v, want nothing: the other account holds nothing of this origin's",
+					len(zoneList.asked), records.listed, records.created, records.deleted)
+			}
+		})
+	}
+}
+
+func TestTheDNSWriterWritesUnderTheAccountATierOfThisOriginWasBootstrappedAgainst(t *testing.T) {
+	t.Parallel()
+
+	for name, write := range dnsWrites() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w, _ := newTestWriter(&fakeRecords{}, testZones, "")
+			recordTierAccount(t, w.Records, environment.TierProduction, "acct-first")
+			recordTierAccount(t, w.Records, environment.TierPreview, testAccountID)
+
+			if err := write(t.Context(), w); err != nil {
+				t.Errorf("%s() = %v, want it to proceed: the preview tier was bootstrapped against %s", name, err, testAccountID)
 			}
 		})
 	}

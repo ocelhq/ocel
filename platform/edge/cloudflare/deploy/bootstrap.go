@@ -14,6 +14,9 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
+	if err := p.recordBootstrapAccount(ctx, tier, accountID); err != nil {
+		return edge.BootstrapOutput{}, err
+	}
 	state, err := p.readState(ctx, accountID, tier)
 	if err != nil {
 		return edge.BootstrapOutput{}, err
@@ -30,7 +33,7 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 }
 
 func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error {
-	accountID, err := requireAccountID("tear the Cloudflare edge down")
+	accountID, err := p.requireTierAccount(ctx, tier, "tear the Cloudflare edge down")
 	if err != nil {
 		return err
 	}
@@ -45,7 +48,10 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	if err := p.deleteClientCertificates(ctx, tier); err != nil {
 		errs = append(errs, err)
 	}
-	return errors.Join(errs...)
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return p.forgetBootstrapAccount(ctx, tier)
 }
 
 type bootstrapWorker struct {

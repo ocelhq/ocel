@@ -172,7 +172,7 @@ func TestAnOriginTooLongForARecordCommentIsRefused(t *testing.T) {
 		{Vendor: "gcp", ID: strings.Repeat("x", maxOriginLength-len("gcp:")+1)},
 		{Vendor: "vps", ID: "k3j 9x0"},
 	} {
-		if _, err := resolveOrigin(t.Context(), fixedOrigin(origin)); err == nil {
+		if _, err := resolveOrigin(t.Context(), fixedOrigin(origin).Scope); err == nil {
 			t.Errorf("resolveOrigin(%q) = nil error, want it refused: its records' comments would not read back or fit", origin)
 		}
 	}

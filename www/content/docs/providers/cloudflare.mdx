@@ -49,6 +49,11 @@ account's zones for the token.
 
 Unless the edge sets `tunnel`, the zone's SSL mode must be **Full (strict)**.
 
+`ocel bootstrap` records which account each tier was bootstrapped against, and every later
+deploy, domain change and destroy of that tier refuses a different `CLOUDFLARE_ACCOUNT_ID`. To
+move a tier to another account, run `ocel bootstrap destroy` with the recorded account still set,
+then bootstrap again under the new one.
+
 ## What runs where
 
 | Origin | Serverless apps | Container apps |

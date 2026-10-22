@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -16,6 +17,7 @@ func domainStack(t *testing.T, m *cfMock) *stack {
 	t.Setenv(envAccountID, "acct")
 	return stackOn(m.provider(t), edge.StackState{
 		Slug:    "acme-web",
+		Tier:    environment.TierProduction,
 		Private: edge.Own(private{EntryWorker: domainEntryScript}),
 	})
 }
@@ -167,6 +169,7 @@ func TestBindDomain(t *testing.T) {
 		m := zoneMock()
 		s := stackOn(m.provider(t), edge.StackState{
 			Slug:    "acme-web",
+			Tier:    environment.TierPreview,
 			Private: edge.Own(private{EntryWorker: previewEntryScriptName}),
 		})
 
@@ -208,7 +211,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "shop.app.com/*" || m.createdRoutes[0]["script"] != domainEntryScript {
 		t.Fatalf("created routes = %v, want shop.app.com/* on %s, the entry worker that reads the promoted release", m.createdRoutes, domainEntryScript)
 	}
-	served, err := s.readServedPromotion(t.Context(), router.DefaultPointer)
+	served, err := routerStackOn(s.p, state).readServedPromotion(t.Context(), router.DefaultPointer)
 	if err != nil {
 		t.Fatalf("readServedPromotion: %v", err)
 	}
@@ -328,7 +331,7 @@ func TestDestroyOutlivesAnUnbindThatCannotRun(t *testing.T) {
 	if !slices.Contains(m.deletedScripts, "ocel-preview") {
 		t.Errorf("deleted scripts = %v, want the workers destroyed even so", m.deletedScripts)
 	}
-	if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
+	if _, err := routerStackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 		t.Error("reading the pointer after Destroy: err = nil, want the store instance gone even so")
 	}
 }

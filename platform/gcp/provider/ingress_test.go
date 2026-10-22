@@ -23,7 +23,7 @@ func TestAServiceBehindTheLoadBalancerIsNotReachableOnItsRunAppURL(t *testing.T)
 func TestAServiceBehindTheCloudflareWorkerAnswersItsRevisionTagURLToEveryCaller(t *testing.T) {
 	t.Parallel()
 
-	front := cloudflare.New("ocel", edges.CloudflareOrigin("acme-prod"), nil, cloudflare.Options{})
+	front := cloudflare.New("ocel", edges.Registry{Project: "acme-prod"}.Cloudflare(), cloudflare.Options{})
 
 	if got := gcp.IngressFor(front.Facts()); got != "INGRESS_TRAFFIC_ALL" {
 		t.Errorf("a service behind the %s worker takes ingress %q, want every caller: the worker reaches the revision-tag URL itself, "+

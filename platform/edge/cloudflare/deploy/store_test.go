@@ -247,14 +247,19 @@ func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
 }
 
 func stackOn(p *cloudflare, state edge.StackState) *stack {
-	if p.store == nil {
-		p.store = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	if p.store.client == nil {
+		p.store.client = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
 	}
 	s := &stack{p: p, state: state}
 	if err := state.Private.Into(&s.own); err != nil {
 		panic(err)
 	}
 	return s
+}
+
+func routerStackOn(p *cloudflare, state edge.StackState) routerStack {
+	s := stackOn(p, state)
+	return routerStack{store: p.store, state: s.state, own: s.own}
 }
 
 func testState(endpoint, secret string) edge.StackState {
@@ -268,7 +273,7 @@ func testState(endpoint, secret string) edge.StackState {
 
 func movePointer(t *testing.T, p *cloudflare, state edge.StackState, move router.PointerMove) {
 	t.Helper()
-	if err := (routerStack{s: stackOn(p, state)}).MovePointer(t.Context(), move, progress.Discard()); err != nil {
+	if err := routerStackOn(p, state).MovePointer(t.Context(), move, progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(%s): %v", move.Promotion.PromotionID, err)
 	}
 }
@@ -316,7 +321,7 @@ func TestAPointerMoveWhoseLedgerKeepsAReleaseWithNoTokenServesNothing(t *testing
 	move := pointerMoveOf("promo-1", "", router.ReleaseRecord{App: "web", Release: keptReleaseOf(t, "a").String()})
 	move.Kept = []router.Promotion{{PromotionID: "promo-1", Releases: map[string]string{"web": "not-a-release"}}}
 
-	err := (routerStack{s: stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t"))}).MovePointer(t.Context(), move, progress.Discard())
+	err := routerStackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).MovePointer(t.Context(), move, progress.Discard())
 
 	if !errors.As(err, new(router.Unserved)) || len(store.moved()) != 0 {
 		t.Errorf("MovePointer = %v after %d store move(s), want an unserved error and no move: a kept release the store cannot know by its token would be forgotten while a rollback can still serve it", err, len(store.moved()))
@@ -368,7 +373,7 @@ func TestAPointerMoveCarryingAnotherRecordForAServedReleaseIsUnservedAndNamesThe
 	movePointer(t, p, state, pointerMoveOf("promo-1", "", router.ReleaseRecord{App: "web", Release: "b1", BuildID: "build-1"}))
 
 	move := pointerMoveOf("promo-2", "", router.ReleaseRecord{App: "web", Release: "b1", BuildID: "build-2"})
-	err := (routerStack{s: stackOn(p, state)}).MovePointer(t.Context(), move, progress.Discard())
+	err := routerStackOn(p, state).MovePointer(t.Context(), move, progress.Discard())
 
 	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
@@ -396,7 +401,7 @@ func TestRemovingAPointerLeavesNothingServedOnIt(t *testing.T) {
 	state := testState(srv.URL, "s3cr3t")
 	movePointer(t, p, state, pointerMoveOf("promo-preview", "pr-42", router.ReleaseRecord{App: "web", Release: "b1"}))
 
-	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), router.PointerRemoval{Pointer: "pr-42"}, progress.Discard()); err != nil {
+	if err := routerStackOn(p, state).RemovePointer(t.Context(), router.PointerRemoval{Pointer: "pr-42"}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	if served := store.serving("pr-42", "web"); served != "" {
@@ -410,7 +415,7 @@ func TestStoreRequest(t *testing.T) {
 	t.Run("a state with no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := stackOn(&cloudflare{}, edge.StackState{}).readServedPromotion(t.Context(), "")
+		_, err := routerStackOn(&cloudflare{}, edge.StackState{}).readServedPromotion(t.Context(), "")
 		if err == nil {
 			t.Fatal("expected an error when the edge stack state has no endpoint")
 		}
@@ -433,7 +438,7 @@ func TestStoreRequest(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).readServedPromotion(t.Context(), ""); err != nil {
+		if _, err := routerStackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).readServedPromotion(t.Context(), ""); err != nil {
 			t.Fatalf("readServedPromotion: %v", err)
 		}
 		if attempts != 3 {
@@ -451,7 +456,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).readServedPromotion(t.Context(), ""); err == nil {
+		if _, err := routerStackOn(&cloudflare{}, testState(srv.URL, "wrong")).readServedPromotion(t.Context(), ""); err == nil {
 			t.Fatal("readServedPromotion err = nil, want the rejection surfaced")
 		}
 		if attempts != 1 {
@@ -471,7 +476,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).readServedPromotion(ctx, ""); err == nil {
+		if _, err := routerStackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).readServedPromotion(ctx, ""); err == nil {
 			t.Fatal("readServedPromotion err = nil, want the failure surfaced")
 		}
 		if attempts != 1 {
@@ -535,7 +540,7 @@ func TestDestroyInstance(t *testing.T) {
 		if err := p.destroyInstance(t.Context(), state); err != nil {
 			t.Fatalf("destroyInstance: %v", err)
 		}
-		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
+		if _, err := routerStackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 			t.Error("reading the pointer after destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
@@ -590,7 +595,7 @@ func TestRemovingAPreviewPointerStopsServingItsLabels(t *testing.T) {
 	move.Hosts = hosts
 	movePointer(t, p, state, move)
 
-	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), router.PointerRemoval{Pointer: "pr-42", Hosts: hosts}, progress.Discard()); err != nil {
+	if err := routerStackOn(p, state).RemovePointer(t.Context(), router.PointerRemoval{Pointer: "pr-42", Hosts: hosts}, progress.Discard()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	if served := store.findServedBuild("pr-42-aaaaaaaaaaaaaaaabbbbbbbb"); served != "" {

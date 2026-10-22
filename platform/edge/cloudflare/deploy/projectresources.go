@@ -13,7 +13,7 @@ const (
 	resourceLocation      = "global"
 )
 
-func ListProjectResources(ctx context.Context, namespace string, origin func(context.Context) (OriginScope, error), req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
+func ListProjectResources(ctx context.Context, namespace string, origin Origin, req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
 	var resources []provider.PhysicalResource
 	if req.EdgeKind == Kind {
 		script, ok, err := projectEntryWorker(ctx, namespace, origin, req)
@@ -43,12 +43,12 @@ func ListProjectResources(ctx context.Context, namespace string, origin func(con
 	return resources, nil
 }
 
-func projectEntryWorker(ctx context.Context, namespace string, origin func(context.Context) (OriginScope, error), req provider.ProjectResourcesRequest) (string, bool, error) {
+func projectEntryWorker(ctx context.Context, namespace string, origin Origin, req provider.ProjectResourcesRequest) (string, bool, error) {
 	var own private
 	if err := req.EdgeStack.Private.Into(&own); err != nil || own.EntryWorker == "" {
 		return "", false, nil
 	}
-	scope, err := resolveOrigin(ctx, origin)
+	scope, err := resolveOrigin(ctx, origin.Scope)
 	if err != nil {
 		return "", false, err
 	}

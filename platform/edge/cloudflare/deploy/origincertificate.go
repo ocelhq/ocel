@@ -25,6 +25,9 @@ const (
 )
 
 func (p *cloudflare) issueOriginCertificate(ctx context.Context, hostname string) (edge.OriginCertificate, error) {
+	if _, err := p.requireBootstrappedAccount(ctx, "issue an origin certificate for "+hostname); err != nil {
+		return edge.OriginCertificate{}, err
+	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return edge.OriginCertificate{}, fmt.Errorf("generate the key %s's origin certificate is issued for: %w", hostname, err)
@@ -69,6 +72,9 @@ func (p *cloudflare) issueOriginCertificate(ctx context.Context, hostname string
 }
 
 func (p *cloudflare) revokeOriginCertificate(ctx context.Context, id string) error {
+	if _, err := p.requireBootstrappedAccount(ctx, "revoke origin certificate "+id); err != nil {
+		return err
+	}
 	if _, err := p.client.OriginCACertificates.Delete(ctx, id); err != nil {
 		return fmt.Errorf("revoke origin certificate %s: %w", id, err)
 	}

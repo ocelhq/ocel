@@ -17,7 +17,7 @@ func (r Routers) Open(kind router.Kind) (router.Router, error) {
 	case router.Kind(alb.Kind):
 		return alb.NewRouter(r.Registry.OpenALB()), nil
 	case router.Kind(cloudflare.Kind):
-		return cloudflare.NewRouter(string(r.Registry.Namespace)), nil
+		return cloudflare.NewRouter(), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no %q", kind)
 }

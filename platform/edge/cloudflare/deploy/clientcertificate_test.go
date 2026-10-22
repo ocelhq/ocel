@@ -26,7 +26,7 @@ import (
 func (m *cfMock) proxyOn(t *testing.T, origin OriginScope) *Proxy {
 	t.Helper()
 	front := m.proxy(t)
-	front.p.origin = fixedOrigin(origin)
+	front.p.Scope = fixedOrigin(origin).Scope
 	return front
 }
 

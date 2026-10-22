@@ -15,11 +15,11 @@ func TestAnAWSOriginIsItsAccountAndRegion(t *testing.T) {
 	p := NewProvider(Options{Region: "eu-west-1"}, nil, aws.Config{Region: "eu-west-1"}, defaultNamespace)
 	p.identity.remember(struct{}{}, &sts.GetCallerIdentityOutput{Account: aws.String("111122223333")})
 
-	origin, err := p.cloudflareOrigin(t.Context())
+	origin, err := p.cloudflareScope(t.Context())
 	if err != nil {
-		t.Fatalf("cloudflareOrigin() = %v", err)
+		t.Fatalf("cloudflareScope() = %v", err)
 	}
 	if want := (cloudflare.OriginScope{Vendor: "aws", ID: "111122223333/eu-west-1"}); origin != want {
-		t.Errorf("cloudflareOrigin() = %v, want %v: one bootstrap is one account and region", origin, want)
+		t.Errorf("cloudflareScope() = %v, want %v: one bootstrap is one account and region", origin, want)
 	}
 }

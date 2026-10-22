@@ -113,10 +113,11 @@ type stack struct {
 	own   private
 }
 
-func (s *stack) State() edge.StackState {
-	current := s.state
-	current.Private = edge.Own(s.own)
-	return current
+func (s *stack) State() edge.StackState { return withOwn(s.state, s.own) }
+
+func withOwn(state edge.StackState, own private) edge.StackState {
+	state.Private = edge.Own(own)
+	return state
 }
 
 func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
@@ -128,7 +129,7 @@ func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	accountID, err := requireAccountID("reconcile the Cloudflare stack")
+	accountID, err := p.requireTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack")
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +301,9 @@ func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, st
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
+	if _, err := s.p.requireTierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack"); err != nil {
+		return err
+	}
 	var errs []error
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {

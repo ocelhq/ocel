@@ -1,16 +1,13 @@
 package cloudflare
 
 import (
-	"context"
-
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type Proxy struct{ p *cloudflare }
 
-func NewProxy(namespace string, origin func(context.Context) (OriginScope, error), keyValues records.Store, options Options) *Proxy {
-	return &Proxy{p: newCloudflare(namespace, origin, keyValues, options)}
+func NewProxy(namespace string, origin Origin, options Options) *Proxy {
+	return &Proxy{p: newCloudflare(namespace, origin, options)}
 }
 
 func (x *Proxy) Kind() edge.Kind { return Kind }
@@ -29,6 +26,7 @@ func (x *Proxy) Facts() edge.Facts {
 
 func (x *Proxy) Hooks() edge.Hooks {
 	return edge.Hooks{
+		PlanBootstrap:                 x.planBootstrap,
 		PlanRemoveBootstrap:           x.planRemoveBootstrap,
 		VerifyCredentials:             x.p.verifyCredentials,
 		DescribeCredentialPermissions: proxyCredentialPermissions,

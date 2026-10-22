@@ -18,6 +18,9 @@ func (p *cloudflare) publishGate(ctx context.Context, publication edge.GatePubli
 	if state.Secret == "" {
 		return fmt.Errorf("the %s edge has no releases-store identity for the %s stack of %s to publish its gate with; deploy it first", Kind, state.Tier, state.Slug)
 	}
+	if _, err := p.requireTierAccount(ctx, state.Tier, fmt.Sprintf("publish the %s gate of %s", state.Tier, state.Slug)); err != nil {
+		return err
+	}
 	return p.putGate(ctx, state, publication.Gate)
 }
 
@@ -26,7 +29,7 @@ func (p *cloudflare) putGate(ctx context.Context, state edge.StackState, publish
 	if published == nil {
 		method, body = http.MethodDelete, nil
 	}
-	res, err := p.storeRequest(ctx, state, method, gatePath, body, nil)
+	res, err := p.store.request(ctx, state, method, gatePath, body, nil)
 	if res == nil || res.StatusCode != http.StatusNotFound {
 		return err
 	}

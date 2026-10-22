@@ -1268,8 +1268,14 @@ func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusing
 	rig.mu.Lock()
 	stored, rendered := table, config
 	rig.mu.Unlock()
-	if stored != string(mustWrite(t, routed())) {
-		t.Errorf("the bootstrap rewrote the routing table as\n%s\nand it is the only record of what the box routes", stored)
+	held, err := routing.ReadRoutingTable([]byte(stored))
+	if err != nil {
+		t.Fatal(err)
+	}
+	minted := held.OriginID
+	held.OriginID = ""
+	if minted == "" || string(mustWrite(t, held)) != string(mustWrite(t, routed())) {
+		t.Errorf("the bootstrap rewrote the routing table as\n%s\nwant only an origin id added: it is the only record of what the box routes", stored)
 	}
 	if rendered != string(mustRender(t, routed())) {
 		t.Errorf("the bootstrap left %s as\n%s\nwant it rendered again from %s", ProxyConfig, rendered, boxapi.RoutingTablePath)

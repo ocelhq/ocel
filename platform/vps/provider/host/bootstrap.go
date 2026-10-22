@@ -226,6 +226,9 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 			return err
 		}
 	}
+	if _, err := b.host.routing.EnsureOriginID(ctx); err != nil {
+		return err
+	}
 	b.host.warnOfKernelSettings(ctx, progress)
 	stamp.State, stamp.Seal = machine.StateComplete, step.Read.Seal
 	return b.host.Stamp(ctx, req.Tier, stamp)

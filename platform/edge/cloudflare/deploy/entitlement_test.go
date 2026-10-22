@@ -32,7 +32,7 @@ func entitlementProvider(t *testing.T, subscriptions string, status int) *cloudf
 	}))
 	t.Cleanup(srv.Close)
 
-	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", resolvedOrigin: resolvedOrigin{Origin: fixedOrigin(testOrigin)}, client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

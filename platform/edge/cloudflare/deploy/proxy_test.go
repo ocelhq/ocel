@@ -54,6 +54,7 @@ func TestTheCloudflareProxyBehavesAsEveryEdgeMust(t *testing.T) {
 			return m.proxy(t), proxyPreviewSpec(), edge.PreviewWildcardSpec{BaseDomain: "preview.app.com", Origin: &edge.Origin{Address: "198.51.100.4"}}
 		},
 		Bootstrap: func(t *testing.T) (edge.Edge, environment.Tier) {
+			t.Setenv(envAPIToken, "tok")
 			return proxyZoneMock().proxy(t), environment.TierProduction
 		},
 	})

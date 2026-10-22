@@ -171,7 +171,7 @@ func (p *Provider) Edges() provider.Edges { return edges{p} }
 
 func (p *Provider) Routers() provider.Routers { return routers{p} }
 
-func (p *Provider) DNS() provider.DNS { return dns{cloudflareOrigin: p.cloudflareOrigin} }
+func (p *Provider) DNS() provider.DNS { return dns{cloudflare: p.cloudflareOrigin()} }
 
 func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
 

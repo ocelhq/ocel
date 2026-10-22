@@ -114,6 +114,7 @@ func (s tierBootstrap) Apply(ctx context.Context, req provider.BootstrapRequest,
 	if err != nil {
 		return err
 	}
+	s.forget()
 	removed, req := s.splitTierParts(req)
 	if err := s.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err

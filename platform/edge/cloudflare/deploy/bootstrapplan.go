@@ -33,7 +33,7 @@ const (
 )
 
 func (p *cloudflare) planBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
-	accountID, err := bootstrapCredentials()
+	accountID, err := p.bootstrapCredentials(ctx, tier, "plan the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (p *cloudflare) planBootstrap(ctx context.Context, tier environment.Tier) (
 }
 
 func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
-	accountID, err := bootstrapCredentials()
+	accountID, err := p.bootstrapCredentials(ctx, tier, "plan removing the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +101,14 @@ func bootstrapCredentials() (string, error) {
 		return "", err
 	}
 	return accountID, nil
+}
+
+func (p *cloudflare) bootstrapCredentials(ctx context.Context, tier environment.Tier, doing string) (string, error) {
+	accountID, err := bootstrapCredentials()
+	if err != nil {
+		return "", err
+	}
+	return accountID, p.refuseAccountChange(ctx, tier, accountID, doing)
 }
 
 type bootstrapState struct {

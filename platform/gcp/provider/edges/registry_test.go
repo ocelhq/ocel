@@ -9,11 +9,11 @@ import (
 func TestAGoogleCloudOriginIsItsProject(t *testing.T) {
 	t.Parallel()
 
-	origin, err := CloudflareOrigin("acme-shop")(t.Context())
+	origin, err := Registry{Project: "acme-shop"}.Cloudflare().Scope(t.Context())
 	if err != nil {
-		t.Fatalf("CloudflareOrigin() = %v", err)
+		t.Fatalf("Cloudflare().Scope() = %v", err)
 	}
 	if want := (cloudflare.OriginScope{Vendor: "gcp", ID: "acme-shop"}); origin != want {
-		t.Errorf("CloudflareOrigin() = %v, want %v: one bootstrap is one project", origin, want)
+		t.Errorf("Cloudflare().Scope() = %v, want %v: one bootstrap is one project", origin, want)
 	}
 }

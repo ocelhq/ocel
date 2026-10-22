@@ -19,12 +19,11 @@ func (p *Provider) edges() edges.Registry {
 
 func (p *Provider) edgeDeps() edges.Deps {
 	return edges.Deps{
-		AWS:              func(context.Context) (aws.Config, error) { return p.aws, nil },
-		Certificates:     p.options.Certificates,
-		Namespace:        p.namespace,
-		EnsurePart:       p.ensurePartNamed,
-		CloudflareOrigin: p.cloudflareOrigin,
-		KeyValues:        p.KeyValues(),
+		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },
+		Certificates: p.options.Certificates,
+		Namespace:    p.namespace,
+		EnsurePart:   p.ensurePartNamed,
+		Cloudflare:   p.cloudflareOrigin(),
 		StateBucket: func(ctx context.Context, tier environment.Tier) (string, error) {
 			deployed, err := p.bootstrapped(ctx, tier)
 			if err != nil {
@@ -38,7 +37,11 @@ func (p *Provider) edgeDeps() edges.Deps {
 	}
 }
 
-func (p *Provider) cloudflareOrigin(ctx context.Context) (cloudflare.OriginScope, error) {
+func (p *Provider) cloudflareOrigin() cloudflare.Origin {
+	return cloudflare.Origin{Scope: p.cloudflareScope, Records: p.KeyValues()}
+}
+
+func (p *Provider) cloudflareScope(ctx context.Context) (cloudflare.OriginScope, error) {
 	accountID, err := p.accountID(ctx)
 	if err != nil {
 		return cloudflare.OriginScope{}, err

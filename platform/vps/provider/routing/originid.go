@@ -4,25 +4,33 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
 func (t *Table) EnsureOriginID(ctx context.Context) (string, error) {
-	current, err := t.Read(ctx)
-	if err != nil {
-		return "", err
-	}
-	if current.OriginID != "" {
-		return current.OriginID, nil
-	}
 	minted := naming.NewRandomTag()
-	var held string
-	err = t.Reshape(ctx, func(state boxapi.RoutingTable) (boxapi.RoutingTable, error) {
-		if state.OriginID == "" {
-			state.OriginID = minted
+	for rewrites := 1; ; rewrites++ {
+		pair, err := t.CurrentTable(ctx)
+		if err != nil {
+			return "", err
 		}
-		held = state.OriginID
-		return state, nil
-	})
-	return held, err
+		table, err := ReadRoutingTable(pair.Table)
+		if err != nil {
+			return "", err
+		}
+		if table.OriginID != "" {
+			return table.OriginID, nil
+		}
+		table.OriginID = minted
+		written, err := WriteRoutingTable(table)
+		if err != nil {
+			return "", err
+		}
+		_, failedPlace, err := t.writePair(ctx, pair.Digest(), Pair{Table: written, Config: pair.Config, Origins: pair.Origins}, false)
+		if err == nil {
+			return minted, failedPlace
+		}
+		if !Moved(err) || rewrites >= Rewrites {
+			return "", err
+		}
+	}
 }

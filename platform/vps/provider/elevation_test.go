@@ -138,3 +138,56 @@ func TestDestroyingABoxBootstrapBehindAnEdgeTearsThatEdgesTierDownFirst(t *testi
 		t.Errorf("tore the edge down for %v and removed the box %d times, want the preview tier's edge torn down, then the box", front.tornDown, inner.removed)
 	}
 }
+
+type bootstrappedEdge struct {
+	edge.Edge
+	planRefusal  error
+	bootstrapped []environment.Tier
+	applied      *reached
+}
+
+func (e *bootstrappedEdge) Kind() edge.Kind { return "cloudflare" }
+
+func (e *bootstrappedEdge) Hooks() edge.Hooks {
+	return edge.Hooks{PlanBootstrap: func(context.Context, environment.Tier) ([]edge.PlanChange, error) {
+		return nil, e.planRefusal
+	}}
+}
+
+func (e *bootstrappedEdge) Bootstrap(_ context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
+	if e.applied.applied == 0 {
+		return edge.BootstrapOutput{}, errors.New("the edge was bootstrapped before the box, and the box holds the origin id the edge names what it owns by")
+	}
+	e.bootstrapped = append(e.bootstrapped, tier)
+	return edge.BootstrapOutput{}, nil
+}
+
+func TestBootstrappingABoxBehindAnEdgeBootstrapsThatEdgesTierAfterTheBox(t *testing.T) {
+	t.Parallel()
+
+	inner := &reached{}
+	front := &bootstrappedEdge{applied: inner}
+	gated := vps.Elevating(inner, func(context.Context) error { return nil }, nil, front)
+
+	if err := gated.Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview}, progress.Discard()); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !slices.Equal(front.bootstrapped, []environment.Tier{environment.TierPreview}) {
+		t.Errorf("bootstrapped the edge for %v, want the preview tier's, so the edge records the account it bootstrapped against", front.bootstrapped)
+	}
+}
+
+func TestABoxBootstrapPlanCarriesItsEdgesRefusal(t *testing.T) {
+	t.Parallel()
+
+	inner := &reached{}
+	refused := refusal.Refuse(refusal.CodeInvalid, "this origin bootstrapped its preview tier on Cloudflare against account acct-first")
+	gated := vps.Elevating(inner, unelevated, nil, &bootstrappedEdge{applied: inner, planRefusal: refused})
+
+	_, err := gated.Plan(context.Background(), provider.BootstrapRequest{Tier: environment.TierPreview})
+
+	var got refusal.Refusal
+	if !errors.As(err, &got) || got.Code != refusal.CodeInvalid {
+		t.Fatalf("Plan() = %v, want the edge's refusal surfaced before anything is applied", err)
+	}
+}
