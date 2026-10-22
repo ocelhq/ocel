@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -16,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -236,4 +239,70 @@ func refusalCode(err error) refusal.Code {
 		return refused.Code
 	}
 	return ""
+}
+
+func cloudflareZoneHoldingNoClientCertificates(t *testing.T) *atomic.Int32 {
+	t.Helper()
+	listed := &atomic.Int32{}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var result string
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/zones"):
+			result = `[{"id":"zone-example","name":"example.com"}]`
+			if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+				result = `[]`
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/zones/zone-example/origin_tls_client_auth/hostnames/certificates"):
+			listed.Add(1)
+			result = `[]`
+		default:
+			http.Error(w, `{"success":false,"errors":[{"code":1,"message":"not served"}]}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"errors":[],"messages":[],"result":` + result + `,"result_info":{"page":1,"per_page":20,"count":1,"total_count":1,"total_pages":1}}`))
+	}))
+	t.Cleanup(api.Close)
+	t.Setenv("CLOUDFLARE_BASE_URL", api.URL+"/")
+	return listed
+}
+
+func TestTheWorkersAnOriginAdoptsAndWhatTheCloudflareEdgeRecordsOfTheTierNeverOverwriteEachOther(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+	t.Setenv("CLOUDFLARE_API_TOKEN", "tok")
+	listed := cloudflareZoneHoldingNoClientCertificates(t)
+	h := newOffersHarness(t)
+	ctx := t.Context()
+	origin := edges.Registry{Project: "acme-prod", KeyValues: h.records}.Cloudflare()
+	proxy := cloudflare.NewProxy("ocel", origin, cloudflare.Options{})
+
+	if _, err := proxy.Bootstrap(ctx, environment.TierProduction); err != nil {
+		t.Fatalf("Bootstrap() = %v", err)
+	}
+	if err := h.adopt(edge.BootstrapOutput{ReleasesStore: storeOffer("c1")}); err != nil {
+		t.Fatalf("adopt the releases store = %v", err)
+	}
+	if _, err := proxy.Hooks().ClientCertificates.Ensure(ctx, environment.TierProduction, "shop.example.com"); err == nil {
+		t.Fatal("Ensure() = nil, want the upload this fake refuses reported after the zone is recorded")
+	}
+	moved := &edge.ReleasesStore{Name: "ocel-releases-store", Endpoint: "https://moved.example.workers.dev", BootstrapCredential: "c1"}
+	if err := h.adopt(edge.BootstrapOutput{ReleasesStore: moved}); err != nil {
+		t.Fatalf("adopt the moved releases store = %v", err)
+	}
+
+	if _, _, err := cloudflareorigin.RequireAdoptedEdge(ctx, h.clients, h.records, environment.TierProduction, cloudflareKind); err != nil {
+		t.Errorf("RequireAdoptedEdge() = %v, want the adopted releases store kept: the edge's record of the tier overwrote it, and every deploy is refused", err)
+	}
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "other")
+	if _, err := proxy.Hooks().PlanRemoveBootstrap(ctx, environment.TierProduction); refusalCode(err) != refusal.CodeInvalid || !strings.Contains(err.Error(), "acct") {
+		t.Errorf("PlanRemoveBootstrap() under another account = %v, want an invalid refusal naming acct: adopting the workers overwrote the account the tier was bootstrapped against", err)
+	}
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+	before := listed.Load()
+	if _, err := proxy.Hooks().PlanRemoveBootstrap(ctx, environment.TierProduction); err != nil {
+		t.Fatalf("PlanRemoveBootstrap() = %v", err)
+	}
+	if listed.Load() == before {
+		t.Error("PlanRemoveBootstrap() never read the client certificates of zone example.com, want the recorded zone reached: adopting the workers again dropped it, and its certificates outlive the teardown")
+	}
 }

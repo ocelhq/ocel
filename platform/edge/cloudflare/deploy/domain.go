@@ -20,7 +20,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if binding.Hostname == "" {
 		return errors.New("binding a domain to a Cloudflare stack needs a hostname")
 	}
-	names, err := s.p.names(ctx)
+	names, err := s.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err != nil {
 		return err
 	}
-	accountID, err := s.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("bind %s to the Cloudflare edge", binding.Hostname))
+	accountID, err := s.p.readTierAccount(ctx, s.state.Tier, fmt.Sprintf("bind %s to the Cloudflare edge", binding.Hostname))
 	if err != nil {
 		return err
 	}
@@ -73,11 +73,11 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from a Cloudflare stack needs a hostname")
 	}
-	names, err := s.p.names(ctx)
+	names, err := s.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}
-	accountID, err := s.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("unbind %s from the Cloudflare edge", hostname))
+	accountID, err := s.p.readTierAccount(ctx, s.state.Tier, fmt.Sprintf("unbind %s from the Cloudflare edge", hostname))
 	if err != nil {
 		return err
 	}

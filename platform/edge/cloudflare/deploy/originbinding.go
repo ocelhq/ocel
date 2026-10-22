@@ -30,7 +30,7 @@ func (s *stack) isStillForwarded(ctx context.Context, names originNames, zoneID,
 }
 
 func (s *stack) bindForwarded(ctx context.Context, names originNames, binding edge.DomainBinding) error {
-	accountID, err := s.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
+	accountID, err := s.p.readTierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
 	if err != nil {
 		return err
 	}

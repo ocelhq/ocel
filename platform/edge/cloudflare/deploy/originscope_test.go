@@ -67,11 +67,11 @@ func TestAnOriginThatNamesNoVendorOrNoIDNamesNothing(t *testing.T) {
 	t.Parallel()
 
 	for _, origin := range []OriginScope{{}, {Vendor: "aws"}, {ID: "123456789012/us-east-1"}} {
-		if names, err := newCloudflare(defaultNamespace, fixedOrigin(origin), Options{}).names(t.Context()); err == nil {
+		if names, err := newCloudflare(defaultNamespace, fixedOrigin(origin), Options{}).resolveNames(t.Context()); err == nil {
 			t.Errorf("names() of an edge opened for %v = %+v, want it refused: a name without its origin reaches another origin's store", origin, names)
 		}
 	}
-	if _, err := newCloudflare(defaultNamespace, Origin{}, Options{}).names(t.Context()); err == nil {
+	if _, err := newCloudflare(defaultNamespace, Origin{}, Options{}).resolveNames(t.Context()); err == nil {
 		t.Error("names() of an edge opened with no origin = nil error, want it refused")
 	}
 }

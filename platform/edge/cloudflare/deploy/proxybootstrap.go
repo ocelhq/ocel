@@ -22,16 +22,19 @@ func (x *Proxy) planBootstrap(ctx context.Context, tier environment.Tier) ([]edg
 	if _, err := bootstrapCredentials(); err != nil {
 		return nil, err
 	}
-	_, err := x.p.tierAccount(ctx, tier, "plan the Cloudflare bootstrap")
+	_, err := x.p.readTierAccount(ctx, tier, "plan the Cloudflare bootstrap")
 	return nil, err
 }
 
 func (x *Proxy) planRemoveBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
-	accountID, err := x.p.tierAccount(ctx, tier, "plan removing the Cloudflare bootstrap")
+	if recorded, err := x.p.readTierRecord(ctx, tier); err != nil || recorded.isEmpty() {
+		return nil, err
+	}
+	accountID, err := x.p.readTierAccount(ctx, tier, "plan removing the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
-	names, err := x.p.names(ctx)
+	names, err := x.p.resolveNames(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -39,11 +42,14 @@ func (x *Proxy) planRemoveBootstrap(ctx context.Context, tier environment.Tier) 
 }
 
 func (x *Proxy) Teardown(ctx context.Context, tier environment.Tier) error {
-	accountID, err := x.p.tierAccount(ctx, tier, "tear the Cloudflare edge down")
+	if recorded, err := x.p.readTierRecord(ctx, tier); err != nil || recorded.isEmpty() {
+		return err
+	}
+	accountID, err := x.p.readTierAccount(ctx, tier, "tear the Cloudflare edge down")
 	if err != nil {
 		return err
 	}
-	names, err := x.p.names(ctx)
+	names, err := x.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}

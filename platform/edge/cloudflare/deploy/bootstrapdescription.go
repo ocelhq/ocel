@@ -11,14 +11,14 @@ func (p *cloudflare) describeBootstrap(ctx context.Context, tier environment.Tie
 	if _, err := bootstrapCredentials(); err != nil {
 		return nil, err
 	}
-	accountID, err := p.tierAccount(ctx, tier, "read the Cloudflare bootstrap")
+	accountID, err := p.readTierAccount(ctx, tier, "read the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
 	if p.skipChecks {
 		return []edge.BootstrapPart{{Name: "bootstrap", Current: true}}, nil
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return nil, err
 	}

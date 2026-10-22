@@ -52,7 +52,7 @@ func (o *resolvedOrigin) forgetAccount(tier environment.Tier) {
 	delete(o.recordedAccounts, tier)
 }
 
-func (o *resolvedOrigin) tierAccount(ctx context.Context, tier environment.Tier, doing string) (string, error) {
+func (o *resolvedOrigin) readTierAccount(ctx context.Context, tier environment.Tier, doing string) (string, error) {
 	accountID := readAccountID()
 	if accountID == "" {
 		return "", refuseUnsetAccount(doing)
@@ -67,7 +67,7 @@ func (o *resolvedOrigin) tierAccount(ctx context.Context, tier environment.Tier,
 	return accountID, nil
 }
 
-func (o *resolvedOrigin) anyTierAccount(ctx context.Context, doing string) (string, error) {
+func (o *resolvedOrigin) readAnyTierAccount(ctx context.Context, doing string) (string, error) {
 	accountID := readAccountID()
 	if accountID == "" {
 		return "", refuseUnsetAccount(doing)

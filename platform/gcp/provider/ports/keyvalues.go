@@ -291,10 +291,18 @@ func (s KeyValues) refuseFailedWrite(key records.Key, err error) error {
 	return fmt.Errorf("write %s: %w", key, err)
 }
 
+var ErrNoRecordsDatabase = errors.New("the tier keeps no records database")
+
+type noRecordsDatabase struct{ refused error }
+
+func (e noRecordsDatabase) Error() string { return e.refused.Error() }
+
+func (e noRecordsDatabase) Unwrap() []error { return []error{e.refused, ErrNoRecordsDatabase} }
+
 func (s KeyValues) refuseUnbootstrapped(tier environment.Tier) error {
-	return refusal.Refuse(refusal.CodeNotReady,
+	return noRecordsDatabase{refused: refusal.Refuse(refusal.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to store an entry.\nRun `%s` to create it, then try again",
-		s.Clients.RecordsDatabase(tier), provider.BootstrapCommand(tier))
+		s.Clients.RecordsDatabase(tier), provider.BootstrapCommand(tier))}
 }
 
 func entryOf(key records.Key, snapshot *firestore.DocumentSnapshot) (records.Entry, error) {

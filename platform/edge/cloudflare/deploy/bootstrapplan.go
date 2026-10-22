@@ -36,11 +36,11 @@ func (p *cloudflare) planBootstrap(ctx context.Context, tier environment.Tier) (
 	if _, err := bootstrapCredentials(); err != nil {
 		return nil, err
 	}
-	accountID, err := p.tierAccount(ctx, tier, "plan the Cloudflare bootstrap")
+	accountID, err := p.readTierAccount(ctx, tier, "plan the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -55,11 +55,11 @@ func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.T
 	if _, err := bootstrapCredentials(); err != nil {
 		return nil, err
 	}
-	accountID, err := p.tierAccount(ctx, tier, "plan removing the Cloudflare bootstrap")
+	accountID, err := p.readTierAccount(ctx, tier, "plan removing the Cloudflare bootstrap")
 	if err != nil {
 		return nil, err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.T
 }
 
 func (p *cloudflare) adoption(ctx context.Context, tier environment.Tier) (edge.Adoption, error) {
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return edge.Adoption{}, err
 	}

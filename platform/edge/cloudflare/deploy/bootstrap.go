@@ -14,7 +14,7 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -37,11 +37,11 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 }
 
 func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error {
-	accountID, err := p.tierAccount(ctx, tier, "tear the Cloudflare edge down")
+	accountID, err := p.readTierAccount(ctx, tier, "tear the Cloudflare edge down")
 	if err != nil {
 		return err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}

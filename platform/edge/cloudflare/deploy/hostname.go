@@ -118,7 +118,7 @@ func routePattern(hostname string) string {
 }
 
 func (p *cloudflare) ProjectOwner(ctx context.Context, slug string, tier environment.Tier) (string, error) {
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -126,11 +126,11 @@ func (p *cloudflare) ProjectOwner(ctx context.Context, slug string, tier environ
 }
 
 func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, error) {
-	accountID, err := p.anyTierAccount(ctx, "read Cloudflare worker routes")
+	accountID, err := p.readAnyTierAccount(ctx, "read Cloudflare worker routes")
 	if err != nil {
 		return "", err
 	}
-	names, err := p.names(ctx)
+	names, err := p.resolveNames(ctx)
 	if err != nil {
 		return "", err
 	}

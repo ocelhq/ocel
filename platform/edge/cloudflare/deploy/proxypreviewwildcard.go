@@ -20,11 +20,11 @@ func (x *Proxy) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewW
 			"the %q edge forwards %s to an origin, and this reconcile names none: it answers no preview itself",
 			Kind, wildcard)
 	}
-	accountID, err := x.p.tierAccount(ctx, environment.TierPreview, fmt.Sprintf("forward %s through Cloudflare", wildcard))
+	accountID, err := x.p.readTierAccount(ctx, environment.TierPreview, fmt.Sprintf("forward %s through Cloudflare", wildcard))
 	if err != nil {
 		return "", err
 	}
-	names, err := x.p.names(ctx)
+	names, err := x.p.resolveNames(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +43,7 @@ func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) e
 	if wildcard == "" {
 		return nil
 	}
-	accountID, err := x.p.tierAccount(ctx, environment.TierPreview, fmt.Sprintf("stop forwarding %s through Cloudflare", wildcard))
+	accountID, err := x.p.readTierAccount(ctx, environment.TierPreview, fmt.Sprintf("stop forwarding %s through Cloudflare", wildcard))
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) e
 	if err != nil {
 		return err
 	}
-	names, err := x.p.names(ctx)
+	names, err := x.p.resolveNames(ctx)
 	if err != nil {
 		return err
 	}
