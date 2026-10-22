@@ -237,6 +237,17 @@ Fails when:
 - An exported symbol in `packages/`, `sdk/`, `python/` or `crates/` lacks a doc-comment,
   or its doc-comment describes internals rather than the contract a user consumes.
 
+## Terse output
+
+A plan shows what changes and, only when it is not obvious, why. A refusal names what is
+missing and the one action that fixes it.
+
+Fails when:
+
+- A plan or progress line describes what a resource is or does.
+- A reason on a create restates the action.
+- A reason or refusal runs past one clause plus its fix.
+
 ## Clean break
 
 <!-- TODO(alpha): remove this rule when the first non-alpha version is released. -->
