@@ -22,8 +22,12 @@ func (o OriginScope) String() string { return o.Vendor + originVendorSeparator +
 
 const maxOriginLength = 40
 
-func (o OriginScope) refuseUnrecordable() error {
-	if readable := o.String(); len(readable) > maxOriginLength || strings.ContainsFunc(readable, unicode.IsSpace) {
+func (o OriginScope) refuseInvalid() error {
+	readable := o.String()
+	switch {
+	case o.Vendor == "" || o.ID == "":
+		return fmt.Errorf("the cloudflare edge was opened for an origin that names no vendor or no id (%q), so it cannot tell its own resources in the account from another origin's", readable)
+	case len(readable) > maxOriginLength || strings.ContainsFunc(readable, unicode.IsSpace):
 		return fmt.Errorf("the origin %q is longer than %d characters or holds whitespace, so the comment that names it on a Cloudflare DNS record would not fit or read back", readable, maxOriginLength)
 	}
 	return nil
@@ -35,13 +39,6 @@ func parseOriginScope(readable string) (OriginScope, bool) {
 		return OriginScope{}, false
 	}
 	return OriginScope{Vendor: vendor, ID: id}, true
-}
-
-func (o OriginScope) refuseIncomplete(what string) error {
-	if o.Vendor == "" || o.ID == "" {
-		return fmt.Errorf("%s: the cloudflare edge was opened for an origin that names no vendor or no id (%q), so it cannot tell its own resources in the account from another origin's", what, o.String())
-	}
-	return nil
 }
 
 func (o OriginScope) tag() string { return naming.HashTag(o.Vendor, o.ID) }
@@ -153,13 +150,6 @@ func (o *resolvedOrigin) originScope(ctx context.Context) (OriginScope, error) {
 	return scope, nil
 }
 
-func (o *resolvedOrigin) requireRecords(doing string) (records.Store, error) {
-	if o.Records == nil {
-		return nil, fmt.Errorf("%s: the cloudflare edge was opened with no record store to keep what this origin records of its tiers", doing)
-	}
-	return o.Records, nil
-}
-
 func resolveOrigin(ctx context.Context, origin func(context.Context) (OriginScope, error)) (OriginScope, error) {
 	if origin == nil {
 		return OriginScope{}, fmt.Errorf("the cloudflare edge was opened with no origin, so it cannot name what that origin owns in the account")
@@ -168,10 +158,7 @@ func resolveOrigin(ctx context.Context, origin func(context.Context) (OriginScop
 	if err != nil {
 		return OriginScope{}, fmt.Errorf("read which origin the cloudflare edge serves: %w", err)
 	}
-	if err := scope.refuseIncomplete("name this origin's Cloudflare resources"); err != nil {
-		return OriginScope{}, err
-	}
-	if err := scope.refuseUnrecordable(); err != nil {
+	if err := scope.refuseInvalid(); err != nil {
 		return OriginScope{}, err
 	}
 	return scope, nil

@@ -34,8 +34,7 @@ type dnsRecords struct {
 	records recordAPI
 	zones   zoneAPI
 
-	accountID string
-	named     string
+	named string
 	resolvedOrigin
 
 	mu   sync.Mutex
@@ -47,7 +46,6 @@ func NewDNS(zone string, origin Origin) edge.DNSRecords {
 	return &dnsRecords{
 		records:        client.DNS.Records,
 		zones:          client.Zones,
-		accountID:      readAccountID(),
 		named:          zone,
 		resolvedOrigin: resolvedOrigin{Origin: origin},
 	}
@@ -55,23 +53,17 @@ func NewDNS(zone string, origin Origin) edge.DNSRecords {
 
 const writingDNSRecords = "write DNS records in Cloudflare"
 
-func (w *dnsRecords) refuseUnusableAccount(ctx context.Context) error {
-	if w.accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to %s", envAccountID, writingDNSRecords)
-	}
-	return w.refuseUnbootstrappedAccount(ctx, w.accountID, writingDNSRecords)
-}
-
 func (w *dnsRecords) TTL() time.Duration {
 	return automaticTTL
 }
 
 func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
-	if err := refuseUnsetCredentials(w.accountID); err != nil {
+	accountID, err := bootstrapCredentials()
+	if err != nil {
 		return err
 	}
 	params := zones.ZoneListParams{
-		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(w.accountID)}),
+		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
 		PerPage: cf.F(float64(5)),
 	}
 	if w.named != "" {
@@ -79,10 +71,10 @@ func (w *dnsRecords) VerifyCredentials(ctx context.Context) error {
 	}
 	res, err := w.zones.List(ctx, params)
 	if err != nil {
-		return refuseUnverifiedToken(ctx, w.accountID, err)
+		return refuseUnverifiedToken(ctx, accountID, err)
 	}
 	if w.named != "" && !slices.ContainsFunc(res.Result, func(z zones.Zone) bool { return strings.EqualFold(z.Name, w.named) }) {
-		return fmt.Errorf("no zone named %q is reachable with %s in account %s", w.named, envAPIToken, w.accountID)
+		return fmt.Errorf("no zone named %q is reachable with %s in account %s", w.named, envAPIToken, accountID)
 	}
 	return nil
 }
@@ -91,7 +83,8 @@ func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func
 	if len(records) == 0 {
 		return []edge.Record{}, nil
 	}
-	if err := w.refuseUnusableAccount(ctx); err != nil {
+	accountID, err := w.anyTierAccount(ctx, writingDNSRecords)
+	if err != nil {
 		return nil, err
 	}
 	origin, err := w.originScope(ctx)
@@ -100,7 +93,7 @@ func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func
 	}
 	written := make([]edge.Record, 0, len(records))
 	for _, want := range records {
-		zone, err := w.zoneFor(ctx, want.Name)
+		zone, err := w.zoneFor(ctx, accountID, want.Name)
 		if err != nil {
 			return written, err
 		}
@@ -120,13 +113,13 @@ func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func
 }
 
 func (w *dnsRecords) ensure(ctx context.Context, zone edge.Zone, origin OriginScope, want edge.Record, live []dns.RecordResponse, say func(string)) (bool, error) {
-	comment := formatWriterComment(origin)
+	writer := dnsWriter(origin)
 	var mine, foreign *dns.RecordResponse
 	for i := range live {
 		if !isAddressRecord(live[i].Type) {
 			continue
 		}
-		if live[i].Comment == comment {
+		if writer.owns(live[i]) {
 			mine = &live[i]
 			break
 		}
@@ -139,7 +132,7 @@ func (w *dnsRecords) ensure(ctx context.Context, zone edge.Zone, origin OriginSc
 		if mine.Content == want.Value && string(mine.Type) == string(want.Type) && mine.Proxied == want.Proxied {
 			return true, nil
 		}
-		if err := w.replace(ctx, zone.ID, mine.ID, want, comment); err != nil {
+		if err := w.replace(ctx, zone.ID, mine.ID, want, writer.comment()); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -149,7 +142,7 @@ func (w *dnsRecords) ensure(ctx context.Context, zone edge.Zone, origin OriginSc
 		}
 		return false, nil
 	}
-	body, err := recordBody(want, comment)
+	body, err := recordBody(want, writer.comment())
 	if err != nil {
 		return false, err
 	}
@@ -170,8 +163,8 @@ func serves(rec dns.RecordResponse, want edge.Record) bool {
 }
 
 func foreignRecordWarning(want edge.Record, rec dns.RecordResponse, origin OriginScope) string {
-	if held, written := parseRecordComment(rec.Comment); written && held.origin != origin {
-		return fmt.Sprintf("%s already has a %s record that origin %s wrote, pointing at %s, and one hostname belongs to one origin, so this deployment will not serve it — release %s on %s first", want.Name, rec.Type, held.origin, rec.Content, want.Name, held.origin)
+	if held, written := parseRecordOwner(rec.Comment); written && held.isOtherOrigin(origin) {
+		return describeOtherOrigin(fmt.Sprintf("%s already has a %s record that origin %s wrote, pointing at %s, so this deployment will not serve it", want.Name, rec.Type, held.origin, rec.Content), want.Name, held.origin)
 	}
 	if want.Proxied {
 		return fmt.Sprintf("%s already has a DNS record ocel did not write and it is not proxied through Cloudflare, so the worker route under it will never fire — set that record to proxied (orange cloud), or delete it and deploy again", want.Name)
@@ -235,16 +228,17 @@ func (w *dnsRecords) Delete(ctx context.Context, records []edge.Record) error {
 	if len(records) == 0 {
 		return nil
 	}
-	if err := w.refuseUnusableAccount(ctx); err != nil {
+	accountID, err := w.anyTierAccount(ctx, writingDNSRecords)
+	if err != nil {
 		return err
 	}
 	origin, err := w.originScope(ctx)
 	if err != nil {
 		return err
 	}
-	comment := formatWriterComment(origin)
+	writer := dnsWriter(origin)
 	for _, written := range records {
-		zone, err := w.zoneFor(ctx, written.Name)
+		zone, err := w.zoneFor(ctx, accountID, written.Name)
 		if err != nil {
 			return err
 		}
@@ -253,7 +247,7 @@ func (w *dnsRecords) Delete(ctx context.Context, records []edge.Record) error {
 			return err
 		}
 		for _, rec := range live {
-			if rec.Comment != comment || rec.Content != written.Value || string(rec.Type) != string(written.Type) {
+			if !writer.owns(rec) || rec.Content != written.Value || string(rec.Type) != string(written.Type) {
 				continue
 			}
 			if _, err := w.records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zone.ID)}); err != nil {
@@ -282,15 +276,15 @@ func (w *dnsRecords) recordsAt(ctx context.Context, zoneID, hostname string) ([]
 	}
 }
 
-func (w *dnsRecords) zoneFor(ctx context.Context, hostname string) (edge.Zone, error) {
-	owned, err := w.ownedZones(ctx)
+func (w *dnsRecords) zoneFor(ctx context.Context, accountID, hostname string) (edge.Zone, error) {
+	owned, err := w.ownedZones(ctx, accountID)
 	if err != nil {
 		return edge.Zone{}, err
 	}
 	return edge.SelectZone(owned, routeBaseDomain(hostname), w.named)
 }
 
-func (w *dnsRecords) ownedZones(ctx context.Context) ([]edge.Zone, error) {
+func (w *dnsRecords) ownedZones(ctx context.Context, accountID string) ([]edge.Zone, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.seen != nil {
@@ -299,7 +293,7 @@ func (w *dnsRecords) ownedZones(ctx context.Context) ([]edge.Zone, error) {
 	owned := []edge.Zone{}
 	for page := 1; ; page++ {
 		res, err := w.zones.List(ctx, zones.ZoneListParams{
-			Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(w.accountID)}),
+			Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
 			Page:    cf.F(float64(page)),
 		})
 		if err != nil {

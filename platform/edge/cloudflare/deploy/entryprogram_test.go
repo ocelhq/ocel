@@ -48,7 +48,7 @@ func previewProgrammed() *edge.Program {
 
 func buildEntry(t *testing.T, tier environment.Tier, slug string, program *edge.Program) entryProgram {
 	t.Helper()
-	built, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), tier, slug, program)
+	built, err := buildEntryProgram(testNames, tier, slug, program)
 	if err != nil {
 		t.Fatalf("buildEntryProgram: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestEntryProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	program := previewProgrammed()
 	program.ReleasesStore.Name = ""
 
-	_, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), environment.TierPreview, "", program)
+	_, err := buildEntryProgram(testNames, environment.TierPreview, "", program)
 	if err == nil || !strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierPreview)) {
 		t.Fatalf("buildEntryProgram = %v, want a refusal naming the bootstrap that provisions the store", err)
 	}
@@ -137,7 +137,7 @@ func TestEntryProgramRefusesAWorkerThatVerifiesPreviewLabelsWithNoKey(t *testing
 		t.Run(name, func(t *testing.T) {
 			program := previewProgrammed()
 			program.PreviewKey = ""
-			if _, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), environment.TierPreview, slug, program); err == nil {
+			if _, err := buildEntryProgram(testNames, environment.TierPreview, slug, program); err == nil {
 				t.Fatal("buildEntryProgram succeeded, want a worker that can verify no preview hostname refused")
 			}
 		})
@@ -215,7 +215,7 @@ func TestAnEntryWorkerRefusesAnOriginSecretReachThatNamesNoSecret(t *testing.T) 
 	program.Origin = secretReach()
 	program.Origin.Reach.Secret = ""
 
-	_, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), environment.TierProduction, "shop", program)
+	_, err := buildEntryProgram(testNames, environment.TierProduction, "shop", program)
 	if err == nil || !strings.Contains(err.Error(), "origin secret") {
 		t.Fatalf("buildEntryProgram = %v, want a refusal of an origin secret reach with no secret", err)
 	}
@@ -225,14 +225,14 @@ func TestAnEntryWorkerRefusesAnOriginReachedTwoWays(t *testing.T) {
 	program := programmed()
 	program.Origin.Reach.Secret = "s1"
 
-	_, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), environment.TierProduction, "shop", program)
+	_, err := buildEntryProgram(testNames, environment.TierProduction, "shop", program)
 	if err == nil || !strings.Contains(err.Error(), "one way") {
 		t.Fatalf("buildEntryProgram = %v, want a refusal of an origin reached both by signing and by an origin secret", err)
 	}
 }
 
 func TestAnEntryWorkerRefusesAStackHandedNoProgram(t *testing.T) {
-	_, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), environment.TierProduction, "shop", nil)
+	_, err := buildEntryProgram(testNames, environment.TierProduction, "shop", nil)
 	if err == nil || !strings.Contains(err.Error(), string(Kind)) {
 		t.Fatalf("buildEntryProgram = %v, want a refusal naming the edge", err)
 	}

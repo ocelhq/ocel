@@ -20,16 +20,16 @@ func TestAnEntryWorkerIsAnOcelNameOfItsTierOriginAndProjectEndingInAHashTag(t *t
 		{environment.TierProduction, "ocel-prod-4c73ed-entry-shop-023da1"},
 		{environment.TierPreview, "ocel-preview-4c73ed-entry-shop-fff38e"},
 	} {
-		got, err := entryWorkerName(defaultNamespace, testOrigin, "shop", tc.tier)
+		got, err := testNames.entryWorker("shop", tc.tier)
 		if err != nil {
-			t.Fatalf("entryWorkerName(%s): %v", tc.tier, err)
+			t.Fatalf("entryWorker(%s): %v", tc.tier, err)
 		}
 		if got != tc.want {
-			t.Errorf("entryWorkerName(%s) = %q, want %q", tc.tier, got, tc.want)
+			t.Errorf("entryWorker(%s) = %q, want %q", tc.tier, got, tc.want)
 		}
 	}
-	if _, err := entryWorkerName(defaultNamespace, testOrigin, "shop", environment.Tier("nonsense")); err == nil {
-		t.Error("entryWorkerName(unknown tier) err = nil, want an error")
+	if _, err := testNames.entryWorker("shop", environment.Tier("nonsense")); err == nil {
+		t.Error("entryWorker(unknown tier) err = nil, want an error")
 	}
 }
 
@@ -37,11 +37,11 @@ func TestAnEntryWorkerOfALongProjectFitsAWorkerNameAndStaysApartFromItsNeighbour
 	t.Parallel()
 
 	slug := strings.Repeat("verylongproject", 5)
-	one, err := entryWorkerName(defaultNamespace, testOrigin, slug+"a", environment.TierProduction)
+	one, err := testNames.entryWorker(slug+"a", environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
-	two, err := entryWorkerName(defaultNamespace, testOrigin, slug+"b", environment.TierProduction)
+	two, err := testNames.entryWorker(slug+"b", environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestAnEntryWorkerNeverSitsInsideTheAppFence(t *testing.T) {
 	t.Parallel()
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		name, err := entryWorkerName(defaultNamespace, testOrigin, "app", tier)
+		name, err := testNames.entryWorker("app", tier)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -76,9 +76,9 @@ func TestProjectOwnsScriptReadsOnlyThisNamespacesWorkers(t *testing.T) {
 	t.Parallel()
 
 	const other = "j-1874-deploy-next-cloudflare"
-	theirs, err := entryWorkerName(other, testOrigin, "shop", environment.TierProduction)
+	theirs, err := originNames{namespace: other, origin: testOrigin}.entryWorker("shop", environment.TierProduction)
 	if err != nil {
-		t.Fatalf("entryWorkerName: %v", err)
+		t.Fatalf("entryWorker: %v", err)
 	}
 	if ownsOf(defaultNamespace, "shop")(theirs) {
 		t.Errorf("%q reads as this namespace's, so a prune here would take a route off the worker %s deploys", theirs, other)
@@ -99,12 +99,12 @@ func TestAProjectOwnsTheEntryWorkersOfBothItsTiersAndNoOtherProjects(t *testing.
 		"my-worker":                              false,
 	} {
 		if got := ownsOf(defaultNamespace, "shop")(script); got != want {
-			t.Errorf("projectOwnsScript(shop)(%q) = %v, want %v", script, got, want)
+			t.Errorf("ownsScript(shop)(%q) = %v, want %v", script, got, want)
 		}
 	}
-	for _, args := range [][3]string{{"", "shop", "ocel-prod-4c73ed-entry-shop-023da1"}, {defaultNamespace, "", "ocel-prod-4c73ed-entry-shop-023da1"}, {defaultNamespace, "shop", ""}} {
-		if ownsOf(args[0], args[1])(args[2]) {
-			t.Errorf("projectOwnsScript(%q, %q)(%q) = true, want false for an empty argument", args[0], args[1], args[2])
+	for _, args := range [][2]string{{"", "ocel-prod-4c73ed-entry-shop-023da1"}, {"shop", ""}} {
+		if ownsOf(defaultNamespace, args[0])(args[1]) {
+			t.Errorf("ownsScript(%q)(%q) = true, want false for an empty argument", args[0], args[1])
 		}
 	}
 }
@@ -113,7 +113,7 @@ func TestAProjectOwnsNoEntryWorkerAnotherOriginDeployedForIt(t *testing.T) {
 	t.Parallel()
 
 	for _, tier := range workerTiers {
-		theirs, err := entryWorkerName(defaultNamespace, otherOrigin, "shop", tier)
+		theirs, err := otherNames.entryWorker("shop", tier)
 		if err != nil {
 			t.Fatal(err)
 		}

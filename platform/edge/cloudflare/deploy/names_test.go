@@ -24,7 +24,7 @@ func TestAccountNames(t *testing.T) {
 		prod, preview string
 	}{
 		{"the releases store", func(namespace string, tier environment.Tier) (string, error) {
-			return storeScriptNameFor(namespace, testOrigin, tier)
+			return originNames{namespace: namespace, origin: testOrigin}.storeScript(tier)
 		}, sharedStoreScriptName, previewStoreScriptName},
 	}
 
@@ -65,14 +65,6 @@ func TestAccountNames(t *testing.T) {
 				}
 				if prod == tc.prod || preview == tc.preview || prod == preview {
 					t.Errorf("names = (%q, %q) collide with the default namespace or each other", prod, preview)
-				}
-			})
-
-			t.Run("no namespace is an error", func(t *testing.T) {
-				t.Parallel()
-
-				if _, err := tc.nameFor("", environment.TierProduction); err == nil {
-					t.Error("nameFor(no namespace) = nil error, want an error")
 				}
 			})
 

@@ -12,7 +12,7 @@ import (
 )
 
 func (x *Proxy) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	if _, err := x.p.requireTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack"); err != nil {
+	if _, err := x.p.tierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack"); err != nil {
 		return nil, err
 	}
 	next := prior
@@ -46,31 +46,64 @@ func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding)
 			"the %q edge forwards %s to an origin, and this binding names none: it answers no hostname itself",
 			Kind, binding.Hostname)
 	}
-	owner, err := s.x.ProjectOwner(ctx, s.state.Slug, s.state.Tier)
+	names, err := s.x.p.names(ctx)
 	if err != nil {
 		return err
 	}
-	return s.x.p.bindOrigin(ctx, &s.state, owner, binding)
+	owner, err := names.forwardingOwner(s.state.Slug, s.state.Tier)
+	if err != nil {
+		return err
+	}
+	accountID, err := s.x.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
+	if err != nil {
+		return err
+	}
+	zone, err := s.x.p.resolveHostnameZone(ctx, accountID, binding.Hostname)
+	if err != nil {
+		return err
+	}
+	return s.x.p.bindOrigin(ctx, &s.state, zone, owner, binding)
 }
 
 func (s *proxyStack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from the Cloudflare proxy needs a hostname")
 	}
-	owner, err := s.x.ProjectOwner(ctx, s.state.Slug, s.state.Tier)
+	names, err := s.x.p.names(ctx)
 	if err != nil {
 		return err
 	}
-	return s.x.p.unbindOrigin(ctx, &s.state, owner, hostname)
+	accountID, err := s.x.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
+	if err != nil {
+		return err
+	}
+	return s.unbindDomain(ctx, names, accountID, hostname)
+}
+
+func (s *proxyStack) unbindDomain(ctx context.Context, names originNames, accountID, hostname string) error {
+	owner, err := names.forwardingOwner(s.state.Slug, s.state.Tier)
+	if err != nil {
+		return err
+	}
+	zone, err := s.x.p.resolveHostnameZone(ctx, accountID, hostname)
+	if err != nil {
+		return err
+	}
+	return s.x.p.unbindOrigin(ctx, &s.state, zone, owner, hostname)
 }
 
 func (s *proxyStack) Destroy(ctx context.Context) error {
-	if _, err := s.x.p.requireTierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack"); err != nil {
+	accountID, err := s.x.p.tierAccount(ctx, s.state.Tier, "destroy the Cloudflare stack")
+	if err != nil {
+		return err
+	}
+	names, err := s.x.p.names(ctx)
+	if err != nil {
 		return err
 	}
 	var errs []error
 	for _, hostname := range s.state.Bound {
-		if err := s.UnbindDomain(ctx, hostname); err != nil {
+		if err := s.unbindDomain(ctx, names, accountID, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("stop forwarding %q: %w", hostname, err))
 		}
 	}

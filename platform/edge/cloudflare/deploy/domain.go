@@ -20,25 +20,33 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if binding.Hostname == "" {
 		return errors.New("binding a domain to a Cloudflare stack needs a hostname")
 	}
+	names, err := s.p.names(ctx)
+	if err != nil {
+		return err
+	}
 	if binding.Origin != nil {
-		return s.bindForwarded(ctx, binding)
+		return s.bindForwarded(ctx, names, binding)
 	}
-	accountID, script, err := s.entryWorker(ctx, "bind")
+	script, err := s.entryWorker(names, "bind")
 	if err != nil {
 		return err
 	}
-	zoneID, zoneName, err := s.p.resolveZone(ctx, accountID, routeBaseDomain(binding.Hostname))
+	accountID, err := s.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("bind %s to the Cloudflare edge", binding.Hostname))
 	if err != nil {
 		return err
 	}
-	if err := s.p.requireTLSCover(ctx, zoneID, zoneName, binding.Hostname); err != nil {
-		return err
-	}
-	forwarded, err := s.isStillForwarded(ctx, zoneID, binding.Hostname)
+	zone, err := s.p.resolveHostnameZone(ctx, accountID, binding.Hostname)
 	if err != nil {
 		return err
 	}
-	owns, err := s.p.projectOwnsScript(ctx, s.state.Slug)
+	if err := s.p.requireTLSCover(ctx, zone.zoneID, zone.zoneName, binding.Hostname); err != nil {
+		return err
+	}
+	forwarded, err := s.isStillForwarded(ctx, names, zone.zoneID, binding.Hostname)
+	if err != nil {
+		return err
+	}
+	owns, err := names.ownsScript(s.state.Slug)
 	if err != nil {
 		return err
 	}
@@ -46,15 +54,15 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		ownsProjectScript := owns
 		owns = func(script string) bool { return script == "" || ownsProjectScript(script) }
 	}
-	if err := s.p.ensureRoute(ctx, s.p.routeSnapshot(), accountID, zoneID, routePattern(binding.Hostname), script, routeSpec{owns: owns}); err != nil {
+	if err := s.p.ensureRoute(ctx, s.p.routeSnapshot(), names.origin, zone.accountID, zone.zoneID, routePattern(binding.Hostname), script, routeSpec{owns: owns}); err != nil {
 		return err
 	}
 	if forwarded {
-		if err := s.stopForwarding(ctx, zoneID, zoneName, binding.Hostname); err != nil {
+		if err := s.stopForwarding(ctx, names, zone, binding.Hostname); err != nil {
 			return err
 		}
 	}
-	if err := s.p.refuseGreyCloud(ctx, zoneID, binding.Hostname); err != nil {
+	if err := s.p.refuseGreyCloud(ctx, zone.zoneID, binding.Hostname); err != nil {
 		return err
 	}
 	s.state.Bind(binding.Hostname)
@@ -65,41 +73,45 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from a Cloudflare stack needs a hostname")
 	}
+	names, err := s.p.names(ctx)
+	if err != nil {
+		return err
+	}
+	accountID, err := s.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("unbind %s from the Cloudflare edge", hostname))
+	if err != nil {
+		return err
+	}
+	return s.unbindDomain(ctx, names, accountID, hostname)
+}
+
+func (s *stack) unbindDomain(ctx context.Context, names originNames, accountID, hostname string) error {
 	if s.isForwarded(hostname) {
-		return s.unbindForwarded(ctx, hostname)
+		return s.unbindForwarded(ctx, names, accountID, hostname)
 	}
-	accountID, script, err := s.entryWorker(ctx, "unbind")
+	script, err := s.entryWorker(names, "unbind")
 	if err != nil {
 		return err
 	}
-	zoneID, _, err := s.p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
+	zone, err := s.p.resolveHostnameZone(ctx, accountID, hostname)
 	if err != nil {
 		return err
 	}
-	if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), []string{script}); err != nil {
+	if err := s.p.detachRoute(ctx, zone.zoneID, routePattern(hostname), []string{script}); err != nil {
 		return err
 	}
 	s.state.Release(hostname)
 	return nil
 }
 
-func (s *stack) entryWorker(ctx context.Context, verb string) (accountID, scriptName string, err error) {
-	accountID, err = s.p.requireTierAccount(ctx, s.state.Tier, fmt.Sprintf("%s a domain on the Cloudflare edge", verb))
-	if err != nil {
-		return "", "", err
-	}
-	scriptName = s.own.EntryWorker
+func (s *stack) entryWorker(names originNames, verb string) (string, error) {
+	scriptName := s.own.EntryWorker
 	if scriptName == "" {
-		return "", "", fmt.Errorf("stack %q records no entry worker to %s a domain on — deploy it first", s.state.Slug, verb)
+		return "", fmt.Errorf("stack %q records no entry worker to %s a domain on — deploy it first", s.state.Slug, verb)
 	}
-	shared, err := s.p.previewEntryScript(ctx)
-	if err != nil {
-		return "", "", err
+	if shared := names.sharedPreviewEntry(); scriptName == shared {
+		return "", fmt.Errorf("stack %q is served by the shared preview entry worker %q, which answers for every project, so no single project's domain may be bound to it", s.state.Slug, shared)
 	}
-	if scriptName == shared {
-		return "", "", fmt.Errorf("stack %q is served by the shared preview entry worker %q, which answers for every project, so no single project's domain may be bound to it", s.state.Slug, shared)
-	}
-	return accountID, scriptName, nil
+	return scriptName, nil
 }
 
 func (p *cloudflare) detachRoute(ctx context.Context, zoneID, pattern string, scriptNames []string) error {

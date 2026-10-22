@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -342,29 +340,12 @@ func heldClientCertificate(id, certificate string) map[string]any {
 
 func recordZones(t *testing.T, m *cfMock, tier environment.Tier, zones ...recordedZone) {
 	t.Helper()
-	value, err := json.Marshal(clientCertificateZones{Zones: zones})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := m.store().Write(context.Background(), records.Entry{Key: clientCertificateZonesKey(tier), Value: value}); err != nil {
-		t.Fatal(err)
-	}
+	writeTierRecord(t, m.store(), tier, func(recorded *tierRecord) { recorded.ClientCertificateZones = zones })
 }
 
 func readRecordedZones(t *testing.T, m *cfMock, tier environment.Tier) []recordedZone {
 	t.Helper()
-	entry, err := records.ReadOrEmpty(context.Background(), m.store(), clientCertificateZonesKey(tier))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entry.Value) == 0 {
-		return nil
-	}
-	var read clientCertificateZones
-	if err := json.Unmarshal(entry.Value, &read); err != nil {
-		t.Fatal(err)
-	}
-	return read.Zones
+	return readTierRecordOf(t, m.store(), tier).ClientCertificateZones
 }
 
 func TestMintingATiersCertificateInAZoneRecordsThatZoneForTheOrigin(t *testing.T) {

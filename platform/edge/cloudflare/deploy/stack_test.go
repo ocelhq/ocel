@@ -58,7 +58,7 @@ func testStoreWorker() workerScript {
 
 func entryOf(t *testing.T, spec edge.StackSpec) entryProgram {
 	t.Helper()
-	built, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), spec.Tier, spec.Slug, spec.Program)
+	built, err := buildEntryProgram(testNames, spec.Tier, spec.Slug, spec.Program)
 	if err != nil {
 		t.Fatalf("buildEntryProgram: %v", err)
 	}
@@ -283,7 +283,7 @@ func previewZoneMock() *cfMock {
 		zoneID:             "zone1",
 		zoneName:           "app.com",
 		existingRecords: []map[string]any{
-			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
 		},
 	}
 }
@@ -885,8 +885,8 @@ func TestDestroy(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := (&cloudflare{}).destroyWorkers(t.Context(), nil); err == nil {
-			t.Fatal("destroyWorkers without an account id err = nil, want an error")
+		if err := stackOn(previewZoneMock().provider(t), testState("https://store.invalid", "s3cr3t")).Destroy(t.Context()); err == nil {
+			t.Fatal("Destroy without an account id err = nil, want an error")
 		}
 	})
 }

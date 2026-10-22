@@ -688,7 +688,7 @@ func ownedSpec(slug string, desired ...string) routeSpec {
 }
 
 func ownsOf(namespace, slug string) func(script string) bool {
-	owns, err := projectOwnsScript(namespace, testOrigin, slug)
+	owns, err := originNames{namespace: namespace, origin: testOrigin}.ownsScript(slug)
 	if err != nil {
 		panic(err)
 	}
@@ -741,8 +741,7 @@ func (tc routeCase) run(t *testing.T) {
 	t.Helper()
 
 	var warnings []string
-	err := tc.mock.provider(t).reconcileWorkerRoutes(
-		t.Context(),
+	err := tc.mock.provider(t).reconcileWorkerRoutes(t.Context(), testNames,
 		upload{accountID: "acct", scriptName: tc.script},
 		tc.spec,
 		func(s string) { warnings = append(warnings, s) },
@@ -787,7 +786,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 		up := upload{accountID: "acct", scriptName: "ocel-preview"}
-		if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, prunedSpec("*.preview.app.com"), nil); err != nil {
+		if err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, up, prunedSpec("*.preview.app.com"), nil); err != nil {
 			t.Fatalf("reconcileWorkerRoutes: %v", err)
 		}
 
@@ -820,7 +819,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
+					{"id": "record1", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
 				},
 			},
 			script:   "ocel-preview",
@@ -838,7 +837,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "other", "pattern": "x.app.com/*", "script": "someone-else"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
+					{"id": "wwwrec", "name": "www.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
 				},
 			},
 			script:        "ocel-prod",
@@ -920,7 +919,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 					{"id": "unnamed", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
 				},
 			},
 			script:        "ocel-preview",
@@ -958,7 +957,7 @@ func TestARouteOfAHostnameServedElsewhereIsNeitherAttachedNorPruned(t *testing.T
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
 	spec := routeSpec{desired: []string{"www.example.com"}, servedElsewhere: []string{"shop.example.com"}, routed: []string{"shop.example.com", "old.example.com"}}
 
-	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, spec, nil); err != nil {
+	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, up, spec, nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 
@@ -975,7 +974,7 @@ func TestNoRouteIsCreatedForAHostnameServedElsewhere(t *testing.T) {
 	m := &cfMock{zoneID: "zone1", zoneName: "example.com"}
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
 
-	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{servedElsewhere: []string{"shop.example.com"}}, nil); err != nil {
+	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, up, routeSpec{servedElsewhere: []string{"shop.example.com"}}, nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 	if len(m.createdRoutes) != 0 {
@@ -995,7 +994,7 @@ func TestAttachingARouteWhoseResponseIsLostSucceedsWhenTheReplayFindsTheRouteHel
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com", lostRouteAttaches: 1}
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
 
-	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{desired: []string{"app.com"}}, nil); err != nil {
+	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), testNames, up, routeSpec{desired: []string{"app.com"}}, nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v, want the route this deploy attached accepted", err)
 	}
 	if got := routePatterns(m.existingRoutes); !slices.Equal(got, []string{"app.com/*"}) {
@@ -1011,7 +1010,7 @@ func TestAttachingARouteAlreadyHeldByTheSameScriptSinceTheListingSucceeds(t *tes
 	}
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
 
-	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, routeSpec{desired: []string{"app.com"}}, nil); err != nil {
+	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), testNames, up, routeSpec{desired: []string{"app.com"}}, nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v, want a route already held by this script accepted", err)
 	}
 	if len(m.createdRoutes) != 0 || len(m.repointedRoutes) != 0 {
@@ -1027,7 +1026,7 @@ func TestAttachingARouteHeldByAnotherWorkerOfTheProjectSinceTheListingRepointsIt
 	}
 	up := upload{accountID: "acct", scriptName: "ocel-preview-4c73ed-entry-shop-fff38e"}
 
-	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil); err != nil {
+	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), testNames, up, ownedSpec("shop", "shop.app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v, want the project's own route repointed", err)
 	}
 	if !slices.Equal(m.repointedRoutes, []string{"late"}) {
@@ -1043,7 +1042,7 @@ func TestAttachingARouteHeldByAForeignWorkerSinceTheListingFails(t *testing.T) {
 	}
 	up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
 
-	err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil)
+	err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), testNames, up, ownedSpec("shop", "shop.app.com"), nil)
 	if err == nil || !strings.Contains(err.Error(), "ocel-other-prod") {
 		t.Fatalf("reconcileWorkerRoutes err = %v, want a failure naming ocel-other-prod", err)
 	}
@@ -1064,7 +1063,7 @@ func TestARouteAnotherOriginDeployedIsRefusedNamingThatOrigin(t *testing.T) {
 		t.Run(tc.host, func(t *testing.T) {
 			t.Parallel()
 
-			theirs, err := entryWorkerName(defaultNamespace, otherOrigin, "shop", environment.TierProduction)
+			theirs, err := otherNames.entryWorker("shop", environment.TierProduction)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1075,8 +1074,8 @@ func TestARouteAnotherOriginDeployedIsRefusedNamingThatOrigin(t *testing.T) {
 			}
 			up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
 
-			err = m.provider(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", tc.host), nil)
-			if err == nil || !strings.Contains(err.Error(), otherOrigin.String()) || !strings.Contains(err.Error(), tc.subject) {
+			err = m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, up, ownedSpec("shop", tc.host), nil)
+			if !isOtherOriginRefusal(err, otherOrigin) || !strings.Contains(err.Error(), tc.subject) {
 				t.Fatalf("reconcileWorkerRoutes err = %v, want a refusal naming %s and saying %q", err, otherOrigin, tc.subject)
 			}
 			if len(m.repointedRoutes) != 0 || len(m.deletedRoutes) != 0 {
@@ -1089,18 +1088,18 @@ func TestARouteAnotherOriginDeployedIsRefusedNamingThatOrigin(t *testing.T) {
 func TestARouteThatRunsNoWorkerIsRefusedNamingTheProjectThatForwardsIt(t *testing.T) {
 	t.Parallel()
 
-	theirs := mustFormatForwardingOwner(defaultNamespace, otherOrigin, "shop", environment.TierProduction)
+	theirs := mustForwardingOwner(defaultNamespace, otherOrigin, "shop", environment.TierProduction)
 	m := &cfMock{
 		zoneID: "zone1", zoneName: "app.com",
 		existingRoutes: []map[string]any{{"id": "forwarded", "pattern": "shop.app.com/*", "script": ""}},
 		existingRecords: []map[string]any{
-			{"id": "forward", "name": "shop.app.com", "type": "A", "content": "192.0.2.1", "proxied": true, "comment": formatOwnerComment(theirs)},
+			{"id": "forward", "name": "shop.app.com", "type": "A", "content": "192.0.2.1", "proxied": true, "comment": theirs.comment()},
 		},
 	}
 	up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
 
-	err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil)
-	if err == nil || !strings.Contains(err.Error(), theirs) {
+	err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, up, ownedSpec("shop", "shop.app.com"), nil)
+	if err == nil || !strings.Contains(err.Error(), theirs.String()) {
 		t.Fatalf("reconcileWorkerRoutes err = %v, want a refusal naming %q, the project that forwards shop.app.com", err, theirs)
 	}
 	if len(m.repointedRoutes) != 0 {
@@ -1119,7 +1118,7 @@ func TestReconcileWorkerRoutesListsNoZoneButTheOnesItsHostnamesName(t *testing.T
 	}
 	spec := routedSpec([]string{"app.com", "old.app.com"}, "app.com")
 
-	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: "ocel-prod"}, spec, nil); err != nil {
+	if err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, upload{accountID: "acct", scriptName: "ocel-prod"}, spec, nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 	if m.accountZoneLists != 0 {
@@ -1162,7 +1161,7 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 
 			p := tc.mock.provider(t)
 			for range max(tc.reconcilePasses, 1) {
-				if err := p.reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: "ocel-prod"}, tc.spec, nil); err != nil {
+				if err := p.reconcileWorkerRoutes(t.Context(), testNames, upload{accountID: "acct", scriptName: "ocel-prod"}, tc.spec, nil); err != nil {
 					t.Fatalf("reconcileWorkerRoutes: %v", err)
 				}
 			}

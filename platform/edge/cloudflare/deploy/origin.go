@@ -12,25 +12,8 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/zones"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
-
-func (p *cloudflare) forwardingOwner(ctx context.Context, slug string, tier environment.Tier) (string, error) {
-	origin, err := p.originScope(ctx)
-	if err != nil {
-		return "", err
-	}
-	return formatForwardingOwner(p.namespace, origin, slug, tier)
-}
-
-func (p *cloudflare) previewForwardingOwner(ctx context.Context) (string, error) {
-	origin, err := p.originScope(ctx)
-	if err != nil {
-		return "", err
-	}
-	return formatPreviewForwardingOwner(origin), nil
-}
 
 func newProxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) {
 	records, err := edge.RecordsFor(edge.DNSTarget{
@@ -47,15 +30,8 @@ func newProxiedRecord(hostname string, origin edge.Origin) (edge.Record, error) 
 	return records[0], nil
 }
 
-func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, owner string, binding edge.DomainBinding) error {
-	accountID, err := p.requireTierAccount(ctx, state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
-	if err != nil {
-		return err
-	}
-	if binding.Origin.Address == "" {
-		return fmt.Errorf("the origin %s is forwarded to names no address", binding.Hostname)
-	}
-	want, err := p.forwardOrigin(ctx, accountID, owner, binding.Hostname, *binding.Origin)
+func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, zone zoneAccess, owner recordOwner, binding edge.DomainBinding) error {
+	want, err := p.forwardOrigin(ctx, zone, owner, binding.Hostname, *binding.Origin)
 	if err != nil {
 		return err
 	}
@@ -65,42 +41,30 @@ func (p *cloudflare) bindOrigin(ctx context.Context, state *edge.StackState, own
 	return nil
 }
 
-func (p *cloudflare) forwardOrigin(ctx context.Context, accountID, owner, hostname string, origin edge.Origin) (edge.Record, error) {
-	if origin.Address == "" {
+func (p *cloudflare) forwardOrigin(ctx context.Context, zone zoneAccess, owner recordOwner, hostname string, forwardedTo edge.Origin) (edge.Record, error) {
+	if forwardedTo.Address == "" {
 		return edge.Record{}, fmt.Errorf("the origin %s is forwarded to names no address", hostname)
 	}
-	zoneID, zoneName, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
-	if err != nil {
+	if err := p.orderTLSCover(ctx, zone.zoneID, zone.zoneName, hostname); err != nil {
 		return edge.Record{}, err
 	}
-	if err := p.orderTLSCover(ctx, zoneID, zoneName, hostname); err != nil {
-		return edge.Record{}, err
-	}
-	if !origin.Tunneled {
-		if err := p.requireStrictOrigin(ctx, zoneID, zoneName); err != nil {
+	if !forwardedTo.Tunneled {
+		if err := p.requireStrictOrigin(ctx, zone); err != nil {
 			return edge.Record{}, err
 		}
 	}
-	want, err := newProxiedRecord(hostname, origin)
+	want, err := newProxiedRecord(hostname, forwardedTo)
 	if err != nil {
 		return edge.Record{}, err
 	}
-	return want, p.forwardRecord(ctx, zoneID, owner, want)
+	return want, p.forwardRecord(ctx, zone.zoneID, owner, want)
 }
 
-func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, owner, hostname string) error {
-	accountID, err := p.requireTierAccount(ctx, state.Tier, fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
-	if err != nil {
+func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, zone zoneAccess, owner recordOwner, hostname string) error {
+	if err := p.dropForwardRecords(ctx, zone.zoneID, owner, hostname); err != nil {
 		return err
 	}
-	zoneID, zoneName, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
-	if err != nil {
-		return err
-	}
-	if err := p.dropForwardRecords(ctx, zoneID, owner, hostname); err != nil {
-		return err
-	}
-	if err := p.releaseClientCertificate(ctx, zoneID, zoneName, hostname); err != nil {
+	if err := p.releaseClientCertificate(ctx, zone, owner.origin, hostname); err != nil {
 		return err
 	}
 	state.Release(hostname)
@@ -111,21 +75,21 @@ func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, o
 
 var strictOriginModes = []string{string(zones.SSLValueStrict), string(zones.SSLValueOriginPull)}
 
-func (p *cloudflare) requireStrictOrigin(ctx context.Context, zoneID, zoneName string) error {
-	setting, err := p.client.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{ZoneID: cf.F(zoneID)})
+func (p *cloudflare) requireStrictOrigin(ctx context.Context, zone zoneAccess) error {
+	setting, err := p.client.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{ZoneID: cf.F(zone.zoneID)})
 	if err != nil {
-		return fmt.Errorf("read the SSL mode of zone %s: %w", zoneName, err)
+		return fmt.Errorf("read the SSL mode of zone %s: %w", zone.zoneName, err)
 	}
 	var read struct {
 		Value string `json:"value"`
 	}
 	if err := json.Unmarshal([]byte(setting.JSON.RawJSON()), &read); err != nil {
-		return fmt.Errorf("read the SSL mode of zone %s: %w", zoneName, err)
+		return fmt.Errorf("read the SSL mode of zone %s: %w", zone.zoneName, err)
 	}
 	if !slices.Contains(strictOriginModes, read.Value) {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"zone %s reaches origins with SSL mode %q, which does not check the certificate the origin answers with, so Cloudflare would forward to anything answering its address: set the zone's SSL mode to Full (strict) and try again",
-			zoneName, read.Value)
+			zone.zoneName, read.Value)
 	}
 	return nil
 }
@@ -151,21 +115,17 @@ func (p *cloudflare) listAddressRecords(ctx context.Context, zoneID, hostname st
 	return found, nil
 }
 
-func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, want edge.Record) error {
-	origin, err := p.originScope(ctx)
-	if err != nil {
-		return err
-	}
+func (p *cloudflare) forwardRecord(ctx context.Context, zoneID string, owner recordOwner, want edge.Record) error {
 	live, err := p.listAddressRecords(ctx, zoneID, want.Name)
 	if err != nil {
 		return err
 	}
 	for _, rec := range live {
-		if rec.Comment != formatOwnerComment(owner) && rec.Comment != formatWriterComment(origin) {
-			return refuseHeldRecord(want.Name, rec, origin)
+		if !owner.owns(rec) && !dnsWriter(owner.origin).owns(rec) {
+			return refuseHeldRecord(want.Name, rec, owner.origin)
 		}
 	}
-	body, err := recordBody(want, formatOwnerComment(owner))
+	body, err := recordBody(want, owner.comment())
 	if err != nil {
 		return err
 	}
@@ -176,7 +136,7 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 		return nil
 	}
 	ours, extra := live[0], live[1:]
-	if ours.Content != want.Value || string(ours.Type) != string(want.Type) || !ours.Proxied || ours.Comment != formatOwnerComment(owner) {
+	if ours.Content != want.Value || string(ours.Type) != string(want.Type) || !ours.Proxied || !owner.owns(ours) {
 		if _, err := p.client.DNS.Records.Update(ctx, ours.ID, dns.RecordUpdateParams{ZoneID: cf.F(zoneID), Body: body}); err != nil {
 			return fmt.Errorf("repoint DNS record %s: %w", want, err)
 		}
@@ -191,26 +151,26 @@ func (p *cloudflare) forwardRecord(ctx context.Context, zoneID, owner string, wa
 }
 
 func refuseHeldRecord(hostname string, rec dns.RecordResponse, origin OriginScope) error {
-	held, written := parseRecordComment(rec.Comment)
+	held, written := parseRecordOwner(rec.Comment)
 	switch {
 	case !written:
 		return fmt.Errorf("%s already has a %s record ocel did not write, pointing at %s — delete it, and ocel writes the proxied record that forwards %s through Cloudflare", hostname, rec.Type, rec.Content, hostname)
-	case held.origin != origin && held.owner != "":
-		return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname belongs to one origin: release it on %s with `ocel domain remove` first", hostname, held.owner, held.origin)
-	case held.origin != origin:
-		return fmt.Errorf("%s already has a %s record that origin %s wrote, pointing at %s, and one hostname belongs to one origin: release it on %s first", hostname, rec.Type, held.origin, rec.Content, held.origin)
+	case held.isOtherOrigin(origin) && held.isForwarding():
+		return refuseOtherOrigin(fmt.Sprintf("%s is forwarded through Cloudflare for %s", hostname, held), hostname, held.origin)
+	case held.isOtherOrigin(origin):
+		return refuseOtherOrigin(fmt.Sprintf("%s already has a %s record that origin %s wrote, pointing at %s", hostname, rec.Type, held.origin, rec.Content), hostname, held.origin)
 	}
-	return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname is served by one project: release it there with `ocel domain remove` first", hostname, held.owner)
+	return fmt.Errorf("%s is forwarded through Cloudflare for %s, and one hostname is served by one project: release it there with `ocel domain remove` first", hostname, held)
 }
 
-func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, hostname string) error {
+func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID string, owner recordOwner, hostname string) error {
 	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
 		return err
 	}
 	var errs []error
 	for _, rec := range live {
-		if rec.Comment != formatOwnerComment(owner) {
+		if !owner.owns(rec) {
 			continue
 		}
 		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
@@ -220,31 +180,27 @@ func (p *cloudflare) dropForwardRecords(ctx context.Context, zoneID, owner, host
 	return errors.Join(errs...)
 }
 
-func (p *cloudflare) isForwardedBy(ctx context.Context, zoneID, owner, hostname string) (bool, error) {
+func (p *cloudflare) isForwardedBy(ctx context.Context, zoneID string, owner recordOwner, hostname string) (bool, error) {
 	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
 		return false, err
 	}
-	return slices.ContainsFunc(live, func(rec dns.RecordResponse) bool { return rec.Comment == formatOwnerComment(owner) }), nil
+	return slices.ContainsFunc(live, owner.owns), nil
 }
 
-func (p *cloudflare) unforwardRecords(ctx context.Context, zoneID, owner, hostname string) error {
-	origin, err := p.originScope(ctx)
-	if err != nil {
-		return err
-	}
+func (p *cloudflare) unforwardRecords(ctx context.Context, zoneID string, owner recordOwner, hostname string) error {
 	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
 		return err
 	}
-	body, err := recordBody(edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}, formatWriterComment(origin))
+	body, err := recordBody(edge.Record{Name: hostname, Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}, dnsWriter(owner.origin).comment())
 	if err != nil {
 		return err
 	}
 	var errs []error
 	rewritten := false
 	for _, rec := range live {
-		if rec.Comment != formatOwnerComment(owner) {
+		if !owner.owns(rec) {
 			continue
 		}
 		if rewritten {
@@ -261,24 +217,22 @@ func (p *cloudflare) unforwardRecords(ctx context.Context, zoneID, owner, hostna
 	return errors.Join(errs...)
 }
 
-func (p *cloudflare) readForwardedOwner(ctx context.Context, zoneID, hostname string) (string, error) {
-	shared, err := p.previewForwardingOwner(ctx)
-	if err != nil {
-		return "", err
-	}
+func (p *cloudflare) readForwardingOwner(ctx context.Context, zoneID, hostname string) (recordOwner, bool, error) {
 	live, err := p.listAddressRecords(ctx, zoneID, hostname)
 	if err != nil {
-		return "", err
+		return recordOwner{}, false, err
 	}
 	for _, rec := range live {
-		held, written := parseRecordComment(rec.Comment)
-		switch {
-		case !written || held.owner == "" || !rec.Proxied:
-			continue
-		case held.owner == shared:
-			return edge.PreviewEntryOwner, nil
+		if held, written := parseRecordOwner(rec.Comment); written && held.isForwarding() && rec.Proxied {
+			return held, true, nil
 		}
-		return held.owner, nil
 	}
-	return "", nil
+	return recordOwner{}, false, nil
+}
+
+func domainOwner(forwarding recordOwner, origin OriginScope) string {
+	if forwarding == previewForwardingOwner(origin) {
+		return edge.PreviewEntryOwner
+	}
+	return forwarding.String()
 }

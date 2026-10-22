@@ -19,23 +19,36 @@ func (x *Proxy) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boot
 }
 
 func (x *Proxy) planBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
-	_, err := x.p.bootstrapCredentials(ctx, tier, "plan the Cloudflare bootstrap")
+	if _, err := bootstrapCredentials(); err != nil {
+		return nil, err
+	}
+	_, err := x.p.tierAccount(ctx, tier, "plan the Cloudflare bootstrap")
 	return nil, err
 }
 
 func (x *Proxy) planRemoveBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
-	if _, err := x.p.requireTierAccount(ctx, tier, "plan removing the Cloudflare bootstrap"); err != nil {
+	accountID, err := x.p.tierAccount(ctx, tier, "plan removing the Cloudflare bootstrap")
+	if err != nil {
 		return nil, err
 	}
-	return x.p.planRemoveClientCertificates(ctx, tier)
+	names, err := x.p.names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return x.p.planRemoveClientCertificates(ctx, accountID, certificateOwner{origin: names.origin, tier: tier})
 }
 
 func (x *Proxy) Teardown(ctx context.Context, tier environment.Tier) error {
-	if _, err := x.p.requireTierAccount(ctx, tier, "tear the Cloudflare edge down"); err != nil {
+	accountID, err := x.p.tierAccount(ctx, tier, "tear the Cloudflare edge down")
+	if err != nil {
 		return err
 	}
-	if err := x.p.deleteClientCertificates(ctx, tier); err != nil {
+	names, err := x.p.names(ctx)
+	if err != nil {
 		return err
 	}
-	return x.p.forgetBootstrapAccount(ctx, tier)
+	if err := x.p.deleteClientCertificates(ctx, accountID, certificateOwner{origin: names.origin, tier: tier}); err != nil {
+		return err
+	}
+	return x.p.forgetTierRecord(ctx, tier)
 }

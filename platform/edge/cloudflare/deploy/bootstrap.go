@@ -14,10 +14,14 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
+	names, err := p.names(ctx)
+	if err != nil {
+		return edge.BootstrapOutput{}, err
+	}
 	if err := p.recordBootstrapAccount(ctx, tier, accountID); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	state, err := p.readState(ctx, accountID, tier)
+	state, err := p.readState(ctx, accountID, names, tier)
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -33,11 +37,15 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 }
 
 func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error {
-	accountID, err := p.requireTierAccount(ctx, tier, "tear the Cloudflare edge down")
+	accountID, err := p.tierAccount(ctx, tier, "tear the Cloudflare edge down")
 	if err != nil {
 		return err
 	}
-	storeScript, err := p.storeScriptName(ctx, tier)
+	names, err := p.names(ctx)
+	if err != nil {
+		return err
+	}
+	storeScript, err := names.storeScript(tier)
 	if err != nil {
 		return err
 	}
@@ -45,13 +53,13 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	if err := p.deleteScript(ctx, accountID, storeScript); err != nil {
 		errs = append(errs, fmt.Errorf("delete worker %q: %w", storeScript, err))
 	}
-	if err := p.deleteClientCertificates(ctx, tier); err != nil {
+	if err := p.deleteClientCertificates(ctx, accountID, certificateOwner{origin: names.origin, tier: tier}); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
-	return p.forgetBootstrapAccount(ctx, tier)
+	return p.forgetTierRecord(ctx, tier)
 }
 
 type bootstrapWorker struct {
@@ -61,20 +69,12 @@ type bootstrapWorker struct {
 	what       string
 }
 
-func (p *cloudflare) bootstrapWorkers(ctx context.Context, tier environment.Tier) ([]bootstrapWorker, error) {
-	origin, err := p.originScope(ctx)
+func (n originNames) bootstrapWorkers(tier environment.Tier) ([]bootstrapWorker, error) {
+	storeScript, err := n.storeScript(tier)
 	if err != nil {
 		return nil, err
 	}
-	return bootstrapWorkers(p.namespace, origin, tier)
-}
-
-func bootstrapWorkers(namespace string, origin OriginScope, tier environment.Tier) ([]bootstrapWorker, error) {
-	storeScript, err := storeScriptNameFor(namespace, origin, tier)
-	if err != nil {
-		return nil, err
-	}
-	storeWorker := workerScript{Main: mainModule(releasesStoreBundle), Tags: []string{origin.scriptTag()}}
+	storeWorker := workerScript{Main: mainModule(releasesStoreBundle), Tags: []string{n.origin.scriptTag()}}
 
 	return []bootstrapWorker{
 		{

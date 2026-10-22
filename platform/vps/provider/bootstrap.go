@@ -23,89 +23,85 @@ func (p *Provider) elevated(ctx context.Context) error {
 type elevating struct {
 	provider.Bootstrap
 	elevated func(context.Context) error
-	served   func(context.Context, environment.Tier) error
-	front    edge.Edge
-}
-
-func (e elevating) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	plan, err := e.Bootstrap.Plan(ctx, req)
-	if err != nil || e.front == nil {
-		return plan, err
-	}
-	bootstrap := e.front.Hooks().PlanBootstrap
-	if bootstrap == nil {
-		return plan, nil
-	}
-	planned, err := bootstrap(ctx, req.Tier)
-	if err != nil {
-		return provider.Plan{}, fmt.Errorf("plan the %s edge bootstrap: %w", e.front.Kind(), err)
-	}
-	if len(planned) == 0 {
-		return plan, nil
-	}
-	group, err := bootstrapplan.EdgeGroup(e.front.Kind(), "", planned)
-	if err != nil {
-		return provider.Plan{}, err
-	}
-	plan.Groups = append(plan.Groups, group)
-	return plan, nil
 }
 
 func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}
-	if err := e.Bootstrap.Apply(ctx, req, progress); err != nil {
-		return err
-	}
-	if e.front != nil {
-		if _, err := e.front.Bootstrap(ctx, req.Tier); err != nil {
-			return fmt.Errorf("bootstrap the %s edge for tier %s: %w", e.front.Kind(), req.Tier, err)
-		}
-	}
-	if e.served == nil {
-		return nil
-	}
-	return e.served(ctx, req.Tier)
-}
-
-func (e elevating) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
-	plan, err := e.Bootstrap.PlanRemove(ctx, tier)
-	if err != nil || e.front == nil {
-		return plan, err
-	}
-	removals := e.front.Hooks().PlanRemoveBootstrap
-	if removals == nil {
-		return plan, nil
-	}
-	planned, err := removals(ctx, tier)
-	if err != nil {
-		return provider.Plan{}, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", e.front.Kind(), err)
-	}
-	if len(planned) == 0 {
-		return plan, nil
-	}
-	changes, err := bootstrapplan.EdgeChanges(e.front.Kind(), planned)
-	if err != nil {
-		return provider.Plan{}, err
-	}
-	plan.Groups = append(plan.Groups, provider.ChangeGroup{
-		Kind:    edge.EdgeGroupKind,
-		Name:    edge.EdgeGroupName(e.front.Kind()),
-		Action:  provider.ActionDelete,
-		Changes: changes,
-	})
-	return plan, nil
+	return e.Bootstrap.Apply(ctx, req, progress)
 }
 
 func (e elevating) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}
-	if e.front != nil {
-		if err := e.front.Teardown(ctx, tier); err != nil {
-			return fmt.Errorf("tear the %s edge down for tier %s: %w", e.front.Kind(), tier, err)
-		}
-	}
 	return e.Bootstrap.Remove(ctx, tier, progress)
+}
+
+type exposed struct {
+	elevating
+	refuseClosedPorts func(context.Context, environment.Tier) error
+}
+
+func (e exposed) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+	if err := e.elevating.Apply(ctx, req, progress); err != nil {
+		return err
+	}
+	return e.refuseClosedPorts(ctx, req.Tier)
+}
+
+type fronted struct {
+	elevating
+	front edge.Edge
+}
+
+func (f fronted) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
+	plan, err := f.elevating.Plan(ctx, req)
+	if err != nil {
+		return plan, err
+	}
+	group, err := bootstrapplan.PlanEdgeBootstrap(ctx, f.front, req.Tier, "")
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	if group != nil {
+		plan.Groups = append(plan.Groups, *group)
+	}
+	return plan, nil
+}
+
+func (f fronted) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+	if err := f.elevating.Apply(ctx, req, progress); err != nil {
+		return err
+	}
+	if _, err := f.front.Bootstrap(ctx, req.Tier); err != nil {
+		return fmt.Errorf("bootstrap the %s edge for tier %s: %w", f.front.Kind(), req.Tier, err)
+	}
+	return nil
+}
+
+func (f fronted) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
+	plan, err := f.elevating.PlanRemove(ctx, tier)
+	if err != nil {
+		return plan, err
+	}
+	group, err := bootstrapplan.PlanEdgeRemoval(ctx, f.front, tier, "")
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	if group != nil {
+		plan.Groups = append(plan.Groups, *group)
+	}
+	return plan, nil
+}
+
+func (f fronted) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
+	if err := f.elevated(ctx); err != nil {
+		return err
+	}
+	if err := f.front.Teardown(ctx, tier); err != nil {
+		return fmt.Errorf("tear the %s edge down for tier %s: %w", f.front.Kind(), tier, err)
+	}
+	return f.Bootstrap.Remove(ctx, tier, progress)
 }

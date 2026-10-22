@@ -1,7 +1,6 @@
 package cloudflare
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -29,18 +28,11 @@ type entryProgram struct {
 	store  edge.ReleasesStore
 }
 
-func (p *cloudflare) buildEntryProgram(ctx context.Context, tier environment.Tier, slug string, program *edge.Program) (entryProgram, error) {
+func buildEntryProgram(names originNames, tier environment.Tier, slug string, program *edge.Program) (entryProgram, error) {
 	if program == nil {
 		return entryProgram{}, fmt.Errorf("the %s edge runs the entry worker, and %s was handed no program for it", Kind, describeProgramScope(slug))
 	}
-	if slug != "" && p.namespace == "" {
-		return entryProgram{}, fmt.Errorf("an edge worker is named for the namespace that installed its bootstrap, and this edge was opened with none; a name without it reaches whatever another namespace deployed for %s", slug)
-	}
-	origin, err := p.originScope(ctx)
-	if err != nil {
-		return entryProgram{}, err
-	}
-	worker, err := newEntryWorker(origin, program.Origin)
+	worker, err := newEntryWorker(names.origin, program.Origin)
 	if err != nil {
 		return entryProgram{}, err
 	}
@@ -55,14 +47,12 @@ func (p *cloudflare) buildEntryProgram(ctx context.Context, tier environment.Tie
 		worker = withVar(worker, envPreview, "1")
 		worker = withVar(worker, envPreviewGlobal, "1")
 		worker = withVar(worker, envPreviewBaseDomain, program.PreviewBaseDomain)
-		if built.name, err = previewEntryScriptNameFor(p.namespace, origin); err != nil {
-			return entryProgram{}, err
-		}
+		built.name = names.sharedPreviewEntry()
 		built.shared = true
 		built.worker, err = addPreviewKey(worker, slug, program)
 		return built, err
 	}
-	if built.name, err = entryWorkerName(p.namespace, origin, slug, tier); err != nil {
+	if built.name, err = names.entryWorker(slug, tier); err != nil {
 		return entryProgram{}, err
 	}
 	if tier == environment.TierPreview {

@@ -2,42 +2,23 @@ package cloudflare
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func recordBootstrapAccountFor(t *testing.T, m *cfMock, tier environment.Tier, accountID string) {
 	t.Helper()
-	value, err := json.Marshal(bootstrapAccount{ID: accountID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := m.store().Write(context.Background(), records.Entry{Key: bootstrapAccountKey(tier), Value: value}); err != nil {
-		t.Fatal(err)
-	}
+	writeTierRecord(t, m.store(), tier, func(recorded *tierRecord) { recorded.AccountID = accountID })
 }
 
 func readBootstrapAccountOf(t *testing.T, m *cfMock, tier environment.Tier) string {
 	t.Helper()
-	entry, err := records.ReadOrEmpty(context.Background(), m.store(), bootstrapAccountKey(tier))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entry.Value) == 0 {
-		return ""
-	}
-	var read bootstrapAccount
-	if err := json.Unmarshal(entry.Value, &read); err != nil {
-		t.Fatal(err)
-	}
-	return read.ID
+	return readTierRecordOf(t, m.store(), tier).AccountID
 }
 
 func boundStack(t *testing.T, p *cloudflare, tier environment.Tier) edge.EdgeStack {
@@ -160,6 +141,14 @@ func tierOperations() map[string]func(context.Context, *testing.T, *cfMock) erro
 		"proxy DestroyPreviewWildcard": func(ctx context.Context, t *testing.T, m *cfMock) error {
 			return proxy(t, m).DestroyPreviewWildcard(ctx, "preview.app.com")
 		},
+		"DomainOwner": func(ctx context.Context, t *testing.T, m *cfMock) error {
+			_, err := worker(t, m).DomainOwner(ctx, "shop.app.com")
+			return err
+		},
+		"proxy DomainOwner": func(ctx context.Context, t *testing.T, m *cfMock) error {
+			_, err := proxy(t, m).DomainOwner(ctx, "shop.app.com")
+			return err
+		},
 		"PurgeHostnames": func(ctx context.Context, t *testing.T, m *cfMock) error {
 			return proxy(t, m).Hooks().PurgeHostnames(ctx, []string{"shop.app.com"})
 		},
@@ -260,7 +249,7 @@ func TestBootstrapAgainstTheRecordedAccountProceeds(t *testing.T) {
 func TestBootstrapRacingAnotherAccountsBootstrapIsRefusedBeforeCloudflareIsAsked(t *testing.T) {
 	seedBootstrapBundle(t, "export default {}")
 	m := bootstrapMock(t)
-	m.store().BeforeNextWrite(bootstrapAccountKey(environment.TierProduction), func() {
+	m.store().BeforeNextWrite(tierRecordKey(environment.TierProduction), func() {
 		recordBootstrapAccountFor(t, m, environment.TierProduction, "acct-first")
 	})
 

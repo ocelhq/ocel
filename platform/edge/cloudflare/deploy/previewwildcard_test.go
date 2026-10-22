@@ -174,8 +174,8 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 				{"id": "project", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
-				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
+				{"id": "projectrec", "name": "pr-1-abc1234567.preview.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
 			},
 		}
 
@@ -236,7 +236,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 				{"id": "someone-elses", "pattern": "*.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
-				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
+				{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
 			},
 		}
 
@@ -288,11 +288,11 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 					{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScriptName},
 				},
 				existingRecords: []map[string]any{
-					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
+					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": dnsWriter(testOrigin).comment(), "proxied": true},
 				},
 			}
 
-			if err := m.provider(t).reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: tc.script}, tc.spec, nil); err != nil {
+			if err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, upload{accountID: "acct", scriptName: tc.script}, tc.spec, nil); err != nil {
 				t.Fatalf("reconcileWorkerRoutes: %v", err)
 			}
 			if len(m.deletedRoutes) != 0 {

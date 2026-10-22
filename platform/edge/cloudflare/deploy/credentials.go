@@ -101,8 +101,8 @@ func refuseUnsetCredentials(accountID string) error {
 }
 
 func (p *cloudflare) verifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
-	accountID := readAccountID()
-	if err := refuseUnsetCredentials(accountID); err != nil {
+	accountID, err := bootstrapCredentials()
+	if err != nil {
 		return edge.CredentialIdentity{}, err
 	}
 	if p.skipChecks {

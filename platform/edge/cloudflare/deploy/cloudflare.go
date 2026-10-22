@@ -2,7 +2,6 @@ package cloudflare
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -64,14 +63,6 @@ func newCloudflare(namespace string, origin Origin, options Options) *cloudflare
 func (p *cloudflare) Kind() edge.Kind { return Kind }
 
 func readAccountID() string { return os.Getenv(envAccountID) }
-
-func requireAccountID(doing string) (string, error) {
-	accountID := readAccountID()
-	if accountID == "" {
-		return "", fmt.Errorf("%s is not set; it is required to %s", envAccountID, doing)
-	}
-	return accountID, nil
-}
 
 func (p *cloudflare) Facts() edge.Facts {
 	return edge.Facts{

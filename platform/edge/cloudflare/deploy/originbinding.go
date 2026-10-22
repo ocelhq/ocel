@@ -13,36 +13,32 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func (s *stack) forwardingOwner(ctx context.Context) (string, error) {
-	return s.p.forwardingOwner(ctx, s.state.Slug, s.state.Tier)
-}
-
 func (s *stack) isForwarded(hostname string) bool {
 	return slices.ContainsFunc(s.state.Records, func(rec edge.Record) bool { return rec.Name == hostname })
 }
 
-func (s *stack) isStillForwarded(ctx context.Context, zoneID, hostname string) (bool, error) {
+func (s *stack) isStillForwarded(ctx context.Context, names originNames, zoneID, hostname string) (bool, error) {
 	if !s.isForwarded(hostname) {
 		return false, nil
 	}
-	owner, err := s.forwardingOwner(ctx)
+	owner, err := names.forwardingOwner(s.state.Slug, s.state.Tier)
 	if err != nil {
 		return false, err
 	}
-	held, err := s.p.readForwardedOwner(ctx, zoneID, hostname)
-	return held == "" || held == owner, err
+	held, forwarded, err := s.p.readForwardingOwner(ctx, zoneID, hostname)
+	return !forwarded || held == owner, err
 }
 
-func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) error {
-	accountID, err := s.p.requireTierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
+func (s *stack) bindForwarded(ctx context.Context, names originNames, binding edge.DomainBinding) error {
+	accountID, err := s.p.tierAccount(ctx, s.state.Tier, fmt.Sprintf("forward %s through Cloudflare", binding.Hostname))
 	if err != nil {
 		return err
 	}
-	zoneID, _, err := s.p.resolveZone(ctx, accountID, routeBaseDomain(binding.Hostname))
+	zone, err := s.p.resolveHostnameZone(ctx, accountID, binding.Hostname)
 	if err != nil {
 		return err
 	}
-	owner, err := s.forwardingOwner(ctx)
+	owner, err := names.forwardingOwner(s.state.Slug, s.state.Tier)
 	if err != nil {
 		return err
 	}
@@ -50,50 +46,46 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 	if s.state.Tier != environment.TierPreview {
 		served = []string{s.own.EntryWorker}
 	}
-	restoreRoute, err := s.p.ensureRouteWithoutWorker(ctx, accountID, zoneID, routePattern(binding.Hostname), served)
+	restoreRoute, err := s.p.ensureRouteWithoutWorker(ctx, names.origin, zone.accountID, zone.zoneID, routePattern(binding.Hostname), served)
 	if err != nil {
 		return err
 	}
-	if err := s.p.bindOrigin(ctx, &s.state, owner, binding); err != nil {
+	if err := s.p.bindOrigin(ctx, &s.state, zone, owner, binding); err != nil {
 		return errors.Join(err, restoreRoute(ctx))
 	}
 	return nil
 }
 
-func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
-	accountID, err := s.p.requireTierAccount(ctx, s.state.Tier, fmt.Sprintf("stop forwarding %s through Cloudflare", hostname))
+func (s *stack) unbindForwarded(ctx context.Context, names originNames, accountID, hostname string) error {
+	zone, err := s.p.resolveHostnameZone(ctx, accountID, hostname)
 	if err != nil {
 		return err
 	}
-	zoneID, _, err := s.p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
+	owner, err := names.forwardingOwner(s.state.Slug, s.state.Tier)
 	if err != nil {
 		return err
 	}
-	owner, err := s.forwardingOwner(ctx)
-	if err != nil {
-		return err
-	}
-	forwarded, err := s.p.isForwardedBy(ctx, zoneID, owner, hostname)
+	forwarded, err := s.p.isForwardedBy(ctx, zone.zoneID, owner, hostname)
 	if err != nil {
 		return err
 	}
 	if forwarded {
-		if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), []string{""}); err != nil {
+		if err := s.p.detachRoute(ctx, zone.zoneID, routePattern(hostname), []string{""}); err != nil {
 			return err
 		}
 	}
-	return s.p.unbindOrigin(ctx, &s.state, owner, hostname)
+	return s.p.unbindOrigin(ctx, &s.state, zone, owner, hostname)
 }
 
-func (s *stack) stopForwarding(ctx context.Context, zoneID, zoneName, hostname string) error {
-	owner, err := s.forwardingOwner(ctx)
+func (s *stack) stopForwarding(ctx context.Context, names originNames, zone zoneAccess, hostname string) error {
+	owner, err := names.forwardingOwner(s.state.Slug, s.state.Tier)
 	if err != nil {
 		return err
 	}
-	if err := s.p.unforwardRecords(ctx, zoneID, owner, hostname); err != nil {
+	if err := s.p.unforwardRecords(ctx, zone.zoneID, owner, hostname); err != nil {
 		return err
 	}
-	if err := s.p.releaseClientCertificate(ctx, zoneID, zoneName, hostname); err != nil {
+	if err := s.p.releaseClientCertificate(ctx, zone, names.origin, hostname); err != nil {
 		return err
 	}
 	s.state.PublishAddress(hostname, "")
@@ -101,7 +93,7 @@ func (s *stack) stopForwarding(ctx context.Context, zoneID, zoneName, hostname s
 	return nil
 }
 
-func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, accountID, zoneID, pattern string, served []string) (func(context.Context) error, error) {
+func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, origin OriginScope, accountID, zoneID, pattern string, served []string) (func(context.Context) error, error) {
 	snap := p.routeSnapshot()
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
@@ -127,7 +119,7 @@ func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, accountID, zo
 				return nil
 			}, nil
 		}
-		held, other, err := p.readOtherOrigin(ctx, accountID, route.Script)
+		held, other, err := p.readOtherOrigin(ctx, origin, accountID, route.Script)
 		if err != nil {
 			return nil, err
 		}

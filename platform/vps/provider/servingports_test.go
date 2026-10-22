@@ -314,7 +314,7 @@ func TestABootstrapFailsAfterInstallingWhenItsPortsAreClosedFromOutside(t *testi
 	closed := func(context.Context, environment.Tier) error {
 		return refusal.Refuse(refusal.CodeNotReady, "port %s is closed from outside", caddy.HTTPPort)
 	}
-	gated := vps.Elevating(inner, func(context.Context) error { return nil }, closed, nil)
+	gated := vps.Exposed(inner, func(context.Context) error { return nil }, closed)
 
 	if err := gated.Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, progress.Discard()); err == nil {
 		t.Error("Apply() = nil, want the bootstrap failed: a box whose hostnames nothing outside reaches is not ready to serve")
