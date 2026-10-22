@@ -530,11 +530,8 @@ func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress prog
 	if err != nil {
 		return err
 	}
-	if read.stateOf != "" {
-		return refusal.Refuse(refusal.CodeNotReady,
-			"%s still stores the state of %s, and removing the bucket a stack is recorded in strands what that stack provisioned.\n"+
-				"Run `%s` in every project deployed here first",
-			read.Buckets[naming.StorageState], read.stateOf, destroyIn(tier))
+	if err := b.RefuseProjectStacks(ctx, read); err != nil {
+		return err
 	}
 	if err := b.partsFree(ctx, tier, read.Stamp.Parts); err != nil {
 		return err

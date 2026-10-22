@@ -7,11 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -49,7 +47,6 @@ type Survey struct {
 	Mending   map[string]string
 	Replacing map[string]string
 	Sibling   bool
-	stateOf   string
 
 	Buckets naming.Buckets
 }
@@ -137,7 +134,6 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 	}
 	stateBucket := read.Buckets[naming.StorageState]
 	var sibling, own stamped
-	var stack string
 	err = runReadsAtOnce(ctx,
 		func(ctx context.Context) error {
 			buckets, err := b.recordedBuckets(ctx, tier.Sibling())
@@ -154,17 +150,12 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 			own, err = b.stamped(ctx, stateBucket)
 			return err
 		},
-		func(ctx context.Context) (err error) {
-			stack, err = b.stateIn(ctx, stateBucket)
-			return err
-		},
 	)
 	if err != nil {
 		return Survey{}, err
 	}
 	read.Sibling = sibling.present
 	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
-	read.stateOf = stack
 	return read, nil
 }
 
@@ -207,40 +198,6 @@ func (b Engine) stamped(ctx context.Context, bucket string) (stamped, error) {
 		return stamped{}, fmt.Errorf("read %s in %s: %w", StampObject, bucket, err)
 	}
 	return stamped{present: true, stamp: read, generation: reader.Attrs.Generation}, nil
-}
-
-const stateRoot = ".pulumi/stacks/"
-
-func (b Engine) stateIn(ctx context.Context, bucket string) (string, error) {
-	if bucket == "" {
-		return "", nil
-	}
-	client, err := b.Clients.Storage()
-	if err != nil {
-		return "", err
-	}
-	objects := client.Bucket(bucket).Objects(ctx, nil)
-	for {
-		attrs, err := objects.Next()
-		if errors.Is(err, iterator.Done) || errors.Is(err, storage.ErrBucketNotExist) || gcloud.Absent(err) {
-			return "", nil
-		}
-		if err != nil {
-			return "", fmt.Errorf("list what %s contains: %w", bucket, err)
-		}
-		if attrs.Name != StampObject {
-			return stackNamed(attrs.Name), nil
-		}
-	}
-}
-
-func stackNamed(object string) string {
-	name := strings.TrimPrefix(object, stateRoot)
-	name = strings.TrimSuffix(name, ".json")
-	if name == "" {
-		return object
-	}
-	return name
 }
 
 type Presence struct {

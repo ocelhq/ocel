@@ -390,7 +390,7 @@ func TestLiveAStateBucketStoringAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	}
 	defer client.Close()
 
-	object := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object(".pulumi/stacks/ocel/shop.json")
+	object := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object("ocel-alb-project-shop/.pulumi/stacks/ocel-alb-project-shop/alb-preview-shop--infra.json")
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write([]byte("{}")); err != nil {
 		t.Fatal(err)
