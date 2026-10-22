@@ -2,8 +2,11 @@ package vps_test
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -57,7 +60,7 @@ func TestNothingWritesAsRootWithoutTheGrantToDoIt(t *testing.T) {
 
 	inner := &reached{}
 	ctx := context.Background()
-	gated := vps.Elevating(inner, unelevated, nil)
+	gated := vps.Elevating(inner, unelevated, nil, nil)
 	req := provider.BootstrapRequest{Tier: environment.TierProduction}
 
 	if err := gated.Apply(ctx, req, progress.Discard()); err == nil {
@@ -76,7 +79,7 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 
 	inner := &reached{}
 	ctx := context.Background()
-	gated := vps.Elevating(inner, unelevated, nil)
+	gated := vps.Elevating(inner, unelevated, nil, nil)
 
 	if _, err := gated.Plan(ctx, provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil {
 		t.Fatalf("Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap state and known slugs",
@@ -87,5 +90,51 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 	}
 	if inner.planned != 2 {
 		t.Errorf("the host was planned against %+v, want both questions passed through", *inner)
+	}
+}
+
+type tornDownEdge struct {
+	edge.Edge
+	tornDown []environment.Tier
+	removed  *reached
+}
+
+func (e *tornDownEdge) Kind() edge.Kind { return "cloudflare" }
+
+func (e *tornDownEdge) Hooks() edge.Hooks {
+	return edge.Hooks{PlanRemoveBootstrap: func(context.Context, environment.Tier) ([]edge.PlanChange, error) {
+		return []edge.PlanChange{{Kind: "Cloudflare::OriginPullCertificate", Name: "app.com/ours", Action: edge.PlanDelete}}, nil
+	}}
+}
+
+func (e *tornDownEdge) Teardown(_ context.Context, tier environment.Tier) error {
+	if e.removed.removed != 0 {
+		return errors.New("the box was removed before its edge, and the box holds the origin id the edge names its certificates by")
+	}
+	e.tornDown = append(e.tornDown, tier)
+	return nil
+}
+
+func TestDestroyingABoxBootstrapBehindAnEdgeTearsThatEdgesTierDownFirst(t *testing.T) {
+	t.Parallel()
+
+	inner := &reached{}
+	front := &tornDownEdge{removed: inner}
+	gated := vps.Elevating(inner, func(context.Context) error { return nil }, nil, front)
+
+	plan, err := gated.PlanRemove(context.Background(), environment.TierPreview)
+	if err != nil {
+		t.Fatalf("PlanRemove: %v", err)
+	}
+	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
+		return group.Kind == edge.EdgeGroupKind && slices.ContainsFunc(group.Changes, func(change provider.Change) bool { return change.Name == "app.com/ours" })
+	}) {
+		t.Errorf("PlanRemove = %+v, want the edge's removals shown, so the destroy consents to the certificates it deletes", plan.Groups)
+	}
+	if err := gated.Remove(context.Background(), environment.TierPreview, progress.Discard()); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if !slices.Equal(front.tornDown, []environment.Tier{environment.TierPreview}) || inner.removed != 1 {
+		t.Errorf("tore the edge down for %v and removed the box %d times, want the preview tier's edge torn down, then the box", front.tornDown, inner.removed)
 	}
 }

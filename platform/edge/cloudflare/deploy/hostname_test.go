@@ -27,6 +27,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 type cfMock struct {
@@ -73,9 +74,10 @@ type cfMock struct {
 	originCSRs               []string
 	revokedOrigin            []string
 	uploadedKeys             []string
-	originPulls              bool
-	globalPulls              bool
-	originPullWrites         []bool
+	extraZones               []cfZone
+	keyValues                *fake.KeyValues
+	associations             map[string]map[string]any
+	associationWrites        []map[string]any
 	deniedClientCertificates clientCertificateAccess
 	afterListing             func(m *cfMock)
 	purges                   [][]string
@@ -84,6 +86,11 @@ type cfMock struct {
 	tunnels tunnelMock
 
 	bootstrapInstalled bool
+}
+
+type cfZone struct {
+	id, name     string
+	certificates []map[string]any
 }
 
 type clientCertificateAccess struct {
@@ -147,12 +154,34 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		if name == "" {
 			m.accountZoneLists++
 		}
-		if name != "" && name != m.zoneName {
-			writeResult(w, []any{})
-			return
+		listed := []map[string]any{}
+		if name == "" || name == m.zoneName {
+			listed = append(listed, map[string]any{"id": m.zoneID, "name": m.zoneName})
 		}
-		writeResult(w, []map[string]any{{"id": m.zoneID, "name": m.zoneName}})
+		for _, zone := range m.extraZones {
+			if name == "" || name == zone.name {
+				listed = append(listed, map[string]any{"id": zone.id, "name": zone.name})
+			}
+		}
+		writeResult(w, listed)
 	})
+
+	for i := range m.extraZones {
+		zone := &m.extraZones[i]
+		mux.HandleFunc("GET /zones/"+zone.id+"/origin_tls_client_auth/hostnames/certificates", func(w http.ResponseWriter, r *http.Request) {
+			if !firstPage(r) {
+				writeResult(w, []any{})
+				return
+			}
+			writeResult(w, zone.certificates)
+		})
+		mux.HandleFunc("DELETE /zones/"+zone.id+"/origin_tls_client_auth/hostnames/certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
+			id := r.PathValue("id")
+			m.deletedClientCertificates = append(m.deletedClientCertificates, id)
+			zone.certificates = slices.DeleteFunc(zone.certificates, func(listed map[string]any) bool { return listed["id"] == id })
+			writeResult(w, map[string]any{"id": id})
+		})
+	}
 
 	mux.HandleFunc("/zones/"+m.zoneID+"/workers/routes", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -388,7 +417,7 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		writeResult(w, map[string]any{"id": "ssl", "value": mode, "editable": true})
 	})
 
-	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth/hostnames/certificates", func(w http.ResponseWriter, r *http.Request) {
 		if m.deniedClientCertificates.reads {
 			writeAuthenticationError(w)
 			return
@@ -404,7 +433,7 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 	})
 
-	mux.HandleFunc("POST /zones/"+m.zoneID+"/origin_tls_client_auth", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /zones/"+m.zoneID+"/origin_tls_client_auth/hostnames/certificates", func(w http.ResponseWriter, r *http.Request) {
 		if m.deniedClientCertificates.writes {
 			writeAuthenticationError(w)
 			return
@@ -413,13 +442,72 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		m.uploadedKeys = append(m.uploadedKeys, fmt.Sprint(body["private_key"]))
 		uploaded := map[string]any{
-			"id":          fmt.Sprintf("client-certificate-%d", len(m.clientCertificates)+1),
+			"id":          fmt.Sprintf("client-certificate-%d", len(m.uploadedKeys)),
 			"certificate": body["certificate"],
 			"status":      "pending_deployment",
-			"uploaded_on": fmt.Sprintf("2026-09-29T10:00:%02dZ", len(m.clientCertificates)),
+			"uploaded_on": fmt.Sprintf("2026-09-29T10:00:%02dZ", len(m.uploadedKeys)),
 		}
 		m.clientCertificates = append(m.clientCertificates, uploaded)
 		writeResult(w, uploaded)
+	})
+
+	mux.HandleFunc("DELETE /zones/"+m.zoneID+"/origin_tls_client_auth/hostnames/certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if m.deniedClientCertificates.writes {
+			writeAuthenticationError(w)
+			return
+		}
+		id := r.PathValue("id")
+		m.deletedClientCertificates = append(m.deletedClientCertificates, id)
+		m.clientCertificates = slices.DeleteFunc(m.clientCertificates, func(listed map[string]any) bool { return listed["id"] == id })
+		writeResult(w, map[string]any{"id": id})
+	})
+
+	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth/hostnames/{hostname}", func(w http.ResponseWriter, r *http.Request) {
+		if m.deniedClientCertificates.reads {
+			writeAuthenticationError(w)
+			return
+		}
+		association, held := m.associations[r.PathValue("hostname")]
+		if !held {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": false, "messages": []any{}, "result": nil,
+				"errors": []any{map[string]any{"code": 1404, "message": "not found"}},
+			})
+			return
+		}
+		writeResult(w, association)
+	})
+
+	mux.HandleFunc("PUT /zones/"+m.zoneID+"/origin_tls_client_auth/hostnames", func(w http.ResponseWriter, r *http.Request) {
+		if m.deniedClientCertificates.writes {
+			writeAuthenticationError(w)
+			return
+		}
+		var body struct {
+			Config []map[string]any `json:"config"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if m.associations == nil {
+			m.associations = map[string]map[string]any{}
+		}
+		for _, config := range body.Config {
+			m.associationWrites = append(m.associationWrites, config)
+			hostname := fmt.Sprint(config["hostname"])
+			if config["enabled"] == nil {
+				delete(m.associations, hostname)
+				continue
+			}
+			association := map[string]any{"hostname": hostname, "cert_id": config["cert_id"], "enabled": config["enabled"], "status": "active", "cert_status": "active"}
+			for _, held := range m.clientCertificates {
+				if held["id"] == config["cert_id"] {
+					association["certificate"] = held["certificate"]
+				}
+			}
+			m.associations[hostname] = association
+		}
+		writeResult(w, body.Config)
 	})
 
 	mux.HandleFunc("POST /certificates", func(w http.ResponseWriter, r *http.Request) {
@@ -445,42 +533,6 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("DELETE /certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
 		m.revokedOrigin = append(m.revokedOrigin, r.PathValue("id"))
 		writeResult(w, map[string]any{"id": r.PathValue("id"), "revoked_at": "2026-09-29T10:00:00Z"})
-	})
-
-	mux.HandleFunc("DELETE /zones/"+m.zoneID+"/origin_tls_client_auth/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		m.deletedClientCertificates = append(m.deletedClientCertificates, id)
-		m.clientCertificates = slices.DeleteFunc(m.clientCertificates, func(listed map[string]any) bool { return listed["id"] == id })
-		writeResult(w, map[string]any{"id": id})
-	})
-
-	mux.HandleFunc("GET /zones/"+m.zoneID+"/settings/tls_client_auth", func(w http.ResponseWriter, _ *http.Request) {
-		value := "off"
-		if m.globalPulls {
-			value = "on"
-		}
-		writeResult(w, map[string]any{"id": "tls_client_auth", "value": value, "editable": true})
-	})
-
-	mux.HandleFunc("GET /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, _ *http.Request) {
-		if m.deniedClientCertificates.reads {
-			writeAuthenticationError(w)
-			return
-		}
-		writeResult(w, map[string]any{"enabled": m.originPulls})
-	})
-
-	mux.HandleFunc("PUT /zones/"+m.zoneID+"/origin_tls_client_auth/settings", func(w http.ResponseWriter, r *http.Request) {
-		if m.deniedClientCertificates.writes {
-			writeAuthenticationError(w)
-			return
-		}
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		enabled, _ := body["enabled"].(bool)
-		m.originPulls = enabled
-		m.originPullWrites = append(m.originPullWrites, enabled)
-		writeResult(w, map[string]any{"enabled": enabled})
 	})
 
 	mux.HandleFunc("POST /zones/"+m.zoneID+"/purge_cache", func(w http.ResponseWriter, r *http.Request) {
@@ -600,14 +652,24 @@ func matchingRecords(records []map[string]any, query url.Values) []map[string]an
 		if recordType := query.Get("type"); recordType != "" && rec["type"] != recordType {
 			continue
 		}
+		if suffix := query.Get("comment.endswith"); suffix != "" && !strings.HasSuffix(strings.ToLower(fmt.Sprint(rec["comment"])), strings.ToLower(suffix)) {
+			continue
+		}
 		matched = append(matched, rec)
 	}
 	return matched
 }
 
+func (m *cfMock) store() *fake.KeyValues {
+	if m.keyValues == nil {
+		m.keyValues = fake.NewKeyValues()
+	}
+	return m.keyValues
+}
+
 func (m *cfMock) provider(t *testing.T) *cloudflare {
 	srv := m.server(t)
-	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), keyValues: m.store(), client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

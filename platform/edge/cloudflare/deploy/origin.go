@@ -93,11 +93,14 @@ func (p *cloudflare) unbindOrigin(ctx context.Context, state *edge.StackState, o
 	if err != nil {
 		return err
 	}
-	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
+	zoneID, zoneName, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
 	if err != nil {
 		return err
 	}
 	if err := p.dropForwardRecords(ctx, zoneID, owner, hostname); err != nil {
+		return err
+	}
+	if err := p.releaseClientCertificate(ctx, zoneID, zoneName, hostname); err != nil {
 		return err
 	}
 	state.Release(hostname)

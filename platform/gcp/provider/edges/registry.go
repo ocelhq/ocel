@@ -87,7 +87,7 @@ func (e Registry) Open(kind edge.Kind, options provider.Options) (edge.Edge, err
 		if err != nil {
 			return nil, err
 		}
-		return cloudflare.New(string(e.Namespace), CloudflareOrigin(e.Project), decoded), nil
+		return cloudflare.New(string(e.Namespace), CloudflareOrigin(e.Project), e.KeyValues, decoded), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge: leave `provider.gcp.edge` out, and each service answers on the url Cloud Run gives it, "+

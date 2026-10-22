@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 const Kind edge.Kind = "cloudflare"
@@ -47,6 +48,7 @@ type cloudflare struct {
 	namespace string
 	options   Options
 
+	keyValues      records.Store
 	origin         func(context.Context) (OriginScope, error)
 	originMu       sync.Mutex
 	resolvedOrigin *OriginScope
@@ -57,12 +59,12 @@ type cloudflare struct {
 	zonesSeen map[string]zoneRef
 }
 
-func New(namespace string, origin func(context.Context) (OriginScope, error), options Options) edge.Edge {
-	return newCloudflare(namespace, origin, options)
+func New(namespace string, origin func(context.Context) (OriginScope, error), keyValues records.Store, options Options) edge.Edge {
+	return newCloudflare(namespace, origin, keyValues, options)
 }
 
-func newCloudflare(namespace string, origin func(context.Context) (OriginScope, error), options Options) *cloudflare {
-	return &cloudflare{client: newAPIClient(), namespace: namespace, origin: origin, options: options, skipChecks: processenv.SkipChecks()}
+func newCloudflare(namespace string, origin func(context.Context) (OriginScope, error), keyValues records.Store, options Options) *cloudflare {
+	return &cloudflare{client: newAPIClient(), namespace: namespace, origin: origin, keyValues: keyValues, options: options, skipChecks: processenv.SkipChecks()}
 }
 
 func (p *cloudflare) Kind() edge.Kind { return Kind }

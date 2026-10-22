@@ -50,7 +50,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return err
 	}
 	if forwarded {
-		if err := s.stopForwarding(ctx, zoneID, binding.Hostname); err != nil {
+		if err := s.stopForwarding(ctx, zoneID, zoneName, binding.Hostname); err != nil {
 			return err
 		}
 	}

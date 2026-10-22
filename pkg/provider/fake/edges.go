@@ -396,14 +396,14 @@ func (e *Edge) HostnamesAskedReady() []string {
 	return slices.Clone(e.askedReady)
 }
 
-func (e *Edge) refuseUnreadyHostname(_ context.Context, hostname string) error {
+func (e *Edge) refuseUnreadyHostname(_ context.Context, _ environment.Tier, hostname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.askedReady = append(e.askedReady, hostname)
 	return e.unready
 }
 
-func (e *Edge) ensureClientCertificates(context.Context, string) ([]string, error) {
+func (e *Edge) ensureClientCertificates(context.Context, environment.Tier, string) ([]string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, "ensure")
@@ -413,7 +413,7 @@ func (e *Edge) ensureClientCertificates(context.Context, string) ([]string, erro
 	return slices.Clone(e.presenting), nil
 }
 
-func (e *Edge) presentClientCertificate(context.Context, string) error {
+func (e *Edge) presentClientCertificate(context.Context, environment.Tier, string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, "present")

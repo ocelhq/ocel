@@ -58,7 +58,7 @@ func testStoreWorker() workerScript {
 
 func entryOf(t *testing.T, spec edge.StackSpec) entryProgram {
 	t.Helper()
-	built, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), Options{}).buildEntryProgram(t.Context(), spec.Tier, spec.Slug, spec.Program)
+	built, err := newCloudflare(defaultNamespace, fixedOrigin(testOrigin), nil, Options{}).buildEntryProgram(t.Context(), spec.Tier, spec.Slug, spec.Program)
 	if err != nil {
 		t.Fatalf("buildEntryProgram: %v", err)
 	}

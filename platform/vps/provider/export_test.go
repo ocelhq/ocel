@@ -119,8 +119,8 @@ func Whoami(ctx context.Context, live hostSurvey) (provider.Principal, error) {
 	return whoami(ctx, live)
 }
 
-func Elevating(inner provider.Bootstrap, gate func(context.Context) error, served func(context.Context, environment.Tier) error) provider.Bootstrap {
-	return elevating{Bootstrap: inner, elevated: gate, served: served}
+func Elevating(inner provider.Bootstrap, gate func(context.Context) error, served func(context.Context, environment.Tier) error, front edge.Edge) provider.Bootstrap {
+	return elevating{Bootstrap: inner, elevated: gate, served: served, front: front}
 }
 
 func (p *Provider) Host() *host.Host { return p.host }

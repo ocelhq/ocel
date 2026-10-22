@@ -234,7 +234,7 @@ func TestTheCloudflareProxyForwardsThePreviewWildcardToATunnelWithOneProxiedReco
 }
 
 func TestTheCloudflareProxysTokenNeedsTunnelWriteOnTheAccountOnlyForATunnel(t *testing.T) {
-	doc, err := NewProxy("ocel", fixedOrigin(testOrigin), Options{}).Hooks().DescribeCredentialPermissions(edge.PurposeDeploy)
+	doc, err := NewProxy("ocel", fixedOrigin(testOrigin), nil, Options{}).Hooks().DescribeCredentialPermissions(edge.PurposeDeploy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestTheCloudflareProxysTokenNeedsTunnelWriteOnTheAccountOnlyForATunnel(t *t
 }
 
 func TestATunnelIsReadyOnlyOnceItsConnectorReportsAConnectionToTheEdge(t *testing.T) {
-	connector := NewProxy("ocel", fixedOrigin(testOrigin), Options{Tunnel: true}).Hooks().Tunnels.Connector
+	connector := NewProxy("ocel", fixedOrigin(testOrigin), nil, Options{Tunnel: true}).Hooks().Tunnels.Connector
 	if slices.Contains(connector.Ready, "--version") {
 		t.Fatalf("the tunnel is ready when `%s` answers, which it does whatever state the tunnel is in", strings.Join(connector.Ready, " "))
 	}
@@ -263,7 +263,7 @@ func TestATunnelIsReadyOnlyOnceItsConnectorReportsAConnectionToTheEdge(t *testin
 }
 
 func TestATunnelsConnectorIsCloudflaredNamingTheVisitorInTheHeadersCloudflareSends(t *testing.T) {
-	connector := NewProxy("ocel", fixedOrigin(testOrigin), Options{Tunnel: true}).Hooks().Tunnels.Connector
+	connector := NewProxy("ocel", fixedOrigin(testOrigin), nil, Options{Tunnel: true}).Hooks().Tunnels.Connector
 
 	if !strings.HasPrefix(connector.Image, "cloudflare/cloudflared@sha256:") || connector.TokenFileEnv != "TUNNEL_TOKEN_FILE" || !slices.Contains(connector.Command, "--no-autoupdate") ||
 		connector.VisitorAddressHeader != "Cf-Connecting-Ip" || connector.VisitorSchemeHeader != "Cf-Visitor" {

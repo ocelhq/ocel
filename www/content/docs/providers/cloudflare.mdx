@@ -126,7 +126,7 @@ else.
 
 A container app's hostname gets a proxied record pointing at a public load balancer, one per
 tier, which the first such app raises (about $16 a month plus traffic). It admits only
-Cloudflare's addresses presenting your zone's client certificate, and redirects plain http to
+Cloudflare's addresses presenting the origin's own client certificate, and redirects plain http to
 https with a 301 (an AWS load balancer cannot send a 308). Each hostname gets an ACM
 certificate, validated through the DNS writer. A container preview gets a proxied record of its own and
 runs no worker.
@@ -161,30 +161,29 @@ a paid add-on; without it ocel refuses the wildcard.
 
 ## Origin certificate
 
-An origin Cloudflare forwards to answers only requests that arrive with the certificate your zone
-presents to origins (zone-level authenticated origin pulls, with a certificate of your own). Every
-such origin trusts the CA of every client certificate the zone holds. Google Cloud is reached by the
-worker with the tier's origin secret instead, and trusts no certificate of the zone.
+An origin Cloudflare forwards to answers only requests that arrive with a client certificate it
+minted itself (per-hostname authenticated origin pulls). Each origin (an AWS account and region,
+a VPS box) trusts only its own, so origins sharing a Cloudflare account and a zone never accept
+each other's traffic. Google Cloud is reached by the worker with the tier's origin secret
+instead, and trusts no certificate of the zone.
 
-- **Zone holds none:** ocel mints a CA and a client certificate, both good for ten years,
-  uploads the certificate, has the origin trust the CA, and turns zone-level pulls on.
-- **Zone presents Cloudflare's shared certificate** (global pulls on, or zone-level pulls with
-  no certificate of its own): refused, since another origin may trust only that one. Upload a
-  certificate of your own first.
-- ocel never otherwise replaces or deletes a zone's client certificate: every origin the zone
-  forwards to shares it.
-- An AWS load balancer refuses the certificate once it or its CA lapses. VPS origins accept it
-  past expiry, except behind your own Traefik.
+- In each zone it forwards through, each tier of an origin mints a CA and a client
+  certificate, both good for ten years, named `ocel origin pull <origin>` with the tier as
+  its organizational unit. It uploads the certificate under
+  **SSL/TLS > Origin Server > Authenticated Origin Pulls**, presents it for each hostname the
+  tier forwards there, and trusts that CA alone.
+- ocel never presents or deletes a certificate another origin or you uploaded, and refuses a
+  hostname Cloudflare already presents one of those for.
+- Releasing a hostname stops presenting the certificate for it. The certificate stays until
+  `ocel bootstrap destroy` removes the tier, which deletes the tier's certificate from each
+  zone the origin recorded minting one in.
+- ocel leaves the zone-level and global authenticated origin pulls settings as you set them: a
+  hostname's own certificate takes precedence.
+- A zone holds at most ten such certificates, one per tier of each origin forwarding through it.
+- An AWS load balancer refuses the certificate once it or its CA lapses. VPS
+  origins accept it past expiry, except behind your own Traefik.
 
-**Rotating it** (or retiring a leaked key):
-
-1. Upload the new certificate under **SSL/TLS > Origin Server > Authenticated Origin Pulls**.
-   ocel must be able to read its CA: upload a self-signed certificate, or one naming its CA's
-   certificate as a `data:application/pkix-cert;base64,` URI in its CA Issuers access, as ocel's
-   own does. An AWS load balancer trusts only a CA, so behind one only the second kind works. A
-   deploy refuses a zone holding a certificate whose CA it cannot read.
-2. Cloudflare presents it at once, and origins refuse it until you deploy one project on each
-   VPS box and each AWS tier with container apps the zone forwards to.
-   Each origin then trusts both.
-3. Delete the old certificate from the zone, then deploy every project with a hostname in the
-   zone again. Each hostname's origin stops trusting the old CA when its project deploys.
+**Rotating it** (or retiring a leaked key): delete the tier's `ocel origin pull <origin>`
+certificate from the zone, then deploy every project of that tier with a hostname the origin
+forwards in the zone. The first deploy mints a new certificate, and each hostname's origin trusts it once its
+project deploys; until then the origin refuses what Cloudflare forwards for that hostname.

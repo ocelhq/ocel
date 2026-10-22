@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -47,12 +48,12 @@ func (c originClaim) recordOn(hostState *stackrecords.HostnameState) (superseded
 	return superseded
 }
 
-func claimOrigin(ctx context.Context, front edge.Edge, claim router.Claim, take originTake, reserve originReservation) (originClaim, error) {
+func claimOrigin(ctx context.Context, front edge.Edge, tier environment.Tier, claim router.Claim, take originTake, reserve originReservation) (originClaim, error) {
 	if claim.Tunnel != edge.None {
 		return claimTunneled(ctx, claim, take)
 	}
 	var claimed originClaim
-	origin, trusted, err := claimTrusting(ctx, front, claim.Hostname, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
+	origin, trusted, err := claimTrusting(ctx, front, tier, claim.Hostname, func(ctx context.Context, clientCertificates []string) (edge.Origin, error) {
 		claim.ClientCAs = clientCertificates
 		origin, issued, err := claimCertified(ctx, front, claim, take, reserve)
 		if issued.ID != "" {
@@ -79,7 +80,7 @@ func claimTunneled(ctx context.Context, claim router.Claim, take originTake) (or
 	return originClaim{origin: &origin}, nil
 }
 
-func readOriginClaimStaleness(ctx context.Context, front edge.Edge, hostname string, tunnel edge.Kind, hostState *stackrecords.HostnameState, now time.Time) (why string, err error) {
+func readOriginClaimStaleness(ctx context.Context, front edge.Edge, tier environment.Tier, hostname string, tunnel edge.Kind, hostState *stackrecords.HostnameState, now time.Time) (why string, err error) {
 	wanted := tunnel != edge.None
 	switch {
 	case wanted && !hostState.Tunneled:
@@ -89,7 +90,7 @@ func readOriginClaimStaleness(ctx context.Context, front edge.Edge, hostname str
 	case wanted:
 		return "", nil
 	}
-	changed, err := hasClientCAsChanged(ctx, front, hostname, hostState.ClientCADigests)
+	changed, err := hasClientCAsChanged(ctx, front, tier, hostname, hostState.ClientCADigests)
 	if err != nil {
 		return "", err
 	}
@@ -102,13 +103,13 @@ func readOriginClaimStaleness(ctx context.Context, front edge.Edge, hostname str
 	return "", nil
 }
 
-func claimTrusting(ctx context.Context, front edge.Edge, hostname string, claim func(context.Context, []string) (edge.Origin, error)) (edge.Origin, []string, error) {
+func claimTrusting(ctx context.Context, front edge.Edge, tier environment.Tier, hostname string, claim func(context.Context, []string) (edge.Origin, error)) (edge.Origin, []string, error) {
 	certificates := front.Hooks().ClientCertificates
 	if certificates == nil {
 		origin, err := claim(ctx, nil)
 		return origin, nil, err
 	}
-	trusted, err := certificates.Ensure(ctx, hostname)
+	trusted, err := certificates.Ensure(ctx, tier, hostname)
 	if err != nil {
 		return edge.Origin{}, nil, err
 	}
@@ -116,10 +117,10 @@ func claimTrusting(ctx context.Context, front edge.Edge, hostname string, claim 
 	if err != nil {
 		return edge.Origin{}, nil, err
 	}
-	if err := certificates.Present(ctx, hostname); err != nil {
+	if err := certificates.Present(ctx, tier, hostname); err != nil {
 		return edge.Origin{}, nil, err
 	}
-	presented, err := certificates.Ensure(ctx, hostname)
+	presented, err := certificates.Ensure(ctx, tier, hostname)
 	if err != nil {
 		return edge.Origin{}, nil, err
 	}
@@ -160,12 +161,12 @@ func revokeUnused(ctx context.Context, certificates *edge.OriginCertificateHooks
 	return nil
 }
 
-func hasClientCAsChanged(ctx context.Context, front edge.Edge, hostname string, trusted []string) (bool, error) {
+func hasClientCAsChanged(ctx context.Context, front edge.Edge, tier environment.Tier, hostname string, trusted []string) (bool, error) {
 	certificates := front.Hooks().ClientCertificates
 	if certificates == nil {
 		return false, nil
 	}
-	held, err := certificates.Ensure(ctx, hostname)
+	held, err := certificates.Ensure(ctx, tier, hostname)
 	if err != nil {
 		return false, err
 	}
