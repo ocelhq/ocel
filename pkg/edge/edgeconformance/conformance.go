@@ -586,7 +586,7 @@ func reconciledOn(t *testing.T, suite Suite) (edge.Edge, edge.EdgeStack) {
 }
 
 func offered(out edge.BootstrapOutput) edge.Adoption {
-	return edge.Adoption{ReleasesStore: out.ReleasesStore != nil, ClientCertificate: out.ClientCertificate != nil}
+	return edge.Adoption{ReleasesStore: out.ReleasesStore != nil}
 }
 
 func checkOffers(t *testing.T, what string, out edge.BootstrapOutput) {
@@ -597,9 +597,6 @@ func checkOffers(t *testing.T, what string, out edge.BootstrapOutput) {
 	}
 	if store := out.ReleasesStore; store != nil && (store.Name == "" || store.Endpoint == "") {
 		t.Errorf("%s: releases store %+v names no worker or endpoint; the origin has nothing to adopt", what, *store)
-	}
-	if cert := out.ClientCertificate; cert != nil && (cert.ID == "" || cert.Authorities == "") {
-		t.Errorf("%s: client certificate %+v carries no ID or authorities; the origin has nothing to adopt", what, *cert)
 	}
 }
 

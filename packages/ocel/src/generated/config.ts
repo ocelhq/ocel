@@ -454,8 +454,6 @@ export type ApiGatewayEdgeOptions = Record<string, never>;
 
 /** Options for the Cloudflare edge. The token and account id are read from the environment. */
 export interface CloudflareEdgeOptions {
-  /** A domain in your Cloudflare zone, used by nothing else, that the worker reaches Google Cloud apps under. AWS refuses it. */
-  originDomain?: string;
   /** Reach the origin through a tunnel it opens to Cloudflare, instead of at its address. A VPS always does. */
   tunnel?: boolean;
 }

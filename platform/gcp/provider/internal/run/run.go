@@ -113,7 +113,7 @@ const (
 )
 
 func IngressFor(facts edge.Facts) string {
-	if facts.ShieldsOrigin {
+	if facts.ShieldsOrigin && !facts.RunsCode {
 		return IngressLoadBalancer
 	}
 	return IngressEverywhere
@@ -258,6 +258,7 @@ func TrafficTo(revision string, current []*run.GoogleCloudRunV2TrafficTarget) []
 
 type Release struct {
 	Url      string
+	TagURL   string
 	Revision string
 }
 
@@ -319,7 +320,23 @@ func (p *Services) DeployService(ctx context.Context, s Serving, progress progre
 	if err := p.tagRevision(ctx, services, path, s.Service, revision, s.Tag); err != nil {
 		return Release{}, err
 	}
-	return Release{Url: deployed.Uri, Revision: revision}, nil
+	tagged, err := p.Read(ctx, services, path, s.Service)
+	if err != nil {
+		return Release{}, err
+	}
+	return Release{Url: deployed.Uri, TagURL: tagURLOf(tagged, s.Tag), Revision: revision}, nil
+}
+
+func tagURLOf(current *run.GoogleCloudRunV2Service, tag string) string {
+	for _, status := range current.TrafficStatuses {
+		if status.Tag == tag && status.Uri != "" {
+			return status.Uri
+		}
+	}
+	if host := HostOf(current.Uri); host != "" {
+		return "https://" + tag + "---" + host
+	}
+	return ""
 }
 
 func (p *Services) DeployAndRoute(ctx context.Context, s Serving, progress progress.Log) (Release, error) {

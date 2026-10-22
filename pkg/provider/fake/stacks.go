@@ -50,6 +50,19 @@ type Stacks struct {
 	routeTables          map[string][]byte
 	withholdsRouteTables bool
 	ignoresGate          bool
+	originSecret         string
+}
+
+func (r *Stacks) HandReleasesOriginSecret(secret string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.originSecret = secret
+}
+
+func (r *Stacks) heldOriginSecret() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.originSecret
 }
 
 func (r *Stacks) IgnoreGate() {
@@ -210,6 +223,9 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 		result.RouteTableKey = r.deliverRouteTable(spec)
 		if spec.App.ISR != nil {
 			result.PurgeSecret = "isr-" + spec.Ref.Name.String()
+		}
+		if secret := r.heldOriginSecret(); secret != "" {
+			result.OriginSecretFingerprint = edge.OriginSecretFingerprint(secret)
 		}
 	}
 	if err := spec.Images.PushRemoved(ctx, progress); err != nil {

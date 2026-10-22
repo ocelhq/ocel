@@ -118,7 +118,7 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	front := originguard.Handler(originguard.Options{
 		Upstream:   upstream,
 		Guard:      guard,
-		HealthPath: healthPath,
+		HealthPath: chooseProbePath(healthPath, probeToken),
 		Gate:       gate,
 		ProbeToken: probeToken,
 	})
@@ -176,6 +176,13 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 			return exitCode(exit)
 		}
 	}
+}
+
+func chooseProbePath(healthPath, probeToken string) string {
+	if probeToken == "" {
+		return ""
+	}
+	return healthPath
 }
 
 func exitCode(exit child.Exit) int {

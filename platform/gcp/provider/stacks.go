@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
@@ -40,5 +41,8 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	}
 	result.RouteTableKey = routeTableKey
 	result.PurgeSecret = facts.PurgeSecret
+	if facts.OriginSecret.Present() {
+		result.OriginSecretFingerprint = edge.OriginSecretFingerprint(facts.OriginSecret.Current)
+	}
 	return result, nil
 }

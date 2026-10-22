@@ -10,8 +10,6 @@ type workerScript struct {
 	Assets        []workerAsset
 	Services      map[string]string
 
-	ClientCertificates map[string]string
-
 	CachedEntrypoints []string
 
 	DurableObjects []string

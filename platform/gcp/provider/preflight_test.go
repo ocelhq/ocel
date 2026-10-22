@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -198,5 +200,75 @@ func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *te
 	}
 	if len(planned) != 2 || planned[0].Part != bootstrap.KeysPart || planned[1].Part != network.PartName || planned[1].Action != provider.ActionCreate || len(planned[1].Changes) != 4 {
 		t.Errorf("a dry deploy planned %+v, want the keys its password is sealed under and the %s part created with its four resources", planned, network.PartName)
+	}
+}
+
+var (
+	containerApp = &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
+	functionApp  = &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{
+		Functions: []*contractv1.ManifestFunction{{LogicalName: "fn--web--index"}},
+	}}}
+	staticApp = &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}
+)
+
+func applyingBehindTheWorker(t *testing.T, h *offersHarness, apps ...*contractv1.ManifestApp) []string {
+	t.Helper()
+	log := &fake.Log{}
+	if len(apps) == 0 {
+		apps = []*contractv1.ManifestApp{containerApp}
+	}
+	deploy := provider.DeploySpec{Tier: environment.TierProduction}
+	for _, app := range apps {
+		deploy.Apps = append(deploy.Apps, provider.AppEntry{App: "web", Manifest: app})
+	}
+	pre := provider.DeployPreflight{Deploy: deploy, Edge: cloudflare.Kind, Progress: log}
+	if err := programming(h).warnStaleOriginSecret(t.Context(), pre); err != nil {
+		t.Fatalf("warnStaleOriginSecret() = %v", err)
+	}
+	return log.Lines()
+}
+
+func TestADeployBehindTheWorkerIsWarnedThatItsTiersOriginSecretIsStale(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	h.recordOriginSecretAs(t, originsecret.Secret{Current: "s1", CreatedAt: time.Now().Add(-originsecret.MaxAge - 24*time.Hour)})
+
+	lines := strings.Join(applyingBehindTheWorker(t, h), "\n")
+	if !strings.Contains(lines, "WARN The production origin secret") || !strings.Contains(lines, "ocel bootstrap") {
+		t.Errorf("the deploy said %q, want a warning that the origin secret is stale and bootstrap rotates it", lines)
+	}
+}
+
+func TestADeployBehindTheWorkerOnAFreshOriginSecretIsWarnedOfNothing(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	h.recordOriginSecretAs(t, originsecret.Secret{Current: "s1", CreatedAt: time.Now().Add(-24 * time.Hour)})
+
+	if lines := applyingBehindTheWorker(t, h); slices.ContainsFunc(lines, func(line string) bool { return strings.Contains(line, "origin secret") }) {
+		t.Errorf("the deploy said %q, want nothing of a secret a day old", lines)
+	}
+}
+
+func TestADeployBehindTheWorkerWarnsOfAStaleOriginSecretOnlyWhenAnAppRunsCode(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		apps   []*contractv1.ManifestApp
+		warned bool
+	}{
+		"a container":          {apps: []*contractv1.ManifestApp{containerApp}, warned: true},
+		"a function":           {apps: []*contractv1.ManifestApp{functionApp}, warned: true},
+		"a static app and one": {apps: []*contractv1.ManifestApp{staticApp, functionApp}, warned: true},
+		"static files alone":   {apps: []*contractv1.ManifestApp{staticApp}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := newOffersHarness(t)
+			h.recordOriginSecretAs(t, originsecret.Secret{Current: "s1", CreatedAt: time.Now().Add(-originsecret.MaxAge - 24*time.Hour)})
+
+			lines := applyingBehindTheWorker(t, h, tc.apps...)
+			if warned := slices.ContainsFunc(lines, func(line string) bool { return strings.Contains(line, "origin secret") }); warned != tc.warned {
+				t.Errorf("the deploy said %q, want a stale origin secret warned of %v: only a release that runs code demands the secret", lines, tc.warned)
+			}
+		})
 	}
 }

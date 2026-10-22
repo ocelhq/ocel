@@ -126,7 +126,7 @@ func (e *Edge) raiseGate(ctx context.Context, tier environment.Tier, image strin
 		}
 		written = writtenPublication{entry: entry, publication: publication}
 		return gateProgram(gateSpec{
-			Names:  loadBalancerNames(e.deps.Namespace, tier, false),
+			Names:  loadBalancerNames(e.deps.Namespace, tier),
 			Main:   publication.Main,
 			Before: publication.Before,
 		})(ctx, project)

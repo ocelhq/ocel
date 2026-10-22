@@ -16,7 +16,7 @@ import {
   SERVE_UNSHARED_HEADER,
   type ServeProps,
 } from "../src/serve-key";
-import { awsOrigin, FN_URL, storeOrigin, withGlobalFetch } from "./origin-deps";
+import { awsOrigin, FN_URL, secretOrigin, storeOrigin, withGlobalFetch } from "./origin-deps";
 import { expectedSignature, sentSignature } from "./sigv4";
 
 const key = "assets/shop/prod/web/r1a2b3c4d/_next/static/app.js";
@@ -303,6 +303,31 @@ describe("Serve fetching from the origin", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get(SERVE_REFUSED_HEADER)).toBe("1");
+  });
+
+  it("fetches from a container's origin with the secret its release holds", async () => {
+    const containerUrl = "https://r1a2b3c4d---web-abc123-ew.a.run.app/";
+    const wire = s3Answering(() => new Response("page"));
+    const env = {
+      OCEL_ORIGIN: secretOrigin({
+        secret: "current",
+        previousSecret: "previous",
+        previousFingerprint: "6da0633528deaa01",
+      }),
+      RELEASES: servedRecords({
+        ...originRecord,
+        functionUrls: {},
+        origin: containerUrl,
+        originSecretFingerprint: "6da0633528deaa01",
+      }),
+    } as unknown as Partial<Env>;
+
+    await withGlobalFetch(wire.fetch, () =>
+      serveWith(env, originProps).fetch(originRequest("blog/a", containerUrl)),
+    );
+
+    expect(wire.calls.map((call) => call.url)).toEqual([`${containerUrl}blog/a`]);
+    expect(wire.calls[0].headers.get("x-ocel-origin-secret")).toBe("previous");
   });
 
   it("fetches nothing for a call that names no release", async () => {

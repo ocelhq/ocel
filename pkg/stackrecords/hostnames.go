@@ -230,9 +230,15 @@ func ProjectsServedOnPreview(ctx context.Context, store records.Store, baseDomai
 	if baseDomain == "" {
 		return nil, nil
 	}
-	recorded, err := store.List(ctx, EdgeStacksPartition(environment.TierPreview))
+	return ProjectsServed(ctx, store, environment.TierPreview, func(state EdgeState) bool {
+		return state.Edge.ServedOnGlobalPreview(baseDomain)
+	})
+}
+
+func ProjectsServed(ctx context.Context, store records.Store, tier environment.Tier, serves func(EdgeState) bool) ([]string, error) {
+	recorded, err := store.List(ctx, EdgeStacksPartition(tier))
 	if err != nil {
-		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
+		return nil, fmt.Errorf("read the projects served on tier %s: %w", tier, err)
 	}
 	var served []string
 	for _, entry := range recorded {
@@ -243,7 +249,7 @@ func ProjectsServedOnPreview(ctx context.Context, store records.Store, baseDomai
 		if err := json.Unmarshal(entry.Value, &state); err != nil {
 			return nil, fmt.Errorf("read %s: %w", entry.Key, err)
 		}
-		if state.Edge.ServedOnGlobalPreview(baseDomain) {
+		if serves(state) {
 			served = append(served, entry.Key.Path[0])
 		}
 	}

@@ -13,7 +13,9 @@ export interface Reach {
   region?: string;
   accessKeyId?: string;
   secretAccessKey?: string;
-  certificate?: string;
+  secret?: string;
+  previousSecret?: string;
+  previousFingerprint?: string;
 }
 
 export interface OriginStore {

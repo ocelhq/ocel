@@ -101,34 +101,6 @@ func TestCredentialPermissionsListsWhatEachPurposeMints(t *testing.T) {
 	}
 }
 
-func TestAnEdgeOpenedForAMutualTLSOriginsBootstrapTokenMayEditAccountCertificates(t *testing.T) {
-	const permission = "Account · SSL and Certificates · Edit"
-	mutual := newCloudflare("ocel", Options{})
-	mutual.workerClientCertificate = true
-
-	for _, tc := range []struct {
-		name    string
-		edge    edge.Edge
-		purpose edge.CredentialPurpose
-		want    bool
-	}{
-		{"mutual TLS bootstrap", mutual, edge.PurposeBootstrap, true},
-		{"mutual TLS deploy", mutual, edge.PurposeDeploy, false},
-		{"plain bootstrap", New("ocel", Options{}), edge.PurposeBootstrap, false},
-		{"plain deploy", New("ocel", Options{}), edge.PurposeDeploy, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc, err := tc.edge.Hooks().DescribeCredentialPermissions(tc.purpose)
-			if err != nil {
-				t.Fatalf("DescribeCredentialPermissions(%v) error = %v", tc.purpose, err)
-			}
-			if got := strings.Contains(doc.Document, permission); got != tc.want {
-				t.Errorf("DescribeCredentialPermissions(%v) = %q, includes %q = %v, want %v", tc.purpose, doc.Document, permission, got, tc.want)
-			}
-		})
-	}
-}
-
 func verifiedAgainst(t *testing.T, answers ...answer) error {
 	t.Helper()
 	t.Setenv(envAccountID, "acct-1")

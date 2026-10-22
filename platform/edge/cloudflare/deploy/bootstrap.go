@@ -2,7 +2,6 @@ package cloudflare
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -26,18 +25,6 @@ func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge
 		}
 		out.ReleasesStore = &store
 	}
-	if p.workerClientCertificate {
-		certificate, err := p.workerClientCertificates().ensure(ctx, accountID, state.certificates)
-		if err != nil {
-			return out, fmt.Errorf("bootstrap the worker client certificate: %w", err)
-		}
-		out.ClientCertificate = &certificate
-		if p.trustClientCertificate != nil {
-			if err := p.trustClientCertificate(ctx, tier, certificate); err != nil {
-				return out, fmt.Errorf("make the origin trust the worker client certificate's CA before the entry worker presents it: %w", err)
-			}
-		}
-	}
 	return out, nil
 }
 
@@ -50,16 +37,10 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	if err != nil {
 		return err
 	}
-	var errs []error
 	if err := p.deleteScript(ctx, accountID, storeScript); err != nil {
-		errs = append(errs, fmt.Errorf("delete worker %q: %w", storeScript, err))
+		return fmt.Errorf("delete worker %q: %w", storeScript, err)
 	}
-	if p.workerClientCertificate {
-		if err := p.workerClientCertificates().teardown(ctx, accountID, tier); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+	return nil
 }
 
 type bootstrapWorker struct {

@@ -12,24 +12,21 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const CloudflareOriginPart = "cloudflare-origin"
 
-var (
-	albBaseAPIs     = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
-	ALBAPIs         = slices.Concat(albBaseAPIs, []string{"networkservices.googleapis.com"})
-	albShieldedAPIs = slices.Concat(albBaseAPIs, []string{"networksecurity.googleapis.com"})
-)
+var ALBAPIs = []string{"compute.googleapis.com", "certificatemanager.googleapis.com", "networkservices.googleapis.com"}
 
 func CredentialParts() []provider.Part {
 	return []provider.Part{{
 		Name: CloudflareOriginPart,
-		Summary: "a global external Application Load Balancer that Cloudflare forwards to and that refuses any client without the certificate the zone presents — " +
-			"a recurring cost, about $18 a month plus egress, " +
-			"and a service account with an HMAC key that reads the tier's static files and nothing else, which the worker signs its reads with",
+		Summary: "the origin secret the Cloudflare worker presents to every release it reaches, which the release demands before the app runs, " +
+			"a service account with an HMAC key that reads the tier's static files and nothing else, which the worker signs its reads with, " +
+			"and the credential and purge seed of the edge's workers, all in Secret Manager",
 		Edges: []edge.Kind{cloudflare.Kind},
 	}}
 }
@@ -120,7 +117,12 @@ func (b Engine) RaiseFronts(ctx context.Context, req provider.BootstrapRequest, 
 		}
 		gcloud.EnsureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's asset reader (service account and HMAC key) for " + string(req.Tier) +
 			": the edge reads this tier's static files from its bucket as that account")
-		return b.FrontParts.RaiseAssets(ctx, b, req.Tier, front.Kind())
+		if err := b.FrontParts.RaiseAssets(ctx, b, req.Tier, front.Kind()); err != nil {
+			return err
+		}
+		gcloud.EnsureProgress(progress).Say("Keeping the " + string(front.Kind()) + " edge's origin secret for " + string(req.Tier) +
+			" (Secret Manager): every release the edge reaches demands it before the app runs")
+		return b.FrontParts.RaiseOriginSecret(ctx, b, req.Tier, front.Kind(), progress)
 	})
 }
 
@@ -184,22 +186,40 @@ func (b Engine) retireFront(ctx context.Context, tier environment.Tier, front ed
 func (b Engine) FrontInstalled(ctx context.Context, tier environment.Tier, part string) (bool, error) {
 	installed := true
 	err := b.eachFront([]string{part}, func(_ provider.Part, front edge.Edge) error {
-		checkInstalled := front.Hooks().CheckBootstrapInstalled
-		if checkInstalled == nil {
+		if checkInstalled := front.Hooks().CheckBootstrapInstalled; checkInstalled != nil {
+			up, err := checkInstalled(ctx, tier)
+			if err != nil {
+				return err
+			}
+			installed = installed && up
+		}
+		if !installed || !front.Facts().RunsCode {
 			return nil
 		}
-		up, err := checkInstalled(ctx, tier)
+		held, err := b.FrontParts.HasOriginSecret(ctx, b, tier, front.Kind())
 		if err != nil {
 			return err
 		}
-		installed = installed && up
+		installed = held
 		return nil
 	})
 	return installed, err
 }
 
 func (b Engine) FrontsFree(ctx context.Context, tier environment.Tier, parts []string) error {
-	return b.eachFront(parts, func(_ provider.Part, front edge.Edge) error {
+	return b.eachFront(parts, func(part provider.Part, front edge.Edge) error {
+		served, err := stackrecords.ProjectsServed(ctx, b.Records, tier, func(state stackrecords.EdgeState) bool {
+			return state.Kind == front.Kind()
+		})
+		if err != nil {
+			return err
+		}
+		if len(served) > 0 {
+			return refusal.Refuse(refusal.CodeInvalid,
+				"the %s edge of tier %s still serves %s, and removing the %s part takes away how it reaches them, leaving every one unreachable.\n"+
+					"Take those projects down with `ocel projects destroy` first",
+				front.Kind(), tier, strings.Join(served, ", "), part.Name)
+		}
 		boundHostnames := front.Hooks().ListBoundHostnames
 		if boundHostnames == nil {
 			return nil
@@ -217,14 +237,6 @@ func (b Engine) FrontsFree(ctx context.Context, tier environment.Tier, parts []s
 
 func (b Engine) partsFree(ctx context.Context, tier environment.Tier, parts []string) error {
 	return b.FrontsFree(ctx, tier, parts)
-}
-
-func APIsFor(tier environment.Tier, parts []string) []string {
-	apis := slices.Clone(BootstrapAPIs)
-	if slices.Contains(parts, CloudflareOriginPart) {
-		apis = AppendMissing(apis, albShieldedAPIs)
-	}
-	return apis
 }
 
 func AppendMissing(listed, more []string) []string {
@@ -250,7 +262,7 @@ func (b Engine) PlannedFronts(ctx context.Context, tier environment.Tier, parts 
 		if front.Facts().RunsCode {
 			var err error
 			if assets, err = b.FrontParts.PlanAssets(ctx, b, tier, front.Kind()); err != nil {
-				return fmt.Errorf("plan the %s edge's asset reader: %w", front.Kind(), err)
+				return fmt.Errorf("plan the %s edge's asset reader and origin secret: %w", front.Kind(), err)
 			}
 		}
 		if len(planned) == 0 && len(assets) == 0 {
@@ -279,7 +291,7 @@ func (b Engine) RemovedFronts(ctx context.Context, tier environment.Tier, parts 
 		if front.Facts().RunsCode {
 			assets, err := b.FrontParts.PlanAssetsRemoval(ctx, b, tier, front.Kind())
 			if err != nil {
-				return fmt.Errorf("plan what removing the %s edge's asset reader takes: %w", front.Kind(), err)
+				return fmt.Errorf("plan what removing the %s edge's asset reader and origin secret takes: %w", front.Kind(), err)
 			}
 			changes = append(changes, assets...)
 		}
@@ -305,4 +317,6 @@ type FrontParts struct {
 	TakeAssets        func(ctx context.Context, b Engine, tier environment.Tier) error
 	PlanAssets        func(ctx context.Context, b Engine, tier environment.Tier, kind edge.Kind) ([]provider.Change, error)
 	PlanAssetsRemoval func(ctx context.Context, b Engine, tier environment.Tier, kind edge.Kind) ([]provider.Change, error)
+	RaiseOriginSecret func(ctx context.Context, b Engine, tier environment.Tier, kind edge.Kind, progress progress.Log) error
+	HasOriginSecret   func(ctx context.Context, b Engine, tier environment.Tier, kind edge.Kind) (bool, error)
 }

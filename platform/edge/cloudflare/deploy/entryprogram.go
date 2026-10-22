@@ -21,8 +21,6 @@ const (
 	purgeQueueObject = "PurgeQueue"
 )
 
-const originClientCertificateBinding = "OCEL_ORIGIN_CLIENT_CERTIFICATE"
-
 type entryProgram struct {
 	name   string
 	worker workerScript
@@ -83,9 +81,6 @@ func newEntryWorker(origin edge.OriginReach) (workerScript, error) {
 		Secrets:           map[string]string{edge.OriginReachVar: string(reach)},
 		CachedEntrypoints: []string{serveEntrypoint},
 		DurableObjects:    []string{purgeQueueObject},
-	}
-	if origin.Reach.Kind == edge.ReachClientCertificate {
-		worker.ClientCertificates = map[string]string{originClientCertificateBinding: origin.Reach.Certificate}
 	}
 	return withPurgeBudget(worker, workersCachePurgeBudget)
 }

@@ -31,7 +31,6 @@ type Deps struct {
 	WarmURL   func(ctx context.Context, url, address, cookie string) error
 	Project   string
 	Region    string
-	Shielded  bool
 
 	Cipher     seal.Cipher
 	GatePlugin []byte
@@ -50,14 +49,14 @@ type FrontPart struct {
 }
 
 func (e *Edge) claimFront(ctx context.Context, tier environment.Tier, user string) error {
-	if e.deps.Shielded || e.deps.FrontPart == nil {
+	if e.deps.FrontPart == nil {
 		return nil
 	}
 	return e.deps.FrontPart.Claim(ctx, tier, user)
 }
 
 func (e *Edge) releaseFront(ctx context.Context, tier environment.Tier, user string) error {
-	if e.deps.Shielded || e.deps.FrontPart == nil {
+	if e.deps.FrontPart == nil {
 		return nil
 	}
 	return e.deps.FrontPart.Release(ctx, tier, user)
@@ -66,7 +65,7 @@ func (e *Edge) releaseFront(ctx context.Context, tier environment.Tier, user str
 type Edge struct{ deps Deps }
 
 func (e *Edge) loadBalancerTarget(tier environment.Tier) Target {
-	return Target{Tier: tier, Shielded: e.deps.Shielded}
+	return Target{Tier: tier}
 }
 
 func New(deps Deps) *Edge { return &Edge{deps: deps} }
@@ -103,10 +102,8 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 	if _, err := e.raise(ctx, tier, progress.Discard()); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	if !e.deps.Shielded {
-		if err := e.publishGates(ctx, tier, gateProof{}, progress.Discard()); err != nil {
-			return edge.BootstrapOutput{}, err
-		}
+	if err := e.publishGates(ctx, tier, gateProof{}, progress.Discard()); err != nil {
+		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }
@@ -118,9 +115,7 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 		if err != nil {
 			return LoadBalancer{}, err
 		}
-		if recorded.Shielded == e.deps.Shielded {
-			preview = recorded
-		}
+		preview = recorded
 	}
 	return e.raiseServing(ctx, tier, preview, progress)
 }
@@ -129,41 +124,37 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 	spec := loadBalancerSpec{
 		Namespace: e.deps.Namespace,
 		Region:    e.deps.Region,
-		Names:     loadBalancerNames(e.deps.Namespace, tier, e.deps.Shielded),
+		Names:     loadBalancerNames(e.deps.Namespace, tier),
 		Tier:      tier,
 		Preview:   preview,
 	}
-	if !e.deps.Shielded {
-		assets, err := e.deps.ReadAssetsBucket(ctx, tier)
-		if err != nil {
-			return LoadBalancer{}, err
-		}
-		spec.Assets = &assets
+	assets, err := e.deps.ReadAssetsBucket(ctx, tier)
+	if err != nil {
+		return LoadBalancer{}, err
 	}
-	if e.deps.Shielded {
-		origin, err := e.readOriginWildcard(ctx, tier)
-		if err != nil {
-			return LoadBalancer{}, err
-		}
-		if !origin.Removing {
-			spec.Origin = origin
-		}
-		trusted, err := e.ensureTrusted(ctx, tier)
-		if err != nil {
-			return LoadBalancer{}, err
-		}
-		spec.ClientCAs = trusted
-	}
+	spec.Assets = &assets
 	outputs, err := e.raiseFront(ctx, spec, progress)
 	if err != nil {
 		return LoadBalancer{}, err
 	}
 	balancer := loadBalancerOf(outputs)
-	balancer.Shielded = e.deps.Shielded
 	if !balancer.provisioned() {
 		return LoadBalancer{}, fmt.Errorf(
 			"provision the %s load balancer for tier %s: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
 			Kind, tier, balancer)
+	}
+	return balancer, nil
+}
+
+func (e *Edge) readProvisionedLoadBalancer(ctx context.Context, tier environment.Tier) (LoadBalancer, error) {
+	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
+	if err != nil {
+		return LoadBalancer{}, err
+	}
+	balancer := loadBalancerOf(outputs)
+	if !balancer.provisioned() {
+		return LoadBalancer{}, refusal.Refuse(refusal.CodeNotReady,
+			"no %s load balancer is provisioned for tier %s: run `ocel bootstrap` for this tier first", Kind, tier)
 	}
 	return balancer, nil
 }
@@ -202,18 +193,10 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, tier, strings.Join(bound, ", "))
 	}
-	if !e.deps.Shielded {
-		if err := e.removeGate(ctx, tier); err != nil {
-			return err
-		}
-	}
-	if err := e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.Discard()); err != nil {
+	if err := e.removeGate(ctx, tier); err != nil {
 		return err
 	}
-	if !e.deps.Shielded {
-		return nil
-	}
-	return e.forgetTrust(ctx, tier)
+	return e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.Discard())
 }
 
 type edgeRecord struct {

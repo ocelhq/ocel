@@ -28,24 +28,10 @@ func (p *Provider) edges() edges.Registry {
 		Images:    albpart.PluginImages{OpenClients: p.openClients},
 		Project:   p.options.Project,
 		Region:    p.options.Region,
-
-		Certificates:  p.Certificates(),
-		ReadWorkerCAs: p.offers().ReadWorkerCAs,
-		FrontPart:     albpart.Front(bootstrapGate{p}.openBootstrap),
+		FrontPart: albpart.Front(bootstrapGate{p}.openBootstrap),
 	}
 }
 
 func (p *Provider) offers() cloudflareorigin.Offers {
 	return cloudflareorigin.Offers{OpenClients: p.openClients, KeyValues: p.KeyValues()}
-}
-
-func (p *Provider) originHosts() *cloudflareorigin.OriginHosts {
-	return &cloudflareorigin.OriginHosts{KeyValues: p.KeyValues(), Routing: p.originRouting()}
-}
-
-func (p *Provider) originRouting() cloudflareorigin.OriginRouting {
-	if p.originRoutes != nil {
-		return p.originRoutes
-	}
-	return p.edges().OpenALB().Shielded()
 }

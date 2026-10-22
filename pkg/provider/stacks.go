@@ -212,6 +212,8 @@ type StackResult struct {
 	Envelope string
 
 	PurgeSecret string
+
+	OriginSecretFingerprint string
 }
 
 type Binding struct {

@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 var shopGate = gate.Gate{Key: "shop-key", PasswordHash: gate.SignPassword("shop-key", "shop password"), BypassSecrets: []string{"shop-bypass"}}
@@ -154,21 +153,6 @@ func TestAnEmptyGateSetStillAttachesThePluginSoGatingLaterIsAVersionSwapAlone(t 
 	}
 }
 
-func TestAShieldedPreviewBalancerAttachesNoGateExtensionBecauseTheEdgeInFrontOfItGates(t *testing.T) {
-	t.Parallel()
-
-	balancer, w := balancing(t)
-	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
-
-	if _, err := balancer.Shielded().Bootstrap(context.Background(), environment.TierPreview); err != nil {
-		t.Fatalf("Bootstrap = %v", err)
-	}
-
-	if declared := w.declarations(GateStack(environment.TierPreview)); len(declared) != 0 {
-		t.Errorf("the shielded balancer declares %v for a gate: only a worker holding its client certificate reaches it, and the worker gates", keys(declared))
-	}
-}
-
 func TestTheALBEdgeGates(t *testing.T) {
 	t.Parallel()
 
@@ -283,42 +267,6 @@ func TestAGatedPreviewIsWarmedWithASessionTheGateAdmits(t *testing.T) {
 	verdict := shopGate.Check(gate.Request{Method: "HEAD", Host: bound, Target: "/", Header: gate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
 	if verdict.Response != nil {
 		t.Errorf("the warm carried %q, which the gate refuses with %d, so it warms nothing", cookies[len(cookies)-1], verdict.Response.Status)
-	}
-}
-
-func TestAProtectedPreviewBehindAShieldedLoadBalancerIsWarmedWithASessionTheEdgeInFrontAdmits(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	balancer, w := balancing(t)
-	w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
-	if err := stackrecords.ChangeGates(ctx, balancer.deps.KeyValues, balancer.deps.Cipher, environment.TierPreview, func(records map[string]stackrecords.GateRecord) error {
-		records["shop"] = stackrecords.GateRecord{Gate: shopGate, Enabled: true}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	reconciledStack, err := balancer.Shielded().Reconcile(ctx, edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, Gate: &shopGate}, edge.StackState{})
-	if err != nil {
-		t.Fatalf("Reconcile = %v", err)
-	}
-	const bound = "pr-7-web.preview.example.com"
-	if err := reconciledStack.BindDomain(ctx, edge.DomainBinding{Hostname: bound, App: "web"}); err != nil {
-		t.Fatalf("BindDomain = %v", err)
-	}
-	reconciledStack.(*stack).recorded.LoadBalancer.Shielded = true
-	stage(t, reconciledStack, previewRecord("b1"))
-	promote(t, reconciledStack, "p1", "b1")
-
-	w.mu.Lock()
-	cookies := slices.Clone(w.warmCookies)
-	w.mu.Unlock()
-	if len(cookies) == 0 {
-		t.Fatal("the promotion warmed nothing")
-	}
-	verdict := shopGate.Check(gate.Request{Method: "HEAD", Host: bound, Target: "/", Header: gate.Header{"Cookie": {cookies[len(cookies)-1]}}}, time.Now())
-	if verdict.Response != nil {
-		t.Errorf("the warm carried %q, which the edge in front refuses with %d, so it never reaches the revision", cookies[len(cookies)-1], verdict.Response.Status)
 	}
 }
 
@@ -730,7 +678,7 @@ func TestEveryPreviewBackendAndTheAssetsBucketMarkTheirResponsesNoindex(t *testi
 
 	front, err := declared(loadBalancerProgram(loadBalancerSpec{
 		Namespace: "ocel",
-		Names:     loadBalancerNames("ocel", environment.TierPreview, false), Tier: environment.TierPreview, Assets: &tierAssets,
+		Names:     loadBalancerNames("ocel", environment.TierPreview), Tier: environment.TierPreview, Assets: &tierAssets,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -764,7 +712,7 @@ func TestThePluginConfigIsMarkedSecretInThePulumiState(t *testing.T) {
 	t.Parallel()
 
 	secret, err := pluginConfigIsSecret(gateProgram(gateSpec{
-		Names: loadBalancerNames("ocel", environment.TierPreview, false),
+		Names: loadBalancerNames("ocel", environment.TierPreview),
 		Main:  gateVersion{ID: "v1", Image: "projects/p/locations/r/repositories/x/genericArtifacts/y:z", Config: "ocel-gate 1\n"},
 	}))
 	if err != nil {

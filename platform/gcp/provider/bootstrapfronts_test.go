@@ -149,45 +149,6 @@ func TestAPartWhoseFrontNeverCameUpIsReportedAbsentSoTheGateRaisesItAgain(t *tes
 	}
 }
 
-type openedFront struct{ front edge.Edge }
-
-func (r openedFront) Open(edge.Kind, provider.Options) (edge.Edge, error) { return r.front, nil }
-
-func TestAPartStampedBeforeItsTierPassphraseWasMadeIsReportedAbsentSoTheBootstrapCanResume(t *testing.T) {
-	t.Parallel()
-
-	h := newOffersHarness(t)
-	shielded := alb.New(alb.Deps{Stacks: alb.PulumiStacks{OpenClients: googletest.Opener(h.clients)}, Shielded: true})
-	b := composed(bootstrap.Engine{Edges: openedFront{shielded}, Clients: h.clients, Records: h.records})
-
-	described, err := b.Described(context.Background(), surveyed(bootstrap.CloudflareOriginPart))
-	if err != nil {
-		t.Fatalf("Described() = %v, want the part described: a bootstrap that failed after stamping %q and before making the tier's "+
-			"passphrase refuses every later deploy and bootstrap with this, and so can never be resumed", err, bootstrap.CloudflareOriginPart)
-	}
-	if stack, _ := partStack(described, bootstrap.CloudflareOriginPart); stack.Present {
-		t.Errorf("the %q part is reported installed, want it absent: no load balancer state is sealed under a passphrase that was never made",
-			bootstrap.CloudflareOriginPart)
-	}
-}
-
-func TestAPartStampedBeforeItsTierPassphraseWasMadeIsRemovedWithNothingToTakeDown(t *testing.T) {
-	t.Parallel()
-
-	h := newOffersHarness(t)
-	shielded := alb.New(alb.Deps{
-		KeyValues: h.records,
-		Stacks:    alb.PulumiStacks{OpenClients: googletest.Opener(h.clients)},
-		Shielded:  true,
-	})
-	b := composed(bootstrap.Engine{Edges: openedFront{shielded}, Clients: h.clients, Records: h.records})
-
-	if err := b.TearFronts(context.Background(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart}); err != nil {
-		t.Errorf("TearFronts() = %v, want nil: no load balancer state is sealed under a passphrase that was never made, and "+
-			"refusing leaves a bootstrap that failed before making it, or a removal retried after deleting it, unable to be removed", err)
-	}
-}
-
 func TestAPartWhoseFrontIsInstalledIsReportedPresent(t *testing.T) {
 	t.Parallel()
 
@@ -275,6 +236,45 @@ func TestRemovingThePartIsRefusedWhileAHostnameIsStillBoundToItsFront(t *testing
 	}
 }
 
+func serveBehind(t *testing.T, store records.Store, tier environment.Tier, slug string, kind edge.Kind) {
+	t.Helper()
+	state, err := json.Marshal(stackrecords.EdgeState{Kind: kind})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Write(t.Context(), records.Entry{Key: stackrecords.EdgeStackKey(tier, slug), Value: state}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRemovingThePartIsRefusedByItsPlanAndItsApplyWhileAProjectIsServedBehindItsEdge(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	serveBehind(t, b.Records, environment.TierProduction, "shop", alb.Kind)
+	serveBehind(t, b.Records, environment.TierProduction, "blog", "cloudfront")
+	serveBehind(t, b.Records, environment.TierPreview, "docs", alb.Kind)
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{bootstrap.CloudflareOriginPart}}
+
+	for what, err := range map[string]error{
+		"plan":  b.FrontsFree(t.Context(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart}),
+		"apply": b.DropFronts(t.Context(), surveyed(bootstrap.CloudflareOriginPart), req, nil),
+	} {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || !strings.Contains(refused.Message, "shop") || !strings.Contains(refused.Message, "ocel projects destroy") {
+			t.Errorf("%s while shop is served behind the edge = %v, want a refusal naming shop and `ocel projects destroy`: "+
+				"removing the part deletes the origin secret every release demands, and each answers 403", what, err)
+			continue
+		}
+		if strings.Contains(refused.Message, "blog") || strings.Contains(refused.Message, "docs") {
+			t.Errorf("%s refused naming %q, want only the projects this edge serves on this tier", what, refused.Message)
+		}
+	}
+	if len(registry.front.torn) != 0 {
+		t.Errorf("the refused removal tore down %v", registry.front.torn)
+	}
+}
+
 func TestAPartNothingInstalledIsNotTornDownOnRemoval(t *testing.T) {
 	t.Parallel()
 
@@ -299,6 +299,62 @@ func TestTheFrontsABootstrapRaisesComeFromWhatItsPartsDeclareTheyNeed(t *testing
 	if !slices.Equal(registry.opened, []edge.Kind{"cloudflare"}) {
 		t.Errorf("the bootstrap opened %v, want the edge the part's Needs name: a second edge with a front of its own must not need a branch here",
 			registry.opened)
+	}
+}
+
+func TestAPartBehindAnEdgeThatRunsCodeIsReportedAbsentWithoutItsOriginSecret(t *testing.T) {
+	t.Parallel()
+
+	b, registry, _ := frontingWithSecrets(t)
+	registry.front.installed, registry.front.runsCode = true, true
+
+	described, err := b.Described(context.Background(), surveyed(bootstrap.CloudflareOriginPart))
+	if err != nil {
+		t.Fatalf("described = %v", err)
+	}
+	if stack, _ := partStack(described, bootstrap.CloudflareOriginPart); stack.Present {
+		t.Error("a part the stamp records is reported installed with no origin secret in Secret Manager, " +
+			"though every deploy behind the edge is refused until a bootstrap stores one")
+	}
+}
+
+func TestAPartBehindAnEdgeThatRunsCodeIsReportedPresentWithItsOriginSecret(t *testing.T) {
+	t.Parallel()
+
+	b, registry, h := frontingWithSecrets(t)
+	registry.front.installed, registry.front.runsCode = true, true
+	if err := cloudflareorigin.EnsureOriginSecret(t.Context(), h.clients, environment.TierProduction, registry.front.Kind(), originSecretMintedAt, h.log); err != nil {
+		t.Fatalf("EnsureOriginSecret() = %v", err)
+	}
+
+	described, err := b.Described(context.Background(), surveyed(bootstrap.CloudflareOriginPart))
+	if err != nil {
+		t.Fatalf("described = %v", err)
+	}
+	if stack, _ := partStack(described, bootstrap.CloudflareOriginPart); !stack.Present {
+		t.Error("a part whose front is installed and whose origin secret is stored is not reported installed, so every bootstrap raises it again")
+	}
+}
+
+func TestAPartWhoseOriginSecretIsUnreadableIsReportedBroken(t *testing.T) {
+	t.Parallel()
+
+	b, registry, h := frontingWithSecrets(t)
+	registry.front.installed, registry.front.runsCode = true, true
+	service, err := h.clients.Secrets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := h.clients.OriginSecret(environment.TierProduction, registry.front.Kind())
+	if err := h.clients.EnsureSecret(t.Context(), service, environment.TierProduction, name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.clients.AddSecretVersion(t.Context(), service, name, []byte("not an origin secret")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := b.Described(context.Background(), surveyed(bootstrap.CloudflareOriginPart)); refusalCode(err) != refusal.CodeInvalid {
+		t.Errorf("described = %v, want the refusal naming the origin secret's secret to delete", err)
 	}
 }
 
@@ -487,36 +543,46 @@ func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T)
 	}
 }
 
-func TestTheShieldedLoadBalancerIsAPartOnlyTheCloudflareEdgePullsIn(t *testing.T) {
+func TestTheCloudflareOriginPartHoldsNoLoadBalancerAndOnlyTheCloudflareEdgePullsItIn(t *testing.T) {
 	t.Parallel()
 
-	offered := composed(bootstrap.Engine{}).Parts()
-	at := slices.IndexFunc(offered, func(f provider.Part) bool { return f.Name == "cloudflare-origin" })
+	b := composed(bootstrap.Engine{})
+	offered := b.Parts()
+	at := slices.IndexFunc(offered, func(f provider.Part) bool { return f.Name == bootstrap.CloudflareOriginPart })
 	if at < 0 {
-		t.Fatalf("Parts() = %v, want the %q part: the load balancer Cloudflare forwards to costs every month, and a recurring cost is consented to by being planned", offered, bootstrap.CloudflareOriginPart)
+		t.Fatalf("Parts() = %v, want the %q part", offered, bootstrap.CloudflareOriginPart)
 	}
-	if !strings.Contains(offered[at].Summary, "$18") {
-		t.Errorf("the %q part reads %q, want the price in the plan", bootstrap.CloudflareOriginPart, offered[at].Summary)
-	}
-	proxied := bootstrapplan.RequiredParts(offered, "cloudflare")
-	if !slices.Contains(proxied, bootstrap.CloudflareOriginPart) {
-		t.Errorf("a cloudflare bootstrap requires %v, want %q and not the front browsers reach directly", proxied, bootstrap.CloudflareOriginPart)
-	}
-	fronted := bootstrapplan.RequiredParts(offered, alb.Kind)
-	if slices.Contains(fronted, bootstrap.CloudflareOriginPart) {
-		t.Errorf("an %q bootstrap requires %v, and a load balancer only Cloudflare reaches serves nothing it binds", alb.Kind, fronted)
-	}
-
-	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com", "networksecurity.googleapis.com"} {
-		if !slices.Contains(bootstrap.APIsFor(environment.TierProduction, []string{bootstrap.CloudflareOriginPart}), api) {
-			t.Errorf("a %q bootstrap checks %v, want %s among them", bootstrap.CloudflareOriginPart, bootstrap.APIsFor(environment.TierProduction, []string{bootstrap.CloudflareOriginPart}), api)
+	summary := offered[at].Summary
+	for _, said := range []string{"load balancer", "$18"} {
+		if strings.Contains(summary, said) {
+			t.Errorf("the %q part reads %q, and names %q: the worker reaches each release on its revision-tag URL", bootstrap.CloudflareOriginPart, summary, said)
 		}
 	}
-	if !slices.Contains(bootstrap.PermissionsFor([]string{bootstrap.CloudflareOriginPart}), "networksecurity.serverTlsPolicies.create") {
-		t.Errorf("a %q bootstrap checks %v, want the permission its server tls policy is raised with", bootstrap.CloudflareOriginPart, bootstrap.PermissionsFor([]string{bootstrap.CloudflareOriginPart}))
+	for _, want := range []string{"origin secret", "HMAC key"} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("the %q part reads %q, want it to name the %s it holds", bootstrap.CloudflareOriginPart, summary, want)
+		}
 	}
-	if !slices.Contains(bootstrap.RolesCovering([]string{bootstrap.CloudflareOriginPart}), "roles/compute.securityAdmin") {
-		t.Errorf("the refusal for a %q bootstrap names %v, want the role that covers its server tls policy", bootstrap.CloudflareOriginPart, bootstrap.RolesCovering([]string{bootstrap.CloudflareOriginPart}))
+	if proxied := bootstrapplan.RequiredParts(offered, "cloudflare"); !slices.Contains(proxied, bootstrap.CloudflareOriginPart) {
+		t.Errorf("a cloudflare bootstrap requires %v, want %q", proxied, bootstrap.CloudflareOriginPart)
+	}
+	if fronted := bootstrapplan.RequiredParts(offered, alb.Kind); slices.Contains(fronted, bootstrap.CloudflareOriginPart) {
+		t.Errorf("an %q bootstrap requires %v, and nothing it binds reads the Cloudflare edge's origin secret", alb.Kind, fronted)
+	}
+	for _, permission := range bootstrap.PermissionsFor([]string{bootstrap.CloudflareOriginPart}) {
+		for _, service := range []string{"compute.", "certificatemanager.", "networksecurity."} {
+			if strings.HasPrefix(permission, service) {
+				t.Errorf("a %q bootstrap checks %s, and a credential would be refused for a load balancer it never raises", bootstrap.CloudflareOriginPart, permission)
+			}
+		}
+	}
+
+	read := surveyed(bootstrap.CloudflareOriginPart)
+	stack := provider.BootstrapStack{Name: read.Project + "/" + string(read.Tier) + "/" + bootstrap.CloudflareOriginPart, Part: bootstrap.CloudflareOriginPart, Present: true}
+	for _, part := range bootstrap.SurveyedParts(b, read, []provider.BootstrapStack{stack}) {
+		if part.Name == bootstrap.CloudflareOriginPart && part.Shape != nil {
+			t.Errorf("the described %q part is shaped as %+v, want no priced load balancer", bootstrap.CloudflareOriginPart, part.Shape)
+		}
 	}
 }
 
@@ -530,19 +596,10 @@ func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingAdded(t *tes
 			t.Errorf("the %s part checks %v, want %s among them: the gate is a Service Extensions plugin, and the front needs the rest", albpart.PartName, balancer.APIs, api)
 		}
 	}
-	plain := bootstrap.APIsFor(environment.TierProduction, nil)
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com"} {
-		if slices.Contains(plain, api) {
+		if slices.Contains(bootstrap.BootstrapAPIs, api) {
 			t.Errorf("a bootstrap provisioning no load balancer demands %s, and it would be refused for a service it never calls", api)
 		}
-	}
-	for _, api := range bootstrap.BootstrapAPIs {
-		if !slices.Contains(plain, api) {
-			t.Errorf("a bootstrap no longer checks %s, and the apply would fail on the first resource that needs it", api)
-		}
-	}
-	if slices.Contains(bootstrap.APIsFor(environment.TierPreview, []string{bootstrap.CloudflareOriginPart}), "networkservices.googleapis.com") {
-		t.Error("a bootstrap for the load balancer only Cloudflare reaches demands the Service Extensions API, and the worker in front of it gates")
 	}
 }
 
@@ -554,10 +611,10 @@ func TestABootstrapProvisioningNoLoadBalancerChecksNoLoadBalancerPermission(t *t
 			t.Errorf("a bootstrap provisioning no load balancer checks %s, and a credential would be refused for a service it never calls", permission)
 		}
 	}
-	if slices.ContainsFunc(bootstrap.RolesCovering(nil), func(role string) bool {
+	if slices.ContainsFunc(bootstrap.BootstrapRoles(), func(role string) bool {
 		return role == "roles/compute.loadBalancerAdmin" || strings.HasPrefix(role, "roles/certificatemanager.")
 	}) {
-		t.Errorf("the refusal for a plain bootstrap names %v, and a role for a front nothing provisions is one more than the credential needs", bootstrap.RolesCovering(nil))
+		t.Errorf("the refusal for a bootstrap names %v, and a role for a front no bootstrap provisions is one more than the credential needs", bootstrap.BootstrapRoles())
 	}
 }
 

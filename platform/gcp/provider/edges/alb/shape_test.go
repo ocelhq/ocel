@@ -69,7 +69,7 @@ func shapedCounts(shaped []pricing.Shaped) map[string]int {
 func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 	t.Parallel()
 
-	spec := loadBalancerSpec{Namespace: "ocel", Region: "europe-west1", Names: loadBalancerNames("ocel", environment.TierPreview, false),
+	spec := loadBalancerSpec{Namespace: "ocel", Region: "europe-west1", Names: loadBalancerNames("ocel", environment.TierPreview),
 		Assets: &tierAssets, Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
 	registered := declaredCounts(t, loadBalancerProgram(spec))
 	maps.Copy(registered, declaredCounts(t, gateProgram(gateSpec{Names: spec.Names, Main: newGateVersion("image", "config")})))

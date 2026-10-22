@@ -61,12 +61,7 @@ func proxyCredentialPermissions(purpose edge.CredentialPurpose) (edge.Credential
 func (p *cloudflare) describeCredentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
 	var permissions []string
 	switch purpose {
-	case edge.PurposeBootstrap:
-		permissions = workerPermissions()
-		if p.workerClientCertificate {
-			permissions = slices.Concat(permissions, workerClientCertificatePermissions)
-		}
-	case edge.PurposeDeploy:
+	case edge.PurposeBootstrap, edge.PurposeDeploy:
 		permissions = workerPermissions()
 	default:
 		return edge.CredentialDocument{}, fmt.Errorf(

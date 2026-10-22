@@ -134,6 +134,9 @@ func Handler(opts Options) http.Handler {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
+		if visitor := r.Header.Get("X-Forwarded-Host"); opts.Guard != nil && visitor != "" {
+			r.Host = visitor
+		}
 		if opts.Gate != nil && !admitGate(w, r, opts, proxy) {
 			return
 		}

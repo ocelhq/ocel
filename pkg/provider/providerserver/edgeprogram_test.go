@@ -133,7 +133,7 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if spec.Program == nil {
 		t.Fatal("the stack has no program, and the relay edge answers every request from an entry worker")
 	}
-	if want := (edge.Reach{Kind: edge.ReachClientCertificate, Certificate: fake.ProgramCertificate + "-" + string(fake.KindRelay)}); spec.Program.Origin.Reach != want {
+	if want := (edge.Reach{Kind: edge.ReachOriginSecret, Secret: fake.ProgramSecret + "-" + string(fake.KindRelay)}); spec.Program.Origin.Reach != want {
 		t.Errorf("Origin.Reach = %+v, want the reach the provider programs for the relay edge, %+v", spec.Program.Origin.Reach, want)
 	}
 	if spec.Program.PreviewKey != "" {

@@ -23,7 +23,7 @@ import type { PurgeOutcome } from "./purge-backlog";
 import { purgeInBand } from "./purge-inband";
 import { parsePurgeOutcome } from "./purge-outcome";
 import type { ReleaseScope } from "./purge-times";
-import type { StoredRecord } from "./releases";
+import { listOriginUrls, type StoredRecord } from "./releases";
 import {
   BROWSER_REVALIDATES,
   type CachedResponse,
@@ -238,9 +238,9 @@ function isReleaseImageOptimizer(
 }
 
 function isReleaseOrigin(record: StoredRecord, origin: string): boolean {
-  return Object.values(record.functionUrls).some((functionUrl) => {
+  return listOriginUrls(record).some((url) => {
     try {
-      return new URL(functionUrl).origin === origin;
+      return new URL(url).origin === origin;
     } catch {
       return false;
     }
@@ -339,7 +339,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       return respondRefused("the image optimizer is not one of the served release's");
     }
     const call = readImageCall(request.headers.get(IMAGE_CALL_HEADER));
-    const optimize = functionUrlImageOrigin(optimizerUrl, origin.fetch);
+    const optimize = functionUrlImageOrigin(optimizerUrl, origin.fetchFor(found.record));
     if (!call || !optimize) return respondRefused("there is no image to optimize");
     const optimized = servedImage(
       withoutServeMarkers(await optimize(call.payload)),
@@ -370,11 +370,26 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       return respondMiss();
     }
     const scope = { slug: found.render.slug, storageCoordinate: found.render.storageCoordinate };
+    const { record } = found;
     const render = () =>
-      this.renderAtOrigin(request, { host, release, scope, keyedUrl, honoursAppCacheHeaders });
+      this.renderAtOrigin(request, {
+        host,
+        release,
+        record,
+        scope,
+        keyedUrl,
+        honoursAppCacheHeaders,
+      });
     if (variant === PPR_SHELL_VARIANT) {
       const regenerate = () =>
-        this.renderAtOrigin(request, { host, release, scope, keyedUrl, unconditional: true });
+        this.renderAtOrigin(request, {
+          host,
+          release,
+          record,
+          scope,
+          keyedUrl,
+          unconditional: true,
+        });
       return this.fromStoredShell(
         request,
         { render: regenerate, release, variant, keyedUrl, cached },
@@ -476,6 +491,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     call: {
       host: string;
       release: string;
+      record: StoredRecord;
       scope: ReleaseScope;
       keyedUrl: string;
       unconditional?: boolean;
@@ -489,7 +505,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
       headers.delete("if-none-match");
       headers.delete("if-modified-since");
     }
-    const originFetch = openOrigin(this.env).fetch;
+    const originFetch = openOrigin(this.env).fetchFor(call.record);
     headers.set("x-forwarded-host", host);
     headers.set("x-forwarded-proto", "https");
     const res = await originFetch(

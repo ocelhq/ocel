@@ -18,7 +18,6 @@ type bindingSpec struct {
 	Tier           environment.Tier
 	CertificateMap string
 	Hosts          map[string]Host
-	Shielded       bool
 }
 
 func bindingProgram(spec bindingSpec) Program {
@@ -49,7 +48,7 @@ func bindingProgram(spec bindingSpec) Program {
 			if err != nil {
 				return err
 			}
-			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(spec.Shielded), responseHeadersOf(spec.Tier)); err != nil {
+			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(), responseHeadersOf(spec.Tier)); err != nil {
 				return err
 			}
 		}

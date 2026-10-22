@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type notices struct {
@@ -44,8 +43,6 @@ func (e *Edge) removeGate(ctx context.Context, tier environment.Tier) error {
 	return e.deps.Images.Delete(ctx, tier)
 }
 
-func (s *stack) isGated() bool { return !s.e.deps.Shielded }
-
 func (s *stack) listRoutedHosts() []string {
 	var hosts []string
 	for _, hostname := range slices.Sorted(maps.Keys(s.recorded.Hosts)) {
@@ -57,9 +54,6 @@ func (s *stack) listRoutedHosts() []string {
 }
 
 func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
-	if !s.isGated() {
-		return nil
-	}
 	tier := s.state.Tier
 	held := spec.Gate
 	if held != nil {
@@ -102,7 +96,7 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 }
 
 func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progress.Log) error {
-	if !s.isGated() || len(hosts) == 0 {
+	if len(hosts) == 0 {
 		return nil
 	}
 	if log == nil {
@@ -123,7 +117,7 @@ func (s *stack) admitGatedHosts(ctx context.Context, hosts []string, log progres
 }
 
 func (s *stack) forgetGatedHosts(ctx context.Context, hosts []string, log progress.Log) {
-	if !s.isGated() || len(hosts) == 0 {
+	if len(hosts) == 0 {
 		return
 	}
 	_, err := s.e.changeGateRecord(ctx, s.state.Tier, s.state.Slug, func(recorded gateRecord, found bool) (gateRecord, bool) {
@@ -139,9 +133,6 @@ func (s *stack) forgetGatedHosts(ctx context.Context, hosts []string, log progre
 }
 
 func (s *stack) withdrawGate(ctx context.Context) error {
-	if !s.isGated() {
-		return nil
-	}
 	tier := s.state.Tier
 	changed, err := s.e.changeGateRecord(ctx, tier, s.state.Slug, func(gateRecord, bool) (gateRecord, bool) { return gateRecord{}, false })
 	if err != nil {
@@ -157,17 +148,6 @@ func (s *stack) withdrawGate(ctx context.Context) error {
 }
 
 func (s *stack) signGateSession(ctx context.Context, hostname string) (string, error) {
-	if !s.isGated() {
-		records, err := stackrecords.ReadGates(ctx, s.e.deps.KeyValues, s.e.deps.Cipher, s.state.Tier)
-		if err != nil {
-			return "", err
-		}
-		inForce := records[s.state.Slug].GateInForce()
-		if inForce == nil {
-			return "", nil
-		}
-		return gate.CookieName + "=" + inForce.SignSession(hostname, time.Now()), nil
-	}
 	recorded, gated, err := s.e.readGateRecord(ctx, s.state.Tier, s.state.Slug)
 	if err != nil || !gated {
 		return "", err

@@ -105,23 +105,43 @@ func TestTheCloudflareFrontOnGCPRunsCodeAndShieldsItsOrigin(t *testing.T) {
 		t.Errorf("Facts().Edges = %v, want cloudflare among them", p.Facts().Edges)
 	}
 	if _, err := p.Bootstrap(cloudflare.Kind); err != nil {
-		t.Fatalf("Bootstrap(%q) = %v, want the bootstrap that raises the load balancer it reaches", cloudflare.Kind, err)
+		t.Fatalf("Bootstrap(%q) = %v, want the bootstrap that keeps its origin secret and asset reader", cloudflare.Kind, err)
 	}
 	front, err := p.Edges().Open(cloudflare.Kind, nil)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", cloudflare.Kind, err)
 	}
 	facts := front.Facts()
-	if !facts.RunsCode || !facts.ProxiesRecords {
-		t.Errorf("the cloudflare edge's facts = %+v, want a worker that runs code and proxies the records of forwarded containers", facts)
+	if !facts.RunsCode {
+		t.Errorf("the cloudflare edge's facts = %+v, want a worker that runs code", facts)
 	}
 	if !facts.ShieldsOrigin {
-		t.Errorf("the cloudflare edge's facts = %+v, want the origin shielded, so a Cloud Run service answers only its load balancer", facts)
+		t.Errorf("the cloudflare edge's facts = %+v, want the origin shielded, so nothing reaches a release around the worker", facts)
 	}
 	hooks := front.Hooks()
-	if hooks.ClientCertificates == nil || hooks.CheckBootstrapInstalled == nil || hooks.ListBoundHostnames == nil ||
-		hooks.OriginCertificates == nil || hooks.PurgeHostnames == nil || hooks.PlanBootstrap == nil {
-		t.Error("the cloudflare edge lacks a hook the worker or the forwarded containers it fronts depend on")
+	if hooks.PlanBootstrap == nil {
+		t.Error("the cloudflare edge plans no bootstrap, so its workers never show in a bootstrap plan")
+	}
+	if hooks.CheckBootstrapInstalled != nil || hooks.ListBoundHostnames != nil || hooks.OriginCertificates != nil || hooks.PurgeHostnames != nil {
+		t.Error("the cloudflare edge on GCP answers for a load balancer or proxied hostnames, and the worker reaches each release on its revision-tag URL with neither between")
+	}
+	permissions, err := hooks.DescribeCredentialPermissions(edge.PurposeBootstrap)
+	if err != nil {
+		t.Fatalf("DescribeCredentialPermissions(bootstrap) = %v", err)
+	}
+	if strings.Contains(permissions.Document, "Account · SSL and Certificates") {
+		t.Errorf("a bootstrap token on GCP needs %q, and the worker presents the origin secret rather than a client certificate", permissions.Document)
+	}
+}
+
+func TestTheCloudflareFrontOnGCPRefusesOriginDomainAsAnOptionItDoesNotTake(t *testing.T) {
+	t.Parallel()
+
+	_, err := testProvider(t).Edges().Open(cloudflare.Kind, provider.Options{"originDomain": "o.example.com"})
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeUnknownOption || !strings.Contains(refused.Message, "edge.cloudflare.originDomain") {
+		t.Errorf("Open(cloudflare, originDomain) = %v, want an unknown-option refusal naming edge.cloudflare.originDomain: the worker reaches each release on its revision-tag URL, under no domain of yours", err)
 	}
 }
 
@@ -137,20 +157,19 @@ func TestTheCloudflareFrontOnGCPDescribesTheEdgesBootstrap(t *testing.T) {
 	}
 }
 
-func TestGCPPairsServerlessAppsWithTheCloudflareRouterAndForwardsContainersThroughTheShieldedLoadBalancer(t *testing.T) {
+func TestGCPPairsServerlessAppsAndContainersWithTheCloudflareRouterAndForwardsNothing(t *testing.T) {
 	t.Parallel()
 
 	facts := testProvider(t).Facts()
 
-	if got, found := facts.PairedRouter(cloudflare.Kind, provider.ComputeServerless); !found || got != router.Kind(cloudflare.Kind) {
-		t.Errorf("PairedRouter(cloudflare, serverless) = %q, %v, want the cloudflare router", got, found)
-	}
-	if got, found := facts.PairedRouter(cloudflare.Kind, provider.ComputeContainer); !found || got != router.Kind(alb.Kind) {
-		t.Errorf("PairedRouter(cloudflare, container) = %q, %v, want the load balancer", got, found)
+	for _, compute := range provider.Computes() {
+		if got, found := facts.PairedRouter(cloudflare.Kind, compute); !found || got != router.Kind(cloudflare.Kind) {
+			t.Errorf("PairedRouter(cloudflare, %s) = %q, %v, want the cloudflare router: the entry worker reaches every release on its revision-tag URL", compute, got, found)
+		}
 	}
 	for _, pairing := range facts.Pairings {
-		if pairing.Edge == cloudflare.Kind && pairing.Forwarded != (pairing.Router == router.Kind(alb.Kind)) {
-			t.Errorf("pairing %+v: only containers behind the load balancer are forwarded", pairing)
+		if pairing.Edge == cloudflare.Kind && (pairing.Forwarded || pairing.Router != router.Kind(cloudflare.Kind)) {
+			t.Errorf("pairing %+v: nothing behind the cloudflare edge is forwarded through a load balancer", pairing)
 		}
 	}
 }
@@ -163,8 +182,8 @@ func TestTheCloudflareRouterOnGCPSignsAndDispatchesAndHasNoOriginHooks(t *testin
 		t.Fatalf("Open(cloudflare router) = %v", err)
 	}
 	facts := opened.Facts()
-	if !facts.SignsOriginForwards || !facts.Dispatches || !facts.ReachesFunctions || facts.ReachesContainers {
-		t.Errorf("facts = %+v, want a router that signs and dispatches to functions but reaches no container", facts)
+	if !facts.SignsOriginForwards || !facts.Dispatches || !facts.ReachesFunctions || !facts.ReachesContainers {
+		t.Errorf("facts = %+v, want a router that signs and dispatches to functions and containers", facts)
 	}
 	if hooks := opened.Hooks(); hooks.Origin != nil {
 		t.Error("the cloudflare router has origin hooks, and the deploy would treat it as one that forwards to an origin")

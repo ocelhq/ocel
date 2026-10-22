@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"reflect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -25,18 +24,12 @@ const (
 )
 
 type AdoptedEdge struct {
-	ReleasesStore     AdoptedWorker            `json:"releasesStore"`
-	ClientCertificate AdoptedClientCertificate `json:"clientCertificate"`
+	ReleasesStore AdoptedWorker `json:"releasesStore"`
 }
 
 type AdoptedWorker struct {
 	Endpoint   string `json:"endpoint"`
 	ScriptName string `json:"scriptName"`
-}
-
-type AdoptedClientCertificate struct {
-	ID          string `json:"id"`
-	Authorities string `json:"authorities"`
 }
 
 type EdgeCredentials struct {
@@ -82,7 +75,8 @@ func AdoptOffers(
 	out edge.BootstrapOutput,
 	runProgress progress.Log,
 ) error {
-	if out.ReleasesStore == nil && out.ClientCertificate == nil {
+	offered := out.ReleasesStore
+	if offered == nil {
 		return nil
 	}
 	say := gcloud.EnsureProgress(runProgress)
@@ -90,31 +84,24 @@ func AdoptOffers(
 	if err != nil {
 		return err
 	}
-	adopted, credentials := stored, storedCredentials
-	if offered := out.ReleasesStore; offered != nil {
-		say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (Secret Manager)", kind))
-		adopted.ReleasesStore = AdoptedWorker{Endpoint: offered.Endpoint, ScriptName: offered.Name}
-		if offered.BootstrapCredential != "" {
-			credentials.ReleasesStore = offered.BootstrapCredential
-		}
-		if credentials.ReleasesStore == "" {
-			return edgeCredentialUnrecorded(c, tier, kind, "releases store", adopted.ReleasesStore.ScriptName)
-		}
+	say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (Secret Manager)", kind))
+	adopted := AdoptedEdge{ReleasesStore: AdoptedWorker{Endpoint: offered.Endpoint, ScriptName: offered.Name}}
+	credentials := storedCredentials
+	if offered.BootstrapCredential != "" {
+		credentials.ReleasesStore = offered.BootstrapCredential
 	}
-	if offered := out.ClientCertificate; offered != nil {
-		adopted.ClientCertificate = AdoptedClientCertificate{ID: offered.ID, Authorities: offered.Authorities}
+	if credentials.ReleasesStore == "" {
+		return edgeCredentialUnrecorded(c, tier, kind, "releases store", adopted.ReleasesStore.ScriptName)
 	}
 	if credentials != storedCredentials {
 		if err := WriteEdgeCredentials(ctx, c, tier, kind, credentials); err != nil {
 			return err
 		}
 	}
-	if out.ReleasesStore != nil {
-		if err := ensurePurgeSeed(ctx, c, tier, kind); err != nil {
-			return err
-		}
+	if err := ensurePurgeSeed(ctx, c, tier, kind); err != nil {
+		return err
 	}
-	if reflect.DeepEqual(adopted, stored) {
+	if adopted == stored {
 		return nil
 	}
 	return writeAdoptedEdge(ctx, store, tier, kind, adopted)
@@ -267,7 +254,7 @@ func ForgetOffers(ctx context.Context, c *gcloud.Clients, store records.Store, t
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{c.EdgeCredentialsSecret(tier, kind), c.PurgeSeedSecret(tier, kind)} {
+	for _, name := range []string{c.EdgeCredentialsSecret(tier, kind), c.PurgeSeedSecret(tier, kind), c.OriginSecret(tier, kind)} {
 		if err := c.DeleteSecret(ctx, service, tier, name); err != nil {
 			return err
 		}

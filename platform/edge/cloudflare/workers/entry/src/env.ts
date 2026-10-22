@@ -11,7 +11,6 @@ export interface Env {
   OCEL_PREVIEW_BASE_DOMAIN?: string;
   OCEL_PREVIEW_KEY?: string;
   OCEL_ORIGIN: string;
-  OCEL_ORIGIN_CLIENT_CERTIFICATE?: Fetcher;
   OCEL_ENVELOPE_KEY?: string;
   OCEL_PURGE_BUDGET?: string;
   LOADER: WorkerLoader;

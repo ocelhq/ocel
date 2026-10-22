@@ -40,6 +40,10 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		return nil, err
 	}
 	budget.WarnOversubscribed(progress)
+	facts, err := p.ReadEdgeFacts(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
 	c, err := p.OpenClients(ctx)
 	if err != nil {
 		return nil, err
@@ -88,7 +92,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		Tag:       p.RevisionTag(spec),
 		Labels:    labels,
 
-		OpensOnPromotion: true,
+		OpensOnPromotion: !run.FactsOf(spec.Edge).RunsCode,
 	}
 	if next.Serves(app) {
 		served = next.FillContainerDefaults(served)
@@ -96,11 +100,17 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		if err != nil {
 			return nil, err
 		}
-		if served.Env, err = run.MergeValues(app.App, release.NextValues, values, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, buckets, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
+		if served.Env, err = run.MergeValues(app.App, release.NextValues, served.Env, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, buckets, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
 			return nil, err
 		}
 	}
-	if err := cloudrun.ApplyGate(ctx, c, gated, app.App, &served); err != nil {
+	if served.Env, err = run.MergeValues(app.App, release.OriginGuardValues, served.Env, release.NewOriginGuardEnv(facts.OriginSecret)); err != nil {
+		return nil, err
+	}
+	if err := cloudrun.ApplyGate(gated, app.App, &served); err != nil {
+		return nil, err
+	}
+	if err := cloudrun.ApplyProbeToken(ctx, c, app.App, &served); err != nil {
 		return nil, err
 	}
 	ran, err := p.Services.DeployService(ctx, served, progress)
@@ -108,8 +118,12 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		return nil, err
 	}
 	release.WarnPreviewOpen(spec, service, progress)
+	address, err := release.ReadAddress(spec, "container "+app.App, ran)
+	if err != nil {
+		return nil, err
+	}
 	deployed := []provider.AppContainer{{
-		Name: app.App, Physical: service, URL: ran.Url, Image: app.Image, Revision: ran.Revision,
+		Name: app.App, Physical: service, URL: address, Image: app.Image, Revision: ran.Revision,
 	}}
 	workers, err := p.ProvisionWorkers(ctx, c, spec, app.Image, account, values, declared, provider.Instances{Max: budget.Ceiling()}, progress)
 	if err != nil {

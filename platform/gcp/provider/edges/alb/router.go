@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 
@@ -31,14 +30,7 @@ func (r Router) Facts() router.Facts {
 	}
 }
 
-func (r Router) Hooks() router.Hooks {
-	return router.Hooks{Origin: &router.OriginHooks{
-		PlanProjectRemoval:      r.planProjectRemoval,
-		ClaimPreviewEntry:       r.claimPreviewEntry,
-		DisclaimPreviewEntry:    r.disclaimPreviewEntry,
-		PlanPreviewEntryRemoval: r.planPreviewEntryRemoval,
-	}}
-}
+func (r Router) Hooks() router.Hooks { return router.Hooks{} }
 
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
 	if spec.Slug == "" {
@@ -63,21 +55,11 @@ func (r routerStack) State() router.StackState {
 
 func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin, error) {
 	s := r.s
-	balancing := s.e.loadBalancerFor(claim)
-	var balancer LoadBalancer
-	var err error
-	switch {
-	case len(claim.ClientCAs) > 0:
-		balancer, err = balancing.trustClaim(ctx, s.state.Tier, claim.Hostname, claim.ClientCAs)
-	case !s.recorded.LoadBalancer.provisioned():
-		balancer, err = balancing.readProvisionedLoadBalancer(ctx, s.state.Tier)
-	default:
-		balancer = s.recorded.LoadBalancer
-	}
-	if err != nil {
-		return edge.Origin{}, err
-	}
-	if balancer != s.recorded.LoadBalancer {
+	if !s.recorded.LoadBalancer.provisioned() {
+		balancer, err := s.e.readProvisionedLoadBalancer(ctx, s.state.Tier)
+		if err != nil {
+			return edge.Origin{}, err
+		}
 		s.recorded.LoadBalancer = balancer
 		s.keep()
 	}
@@ -88,14 +70,7 @@ func (r routerStack) Claim(ctx context.Context, claim router.Claim) (edge.Origin
 }
 
 func (r routerStack) Disclaim(ctx context.Context, hostname string) error {
-	shielded := r.s.recorded.LoadBalancer.Shielded
-	if err := r.s.UnbindDomain(ctx, hostname); err != nil {
-		return err
-	}
-	if !shielded {
-		return nil
-	}
-	return r.s.e.Shielded().withdrawClaims(ctx, r.s.state.Tier, hostname)
+	return r.s.UnbindDomain(ctx, hostname)
 }
 
 func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, progress progress.Log) error {
@@ -156,12 +131,5 @@ func (r routerStack) RemovePointer(ctx context.Context, removal router.PointerRe
 }
 
 func (r routerStack) Destroy(ctx context.Context) error {
-	shielded, hostnames := r.s.recorded.LoadBalancer.Shielded, slices.Sorted(maps.Keys(r.s.recorded.Hosts))
-	if err := r.s.Destroy(ctx); err != nil {
-		return err
-	}
-	if !shielded || len(hostnames) == 0 {
-		return nil
-	}
-	return r.s.e.Shielded().withdrawClaims(ctx, r.s.state.Tier, hostnames...)
+	return r.s.Destroy(ctx)
 }

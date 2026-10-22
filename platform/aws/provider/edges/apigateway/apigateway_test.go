@@ -412,7 +412,7 @@ func TestBootstrapWritesNothing(t *testing.T) {
 	if out.Trust != edge.TrustInternal {
 		t.Errorf("Trust = %q, want internal; this edge runs inside the account it serves", out.Trust)
 	}
-	if out.ReleasesStore != nil || out.ClientCertificate != nil {
+	if out.ReleasesStore != nil {
 		t.Errorf("Bootstrap offered %+v, want nothing; the api-gateway edge hosts no store the bootstrap adopts", out)
 	}
 	if got := w.gateway.mutations(); len(got) != 0 {

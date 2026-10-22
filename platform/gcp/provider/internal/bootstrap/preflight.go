@@ -10,7 +10,6 @@ import (
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -146,7 +145,7 @@ var bootstrapRoles = []string{
 func BootstrapRoles() []string { return slices.Clone(bootstrapRoles) }
 
 func (b Engine) preflight(ctx context.Context, read Survey, parts []string) error {
-	if err := b.RefuseServicesOff(ctx, APIsFor(read.Tier, parts)); err != nil {
+	if err := b.RefuseServicesOff(ctx, BootstrapAPIs); err != nil {
 		return err
 	}
 	if err := b.Permitted(ctx, parts); err != nil {
@@ -158,18 +157,9 @@ func (b Engine) preflight(ctx context.Context, read Survey, parts []string) erro
 func PermissionsFor(parts []string) []string {
 	permissions := slices.Clone(BootstrapPermissions)
 	if slices.Contains(parts, CloudflareOriginPart) {
-		permissions = AppendMissing(permissions, alb.ShieldedPermissions)
 		permissions = AppendMissing(permissions, AssetStorePermissions)
 	}
 	return permissions
-}
-
-func RolesCovering(parts []string) []string {
-	roles := BootstrapRoles()
-	if slices.Contains(parts, CloudflareOriginPart) {
-		roles = AppendMissing(roles, alb.ShieldedRoles())
-	}
-	return roles
 }
 
 func (b Engine) ListServicesOff(ctx context.Context, apis []string) ([]string, error) {
@@ -240,7 +230,7 @@ func (b Engine) Permitted(ctx context.Context, parts []string) error {
 	return refusal.Refuse(refusal.CodeDenied,
 		"this credential may not do what a bootstrap of project %s does: it lacks %s.\n"+
 			"Granting %s covers every one of them, but the permissions are what is checked",
-		b.Clients.Project(), strings.Join(missing, ", "), strings.Join(RolesCovering(parts), ", "))
+		b.Clients.Project(), strings.Join(missing, ", "), strings.Join(bootstrapRoles, ", "))
 }
 
 func (b Engine) RegionServed(ctx context.Context, read Survey) error {

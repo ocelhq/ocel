@@ -97,6 +97,14 @@ export function hasRequestLog<T extends object>(target: T): target is T & Reques
   return typeof (target as Partial<RequestLog>).countOriginRequests === "function";
 }
 
+export interface RevisionTags {
+  readRevisionTagUrls(cell: CellUnderTest, app: string): Promise<string[]>;
+}
+
+export function hasRevisionTags<T extends object>(target: T): target is T & RevisionTags {
+  return typeof (target as Partial<RevisionTags>).readRevisionTagUrls === "function";
+}
+
 export interface Restart {
   restart(cell: CellUnderTest): Promise<Deployment>;
 }

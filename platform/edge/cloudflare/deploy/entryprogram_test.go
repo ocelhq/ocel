@@ -2,7 +2,6 @@ package cloudflare
 
 import (
 	"encoding/json"
-	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -22,9 +21,9 @@ func signedReach() edge.OriginReach {
 	}
 }
 
-func certifiedReach() edge.OriginReach {
+func secretReach() edge.OriginReach {
 	return edge.OriginReach{
-		Reach:    edge.Reach{Kind: edge.ReachClientCertificate, Certificate: "c1"},
+		Reach:    edge.Reach{Kind: edge.ReachOriginSecret, Secret: "secret-current", PreviousSecret: "secret-previous", PreviousFingerprint: edge.OriginSecretFingerprint("secret-previous")},
 		Throttle: edge.Throttle{Status: 429, BodyContains: "no available instance"},
 	}
 }
@@ -192,31 +191,43 @@ func TestAProductionProjectEntryProgramCarriesNoPreviewConfig(t *testing.T) {
 	}
 }
 
-func TestAnEntryWorkerReachingItsOriginByClientCertificateBindsItForMutualTLS(t *testing.T) {
+func TestAnEntryWorkerReachingItsOriginByASecretHoldsBothSecrets(t *testing.T) {
 	program := programmed()
-	program.Origin = certifiedReach()
+	program.Origin = secretReach()
 
 	built := buildEntry(t, environment.TierProduction, "shop", program)
-	want := map[string]string{originClientCertificateBinding: "c1"}
-	if !maps.Equal(built.worker.ClientCertificates, want) {
-		t.Errorf("ClientCertificates = %v, want %v", built.worker.ClientCertificates, want)
+	var reach edge.OriginReach
+	if err := json.Unmarshal([]byte(built.worker.Secrets[edge.OriginReachVar]), &reach); err != nil {
+		t.Fatalf("Secrets[%s]: %v", edge.OriginReachVar, err)
+	}
+	if reach.Reach != secretReach().Reach {
+		t.Errorf("the reach the worker holds = %+v, want %+v", reach.Reach, secretReach().Reach)
+	}
+	for name, value := range built.worker.Variables {
+		if strings.Contains(value, "secret-current") || strings.Contains(value, "secret-previous") {
+			t.Errorf("Variables[%s] = %q holds an origin secret in the clear", name, value)
+		}
 	}
 }
 
-func TestAnEntryWorkerReachingItsOriginBySigningBindsNoClientCertificate(t *testing.T) {
-	built := buildEntry(t, environment.TierProduction, "shop", programmed())
-	if built.worker.ClientCertificates != nil {
-		t.Errorf("ClientCertificates = %v, want nil", built.worker.ClientCertificates)
+func TestAnEntryWorkerRefusesAnOriginSecretReachThatNamesNoSecret(t *testing.T) {
+	program := programmed()
+	program.Origin = secretReach()
+	program.Origin.Reach.Secret = ""
+
+	_, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(environment.TierProduction, "shop", program)
+	if err == nil || !strings.Contains(err.Error(), "origin secret") {
+		t.Fatalf("buildEntryProgram = %v, want a refusal of an origin secret reach with no secret", err)
 	}
 }
 
 func TestAnEntryWorkerRefusesAnOriginReachedTwoWays(t *testing.T) {
 	program := programmed()
-	program.Origin.Reach.Certificate = "c1"
+	program.Origin.Reach.Secret = "s1"
 
 	_, err := newCloudflare(defaultNamespace, Options{}).buildEntryProgram(environment.TierProduction, "shop", program)
 	if err == nil || !strings.Contains(err.Error(), "one way") {
-		t.Fatalf("buildEntryProgram = %v, want a refusal of an origin reached both by signing and by a certificate", err)
+		t.Fatalf("buildEntryProgram = %v, want a refusal of an origin reached both by signing and by an origin secret", err)
 	}
 }
 

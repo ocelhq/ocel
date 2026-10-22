@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/connector"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -43,8 +42,6 @@ type Provider struct {
 	writtenBy provider.WrittenBy
 
 	records records.Store
-
-	originRoutes cloudflareorigin.OriginRouting
 
 	mu            sync.Mutex
 	resolved      *gcloud.Clients
@@ -107,8 +104,7 @@ func (p *Provider) Facts() provider.Facts {
 		Pairings: []provider.Pairing{
 			{Edge: edge.None, Router: cloudrun.RouterKind, Computes: provider.Computes()},
 			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
-			{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: []provider.Compute{provider.ComputeServerless}},
-			{Edge: cloudflare.Kind, Router: router.Kind(alb.Kind), Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
+			{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: provider.Computes()},
 		},
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,

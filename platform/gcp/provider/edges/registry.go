@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -35,10 +34,7 @@ type Registry struct {
 	Images    alb.PluginImages
 	Project   string
 	Region    string
-
-	Certificates  provider.Certificates
-	ReadWorkerCAs func(ctx context.Context, tier environment.Tier) ([]string, error)
-	FrontPart     *alb.FrontPart
+	FrontPart *alb.FrontPart
 }
 
 var Supported = []edge.Kind{alb.Kind, cloudflare.Kind}
@@ -85,11 +81,7 @@ func (e Registry) Open(kind edge.Kind, options provider.Options) (edge.Edge, err
 		if err != nil {
 			return nil, err
 		}
-		return cloudflareorigin.NewFront(e.Namespace, decoded, e.OpenALB().Shielded(), cloudflareorigin.Wildcards{
-			KeyValues:     e.KeyValues,
-			Certificates:  e.Certificates,
-			ReadWorkerCAs: e.ReadWorkerCAs,
-		}), nil
+		return cloudflare.New(string(e.Namespace), decoded), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge: leave `provider.gcp.edge` out, and each service answers on the url Cloud Run gives it, "+

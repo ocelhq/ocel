@@ -17,7 +17,7 @@ type StaticRoutes struct {
 }
 
 func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) (*StaticRoutes, error) {
-	if balancer.Shielded || balancer.AssetsBackend == "" || !hasUploadedStaticFiles(record) ||
+	if balancer.AssetsBackend == "" || !hasUploadedStaticFiles(record) ||
 		record.Static == nil || len(record.Static.ImmutablePrefixes) == 0 {
 		return nil, nil
 	}

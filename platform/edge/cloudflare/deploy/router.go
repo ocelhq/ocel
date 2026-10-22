@@ -25,6 +25,7 @@ func (r Router) Facts() router.Facts {
 		CachesRecords:               true,
 		SignsOriginForwards:         true,
 		ReachesFunctions:            true,
+		ReachesContainers:           true,
 		Dispatches:                  true,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,

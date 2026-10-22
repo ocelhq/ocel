@@ -42,6 +42,7 @@ function context(fetch: Fetch): CheckContext {
     readExposed: async () => "",
     countOriginRequests: async () => 0,
     readReleaseFile: async () => new Uint8Array(),
+    readRevisionTagUrls: async () => [],
     runInEnvironment: async () => "",
     journeyNonce: "journey-nonce",
     projectDir: "/nonexistent",

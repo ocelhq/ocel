@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -211,17 +210,7 @@ func (s *stack) readLoadBalancer(ctx context.Context) (LoadBalancer, error) {
 	if s.recorded.LoadBalancer.provisioned() {
 		return s.recorded.LoadBalancer, nil
 	}
-	balancing := s.e
-	if s.state.Tier == environment.TierPreview {
-		preview, err := s.e.recordedPreview(ctx)
-		if err != nil {
-			return LoadBalancer{}, err
-		}
-		if preview.Shielded {
-			balancing = s.e.Shielded()
-		}
-	}
-	return balancing.readProvisionedLoadBalancer(ctx, s.state.Tier)
+	return s.e.readProvisionedLoadBalancer(ctx, s.state.Tier)
 }
 
 const maxHostRules = 1000

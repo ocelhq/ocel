@@ -1,6 +1,7 @@
 import { carryClientAuthorization } from "@platform/edge-contract/client-authorization";
 import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import type { AwsClient } from "aws4fetch";
+import { ORIGIN_SECRET_HEADER } from "./origin-secret";
 
 const SIGV4_HEADERS = [
   "authorization",
@@ -45,6 +46,7 @@ export function sigv4OriginFetch(client: AwsClient): typeof fetch {
     const signed = await client.sign(request.url, { method: request.method, body });
 
     const headers = new Headers(request.headers);
+    headers.delete(ORIGIN_SECRET_HEADER);
     carryClientAuthorization(headers);
     for (const name of SIGV4_HEADERS) {
       const value = signed.headers.get(name);

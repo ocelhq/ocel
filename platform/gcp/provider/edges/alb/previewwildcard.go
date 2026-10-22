@@ -17,7 +17,6 @@ import (
 type previewEntry struct {
 	BaseDomain  string `json:"baseDomain"`
 	Certificate string `json:"certificate,omitempty"`
-	Shielded    bool   `json:"shielded,omitempty"`
 }
 
 func (e *Edge) previewKey() records.Key {
@@ -67,7 +66,7 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 	if err := e.claimFront(ctx, environment.TierPreview, wildcard); err != nil {
 		return "", err
 	}
-	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate, Shielded: e.deps.Shielded}
+	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
 	balancer, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.Discard())
 	if err != nil {
 		return "", err

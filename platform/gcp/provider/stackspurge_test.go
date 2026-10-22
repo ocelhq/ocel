@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -52,6 +53,9 @@ func (o *orderLog) add(step string) {
 func adoptTheWorker(t *testing.T, h *offersHarness) {
 	t.Helper()
 	if err := h.adopt(fullOffers("c1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.ensureOriginSecret(t, environment.TierProduction, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -135,21 +139,55 @@ func TestANextDeployBehindAnEdgeItNeverAdoptedIsNotReadyAndDeploysNothing(t *tes
 	}
 }
 
-func TestANextDeployBehindTheWorkerOnATierWithNoOriginWildcardProvisionsNothing(t *testing.T) {
+func TestADeployBehindTheWorkerOnATierWithNoOriginSecretProvisionsNothing(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 	order := &orderLog{}
-	adoptTheWorker(t, h)
+	if err := h.adopt(fullOffers("c1")); err != nil {
+		t.Fatal(err)
+	}
 	spec := isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeServerless, &provider.ISRSpec{})
 	spec.App.Functions = []provider.FunctionSpec{{Name: "web"}}
 	wrapped := stacks{Stacks: recordingStacks{order: order}, p: programming(h)}
 
 	_, err := wrapped.Provision(t.Context(), spec, nil)
 
-	if refusalCode(err) != refusal.CodeInvalid || !strings.Contains(err.Error(), "originDomain") {
-		t.Errorf("Provision = %v, want an invalid refusal naming originDomain", err)
+	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "origin secret") {
+		t.Errorf("Provision = %v, want a not-ready refusal naming the origin secret", err)
 	}
 	if len(order.steps) != 0 {
 		t.Errorf("steps %v, want the refusal before anything provisioned", order.steps)
+	}
+}
+
+func TestADeployBehindTheCodeRunningEdgeHandsTheRecordTheFingerprintOfTheOriginSecretItsReleaseHolds(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		spec    provider.StackSpec
+		holding bool
+	}{
+		"a container behind the worker": {spec: isrSpec(codeRunningFront{kind: cloudflareKind, runsCode: true}, provider.ComputeContainer, nil), holding: true},
+		"the alb front":                 {spec: isrSpec(codeRunningFront{kind: "alb"}, provider.ComputeContainer, nil)},
+		"a stack with no app":           {spec: provider.StackSpec{Edge: codeRunningFront{kind: cloudflareKind, runsCode: true}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := newOffersHarness(t)
+			adoptTheWorker(t, h)
+			wrapped := stacks{Stacks: recordingStacks{order: &orderLog{}}, p: programming(h)}
+
+			result, err := wrapped.Provision(t.Context(), tc.spec, nil)
+			if err != nil {
+				t.Fatalf("Provision = %v", err)
+			}
+
+			want := ""
+			if tc.holding {
+				want = edge.OriginSecretFingerprint(h.storedOriginSecret(t, environment.TierProduction).Current)
+			}
+			if result.OriginSecretFingerprint != want {
+				t.Errorf("OriginSecretFingerprint = %q, want %q", result.OriginSecretFingerprint, want)
+			}
+		})
 	}
 }

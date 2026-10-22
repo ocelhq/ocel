@@ -13,40 +13,26 @@ import (
 type Program func(ctx *pulumi.Context, project string) error
 
 type Target struct {
-	Tier     environment.Tier
-	Slug     string
-	Shielded bool
-	Origin   string
-	Gate     bool
+	Tier environment.Tier
+	Slug string
+	Gate bool
 }
 
-func OriginHostStack(hostname string, tier environment.Tier) (string, error) {
-	return naming.TaggedName{
-		Head:     dashed(string(Kind), originScope, naming.TierWord(tier)),
-		Readable: naming.SanitizeHost(hostname),
-		Tag:      naming.HashTag(string(tier), hostname),
-	}.Fit(maxResourceName)
-}
-
-func (t Target) Name() (string, error) {
+func (t Target) Name() string {
 	switch {
-	case t.Origin != "":
-		return OriginHostStack(t.Origin, t.Tier)
 	case t.Gate:
-		return GateStack(t.Tier), nil
+		return GateStack(t.Tier)
 	case t.Slug != "":
-		return BindingStack(t.Slug, t.Tier), nil
-	case t.Shielded:
-		return ShieldedLoadBalancerStack(t.Tier), nil
+		return BindingStack(t.Slug, t.Tier)
 	}
-	return LoadBalancerStack(t.Tier), nil
+	return LoadBalancerStack(t.Tier)
 }
 
-func (t Target) Prefix() (string, error) {
+func (t Target) Prefix() string {
 	if t.Slug == "" {
 		return t.Name()
 	}
-	return dashed(string(Kind), "project", naming.Sanitize(t.Slug)), nil
+	return dashed(string(Kind), "project", naming.Sanitize(t.Slug))
 }
 
 type Stacks interface {
@@ -87,9 +73,6 @@ type LoadBalancer struct {
 	URLMap         string `json:"urlMap,omitempty"`
 	NotFound       string `json:"notFound,omitempty"`
 	AssetsBackend  string `json:"assetsBackend,omitempty"`
-	Shielded       bool   `json:"shielded,omitempty"`
-
-	TrustedFingerprint string `json:"-"`
 }
 
 func (f LoadBalancer) provisioned() bool {
@@ -102,7 +85,6 @@ const (
 	outputURLMap         = "urlMap"
 	outputNotFound       = "notFound"
 	outputAssetsBackend  = "assetsBackend"
-	outputTrusted        = "trustedFingerprint"
 )
 
 func loadBalancerOf(outputs map[string]string) LoadBalancer {
@@ -112,17 +94,11 @@ func loadBalancerOf(outputs map[string]string) LoadBalancer {
 		URLMap:         outputs[outputURLMap],
 		NotFound:       outputs[outputNotFound],
 		AssetsBackend:  outputs[outputAssetsBackend],
-
-		TrustedFingerprint: outputs[outputTrusted],
 	}
 }
 
 func LoadBalancerStack(tier environment.Tier) string {
 	return dashed(string(Kind), "front", naming.TierWord(tier))
-}
-
-func ShieldedLoadBalancerStack(tier environment.Tier) string {
-	return dashed(string(Kind), "front", shieldedNameSegment, naming.TierWord(tier))
 }
 
 func BindingStack(slug string, tier environment.Tier) string {

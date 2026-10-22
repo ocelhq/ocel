@@ -3,9 +3,40 @@ package run
 import (
 	"testing"
 
+	run "google.golang.org/api/run/v2"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
+
+func TestAReleasesTagAnswersOnTheURLCloudRunReportsForThatTag(t *testing.T) {
+	t.Parallel()
+
+	current := &run.GoogleCloudRunV2Service{
+		Uri: "https://ocel-shop-prod-web-abc123-x7k2p9q4wa-ew.a.run.app",
+		TrafficStatuses: []*run.GoogleCloudRunV2TrafficTargetStatus{
+			{Tag: "r0000aaaa", Uri: "https://r0000aaaa---ocel-shop-prod-web-abc123-x7k2p9q4wa-ew.a.run.app"},
+			{Tag: "r0000bbbb", Uri: "https://r0000bbbb---ocel-shop-prod-web-abc123-x7k2p9q4wa-ew.a.run.app"},
+		},
+	}
+
+	if got, want := tagURLOf(current, "r0000bbbb"), "https://r0000bbbb---ocel-shop-prod-web-abc123-x7k2p9q4wa-ew.a.run.app"; got != want {
+		t.Errorf("tagURLOf() = %q, want %q: the edge reaches a release on the URL its own tag answers on", got, want)
+	}
+}
+
+func TestATagCloudRunReportsNoURLForAnswersOnTheTaggedHostOfTheService(t *testing.T) {
+	t.Parallel()
+
+	current := &run.GoogleCloudRunV2Service{
+		Uri:             "https://ocel-shop-prod-web-abc123.run.app",
+		TrafficStatuses: []*run.GoogleCloudRunV2TrafficTargetStatus{{Tag: "r0000aaaa"}},
+	}
+
+	if got, want := tagURLOf(current, "r0000aaaa"), "https://r0000aaaa---ocel-shop-prod-web-abc123.run.app"; got != want {
+		t.Errorf("tagURLOf() = %q, want %q", got, want)
+	}
+}
 
 func TestATiersServiceCarriesItsTierOnEveryRevisionSoItsLogEntriesCarryIt(t *testing.T) {
 	t.Parallel()
