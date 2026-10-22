@@ -123,7 +123,7 @@ func (f *fakeEdge) DomainOwner(context.Context, string) (string, error) {
 	return "", errors.New("bootstrap never reads a domain owner")
 }
 
-func (f *fakeEdge) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+func (f *fakeEdge) ProjectOwner(_ context.Context, slug string, tier environment.Tier) (string, error) {
 	return slug + "-" + string(tier), nil
 }
 

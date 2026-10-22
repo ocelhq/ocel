@@ -72,14 +72,14 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		if len(m.putScripts) != 1 || m.putScripts[0] != previewEntryScript {
-			t.Errorf("uploaded scripts = %v, want [%s]", m.putScripts, previewEntryScript)
+		if len(m.putScripts) != 1 || m.putScripts[0] != previewEntryScriptName {
+			t.Errorf("uploaded scripts = %v, want [%s]", m.putScripts, previewEntryScriptName)
 		}
 		if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "*.preview.app.com/*" {
 			t.Errorf("created routes = %v, want the bootstrap wildcard *.preview.app.com/*", m.createdRoutes)
 		}
-		if m.createdRoutes[0]["script"] != previewEntryScript {
-			t.Errorf("route script = %v, want %s", m.createdRoutes[0]["script"], previewEntryScript)
+		if m.createdRoutes[0]["script"] != previewEntryScriptName {
+			t.Errorf("route script = %v, want %s", m.createdRoutes[0]["script"], previewEntryScriptName)
 		}
 		if len(m.createdRecords) != 0 {
 			t.Errorf("created records = %v, want none: the wildcard's record is the DNS axis's to write", m.createdRecords)
@@ -100,7 +100,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		meta := uploadedMetadata(t, m, previewEntryScript)
+		meta := uploadedMetadata(t, m, previewEntryScriptName)
 		for _, typ := range []string{"secret_text", "plain_text"} {
 			for _, binding := range bindingsByType(meta, typ) {
 				if name := binding["name"]; name == genericSlugBinding || name == envelopeKeyBinding {
@@ -121,7 +121,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		meta := uploadedMetadata(t, m, previewEntryScript)
+		meta := uploadedMetadata(t, m, previewEntryScriptName)
 		if got := bindingsByType(meta, "r2_bucket"); len(got) != 0 {
 			t.Errorf("r2_bucket bindings = %v, want none: the entry reads objects through Serve", got)
 		}
@@ -137,8 +137,8 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		if !m.subdomainOn[previewEntryScript] {
-			t.Errorf("workers.dev subdomain of %s = off, want on: a preview's cached prerenders are purged through it", previewEntryScript)
+		if !m.subdomainOn[previewEntryScriptName] {
+			t.Errorf("workers.dev subdomain of %s = off, want on: a preview's cached prerenders are purged through it", previewEntryScriptName)
 		}
 	})
 
@@ -170,7 +170,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 			zoneID:             "zone1",
 			zoneName:           "app.com",
 			existingRoutes: []map[string]any{
-				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
+				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScriptName},
 				{"id": "project", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-shop-preview"},
 			},
 			existingRecords: []map[string]any{
@@ -185,7 +185,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
 		assertSet(t, "deleted records", m.deletedRecords, nil)
-		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScript})
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScriptName})
 	})
 
 	t.Run("the script stays while another wildcard still routes to it", func(t *testing.T) {
@@ -194,8 +194,8 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 			zoneID:             "zone1",
 			zoneName:           "app.com",
 			existingRoutes: []map[string]any{
-				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
-				{"id": "sibling", "pattern": "*.staging.app.com/*", "script": previewEntryScript},
+				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScriptName},
+				{"id": "sibling", "pattern": "*.staging.app.com/*", "script": previewEntryScriptName},
 			},
 		}
 
@@ -205,6 +205,26 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 
 		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
 		assertSet(t, "deleted scripts", m.deletedScripts, nil)
+	})
+
+	t.Run("another origin's preview entry is neither unrouted nor what keeps this one's", func(t *testing.T) {
+		theirs := "ocel-preview-32da6c-shared-entry"
+		m := &cfMock{
+			bootstrapInstalled: true,
+			zoneID:             "zone1",
+			zoneName:           "app.com",
+			existingRoutes: []map[string]any{
+				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScriptName},
+				{"id": "theirs", "pattern": "*.staging.app.com/*", "script": theirs},
+			},
+		}
+
+		if err := m.provider(t).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err != nil {
+			t.Fatalf("DestroyPreviewWildcard: %v", err)
+		}
+
+		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScriptName})
 	})
 
 	t.Run("a wildcard another script owns is left in place", func(t *testing.T) {
@@ -226,7 +246,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		if len(m.deletedRoutes) != 0 {
 			t.Errorf("deleted routes = %v, want none: the wildcard belongs to another worker", m.deletedRoutes)
 		}
-		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScript})
+		assertSet(t, "deleted scripts", m.deletedScripts, []string{previewEntryScriptName})
 	})
 
 	t.Run("an unset account id is an error", func(t *testing.T) {
@@ -253,7 +273,7 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 		},
 		{
 			name:   "the shared script does not sweep its own route",
-			script: previewEntryScript,
+			script: previewEntryScriptName,
 			spec:   routedSpec([]string{"*.preview.app.com"}, "pr-1-abc1234567.preview.app.com"),
 		},
 	} {
@@ -265,7 +285,7 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 				zoneID:             "zone1",
 				zoneName:           "app.com",
 				existingRoutes: []map[string]any{
-					{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
+					{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScriptName},
 				},
 				existingRecords: []map[string]any{
 					{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},

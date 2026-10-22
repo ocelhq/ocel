@@ -1,6 +1,8 @@
 package cloudflare
 
 import (
+	"context"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
@@ -12,22 +14,33 @@ const (
 
 var workerTiers = []environment.Tier{environment.TierProduction, environment.TierPreview}
 
-func entryWorkerName(namespace, slug string, tier environment.Tier) (string, error) {
+func entryWorkerName(namespace string, origin OriginScope, slug string, tier environment.Tier) (string, error) {
+	if err := origin.refuseIncomplete("stack workers"); err != nil {
+		return "", err
+	}
 	if err := refuseUnknownTier("stack workers", tier); err != nil {
 		return "", err
 	}
 	return naming.TaggedName{
-		Head:     naming.OcelName(namespace, tier, entryWorkerWord),
+		Head:     naming.OcelName(namespace, tier, origin.tag(), entryWorkerWord),
 		Readable: naming.Sanitize(slug),
-		Tag:      naming.HashTag(namespace, slug, string(tier)),
+		Tag:      naming.HashTag(namespace, slug, string(tier), origin.Vendor, origin.ID),
 	}.Fit(maxWorkerNameLength)
 }
 
-func projectOwnsScript(namespace, slug string) (func(script string) bool, error) {
+func (p *cloudflare) entryWorkerName(ctx context.Context, slug string, tier environment.Tier) (string, error) {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return "", err
+	}
+	return entryWorkerName(p.namespace, origin, slug, tier)
+}
+
+func projectOwnsScript(namespace string, origin OriginScope, slug string) (func(script string) bool, error) {
 	owned := map[string]bool{}
 	if namespace != "" && slug != "" {
 		for _, tier := range workerTiers {
-			name, err := entryWorkerName(namespace, slug, tier)
+			name, err := entryWorkerName(namespace, origin, slug, tier)
 			if err != nil {
 				return nil, err
 			}
@@ -37,10 +50,10 @@ func projectOwnsScript(namespace, slug string) (func(script string) bool, error)
 	return func(script string) bool { return owned[script] }, nil
 }
 
-func ProjectOwnsWorker(namespace, slug, script string) (bool, error) {
-	owns, err := projectOwnsScript(namespace, slug)
+func (p *cloudflare) projectOwnsScript(ctx context.Context, slug string) (func(script string) bool, error) {
+	origin, err := p.originScope(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return owns(script), nil
+	return projectOwnsScript(p.namespace, origin, slug)
 }

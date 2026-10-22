@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func (p *Provider) edges() edges.Registry {
@@ -18,10 +19,11 @@ func (p *Provider) edges() edges.Registry {
 
 func (p *Provider) edgeDeps() edges.Deps {
 	return edges.Deps{
-		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },
-		Certificates: p.options.Certificates,
-		Namespace:    p.namespace,
-		EnsurePart:   p.ensurePartNamed,
+		AWS:              func(context.Context) (aws.Config, error) { return p.aws, nil },
+		Certificates:     p.options.Certificates,
+		Namespace:        p.namespace,
+		EnsurePart:       p.ensurePartNamed,
+		CloudflareOrigin: p.cloudflareOrigin,
 		StateBucket: func(ctx context.Context, tier environment.Tier) (string, error) {
 			deployed, err := p.bootstrapped(ctx, tier)
 			if err != nil {
@@ -33,4 +35,12 @@ func (p *Provider) edgeDeps() edges.Deps {
 			return deployed.Buckets[naming.StorageState], nil
 		},
 	}
+}
+
+func (p *Provider) cloudflareOrigin(ctx context.Context) (cloudflare.OriginScope, error) {
+	accountID, err := p.accountID(ctx)
+	if err != nil {
+		return cloudflare.OriginScope{}, err
+	}
+	return cloudflare.OriginScope{Vendor: string(Vendor), ID: accountID + "/" + p.aws.Region}, nil
 }

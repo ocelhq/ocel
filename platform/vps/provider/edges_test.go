@@ -79,11 +79,13 @@ func TestTheCloudflareProxyInFrontOfABoxOwnsWhatItForwardsInOcelsNamespace(t *te
 	if err != nil {
 		t.Fatalf("Edges().Open(%q): %v", cloudflare.Kind, err)
 	}
-	got, err := front.ProjectOwner("shop", environment.TierProduction)
+	got, err := front.ProjectOwner(t.Context(), "shop", environment.TierProduction)
 	if err != nil {
 		t.Fatalf("ProjectOwner: %v", err)
 	}
-	want, err := cloudflare.NewProxy("staging", cloudflare.Options{}).ProjectOwner("shop", environment.TierProduction)
+	want, err := cloudflare.NewProxy("staging", func(context.Context) (cloudflare.OriginScope, error) {
+		return cloudflare.OriginScope{Vendor: "vps", ID: "k3j9x0"}, nil
+	}, cloudflare.Options{}).ProjectOwner(t.Context(), "shop", environment.TierProduction)
 	if err != nil {
 		t.Fatalf("ProjectOwner: %v", err)
 	}

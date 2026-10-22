@@ -6,11 +6,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
 
-func (p *Provider) ListProjectResources(_ context.Context, req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
+func (p *Provider) ListProjectResources(ctx context.Context, req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
 	var listed []provider.PhysicalResource
 	for _, cert := range req.Certificates {
 		if cert.Requested && cert.Issued() {
@@ -26,7 +27,11 @@ func (p *Provider) ListProjectResources(_ context.Context, req provider.ProjectR
 			listed = append(listed, p.albHostResources(host)...)
 		}
 	}
-	return append(listed, cloudflare.ListProjectResources(string(p.namespace), req)...), nil
+	workers, err := cloudflare.ListProjectResources(ctx, string(p.namespace), edges.CloudflareOrigin(p.options.Project), req)
+	if err != nil {
+		return nil, err
+	}
+	return append(listed, workers...), nil
 }
 
 func (p *Provider) albHostResources(host alb.HostResources) []provider.PhysicalResource {

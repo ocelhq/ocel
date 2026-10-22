@@ -351,7 +351,7 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, tier e
 	}
 	var mine string
 	if slug := req.GetSlug(); slug != "" {
-		if mine, err = front.ProjectOwner(slug, tier); err != nil {
+		if mine, err = front.ProjectOwner(ctx, slug, tier); err != nil {
 			return nil, err
 		}
 	}

@@ -334,7 +334,7 @@ func (p *cloudFront) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (p *cloudFront) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+func (p *cloudFront) ProjectOwner(_ context.Context, slug string, tier environment.Tier) (string, error) {
 	return distributionName(p.ns, slug, tier)
 }
 

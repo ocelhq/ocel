@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -23,18 +24,23 @@ const (
 
 type entryProgram struct {
 	name   string
+	shared bool
 	worker workerScript
 	store  edge.ReleasesStore
 }
 
-func (p *cloudflare) buildEntryProgram(tier environment.Tier, slug string, program *edge.Program) (entryProgram, error) {
+func (p *cloudflare) buildEntryProgram(ctx context.Context, tier environment.Tier, slug string, program *edge.Program) (entryProgram, error) {
 	if program == nil {
 		return entryProgram{}, fmt.Errorf("the %s edge runs the entry worker, and %s was handed no program for it", Kind, describeProgramScope(slug))
 	}
 	if slug != "" && p.namespace == "" {
 		return entryProgram{}, fmt.Errorf("an edge worker is named for the namespace that installed its bootstrap, and this edge was opened with none; a name without it reaches whatever another namespace deployed for %s", slug)
 	}
-	worker, err := newEntryWorker(program.Origin)
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return entryProgram{}, err
+	}
+	worker, err := newEntryWorker(origin, program.Origin)
 	if err != nil {
 		return entryProgram{}, err
 	}
@@ -49,11 +55,14 @@ func (p *cloudflare) buildEntryProgram(tier environment.Tier, slug string, progr
 		worker = withVar(worker, envPreview, "1")
 		worker = withVar(worker, envPreviewGlobal, "1")
 		worker = withVar(worker, envPreviewBaseDomain, program.PreviewBaseDomain)
-		built.name = previewEntryScript
+		if built.name, err = previewEntryScriptNameFor(p.namespace, origin); err != nil {
+			return entryProgram{}, err
+		}
+		built.shared = true
 		built.worker, err = addPreviewKey(worker, slug, program)
 		return built, err
 	}
-	if built.name, err = entryWorkerName(p.namespace, slug, tier); err != nil {
+	if built.name, err = entryWorkerName(p.namespace, origin, slug, tier); err != nil {
 		return entryProgram{}, err
 	}
 	if tier == environment.TierPreview {
@@ -64,7 +73,7 @@ func (p *cloudflare) buildEntryProgram(tier environment.Tier, slug string, progr
 	return built, nil
 }
 
-func newEntryWorker(origin edge.OriginReach) (workerScript, error) {
+func newEntryWorker(owner OriginScope, origin edge.OriginReach) (workerScript, error) {
 	if len(entryBundle) == 0 {
 		return workerScript{}, fmt.Errorf("the %s edge was built with no entry bundle for its worker to run", Kind)
 	}
@@ -81,6 +90,7 @@ func newEntryWorker(origin edge.OriginReach) (workerScript, error) {
 		Secrets:           map[string]string{edge.OriginReachVar: string(reach)},
 		CachedEntrypoints: []string{serveEntrypoint},
 		DurableObjects:    []string{purgeQueueObject},
+		Tags:              []string{owner.scriptTag()},
 	}
 	return withPurgeBudget(worker, workersCachePurgeBudget)
 }

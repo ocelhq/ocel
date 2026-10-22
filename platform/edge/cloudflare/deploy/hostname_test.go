@@ -583,7 +583,7 @@ func putSettings(put putBody) map[string]any {
 		return map[string]any{}
 	}
 	settings := map[string]any{"bindings": []any{}}
-	for _, key := range []string{"compatibility_date", "compatibility_flags", "bindings"} {
+	for _, key := range []string{"compatibility_date", "compatibility_flags", "bindings", "tags"} {
 		if value, ok := meta[key]; ok {
 			settings[key] = value
 		}
@@ -607,7 +607,7 @@ func matchingRecords(records []map[string]any, query url.Values) []map[string]an
 
 func (m *cfMock) provider(t *testing.T) *cloudflare {
 	srv := m.server(t)
-	return &cloudflare{namespace: "ocel", client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}
@@ -626,7 +626,7 @@ func ownedSpec(slug string, desired ...string) routeSpec {
 }
 
 func ownsOf(namespace, slug string) func(script string) bool {
-	owns, err := projectOwnsScript(namespace, slug)
+	owns, err := projectOwnsScript(namespace, testOrigin, slug)
 	if err != nil {
 		panic(err)
 	}
@@ -815,10 +815,10 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRoutes: []map[string]any{
-					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-prod-entry-shop-138c36"},
+					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-prod-4c73ed-entry-shop-023da1"},
 				},
 			},
-			script:          "ocel-preview-entry-shop-a72e31",
+			script:          "ocel-preview-4c73ed-entry-shop-fff38e",
 			spec:            ownedSpec("shop", "shop.app.com"),
 			repointedRoutes: []string{"mine"},
 		},
@@ -925,7 +925,7 @@ func (m *cfMock) providerRetryingAsDeployed(t *testing.T) *cloudflare {
 	srv := m.server(t)
 	clock := &fakeClock{at: time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)}
 	policy := apiRetryPolicy{budget: rateLimitBudget, wait: clock.wait, jitter: func() float64 { return 1 }, now: clock.now}
-	return &cloudflare{namespace: "ocel", client: policy.newClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: policy.newClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
 }
 
 func TestAttachingARouteWhoseResponseIsLostSucceedsWhenTheReplayFindsTheRouteHeld(t *testing.T) {
@@ -961,9 +961,9 @@ func TestAttachingARouteHeldByAnotherWorkerOfTheProjectSinceTheListingRepointsIt
 	t.Parallel()
 	m := &cfMock{
 		zoneID: "zone1", zoneName: "app.com",
-		routesAddedAfterListing: []map[string]any{{"id": "late", "pattern": "shop.app.com/*", "script": "ocel-prod-entry-shop-138c36"}},
+		routesAddedAfterListing: []map[string]any{{"id": "late", "pattern": "shop.app.com/*", "script": "ocel-prod-4c73ed-entry-shop-023da1"}},
 	}
-	up := upload{accountID: "acct", scriptName: "ocel-preview-entry-shop-a72e31"}
+	up := upload{accountID: "acct", scriptName: "ocel-preview-4c73ed-entry-shop-fff38e"}
 
 	if err := m.providerRetryingAsDeployed(t).reconcileWorkerRoutes(t.Context(), up, ownedSpec("shop", "shop.app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v, want the project's own route repointed", err)
@@ -1091,7 +1091,7 @@ func TestAHostnameAReconcileRoutedIsOwnedByTheProjectBeforeAnyBindRecordsIt(t *t
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	mine, err := p.ProjectOwner(spec.Slug, spec.Tier)
+	mine, err := p.ProjectOwner(t.Context(), spec.Slug, spec.Tier)
 	if err != nil {
 		t.Fatalf("ProjectOwner: %v", err)
 	}
@@ -1140,11 +1140,23 @@ func TestRouteOwner(t *testing.T) {
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRoutes: []map[string]any{
-					{"id": "route1", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
+					{"id": "route1", "pattern": "*.preview.app.com/*", "script": previewEntryScriptName},
 				},
 			},
 			hostname: "*.preview.app.com",
 			want:     edge.PreviewEntryOwner,
+		},
+		{
+			name: "another origin's preview entry worker answers as itself",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "route1", "pattern": "*.preview.app.com/*", "script": "ocel-preview-32da6c-shared-entry"},
+				},
+			},
+			hostname: "*.preview.app.com",
+			want:     "ocel-preview-32da6c-shared-entry",
 		},
 		{
 			name:     "a pattern no worker owns is unclaimed",

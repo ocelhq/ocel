@@ -160,7 +160,7 @@ func (p *Provider) Edges() provider.Edges { return p.edges() }
 func (p *Provider) Routers() provider.Routers { return p.routers() }
 
 func (p *Provider) DNS() provider.DNS {
-	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
+	return dns.Registry{Deps: dns.Deps{AWS: p.aws, CloudflareOrigin: p.cloudflareOrigin}}
 }
 
 func (p *Provider) Certificates() provider.Certificates { return certificates{p} }

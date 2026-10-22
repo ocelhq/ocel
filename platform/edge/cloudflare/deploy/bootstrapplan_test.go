@@ -122,6 +122,24 @@ func TestPlanBootstrap(t *testing.T) {
 		}
 	})
 
+	t.Run("a store that does not carry its origin's tag plans and applies an update", func(t *testing.T) {
+		seedBootstrapBundle(t, "export default {}")
+		m := bootstrapMock(t)
+		p := m.provider(t)
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		delete(m.scriptSettings[sharedStoreScriptName], "tags")
+
+		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
+		if err != nil {
+			t.Fatalf("PlanBootstrap: %v", err)
+		}
+		if !reflect.DeepEqual(changes, driftedWorker(sharedStoreScriptName, reasonMetadataDrift)) {
+			t.Errorf("plan = %+v, want the store worker updated so it names the origin that owns it", changes)
+		}
+	})
+
 	t.Run("a compatibility bump plans and applies an update to a script that has not changed", func(t *testing.T) {
 		seedBootstrapBundle(t, "export default {}")
 		m := bootstrapMock(t)
@@ -183,7 +201,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 		t.Setenv(envAPIToken, "tok")
-		if _, err := New("ocel", Options{}).Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
+		if _, err := New("ocel", fixedOrigin(testOrigin), Options{}).Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("PlanBootstrap without an account id err = nil, want an error")
 		}
 	})
@@ -191,7 +209,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset api token is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 		t.Setenv(envAPIToken, "")
-		if _, err := New("ocel", Options{}).Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
+		if _, err := New("ocel", fixedOrigin(testOrigin), Options{}).Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("PlanBootstrap without an api token err = nil, want an error")
 		}
 	})

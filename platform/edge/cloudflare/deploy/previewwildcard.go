@@ -14,12 +14,28 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-const previewEntryScript = "ocel-preview-entry"
+const sharedEntryStem = "shared-entry"
+
+func previewEntryScriptNameFor(namespace string, origin OriginScope) (string, error) {
+	return accountNameFor("the shared preview entry worker", namespace, origin, environment.TierPreview, sharedEntryStem)
+}
+
+func (p *cloudflare) previewEntryScript(ctx context.Context) (string, error) {
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return "", err
+	}
+	return previewEntryScriptNameFor(p.namespace, origin)
+}
 
 const purgeProjectParam = "project"
 
 func (p *cloudflare) readSharedPreviewPurgeURL(ctx context.Context, accountID, slug string) (string, error) {
-	workersDev, err := p.subdomainURL(ctx, accountID, previewEntryScript)
+	shared, err := p.previewEntryScript(ctx)
+	if err != nil {
+		return "", err
+	}
+	workersDev, err := p.subdomainURL(ctx, accountID, shared)
 	if err != nil {
 		return "", fmt.Errorf("read the shared preview entry worker's subdomain: %w", err)
 	}
@@ -36,7 +52,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 		return "", errors.New("the shared preview entry worker needs a base domain to serve")
 	}
 
-	program, err := p.buildEntryProgram(environment.TierPreview, "", spec.Program)
+	program, err := p.buildEntryProgram(ctx, environment.TierPreview, "", spec.Program)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +61,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	}
 	up := upload{
 		accountID:  accountID,
-		scriptName: previewEntryScript,
+		scriptName: program.name,
 		worker:     bindCodeLoader(program.worker),
 	}
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
@@ -66,24 +82,28 @@ func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 		return err
 	}
 
-	snap := p.routeSnapshot()
-	if err := p.stripPreviewWildcardRoute(ctx, accountID, snap, baseDomain); err != nil {
+	shared, err := p.previewEntryScript(ctx)
+	if err != nil {
 		return err
 	}
-	stillRouted, err := p.previewEntryStillRouted(ctx, accountID, snap)
+	snap := p.routeSnapshot()
+	if err := p.stripPreviewWildcardRoute(ctx, accountID, snap, shared, baseDomain); err != nil {
+		return err
+	}
+	stillRouted, err := p.previewEntryStillRouted(ctx, accountID, snap, shared)
 	if err != nil {
 		return err
 	}
 	if stillRouted {
 		return nil
 	}
-	if err := p.deleteScript(ctx, accountID, previewEntryScript); err != nil {
-		return fmt.Errorf("delete worker %q: %w", previewEntryScript, err)
+	if err := p.deleteScript(ctx, accountID, shared); err != nil {
+		return fmt.Errorf("delete worker %q: %w", shared, err)
 	}
 	return nil
 }
 
-func (p *cloudflare) previewEntryStillRouted(ctx context.Context, accountID string, snap *routeSnapshot) (bool, error) {
+func (p *cloudflare) previewEntryStillRouted(ctx context.Context, accountID string, snap *routeSnapshot, shared string) (bool, error) {
 	owned, err := p.accountZones(ctx, accountID)
 	if err != nil {
 		return false, err
@@ -93,14 +113,14 @@ func (p *cloudflare) previewEntryStillRouted(ctx context.Context, accountID stri
 		if err != nil {
 			return false, err
 		}
-		if slices.ContainsFunc(inZone, func(route workers.RouteListResponse) bool { return route.Script == previewEntryScript }) {
+		if slices.ContainsFunc(inZone, func(route workers.RouteListResponse) bool { return route.Script == shared }) {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-func (p *cloudflare) stripPreviewWildcardRoute(ctx context.Context, accountID string, snap *routeSnapshot, baseDomain string) error {
+func (p *cloudflare) stripPreviewWildcardRoute(ctx context.Context, accountID string, snap *routeSnapshot, shared, baseDomain string) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
 	if wildcard == "" {
 		return nil
@@ -116,7 +136,7 @@ func (p *cloudflare) stripPreviewWildcardRoute(ctx context.Context, accountID st
 
 	pattern := routePattern(wildcard)
 	for _, route := range slices.Clone(inZone) {
-		if route.Pattern != pattern || route.Script != previewEntryScript {
+		if route.Pattern != pattern || route.Script != shared {
 			continue
 		}
 		if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {

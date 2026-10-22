@@ -58,6 +58,10 @@ func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec 
 }
 
 func (p *cloudflare) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up upload, routed []string, wanted map[string]bool) error {
+	shared, err := p.previewEntryScript(ctx)
+	if err != nil {
+		return err
+	}
 	var errs []error
 	for _, host := range routed {
 		if wanted[host] {
@@ -78,7 +82,7 @@ func (p *cloudflare) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, 
 		}
 		pattern := routePattern(host)
 		for _, route := range slices.Clone(inZone) {
-			if route.Pattern != pattern || route.Script != up.scriptName || route.Script == previewEntryScript {
+			if route.Pattern != pattern || route.Script != up.scriptName || route.Script == shared {
 				continue
 			}
 			if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
@@ -117,8 +121,8 @@ func routePattern(hostname string) string {
 	return hostname + "/*"
 }
 
-func (p *cloudflare) ProjectOwner(slug string, tier environment.Tier) (string, error) {
-	return entryWorkerName(p.namespace, slug, tier)
+func (p *cloudflare) ProjectOwner(ctx context.Context, slug string, tier environment.Tier) (string, error) {
+	return p.entryWorkerName(ctx, slug, tier)
 }
 
 func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, error) {
@@ -134,12 +138,16 @@ func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, 
 	if err != nil {
 		return "", err
 	}
+	shared, err := p.previewEntryScript(ctx)
+	if err != nil {
+		return "", err
+	}
 	pattern := routePattern(hostname)
 	for _, route := range inZone {
 		if route.Pattern != pattern || route.Script == "" {
 			continue
 		}
-		if route.Script == previewEntryScript {
+		if route.Script == shared {
 			return edge.PreviewEntryOwner, nil
 		}
 		return route.Script, nil

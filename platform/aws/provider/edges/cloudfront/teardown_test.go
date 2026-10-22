@@ -46,7 +46,7 @@ func TestTheCommentOnADistributionIsTheOwnerAProjectClaims(t *testing.T) {
 
 	spec := distributionSpec{name: must(distributionName(ns, slug, environment.TierProduction))}
 	comment := aws.ToString(spec.config(nil, "").Comment)
-	if owner := must(p.ProjectOwner(slug, environment.TierProduction)); comment != owner {
+	if owner := must(p.ProjectOwner(t.Context(), slug, environment.TierProduction)); comment != owner {
 		t.Errorf("a distribution reads as owned by %q while the project claims %q, so the project is refused its own domain", comment, owner)
 	}
 }

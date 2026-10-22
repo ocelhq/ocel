@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"context"
 	"slices"
 	"strings"
 
@@ -20,14 +21,16 @@ const (
 
 type Deps struct {
 	AWS aws.Config
+
+	CloudflareOrigin func(ctx context.Context) (cloudflare.OriginScope, error)
 }
 
 var constructors = map[string]func(Deps, string) (edge.DNSRecords, error){
 	KindRoute53: func(deps Deps, zone string) (edge.DNSRecords, error) {
 		return NewRoute53(route53.NewFromConfig(deps.AWS), zone), nil
 	},
-	KindCloudflare: func(_ Deps, zone string) (edge.DNSRecords, error) {
-		return cloudflare.NewDNS(zone), nil
+	KindCloudflare: func(deps Deps, zone string) (edge.DNSRecords, error) {
+		return cloudflare.NewDNS(zone, deps.CloudflareOrigin), nil
 	},
 }
 

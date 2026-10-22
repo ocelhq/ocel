@@ -27,10 +27,10 @@ var edgeResources = map[string]func(state edge.StackState, region string) ([]pro
 }
 
 func (p *Provider) ListProjectResources(ctx context.Context, req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
-	return listProjectResources(ctx, p.KeyValues(), p.namespace, p.aws.Region, req)
+	return listProjectResources(ctx, p.KeyValues(), p.namespace, p.aws.Region, p.cloudflareOrigin, req)
 }
 
-func listProjectResources(ctx context.Context, store records.Store, ns account.Namespace, region string, req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
+func listProjectResources(ctx context.Context, store records.Store, ns account.Namespace, region string, cloudflareOrigin func(context.Context) (cloudflare.OriginScope, error), req provider.ProjectResourcesRequest) ([]provider.PhysicalResource, error) {
 	routed, err := listEdgeResources(region, req)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,11 @@ func listProjectResources(ctx context.Context, store records.Store, ns account.N
 	if err != nil {
 		return nil, err
 	}
-	listed := slices.Concat(listImageRepositories(string(ns), req), routed, distributions, listRequestedCertificates(req), listRoute53Records(req), cloudflare.ListProjectResources(string(ns), req))
+	workers, err := cloudflare.ListProjectResources(ctx, string(ns), cloudflareOrigin, req)
+	if err != nil {
+		return nil, err
+	}
+	listed := slices.Concat(listImageRepositories(string(ns), req), routed, distributions, listRequestedCertificates(req), listRoute53Records(req), workers)
 	seen := map[provider.PhysicalResource]bool{}
 	return slices.DeleteFunc(listed, func(resource provider.PhysicalResource) bool {
 		named := seen[resource]

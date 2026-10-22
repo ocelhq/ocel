@@ -455,11 +455,11 @@
       }
     },
     {
-      "id": "project:shop/shared:production/cloudflare_workers_script:ocel-prod-releases-store",
+      "id": "project:shop/shared:production/cloudflare_workers_script:releases-store",
       "scope": "project:shop/shared:production",
       "vendor": "cloudflare",
       "type": "cloudflare_workers_script",
-      "name": "ocel-prod-releases-store",
+      "name": "releases-store",
       "properties": {
         "durable_objects": [
           "ReleasesStore"

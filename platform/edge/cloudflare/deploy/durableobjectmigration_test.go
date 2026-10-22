@@ -40,7 +40,7 @@ func settingsProvider(t *testing.T, status int, body string) *cloudflare {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	return &cloudflare{namespace: "ocel", client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", origin: fixedOrigin(testOrigin), client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}
@@ -70,21 +70,21 @@ func TestDeployedClasses(t *testing.T) {
 			name:   "reads the class off the live settings response",
 			status: http.StatusOK,
 			body:   liveReleasesStoreSettings,
-			script: "ocel-preview-releases-store",
+			script: "ocel-preview-4c73ed-releases-store",
 			want:   []string{"ReleasesStore"},
 		},
 		{
 			name:   "a script that does not exist has no classes",
 			status: http.StatusNotFound,
 			body:   absentScriptSettings,
-			script: "ocel-preview-releases-store",
+			script: "ocel-preview-4c73ed-releases-store",
 			want:   nil,
 		},
 		{
 			name:   "a class owned by another script is not ours",
 			status: http.StatusOK,
 			body:   foreignClassSettings,
-			script: "ocel-preview-releases-store",
+			script: "ocel-preview-4c73ed-releases-store",
 			want:   nil,
 		},
 	} {
@@ -104,7 +104,7 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
 	t.Run("a class the script already declares is not redeclared", func(t *testing.T) {
-		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveReleasesStoreSettings), "ocel-preview-releases-store")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveReleasesStoreSettings), "ocel-preview-4c73ed-releases-store")
 		if err != nil {
 			t.Fatalf("read settings: %v", err)
 		}
@@ -117,7 +117,7 @@ func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	})
 
 	t.Run("a class another script owns is still created locally", func(t *testing.T) {
-		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, foreignClassSettings), "ocel-preview-releases-store")
+		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, foreignClassSettings), "ocel-preview-4c73ed-releases-store")
 		if err != nil {
 			t.Fatalf("read settings: %v", err)
 		}

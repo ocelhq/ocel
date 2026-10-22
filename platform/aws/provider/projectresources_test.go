@@ -24,6 +24,10 @@ const (
 	shopECRImage       = "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel2/prod/shop.web:sha256-own"
 )
 
+func inventoryOrigin(context.Context) (cloudflare.OriginScope, error) {
+	return cloudflare.OriginScope{Vendor: string(Vendor), ID: "123456789012/" + inventoryRegion}, nil
+}
+
 func listShopResources(t *testing.T, store records.Store, req provider.ProjectResourcesRequest) []provider.PhysicalResource {
 	t.Helper()
 	if req.Project == "" {
@@ -32,7 +36,7 @@ func listShopResources(t *testing.T, store records.Store, req provider.ProjectRe
 	if req.Tier == "" {
 		req.Tier = environment.TierProduction
 	}
-	listed, err := listProjectResources(context.Background(), store, inventoryNamespace, inventoryRegion, req)
+	listed, err := listProjectResources(context.Background(), store, inventoryNamespace, inventoryRegion, inventoryOrigin, req)
 	if err != nil {
 		t.Fatalf("listProjectResources() = %v", err)
 	}

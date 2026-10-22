@@ -43,7 +43,7 @@ func (s *proxyStack) BindDomain(ctx context.Context, binding edge.DomainBinding)
 			"the %q edge forwards %s to an origin, and this binding names none: it answers no hostname itself",
 			Kind, binding.Hostname)
 	}
-	owner, err := s.x.ProjectOwner(s.state.Slug, s.state.Tier)
+	owner, err := s.x.ProjectOwner(ctx, s.state.Slug, s.state.Tier)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (s *proxyStack) UnbindDomain(ctx context.Context, hostname string) error {
 	if hostname == "" {
 		return errors.New("unbinding a domain from the Cloudflare proxy needs a hostname")
 	}
-	owner, err := s.x.ProjectOwner(s.state.Slug, s.state.Tier)
+	owner, err := s.x.ProjectOwner(ctx, s.state.Slug, s.state.Tier)
 	if err != nil {
 		return err
 	}

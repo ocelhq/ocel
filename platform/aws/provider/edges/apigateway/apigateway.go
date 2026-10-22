@@ -341,7 +341,7 @@ func (p *apiGateway) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (p *apiGateway) ProjectOwner(slug string, tier environment.Tier) (string, error) {
+func (p *apiGateway) ProjectOwner(_ context.Context, slug string, tier environment.Tier) (string, error) {
 	return apiName(p.ns, slug, tier, "")
 }
 

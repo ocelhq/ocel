@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	sharedStoreScriptName  = "ocel-prod-releases-store"
-	previewStoreScriptName = "ocel-preview-releases-store"
+	sharedStoreScriptName  = "ocel-prod-4c73ed-releases-store"
+	previewStoreScriptName = "ocel-preview-4c73ed-releases-store"
+	previewEntryScriptName = "ocel-preview-4c73ed-shared-entry"
 )
 
 func TestAccountNames(t *testing.T) {
@@ -22,14 +23,16 @@ func TestAccountNames(t *testing.T) {
 		nameFor       func(string, environment.Tier) (string, error)
 		prod, preview string
 	}{
-		{"the releases store", storeScriptNameFor, sharedStoreScriptName, previewStoreScriptName},
+		{"the releases store", func(namespace string, tier environment.Tier) (string, error) {
+			return storeScriptNameFor(namespace, testOrigin, tier)
+		}, sharedStoreScriptName, previewStoreScriptName},
 	}
 
 	for _, tc := range derivations {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			t.Run("the default namespace names the account-wide workers and buckets under its tier word", func(t *testing.T) {
+			t.Run("the default namespace names the account-wide workers and buckets under its tier word and origin", func(t *testing.T) {
 				t.Parallel()
 
 				prod, err := tc.nameFor("ocel", environment.TierProduction)

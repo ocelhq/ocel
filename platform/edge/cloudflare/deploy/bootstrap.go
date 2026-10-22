@@ -33,7 +33,7 @@ func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error 
 	if err != nil {
 		return err
 	}
-	storeScript, err := storeScriptNameFor(p.namespace, tier)
+	storeScript, err := p.storeScriptName(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -50,12 +50,20 @@ type bootstrapWorker struct {
 	what       string
 }
 
-func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorker, error) {
-	storeScript, err := storeScriptNameFor(namespace, tier)
+func (p *cloudflare) bootstrapWorkers(ctx context.Context, tier environment.Tier) ([]bootstrapWorker, error) {
+	origin, err := p.originScope(ctx)
 	if err != nil {
 		return nil, err
 	}
-	storeWorker := workerScript{Main: mainModule(releasesStoreBundle)}
+	return bootstrapWorkers(p.namespace, origin, tier)
+}
+
+func bootstrapWorkers(namespace string, origin OriginScope, tier environment.Tier) ([]bootstrapWorker, error) {
+	storeScript, err := storeScriptNameFor(namespace, origin, tier)
+	if err != nil {
+		return nil, err
+	}
+	storeWorker := workerScript{Main: mainModule(releasesStoreBundle), Tags: []string{origin.scriptTag()}}
 
 	return []bootstrapWorker{
 		{

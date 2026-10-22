@@ -37,7 +37,7 @@ func (p *cloudflare) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{
 			{Kind: kindWorkerRoute, Name: wildcard, Action: edge.PlanDelete},
-			{Kind: kindWorker, Name: previewEntryScript, Action: edge.PlanDelete,
+			{Kind: kindWorker, Name: sharedEntryStem, Action: edge.PlanDelete,
 				Reason: "the shared entry worker this wildcard is owned by"},
 		},
 	}
@@ -55,6 +55,6 @@ func (p *cloudflare) PlanSharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "bootstrap-scoped: " + edge.PreviewEntryOwner + " fronts every project's previews",
+		Reason: "bootstrap-scoped: the shared preview entry worker fronts every project's previews",
 	}
 }

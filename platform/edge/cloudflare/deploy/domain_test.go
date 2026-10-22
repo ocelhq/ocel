@@ -72,7 +72,7 @@ func TestBindDomain(t *testing.T) {
 	t.Run("a host another worker of this project routes is repointed", func(t *testing.T) {
 		m := zoneMock()
 		m.existingRoutes = []map[string]any{
-			{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-prod-entry-acme-web-d328f8"},
+			{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-prod-4c73ed-entry-acme-web-750baa"},
 		}
 		s := domainStack(t, m)
 
@@ -167,14 +167,14 @@ func TestBindDomain(t *testing.T) {
 		m := zoneMock()
 		s := stackOn(m.provider(t), edge.StackState{
 			Slug:    "acme-web",
-			Private: edge.Own(private{EntryWorker: previewEntryScript}),
+			Private: edge.Own(private{EntryWorker: previewEntryScriptName}),
 		})
 
 		err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"})
 		if err == nil {
 			t.Fatal("BindDomain err = nil, want a refusal to route a customer hostname at the multi-tenant worker")
 		}
-		if !strings.Contains(err.Error(), previewEntryScript) {
+		if !strings.Contains(err.Error(), previewEntryScriptName) {
 			t.Errorf("BindDomain err = %q, want it to name the shared worker", err)
 		}
 		if len(m.createdRoutes) != 0 || len(m.createdRecords) != 0 {

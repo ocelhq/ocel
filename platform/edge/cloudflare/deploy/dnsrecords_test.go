@@ -448,7 +448,7 @@ func TestTheDNSWriterVerifiesTheCredentialsItWritesWith(t *testing.T) {
 			t.Setenv(envAccountID, tc.accountID)
 			t.Setenv(envAPIToken, tc.apiToken)
 
-			writer := NewDNS(tc.named).(*dnsRecords)
+			writer := NewDNS(tc.named, fixedOrigin(testOrigin)).(*dnsRecords)
 			if tc.zones != nil {
 				writer.zones = tc.zones
 			}
@@ -476,7 +476,7 @@ func TestTheDNSWriterVerifiesTheCredentialsItWritesWith(t *testing.T) {
 func TestADNSWriterWithNoAccountIDRefusesToWrite(t *testing.T) {
 	t.Setenv(envAccountID, "")
 
-	_, err := NewDNS("app.com").Ensure(t.Context(), []edge.Record{{Name: "app.com", Type: edge.RecordTypeA, Value: "192.0.2.1"}}, nil)
+	_, err := NewDNS("app.com", fixedOrigin(testOrigin)).Ensure(t.Context(), []edge.Record{{Name: "app.com", Type: edge.RecordTypeA, Value: "192.0.2.1"}}, nil)
 	if err == nil || !strings.Contains(err.Error(), envAccountID+" is not set; it is required to write DNS records in Cloudflare") {
 		t.Errorf("Ensure() error = %v, want the unset account id named", err)
 	}

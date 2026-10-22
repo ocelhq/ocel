@@ -16,7 +16,7 @@ import (
 
 func installBootstrap(t *testing.T, m *cfMock, tier environment.Tier) {
 	t.Helper()
-	planned, err := bootstrapWorkers("ocel", tier)
+	planned, err := bootstrapWorkers("ocel", testOrigin, tier)
 	if err != nil {
 		t.Fatalf("bootstrapWorkers: %v", err)
 	}
@@ -59,7 +59,7 @@ func refusedNotReady(t *testing.T, err error) refusal.Refusal {
 
 func bootstrapScriptName(t *testing.T, tier environment.Tier) string {
 	t.Helper()
-	planned, err := bootstrapWorkers("ocel", tier)
+	planned, err := bootstrapWorkers("ocel", testOrigin, tier)
 	if err != nil {
 		t.Fatalf("bootstrapWorkers: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestTheSharedPreviewEntryIsNotUploadedOntoABootstrapThatIsBehind(t *testing
 	if !strings.Contains(refused.Error(), provider.BootstrapCommand(environment.TierPreview)) {
 		t.Errorf("refusal %q does not name the preview bootstrap command", refused.Error())
 	}
-	if slices.Contains(m.putScripts, previewEntryScript) {
+	if slices.Contains(m.putScripts, previewEntryScriptName) {
 		t.Errorf("uploaded %v, want no shared preview entry", m.putScripts)
 	}
 }

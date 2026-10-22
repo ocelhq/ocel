@@ -38,18 +38,20 @@ type dnsRecords struct {
 
 	accountID string
 	named     string
+	origin    func(context.Context) (OriginScope, error)
 
 	mu   sync.Mutex
 	seen []edge.Zone
 }
 
-func NewDNS(zone string) edge.DNSRecords {
+func NewDNS(zone string, origin func(context.Context) (OriginScope, error)) edge.DNSRecords {
 	client := newAPIClient()
 	return &dnsRecords{
 		records:   client.DNS.Records,
 		zones:     client.Zones,
 		accountID: readAccountID(),
 		named:     zone,
+		origin:    origin,
 	}
 }
 

@@ -16,7 +16,7 @@ type bootstrapCaller struct {
 }
 
 func (p *cloudflare) refuseBootstrapBehind(ctx context.Context, accountID string, tier environment.Tier, caller bootstrapCaller) error {
-	planned, err := bootstrapWorkers(p.namespace, tier)
+	planned, err := p.bootstrapWorkers(ctx, tier)
 	if err != nil {
 		return err
 	}

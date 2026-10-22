@@ -11,8 +11,8 @@ import (
 )
 
 var shapes = map[edge.Kind]func(account.Namespace, pricing.EdgeSite) (pricing.EdgeShape, error){
-	cloudflare.Kind: func(ns account.Namespace, site pricing.EdgeSite) (pricing.EdgeShape, error) {
-		return cloudflare.Shape(string(ns), site)
+	cloudflare.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeShape, error) {
+		return cloudflare.Shape(site)
 	},
 	cloudfront.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeShape, error) {
 		return cloudfront.Shape(site)
