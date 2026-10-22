@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,7 +29,8 @@ type storageServer struct {
 	removed  []string
 	writes   []string
 
-	listed int
+	listed        int
+	objectsListed int
 
 	takenElsewhere  bool
 	forbiddingReads bool
@@ -64,7 +66,8 @@ func (s *storageServer) serve() http.HandlerFunc {
 		case len(parts) == 3 && parts[2] == "iam":
 			s.policy(w, r, parts[1])
 		case len(parts) == 3 && parts[2] == "o":
-			s.list(w, parts[1])
+			s.objectsListed++
+			s.list(w, parts[1], r.URL.Query().Get("matchGlob"))
 		case len(parts) == 4 && parts[2] == "o" && r.Method == http.MethodDelete:
 			name, _ := url.PathUnescape(parts[3])
 			s.removed = append(s.removed, name)
@@ -167,16 +170,34 @@ func (s *storageServer) policy(w http.ResponseWriter, r *http.Request, name stri
 	}
 }
 
-func (s *storageServer) list(w http.ResponseWriter, bucket string) {
+func (s *storageServer) list(w http.ResponseWriter, bucket, glob string) {
 	if _, found := s.buckets[bucket]; !found {
 		missingObject(w)
 		return
 	}
 	listed := &raw.Objects{Kind: "storage#objects"}
 	for _, name := range s.objects[bucket] {
+		if glob != "" && !matchesGlob(glob, name) {
+			continue
+		}
 		listed.Items = append(listed.Items, &raw.Object{Name: name, Bucket: bucket})
 	}
 	googletest.WriteBody(w, listed)
+}
+
+func matchesGlob(glob, name string) bool {
+	head, alternatives, braced := strings.Cut(glob, "{")
+	if !braced {
+		matched, _ := path.Match(glob, name)
+		return matched
+	}
+	alternatives, tail, _ := strings.Cut(alternatives, "}")
+	for _, alternative := range strings.Split(alternatives, ",") {
+		if matchesGlob(head+alternative+tail, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *storageServer) listBuckets(w http.ResponseWriter, prefix string) {
@@ -213,6 +234,12 @@ func (s *storageServer) listings() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.listed
+}
+
+func (s *storageServer) objectListings() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.objectsListed
 }
 
 func (s *storageServer) granted(bucket string) *raw.Policy {

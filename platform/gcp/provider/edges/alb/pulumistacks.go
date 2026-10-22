@@ -126,6 +126,14 @@ func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target
 	return config, provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(name)}, nil
 }
 
+func ListTierProjects(tier environment.Tier) []string {
+	return []string{
+		naming.PulumiProject(LoadBalancerStack(tier)),
+		naming.PulumiProject(GateStack(tier)),
+		naming.PulumiProject(ShieldedLoadBalancerStack(tier)),
+	}
+}
+
 func refreshesTheFront(provider.StackRef, pulumi.Operation) bool { return true }
 
 func (s PulumiStacks) passphrase(ctx context.Context, clients *gcloud.Clients, tier environment.Tier) (string, error) {
