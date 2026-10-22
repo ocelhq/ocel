@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -420,6 +421,8 @@ func TestAPreviewBehindAnEdgeThatGatesItselfMountsNothingAndCreatesNoSecret(t *t
 	p := providerServing(server, t)
 	spec := previewSpec()
 	spec.Edge = codeRunningFront{kind: cloudflareKind, runsCode: true, shields: true}
+	spec.Ref.Name.Release = naming.NewReleaseToken("d1", "f1")
+	mintOriginSecret(t, p, environment.TierPreview, cloudflareKind)
 
 	if _, err := p.ProvisionContainers(context.Background(), spec, &fake.Log{}); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)

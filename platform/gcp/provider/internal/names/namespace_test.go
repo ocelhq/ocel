@@ -162,6 +162,7 @@ func TestAnOcelOwnedNameIsTheNamespaceTheTierWordAndOcelsOwnWords(t *testing.T) 
 		named.PassphraseSecret(prod):                 "ocel-prod-pulumi-passphrase",
 		named.EdgeCredentialsSecret(preview, "alb"):  "ocel-preview-alb-edge-credentials",
 		named.PurgeSeedSecret(prod, "alb"):           "ocel-prod-alb-purge-seed",
+		named.OriginSecret(prod, "cloudflare"):       "ocel-prod-cloudflare-origin-secret",
 		named.Connector():                            "ocel-connector",
 		named.RealtimeAccount(prod):                  "ocel-prod-realtime",
 		named.PushAccount(preview):                   "ocel-preview-push",

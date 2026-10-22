@@ -48,15 +48,6 @@ func TestAHostnameTooLongToNameIsShortenedRatherThanRefusedByCompute(t *testing.
 	}
 }
 
-func TestAnOriginHostsStackIsNamedForItsTierAndHostnameCutAheadOfItsHashTag(t *testing.T) {
-	t.Parallel()
-
-	got := must(OriginHostStack("checkout-eu-west-staging.a-very-long-customer-subdomain.example.com", environment.TierProduction))
-	if want := "alb-origin-prod-checkout-eu-west-staging-a-very-long-cus-5e1b31"; got != want {
-		t.Errorf("OriginHostStack() = %q, want %q", got, want)
-	}
-}
-
 func TestEveryStackOfTheLoadBalancerNamesItsTierByItsWord(t *testing.T) {
 	t.Parallel()
 
@@ -65,11 +56,11 @@ func TestEveryStackOfTheLoadBalancerNamesItsTierByItsWord(t *testing.T) {
 		want   string
 	}{
 		{Target{Tier: environment.TierProduction}, "alb-front-prod"},
-		{Target{Tier: environment.TierPreview, Shielded: true}, "alb-front-shielded-preview"},
+		{Target{Tier: environment.TierPreview}, "alb-front-preview"},
 		{Target{Tier: environment.TierProduction, Gate: true}, "alb-gate-prod"},
 		{Target{Tier: environment.TierProduction, Slug: "shop"}, "alb-prod-shop"},
 	} {
-		if got := must(named.target.Name()); got != named.want {
+		if got := named.target.Name(); got != named.want {
 			t.Errorf("%+v.Name() = %q, want %q", named.target, got, named.want)
 		}
 	}
@@ -103,7 +94,7 @@ func TestAProjectAndAHostnameThatSplitTheSameLettersAreTwoBackends(t *testing.T)
 func TestTwoNamespacesNameTheirLoadBalancersApart(t *testing.T) {
 	t.Parallel()
 
-	ours, theirs := loadBalancerNames("ocel", environment.TierProduction, false), loadBalancerNames("ocel-dev", environment.TierProduction, false)
+	ours, theirs := loadBalancerNames("ocel", environment.TierProduction), loadBalancerNames("ocel-dev", environment.TierProduction)
 	if ours.URLMap == theirs.URLMap || ours.Address == theirs.Address {
 		t.Errorf("namespaces ocel and ocel-dev both name their load balancer %q, and the second bootstrap would take over the first's", ours.URLMap)
 	}

@@ -703,7 +703,7 @@ describe("a node release resolved by the gateway", () => {
     });
     const wire = capturing();
     const base = resolveBase({
-      originFetch: wire.fetch,
+      originFetchFor: () => wire.fetch,
       routeTableStore:
         routes === undefined ? undefined : objectStoreHolding({ [tableKey]: routes as never }),
       serving,

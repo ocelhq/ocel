@@ -11,7 +11,7 @@ import (
 func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, false)}))
+	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}

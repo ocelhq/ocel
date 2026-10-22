@@ -21,10 +21,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
-const (
-	cloudflareKind = edge.Kind("cloudflare")
-	offeredCAs     = "-----BEGIN CERTIFICATE-----\ncurrent\n-----END CERTIFICATE-----\n"
-)
+const cloudflareKind = edge.Kind("cloudflare")
 
 type offersHarness struct {
 	secrets *googletest.Secrets
@@ -83,15 +80,11 @@ func storeOffer(credential string) *edge.ReleasesStore {
 	return &edge.ReleasesStore{Name: "ocel-releases-store", Endpoint: "https://s.example.workers.dev", BootstrapCredential: credential}
 }
 
-func certificateOffer() *edge.ClientCertificate {
-	return &edge.ClientCertificate{ID: "m1", Authorities: offeredCAs}
-}
-
 func fullOffers(storeCredential string) edge.BootstrapOutput {
-	return edge.BootstrapOutput{ReleasesStore: storeOffer(storeCredential), ClientCertificate: certificateOffer()}
+	return edge.BootstrapOutput{ReleasesStore: storeOffer(storeCredential)}
 }
 
-func TestABootstrapAdoptsTheCloudflareEdgesWorkerAndCertificateAndKeepsItsCredentialInSecretManager(t *testing.T) {
+func TestABootstrapAdoptsTheCloudflareEdgesWorkerAndKeepsItsCredentialInSecretManager(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
 
@@ -105,9 +98,6 @@ func TestABootstrapAdoptsTheCloudflareEdgesWorkerAndCertificateAndKeepsItsCreden
 	}
 	if want := (cloudflareorigin.AdoptedWorker{Endpoint: "https://s.example.workers.dev", ScriptName: "ocel-releases-store"}); adopted.ReleasesStore != want {
 		t.Errorf("releases store = %+v, want %+v", adopted.ReleasesStore, want)
-	}
-	if want := (cloudflareorigin.AdoptedClientCertificate{ID: "m1", Authorities: offeredCAs}); adopted.ClientCertificate != want {
-		t.Errorf("client certificate = %+v, want %+v", adopted.ClientCertificate, want)
 	}
 	if got, want := h.credentials(t), `{"releasesStore":"c1"}`; got != want {
 		t.Errorf("credentials secret = %q, want %q", got, want)

@@ -71,6 +71,7 @@ function context(at: World): CheckContext {
     readExposed: async () => "",
     countOriginRequests,
     readReleaseFile: async () => new TextEncoder().encode(UPLOADED),
+    readRevisionTagUrls: async () => [],
     runInEnvironment: async () => "",
     journeyNonce: "journey-nonce",
     projectDir: "/nowhere",

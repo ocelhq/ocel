@@ -6,6 +6,7 @@ import {
   SHIELDED_ORIGIN_CHECKS,
 } from "../checks/originShield";
 import { imageShowsNoBindingCheck } from "../checks/prerender";
+import { revisionTagChecks } from "../checks/revisionTag";
 import { TUNNELED_ORIGIN_CHECKS } from "../checks/tunnel";
 import { JOURNEY_REGISTRY, REGISTRY_TOKEN_ENV } from "../registry/settings";
 import { DEFAULT_VARIANT, TARGETS, type Variant, variant } from "./types";
@@ -60,7 +61,7 @@ export const cloudflareTunnel = variant("cloudflare-tunnel", {
 export const cloudflareOnGoogleCloud = variant("cloudflare", {
   offeredOn: ["gcp"],
   config: { edge: "cloudflare" },
-  checks: SHIELDED_ORIGIN_CHECKS,
+  checks: revisionTagChecks,
 });
 
 export const alb = variant("alb", { offeredOn: ["gcp"], config: { edge: "alb" } });

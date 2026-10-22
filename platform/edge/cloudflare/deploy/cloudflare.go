@@ -1,7 +1,6 @@
 package cloudflare
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	cf "github.com/cloudflare/cloudflare-go/v4"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -48,24 +46,13 @@ type cloudflare struct {
 	namespace string
 	options   Options
 
-	workerClientCertificate bool
-	trustClientCertificate  ClientCertificateTrust
-	skipChecks              bool
+	skipChecks bool
 
 	zoneMu    sync.Mutex
 	zonesSeen map[string]zoneRef
 }
 
 func New(namespace string, options Options) edge.Edge { return newCloudflare(namespace, options) }
-
-type ClientCertificateTrust func(ctx context.Context, tier environment.Tier, certificate edge.ClientCertificate) error
-
-func NewWithWorkerClientCertificate(namespace string, options Options, trust ClientCertificateTrust) edge.Edge {
-	front := newCloudflare(namespace, options)
-	front.workerClientCertificate = true
-	front.trustClientCertificate = trust
-	return front
-}
 
 func newCloudflare(namespace string, options Options) *cloudflare {
 	return &cloudflare{client: newAPIClient(), namespace: namespace, options: options, skipChecks: processenv.SkipChecks()}
@@ -96,6 +83,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		ServesUnbound:         true,
 		ProxiesRecords:        true,
 		ProxiedRecordNote:     "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
+		ShieldsOrigin:         true,
 		OriginFacingRanges:    listOriginFacingRanges(),
 		TunnelsToOrigin:       p.options.Tunnel,
 		CredentialScope:       readAccountID(),

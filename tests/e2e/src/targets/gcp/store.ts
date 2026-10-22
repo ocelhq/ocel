@@ -24,6 +24,19 @@ export function servicesIn(body: unknown): Service[] {
   }));
 }
 
+type TrafficStatuses = {
+  services?: Array<{ name?: string; trafficStatuses?: Array<{ tag?: string; uri?: string }> }>;
+};
+
+export function revisionTagUrlsOf(body: unknown, serviceName: string): string[] {
+  const service = ((body as TrafficStatuses).services ?? []).find(
+    (one) => (one.name ?? "").split("/").pop() === serviceName,
+  );
+  return (service?.trafficStatuses ?? [])
+    .filter((status) => status.tag && status.uri)
+    .map((status) => status.uri as string);
+}
+
 export function findAppService(
   services: Service[],
   namespace: string,

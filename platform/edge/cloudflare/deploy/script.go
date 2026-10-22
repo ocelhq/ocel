@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"mime/multipart"
 	"net/textproto"
 	"path"
@@ -232,13 +231,6 @@ func scriptBindings(worker workerScript, includeAssets bool) []map[string]any {
 			"type": "secret_text",
 			"name": name,
 			"text": text,
-		})
-	}
-	for _, name := range slices.Sorted(maps.Keys(worker.ClientCertificates)) {
-		bindings = append(bindings, map[string]any{
-			"type":           "mtls_certificate",
-			"name":           name,
-			"certificate_id": worker.ClientCertificates[name],
 		})
 	}
 	return bindings

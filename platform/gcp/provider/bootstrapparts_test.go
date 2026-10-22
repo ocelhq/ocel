@@ -36,8 +36,8 @@ func TestAGCPBootstrapsPartsAreTheBaseItemsEachInstalledPartAndEachEdgePart(t *t
 	if base.Shape == nil || len(base.Shape.Resources) != len(base.Resources) || base.Shape.Region != "europe-west1" {
 		t.Errorf("base shape = %+v, want every base item priced in the tier's region", base.Shape)
 	}
-	if alb := parts[1]; alb.Shape == nil || len(alb.Shape.Resources) == 0 || alb.Summary == "" {
-		t.Errorf("%s = %+v, want the load balancer it stands up priced and summarised", bootstrap.CloudflareOriginPart, alb)
+	if origin := parts[1]; origin.Shape != nil || origin.Summary == "" {
+		t.Errorf("%s = %+v, want it summarised and unpriced: it holds secrets and an asset reader, and no load balancer", bootstrap.CloudflareOriginPart, origin)
 	}
 	if edgePart := parts[2]; !edgePart.Current || edgePart.Shape != nil {
 		t.Errorf("edge part = %+v, want it current and its idle cost unknown", edgePart)

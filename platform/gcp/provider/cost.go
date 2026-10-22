@@ -122,16 +122,18 @@ func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*c
 }
 
 func edgeShapes(kind edge.Kind, namespace string, site pricing.EdgeSite) ([]pricing.EdgeShape, error) {
-	if kind != alb.Kind && kind != cloudflare.Kind {
+	var shape func(string, pricing.EdgeSite) (pricing.EdgeShape, error)
+	switch kind {
+	case alb.Kind:
+		shape = alb.Shape
+	case cloudflare.Kind:
+		shape = cloudflare.Shape
+	default:
 		return nil, nil
 	}
-	balancer, err := alb.Shape(namespace, site)
-	if err != nil || kind == alb.Kind {
-		return []pricing.EdgeShape{balancer}, err
-	}
-	worker, err := cloudflare.Shape(namespace, site)
+	shaped, err := shape(namespace, site)
 	if err != nil {
 		return nil, err
 	}
-	return []pricing.EdgeShape{balancer, worker}, nil
+	return []pricing.EdgeShape{shaped}, nil
 }

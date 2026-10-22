@@ -71,8 +71,6 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
 			balancer, w, stack := reconciled(t)
-			w.outputs[ShieldedLoadBalancerStack(environment.TierProduction)] = shieldedLoadBalancer()
-			w.outputs[ShieldedLoadBalancerStack(environment.TierPreview)] = shieldedPreviewLoadBalancer()
 			state := stack.State()
 			return routerconformance.Fixture{
 				Router: NewRouter(balancer),
@@ -878,22 +876,6 @@ func TestAPromotionWarmsItsRevisionThroughTheLoadBalancerOnAHostnameRoutedToIt(t
 	want := []string{"https://shop.example.com/healthz via " + loadBalancerAddress}
 	if got := w.warmedThrough(); !slices.Equal(got, want) {
 		t.Errorf("the promotion warmed %v, want %v: the service's ingress admits the load balancer alone, so its run.app url turns the warm away", got, want)
-	}
-}
-
-func TestAPromotionBehindAShieldedLoadBalancerWarmsThroughTheEdgeInFront(t *testing.T) {
-	t.Parallel()
-
-	_, w, bound := reconciled(t)
-	if err := bound.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
-		t.Fatalf("BindDomain = %v", err)
-	}
-	bound.(*stack).recorded.LoadBalancer.Shielded = true
-	promotedWithHealthPath(t, bound)
-
-	want := []string{"https://shop.example.com/healthz via the hostname's own address"}
-	if got := w.warmedThrough(); !slices.Equal(got, want) {
-		t.Errorf("the promotion warmed %v, want %v: a shielded load balancer admits the edge's client certificate alone, so the warm goes where the hostname resolves", got, want)
 	}
 }
 

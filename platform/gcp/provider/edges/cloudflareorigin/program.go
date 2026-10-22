@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
 )
 
@@ -28,13 +28,12 @@ func (p Offers) Program(ctx context.Context, req provider.EdgeProgramRequest) (e
 	if err != nil {
 		return edge.Program{}, err
 	}
-	if adopted.ClientCertificate.ID == "" {
-		return edge.Program{}, refusal.Refuse(refusal.CodeNotReady,
-			"the %s edge's worker reaches GCP only through its client certificate, and the bootstrap adopted none: run `%s` again",
-			req.Kind, provider.BootstrapCommand(req.Tier))
-	}
 	if !credentials.hasAssetStoreKey() {
 		return edge.Program{}, notBootstrapped(req.Tier, req.Kind, "no asset-store credential")
+	}
+	secret, err := RequireOriginSecret(ctx, c, req.Tier, req.Kind)
+	if err != nil {
+		return edge.Program{}, err
 	}
 	buckets, err := c.TierBuckets(ctx, req.Tier, naming.StorageEdge)
 	if err != nil {
@@ -42,7 +41,7 @@ func (p Offers) Program(ctx context.Context, req provider.EdgeProgramRequest) (e
 	}
 	return edge.Program{
 		Origin: edge.OriginReach{
-			Reach: edge.Reach{Kind: edge.ReachClientCertificate, Certificate: adopted.ClientCertificate.ID},
+			Reach: originSecretReach(secret),
 			// TODO: the asset-store key is one account per tier that reads the whole edge
 			// bucket, so every project's worker can read every other project's static files,
 			// pages entries and edge bundles. Bind a reader per project to its own prefixes,
@@ -62,4 +61,13 @@ func (p Offers) Program(ctx context.Context, req provider.EdgeProgramRequest) (e
 			BootstrapCredential: credentials.ReleasesStore,
 		},
 	}, nil
+}
+
+func originSecretReach(secret originsecret.Secret) edge.Reach {
+	reach := edge.Reach{Kind: edge.ReachOriginSecret, Secret: secret.Current}
+	if secret.Rotating() {
+		reach.PreviousSecret = secret.Previous
+		reach.PreviousFingerprint = edge.OriginSecretFingerprint(secret.Previous)
+	}
+	return reach
 }

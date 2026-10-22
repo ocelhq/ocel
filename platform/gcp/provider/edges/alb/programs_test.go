@@ -7,13 +7,8 @@ import (
 )
 
 func binding(hosts map[string]Host) Program {
-	return shieldedBinding(hosts, false)
-}
-
-func shieldedBinding(hosts map[string]Host, shielded bool) Program {
 	return bindingProgram(bindingSpec{
 		Namespace:      "ocel",
-		Shielded:       shielded,
 		Region:         "europe-west1",
 		Slug:           "shop",
 		Tier:           environment.TierProduction,
@@ -80,7 +75,7 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 func frontSpec() loadBalancerSpec {
 	return loadBalancerSpec{
 		Namespace: "ocel",
-		Names:     loadBalancerNames("ocel", environment.TierProduction, false),
+		Names:     loadBalancerNames("ocel", environment.TierProduction),
 		Assets:    &tierAssets,
 	}
 }
@@ -131,20 +126,6 @@ func TestTheLoadBalancersServiceAgentListsTheTiersEdgeBucketAndReadsOnlyItsStati
 	if expression != want {
 		t.Errorf("the grant is conditioned on %q, want %q: the agent lists the edge bucket, so a missing file is a 404, "+
 			"and reads its static files alone, never the pages, edge bundles, route tables or image config beside them", expression, want)
-	}
-}
-
-func TestTheFrontendOfAShieldedLoadBalancerDeclaresNoBackendBucket(t *testing.T) {
-	t.Parallel()
-
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction, true)}))
-	if err != nil {
-		t.Fatalf("the frontend program = %v", err)
-	}
-	for name, resource := range seen {
-		if resource.Token == "gcp:compute/backendBucket:BackendBucket" || resource.Token == "gcp:projects/iAMMember:IAMMember" {
-			t.Errorf("the shielded frontend declares %s, a %s: a shielded host's files are served by the edge in front of it, never from a backend bucket", name, resource.Token)
-		}
 	}
 }
 

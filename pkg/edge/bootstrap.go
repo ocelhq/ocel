@@ -3,19 +3,12 @@ package edge
 import "strings"
 
 type BootstrapOutput struct {
-	Trust             TrustBoundary
-	ReleasesStore     *ReleasesStore
-	ClientCertificate *ClientCertificate
-}
-
-type ClientCertificate struct {
-	ID          string
-	Authorities string
+	Trust         TrustBoundary
+	ReleasesStore *ReleasesStore
 }
 
 type Adoption struct {
-	ReleasesStore     bool
-	ClientCertificate bool
+	ReleasesStore bool
 }
 
 type BootstrapPart struct {

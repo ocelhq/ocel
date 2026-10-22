@@ -289,6 +289,28 @@ func TestAContainerThatNamesNoHealthPathIsProbedAtTheRoot(t *testing.T) {
 	}
 }
 
+func TestAContainerBehindTheLoadBalancerIsProbedWithATokenToo(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	front, err := p.Edges().Open(alb.Kind, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := previewSpec()
+	spec.Edge = front
+
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	container := server.Service.Template.Containers[0]
+	token := googletest.EnvOf(container)[originguard.ProbeTokenVar]
+	probe := container.StartupProbe.HttpGet
+	if len(token) < 32 || len(probe.HttpHeaders) != 1 || probe.HttpHeaders[0].Value != token {
+		t.Errorf("a container behind the %s edge is probed with %+v and its front holds %q, want the same token: every container is probed the same way, whatever fronts it", alb.Kind, probe.HttpHeaders, token)
+	}
+}
+
 func boundToAStore(spec provider.StackSpec) provider.StackSpec {
 	spec.App.Values.Bindings = []provider.Binding{{Type: provider.BindingKV, Name: "cache"}}
 	return spec

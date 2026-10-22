@@ -1,4 +1,4 @@
-import type { OriginReach, OriginStore } from "@platform/edge-contract/origin-reach";
+import type { OriginReach, OriginStore, Reach } from "@platform/edge-contract/origin-reach";
 import type { PointerRecordResult, ReleasesBinding, StoredRecord } from "../src/releases";
 
 export const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
@@ -80,25 +80,9 @@ export function awsOrigin(over: AwsOrigin = {}): string {
   return JSON.stringify(origin);
 }
 
-export function certificateBinding(answer: () => Response = () => new Response("ok")) {
-  const sent: Request[] = [];
-  const binding = {
-    fetch: async (request: Request) => {
-      sent.push(request);
-      return answer();
-    },
-  } as unknown as Fetcher;
-  return { binding, sent };
-}
-
-export interface CertificateOriginEnv {
-  OCEL_ORIGIN: string;
-  OCEL_ORIGIN_CLIENT_CERTIFICATE: Fetcher;
-}
-
-export function storeOrigin(store: Partial<OriginStore> = {}): CertificateOriginEnv {
+export function storeOrigin(store: Partial<OriginStore> = {}): { OCEL_ORIGIN: string } {
   const origin: OriginReach = {
-    reach: { kind: "client-certificate", certificate: "certificate-id" },
+    reach: { kind: "origin-secret", secret: "origin-secret" },
     store: {
       url: "https://objects.example.com/ocel-acme-production",
       region: "auto",
@@ -110,8 +94,15 @@ export function storeOrigin(store: Partial<OriginStore> = {}): CertificateOrigin
     throttle: { status: 429, bodyContains: "no available instance" },
     images: { maxRequestBytes: 33554432 },
   };
-  return {
-    OCEL_ORIGIN: JSON.stringify(origin),
-    OCEL_ORIGIN_CLIENT_CERTIFICATE: certificateBinding().binding,
+  return { OCEL_ORIGIN: JSON.stringify(origin) };
+}
+
+export function secretOrigin(
+  secrets: Pick<Reach, "secret" | "previousSecret" | "previousFingerprint">,
+): string {
+  const origin: OriginReach = {
+    reach: { kind: "origin-secret", ...secrets },
+    throttle: { status: 429, bodyContains: "no available instance" },
   };
+  return JSON.stringify(origin);
 }

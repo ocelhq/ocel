@@ -17,39 +17,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
-func TestABootstrapNeedingMoreThanAHundredPermissionsAsksForThemInBatchesGoogleAccepts(t *testing.T) {
-	t.Parallel()
-
-	parts := []string{bootstrap.CloudflareOriginPart}
-	if n := len(bootstrap.PermissionsFor(parts)); n <= 100 {
-		t.Fatalf("the parts need %d permissions, want more than 100 to cross Google's limit", n)
-	}
-	var asked int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request struct{ Permissions []string }
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Errorf("decode testIamPermissions: %v", err)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if len(request.Permissions) > 100 {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"error":{"code":400,"message":"The number of permissions is greater than the maximum allowed (100).","status":"INVALID_ARGUMENT"}}`))
-			return
-		}
-		asked += len(request.Permissions)
-		json.NewEncoder(w).Encode(map[string][]string{"permissions": request.Permissions})
-	}))
-	t.Cleanup(server.Close)
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}})
-
-	if err := b.Permitted(context.Background(), parts); err != nil {
-		t.Fatalf("permitted: %v", err)
-	}
-	if want := len(bootstrap.PermissionsFor(parts)); asked != want {
-		t.Errorf("asked about %d permissions, want %d", asked, want)
-	}
-}
-
 func servingFirestoreIn(t *testing.T, regions ...string) *gcloud.Clients {
 	t.Helper()
 	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -114,8 +81,8 @@ func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
 			t.Errorf("a bootstrap does not check %s, and the apply would fail at an account's grant", permission)
 		}
 	}
-	if !slices.Contains(bootstrap.RolesCovering(nil), "roles/resourcemanager.projectIamAdmin") {
-		t.Errorf("the refusal names %v, want roles/resourcemanager.projectIamAdmin among them: it is what covers a project policy write", bootstrap.RolesCovering(nil))
+	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/resourcemanager.projectIamAdmin") {
+		t.Errorf("the refusal names %v, want roles/resourcemanager.projectIamAdmin among them: it is what covers a project policy write", bootstrap.BootstrapRoles())
 	}
 }
 

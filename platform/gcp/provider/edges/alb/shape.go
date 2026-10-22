@@ -54,7 +54,7 @@ const (
 )
 
 func ShapeLoadBalancer(namespace string, tier environment.Tier) []pricing.Shaped {
-	balancer := loadBalancerNames(namespace, tier, false)
+	balancer := loadBalancerNames(namespace, tier)
 	shaped := []pricing.Shaped{
 		{Name: balancer.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
 		{Name: balancer.NotFound, Type: tfBackendService, Properties: backendProperties(false)},

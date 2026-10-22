@@ -38,6 +38,7 @@ import type {
   Previews,
   ReleaseCycle,
   Restart,
+  RevisionTags,
   Sweeper,
   Target,
 } from "../types";
@@ -63,6 +64,7 @@ import {
   listServices,
   reachable,
   readServices,
+  revisionTagUrlsOf,
   servicesIn,
   strayServices,
   switchOn,
@@ -170,7 +172,7 @@ export function previewBootstrapArgs(
   return ["bootstrap", "preview", "--yes"];
 }
 
-export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previews {
+export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previews, RevisionTags {
   readonly name = "gcp";
   readonly workers = 2;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
@@ -368,6 +370,12 @@ export class GcpTarget implements Target, ReleaseCycle, Restart, Exposure, Previ
       assetPrefixOf(listed, service.name),
       path,
     );
+  }
+
+  async readRevisionTagUrls(cell: CellUnderTest, app: string): Promise<string[]> {
+    const listed = await readServices(await this.where());
+    const service = findAppService(servicesIn(listed), namespaceOf(process.env), cell.slug, app);
+    return revisionTagUrlsOf(listed, service.name).map((uri) => reachable(uri, endpoint()));
   }
 
   async readExposed(cell: CellUnderTest): Promise<string> {

@@ -9,32 +9,33 @@ import (
 )
 
 type ReleaseRecord struct {
-	App                  string              `json:"app"`
-	Framework            string              `json:"framework"`
-	Release              string              `json:"release"`
-	BuildID              string              `json:"buildId"`
-	RootFunction         string              `json:"rootFunction"`
-	RootFunctionPhysical string              `json:"rootFunctionPhysical,omitempty"`
-	Image                string              `json:"image,omitempty"`
-	Physical             string              `json:"physical,omitempty"`
-	Revisions            map[string]string   `json:"revisions,omitempty"`
-	Origin               string              `json:"origin,omitempty"`
-	HealthPath           string              `json:"healthPath,omitempty"`
-	HealthPathDiscovered bool                `json:"healthPathDiscovered,omitempty"`
-	RouteTable           *RouteTableLocation `json:"routeTable,omitempty"`
-	Static               *edge.Static        `json:"static,omitempty"`
-	FunctionURLs         map[string]string   `json:"functionUrls"`
-	StorageCoordinate    string              `json:"storageCoordinate"`
-	Prerenders           bool                `json:"prerenders,omitempty"`
-	CreatedAt            int64               `json:"createdAt"`
-	EdgeBundle           *EdgeBundle         `json:"edgeBundle,omitempty"`
-	ReleaseFingerprint   string              `json:"releaseFingerprint,omitempty"`
-	Variables            []VariableRecord    `json:"variables,omitempty"`
-	Needs                []edge.Need         `json:"needs,omitempty"`
-	SupportInEffect      []edge.Need         `json:"supportInEffect,omitempty"`
-	Waived               []edge.Need         `json:"waived,omitempty"`
-	Secrets              ReleaseSecrets      `json:"-"`
-	Sealed               []byte              `json:"sealed,omitempty" ts:"-"`
+	App                     string              `json:"app"`
+	Framework               string              `json:"framework"`
+	Release                 string              `json:"release"`
+	BuildID                 string              `json:"buildId"`
+	RootFunction            string              `json:"rootFunction"`
+	RootFunctionPhysical    string              `json:"rootFunctionPhysical,omitempty"`
+	Image                   string              `json:"image,omitempty"`
+	Physical                string              `json:"physical,omitempty"`
+	Revisions               map[string]string   `json:"revisions,omitempty"`
+	Origin                  string              `json:"origin,omitempty"`
+	HealthPath              string              `json:"healthPath,omitempty"`
+	HealthPathDiscovered    bool                `json:"healthPathDiscovered,omitempty"`
+	RouteTable              *RouteTableLocation `json:"routeTable,omitempty"`
+	Static                  *edge.Static        `json:"static,omitempty"`
+	FunctionURLs            map[string]string   `json:"functionUrls"`
+	StorageCoordinate       string              `json:"storageCoordinate"`
+	Prerenders              bool                `json:"prerenders,omitempty"`
+	CreatedAt               int64               `json:"createdAt"`
+	EdgeBundle              *EdgeBundle         `json:"edgeBundle,omitempty"`
+	ReleaseFingerprint      string              `json:"releaseFingerprint,omitempty"`
+	OriginSecretFingerprint string              `json:"originSecretFingerprint,omitempty"`
+	Variables               []VariableRecord    `json:"variables,omitempty"`
+	Needs                   []edge.Need         `json:"needs,omitempty"`
+	SupportInEffect         []edge.Need         `json:"supportInEffect,omitempty"`
+	Waived                  []edge.Need         `json:"waived,omitempty"`
+	Secrets                 ReleaseSecrets      `json:"-"`
+	Sealed                  []byte              `json:"sealed,omitempty" ts:"-"`
 }
 
 func (r ReleaseRecord) ParseStorageCoordinate() (naming.Coordinate, error) {

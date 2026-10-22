@@ -393,7 +393,7 @@ describe("the image origin of a routed deployment", () => {
 
   it("asks the deployment's own service for an image when its origin names images but no optimizer", async () => {
     const fetched: string[] = [];
-    const serve = imageRelease({ images: {}, originFetch: reached(fetched) });
+    const serve = imageRelease({ images: {}, originFetchFor: () => reached(fetched) });
 
     const response = await serve(imageRequest());
 
@@ -412,7 +412,7 @@ describe("the image origin of a routed deployment", () => {
 
   it("leaves a deployment whose origin names no images without an image origin", async () => {
     const fetched: string[] = [];
-    const serve = imageRelease({ originFetch: reached(fetched) });
+    const serve = imageRelease({ originFetchFor: () => reached(fetched) });
 
     const response = await serve(imageRequest());
 
@@ -434,10 +434,11 @@ describe("the image origin of a routed deployment", () => {
         storageCoordinate: STORAGE_COORDINATE,
       },
       base: {
-        originFetch: (async () =>
-          new Response(new Uint8Array(400), {
-            headers: { "content-type": "image/png" },
-          })) as typeof fetch,
+        originFetchFor: () =>
+          (async () =>
+            new Response(new Uint8Array(400), {
+              headers: { "content-type": "image/png" },
+            })) as typeof fetch,
         ...base,
       },
     });
@@ -481,9 +482,10 @@ describe("the image origin of a routed deployment", () => {
   it("answers unprovisioned when the deployment's service cannot be reached", async () => {
     const serve = imageRelease({
       images: {},
-      originFetch: (async () => {
-        throw new Error("unreachable");
-      }) as typeof fetch,
+      originFetchFor: () =>
+        (async () => {
+          throw new Error("unreachable");
+        }) as typeof fetch,
     });
 
     const response = await serve(imageRequest());

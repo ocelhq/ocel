@@ -3,12 +3,16 @@ package gcp
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
@@ -62,6 +66,9 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err := p.refuseAPIsOff(ctx, pre); err != nil {
 		return err
 	}
+	if err := p.warnStaleOriginSecret(ctx, pre); err != nil {
+		return err
+	}
 	if err := p.ensureProjectWritableDatabase(ctx, pre); err != nil {
 		return err
 	}
@@ -78,6 +85,32 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	}
 	slices.Sort(parts)
 	return stackrecords.RecordPartsUsed(ctx, p.KeyValues(), pre.Deploy.Tier, pre.Deploy.Slug, parts)
+}
+
+func (p *Provider) warnStaleOriginSecret(ctx context.Context, pre provider.DeployPreflight) error {
+	if pre.Progress == nil || pre.Edge == edge.None || !slices.ContainsFunc(pre.Deploy.Apps, servesCompute) {
+		return nil
+	}
+	front, err := p.Edges().Open(pre.Edge, nil)
+	if err != nil || !front.Facts().RunsCode {
+		return err
+	}
+	c, err := p.openClients(ctx)
+	if err != nil {
+		return err
+	}
+	secret, found, err := cloudflareorigin.ReadOriginSecret(ctx, c, pre.Deploy.Tier, pre.Edge)
+	if err != nil || !found {
+		return err
+	}
+	if notice := originsecret.FormatStaleNotice(secret, time.Now(), pre.Deploy.Tier); notice != "" {
+		pre.Progress.Warn(notice)
+	}
+	return nil
+}
+
+func servesCompute(app provider.AppEntry) bool {
+	return app.Compute() == provider.ComputeContainer || len(app.Manifest.GetServerless().GetFunctions()) > 0
 }
 
 func (p *Provider) partsUsedBy(pre provider.DeployPreflight) ([]string, error) {

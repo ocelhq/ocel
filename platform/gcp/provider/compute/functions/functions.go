@@ -2,7 +2,6 @@ package functions
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -138,10 +137,13 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		if values, err = run.MergeValues(fn.Name, release.NodePurgeValues, values, next.NewNodePurgeEnv(spec, facts.PurgeSecret)); err != nil {
 			return nil, err
 		}
+		if values, err = run.MergeValues(fn.Name, release.OriginGuardValues, values, release.NewOriginGuardEnv(facts.OriginSecret)); err != nil {
+			return nil, err
+		}
 		served.Env = values
 		gateIgnored := cloudrun.IgnoresGate(spec, fn)
 		if !gateIgnored {
-			if err := cloudrun.ApplyGate(ctx, c, gated, fn.Name, &served); err != nil {
+			if err := cloudrun.ApplyGate(gated, fn.Name, &served); err != nil {
 				return nil, err
 			}
 		}
@@ -150,14 +152,9 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			return nil, err
 		}
 		release.WarnPreviewOpen(spec, service, progress)
-		address := ran.Url
-		if facts.OriginBase != "" {
-			if served.Tag == "" {
-				return nil, fmt.Errorf("function %s is served behind the Cloudflare worker, which reaches the revision this release tags, and this release tagged none", fn.Name)
-			}
-			if address, err = p.Origins.Route(ctx, spec, facts.OriginBase, service, served.Tag, ran.Revision, progress); err != nil {
-				return nil, err
-			}
+		address, err := release.ReadAddress(spec, "function "+fn.Name, ran)
+		if err != nil {
+			return nil, err
 		}
 		deployed = append(deployed, provider.Function{
 			Name: fn.Name, Physical: service, URL: address, Revision: ran.Revision, IgnoresGate: gateIgnored,
@@ -192,9 +189,6 @@ func workerImageOf(app *provider.AppSpec, images provider.ImagePushes) (string, 
 }
 
 func (p Functions) Remove(ctx context.Context, ref provider.StackRef, functions []provider.Function, images provider.ImageStore, progress progress.Log) error {
-	if err := p.Origins.UnrouteServices(ctx, ref.Tier, functions); err != nil {
-		return err
-	}
 	if err := p.TearDownAll(ctx, ref, functionRevisions(functions), images, progress); err != nil {
 		return err
 	}
@@ -233,16 +227,11 @@ func (p Functions) RemoveRevisions(ctx context.Context, ref provider.StackRef, f
 	if err != nil {
 		return nil, err
 	}
-	var left, removed []provider.Function
+	var left []provider.Function
 	for at, function := range functions {
 		if slices.Contains(kept, at) {
 			left = append(left, function)
-			continue
 		}
-		removed = append(removed, function)
-	}
-	if err := p.Origins.UnrouteRevisions(ctx, ref.Tier, removed); err != nil {
-		return nil, err
 	}
 	return left, nil
 }

@@ -29,6 +29,7 @@ export type CheckContext = {
   readExposed: () => Promise<string>;
   countOriginRequests: (urlFragment: string) => Promise<number>;
   readReleaseFile: (path: string) => Promise<Uint8Array>;
+  readRevisionTagUrls: () => Promise<string[]>;
   runInEnvironment: (command: string[]) => Promise<string>;
   journeyNonce: string;
   projectDir: string;

@@ -18,7 +18,6 @@ func (p *Provider) release() *release.Release {
 		Topics:            p.topicHooks(),
 		Objects:           p.objects(),
 		CacheGrants:       cacheGrants,
-		Origins:           p.originHosts(),
 		Offers:            p.offers(),
 		Region:            p.options.Region,
 		ContainerEndpoint: p.containerEndpoint(),

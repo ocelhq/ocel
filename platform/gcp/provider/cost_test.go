@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -22,6 +23,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -199,6 +202,29 @@ func TestShapeOfAPreviewBehindTheLoadBalancerIncludesTheWildcardCertificate(t *t
 	counts := typeCounts(set)
 	if counts["google_certificate_manager_certificate_map_entry"] != 2 || counts["google_compute_region_network_endpoint_group"] != 1 {
 		t.Errorf("counts = %v, want the preview wildcard's certificate beside the hostname's, and the hostname's endpoint group alone", counts)
+	}
+}
+
+func TestShapeBehindCloudflareCarriesTheWorkerAndNoLoadBalancer(t *testing.T) {
+	client, _ := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    shopManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Edge:        &contractv1.EdgeSelection{Kind: string(cloudflare.Kind)},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	counts := typeCounts(set)
+	if counts[cloudflarecost.TypeWorkersScript] == 0 {
+		t.Errorf("counts = %v, want the worker in front of the apps", counts)
+	}
+	for typ := range counts {
+		if strings.HasPrefix(typ, "google_compute_") || strings.HasPrefix(typ, "google_certificate_manager_") {
+			t.Errorf("the shape lists %s, and the worker reaches each release on its revision-tag URL with no load balancer between", typ)
+		}
 	}
 }
 

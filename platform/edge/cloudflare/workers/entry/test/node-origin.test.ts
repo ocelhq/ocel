@@ -56,7 +56,7 @@ describe("node runtime serve path", () => {
   it("forwards to the app's single Function URL, signed with SigV4", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), {
-      originFetch: openOrigin({ OCEL_ORIGIN: awsOrigin() }).fetch,
+      originFetchFor: openOrigin({ OCEL_ORIGIN: awsOrigin() }).fetchFor,
     })) as ServeFetch;
     expect(serve).toBeTypeOf("function");
 
@@ -76,7 +76,9 @@ describe("node runtime serve path", () => {
 
   it("percent-encodes the second question mark Next writes into an icon URL", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     await serve(new Request("https://api.example.com/favicon.ico?favicon.abc.ico?dpl=123"));
 
@@ -87,7 +89,9 @@ describe("node runtime serve path", () => {
 
   it("leaves an ordinary query untouched on its way to the Function URL", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     await serve(new Request("https://api.example.com/search?a=1&b=2"));
 
@@ -96,7 +100,9 @@ describe("node runtime serve path", () => {
 
   it("sets the forwarded host and proto so the origin can build absolute URLs", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     await serve(new Request("https://api.example.com/whoami"));
 
@@ -106,7 +112,9 @@ describe("node runtime serve path", () => {
 
   it("passes the method, headers and body through to the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     await serve(
       new Request("https://api.example.com/orders", {
@@ -125,7 +133,9 @@ describe("node runtime serve path", () => {
 
   it("redirects a protocol-relative path rather than letting it retarget the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     const response = await serve(new Request("https://api.example.com//evil.com/x?a=1"));
 
@@ -136,7 +146,9 @@ describe("node runtime serve path", () => {
 
   it("forwards a body far past any origin's own limit, leaving the refusal to the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     const size = 8 * 1024 * 1024;
     const response = await serve(
@@ -154,7 +166,9 @@ describe("node runtime serve path", () => {
 
   it("forwards a json body to the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     await serve(
       new Request("https://api.example.com/orders", {
@@ -169,7 +183,9 @@ describe("node runtime serve path", () => {
 
   it("forwards a streamed body with no content-length intact", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     const request = streamedPost(512);
     expect(request.headers.get("content-length")).toBeNull();
@@ -183,7 +199,9 @@ describe("node runtime serve path", () => {
 
   it("binds none of next's machinery onto the forwarded request", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;
+    const serve = (await resolved(makeRecord(), {
+      originFetchFor: () => wire.fetch,
+    })) as ServeFetch;
 
     const response = await serve(new Request("https://api.example.com/_next/data/x/y.json"));
 
@@ -194,16 +212,54 @@ describe("node runtime serve path", () => {
     expect(response.headers.get("x-matched-path")).toBeNull();
   });
 
-  it("answers 502 rather than guessing when the app published no Function URL", async () => {
+  it("forwards a container's release to the origin its record names", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord({ functionUrls: {} }), {
-      originFetch: wire.fetch,
+    const serve = (await resolved(
+      makeRecord({ functionUrls: {}, origin: "https://r1---web-abc123-ew.a.run.app" }),
+      { originFetchFor: () => wire.fetch },
+    )) as ServeFetch;
+
+    await serve(new Request("https://api.example.com/users?page=2"));
+
+    expect(wire.calls.map((call) => call.url)).toEqual([
+      "https://r1---web-abc123-ew.a.run.app/users?page=2",
+    ]);
+  });
+
+  it("forwards with the fetch the origin reaches the record's own release with", async () => {
+    const wire = capturing();
+    const reachedFor: (string | undefined)[] = [];
+    const serve = (await resolved(makeRecord({ originSecretFingerprint: "97b0560280ed60a5" }), {
+      originFetchFor: (record) => {
+        reachedFor.push(record.originSecretFingerprint);
+        return wire.fetch;
+      },
+    })) as ServeFetch;
+
+    await serve(new Request("https://api.example.com/"));
+
+    expect(reachedFor).toEqual(["97b0560280ed60a5"]);
+    expect(wire.calls).toHaveLength(1);
+  });
+
+  it.each([
+    ["a node app that published no Function URL", { functionUrls: {} }],
+    [
+      "a container that recorded no origin",
+      { functionUrls: {}, image: "registry.example/api@sha256:a" },
+    ],
+  ])("answers 502 rather than guessing for %s", async (_, over) => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(over), {
+      originFetchFor: () => wire.fetch,
     })) as ServeFetch;
 
     const response = await serve(new Request("https://api.example.com/"));
 
     expect(response.status).toBe(502);
-    expect(await response.text()).toMatch(/No function URL for api/);
+    expect(await response.text()).toBe(
+      "api recorded neither a function URL nor a container origin to reach.",
+    );
     expect(wire.calls).toHaveLength(0);
   });
 
@@ -213,7 +269,7 @@ describe("node runtime serve path", () => {
       makeRecord({
         functionUrls: { api: FN_URL, worker: "https://d.lambda-url.eu-west-2.on.aws/" },
       }),
-      { originFetch: wire.fetch },
+      { originFetchFor: () => wire.fetch },
     )) as ServeFetch;
 
     const response = await serve(new Request("https://api.example.com/"));
@@ -223,7 +279,7 @@ describe("node runtime serve path", () => {
     expect(wire.calls).toHaveLength(0);
   });
 
-  it("answers 502 rather than calling the IAM-guarded origin unsigned", async () => {
+  it("answers 502 rather than calling a guarded origin with nothing to reach it by", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), { fetch: wire.fetch })) as ServeFetch;
 
@@ -232,14 +288,14 @@ describe("node runtime serve path", () => {
     );
 
     expect(response.status).toBe(502);
-    expect(await response.text()).toMatch(/signing credentials/);
+    expect(await response.text()).toMatch(/no way to reach the origin is bound to this worker/i);
     expect(wire.calls).toHaveLength(0);
   });
 
   it("passes a framework it has never heard of through to the origin", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord({ framework: "sveltekit" }), {
-      originFetch: wire.fetch,
+      originFetchFor: () => wire.fetch,
     })) as ServeFetch;
 
     await serve(new Request("https://api.example.com/ping"));

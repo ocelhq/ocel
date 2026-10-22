@@ -226,7 +226,6 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		Tier:           s.state.Tier,
 		CertificateMap: s.recorded.LoadBalancer.CertificateMap,
 		Hosts:          hosts,
-		Shielded:       s.recorded.LoadBalancer.Shielded,
 	}), progress.Discard())
 	return err
 }
@@ -350,9 +349,6 @@ func (s *stack) warmThroughLoadBalancer(ctx context.Context, service, revision, 
 		return nil
 	}
 	address := s.recorded.LoadBalancer.Address
-	if s.recorded.LoadBalancer.Shielded {
-		address = ""
-	}
 	cookie, err := s.signGateSession(ctx, hostname)
 	if err != nil {
 		return fmt.Errorf("revision %s of %s: %w", revision, service, err)

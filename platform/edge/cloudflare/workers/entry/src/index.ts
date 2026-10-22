@@ -25,7 +25,7 @@ import {
 } from "./gate";
 import { workersCacheImage } from "./image";
 import { nodeOrigin } from "./node";
-import { openOrigin } from "./origin/reach";
+import { openOrigin, type ReachedRecord } from "./origin/reach";
 import { findPreviewTarget } from "./preview";
 import {
   answerPurgeOnWorker,
@@ -33,7 +33,7 @@ import {
   isPurgeRequest,
   respondOnControlHost,
 } from "./purge-request";
-import { type ReleaseLookup, resolveRelease, type StoredRecord } from "./releases";
+import { listOriginUrls, type ReleaseLookup, resolveRelease, type StoredRecord } from "./releases";
 import { ownRouteTableKey, readRouteTable, readStoredOcelRouteTable } from "./route-table";
 import { serveNodeOrigin } from "./serve-node";
 import { serveObjects } from "./serve-objects";
@@ -59,10 +59,8 @@ function hostRequestInit(request: Request): HostRequestExtras {
   return { cf: request.cf };
 }
 
-export type ResolveBase = Pick<
-  RouteDeps,
-  "fetch" | "originFetch" | "imageOrigin" | "isOriginThrottle"
-> & {
+export type ResolveBase = Pick<RouteDeps, "fetch" | "imageOrigin" | "isOriginThrottle"> & {
+  originFetchFor?: (record: ReachedRecord) => typeof fetch;
   images?: OriginImages;
   serving: ServingPorts;
   assetStore: Omit<AssetStoreDeps, "storage">;
@@ -95,13 +93,9 @@ function serveOrigin(
   base: ResolveBase,
 ): ServeFetch {
   const app = releases.app ?? record.app;
-  const forward = nodeOrigin({
-    app,
-    functionUrls: record.functionUrls,
-    originFetch: base.originFetch,
-  });
+  const urls = listOriginUrls(record);
+  const forward = nodeOrigin({ app, urls, originFetch: base.originFetchFor?.(record) });
   const serving = newReleaseServing(base.serving, record, storage, releases, app);
-  const urls = Object.values(record.functionUrls);
   if (urls.length !== 1) return forward;
   return serveNodeOrigin({ serving, app, origin: urls[0], routes, forward });
 }
@@ -213,13 +207,13 @@ function routedDeps(
   const rootUrl = record.functionUrls[manifest.rootFunction];
   const serving = newReleaseServing(base.serving, record, storage, releases, app);
   const optimizerUrl = readImageOptimizerUrl(base.images, rootUrl);
+  const originFetch = base.originFetchFor?.(record);
   return {
     fetch: base.fetch,
-    originFetch: base.originFetch,
+    originFetch,
     hostRequestInit,
     imageOrigin:
-      base.imageOrigin ??
-      functionUrlImageOrigin(optimizerUrl, base.originFetch ?? base.fetch ?? fetch),
+      base.imageOrigin ?? functionUrlImageOrigin(optimizerUrl, originFetch ?? base.fetch ?? fetch),
     maxImageRequestBytes: base.images?.maxRequestBytes,
     imageCache: optimizerUrl ? workersCacheImage({ serving, app, optimizerUrl }) : undefined,
     prerender: servePrerender({ serving, app }),
@@ -330,7 +324,7 @@ export default {
 
     const serveRequest = await resolveServe(releases, {
       fetch,
-      originFetch: origin.fetch,
+      originFetchFor: origin.fetchFor,
       isOriginThrottle: origin.isThrottle,
       images: origin.images,
       routeTableStore: objects,

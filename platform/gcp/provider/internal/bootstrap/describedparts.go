@@ -4,9 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -58,7 +56,6 @@ func SurveyedParts(b Engine, read Survey, stacks []provider.BootstrapStack) []pr
 					Name:    stack.Part,
 					Summary: b.summaryOf(stack.Part),
 					Current: stack.DigestCurrent,
-					Shape:   partShape(read, stack.Part),
 				})
 			}
 		default:
@@ -66,17 +63,6 @@ func SurveyedParts(b Engine, read Survey, stacks []provider.BootstrapStack) []pr
 		}
 	}
 	return parts
-}
-
-func partShape(read Survey, part string) *provider.PartShape {
-	if part != CloudflareOriginPart {
-		return nil
-	}
-	shape, err := alb.Shape(string(read.Names.Namespace()), pricing.EdgeSite{Tier: read.Tier, Region: read.Region})
-	if err != nil {
-		return nil
-	}
-	return &provider.PartShape{Vendor: shape.Vendor, Region: shape.Region, Resources: shape.Shared}
 }
 
 func (b Engine) describeMadeParts(ctx context.Context, tier environment.Tier) ([]provider.BootstrapPart, error) {

@@ -204,7 +204,7 @@ func TestDestroyingAProjectReleasesTheLoadBalancerOnlyOnceItsHostsAreUnrouted(t 
 		Claim: func(context.Context, environment.Tier, string) error { return nil },
 		Release: func(_ context.Context, tier environment.Tier, slug string) error {
 			released = append(released, string(tier)+"/"+slug)
-			if hosts := w.hosts(loadBalancerNames("ocel", tier, false).URLMap); len(hosts) != 0 {
+			if hosts := w.hosts(loadBalancerNames("ocel", tier).URLMap); len(hosts) != 0 {
 				t.Errorf("the load balancer was released while it still routes %v", hosts)
 			}
 			return nil

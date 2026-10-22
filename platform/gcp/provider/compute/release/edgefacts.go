@@ -4,12 +4,13 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 )
 
 type EdgeFacts struct {
-	OriginBase  string
-	PurgeSecret string
+	OriginSecret originsecret.Secret
+	PurgeSecret  string
 }
 
 type readEdgeFactsKey struct{}
@@ -27,7 +28,7 @@ func (p *Release) ReadEdgeFacts(ctx context.Context, spec provider.StackSpec) (E
 	if read, found := ctx.Value(readEdgeFactsKey{}).(stackEdgeFacts); found && read.ref == spec.Ref {
 		return read.facts, nil
 	}
-	originBase, err := p.Origins.ReadBase(ctx, spec)
+	originSecret, err := p.readOriginSecret(ctx, spec)
 	if err != nil {
 		return EdgeFacts{}, err
 	}
@@ -35,7 +36,7 @@ func (p *Release) ReadEdgeFacts(ctx context.Context, spec provider.StackSpec) (E
 	if err != nil {
 		return EdgeFacts{}, err
 	}
-	return EdgeFacts{OriginBase: originBase, PurgeSecret: purgeSecret}, nil
+	return EdgeFacts{OriginSecret: originSecret, PurgeSecret: purgeSecret}, nil
 }
 
 func (p *Release) readEdgePurgeSecret(ctx context.Context, spec provider.StackSpec) (string, error) {

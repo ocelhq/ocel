@@ -139,12 +139,6 @@ func TestScriptBindings(t *testing.T) {
 			want:   []map[string]string{{"name": "RELEASES", "service": "ocel-proj-store"}},
 		},
 		{
-			name:   "a client certificate becomes an mtls_certificate binding naming its certificate id",
-			worker: workerScript{Main: testModule(), ClientCertificates: map[string]string{"OCEL_ORIGIN_CLIENT_CERTIFICATE": "c1"}},
-			typ:    "mtls_certificate",
-			want:   []map[string]string{{"name": "OCEL_ORIGIN_CLIENT_CERTIFICATE", "certificate_id": "c1"}},
-		},
-		{
 			name:   "a loader binding maps to a worker_loader binding",
 			worker: workerScript{Main: testModule(), LoaderBinding: "LOADER"},
 			typ:    "worker_loader",
@@ -387,6 +381,15 @@ func TestPropagationIsTheRecordCacheWindow(t *testing.T) {
 	}
 }
 
+func TestTheRouterReachesFunctionsAndContainers(t *testing.T) {
+	t.Parallel()
+
+	facts := Router{p: &cloudflare{}}.Facts()
+	if !facts.ReachesFunctions || !facts.ReachesContainers {
+		t.Errorf("Facts() = %+v, want a router that reaches functions and containers: the entry worker forwards a container's release to the origin its record names", facts)
+	}
+}
+
 func TestProviderRequiresItsCredentials(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -503,6 +506,14 @@ func TestCloudflareInvalidatesByCacheTag(t *testing.T) {
 
 	if !New("ocel", Options{}).Facts().InvalidatesByCacheTag {
 		t.Error("Facts().InvalidatesByCacheTag = false, but Serve purges what it cached by the tags its origin stamps")
+	}
+}
+
+func TestTheCloudflareWorkerShieldsItsOrigin(t *testing.T) {
+	t.Parallel()
+
+	if !New("ocel", Options{}).Facts().ShieldsOrigin {
+		t.Error("Facts().ShieldsOrigin = false, but nothing reaches an origin behind the worker without what the worker presents it")
 	}
 }
 

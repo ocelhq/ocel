@@ -242,8 +242,7 @@ Changing or revoking a password or secret takes the same few minutes to apply, a
 The deploy that adds the load balancer attaches the plugin with an empty gate set that admits
 everything, and a plugin that crashes refuses requests rather than passing them. That deploy checks
 the Service Extensions API (`networkservices.googleapis.com`) is on, and the deploy credential
-holds `roles/networkservices.admin`. A load balancer only Cloudflare
-reaches attaches no plugin: the worker in front of it runs the gate.
+holds `roles/networkservices.admin`.
 
 A service behind the load balancer takes traffic from the load balancer alone, so its
 `run.app` URL does not answer: there is no way round the gate to it.
@@ -331,25 +330,18 @@ certificate is entered on the preview tier's load balancer, and each of the proj
 previews is an exact host rule under it.
 
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
-Name it and a hostname is forwarded through Cloudflare to a load balancer of its own, which
-`ocel bootstrap` provisions per tier at the same price as the `alb` one, as the
+Name it and Cloudflare runs a worker in front of every app, serverless or container, which reaches
+each deployment on its Cloud Run revision-tag URL and presents the tier's origin secret. Each
+service it reaches takes ingress `all`, and the runtime refuses a request without the secret
+before the app runs, so a request that skips Cloudflare is turned away. No load balancer stands
+behind the worker. `ocel bootstrap` keeps the
+origin secret, the worker's asset reader and the credentials of the edge's workers per tier as the
 `cloudflare-origin` part, adding the `edge-bucket` and `keys` parts the worker reads with it. Only
 the bootstrap credential may make it, so the first deploy through
 Cloudflare records that its project wants it and stops: in a terminal Ocel offers to add it there
-and then, and a script or CI is refused with `ocel bootstrap <tier>`, which adds it. That load balancer
-refuses any client that does not present the certificate your Cloudflare zone presents to
-origins, so a request that skips Cloudflare is turned away. On port 80 it answers every
-hostname with a redirect to https and forwards nothing, so a visitor who opens `http://`
-lands on https through Cloudflare, which reaches the load balancer over plain http whenever
-the visitor did. That port 80 listener is a second forwarding rule, which costs nothing more
-while the project holds five or fewer. The wildcard `ocel domain use
---preview` names is forwarded the same way, to a host rule on that load balancer; see
-[previews behind Cloudflare](/docs/providers/cloudflare#previews-behind-cloudflare).
-That is how container apps are served. A serverless app is not forwarded: Cloudflare runs a
-worker in front of it and reaches each deployment on a hostname under an `originDomain` you
-name, as
-[serverless apps on Google Cloud](/docs/providers/cloudflare#serverless-apps-on-google-cloud)
-describes.
+and then, and a script or CI is refused with `ocel bootstrap <tier>`, which adds it. The worker
+answers the wildcard `ocel domain use --preview` names too. See
+[apps on Google Cloud](/docs/providers/cloudflare#apps-on-google-cloud).
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -385,14 +377,7 @@ export default defineConfig({
 }
 ```
 
-That load balancer needs one more service on, and a bootstrap credential that also holds
-`roles/compute.networkAdmin` and `roles/compute.securityAdmin`:
-
-```bash
-gcloud services enable networksecurity.googleapis.com --project my-project
-```
-
-Provisioning the load balancer needs two more services on:
+The `alb` edge's load balancer needs two more services on:
 
 ```bash
 gcloud services enable compute.googleapis.com certificatemanager.googleapis.com \

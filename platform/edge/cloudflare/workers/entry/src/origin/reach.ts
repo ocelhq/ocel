@@ -7,23 +7,30 @@ import type {
 } from "@platform/edge-contract/origin-reach";
 import { AwsClient } from "aws4fetch";
 import type { Env } from "../env";
+import type { StoredRecord } from "../releases";
 import type { StoreSource } from "../store-read";
-import { clientCertificateOriginFetch } from "./client-certificate";
+import { type OriginSecrets, originSecretFetch, presentedSecret } from "./origin-secret";
 import { sigv4OriginFetch } from "./sigv4";
 import { type OpenedStore, type OriginObjects, openStore } from "./store";
 
-export type OriginEnv = Pick<Env, "OCEL_ORIGIN" | "OCEL_ORIGIN_CLIENT_CERTIFICATE">;
+export type OriginEnv = Pick<Env, "OCEL_ORIGIN">;
+
+export type ReachedRecord = Pick<StoredRecord, "originSecretFingerprint">;
 
 export interface Origin {
-  fetch: typeof fetch;
+  fetchFor(record: ReachedRecord): typeof fetch;
   isThrottle: OriginThrottle;
   objects?: OriginObjects;
   entries?: StoreSource;
   images?: OriginImages;
 }
 
+type ReadReach =
+  | { kind: "sigv4"; signedFetch: typeof fetch }
+  | { kind: "origin-secret"; secrets: OriginSecrets };
+
 interface ReadOrigin {
-  signedFetch?: typeof fetch;
+  reach: ReadReach;
   isThrottle: OriginThrottle;
   store?: OpenedStore;
   images?: OriginImages;
@@ -69,21 +76,36 @@ function parseDescriptor(raw: string | undefined): Fields {
   return readFields(parsed, "origin");
 }
 
-function readSignedFetch(reach: Fields): typeof fetch | undefined {
+function readSecrets(reach: Fields): OriginSecrets {
+  const what = "an origin secret reach";
+  const secret = readText(reach, "secret", what);
+  const previousSecret = readOptionalText(reach, "previousSecret", what);
+  const previousFingerprint = readOptionalText(reach, "previousFingerprint", what);
+  if (previousSecret === undefined && previousFingerprint === undefined) return { secret };
+  if (previousSecret === undefined || previousFingerprint === undefined) {
+    refuse("names a previous origin secret without its fingerprint");
+  }
+  return { secret, previous: { secret: previousSecret, fingerprint: previousFingerprint } };
+}
+
+function readReach(reach: Fields): ReadReach {
   const kind = reach.kind;
-  if (kind === "client-certificate") return undefined;
+  if (kind === "origin-secret") return { kind, secrets: readSecrets(reach) };
   if (kind !== "sigv4") {
     refuse(`names the reach ${JSON.stringify(kind)}, which this worker does not know`);
   }
   const what = "a signed reach";
-  return sigv4OriginFetch(
-    new AwsClient({
-      service: readText(reach, "service", what),
-      region: readText(reach, "region", what),
-      accessKeyId: readText(reach, "accessKeyId", what),
-      secretAccessKey: readText(reach, "secretAccessKey", what),
-    }),
-  );
+  return {
+    kind,
+    signedFetch: sigv4OriginFetch(
+      new AwsClient({
+        service: readText(reach, "service", what),
+        region: readText(reach, "region", what),
+        accessKeyId: readText(reach, "accessKeyId", what),
+        secretAccessKey: readText(reach, "secretAccessKey", what),
+      }),
+    ),
+  };
 }
 
 function readThrottle(value: unknown): OriginThrottle {
@@ -152,7 +174,7 @@ function readOrigin(raw: string | undefined): ReadOrigin {
   const descriptor = parseDescriptor(raw) as Partial<Record<keyof OriginReach, unknown>>;
   const store = readStore(descriptor.store);
   return {
-    signedFetch: readSignedFetch(readFields(descriptor.reach, "reach")),
+    reach: readReach(readFields(descriptor.reach, "reach")),
     isThrottle: readThrottle(descriptor.throttle),
     store: store && openStore(store),
     images: readImages(descriptor.images),
@@ -168,19 +190,20 @@ function readHeldOrigin(raw: string | undefined): ReadOrigin {
   return origin;
 }
 
-function certificateFetch(binding: Fetcher | undefined): typeof fetch {
-  if (!binding) {
-    refuse(
-      "names a client certificate reach, and this worker has no OCEL_ORIGIN_CLIENT_CERTIFICATE binding to present it with",
-    );
+function newFetchFor(reach: ReadReach): (record: ReachedRecord) => typeof fetch {
+  switch (reach.kind) {
+    case "sigv4":
+      return () => reach.signedFetch;
+    case "origin-secret":
+      return (record) =>
+        originSecretFetch(presentedSecret(reach.secrets, record.originSecretFingerprint));
   }
-  return clientCertificateOriginFetch(binding);
 }
 
 export function openOrigin(env: OriginEnv): Origin {
-  const { signedFetch, isThrottle, store, images } = readHeldOrigin(env.OCEL_ORIGIN);
+  const { reach, isThrottle, store, images } = readHeldOrigin(env.OCEL_ORIGIN);
   return {
-    fetch: signedFetch ?? certificateFetch(env.OCEL_ORIGIN_CLIENT_CERTIFICATE),
+    fetchFor: newFetchFor(reach),
     isThrottle,
     objects: store?.objects,
     entries: store?.entries,

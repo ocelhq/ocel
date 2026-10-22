@@ -2,10 +2,14 @@ package stackrecords_test
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -70,5 +74,39 @@ func TestTheRecordsAHumanMustWriteAreStoredUnderTheirLiteralName(t *testing.T) {
 	}
 	if !strings.Contains(string(stored), `"manual":`) {
 		t.Errorf("a hostname record is stored as %s, want the manual records under %q", stored, "manual")
+	}
+}
+
+func TestATierListsInOrderTheProjectsWhoseEdgeStateServesWhatTheCallerAsks(t *testing.T) {
+	t.Parallel()
+
+	store := fake.NewKeyValues()
+	write := func(tier environment.Tier, slug string, value []byte) {
+		t.Helper()
+		if _, err := store.Write(t.Context(), records.Entry{Key: stackrecords.EdgeStackKey(tier, slug), Value: value}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	behind := func(kind edge.Kind) []byte {
+		t.Helper()
+		value, err := json.Marshal(stackrecords.EdgeState{Kind: kind})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	write(environment.TierProduction, "shop", behind("alb"))
+	write(environment.TierProduction, "art", behind("alb"))
+	write(environment.TierProduction, "blog", behind("cloudflare"))
+	write(environment.TierPreview, "docs", behind("alb"))
+
+	served, err := stackrecords.ProjectsServed(t.Context(), store, environment.TierProduction, func(state stackrecords.EdgeState) bool {
+		return state.Kind == "alb"
+	})
+	if err != nil {
+		t.Fatalf("ProjectsServed = %v", err)
+	}
+	if want := []string{"art", "shop"}; !slices.Equal(served, want) {
+		t.Errorf("ProjectsServed = %v, want %v", served, want)
 	}
 }

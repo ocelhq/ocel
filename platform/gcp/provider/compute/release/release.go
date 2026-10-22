@@ -28,7 +28,6 @@ type Release struct {
 	Topics            *topic.Topic
 	Objects           *assets.Store
 	CacheGrants       CacheGrants
-	Origins           *cloudflareorigin.OriginHosts
 	Offers            cloudflareorigin.Offers
 	Region            string
 	ContainerEndpoint string

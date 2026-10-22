@@ -4,14 +4,11 @@ import { openOrigin } from "../../src/origin/reach";
 import {
   awsOrigin,
   capturing,
-  certificateBinding,
+  makeRecord,
+  secretOrigin,
   storeOrigin,
   withGlobalFetch,
 } from "../origin-deps";
-
-const forbiddenFetch = (async () => {
-  throw new Error("global fetch must not be called");
-}) as typeof fetch;
 
 function signedBy(origin: Partial<OriginReach>): string {
   return JSON.stringify({
@@ -30,7 +27,7 @@ function signedBy(origin: Partial<OriginReach>): string {
 describe("an origin reached by signing requests", () => {
   it("signs a request to any host with the service and region the origin names", async () => {
     const wire = capturing();
-    const { fetch: originFetch } = openOrigin({ OCEL_ORIGIN: signedBy({}) });
+    const originFetch = openOrigin({ OCEL_ORIGIN: signedBy({}) }).fetchFor(makeRecord());
 
     await withGlobalFetch(wire.fetch, () => originFetch(new Request("https://fn.example.com/x")));
 
@@ -39,43 +36,73 @@ describe("an origin reached by signing requests", () => {
       /^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE\/\d{8}\/ap-south-1\/lambda\/aws4_request, /,
     );
   });
+});
 
-  it("is never reached through a client certificate the worker happens to hold", async () => {
+describe("an origin reached by presenting its origin secret", () => {
+  const rotating = {
+    secret: "current",
+    previousSecret: "previous",
+    previousFingerprint: "6da0633528deaa01",
+  };
+
+  it("presents the current secret to a release that holds it", async () => {
     const wire = capturing();
-    const { binding, sent } = certificateBinding();
-    const { fetch: originFetch } = openOrigin({
-      OCEL_ORIGIN: signedBy({}),
-      OCEL_ORIGIN_CLIENT_CERTIFICATE: binding,
-    });
+    const origin = openOrigin({ OCEL_ORIGIN: secretOrigin(rotating) });
 
-    await withGlobalFetch(wire.fetch, () => originFetch(new Request("https://fn.example.com/x")));
+    await withGlobalFetch(wire.fetch, () =>
+      origin.fetchFor(makeRecord({ originSecretFingerprint: "97b0560280ed60a5" }))(
+        new Request("https://r1---web.a.run.app/"),
+      ),
+    );
 
-    expect(sent).toEqual([]);
-    expect(wire.calls).toHaveLength(1);
+    expect(wire.calls[0].headers.get("x-ocel-origin-secret")).toBe("current");
+  });
+
+  it("presents the previous secret to a release that holds the one the rotation replaced", async () => {
+    const wire = capturing();
+    const origin = openOrigin({ OCEL_ORIGIN: secretOrigin(rotating) });
+
+    await withGlobalFetch(wire.fetch, () =>
+      origin.fetchFor(makeRecord({ originSecretFingerprint: "6da0633528deaa01" }))(
+        new Request("https://r1---web.a.run.app/"),
+      ),
+    );
+
+    expect(wire.calls[0].headers.get("x-ocel-origin-secret")).toBe("previous");
+  });
+
+  it("is refused when it names no secret", () => {
+    expect(() => openOrigin({ OCEL_ORIGIN: secretOrigin({ secret: "" }) })).toThrow(
+      /^ocel: OCEL_ORIGIN /,
+    );
   });
 });
 
-describe("an origin reached by a client certificate", () => {
-  it("is reached through the certificate binding, with no signature", async () => {
-    const { binding, sent } = certificateBinding();
-    const { fetch: originFetch } = openOrigin({
-      ...storeOrigin(),
-      OCEL_ORIGIN_CLIENT_CERTIFICATE: binding,
-    });
+describe("a visitor's origin secret", () => {
+  const forged = { "x-ocel-origin-secret": "a-guess" };
 
-    await withGlobalFetch(forbiddenFetch, () =>
-      originFetch(new Request("https://d-abc.origin.example.com/x")),
+  it("never reaches an origin reached by signing requests", async () => {
+    const wire = capturing();
+    const originFetch = openOrigin({ OCEL_ORIGIN: signedBy({}) }).fetchFor(makeRecord());
+
+    await withGlobalFetch(wire.fetch, () =>
+      originFetch(new Request("https://fn.example.com/x", { headers: forged })),
     );
 
-    expect(sent).toHaveLength(1);
-    expect(sent[0].headers.has("authorization")).toBe(false);
-    expect(sent[0].headers.has("x-amz-date")).toBe(false);
+    expect(wire.calls[0].headers.has("x-ocel-origin-secret")).toBe(false);
   });
 
-  it("is refused when the worker holds no certificate binding to reach it with", () => {
-    const { OCEL_ORIGIN } = storeOrigin();
+  it("is replaced by the origin's own on an origin reached by its origin secret", async () => {
+    const wire = capturing();
+    const originFetch = openOrigin({ OCEL_ORIGIN: secretOrigin({ secret: "current" }) }).fetchFor(
+      makeRecord(),
+    );
 
-    expect(() => openOrigin({ OCEL_ORIGIN })).toThrow(/OCEL_ORIGIN_CLIENT_CERTIFICATE/);
+    await withGlobalFetch(wire.fetch, () =>
+      originFetch(new Request("https://r1---web.a.run.app/", { headers: forged })),
+    );
+
+    expect(wire.calls[0].headers.get("x-ocel-origin-secret")).toBe("current");
   });
 });
 
@@ -88,6 +115,26 @@ describe("a malformed origin", () => {
       "signs with no region",
       signedBy({
         reach: { kind: "sigv4", service: "lambda", accessKeyId: "k", secretAccessKey: "s" },
+      }),
+    ],
+    [
+      "presents only a previous secret",
+      signedBy({
+        reach: {
+          kind: "origin-secret",
+          previousSecret: "s1",
+          previousFingerprint: "6da0633528deaa01",
+        },
+      }),
+    ],
+    [
+      "presents a previous secret with no fingerprint",
+      signedBy({ reach: { kind: "origin-secret", secret: "s2", previousSecret: "s1" } }),
+    ],
+    [
+      "names a previous fingerprint with no secret",
+      signedBy({
+        reach: { kind: "origin-secret", secret: "s2", previousFingerprint: "6da0633528deaa01" },
       }),
     ],
     ["names no throttle status", signedBy({ throttle: {} as OriginReach["throttle"] })],

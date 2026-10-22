@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -403,5 +405,55 @@ func declaresHosting(t *testing.T, app string, hosting buildoutput.Hosting) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, buildoutput.HostingFile), raw, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTheStagedRecordIsCreatedNoLaterThanTheProviderBeganProvisioningTheRelease(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
+	var began atomic.Int64
+	vendor.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind != provider.StackApp {
+			return nil
+		}
+		now := time.Now()
+		began.Store(now.Unix())
+		time.Sleep(time.Until(now.Truncate(time.Second).Add(time.Second)))
+		return nil
+	})
+
+	result, _ := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := stager.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	if staged[0].CreatedAt > began.Load() {
+		t.Errorf("createdAt = %d, want no later than %d, when the provider began provisioning: an edge picks the origin secret it presents by createdAt, and a release whose provider read the secret before a rotation, stamped after it, is presented one it does not hold",
+			staged[0].CreatedAt, began.Load())
+	}
+}
+
+func TestTheStagedRecordNamesTheFingerprintOfTheOriginSecretTheProviderHandedTheRelease(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
+	vendor.FakeStacks().HandReleasesOriginSecret("current")
+
+	result, _ := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := stager.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	if want := edge.OriginSecretFingerprint("current"); staged[0].OriginSecretFingerprint != want {
+		t.Errorf("originSecretFingerprint = %q, want %q: an edge presents the release the secret whose fingerprint it holds", staged[0].OriginSecretFingerprint, want)
 	}
 }

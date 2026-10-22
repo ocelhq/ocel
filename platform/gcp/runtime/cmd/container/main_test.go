@@ -44,6 +44,8 @@ type served struct {
 	Gate     string `json:"gate"`
 	GateFile string `json:"gateFile"`
 	Probe    string `json:"probe"`
+	Host     string `json:"host"`
+	Named    string `json:"named"`
 }
 
 func TestContainerHelper(t *testing.T) {
@@ -105,8 +107,10 @@ func TestContainerHelper(t *testing.T) {
 			os.Exit(0)
 		}()
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(served{
+			Host:     r.Host,
+			Named:    r.Header.Get("X-Forwarded-Host"),
 			Port:     os.Getenv(containerimage.PortEnvVar),
 			Secret:   os.Getenv(edge.OriginSecretVar),
 			Health:   os.Getenv(originguard.HealthPathVar),
@@ -357,6 +361,22 @@ func TestRun(t *testing.T) {
 		}
 	})
 
+	t.Run("the app hears the visitor's host the worker forwarded, not the revision-tag URL's", func(t *testing.T) {
+		const (
+			secret  = "s3cr3t"
+			visitor = "shop.example.com"
+		)
+		r := launch(t, "serve", edge.OriginFrontedVar+"=1", edge.OriginSecretVar+"="+secret)
+		body := r.awaitFrontWith(t, secret, http.Header{"X-Forwarded-Host": {visitor}})
+
+		if body.Host != visitor || body.Named != visitor {
+			t.Errorf("the app heard Host %q and X-Forwarded-Host %q, want %q for both: an app that checks or redirects to its host would answer for the tag URL, which refuses the visitor", body.Host, body.Named, visitor)
+		}
+		if code := r.quit(t, secret); code != 0 {
+			t.Errorf("run = %d, want 0", code)
+		}
+	})
+
 	t.Run("a front marked fronted and handed no origin secret refuses to start", func(t *testing.T) {
 		r := launch(t, "serve", edge.OriginFrontedVar+"=1")
 
@@ -378,16 +398,36 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("the platform's probe is answered without the secret", func(t *testing.T) {
+	t.Run("Cloud Run's probe carrying its token is answered without the secret, and no other request on the health path is", func(t *testing.T) {
 		const secret = "s3cr3t"
-		r := launch(t, "serve", edge.OriginSecretVar+"="+secret, originguard.HealthPathVar+"="+healthPath)
+		r := launch(t, "serve", edge.OriginSecretVar+"="+secret, originguard.HealthPathVar+"="+healthPath, originguard.ProbeTokenVar+"=probe-token")
 		body := r.awaitFront(t, secret)
 
 		if body.Health != healthPath {
 			t.Errorf("the app was handed %s=%q, want %q: the app serves the path the platform probes", originguard.HealthPathVar, body.Health, healthPath)
 		}
-		if resp := r.ask(t, healthPath, ""); resp.StatusCode != http.StatusOK {
-			t.Errorf("probe status = %d, want %d: the platform's probe sends no secret and its failure takes the deployment down", resp.StatusCode, http.StatusOK)
+		probe, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+r.port+healthPath, nil)
+		probe.Header.Set(originguard.ProbeTokenHeader, "probe-token")
+		if resp, err := http.DefaultClient.Do(probe); err != nil || resp.StatusCode != http.StatusOK {
+			t.Errorf("a probe carrying the token = %v, %v, want the app's 200: the startup probe sends no secret and its failure takes the deployment down", resp, err)
+		} else {
+			resp.Body.Close()
+		}
+		if resp := r.ask(t, healthPath, ""); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("a request on the health path with neither the secret nor the token = %d, want %d", resp.StatusCode, http.StatusForbidden)
+		}
+		if code := r.quit(t, secret); code != 0 {
+			t.Errorf("run = %d, want 0", code)
+		}
+	})
+
+	t.Run("a front holding the origin secret and no probe token runs no app code for a request on the health path without the secret", func(t *testing.T) {
+		const secret = "s3cr3t"
+		r := launch(t, "serve", edge.OriginSecretVar+"="+secret, originguard.HealthPathVar+"="+healthPath)
+		r.awaitFront(t, secret)
+
+		if resp := r.ask(t, healthPath, ""); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("status on the health path without the secret = %d, want %d: Cloud Run's probe carries a token, so a caller without one came round the edge", resp.StatusCode, http.StatusForbidden)
 		}
 		if code := r.quit(t, secret); code != 0 {
 			t.Errorf("run = %d, want 0", code)

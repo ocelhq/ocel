@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -212,11 +213,12 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 }
 
 type appStack struct {
-	entry  provider.AppEntry
-	spec   provider.StackSpec
-	facts  AppServing
-	images provider.ImagePushes
-	values provider.AppValues
+	entry     provider.AppEntry
+	spec      provider.StackSpec
+	facts     AppServing
+	images    provider.ImagePushes
+	values    provider.AppValues
+	createdAt int64
 }
 
 func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (appStack, error) {
@@ -287,7 +289,7 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 			Topics:                    topics,
 		},
 	}
-	return appStack{entry: entry, spec: spec, facts: facts, images: images, values: values}, nil
+	return appStack{entry: entry, spec: spec, facts: facts, images: images, values: values, createdAt: time.Now().Unix()}, nil
 }
 
 func (r *deployRun) provisionAppStack(ctx context.Context, release appStack, progress progress.Log) (appProvisioned, error) {
@@ -314,7 +316,7 @@ func (r *deployRun) provisionAppStack(ctx context.Context, release appStack, pro
 	address, deployment := findOwnAddresses(entry, release.facts, result)
 	provisioned.address = address
 	provisioned.deployment = r.deploymentHost(entry.App, deployment)
-	return provisioned, r.recordStagedRelease(ctx, entry, release.facts, release.images, release.values, result)
+	return provisioned, r.recordStagedRelease(ctx, release, result)
 }
 
 func (r *deployRun) recordAppStack(ctx context.Context, entry provider.AppEntry, images provider.ImagePushes, result provider.StackResult) error {

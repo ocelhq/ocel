@@ -2,6 +2,7 @@ package cloudflareorigin
 
 import (
 	"context"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -24,9 +25,26 @@ var FrontParts = bootstrap.FrontParts{
 		return TakeAssetStore(ctx, b.Clients, tier)
 	},
 	PlanAssets: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
-		return PlannedAssetStore(ctx, b.Clients, tier, kind)
+		assets, err := PlannedAssetStore(ctx, b.Clients, tier, kind)
+		if err != nil {
+			return nil, err
+		}
+		secret, err := PlannedOriginSecret(ctx, b.Clients, tier, kind, time.Now())
+		return append(assets, secret), err
 	},
 	PlanAssetsRemoval: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
-		return PlannedAssetStoreRemoval(ctx, b.Clients, tier, kind)
+		assets, err := PlannedAssetStoreRemoval(ctx, b.Clients, tier, kind)
+		if err != nil {
+			return nil, err
+		}
+		secret, err := PlannedOriginSecretRemoval(ctx, b.Clients, tier, kind)
+		return append(assets, secret), err
+	},
+	RaiseOriginSecret: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind, progress progress.Log) error {
+		return EnsureOriginSecret(ctx, b.Clients, tier, kind, time.Now(), progress)
+	},
+	HasOriginSecret: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) (bool, error) {
+		_, found, err := ReadOriginSecret(ctx, b.Clients, tier, kind)
+		return found, err
 	},
 }

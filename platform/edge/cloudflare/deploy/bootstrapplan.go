@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
@@ -25,7 +24,6 @@ const (
 	kindWorkerSubdomain = "Cloudflare::WorkerSubdomain"
 	kindWorkerRoute     = "Cloudflare::WorkerRoute"
 	kindDurableObject   = "Cloudflare::DurableObject"
-	kindMTLSCertificate = "Cloudflare::MTLSCertificate"
 )
 
 const (
@@ -63,7 +61,7 @@ func (p *cloudflare) adoption(_ context.Context, tier environment.Tier) (edge.Ad
 	if err != nil {
 		return edge.Adoption{}, err
 	}
-	return edge.Adoption{ReleasesStore: len(workers) > 0, ClientCertificate: p.workerClientCertificate}, nil
+	return edge.Adoption{ReleasesStore: len(workers) > 0}, nil
 }
 
 func (s bootstrapState) removals() []edge.PlanChange {
@@ -71,7 +69,6 @@ func (s bootstrapState) removals() []edge.PlanChange {
 	for _, worker := range s.workers {
 		changes = append(changes, worker.removals()...)
 	}
-	changes = append(changes, s.certificates.removals()...)
 	return changes
 }
 
@@ -103,8 +100,7 @@ func bootstrapCredentials() (string, error) {
 }
 
 type bootstrapState struct {
-	workers      []workerState
-	certificates workerClientCertificateState
+	workers []workerState
 }
 
 func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
@@ -120,12 +116,6 @@ func (p *cloudflare) readState(ctx context.Context, accountID string, tier envir
 		}
 		state.workers = append(state.workers, read)
 	}
-	if p.workerClientCertificate {
-		state.certificates, err = p.workerClientCertificates().read(ctx, accountID, tier, time.Now())
-		if err != nil {
-			return bootstrapState{}, err
-		}
-	}
 	return state, nil
 }
 
@@ -134,7 +124,7 @@ func (s bootstrapState) changes() []edge.PlanChange {
 	for _, worker := range s.workers {
 		changes = append(changes, worker.changes()...)
 	}
-	return append(changes, s.certificates.changes()...)
+	return changes
 }
 
 func presence(present bool) edge.PlanAction {
@@ -159,7 +149,6 @@ type workerState struct {
 	secretPresent   bool
 	subdomainOn     bool
 	classes         []string
-	certificateID   string
 }
 
 func (w workerState) changes() []edge.PlanChange {
@@ -212,7 +201,6 @@ func (p *cloudflare) readWorkerState(ctx context.Context, accountID string, b bo
 	}
 	state.metadataCurrent = settingsCurrent(settings, b)
 	state.classes = deployedClasses(settings)
-	state.certificateID = deployedCertificate(settings)
 
 	secrets, err := p.client.Workers.Scripts.Secrets.List(ctx, b.scriptName, workers.ScriptSecretListParams{
 		AccountID: cf.F(accountID),
@@ -300,8 +288,6 @@ func comparableBinding(kind string, declared map[string]any) (binding, bool) {
 		ref.value = fmt.Sprint(declared["service"])
 	case "plain_text":
 		ref.value = fmt.Sprint(declared["text"])
-	case "mtls_certificate":
-		ref.value = fmt.Sprint(declared["certificate_id"])
 	case "worker_loader":
 	default:
 		return binding{}, false
@@ -318,8 +304,6 @@ func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse
 			ref.value = deployed.Service
 		case "plain_text":
 			ref.value = deployed.Text
-		case "mtls_certificate":
-			ref.value = deployed.CertificateID
 		case durableObjectBindingType:
 			ref.value = deployed.ClassName
 		case "worker_loader":
@@ -329,18 +313,6 @@ func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse
 		current = append(current, ref)
 	}
 	return current
-}
-
-func deployedCertificate(settings *workers.ScriptScriptAndVersionSettingGetResponse) string {
-	if settings == nil {
-		return ""
-	}
-	for _, deployed := range settings.Bindings {
-		if string(deployed.Type) == "mtls_certificate" && deployed.Name == originClientCertificateBinding {
-			return deployed.CertificateID
-		}
-	}
-	return ""
 }
 
 func deployedClasses(settings *workers.ScriptScriptAndVersionSettingGetResponse) []string {

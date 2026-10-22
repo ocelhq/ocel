@@ -113,10 +113,7 @@ func balancer() map[string]string {
 }
 
 func (w *world) Up(_ context.Context, target Target, program Program, _ progress.Log) (map[string]string, error) {
-	stack, err := target.Name()
-	if err != nil {
-		return nil, err
-	}
+	stack := target.Name()
 	if program == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
 	}
@@ -162,12 +159,6 @@ func (w *world) commitUp(stack string, seen map[string]declaration) (map[string]
 		}
 	}
 	w.backends[stack] = backends
-	if trust, shielding := trustConfigOf(seen); shielding {
-		if w.outputs[stack] == nil {
-			w.outputs[stack] = map[string]string{}
-		}
-		w.outputs[stack][outputTrusted] = fingerprintTrusted(trust)
-	}
 	if outputs, up := w.outputs[stack]; up {
 		return maps.Clone(outputs), nil
 	}
@@ -175,22 +166,8 @@ func (w *world) commitUp(stack string, seen map[string]declaration) (map[string]
 	return map[string]string{}, nil
 }
 
-func trustConfigOf(seen map[string]declaration) ([]string, bool) {
-	for _, declared := range seen {
-		if declared.Token != "gcp:certificatemanager/trustConfig:TrustConfig" {
-			continue
-		}
-		anchors, allowlisted := readTrustConfig(declared)
-		return slices.Concat(anchors, allowlisted), true
-	}
-	return nil, false
-}
-
 func (w *world) Destroy(_ context.Context, target Target, _ progress.Log) error {
-	stack, err := target.Name()
-	if err != nil {
-		return err
-	}
+	stack := target.Name()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.destroys = append(w.destroys, stack)
@@ -200,10 +177,7 @@ func (w *world) Destroy(_ context.Context, target Target, _ progress.Log) error 
 }
 
 func (w *world) Outputs(_ context.Context, target Target) (map[string]string, error) {
-	stack, err := target.Name()
-	if err != nil {
-		return nil, err
-	}
+	stack := target.Name()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return maps.Clone(w.outputs[stack]), nil

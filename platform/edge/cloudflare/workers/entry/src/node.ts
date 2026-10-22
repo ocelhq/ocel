@@ -8,17 +8,16 @@ import {
 
 export interface NodeOriginDeps {
   app: string;
-  functionUrls: Record<string, string>;
+  urls: string[];
   originFetch?: typeof fetch;
 }
 
 export function nodeOrigin(deps: NodeOriginDeps): (request: Request) => Promise<Response> {
-  const urls = Object.values(deps.functionUrls);
-  const { app, originFetch } = deps;
+  const { app, urls, originFetch } = deps;
 
   return async (request) => {
     if (urls.length !== 1) return noSingleFunctionUrl(app, urls.length);
-    if (!originFetch) return noOriginSigner(app);
+    if (!originFetch) return noOriginReach(app);
 
     if (needsSlashNormalization(readRawPath(request.url))) {
       return new Response(null, {
@@ -46,14 +45,14 @@ export function nodeOrigin(deps: NodeOriginDeps): (request: Request) => Promise<
 function noSingleFunctionUrl(app: string, count: number): Response {
   return plain(
     count === 0
-      ? `No function URL for ${app}.`
+      ? `${app} recorded neither a function URL nor a container origin to reach.`
       : `${app} published ${count} function URLs; a node app is served by exactly one.`,
   );
 }
 
-function noOriginSigner(app: string): Response {
+function noOriginReach(app: string): Response {
   return plain(
-    `No origin signing credentials are bound to this worker; ${app} would answer 403 to an unsigned request.`,
+    `No way to reach the origin is bound to this worker; ${app} refuses a request that carries no signature or origin secret.`,
   );
 }
 

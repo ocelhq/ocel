@@ -12,9 +12,32 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
-const probeTokenBytes = 32
+const (
+	probeTokenBytes  = 32
+	probeTokenValues = "the token its startup probe carries"
+)
+
+func ApplyProbeToken(ctx context.Context, c *gcloud.Clients, what string, served *run.Serving) error {
+	token, err := readProbeToken(ctx, c, served.Service)
+	if err != nil {
+		return err
+	}
+	if token == "" {
+		if token, err = newProbeToken(); err != nil {
+			return err
+		}
+	}
+	values, err := run.MergeValues(what, probeTokenValues, served.Env, map[string]string{originguard.ProbeTokenVar: token})
+	if err != nil {
+		return err
+	}
+	served.Env = values
+	served.ProbeToken = token
+	return nil
+}
 
 func newProbeToken() (string, error) {
 	token := make([]byte, probeTokenBytes)

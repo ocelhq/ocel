@@ -31,10 +31,7 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 		{Tier: tier, Slug: "shop"},
 		{Tier: tier, Slug: "blog"},
 	} {
-		config, _, err := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", target, "secret")
-		if err != nil {
-			t.Fatal(err)
-		}
+		config, _ := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", target, "secret")
 		prefixes[target.Slug] = config.Backend.URL
 	}
 
@@ -54,10 +51,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	t.Parallel()
 
 	stacks := stacking(t)
-	front, ref, err := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction}, "secret")
-	if err != nil {
-		t.Fatal(err)
-	}
+	front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction}, "secret")
 	if front.Refresh == nil || !front.Refresh(ref, pulumi.OperationProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by keeping " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the tier back to unrouted")
@@ -68,10 +62,7 @@ func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing
 	t.Parallel()
 
 	stacks := stacking(t)
-	config, ref, err := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction, Slug: "shop"}, "secret")
-	if err != nil {
-		t.Fatal(err)
-	}
+	config, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction, Slug: "shop"}, "secret")
 	if _, err := pulumi.New(config).Workspace(ref, nil); err != nil {
 		t.Errorf("Workspace() for a teardown = %v, want the stack ready to destroy: a teardown has no program to hand it", err)
 	}
@@ -90,7 +81,7 @@ func unsealedStacks(t *testing.T) PulumiStacks {
 func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerInstalledOrHostnameBound(t *testing.T) {
 	t.Parallel()
 
-	balancer := New(Deps{Stacks: unsealedStacks(t), Entries: newWorld(), Shielded: true})
+	balancer := New(Deps{Stacks: unsealedStacks(t), Entries: newWorld()})
 	installed, err := balancer.bootstrapInstalled(context.Background(), environment.TierProduction)
 	if err != nil || installed {
 		t.Errorf("bootstrapInstalled() = %v, %v, want false and no error: no state is sealed under a passphrase that was never made, "+
@@ -105,7 +96,7 @@ func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerInstalledOrHostnameBou
 func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseItsLoadBalancer(t *testing.T) {
 	t.Parallel()
 
-	target := Target{Tier: environment.TierProduction, Shielded: true}
+	target := Target{Tier: environment.TierProduction}
 	_, err := unsealedStacks(t).Up(context.Background(), target, nil, progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
@@ -116,7 +107,7 @@ func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseItsLoadBalancer(t *testin
 func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerToDestroy(t *testing.T) {
 	t.Parallel()
 
-	target := Target{Tier: environment.TierProduction, Shielded: true}
+	target := Target{Tier: environment.TierProduction}
 	if err := unsealedStacks(t).Destroy(context.Background(), target, progress.Discard()); err != nil {
 		t.Errorf("Destroy() = %v, want nil: no state is sealed under a passphrase that was never made, and refusing leaves "+
 			"a bootstrap that failed before making it, or a removal retried after deleting it, unable to be removed", err)

@@ -215,14 +215,6 @@ func TestAnAliasMovedToANewReleaseRoutesThatReleasesFiles(t *testing.T) {
 	expectStaticRoutes(t, w, aliasHost, staticRoutesFor("b2"), "the alias follows the pointer, and the objects follow the alias")
 }
 
-func TestAShieldedBalancerWithNoBackendBucketIsProvisioned(t *testing.T) {
-	t.Parallel()
-
-	if !loadBalancerOf(shieldedLoadBalancer()).provisioned() {
-		t.Error("a shielded load balancer counts as unprovisioned without a backend bucket, so every claim re-raises it for a bucket it never routes to")
-	}
-}
-
 func storageCoordinateOf(app, build string) string {
 	return naming.Coordinate{Project: "shop", Env: "prod", App: app, Release: naming.NewReleaseToken(build, "")}.StorageCoordinate()
 }

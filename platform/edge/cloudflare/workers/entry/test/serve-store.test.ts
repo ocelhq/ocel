@@ -11,7 +11,7 @@ import {
   SERVE_NO_SHELL_HEADER,
   SERVE_UNSHARED_HEADER,
 } from "../src/serve-key";
-import { awsOrigin, certificateBinding, FN_URL, storeOrigin, withGlobalFetch } from "./origin-deps";
+import { awsOrigin, FN_URL, storeOrigin, withGlobalFetch } from "./origin-deps";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -21,15 +21,15 @@ declare module "cloudflare:test" {
 
 const BUCKET_HOST = "assets-bucket.s3.us-east-1.amazonaws.com";
 
-const CERTIFIED_STORE = "https://objects.example.com/ocel-acme-production";
+const HMAC_STORE = "https://objects.example.com/ocel-acme-production";
 
 const objects = new Map<string, string>();
 
 function storedKey(url: string): string | undefined {
   const { host, pathname } = new URL(url);
   if (host === BUCKET_HOST) return decodeURIComponent(pathname.slice(1));
-  if (url.startsWith(`${CERTIFIED_STORE}/`)) {
-    return decodeURIComponent(url.slice(CERTIFIED_STORE.length + 1));
+  if (url.startsWith(`${HMAC_STORE}/`)) {
+    return decodeURIComponent(url.slice(HMAC_STORE.length + 1));
   }
   return undefined;
 }
@@ -216,20 +216,13 @@ describe("Serve answering a miss from the durable store", () => {
     expect(h.originCalls).toEqual([]);
   });
 
-  it("answers the stored page from the store of an origin reached by client certificate", async () => {
+  it("answers the stored page from the store of an origin reached by its origin secret", async () => {
     await seed(storedEntry());
-    const { binding, sent } = certificateBinding();
-    const h = harness({
-      env: {
-        ...storeOrigin({ url: CERTIFIED_STORE, holdsEntries: true }),
-        OCEL_ORIGIN_CLIENT_CERTIFICATE: binding,
-      },
-    }) as Used;
+    const h = harness({ env: storeOrigin({ url: HMAC_STORE, holdsEntries: true }) }) as Used;
 
     const response = await h.fetchOrigin(() => h.serve.fetch(h.request()));
 
     expect(await response.text()).toBe("<html>from the store</html>");
-    expect(sent).toEqual([]);
     expect(h.originCalls).toEqual([]);
   });
 

@@ -8,14 +8,14 @@ import (
 )
 
 const (
-	ProgramStore       = "fake-releases-store"
-	ProgramCertificate = "fake-client-certificate"
+	ProgramStore  = "fake-releases-store"
+	ProgramSecret = "fake-origin-secret"
 )
 
 func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramRequest) (edge.Program, error) {
 	return edge.Program{
 		Origin: edge.OriginReach{
-			Reach:    edge.Reach{Kind: edge.ReachClientCertificate, Certificate: ProgramCertificate + "-" + string(req.Kind)},
+			Reach:    edge.Reach{Kind: edge.ReachOriginSecret, Secret: ProgramSecret + "-" + string(req.Kind)},
 			Throttle: edge.Throttle{Status: 429},
 		},
 		ReleasesStore: edge.ReleasesStore{Name: ProgramStore},

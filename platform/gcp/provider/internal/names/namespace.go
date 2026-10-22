@@ -19,6 +19,7 @@ const (
 	passphraseWords     = "pulumi-passphrase"
 	edgeCredentialsWord = "edge-credentials"
 	purgeSeedWord       = "purge-seed"
+	originSecretWord    = "origin-secret"
 )
 
 const (
@@ -294,6 +295,10 @@ func (n Names) EdgeCredentialsSecret(tier environment.Tier, kind edge.Kind) stri
 
 func (n Names) PurgeSeedSecret(tier environment.Tier, kind edge.Kind) string {
 	return n.ocelName(tier, string(kind), purgeSeedWord)
+}
+
+func (n Names) OriginSecret(tier environment.Tier, kind edge.Kind) string {
+	return n.ocelName(tier, string(kind), originSecretWord)
 }
 
 const partsSuffix = "parts"

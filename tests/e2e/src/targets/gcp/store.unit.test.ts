@@ -17,6 +17,7 @@ import {
   findAppService,
   reachable,
   readServices,
+  revisionTagUrlsOf,
   servicesIn,
   servicesOf,
   strayServices,
@@ -278,6 +279,49 @@ describe("reachable", () => {
     expect(reachable(web.uri, "http://127.0.0.1:33104")).toBe(
       "http://ocel-j-1-deploy-node-prod-web-a1b2c3-9f8.europe-west1.run.localhost.floci.io:33104",
     );
+  });
+});
+
+describe("revisionTagUrlsOf", () => {
+  const tagged = {
+    name: "projects/p/locations/europe-west1/services/ocel-prod-web",
+    trafficStatuses: [
+      {
+        type: "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION",
+        revision: "ocel-prod-web-00002",
+        percent: 100,
+      },
+      {
+        revision: "ocel-prod-web-00002",
+        tag: "r2b3c4d5e",
+        uri: "https://r2b3c4d5e---ocel-prod-web-abc123-ew.a.run.app",
+      },
+      {
+        revision: "ocel-prod-web-00001",
+        tag: "r1a2b3c4d",
+        uri: "https://r1a2b3c4d---ocel-prod-web-abc123-ew.a.run.app",
+      },
+    ],
+  };
+  const other = {
+    name: "projects/p/locations/europe-west1/services/ocel-prod-api",
+    trafficStatuses: [{ tag: "r9", uri: "https://r9---ocel-prod-api-abc123-ew.a.run.app" }],
+  };
+
+  it("is the url of every tag the named service carries, and of no other service", () => {
+    expect(revisionTagUrlsOf({ services: [other, tagged] }, "ocel-prod-web")).toEqual([
+      "https://r2b3c4d5e---ocel-prod-web-abc123-ew.a.run.app",
+      "https://r1a2b3c4d---ocel-prod-web-abc123-ew.a.run.app",
+    ]);
+  });
+
+  it("is empty for a service that carries no tag", () => {
+    expect(
+      revisionTagUrlsOf(
+        { services: [{ name: tagged.name, trafficStatuses: [tagged.trafficStatuses[0]] }] },
+        "ocel-prod-web",
+      ),
+    ).toEqual([]);
   });
 });
 

@@ -336,6 +336,47 @@ func TestTheAppHearsTheForwardedChainAndSchemeTheFrontSetWithTheGuardsPeerAppend
 	}
 }
 
+func TestTheAppHearsTheVisitorsHostOnlyFromAFrontThatPresentedTheOriginSecret(t *testing.T) {
+	const (
+		secret  = "s3cr3t"
+		tagHost = "t-1---web-abc-uc.a.run.app"
+		visitor = "shop.example.com"
+	)
+	for _, heard := range []struct {
+		name      string
+		guard     *Guard
+		secret    string
+		wantHost  string
+		wantNamed string
+	}{
+		{name: "admitted by the origin secret", guard: NewGuard(secret), secret: secret, wantHost: visitor, wantNamed: visitor},
+		{name: "with no guard", guard: nil, wantHost: tagHost, wantNamed: tagHost},
+	} {
+		up := serveUpstream(t)
+		front := serveFront(t, up, heard.guard, nil)
+		req, err := http.NewRequest(http.MethodGet, front.URL+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = tagHost
+		req.Header.Set("X-Forwarded-Host", visitor)
+		if heard.secret != "" {
+			req.Header.Set(edge.OriginSecretHeader, heard.secret)
+		}
+		resp, err := front.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if up.host != heard.wantHost {
+			t.Errorf("%s: the app heard the host %q, want %q", heard.name, up.host, heard.wantHost)
+		}
+		if got := up.heard.Get("X-Forwarded-Host"); got != heard.wantNamed {
+			t.Errorf("%s: the app heard X-Forwarded-Host %q, want %q", heard.name, got, heard.wantNamed)
+		}
+	}
+}
+
 func TestAStreamTheAppFlushesReachesTheClientEventByEvent(t *testing.T) {
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })

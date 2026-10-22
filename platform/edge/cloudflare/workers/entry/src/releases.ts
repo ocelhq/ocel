@@ -13,6 +13,11 @@ export interface StoredRecord extends ServedRecord {
   buildCoordinates?: Record<string, string>;
 }
 
+export function listOriginUrls(record: Pick<StoredRecord, "functionUrls" | "origin">): string[] {
+  const urls = Object.values(record.functionUrls);
+  return urls.length === 0 && record.origin ? [record.origin] : urls;
+}
+
 export type PointerRecordResult = StorePointerRecordResult<StoredRecord>;
 
 export type ServedRecordResult = StoreServedRecordResult<StoredRecord>;

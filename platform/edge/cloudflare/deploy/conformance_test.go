@@ -70,20 +70,3 @@ func TestTheCloudflareEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 		},
 	})
 }
-
-func TestTheCloudflareEdgeForAMutualTLSOriginBehavesAsEveryEdgeMust(t *testing.T) {
-	edgeconformance.Run(t, edgeconformance.Suite{
-		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
-			t.Setenv(envAccountID, "acct")
-			store := fakeStoreServer(t, "")
-			return previewZoneMock().provider(t), previewSpec(store.URL, "v1")
-		},
-		Hostname: "shop.app.com",
-		Bootstrap: func(t *testing.T) (edge.Edge, environment.Tier) {
-			seedBootstrapBundle(t, "export default {}")
-			p := bootstrapMock(t).provider(t)
-			p.workerClientCertificate = true
-			return p, environment.TierProduction
-		},
-	})
-}

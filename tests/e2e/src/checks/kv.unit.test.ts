@@ -47,6 +47,7 @@ function context(fetch: Fetch, phase: Phase, notes: Map<string, string>): CheckC
     readExposed: async () => "",
     countOriginRequests: async () => 0,
     readReleaseFile: async () => new Uint8Array(),
+    readRevisionTagUrls: async () => [],
     runInEnvironment: async () => "",
     journeyNonce: NONCE,
     projectDir: "/nowhere",

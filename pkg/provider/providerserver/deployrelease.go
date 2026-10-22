@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -85,7 +84,8 @@ func declaredVariables(framework string, values provider.AppValues) []router.Var
 	return declared
 }
 
-func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppEntry, facts AppServing, images provider.ImagePushes, values provider.AppValues, result provider.StackResult) error {
+func (r *deployRun) recordStagedRelease(ctx context.Context, release appStack, result provider.StackResult) error {
+	entry, facts, images, values := release.entry, release.facts, release.images, release.values
 	urlByLogical := make(map[string]string, len(result.Functions))
 	physicalByLogical := make(map[string]string, len(result.Functions))
 	for _, fn := range result.Functions {
@@ -115,30 +115,31 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, entry provider.AppE
 		}
 	}
 	record := router.ReleaseRecord{
-		RouteTable:           routeTable,
-		Static:               facts.Static,
-		App:                  entry.App,
-		Framework:            entry.Manifest.GetFramework().GetName(),
-		Release:              r.spec.Releases[entry.App],
-		BuildID:              entry.Release.BuildID(),
-		RootFunction:         facts.RootFunction,
-		RootFunctionPhysical: physicalByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)],
-		Image:                images.ImageRef(entry.App),
-		Physical:             physicalOf(result.Containers, entry.App),
-		Revisions:            revisionsOf(result, entry.App, logical),
-		Origin:               origin,
-		HealthPath:           healthPathOf(entry, result.Containers),
-		HealthPathDiscovered: entry.HealthCheckPath == "" && discoveredHealthPathOf(result.Containers, entry.App) != "",
-		FunctionURLs:         urls,
-		StorageCoordinate:    coordinate.StorageCoordinate(),
-		Prerenders:           facts.Prerenders,
-		Secrets:              router.ReleaseSecrets{PurgeSecret: result.PurgeSecret},
-		CreatedAt:            time.Now().Unix(),
-		ReleaseFingerprint:   entry.Release.Fingerprint(),
-		Variables:            declaredVariables(entry.Manifest.GetFramework().GetName(), values),
-		Needs:                r.needs[entry.App].Needs,
-		SupportInEffect:      r.needs[entry.App].InEffect,
-		Waived:               r.needs[entry.App].Waived,
+		RouteTable:              routeTable,
+		Static:                  facts.Static,
+		App:                     entry.App,
+		Framework:               entry.Manifest.GetFramework().GetName(),
+		Release:                 r.spec.Releases[entry.App],
+		BuildID:                 entry.Release.BuildID(),
+		RootFunction:            facts.RootFunction,
+		RootFunctionPhysical:    physicalByLogical[rootFunctionLogicalName(entry.Manifest, facts.RootFunction)],
+		Image:                   images.ImageRef(entry.App),
+		Physical:                physicalOf(result.Containers, entry.App),
+		Revisions:               revisionsOf(result, entry.App, logical),
+		Origin:                  origin,
+		HealthPath:              healthPathOf(entry, result.Containers),
+		HealthPathDiscovered:    entry.HealthCheckPath == "" && discoveredHealthPathOf(result.Containers, entry.App) != "",
+		FunctionURLs:            urls,
+		StorageCoordinate:       coordinate.StorageCoordinate(),
+		Prerenders:              facts.Prerenders,
+		Secrets:                 router.ReleaseSecrets{PurgeSecret: result.PurgeSecret},
+		CreatedAt:               release.createdAt,
+		ReleaseFingerprint:      entry.Release.Fingerprint(),
+		OriginSecretFingerprint: result.OriginSecretFingerprint,
+		Variables:               declaredVariables(entry.Manifest.GetFramework().GetName(), values),
+		Needs:                   r.needs[entry.App].Needs,
+		SupportInEffect:         r.needs[entry.App].InEffect,
+		Waived:                  r.needs[entry.App].Waived,
 	}
 	code, err := r.edgeCode(entry, result)
 	if err != nil {

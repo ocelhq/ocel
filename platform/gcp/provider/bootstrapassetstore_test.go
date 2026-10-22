@@ -381,8 +381,8 @@ func TestAPlanOfAFrontThatRunsCodeNamesItsAssetReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plannedFronts() = %v", err)
 	}
-	if len(groups) != 1 || len(groups[0].Changes) != 2 || groups[0].Action != provider.ActionCreate {
-		t.Fatalf("the plan = %+v, want one edge group that creates the reader's account and key", groups)
+	if len(groups) != 1 || len(groups[0].Changes) != 3 || groups[0].Action != provider.ActionCreate {
+		t.Fatalf("the plan = %+v, want one edge group that creates the reader's account and key and the edge's origin secret", groups)
 	}
 
 	removed, err := b.RemovedFronts(t.Context(), environment.TierProduction, []string{bootstrap.CloudflareOriginPart})

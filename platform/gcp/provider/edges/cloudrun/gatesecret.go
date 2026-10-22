@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -121,7 +120,7 @@ type GatedServing struct {
 	mounts []run.SecretMount
 }
 
-func (g GatedServing) hasGate() bool { return len(g.env) > 0 }
+func (g GatedServing) holdsGate() bool { return len(g.env) > 0 }
 
 func ProvisionGate(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, inEnv bool) (GatedServing, error) {
 	if !mountsGate(spec) {
@@ -156,25 +155,11 @@ func ProvisionGate(ctx context.Context, c *gcloud.Clients, spec provider.StackSp
 	}, nil
 }
 
-func ApplyGate(ctx context.Context, c *gcloud.Clients, g GatedServing, what string, served *run.Serving) error {
-	if !g.hasGate() {
+func ApplyGate(g GatedServing, what string, served *run.Serving) error {
+	if !g.holdsGate() {
 		return nil
 	}
-	env := maps.Clone(g.env)
-	if served.Compute == provider.ComputeContainer {
-		token, err := readProbeToken(ctx, c, served.Service)
-		if err != nil {
-			return err
-		}
-		if token == "" {
-			if token, err = newProbeToken(); err != nil {
-				return err
-			}
-		}
-		served.ProbeToken = token
-		env[originguard.ProbeTokenVar] = token
-	}
-	values, err := run.MergeValues(what, gateValues, served.Env, env)
+	values, err := run.MergeValues(what, gateValues, served.Env, maps.Clone(g.env))
 	if err != nil {
 		return err
 	}

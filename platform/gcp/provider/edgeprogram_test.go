@@ -3,10 +3,12 @@ package gcp
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 )
@@ -27,17 +29,26 @@ func (h *offersHarness) keyAssets(t *testing.T, tier environment.Tier) {
 	}
 }
 
+func (h *offersHarness) bootstrapForProgramming(t *testing.T, tier environment.Tier) originsecret.Secret {
+	t.Helper()
+	if err := h.adoptIn(tier, fullOffers("c1")); err != nil {
+		t.Fatal(err)
+	}
+	h.keyAssets(t, tier)
+	if err := h.ensureOriginSecret(t, tier, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	return h.storedOriginSecret(t, tier)
+}
+
 func entryRequest(tier environment.Tier) provider.EdgeProgramRequest {
 	return provider.EdgeProgramRequest{Tier: tier, Kind: cloudflareKind}
 }
 
-func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWSKeys(t *testing.T) {
+func TestTheEntryWorkerProgramReachesGCPByPresentingTheTiersOriginSecretAndHoldsNoAWSKeys(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(fullOffers("c1")); err != nil {
-		t.Fatal(err)
-	}
-	h.keyAssets(t, environment.TierProduction)
+	secret := h.bootstrapForProgramming(t, environment.TierProduction)
 
 	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
 	if err != nil {
@@ -48,8 +59,8 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 	if program.ReleasesStore != wantStore {
 		t.Errorf("releases store = %+v, want %+v", program.ReleasesStore, wantStore)
 	}
-	if want := (edge.Reach{Kind: edge.ReachClientCertificate, Certificate: "m1"}); program.Origin.Reach != want {
-		t.Errorf("reach = %+v, want %+v: GCP is reached by the client certificate alone, with no signing keys", program.Origin.Reach, want)
+	if want := (edge.Reach{Kind: edge.ReachOriginSecret, Secret: secret.Current}); program.Origin.Reach != want {
+		t.Errorf("reach = %+v, want %+v: the worker reaches each revision-tag URL by presenting the tier's origin secret, with no certificate or signing keys", program.Origin.Reach, want)
 	}
 	if want := (edge.Throttle{Status: 429, BodyContains: "no available instance"}); program.Origin.Throttle != want {
 		t.Errorf("throttle = %+v, want %+v: Cloud Run names its throttle only in the body of a 429", program.Origin.Throttle, want)
@@ -59,13 +70,34 @@ func TestTheEntryWorkerProgramReachesGCPThroughItsClientCertificateAndHoldsNoAWS
 	}
 }
 
+func TestAnEntryWorkerProgrammedDuringARotationPresentsTheReplacedSecretToReleasesMadeBeforeIt(t *testing.T) {
+	t.Parallel()
+	h := newOffersHarness(t)
+	if err := h.adopt(fullOffers("c1")); err != nil {
+		t.Fatal(err)
+	}
+	h.keyAssets(t, environment.TierProduction)
+	rotatedAt := originSecretMintedAt.Add(originsecret.MaxAge)
+	h.recordOriginSecretAs(t, originsecret.Secret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt})
+
+	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
+	if err != nil {
+		t.Fatalf("ProgramEdge = %v", err)
+	}
+
+	want := edge.Reach{Kind: edge.ReachOriginSecret, Secret: "s2", PreviousSecret: "s1", PreviousFingerprint: edge.OriginSecretFingerprint("s1")}
+	if program.Origin.Reach != want {
+		t.Errorf("reach = %+v, want %+v: a release made before the rotation accepts only the secret it replaced", program.Origin.Reach, want)
+	}
+	if err := program.Origin.RefuseIncomplete(); err != nil {
+		t.Errorf("RefuseIncomplete() = %v, want the rotating reach complete", err)
+	}
+}
+
 func TestThePreviewEntryProgramReadsEveryReleaseRecordThroughThePreviewTiersAdoptedStore(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adoptIn(environment.TierPreview, fullOffers("c1")); err != nil {
-		t.Fatal(err)
-	}
-	h.keyAssets(t, environment.TierPreview)
+	h.bootstrapForProgramming(t, environment.TierPreview)
 
 	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierPreview))
 	if err != nil {
@@ -84,15 +116,17 @@ func TestProgrammingAnEntryWorkerBeforeBootstrapIsNotReady(t *testing.T) {
 	}
 }
 
-func TestProgrammingAnEntryWorkerWithoutAnAdoptedClientCertificateIsNotReady(t *testing.T) {
+func TestProgrammingAnEntryWorkerOnATierWithNoOriginSecretIsNotReady(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(edge.BootstrapOutput{ReleasesStore: storeOffer("c1")}); err != nil {
+	if err := h.adopt(fullOffers("c1")); err != nil {
 		t.Fatal(err)
 	}
+	h.keyAssets(t, environment.TierProduction)
+
 	_, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
-	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "client certificate") {
-		t.Errorf("ProgramEdge = %v, want a not-ready refusal about the client certificate", err)
+	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "origin secret") || !strings.Contains(err.Error(), "ocel bootstrap production") {
+		t.Errorf("ProgramEdge = %v, want a not-ready refusal naming the origin secret and ocel bootstrap production", err)
 	}
 }
 
@@ -103,25 +137,21 @@ func TestTheProviderHandsTheEntryWorkerProgramToItsHooks(t *testing.T) {
 	}
 }
 
-func TestAGCPEntryWorkerPresentsItsTiersClientCertificateToTheOrigin(t *testing.T) {
+func TestAGCPEntryWorkerPresentsItsOwnTiersOriginSecret(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(fullOffers("c1")); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.adoptIn(environment.TierPreview, fullOffers("c1")); err != nil {
-		t.Fatal(err)
-	}
-	h.keyAssets(t, environment.TierProduction)
-	h.keyAssets(t, environment.TierPreview)
-
+	secrets := map[environment.Tier]originsecret.Secret{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		secrets[tier] = h.bootstrapForProgramming(t, tier)
+	}
+
+	for tier, secret := range secrets {
 		program, err := programming(h).ProgramEdge(t.Context(), entryRequest(tier))
 		if err != nil {
 			t.Fatalf("ProgramEdge(%s) = %v", tier, err)
 		}
-		if program.Origin.Reach.Kind != edge.ReachClientCertificate || program.Origin.Reach.Certificate == "" {
-			t.Errorf("%s reach = %+v, want the tier's client certificate", tier, program.Origin.Reach)
+		if program.Origin.Reach.Kind != edge.ReachOriginSecret || program.Origin.Reach.Secret != secret.Current {
+			t.Errorf("%s reach = %+v, want the tier's own origin secret", tier, program.Origin.Reach)
 		}
 	}
 }
@@ -129,10 +159,7 @@ func TestAGCPEntryWorkerPresentsItsTiersClientCertificateToTheOrigin(t *testing.
 func TestTheEntryWorkerReadsAssetsFromTheTiersBucketWithTheKeyOfItsAssetReader(t *testing.T) {
 	t.Parallel()
 	h := newOffersHarness(t)
-	if err := h.adopt(fullOffers("c1")); err != nil {
-		t.Fatal(err)
-	}
-	h.keyAssets(t, environment.TierProduction)
+	h.bootstrapForProgramming(t, environment.TierProduction)
 
 	program, err := programming(h).ProgramEdge(t.Context(), entryRequest(environment.TierProduction))
 	if err != nil {

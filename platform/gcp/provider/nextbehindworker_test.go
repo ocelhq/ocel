@@ -3,16 +3,17 @@ package gcp
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
 type wallet struct {
@@ -143,20 +144,40 @@ func TestPrerenderSeedsBehindTheWorkerAllGoToCloudStorage(t *testing.T) {
 	}
 }
 
-func TestANextServiceBehindTheWorkerOnATierWithNoOriginWildcardSeedsNoPrerenders(t *testing.T) {
+func TestANextServiceBehindTheWorkerOnATierWithNoOriginSecretSeedsNoPrerenders(t *testing.T) {
 	w := behindTheWorkerWithItsSeed(t)
 	root := plantPrerenders(t, map[string]string{"cache/blog/post.cache.json": "{}"})
-	if err := records.Forget(context.Background(), w.p.records, cloudflareorigin.WildcardKey(environment.TierProduction)); err != nil {
-		t.Fatal(err)
-	}
+	w.server.Secrets.Mu.Lock()
+	delete(w.server.Secrets.Secrets, w.p.resolved.OriginSecret(environment.TierProduction, cloudflareKind))
+	w.server.Secrets.Mu.Unlock()
 
 	_, err := w.p.ProvisionFunctions(context.Background(), builtAt(w.spec, root), nil)
 
-	if refusalCode(err) != refusal.CodeInvalid {
-		t.Errorf("ProvisionFunctions = %v, want the refusal for a tier with no origin domain", err)
+	if refusalCode(err) != refusal.CodeNotReady || !strings.Contains(err.Error(), "origin secret") {
+		t.Errorf("ProvisionFunctions = %v, want the not-ready refusal for a tier with no origin secret", err)
 	}
 	if got := uploadNames(w.server.Stored()); len(got) != 0 {
 		t.Errorf("seeded %v before refusing, want nothing written", got)
+	}
+}
+
+func TestANextServiceBehindTheWorkerIsHandedTheOriginSecretAndAnswersOnItsTagURL(t *testing.T) {
+	w := behindTheWorkerWithItsSeed(t)
+	secret := originSecretOf(t, w.p)
+
+	functions, err := w.p.ProvisionFunctions(context.Background(), w.spec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	service := w.server.Created[0]
+	env := googletest.EnvOf(service.Template.Containers[0])
+	if env[edge.OriginFrontedVar] != "1" || env[edge.OriginSecretVar] != secret.Current || service.Ingress != run.IngressEverywhere {
+		t.Errorf("fronted %q, secret handed %v, ingress %s: want the Next service fronted, demanding the tier's origin secret and reached directly",
+			env[edge.OriginFrontedVar], env[edge.OriginSecretVar] == secret.Current, service.Ingress)
+	}
+	if tag := w.spec.Ref.Name.Release.String(); !strings.HasPrefix(functions[0].URL, "https://"+tag+"---") {
+		t.Errorf("URL = %q, want the revision-tag URL of %s", functions[0].URL, tag)
 	}
 }
 

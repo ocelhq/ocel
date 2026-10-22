@@ -23,6 +23,7 @@ export interface ReleaseRecord {
   createdAt: number;
   edgeBundle?: EdgeBundle;
   releaseFingerprint?: string;
+  originSecretFingerprint?: string;
   variables?: VariableRecord[];
   needs?: string[];
   supportInEffect?: string[];

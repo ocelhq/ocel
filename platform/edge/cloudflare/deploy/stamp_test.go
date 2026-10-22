@@ -51,7 +51,7 @@ func TestSpecStampShape(t *testing.T) {
 		},
 		{
 			typ:  reflect.TypeFor[workerScript](),
-			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "ClientCertificates", "DurableObjects", "LoaderBinding", "Main", "Modules", "Secrets", "Services", "Variables"},
+			want: []string{"AssetBinding", "Assets", "CachedEntrypoints", "DurableObjects", "LoaderBinding", "Main", "Modules", "Secrets", "Services", "Variables"},
 		},
 		{
 			typ:  reflect.TypeFor[workerModule](),
@@ -159,29 +159,4 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 		}
 	})
 
-	t.Run("binding a client certificate restamps the spec", func(t *testing.T) {
-		spec := edge.StackSpec{Slug: "acme-web", Tier: environment.TierProduction, Version: "v2", Program: programmed()}
-		plain, err := genericWorker(spec, entryOf(t, spec), "")
-		if err != nil {
-			t.Fatalf("genericWorker: %v", err)
-		}
-		before, err := specStamp(spec, entryOf(t, spec), plain)
-		if err != nil {
-			t.Fatalf("specStamp: %v", err)
-		}
-
-		spec.Program.Origin = certifiedReach()
-		bound, err := genericWorker(spec, entryOf(t, spec), "")
-		if err != nil {
-			t.Fatalf("genericWorker with a certificate: %v", err)
-		}
-		after, err := specStamp(spec, entryOf(t, spec), bound)
-		if err != nil {
-			t.Fatalf("specStamp with a certificate: %v", err)
-		}
-
-		if before == after {
-			t.Errorf("stamp = %q either way, want a bound client certificate to move it", before)
-		}
-	})
 }

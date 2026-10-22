@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -15,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
@@ -246,30 +244,6 @@ func TestRun(t *testing.T) {
 					t.Errorf("stored a static key at %s with no external edge asked for", tc.credParam)
 				}
 			})
-		}
-	})
-
-	t.Run("adopts nothing from the worker client certificate offer and warns nothing", func(t *testing.T) {
-		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		frontedBy(t, &fakeEdge{kind: "cloudflare", out: edge.BootstrapOutput{
-			ClientCertificate: &edge.ClientCertificate{ID: "certificate-1", Authorities: "-----BEGIN CERTIFICATE-----"},
-			ReleasesStore:     new(offeredReleasesStore()),
-		}})
-		log := &warningLog{Log: progress.Discard()}
-
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, everything(), log); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		if len(log.warnings) != 0 {
-			t.Errorf("warnings = %v, want none for an offer this bootstrap deliberately adopts nothing from", log.warnings)
-		}
-		for name, value := range ssmc.params {
-			if strings.Contains(fmt.Sprint(value), "certificate-1") {
-				t.Errorf("stored the worker client certificate offer in %s", name)
-			}
-		}
-		if _, ok := ssmc.params[cloudflareNames(environment.TierProduction).releasesStoreParam]; !ok {
-			t.Errorf("the releases store offer alongside it was not adopted")
 		}
 	})
 
@@ -719,13 +693,6 @@ func recordWaits(t *testing.T) *[]time.Duration {
 	t.Cleanup(func() { cfn.WaitBefore = previous })
 	return &waits
 }
-
-type warningLog struct {
-	progress.Log
-	warnings []string
-}
-
-func (l *warningLog) Warn(message string) { l.warnings = append(l.warnings, message) }
 
 func TestABootstrapRunRefusesAPartItHoldsNoTemplateForBeforeItWritesAnything(t *testing.T) {
 	stacks, apis := installedBootstrap(t)

@@ -30,6 +30,7 @@ import {
   hasReleaseCycle,
   hasRequestLog,
   hasRestart,
+  hasRevisionTags,
   type PreviewRelease,
   type Target,
 } from "../targets/types";
@@ -234,6 +235,7 @@ export class CellRun {
       readExposed: () => this.readExposed(),
       countOriginRequests: (urlFragment) => this.countOriginRequests(urlFragment),
       readReleaseFile: (path) => this.readReleaseFile(app, path),
+      readRevisionTagUrls: () => this.readRevisionTagUrls(app),
       runInEnvironment: (command) => this.runInEnvironment(command),
       journeyNonce: this.journeyNonce,
       projectDir: configTree(this, this.target.name),
@@ -282,6 +284,15 @@ export class CellRun {
       `${target.name} has no way to read the files a release uploaded`,
     );
     return target.readReleaseFile(this, app, path);
+  }
+
+  private async readRevisionTagUrls(app: string): Promise<string[]> {
+    const target = this.target;
+    assert.ok(
+      hasRevisionTags(target),
+      `${target.name} has no way to read the revision-tag URLs a release is reached on`,
+    );
+    return target.readRevisionTagUrls(this, app);
   }
 
   private async readExposed(): Promise<string> {
