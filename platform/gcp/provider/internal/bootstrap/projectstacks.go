@@ -24,6 +24,7 @@ const (
 var checkpointExtensions = []string{".json", ".json.gz", ".json.zst"}
 
 type checkpoint struct {
+	object  string
 	project string
 	stack   string
 }
@@ -40,6 +41,17 @@ func (b Engine) RefuseProjectStacks(ctx context.Context, read Survey) error {
 		"%s still stores the state of %s, and removing the bucket a stack is recorded in strands what that stack provisioned.\n"+
 			"Run `%s` in every project deployed here first",
 		bucket, live, destroyIn(read.Tier))
+}
+
+func (b Engine) refuseLiveStacks(ctx context.Context, read Survey, bucket string) error {
+	live, found, err := b.findCheckpoint(ctx, bucket, nil)
+	if err != nil || !found {
+		return err
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"%s still holds the live state of %s, which nothing removed, and deleting the bucket strands what that stack provisioned.\n"+
+			"Delete what %s provisioned and the object %s in %s, then run `ocel bootstrap destroy %s` again",
+		bucket, live, live, live.object, bucket, read.Tier)
 }
 
 func (b Engine) findCheckpoint(ctx context.Context, bucket string, exceptProjects []string) (checkpoint, bool, error) {
@@ -73,7 +85,7 @@ func parseCheckpoint(object string) (checkpoint, bool) {
 	}
 	for _, extension := range checkpointExtensions {
 		if stack, cut := strings.CutSuffix(file, extension); cut && stack != "" {
-			return checkpoint{project: project, stack: stack}, true
+			return checkpoint{object: object, project: project, stack: stack}, true
 		}
 	}
 	return checkpoint{}, false
