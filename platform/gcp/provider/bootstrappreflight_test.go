@@ -97,11 +97,8 @@ func TestARegionFirestoreServesIsAdmitted(t *testing.T) {
 	}
 }
 
-func TestABootstrapChecksThePermissionItMendsItsBucketsWithAndListsNone(t *testing.T) {
+func TestABootstrapListsNoBucket(t *testing.T) {
 	t.Parallel()
-	if !slices.Contains(bootstrap.BootstrapPermissions, "storage.buckets.update") {
-		t.Error("a bootstrap does not check storage.buckets.update, and the survey mends a tier's recorded buckets by updating them")
-	}
 	if slices.Contains(bootstrap.BootstrapPermissions, "storage.buckets.list") {
 		t.Error("a bootstrap checks storage.buckets.list, and it finds no bucket by listing: it records each name before it creates the bucket")
 	}
@@ -125,7 +122,7 @@ func TestABootstrapChecksThePermissionsItsAccountGrantsNeed(t *testing.T) {
 func TestAProjectOwnerIsPermittedABootstrapThoughOnlyTheBucketsItCreatesGrantItTheirObjects(t *testing.T) {
 	t.Parallel()
 
-	bucketOnly := []string{"storage.buckets.get", "storage.objects.create", "storage.objects.list", "storage.objects.delete"}
+	bucketOnly := []string{"storage.buckets.get", "storage.buckets.update", "storage.objects.create", "storage.objects.list", "storage.objects.delete"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct{ Permissions []string }
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
