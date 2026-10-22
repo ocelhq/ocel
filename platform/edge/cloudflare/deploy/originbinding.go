@@ -13,12 +13,24 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func (s *stack) formatOwner() string {
-	return formatForwardingOwner(s.p.namespace, s.state.Slug, s.state.Tier)
+func (s *stack) forwardingOwner(ctx context.Context) (string, error) {
+	return s.p.forwardingOwner(ctx, s.state.Slug, s.state.Tier)
 }
 
 func (s *stack) isForwarded(hostname string) bool {
 	return slices.ContainsFunc(s.state.Records, func(rec edge.Record) bool { return rec.Name == hostname })
+}
+
+func (s *stack) isStillForwarded(ctx context.Context, zoneID, hostname string) (bool, error) {
+	if !s.isForwarded(hostname) {
+		return false, nil
+	}
+	owner, err := s.forwardingOwner(ctx)
+	if err != nil {
+		return false, err
+	}
+	held, err := s.p.readForwardedOwner(ctx, zoneID, hostname)
+	return held == "" || held == owner, err
 }
 
 func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) error {
@@ -30,15 +42,19 @@ func (s *stack) bindForwarded(ctx context.Context, binding edge.DomainBinding) e
 	if err != nil {
 		return err
 	}
+	owner, err := s.forwardingOwner(ctx)
+	if err != nil {
+		return err
+	}
 	var served []string
 	if s.state.Tier != environment.TierPreview {
 		served = []string{s.own.EntryWorker}
 	}
-	restoreRoute, err := s.p.ensureRouteWithoutWorker(ctx, zoneID, routePattern(binding.Hostname), served)
+	restoreRoute, err := s.p.ensureRouteWithoutWorker(ctx, accountID, zoneID, routePattern(binding.Hostname), served)
 	if err != nil {
 		return err
 	}
-	if err := s.p.bindOrigin(ctx, &s.state, s.formatOwner(), binding); err != nil {
+	if err := s.p.bindOrigin(ctx, &s.state, owner, binding); err != nil {
 		return errors.Join(err, restoreRoute(ctx))
 	}
 	return nil
@@ -53,14 +69,28 @@ func (s *stack) unbindForwarded(ctx context.Context, hostname string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), []string{""}); err != nil {
+	owner, err := s.forwardingOwner(ctx)
+	if err != nil {
 		return err
 	}
-	return s.p.unbindOrigin(ctx, &s.state, s.formatOwner(), hostname)
+	forwarded, err := s.p.isForwardedBy(ctx, zoneID, owner, hostname)
+	if err != nil {
+		return err
+	}
+	if forwarded {
+		if err := s.p.detachRoute(ctx, zoneID, routePattern(hostname), []string{""}); err != nil {
+			return err
+		}
+	}
+	return s.p.unbindOrigin(ctx, &s.state, owner, hostname)
 }
 
 func (s *stack) stopForwarding(ctx context.Context, zoneID, hostname string) error {
-	if err := s.p.unforwardRecords(ctx, zoneID, s.formatOwner(), hostname); err != nil {
+	owner, err := s.forwardingOwner(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.p.unforwardRecords(ctx, zoneID, owner, hostname); err != nil {
 		return err
 	}
 	s.state.PublishAddress(hostname, "")
@@ -68,7 +98,7 @@ func (s *stack) stopForwarding(ctx context.Context, zoneID, hostname string) err
 	return nil
 }
 
-func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, pattern string, served []string) (func(context.Context) error, error) {
+func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, accountID, zoneID, pattern string, served []string) (func(context.Context) error, error) {
 	snap := p.routeSnapshot()
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
@@ -93,6 +123,13 @@ func (p *cloudflare) ensureRouteWithoutWorker(ctx context.Context, zoneID, patte
 				snap.repointed(zoneID, route.ID, route.Script)
 				return nil
 			}, nil
+		}
+		held, other, err := p.readOtherOrigin(ctx, accountID, route.Script)
+		if err != nil {
+			return nil, err
+		}
+		if other {
+			return nil, refuseOtherOriginsRoute(pattern, route.Script, held)
 		}
 		return nil, fmt.Errorf("worker route %q runs %q, and a hostname forwarded to its origin runs no worker: remove that route and bind it again", pattern, route.Script)
 	}

@@ -110,9 +110,10 @@ func AdoptOffers(
 func edgeCredentialUnrecorded(c *gcloud.Clients, tier environment.Tier, kind edge.Kind, surface, scriptName string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %s edge reoffered its %s %q without a bootstrap credential, meaning it still has the one it was given, "+
-			"but secret %s stores none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
-			"back, so delete the bootstrap credential set on %q at the %s edge and re-run bootstrap to mint a fresh one",
-		kind, surface, scriptName, c.EdgeCredentialsSecret(tier, kind), scriptName, kind)
+			"but secret %[4]s stores none: a prior bootstrap of this origin set that credential and failed before storing it, "+
+			"or secret %[4]s was deleted since. It cannot be read back, so delete the bootstrap credential set on %[3]q "+
+			"at the %[1]s edge and re-run bootstrap to mint a fresh one",
+		kind, surface, scriptName, c.EdgeCredentialsSecret(tier, kind))
 }
 
 func readAdoptedEdge(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, kind edge.Kind) (AdoptedEdge, EdgeCredentials, error) {

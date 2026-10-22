@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 )
@@ -15,6 +16,23 @@ type OriginScope struct {
 }
 
 func (o OriginScope) String() string { return o.Vendor + originVendorSeparator + o.ID }
+
+const maxOriginLength = 40
+
+func (o OriginScope) refuseUnrecordable() error {
+	if readable := o.String(); len(readable) > maxOriginLength || strings.ContainsFunc(readable, unicode.IsSpace) {
+		return fmt.Errorf("the origin %q is longer than %d characters or holds whitespace, so the comment that names it on a Cloudflare DNS record would not fit or read back", readable, maxOriginLength)
+	}
+	return nil
+}
+
+func parseOriginScope(readable string) (OriginScope, bool) {
+	vendor, id, named := strings.Cut(readable, originVendorSeparator)
+	if !named || vendor == "" || id == "" || strings.ContainsFunc(readable, unicode.IsSpace) {
+		return OriginScope{}, false
+	}
+	return OriginScope{Vendor: vendor, ID: id}, true
+}
 
 func (o OriginScope) refuseIncomplete(what string) error {
 	if o.Vendor == "" || o.ID == "" {
@@ -126,6 +144,9 @@ func resolveOrigin(ctx context.Context, origin func(context.Context) (OriginScop
 		return OriginScope{}, fmt.Errorf("read which origin the cloudflare edge serves: %w", err)
 	}
 	if err := scope.refuseIncomplete("name this origin's Cloudflare resources"); err != nil {
+		return OriginScope{}, err
+	}
+	if err := scope.refuseUnrecordable(); err != nil {
 		return OriginScope{}, err
 	}
 	return scope, nil

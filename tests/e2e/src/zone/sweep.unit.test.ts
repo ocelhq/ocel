@@ -14,7 +14,7 @@ function host(run: string, cell = "deploy-node-cloudflare", app = "web"): string
 }
 
 function owned(run: string, cell = "deploy-node-cloudflare"): string {
-  return `managed by ocel for ocel--j-${run}-${cell}--production`;
+  return `managed by ocel for ocel-prod-j-${run}-${cell}-1a2b3c on aws:123456789012/us-east-1`;
 }
 
 function record(id: string, name: string, change: Partial<DnsRecord> = {}): DnsRecord {
@@ -23,8 +23,8 @@ function record(id: string, name: string, change: Partial<DnsRecord> = {}): DnsR
 
 const RECORDS: DnsRecord[] = [
   record("dead", host("111")),
-  record("dead-plain-comment", host("111", "lifecycle-next-cloudflare"), {
-    comment: "managed by ocel",
+  record("dead-writer-comment", host("111", "lifecycle-next-cloudflare"), {
+    comment: "managed by ocel on aws:123456789012/us-east-1",
   }),
   record("live", host("222"), { comment: owned("222") }),
   record("unreadable", host("333"), { comment: owned("333") }),
@@ -201,7 +201,7 @@ describe("sweepStaleFromZone", () => {
     await sweepStaleFromZone(client, ZONE, CELLS, "444", look).catch(() => {});
     expect(deleted(asked)).toEqual([
       "/zones/z1/dns_records/dead",
-      "/zones/z1/dns_records/dead-plain-comment",
+      "/zones/z1/dns_records/dead-writer-comment",
       "/certificates/dead",
     ]);
   });
@@ -376,7 +376,7 @@ describe("sweepRunFromZone", () => {
     ]);
     expect(deleted(asked)).toEqual([
       "/zones/z1/dns_records/dead",
-      "/zones/z1/dns_records/dead-plain-comment",
+      "/zones/z1/dns_records/dead-writer-comment",
       "/certificates/dead",
     ]);
   });

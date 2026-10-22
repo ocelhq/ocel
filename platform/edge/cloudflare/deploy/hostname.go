@@ -49,7 +49,7 @@ func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec 
 		if !coveredByUniversalSSL(host, zoneName) {
 			warn(fmt.Sprintf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover — TLS will fail there until you add a Cloudflare Advanced Certificate for it", host, zoneName))
 		}
-		if err := p.ensureRoute(ctx, routes, zoneID, routePattern(host), up.scriptName, spec); err != nil {
+		if err := p.ensureRoute(ctx, routes, up.accountID, zoneID, routePattern(host), up.scriptName, spec); err != nil {
 			return err
 		}
 	}
@@ -150,13 +150,63 @@ func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, 
 		if route.Script == shared {
 			return edge.PreviewEntryOwner, nil
 		}
+		held, other, err := p.readOtherOrigin(ctx, accountID, route.Script)
+		if err != nil {
+			return "", err
+		}
+		if other {
+			return route.Script + recordOriginMarker + held.String(), nil
+		}
 		return route.Script, nil
 	}
 	return p.readForwardedOwner(ctx, zoneID, hostname)
 }
 
-func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, spec routeSpec) error {
-	if held, err := p.repointHeldRoute(ctx, snap, zoneID, pattern, scriptName, spec); err != nil || held {
+func (p *cloudflare) readOtherOrigin(ctx context.Context, accountID, script string) (OriginScope, bool, error) {
+	if script == "" {
+		return OriginScope{}, false, nil
+	}
+	origin, err := p.originScope(ctx)
+	if err != nil {
+		return OriginScope{}, false, err
+	}
+	held, tagged, err := p.readScriptOrigin(ctx, accountID, script)
+	if err != nil || !tagged || held == origin {
+		return OriginScope{}, false, err
+	}
+	return held, true, nil
+}
+
+func refuseOtherOriginsRoute(pattern, script string, held OriginScope) error {
+	subject := "hostname"
+	if strings.HasPrefix(pattern, "*.") {
+		subject = "preview base domain"
+	}
+	return fmt.Errorf("worker route %q runs %q, which origin %s deployed, and one %s belongs to one origin, so it is left in place; release it on %s first", pattern, script, held, subject, held)
+}
+
+func (p *cloudflare) refuseHeldRoute(ctx context.Context, accountID, zoneID string, route workers.RouteListResponse) error {
+	held, other, err := p.readOtherOrigin(ctx, accountID, route.Script)
+	if err != nil {
+		return err
+	}
+	if other {
+		return refuseOtherOriginsRoute(route.Pattern, route.Script, held)
+	}
+	if route.Script == "" {
+		owner, err := p.readForwardedOwner(ctx, zoneID, strings.TrimSuffix(route.Pattern, routePattern("")))
+		if err != nil {
+			return err
+		}
+		if owner != "" {
+			return fmt.Errorf("worker route %q runs no worker because Cloudflare forwards it for %s, so it is left in place; release it there with `ocel domain remove` first", route.Pattern, owner)
+		}
+	}
+	return fmt.Errorf("worker route %q is owned by %q, which this project does not own, so it is left in place; release it from the project that owns it first", route.Pattern, route.Script)
+}
+
+func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, accountID, zoneID, pattern, scriptName string, spec routeSpec) error {
+	if held, err := p.repointHeldRoute(ctx, snap, accountID, zoneID, pattern, scriptName, spec); err != nil || held {
 		return err
 	}
 
@@ -167,7 +217,7 @@ func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneI
 	})
 	if hasStatus(err, http.StatusConflict) {
 		snap.discard(zoneID)
-		held, heldErr := p.repointHeldRoute(ctx, snap, zoneID, pattern, scriptName, spec)
+		held, heldErr := p.repointHeldRoute(ctx, snap, accountID, zoneID, pattern, scriptName, spec)
 		if heldErr != nil || held {
 			return heldErr
 		}
@@ -179,7 +229,7 @@ func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneI
 	return nil
 }
 
-func (p *cloudflare) repointHeldRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, spec routeSpec) (bool, error) {
+func (p *cloudflare) repointHeldRoute(ctx context.Context, snap *routeSnapshot, accountID, zoneID, pattern, scriptName string, spec routeSpec) (bool, error) {
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
 		return false, err
@@ -192,7 +242,7 @@ func (p *cloudflare) repointHeldRoute(ctx context.Context, snap *routeSnapshot, 
 			return true, nil
 		}
 		if !spec.ownsRoute(scriptName, route.Script) {
-			return false, fmt.Errorf("worker route %q is owned by %q, which this project does not own, so it is left in place; release it from the project that owns it first", pattern, route.Script)
+			return false, p.refuseHeldRoute(ctx, accountID, zoneID, route)
 		}
 		if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{
 			ZoneID:  cf.F(zoneID),

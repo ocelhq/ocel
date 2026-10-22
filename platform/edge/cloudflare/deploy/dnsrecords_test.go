@@ -15,6 +15,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/zones"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type fakeRecords struct {
@@ -78,7 +79,7 @@ func newTestWriter(records *fakeRecords, owned []zones.Zone, named string) (*dns
 		records.existing = map[string][]dns.RecordResponse{}
 	}
 	zoneList := &fakeZones{owned: owned}
-	return &dnsRecords{records: records, zones: zoneList, accountID: testAccountID, named: named}, zoneList
+	return &dnsRecords{records: records, zones: zoneList, accountID: testAccountID, named: named, origin: fixedOrigin(testOrigin)}, zoneList
 }
 
 var testZones = []zones.Zone{
@@ -148,7 +149,7 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 		t.Parallel()
 
 		records := &fakeRecords{existing: map[string][]dns.RecordResponse{
-			"zone-app|shop.app.com": {{ID: "rec-1", Type: dns.RecordResponseTypeAAAA, Content: "2001:db8::1", Comment: recordComment}},
+			"zone-app|shop.app.com": {{ID: "rec-1", Type: dns.RecordResponseTypeAAAA, Content: "2001:db8::1", Comment: formatWriterComment(testOrigin)}},
 		}}
 		w, _ := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "shop.app.com", Type: "MX", Value: "mail.example.net"}
@@ -173,6 +174,9 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 		body := createdBody(t, records.created[0])
 		if body["type"] != "CNAME" || body["content"] != "front.example.net" || body["proxied"] != false {
 			t.Errorf("created record = %v, want a grey-cloud CNAME", body)
+		}
+		if body["comment"] != formatWriterComment(testOrigin) {
+			t.Errorf("created record = %v, want it to name %s, the origin that wrote it", body, testOrigin)
 		}
 	})
 
@@ -256,7 +260,7 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 		t.Parallel()
 
 		records := &fakeRecords{existing: map[string][]dns.RecordResponse{
-			"zone-app|ours.app.com":   {{ID: "ours", Type: dns.RecordResponseTypeCNAME, Content: "old.example.net", Comment: recordComment}},
+			"zone-app|ours.app.com":   {{ID: "ours", Type: dns.RecordResponseTypeCNAME, Content: "old.example.net", Comment: formatWriterComment(testOrigin)}},
 			"zone-app|theirs.app.com": {{ID: "theirs", Type: dns.RecordResponseTypeCNAME, Content: "their.example.net"}},
 		}}
 		w, _ := newTestWriter(records, testZones, "")
@@ -302,13 +306,36 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 		}
 	})
 
+	t.Run("a record another origin wrote is left in place and names that origin", func(t *testing.T) {
+		t.Parallel()
+
+		records := &fakeRecords{existing: map[string][]dns.RecordResponse{
+			"zone-app|shop.app.com": {{ID: "theirs", Type: dns.RecordResponseTypeCNAME, Content: "their-front.example.net", Comment: formatWriterComment(otherOrigin)}},
+		}}
+		w, _ := newTestWriter(records, testZones, "")
+		var said []string
+		written, err := w.Ensure(t.Context(), []edge.Record{{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}}, func(m string) { said = append(said, m) })
+		if err != nil {
+			t.Fatalf("Ensure: %v", err)
+		}
+		if len(records.created) != 0 || len(records.updated) != 0 {
+			t.Errorf("created = %v, updated = %v, want %s's record left in place", records.created, records.updated, otherOrigin)
+		}
+		if len(written) != 0 {
+			t.Errorf("written = %v, want nothing recorded: this origin wrote nothing", written)
+		}
+		if len(said) != 1 || !strings.Contains(said[0], otherOrigin.String()) || !strings.Contains(said[0], "one hostname belongs to one origin") {
+			t.Errorf("said = %v, want the origin that holds shop.app.com named, and that one hostname belongs to one origin", said)
+		}
+	})
+
 	t.Run("a foreign record listed first does not hide ocel's own", func(t *testing.T) {
 		t.Parallel()
 
 		records := &fakeRecords{existing: map[string][]dns.RecordResponse{
 			"zone-app|shop.app.com": {
 				{ID: "theirs", Type: dns.RecordResponseTypeA, Content: "203.0.113.9"},
-				{ID: "ours", Type: dns.RecordResponseTypeAAAA, Content: "100::", Comment: recordComment},
+				{ID: "ours", Type: dns.RecordResponseTypeAAAA, Content: "100::", Comment: formatWriterComment(testOrigin)},
 			},
 		}}
 		w, _ := newTestWriter(records, testZones, "")
@@ -352,17 +379,29 @@ func TestDNSRecordsDeleteRecords(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "deletes a record whose value still matches",
-			live: dns.RecordResponse{ID: "ours", Type: dns.RecordResponseTypeAAAA, Content: edge.ProxyPlaceholder},
+			name: "deletes a record this origin wrote whose value still matches",
+			live: dns.RecordResponse{ID: "ours", Type: dns.RecordResponseTypeAAAA, Content: edge.ProxyPlaceholder, Comment: formatWriterComment(testOrigin)},
 			want: []string{"ours"},
 		},
 		{
+			name: "leaves a record of the same value forwarded for a project",
+			live: dns.RecordResponse{ID: "forwarded", Type: dns.RecordResponseTypeAAAA, Content: edge.ProxyPlaceholder, Comment: formatOwnerComment(mustFormatForwardingOwner(defaultNamespace, testOrigin, "acme", environment.TierProduction))},
+		},
+		{
+			name: "leaves a record of the same value ocel did not write",
+			live: dns.RecordResponse{ID: "theirs", Type: dns.RecordResponseTypeAAAA, Content: edge.ProxyPlaceholder},
+		},
+		{
+			name: "leaves a record of the same value another origin wrote",
+			live: dns.RecordResponse{ID: "other-origin", Type: dns.RecordResponseTypeAAAA, Content: edge.ProxyPlaceholder, Comment: formatWriterComment(otherOrigin)},
+		},
+		{
 			name: "leaves a record whose value has moved on",
-			live: dns.RecordResponse{ID: "moved", Type: dns.RecordResponseTypeAAAA, Content: "2001:db8::1"},
+			live: dns.RecordResponse{ID: "moved", Type: dns.RecordResponseTypeAAAA, Content: "2001:db8::1", Comment: formatWriterComment(testOrigin)},
 		},
 		{
 			name: "leaves a record of another type at the same name",
-			live: dns.RecordResponse{ID: "other", Type: dns.RecordResponseTypeCNAME, Content: edge.ProxyPlaceholder},
+			live: dns.RecordResponse{ID: "other", Type: dns.RecordResponseTypeCNAME, Content: edge.ProxyPlaceholder, Comment: formatWriterComment(testOrigin)},
 		},
 	}
 	for _, tc := range cases {

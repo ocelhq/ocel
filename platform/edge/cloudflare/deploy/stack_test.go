@@ -283,7 +283,7 @@ func previewZoneMock() *cfMock {
 		zoneID:             "zone1",
 		zoneName:           "app.com",
 		existingRecords: []map[string]any{
-			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true},
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": formatWriterComment(testOrigin), "proxied": true},
 		},
 	}
 }
@@ -607,6 +607,9 @@ func TestReconcile(t *testing.T) {
 		}
 		if strings.Contains(err.Error(), "s3cr3t") {
 			t.Errorf("err = %v, want it to keep the current secret out of the message", err)
+		}
+		if strings.Contains(err.Error(), "reset the store") || !strings.Contains(err.Error(), "ocel bootstrap destroy") {
+			t.Errorf("err = %v, want it to name tearing the tier down as what clears the store: a re-bootstrap keeps every identity it holds", err)
 		}
 	})
 

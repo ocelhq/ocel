@@ -224,7 +224,7 @@ func TestUnbindDomain(t *testing.T) {
 			{"id": "bound", "pattern": "shop.app.com/*", "script": domainEntryScript},
 		}
 		m.existingRecords = []map[string]any{
-			{"id": "placeholder", "name": "shop.app.com", "type": "AAAA", "content": edge.ProxyPlaceholder, "comment": recordComment, "proxied": true},
+			{"id": "placeholder", "name": "shop.app.com", "type": "AAAA", "content": edge.ProxyPlaceholder, "comment": formatWriterComment(testOrigin), "proxied": true},
 		}
 		s := domainStack(t, m)
 		s.state.Bind("shop.app.com")

@@ -23,7 +23,11 @@ func (x *Proxy) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewW
 	if err != nil {
 		return "", err
 	}
-	if _, err := x.p.forwardOrigin(ctx, accountID, edge.PreviewEntryOwner, wildcard, *spec.Origin); err != nil {
+	owner, err := x.p.previewForwardingOwner(ctx)
+	if err != nil {
+		return "", err
+	}
+	if _, err := x.p.forwardOrigin(ctx, accountID, owner, wildcard, *spec.Origin); err != nil {
 		return "", err
 	}
 	return spec.Origin.Address, nil
@@ -42,5 +46,9 @@ func (x *Proxy) DestroyPreviewWildcard(ctx context.Context, baseDomain string) e
 	if err != nil {
 		return err
 	}
-	return x.p.dropForwardRecords(ctx, zoneID, edge.PreviewEntryOwner, wildcard)
+	owner, err := x.p.previewForwardingOwner(ctx)
+	if err != nil {
+		return err
+	}
+	return x.p.dropForwardRecords(ctx, zoneID, owner, wildcard)
 }
