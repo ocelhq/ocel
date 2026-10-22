@@ -32,7 +32,6 @@ var BootstrapPermissions = []string{
 	"datastore.schemas.list",
 	"datastore.schemas.update",
 	"storage.buckets.create",
-	"storage.buckets.update",
 	"storage.buckets.delete",
 	"cloudkms.keyRings.create",
 	"cloudkms.keyRings.get",
