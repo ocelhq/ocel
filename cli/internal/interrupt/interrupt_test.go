@@ -43,6 +43,23 @@ func fakeCall(t *testing.T) (call func(), callCount func() int) {
 		}
 }
 
+func fakeWarn(t *testing.T) (warn func(string), notices func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var said []string
+	return func(notice string) {
+			mu.Lock()
+			defer mu.Unlock()
+			said = append(said, notice)
+		}, func() []string {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]string(nil), said...)
+		}
+}
+
+func discardNotice(string) {}
+
 func TestHandleFirstSignalCancelsContext(t *testing.T) {
 	t.Parallel()
 
@@ -52,7 +69,7 @@ func TestHandleFirstSignalCancelsContext(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, discardNotice, teardown, forceKill, exit)
 	defer stop()
 
 	select {
@@ -80,6 +97,49 @@ func TestHandleFirstSignalCancelsContext(t *testing.T) {
 	}
 }
 
+func TestHandleFirstSignalWarnsWhatItWaitsOnAndHowToExitAtOnce(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	ch := make(chan os.Signal, 2)
+	exit, calls := fakeExit(t)
+	forceKill, forceKillCalls := fakeCall(t)
+	teardown, teardownCalls := fakeCall(t)
+	warn, notices := fakeWarn(t)
+
+	ctx, stop := handle(context.Background(), &stderr, ch, 13*time.Second, warn, teardown, forceKill, exit)
+	defer stop()
+
+	ch <- os.Interrupt
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("context was not cancelled after the first signal")
+	}
+
+	got := notices()
+	if len(got) != 1 {
+		t.Fatalf("notices = %q, want exactly one on the first signal", got)
+	}
+	want := "Interrupted: waiting up to 13s for in-flight work to stop. Press Ctrl-C again to exit immediately."
+	if got[0] != want {
+		t.Errorf("notice = %q, want %q", got[0], want)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want the notice to reach the run view rather than draw over it", stderr.String())
+	}
+	if got := calls(); len(got) != 0 {
+		t.Errorf("exit called %v after only one signal, want no forced exit", got)
+	}
+	if got := forceKillCalls(); got != 0 {
+		t.Errorf("forceKill called %d times after only one signal, want the graceful shutdown left to finish", got)
+	}
+	if got := teardownCalls(); got != 0 {
+		t.Errorf("teardown called %d times after only one signal, want the live view left drawing", got)
+	}
+}
+
 func TestHandleSecondSignalForcesExit(t *testing.T) {
 	t.Parallel()
 
@@ -89,7 +149,7 @@ func TestHandleSecondSignalForcesExit(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, discardNotice, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -123,7 +183,7 @@ func TestHandleTerminateDoesNotCutTheWindowShort(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, time.Hour, discardNotice, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -159,7 +219,7 @@ func TestHandleGracefulWindowExpiryForcesExit(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := handle(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, 20*time.Millisecond, discardNotice, teardown, forceKill, exit)
 	defer stop()
 
 	ch <- os.Interrupt
@@ -194,7 +254,7 @@ func TestHandleStopPreventsForcedExit(t *testing.T) {
 	forceKill, forceKillCalls := fakeCall(t)
 	teardown, teardownCalls := fakeCall(t)
 
-	ctx, stop := handle(context.Background(), &stderr, ch, 20*time.Millisecond, teardown, forceKill, exit)
+	ctx, stop := handle(context.Background(), &stderr, ch, 20*time.Millisecond, discardNotice, teardown, forceKill, exit)
 
 	ch <- os.Interrupt
 	<-ctx.Done()
@@ -212,6 +272,41 @@ func TestHandleStopPreventsForcedExit(t *testing.T) {
 	}
 }
 
+func TestHandleWarnsNothingOnceStopHasReturned(t *testing.T) {
+	t.Parallel()
+
+	const attempts = 500
+	type attempt struct {
+		notices     func() []string
+		heardByStop int
+	}
+	var runs []attempt
+	for range attempts {
+		var stderr bytes.Buffer
+		ch := make(chan os.Signal, 2)
+		exit, _ := fakeExit(t)
+		forceKill, _ := fakeCall(t)
+		teardown, _ := fakeCall(t)
+		warn, notices := fakeWarn(t)
+
+		_, stop := handle(context.Background(), &stderr, ch, time.Hour, warn, teardown, forceKill, exit)
+		ch <- os.Interrupt
+		stop()
+		runs = append(runs, attempt{notices: notices, heardByStop: len(notices())})
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	late := 0
+	for _, r := range runs {
+		if len(r.notices()) != r.heardByStop {
+			late++
+		}
+	}
+	if late != 0 {
+		t.Errorf("%d of %d handlers warned after stop() returned, want none to write below the run's last line", late, attempts)
+	}
+}
+
 func TestHandleStopIsSafeToCallTwice(t *testing.T) {
 	t.Parallel()
 
@@ -221,7 +316,7 @@ func TestHandleStopIsSafeToCallTwice(t *testing.T) {
 	forceKill, _ := fakeCall(t)
 	teardown, _ := fakeCall(t)
 
-	_, stop := handle(context.Background(), &stderr, ch, time.Hour, teardown, forceKill, exit)
+	_, stop := handle(context.Background(), &stderr, ch, time.Hour, discardNotice, teardown, forceKill, exit)
 
 	stop()
 	stop()
@@ -243,7 +338,7 @@ func TestForcedExitTearsTheUIDownBeforeAnythingElseTouchesTheTerminal(t *testing
 	ch := make(chan os.Signal, 2)
 	exit, calls := fakeExit(t)
 
-	ctx, stop := handle(context.Background(), recordingWriter{record: record("stderr")}, ch, time.Hour, record("teardown"), record("forceKill"), exit)
+	ctx, stop := handle(context.Background(), recordingWriter{record: record("stderr")}, ch, time.Hour, discardNotice, record("teardown"), record("forceKill"), exit)
 	defer stop()
 
 	ch <- os.Interrupt

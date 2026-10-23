@@ -20,11 +20,11 @@ const gracefulShutdownWindow = max(providerprocess.DefaultGracePeriod+providerpr
 const devShutdownWindow = childprocess.WaitDelay + docker.StopsWithin + shutdownSlack
 
 func installDevInterruptHandler(parent context.Context, stderr io.Writer, bus *run.Bus) (context.Context, context.CancelFunc) {
-	return interrupt.Handle(parent, stderr, devShutdownWindow, bus.Interrupt, killChildrenAndRemoveLiveDirs)
+	return interrupt.Handle(parent, stderr, devShutdownWindow, bus.Warn, bus.Interrupt, killChildrenAndRemoveLiveDirs)
 }
 
 func installInterruptHandler(parent context.Context, stderr io.Writer, bus *run.Bus) (context.Context, context.CancelFunc) {
-	return interrupt.Handle(parent, stderr, gracefulShutdownWindow, bus.Interrupt, killChildrenAndRemoveLiveDirs)
+	return interrupt.Handle(parent, stderr, gracefulShutdownWindow, bus.Warn, bus.Interrupt, killChildrenAndRemoveLiveDirs)
 }
 
 func killChildrenAndRemoveLiveDirs() {

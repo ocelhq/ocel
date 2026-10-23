@@ -57,6 +57,10 @@ func (b *Bus) Preamble(ctx context.Context) *Span {
 	return &Span{run: r, start: r.start, level: progressv1.Level_LEVEL_INFO}
 }
 
+func (b *Bus) Warn(message string) {
+	b.send(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_WARN, Message: message}})
+}
+
 func (b *Bus) Interrupt() {
 	b.mu.Lock()
 	runs := slices.Clone(b.runs)

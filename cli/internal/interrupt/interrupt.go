@@ -13,15 +13,16 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 )
 
-func Handle(parent context.Context, stderr io.Writer, window time.Duration, teardown, forceKill func()) (context.Context, context.CancelFunc) {
+func Handle(parent context.Context, stderr io.Writer, window time.Duration, warn func(notice string), teardown, forceKill func()) (context.Context, context.CancelFunc) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
-	return handle(parent, stderr, ch, window, teardown, forceKill, os.Exit)
+	return handle(parent, stderr, ch, window, warn, teardown, forceKill, os.Exit)
 }
 
-func handle(parent context.Context, stderr io.Writer, ch chan os.Signal, window time.Duration, teardown, forceKill func(), exit func(int)) (context.Context, context.CancelFunc) {
+func handle(parent context.Context, stderr io.Writer, ch chan os.Signal, window time.Duration, warn func(notice string), teardown, forceKill func(), exit func(int)) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
+	var stopping sync.Mutex
 
 	go func() {
 		select {
@@ -29,6 +30,15 @@ func handle(parent context.Context, stderr io.Writer, ch chan os.Signal, window 
 			return
 		case <-ch:
 		}
+		stopping.Lock()
+		select {
+		case <-done:
+			stopping.Unlock()
+			return
+		default:
+		}
+		warn(fmt.Sprintf("Interrupted: waiting up to %s for in-flight work to stop. Press Ctrl-C again to exit immediately.", window))
+		stopping.Unlock()
 		cancel()
 
 		timer := time.NewTimer(window)
@@ -58,7 +68,9 @@ func handle(parent context.Context, stderr io.Writer, ch chan os.Signal, window 
 	return ctx, func() {
 		stopOnce.Do(func() {
 			signal.Stop(ch)
+			stopping.Lock()
 			close(done)
+			stopping.Unlock()
 			cancel()
 		})
 	}
