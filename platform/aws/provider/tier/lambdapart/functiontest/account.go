@@ -56,6 +56,7 @@ type Account struct {
 	Mappings  map[string]*Mapping
 
 	Unassumable int
+	Unpermitted int
 	Updating    int
 	RoleIDs     int
 	Calls       []string
@@ -336,6 +337,10 @@ func (a Lambda) CreateEventSourceMapping(_ context.Context, in *lambda.CreateEve
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.record("CreateEventSourceMapping")
+	if a.Unpermitted > 0 {
+		a.Unpermitted--
+		return nil, &lambdatypes.InvalidParameterValueException{Message: aws.String("Cannot access stream " + aws.ToString(in.EventSourceArn) + ". Please ensure the role can perform the GetRecords, GetShardIterator, DescribeStream, and ListStreams Actions on your stream in IAM.")}
+	}
 	for _, mapping := range a.Mappings {
 		if aws.ToString(mapping.Input.FunctionName) == aws.ToString(in.FunctionName) && aws.ToString(mapping.Input.EventSourceArn) == aws.ToString(in.EventSourceArn) {
 			return nil, &lambdatypes.ResourceConflictException{Message: aws.String("mapping exists")}

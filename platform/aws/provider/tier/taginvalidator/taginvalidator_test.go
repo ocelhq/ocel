@@ -119,6 +119,19 @@ func TestEnsureMakesAnInvalidatorTriggeredByTheStateTablesTagWrites(t *testing.T
 	}
 }
 
+func TestEnsureWaitsOutARoleWhoseStreamPermissionLambdaCannotSeeYet(t *testing.T) {
+	t.Parallel()
+	account, q := functiontest.New(), newQueues()
+	account.Unpermitted = 1
+
+	if _, err := taginvalidator.Ensure(context.Background(), clients(account, q), spec(environment.TierProduction)); err != nil {
+		t.Fatalf("Ensure() while the role's policy propagates = %v, want it waited out", err)
+	}
+	if len(account.Mappings) != 1 {
+		t.Errorf("mappings = %v, want one on the state table's stream once the role's policy is visible", account.Mappings)
+	}
+}
+
 func TestEnsureAgainUpdatesTheOneMappingItMade(t *testing.T) {
 	t.Parallel()
 	account, q := functiontest.New(), newQueues()
