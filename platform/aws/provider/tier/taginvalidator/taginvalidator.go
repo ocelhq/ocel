@@ -223,7 +223,7 @@ func ensureMapping(ctx context.Context, c LambdaAPI, function, stream, queue str
 		return existing, nil
 	}
 	var created *lambda.CreateEventSourceMappingOutput
-	err = lambdapart.Retrying(ctx, lambdapart.Updating, func() error {
+	err = lambdapart.Retrying(ctx, unpermittedOrUpdating, func() error {
 		created, err = c.CreateEventSourceMapping(ctx, &lambda.CreateEventSourceMappingInput{
 			FunctionName:                   aws.String(function),
 			EventSourceArn:                 aws.String(stream),
@@ -242,6 +242,13 @@ func ensureMapping(ctx context.Context, c LambdaAPI, function, stream, queue str
 	}
 	return aws.ToString(created.UUID), nil
 }
+
+func unpermitted(err error) bool {
+	var invalid *lambdatypes.InvalidParameterValueException
+	return errors.As(err, &invalid) && strings.Contains(strings.ToLower(err.Error()), "role")
+}
+
+func unpermittedOrUpdating(err error) bool { return unpermitted(err) || lambdapart.Updating(err) }
 
 func Remove(ctx context.Context, c Clients, namespace string, tier environment.Tier) error {
 	names := NamesFor(namespace, tier)
