@@ -62,7 +62,7 @@ func (l Location) Rebase(context string) (Location, error) {
 	}
 	if !under(root, l.Root) {
 		return Location{}, fmt.Errorf(
-			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the build reads, so image.context may name %s — the app's own directory, the workspace it is a member of, or the directory holding its Go module and every module that module replaces — or a directory above it",
+			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the build reads, so image.context may name %s — the app's own directory, the workspace it is a member of, or the directory holding it and everything it depends on by path, such as the modules its go.mod replaces or the crates its Cargo.toml names — or a directory above it",
 			root, l.Root, l.Root,
 		)
 	}
@@ -120,12 +120,65 @@ func locate(dir string, program Program) (Location, error) {
 		return locateGoApp(dir, module.Dir, module.GoVersion, root)
 	}
 	root := dir
-	if program.Language == "" || program.Language == language.JS {
+	switch program.Language {
+	case "", language.JS:
 		if enclosingRoot, ok := enclosing(dir); ok {
 			root = enclosingRoot
 		}
+	case language.Rust:
+		found, err := findRustContext(dir)
+		if err != nil {
+			return Location{}, err
+		}
+		root = found
+	case language.Python:
+		found, err := findPythonContext(dir)
+		if err != nil {
+			return Location{}, err
+		}
+		root = found
 	}
 	return locatedAt(dir, root, program.Language)
+}
+
+func findContext(dir string, reached []string) (root, outside string) {
+	repository := findRepository(dir)
+	root = dir
+	for _, path := range reached {
+		for !under(root, path) {
+			root = filepath.Dir(root)
+		}
+		if !under(repository, root) || filepath.Dir(root) == root {
+			return root, path
+		}
+	}
+	return root, ""
+}
+
+func findLocalPath(dir string, declared any) (string, bool) {
+	table, _ := declared.(map[string]any)
+	named, ok := table["path"].(string)
+	if !ok || named == "" {
+		return "", false
+	}
+	if !filepath.IsAbs(named) {
+		named = filepath.Join(dir, filepath.FromSlash(named))
+	}
+	return filepath.Clean(named), true
+}
+
+func findRepository(dir string) string {
+	for !atBoundary(dir) {
+		dir = filepath.Dir(dir)
+	}
+	return dir
+}
+
+func findRelativeRoot(dir string) string {
+	if dir == "." {
+		return ""
+	}
+	return strings.TrimSuffix(strings.Repeat("../", strings.Count(dir, "/")+1), "/")
 }
 
 func locatedAt(dir, root string, written language.Language) (Location, error) {
@@ -145,7 +198,7 @@ func locatedAt(dir, root string, written language.Language) (Location, error) {
 		Package:        describe(dir, app),
 		PackageManager: detect(root),
 	}
-	if globs, ok := declaredPackages(root); ok {
+	if globs, ok := declaredPackages(root); ok && (written == "" || written == language.JS) {
 		_, located.Member = memberOf(root, dir, globs)
 	}
 

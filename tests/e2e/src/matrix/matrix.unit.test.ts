@@ -746,7 +746,7 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
     );
   });
 
-  it("runs Go on a box and skips Python and Rust under the ticket for their images", () => {
+  it("runs Go, Python and Rust on a box", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
       expect(
         Object.fromEntries(
@@ -754,7 +754,7 @@ describe("sdk/go, sdk/python and sdk/rust", () => {
             .filter(([cell]) => CELLS.includes(cell))
             .map(([cell, gaps]) => [cell, gaps.map((gap) => gap.issue)]),
         ),
-      ).toEqual({ "sdk/python": [1598], "sdk/rust": [1598] });
+      ).toEqual({});
     }
   });
 

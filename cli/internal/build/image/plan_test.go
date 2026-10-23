@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/shlex"
+
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/cli/internal/language"
@@ -57,6 +59,24 @@ func (p builtPlan) step(t *testing.T, name string) []string {
 	}
 	t.Fatalf("the plan has no %q step; it has %d steps", name, len(p.Steps))
 	return nil
+}
+
+func (p builtPlan) shellScript(t *testing.T, name string) string {
+	t.Helper()
+	for _, cmd := range p.step(t, name) {
+		argv, err := shlex.Split(cmd)
+		if err != nil {
+			t.Fatalf("split %q as buildkit does: %v", cmd, err)
+		}
+		if len(argv) > 0 && argv[0] == "sh" {
+			if len(argv) != 3 || argv[1] != "-c" {
+				t.Fatalf("the %s step runs %q, which buildkit splits into %q rather than one script for sh -c", name, cmd, argv)
+			}
+			return argv[2]
+		}
+	}
+	t.Fatalf("the %s step runs no shell", name)
+	return ""
 }
 
 func (p builtPlan) copied(name string) []string {
@@ -623,6 +643,83 @@ func TestAGoAppBelowItsModuleIsBuiltFromThePackageWithTheModulesItReplacesAndNot
 	}
 	if plan.Deploy.StartCommand != "./out" {
 		t.Errorf("the plan starts the app with %q, want the binary the build step writes at the context root", plan.Deploy.StartCommand)
+	}
+}
+
+func TestARustAppReachingACrateByPathIsCompiledInTheBuildStepFromTheDirectoryHoldingBoth(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		".git/HEAD":                      "ref: refs/heads/main\n",
+		"crates/Cargo.toml":              "[workspace]\nmembers = [\"*\"]\n\n[workspace.package]\nversion = \"0.1.0\"\n",
+		"crates/ocel-sdk/Cargo.toml":     "[package]\nname = \"ocel-sdk\"\nversion.workspace = true\n",
+		"crates/ocel-sdk/src/lib.rs":     "\n",
+		"tests/fixtures/web/Cargo.toml":  "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\nrust-version = \"1.92\"\n\n[workspace]\n\n[dependencies]\nocel-sdk = { path = \"../../../crates/ocel-sdk\" }\n",
+		"tests/fixtures/web/src/main.rs": "fn main() {}\n",
+	})
+
+	plan := plannedFrom(t, locatedIn(t, root, filepath.Join(root, "tests", "fixtures", "web"), language.Rust, ""))
+
+	if install := plan.step(t, "install"); len(install) != 0 {
+		t.Errorf("the install step runs %q, want nothing — the context root holds no Cargo.toml for it to compile dependencies from", install)
+	}
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if want := "cd tests/fixtures/web && mkdir -p bin && cargo build --release --bin web --target-dir ../../../target"; !strings.Contains(build, want) {
+		t.Errorf("the build step runs:\n%s\nwant %q — the crate is compiled from its own directory, where cargo finds the sdk by its path", build, want)
+	}
+	if plan.Deploy.StartCommand != "./tests/fixtures/web/bin/web" {
+		t.Errorf("the plan starts the app with %q, want the crate's one binary", plan.Deploy.StartCommand)
+	}
+	if !strings.Contains(assets(t, plan), `rust = "1.92`) {
+		t.Errorf("the plan installs:\n%s\nwant the rust 1.92 the crate requires — no Cargo.toml at the context root tells railpack", assets(t, plan))
+	}
+}
+
+func TestAPythonAppWithAUvPathSourceIsSyncedInTheBuildStepFromTheDirectoryHoldingBoth(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		".git/HEAD":                  "ref: refs/heads/main\n",
+		"python/ocel/pyproject.toml": "[project]\nname = \"ocel\"\nversion = \"0.0.0\"\n",
+		"apps/web/pyproject.toml":    "[project]\nname = \"web\"\nversion = \"0.0.0\"\ndependencies = [\"ocel\"]\n\n[tool.uv.sources]\nocel = { path = \"../../python/ocel\", editable = true }\n",
+		"apps/web/uv.lock":           "version = 1\n",
+		"apps/web/.python-version":   "3.12\n",
+		"apps/web/main.py":           "print('hi')\n",
+	})
+
+	plan := plannedFrom(t, locatedIn(t, root, filepath.Join(root, "apps", "web"), language.Python, "main.py"))
+
+	if install := plan.step(t, "install"); len(install) != 0 {
+		t.Errorf("the install step runs %q, want nothing — the context root holds no pyproject.toml for it to sync", install)
+	}
+	if want := "cd apps/web && UV_PYTHON_DOWNLOADS=never uv sync --locked --no-dev --no-editable"; plan.shellScript(t, "build") != want {
+		t.Errorf("the build step's shell runs %q, want %q — the app is synced from its own directory, where uv finds the sdk by its path", plan.shellScript(t, "build"), want)
+	}
+	if !strings.Contains(assets(t, plan), "uv = ") {
+		t.Errorf("the plan installs:\n%s\nwant uv among them — nothing at the context root tells railpack the build runs it", assets(t, plan))
+	}
+	if !strings.Contains(assets(t, plan), `python = "3.12`) {
+		t.Errorf("the plan installs:\n%s\nwant the python 3.12 the app's .python-version names — uv sync downloads no other", assets(t, plan))
+	}
+	if want := "cd apps/web && .venv/bin/python3 ocel-server.py file main.py"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q — the python the sync installed the app's dependencies for", plan.Deploy.StartCommand, want)
+	}
+}
+
+func TestAPythonAppWithAUvPathSourceRunsTheBuildCommandItNamesAfterTheSync(t *testing.T) {
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		".git/HEAD":                  "ref: refs/heads/main\n",
+		"python/ocel/pyproject.toml": "[project]\nname = \"ocel\"\nversion = \"0.0.0\"\n",
+		"apps/web/pyproject.toml":    "[project]\nname = \"web\"\nversion = \"0.0.0\"\n\n[tool.uv.sources]\nocel = { path = \"../../python/ocel\" }\n",
+		"apps/web/uv.lock":           "version = 1\n",
+		"apps/web/main.py":           "print('hi')\n",
+	})
+	loc := locatedIn(t, root, filepath.Join(root, "apps", "web"), language.Python, "main.py")
+	loc.BuildCommand = "python -c 1"
+
+	plan := plannedFrom(t, loc)
+
+	if want := "cd apps/web && UV_PYTHON_DOWNLOADS=never uv sync --locked --no-dev --no-editable && python -c 1"; plan.shellScript(t, "build") != want {
+		t.Errorf("the build step's shell runs %q, want %q — the image starts the python the sync writes, so the build command runs after it rather than in its place", plan.shellScript(t, "build"), want)
 	}
 }
 
