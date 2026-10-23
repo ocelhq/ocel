@@ -10,7 +10,7 @@ import { animatedGif, ico, notAnImage, png, svg } from "./fixture-assets.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, "..");
 const repoRoot = join(packageRoot, "..", "..", "..");
-const appRoot = join(repoRoot, "examples", "next-test");
+const appRoot = join(here, "image-fixtures-app");
 const fixtureFile = join(packageRoot, "fixtures", "image-conformance.json");
 const port = Number(process.env.OCEL_IMAGE_FIXTURE_PORT ?? 3111);
 const origin = `http://127.0.0.1:${port}`;
@@ -284,7 +284,7 @@ async function staticMediaPath() {
   const emitted = entries.filter((name) => name.endsWith(".png")).sort();
   if (emitted.length === 0) {
     throw new Error(
-      `no static-import image under ${dir}; app/image-fixtures/page.tsx must import one`,
+      `no static-import image under ${dir}; app/image-fixtures/page.jsx must import one`,
     );
   }
   return `/_next/static/media/${emitted[0]}`;
@@ -297,6 +297,7 @@ async function compiledConfig() {
   const { compileImageConfig, imageConfigHash } = await import(
     pathToFileURL(join(repoRoot, "frameworks", "next", "adapter", "dist", "image-config.mjs")).href
   );
+  process.chdir(appRoot);
   const compiled = compileImageConfig(required.config.images);
   if (!compiled) throw new Error("the fixture app compiled to no image config");
   return { ...compiled, configHash: imageConfigHash(compiled) };

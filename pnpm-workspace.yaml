@@ -5,6 +5,7 @@ packages:
   - packages/*
   - pkg/provider/transform
   - frameworks/*/*
+  - frameworks/next/router/scripts/image-fixtures-app
   - platform/aws/functions/*
   - platform/aws/runtime
   - platform/aws/provider/edges/cloudfront/resolver

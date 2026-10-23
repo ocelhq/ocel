@@ -1,0 +1,11 @@
+{
+  "name": "@ocel-fixtures/next-router-image",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  }
+}
