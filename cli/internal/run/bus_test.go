@@ -285,6 +285,26 @@ func secretBearingFields(root protoreflect.MessageDescriptor) []string {
 	return found
 }
 
+func TestABusWarningReachesEverySinkAsAWarningOutsideAnySpan(t *testing.T) {
+	bus := run.NewBus(time.Now)
+	first, second := &recording{}, &recording{}
+	bus.Attach(first)
+	bus.Attach(second)
+
+	bus.Warn("Interrupted.")
+
+	for _, seen := range []*recording{first, second} {
+		events := seen.received()
+		if len(events) != 1 {
+			t.Fatalf("events = %v, want the one warning", events)
+		}
+		warned := events[0].GetOperation()
+		if warned.GetMessage() != "Interrupted." || warned.GetLevel() != progressv1.Level_LEVEL_WARN || len(warned.GetSpanId()) != 0 || warned.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED {
+			t.Errorf("warned %v, want the message at warn level with no scope", warned)
+		}
+	}
+}
+
 func TestAPreambleSaysAndAsksBeforeAnyRunBeginsAndSummarisesNothing(t *testing.T) {
 	bus := run.NewBus(time.Now)
 	seen := &recording{}
