@@ -30,10 +30,11 @@ func aPromptTerminal(t *testing.T) (*os.File, *os.File, *ptyScreen) {
 	if err != nil {
 		t.Skipf("no pty available: %v", err)
 	}
-	t.Cleanup(func() {
-		ptmx.Close()
-		tty.Close()
-	})
+	// FIXME: bubbletea v2.0.10 answers huh's RequestWindowSize from a goroutine that
+	// Program.Run never waits for, so it can call tty.Fd() after the prompt returns and
+	// closing tty here races it. tty is left to its finalizer, which runs only once that
+	// goroutine lets go of it; close it here again once upstream joins the goroutine.
+	t.Cleanup(func() { ptmx.Close() })
 	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 100}); err != nil {
 		t.Fatalf("size the pty: %v", err)
 	}
