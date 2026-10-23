@@ -723,6 +723,54 @@ func TestAPythonAppWithAUvPathSourceRunsTheBuildCommandItNamesAfterTheSync(t *te
 	}
 }
 
+func TestAnAppInADirectoryItsBuildQuotesIsBuiltThereByTheShellTheImageRuns(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		files   map[string]string
+		app     string
+		written language.Language
+		entry   string
+		want    string
+	}{
+		{
+			name: "a rust workspace member",
+			files: map[string]string{
+				"Cargo.toml":            "[workspace]\nmembers = [\"my api\"]\n",
+				"my api/Cargo.toml":     "[package]\nname = \"api\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+				"my api/src/main.rs":    "fn main() {}\n",
+				"my api/src/bin/api.rs": "fn main() {}\n",
+			},
+			app:     "my api",
+			written: language.Rust,
+			entry:   "api",
+			want:    "cd 'my api' && mkdir -p bin && cargo build --release --bin api --target-dir ../target && cp ../target/release/api bin/",
+		},
+		{
+			name: "a go package below its module",
+			files: map[string]string{
+				"go.mod":         "module example.com/web\n\ngo 1.25.0\n",
+				"my web/main.go": "package main\n\nfunc main() {}\n",
+			},
+			app:     "my web",
+			written: language.Go,
+			entry:   ".",
+			want:    `GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o out './my web'`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			tt.files[".git/HEAD"] = "ref: refs/heads/main\n"
+			writeFiles(t, root, tt.files)
+
+			plan := plannedFrom(t, locatedIn(t, root, filepath.Join(root, tt.app), tt.written, tt.entry))
+
+			if got := plan.shellScript(t, "build"); got != tt.want {
+				t.Errorf("the build step's shell runs %q, want %q — railpack wraps the build command in single quotes, so a quote inside it must reach sh intact", got, tt.want)
+			}
+		})
+	}
+}
+
 func contains(haystack []string, needle string) bool {
 	for _, straw := range haystack {
 		if straw == needle {

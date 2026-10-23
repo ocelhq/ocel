@@ -94,13 +94,14 @@ func Plan(loc workspace.Location) ([]byte, error) {
 }
 
 func planBuildCommand(commands workspace.Commands) string {
-	if !commands.InstallsInBuild || commands.Install == "" {
-		return commands.Build
+	script := commands.Build
+	if commands.InstallsInBuild && commands.Install != "" {
+		script = commands.Install
+		if commands.Build != "" {
+			script += " && " + commands.Build
+		}
 	}
-	if commands.Build == "" {
-		return commands.Install
-	}
-	return commands.Install + " && " + commands.Build
+	return strings.ReplaceAll(script, "'", `'\''`)
 }
 
 func addAsset(built *railpackplan.BuildPlan, loc workspace.Location, asset workspace.Asset) error {
