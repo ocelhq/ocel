@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -83,8 +85,16 @@ func (b Engine) partWork(tier environment.Tier, project string, want Part, repla
 	}
 }
 
+func (b Engine) readPart(ctx context.Context, tier environment.Tier, name string) (stackrecords.BootstrapPart, bool, error) {
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, name)
+	if errors.Is(err, ports.ErrNoRecordsDatabase) {
+		return stackrecords.BootstrapPart{}, false, nil
+	}
+	return recorded, present, err
+}
+
 func (b Engine) planPart(ctx context.Context, tier environment.Tier, want Part) (provider.ChangeGroup, bool, error) {
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, want.Name)
+	recorded, present, err := b.readPart(ctx, tier, want.Name)
 	if err != nil {
 		return provider.ChangeGroup{}, false, err
 	}
@@ -112,7 +122,7 @@ func (b Engine) planPart(ctx context.Context, tier environment.Tier, want Part) 
 }
 
 func (b Engine) describePart(ctx context.Context, tier environment.Tier, want Part) (provider.BootstrapPart, bool, error) {
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, want.Name)
+	recorded, present, err := b.readPart(ctx, tier, want.Name)
 	if err != nil || !present {
 		return provider.BootstrapPart{}, false, err
 	}
@@ -136,7 +146,7 @@ func (b Engine) describePart(ctx context.Context, tier environment.Tier, want Pa
 func (b Engine) listRecordedParts(ctx context.Context, tier environment.Tier) ([]Part, error) {
 	var recorded []Part
 	for _, each := range b.listDeployedParts(tier) {
-		_, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, each.Name)
+		_, present, err := b.readPart(ctx, tier, each.Name)
 		if err != nil {
 			return nil, err
 		}

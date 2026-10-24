@@ -91,7 +91,7 @@ func (b Engine) planNamedRemoval(ctx context.Context, tier environment.Tier, eac
 		}}, true, nil
 	}
 	deployed := each.Deployed(b, tier)
-	_, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, each.Name)
+	_, present, err := b.readPart(ctx, tier, each.Name)
 	if err != nil || !present {
 		return plannedRemoval{}, false, err
 	}
