@@ -35,15 +35,15 @@ func Repository(imageRef string) (string, bool) {
 
 func Scope(project, app string) string { return naming.Sanitize(project) + "/" + app }
 
-func (i *Images) Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error {
-	_, err := i.releases(ctx, "record "+imageRef+" as "+app+"'s release",
-		Scope(project, app), "promote", string(tier), imageRef)
+func (i *Images) Promote(ctx context.Context, tier environment.Tier, project, env, app, imageRef string) error {
+	_, err := i.releases(ctx, "record "+imageRef+" as "+app+"'s release in "+env,
+		Scope(project, app), "promote", string(tier), env, imageRef)
 	return err
 }
 
-func (i *Images) Forget(ctx context.Context, tier environment.Tier, project, app string) error {
-	_, err := i.releases(ctx, "forget "+app+"'s releases",
-		Scope(project, app), "forget", string(tier))
+func (i *Images) Forget(ctx context.Context, tier environment.Tier, project, env, app string) error {
+	_, err := i.releases(ctx, "forget "+app+"'s releases in "+env,
+		Scope(project, app), "forget", string(tier), env)
 	return err
 }
 

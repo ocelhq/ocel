@@ -76,7 +76,7 @@ func TestTheDeployLoginLoadsImagesAsItself(t *testing.T) {
 func TestALoginWithSudoRecordsReleasesAsTheDeployLogin(t *testing.T) {
 	rig := loggedInAs("ubuntu", ssh.Facts{Sudo: true, Systemd: true})
 
-	if err := rig.host().images.Promote(context.Background(), environment.TierProduction, "shop", "web", imageRef); err != nil {
+	if err := rig.host().images.Promote(context.Background(), environment.TierProduction, "shop", "prod", "web", imageRef); err != nil {
 		t.Fatalf("Promote() as a login with sudo = %v", err)
 	}
 	if recorded := commandWith(t, rig, shell.Quote(boxapi.ReleasesHelper)); !strings.HasPrefix(recorded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote(shell.Quote(boxapi.ReleasesHelper)), "'")) {

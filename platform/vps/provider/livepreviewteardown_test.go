@@ -307,12 +307,10 @@ func TestLiveTearingDownOneOfFourLivePreviewsSweepsNoLivePreviewsImage(t *testin
 	for at, pointer := range []string{"pr-1", "pr-2", "pr-3", "pr-4"} {
 		previewUp(t, vm, p, stack, pointer, int64(at)+1)
 	}
-	window := windowOf(t, vm, teardownSlug, teardownApp, environment.TierPreview)
-	if len(window) != 3 {
-		t.Fatalf("the box's preview window reads %v, and this test turns on it being full: past the third live preview of one app the container's ocel.ref label is the sole guard against sweeping a live one", window)
-	}
-	if slices.Contains(window, teardownAt("pr-1")) {
-		t.Fatalf("the window still names %s after four previews of one app, so no live preview here is guarded by its label alone and the regression this test exists for cannot happen: %v", teardownAt("pr-1"), window)
+	for _, pointer := range []string{"pr-1", "pr-2", "pr-3", "pr-4"} {
+		if window := windowOf(t, vm, teardownSlug, teardownApp, environment.TierPreview, pointer); !slices.Equal(window, []string{teardownAt(pointer)}) {
+			t.Fatalf("%s's window reads %v, want %s alone: each preview keeps its own window, and a fourth preview never evicts the first's release", pointer, window, teardownAt(pointer))
+		}
 	}
 
 	previewRemove(t, p, stack, "pr-2")

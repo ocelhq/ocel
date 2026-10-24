@@ -37,7 +37,7 @@ func TestAStartedReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 	if len(called) != 1 {
 		t.Fatalf("starting the release ran %d promotes, want the one that names what the box most recently served", len(called))
 	}
-	for _, want := range []string{"'shop/web'", "'production'", "'" + loadedImageRef + "'"} {
+	for _, want := range []string{"'shop/web'", "'production' 'prod'", "'" + loadedImageRef + "'"} {
 		if !strings.Contains(called[0], want) {
 			t.Errorf("the promote ran as %q and never names %s", called[0], want)
 		}
@@ -135,9 +135,9 @@ func TestATeardownDropsTheWindowBeforeAnythingSweepsAgainstIt(t *testing.T) {
 	if len(called) != 1 {
 		t.Fatalf("the teardown ran %d forgets, want the one that drops the window the torn-down stack wrote", len(called))
 	}
-	for _, want := range []string{"'shop/web'", "'production'"} {
+	for _, want := range []string{"'shop/web'", "'production' 'prod'"} {
 		if !strings.Contains(called[0], want) {
-			t.Errorf("the forget ran as %q and never names %s", called[0], want)
+			t.Errorf("the forget ran as %q and never names %s: the window it drops is the torn-down environment's alone", called[0], want)
 		}
 	}
 }

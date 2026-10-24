@@ -22,7 +22,7 @@ func TestAReconcileWaitsForTheLockAPromoteOfTheSameAppHoldsAndForNoOtherApps(t *
 	if err := os.WriteFile(script, release.HelperScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "ocel/shop/web:one")
+	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "prod", "ocel/shop/web:one")
 	slow.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root, "PATH="+slowGrep(t)+":"+os.Getenv("PATH"))
 	slow.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := slow.Start(); err != nil {
@@ -77,7 +77,7 @@ func TestAReconcileWaitsForTheLockAPromoteOfTheSameAppHoldsAndForNoOtherApps(t *
 	case <-time.After(5 * time.Second):
 		t.Fatal("web's reconcile never finished after the promote released its lock")
 	}
-	if refs := window(t, root, "shop/web", "production"); !slices.Equal(refs, []string{"ocel/shop/web:one"}) {
+	if refs := window(t, root, "shop/web", "production", "prod"); !slices.Equal(refs, []string{"ocel/shop/web:one"}) {
 		t.Errorf("the window has %v after the promote landed, want the one ref it wrote", refs)
 	}
 	if log := dock.log(t); !strings.Contains(log, "rmi ocel/shop/web:gone") || strings.Contains(log, "rmi ocel/shop/web:one") {
@@ -118,7 +118,7 @@ func TestAReconcileWaitingOnAScopeAForgetRemovedWaitsForThePromoteThatMadeItAgai
 	if err := os.WriteFile(script, release.HelperScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "ocel/shop/web:one")
+	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "prod", "ocel/shop/web:one")
 	slow.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root, "PATH="+slowGrep(t)+":"+os.Getenv("PATH"))
 	if err := slow.Start(); err != nil {
 		t.Fatal(err)

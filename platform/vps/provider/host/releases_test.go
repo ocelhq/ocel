@@ -57,16 +57,16 @@ func releases(t *testing.T, root, path, scope string, args ...string) (string, i
 	}
 }
 
-func promote(t *testing.T, root, scope, tier, ref string) {
+func promote(t *testing.T, root, scope, tier, env, ref string) {
 	t.Helper()
-	if _, code := releases(t, root, "", scope, "promote", tier, ref); code != 0 {
+	if _, code := releases(t, root, "", scope, "promote", tier, env, ref); code != 0 {
 		t.Fatalf("promote %s exited %d", ref, code)
 	}
 }
 
-func window(t *testing.T, root, scope, tier string) []string {
+func window(t *testing.T, root, scope, tier, env string) []string {
 	t.Helper()
-	contents, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(scope), tier))
+	contents, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(scope), tier+"@"+env))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,9 +82,9 @@ func TestTheWindowKeepsThreeMostRecentlyServedFirst(t *testing.T) {
 
 	root := releasesDir(t)
 	for _, ref := range []string{"ocel/shop/web:one", "ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
-		promote(t, root, "shop/web", "production", ref)
+		promote(t, root, "shop/web", "production", "prod", ref)
 	}
-	got := window(t, root, "shop/web", "production")
+	got := window(t, root, "shop/web", "production", "prod")
 	want := []string{"ocel/shop/web:four", "ocel/shop/web:three", "ocel/shop/web:two"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("the window lists %v, want %v: the head is the most recently served and the fourth ref evicts the first", got, want)
@@ -96,9 +96,9 @@ func TestARepeatedRefMovesToTheHeadRatherThanConsumingASlot(t *testing.T) {
 
 	root := releasesDir(t)
 	for _, ref := range []string{"ocel/shop/web:a", "ocel/shop/web:b", "ocel/shop/web:c", "ocel/shop/web:a"} {
-		promote(t, root, "shop/web", "production", ref)
+		promote(t, root, "shop/web", "production", "prod", ref)
 	}
-	got := window(t, root, "shop/web", "production")
+	got := window(t, root, "shop/web", "production", "prod")
 	want := []string{"ocel/shop/web:a", "ocel/shop/web:c", "ocel/shop/web:b"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("the window lists %v, want %v: re-promoting a retained ref moves it to the head and evicts nothing", got, want)
@@ -110,16 +110,16 @@ func TestTheWindowFileNeverGrows(t *testing.T) {
 
 	root := releasesDir(t)
 	for i := range 50 {
-		promote(t, root, "shop/web", "production", "ocel/shop/web:r"+strconv.Itoa(i))
-		if got := window(t, root, "shop/web", "production"); len(got) > 3 {
+		promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:r"+strconv.Itoa(i))
+		if got := window(t, root, "shop/web", "production", "prod"); len(got) > 3 {
 			t.Fatalf("after %d promotes the window lists %d refs, and a file that grows is a read whose size is a function of history", i+1, len(got))
 		}
 	}
 	alone := releasesDir(t)
 	for range 50 {
-		promote(t, alone, "shop/web", "production", "ocel/shop/web:same")
+		promote(t, alone, "shop/web", "production", "prod", "ocel/shop/web:same")
 	}
-	if got := window(t, alone, "shop/web", "production"); len(got) != 1 || got[0] != "ocel/shop/web:same" {
+	if got := window(t, alone, "shop/web", "production", "prod"); len(got) != 1 || got[0] != "ocel/shop/web:same" {
 		t.Errorf("fifty promotes of one ref left %v, want that ref alone: the window is not an append log", got)
 	}
 }
@@ -128,13 +128,13 @@ func TestAPromoteRenamesAndLeavesNothingHalfWritten(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
-	file := filepath.Join(root, "shop", "web", "production")
-	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	file := filepath.Join(root, "shop", "web", "production@prod")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:one")
 	first, err := os.Stat(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	promote(t, root, "shop/web", "production", "ocel/shop/web:two")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:two")
 	second, err := os.Stat(file)
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestConcurrentPromotesOfOneTierLoseNoUpdate(t *testing.T) {
 			racing.Add(1)
 			go func() {
 				defer racing.Done()
-				cmd := exec.Command("/bin/sh", script, "shop/web", "promote", "production", ref)
+				cmd := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "prod", ref)
 				cmd.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root)
 				failed[at] = cmd.Run()
 			}()
@@ -178,7 +178,7 @@ func TestConcurrentPromotesOfOneTierLoseNoUpdate(t *testing.T) {
 				t.Fatalf("promote %s exited: %v", refs[at], err)
 			}
 		}
-		got := window(t, root, "shop/web", "production")
+		got := window(t, root, "shop/web", "production", "prod")
 		slices.Sort(got)
 		if !slices.Equal(got, refs) {
 			t.Fatalf("round %d left the window listing %v, want all of %v: promote reads the window, prepends and renames, and two of those interleaving without the lock drops whichever landed first", round, got, refs)
@@ -212,7 +212,7 @@ func TestAPromoteKilledMidWriteTakesItsStagingFileWithIt(t *testing.T) {
 	if err := os.WriteFile(script, release.HelperScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "ocel/shop/web:one")
+	cmd := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "prod", "ocel/shop/web:one")
 	cmd.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root, "PATH="+slowGrep(t)+":"+os.Getenv("PATH"))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
@@ -242,7 +242,7 @@ func TestOneAppsSlowWriteNeverBlocksAnotherApp(t *testing.T) {
 	if err := os.WriteFile(script, release.HelperScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "ocel/shop/web:one")
+	slow := exec.Command("/bin/sh", script, "shop/web", "promote", "production", "prod", "ocel/shop/web:one")
 	slow.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root, "PATH="+slowGrep(t)+":"+os.Getenv("PATH"))
 	slow.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := slow.Start(); err != nil {
@@ -264,7 +264,7 @@ func TestOneAppsSlowWriteNeverBlocksAnotherApp(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		other := exec.Command("/bin/sh", script, "shop/api", "promote", "production", "ocel/shop/api:one")
+		other := exec.Command("/bin/sh", script, "shop/api", "promote", "production", "prod", "ocel/shop/api:one")
 		other.Env = append(os.Environ(), "OCEL_RELEASES_ROOT="+root)
 		done <- other.Run()
 	}()
@@ -287,7 +287,7 @@ func TestAPromoteReclaimsTheStagingFilesOfHelpersNoLongerRunning(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:one")
 	if _, err := os.Stat(dead); !os.IsNotExist(err) {
 		t.Errorf("%s remains after a later run held the lock (%v), and nothing else on this box ever sweeps it", dead, err)
 	}
@@ -300,12 +300,12 @@ func TestForgettingATierAndReconcilingLeavesTheBoxAsItWasBeforeTheFirstPromote(t
 	t.Parallel()
 
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:one")
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:one"})
 	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
 		t.Fatalf("archive exited %d", code)
 	}
-	if _, code := releases(t, root, "", "shop/web", "forget", "production"); code != 0 {
+	if _, code := releases(t, root, "", "shop/web", "forget", "production", "prod"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
 	if _, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); code != 0 {
@@ -323,12 +323,12 @@ func TestForgettingOneTierLeavesTheOthersInPlace(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:live")
-	promote(t, root, "shop/web", "preview", "ocel/shop/web:branch")
-	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:live")
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:branch")
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview", "pr-1"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
-	if got := window(t, root, "shop/web", "production"); len(got) != 1 || got[0] != "ocel/shop/web:live" {
+	if got := window(t, root, "shop/web", "production", "prod"); len(got) != 1 || got[0] != "ocel/shop/web:live" {
 		t.Errorf("forgetting preview left production listing %v, and one tier's teardown is never another's", got)
 	}
 }
@@ -338,9 +338,82 @@ func TestForgettingATierTheHostNeverServedIsRefused(t *testing.T) {
 
 	root := releasesDir(t)
 	for _, tier := range []string{"", "../../etc", "PRODUCTION", "prod;rm -rf /"} {
-		if _, code := releases(t, root, "", "shop/web", "forget", tier); code != 2 {
+		if _, code := releases(t, root, "", "shop/web", "forget", tier, "prod"); code != 2 {
 			t.Errorf("forget %q exited %d, want a refusal", tier, code)
 		}
+	}
+}
+
+func TestAnEnvironmentThatCannotNameAWindowFileIsRefused(t *testing.T) {
+	t.Parallel()
+
+	root := releasesDir(t)
+	for _, env := range []string{"", "../../etc", "PR-1", "pr-1;rm -rf /", "pr/1", "pr@1", ".dropped", "-pr"} {
+		if _, code := releases(t, root, "", "shop/web", "promote", "preview", env, "ocel/shop/web:one"); code != 2 {
+			t.Errorf("promote under %q exited %d, want a refusal", env, code)
+		}
+		if _, code := releases(t, root, "", "shop/web", "forget", "preview", env); code != 2 {
+			t.Errorf("forget of %q exited %d, want a refusal", env, code)
+		}
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			t.Errorf("a refused environment wrote %q, and the gate is what stops a name reaching the filesystem at all", entry.Name())
+		}
+	}
+}
+
+func TestTearingDownOnePreviewKeepsTheReleasesAnotherPreviewHoldsButIsNotRunning(t *testing.T) {
+	t.Parallel()
+
+	root := releasesDir(t)
+	for _, ref := range []string{"ocel/shop/web:pr1-a", "ocel/shop/web:pr1-b"} {
+		promote(t, root, "shop/web", "preview", "pr-1", ref)
+	}
+	for _, ref := range []string{"ocel/shop/web:pr2-a", "ocel/shop/web:pr2-b", "ocel/shop/web:pr2-c"} {
+		promote(t, root, "shop/web", "preview", "pr-2", ref)
+	}
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview", "pr-1"); code != 0 {
+		t.Fatalf("forget exited %d", code)
+	}
+	dock := fakeDocker(t, []string{"shop web ocel/shop/web:pr2-c"}, []string{
+		"ocel/shop/web:pr1-a", "ocel/shop/web:pr1-b", "ocel/shop/web:pr2-a", "ocel/shop/web:pr2-b", "ocel/shop/web:pr2-c",
+	})
+
+	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
+
+	if code != 0 {
+		t.Fatalf("reconcile exited %d", code)
+	}
+	if got, want := removedFromBox(rendered), "ocel/shop/web:pr1-a\nocel/shop/web:pr1-b"; got != want {
+		t.Errorf("tearing down pr-1 removed %q, want %q alone: pr-2 still holds pr2-a and pr2-b for `ocel rollback`, and another preview's teardown is never its own", got, want)
+	}
+	if got := window(t, root, "shop/web", "preview", "pr-2"); !slices.Equal(got, []string{"ocel/shop/web:pr2-c", "ocel/shop/web:pr2-b", "ocel/shop/web:pr2-a"}) {
+		t.Errorf("pr-2's window lists %v after pr-1 was torn down, want all three of its releases", got)
+	}
+}
+
+func TestTheWindowsOfEveryEnvironmentOfATierAreAskedForLostReleases(t *testing.T) {
+	t.Parallel()
+
+	root := releasesDir(t)
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:pr1-pruned")
+	promote(t, root, "shop/web", "preview", "pr-2", "ocel/shop/web:pr2-pruned")
+	promote(t, root, "shop/web", "preview", "pr-2", "ocel/shop/web:live")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:prod-pruned")
+	dock := fakeDocker(t, []string{"shop web ocel/shop/web:live"}, nil)
+
+	said, code := releases(t, root, dock.dir, "shop/web", "lost", "preview")
+
+	if code != 0 {
+		t.Fatalf("lost exited %d", code)
+	}
+	if got, want := reported(said, "lost"), "ocel/shop/web:pr1-pruned\nocel/shop/web:pr2-pruned"; got != want {
+		t.Errorf("lost named %q, want %q: every preview's window is asked, and production's is another tier's", got, want)
 	}
 }
 
@@ -352,7 +425,7 @@ func TestTheHelperRefusesAScopeThatIsNotOneProjectAndOneApp(t *testing.T) {
 		"shop/web; rm -rf /", "$(id)", "'; docker rmi $(docker images -q); #", "../../etc", "shop/web\nshop/web", "SHOP/WEB",
 		"web", "shop/web/preview", "/web", "shop/", "shop//web", "",
 	} {
-		rendered, code := releases(t, root, "", scope, "promote", "production", "ocel/shop/web:one")
+		rendered, code := releases(t, root, "", scope, "promote", "production", "prod", "ocel/shop/web:one")
 		if code != 2 {
 			t.Errorf("promote as %q exited %d, want a refusal", scope, code)
 		}
@@ -376,7 +449,7 @@ func TestTheHelperRefusesACoordinateItCannotName(t *testing.T) {
 
 	root := releasesDir(t)
 	for _, ref := range []string{"", "-rf", "ocel/shop/web:one; docker rmi $(docker images -q)", "ocel/shop/web:one\nocel/shop/web:two"} {
-		if _, code := releases(t, root, "", "shop/web", "promote", "production", ref); code != 2 {
+		if _, code := releases(t, root, "", "shop/web", "promote", "production", "prod", ref); code != 2 {
 			t.Errorf("promote %q exited %d, want a refusal", ref, code)
 		}
 	}
@@ -384,11 +457,11 @@ func TestTheHelperRefusesACoordinateItCannotName(t *testing.T) {
 
 func TestOneAppsWindowsAreReadTogetherAndAnothersAreNeverRead(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:live")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:live")
 	for _, ref := range []string{"ocel/shop/web:p1", "ocel/shop/web:p2", "ocel/shop/web:p3"} {
-		promote(t, root, "shop/web", "preview", ref)
+		promote(t, root, "shop/web", "preview", "pr-1", ref)
 	}
-	promote(t, root, "shop/api", "production", "ocel/shop/api:live")
+	promote(t, root, "shop/api", "production", "prod", "ocel/shop/api:live")
 
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:live", "ocel/shop/web:p1", "ocel/shop/web:p2", "ocel/shop/web:p3", "ocel/shop/web:gone"})
 	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
@@ -408,7 +481,7 @@ func TestOneAppsWindowsAreReadTogetherAndAnothersAreNeverRead(t *testing.T) {
 
 func TestARefOnlyARunningContainerNamesIsNeverRemoved(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:named")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:named")
 
 	dock := fakeDocker(t, []string{"shop web ocel/shop/web:running"}, []string{"ocel/shop/web:named", "ocel/shop/web:running", "ocel/shop/web:orphan"})
 	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
@@ -422,7 +495,7 @@ func TestARefOnlyARunningContainerNamesIsNeverRemoved(t *testing.T) {
 
 func TestAContainerWithTheAppLabelAndNoRefStopsTheSweep(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:named")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:named")
 
 	dock := fakeDocker(t, []string{"shop web "}, []string{"ocel/shop/web:named", "ocel/shop/web:orphan"})
 	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
@@ -439,7 +512,7 @@ func TestAContainerWithTheAppLabelAndNoRefStopsTheSweep(t *testing.T) {
 
 func TestASecondReconcileRemovesNothing(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:named")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:named")
 
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:named", "ocel/shop/web:orphan"})
 	if _, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web"); code != 0 {
@@ -476,11 +549,11 @@ func TestARefusedRemovalIsLeftForTheNextRun(t *testing.T) {
 
 func TestOneProjectsTeardownLeavesAnotherProjectsImagesOfTheSameAppInPlace(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:live")
-	promote(t, root, "blog/web", "production", "ocel/blog/web:live")
-	promote(t, root, "blog/web", "production", "ocel/blog/web:next")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:live")
+	promote(t, root, "blog/web", "production", "prod", "ocel/blog/web:live")
+	promote(t, root, "blog/web", "production", "prod", "ocel/blog/web:next")
 
-	if _, code := releases(t, root, "", "shop/web", "forget", "production"); code != 0 {
+	if _, code := releases(t, root, "", "shop/web", "forget", "production", "prod"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:live", "ocel/blog/web:live", "ocel/blog/web:next"})
@@ -491,7 +564,7 @@ func TestOneProjectsTeardownLeavesAnotherProjectsImagesOfTheSameAppInPlace(t *te
 	if removedFromBox(rendered) != "ocel/shop/web:live" {
 		t.Errorf("shop's teardown removed %q, want ocel/shop/web:live alone: two projects that each name an app web shared one repository and one window, and shop's sweep took blog's image out from under a load still importing it", removedFromBox(rendered))
 	}
-	if got := window(t, root, "blog/web", "production"); strings.Join(got, ",") != "ocel/blog/web:next,ocel/blog/web:live" {
+	if got := window(t, root, "blog/web", "production", "prod"); strings.Join(got, ",") != "ocel/blog/web:next,ocel/blog/web:live" {
 		t.Errorf("blog's window reads %v after shop was torn down, want both refs it promoted", got)
 	}
 	if strings.Contains(dock.log(t), "rmi ocel/blog") {
@@ -501,7 +574,7 @@ func TestOneProjectsTeardownLeavesAnotherProjectsImagesOfTheSameAppInPlace(t *te
 
 func TestOneProjectsRunningContainerIsNeverReadAsAnothersUnderTheSameAppName(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:named")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:named")
 
 	dock := fakeDocker(t, []string{"blog web ocel/shop/web:orphan"},
 		[]string{"ocel/shop/web:named", "ocel/shop/web:orphan"})
@@ -657,7 +730,7 @@ func joined(lines []string) string {
 func TestARefAPromoteDropsPastTheWindowIsReportedByTheNextReconcileEvenOnceTheBoxHasNoCopy(t *testing.T) {
 	root := releasesDir(t)
 	for _, ref := range []string{"ocel/shop/web:one", "ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
-		promote(t, root, "shop/web", "production", ref)
+		promote(t, root, "shop/web", "production", "prod", ref)
 	}
 
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"})
@@ -677,9 +750,9 @@ func TestARefAPromoteDropsPastTheWindowIsReportedByTheNextReconcileEvenOnceTheBo
 
 func TestARefOneTierDropsAndAnotherStillNamesIsNotReported(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:one")
 	for _, ref := range []string{"ocel/shop/web:one", "ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
-		promote(t, root, "shop/web", "production", ref)
+		promote(t, root, "shop/web", "production", "prod", ref)
 	}
 
 	rendered, code := fakeDocker(t, nil, nil).reconcile(t, root, "shop/web", "ocel/shop/web")
@@ -694,8 +767,8 @@ func TestARefOneTierDropsAndAnotherStillNamesIsNotReported(t *testing.T) {
 
 func TestTheRefsOfAForgottenTierAreReportedByTheNextReconcileEvenOnceTheBoxHasNoCopy(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
-	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:one")
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview", "pr-1"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
 
@@ -735,11 +808,11 @@ func TestALockWhoseScopeAnotherHelperRemovedIsTakenAgain(t *testing.T) {
 		t.Run(race, func(t *testing.T) {
 			root := releasesDir(t)
 
-			if _, code := releases(t, root, racingMkdir(t, race), "shop/web", "promote", "production", "ocel/shop/web:one"); code != 0 {
+			if _, code := releases(t, root, racingMkdir(t, race), "shop/web", "promote", "production", "prod", "ocel/shop/web:one"); code != 0 {
 				t.Fatalf("promote exited %d, want the lock taken again: a helper that emptied the scope removed it between this one making and opening it", code)
 			}
 
-			if got := window(t, root, "shop/web", "production"); !slices.Equal(got, []string{"ocel/shop/web:one"}) {
+			if got := window(t, root, "shop/web", "production", "prod"); !slices.Equal(got, []string{"ocel/shop/web:one"}) {
 				t.Errorf("the window holds %v, want the promoted ref", got)
 			}
 		})
@@ -755,9 +828,9 @@ func settle(t *testing.T, root, scope string, refs ...string) {
 
 func TestARefWhoseRegistryCopyWasNotRemovedIsReportedAgainUntilItIsSettled(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
-	promote(t, root, "shop/web", "preview", "ocel/shop/web:two")
-	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:two")
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview", "pr-1"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
 	dock := fakeDocker(t, nil, nil)
@@ -785,7 +858,7 @@ func TestARefWhoseRegistryCopyWasNotRemovedIsReportedAgainUntilItIsSettled(t *te
 
 func TestARefTheBoxRemovesIsReportedForTheRegistryUntilItIsSettled(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:named")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:named")
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:named", "ocel/shop/web:orphan"})
 
 	first, _ := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
@@ -801,8 +874,8 @@ func TestARefTheBoxRemovesIsReportedForTheRegistryUntilItIsSettled(t *testing.T)
 
 func TestARefAReconcileReportedIsClaimedOnceADeployPromotesItAgain(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "preview", "ocel/shop/web:one")
-	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:one")
+	if _, code := releases(t, root, "", "shop/web", "forget", "preview", "pr-1"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
 	dock := fakeDocker(t, nil, nil)
@@ -810,7 +883,7 @@ func TestARefAReconcileReportedIsClaimedOnceADeployPromotesItAgain(t *testing.T)
 		t.Fatalf("the reconcile reported %q", unused(first))
 	}
 
-	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:one")
 	claimed, code := releases(t, root, dock.dir, "shop/web", "claimed", "ocel/shop/web:one")
 
 	if code != 0 || strings.TrimSpace(claimed) != "ocel/shop/web:one" {
@@ -850,8 +923,8 @@ func (d dockerStub) images(t *testing.T) []string {
 
 func TestAnArchivedReleaseIsLoadedBackOnceAPruneRemovedItsImage(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
-	promote(t, root, "shop/web", "production", "ocel/shop/web:two")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:two")
 	dock := fakeDocker(t, []string{"shop web ocel/shop/web:two"}, []string{"ocel/shop/web:one", "ocel/shop/web:two"})
 
 	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
@@ -873,7 +946,7 @@ func TestAnArchivedReleaseIsLoadedBackOnceAPruneRemovedItsImage(t *testing.T) {
 
 func TestARestoreOfAnImageTheEngineStillHasLoadsNothing(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:one")
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:one"})
 	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
 		t.Fatalf("archive exited %d", code)
@@ -891,13 +964,13 @@ func TestARestoreOfAnImageTheEngineStillHasLoadsNothing(t *testing.T) {
 
 func TestAReleaseTheWindowDropsLosesItsImageAndItsArchiveInOneReconcile(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:one")
 	dock := fakeDocker(t, nil, []string{"ocel/shop/web:one"})
 	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:one"); code != 0 {
 		t.Fatalf("archive exited %d", code)
 	}
 	for _, ref := range []string{"ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
-		promote(t, root, "shop/web", "production", ref)
+		promote(t, root, "shop/web", "production", "prod", ref)
 	}
 
 	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
@@ -969,9 +1042,9 @@ func (d dockerStub) stopped(t *testing.T, containers ...string) {
 func TestARetainedReleaseWithNeitherAContainerNorAnArchiveIsLost(t *testing.T) {
 	root := releasesDir(t)
 	for _, ref := range []string{"ocel/shop/web:archived", "ocel/shop/web:stopped", "ocel/shop/web:pruned", "ocel/shop/web:live"} {
-		promote(t, root, "shop/web", "production", ref)
+		promote(t, root, "shop/web", "production", "prod", ref)
 	}
-	promote(t, root, "shop/web", "preview", "ocel/shop/web:elsewhere")
+	promote(t, root, "shop/web", "preview", "pr-1", "ocel/shop/web:elsewhere")
 	dock := fakeDocker(t, []string{"shop web ocel/shop/web:live"}, []string{"ocel/shop/web:archived"})
 	dock.stopped(t, "shop web ocel/shop/web:stopped")
 	if _, code := releases(t, root, dock.dir, "shop/web", "archive", "ocel/shop/web:archived"); code != 0 {
@@ -990,11 +1063,11 @@ func TestARetainedReleaseWithNeitherAContainerNorAnArchiveIsLost(t *testing.T) {
 
 func TestTheLostReleasesOfEveryAppOnTheBoxAreNamedWithTheirApp(t *testing.T) {
 	root := releasesDir(t)
-	promote(t, root, "shop/web", "production", "ocel/shop/web:pruned")
-	promote(t, root, "shop/web", "production", "ocel/shop/web:live")
-	promote(t, root, "blog/api", "production", "ocel/blog/api:pruned")
-	promote(t, root, "blog/api", "production", "ocel/blog/api:live")
-	promote(t, root, "docs/site", "production", "ocel/docs/site:live")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:pruned")
+	promote(t, root, "shop/web", "production", "prod", "ocel/shop/web:live")
+	promote(t, root, "blog/api", "production", "prod", "ocel/blog/api:pruned")
+	promote(t, root, "blog/api", "production", "prod", "ocel/blog/api:live")
+	promote(t, root, "docs/site", "production", "prod", "ocel/docs/site:live")
 	dock := fakeDocker(t, []string{"shop web ocel/shop/web:live", "blog api ocel/blog/api:live", "docs site ocel/docs/site:live"}, nil)
 	helper := filepath.Join(t.TempDir(), "releases")
 	if err := os.WriteFile(helper, release.HelperScript, 0o755); err != nil {

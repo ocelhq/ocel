@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>... | <project>/<app> claimed <ref>... | <project>/<app> archive <ref> | <project>/<app> restore <ref> | <project>/<app> lost <tier>" >&2
+	echo "usage: releases <project>/<app> promote <tier> <environment> <ref> | <project>/<app> forget <tier> <environment> | <project>/<app> reconcile <repository> | <project>/<app> settle <ref>... | <project>/<app> claimed <ref>... | <project>/<app> archive <ref> | <project>/<app> restore <ref> | <project>/<app> lost <tier>" >&2
 	exit 2
 }
 
@@ -87,6 +87,18 @@ read_desired() {
 	done <"$scratch".running
 }
 
+refuse_invalid_tier() {
+	case $1 in
+	'' | *[!a-z0-9-]*) abort "$1 is not a valid tier" ;;
+	esac
+}
+
+refuse_invalid_environment() {
+	case $1 in
+	'' | -* | *- | *--* | *[!a-z0-9-]*) abort "$1 is not a valid environment" ;;
+	esac
+}
+
 coordinate() {
 	case $1 in
 	'' | -* | *[!A-Za-z0-9._:/@-]*) abort "$1 is not a valid image coordinate" ;;
@@ -96,7 +108,7 @@ coordinate() {
 scratch="$root/.staging.$$"
 clean() {
 	rm -f "$scratch".desired "$scratch".actual "$scratch".running "$scratch".going "$scratch".staged "$scratch".kept "$scratch".unnamed \
-		"$scratch".removed "$scratch".pending "$scratch".settled "$scratch".tar "$scratch".containers
+		"$scratch".removed "$scratch".pending "$scratch".settled "$scratch".tar "$scratch".containers "$scratch".lost
 }
 trap clean EXIT
 trap 'clean; exit 129' HUP
@@ -114,15 +126,13 @@ done
 
 case "$verb" in
 promote)
-	[ $# -eq 2 ] || usage
-	tier=$1
-	ref=$2
-	case $tier in
-	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
-	esac
+	[ $# -eq 3 ] || usage
+	refuse_invalid_tier "$1"
+	refuse_invalid_environment "$2"
+	ref=$3
 	coordinate "$ref"
 	lock
-	file="$dir/$tier"
+	file="$dir/$1@$2"
 	: >>"$file"
 	{
 		printf '%s\n' "$ref"
@@ -134,16 +144,15 @@ promote)
 	[ -s "$dropped" ] || rm -f "$dropped"
 	;;
 forget)
-	[ $# -eq 1 ] || usage
-	tier=$1
-	case $tier in
-	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
-	esac
+	[ $# -eq 2 ] || usage
+	refuse_invalid_tier "$1"
+	refuse_invalid_environment "$2"
 	lock
-	if [ -f "$dir/$tier" ]; then
-		cat "$dir/$tier" >>"$dropped"
+	file="$dir/$1@$2"
+	if [ -f "$file" ]; then
+		cat "$file" >>"$dropped"
 	fi
-	rm -f "$dir/$tier"
+	rm -f "$file"
 	[ -s "$dropped" ] || rm -f "$dropped"
 	remove_emptied_scope
 	;;
@@ -245,20 +254,24 @@ restore)
 	;;
 lost)
 	[ $# -eq 1 ] || usage
-	tier=$1
-	case $tier in
-	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
-	esac
+	refuse_invalid_tier "$1"
 	lock
-	if [ -f "$dir/$tier" ]; then
-		docker ps --all --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".containers
+	listed=
+	: >"$scratch".lost
+	for file in "$dir/$1"@*; do
+		[ -f "$file" ] || continue
+		if [ -z "$listed" ]; then
+			docker ps --all --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".containers
+			listed=1
+		fi
 		while IFS= read -r ref; do
 			[ -n "$ref" ] || continue
 			grep -F -x -q -e "$ref" "$scratch".containers && continue
 			[ -f "$(archive_of "$ref")" ] && continue
-			printf 'lost %s\n' "$ref"
-		done <"$dir/$tier"
-	fi
+			printf '%s\n' "$ref" >>"$scratch".lost
+		done <"$file"
+	done
+	sort -u "$scratch".lost | sed 's/^/lost /'
 	remove_emptied_scope
 	;;
 *)

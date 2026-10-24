@@ -51,5 +51,5 @@ func namesRegistry(imageRef string) bool {
 }
 
 func (p *Provider) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, _ provider.ImageStore, _ progress.Log) error {
-	return p.images.Forget(ctx, ref.Tier, ref.Project, app)
+	return p.images.Forget(ctx, ref.Tier, ref.Project, ref.Name.Env, app)
 }
