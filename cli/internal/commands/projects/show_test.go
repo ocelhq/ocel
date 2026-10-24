@@ -13,8 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-const webRelease = "00000000000000000000000000000001~000000000001"
-
 func TestProjectsShowListsEachEnvironmentWithItsPromotionAppsAndURL(t *testing.T) {
 	project := deployedToBothTiers(t)
 	serveOnProductionHost(t, project)
@@ -25,16 +23,14 @@ func TestProjectsShowListsEachEnvironmentWithItsPromotionAppsAndURL(t *testing.T
 	}
 
 	header := strings.Split(got.stdout, "\n")[0]
-	if !strings.HasPrefix(header, "test-app · fake 000000000000") || !strings.HasSuffix(header, " · edge relay") {
+	if !strings.HasPrefix(header, "test-app  fake 000000000000") || !strings.HasSuffix(header, " · edge relay") {
 		t.Errorf("header = %q, want the project, the provider's identity and its edge", header)
 	}
-	for _, column := range []string{"ENVIRONMENT", "TIER", "PROMOTION", "APPS", "URL"} {
-		if !strings.Contains(got.stdout, column) {
-			t.Errorf("output has no %s column:\n%s", column, got.stdout)
-		}
+	if row, want := rowOf(t, got.stdout, "ENV"), []string{"ENV", "TIER", "PROMOTION", "APPS", "URL"}; !slices.Equal(row, want) {
+		t.Errorf("environments head = %v, want %v", row, want)
 	}
-	if row, want := rowOf(t, got.stdout, "prod"), []string{"prod", "production", promotionID, "web", webRelease, "https://" + productionHost}; !slices.Equal(row, want) {
-		t.Errorf("prod row = %v, want %v: the env is named by its slug, its tier by the word", row, want)
+	if row, want := rowOf(t, got.stdout, "prod"), []string{"prod", "production", promotionID, "web", "00000000", "https://" + productionHost}; !slices.Equal(row, want) {
+		t.Errorf("prod row = %v, want %v: the env is named by its slug, its tier by the word, each app by the start of its build id", row, want)
 	}
 	if row, want := rowOf(t, got.stdout, "pr-1"), []string{"pr-1", "preview", "—", "—", "—"}; !slices.Equal(row, want) {
 		t.Errorf("pr-1 row = %v, want %v", row, want)
@@ -51,7 +47,7 @@ func TestProjectsShowOfAnotherProjectNamesTheEdgeItRecorded(t *testing.T) {
 		t.Fatalf("ocel projects show blog err = %v; run=%s", got.err, got.run)
 	}
 
-	if header := strings.Split(got.stdout, "\n")[0]; !strings.HasPrefix(header, "blog · ") || !strings.HasSuffix(header, " · edge direct") {
+	if header := strings.Split(got.stdout, "\n")[0]; !strings.HasPrefix(header, "blog  ") || !strings.HasSuffix(header, " · edge direct") {
 		t.Errorf("header = %q, want blog on the edge it recorded", header)
 	}
 }
@@ -65,10 +61,13 @@ func TestProjectsShowMarksAResourceThatHasAConsoleLink(t *testing.T) {
 		if got.err != nil {
 			t.Fatalf("ocel projects show err = %v; run=%s", got.err, got.run)
 		}
-		for _, want := range []string{"RESOURCES", "STACK", "KIND", "ID", "fake:function", webFunctionID + " ↗"} {
+		for _, want := range []string{"Resources  prod", "KIND", "ID", "fake:function", webFunctionID + " ↗"} {
 			if !strings.Contains(got.stdout, want) {
 				t.Errorf("output has no %q:\n%s", want, got.stdout)
 			}
+		}
+		if strings.Contains(got.stdout, "STACK") {
+			t.Errorf("output = %q, want no stack column: a stack is Ocel's bookkeeping, not what it created", got.stdout)
 		}
 		if strings.Contains(got.stdout, "\x1b]8;;") {
 			t.Errorf("output = %q, want no hyperlink off a terminal", got.stdout)
@@ -101,7 +100,7 @@ func TestProjectsShowWithLinksPrintsEachConsoleURL(t *testing.T) {
 	if got.err != nil {
 		t.Fatalf("ocel projects show --links err = %v; run=%s", got.err, got.run)
 	}
-	row := rowOf(t, got.stdout, webStackName(t, project))
+	row := rowOf(t, got.stdout, "fake:function")
 	if !slices.Contains(row, webFunctionLink) {
 		t.Errorf("row = %v, want the console URL printed in its own column", row)
 	}
@@ -110,15 +109,18 @@ func TestProjectsShowWithLinksPrintsEachConsoleURL(t *testing.T) {
 	}
 }
 
-func webStackName(t *testing.T, project clitest.FakeProject) string {
-	t.Helper()
-	for _, stack := range recordedStacks(t, project, environment.TierProduction, clitest.FixtureSlug) {
-		if stack.App == "web" {
-			return stack.Name.String()
-		}
+func TestProjectsShowListsAResourceTwoReleasesShareOnce(t *testing.T) {
+	project := deployedToProductionOnly(t)
+	recordWebFunction(t, project)
+	recordWebFunctionInBuild(t, project, "b2")
+
+	got := runProjects(t, clitest.NewInvocation(), project.Root, strings.NewReader(""), "show")
+	if got.err != nil {
+		t.Fatalf("ocel projects show err = %v; run=%s", got.err, got.run)
 	}
-	t.Fatal("the production web stack is not recorded")
-	return ""
+	if n := strings.Count(got.stdout, webFunctionID); n != 1 {
+		t.Errorf("output names %s %d times, want once:\n%s", webFunctionID, n, got.stdout)
+	}
 }
 
 func TestProjectsShowAsJSONCarriesEveryConsoleURL(t *testing.T) {
@@ -166,9 +168,10 @@ func TestProjectsShowNamesThePartsTheProjectShares(t *testing.T) {
 		t.Fatalf("ocel projects show err = %v; run=%s", got.err, got.run)
 	}
 
-	for _, want := range []string{"SHARED", "test-app shares containers with 2 other projects", "Fake::Cluster", "ocel-containers-production"} {
-		if !strings.Contains(got.stdout, want) {
-			t.Errorf("output has no %q:\n%s", want, got.stdout)
-		}
+	if !strings.Contains(got.stdout, "Shared  production") {
+		t.Errorf("output has no shared heading for production:\n%s", got.stdout)
+	}
+	if row, want := rowOf(t, got.stdout, "containers"), []string{"containers", "2", "other", "projects", "Fake::Cluster", "ocel-containers-production"}; !slices.Equal(row, want) {
+		t.Errorf("containers row = %v, want %v", row, want)
 	}
 }
