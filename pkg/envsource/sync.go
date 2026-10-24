@@ -220,13 +220,32 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 	if err != nil {
 		return nil, nil, err
 	}
+	listings := make([][]variablestore.Metadata, len(group))
+	current := make([]bool, len(group))
+	for i, registration := range group {
+		if listings[i], err = s.Store.List(ctx, s.scope(registration)); err != nil {
+			return nil, nil, err
+		}
+		if current[i], err = isCurrent(ctx, s.Store.KeyValues, s.Tier, registration); err != nil {
+			return nil, nil, err
+		}
+	}
+	results := make([]CopyResult, len(group))
+	for i := range group {
+		results[i] = CopyResult{EnvSource: source.ID()}
+	}
+	if !slices.Contains(current, true) {
+		return results, map[string]string{}, nil
+	}
 	read, err := source.Read(ctx, folders)
 	if err != nil {
 		return nil, nil, err
 	}
-	results := make([]CopyResult, 0, len(group))
-	for _, registration := range group {
-		result, err := CopyValues(ctx, s.Store, s.scope(registration), digestKey, source.ID(), readAt, read, registration.Folders, registration.Credentials())
+	for i, registration := range group {
+		if !current[i] {
+			continue
+		}
+		result, err := CopyValues(ctx, s.Store, s.scope(registration), listings[i], digestKey, source.ID(), readAt, read, registration.Folders, registration.Credentials())
 		if len(result.versions) > 0 || err != nil {
 			from := variablestore.Provenance{EnvSource: source.ID(), ReadAt: readAt}
 			err = errors.Join(err, s.forgetCopiesIntoRemoved(ctx, s.scope(registration), from, result))
@@ -234,7 +253,7 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 		if err != nil {
 			return nil, nil, err
 		}
-		results = append(results, result)
+		results[i] = result
 	}
 	urls := map[string]string{}
 	for _, folder := range folders {

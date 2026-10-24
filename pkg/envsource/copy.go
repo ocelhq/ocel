@@ -23,12 +23,8 @@ type CopyResult struct {
 	versions map[variablestore.Cell]variablestore.Version
 }
 
-func CopyValues(ctx context.Context, store variablestore.Store, scope variablestore.Scope, key DigestKey, envSource string, readAt time.Time, read map[variablestore.Cell]Value, folders []string, keep []variablestore.Cell) (CopyResult, error) {
+func CopyValues(ctx context.Context, store variablestore.Store, scope variablestore.Scope, listed []variablestore.Metadata, key DigestKey, envSource string, readAt time.Time, read map[variablestore.Cell]Value, folders []string, keep []variablestore.Cell) (CopyResult, error) {
 	result := CopyResult{EnvSource: envSource}
-	listed, err := store.List(ctx, scope)
-	if err != nil {
-		return CopyResult{}, err
-	}
 	stored := map[variablestore.Cell]variablestore.Metadata{}
 	for _, metadata := range listed {
 		if metadata.Coordinate.Environment == "" {

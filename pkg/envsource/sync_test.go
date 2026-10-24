@@ -700,3 +700,87 @@ func TestASyncStaysInUseUntilItCanNoLongerBeCopyingIntoARemovedProject(t *testin
 		t.Fatalf("ScheduledProjects() once shop's removal is forgotten = %v, %v, want none", users, err)
 	}
 }
+
+func switchToBuiltinAndSet(t *testing.T, store variablestore.Store, project, key, value string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := envsource.ClearProvenance(ctx, store, scopeOf(project)); err != nil {
+		t.Error(err)
+	}
+	if err := envsource.Unregister(ctx, store, environment.TierProduction, project); err != nil {
+		t.Error(err)
+	}
+	if value == "" {
+		return
+	}
+	if _, err := store.Set(ctx, scopeOf(project), tierWide("", key), value, nil); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestASyncThatReadBeforeASwitchToBuiltinKeepsAValueSetAfterIt(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "from-infisical", version: 1})
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	held, synced := syncHeldInRead(t, sync, fake)
+
+	switchToBuiltinAndSet(t, store, "shop", "K", "mine")
+	close(held.released)
+	<-synced
+
+	if k := reveal(t, store, scopeOf("shop"), tierWide("", "K")); k.Plaintext != "mine" {
+		t.Fatalf("shop K = %q, want the value set after the sync's read kept", k.Plaintext)
+	}
+}
+
+func TestASyncThatReadBeforeASwitchToBuiltinKeepsAValueItsSourceNoLongerHas(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, at := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "from-infisical", version: 1})
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	ctx := context.Background()
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fake.set(func(f *fakeInfisical) { f.secrets["/"] = nil })
+	at.advance(time.Minute)
+	held, synced := syncHeldInRead(t, sync, fake)
+
+	switchToBuiltinAndSet(t, store, "shop", "K", "")
+	close(held.released)
+	<-synced
+
+	if k := reveal(t, store, scopeOf("shop"), tierWide("", "K")); k.Plaintext != "from-infisical" {
+		t.Fatalf("shop K = %q, want the copy the switch kept as ocel's own", k.Plaintext)
+	}
+}
+
+type valuesListHook struct {
+	records.Store
+	once   sync.Once
+	before func()
+}
+
+func (h *valuesListHook) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	if in.Root == variablestore.RootValues {
+		h.once.Do(h.before)
+	}
+	return h.Store.List(ctx, in, under...)
+}
+
+func TestASyncListingARegistrationThatSwitchedToBuiltinBeforeItsReadCopiesNothingIntoIt(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "from-infisical", version: 1})
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	sync.Store.KeyValues = &valuesListHook{Store: store.KeyValues, before: func() { switchToBuiltinAndSet(t, store, "shop", "K", "mine") }}
+
+	if err := sync.CopyScheduled(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	if k := reveal(t, store, scopeOf("shop"), tierWide("", "K")); k.Plaintext != "mine" {
+		t.Fatalf("shop K = %q, want the value set after the switch kept", k.Plaintext)
+	}
+}
