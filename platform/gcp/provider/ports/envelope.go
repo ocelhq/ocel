@@ -88,7 +88,7 @@ func (s Envelope) sealingKey(ctx context.Context, tier environment.Tier, bound s
 	if err != nil {
 		return nil, err
 	}
-	wrapped, err := Cipher{Clients: s.Clients}.Seal(ctx, tier, dataKeyBound(bound), raw)
+	wrapped, err := Cipher(s).Seal(ctx, tier, dataKeyBound(bound), raw)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (s Envelope) openingKey(ctx context.Context, tier environment.Tier, bound s
 	if held, found := s.Clients.openedKeys.Load(id); found {
 		return held.(cipher.AEAD), nil
 	}
-	raw, err := Cipher{Clients: s.Clients}.Open(ctx, tier, dataKeyBound(bound), wrapped)
+	raw, err := Cipher(s).Open(ctx, tier, dataKeyBound(bound), wrapped)
 	if err != nil {
 		return nil, err
 	}
