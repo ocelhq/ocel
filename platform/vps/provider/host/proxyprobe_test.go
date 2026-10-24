@@ -13,8 +13,9 @@ import (
 func TestAProbeStartsWhereAnInterruptedRunLeftItsContainerBehind(t *testing.T) {
 	engineOrFail(t)
 
-	if out, err := exec.Command(dockerEngine, "run", "--detach", "--name", probeName(t),
-		"--network", enginetest.Network(t, "box"), "--entrypoint", "sleep", caddy.Image(), "600").CombinedOutput(); err != nil {
+	run := append([]string{"run", "--detach", "--name", probeName(t)}, enginetest.RunLabelArgs(t)...)
+	if out, err := exec.Command(dockerEngine, append(run,
+		"--network", enginetest.Network(t, "box"), "--entrypoint", "sleep", caddy.Image(), "600")...).CombinedOutput(); err != nil {
 		t.Fatalf("plant the container a killed run would have left under the name this probe takes: %v\n%s", err, out)
 	}
 
