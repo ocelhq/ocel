@@ -169,8 +169,14 @@ func TestADeployThatFailsAfterItsWorkersStartedLeavesThePreviousReleasesWorkersR
 	serving, _ := recordedWorker(t, store, "worker")
 
 	before := len(machine.commands())
-	provisionedRelease(t, p, releaseOf(t, aWorkerApp(), nextBuildID))
+	next := provisionedRelease(t, p, releaseOf(t, aWorkerApp(), nextBuildID))
 
+	for _, name := range []string{"worker", "ledger"} {
+		unserved, _ := releasedWorker(t, store, next, name)
+		if state := machine.containers[unserved.Container]; !strings.HasPrefix(state, "exited ") {
+			t.Errorf("the unpromoted release's worker %s is %q, want it stopped until a promotion serves its release, so a failed deploy leaves nothing idle on the box", unserved.Container, state)
+		}
+	}
 	if after, found := recordedWorker(t, store, "worker"); !found || after != serving {
 		t.Errorf("the engine delivers to %+v (recorded %t) once a release no promotion served started its workers, want %+v: the app still serves the previous release", after, found, serving)
 	}

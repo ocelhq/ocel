@@ -66,19 +66,24 @@ func (w Workers) openDeliverySecret(ctx context.Context, ref provider.StackRef) 
 
 func (w Workers) Run(ctx context.Context, spec provider.StackSpec, appContainer string, manifest []byte, progress progress.Log) error {
 	app, ref := spec.App, spec.Ref
-	deliverySecret := ""
-	if len(app.Workers) > 0 {
-		var err error
-		if deliverySecret, err = w.openDeliverySecret(ctx, ref); err != nil {
-			return err
-		}
+	if len(app.Workers) == 0 {
+		return nil
+	}
+	deliverySecret, err := w.openDeliverySecret(ctx, ref)
+	if err != nil {
+		return err
+	}
+	partition, under := boxapi.QueueWorkersUnder(ref.Tier, ref.Project, ref.Name.Env)
+	serving, err := w.readWorkers(ctx, partition, under)
+	if err != nil {
+		return err
 	}
 	for _, worker := range app.Workers {
 		name, err := release.ContainerName(ref.Project, ref.Name, worker.Name, app.Image)
 		if err != nil {
 			return err
 		}
-		progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name)
+		progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name + ", stopped until a promotion serves this release")
 		if _, err := w.box.Apps.Run(ctx, release.Container{
 			Name: name, Project: ref.Project, App: app.App, Image: app.Image, Tier: ref.Tier,
 			Env: newEnv(app, worker.Name, deliverySecret), Manifest: manifest, Resolved: true,
@@ -88,6 +93,12 @@ func (w Workers) Run(ctx context.Context, spec provider.StackSpec, appContainer 
 		if _, err := w.record(ctx, boxapi.QueueReleaseWorkerKey(ref.Tier, ref.Project, ref.Name.Env, appContainer, worker.Name), boxapi.QueueWorker{
 			App: app.App, Stack: ref.Name.String(), Container: name, Image: app.Image, Concurrency: worker.Concurrency,
 		}); err != nil {
+			return err
+		}
+		if serving[worker.Name].worker.Container == name {
+			continue
+		}
+		if err := w.box.Apps.Stop(ctx, name); err != nil {
 			return err
 		}
 	}
@@ -115,7 +126,7 @@ func (w Workers) Promote(ctx context.Context, tier environment.Tier, project, en
 			return err
 		}
 		if ran == release.RunRestarted {
-			progress.Say("Started worker " + name + "'s container " + worker.Container + " again")
+			progress.Say("Started worker " + name + "'s container " + worker.Container)
 		}
 		replaced, err := w.record(ctx, boxapi.QueueWorkerKey(tier, project, env, name), worker)
 		if err != nil {
