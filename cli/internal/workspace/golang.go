@@ -2,8 +2,8 @@ package workspace
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/railwayapp/railpack/core/providers/golang"
 
@@ -18,21 +18,13 @@ const (
 )
 
 func findGoContext(module gomodule.Module) (string, error) {
-	repository := module.Dir
-	for !atBoundary(repository) {
-		repository = filepath.Dir(repository)
-	}
-	root := module.Dir
-	for _, replaced := range module.ReplacementDirs {
-		for !under(root, replaced) {
-			root = filepath.Dir(root)
-		}
-		if !under(repository, root) || filepath.Dir(root) == root {
-			return "", fmt.Errorf(
-				"the %s at %s replaces a module with %s, and the only directory holding both is %s, outside %s: an image is built from one directory holding the module and every directory it replaces a module with, and never from above the repository the app is checked out in or from the filesystem root — move %s inside %s, or require a published version of the module it holds",
-				gomodule.File, module.Dir, replaced, root, repository, replaced, repository,
-			)
-		}
+	root, outside := findContext(module.Dir, module.ReplacementDirs)
+	if outside != "" {
+		repository := findRepository(module.Dir)
+		return "", fmt.Errorf(
+			"the %s at %s replaces a module with %s, and the only directory holding both is %s, outside %s: an image is built from one directory holding the module and every directory it replaces a module with, and never from above the repository the app is checked out in or from the filesystem root — move %s inside %s, or require a published version of the module it holds",
+			gomodule.File, module.Dir, outside, root, repository, outside, repository,
+		)
 	}
 	return root, nil
 }
@@ -41,10 +33,7 @@ func (l Location) planGoCommands() Commands {
 	if l.ModuleDir == "" || l.GoPackage == "" || l.Entrypoint == "" && l.Path == "." {
 		return Commands{}
 	}
-	binary := golang.GO_BINARY_NAME
-	if l.ModuleDir != "." {
-		binary = strings.Repeat("../", strings.Count(l.ModuleDir, "/")+1) + binary
-	}
+	binary := path.Join(findRelativeRoot(l.ModuleDir), golang.GO_BINARY_NAME)
 	commands := Commands{Build: inDir(l.ModuleDir, `GOWORK=off CGO_ENABLED=0 go build -ldflags="-w -s" -o `+shellword.Quote(binary)+" "+shellword.Quote(l.GoPackage))}
 	if l.ModuleDir != "." && isGoModuleOrWorkspaceRoot(l.Root) {
 		commands.Install = "sh -c " + shellword.Quote(inDir(l.ModuleDir, "GOWORK=off "+goModDownload))

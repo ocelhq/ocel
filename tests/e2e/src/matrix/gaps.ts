@@ -496,20 +496,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "path-dependency-outside-the-image",
-    reason:
-      "a container app's image is built from its path alone, and the Python and Rust fixtures depend on the repository's SDK by a path outside it, so the install in the image finds no SDK",
-    issue: 1598,
-    where: [
-      {
-        on: ["vps", "vps.incus"],
-        fixtures: [sdk.python, sdk.rust],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
     id: "rust-attribution-resolves-offline",
     reason:
       "attribution resolves a rust app's whole lockfile with cargo metadata --offline, and the build downloaded only what its musl target builds, so a crate only another platform builds is missing and the manifest is never assembled",

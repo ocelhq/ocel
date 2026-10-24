@@ -54,12 +54,12 @@ func Plan(loc workspace.Location) ([]byte, error) {
 		return nil, err
 	}
 	options := &core.GenerateBuildPlanOptions{
-		BuildCommand:             commands.Build,
+		BuildCommand:             planBuildCommand(commands),
 		StartCommand:             commands.Start,
 		ErrorMissingStartCommand: true,
 	}
 	if provider := providerFor(loc); provider != "" {
-		named, done, err := providerConfigFile(loc, provider)
+		named, done, err := providerConfigFile(loc, commands, provider)
 		if err != nil {
 			return nil, err
 		}
@@ -93,6 +93,17 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	return plan, nil
 }
 
+func planBuildCommand(commands workspace.Commands) string {
+	script := commands.Build
+	if commands.InstallsInBuild && commands.Install != "" {
+		script = commands.Install
+		if commands.Build != "" {
+			script += " && " + commands.Build
+		}
+	}
+	return strings.ReplaceAll(script, "'", `'\''`)
+}
+
 func addAsset(built *railpackplan.BuildPlan, loc workspace.Location, asset workspace.Asset) error {
 	for i := range built.Steps {
 		step := &built.Steps[i]
@@ -124,7 +135,7 @@ func providerFor(loc workspace.Location) string {
 	}
 }
 
-func providerConfigFile(loc workspace.Location, provider string) (string, func(), error) {
+func providerConfigFile(loc workspace.Location, commands workspace.Commands, provider string) (string, func(), error) {
 	root := loc.Root
 	config, err := configuredIn(root)
 	if err != nil {
@@ -133,6 +144,11 @@ func providerConfigFile(loc workspace.Location, provider string) (string, func()
 	config[providerKey] = json.RawMessage(`"` + provider + `"`)
 	if loc.Language == language.Go && loc.ModuleDir != "." && loc.GoVersion != "" {
 		if err := pinPackage(config, goPackage, loc.GoVersion, root); err != nil {
+			return "", nil, err
+		}
+	}
+	for _, tool := range commands.Tools {
+		if err := pinPackage(config, tool.Name, tool.Version, root); err != nil {
 			return "", nil, err
 		}
 	}
@@ -217,19 +233,23 @@ func scope(built *railpackplan.BuildPlan, loc workspace.Location, commands works
 		})
 		switch step.Name {
 		case installStep:
-			if err := replaceInstall(step, loc, commands.Install); err != nil {
+			if commands.InstallsInBuild {
+				step.Commands = slices.DeleteFunc(step.Commands, isExec)
+			} else if err := replaceInstall(step, loc, commands.Install); err != nil {
 				return err
 			}
 		case buildStep:
 			if loc.Member && commands.Build == "" {
-				step.Commands = slices.DeleteFunc(step.Commands, func(command railpackplan.Command) bool {
-					_, ok := command.(railpackplan.ExecCommand)
-					return ok
-				})
+				step.Commands = slices.DeleteFunc(step.Commands, isExec)
 			}
 		}
 	}
 	return nil
+}
+
+func isExec(command railpackplan.Command) bool {
+	_, ok := command.(railpackplan.ExecCommand)
+	return ok
 }
 
 func replaceInstall(step *railpackplan.Step, loc workspace.Location, scoped string) error {

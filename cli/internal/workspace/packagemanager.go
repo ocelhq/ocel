@@ -34,15 +34,22 @@ const (
 )
 
 type Commands struct {
-	Install string
-	Build   string
-	Start   string
-	Asset   Asset
+	Install         string
+	Build           string
+	Start           string
+	Asset           Asset
+	Tools           []Tool
+	InstallsInBuild bool
 }
 
 type Asset struct {
 	Name    string
 	Content string
+}
+
+type Tool struct {
+	Name    string
+	Version string
 }
 
 type behaviour struct {
@@ -201,7 +208,11 @@ func (l Location) Commands() (Commands, error) {
 	case language.Go:
 		commands = l.planGoCommands()
 	case language.Rust:
-		commands = l.planRustCommands()
+		planned, err := l.planRustCommands()
+		if err != nil {
+			return Commands{}, err
+		}
+		commands = planned
 	case language.Python:
 		planned, err := l.planPythonCommands()
 		if err != nil {

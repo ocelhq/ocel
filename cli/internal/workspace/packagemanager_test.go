@@ -1,6 +1,7 @@
 package workspace_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -98,7 +99,7 @@ func TestEachPackageManagerRunsTheAppsOwnScriptsRatherThanTheRoots(t *testing.T)
 			if err != nil {
 				t.Fatalf("Commands() = %v", err)
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Commands() = %+v, want %+v", got, tt.want)
 			}
 		})

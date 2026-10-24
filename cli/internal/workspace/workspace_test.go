@@ -3,6 +3,7 @@ package workspace_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -366,7 +367,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		if err != nil {
 			t.Fatalf("Commands() = %v", err)
 		}
-		if commands != (workspace.Commands{}) {
+		if !reflect.DeepEqual(commands, workspace.Commands{}) {
 			t.Errorf("Commands() = %+v, want railpack left to plan a context that declares no workspace", commands)
 		}
 	})
@@ -637,7 +638,7 @@ func TestAGoAppBuildsItsOwnPackageWithTheModuleItBelongsTo(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Commands() = %v", err)
 			}
-			if commands != (workspace.Commands{Build: tt.build}) {
+			if !reflect.DeepEqual(commands, workspace.Commands{Build: tt.build}) {
 				t.Errorf("Commands() = %+v, want only the build %q — railpack's own go build runs at the context root, which holds no go.mod", commands, tt.build)
 			}
 		})
@@ -678,7 +679,7 @@ func TestAGoAppBuildsItsOwnPackageWithTheModuleItBelongsTo(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Commands() = %v", err)
 			}
-			if commands != (workspace.Commands{Build: tt.build}) {
+			if !reflect.DeepEqual(commands, workspace.Commands{Build: tt.build}) {
 				t.Errorf("Commands() = %+v, want only the build %q", commands, tt.build)
 			}
 		})
@@ -750,7 +751,7 @@ func TestARustAppBuildsAndStartsTheBinaryItsEntrypointNames(t *testing.T) {
 		Build: "mkdir -p bin && cargo build --release --bin worker --target-dir target && cp target/release/worker bin/",
 		Start: "./bin/worker",
 	}
-	if commands != want {
+	if !reflect.DeepEqual(commands, want) {
 		t.Errorf("Commands() = %+v, want %+v — the image builds and runs the binary the function would", commands, want)
 	}
 }
@@ -773,10 +774,11 @@ func TestARustWorkspaceMemberPointedAtItsWorkspaceBuildsTheBinaryWhereItCopiesIt
 		t.Fatalf("Commands() = %v", err)
 	}
 	want := workspace.Commands{
-		Build: "cd crates/api && mkdir -p bin && cargo build --release --bin api --target-dir target && cp target/release/api bin/",
-		Start: "./crates/api/bin/api",
+		Build:           "cd crates/api && mkdir -p bin && cargo build --release --bin api --target-dir ../../target && cp ../../target/release/api bin/",
+		Start:           "./crates/api/bin/api",
+		InstallsInBuild: true,
 	}
-	if commands != want {
+	if !reflect.DeepEqual(commands, want) {
 		t.Errorf("Commands() = %+v, want %+v — a member's cargo build writes to the workspace's target unless told where", commands, want)
 	}
 }
@@ -799,10 +801,11 @@ func TestARustAppInADirectoryWithASpaceBuildsAndStartsItsBinaryThere(t *testing.
 		t.Fatalf("Commands() = %v", err)
 	}
 	want := workspace.Commands{
-		Build: "cd 'my api' && mkdir -p bin && cargo build --release --bin 'api-é' --target-dir target && cp 'target/release/api-é' bin/",
-		Start: "'./my api/bin/api-é'",
+		Build:           "cd 'my api' && mkdir -p bin && cargo build --release --bin 'api-é' --target-dir ../target && cp '../target/release/api-é' bin/",
+		Start:           "'./my api/bin/api-é'",
+		InstallsInBuild: true,
 	}
-	if commands != want {
+	if !reflect.DeepEqual(commands, want) {
 		t.Errorf("Commands() = %+v, want %+v", commands, want)
 	}
 }
@@ -812,7 +815,7 @@ func TestARustAppNamingNoEntrypointIsLeftToRailpack(t *testing.T) {
 	write(t, dir, map[string]string{"Cargo.toml": "[package]\nname = \"server\"\nversion = \"0.1.0\"\n", "src/main.rs": "fn main() {}\n"})
 
 	commands, err := located(t, dir, language.Rust).Commands()
-	if err != nil || commands != (workspace.Commands{}) {
+	if err != nil || !reflect.DeepEqual(commands, workspace.Commands{}) {
 		t.Errorf("Commands() = %+v, %v, want nothing: railpack builds the crate's binaries and starts the one it runs by default", commands, err)
 	}
 }
@@ -827,7 +830,7 @@ func TestAGoAppAtItsModuleRootNamingNoEntrypointIsLeftToRailpackAndOneBelowItBui
 	})
 
 	commands, err := located(t, dir, language.Go).Commands()
-	if err != nil || commands != (workspace.Commands{}) {
+	if err != nil || !reflect.DeepEqual(commands, workspace.Commands{}) {
 		t.Errorf("Commands() = %+v, %v, want nothing: railpack builds cmd/worker, the first command it finds", commands, err)
 	}
 
