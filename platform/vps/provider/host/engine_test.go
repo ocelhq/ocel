@@ -65,9 +65,9 @@ func aLiveProxy(t *testing.T) liveProxy {
 	t.Helper()
 
 	engineOrFail(t)
-	enginetest.HostPorts(t, proxyServing()...)
 	name, network := probeName(t), enginetest.Network(t, "box")
 	tunneling := enginetest.Network(t, "tunnel")
+	enginetest.HostPorts(t, proxyServing()...)
 	board := name + "-board"
 	t.Cleanup(func() { taken(t, name) })
 	t.Cleanup(func() { taken(t, board) })
@@ -109,6 +109,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 		shell.Quote(ProxyNetwork), shell.Quote(network),
 		`"`+ProxyNetwork+`"`, `"`+network+`"`,
 		unprivilegedHere(t), "",
+		shell.Quote("--name"), shell.Words(enginetest.RunLabelArgs(t))+" "+shell.Quote("--name"),
 	).Replace
 
 	taken(t, board)
