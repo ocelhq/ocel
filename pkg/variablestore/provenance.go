@@ -27,7 +27,7 @@ func (s Store) DeleteFromEnvSource(ctx context.Context, scope Scope, at Coordina
 	return s.remove(ctx, scope, at, from, &expected)
 }
 
-func (s Store) ForgetFromEnvSource(ctx context.Context, scope Scope, at Coordinate, from Provenance, version int64) error {
+func (s Store) ForgetFromEnvSource(ctx context.Context, scope Scope, at Coordinate, from Provenance, written Version) error {
 	found, matched := false, false
 	err := records.ForgetMatching(ctx, s.KeyValues, CellKey(scope, at), func(recorded records.Entry) (bool, error) {
 		var stored storedValue
@@ -36,14 +36,20 @@ func (s Store) ForgetFromEnvSource(ctx context.Context, scope Scope, at Coordina
 		}
 		found, matched = true, stored.EnvSource == from.EnvSource && stored.ReadAt.Equal(from.ReadAt)
 		if matched {
-			version = stored.Version
+			written = Version{Version: stored.Version, CreatedAt: stored.UpdatedAt}
 		}
 		return matched, nil
 	})
-	if err != nil || (found && !matched) || version == 0 {
+	if err != nil || (found && !matched) || written.Version == 0 {
 		return err
 	}
-	return records.Forget(ctx, s.KeyValues, versionKey(scope, at, version))
+	return records.ForgetMatching(ctx, s.KeyValues, versionKey(scope, at, written.Version), func(recorded records.Entry) (bool, error) {
+		var version Version
+		if err := json.Unmarshal(recorded.Value, &version); err != nil {
+			return false, fmt.Errorf("read version %d of %s: %w", written.Version, at, err)
+		}
+		return version.Version == written.Version && version.CreatedAt == written.CreatedAt, nil
+	})
 }
 
 type Dereferenced struct {

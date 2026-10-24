@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,15 +23,21 @@ func TestForgettingWhatOneEnvSourceReadCopiedLeavesNothingOfItAndKeepsAnotherRea
 	if _, err := store.SetFromEnvSource(ctx, scope, at("TOKEN"), "later", later, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetFromEnvSource(ctx, scope, at("PURGED"), "stale", stale, 0); err != nil {
+	purged, err := store.SetFromEnvSource(ctx, scope, at("PURGED"), "stale", stale, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := records.Forget(ctx, store.KeyValues, variablestore.CellKey(scope, at("PURGED"))); err != nil {
 		t.Fatal(err)
 	}
 
-	for key, version := range map[string]int64{"API_KEY": 0, "TOKEN": 1, "PURGED": 1, "NEVER_SET": 0} {
-		if err := store.ForgetFromEnvSource(ctx, scope, at(key), stale, version); err != nil {
+	for key, written := range map[string]variablestore.Version{
+		"API_KEY":   {},
+		"TOKEN":     {Version: 1},
+		"PURGED":    {Version: purged.Version, CreatedAt: purged.UpdatedAt},
+		"NEVER_SET": {},
+	} {
+		if err := store.ForgetFromEnvSource(ctx, scope, at(key), stale, written); err != nil {
 			t.Fatalf("ForgetFromEnvSource(%s) = %v", key, err)
 		}
 	}
@@ -51,6 +58,51 @@ func TestForgettingWhatOneEnvSourceReadCopiedLeavesNothingOfItAndKeepsAnotherRea
 	}
 	if token, err := store.Get(ctx, scope, at("TOKEN"), true); err != nil || token.Plaintext != "later" {
 		t.Fatalf("TOKEN = %+v, %v, want the later read's copy kept", token, err)
+	}
+}
+
+type historyReadHook struct {
+	records.Store
+	once   sync.Once
+	before func()
+}
+
+func (h *historyReadHook) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	if slices.Contains(key.Path, "history") {
+		h.once.Do(h.before)
+	}
+	return h.Store.Read(ctx, key)
+}
+
+func TestForgettingAPurgedCopyKeepsTheVersionAWriteRecreatingTheValueRecordedUnderTheSameNumber(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	store.Now = func() time.Time { return now }
+	stale := variablestore.Provenance{EnvSource: "infisical:p/prod", Version: "s1@1", ReadAt: now}
+	copied, err := store.SetFromEnvSource(ctx, scope, at("K"), "stale", stale, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := records.Forget(ctx, store.KeyValues, variablestore.CellKey(scope, at("K"))); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Minute)
+	recreating := store
+	hooked := store
+	hooked.KeyValues = &historyReadHook{Store: store.KeyValues, before: func() {
+		if _, err := recreating.Set(ctx, scope, at("K"), "recreated", nil); err != nil {
+			t.Error(err)
+		}
+	}}
+
+	if err := hooked.ForgetFromEnvSource(ctx, scope, at("K"), stale, variablestore.Version{Version: copied.Version, CreatedAt: copied.UpdatedAt}); err != nil {
+		t.Fatal(err)
+	}
+
+	versions, err := store.Versions(ctx, scope, at("K"))
+	if err != nil || len(versions) != 1 || versions[0].CreatedAt != now.Unix() {
+		t.Fatalf("Versions() = %+v, %v, want the recreating write's version 1 kept", versions, err)
 	}
 }
 

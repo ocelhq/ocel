@@ -20,7 +20,7 @@ type CopyResult struct {
 	Removed   []variablestore.Cell
 	Refused   map[variablestore.Cell]string
 
-	versions map[variablestore.Cell]int64
+	versions map[variablestore.Cell]variablestore.Version
 }
 
 func CopyValues(ctx context.Context, store variablestore.Store, scope variablestore.Scope, key DigestKey, envSource string, readAt time.Time, read map[variablestore.Cell]Value, folders []string, keep []variablestore.Cell) (CopyResult, error) {
@@ -60,7 +60,7 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 		}
 		written, err := store.SetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at}, string(next.Plaintext), variablestore.Provenance{EnvSource: envSource, Version: version, ReadAt: readAt}, expected)
 		if written.Version > 0 {
-			result.recordVersion(at, written.Version)
+			result.recordVersion(at, variablestore.Version{Version: written.Version, CreatedAt: written.UpdatedAt, Size: written.Size})
 		}
 		switch {
 		case err == nil:
@@ -119,9 +119,9 @@ func ClearProvenance(ctx context.Context, store variablestore.Store, scope varia
 	return nil
 }
 
-func (r *CopyResult) recordVersion(at variablestore.Cell, version int64) {
+func (r *CopyResult) recordVersion(at variablestore.Cell, version variablestore.Version) {
 	if r.versions == nil {
-		r.versions = map[variablestore.Cell]int64{}
+		r.versions = map[variablestore.Cell]variablestore.Version{}
 	}
 	r.versions[at] = version
 }
