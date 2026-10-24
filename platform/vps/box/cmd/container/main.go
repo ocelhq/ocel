@@ -70,10 +70,11 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if err != nil {
 		return fatal(err.Error())
 	}
-	internal, err := child.FreePort()
+	internal, release, err := child.ReservePort()
 	if err != nil {
-		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
+		return fatal(fmt.Sprintf("reserve a loopback port for the app: %v", err))
 	}
+	defer release()
 	app := "127.0.0.1:" + strconv.Itoa(internal)
 	var ready atomic.Bool
 	front, err := newFront(pinned, originguard.Options{
@@ -96,6 +97,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env("")...)
 
+	release()
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {
 		return fatal(err.Error())

@@ -52,9 +52,9 @@ func runWorker(ctx context.Context, worker string, served buildoutput.FunctionCo
 		}
 		cfg.queues.Workers[worker] = queues.Worker{Concurrency: concurrency}
 	}
-	port, err := process.FreePort()
+	port, release, err := process.ReservePort()
 	if err != nil {
-		fatalInit(fmt.Sprintf("find a loopback port for worker %q: %v", worker, err))
+		fatalInit(fmt.Sprintf("reserve a loopback port for worker %q: %v", worker, err))
 	}
 	address := "127.0.0.1:" + strconv.Itoa(port)
 	cfg.worker, cfg.workerURL = worker, "http://"+address
@@ -70,6 +70,7 @@ func runWorker(ctx context.Context, worker string, served buildoutput.FunctionCo
 	env := append(os.Environ(), "PORT="+strconv.Itoa(port), "HOST=127.0.0.1", processenv.WorkerEnvVar+"="+worker)
 	env = append(env, childEnv(bakedEnv, values, bound.env)...)
 	command := workerCommand(served.Worker)
+	release()
 	proc, err := process.Start(process.Options{Command: command, Dir: taskRoot(), Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {
 		fatalInit(fmt.Sprintf("start worker %q: %v", worker, err))
