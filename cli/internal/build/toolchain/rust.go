@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/cargo"
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/pkg/arch"
 )
 
@@ -53,10 +55,18 @@ func (c Compilation) compileRust(ctx context.Context) error {
 		"--manifest-path", crate.ManifestPath, "--bin", bin.Name, "--target", target)
 	cmd.Dir = workspace.Root
 	cmd.Env = c.environ("CARGO_PROFILE_RELEASE_STRIP=symbols")
-	linker := "CARGO_TARGET_" + strings.ToUpper(strings.ReplaceAll(target, "-", "_")) + "_LINKER"
-	_, declared := c.Env[linker]
-	if _, set := os.LookupEnv(linker); !set && !declared && !cargoConfigNamesLinker(workspace.Root, target) {
-		cmd.Env = append(cmd.Env, linker+"="+rustLinker)
+	config := readCargoConfig(workspace.Root, target)
+	linkerVariable := "CARGO_TARGET_" + strings.ToUpper(strings.ReplaceAll(target, "-", "_")) + "_LINKER"
+	linker, set := lookupEnviron(cmd.Env, linkerVariable)
+	if !set {
+		linker = config.linker
+	}
+	if !set && linker == "" {
+		linker = rustLinker
+		cmd.Env = append(cmd.Env, linkerVariable+"="+rustLinker)
+	}
+	if err := c.refuseCWithNoCompiler(ctx, workspace.Root, crate, target, linker, config, cmd.Env); err != nil {
+		return err
 	}
 	var said bytes.Buffer
 	cmd.Stdout = &said
@@ -76,7 +86,79 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, []string{"./" + c.App}, c.FunctionDir, c.AppDir)
 }
 
-func cargoConfigNamesLinker(workspaceRoot, target string) bool {
+func (c Compilation) refuseCWithNoCompiler(ctx context.Context, workspaceRoot string, crate cargo.Package, target, linker string, config cargoConfig, environ []string) error {
+	compilers := listMuslCCompilers(target)
+	if namesCCompiler(target, linker, config, environ, compilers) || isRustHost(ctx, workspaceRoot, target, environ) {
+		return nil
+	}
+	crates, err := cargo.ListPackagesBuildingC(ctx, workspaceRoot, crate.ManifestPath, target, environ)
+	if err != nil || len(crates) == 0 {
+		return nil
+	}
+	return fmt.Errorf("app %q compiles C for %s in %s %s, and no C compiler for that target is on PATH: install %s, or set CC_%s to one",
+		c.App, target, english.Number(len(crates), "the crate", "the crates"), english.And(crates), english.Or(compilers), strings.ReplaceAll(target, "-", "_"))
+}
+
+func listMuslCCompilers(target string) []string {
+	architecture, _, _ := strings.Cut(target, "-")
+	compilers := []string{architecture + "-linux-musl-gcc"}
+	if architecture == "x86_64" {
+		compilers = append(compilers, "musl-gcc")
+	}
+	return compilers
+}
+
+func namesCCompiler(target, linker string, config cargoConfig, environ, compilers []string) bool {
+	for _, name := range []string{"CC_" + target, "CC_" + strings.ReplaceAll(target, "-", "_"), "TARGET_CC", "CC", "CROSS_COMPILE"} {
+		if value, _ := lookupEnviron(environ, name); strings.TrimSpace(value) != "" || config.env[name] {
+			return true
+		}
+	}
+	if strings.HasSuffix(linker, "-gcc") {
+		return true
+	}
+	path, _ := lookupEnviron(environ, "PATH")
+	for _, dir := range filepath.SplitList(path) {
+		for _, compiler := range compilers {
+			if _, err := os.Stat(filepath.Join(dir, compiler)); err == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isRustHost(ctx context.Context, workspaceRoot, target string, environ []string) bool {
+	rustc, set := lookupEnviron(environ, "RUSTC")
+	if !set || rustc == "" {
+		rustc = "rustc"
+	}
+	cmd := exec.Command(rustc, "-vV")
+	cmd.Dir = workspaceRoot
+	cmd.Env = environ
+	var said bytes.Buffer
+	cmd.Stdout = &said
+	if childprocess.Run(ctx, cmd) != nil {
+		return false
+	}
+	return slices.Contains(strings.Split(said.String(), "\n"), "host: "+target)
+}
+
+func lookupEnviron(environ []string, name string) (string, bool) {
+	for _, entry := range slices.Backward(environ) {
+		if key, value, _ := strings.Cut(entry, "="); key == name {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+type cargoConfig struct {
+	linker string
+	env    map[string]bool
+}
+
+func readCargoConfig(workspaceRoot, target string) cargoConfig {
 	var configs []string
 	for dir := workspaceRoot; ; dir = filepath.Dir(dir) {
 		configs = append(configs, filepath.Join(dir, ".cargo", "config.toml"), filepath.Join(dir, ".cargo", "config"))
@@ -93,6 +175,7 @@ func cargoConfigNamesLinker(workspaceRoot, target string) bool {
 	if home != "" {
 		configs = append(configs, filepath.Join(home, "config.toml"), filepath.Join(home, "config"))
 	}
+	read := cargoConfig{env: map[string]bool{}}
 	for _, path := range configs {
 		body, err := os.ReadFile(path)
 		if err != nil {
@@ -102,10 +185,17 @@ func cargoConfigNamesLinker(workspaceRoot, target string) bool {
 			Target map[string]struct {
 				Linker string `toml:"linker"`
 			} `toml:"target"`
+			Env map[string]any `toml:"env"`
 		}
-		if toml.Unmarshal(body, &config) == nil && config.Target[target].Linker != "" {
-			return true
+		if toml.Unmarshal(body, &config) != nil {
+			continue
+		}
+		if read.linker == "" {
+			read.linker = config.Target[target].Linker
+		}
+		for name := range config.Env {
+			read.env[name] = true
 		}
 	}
-	return false
+	return read
 }
