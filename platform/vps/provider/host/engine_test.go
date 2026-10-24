@@ -125,17 +125,27 @@ func aLiveProxy(t *testing.T) liveProxy {
 
 func unprivilegedHere(t *testing.T) string {
 	t.Helper()
-	if pinnable() {
+	if pinnable(t) {
 		return ""
 	}
 	t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard runs here without it")
 	return shell.Quote("--security-opt") + " " + shell.Quote(docker.NoNewPrivileges) + " "
 }
 
-var pinnable = sync.OnceValue(func() bool {
-	said, err := exec.Command(dockerEngine, "run", "--rm", "--security-opt", docker.NoNewPrivileges, "--entrypoint", "/bin/true", caddy.Image()).CombinedOutput()
-	return err == nil || !strings.Contains(string(said), "operation not permitted")
-})
+var pinned struct {
+	once     sync.Once
+	pinnable bool
+}
+
+func pinnable(t *testing.T) bool {
+	t.Helper()
+	run := append([]string{"run", "--rm"}, enginetest.RunLabelArgs(t)...)
+	pinned.once.Do(func() {
+		said, err := exec.Command(dockerEngine, append(run, "--security-opt", docker.NoNewPrivileges, "--entrypoint", "/bin/true", caddy.Image())...).CombinedOutput()
+		pinned.pinnable = err == nil || !strings.Contains(string(said), "operation not permitted")
+	})
+	return pinned.pinnable
+}
 
 func taken(t *testing.T, name string) {
 	t.Helper()
@@ -472,9 +482,9 @@ func (p liveProxy) runsSlowApp(t *testing.T, upstream string, slow time.Duration
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	answer := fmt.Sprintf(`while read -r line && [ "$line" != "$(printf '\r')" ]; do :; done; sleep %d; printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'`,
 		int(slow.Seconds()))
-	out, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
-		"--network", p.network, "--entrypoint", "nc", caddy.Image(),
-		"-lk", "-p", containerimage.PortText, "-e", "sh", "-c", answer).CombinedOutput()
+	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
+	out, err := exec.Command(dockerEngine, append(run, "--network", p.network, "--entrypoint", "nc", caddy.Image(),
+		"-lk", "-p", containerimage.PortText, "-e", "sh", "-c", answer)...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
