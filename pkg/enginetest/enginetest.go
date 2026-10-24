@@ -29,10 +29,10 @@ const (
 )
 
 var (
-	run     = runOf(hostname(), os.Getpid())
-	engaged atomic.Bool
-	begun   sync.Once
-	silent  string
+	run           = runOf(hostname(), os.Getpid())
+	engaged       atomic.Bool
+	begun         sync.Once
+	dockerMissing string
 )
 
 func hostname() string {
@@ -65,21 +65,21 @@ func Main(m *testing.M) int {
 
 func RunLabelArgs(t *testing.T) []string {
 	t.Helper()
-	requireDocker(t)
+	RequireDocker(t)
 	return labelledAs(run)
 }
 
 func labelledAs(of string) []string { return []string{"--label", runLabel + "=" + of} }
 
-func requireDocker(t *testing.T) {
+func RequireDocker(t *testing.T) {
 	t.Helper()
 	begun.Do(func() {
 		if _, err := exec.LookPath(engine); err != nil {
-			silent = "this machine has no docker, so nothing can run on an engine that is not here"
+			dockerMissing = "this machine has no docker, so nothing can run on an engine that is not here"
 			return
 		}
 		if err := exec.Command(engine, "info").Run(); err != nil {
-			silent = "the docker on this machine answers nothing, so nothing can run on it"
+			dockerMissing = "the docker on this machine answers nothing, so nothing can run on it"
 			return
 		}
 		engaged.Store(true)
@@ -87,8 +87,8 @@ func requireDocker(t *testing.T) {
 			fmt.Fprintf(os.Stderr, "a run that ended without clearing up left what this one could not take either:\n%v\n", err)
 		}
 	})
-	if silent != "" {
-		t.Skip(silent)
+	if dockerMissing != "" {
+		t.Fatal(dockerMissing)
 	}
 }
 
@@ -229,26 +229,26 @@ func uniqueName(what string) string {
 	return rootPrefix + what + "-" + hex.EncodeToString(suffix[:])
 }
 
-type onceOrSkip[T any] struct {
+type onceOrFail[T any] struct {
 	once    sync.Once
 	value   T
 	refused string
 }
 
-func (l *onceOrSkip[T]) get(t *testing.T, provision func() (T, string)) T {
+func (l *onceOrFail[T]) get(t *testing.T, provision func() (T, string)) T {
 	t.Helper()
 	l.once.Do(func() { l.value, l.refused = provision() })
 	if l.refused != "" {
-		t.Skip(l.refused)
+		t.Fatal(l.refused)
 	}
 	return l.value
 }
 
-var bound onceOrSkip[string]
+var bound onceOrFail[string]
 
 func BindSource(t *testing.T) string {
 	t.Helper()
-	requireDocker(t)
+	RequireDocker(t)
 	root := bound.get(t, rootSeenByTheEngine)
 	dir, err := os.MkdirTemp(root, "test-")
 	if err != nil {

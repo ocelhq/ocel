@@ -28,7 +28,7 @@ var lease slotLease
 
 func Network(t *testing.T, role string) string {
 	t.Helper()
-	requireDocker(t)
+	RequireDocker(t)
 	lease.once.Do(func() {
 		dir, err := slotDir()
 		if err != nil {
@@ -45,11 +45,11 @@ func Network(t *testing.T, role string) string {
 		}
 	})
 	if lease.refused != "" {
-		t.Skip(lease.refused)
+		t.Fatal(lease.refused)
 	}
 	name, err := slotNetwork(lease.slot, role)
 	if err != nil {
-		t.Skipf("this machine's engine will not provide the %s network the run's containers resolve each other across: %v", role, err)
+		t.Fatalf("this machine's engine will not provide the %s network the run's containers resolve each other across: %v", role, err)
 	}
 	return name
 }

@@ -1,3 +1,5 @@
+//go:build integration
+
 package host
 
 import (
@@ -32,15 +34,10 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
-func engineOrSkip(t *testing.T) {
+func engineOrFail(t *testing.T) {
 	t.Helper()
 
-	if _, err := exec.LookPath(dockerEngine); err != nil {
-		t.Skip("this machine has no docker, and what an engine reports cannot be read off one that is not here")
-	}
-	if err := exec.Command(dockerEngine, "info").Run(); err != nil {
-		t.Skip("the docker on this machine answers nothing, so there is no engine to measure against")
-	}
+	enginetest.RequireDocker(t)
 	for _, existing := range []struct{ kind, name, take string }{
 		{"container", caddy.Container, "docker rm --force " + caddy.Container},
 		{"container", boxapi.Switchboard, "docker rm --force " + boxapi.Switchboard},
@@ -67,7 +64,7 @@ type liveProxy struct {
 func aLiveProxy(t *testing.T) liveProxy {
 	t.Helper()
 
-	engineOrSkip(t)
+	engineOrFail(t)
 	name, network := probeName(t), enginetest.Network(t, "box")
 	tunneling := enginetest.Network(t, "tunnel")
 	board := name + "-board"
@@ -319,7 +316,7 @@ func (p liveProxy) runsApp(t *testing.T, upstream, body string) {
 	out, err := exec.Command(dockerEngine, append(run, "--network", p.network, caddy.Image(),
 		"caddy", "respond", "--listen", ":"+containerimage.PortText, body)...).CombinedOutput()
 	if err != nil {
-		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
+		t.Fatalf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 }
@@ -479,7 +476,7 @@ func (p liveProxy) runsSlowApp(t *testing.T, upstream string, slow time.Duration
 		"--network", p.network, "--entrypoint", "nc", caddy.Image(),
 		"-lk", "-p", containerimage.PortText, "-e", "sh", "-c", answer).CombinedOutput()
 	if err != nil {
-		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
+		t.Fatalf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 }

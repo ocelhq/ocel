@@ -1,3 +1,5 @@
+//go:build integration
+
 package pgmq
 
 import (
@@ -19,10 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/topic/v1/topicv1connect"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
-
-func aTopic(consumers ...*contractv1.ManifestConsumer) *contractv1.ManifestTopic {
-	return &contractv1.ManifestTopic{Consumers: consumers}
-}
 
 func send(t *testing.T, engine *Engine, topic, payload string, req *topicv1.SendRequest) string {
 	t.Helper()

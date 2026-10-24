@@ -1,3 +1,5 @@
+//go:build integration
+
 package host
 
 import (
@@ -155,7 +157,7 @@ func appOn(t *testing.T, network, named, body string) string {
 	out, err := exec.Command(dockerEngine, append(run, "--network", network, caddy.Image(),
 		"caddy", "respond", "--listen", ":"+containerimage.PortText, body)...).CombinedOutput()
 	if err != nil {
-		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
+		t.Fatalf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 	return name + ":" + containerimage.PortText

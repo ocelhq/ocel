@@ -743,3 +743,33 @@ func TestABrowserUploadIsBoundedByPolicyWhereTheStoreSignsOne(t *testing.T) {
 		t.Fatalf("fields include Content-Type %q, and a policy conditioned on one refuses a form that omits it", got)
 	}
 }
+
+func TestMetadataBeyondTheCapIsRefusedBeforeItIsSigned(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, nil)
+
+	big := make([]byte, 2048)
+	for i := range big {
+		big[i] = 'a'
+	}
+	_, err := h.svc.Sign(context.Background(), &bucketv1.SignRequest{
+		Bucket:    "store",
+		Key:       "big.txt",
+		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_PUT,
+		Constraints: &bucketv1.SignConstraints{
+			Metadata: map[string]string{"blob": string(big)},
+		},
+	})
+	if err == nil {
+		t.Fatal("Sign took metadata past the 2 KB a store will accept")
+	}
+
+	_, err = h.svc.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{
+		Bucket:   "store",
+		Key:      "big.txt",
+		Metadata: map[string]string{"blob": string(big)},
+	})
+	if err == nil {
+		t.Fatal("CreateMultipart took metadata past the 2 KB a store will accept")
+	}
+}

@@ -22,7 +22,7 @@ type ObjectStore struct {
 }
 
 var (
-	store   onceOrSkip[ObjectStore]
+	store   onceOrFail[ObjectStore]
 	buckets = taken{by: map[string]string{}}
 )
 
