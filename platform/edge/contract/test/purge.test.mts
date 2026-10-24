@@ -97,6 +97,34 @@ describe("purgeHeaderFor", () => {
     );
   });
 
+  it("writes when each invalidated tag expires, one group per expire", () => {
+    const entries = [
+      { tag: "a", mode: "invalidate" as const, raisedAt: 1, expiresAt: 61_000 },
+      { tag: "b", mode: "invalidate" as const, raisedAt: 1 },
+      { tag: "c", mode: "invalidate" as const, raisedAt: 1, expiresAt: 61_000 },
+      { tag: "d", mode: "purge" as const, raisedAt: 2 },
+    ];
+
+    expect(purgeHeaderFor("r0a1b2c3d", entries)).toBe(
+      "purge r0a1b2c3d|d invalidate;expires=61000 r0a1b2c3d|a,r0a1b2c3d|c invalidate r0a1b2c3d|b",
+    );
+  });
+
+  it("writes a fractional expire as the next whole millisecond, and keeps every group readable", () => {
+    const entries = [
+      { tag: "users", mode: "purge" as const, raisedAt: 1.5 },
+      { tag: "posts", mode: "invalidate" as const, raisedAt: 1.5, expiresAt: 61_000.25 },
+    ];
+
+    const header = purgeHeaderFor("r0a1b2c3d", entries)!;
+
+    expect(header).toBe("purge r0a1b2c3d|users invalidate;expires=61001 r0a1b2c3d|posts");
+    expect(readPurge(header)).toEqual([
+      { mode: "purge", tags: ["r0a1b2c3d|users"] },
+      { mode: "invalidate", tags: ["r0a1b2c3d|posts"], expiresAt: 61_001 },
+    ]);
+  });
+
   it("writes no header for no entries", () => {
     expect(purgeHeaderFor("r0a1b2c3d", [])).toBeUndefined();
   });
@@ -303,6 +331,15 @@ describe("readPurgeEntry", () => {
     });
   });
 
+  it("reads a fractional expire as the next whole millisecond", () => {
+    expect(readPurgeEntry("home", { stale: 200.5, expired: 90_000.25 }, now)).toEqual({
+      tag: "home",
+      mode: "invalidate",
+      raisedAt: 200.5,
+      expiresAt: 90_001,
+    });
+  });
+
   it("reads a tag stale now and expiring later as an invalidate raised when it went stale, expiring when the tag does", () => {
     expect(readPurgeEntry("home", { stale: 200, expired: 90_000 }, now)).toEqual({
       tag: "home",
@@ -383,11 +420,27 @@ describe("the x-ocel-purge header", () => {
     expect(readPurge(formatPurge(groups)!)).toEqual(groups);
   });
 
+  it("reads a fractional expire another writer sent as the next whole millisecond", () => {
+    expect(readPurge("invalidate;expires=61000.5 r0a1b2c3d|a")).toEqual([
+      { mode: "invalidate", tags: ["r0a1b2c3d|a"], expiresAt: 61_001 },
+    ]);
+  });
+
+  it("writes when an invalidate expires as '<mode>;expires=<ms> <tag>', and reads it back", () => {
+    const groups = [{ mode: "invalidate" as const, tags: ["r0a1b2c3d|a"], expiresAt: 61_000 }];
+
+    expect(formatPurge(groups)).toBe("invalidate;expires=61000 r0a1b2c3d|a");
+    expect(readPurge(formatPurge(groups)!)).toEqual(groups);
+  });
+
   it.each([
     ["an unknown mode", "evict r0a1b2c3d|a"],
     ["a mode with no tags", "purge"],
     ["a tag list with no mode", "r0a1b2c3d|a"],
     ["an empty value", ""],
+    ["a purge that expires", "purge;expires=61000 r0a1b2c3d|a"],
+    ["a negative expire", "invalidate;expires=-1 r0a1b2c3d|a"],
+    ["an expire that is no time", "invalidate;expires=soon r0a1b2c3d|a"],
   ])("reads %s as no purge", (_name, value) => {
     expect(readPurge(value)).toEqual([]);
   });

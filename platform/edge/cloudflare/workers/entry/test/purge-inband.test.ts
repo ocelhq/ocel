@@ -66,6 +66,16 @@ describe("a purge the origin announced in-band", () => {
     expect(recorded).toEqual([{ mode: "invalidate", tags: [{ tag: "r1|a", raisedAt: 5_000 }] }]);
   });
 
+  it("records when each invalidation the origin announced expires, and hands it to the purge queue", async () => {
+    const { port, recorded, raised } = ports(() => refused);
+
+    await purgeInBand([{ mode: "invalidate", tags: ["r1|a"], expiresAt: 65_000 }], port);
+
+    const tags = [{ tag: "r1|a", raisedAt: 5_000, expiresAt: 65_000 }];
+    expect(recorded).toEqual([{ mode: "invalidate", tags }]);
+    expect(raised).toEqual([{ mode: "invalidate", tags }]);
+  });
+
   it("purges nothing itself when the times cannot be recorded, and hands the tags to the purge queue, which records before it purges", async () => {
     const { port, purged, raised } = ports();
     port.times.record = async () => {
