@@ -87,7 +87,7 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 	if err != nil {
 		failed = append(failed, err)
 	}
-	if err := forgetRemovalsBefore(ctx, s.Store.KeyValues, removals, s.now().Add(-2*s.budget())); err != nil {
+	if err := expireRemovals(ctx, s.Store.KeyValues, removals, s.now(), 2*s.budget()); err != nil {
 		failed = append(failed, err)
 	}
 	for _, registration := range registrations {
@@ -227,9 +227,9 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 	results := make([]CopyResult, 0, len(group))
 	for _, registration := range group {
 		result, err := CopyValues(ctx, s.Store, s.scope(registration), digestKey, source.ID(), readAt, read, registration.Folders, registration.Credentials())
-		if len(result.Written) > 0 {
+		if len(result.versions) > 0 || err != nil {
 			from := variablestore.Provenance{EnvSource: source.ID(), ReadAt: readAt}
-			err = errors.Join(err, s.forgetCopiesIntoRemoved(ctx, s.scope(registration), from, result.Written))
+			err = errors.Join(err, s.forgetCopiesIntoRemoved(ctx, s.scope(registration), from, result))
 		}
 		if err != nil {
 			return nil, nil, err
@@ -245,15 +245,15 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 	return results, urls, nil
 }
 
-func (s *Sync) forgetCopiesIntoRemoved(ctx context.Context, scope variablestore.Scope, from variablestore.Provenance, written []variablestore.Cell) error {
+func (s *Sync) forgetCopiesIntoRemoved(ctx context.Context, scope variablestore.Scope, from variablestore.Provenance, copied CopyResult) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), removedCopiesTimeout)
 	defer cancel()
 	removed, err := isRemoved(ctx, s.Store.KeyValues, scope.Tier, scope.Project)
 	if err != nil || !removed {
 		return err
 	}
-	for _, at := range written {
-		if err := s.Store.ForgetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at}, from); err != nil {
+	for _, at := range copied.Present {
+		if err := s.Store.ForgetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at}, from, copied.versions[at]); err != nil {
 			return fmt.Errorf("forget what this sync copied into %s after its removal: %w", scope.Project, err)
 		}
 	}

@@ -75,11 +75,11 @@ func removalKey(tier environment.Tier, project string) records.Key {
 }
 
 type removal struct {
-	RemovedAt time.Time `json:"removedAt"`
+	SeenAt time.Time `json:"seenAt,omitzero"`
 }
 
-func recordRemoval(ctx context.Context, store records.Store, tier environment.Tier, project string, at time.Time) error {
-	encoded, err := json.Marshal(removal{RemovedAt: at})
+func recordRemoval(ctx context.Context, store records.Store, tier environment.Tier, project string) error {
+	encoded, err := json.Marshal(removal{})
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func isRemoved(ctx context.Context, store records.Store, tier environment.Tier, 
 	return err == nil, err
 }
 
-func forgetRemovalsBefore(ctx context.Context, store records.Store, removals []records.Entry, before time.Time) error {
+func expireRemovals(ctx context.Context, store records.Store, removals []records.Entry, now time.Time, after time.Duration) error {
 	var failed []error
 	for _, recorded := range removals {
 		var removed removal
@@ -104,7 +104,13 @@ func forgetRemovalsBefore(ctx context.Context, store records.Store, removals []r
 			failed = append(failed, fmt.Errorf("read %s: %w", recorded.Key, err))
 			continue
 		}
-		if !removed.RemovedAt.Before(before) {
+		if removed.SeenAt.IsZero() {
+			if err := markRemovalSeen(ctx, store, recorded, now); err != nil {
+				failed = append(failed, err)
+			}
+			continue
+		}
+		if now.Sub(removed.SeenAt) <= after {
 			continue
 		}
 		if err := records.ForgetMatching(ctx, store, recorded.Key, func(current records.Entry) (bool, error) {
@@ -114,6 +120,18 @@ func forgetRemovalsBefore(ctx context.Context, store records.Store, removals []r
 		}
 	}
 	return errors.Join(failed...)
+}
+
+func markRemovalSeen(ctx context.Context, store records.Store, recorded records.Entry, at time.Time) error {
+	encoded, err := json.Marshal(removal{SeenAt: at})
+	if err != nil {
+		return err
+	}
+	recorded.Value = encoded
+	if _, err := store.Write(ctx, recorded); err != nil && !errors.Is(err, records.ErrStale) {
+		return fmt.Errorf("record %s: %w", recorded.Key, err)
+	}
+	return nil
 }
 
 func Register(ctx context.Context, store variablestore.Store, tier environment.Tier, registration Registration) (Registration, error) {
@@ -139,6 +157,9 @@ func Register(ctx context.Context, store variablestore.Store, tier environment.T
 		return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
 	}
 	if err != nil {
+		return Registration{}, err
+	}
+	if err := records.Forget(ctx, store.KeyValues, removalKey(tier, registration.Project)); err != nil {
 		return Registration{}, err
 	}
 	return registration, moveSharer(ctx, store.KeyValues, tier, registration.Project, previous.DedupeKey, key)
@@ -284,7 +305,7 @@ func readRegistrations(ctx context.Context, store records.Store, tier environmen
 }
 
 func ScheduledProjects(ctx context.Context, store records.Store, tier environment.Tier) ([]string, error) {
-	registrations, err := Registrations(ctx, store, tier)
+	registrations, removals, err := readRegistrations(ctx, store, tier)
 	if registrations == nil {
 		return nil, err
 	}
@@ -294,5 +315,9 @@ func ScheduledProjects(ctx context.Context, store records.Store, tier environmen
 			projects = append(projects, registration.Project)
 		}
 	}
-	return projects, nil
+	for _, removed := range removals {
+		projects = append(projects, removed.Key.Path[0])
+	}
+	slices.Sort(projects)
+	return slices.Compact(projects), nil
 }
