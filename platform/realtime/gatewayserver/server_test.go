@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -502,9 +501,13 @@ func TestReadyAnswersOnlyWhileTheGatewayListens(t *testing.T) {
 func TestReadyFailsWhenWhatAnswersOnItsPortIsNoGateway(t *testing.T) {
 	t.Parallel()
 
-	stranger := httptest.NewServer(http.NotFoundHandler())
-	t.Cleanup(stranger.Close)
-	if err := probeReady(stranger.Listener.Addr().String()); err == nil {
+	stranger, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stranger.Close() })
+	go func() { _ = http.Serve(stranger, http.NotFoundHandler()) }()
+	if err := probeReady(stranger.Addr().String()); err == nil {
 		t.Error("probeReady against a server that is no gateway = nil, want an error")
 	}
 
