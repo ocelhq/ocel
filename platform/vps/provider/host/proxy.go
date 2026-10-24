@@ -259,12 +259,11 @@ func containerProbe(s docker.Service) string {
 }
 
 func containerMountsProbe(s docker.Service) string {
-	asked := append([]string{"docker", "exec", s.Name}, s.Inodes...)
+	asked := append([]string{"docker", "exec", s.Name}, s.MountInodesCommand()...)
 	var compared string
 	for _, bind := range s.Binds {
 		source, dest, _ := strings.Cut(bind, ":")
 		dest, _, _ = strings.Cut(dest, ":")
-		asked = append(asked, dest)
 		compared += "if outside=$(stat -c %d:%i " + shell.Quote(source) + " 2>/dev/null) && " +
 			"! printf '%s\\n' \"$inside\" | grep -Fqx -- " + shell.Quote(dest) + "\" $outside\"; then mounts=" + docker.MountsMoved + "; fi\n"
 	}

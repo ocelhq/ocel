@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/machine"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -37,8 +38,9 @@ func grants(tier environment.Tier, arch string, fronting front.Proxy) []Grant {
 			Detail: "the line is\n\n      " + strings.TrimSpace(string(line.Content)) +
 				"\n\n    and " + deployer.name + " is in no group that reaches the docker socket, which docker documents as root-level (https://docs.docker.com/engine/install/linux-postinstall/). " +
 				"The " + DockerShim + " on its PATH hands every docker command to that check, which refuses what reaches the host: privileged or device access, a host namespace, a capability past the ones ocel's containers use, a published port beyond loopback, " +
-				"a mount of anything but the directories " + boxapi.DockerGrantsPath + " lists under a path only root can change, a network not ocel's or granted, exec into a container ocel does not run, and any file it reads or writes outside " + boxapi.StateRoot + ". " +
+				"a mount of anything but the directories " + boxapi.DockerGrantsPath + " lists under a path only root can change, a network not ocel's or granted, exec into a container ocel does not run, any command in " + caddy.Container + " but the ones ocel runs there, and any file it reads or writes outside " + boxapi.StateRoot + ". " +
 				"An adopted proxy whose container mounts the docker socket reads the config this login writes for it, and through that config can reach the socket. " +
+				ownProxyKeys(fronting) +
 				"Bootstrap uses a docker " + engineFloor + " or later it finds, or installs the daemon from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
 		})
 	}
@@ -123,6 +125,13 @@ func sealing(items []machine.Item, tier environment.Tier, deployer login) []Gran
 		Detail: fmt.Sprintf("root-owned at %04o, created on this machine and never leaves it; %s uses it through ocel-live seal and cannot read the %s key. It is never rotated; `ocel bootstrap destroy %s` removes it with the tier",
 			key.Mode, deployer.name, machine.SealAlgorithm, tier),
 	}}
+}
+
+func ownProxyKeys(fronting front.Proxy) string {
+	if fronting.Adopted() {
+		return ""
+	}
+	return "Ocel's own proxy reads the pinned keys and the keys of the certificates it obtains, and loads the config this login writes for it, so through that config this login can reach those keys. "
 }
 
 func written(items []machine.Item, kind, name string) machine.Item {

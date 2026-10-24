@@ -13,10 +13,12 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
 	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/machine"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
@@ -45,7 +47,10 @@ func composedArgvs(fronting front.Proxy) map[string][]string {
 		"a resource's readiness":       append([]string{"docker", "exec", resourced().Name}, "pg_isready"),
 		"a credential reasserted":      append([]string{"docker", "exec", "--interactive", resourced().Name}, "psql"),
 		"the proxy's readiness":        frontProxy().Readiness(),
-		"the proxy's mounts, compared": append([]string{"docker", "exec", caddy.Container}, frontProxy().Inodes...),
+		"the proxy's mounts, compared": append([]string{"docker", "exec", caddy.Container}, frontProxy().MountInodesCommand()...),
+	}
+	for what, argv := range ranInsideOcelsProxy() {
+		argvs[what] = argv
 	}
 	if placed := routing.Destination(fronting.Front().Open(frontBox{})); placed != "" {
 		argvs["a placement"] = routing.Placement(filepath.Dir(placed), "origin-group")
@@ -55,6 +60,59 @@ func composedArgvs(fronting front.Proxy) map[string][]string {
 		argvs["the adopted proxy's reload"] = []string{"docker", "exec", fronting.Caddy.Container, "caddy", "reload"}
 	}
 	return argvs
+}
+
+type recordingProxyBox struct{ ran map[string][]string }
+
+func (b recordingProxyBox) Ran(_ context.Context, what string, argv []string) (string, error) {
+	b.ran[what] = argv
+	return "", nil
+}
+
+func (b recordingProxyBox) Said(_ context.Context, argv []string) (string, error) {
+	b.ran[strings.Join(argv, " ")] = argv
+	return "", nil
+}
+
+func ranInsideOcelsProxy() map[string][]string {
+	box := recordingProxyBox{ran: map[string][]string{}}
+	ctx := context.Background()
+	builtin := caddy.Builtin{Box: box}
+	_ = builtin.Reload(ctx, proxy.Spec{})
+	_, _ = builtin.Inspect(ctx)
+	inside := map[string][]string{}
+	for what, argv := range box.ran {
+		if len(argv) > 2 && argv[0] == "docker" && argv[1] == "exec" {
+			inside[what] = argv
+		}
+	}
+	return inside
+}
+
+func TestTheDeployLoginRunsNothingInsideOcelsProxyButTheCommandsOcelRunsThere(t *testing.T) {
+	t.Parallel()
+
+	if len(ranInsideOcelsProxy()) < 2 {
+		t.Fatalf("ocel's proxy ran %v inside its container, want its reload and its listeners read", ranInsideOcelsProxy())
+	}
+	if probe := containerMountsProbe(frontProxy()); !strings.Contains(probe, shell.Words(append([]string{"docker", "exec", caddy.Container}, frontProxy().MountInodesCommand()...))) {
+		t.Fatalf("the mounts probe runs\n%s\nwhich is not the command the grants name", probe)
+	}
+	policy := dockerpolicy.Policy{DockerGrants: dockerGrants(front.Proxy{}), Inspect: everyContainerOcels{}, Ancestors: func(string) error { return nil }}
+	key := caddy.PinsMount + "/shop.key"
+	for _, argv := range [][]string{
+		{"exec", caddy.Container, "cat", key},
+		{"exec", caddy.Container, "sh", "-c", "cat " + key},
+		{"exec", "--interactive", caddy.Container, "sh"},
+		{"exec", caddy.Container, "caddy", "reload", "--config", key},
+		{"exec", caddy.Container, "stat", "-c", "%n %d:%i", key},
+	} {
+		inv, err := policy.Open(context.Background(), argv)
+		inv.Close()
+		if err == nil {
+			t.Errorf("docker %s was let through, and %s mounts the pinned keys and its own", strings.Join(argv, " "), caddy.Container)
+		}
+	}
 }
 
 func TestEveryDockerCommandADeployComposesIsOneTheCheckLetsThrough(t *testing.T) {

@@ -103,6 +103,7 @@ The docker check refuses:
 - a port published beyond loopback;
 - the default bridge, and a network that is neither Ocel's nor your proxy's `network`;
 - `exec` and `rename` on a container Ocel does not run;
+- `exec` into `ocel-proxy` of anything but the commands Ocel runs there;
 - a named volume that binds a host path, and a bind mount outside the directories
   `/etc/ocel/docker.json` lists.
 
@@ -112,6 +113,10 @@ previews must not reach production, give each tier its own box.
 An adopted proxy whose container mounts the docker socket (Coolify's and Dokploy's do) reads the
 config `ocel-deploy` writes for it, so on such a box the deploy login can reach the socket
 through it.
+
+Ocel's own proxy reads the keys under `/etc/ocel/certs` and the keys of the certificates it
+obtains, and loads the config `ocel-deploy` writes for it, so the deploy login can reach those
+keys through that config.
 
 ## Domains and certificates
 

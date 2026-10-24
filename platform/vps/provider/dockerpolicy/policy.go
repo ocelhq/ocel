@@ -386,6 +386,12 @@ func (p Policy) exec(ctx context.Context, args []string) (Invocation, error) {
 		return Invocation{}, refuse("docker exec names no container and command")
 	}
 	container := operands[0]
+	if commands, limited := p.Commands[container]; limited {
+		if !slices.ContainsFunc(commands, func(command []string) bool { return slices.Equal(args, append([]string{container}, command...)) }) {
+			return Invocation{}, refuse("%s runs only the commands ocel runs inside it, exactly as bootstrap granted them", container)
+		}
+		return inv, nil
+	}
 	if slices.Contains(p.Containers, container) {
 		return inv, nil
 	}
