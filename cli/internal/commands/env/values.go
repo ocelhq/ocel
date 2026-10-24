@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"text/tabwriter"
+	"strconv"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -250,10 +250,11 @@ func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key stri
 		if err != nil {
 			return err
 		}
-		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		present := dependencies.Presentation(stdout)
+		if present.Format == terminal.FormatJSON {
 			return writeEnvHistoryJSON(stdout, req, resp.GetVersions())
 		}
-		renderVersions(stdout, describeCell(key, opts), resp.GetVersions())
+		renderVersions(stdout, present, describeCell(key, opts), resp.GetVersions())
 		return nil
 	})
 }
@@ -270,15 +271,18 @@ func writeEnvHistoryJSON(stdout io.Writer, req *variablestorev1.ListVersionsRequ
 	return terminal.WriteResultJSON(stdout, result)
 }
 
-func renderVersions(stdout io.Writer, cell string, versions []*variablestorev1.VersionEntry) {
+func renderVersions(stdout io.Writer, present terminal.Presentation, cell string, versions []*variablestorev1.VersionEntry) {
 	if len(versions) == 0 {
 		fmt.Fprintf(stdout, "No history for %s.\n", cell)
 		return
 	}
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "VERSION\tCREATED\tBYTES")
+	table := terminal.NewTable(
+		terminal.Column{Head: "VERSION", Align: terminal.AlignRight},
+		terminal.Column{Head: "CREATED"},
+		terminal.Column{Head: "BYTES", Align: terminal.AlignRight},
+	)
 	for _, v := range versions {
-		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), terminal.EpochDate(v.GetCreatedAt()), v.GetSize())
+		table.Row(strconv.FormatInt(v.GetVersion(), 10), present.EpochAge(v.GetCreatedAt()), strconv.FormatInt(v.GetSize(), 10))
 	}
-	_ = tw.Flush()
+	fmt.Fprint(stdout, table.Render(present.Palette(), ""))
 }

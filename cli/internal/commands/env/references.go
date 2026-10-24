@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"text/tabwriter"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -66,10 +65,11 @@ func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string,
 		if err != nil {
 			return err
 		}
-		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		present := dependencies.Presentation(stdout)
+		if present.Format == terminal.FormatJSON {
 			return writeEnvRefsJSON(stdout, req, resp.GetReferences())
 		}
-		renderReferences(stdout, describeCell(key, opts), resp.GetReferences())
+		renderReferences(stdout, present.Palette(), describeCell(key, opts), resp.GetReferences())
 		return nil
 	})
 }
@@ -86,18 +86,21 @@ func writeEnvRefsJSON(stdout io.Writer, req *variablestorev1.ListReferencesReque
 	return terminal.WriteResultJSON(stdout, result)
 }
 
-func renderReferences(stdout io.Writer, cell string, references []*variablestorev1.Coordinate) {
+func renderReferences(stdout io.Writer, palette terminal.Palette, cell string, references []*variablestorev1.Coordinate) {
 	if len(references) == 0 {
 		fmt.Fprintf(stdout, "Nothing references %s.\n", cell)
 		return
 	}
-	fmt.Fprintf(stdout, "%d referencing %s:\n", len(references), cell)
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "PROJECT\tKEY\tFOLDER\tENVIRONMENT")
+	fmt.Fprintf(stdout, "%s\n\n", palette.Heading(fmt.Sprintf("%d referencing %s", len(references), cell)))
+	table := terminal.NewTable(
+		terminal.Column{Head: "PROJECT"},
+		terminal.Column{Head: "KEY"},
+		terminal.Column{Head: "FOLDER"},
+		terminal.Column{Head: "ENVIRONMENT"},
+	)
 	for _, c := range references {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-			c.GetSlug(), c.GetKey(), folderOrRoot(c.GetFolder()), environmentOrAll(c.GetEnvironment()))
+		table.Row(c.GetSlug(), palette.Bold(c.GetKey()), folderOrRoot(c.GetFolder()), environmentOrAll(c.GetEnvironment()))
 	}
-	_ = tw.Flush()
-	fmt.Fprintln(stdout, "\nEditing this value changes what every one of them reads.")
+	fmt.Fprint(stdout, table.Render(palette, "  "))
+	fmt.Fprintln(stdout, "\n"+palette.Warning("Editing this value changes what every one of them reads."))
 }

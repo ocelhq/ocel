@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -351,10 +350,11 @@ func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd st
 		if err != nil {
 			return "", err
 		}
-		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+		present := invocation.Presentation(stdout)
+		if present.Format == terminal.FormatJSON {
 			return "", terminal.WriteResultJSON(stdout, &resultv1.BindingListResult{Bindings: bindingSummaries(resp.GetBindings())})
 		}
-		renderBindings(stdout, resp.GetBindings())
+		renderBindings(stdout, present.Palette(), resp.GetBindings())
 		return "", nil
 	})
 }
@@ -414,18 +414,22 @@ func bindingSummaries(bindings []*variablestorev1.BindingSummary) []*resultv1.Bi
 	return out
 }
 
-func renderBindings(stdout io.Writer, bindings []*variablestorev1.BindingSummary) {
+func renderBindings(stdout io.Writer, palette terminal.Palette, bindings []*variablestorev1.BindingSummary) {
 	if len(bindings) == 0 {
 		fmt.Fprintln(stdout, "No bindings published. Publish one with `ocel bindings set < binding.json`.")
 		return
 	}
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tTYPE\tSOURCE\tOWNER\tVERSION")
+	table := terminal.NewTable(
+		terminal.Column{Head: "NAME"},
+		terminal.Column{Head: "TYPE"},
+		terminal.Column{Head: "SOURCE"},
+		terminal.Column{Head: "OWNER"},
+		terminal.Column{Head: "VERSION", Align: terminal.AlignRight},
+	)
 	for _, binding := range bindings {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
-			binding.GetName(), bindingTypeName(binding.GetType()), sourceOrDash(binding.GetSource()), binding.GetOwner(), binding.GetVersion())
+		table.Row(palette.Bold(binding.GetName()), bindingTypeName(binding.GetType()), sourceOrDash(binding.GetSource()), binding.GetOwner(), strconv.FormatInt(int64(binding.GetVersion()), 10))
 	}
-	_ = tw.Flush()
+	fmt.Fprint(stdout, table.Render(palette, ""))
 }
 
 func bindingTypeName(t bindingsv1.BindingType) string {
@@ -434,7 +438,7 @@ func bindingTypeName(t bindingsv1.BindingType) string {
 
 func sourceOrDash(source string) string {
 	if source == "" {
-		return "—"
+		return terminal.NoValue
 	}
 	return source
 }
