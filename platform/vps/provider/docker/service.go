@@ -252,6 +252,16 @@ func (s Service) Readiness() []string {
 	return append([]string{"docker", "exec", s.Name}, s.Ready...)
 }
 
+func (s Service) MountInodesCommand() []string {
+	command := slices.Clone(s.Inodes)
+	for _, bind := range s.Binds {
+		_, dest, _ := strings.Cut(bind, ":")
+		dest, _, _ = strings.Cut(dest, ":")
+		command = append(command, dest)
+	}
+	return command
+}
+
 func (s Service) Rising(attempts int) string {
 	name := shell.Quote(s.Name)
 	inspect := shell.Within(shell.ProbeSeconds, "docker inspect --type container --format ")

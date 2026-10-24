@@ -21,9 +21,10 @@ type DockerBind struct {
 }
 
 type DockerGrants struct {
-	Binds      []DockerBind `json:"binds"`
-	Networks   []string     `json:"networks"`
-	Containers []string     `json:"containers"`
+	Binds      []DockerBind          `json:"binds"`
+	Networks   []string              `json:"networks"`
+	Containers []string              `json:"containers"`
+	Commands   map[string][][]string `json:"commands,omitempty"`
 }
 
 func AppNetwork(tier environment.Tier, project string) string {

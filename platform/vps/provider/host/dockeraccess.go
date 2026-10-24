@@ -48,7 +48,10 @@ func dockerGrants(fronting front.Proxy) boxapi.DockerGrants {
 			{Path: tunnel.Dir, Writable: true},
 		},
 		Containers: []string{boxapi.Switchboard, caddy.Container, tunnel.ContainerName},
-		Networks:   []string{},
+		Commands: map[string][][]string{
+			caddy.Container: {caddy.ReloadCommand(), caddy.ListenersCommand(), frontProxy().Ready, frontProxy().MountInodesCommand()},
+		},
+		Networks: []string{},
 	}
 	if placed := routing.Destination(fronting.Front().Open(frontBox{})); placed != "" {
 		grants.Binds = append(grants.Binds, boxapi.DockerBind{Path: filepath.Dir(placed), Writable: true})
