@@ -20,11 +20,9 @@ func takenDown(machine *box, container string) bool {
 func TestRetiringTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{}
+	machine := &box{remembers: true}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
+	promotedWorkers(t, p, provisionedRelease(t, p, aStack(t, aWorkerApp())))
 	worker, _ := recordedWorker(t, store, "worker")
 	hooks := p.Hooks().Retirement
 	if hooks == nil {
@@ -62,11 +60,9 @@ func TestRetiringTakesDownTheWorkersOfAnAppNoLongerDeployed(t *testing.T) {
 func TestRetiringKeepsTheWorkersOfALiveApp(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{}
+	machine := &box{remembers: true}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
+	promotedWorkers(t, p, provisionedRelease(t, p, aStack(t, aWorkerApp())))
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Workers: []string{"worker", "ledger"}}}}
 
 	plan, err := p.Hooks().Retirement.Plan(context.Background(), live, progress.Discard())
@@ -88,11 +84,9 @@ func TestRetiringKeepsTheWorkersOfALiveApp(t *testing.T) {
 func TestRetiringTakesDownTheWorkersALiveAppNoLongerHosts(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{}
+	machine := &box{remembers: true}
 	p, store := recording(machine)
-	if _, err := p.ProvisionContainers(context.Background(), aStack(t, aWorkerApp()), progress.Discard()); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
+	promotedWorkers(t, p, provisionedRelease(t, p, aStack(t, aWorkerApp())))
 	dropped, _ := recordedWorker(t, store, "ledger")
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Workers: []string{"worker"}}}}
 

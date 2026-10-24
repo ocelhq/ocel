@@ -36,13 +36,13 @@ func recordedStackOn(t *testing.T, stack string, recorded stackrecords.Stack) (*
 	return machine, p.Stacks(), store, ref
 }
 
-func recordWorker(t *testing.T, store records.Store, ref provider.StackRef, name string, worker boxapi.QueueWorker) {
+func recordWorker(t *testing.T, store records.Store, ref provider.StackRef, appContainer, name string, worker boxapi.QueueWorker) {
 	t.Helper()
 	value, err := json.Marshal(worker)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Write(context.Background(), records.Entry{Key: boxapi.QueueWorkerKey(ref.Tier, ref.Project, ref.Name.Env, name), Value: value}); err != nil {
+	if _, err := store.Write(context.Background(), records.Entry{Key: boxapi.QueueReleaseWorkerKey(ref.Tier, ref.Project, ref.Name.Env, appContainer, name), Value: value}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -63,8 +63,8 @@ func TestStackResourcesNameTheContainerEachAppRuns(t *testing.T) {
 		Kind: provider.StackApp, App: "web",
 		Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web-r0a1b2c3d"}},
 	})
-	recordWorker(t, store, ref, "mailer", boxapi.QueueWorker{App: "web", Stack: ref.Name.String(), Container: "shop-prod-web-mailer-r0a1b2c3d"})
-	recordWorker(t, store, ref, "billing", boxapi.QueueWorker{App: "api", Stack: "prod--api--r9f8e7d6c", Container: "shop-prod-api-billing-r9f8e7d6c"})
+	recordWorker(t, store, ref, "shop-prod-web-r0a1b2c3d", "mailer", boxapi.QueueWorker{App: "web", Stack: ref.Name.String(), Container: "shop-prod-web-mailer-r0a1b2c3d"})
+	recordWorker(t, store, ref, "shop-prod-api-r9f8e7d6c", "billing", boxapi.QueueWorker{App: "api", Stack: "prod--api--r9f8e7d6c", Container: "shop-prod-api-billing-r9f8e7d6c"})
 
 	listed, err := stacks.Resources(context.Background(), provider.StackResources{Ref: ref})
 	if err != nil {

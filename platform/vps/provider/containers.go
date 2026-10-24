@@ -83,7 +83,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err := p.images.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name.Env, app.App, app.Image); err != nil {
 		return nil, err
 	}
-	if err := topic.NewWorkers(p.components()).Run(ctx, spec, manifest, progress); err != nil {
+	if err := topic.NewWorkers(p.components()).Run(ctx, spec, physical, manifest, progress); err != nil {
 		return nil, err
 	}
 	return []provider.AppContainer{{
@@ -96,12 +96,12 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, progress progress.Log) error {
-	if err := topic.NewWorkers(p.components()).Remove(ctx, ref); err != nil {
-		return err
-	}
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
+		}
+		if err := topic.NewWorkers(p.components()).Remove(ctx, ref, container.Physical); err != nil {
+			return err
 		}
 		progress.Say("Removing " + container.Name + "'s container " + container.Physical)
 		if err := p.containers.TakeDown(ctx, ref.Tier, container.Physical); err != nil {

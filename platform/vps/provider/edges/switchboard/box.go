@@ -40,6 +40,10 @@ type Images interface {
 	Promote(ctx context.Context, tier environment.Tier, project, env, app, imageRef string) error
 }
 
+type Workers interface {
+	Promote(ctx context.Context, tier environment.Tier, project, env, app, appContainer string, progress progress.Log) error
+}
+
 type TunnelContainer interface {
 	Reserve(ctx context.Context, front edge.Kind, connector edge.TunnelConnector) (boxapi.Tunnel, error)
 	Run(ctx context.Context, tunnel boxapi.Tunnel, connector edge.TunnelConnector, token func(context.Context) (string, error)) error
@@ -75,6 +79,7 @@ type Box struct {
 	Machine    Machine
 	Containers Containers
 	Images     Images
+	Workers    Workers
 	Routes     Routes
 	Tunnel     TunnelContainer
 	Origins    Origins
@@ -87,6 +92,7 @@ type Edge struct {
 	machine    Machine
 	containers Containers
 	images     Images
+	workers    Workers
 	routes     Routes
 	tunnel     TunnelContainer
 	origins    Origins
@@ -98,7 +104,7 @@ type Edge struct {
 var _ edge.Edge = (*Edge)(nil)
 
 func New(box Box) *Edge {
-	return &Edge{machine: box.Machine, containers: box.Containers, images: box.Images, routes: box.Routes, tunnel: box.Tunnel,
+	return &Edge{machine: box.Machine, containers: box.Containers, images: box.Images, workers: box.Workers, routes: box.Routes, tunnel: box.Tunnel,
 		origins: box.Origins, scope: box.Scope, tunnels: box.Tunnels, readGate: box.ReadGate}
 }
 

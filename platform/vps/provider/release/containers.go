@@ -208,6 +208,15 @@ func (c *Containers) TakeDown(ctx context.Context, tier environment.Tier, name s
 	return err
 }
 
+func (c *Containers) Stop(ctx context.Context, name string) error {
+	elevation, err := ssh.Docker, c.box.Assume(ctx, ssh.Docker)
+	if err != nil {
+		return err
+	}
+	_, err = c.box.Run(ctx, elevation, "stop "+name, shell.BoundedTolerating(shell.DockerStepSeconds, "docker stop of "+name, "docker stop "+shell.Quote(name)+" >/dev/null 2>&1"), nil)
+	return err
+}
+
 func ReleaseSelectors() string {
 	return docker.LabelSelector(docker.LabelProject) + " " + docker.LabelSelector(docker.LabelApp) + " " + docker.LabelSelector(docker.LabelRef)
 }
