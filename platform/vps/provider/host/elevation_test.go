@@ -84,7 +84,7 @@ func (c *sudoless) elevated() []string {
 }
 
 func hostFor(conn *sudoless) *Host {
-	return New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return conn, nil }, nil), Keys{}, nil, front.Proxy{})
+	return New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return conn, nil }, nil), "shop", Keys{}, nil, front.Proxy{})
 }
 
 func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {

@@ -52,3 +52,19 @@ func TestANetworkThatWillNotGoIsReportedAndTheRestOfTheTeardownStillRuns(t *test
 		t.Errorf("a network that would not go stopped the teardown before the routes were taken: %v", m.calls)
 	}
 }
+
+func TestDestroyingAStackUnpinsTheProjectOnceNothingElseItDoesTouchesTheRoutingTable(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	if err := stack.Destroy(context.Background()); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	unpinned := slices.Index(m.calls, "unpin "+slug)
+	if unpinned < 0 {
+		t.Fatalf("a torn-down project leaves its pins in the routing table, loading certificates for hostnames nothing claims: %v", m.calls)
+	}
+	if unpinned != len(m.calls)-1 {
+		t.Errorf("the project was unpinned at %d of %v, want last: any reshape after it writes the project's pins back", unpinned, m.calls)
+	}
+}

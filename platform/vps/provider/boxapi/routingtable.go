@@ -76,6 +76,7 @@ type Route struct {
 func (r Route) isApp() bool { return r.App != StoreLabel }
 
 type Pin struct {
+	Project  string `json:"project"`
 	Hostname string `json:"hostname"`
 	Path     string `json:"path"`
 }
@@ -129,7 +130,7 @@ func WriteRoutingTable(table RoutingTable) ([]byte, error) {
 	sorted.Claims = slices.SortedFunc(slices.Values(table.Claims), func(a, b Claim) int { return strings.Compare(a.Hostname, b.Hostname) })
 	sorted.Routes = slices.SortedFunc(slices.Values(table.Routes), func(a, b Route) int { return strings.Compare(a.Identity(), b.Identity()) })
 	sorted.Pins = slices.SortedFunc(slices.Values(table.Pins), func(a, b Pin) int {
-		return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path))
+		return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path), strings.Compare(a.Project, b.Project))
 	})
 	sorted.Shields = slices.SortedFunc(slices.Values(table.Shields), func(a, b Shield) int {
 		return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Owner, b.Owner))

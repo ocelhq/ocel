@@ -92,7 +92,7 @@ func RenderOriginFiles(front proxy.Proxy, state boxapi.RoutingTable) ([]proxy.Or
 func Spec(state boxapi.RoutingTable) proxy.Spec {
 	pins := make([]proxy.Pin, 0, len(state.Pins))
 	for _, pin := range state.Pins {
-		pins = append(pins, proxy.Pin(pin))
+		pins = append(pins, proxy.Pin{Hostname: pin.Hostname, Path: pin.Path})
 	}
 	shields := make([]proxy.Shield, 0, len(state.Shields))
 	for _, shield := range state.Shields {

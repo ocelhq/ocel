@@ -64,12 +64,12 @@ func newBench(installed map[environment.Tier][]machine.Item) *bench {
 func (b *bench) host() *Host { return b.fronted(front.Proxy{}) }
 
 func (b *bench) fronted(fronting front.Proxy) *Host {
-	return New(ssh.NewBox(b.dial, b.pause), Keys{}, nil, fronting)
+	return New(ssh.NewBox(b.dial, b.pause), "shop", Keys{}, nil, fronting)
 }
 
 func (h *Host) useFront(front proxy.Proxy) {
 	h.front = front
-	h.routing = routing.NewTable(h.Box, front, h.pins.Verified)
+	h.routing = routing.NewTable(h.Box, front, "shop", h.pins.Verified)
 	h.tunnel = tunnel.New(h.Box, h.routing)
 	h.containers = release.NewContainers(h.Box, h.engine, h.routing, front, h.images)
 }

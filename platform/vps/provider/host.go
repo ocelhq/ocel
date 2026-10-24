@@ -10,7 +10,7 @@ import (
 
 func (p *Provider) onHost(dial ssh.Dial) *Provider {
 	box := ssh.NewBox(dial, nil)
-	p.host = host.New(box, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.Filled())
+	p.host = host.New(box, p.project, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.Filled())
 	p.routing = p.host.Routing()
 	p.tunnel = p.host.Tunnel()
 	p.pins = p.host.Pins()

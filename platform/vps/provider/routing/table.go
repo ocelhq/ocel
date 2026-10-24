@@ -10,13 +10,14 @@ import (
 )
 
 type Table struct {
-	box   *ssh.Box
-	front proxy.Proxy
-	pins  func(context.Context) ([]boxapi.Pin, error)
+	box     *ssh.Box
+	front   proxy.Proxy
+	project string
+	pins    func(context.Context) ([]boxapi.Pin, error)
 }
 
-func NewTable(box *ssh.Box, front proxy.Proxy, pins func(context.Context) ([]boxapi.Pin, error)) *Table {
-	return &Table{box: box, front: front, pins: pins}
+func NewTable(box *ssh.Box, front proxy.Proxy, project string, pins func(context.Context) ([]boxapi.Pin, error)) *Table {
+	return &Table{box: box, front: front, project: project, pins: pins}
 }
 
 func WriteRoutingTable(table boxapi.RoutingTable) ([]byte, error) {

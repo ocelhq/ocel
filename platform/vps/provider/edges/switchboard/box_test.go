@@ -281,6 +281,11 @@ func (m *fakeBox) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
+func (m *fakeBox) Unpin(_ context.Context, project string) error {
+	m.calls = append(m.calls, "unpin "+project)
+	return m.refuse("Unpin")
+}
+
 func (m *fakeBox) PutShield(_ context.Context, shield boxapi.Shield) (boxapi.Shield, error) {
 	m.calls = append(m.calls, "shield "+shield.Hostname)
 	if err := m.refuse("PutShield"); err != nil {
