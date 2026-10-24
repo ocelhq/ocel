@@ -261,6 +261,8 @@ func (b *bench) rendered(command string) ssh.Result {
 		return ssh.Result{}
 	case strings.HasPrefix(command, ownersCommand):
 		return ssh.Result{}
+	case readsEnv(command):
+		return ssh.Result{Stdout: "null\n"}
 	case strings.Contains(command, shell.Quote(release.ReleaseSelectors())):
 		return ssh.Result{Stdout: "shop web " + appImage + "\n"}
 	case strings.HasPrefix(command, "cat ") && !strings.HasPrefix(command, "cat | "):

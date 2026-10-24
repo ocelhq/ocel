@@ -86,7 +86,7 @@ func (c *Containers) refuseMissingHealthPath(ctx context.Context, search HealthP
 		return refusal.Refuse(refusal.CodeNotReady, "start %s on %s: %s%s",
 			search.App, c.box.Named(), c.describeUnstarted(ctx, search.App, name, state, elevation), c.discardSearched(ctx, search, elevation))
 	}
-	logs := c.box.Evidence(ctx, elevation, LogCommand(name))
+	logs := c.readRedactedLogs(ctx, elevation, name, LogCommand(name))
 	if logs == "" {
 		logs = NoLogOutput
 	}

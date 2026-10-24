@@ -69,10 +69,10 @@ func RenderLastRunLogs(name string) string {
 }
 
 func (c *Containers) describeUnstarted(ctx context.Context, app, name, state string, elevation ssh.Acting) string {
-	logs := c.box.Evidence(ctx, elevation, RenderLastRunLogs(name))
+	logs := c.readRedactedLogs(ctx, elevation, name, RenderLastRunLogs(name))
 	ran := "its last run, last " + docker.LogTail + " lines"
 	if logs == "" {
-		logs = c.box.Evidence(ctx, elevation, LogCommand(name))
+		logs = c.readRedactedLogs(ctx, elevation, name, LogCommand(name))
 		ran = "the last " + docker.LogTail + " lines"
 	}
 	if logs == "" {
