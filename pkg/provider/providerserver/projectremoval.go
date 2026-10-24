@@ -97,6 +97,9 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 		removal.setEdgeStack(stack)
 	}
 	removal.restoreRouterStates(state)
+	if err := removal.adoptIssuedGlobalWildcardCertificate(ctx); err != nil {
+		return nil, err
+	}
 	entries, err := stackrecords.List(ctx, vendor.KeyValues(), tier, req.GetSlug())
 	if err != nil {
 		return nil, err
@@ -424,6 +427,31 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 func (r *projectRemoval) keepOnRecord(err error, progress progress.Log) error {
 	progress.Say(fmt.Sprintf("Keeping %s on record in %s: a rerun reads its progress from what is still here", r.slug, r.tier))
 	return err
+}
+
+func (r *projectRemoval) adoptIssuedGlobalWildcardCertificate(ctx context.Context) error {
+	if r.tier != environment.TierPreview {
+		return nil
+	}
+	wildcard, err := stackrecords.ReadWildcard(ctx, r.provider.KeyValues())
+	if err != nil || !wildcard.IsRecorded() {
+		return err
+	}
+	hostname := wildcard.Hostname()
+	held, recorded := r.state.Hosts[hostname]
+	if !recorded || !held.Certificate.Requested {
+		return nil
+	}
+	health, err := r.provider.Certificates().Inspect(ctx, r.front.Kind(), held.Router, hostname, held.Certificate)
+	if err != nil {
+		return fmt.Errorf("read whether certificate %s for %s is issued: %w", held.Certificate.ID, hostname, err)
+	}
+	if !health.Issued {
+		return nil
+	}
+	held.Certificate = provider.Certificate{ID: held.Certificate.ID}
+	r.state.SetHost(hostname, held)
+	return nil
 }
 
 func (r *projectRemoval) originCertificates() []string {
