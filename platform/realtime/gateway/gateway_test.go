@@ -163,8 +163,8 @@ func (pipeAddr) String() string { return "pipe" }
 func newHarness(t *testing.T, configure ...func(*gateway.Config)) *harness {
 	t.Helper()
 	h := newUnstartedHarness(t, configure...)
-	h.client = http.DefaultClient
 	h.server.Start()
+	h.client = h.server.Client()
 	return h
 }
 
