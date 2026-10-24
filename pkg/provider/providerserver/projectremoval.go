@@ -530,6 +530,7 @@ func withoutServing(hosts map[string]stackrecords.HostnameState) map[string]stac
 	retiring := make(map[string]stackrecords.HostnameState, len(hosts))
 	for hostname, host := range hosts {
 		retiring[hostname] = stackrecords.HostnameState{
+			Router:              host.Router,
 			Certificate:         host.Certificate,
 			Superseded:          host.Superseded,
 			Written:             host.Written,
