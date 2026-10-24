@@ -251,6 +251,11 @@ jobs:
           echo "${packages[@]}"
           go test -race -count=1 -timeout 30m -tags integration -skip '^TestLive' "${packages[@]}"
 
+      - uses: ./.github/actions/containerd-docker
+
+      - name: Run the image build suites on a daemon keeping images in containerd, as every build the cli accepts does
+        run: go test -race -count=1 -timeout 30m -tags integration -skip '^TestLive' ./cli/internal/build/image/
+
   vps:
     name: VPS (live ${{ matrix.runner }} of 2)
     runs-on: ubuntu-latest
