@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -23,7 +22,8 @@ import (
 )
 
 const (
-	unknownCell   = "—"
+	unknownCell   = terminal.NoValue
+	blockIndent   = "  "
 	everyProject  = "every project"
 	usersShown    = 3
 	partCreating  = "creating"
@@ -117,14 +117,15 @@ func RunStatus(ctx context.Context, invocation commands.Invocation, cwd string, 
 	if err != nil {
 		return err
 	}
-	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+	present := invocation.Presentation(stdout)
+	if present.Format == terminal.FormatJSON {
 		return terminal.WriteResultJSON(stdout, statusResult(read))
 	}
 	for i, status := range read {
 		if i > 0 {
 			fmt.Fprintln(stdout)
 		}
-		renderTierStatus(stdout, status, opts)
+		renderTierStatus(stdout, present.Palette(), status, opts)
 	}
 	return nil
 }
@@ -169,37 +170,46 @@ func partState(part *contractv1.BootstrapPart) string {
 	return partReady
 }
 
-func renderTierStatus(out io.Writer, status tierStatus, opts StatusOptions) {
+func renderTierStatus(out io.Writer, palette terminal.Palette, status tierStatus, opts StatusOptions) {
 	name := readiness.TierName(status.tier)
-	header := strings.Join(append([]string{name}, readiness.IdentityCells(status.identity)...), " · ")
+	identity := readiness.IdentityCells(status.identity)
 	if !status.described.GetBootstrap().GetPresent() {
-		fmt.Fprintf(out, "%s · not bootstrapped\n  → run `%s` to set it up\n", header, readiness.BootstrapCommand(status.tier))
+		fmt.Fprintln(out, palette.Heading(name, append(identity, "not bootstrapped")...))
+		fmt.Fprintf(out, "%s→ %s\n", blockIndent, palette.Commands("run `"+readiness.BootstrapCommand(status.tier)+"` to set it up"))
 		return
 	}
-	fmt.Fprintln(out, header)
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "PART\tADDED\tUSED BY\tIDLE\tSTATE")
+	fmt.Fprintf(out, "%s\n\n", palette.Heading(name, identity...))
+	table := terminal.NewTable(
+		terminal.Column{Head: "PART"},
+		terminal.Column{Head: "ADDED"},
+		terminal.Column{Head: "USED BY"},
+		terminal.Column{Head: "IDLE", Align: terminal.AlignRight},
+		terminal.Column{Head: "STATE"},
+	)
 	for _, part := range status.described.GetParts() {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", part.GetName(), addedCell(part), usedByCell(part), idleCell(part), stateCell(part, status.tier))
+		table.Row(palette.Bold(part.GetName()), addedCell(part), usedByCell(part), idleCell(part), stateCell(palette, part, status.tier))
 	}
-	_ = tw.Flush()
+	fmt.Fprint(out, table.Render(palette, blockIndent))
 	if opts.Resources {
-		renderResources(out, status.described.GetParts())
+		renderResources(out, palette, name, status.described.GetParts())
 	}
 }
 
-func renderResources(out io.Writer, parts []*contractv1.BootstrapPart) {
+func renderResources(out io.Writer, palette terminal.Palette, tier string, parts []*contractv1.BootstrapPart) {
+	table := terminal.NewTable(terminal.Column{Head: "PART"}, terminal.Column{Head: "KIND"}, terminal.Column{Head: "ID"})
+	listed := false
 	for _, part := range parts {
-		if len(part.GetResources()) == 0 {
-			continue
-		}
-		fmt.Fprintf(out, "\n%s\n", part.GetName())
-		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		name := palette.Bold(part.GetName())
 		for _, resource := range part.GetResources() {
-			fmt.Fprintf(tw, "  %s\t%s\n", resource.GetKind(), resource.GetId())
+			table.Row(name, resource.GetKind(), resource.GetId())
+			name, listed = "", true
 		}
-		_ = tw.Flush()
 	}
+	if !listed {
+		return
+	}
+	fmt.Fprintf(out, "\n%s\n", palette.Heading("Resources", tier))
+	fmt.Fprint(out, table.Render(palette, blockIndent))
 }
 
 func addedCell(part *contractv1.BootstrapPart) string {
@@ -252,16 +262,17 @@ func currencyOf(part *contractv1.BootstrapPart) string {
 	return part.GetCurrency() + " "
 }
 
-func stateCell(part *contractv1.BootstrapPart, tier environmentv1.Tier) string {
+func stateCell(palette terminal.Palette, part *contractv1.BootstrapPart, tier environmentv1.Tier) string {
+	run := palette.Commands(", run `" + readiness.BootstrapCommand(tier) + "`")
 	switch {
 	case part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_CREATING:
-		return partCreating
+		return palette.Health(terminal.Pending, partCreating)
 	case part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED:
-		return partWanted + " by " + strings.Join(part.GetWantedBy(), ", ") + ", run `" + readiness.BootstrapCommand(tier) + "`"
+		return palette.Health(terminal.Pending, partWanted+" by "+strings.Join(part.GetWantedBy(), ", ")) + run
 	case part.GetCurrent() && part.GetRetiresWithLastUser() && len(part.GetUsedBy()) > 0:
-		return partRetires + " " + strings.Join(part.GetUsedBy(), ", ")
+		return palette.Health(terminal.Absent, partRetires+" "+strings.Join(part.GetUsedBy(), ", "))
 	case part.GetCurrent():
-		return partCurrent
+		return palette.Health(terminal.Healthy, partCurrent)
 	}
-	return partBehind + ", run `" + readiness.BootstrapCommand(tier) + "`"
+	return palette.Health(terminal.Pending, partBehind) + run
 }
