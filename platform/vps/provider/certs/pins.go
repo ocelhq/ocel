@@ -2,14 +2,13 @@ package certs
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -53,61 +52,50 @@ func (p *Pins) verify(ctx context.Context, pin boxapi.Pin) error {
 	if err := RefuseMisplacedPin(pin); err != nil {
 		return refused(err)
 	}
-	block, err := p.Certificate(ctx, pin.Path)
+	pair, err := p.read(ctx, pin.Path)
 	if err != nil {
 		return err
 	}
-	leaf, err := Parse(boxapi.PinCertificate(pin.Path), block)
+	leaf, err := Parse(boxapi.PinCertificate(pin.Path), []byte(pair.Certificate))
 	if err != nil {
 		return refused(err)
 	}
 	if err := Verify(pin.Path, pin.Hostname, leaf, time.Now()); err != nil {
 		return refused(err)
 	}
-	if err := p.refuseUnpaired(ctx, pin); err != nil {
-		return refused(err)
-	}
-	return nil
-}
-
-const (
-	pairMatched    = "matched"
-	pairMismatched = "mismatched"
-	pairUnchecked  = "unchecked"
-)
-
-func pairCommand(path string) string {
-	certificate, key := shell.Quote(boxapi.PinCertificate(path)), shell.Quote(boxapi.PinKey(path))
-	return "if ! command -v openssl >/dev/null 2>&1; then echo " + pairUnchecked + "; exit 0; fi\n" +
-		"certified=$(openssl x509 -in " + certificate + " -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)\n" +
-		"keyed=$(openssl pkey -in " + key + " -pubout -outform DER 2>/dev/null | sha256sum)\n" +
-		"if [ -n \"$certified\" ] && [ \"$certified\" = \"$keyed\" ]; then echo " + pairMatched + "; else echo " + pairMismatched + "; fi"
-}
-
-func (p *Pins) refuseUnpaired(ctx context.Context, pin boxapi.Pin) error {
-	said, err := p.box.Run(ctx, ssh.Root, "check the key pinned beside "+boxapi.PinCertificate(pin.Path), pairCommand(pin.Path), nil)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(said) == pairMismatched {
-		return refusal.Refuse(refusal.CodeInvalid,
+	if !pair.KeyMatches {
+		return refused(refusal.Refuse(refusal.CodeInvalid,
 			"the key at %s does not match the certificate at %s",
-			boxapi.PinKey(pin.Path), boxapi.PinCertificate(pin.Path))
+			boxapi.PinKey(pin.Path), boxapi.PinCertificate(pin.Path)))
 	}
 	return nil
 }
 
 func (p *Pins) Certificate(ctx context.Context, path string) ([]byte, error) {
-	if _, pinned := boxapi.Pinned(path); !pinned {
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"pinned certificate %q is outside %s",
-			path, boxapi.PinsDir)
-	}
-	read, err := p.box.Run(ctx, ssh.Root, "read the certificate pinned at "+boxapi.PinCertificate(path), "cat "+shell.Quote(boxapi.PinCertificate(path)), nil)
+	pair, err := p.read(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	return []byte(read), nil
+	return []byte(pair.Certificate), nil
+}
+
+func (p *Pins) read(ctx context.Context, path string) (boxapi.PinnedPair, error) {
+	leaf, pinned := boxapi.Pinned(path)
+	if !pinned {
+		return boxapi.PinnedPair{}, refusal.Refuse(refusal.CodeInvalid,
+			"pinned certificate %q is outside %s",
+			path, boxapi.PinsDir)
+	}
+	said, err := p.box.RunArgv(ctx, ssh.Granted, "read the certificate pinned at "+boxapi.PinCertificate(path), []string{boxapi.LiveBinary, boxapi.PinCommand, leaf}, nil)
+	if err != nil {
+		return boxapi.PinnedPair{}, err
+	}
+	var pair boxapi.PinnedPair
+	if err := json.Unmarshal([]byte(said), &pair); err != nil {
+		return boxapi.PinnedPair{}, refusal.Refuse(refusal.CodeDenied,
+			"the box answered a read of %s with %d unreadable bytes", boxapi.PinCertificate(path), len(said))
+	}
+	return pair, nil
 }
 
 func pinCovers(pin boxapi.Pin, hostname string) bool {

@@ -21,14 +21,18 @@ import (
 
 const sealed = "postgres://example"
 
-func (vm liveBox) deploying(t *testing.T) *vps.Provider {
+func (vm liveBox) deploying(t *testing.T, shaped ...shaping) *vps.Provider {
 	t.Helper()
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{
+	options := vps.Options{SSH: vps.Target{
 		Host:         vm.addr,
 		User:         deployLogin,
 		IdentityFile: vm.key,
 		Config:       vm.config,
-	}})
+	}}
+	for _, shape := range shaped {
+		shape(&options)
+	}
+	p := vps.NewProvider(options)
 	t.Cleanup(func() { closing(t, p) })
 	return p
 }

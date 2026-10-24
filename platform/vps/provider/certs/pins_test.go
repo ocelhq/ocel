@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"math/big"
@@ -21,50 +22,67 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh/sshtest"
 )
 
-func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t *testing.T) {
+func pinHelper(pin boxapi.Pin) string {
+	leaf, _ := boxapi.Pinned(pin.Path)
+	return shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand, leaf})
+}
+
+func answeringPin(t *testing.T, pin boxapi.Pin, pair boxapi.PinnedPair) *sshtest.Box {
+	t.Helper()
+	said, err := json.Marshal(pair)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sshtest.New(func(command string) (ssh.Result, bool) {
+		if strings.HasSuffix(command, pinHelper(pin)) {
+			return ssh.Result{Stdout: string(said) + "\n"}, true
+		}
+		return ssh.Result{}, false
+	})
+}
+
+func TestTheDeployLoginVerifiesAPinThroughThePinHelperAndNeverReadsTheKey(t *testing.T) {
 	t.Parallel()
 
 	pin := boxapi.Pin{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}
-	for verdict, refuses := range map[string]bool{pairMatched: false, pairMismatched: true, pairUnchecked: false, "": false} {
-		leaf := pinnedLeaf(t, pin.Hostname)
-		box := sshtest.New(func(command string) (ssh.Result, bool) {
-			switch {
-			case strings.Contains(command, "cat "+shell.Quote(boxapi.PinCertificate(pin.Path))):
-				return ssh.Result{Stdout: string(leaf)}, true
-			case strings.Contains(command, "openssl pkey -in "+shell.Quote(boxapi.PinKey(pin.Path))):
-				return ssh.Result{Stdout: verdict + "\n"}, true
-			}
-			return ssh.Result{}, false
-		})
-		_, err := NewPins(box.Open(), []boxapi.Pin{pin}).Verified(context.Background())
-		var refused refusal.Refusal
-		if refused := errors.As(err, &refused); refused != refuses {
-			t.Errorf("a pair the box reports %q vouches as %v, want refused=%v: a mismatched pair is one the proxy refuses at the cutover, taking every hostname pinned to it off the air", verdict, err, refuses)
+	leaf := pinnedLeaf(t, pin.Hostname)
+	box := answeringPin(t, pin, boxapi.PinnedPair{Certificate: string(leaf), KeyMatches: true})
+	box.Facts, box.User = ssh.Facts{Systemd: true}, boxapi.DeployLogin
+	pins := NewPins(box.Open(), []boxapi.Pin{pin})
+
+	if _, err := pins.Verified(context.Background()); err != nil {
+		t.Fatalf("verifying a matched pin as %s, which has no sudo but its own lines: %v", boxapi.DeployLogin, err)
+	}
+	read, err := pins.Certificate(context.Background(), pin.Path)
+	if err != nil || string(read) != string(leaf) {
+		t.Fatalf("reading the pinned certificate as %s = %q, %v, want the certificate the helper printed", boxapi.DeployLogin, read, err)
+	}
+	for _, command := range box.Commands() {
+		if strings.Contains(command, "id -u") {
+			continue
 		}
-		if refuses && (!strings.Contains(err.Error(), boxapi.PinKey(pin.Path)) || !strings.Contains(err.Error(), boxapi.PinCertificate(pin.Path))) {
-			t.Errorf("the refusal reads %q and names neither the key nor the certificate", err)
+		if command != "sudo -n "+pinHelper(pin) {
+			t.Errorf("reading the pin ran %q, want only the pin helper through the deploy login's sudoers line", command)
 		}
-		for _, command := range box.Commands() {
-			if strings.Contains(command, "cat "+shell.Quote(boxapi.PinKey(pin.Path))) || (strings.Contains(command, boxapi.PinKey(pin.Path)) && !strings.Contains(command, "-pubout")) {
-				t.Errorf("checking the pair ran %q, which brings the private key across the session rather than a digest of its public half", command)
-			}
+		if strings.Contains(command, boxapi.PinKey(pin.Path)) || strings.Contains(command, "cat ") {
+			t.Errorf("reading the pin ran %q, which brings the private key across the session", command)
 		}
 	}
 }
 
-func TestThePairCheckReadsOnlyPublicHalvesAndSaysWhenItCouldNotRun(t *testing.T) {
+func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t *testing.T) {
 	t.Parallel()
 
-	command := pairCommand(boxapi.PinsDir + "/shop")
-	for what, wanted := range map[string]string{
-		"the certificate's public key":          "openssl x509 -in " + shell.Quote(boxapi.PinsDir+"/shop.crt") + " -noout -pubkey",
-		"the key's public half":                 "openssl pkey -in " + shell.Quote(boxapi.PinsDir+"/shop.key") + " -pubout",
-		"a verdict when openssl is absent":      "echo " + pairUnchecked,
-		"a digest rather than the bytes":        "sha256sum",
-		"one word for a pair that does not fit": "echo " + pairMismatched,
-	} {
-		if !strings.Contains(command, wanted) {
-			t.Errorf("the pair check runs\n%s\nwhich contains no %s (%s)", command, what, wanted)
+	pin := boxapi.Pin{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}
+	for _, matches := range []bool{true, false} {
+		box := answeringPin(t, pin, boxapi.PinnedPair{Certificate: string(pinnedLeaf(t, pin.Hostname)), KeyMatches: matches})
+		_, err := NewPins(box.Open(), []boxapi.Pin{pin}).Verified(context.Background())
+		var refused refusal.Refusal
+		if refused := errors.As(err, &refused); refused == matches {
+			t.Errorf("a pair whose key matches = %v vouches as %v: a mismatched pair is one the proxy refuses at the cutover, taking every hostname pinned to it off the air", matches, err)
+		}
+		if !matches && (!strings.Contains(err.Error(), boxapi.PinKey(pin.Path)) || !strings.Contains(err.Error(), boxapi.PinCertificate(pin.Path))) {
+			t.Errorf("the refusal reads %q and names neither the key nor the certificate", err)
 		}
 	}
 }

@@ -65,6 +65,7 @@ func ProxyItems(arch string, fronting front.Proxy) []machine.Item {
 			Note: "routes every hostname and switches releases"},
 		machine.Dir(proxyRoot, 0o750, stateOwner, ""),
 		machine.Dir(boxapi.PinsDir, 0o700, machine.RootOwner, "your pinned certificates"),
+		pinsSudoersItem(),
 		machine.Dir(boxapi.RoutingDir, 0o750, stateOwner, ""),
 		proxyConfigItem(),
 		routingTableItem(),
@@ -304,6 +305,7 @@ func proxyRemovals() []machine.Removal {
 		machine.Taking(machine.KindRoutingTable, boxapi.RoutingTablePath, "every app's routes"),
 		machine.Taking(machine.KindDir, boxapi.RoutingDir, ""),
 		machine.Taking(machine.KindDir, proxyRoot, ""),
+		machine.Taking(machine.KindFile, sudoersPins, ""),
 		machine.Sharing(boxapi.PinsDir, "only if empty"),
 		machine.Taking(machine.KindFile, FrontRecordPath, "which proxy fronts this box"),
 	}

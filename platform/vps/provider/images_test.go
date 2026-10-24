@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -129,6 +130,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Re
 	if read, named := b.catting(command); named {
 		return read, nil
 	}
+	if read, named := b.readingPin(command); named {
+		return read, nil
+	}
 	if sealed, sealing := b.sealing(command, input); sealing {
 		return sealed, nil
 	}
@@ -222,6 +226,23 @@ func (b *box) catting(command string) (ssh.Result, bool) {
 		return ssh.Result{Code: 3, Stderr: "ocel-switchboard: 127.0.0.1:443 served no certificate for shop.example.com: EOF"}, true
 	}
 	return ssh.Result{Stdout: b.leaf}, true
+}
+
+func (b *box) readingPin(command string) (ssh.Result, bool) {
+	named, asked := strings.CutPrefix(command, "sudo -n ")
+	if named, asked = strings.CutPrefix(named, shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand})+" "); !asked {
+		return ssh.Result{}, false
+	}
+	at := boxapi.PinCertificate(boxapi.PinsDir + "/" + unquoted(named))
+	read, found := b.reads[at]
+	if !found {
+		return ssh.Result{Code: boxapi.ExitRefused, Stderr: "ocel-live pin: open " + at + ": no such file or directory"}, true
+	}
+	said, err := json.Marshal(boxapi.PinnedPair{Certificate: read, KeyMatches: true})
+	if err != nil {
+		return ssh.Result{Code: boxapi.ExitRefused, Stderr: err.Error()}, true
+	}
+	return ssh.Result{Stdout: string(said) + "\n"}, true
 }
 
 const fakeSeal = "sealed:"
