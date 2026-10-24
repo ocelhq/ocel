@@ -188,6 +188,50 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	}
 }
 
+func TestARemovalRerunDiscardsTheCertificateAnEarlierRunFailedToDiscard(t *testing.T) {
+	t.Parallel()
+	client, p := contractServed(t, "1.0.0")
+	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
+	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Kind: fake.KindRelay,
+		Edge: edge.StackState{
+			Slug:     "shop",
+			Tier:     environment.TierProduction,
+			Endpoint: "https://shop.fake.invalid",
+			Address:  "shop.relay.fake.invalid",
+			Bound:    []string{"app.acme.com"},
+		},
+		Hosts: map[string]stackrecords.HostnameState{
+			"app.acme.com": {
+				Router:      fake.RouterRelay,
+				Certificate: provider.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}},
+			},
+		},
+	})
+	writer, err := p.DNS().Open(fake.KindZone, "acme.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Ensure(context.Background(), []edge.Record{validation}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	p.QueueDiscardFailures(errors.New("the provider throttled the delete"))
+	if result := removeProject(t, client, cutOverRequest()); result.GetSuccess() {
+		t.Fatal("RemoveProject() removed the project, want it failed on a certificate it could not discard")
+	}
+	if result := removeProject(t, client, cutOverRequest()); !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, want the rerun to remove the project", result.GetError())
+	}
+
+	if discarded := p.Discarded(); !slices.Contains(discarded, "ocels-cert") {
+		t.Errorf("the provider discarded %v, want the rerun to discard the certificate the first run could not", discarded)
+	}
+	if written := writer.(*fake.DNSRecords).Records(); len(written) != 0 {
+		t.Errorf("the zone still contains %v, want the validation record released with the certificate", written)
+	}
+}
+
 func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	ctx := context.Background()
 	client, vendor := deployedProject(t)
