@@ -1,4 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it, setSystemTime } from "bun:test";
+import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
 import { gzipSync } from "node:zlib";
 import { type CheckContext, type Fetch, SECRET_TOKEN, secretGuarded } from "./context";
 import { clientAddressCheck, httpProbeChecks, publicOriginCheck, streamCheck } from "./probes";
@@ -279,4 +281,64 @@ describe("the oversized cookie check", () => {
     );
     expect(message).toContain("twelve kilobytes of cookie answered 400 from box");
   });
+});
+
+describe("the hold-open probes", () => {
+  let server: Server;
+  let base: string;
+  const servedOn: number[] = [];
+
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      servedOn.push(req.socket.remotePort ?? 0);
+      const url = new URL(req.url ?? "/", "http://probe.test");
+      if (url.pathname === "/api/probes/sse") {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.write("data: ocel-sse-1\n\n");
+        setTimeout(() => {
+          setSystemTime(new Date(Date.now() + Number(url.searchParams.get("gap"))));
+          res.end("data: ocel-sse-2\n\ndata: ocel-sse-end\n\n");
+        }, 50);
+        return;
+      }
+      const slept = url.pathname === "/api/probes/sleep" ? Number(url.searchParams.get("ms")) : 0;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ slept }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    base = `http://127.0.0.1:${address.port}`;
+  });
+
+  afterEach(() => {
+    setSystemTime();
+    servedOn.length = 0;
+  });
+
+  afterAll(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  for (const [probe, title] of [
+    ["the SSE silence probe", "GET /api/probes/sse survives a forty-second silence"],
+    [
+      "the twenty-five-second sleep probe",
+      "GET /api/probes/sleep holds the request open for twenty-five",
+    ],
+    [
+      "the forty-five-second sleep probe",
+      "GET /api/probes/sleep holds the request open for forty-five",
+    ],
+  ]) {
+    it(`${probe} opens its own connection rather than one an earlier request left idle`, async () => {
+      const ctx = context((input, init) => fetch(input, init), base);
+      await (await ctx.fetch(`${base}/api/probes/echo`)).text();
+      await checkTitled(title).run(ctx);
+      const [earlier, held] = servedOn;
+      expect(servedOn).toHaveLength(2);
+      expect(held).not.toBe(earlier);
+    });
+  }
 });

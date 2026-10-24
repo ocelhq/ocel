@@ -48,6 +48,7 @@ describe("emulatorFetch", () => {
       });
       req.on("end", () => {
         res.setHeader("content-type", "application/json");
+        res.setHeader("x-client-port", String(req.socket.remotePort));
         res.end(
           JSON.stringify({
             host: req.headers.host,
@@ -99,6 +100,20 @@ describe("emulatorFetch", () => {
     const seen = (await res.json()) as { type: string; body: string };
     assert.match(seen.type, /^multipart\/form-data; boundary=/);
     assert.match(seen.body, /name="note"\r\n\r\ncafé\r\n/);
+  });
+
+  it("dials a connection of its own for a request that turns keep-alive off", async () => {
+    const dispatch = emulatorFetch(endpoint);
+    const portOf = async (init?: RequestInit) => {
+      const res = await dispatch("https://web-j-1-node.journey.test/api/probes/echo", init);
+      await res.text();
+      return res.headers.get("x-client-port");
+    };
+    const earlier = await portOf();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(await portOf(), earlier);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.notEqual(await portOf({ keepalive: false }), earlier);
   });
 });
 
