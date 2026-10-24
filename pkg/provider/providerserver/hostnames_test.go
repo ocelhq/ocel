@@ -446,9 +446,13 @@ func TestRemoveHostnameKeepsTheHostRecordedUntilItsCertificateIsDiscarded(t *tes
 		t.Fatalf("AddHostname() = %q, want the hostname attached", result.GetError())
 	}
 
-	vendor.QueueDiscardFailures(errors.New("the provider throttled the delete"))
-	if result := removeHostname(t, client); result.GetSuccess() {
-		t.Fatal("RemoveHostname() gave the hostname back, want it failed on a certificate it could not discard")
+	vendor.QueueDiscardFailures(refusal.Refuse(refusal.CodeNotReady, "the edge still uses certificate issued-for-app.acme.com"))
+	failed := removeHostname(t, client)
+	if failed.GetSuccess() {
+		t.Fatal("RemoveHostname() gave the hostname back, want it failed on a certificate the edge still holds")
+	}
+	if !strings.Contains(failed.GetError(), "ocel domain rm app.acme.com") {
+		t.Errorf("RemoveHostname() = %q, want it to name the command that retires the certificate", failed.GetError())
 	}
 	hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com")
 	if hostState.Certificate.ID != "issued-for-app.acme.com" {
@@ -678,6 +682,34 @@ func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *
 	}
 	if written := vendor.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(written, validationRecord) {
 		t.Errorf("the zone still contains %v, want the superseded validation record released", written)
+	}
+}
+
+func TestAddHostnameKeepsASupersededCertificateTheEdgeStillHoldsOnRecordForTheNextRun(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierProduction, "shop")
+	vendor.RequireValidationRecords(validationRecord)
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the hostname attached", result.GetError())
+	}
+
+	vendor.RotateCertificates()
+	vendor.RequireValidationRecords(rotatedValidationRecord)
+	vendor.QueueDiscardFailures(refusal.Refuse(refusal.CodeNotReady, "the edge still uses certificate issued-for-app.acme.com"))
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the rotation cut over though the edge still holds the superseded certificate", result.GetError())
+	}
+	hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com")
+	if len(hostState.Superseded) != 1 || hostState.Superseded[0].ID != "issued-for-app.acme.com" {
+		t.Fatalf("the record has %+v superseded, want the certificate the edge still holds kept on record", hostState.Superseded)
+	}
+
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the re-run to attach it", result.GetError())
+	}
+	if discarded := vendor.Discarded(); !slices.Contains(discarded, "issued-for-app.acme.com") {
+		t.Errorf("the provider discarded %v, want the re-run to discard the certificate the edge let go of", discarded)
 	}
 }
 

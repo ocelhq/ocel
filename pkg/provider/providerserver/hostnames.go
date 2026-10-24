@@ -433,7 +433,11 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Log) error 
 			if d.state.UsesOutside(host, cert.ID) {
 				continue
 			}
-			if err := discardCertificateAndRecords(ctx, d.provider, d.cutover, cert, provider.Certificate{}, runProgress); err != nil {
+			err := discardCertificateAndRecords(ctx, d.provider, d.cutover, cert, provider.Certificate{}, runProgress)
+			if code, _ := provider.RefusedCode(err); code == refusal.CodeNotReady {
+				return refusal.Refuse(refusal.CodeNotReady, "%v: run `ocel domain rm %s` again once it lets go", err, host)
+			}
+			if err != nil {
 				return err
 			}
 		}
