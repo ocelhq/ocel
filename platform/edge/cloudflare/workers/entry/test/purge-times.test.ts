@@ -57,6 +57,22 @@ describe("the times the PurgeQueue keeps for the tags raised", () => {
     });
   });
 
+  it("keeps an invalidation until a day after it expires, and forgets it after", async () => {
+    const week = 7 * 86_400_000;
+    await runInDurableObject(freshQueue(), async (_instance, state) => {
+      const times = newSqliteTagTimes(state.storage);
+      times.record("invalidate", [{ tag: "r1|weekly", raisedAt: 1_000, expiresAt: 1_000 + week }]);
+
+      times.forgetBefore(1_000 + TAG_TIMES_RETENTION_MS + 3_600_000);
+      expect(times.read(["r1|weekly"])).toEqual({
+        "r1|weekly": { invalidatedAt: 1_000, expiresAt: 1_000 + week },
+      });
+
+      times.forgetBefore(1_000 + week + TAG_TIMES_RETENTION_MS + 1);
+      expect(times.read(["r1|weekly"])).toEqual({});
+    });
+  });
+
   it("reads a hundred tags in one query", async () => {
     await runInDurableObject(freshQueue(), async (_instance, state) => {
       const times = newSqliteTagTimes(state.storage);

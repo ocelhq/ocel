@@ -19,6 +19,9 @@ export interface TagTimesStore {
 
 const TAGS_PER_QUERY = 100;
 
+const LATEST_TIME =
+  "MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0), COALESCE(expires_at, 0))";
+
 export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore {
   const { sql } = storage;
   sql.exec(
@@ -29,7 +32,7 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
        expires_at INTEGER
      );
      CREATE INDEX IF NOT EXISTS tag_times_by_age
-       ON tag_times (MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)));`,
+       ON tag_times (${LATEST_TIME});`,
   );
 
   return {
@@ -80,11 +83,7 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
       return times;
     },
     forgetBefore(at) {
-      sql.exec(
-        `DELETE FROM tag_times
-         WHERE MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)) < ?`,
-        at,
-      );
+      sql.exec(`DELETE FROM tag_times WHERE ${LATEST_TIME} < ?`, at);
     },
   };
 }
