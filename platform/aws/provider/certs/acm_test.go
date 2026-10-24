@@ -17,7 +17,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const (
@@ -398,19 +400,19 @@ func TestIssuerDiscard(t *testing.T) {
 		}
 	})
 
-	t.Run("a certificate still in use once the wait runs out is left in place, not fatal", func(t *testing.T) {
+	t.Run("a certificate still in use once the wait runs out is refused as not ready, so nothing forgets it", func(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{deleteErr: &acmtypes.ResourceInUseException{}}
-		var progress fake.Log
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, &progress); err != nil {
-			t.Fatalf("Discard: %v", err)
+		err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, progress.Discard())
+		if code, _ := provider.RefusedCode(err); code != refusal.CodeNotReady {
+			t.Fatalf("Discard err = %v, want a not-ready refusal so the caller keeps the certificate on record", err)
+		}
+		if !strings.Contains(err.Error(), testARN) {
+			t.Errorf("Discard err = %q, want the certificate named", err)
 		}
 		if api.deletes < 2 {
 			t.Errorf("deletes = %d, want the refusal retried", api.deletes)
-		}
-		if said := progress.Lines(); len(said) == 0 || !strings.HasPrefix(said[len(said)-1], "WARN Leaving certificate "+testARN+" in place") {
-			t.Errorf("said = %v, want a warning naming the certificate left in place", said)
 		}
 	})
 

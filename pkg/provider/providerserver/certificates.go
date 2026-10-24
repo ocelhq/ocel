@@ -3,12 +3,14 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -83,10 +85,16 @@ func (c hostCertificates) discardSuperseded(ctx context.Context, progress progre
 		if c.uses != nil && c.uses(cert.ID) {
 			continue
 		}
-		if err := discardCertificateAndRecords(ctx, c.provider, c.cutover, cert, active, progress); err != nil {
-			errs = append(errs, err)
-			kept = append(kept, cert)
+		err := discardCertificateAndRecords(ctx, c.provider, c.cutover, cert, active, progress)
+		if err == nil {
+			continue
 		}
+		kept = append(kept, cert)
+		if code, _ := provider.RefusedCode(err); code == refusal.CodeNotReady {
+			progress.Warn(fmt.Sprintf("Keeping certificate %s on record for the next run to discard: %v", cert.ID, err))
+			continue
+		}
+		errs = append(errs, err)
 	}
 	c.hostState.Superseded = kept
 	return errors.Join(append(errs, c.persist(ctx))...)

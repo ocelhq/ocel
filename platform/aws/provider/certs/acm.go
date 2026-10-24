@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/tags"
 )
 
@@ -325,10 +326,10 @@ func (i ACM) Discard(ctx context.Context, cert Certificate, progress progress.Lo
 	if err == nil || Gone(err) {
 		return nil
 	}
-	progress.Warn(fmt.Sprintf("Leaving certificate %s in place: %v — delete it in ACM once nothing uses it", cert.ARN, err))
 	if InUse(err) {
-		return nil
+		return refusal.Refuse(refusal.CodeNotReady, "the edge still uses certificate %s %s after the hostname left it", cert.ARN, releaseBudget)
 	}
+	progress.Warn(fmt.Sprintf("Leaving certificate %s in place: %v — delete it in ACM once nothing uses it", cert.ARN, err))
 	return fmt.Errorf("delete certificate %s: %w", cert.ARN, err)
 }
 
