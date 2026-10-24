@@ -39,6 +39,21 @@ func echoing(t *testing.T) string {
 	return listener.Addr().String()
 }
 
+func addressNothingListensOn(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	bound, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = bound.Close() })
+	return bound.LocalAddr().String()
+}
+
 func relayAllowing(t *testing.T, allowed ...string) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(relay.NewHandler(destinationsOf(t, allowed...)))
@@ -189,15 +204,10 @@ func TestClosingAForwardEndsItsOpenConnectionsAndFreesItsPort(t *testing.T) {
 
 func TestATargetTheRelayCannotReachIsRefusedAsNotReady(t *testing.T) {
 	t.Parallel()
-	closed, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := closed.Addr().String()
-	_ = closed.Close()
+	target := addressNothingListensOn(t)
 	server := relayAllowing(t, target)
 
-	_, err = relay.OpenForward(context.Background(), relay.Link{URL: server.URL, Target: target, Token: tokenOf("id-token")})
+	_, err := relay.OpenForward(context.Background(), relay.Link{URL: server.URL, Target: target, Token: tokenOf("id-token")})
 
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeNotReady {
 		t.Errorf("OpenForward() to a target nothing listens on = %v, want a not-ready refusal", err)
@@ -206,14 +216,9 @@ func TestATargetTheRelayCannotReachIsRefusedAsNotReady(t *testing.T) {
 
 func TestABastionThatCannotBeReachedIsRefusedSayingWhy(t *testing.T) {
 	t.Parallel()
-	closed, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	address := closed.Addr().String()
-	_ = closed.Close()
+	address := addressNothingListensOn(t)
 
-	_, err = relay.OpenForward(context.Background(), relay.Link{URL: "http://" + address, Target: "10.240.0.5:5432", Token: tokenOf("id-token")})
+	_, err := relay.OpenForward(context.Background(), relay.Link{URL: "http://" + address, Target: "10.240.0.5:5432", Token: tokenOf("id-token")})
 
 	if err == nil || !strings.Contains(err.Error(), "refused") {
 		t.Errorf("OpenForward() through a bastion nothing listens at = %v, want the refusal to carry why the dial failed", err)
