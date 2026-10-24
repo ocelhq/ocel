@@ -7,92 +7,149 @@ import (
 	"math/big"
 	"slices"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
-func render(stdout io.Writer, slug string, set *costv1.ResourceSet, estimates map[costv1.Profile]*costv1.Estimate, profile costv1.Profile, assumptions []string) error {
+const blockIndent = "  "
+
+type pricedSet struct {
+	priced   map[string]*costv1.ResourceEstimate
+	byScope  map[string][]*costv1.Resource
+	children map[string][]*costv1.Scope
+}
+
+func render(stdout io.Writer, palette terminal.Palette, slug string, set *costv1.ResourceSet, estimates map[costv1.Profile]*costv1.Estimate, profile costv1.Profile, assumptions []string) {
 	chosen := estimates[profile]
-	fmt.Fprintf(stdout, "%s · %s profile · %s per month · rates %s\n\n", slug, profileName(profile), chosen.GetCurrency(), chosen.GetRatesVersion())
+	fmt.Fprintf(stdout, "%s\n\n", palette.Heading(slug, profileName(profile)+" profile", chosen.GetCurrency()+" per month", "rates "+chosen.GetRatesVersion()))
 
-	priced := make(map[string]*costv1.ResourceEstimate, len(chosen.GetResources()))
+	resources := pricedSet{
+		priced:   make(map[string]*costv1.ResourceEstimate, len(chosen.GetResources())),
+		byScope:  make(map[string][]*costv1.Resource, len(set.GetScopes())),
+		children: make(map[string][]*costv1.Scope, len(set.GetScopes())),
+	}
 	for _, resource := range chosen.GetResources() {
-		priced[resource.GetResource()] = resource
+		resources.priced[resource.GetResource()] = resource
 	}
-	byScope := make(map[string][]*costv1.Resource, len(set.GetScopes()))
 	for _, resource := range set.GetResources() {
-		byScope[resource.GetScope()] = append(byScope[resource.GetScope()], resource)
+		resources.byScope[resource.GetScope()] = append(resources.byScope[resource.GetScope()], resource)
 	}
-	children := make(map[string][]*costv1.Scope, len(set.GetScopes()))
 	for _, scope := range set.GetScopes() {
-		children[scope.GetParent()] = append(children[scope.GetParent()], scope)
+		resources.children[scope.GetParent()] = append(resources.children[scope.GetParent()], scope)
 	}
 
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "RESOURCE\tTYPE\tFIXED\tUSAGE")
+	table := terminal.NewTable(
+		terminal.Column{Head: "RESOURCE"},
+		terminal.Column{Head: "TYPE"},
+		terminal.Column{Head: "FIXED", Align: terminal.AlignRight},
+		terminal.Column{Head: "USAGE", Align: terminal.AlignRight},
+		terminal.Column{Head: "MONTHLY", Align: terminal.AlignRight},
+	)
 	var walk func(parent string, depth int)
 	walk = func(parent string, depth int) {
-		for _, scope := range children[parent] {
-			fmt.Fprintf(tw, "%s%s\n", indent(depth), scopeLabel(scope))
-			for _, resource := range byScope[scope.GetId()] {
-				writeRow(tw, indent(depth+1), resource, priced[resource.GetId()])
+		for _, scope := range resources.children[parent] {
+			table.Row(indent(depth)+scopeLabel(palette, scope), "", "", "", palette.Muted(resources.total(scope.GetId()).FloatString(2)))
+			for _, resource := range resources.byScope[scope.GetId()] {
+				writeRow(table, palette, indent(depth+1), resource, resources.priced[resource.GetId()])
 			}
 			walk(scope.GetId(), depth+1)
 		}
 	}
 	walk("", 0)
-	if err := tw.Flush(); err != nil {
-		return err
-	}
+	table.Rule()
+	table.Row(palette.Bold("Total"), "", money(chosen.GetMonthlyFixed()), money(chosen.GetMonthlyUsage()), palette.Bold(sum(chosen.GetMonthlyFixed(), chosen.GetMonthlyUsage())))
+	fmt.Fprint(stdout, table.Render(palette, blockIndent))
 
-	fmt.Fprintln(stdout)
-	fmt.Fprintf(stdout, "Fixed %s + usage %s = %s per month on the %s profile\n", money(chosen.GetMonthlyFixed()), money(chosen.GetMonthlyUsage()), sum(chosen.GetMonthlyFixed(), chosen.GetMonthlyUsage()), profileName(profile))
 	byProfile := make([]string, 0, len(estimates))
-	for _, profile := range profiles() {
-		byProfile = append(byProfile, fmt.Sprintf("%s %s", profileName(profile), money(estimates[profile].GetMonthlyUsage())))
+	for _, each := range profiles() {
+		total := profileName(each) + " " + sum(estimates[each].GetMonthlyFixed(), estimates[each].GetMonthlyUsage())
+		if each == profile {
+			total = palette.Bold(total)
+		}
+		byProfile = append(byProfile, total)
 	}
-	fmt.Fprintf(stdout, "Usage by profile: %s\n", strings.Join(byProfile, " · "))
-	coverage := chosen.GetCoverage()
-	fmt.Fprintf(stdout, "Coverage: %d priced, %d free, %d unsupported, %d without a price\n", coverage.GetSupported(), coverage.GetFree(), coverage.GetUnsupported(), coverage.GetNoPrice())
-	for _, typ := range slices.Sorted(maps.Keys(coverage.GetUnsupportedTypes())) {
-		fmt.Fprintf(stdout, "  unsupported: %s ×%d\n", typ, coverage.GetUnsupportedTypes()[typ])
+	fields := terminal.NewTable(terminal.Column{}, terminal.Column{})
+	fields.Row(palette.Muted("By profile"), strings.Join(byProfile, palette.Muted(" · ")))
+	fields.Row(palette.Muted("Coverage"), coverageCell(chosen.GetCoverage()))
+	fmt.Fprint(stdout, "\n"+fields.Render(palette, blockIndent))
+
+	if len(assumptions)+len(chosen.GetNotes()) > 0 {
+		fmt.Fprintln(stdout)
 	}
 	for _, assumption := range assumptions {
-		fmt.Fprintf(stdout, "Assumption: %s\n", assumption)
+		fmt.Fprintf(stdout, "%s%s %s\n", blockIndent, palette.WarnMark(), palette.Commands(assumption))
 	}
 	for _, note := range chosen.GetNotes() {
-		fmt.Fprintf(stdout, "Note: %s\n", note)
+		fmt.Fprintf(stdout, "%s%s %s\n", blockIndent, palette.NeutralMark(), palette.Commands(note))
 	}
-	return nil
 }
 
-func writeRow(tw io.Writer, indent string, resource *costv1.Resource, estimate *costv1.ResourceEstimate) {
+func (s pricedSet) total(scope string) *big.Rat {
+	total := new(big.Rat)
+	for _, resource := range s.byScope[scope] {
+		if estimate := s.priced[resource.GetId()]; estimate.GetStatus() == costv1.ResourceEstimate_STATUS_PRICED {
+			total.Add(total, amountOf(estimate.GetMonthlyFixed()))
+			total.Add(total, amountOf(estimate.GetMonthlyUsage()))
+		}
+	}
+	for _, child := range s.children[scope] {
+		total.Add(total, s.total(child.GetId()))
+	}
+	return total
+}
+
+func coverageCell(coverage *costv1.Coverage) string {
+	unsupported := fmt.Sprintf("%d unsupported", coverage.GetUnsupported())
+	if types := coverage.GetUnsupportedTypes(); len(types) > 0 {
+		counted := make([]string, 0, len(types))
+		for _, typ := range slices.Sorted(maps.Keys(types)) {
+			counted = append(counted, fmt.Sprintf("%s ×%d", typ, types[typ]))
+		}
+		unsupported += " (" + strings.Join(counted, ", ") + ")"
+	}
+	return strings.Join([]string{
+		fmt.Sprintf("%d priced", coverage.GetSupported()),
+		fmt.Sprintf("%d free", coverage.GetFree()),
+		unsupported,
+		fmt.Sprintf("%d without a price", coverage.GetNoPrice()),
+	}, " · ")
+}
+
+func writeRow(table *terminal.Table, palette terminal.Palette, indent string, resource *costv1.Resource, estimate *costv1.ResourceEstimate) {
 	name := resource.GetName()
 	if name == "" {
 		name = resource.GetId()
 	}
+	name = indent + name
 	switch estimate.GetStatus() {
 	case costv1.ResourceEstimate_STATUS_PRICED:
-		fmt.Fprintf(tw, "%s%s\t%s\t%s\t%s\n", indent, name, resource.GetType(), money(estimate.GetMonthlyFixed()), money(estimate.GetMonthlyUsage()))
+		table.Row(name, resource.GetType(), cost(estimate.GetMonthlyFixed()), cost(estimate.GetMonthlyUsage()), sum(estimate.GetMonthlyFixed(), estimate.GetMonthlyUsage()))
 	case costv1.ResourceEstimate_STATUS_FREE:
-		fmt.Fprintf(tw, "%s%s\t%s\tfree\n", indent, name, resource.GetType())
+		table.Row(name, resource.GetType(), "", "", palette.Muted("free"))
 	case costv1.ResourceEstimate_STATUS_NO_PRICE:
-		fmt.Fprintf(tw, "%s%s\t%s\tno price\n", indent, name, resource.GetType())
+		table.Row(name, resource.GetType(), "", "", palette.Warning("no price"))
 	default:
-		fmt.Fprintf(tw, "%s%s\t%s\tunsupported\n", indent, name, resource.GetType())
+		table.Row(name, resource.GetType(), "", "", palette.Warning("unsupported"))
 	}
 }
 
-func scopeLabel(scope *costv1.Scope) string {
+func scopeLabel(palette terminal.Palette, scope *costv1.Scope) string {
 	if scope.GetName() == "" {
-		return scope.GetKind()
+		return palette.Bold(scope.GetKind())
 	}
-	return scope.GetKind() + " " + scope.GetName()
+	return palette.Muted(scope.GetKind()) + " " + palette.Bold(scope.GetName())
 }
 
 func indent(depth int) string {
 	return strings.Repeat("  ", depth)
+}
+
+func cost(amount string) string {
+	if amountOf(amount).Sign() == 0 {
+		return terminal.NoValue
+	}
+	return amount
 }
 
 func money(amount string) string {
@@ -102,15 +159,17 @@ func money(amount string) string {
 	return amount
 }
 
+func amountOf(amount string) *big.Rat {
+	if parsed, ok := new(big.Rat).SetString(amount); ok {
+		return parsed
+	}
+	return new(big.Rat)
+}
+
 func sum(amounts ...string) string {
 	total := new(big.Rat)
 	for _, amount := range amounts {
-		if amount == "" {
-			continue
-		}
-		if parsed, ok := new(big.Rat).SetString(amount); ok {
-			total.Add(total, parsed)
-		}
+		total.Add(total, amountOf(amount))
 	}
 	return total.FloatString(2)
 }

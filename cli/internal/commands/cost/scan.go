@@ -98,10 +98,12 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 		if err != nil {
 			return err
 		}
-		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		present := dependencies.Presentation(stdout)
+		if present.Format == terminal.FormatJSON {
 			return terminal.WriteResultJSON(stdout, &resultv1.CostScanResult{Resources: set, Estimate: estimates[profile], Assumptions: assumptions})
 		}
-		return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
+		render(stdout, present.Palette(), cfg.Slug, set, estimates, profile, assumptions)
+		return nil
 	})
 }
 

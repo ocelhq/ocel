@@ -5,9 +5,11 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -71,10 +73,8 @@ func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 			"14.60",
 			"1.00",
 			"moderate",
-			"light",
-			"0.10",
-			"heavy",
-			"10.00",
+			"light 14.70",
+			"heavy 24.60",
 			"15.60",
 			"0 unsupported",
 			"0 without a price",
@@ -82,6 +82,26 @@ func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout lacks %q:\n%s", want, out)
 			}
+		}
+	})
+
+	t.Run("every row lines up under the heads and the total sums the month", func(t *testing.T) {
+		root, _, dependencies := scanFixture(t)
+
+		out := scan(t, dependencies, root, Options{})
+
+		head := lineNaming(out, "MONTHLY")
+		end := strings.Index(head, "MONTHLY") + len("MONTHLY")
+		for _, name := range []string{"db--main", "fn--api--api", "Total"} {
+			if row := lineNaming(out, name); utf8.RuneCountInString(row) != end {
+				t.Errorf("%s row = %q ends at %d, want its monthly cost to end under MONTHLY at %d", name, row, utf8.RuneCountInString(row), end)
+			}
+		}
+		if row, want := strings.Fields(lineNaming(out, "Total")), []string{"Total", "14.60", "1.00", "15.60"}; !slices.Equal(row, want) {
+			t.Errorf("total row = %v, want %v", row, want)
+		}
+		if row, want := strings.Fields(lineNaming(out, "app api")), []string{"app", "api", "1.00"}; !slices.Equal(row, want) {
+			t.Errorf("app scope row = %v, want %v: a scope carries what its resources cost", row, want)
 		}
 	})
 
@@ -120,7 +140,7 @@ func TestCostScanPricesEveryResourceUnderTheProfileAskedFor(t *testing.T) {
 		if !strings.Contains(out, "fake_function") {
 			t.Errorf("stdout = %q, want the api app priced as one function without a build", out)
 		}
-		if !strings.Contains(out, "Assumption: nothing is built, so each serverless app is priced as one function") {
+		if !strings.Contains(out, "⚠ nothing is built, so each serverless app is priced as one function") {
 			t.Errorf("stdout = %q, want the one-function-per-app assumption said out loud", out)
 		}
 	})
