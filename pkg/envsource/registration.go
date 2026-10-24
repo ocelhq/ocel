@@ -270,6 +270,17 @@ func Registered(ctx context.Context, store records.Store, tier environment.Tier,
 	return out, true, err
 }
 
+func isCurrent(ctx context.Context, store records.Store, tier environment.Tier, registration Registration) (bool, error) {
+	recorded, registered, err := Registered(ctx, store, tier, registration.Project)
+	if isUndecodable(err) {
+		return false, nil
+	}
+	if err != nil || !registered {
+		return false, err
+	}
+	return recorded.Descriptor.ID() == registration.Descriptor.ID() && slices.Equal(recorded.Folders, registration.Folders), nil
+}
+
 func Registrations(ctx context.Context, store records.Store, tier environment.Tier) ([]Registration, error) {
 	registrations, _, err := readRegistrations(ctx, store, tier)
 	return registrations, err
