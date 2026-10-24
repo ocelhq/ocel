@@ -138,6 +138,18 @@ func TestABucketIsCreatedTaggedForItsNamespaceAndTierWithABACOnThatOutlivesIt(t 
 	}
 }
 
+func TestABucketIsEmptiedOfItsObjectsWhenItIsDeleted(t *testing.T) {
+	t.Parallel()
+
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, testStack("shop"), "bucket--uploads", translate(&provider.BucketSpec{}), testSessions("shop"), testUploadCompleter())
+	})
+
+	if got := rec.InputsOf(t, component.TokenS3Bucket, testBucket)["forceDestroy"]; !got.IsBool() || !got.BoolValue() {
+		t.Errorf("forceDestroy = %v, want true: S3 refuses to delete a bucket that holds an object, so destroying the stack would stop partway", got)
+	}
+}
+
 func TestResourceCoordinate(t *testing.T) {
 	t.Parallel()
 
