@@ -429,17 +429,17 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Log) error 
 		if err := d.cutover.release(ctx, hostState.Written, runProgress.Say); err != nil {
 			return err
 		}
-		d.state.Forget(host)
-		if err := d.checkpoint(ctx); err != nil {
-			return err
-		}
 		for _, cert := range hostState.Certificates() {
-			if d.state.Uses(cert.ID) {
+			if d.state.UsesOutside(host, cert.ID) {
 				continue
 			}
 			if err := discardCertificateAndRecords(ctx, d.provider, d.cutover, cert, provider.Certificate{}, runProgress); err != nil {
 				return err
 			}
+		}
+		d.state.Forget(host)
+		if err := d.checkpoint(ctx); err != nil {
+			return err
 		}
 	}
 	return nil

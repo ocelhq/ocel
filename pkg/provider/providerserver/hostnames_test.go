@@ -420,6 +420,80 @@ func TestRemoveHostnameRefusesAHostTheProjectDoesNotServe(t *testing.T) {
 	}
 }
 
+func removeHostname(t *testing.T, client contractv1connect.ProviderServiceClient) *progressv1.OperationResult {
+	t.Helper()
+	stream, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug: "shop",
+		Host: "app.acme.com",
+		Edge: zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("RemoveHostname() error = %v", err)
+	}
+	result, err := drain(stream)
+	if err != nil {
+		t.Fatalf("RemoveHostname() error = %v", err)
+	}
+	return result
+}
+
+func TestRemoveHostnameKeepsTheHostRecordedUntilItsCertificateIsDiscarded(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierProduction, "shop")
+	vendor.RequireValidationRecords(validationRecord)
+	if result := addHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("AddHostname() = %q, want the hostname attached", result.GetError())
+	}
+
+	vendor.QueueDiscardFailures(errors.New("the provider throttled the delete"))
+	if result := removeHostname(t, client); result.GetSuccess() {
+		t.Fatal("RemoveHostname() gave the hostname back, want it failed on a certificate it could not discard")
+	}
+	hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com")
+	if hostState.Certificate.ID != "issued-for-app.acme.com" {
+		t.Fatalf("the hostname state records %+v, want the certificate left standing still on record", hostState.Certificate)
+	}
+
+	if result := removeHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("RemoveHostname() = %q, want the re-run to give the hostname back", result.GetError())
+	}
+	if discarded := vendor.Discarded(); !slices.Contains(discarded, "issued-for-app.acme.com") {
+		t.Errorf("the provider discarded %v, want the re-run to discard the certificate", discarded)
+	}
+	if state := readStack(t, vendor, environment.TierProduction, "shop"); len(state.Hosts) != 0 {
+		t.Errorf("the hostname state still records %v", state.Hostnames())
+	}
+	if written := vendor.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 0 {
+		t.Errorf("the zone still contains %v, want the validation record released", written)
+	}
+}
+
+func TestRemoveHostnameKeepsACertificateAnotherHostnameStillServes(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	shared := provider.Certificate{ID: "shared", Requested: true}
+	seedStack(t, vendor, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Endpoint: "https://shop.fake.invalid"},
+		Apps: map[string]router.Kind{"web": fake.RouterRelay},
+		Hosts: map[string]stackrecords.HostnameState{
+			"app.acme.com": {Router: fake.RouterRelay, Certificate: shared},
+			"www.acme.com": {Router: fake.RouterRelay, Certificate: shared},
+		},
+	})
+	promoted(t, vendor, environment.TierProduction, "shop")
+
+	if result := removeHostname(t, client); !result.GetSuccess() {
+		t.Fatalf("RemoveHostname() = %q, want the hostname given back", result.GetError())
+	}
+	if discarded := vendor.Discarded(); slices.Contains(discarded, "shared") {
+		t.Errorf("the provider discarded %v, want the certificate www.acme.com still serves kept", discarded)
+	}
+	if hosts := readStack(t, vendor, environment.TierProduction, "shop").Hostnames(); !slices.Equal(hosts, []string{"www.acme.com"}) {
+		t.Errorf("the hostname state records %v, want only www.acme.com left", hosts)
+	}
+}
+
 func TestAddHostnameBindsTheCertificateItsProviderIssues(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")

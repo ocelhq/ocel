@@ -182,12 +182,14 @@ func (s EdgeState) Certificates() []provider.Certificate {
 	return certificates
 }
 
-func (s EdgeState) Uses(id string) bool {
+func (s EdgeState) Uses(id string) bool { return s.UsesOutside("", id) }
+
+func (s EdgeState) UsesOutside(hostname, id string) bool {
 	if id == "" {
 		return false
 	}
-	for _, host := range s.Hosts {
-		if host.Certificate.ID == id {
+	for name, host := range s.Hosts {
+		if name != hostname && host.Certificate.ID == id {
 			return true
 		}
 	}

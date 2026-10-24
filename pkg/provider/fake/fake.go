@@ -21,6 +21,7 @@ type Provider struct {
 	issue                 []edge.Record
 	discarded             []string
 	servingDiscardRefusal error
+	discardFailures       []error
 	rotation              int
 	pending               error
 	health                *provider.CertificateHealth
