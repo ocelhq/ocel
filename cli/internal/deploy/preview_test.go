@@ -1092,10 +1092,33 @@ func removePreviewNamed(t *testing.T, fixture clitest.FakeProject, dependencies 
 
 func TestPreviewListShowsADashForAPreviewWithNoLifecycle(t *testing.T) {
 	var out strings.Builder
-	renderEnvironments(&out, []*contractv1.PreviewEnvironment{{Identity: "staging"}})
+	renderEnvironments(&out, terminal.Presentation{}, []*contractv1.PreviewEnvironment{{Identity: "staging"}})
 
-	if fields := strings.Split(out.String(), "\t"); len(fields) < 2 || fields[1] != "—" {
+	if fields := strings.Fields(strings.Split(out.String(), "\n")[1]); len(fields) < 2 || fields[0] != "staging" || fields[1] != "—" {
 		t.Errorf("ocel preview ls printed %q, want a dash where the lifecycle goes: the provider named none", out.String())
+	}
+}
+
+func TestPreviewListLinesUpEachPreviewUnderItsHeads(t *testing.T) {
+	var out strings.Builder
+	renderEnvironments(&out, terminal.Presentation{}, []*contractv1.PreviewEnvironment{
+		{Identity: "staging", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, AliasUrls: []string{"https://staging.example.com"}},
+		{Identity: "feature-login-0a1b2c", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, Label: "pr-7"},
+	})
+
+	lines := strings.Split(out.String(), "\n")
+	if fields := strings.Fields(lines[0]); !slices.Equal(fields, []string{"PREVIEW", "KIND", "LABEL", "URL", "CREATED"}) {
+		t.Fatalf("head = %q, want the columns named", lines[0])
+	}
+	kind, url := strings.Index(lines[0], "KIND"), strings.Index(lines[0], "URL")
+	for _, line := range lines[1:3] {
+		runes := []rune(line)
+		if at := string(runes[kind:]); !strings.HasPrefix(at, "persistent") && !strings.HasPrefix(at, "ephemeral") {
+			t.Errorf("row %q puts its lifecycle off KIND at %d", line, kind)
+		}
+		if at := string(runes[url:]); !strings.HasPrefix(at, "https://") && !strings.HasPrefix(at, "—") {
+			t.Errorf("row %q puts its URL off URL at %d", line, url)
+		}
 	}
 }
 

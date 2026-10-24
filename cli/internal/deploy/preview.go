@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
@@ -172,10 +171,11 @@ func ListPreviews(ctx context.Context, dependencies Dependencies, cwd string, st
 	if err != nil {
 		return err
 	}
-	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+	present := dependencies.Presentation(stdout)
+	if present.Format == terminal.FormatJSON {
 		return terminal.WriteResultJSON(stdout, previewListResult(previews))
 	}
-	renderEnvironments(stdout, previews)
+	renderEnvironments(stdout, present, previews)
 	return nil
 }
 
@@ -255,20 +255,30 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 	})
 }
 
-func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment) {
+func renderEnvironments(stdout io.Writer, present terminal.Presentation, envs []*contractv1.PreviewEnvironment) {
 	if len(envs) == 0 {
 		fmt.Fprintln(stdout, "No previews.")
 		return
 	}
+	palette := present.Palette()
+	table := terminal.NewTable(
+		terminal.Column{Head: "PREVIEW"},
+		terminal.Column{Head: "KIND"},
+		terminal.Column{Head: "LABEL"},
+		terminal.Column{Head: "URL"},
+		terminal.Column{Head: "CREATED"},
+	)
 	for _, e := range envs {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\tcreated %s\n",
-			e.GetIdentity(),
-			lifecycleTag(e.GetLifecycle()),
-			formatValueOrDash(e.GetLabel()),
-			formatValueOrDash(strings.Join(e.GetAliasUrls(), " ")),
-			terminal.EpochDate(e.GetCreatedAt()),
-		)
+		url, more := terminal.NoValue, []string(nil)
+		if urls := e.GetAliasUrls(); len(urls) > 0 {
+			url, more = urls[0], urls[1:]
+		}
+		table.Row(palette.Bold(e.GetIdentity()), lifecycleTag(e.GetLifecycle()), formatValueOrDash(e.GetLabel()), url, present.EpochAge(e.GetCreatedAt()))
+		for _, url := range more {
+			table.Row("", "", "", url)
+		}
 	}
+	fmt.Fprint(stdout, table.Render(palette, ""))
 }
 
 func lifecycleTag(l environmentv1.Lifecycle) string {
@@ -278,13 +288,13 @@ func lifecycleTag(l environmentv1.Lifecycle) string {
 	case environmentv1.Lifecycle_LIFECYCLE_PERSISTENT:
 		return "persistent"
 	default:
-		return "—"
+		return terminal.NoValue
 	}
 }
 
 func formatValueOrDash(value string) string {
 	if value == "" {
-		return "—"
+		return terminal.NoValue
 	}
 	return value
 }
