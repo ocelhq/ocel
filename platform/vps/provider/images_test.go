@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -61,6 +62,10 @@ type box struct {
 	remembers  bool
 	containers map[string]string
 	store      *heldStore
+	containerd bool
+	reports    string
+	archived   sentArchive
+	loadedID   string
 }
 
 func (b *box) ForwardPort(_ context.Context, remote string) (string, func(), error) {
@@ -91,7 +96,12 @@ func (b *box) forwardedTo() []string {
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Result, error) {
 	var input string
+	var archived sentArchive
+	loading := strings.Contains(command, "docker load")
 	if stdin != nil && b.drains {
+		if loading {
+			archived = readSentArchive(stdin)
+		}
 		if _, err := io.Copy(io.Discard, stdin); err != nil {
 			return ssh.Result{}, err
 		}
@@ -101,9 +111,15 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Re
 			return ssh.Result{}, err
 		}
 		input = string(raw)
+		if loading {
+			archived = readSentArchive(strings.NewReader(input))
+		}
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if loading {
+		b.archived = archived
+	}
 	b.ran = append(b.ran, command)
 	b.fed = append(b.fed, input)
 	if b.refuses != nil {
@@ -150,7 +166,13 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Re
 		case fields[1] == "load":
 			b.hasImage = true
 			b.name(loadedImageRef, loadedImageRef)
+			b.loadedID = b.archived.config
+			if b.containerd {
+				b.loadedID = b.archived.manifest
+			}
 			said = "Loaded image: " + loadedImageRef + "\n"
+		case fields[1] == "image" && len(fields) > 2 && fields[2] == "inspect" && strings.Contains(line, "{{.Id}}"):
+			return b.inspected(), nil
 		case fields[1] == "pull" && len(fields) > 2 || fields[1] == "pull-as" && len(fields) > 4:
 			ref := unquoted(fields[len(fields)-1])
 			b.hasImage = true
@@ -165,6 +187,59 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Re
 		}
 	}
 	return ssh.Result{Stdout: said}, nil
+}
+
+type sentArchive struct {
+	config, manifest, containerdName string
+}
+
+func readSentArchive(from io.Reader) sentArchive {
+	var sent sentArchive
+	var configPath string
+	var index v1.IndexManifest
+	digests := map[string]string{}
+	archive := tar.NewReader(from)
+	for {
+		header, err := archive.Next()
+		if err != nil {
+			break
+		}
+		hash := sha256.New()
+		body := io.TeeReader(archive, hash)
+		switch header.Name {
+		case "manifest.json":
+			var described []struct{ Config string }
+			if json.NewDecoder(body).Decode(&described) == nil && len(described) == 1 {
+				configPath = described[0].Config
+			}
+		case "index.json":
+			_ = json.NewDecoder(body).Decode(&index)
+		}
+		_, _ = io.Copy(io.Discard, body)
+		digests[header.Name] = "sha256:" + hex.EncodeToString(hash.Sum(nil))
+	}
+	sent.config = digests[configPath]
+	if len(index.Manifests) == 1 {
+		named := index.Manifests[0]
+		if digests["blobs/sha256/"+named.Digest.Hex] == named.Digest.String() {
+			sent.manifest = named.Digest.String()
+		}
+		sent.containerdName = named.Annotations["io.containerd.image.name"]
+	}
+	return sent
+}
+
+func (b *box) inspected() ssh.Result {
+	missing := ssh.Result{Code: 1, Stderr: "Error response from daemon: No such image: " + loadedImageRef}
+	switch {
+	case !b.hasImage:
+		return missing
+	case b.reports != "":
+		return ssh.Result{Stdout: b.reports + "\n"}
+	case b.containerd && b.archived.containerdName != "docker.io/"+loadedImageRef:
+		return missing
+	}
+	return ssh.Result{Stdout: b.loadedID + "\n"}
 }
 
 func (b *box) proxying(command, input string) (ssh.Result, bool) {

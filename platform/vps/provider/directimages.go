@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -53,10 +52,10 @@ func (l loaded) load(ctx context.Context, push provider.ImagePush, progress prog
 		return fmt.Errorf("%q is not a valid image tag: %w", push.ImageRef, err)
 	}
 	stream, writer := io.Pipe()
-	go func() { writer.CloseWithError(tarball.Write(ref, push.Built, writer)) }()
+	go func() { writer.CloseWithError(release.WriteArchive(ref, push.Built, writer)) }()
 	sent := &counted{from: stream}
 	began := l.now()
-	said, err := l.images.Load(ctx, push.ImageRef, sent)
+	said, err := l.images.Load(ctx, push.ImageRef, push.Built, sent)
 	took := l.now().Sub(began)
 	_ = stream.Close()
 	if err != nil {
