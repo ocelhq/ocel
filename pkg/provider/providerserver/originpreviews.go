@@ -92,7 +92,7 @@ func (r *deployRun) forwardAppPreviews(ctx context.Context, progress progress.Lo
 func (r *deployRun) forwardAppPreview(ctx context.Context, forwarding *hostnames, target ConfiguredHost, wildcard provider.Certificate, progress progress.Log) error {
 	hostState := r.state.Host(target.Hostname)
 	rotated := hostState.Certificate.ID != wildcard.ID
-	hostState.Certificate = provider.Certificate{ID: wildcard.ID, Requested: wildcard.Requested && r.hostingMode() != hostingGlobalPreview}
+	hostState.Certificate = provider.Certificate{ID: wildcard.ID, Requested: wildcard.Requested}
 	hostState.Router = r.appRouters[target.App]
 	if slices.Contains(r.edgeStack().State().Bound, target.Hostname) && !rotated {
 		_, err := forwarding.refreshOriginClaim(ctx, target, &hostState, progress)
@@ -120,5 +120,9 @@ func (r *deployRun) certifyPreviewWildcard(ctx context.Context, forwarding *host
 	if err := certifying.certify(ctx, wildcard, progress); err != nil {
 		return hostCertificates{}, err
 	}
-	return certifying, nil
+	if r.hostingMode() != hostingGlobalPreview {
+		return certifying, nil
+	}
+	wildcardState.Certificate = provider.Certificate{ID: wildcardState.Certificate.ID}
+	return certifying, certifying.persist(ctx)
 }
