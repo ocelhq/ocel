@@ -91,7 +91,7 @@ func TestLiveStacks(t *testing.T) {
 		parts = append(parts, gcp.NetworkPart)
 	}
 	bootstrappedWith(t, p, environment.TierPreview, parts...)
-	writableDatabaseMade(t, p, environment.TierPreview, "conformance")
+	projectDatabaseMade(t, p, environment.TierPreview, "conformance")
 
 	conformance.RunStacks(t, servableFacts(p.Facts()), p.Stacks(), p.Artifacts(), p.KeyValues(), realtime.RootRealtime, postgres.RootPostgres)
 }

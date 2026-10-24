@@ -118,11 +118,11 @@ func TestTwoAppsInOneProjectRunAsDifferentAccounts(t *testing.T) {
 	p, c := ensuringAccounts(t, server)
 	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
 
-	web, err := p.release().EnsureAccount(context.Background(), c, appNamed("web", spec), nil)
+	web, _, err := p.release().EnsureAccount(context.Background(), c, appNamed("web", spec), nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(web) = %v", err)
 	}
-	api, err := p.release().EnsureAccount(context.Background(), c, appNamed("api", spec), nil)
+	api, _, err := p.release().EnsureAccount(context.Background(), c, appNamed("api", spec), nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(api) = %v", err)
 	}
@@ -151,7 +151,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			return err
 		},
 		"a worker": func(p *Provider, spec provider.StackSpec) error {
-			account, err := p.release().EnsureAccount(context.Background(), p.resolved, worker, nil)
+			account, _, err := p.release().EnsureAccount(context.Background(), p.resolved, worker, nil)
 			if err != nil {
 				return err
 			}
@@ -185,12 +185,12 @@ func TestAnAppsAccountIsCreatedOnceAndReusedByTheNextDeploy(t *testing.T) {
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
 	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
-	if _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatal(err)
 	}
 	created, written := len(server.Created), server.Writes
 
-	if _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() again = %v", err)
 	}
 
@@ -206,7 +206,7 @@ func TestAnAppThatOpensNoValueIsGrantedNoKeyAndMakesNone(t *testing.T) {
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
 
-	if _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -222,13 +222,13 @@ func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothin
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
-	email, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil)
+	email, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	member := "serviceAccount:" + email
-	want := []string{"roles/datastore.viewer " + member + ` resource.name == "projects/acme-prod/databases/` + ports.ProjectDatabase("ocel", environment.TierProduction, "shop") + `"`}
+	want := []string{"roles/datastore.viewer " + member + ` resource.name == "projects/acme-prod/databases/` + ports.SharedDatabase("ocel", environment.TierProduction) + `"`}
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
 		t.Errorf("the project binds %q, want exactly %q", got, want)
 	}
@@ -252,7 +252,7 @@ func TestAGrantRefusedBecauseTheNewAccountIsNotYetVisibleIsRetried(t *testing.T)
 	server.Unseen = 2
 	p, c := ensuringAccounts(t, server)
 
-	if _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v, want the grant retried until the account is visible", err)
 	}
 
@@ -273,7 +273,7 @@ func TestAProjectWithNoRoomForAnotherAccountIsRefusedNamingTheQuota(t *testing.T
 			configure(server)
 			p, c := ensuringAccounts(t, server)
 
-			_, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
+			_, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
 
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, "Service Account Count") {
@@ -291,14 +291,14 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	declared := map[string]*provider.TopicSpec{"resize": {}}
 
-	email, err := p.release().EnsureAccount(context.Background(), c, spec, declared)
+	email, _, err := p.release().EnsureAccount(context.Background(), c, spec, declared)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 
 	member := "serviceAccount:" + email
-	if !slices.Contains(projectBindingsOf(server), "roles/datastore.user "+member+` resource.name == "projects/acme-prod/databases/`+ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")+`"`) {
-		t.Errorf("the project binds %q, want the app to write its project's production database of runs", projectBindingsOf(server))
+	if !slices.Contains(projectBindingsOf(server), "roles/datastore.user "+member+` resource.name == "projects/acme-prod/databases/`+ports.SharedDatabase("ocel", environment.TierProduction)+`"`) {
+		t.Errorf("the project binds %q, want the app to write the production database its project keeps its runs in", projectBindingsOf(server))
 	}
 	queue := c.DelayQueuePath("europe-west1", environment.TierProduction)
 	var queueRoles []string
@@ -345,7 +345,7 @@ func TestAnAppReachingTopicsMayNotDeleteTasksOnTheTiersDelayQueue(t *testing.T) 
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
-	email, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+	email, _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -364,7 +364,7 @@ func TestAnAppReachingNoTopicsIsGrantedNothingOnTheQueueOrItsOwnAccount(t *testi
 	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 
-	if _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -427,7 +427,7 @@ func TestAnAppsOwnAccountNotYetReadableIsActedAsOnceItIs(t *testing.T) {
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
-	email, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+	email, _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v, want the grant retried until the account is readable", err)
 	}
@@ -450,7 +450,7 @@ func TestAnAppsOwnAccountItMayNotActAsNamesTheTiersAccountsGrant(t *testing.T) {
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
-	_, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+	_, _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
 
 	const lacking = "roles/iam.serviceAccountAdmin, on the condition !resource.hasTagKey('acme-prod/ocel-tier') || resource.matchTag('acme-prod/ocel-tier', 'production')"
 	if err == nil || !strings.Contains(err.Error(), lacking) {
@@ -464,7 +464,7 @@ func TestANextAppThatDeclaresNoTopicIsGrantedNothingOnTheQueueOrAnyAccount(t *te
 	server.AccountPolicies = map[string]*iam.Policy{}
 	p, c := ensuringAccounts(t, server)
 
-	if _, err := p.release().EnsureAccount(context.Background(), c, routedNextSpec(), nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, routedNextSpec(), nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 
@@ -481,7 +481,7 @@ func TestANextAppOnContainerComputeIsGrantedNothingOnTheQueueOrAnyAccount(t *tes
 	spec := routedNextSpec()
 	spec.App.Compute = provider.ComputeContainer
 
-	if _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatal(err)
 	}
 

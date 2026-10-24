@@ -17,11 +17,15 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 func tierParts() []bootstrap.RemovablePart {
 	return []bootstrap.RemovablePart{
 		bootstrap.Keys.Removable(),
+		variables.SharedDatabasePart(appDatabaseLayouts()...),
 		bootstrap.EdgeBucket.Removable(),
 		bootstrap.CacheBucket.Removable(),
 		{Part: provider.Part{Name: network.PartName, Summary: network.Summary}, Deployed: network.NewPart},
@@ -31,6 +35,10 @@ func tierParts() []bootstrap.RemovablePart {
 		envsource.Part,
 		bastion.Part,
 	}
+}
+
+func appDatabaseLayouts() []variables.Layout {
+	return []variables.Layout{task.RunLayout(), tagLayout()}
 }
 
 func tierAccounts(registry component.Registry) []bootstrap.Account {
@@ -97,6 +105,11 @@ func (u deployUse) sealsProjectValues() bool {
 	return len(u.resources) > 0 ||
 		slices.ContainsFunc(u.deploy.Apps, opensSecrets) ||
 		slices.ContainsFunc(u.usages, func(usage provider.AppUsage) bool { return len(usage.Grants) > 0 })
+}
+
+func (u deployUse) keepsProjectRecords() bool {
+	revalidates := slices.ContainsFunc(u.uses, func(uses buildoutput.Uses) bool { return uses.Revalidation })
+	return u.deploy.Slug != "" && (revalidates || topic.DeclaresTopics(u.resources) || u.sealsProjectValues() || slices.ContainsFunc(u.deploy.Apps, servesNext))
 }
 
 func (u deployUse) servesFromTheEdgeBucket() bool {

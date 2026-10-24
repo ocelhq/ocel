@@ -12,17 +12,18 @@ import (
 const EnvVar = "OCEL_LIVE_MANIFEST"
 
 type Manifest struct {
-	Project            string         `json:"project"`
-	Region             string         `json:"region"`
-	Namespace          string         `json:"namespace"`
-	Slug               string         `json:"slug"`
-	Tier               string         `json:"tier"`
-	Environment        string         `json:"environment,omitempty"`
-	Endpoint           string         `json:"endpoint,omitempty"`
-	Keys               []live.Key     `json:"keys"`
-	Bindings           []live.Binding `json:"bindings,omitempty"`
-	Tasks              *Tasks         `json:"tasks,omitempty"`
-	RealtimePublishURL string         `json:"realtimePublishUrl,omitempty"`
+	Project            string            `json:"project"`
+	Region             string            `json:"region"`
+	Namespace          string            `json:"namespace"`
+	Slug               string            `json:"slug"`
+	Tier               string            `json:"tier"`
+	Environment        string            `json:"environment,omitempty"`
+	Endpoint           string            `json:"endpoint,omitempty"`
+	Databases          map[string]string `json:"databases,omitempty"`
+	Keys               []live.Key        `json:"keys"`
+	Bindings           []live.Binding    `json:"bindings,omitempty"`
+	Tasks              *Tasks            `json:"tasks,omitempty"`
+	RealtimePublishURL string            `json:"realtimePublishUrl,omitempty"`
 }
 
 type Tasks struct {

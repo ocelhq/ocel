@@ -58,11 +58,11 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			return nil, err
 		}
 	}
-	account, err := p.EnsureAccount(ctx, c, spec, declared)
+	account, databases, err := p.EnsureAccount(ctx, c, spec, declared)
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.RuntimeEnv(named, spec, tasks)
+	own, err := p.RuntimeEnv(named, spec, tasks, databases)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,11 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			if err != nil {
 				return nil, err
 			}
-			if values, err = run.MergeValues(fn.Name, release.NextValues, values, next.NewEnv(spec, fn, served, next.NewCache(named, buckets, spec.Ref, p.ContainerEndpoint, p.ContainerTagEndpoint, facts.PurgeSecret))); err != nil {
+			database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, spec.Ref.Project)
+			if err != nil {
+				return nil, err
+			}
+			if values, err = run.MergeValues(fn.Name, release.NextValues, values, next.NewEnv(spec, fn, served, next.NewCache(named, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, facts.PurgeSecret))); err != nil {
 				return nil, err
 			}
 		}

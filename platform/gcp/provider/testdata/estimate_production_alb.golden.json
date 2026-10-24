@@ -142,7 +142,7 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/shared:production/google_firestore_database:ocel-app-prod-v-6f25da114a",
+      "resource": "project:shop/shared:production/google_firestore_database:ocel-app-prod-shared",
       "status": "STATUS_PRICED",
       "components": [
         {

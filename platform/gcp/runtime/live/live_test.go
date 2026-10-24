@@ -179,13 +179,15 @@ func TestAManifestThatWillNotParseIsAnInitFailure(t *testing.T) {
 func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T) {
 	t.Parallel()
 	endpoint := servingFirestoreAndKMS(t)
-	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
+	databases := map[string]string{"shop": ports.OwnDatabase("ocel", environment.TierProduction, "shop")}
+	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint, ProjectDatabases: databases}
 	seeded := stores{keyValues: ports.KeyValues{Clients: clients}, cipher: ports.Cipher{Clients: clients}}
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 	seeded.set(t, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Endpoint = endpoint
+	manifest.Databases = databases
 	raw, err := variables.Render(manifest)
 	if err != nil {
 		t.Fatal(err)

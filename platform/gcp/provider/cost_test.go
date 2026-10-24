@@ -444,7 +444,7 @@ func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEa
 		"google_pubsub_topic":         2,
 		"google_pubsub_subscription":  3,
 		"google_cloud_tasks_queue":    1,
-		"google_firestore_database":   3,
+		"google_firestore_database":   2,
 		"google_cloud_run_v2_service": 4,
 		"google_cloud_scheduler_job":  2,
 	} {

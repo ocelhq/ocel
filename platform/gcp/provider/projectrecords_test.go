@@ -30,7 +30,7 @@ func TestAnAppIsGrantedNoRecordsOrKeyOfTheNamespaceOrTheTier(t *testing.T) {
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
 
-	email, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
+	email, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,8 +61,13 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 		t.Fatal(err)
 	}
 	spec := functionStackDeclaring(tier, "production", provider.AppValues{Secrets: []provider.SecretRef{{Key: "STRIPE_KEY"}}})
+	databases := map[string]string{
+		"shop":    ports.SharedDatabase("ocel", tier),
+		"billing": recordOwnDatabase(t, c, tier, "billing"),
+		"blog":    recordOwnDatabase(t, c, tier, "blog"),
+	}
 
-	email, err := p.release().EnsureAccount(ctx, c, spec, nil)
+	email, _, err := p.release().EnsureAccount(ctx, c, spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,8 +77,8 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 		if !strings.Contains(bound, email) {
 			continue
 		}
-		for _, project := range []string{"shop", "billing", "blog"} {
-			if strings.Contains(bound, ports.ProjectDatabase("ocel", tier, project)) || strings.Contains(bound, ports.ProjectKey(tier, project)) {
+		for project, database := range databases {
+			if strings.Contains(bound, "/databases/"+database+`"`) || strings.Contains(bound, ports.ProjectKey(tier, project)) {
 				reached = append(reached, project)
 			}
 		}

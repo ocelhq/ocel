@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -20,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -42,12 +40,16 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		tree.Add(shared, string(gcloud.Vendor), shaped.Type, item.Name, region, shaped.Properties)
 	}
 	use := newShapeUse(req)
-	owned := []bootstrap.Resource{{Kind: bootstrap.KindDatabase, Name: names.ProjectDatabase(req.Deploy.Tier, req.Deploy.Slug)}}
+	var owned []bootstrap.Resource
+	if use.keepsProjectRecords() {
+		database := names.SharedDatabase(req.Deploy.Tier)
+		if p.options.OwnDatabase {
+			database = names.OwnDatabase(req.Deploy.Tier, req.Deploy.Slug)
+		}
+		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: database})
+	}
 	if use.sealsProjectValues() {
 		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)})
-	}
-	if topic.DeclaresTopics(req.Resources) || slices.ContainsFunc(req.Deploy.Apps, servesNext) {
-		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: names.ProjectWritableDatabase(req.Deploy.Tier, req.Deploy.Slug)})
 	}
 	for _, owned := range owned {
 		shaped, _ := owned.Shape(region)

@@ -10,6 +10,10 @@
   "options": {
     "additionalProperties": false,
     "properties": {
+      "ownDatabase": {
+        "description": "Keep this project's values, runs and tag records in a Firestore database of its own, which no other project's apps can reach. Left off, they are kept in the one database every project of the tier shares. Fixed by the project's first deploy or value.",
+        "type": "boolean"
+      },
       "project": {
         "description": "The Google Cloud project to deploy into. Left off, from GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT or gcloud config.",
         "type": "string"

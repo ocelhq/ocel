@@ -37,6 +37,8 @@ func FromManifest(raw []byte) (*live.Values, error) {
 		Project:   manifest.Project,
 		Region:    manifest.Region,
 		Endpoint:  manifest.Endpoint,
+
+		ProjectDatabases: manifest.Databases,
 	}
 	return Over(manifest, ports.KeyValues{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }

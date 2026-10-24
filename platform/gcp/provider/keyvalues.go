@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"errors"
 
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -29,38 +28,47 @@ func (s keyValues) Read(ctx context.Context, key records.Key) (records.Entry, er
 }
 
 func (s keyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
-	c, store, err := s.open(ctx)
+	_, store, err := s.open(ctx)
 	if err != nil {
 		return "", err
 	}
-	revision, err := store.Write(ctx, entry)
-	if !errors.Is(err, ports.ErrNoProjectRecords) {
-		return revision, err
-	}
-	if err := ensureProjectDatabaseOf(ctx, c, entry.Key.Partition); err != nil {
+	if err := s.p.ensureRecordedDatabase(ctx, entry.Key.Partition); err != nil {
 		return "", err
 	}
 	return store.Write(ctx, entry)
 }
 
 func (s keyValues) WritePair(ctx context.Context, first, second records.Entry) error {
-	c, store, err := s.open(ctx)
+	_, store, err := s.open(ctx)
 	if err != nil {
 		return err
 	}
-	err = store.WritePair(ctx, first, second)
-	if !errors.Is(err, ports.ErrNoProjectRecords) {
-		return err
-	}
-	if err := ensureProjectDatabaseOf(ctx, c, first.Key.Partition); err != nil {
-		return err
+	for _, entry := range []records.Entry{first, second} {
+		if err := s.p.ensureRecordedDatabase(ctx, entry.Key.Partition); err != nil {
+			return err
+		}
 	}
 	return store.WritePair(ctx, first, second)
 }
 
-func ensureProjectDatabaseOf(ctx context.Context, c *gcloud.Clients, in records.Partition) error {
-	project, _ := ports.ProjectOfRecords(in)
-	return variables.EnsureProjectDatabase(ctx, c, in.Tier, project)
+func (p *Provider) ensureRecordedDatabase(ctx context.Context, in records.Partition) error {
+	project, owned := ports.ProjectOfRecords(in)
+	if !owned {
+		return nil
+	}
+	recorded := string(in.Tier) + "/" + project
+	if _, done := p.recordedDatabases.Load(recorded); done {
+		return nil
+	}
+	b, err := bootstrapGate{p}.openBootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	if err := variables.EnsureProjectDatabaseRecorded(ctx, b, in.Tier, project, p.options.OwnDatabase, appDatabaseLayouts()...); err != nil {
+		return err
+	}
+	p.recordedDatabases.Store(recorded, true)
+	return nil
 }
 
 func (s keyValues) Remove(ctx context.Context, key records.Key, expected records.Revision) error {

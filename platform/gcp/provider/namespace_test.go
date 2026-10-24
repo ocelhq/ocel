@@ -36,7 +36,8 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 				"key ring":          names.KeyRing(),
 				"passphrase secret": names.PassphraseSecret(environment.TierProduction),
 				"image repository":  names.Repository(environment.TierProduction),
-				"runs database":     names.ProjectWritableDatabase(environment.TierProduction, "shop"),
+				"shared database":   names.SharedDatabase(environment.TierProduction),
+				"own database":      names.OwnDatabase(environment.TierProduction, "shop"),
 				"delay queue":       names.DelayQueue(environment.TierProduction),
 				"push account":      names.PushAccount(environment.TierProduction),
 			} {
@@ -75,8 +76,11 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 			if got, want := names.RepositoryPath("europe-west1", environment.TierPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-preview-containers"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.ProjectWritableDatabasePrefix(environment.TierPreview), tc.stem+"-app-preview-w-"; got != want || !strings.HasPrefix(names.ProjectWritableDatabase(environment.TierPreview, "shop"), want) {
-				t.Errorf("ProjectWritableDatabasePrefix() = %q, want %q naming every preview project's database of runs and tag records", got, want)
+			if got, want := names.OwnDatabasePrefix(environment.TierPreview), tc.stem+"-app-preview-p-"; got != want || !strings.HasPrefix(names.OwnDatabase(environment.TierPreview, "shop"), want) {
+				t.Errorf("OwnDatabasePrefix() = %q, want %q naming every database a preview project owns", got, want)
+			}
+			if got, want := names.SharedDatabase(environment.TierPreview), tc.stem+"-app-preview-shared"; got != want {
+				t.Errorf("SharedDatabase(preview) = %q, want %q", got, want)
 			}
 			if got, want := names.DelayQueue(environment.TierProduction), tc.stem+"-prod-delays"; got != want {
 				t.Errorf("DelayQueue() = %q, want %q", got, want)
@@ -293,20 +297,23 @@ func TestAnAppsAccountIsNamedForItsNamespacesAppFenceAndAHashOfItsProjectEnviron
 	}
 }
 
-func TestEachProjectOfEachTierKeepsItsRunsAndTagRecordsInADatabaseOfItsOwn(t *testing.T) {
+func TestEachTierSharesADatabaseOfItsOwnAndEachProjectThatOwnsOneKeepsItApart(t *testing.T) {
 	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	databases := map[string]string{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		named := map[string]string{"the shared database of " + string(tier): names.SharedDatabase(tier)}
 		for _, project := range []string{"shop", "blog"} {
-			database := names.ProjectWritableDatabase(tier, project)
+			named[project+" of "+string(tier)] = names.OwnDatabase(tier, project)
+		}
+		for what, database := range named {
 			if other, taken := databases[database]; taken {
-				t.Errorf("%s of %s and %s share the database %s", project, tier, other, database)
+				t.Errorf("%s and %s are both kept in %s", what, other, database)
 			}
-			if database == names.ProjectDatabase(tier, project) {
-				t.Errorf("%s of %s keeps its runs in %s, the database of its values", project, tier, database)
+			if database == names.RecordsDatabase(tier) {
+				t.Errorf("%s is kept in %s, the database of the tier's records", what, database)
 			}
-			databases[database] = project + " of " + string(tier)
+			databases[database] = what
 		}
 	}
 }

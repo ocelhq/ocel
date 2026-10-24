@@ -63,6 +63,7 @@ credential, and shows in its plan as added on first use:
 | Part | Holds | Added by the first deploy that |
 | --- | --- | --- |
 | `keys` | the key ring and the tier's KMS key | seals a value: a preview, a secret, a granted binding, any declared resource, whose binding is sealed when it is published, or a deploy behind the `alb` or Cloudflare edge |
+| `app-database` | the Firestore database the tier's projects [share](#project-records) | keeps a project's records: seals a value, declares a topic or task, ships a Next app or a build that revalidates, or sets a value with the ocel CLI |
 | `edge-bucket` | the tier's [edge bucket](#buckets-of-a-tier) | ships a Next app, or deploys behind the `alb` or Cloudflare edge |
 | `cache-bucket` | the tier's [cache bucket](#buckets-of-a-tier) | ships a Next app, or a build that revalidates |
 | `private-network` | the tier's [network](#private-network) | declares a database or kv store |
@@ -82,12 +83,46 @@ deploy adds adds it back. `--force` never takes `private-network` down while a k
 is on it, `alb` while a hostname is bound to it, or `edge-bucket` and `keys` while `cloudflare-origin`
 is installed and reads them: remove those first, or the front in the same run.
 
-A project that declares a topic or task, or whose build revalidates, also gets a Firestore
-database of its own in each tier, `<namespace>-app-prod-w-<hash>` in production and
-`<namespace>-app-preview-w-<hash>` in previews, which holds its runs and its Next
-tag records. Only that project's apps may write it. The first deploy that needs it makes it, a dry
-deploy plans it, and removing the project from the tier deletes it. It has no standing charge, only
-the reads, writes and storage its records use.
+### Project records
+
+A project's values, runs and Next tag records are kept in one Firestore database the tier's projects
+share, `<namespace>-app-prod-shared` in production and `<namespace>-app-preview-shared` in previews,
+which the `app-database` part adds. Every app of the tier that keeps records may read and write it:
+a value is sealed under its project's own key, so another project's app reads no value it was not
+granted, but it may delete or rewrite another project's runs and tag records. Removing a project
+from the tier deletes its records and leaves the database to the rest.
+
+Set `ownDatabase` to keep a project's records in a Firestore database of its own instead,
+`<namespace>-app-prod-p-<hash>` in production and `<namespace>-app-preview-p-<hash>` in previews,
+which only that project's apps may read and write:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({ project: "my-project", region: "europe-west1", ownDatabase: true }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "gcp": { "project": "my-project", "region": "europe-west1", "ownDatabase": true }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+A project's first deploy or value that keeps a record fixes which database it keeps them in, and a
+dry deploy plans it. A deploy that changes `ownDatabase` afterwards is refused, since no record moves
+between databases: `ocel projects destroy` the project first. Removing the project deletes its own
+database. Neither database has a standing charge, only the reads, writes and storage its records use,
+and Firestore allows 100 databases in a Google Cloud project unless Google raises the limit.
 
 ### Buckets of a tier
 
@@ -470,8 +505,8 @@ or database is still on it, naming them. The bootstrap credential needs
 Each topic and task is a Pub/Sub topic, and each of its consumers gets a push subscription of
 its own. Pub/Sub redelivers a message until its run settles, and a run that spends its attempts
 settles failed, a dead letter to list or redrive. A task with a `cron` is a Cloud Scheduler job publishing to its
-topic. Runs are kept in the project's own Firestore database, which no other project's apps may
-read or write, and a delayed send or trigger waits in the tier's Cloud Tasks queue until it is due.
+topic. Runs are kept in the database the project keeps its [records](#project-records) in, and a
+delayed send or trigger waits in the tier's Cloud Tasks queue until it is due.
 
 Each worker runs as a second Cloud Run service from its app's image, scaled from zero, reached
 by Pub/Sub alone: its ingress is internal, and only the tier's push account may invoke it. A run
@@ -480,10 +515,10 @@ gets at most 600 seconds, the longest a push subscription waits for an answer.
 The first deploy declaring a topic or task adds the tier's `topics` part: its delay queue,
 `<namespace>-prod-delays` or `<namespace>-preview-delays`, and the push account Pub/Sub signs each
 push as, which Pub/Sub's service agent may sign as and nothing else may. The part wants Cloud Tasks
-and Pub/Sub on. That deploy also makes the project's own database of runs.
+and Pub/Sub on.
 
 None of it bills while idle. A Next app that declares neither uses no queue. `ocel bootstrap
-destroy` deletes every project's databases and purges the queue, keeping it, since Cloud Tasks will
+destroy` deletes the tier's project databases and purges the queue, keeping it, since Cloud Tasks will
 not make a queue under a deleted queue's name for 7 days. It needs `roles/cloudtasks.admin` in the
 bootstrap credential.
 
@@ -626,9 +661,9 @@ Each app runs as a service account of its own in each environment, which a deplo
 time the app ships to that environment and grants only what the app's runtime reads. Its key and
 storage grants are on the resource: decrypt on its project's key and any key its values reference,
 its cache and static files on the tier's buckets, publishing on its topics, enqueuing on the delay
-queue. Firestore databases take no IAM policy of their own, so read access to its project's values
-database and write access to its project's database of runs and tag records are granted on the
-project, on a condition naming that database.
+queue. Firestore databases take no IAM policy of their own, so access to the database its project
+keeps its records in, and read access to the database of any project its values reference, are
+granted on the project, on a condition naming that database.
 
 A serverless app behind the load balancer that revalidates, a Next app or a Node app whose build declares the `revalidation` need, is also granted the cache purge role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map; see [sharing one project between tiers](#sharing-one-project-between-tiers).
 
