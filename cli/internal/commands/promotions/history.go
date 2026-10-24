@@ -4,7 +4,6 @@ import (
 	"context"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -39,21 +38,18 @@ func activePromotion(history []*contractv1.PromotionHistoryEntry) *contractv1.Pr
 	return nil
 }
 
-func deployedReleases(releaseByApp map[string]string) string {
-	if len(releaseByApp) == 0 {
-		return "—"
+func promotionCreated(present terminal.Presentation, ts int64) string {
+	if present.TTY {
+		return present.EpochAge(ts)
 	}
-	apps := make([]string, 0, len(releaseByApp))
-	for app := range releaseByApp {
-		apps = append(apps, app)
-	}
-	slices.Sort(apps)
+	return terminal.EpochDateTime(ts)
+}
 
-	pairs := make([]string, 0, len(apps))
-	for _, app := range apps {
-		pairs = append(pairs, app+"="+releaseByApp[app])
+func tagOrNone(tag string) string {
+	if tag == "" {
+		return terminal.NoValue
 	}
-	return strings.Join(pairs, " ")
+	return tag
 }
 
 func deployedBuilds(palette terminal.Palette, releaseByApp map[string]string) []string {

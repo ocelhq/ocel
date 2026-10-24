@@ -191,14 +191,6 @@ func renderPromotions(stdout io.Writer, present terminal.Presentation, promotion
 	)
 	for _, entry := range promotions {
 		p := entry.GetPromotion()
-		tag := p.GetTag()
-		if tag == "" {
-			tag = terminal.NoValue
-		}
-		created := terminal.EpochDateTime(p.GetTs())
-		if present.TTY {
-			created = present.EpochAge(p.GetTs())
-		}
 		status := ""
 		switch {
 		case entry.GetActive():
@@ -207,7 +199,7 @@ func renderPromotions(stdout io.Writer, present terminal.Presentation, promotion
 			status = palette.Health(terminal.Absent, "unpromoted")
 		}
 		apps := deployedBuilds(palette, p.GetReleases())
-		table.Row(palette.Bold(terminal.ShortID(p.GetPromotionId())), tag, created, apps[0], status)
+		table.Row(palette.Bold(terminal.ShortID(p.GetPromotionId())), tagOrNone(p.GetTag()), promotionCreated(present, p.GetTs()), apps[0], status)
 		for _, app := range apps[1:] {
 			table.Row("", "", "", app)
 		}

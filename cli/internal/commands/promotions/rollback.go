@@ -100,20 +100,20 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		}
 
 		plan := run.Phase(progressv1.Phase_PHASE_PLAN)
-		showRollbackPlan(plan, cfg.Slug, live, target)
+		showRollbackPlan(plan, invocation.Presentation(stdout), live, target)
 		if opts.dry {
 			plan.Say("Run without --dry to roll back.")
 			plan.End(nil)
 			return nil
 		}
 
-		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Roll production of %q back to promotion %s?", cfg.Slug, target.GetPromotionId()))
+		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Roll %q back to %s?", cfg.Slug, terminal.ShortID(target.GetPromotionId())))
 		plan.End(err)
 		if err != nil {
 			return err
 		}
 		if !granted {
-			run.Succeed(fmt.Sprintf("Nothing rolled back: production of %s stays on its live promotion", cfg.Slug))
+			run.Succeed("Nothing rolled back")
 			return nil
 		}
 
@@ -130,16 +130,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, promotion, unparsed); err != nil {
 			return err
 		}
-		tagSuffix := ""
-		if target.GetTag() != "" {
-			tagSuffix = fmt.Sprintf(", tag %s", target.GetTag())
-		}
-		noteSuffix := ""
-		if note := terminal.PropagationNote(rolled.GetPropagation()); note != "" {
-			noteSuffix = "; " + note
-		}
-		run.Succeed(fmt.Sprintf("Rolled back to promotion %s (created %s%s) as promotion %s%s",
-			target.GetPromotionId(), terminal.EpochDate(target.GetTs()), tagSuffix, rolled.GetPromotionId(), noteSuffix))
+		run.Succeed(fmt.Sprintf("Rolled %s back to %s", cfg.Slug, terminal.ShortID(target.GetPromotionId())))
 		return nil
 	})
 	invocation.Console.ReportDeployment(ctx, cfg.Dir, report, stderr)
@@ -235,25 +226,27 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 	return nil, fmt.Errorf("no promotion in this project's production history is live, so there is nothing to roll back from: pass --to with the promotion id to serve")
 }
 
-func showRollbackPlan(plan *run.Span, slug string, live, target *contractv1.Promotion) {
-	lines := []string{fmt.Sprintf("This will roll production of project %q back to an earlier deployment", slug)}
+func showRollbackPlan(plan *run.Span, present terminal.Presentation, live, target *contractv1.Promotion) {
+	table := terminal.NewTable(
+		terminal.Column{},
+		terminal.Column{Head: "ID"},
+		terminal.Column{Head: "CREATED"},
+		terminal.Column{Head: "TAG"},
+		terminal.Column{Head: "DEPLOYED"},
+	)
 	if live != nil {
-		lines = append(lines, "– live    "+promotionLine(live))
+		promotionRows(table, present, "live", live)
 	}
-	lines = append(lines, "– target  "+promotionLine(target))
-	if note := terminal.PropagationNote(target.GetPropagation()); note != "" {
-		lines = append(lines, note)
-	}
-	lines = append(lines, "`ocel deploy` puts the current build back.")
-	plan.Say(strings.Join(lines, "\n"))
+	promotionRows(table, present, "target", target)
+	plan.Say("Roll back production:\n" + table.Render(terminal.Palette{}, "") + "`ocel deploy` puts the current build back.")
 }
 
-func promotionLine(p *contractv1.Promotion) string {
-	tag := "untagged"
-	if p.GetTag() != "" {
-		tag = "tag " + p.GetTag()
+func promotionRows(table *terminal.Table, present terminal.Presentation, role string, p *contractv1.Promotion) {
+	apps := deployedBuilds(terminal.Palette{}, p.GetReleases())
+	table.Row(role, terminal.ShortID(p.GetPromotionId()), promotionCreated(present, p.GetTs()), tagOrNone(p.GetTag()), apps[0])
+	for _, app := range apps[1:] {
+		table.Row("", "", "", "", app)
 	}
-	return fmt.Sprintf("%s  created %s  %s  %s", p.GetPromotionId(), terminal.EpochDateTime(p.GetTs()), tag, deployedReleases(p.GetReleases()))
 }
 
 func promotionIDs(history []*contractv1.PromotionHistoryEntry) string {

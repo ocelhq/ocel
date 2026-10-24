@@ -35,13 +35,14 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 
 		out := stdout.String()
 		for _, want := range []string{
-			`This will roll production of project "test-app" back to an earlier deployment`,
-			"– live    promo-2",
-			"– target  promo-1",
-			"tag v1.0.0",
-			"web=build-1",
-			"Rolled back to promotion promo-1",
-			"as promotion " + activePromotionID(t, project),
+			"INFO  [plan] Roll back production:\n" +
+				"              ID       CREATED                  TAG     DEPLOYED\n" +
+				"      live    promo-2  1970-01-01 00:00:02 UTC  —       admin build-2\n" +
+				"                                                        web build-2\n" +
+				"      target  promo-1  1970-01-01 00:00:01 UTC  v1.0.0  web build-1\n" +
+				"      `ocel deploy` puts the current build back.\n",
+			"✓ Rolled test-app back to promo-1 in ",
+			"  prod now serves promotion " + terminal.ShortID(activePromotionID(t, project)) + " · ",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -68,10 +69,10 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		}
 
 		out := stdout.String()
-		if strings.Contains(out, "Roll production of") {
+		if strings.Contains(out, `Roll "test-app" back`) {
 			t.Errorf("stdout = %q, want --yes to skip the confirmation", out)
 		}
-		if !strings.Contains(out, "Rolled back to promotion promo-1") {
+		if !strings.Contains(out, "Rolled test-app back to promo-1") {
 			t.Errorf("stdout = %q, want --yes to roll back all the same", out)
 		}
 	})
@@ -88,10 +89,10 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, `Roll production of "test-app" back to promotion promo-1?`) {
+		if !strings.Contains(out, `Roll "test-app" back to promo-1?`) {
 			t.Errorf("stdout = %q, want the rollback to ask before it moves production", out)
 		}
-		if !strings.Contains(out, "Rolled back to promotion promo-1") {
+		if !strings.Contains(out, "Rolled test-app back to promo-1") {
 			t.Errorf("stdout = %q, want it to report rolling back to promo-1", out)
 		}
 	})
@@ -111,7 +112,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
 			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
 		}
-		if strings.Contains(out, "Rolled back") {
+		if strings.Contains(out, "Rolled test-app back") {
 			t.Errorf("stdout = %q, want no rollback behind a declined confirmation", out)
 		}
 	})
@@ -127,12 +128,12 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"– live    promo-2", "– target  promo-1", "Run without --dry to roll back."} {
+		for _, want := range []string{"      live    promo-2  ", "      target  promo-1  ", "Run without --dry to roll back."} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
 			}
 		}
-		if strings.Contains(out, "Rolled back") {
+		if strings.Contains(out, "Rolled test-app back") {
 			t.Errorf("stdout = %q, want --dry to roll nothing back", out)
 		}
 	})
@@ -148,11 +149,11 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "Rolled back to promotion promo-1") {
+		if !strings.Contains(out, "Rolled test-app back to promo-1") {
 			t.Errorf("stdout = %q, want it to report rolling back to promo-1", out)
 		}
-		if !strings.Contains(out, "tag v1.0.0") {
-			t.Errorf("stdout = %q, want it to echo the target's tag", out)
+		if !strings.Contains(out, "      target  promo-1  1970-01-01 00:00:01 UTC  v1.0.0  ") {
+			t.Errorf("stdout = %q, want the plan to show the target's tag", out)
 		}
 	})
 
@@ -186,7 +187,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 				t.Errorf("stdout = %q, want it to name %q — what was asked for and what is there", stdout.String(), want)
 			}
 		}
-		if strings.Contains(stdout.String(), "Rolled back") {
+		if strings.Contains(stdout.String(), "Rolled test-app back") {
 			t.Errorf("stdout = %q, want nothing rolled back", stdout.String())
 		}
 	})
@@ -207,7 +208,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 			}
 		}
 		out := stdout.String()
-		if strings.Contains(out, "This will roll production") || strings.Contains(out, "Rolled back") {
+		if strings.Contains(out, "Roll back production") || strings.Contains(out, "Rolled test-app back") {
 			t.Errorf("stdout = %q, want the refusal to come before the plan and the rollback", out)
 		}
 	})
@@ -226,7 +227,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		if !strings.Contains(stdout.String(), "this command needs production infrastructure") {
 			t.Errorf("stdout = %q, want the concrete tier-mismatch message", stdout.String())
 		}
-		if strings.Contains(stdout.String(), "Rolled back") {
+		if strings.Contains(stdout.String(), "Rolled test-app back") {
 			t.Errorf("stdout = %q, want no rollback to have been driven against preview infra", stdout.String())
 		}
 	})
@@ -247,7 +248,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 		if !strings.Contains(stdout.String(), "ocel bootstrap production") {
 			t.Errorf("stdout = %q, want it to direct the user to `ocel bootstrap production`", stdout.String())
 		}
-		if strings.Contains(stdout.String(), "Rolled back") {
+		if strings.Contains(stdout.String(), "Rolled test-app back") {
 			t.Errorf("stdout = %q, want no rollback to have been driven", stdout.String())
 		}
 	})
@@ -284,7 +285,7 @@ func TestARollbackAsksWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 
 	evs := clitest.RunEvents(t, stream.String())
 	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return strings.Contains(ev.GetOperation().GetMessage(), "– target  promo-1")
+		return strings.Contains(ev.GetOperation().GetMessage(), "target  promo-1")
 	})
 	if shown < 0 || evs[shown].GetOperation().GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("the rollback plan was not shown in the plan phase: %s", stream.String())
@@ -298,7 +299,7 @@ func TestARollbackAsksWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
 		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
 	}
 	result := evs[len(evs)-1].GetSummary()
-	if !result.GetSuccess() || !strings.HasPrefix(result.GetHeadline(), "Rolled back to promotion promo-1") {
+	if !result.GetSuccess() || result.GetHeadline() != "Rolled test-app back to promo-1" {
 		t.Errorf("result = %v, want the run to end reporting the rollback to promo-1", result)
 	}
 }
@@ -433,7 +434,7 @@ func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
 	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if out := stdout.String(); !strings.Contains(out, warned) || !strings.Contains(out, "Rolled back to promotion p18") {
+	if out := stdout.String(); !strings.Contains(out, warned) || !strings.Contains(out, "Rolled test-app back to p18") {
 		t.Errorf("stdout = %q, want the rollback reported with the provider's warning %q", out, warned)
 	}
 }
@@ -449,7 +450,7 @@ func TestARollbackShowsWhatTheProviderSaysWhileItMovesProduction(t *testing.T) {
 	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if out := stdout.String(); !strings.Contains(out, said) || !strings.Contains(out, "Rolled back to promotion promo-1") {
+	if out := stdout.String(); !strings.Contains(out, said) || !strings.Contains(out, "Rolled test-app back to promo-1") {
 		t.Errorf("stdout = %q, want the rollback reported with the line %q the pointer move said", out, said)
 	}
 }
@@ -478,7 +479,7 @@ var propagationCases = []struct {
 	},
 }
 
-func TestPropagationOnTheRollbackPromotionLine(t *testing.T) {
+func TestARollbackSaysOnceHowSoonWhatItPromotedPropagates(t *testing.T) {
 	for _, tc := range propagationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			project := promotedTwice(t)
@@ -492,14 +493,17 @@ func TestPropagationOnTheRollbackPromotionLine(t *testing.T) {
 			}
 
 			out := stdout.String()
+			if tc.want != "" && strings.Count(out, "propagates") != 1 {
+				t.Errorf("stdout = %q, want propagation said once", out)
+			}
 			line := ""
 			for _, l := range strings.Split(out, "\n") {
-				if strings.Contains(l, "Rolled back to promotion") {
+				if strings.Contains(l, "prod now serves promotion") {
 					line = l
 				}
 			}
 			if line == "" {
-				t.Fatalf("stdout = %q, want a rolled-back line", out)
+				t.Fatalf("stdout = %q, want a line naming what prod now serves", out)
 			}
 			assertPropagationNote(t, line, tc.want, tc.other)
 		})
