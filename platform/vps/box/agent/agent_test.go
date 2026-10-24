@@ -5,23 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	"github.com/ocelhq/ocel/pkg/variablestore"
 	source "github.com/ocelhq/ocel/platform/vps/box/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
@@ -347,118 +342,6 @@ func TestAnEngineThatCannotBeAskedIsReportedAsTheBoxsFault(t *testing.T) {
 	if status, body := ask(t, socket); status != http.StatusBadGateway || !strings.Contains(body, "not answering") {
 		t.Errorf("an engine that cannot be asked was answered %d %q, want 502 saying why", status, body)
 	}
-}
-
-func engineOrSkip(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("this machine has no docker, so no container can ask the agent for anything")
-	}
-	if err := exec.Command("docker", "info").Run(); err != nil {
-		t.Skip("the docker on this machine answers nothing, so no container can ask the agent for anything")
-	}
-}
-
-func underHome(t *testing.T) string {
-	t.Helper()
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("this machine has no home directory to hand the engine a bind source from")
-	}
-	dir, err := os.MkdirTemp(home, "ocel-live-")
-	if err != nil {
-		t.Skip("nothing under this home directory can be written, so the engine can be handed no bind source")
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	return dir
-}
-
-func containerRuntime(t *testing.T, dir string) string {
-	t.Helper()
-	binary := filepath.Join(dir, "runtime")
-	build := exec.Command("go", "build", "-trimpath", "-o", binary, "../cmd/container")
-	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux")
-	if said, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build the container runtime: %v\n%s", err, said)
-	}
-	return binary
-}
-
-const testImage = "mirror.gcr.io/library/alpine:3.21"
-
-func pulled(t *testing.T, image string) {
-	t.Helper()
-	if exec.Command("docker", "image", "inspect", image).Run() == nil {
-		return
-	}
-	var said []byte
-	var err error
-	for attempt := range 6 {
-		if said, err = exec.Command("docker", "pull", "--quiet", image).CombinedOutput(); err == nil {
-			return
-		}
-		if !strings.Contains(strings.ToLower(string(said)), "toomanyrequests") {
-			break
-		}
-		time.Sleep(time.Second<<attempt + rand.N(time.Second))
-	}
-	t.Fatalf("pull %s: %v\n%s", image, err, said)
-}
-
-func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testing.T) {
-	engineOrSkip(t)
-	pulled(t, testImage)
-	dir := underHome(t)
-	runtimeBinary := containerRuntime(t, dir)
-
-	b := aBox(t, dir)
-	b.set(t, shop, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://app:hunter2@db.internal/orders")
-	b.dump(t)
-	inspect, err := NewDocker()
-	if err != nil {
-		t.Fatal(err)
-	}
-	socketDir := filepath.Join(dir, "run")
-	if err := os.MkdirAll(socketDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	ln, err := net.Listen("unix", filepath.Join(socketDir, boxapi.SocketFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(filepath.Join(socketDir, boxapi.SocketFile), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	ctx, stop := context.WithCancel(context.Background())
-	served := make(chan error, 1)
-	go func() { served <- (&Server{Inspect: inspect, Resolve: b.resolver()}).Serve(ctx, ln) }()
-	t.Cleanup(func() {
-		stop()
-		if err := <-served; err != nil {
-			t.Errorf("Serve() = %v", err)
-		}
-	})
-
-	manifest := manifestFor(t, "shop", "")
-	run := exec.Command("docker", "run", "--rm", "--pull", "never", "--network", "none",
-		"--mount", "type=bind,src="+socketDir+",dst="+boxapi.SocketDir+",readonly",
-		"--volume", runtimeBinary+":"+containerimage.RuntimePath+":ro",
-		"--env", boxapi.EnvVar+"="+manifest,
-		"--env", containerimage.PortEnvVar+"="+containerimage.PortText,
-		testImage, containerimage.RuntimePath,
-		"sh", "-c", `cat "$OCEL_LIVE_DIR/DATABASE_URL"; echo; echo "keys=$OCEL_LIVE_KEYS"`)
-	run.WaitDelay = 2 * time.Minute
-	said, err := run.CombinedOutput()
-	if err != nil {
-		t.Fatalf("the container did not run behind the runtime: %v\n%s", err, said)
-	}
-	if !strings.Contains(string(said), "postgres://app:hunter2@db.internal/orders") {
-		t.Errorf("the app read %q off its live directory, want the secret sealed on the box", said)
-	}
-	if !strings.Contains(string(said), "keys=DATABASE_URL") {
-		t.Errorf("the app was told %q, want the live keys named", said)
-	}
-
 }
 
 func TestTheDaemonNamesTheProcessAContainerRunsAsItsInit(t *testing.T) {

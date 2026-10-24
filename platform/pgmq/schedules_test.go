@@ -1,3 +1,5 @@
+//go:build integration
+
 package pgmq
 
 import (
@@ -78,8 +80,4 @@ func TestAScheduleKeepsItsTimeWhenReappliedAndGoesWhenItsCronDoes(t *testing.T) 
 	if _, found := scheduledAt(t, engine, "report"); found {
 		t.Error("a task without a cron is still scheduled")
 	}
-}
-
-func named(name string) func(*contractv1.ManifestTopic) {
-	return func(topic *contractv1.ManifestTopic) { topic.Consumers[0].Name = name }
 }

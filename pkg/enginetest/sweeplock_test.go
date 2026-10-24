@@ -1,11 +1,11 @@
-//go:build unix
+//go:build integration && unix
 
 package enginetest
 
 import "testing"
 
 func TestTwoRunsSweepingTheSameDeadRunAtOnceBothSucceed(t *testing.T) {
-	requireDocker(t)
+	RequireDocker(t)
 
 	for range 3 {
 		plant(t, aRunThatEnded(t))

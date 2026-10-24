@@ -1,3 +1,5 @@
+//go:build integration
+
 package host
 
 import (
@@ -47,7 +49,7 @@ func (y yourNetwork) shell(script string) (string, error) {
 
 func onYourNetwork(t *testing.T) yourNetwork {
 	t.Helper()
-	engineOrSkip(t)
+	engineOrFail(t)
 	arch, err := ssh.Architecture(runtime.GOARCH)
 	if err != nil {
 		t.Skipf("no switchboard is built for a machine reporting %q", runtime.GOARCH)

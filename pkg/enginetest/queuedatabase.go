@@ -16,7 +16,7 @@ type QueueDatabase struct {
 }
 
 var (
-	queueDatabase onceOrSkip[QueueDatabase]
+	queueDatabase onceOrFail[QueueDatabase]
 	databases     = taken{by: map[string]string{}}
 )
 

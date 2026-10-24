@@ -217,6 +217,40 @@ jobs:
           left=$(docker ps --all --quiet --filter label=dev.ocel.project)
           [ -z "$left" ] || docker rm --force --volumes $left
 
+  docker:
+    name: Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+        with:
+          caches: modules,build
+          build-scope: vps
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: What the vps provider embeds
+        run: go generate -C platform/vps/provider ./...
+
+      - name: Run every pkg and platform package whose tests drive the engine, on the runner's docker
+        run: |
+          set -euo pipefail
+          packages=(./pkg/enginetest/)
+          for dir in $(grep -rl --include='*_test.go' '"github.com/ocelhq/ocel/pkg/enginetest"' pkg platform | xargs -n1 dirname | sort -u); do
+            packages+=("./$dir/")
+          done
+          echo "${packages[@]}"
+          go test -race -count=1 -timeout 30m -tags integration -skip '^TestLive' "${packages[@]}"
+
   vps:
     name: VPS (live ${{ matrix.runner }} of 2)
     runs-on: ubuntu-latest

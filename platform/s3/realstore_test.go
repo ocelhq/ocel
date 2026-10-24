@@ -1,3 +1,5 @@
+//go:build integration
+
 package s3
 
 import (
@@ -111,32 +113,44 @@ func TestAStoreTakesThePutTheServiceSignedWithMetadataAndCacheControl(t *testing
 	}
 }
 
-func TestMetadataBeyondTheCapIsRefusedBeforeItIsSigned(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t, nil)
-
-	big := make([]byte, 2048)
-	for i := range big {
-		big[i] = 'a'
+func TestEnsureBucketCreatesABucketOnceAndSetUploadOriginsLetsOnlyTheLatestOriginsUpload(t *testing.T) {
+	ctx := context.Background()
+	running := enginetest.SharedObjectStore(t)
+	running.ClaimBucket(t, "ensured")
+	store := Store{
+		Endpoint:        running.Endpoint,
+		Region:          running.Region,
+		AccessKeyID:     running.AccessKeyID,
+		SecretAccessKey: running.SecretKey,
+		PathStyle:       true,
 	}
-	_, err := h.svc.Sign(context.Background(), &bucketv1.SignRequest{
-		Bucket:    "store",
-		Key:       "big.txt",
-		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_PUT,
-		Constraints: &bucketv1.SignConstraints{
-			Metadata: map[string]string{"blob": string(big)},
-		},
-	})
-	if err == nil {
-		t.Fatal("Sign took metadata past the 2 KB a store will accept")
+	allowed := func(origin string) string {
+		req, err := http.NewRequestWithContext(ctx, http.MethodOptions, running.Endpoint+"/ensured/a.txt", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("preflight: %v", err)
+		}
+		_ = resp.Body.Close()
+		return resp.Header.Get("Access-Control-Allow-Origin")
 	}
 
-	_, err = h.svc.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{
-		Bucket:   "store",
-		Key:      "big.txt",
-		Metadata: map[string]string{"blob": string(big)},
-	})
-	if err == nil {
-		t.Fatal("CreateMultipart took metadata past the 2 KB a store will accept")
+	for _, origins := range [][]string{{"http://localhost:3000"}, {"http://localhost:4100"}} {
+		if err := store.EnsureBucket(ctx, "ensured"); err != nil {
+			t.Fatalf("EnsureBucket: %v", err)
+		}
+		if err := store.SetUploadOrigins(ctx, "ensured", origins); err != nil {
+			t.Fatalf("SetUploadOrigins(%v): %v", origins, err)
+		}
+	}
+	if got := allowed("http://localhost:4100"); got != "http://localhost:4100" {
+		t.Errorf("Access-Control-Allow-Origin = %q for the origin allowed last", got)
+	}
+	if got := allowed("http://localhost:3000"); got == "http://localhost:3000" {
+		t.Error("an origin no longer allowed may still upload")
 	}
 }

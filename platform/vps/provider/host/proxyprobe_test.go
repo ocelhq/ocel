@@ -1,3 +1,5 @@
+//go:build integration
+
 package host
 
 import (
@@ -9,7 +11,7 @@ import (
 )
 
 func TestAProbeStartsWhereAnInterruptedRunLeftItsContainerBehind(t *testing.T) {
-	engineOrSkip(t)
+	engineOrFail(t)
 
 	if out, err := exec.Command(dockerEngine, "run", "--detach", "--name", probeName(t),
 		"--network", enginetest.Network(t, "box"), "--entrypoint", "sleep", caddy.Image(), "600").CombinedOutput(); err != nil {
