@@ -17,7 +17,7 @@ import (
 
 func (c Compilation) compileGo(ctx context.Context) error {
 	if c.GoModuleDir == "" || c.GoPackage == "" {
-		return fmt.Errorf("app %q is built with go and is compiled from no package of a go module: an app is compiled from the module it belongs to", c.App)
+		return fmt.Errorf("app %q is built with go and is in no go module", c.App)
 	}
 	goarch, runs := arch.GoArch(c.Framework.Arch)
 	if !runs {

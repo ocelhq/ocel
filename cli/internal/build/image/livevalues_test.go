@@ -194,7 +194,7 @@ func TestAFailedBuildWithBindingsOnADaemonOnAnotherMachineSaysTheForwardsAreOutO
 
 		err := d.explainFailedBuild("web", live, failed)
 
-		if says := strings.Contains(err.Error(), "another machine"); says != elsewhere {
+		if says := strings.Contains(err.Error(), "is remote"); says != elsewhere {
 			t.Errorf("a failed build on the daemon at %s says %q", address, err)
 		}
 		if !errors.Is(err, failed) {

@@ -22,7 +22,7 @@ func ChooseRecipe(app App) (Recipe, error) {
 		}
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
-			return Recipe{}, fmt.Errorf("app %q sets image.dockerfile to %q, and %s is not a file to build from: image.dockerfile resolves against the app's own directory, and may point outside it", app.Name, app.Dockerfile, path)
+			return Recipe{}, fmt.Errorf("app %q sets image.dockerfile to %q, and %s is not a file", app.Name, app.Dockerfile, path)
 		}
 		return Recipe{App: app, Dockerfile: path}, nil
 	}

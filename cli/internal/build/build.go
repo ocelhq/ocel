@@ -121,7 +121,7 @@ func ReadPrebuilt(ctx context.Context, cfg *project.Project, archs map[string]st
 
 func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, host Host, log Log) (Output, error) {
 	if unresolved := cfg.UnresolvedApps(); len(unresolved) > 0 {
-		return Output{}, fmt.Errorf("the build reached %s with no compute resolved, and an app is built for the compute it runs on", english.And(english.Quoted(unresolved)))
+		return Output{}, fmt.Errorf("no compute resolved for %s", english.And(english.Quoted(unresolved)))
 	}
 	if err := t.functions(ctx, cfg, variables, host, log); err != nil {
 		return Output{}, err

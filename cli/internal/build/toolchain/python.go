@@ -97,7 +97,7 @@ func (c Compilation) refuseUnservedASGI(ctx context.Context, entrypoint pythonse
 	if !definesApp {
 		return nil
 	}
-	return fmt.Errorf("app %q depends on %s, an ASGI framework, and its entrypoint %s defines app or application, which ocel serves with %s, and %s is not installed: add %s to its dependencies, or make the entrypoint a script that starts the server it installs", c.App, framework, entrypoint, asgiServer, asgiServer, asgiServer)
+	return fmt.Errorf("app %q serves the %s app in %s with %s, which is not installed: add %s to its dependencies, or make the entrypoint start its own server", c.App, framework, entrypoint, asgiServer, asgiServer)
 }
 
 func (c Compilation) writePythonServer() error {
@@ -190,7 +190,7 @@ func copyTree(source, dest string, skip func(name string) bool) error {
 			return os.MkdirAll(filepath.Join(dest, rel), 0o755)
 		}
 		if !entry.Type().IsRegular() {
-			return fmt.Errorf("%s is %s, and an artifact contains the app's own files: what this points at is read on the build host and is nowhere the function runs", path, entry.Type())
+			return fmt.Errorf("%s is %s, and an artifact holds only regular files", path, entry.Type())
 		}
 		info, err := entry.Info()
 		if err != nil {

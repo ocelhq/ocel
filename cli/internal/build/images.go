@@ -99,7 +99,7 @@ func (t tools) refuseAbsentImage(ctx context.Context, app, ref, arch string) err
 	repository, digest, _ := strings.Cut(ref, "@")
 	built, err := t.inspection(ctx, repository, digest)
 	if err != nil {
-		return fmt.Errorf("app %q was prebuilt into the image %s, and the docker daemon cannot hand it over: %w; run `ocel build` again, or deploy without --prebuilt", app, ref, err)
+		return fmt.Errorf("app %q was prebuilt into the image %s, which docker cannot hand over: %w; run `ocel build` again, or deploy without --prebuilt", app, ref, err)
 	}
 	if arch != "" && built.Architecture != arch {
 		return fmt.Errorf("app %q was prebuilt into an image for %s, and the target runs %s: declare `arch: %q` on %q and run `ocel build` again, or deploy without --prebuilt", app, images.ContainerPlatform(built.Architecture), images.ContainerPlatform(arch), arch, app)
@@ -174,7 +174,7 @@ func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *project.P
 		}
 	}
 	if err := image.RefuseUnusableDaemon(ctx, slices.Sorted(maps.Values(archs))...); err != nil {
-		return fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", english.And(english.Quoted(containers)), err)
+		return fmt.Errorf("build the container image for %s:\n    %w", english.And(english.Quoted(containers)), err)
 	}
 	return nil
 }

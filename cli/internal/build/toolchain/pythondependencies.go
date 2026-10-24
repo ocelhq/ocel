@@ -81,7 +81,7 @@ func (c Compilation) exportDependencies(ctx context.Context, scratch string) (py
 			return writeRequirements(scratch, pythonProjectFile, project.Project.Dependencies)
 		}
 		if poetry := slices.DeleteFunc(slices.Collect(maps.Keys(project.Tool.Poetry.Dependencies)), func(name string) bool { return name == "python" }); len(poetry) > 0 {
-			return pythonDependencies{}, fmt.Errorf("app %q declares its dependencies in the tool.poetry.dependencies of its %s, which ocel does not vendor: declare them as [project].dependencies, which Poetry 2 reads too, or export them to %s", c.App, pythonProjectFile, pythonRequirementsFile)
+			return pythonDependencies{}, fmt.Errorf("app %q declares its dependencies in tool.poetry.dependencies of its %s, which ocel does not vendor: move them to [project].dependencies, or export them to %s", c.App, pythonProjectFile, pythonRequirementsFile)
 		}
 	}
 	locked, err := c.declares(pythonPipfileLock)
@@ -96,7 +96,7 @@ func (c Compilation) exportDependencies(ctx context.Context, scratch string) (py
 		return pythonDependencies{}, err
 	}
 	if unlocked {
-		return pythonDependencies{}, fmt.Errorf("app %q declares its dependencies in a %s with no %s beside it, and ocel vendors the versions a lock pins: run pipenv lock and commit %s", c.App, pythonPipfile, pythonPipfileLock, pythonPipfileLock)
+		return pythonDependencies{}, fmt.Errorf("app %q has a %s with no %s: run pipenv lock and commit %s", c.App, pythonPipfile, pythonPipfileLock, pythonPipfileLock)
 	}
 	return pythonDependencies{}, nil
 }
@@ -134,7 +134,7 @@ func (c Compilation) readPythonProject() (pythonProject, bool, error) {
 func (c Compilation) exportUvLock(ctx context.Context, scratch string) (pythonDependencies, error) {
 	uv, err := exec.LookPath("uv")
 	if err != nil {
-		return pythonDependencies{}, fmt.Errorf("app %q locks its dependencies in %s, and uv is not on PATH to export them for pip: install uv (https://docs.astral.sh/uv/) where ocel builds", c.App, pythonUvLockFile)
+		return pythonDependencies{}, fmt.Errorf("app %q locks its dependencies in %s, and uv is not on PATH: install uv (https://docs.astral.sh/uv/)", c.App, pythonUvLockFile)
 	}
 	requirements := filepath.Join(scratch, pythonRequirementsFile)
 	cmd := exec.Command(uv, "export", "--frozen", "--format", "requirements-txt", "--no-dev", "--no-editable", "--no-hashes", "--no-header", "--no-annotate", "--output-file", requirements)

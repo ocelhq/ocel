@@ -200,7 +200,7 @@ func installVariants(ctx context.Context, app, staging string, parent manifest, 
 		}
 	}
 	if !slices.ContainsFunc(install.variants, func(variant tracedPackage) bool { return namesVariantFor(variant.manifest.Name, cpu) }) {
-		return stagedVariants{}, fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s, so the function would fail at its first require of it; npm reported:\n%s",
+		return stagedVariants{}, fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s; npm reported:\n%s",
 			parent.Name, app, arch.NodePackageOS, cpu, arch.NodePackageLibc, npmOutput.String())
 	}
 	return install, nil

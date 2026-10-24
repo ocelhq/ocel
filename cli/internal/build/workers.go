@@ -27,10 +27,10 @@ func (t tools) addWorkerEntry(ctx context.Context, cfg *project.Project, app pro
 		return image.Image{}, err
 	}
 	if app.Language == "" && app.HasLanguageManifest() {
-		return image.Image{}, fmt.Errorf("app %q runs in an image and the workers joining it serve what %s declares in %s, and nothing says which language %q is written in: a worker runs in its app's image, so set \"framework\" on %q", app.Name, served.Dir, served.Language, app.Name, app.Name)
+		return image.Image{}, fmt.Errorf("app %q runs the %s workers in %s, and its own language is unknown: set \"framework\" on %q", app.Name, served.Language, served.Dir, app.Name)
 	}
 	if runs := app.Language; runs != "" && runs != served.Language {
-		return image.Image{}, fmt.Errorf("app %q runs %s and the workers joining it serve what %s declares in %s: a worker runs in its app's image, so give the workers an app of their own in %s", app.Name, runs, served.Dir, served.Language, served.Language)
+		return image.Image{}, fmt.Errorf("app %q runs %s, and its workers in %s are %s: give the workers an app of their own in %s", app.Name, runs, served.Dir, served.Language, served.Language)
 	}
 	files, err := os.MkdirTemp("", "ocel-worker-entry-")
 	if err != nil {
@@ -66,7 +66,7 @@ func (t tools) addWorkerEntry(ctx context.Context, cfg *project.Project, app pro
 	case language.Rust:
 		return built, nil
 	default:
-		return image.Image{}, fmt.Errorf("app %q runs in an image and the workers joining it serve what %s declares in %s, and a worker is not built into an image for %s", app.Name, served.Dir, served.Language, served.Language)
+		return image.Image{}, fmt.Errorf("app %q runs in an image, which cannot run the %s workers in %s", app.Name, served.Language, served.Dir)
 	}
 	return t.addFiles(ctx, built, cfg.Slug, app.Name, files, containerimage.WorkerDir, arch, log)
 }

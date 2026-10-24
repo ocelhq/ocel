@@ -207,7 +207,7 @@ func (p *crossInstall) installInto(ctx context.Context, app, source, functionDir
 		versions := reached[name]
 		if len(versions) > 1 {
 			slices.Sort(versions)
-			return fmt.Errorf("app %q reaches %s at versions %s, and it ships one package per platform: a function contains one copy of it, installed for its architecture, so every importer must agree on the version",
+			return fmt.Errorf("app %q reaches %s at versions %s, and it ships one package per platform: make every importer use one version",
 				app, name, strings.Join(versions, ", "))
 		}
 		wanted[name] = versions[0]
@@ -246,7 +246,7 @@ func (p *crossInstall) installInto(ctx context.Context, app, source, functionDir
 	}
 	for _, name := range slices.Sorted(maps.Keys(wanted)) {
 		if !installedForTarget(filepath.Join(staging, nodeModulesDir), name, cpu) {
-			return fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s, so the function would fail at its first require of it; npm reported:\n%s",
+			return fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s; npm reported:\n%s",
 				name, app, arch.NodePackageOS, cpu, arch.NodePackageLibc, npmOutput.String())
 		}
 	}
