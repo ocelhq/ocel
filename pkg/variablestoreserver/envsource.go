@@ -140,7 +140,7 @@ func switchToBuiltin(ctx context.Context, store variablestore.Store, scope varia
 	if err := envsource.ClearProvenance(ctx, store, scope); err != nil {
 		return err
 	}
-	return envsource.ForgetProject(ctx, store, scope.Tier, scope.Project)
+	return envsource.Unregister(ctx, store, scope.Tier, scope.Project)
 }
 
 func (h *Service) syncRegistered(ctx context.Context, store variablestore.Store, scope variablestore.Scope) (*variablestorev1.SyncEnvSourceResponse, error) {

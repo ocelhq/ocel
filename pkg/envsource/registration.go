@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -18,6 +19,8 @@ const (
 	RootRegistrations records.Root = "envsources"
 	RootStatus        records.Root = "envsourcestatus"
 	RootDigestKey     records.Root = "envsourcedigestkey"
+
+	removalSegment = "removal"
 )
 
 type Registration struct {
@@ -65,6 +68,52 @@ func registrationsPartition(tier environment.Tier) records.Partition {
 
 func registrationKey(tier environment.Tier, project string) records.Key {
 	return registrationsPartition(tier).Key(project)
+}
+
+func removalKey(tier environment.Tier, project string) records.Key {
+	return registrationsPartition(tier).Key(project, removalSegment)
+}
+
+type removal struct {
+	RemovedAt time.Time `json:"removedAt"`
+}
+
+func recordRemoval(ctx context.Context, store records.Store, tier environment.Tier, project string, at time.Time) error {
+	encoded, err := json.Marshal(removal{RemovedAt: at})
+	if err != nil {
+		return err
+	}
+	return records.Change(ctx, store, removalKey(tier, project), func(records.Entry) ([]byte, bool, error) {
+		return encoded, true, nil
+	})
+}
+
+func isRemoved(ctx context.Context, store records.Store, tier environment.Tier, project string) (bool, error) {
+	_, err := store.Read(ctx, removalKey(tier, project))
+	if errors.Is(err, records.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func forgetRemovalsBefore(ctx context.Context, store records.Store, removals []records.Entry, before time.Time) error {
+	var failed []error
+	for _, recorded := range removals {
+		var removed removal
+		if err := json.Unmarshal(recorded.Value, &removed); err != nil {
+			failed = append(failed, fmt.Errorf("read %s: %w", recorded.Key, err))
+			continue
+		}
+		if !removed.RemovedAt.Before(before) {
+			continue
+		}
+		if err := records.ForgetMatching(ctx, store, recorded.Key, func(current records.Entry) (bool, error) {
+			return current.Revision == recorded.Revision, nil
+		}); err != nil {
+			failed = append(failed, err)
+		}
+	}
+	return errors.Join(failed...)
 }
 
 func Register(ctx context.Context, store variablestore.Store, tier environment.Tier, registration Registration) (Registration, error) {
@@ -201,25 +250,37 @@ func Registered(ctx context.Context, store records.Store, tier environment.Tier,
 }
 
 func Registrations(ctx context.Context, store records.Store, tier environment.Tier) ([]Registration, error) {
+	registrations, _, err := readRegistrations(ctx, store, tier)
+	return registrations, err
+}
+
+func readRegistrations(ctx context.Context, store records.Store, tier environment.Tier) ([]Registration, []records.Entry, error) {
 	recorded, err := store.List(ctx, registrationsPartition(tier))
 	if err != nil {
-		return nil, fmt.Errorf("read the %s env source registrations: %w", tier, err)
+		return nil, nil, fmt.Errorf("read the %s env source registrations: %w", tier, err)
 	}
 	out := make([]Registration, 0, len(recorded))
+	var removals []records.Entry
 	var undecodable []error
 	for _, entry := range recorded {
+		if len(entry.Key.Path) > 1 {
+			if entry.Key.Path[1] == removalSegment {
+				removals = append(removals, entry)
+			}
+			continue
+		}
 		registration, err := registrationOf(entry)
 		if isUndecodable(err) {
 			undecodable = append(undecodable, err)
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		out = append(out, registration)
 	}
 	slices.SortFunc(out, func(a, b Registration) int { return strings.Compare(a.Project, b.Project) })
-	return out, errors.Join(undecodable...)
+	return out, removals, errors.Join(undecodable...)
 }
 
 func ScheduledProjects(ctx context.Context, store records.Store, tier environment.Tier) ([]string, error) {

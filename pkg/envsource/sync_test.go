@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -498,4 +499,86 @@ func TestCopyingEveryIntervalReadsASourceAgainAfterAReadOverranItsShare(t *testi
 	}
 	cancel()
 	<-done
+}
+
+func syncHeldInRead(t *testing.T, sync *envsource.Sync, fake *fakeInfisical) (*listHold, <-chan error) {
+	t.Helper()
+	held := fake.holdList()
+	synced := make(chan error, 1)
+	go func() { synced <- sync.CopyScheduled(context.Background()) }()
+	<-held.arrived
+	return held, synced
+}
+
+func TestASyncThatReadARemovedProjectsRegistrationLeavesNoValueOfItBehind(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	ctx := context.Background()
+	held, synced := syncHeldInRead(t, sync, fake)
+
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Purge(ctx, scopeOf("shop")); err != nil {
+		t.Fatal(err)
+	}
+	close(held.released)
+	if err := <-synced; err != nil {
+		t.Fatalf("CopyScheduled() = %v", err)
+	}
+
+	left, err := store.KeyValues.List(ctx, variablestore.ValuesPartition(scopeOf("shop")))
+	if err != nil || len(left) != 0 {
+		t.Fatalf("values of removed shop = %v, %v, want none left by a sync that read shop before its removal", left, err)
+	}
+}
+
+func TestASyncRacingASwitchToBuiltinKeepsWhatItCopied(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	ctx := context.Background()
+	held, synced := syncHeldInRead(t, sync, fake)
+
+	if err := envsource.Unregister(ctx, store, environment.TierProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	close(held.released)
+	if err := <-synced; err != nil {
+		t.Fatalf("CopyScheduled() = %v", err)
+	}
+
+	if k := reveal(t, store, scopeOf("shop"), tierWide("", "K")); k.Plaintext != "v" {
+		t.Fatalf("shop K = %q, want the copy kept as the builtin store's own", k.Plaintext)
+	}
+}
+
+func TestARemovalIsForgottenOnceNoSyncThatReadBeforeItCanStillBeCopying(t *testing.T) {
+	t.Parallel()
+	sync, store, _, host, at := syncFixture(t)
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	ctx := context.Background()
+	at.advance(time.Since(at.now()))
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	registrations := records.Partition{Tier: environment.TierProduction, Root: envsource.RootRegistrations}
+
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := store.KeyValues.List(ctx, registrations); err != nil || len(recorded) != 1 {
+		t.Fatalf("registrations right after shop's removal = %v, %v, want its removal recorded", recorded, err)
+	}
+
+	at.advance(2 * time.Minute)
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := store.KeyValues.List(ctx, registrations); err != nil || len(recorded) != 0 {
+		t.Fatalf("registrations two minutes after shop's removal = %v, %v, want nothing left", recorded, err)
+	}
 }

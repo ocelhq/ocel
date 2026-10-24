@@ -45,7 +45,7 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 		next := read[at]
 		version, err := key.version(scope, at, next)
 		if err != nil {
-			return CopyResult{}, err
+			return result, err
 		}
 		current, found := stored[at]
 		if found && current.Provenance.EnvSource == envSource && !isNewerVersion(version, current.Provenance.Version) {
@@ -64,7 +64,7 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 		case errors.Is(err, variablestore.ErrTooLarge), errors.Is(err, variablestore.ErrIsReference):
 			result.refuse(at, err)
 		default:
-			return CopyResult{}, err
+			return result, err
 		}
 	}
 
@@ -81,7 +81,7 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 			continue
 		}
 		if err != nil {
-			return CopyResult{}, err
+			return result, err
 		}
 		if removed {
 			result.Removed = append(result.Removed, at)

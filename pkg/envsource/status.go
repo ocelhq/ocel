@@ -107,10 +107,27 @@ func ForgetProject(ctx context.Context, store variablestore.Store, tier environm
 	if (err != nil && !isUndecodable(err)) || !registered {
 		return err
 	}
-	if err := release(ctx, store.KeyValues, tier, registration.DedupeKey, project); err != nil {
+	if err == nil && registration.Descriptor.Reading() == ReadingOnSchedule {
+		if err := recordRemoval(ctx, store.KeyValues, tier, project, time.Now()); err != nil {
+			return err
+		}
+	}
+	return unregister(ctx, store.KeyValues, tier, project, registration.DedupeKey)
+}
+
+func Unregister(ctx context.Context, store variablestore.Store, tier environment.Tier, project string) error {
+	registration, registered, err := Registered(ctx, store.KeyValues, tier, project)
+	if (err != nil && !isUndecodable(err)) || !registered {
 		return err
 	}
-	return records.Forget(ctx, store.KeyValues, registrationKey(tier, project))
+	return unregister(ctx, store.KeyValues, tier, project, registration.DedupeKey)
+}
+
+func unregister(ctx context.Context, store records.Store, tier environment.Tier, project, dedupeKey string) error {
+	if err := release(ctx, store, tier, dedupeKey, project); err != nil {
+		return err
+	}
+	return records.Forget(ctx, store, registrationKey(tier, project))
 }
 
 func moveSharer(ctx context.Context, store records.Store, tier environment.Tier, project, from, to string) error {

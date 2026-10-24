@@ -2,7 +2,11 @@ package variablestore
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type Provenance struct {
@@ -21,6 +25,25 @@ func (s Store) SetFromEnvSource(ctx context.Context, scope Scope, at Coordinate,
 
 func (s Store) DeleteFromEnvSource(ctx context.Context, scope Scope, at Coordinate, from Provenance, expected int64) (bool, error) {
 	return s.remove(ctx, scope, at, from, &expected)
+}
+
+func (s Store) ForgetFromEnvSource(ctx context.Context, scope Scope, at Coordinate, from Provenance) error {
+	var forgotten int64
+	err := records.ForgetMatching(ctx, s.KeyValues, CellKey(scope, at), func(recorded records.Entry) (bool, error) {
+		var stored storedValue
+		if err := json.Unmarshal(recorded.Value, &stored); err != nil {
+			return false, fmt.Errorf("read %s: %w", at, err)
+		}
+		if stored.EnvSource != from.EnvSource || !stored.ReadAt.Equal(from.ReadAt) {
+			return false, nil
+		}
+		forgotten = stored.Version
+		return true, nil
+	})
+	if err != nil || forgotten == 0 {
+		return err
+	}
+	return records.Forget(ctx, s.KeyValues, versionKey(scope, at, forgotten))
 }
 
 type Dereferenced struct {
