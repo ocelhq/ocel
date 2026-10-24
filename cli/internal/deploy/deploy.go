@@ -59,7 +59,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		return commands.RefuseNoWait()
 	}
 	if opts.Yes && dependencies.JobAnswers != nil {
-		return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("`%s` runs inside an Ocel Cloud job, where the console answers every confirmation, so --yes would consent for a person nobody asked: drop it", target.command())}
+		return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("`%s` runs inside an Ocel Cloud job, where the console answers confirmations: drop --yes", target.command())}
 	}
 	cfg := resolved.Project
 	env, err := target.environment(dependencies, cwd)
@@ -157,7 +157,7 @@ func toCloud(ctx context.Context, dependencies Dependencies, cwd string, resolve
 	case opts.Prebuilt:
 		return commands.NotOnCloud(target.command() + " --prebuilt")
 	case opts.Yes:
-		return &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("`%s --yes` does not run on Ocel Cloud: a job asks each confirmation on its page in the console, so --yes has nothing here to consent to — drop it, and answer there", target.command())}
+		return &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("`%s --yes` does not run on Ocel Cloud: drop --yes and confirm in the console", target.command())}
 	}
 	job := commands.CloudJob{Command: target.command(), Tier: target.tier, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, Tag: target.tag, NoWait: opts.NoWait, Stderr: stderr}
 	if target.isPreview() {

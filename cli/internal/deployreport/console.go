@@ -50,11 +50,11 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 		if !linked {
 			return
 		}
-		fmt.Fprintf(stderr, "Couldn't report %s to the console: you're not logged in. Run `ocel login`.\n", subject)
+		fmt.Fprintf(stderr, "Couldn't report %s to the console: not logged in. Run `ocel login`.\n", subject)
 		return
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "Couldn't report %s to the console: your saved login could not be read: %v\n", subject, err)
+		fmt.Fprintf(stderr, "Couldn't report %s to the console: %v\n", subject, err)
 		return
 	}
 	apiURL := console.BaseURL(credentials.APIURL)
@@ -64,7 +64,7 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 		return
 	}
 	if link == nil {
-		fmt.Fprintln(stderr, "This directory isn't linked to a console project, so nothing was reported there. Run `ocel link` to link it.")
+		fmt.Fprintln(stderr, "Not reported to the console: run `ocel link`.")
 		return
 	}
 

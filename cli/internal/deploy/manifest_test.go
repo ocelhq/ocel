@@ -140,7 +140,7 @@ func TestADeployOfResourcesAloneFromARootHoldingNoAppSaysSoWithoutWarning(t *tes
 	_, undetected := language.Resolve(root, root, "")
 
 	out := deployingResourcesAlone(t, root, undetected)
-	if !strings.Contains(out, "deploys only the 1 resource shop declares") || strings.Contains(out, "WARN") {
+	if !strings.Contains(out, "deploying only 1 resource") || strings.Contains(out, "WARN") {
 		t.Errorf("output = %q, want it said without a warning that only the resources are deployed", out)
 	}
 }
@@ -807,7 +807,7 @@ func TestAnAppBuildsItsFunctionsIntoTheManifest(t *testing.T) {
 	if fn.GetLogicalName() != "fn--api--api" || fn.GetFramework().GetName() != "node" || fn.GetEntryFile() != "src/server.js" || fn.GetArtifactPath() != "output/api" {
 		t.Errorf("function = %v, want fn--api--api built by node from src/server.js at output/api", fn)
 	}
-	if strings.Contains(out, "deploys only the") {
+	if strings.Contains(out, "deploying only") {
 		t.Errorf("output = %q, want no infra-only note when a function is built", out)
 	}
 	if !strings.Contains(out, "Deployed") {
@@ -824,7 +824,7 @@ func TestAProjectWhoseAppsBuildNothingDeploysItsResourcesAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
-	if !strings.Contains(out, "No app has a function or image to deploy, so this deploys only the 1 resource test-app declares") {
+	if !strings.Contains(out, "No app has a function or image; deploying only 1 resource") {
 		t.Errorf("output = %q, want the infra-only note naming how many resources deploy", out)
 	}
 	if !strings.Contains(out, "INFO  [build] ✓ test-app: Collected the resources test-app declares in ") {
@@ -1756,7 +1756,7 @@ func TestADeployWarnsOfTheValuesAnImageBuildGetsNoneOfAndHandsItTheSensitiveAndS
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
 	for _, app := range []string{"web", "api"} {
-		want := `app "` + app + `" builds as an image, and an image build gets none of its plaintext values yet: PAGE_ID.`
+		want := `app "` + app + `" builds as an image, so its build sees these plaintext values unset: PAGE_ID`
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}
@@ -1785,7 +1785,7 @@ func TestADeployWarnsOfPlaintextValuesAnImageBuildGetsNoneOfWhenEveryOneIsPlaint
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; output=%s", err, out)
 	}
-	if want := `app "api" builds as an image, and an image build gets none of its plaintext values yet: PAGE_ID.`; !strings.Contains(out, want) {
+	if want := `app "api" builds as an image, so its build sees these plaintext values unset: PAGE_ID`; !strings.Contains(out, want) {
 		t.Errorf("output lacks %q:\n%s", want, out)
 	}
 	if strings.Contains(out, processenv.AppURLEnvVar+",") || strings.Contains(out, ", "+processenv.AppURLEnvVar) {

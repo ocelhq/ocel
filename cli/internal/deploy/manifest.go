@@ -201,7 +201,7 @@ func (d *deployRun) assemble(c collected, built build.Output) (*contractv1.Manif
 		if len(c.resources) == 0 {
 			return nil, nil
 		}
-		only := fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", english.Count(len(c.resources), "resource"), cfg.Slug)
+		only := fmt.Sprintf("No app has a function or image; deploying only %s", english.Count(len(c.resources), "resource"))
 		if cfg.HasUnclearRootApp() {
 			d.phase.Warn(only + ", and " + cfg.RootAppUndetected.Error())
 		} else {
@@ -336,7 +336,7 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []variables.C
 			continue
 		}
 		slices.Sort(keys)
-		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, and an image build gets none of its plaintext values yet: %s. Code that reads one while the app builds sees it unset", app.Name, strings.Join(slices.Compact(keys), ", ")))
+		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, so its build sees these plaintext values unset: %s", app.Name, strings.Join(slices.Compact(keys), ", ")))
 	}
 	return warnings
 }
@@ -345,8 +345,8 @@ func checkAppPaths(cfg *project.Project, configName string) error {
 	for _, a := range cfg.Apps {
 		if info, err := os.Stat(filepath.Join(cfg.Dir, a.Path)); err != nil || !info.IsDir() {
 			return fmt.Errorf(
-				"app %q has path %q, which is not a directory of this project: ocel reads an app's source to tell which resources it may be handed, so a path that names nothing would deploy %q alive with no resource at all — point `apps` in %s at %q's source",
-				a.Name, a.Path, a.Name, configName, a.Name,
+				"app %q has path %q, which is not a directory: point `apps` in %s at its source",
+				a.Name, a.Path, configName,
 			)
 		}
 	}

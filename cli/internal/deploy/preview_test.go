@@ -254,7 +254,7 @@ export default {
 			t.Fatal("runPreviewUp err = nil, want a missing-preview-domain refusal")
 		}
 		out := stdout.String()
-		for _, want := range []string{"declares no preview domain", "domains.preview", "*.preview.", "ocel domain use"} {
+		for _, want := range []string{"no preview domain", "domains.preview", "*.preview.", "ocel domain use"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -334,7 +334,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"This will create a NEW project.", "This backend already has: billing, my-application", "Not confirmed, so this run changes nothing", "Nothing deployed to preview"} {
+		for _, want := range []string{"is a NEW project.", "Already deployed: billing, my-application", "Not confirmed, so this run changes nothing", "Nothing deployed to preview"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
@@ -976,7 +976,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		if err == nil {
 			t.Fatal("refuseMissingPreviewDomain err = nil, want a refusal")
 		}
-		for _, want := range []string{"declares no preview domain", "no global one", "domains.preview", "ocel domain use"} {
+		for _, want := range []string{"no preview domain", "domains.preview", "ocel domain use"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
@@ -1073,7 +1073,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		if err == nil {
 			t.Fatal("refuseMissingPreviewDomain err = nil, want a route refusal")
 		}
-		for _, want := range []string{"wildcard route is not installed", "ocel domain use '*.preview.ocel.app' --preview"} {
+		for _, want := range []string{"has no wildcard route", "ocel domain use '*.preview.ocel.app' --preview"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}

@@ -340,7 +340,7 @@ export * from "./storage.js";
 	if !p.ran(t) {
 		t.Error("the preBuild did not run, though the provider forwarded every port it can")
 	}
-	if !strings.Contains(out, "lifecycle.preBuild goes without the bindings of files,") || strings.Contains(out, "The build goes without") {
+	if !strings.Contains(out, "lifecycle.preBuild goes without the bindings of files:") || strings.Contains(out, "The build goes without") {
 		t.Errorf("the deploy said %q, want it to say the preBuild, which no app's build shares, goes without files", out)
 	}
 }

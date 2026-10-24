@@ -36,10 +36,7 @@ func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.Previ
 		check.Say("Serving previews on the address each app's release is given")
 
 	case declared == "" && base == "":
-		return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
-			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
-			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
-			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
+		return fmt.Errorf("no preview domain: add a domains.preview wildcard to %s, or run `ocel domain use '*.preview.acme.com' --preview`",
 			configName)
 
 	case declared == "":
@@ -68,14 +65,12 @@ func previewAppNames(cfg *project.Project) []string {
 func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, configName string) error {
 	base := wildcard.GetBaseDomain()
 	if want, have := wildcard.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
-		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, but this deploy is authenticated to account %s: "+
-			"the wildcard can only be served from the account that owns it — "+
-			"re-scope this run's edge credentials to %s, or declare this project's own domains.preview in %s",
+		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, not %s: "+
+			"use credentials for %s, or declare domains.preview in %s",
 			base, want, have, want, configName)
 	}
 	if !wildcard.GetRouteInstalled() {
-		return fmt.Errorf("the global preview domain *.%s is recorded, but its wildcard route is not installed, so nothing would answer a preview hostname: "+
-			"run `ocel domain use '*.%s' --preview` to reinstall the edge's preview routing and reclaim the wildcard",
+		return fmt.Errorf("the global preview domain *.%s has no wildcard route: run `ocel domain use '*.%s' --preview`",
 			base, base)
 	}
 	return nil

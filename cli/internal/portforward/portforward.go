@@ -133,7 +133,7 @@ func RefuseUnforwarded(subject string, declared []string, err error) error {
 }
 
 func DescribeUnforwarded(subject string, unforwarded []string) string {
-	return fmt.Sprintf("%s goes without the bindings of %s, since the provider forwards no port to them", subject, english.And(unforwarded))
+	return fmt.Sprintf("%s goes without the bindings of %s: the provider forwards no port to them", subject, english.And(unforwarded))
 }
 
 func DescribeRefused(subject string, declared []string, err error) string {

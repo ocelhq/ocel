@@ -36,11 +36,11 @@ func describePlannedPreBuild(command *project.LifecycleCommand, prebuilt bool) s
 	if command == nil || prebuilt {
 		return ""
 	}
-	return fmt.Sprintf("Before it builds, this deploy would run %s: %s", preBuildName, command.Command)
+	return fmt.Sprintf("Would run %s before building: %s", preBuildName, command.Command)
 }
 
 func sayPrebuiltSkipsPreBuild(span *run.Span, command project.LifecycleCommand, tier environmentv1.Tier) {
-	span.Say(fmt.Sprintf("--prebuilt skips %s, which runs before a build and this deploy builds nothing; if its command %q must run first, run it yourself, for example with `ocel run --env %s -- <command>`", preBuildName, command.Command, readiness.TierName(tier)))
+	span.Say(fmt.Sprintf("--prebuilt skips %s; to run it, use `ocel run --env %s -- %s`", preBuildName, readiness.TierName(tier), command.Command))
 }
 
 func (d *deployRun) runPreBuild(ctx context.Context, command project.LifecycleCommand, forwards *portforward.Forwards, values map[string]build.AppVariables, resourceCount int) error {
@@ -59,7 +59,7 @@ func (d *deployRun) runPreBuild(ctx context.Context, command project.LifecycleCo
 
 	span := d.phase.Child(cfg.Slug, progress.Running.Title(preBuildName))
 	if forwards == nil && resourceCount > 0 && !d.forwardsPorts {
-		span.Say(fmt.Sprintf("The provider forwards no port, so %s goes without the bindings of the resources %s declares", preBuildName, cfg.Slug))
+		span.Say(fmt.Sprintf("%s runs without bindings: the provider forwards no port", preBuildName))
 	}
 	hidden := redaction.NewValues(build.AppVariables{Live: live, BindingProxyEnv: forwards.BindingProxyEnv(portforward.WholeProject)}.SecretValues())
 	out := hidden.Writer(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
@@ -99,6 +99,6 @@ func warnNpmPrebuildScripts(span *run.Span, cfg *project.Project) {
 	if len(apps) == 0 {
 		return
 	}
-	span.Warn(fmt.Sprintf("A package.json prebuild script is set in %s. npm and yarn 1 run it before each app's own build with the build's environment, and %s runs once per deploy against the deployed bindings, so both run. Rename the script if only %s should run it",
-		english.And(english.Quoted(apps)), preBuildName, preBuildName))
+	span.Warn(fmt.Sprintf("The package.json prebuild script in %s runs too, before each app's build; rename it if only %s should run",
+		english.And(english.Quoted(apps)), preBuildName))
 }
