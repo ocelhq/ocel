@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
@@ -226,11 +227,13 @@ func Apply(ctx context.Context, c *gcloud.Clients, tier environment.Tier, grante
 	for _, target := range targetsOf(slices.Concat(granted, revoked)) {
 		granting := slices.ContainsFunc(granted, func(grant Grant) bool { return grant.Target == target })
 		err := gcloud.UntilVisible(ctx, func() error {
-			_, err := policy.Edit(ctx, policyOf(c, target), changesOn(target, granted, revoked))
-			if err != nil && (granting || !policy.IsAbsent(err)) {
-				return explainRefusedGrant(c, tier, target, err)
-			}
-			return nil
+			return googleretry.UntilServed(ctx, func() error {
+				_, err := policy.Edit(ctx, policyOf(c, target), changesOn(target, granted, revoked))
+				if err != nil && (granting || !policy.IsAbsent(err)) {
+					return explainRefusedGrant(c, tier, target, err)
+				}
+				return nil
+			})
 		})
 		if err != nil {
 			return err

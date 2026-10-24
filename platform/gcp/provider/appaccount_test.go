@@ -261,6 +261,22 @@ func TestAGrantRefusedBecauseTheNewAccountIsNotYetVisibleIsRetried(t *testing.T)
 	}
 }
 
+func TestAProjectKeyGoogleDoesNotServeYetAfterMakingItIsWaitedForAndGranted(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	server.KeyUnserved = 2
+	p, c := ensuringAccounts(t, server)
+
+	email, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil)
+	if err != nil {
+		t.Fatalf("ensureAppAccount() = %v, want the grant on the new key made once Google serves it", err)
+	}
+	opening := "roles/cloudkms.cryptoKeyDecrypter serviceAccount:" + email + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")
+	if got := keyBindingsOf(server); !slices.Contains(got, opening) {
+		t.Errorf("the keys bind %q, want %q", got, opening)
+	}
+}
+
 func TestAProjectWithNoRoomForAnotherAccountIsRefusedNamingTheQuota(t *testing.T) {
 	t.Parallel()
 	for name, configure := range map[string]func(*googletest.IAM){

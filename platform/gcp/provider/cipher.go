@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -43,7 +44,11 @@ func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 			return nil, err
 		}
 	}
-	return opened.Seal(ctx, tier, bound, plaintext)
+	err = googleretry.UntilServed(ctx, func() error {
+		sealed, err = opened.Seal(ctx, tier, bound, plaintext)
+		return err
+	})
+	return sealed, err
 }
 
 func (s cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {

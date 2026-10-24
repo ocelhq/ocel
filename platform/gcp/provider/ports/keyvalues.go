@@ -283,7 +283,7 @@ func (s KeyValues) refuseFailedWrite(key records.Key, err error) error {
 		return err
 	}
 	if project, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
-		return refuseNoProjectRecords(key.Partition.Tier, project)
+		return refuseNoProjectRecords(key.Partition.Tier, project, err)
 	}
 	if status.Code(err) == codes.NotFound {
 		return s.refuseUnbootstrapped(key.Partition.Tier)
