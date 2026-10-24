@@ -13,14 +13,14 @@ func PropagationNote(bound *progressv1.Propagation) string {
 		return ""
 	}
 	if bound.GetPublished() {
-		return fmt.Sprintf("propagates within ~%s", propagationDuration(typical))
+		return "propagates within " + propagationDuration(typical)
 	}
-	return fmt.Sprintf("propagates in ~%s (typical, not guaranteed)", propagationDuration(typical))
+	return "propagates in ~" + propagationDuration(typical)
 }
 
 func propagationDuration(ms int64) string {
 	if ms < 1000 {
-		return fmt.Sprintf("%d ms", ms)
+		return fmt.Sprintf("%dms", ms)
 	}
-	return strconv.FormatFloat(float64(ms)/1000, 'f', -1, 64) + " s"
+	return strconv.FormatFloat(float64(ms)/1000, 'f', -1, 64) + "s"
 }

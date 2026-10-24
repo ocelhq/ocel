@@ -50,7 +50,6 @@ INFO  [provision] ✓ cloudflare: Attached production hostname acme.example.com 
 INFO  [promote] ✓ production: Switched traffic to promotion p-7f3a in 2s
 
 ✓ Deployed acme to prod in 54s
-  on aws 123456789012 · us-east-1 · as deploy
   prod now serves promotion p-7f3a
   web  https://acme.example.com
   api  https://api.acme.example.com

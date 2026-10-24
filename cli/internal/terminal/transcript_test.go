@@ -894,6 +894,27 @@ func TestASuccessfulDeployNamesWhatProductionServesNowAndWhereEachAppIs(t *testi
 	}
 }
 
+func TestASuccessfulPromotionSaysOnOneLineWhatProductionServesByItsShortIDAndHowSoonItPropagates(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := productionRun(t)
+	forwardOutcome(run, &progressv1.OperationResult{
+		Success:     true,
+		PromotionId: "7413110502192f88de2292ab4c4dea86",
+		Propagation: &progressv1.Propagation{TypicalMs: 5000},
+	})
+	run.Succeed("Rolled acme back to 2a8b0711")
+	c.pass(54 * time.Second)
+	ended(run, nil)
+
+	want := productionHead +
+		"✓ Rolled acme back to 2a8b0711 in 54s\n" +
+		"  prod now serves promotion 74131105 · propagates in ~5s\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServesWhatItDidAndNamesTheFailedApp(t *testing.T) {
 	t.Parallel()
 
@@ -961,7 +982,7 @@ func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
 	want := "✓ Preview pr-12 is up in 41s\n" +
 		"  web  https://pr-12.acme.example.com\n" +
 		"  web: the custom domain shop.acme.com is not attached to previews\n" +
-		"  propagates within ~5 s\n" +
+		"  propagates within 5s\n" +
 		"  Log: /var/ocel-runs/0af3.ndjson\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -1145,7 +1166,7 @@ func TestTheIdentityHeaderNamesEachAccountTheRunSignedInToAndIsSetApartByBlankLi
 	}
 }
 
-func TestTheSummaryNamesTheAccountTheRunWasSignedInTo(t *testing.T) {
+func TestTheSummaryLeavesTheAccountToTheIdentityHeaderThatAlreadyNamedIt(t *testing.T) {
 	t.Parallel()
 
 	for _, success := range []bool{true, false} {
@@ -1161,8 +1182,8 @@ func TestTheSummaryNamesTheAccountTheRunWasSignedInTo(t *testing.T) {
 		}
 		run.End(&err)
 
-		if want := "\n  on fake 123456789012 · example-region · as deploy\n"; !strings.Contains(out.String(), want) {
-			t.Errorf("success=%v: got\n%s\nwant it to contain %q", success, out.String(), want)
+		if got := out.String(); strings.Count(got, "123456789012") != 1 || strings.Contains(got, "  on fake") {
+			t.Errorf("success=%v: got\n%s\nwant the account named once, by the identity header", success, got)
 		}
 	}
 }

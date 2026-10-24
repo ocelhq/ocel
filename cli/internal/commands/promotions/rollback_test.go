@@ -467,13 +467,13 @@ var propagationCases = []struct {
 	{
 		name:        "published",
 		propagation: router.Propagation{Typical: 5 * time.Second, Published: true},
-		want:        "propagates within ~5 s",
-		other:       []string{"typical, not guaranteed"},
+		want:        "propagates within 5s",
+		other:       []string{"propagates in"},
 	},
 	{
 		name:        "unpublished",
 		propagation: router.Propagation{Typical: 5 * time.Second},
-		want:        "propagates in ~5 s (typical, not guaranteed)",
+		want:        "propagates in ~5s",
 		other:       []string{"propagates within"},
 	},
 }

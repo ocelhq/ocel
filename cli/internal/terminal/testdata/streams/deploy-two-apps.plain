@@ -44,6 +44,5 @@ ERROR [deploy] ✗ api: Deploying the serverless app to production failed after 
 INFO  [deploy] ✓ web: Deployed the serverless app to production in 12s (2/2) — 1 resource created
 
 ✗ Deploy failed in 21s — internal: provision api: update failed
-  on aws 123456789012 · us-east-1 · as deploy
   web deployed but was not promoted: promotion needs every app, and api failed
   prod still serves what it served before this run

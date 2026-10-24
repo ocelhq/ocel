@@ -46,18 +46,21 @@ func (s summary) succeeded(took string) []string {
 	result := s.result
 	head := s.present.Palette().SuccessBold(fmt.Sprintf("%s %s in %s", passGlyph, headlineOr(result, "Done"), took))
 	out := []string{head}
-	if target := targetLine(s.present, result.GetOrigin()); target != "" {
-		out = append(out, target)
-	}
+	propagation := PropagationNote(result.GetPropagation())
 	if place := servedPlace(result.GetTier()); place != "" && result.GetPromotionId() != "" {
-		out = append(out, blockIndent+place+" now serves promotion "+result.GetPromotionId())
+		served := blockIndent + place + " now serves promotion " + ShortID(result.GetPromotionId())
+		if propagation != "" {
+			served += s.present.Palette().Muted(partySep + propagation)
+			propagation = ""
+		}
+		out = append(out, served)
 	}
 	out = append(out, s.appURLs()...)
 	for _, note := range result.GetUrlNotes() {
 		out = append(out, blockIndent+note)
 	}
-	if note := PropagationNote(result.GetPropagation()); note != "" {
-		out = append(out, s.present.Palette().Muted(blockIndent+note))
+	if propagation != "" {
+		out = append(out, s.present.Palette().Muted(blockIndent+propagation))
 	}
 	return out
 }
@@ -69,9 +72,6 @@ func (s summary) failed(took string) []string {
 		return append(out, detailLines(result.GetDetail())...)
 	}
 	out := failureLines(s.present.Palette(), headlineOr(result, "Failed")+" in "+took, result.GetDetail())
-	if target := targetLine(s.present, result.GetOrigin()); target != "" {
-		out = append(out, target)
-	}
 	if unpromoted := s.unpromoted(); len(unpromoted) > 0 {
 		out = append(out, unpromoted...)
 	} else if place := servedPlace(result.GetTier()); place != "" && !result.GetChangeStarted() {

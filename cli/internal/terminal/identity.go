@@ -52,17 +52,6 @@ func partyRows(present Presentation, ev *streamv1.IdentityEvent) []string {
 	return rows
 }
 
-func targetLine(present Presentation, party *streamv1.Party) string {
-	if !isNamedParty(party) {
-		return ""
-	}
-	text := blockIndent + present.Palette().Muted("on ") + present.Palette().Bold(vendorName(party))
-	if detail := partyDetail(present, party); detail != "" {
-		text += " " + detail
-	}
-	return text
-}
-
 func partyDetail(present Presentation, party *streamv1.Party) string {
 	parts := nonEmpty(party.GetAccount(), party.GetLocation())
 	if principal := party.GetPrincipal(); principal != "" {
