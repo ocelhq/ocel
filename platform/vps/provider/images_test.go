@@ -173,6 +173,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Re
 			said = "Loaded image: " + loadedImageRef + "\n"
 		case fields[1] == "image" && len(fields) > 2 && fields[2] == "inspect" && strings.Contains(line, "{{.Id}}"):
 			return b.inspected(), nil
+		case fields[1] == "image" && len(fields) > 3 && fields[2] == "rm":
+			delete(b.images, unquoted(fields[len(fields)-1]))
+			b.hasImage = false
 		case fields[1] == "pull" && len(fields) > 2 || fields[1] == "pull-as" && len(fields) > 4:
 			ref := unquoted(fields[len(fields)-1])
 			b.hasImage = true
