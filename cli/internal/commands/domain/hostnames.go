@@ -30,7 +30,8 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 		return err
 	}
 
-	asJSON := invocation.Presentation(stdout).Format == terminal.FormatJSON
+	present := invocation.Presentation(stdout)
+	asJSON, palette := present.Format == terminal.FormatJSON, present.Palette()
 	if !opts.preview {
 		resp, err := listProductionHostnames(ctx, invocation, target)
 		if err != nil {
@@ -39,7 +40,7 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 		if asJSON {
 			return terminal.WriteResultJSON(stdout, domainListResult(resp))
 		}
-		renderBoundHostnames(stdout, resp, filepath.Base(target.Project.Path))
+		renderBoundHostnames(stdout, palette, resp, filepath.Base(target.Project.Path))
 		return nil
 	}
 	resp, err := listGlobalPreviewDomain(ctx, invocation, target)
@@ -49,7 +50,7 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 	if asJSON {
 		return terminal.WriteResultJSON(stdout, previewDomainResult(resp))
 	}
-	renderGlobalDomain(stdout, resp)
+	renderGlobalDomain(stdout, palette, resp)
 	return nil
 }
 

@@ -37,10 +37,11 @@ func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd st
 	if err != nil {
 		return err
 	}
-	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+	present := invocation.Presentation(stdout)
+	if present.Format == terminal.FormatJSON {
 		return writeDomainStatusJSON(stdout, resp)
 	}
-	renderDomainStatus(stdout, resp, filepath.Base(cfg.Path))
+	renderDomainStatus(stdout, present.Palette(), resp, filepath.Base(cfg.Path))
 	return nil
 }
 
