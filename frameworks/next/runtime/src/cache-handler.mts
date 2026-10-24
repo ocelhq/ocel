@@ -12,6 +12,7 @@ import { servesOnlyFresh } from "@framework/node-runtime/host";
 import type { CacheStore } from "./cache-store.mjs";
 import { getNextHost } from "./host.mjs";
 import { notedTags, noteTags } from "./origin-tags.mjs";
+import { readPrerender } from "./prerender-files.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { isRscRequest } from "./rsc-request.mjs";
 import { isUncachedRender, readServedRoute } from "./served-route.mjs";
@@ -122,8 +123,11 @@ export default class OcelCacheHandler {
 
   private readonly requestHeaders: RequestHeaders;
 
-  constructor(ctx?: { _requestHeaders?: Record<string, any> }) {
+  private readonly serverDistDir: string | undefined;
+
+  constructor(ctx?: { _requestHeaders?: Record<string, any>; serverDistDir?: string }) {
     this.requestHeaders = ctx?._requestHeaders ?? {};
+    this.serverDistDir = ctx?.serverDistDir;
   }
 
   private get isRscRequest(): boolean {
@@ -154,7 +158,9 @@ export default class OcelCacheHandler {
     try {
       const store = await this.openStore();
       const entry =
-        ctx?.kind === "FETCH" ? await store.readFetch(key) : await store.readEntry(cacheKey(key));
+        ctx?.kind === "FETCH"
+          ? await store.readFetch(key)
+          : ((await store.readEntry(cacheKey(key))) ?? (await this.readPrerenderFiles(key, ctx)));
       if (!entry) return null;
 
       const tags = tagsOf(entry.value, ctx);
@@ -177,6 +183,15 @@ export default class OcelCacheHandler {
     } catch {
       return null;
     }
+  }
+
+  private async readPrerenderFiles(key: string, ctx: any): Promise<CacheEntryFile | null> {
+    if (!this.serverDistDir) return null;
+    const entry = await readPrerender(this.serverDistDir, key, ctx);
+    if (entry?.value.kind === "APP_PAGE") {
+      Object.assign(entry.value, this.variantHeaders[cacheKey(key)]);
+    }
+    return entry;
   }
 
   async set(key: string, data: any, ctx: any): Promise<void> {

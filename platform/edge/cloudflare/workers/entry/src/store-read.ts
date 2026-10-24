@@ -1,8 +1,8 @@
 import {
   type CacheEntryFile,
-  cacheKey,
   deserialize,
   entryObjectKey,
+  routeCacheKey,
   tagsOf,
 } from "@framework/next-cache";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
@@ -67,7 +67,7 @@ function parseEntry(body: string): CacheEntryFile | null {
 
 async function readEntry(deps: StoreReadDeps, call: StoreCall, path: string) {
   const coordinate = parseStorageCoordinate(call.storageCoordinate);
-  const key = coordinate && entryObjectKey(coordinate, cacheKey(path));
+  const key = coordinate && entryObjectKey(coordinate, routeCacheKey(path));
   if (!key) return null;
   const object = await deps.source.get(key);
   return object ? parseEntry(await object.text()) : null;

@@ -8,6 +8,8 @@ import {
   cacheKey,
   deserialize,
   entryObjectKey,
+  routeCacheKey,
+  routeOf,
   tagFreshness,
   tagsOf,
 } from "../src/index.mjs";
@@ -20,6 +22,24 @@ describe("cacheKey", () => {
 
   it("strips the leading slash", () => {
     expect(cacheKey("/blog/a")).toBe("blog/a");
+  });
+});
+
+describe("routeCacheKey", () => {
+  it("keys a route as Next keys its page, so the root and a route named index stay apart", () => {
+    expect(routeCacheKey("/")).toBe("index");
+    expect(routeCacheKey("/index")).toBe("index/index");
+    expect(routeCacheKey("/index/docs")).toBe("index/index/docs");
+    expect(routeCacheKey("/index/[slug]")).toBe("index/[slug]");
+    expect(routeCacheKey("/blog/a")).toBe("blog/a");
+  });
+});
+
+describe("routeOf", () => {
+  it("reads back the route each page path was keyed from", () => {
+    for (const route of ["/", "/index", "/index/docs", "/index/[slug]", "/blog/a"]) {
+      expect(routeOf(`/${routeCacheKey(route)}`)).toBe(route);
+    }
   });
 });
 
