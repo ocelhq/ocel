@@ -64,6 +64,17 @@ function call(over: Partial<StoreCall> = {}): StoreCall {
 }
 
 describe("reading a page from the durable store on a Serve miss", () => {
+  it("reads a route named index from its own entry, not the root page's", async () => {
+    const { deps } = harness({
+      [key("index")]: entry({ html: "<html>root</html>" }),
+      [key("index/index")]: entry({ html: "<html>index route</html>" }),
+    });
+
+    const answer = await readFromStore(call({ entryPath: "/index" }), deps);
+
+    expect(await answer?.response.text()).toBe("<html>index route</html>");
+  });
+
   it("answers the page's HTML with the tags the origin checks it by, stamped with the release", async () => {
     const { deps } = harness({ [key("blog/a")]: entry() });
 

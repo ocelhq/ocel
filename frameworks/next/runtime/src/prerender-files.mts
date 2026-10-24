@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { CacheEntryFile } from "@framework/next-cache";
+import { type CacheEntryFile, routeOf } from "@framework/next-cache";
 
 type Revalidate = number | false | undefined;
 
@@ -31,14 +31,6 @@ function readManifest(serverDistDir: string): Promise<PrerenderManifest | null> 
     manifests.set(serverDistDir, manifest);
   }
   return manifest;
-}
-
-const dynamicSegment = /\/\[[^/]+?\](?=\/|$)/;
-
-function routeOf(key: string): string {
-  if (key === "/index") return "/";
-  if (key.startsWith("/index/") && !dynamicSegment.test(key)) return key.slice("/index".length);
-  return key;
 }
 
 function cacheControlOf(

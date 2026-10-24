@@ -1,7 +1,7 @@
 import type { TagRecord } from "@platform/edge-contract/purge";
 import { objectKey, type StorageCoordinate } from "@platform/edge-contract/storage-key";
 
-export { cacheKey, variantHeadersFile } from "./naming.mjs";
+export { cacheKey, routeCacheKey, routeOf, variantHeadersFile } from "./naming.mjs";
 export {
   latest,
   mergeRecord,

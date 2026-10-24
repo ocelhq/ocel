@@ -1,6 +1,6 @@
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { cacheKey } from "@framework/next-cache/naming";
+import { routeCacheKey } from "@framework/next-cache/naming";
 import { boundCacheTags, type CacheTagLimits } from "@platform/edge-contract/cache-tags";
 import type { AdapterOutput } from "next";
 
@@ -75,7 +75,7 @@ export function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
     const html = pages.find((m) => isUserFacingPathname(m.pathname));
     if (!html) continue;
     groups.push({
-      entryKey: cacheKey(html.pathname),
+      entryKey: routeCacheKey(html.pathname),
       html,
       rsc: pages.find((m) => m.pathname.endsWith(".rsc")),
       data: pages.find((m) => NEXT_DATA_PRERENDER.test(m.pathname)),
