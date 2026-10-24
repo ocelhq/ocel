@@ -192,11 +192,10 @@ func WatchListening(address string, exited <-chan Exit) <-chan error {
 	return out
 }
 
-func FreePort() (int, error) {
+func ReservePort() (int, func(), error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	defer ln.Close()
-	return ln.Addr().(*net.TCPAddr).Port, nil
+	return ln.Addr().(*net.TCPAddr).Port, func() { ln.Close() }, nil
 }

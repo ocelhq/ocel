@@ -318,16 +318,44 @@ func bindPortWithoutListening(t *testing.T) int {
 	return bound.(*syscall.SockaddrInet4).Port
 }
 
-func TestFreePort(t *testing.T) {
-	t.Run("names a port the app can bind", func(t *testing.T) {
-		port, err := FreePort()
+func TestReservePort(t *testing.T) {
+	t.Run("holds the port until it is released", func(t *testing.T) {
+		port, release, err := ReservePort()
 		if err != nil {
-			t.Fatalf("FreePort: %v", err)
+			t.Fatalf("ReservePort: %v", err)
 		}
-		ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		t.Cleanup(release)
+		address := "127.0.0.1:" + strconv.Itoa(port)
+
+		if ln, err := net.Listen("tcp", address); err == nil {
+			ln.Close()
+			t.Fatalf("listened on %s while it was reserved, want the bind refused", address)
+		}
+		release()
+		ln, err := net.Listen("tcp", address)
 		if err != nil {
-			t.Fatalf("listen on the port handed out: %v", err)
+			t.Fatalf("listen on %s once released: %v", address, err)
 		}
 		ln.Close()
+	})
+
+	t.Run("keeps the port from a listener the process opens on port 0", func(t *testing.T) {
+		port, release, err := ReservePort()
+		if err != nil {
+			t.Fatalf("ReservePort: %v", err)
+		}
+		t.Cleanup(release)
+
+		for range 200 {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatalf("listen on port 0: %v", err)
+			}
+			got := ln.Addr().(*net.TCPAddr).Port
+			ln.Close()
+			if got == port {
+				t.Fatalf("a listener on port 0 was handed %d while it was reserved", port)
+			}
+		}
 	})
 }
