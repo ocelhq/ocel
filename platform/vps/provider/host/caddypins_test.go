@@ -25,7 +25,14 @@ const wildcard = "*.preview.example.com"
 func pinnedBox(t *testing.T, pins []boxapi.Pin, files map[string][]byte) *Host {
 	t.Helper()
 
-	rig := claimingBox(t, routed())
+	_, h := projectBox(t, routed(), "shop", pins, files)
+	return h
+}
+
+func projectBox(t *testing.T, state boxapi.RoutingTable, project string, pins []boxapi.Pin, files map[string][]byte) (*claimBench, *Host) {
+	t.Helper()
+
+	rig := claimingBox(t, state)
 	serves := rig.answer
 	rig.answer = func(command string) (ssh.Result, bool) {
 		for path, block := range files {
@@ -35,7 +42,24 @@ func pinnedBox(t *testing.T, pins []boxapi.Pin, files map[string][]byte) *Host {
 		}
 		return serves(command)
 	}
-	return New(ssh.NewBox(rig.dial, nil), Keys{}, pins, front.Proxy{})
+	return rig, New(ssh.NewBox(rig.dial, nil), project, Keys{}, pins, front.Proxy{})
+}
+
+func recordedPins(t *testing.T, rig *claimBench) []boxapi.Pin {
+	t.Helper()
+
+	table, err := routing.ReadRoutingTable([]byte(rig.recorded))
+	if err != nil {
+		t.Fatalf("ReadRoutingTable() = %v", err)
+	}
+	return table.Pins
+}
+
+func coveringPin(t *testing.T, hostname, at string) ([]boxapi.Pin, map[string][]byte) {
+	t.Helper()
+
+	covering, _ := pinnedBlocks(t, []string{hostname}, 90*24*time.Hour)
+	return []boxapi.Pin{{Hostname: hostname, Path: at}}, map[string][]byte{boxapi.PinCertificate(at): covering}
 }
 
 func pinning(t *testing.T) (*claimBench, *Host) {
@@ -51,7 +75,7 @@ func pinning(t *testing.T) (*claimBench, *Host) {
 		}
 		return serves(command)
 	}
-	return rig, New(ssh.NewBox(rig.dial, nil), Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
+	return rig, New(ssh.NewBox(rig.dial, nil), "shop", Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
 }
 
 func claiming(t *testing.T, pins []boxapi.Pin, files map[string][]byte) error {
@@ -149,7 +173,7 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 		}
 		return serves(command)
 	}
-	h := New(ssh.NewBox(rig.dial, nil), Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
+	h := New(ssh.NewBox(rig.dial, nil), "shop", Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
 
 	ctx := context.Background()
 	for _, hostname := range []string{claimed, "blog.example.com", "www.example.com"} {
@@ -258,5 +282,107 @@ func TestAPinnedPreviewWildcardServesTheProbeBeforeAnyPreviewIsClaimed(t *testin
 		return pair.Certificate == boxapi.PinCertificate(caddy.PinsMount+"/wildcard")
 	}) {
 		t.Errorf("a box answering previews under a pinned %s hands the proxy %+v, want that pair loaded: the probe %s is answered whether or not a preview is claimed, and with no pair loaded for it the proxy orders one from acme, which a dns-01-only setup never gets", wildcard, loaded, edge.ProbeHostname(wildcard))
+	}
+}
+
+func TestAReshapeByOneProjectKeepsThePinsAnotherProjectBound(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Pins = []boxapi.Pin{{Project: "shop", Hostname: claimed, Path: boxapi.PinsDir + "/shop"}}
+	rig, blog := projectBox(t, state, "blog", nil, nil)
+	if err := blog.routing.ClaimHosts(context.Background(), []boxapi.Claim{
+		{Hostname: "blog.example.com", Owner: boxapi.Surface("blog", "production"), Pointer: pointed},
+	}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
+	}
+	if held := recordedPins(t, rig); !slices.Equal(held, state.Pins) {
+		t.Errorf("after blog claimed a hostname the box pins %v, want shop's %v kept: blog's options speak only for blog", held, state.Pins)
+	}
+}
+
+func TestAReshapeReplacesOnlyThePinsOfTheProjectReshaping(t *testing.T) {
+	t.Parallel()
+
+	shop := boxapi.Pin{Project: "shop", Hostname: claimed, Path: boxapi.PinsDir + "/shop"}
+	state := routed()
+	state.Pins = []boxapi.Pin{shop, {Project: "blog", Hostname: "blog.example.com", Path: boxapi.PinsDir + "/blog-old"}}
+	at := boxapi.PinsDir + "/blog"
+	pins, files := coveringPin(t, "blog.example.com", at)
+	rig, blog := projectBox(t, state, "blog", pins, files)
+	if err := blog.routing.ClaimHosts(context.Background(), []boxapi.Claim{
+		{Hostname: "blog.example.com", Owner: boxapi.Surface("blog", "production"), Pointer: pointed},
+	}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
+	}
+	want := []boxapi.Pin{{Project: "blog", Hostname: "blog.example.com", Path: at}, shop}
+	if held := recordedPins(t, rig); !slices.Equal(held, want) {
+		t.Errorf("after blog reshaped with a new pin the box pins %v, want %v: blog's pins replace blog's own and leave shop's", held, want)
+	}
+}
+
+func TestAPinRecordedWithoutAProjectIsKeptByEveryProjectsReshape(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Pins = []boxapi.Pin{{Hostname: claimed, Path: boxapi.PinsDir + "/shop"}}
+	rig, blog := projectBox(t, state, "blog", nil, nil)
+	if err := blog.routing.ClaimHosts(context.Background(), []boxapi.Claim{
+		{Hostname: "blog.example.com", Owner: boxapi.Surface("blog", "production"), Pointer: pointed},
+	}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
+	}
+	if held := recordedPins(t, rig); !slices.Equal(held, state.Pins) {
+		t.Errorf("a pin recorded with no project reads back after blog's reshape as %v, want %v kept: no project speaks for it, so none may drop it", held, state.Pins)
+	}
+}
+
+func TestUnpinningAProjectThatHoldsNothingOnTheBoxDropsOnlyItsPins(t *testing.T) {
+	t.Parallel()
+
+	at := boxapi.PinsDir + "/shop"
+	pins, files := coveringPin(t, claimed, at)
+	blog := boxapi.Pin{Project: "blog", Hostname: "blog.example.com", Path: boxapi.PinsDir + "/blog"}
+	state := routed()
+	state.Claims = []boxapi.Claim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	state.Pins = []boxapi.Pin{blog, {Project: "shop", Hostname: claimed, Path: at}}
+	rig, shop := projectBox(t, state, "shop", pins, files)
+	ctx := context.Background()
+	if err := shop.routing.DisclaimSurface(ctx, surface); err != nil {
+		t.Fatalf("DisclaimSurface() = %v", err)
+	}
+	if err := shop.routing.UnrouteSurface(ctx, surface); err != nil {
+		t.Fatalf("UnrouteSurface() = %v", err)
+	}
+	if err := shop.routing.Unpin(ctx, "shop"); err != nil {
+		t.Fatalf("Unpin() = %v", err)
+	}
+	if held := recordedPins(t, rig); !slices.Equal(held, []boxapi.Pin{blog}) {
+		t.Errorf("after shop's last surface left the box it pins %v, want only blog's %v: a removed project's pins load a certificate for hostnames nothing on the box claims any more", held, blog)
+	}
+}
+
+func TestUnpinningAProjectWhoseOtherTierStillHoldsTheBoxKeepsItsPins(t *testing.T) {
+	t.Parallel()
+
+	at := boxapi.PinsDir + "/shop"
+	pins, files := coveringPin(t, claimed, at)
+	state := routed()
+	state.Claims = []boxapi.Claim{
+		{Hostname: claimed, Owner: surface, Pointer: pointed},
+		{Hostname: "pr-1.preview.example.com", Owner: boxapi.Surface("shop", "preview"), Pointer: "@pr-1"},
+	}
+	state.Pins = []boxapi.Pin{{Project: "shop", Hostname: claimed, Path: at}}
+	rig, shop := projectBox(t, state, "shop", pins, files)
+	ctx := context.Background()
+	if err := shop.routing.DisclaimSurface(ctx, surface); err != nil {
+		t.Fatalf("DisclaimSurface() = %v", err)
+	}
+	if err := shop.routing.Unpin(ctx, "shop"); err != nil {
+		t.Fatalf("Unpin() = %v", err)
+	}
+	if held := recordedPins(t, rig); !slices.Equal(held, state.Pins) {
+		t.Errorf("after shop's production surface left the box it pins %v, want %v kept: shop's preview surface still claims a hostname on it", held, state.Pins)
 	}
 }

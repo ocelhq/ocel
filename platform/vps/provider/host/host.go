@@ -45,10 +45,10 @@ type Host struct {
 	resources  *container.Containers
 }
 
-func New(box *ssh.Box, deploy Keys, pins []boxapi.Pin, fronting front.Proxy) *Host {
+func New(box *ssh.Box, project string, deploy Keys, pins []boxapi.Pin, fronting front.Proxy) *Host {
 	h := &Host{Box: box, engine: docker.NewEngine(box), deploy: deploy, pins: certs.NewPins(box, pins), proxyOption: fronting}
 	h.front = fronting.Front().Open(frontBox{h})
-	h.routing = routing.NewTable(box, h.front, h.pins.Verified)
+	h.routing = routing.NewTable(box, h.front, project, h.pins.Verified)
 	h.tunnel = tunnel.New(box, h.routing)
 	h.images = release.NewImages(box)
 	h.resources = container.New(box, h.engine)

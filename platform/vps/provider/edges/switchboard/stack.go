@@ -409,5 +409,8 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err := s.e.releaseTunnel(ctx); err != nil {
 		errs = append(errs, err)
 	}
+	if err := s.e.routes.Unpin(ctx, s.state.Slug); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }

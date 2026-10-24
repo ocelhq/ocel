@@ -60,6 +60,7 @@ type Routes interface {
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error
 	DisclaimSurface(ctx context.Context, owner string) error
+	Unpin(ctx context.Context, project string) error
 	PreviewEntry(ctx context.Context) (string, error)
 	InstallPreviewEntry(ctx context.Context, base string) error
 	RemovePreviewEntry(ctx context.Context, base string) error

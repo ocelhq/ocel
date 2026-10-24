@@ -267,11 +267,43 @@ func (t *Table) Reshape(ctx context.Context, change func(boxapi.RoutingTable) (b
 		if err != nil {
 			return boxapi.RoutingTable{}, err
 		}
-		if changed.Pins, err = t.pins(ctx); err != nil {
+		own, err := t.pins(ctx)
+		if err != nil {
 			return boxapi.RoutingTable{}, err
 		}
+		changed.Pins = replacePins(changed.Pins, t.project, own)
 		return changed, nil
 	})
+}
+
+func (t *Table) Unpin(ctx context.Context, project string) error {
+	return t.recomposed(ctx, func(current boxapi.RoutingTable) (boxapi.RoutingTable, error) {
+		if !hasRowsOf(current, project) {
+			current.Pins = replacePins(current.Pins, project, nil)
+		}
+		return current, nil
+	})
+}
+
+func replacePins(held []boxapi.Pin, project string, own []boxapi.Pin) []boxapi.Pin {
+	kept := slices.DeleteFunc(slices.Clone(held), func(pin boxapi.Pin) bool { return pin.Project == project })
+	for _, pin := range own {
+		pin.Project = project
+		kept = append(kept, pin)
+	}
+	return kept
+}
+
+func hasRowsOf(state boxapi.RoutingTable, project string) bool {
+	surfaces := []string{
+		boxapi.Surface(project, string(environment.TierProduction)),
+		boxapi.Surface(project, string(environment.TierPreview)),
+	}
+	owns := func(owner string) bool { return slices.Contains(surfaces, owner) }
+	return slices.ContainsFunc(state.Claims, func(claim boxapi.Claim) bool { return owns(claim.Owner) }) ||
+		slices.ContainsFunc(state.Routes, func(route boxapi.Route) bool { return owns(route.Owner) }) ||
+		slices.ContainsFunc(state.Shields, func(shield boxapi.Shield) bool { return owns(shield.Owner) }) ||
+		slices.ContainsFunc(state.Gates, func(held boxapi.OwnedGate) bool { return owns(held.Owner) })
 }
 
 func (t *Table) Rerender(ctx context.Context) error {

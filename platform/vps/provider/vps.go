@@ -78,8 +78,8 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	if err := decoded.Proxy.RefuseUnusable(decoded.Certificates); err != nil {
 		return nil, err
 	}
-	p := NewProvider(decoded)
-	p.project = settings.Slug
+	p := &Provider{options: decoded, project: settings.Slug, now: time.Now}
+	p.onHost(p.conn)
 	if len(settings.Transforms) > 0 {
 		p.transform = nodePass(settings.ProjectDir, settings.Transforms)
 	}
