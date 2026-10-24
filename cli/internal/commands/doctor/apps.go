@@ -45,7 +45,7 @@ func appsCheck(cfg *project.Project, roots []discovery.Root, rootsErr error) che
 	for _, root := range roots {
 		folders = append(folders, rootName(cfg.Dir, root))
 	}
-	return check{verdict: verdictPass, text: "config loads — no apps declared, so a deploy carries only the resources declared in " + english.And(folders)}
+	return check{verdict: verdictPass, text: "config loads — no apps, only the resources in " + english.And(folders)}
 }
 
 func rootName(projectDir string, root discovery.Root) string {

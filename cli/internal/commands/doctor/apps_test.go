@@ -115,7 +115,7 @@ func TestDoctorPassesAProjectThatDeclaresResourcesAloneBesideItsTooling(t *testi
 	t.Parallel()
 
 	cfg := projectWith(t, `{"slug":"shop"}`, map[string]string{"package.json": `{"dependencies":{"ocel":"0.0.2"}}`, declaredResources: "export {}\n"})
-	want := "config loads — no apps declared, so a deploy carries only the resources declared in " + discovery.DefaultRootDirName
+	want := "config loads — no apps, only the resources in " + discovery.DefaultRootDirName
 	if got := checkApps(cfg); got.verdict != verdictPass || got.text != want {
 		t.Errorf("check = %+v, want a pass saying %q: the resources are what it deploys", got, want)
 	}
@@ -138,7 +138,7 @@ func TestDoctorNamesTheRootCrateWhereItDeclaresTheResources(t *testing.T) {
 		"Cargo.toml": "[package]\nname = \"shop\"\n\n[dependencies]\nocel-sdk = \"0.1\"\n",
 		"src/lib.rs": "\n",
 	})
-	want := "config loads — no apps declared, so a deploy carries only the resources declared in the root crate"
+	want := "config loads — no apps, only the resources in the root crate"
 	if got := checkApps(cfg); got.verdict != verdictPass || got.text != want {
 		t.Errorf("check = %+v, want a pass saying %q", got, want)
 	}
@@ -148,7 +148,7 @@ func TestDoctorNamesTheProjectRootWhereItIsTheDiscoveryFolder(t *testing.T) {
 	t.Parallel()
 
 	cfg := projectWith(t, `{"slug":"shop","discovery":{"paths":["."]}}`, map[string]string{"package.json": `{"dependencies":{"ocel":"0.0.2"}}`, "resources.ts": "export {}\n"})
-	want := "config loads — no apps declared, so a deploy carries only the resources declared in the project root"
+	want := "config loads — no apps, only the resources in the project root"
 	if got := checkApps(cfg); got.verdict != verdictPass || got.text != want {
 		t.Errorf("check = %+v, want a pass saying %q", got, want)
 	}

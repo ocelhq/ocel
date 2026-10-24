@@ -14,14 +14,14 @@ const PREVIEW = [
   "Preview",
   "  ⚠ no preview domain",
   "    → run `ocel domain use '*.preview.example.com' --preview`",
-  "  – not set up — run `ocel bootstrap preview` to add previews",
+  "  – not set up — run `ocel bootstrap preview`",
 ].join("\n");
 
 const FRESH = [
   PROJECT,
   "",
   "Production",
-  "  – not set up — run `ocel bootstrap production` to set it up",
+  "  – not set up — run `ocel bootstrap production`",
   "",
   PREVIEW,
   "",
@@ -40,7 +40,7 @@ const BOOTSTRAPPED = [
   PROJECT,
   "",
   "Production",
-  "  ✓ bootstrapped, current — `ocel bootstrap status production` lists its parts",
+  "  ✓ bootstrapped, current",
   "",
   PREVIEW,
   "",
@@ -57,8 +57,8 @@ describe("unbootstrappedMissed", () => {
 
   it("reads the verdict through the colour a terminal paints it in", () => {
     const painted = FRESH.replace("  – not set up", "  \u001b[2m– not set up").replace(
-      "to set it up\n",
-      "to set it up\u001b[0m\n",
+      "production`\n",
+      "production`\u001b[0m\n",
     );
     expect(unbootstrappedMissed(painted)).toBeUndefined();
   });

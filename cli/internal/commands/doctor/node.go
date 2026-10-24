@@ -34,16 +34,14 @@ func nodeCheck(ctx context.Context, cfg *project.Project, roots []discovery.Root
 	if len(reasons) == 0 {
 		return check{}, false
 	}
-	needed := "node is needed — " + strings.Join(reasons, ", ")
-
 	path, err := exec.LookPath("node")
 	if err != nil {
-		return check{verdict: verdictFail, text: needed + " — and it is not on PATH", fix: "install Node.js and put it on PATH"}, true
+		return check{verdict: verdictFail, text: "node is not on PATH, and " + strings.Join(reasons, ", "), fix: "install Node.js and put it on PATH"}, true
 	}
 	out, runErr := exec.CommandContext(ctx, path, "--version").Output()
 	found := strings.TrimSpace(string(out))
 	if runErr != nil || found == "" {
-		return check{verdict: verdictPass, text: needed + " — node on PATH"}, true
+		return check{verdict: verdictPass, text: "node on PATH"}, true
 	}
-	return check{verdict: verdictPass, text: needed + " — node " + found + " on PATH"}, true
+	return check{verdict: verdictPass, text: "node " + found + " on PATH"}, true
 }
