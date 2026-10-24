@@ -65,6 +65,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 	t.Helper()
 
 	engineOrFail(t)
+	enginetest.HostPorts(t, proxyServing()...)
 	name, network := probeName(t), enginetest.Network(t, "box")
 	tunneling := enginetest.Network(t, "tunnel")
 	board := name + "-board"
