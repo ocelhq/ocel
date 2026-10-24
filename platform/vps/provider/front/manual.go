@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/machine"
@@ -30,7 +31,9 @@ func (m *Manual) Resolvers() string { return "" }
 
 func (m *Manual) SharesPreviewWildcard() bool { return false }
 
-func (m *Manual) DescribeSharedPreviewCertificate(base string) string { return pinAdvice(base) }
+func (m *Manual) DescribeSharedPreviewCertificate(base string) string {
+	return "Serve " + edge.PreviewWildcard(base) + " from a wildcard certificate in your proxy"
+}
 
 func (m *Manual) Joined() []docker.Network { return joinedOther(m.Network, "proxy.manual.network") }
 
