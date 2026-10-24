@@ -12,9 +12,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
@@ -101,13 +103,24 @@ func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claim
 	if len(claims) > 0 {
 		errs = append(errs, s.disclaimUnnamed(ctx, move.Pointer, claims))
 	}
+	env := s.resolveEnv(move.Pointer)
 	for _, promoted := range ready {
-		errs = append(errs, s.e.images.Promote(ctx, s.state.Tier, s.state.Slug, promoted.app, promoted.record.Image))
+		errs = append(errs, s.e.images.Promote(ctx, s.state.Tier, s.state.Slug, env, promoted.app, promoted.record.Image))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("promotion %s serves on this box, but the box did not record all of it: %w", move.Promotion.PromotionID, err)
 	}
 	return nil
+}
+
+func (s *stack) resolveEnv(pointer string) string {
+	if s.state.Tier == environment.TierProduction {
+		return stackrecords.ProductionEnv
+	}
+	if preview, _, deployment := router.ParseDeploymentPointer(pointer); deployment {
+		return preview
+	}
+	return pointer
 }
 
 func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, record router.ReleaseRecord) (promotable, bool, error) {

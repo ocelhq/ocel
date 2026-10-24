@@ -134,8 +134,8 @@ func (m *fakeBox) ForgetNetwork(_ context.Context, tier environment.Tier, projec
 	return m.refuse("ForgetNetwork")
 }
 
-func (m *fakeBox) Promote(_ context.Context, _ environment.Tier, project, app, coordinate string) error {
-	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
+func (m *fakeBox) Promote(_ context.Context, _ environment.Tier, project, env, app, coordinate string) error {
+	m.calls = append(m.calls, "head "+project+"/"+app+" in "+env+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
 	return m.refuse("Promote")
 }
@@ -545,7 +545,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItCutsOver(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"gate " + switchboard.Surface(slug, environment.TierProduction), "run shop-web-1111", "release web onto shop-web-1111:" + containerimage.PortText, "head shop/web at " + imageFor("web", "b1")}
+	want := []string{"gate " + switchboard.Surface(slug, environment.TierProduction), "run shop-web-1111", "release web onto shop-web-1111:" + containerimage.PortText, "head shop/web in prod at " + imageFor("web", "b1")}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running, then cuts over, and heads the window only at what now serves", m.calls, want)
 	}
@@ -593,7 +593,7 @@ func TestAPromotionOfSeveralAppsCutsOverThemAllInOneRelease(t *testing.T) {
 		"gate " + switchboard.Surface(slug, environment.TierProduction),
 		"run shop-api-1111", "run shop-web-1111",
 		"release api onto shop-api-1111:" + containerimage.PortText + ", web onto shop-web-1111:" + containerimage.PortText,
-		"head shop/api at " + imageFor("api", "b1"), "head shop/web at " + imageFor("web", "b1"),
+		"head shop/api in prod at " + imageFor("api", "b1"), "head shop/web in prod at " + imageFor("web", "b1"),
 	}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container is running before one release cuts over them all, so a failure on either leaves the box on the promotion it was serving", m.calls, want)
@@ -965,7 +965,7 @@ func TestARollbackRestartsThePreviousContainerAndCutsOverToIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"gate " + switchboard.Surface(slug, environment.TierProduction), "run shop-web-1111", "release web onto shop-web-1111:" + containerimage.PortText, "head shop/web at " + imageFor("web", "b1")}
+	want := []string{"gate " + switchboard.Surface(slug, environment.TierProduction), "run shop-web-1111", "release web onto shop-web-1111:" + containerimage.PortText, "head shop/web in prod at " + imageFor("web", "b1")}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", m.calls, want)
 	}

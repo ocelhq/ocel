@@ -535,6 +535,27 @@ func TestRemovingAPointerNothingWasEverPromotedUnderTakesNothingAndRefusesNothin
 	}
 }
 
+func TestAPreviewPromotionHeadsTheWindowOfThePreviewItServes(t *testing.T) {
+	t.Parallel()
+
+	m := aMachine()
+	stack := previewStack(t, m)
+	previewed(t, stack, "pr-7", "web")
+	staged(t, stack, "web", "b-deployment", slug+"-web-deployment")
+	movePointerOnto(t, stack, router.FormatDeploymentPointer("pr-7", "p-deployment"), "p-deployment", map[string]string{"web": "b-deployment"}, nil)
+
+	var headed []string
+	for _, call := range m.calls {
+		if strings.HasPrefix(call, "head ") {
+			headed = append(headed, call)
+		}
+	}
+	want := []string{"head shop/web in pr-7 at " + imageFor("web", "b-pr-7"), "head shop/web in pr-7 at " + imageFor("web", "b-deployment")}
+	if !slices.Equal(headed, want) {
+		t.Errorf("the promotions headed %v, want %v: each preview keeps its own window, so a teardown of another preview never drops it", headed, want)
+	}
+}
+
 func TestRemovingAPreviewLeavesTheCatchAllInPlaceAndRendersItAsKeptWithAReason(t *testing.T) {
 	t.Parallel()
 

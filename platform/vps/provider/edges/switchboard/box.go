@@ -37,7 +37,7 @@ type Containers interface {
 
 type Images interface {
 	Ensure(ctx context.Context, project, app, imageRef string) (bool, error)
-	Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error
+	Promote(ctx context.Context, tier environment.Tier, project, env, app, imageRef string) error
 }
 
 type TunnelContainer interface {

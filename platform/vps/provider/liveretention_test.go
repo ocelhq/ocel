@@ -71,10 +71,10 @@ func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	}
 }
 
-func windowOf(t *testing.T, vm liveBox, project, app string, tier environment.Tier) []string {
+func windowOf(t *testing.T, vm liveBox, project, app string, tier environment.Tier, env string) []string {
 	t.Helper()
 	listed := strings.TrimSpace(vm.sshAs(t, deployLogin,
-		"cat "+boxapi.ReleasesDir+"/"+project+"/"+app+"/"+string(tier)))
+		"cat "+boxapi.ReleasesDir+"/"+project+"/"+app+"/"+string(tier)+"@"+env))
 	if listed == "" {
 		return nil
 	}
@@ -100,14 +100,14 @@ func TestLiveTheWindowKeepsThreeAndMovesARepeatedRefToTheHead(t *testing.T) {
 	for _, tag := range []string{"r1", "r2", "r3", "r4"} {
 		sweepsUp(t, p, tag)
 	}
-	window := windowOf(t, vm, sweepProject, sweepApp, environment.TierProduction)
+	window := windowOf(t, vm, sweepProject, sweepApp, environment.TierProduction, "prod")
 	want := []string{sweepAt("r4"), sweepAt("r3"), sweepAt("r2")}
 	if strings.Join(window, ",") != strings.Join(want, ",") {
 		t.Fatalf("the box's window reads %v, want %v: three deep, most recently served first", window, want)
 	}
 
 	sweepsUp(t, p, "r2")
-	window = windowOf(t, vm, sweepProject, sweepApp, environment.TierProduction)
+	window = windowOf(t, vm, sweepProject, sweepApp, environment.TierProduction, "prod")
 	want = []string{sweepAt("r2"), sweepAt("r4"), sweepAt("r3")}
 	if strings.Join(window, ",") != strings.Join(want, ",") {
 		t.Errorf("the box's window reads %v, want %v: a ref already in the window moves to the head and evicts nothing", window, want)
