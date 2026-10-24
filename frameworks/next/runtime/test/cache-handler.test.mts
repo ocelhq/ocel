@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type CacheEntryFile, variantHeadersFile } from "@framework/next-cache";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
 import type { TagRecord } from "@platform/edge-contract/purge";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
 import OcelCacheHandler from "../src/cache-handler.mjs";
 import type { CacheStore } from "../src/cache-store.mjs";
 import { installNextHost } from "../src/host.mjs";
@@ -12,6 +12,7 @@ import { collectTags, notedTags } from "../src/origin-tags.mjs";
 import { purgedSince, purgeMark } from "../src/purge-signal.mjs";
 import { noteServedRoute, noteUncachedRender } from "../src/served-route.mjs";
 import { setTagClockStore } from "../src/tag-clock.mjs";
+import { writeServerDistFixture } from "../test-support/server-dist-fixture.mjs";
 
 function fakeStore() {
   const entries = new Map<string, CacheEntryFile>();
@@ -1015,4 +1016,101 @@ test("behind a caching edge, a render no edge stores does not wait for its fetch
   release();
   await Promise.all(deferred);
   expect(store.fetches.get("abc")?.value.data.body).toBe("x");
+});
+
+const isrTags = "_N_T_/layout,_N_T_/cache/isr/page,_N_T_/cache/isr,products";
+
+function prerenderedIsrPage(writtenAt?: number) {
+  const dist = writeServerDistFixture(
+    {
+      routes: {
+        "/cache/isr": {
+          initialRevalidateSeconds: 15,
+          initialExpireSeconds: 31_536_000,
+          srcRoute: "/cache/isr",
+          dataRoute: "/cache/isr.rsc",
+        },
+      },
+    },
+    {
+      "app/cache/isr.html": "<html>prerendered</html>",
+      "app/cache/isr.rsc": "RSC",
+      "app/cache/isr.meta": JSON.stringify({
+        headers: { "x-nextjs-prerender": "1", "x-next-cache-tags": isrTags },
+        segmentPaths: ["/_tree"],
+      }),
+      "app/cache/isr.segments/_tree.segment.rsc": "TREE",
+      "app/cache/dynamic.html": "<html>never prerendered</html>",
+    },
+    writtenAt,
+  );
+  onTestFinished(dist.remove);
+  return new OcelCacheHandler({ serverDistDir: dist.serverDistDir });
+}
+
+test("a store miss for a page next build prerendered serves the files it wrote", async () => {
+  fakeStore();
+  const writtenAt = Date.now() - 10_000;
+  const handler = prerenderedIsrPage(writtenAt);
+
+  const entry = await handler.get("/cache/isr", { kind: "APP_PAGE" });
+
+  expect(entry?.lastModified).toBe(writtenAt);
+  expect(entry?.value.kind).toBe("APP_PAGE");
+  expect(entry?.value.html).toBe("<html>prerendered</html>");
+  expect(entry?.value.headers["x-next-cache-tags"]).toBe(isrTags);
+  expect(Buffer.isBuffer(entry?.value.rscData)).toBe(true);
+  expect(entry?.value.rscData.toString()).toBe("RSC");
+  expect(entry?.value.segmentData.get("/_tree").toString()).toBe("TREE");
+});
+
+test("a page next build prerendered is a miss once a tag it carries is revalidated", async () => {
+  fakeStore();
+  const handler = prerenderedIsrPage();
+
+  await handler.revalidateTag("products");
+
+  expect(await handler.get("/cache/isr", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("a page next build prerendered is a miss once its path is revalidated", async () => {
+  fakeStore();
+  const handler = prerenderedIsrPage();
+
+  await handler.revalidateTag("_N_T_/cache/isr");
+
+  expect(await handler.get("/cache/isr", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("a store miss for a route next build did not prerender stays a miss", async () => {
+  fakeStore();
+  const handler = prerenderedIsrPage();
+
+  expect(await handler.get("/cache/dynamic", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("the store's entry wins over the page next build prerendered", async () => {
+  const store = fakeStore();
+  seedPage(store, "cache/isr", { lastModified: Date.now() });
+  const handler = prerenderedIsrPage();
+
+  const entry = await handler.get("/cache/isr", { kind: "APP_PAGE" });
+
+  expect(entry?.value.html).toBe("<html>hi</html>");
+});
+
+test("behind a caching edge, a page next build prerendered is a miss once its revalidate window passed", async () => {
+  behindCachingEdge();
+  fakeStore();
+  const handler = prerenderedIsrPage(Date.now() - 60_000);
+
+  expect(await handler.get("/cache/isr", { kind: "APP_PAGE" })).toBeNull();
+});
+
+test("behind a caching edge, a page next build prerendered inside its revalidate window is served", async () => {
+  behindCachingEdge();
+  fakeStore();
+  const handler = prerenderedIsrPage(Date.now() - 5_000);
+
+  expect(await handler.get("/cache/isr", { kind: "APP_PAGE" })).not.toBeNull();
 });

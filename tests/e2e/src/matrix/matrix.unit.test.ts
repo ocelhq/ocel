@@ -539,7 +539,7 @@ describe("the Next cache a cell is held to", () => {
     }
   });
 
-  it("lists every check that reads a page from the Next server's cache red under #1815 on a Next container on gcp, which nothing seeds", () => {
+  it("expects every check that reads a page from the Next server's cache green on a Next container on gcp, which serves the pages next build prerendered", () => {
     const readFromNextCache = [
       "the Next server serves a static page from its cache, frozen, with assets immutable for a year",
       "the Next server keeps an ISR page frozen inside its revalidate window and moves it after",
@@ -551,11 +551,7 @@ describe("the Next cache a cell is held to", () => {
       const planned = planOn(lane, {}, EVERY_CELL);
       const listed = planned.expectedFailures["deploy/next-container/web"] ?? {};
       for (const title of readFromNextCache) {
-        const key = Object.keys(listed).find((one) => one.endsWith(title));
-        expect({ title, issues: key ? listed[key]!.map((gap) => gap.issue) : [] }).toEqual({
-          title,
-          issues: expect.arrayContaining([1815]),
-        });
+        expect(Object.keys(listed).filter((one) => one.endsWith(title))).toEqual([]);
       }
     }
   });
