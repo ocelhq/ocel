@@ -382,6 +382,41 @@ func TestARollbackPassesOverAPromotionTakenBackAndRefusesToNameOne(t *testing.T)
 	}
 }
 
+func TestARollbackToTheStartOfAPromotionIDNamesThePromotionItStarts(t *testing.T) {
+	history := []*contractv1.PromotionHistoryEntry{
+		{Promotion: &contractv1.Promotion{PromotionId: "91532c18c75ea056"}, Active: true},
+		{Promotion: &contractv1.Promotion{PromotionId: "4e0f9a21b7d3c810"}},
+		{Promotion: &contractv1.Promotion{PromotionId: "4e0f2b55aa01ee93"}},
+		{Promotion: &contractv1.Promotion{PromotionId: "4e0f2b55"}},
+	}
+
+	t.Run("a prefix one promotion starts with names it", func(t *testing.T) {
+		target, err := rollbackTarget(history, "4e0f9a21", "")
+		if err != nil || target.GetPromotionId() != "4e0f9a21b7d3c810" {
+			t.Errorf("rollbackTarget(--to 4e0f9a21) = %v, %v, want 4e0f9a21b7d3c810", target.GetPromotionId(), err)
+		}
+	})
+
+	t.Run("a whole id names its promotion though it starts another", func(t *testing.T) {
+		target, err := rollbackTarget(history, "4e0f2b55", "")
+		if err != nil || target.GetPromotionId() != "4e0f2b55" {
+			t.Errorf("rollbackTarget(--to 4e0f2b55) = %v, %v, want 4e0f2b55", target.GetPromotionId(), err)
+		}
+	})
+
+	t.Run("a prefix several promotions start with names none of them", func(t *testing.T) {
+		_, err := rollbackTarget(history, "4e0f", "")
+		if err == nil {
+			t.Fatal("rollbackTarget(--to 4e0f) err = nil, want an ambiguous prefix refused")
+		}
+		for _, want := range []string{`"4e0f"`, "4e0f9a21b7d3c810", "4e0f2b55aa01ee93"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %s", err, want)
+			}
+		}
+	})
+}
+
 func TestARollbackShowsTheWarningsTheProviderReturned(t *testing.T) {
 	project := clitest.SetUpProject(t)
 	kept := make([]router.Promotion, fake.KeptPromotions)

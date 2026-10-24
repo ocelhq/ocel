@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -82,10 +81,11 @@ func runPromotionsList(ctx context.Context, invocation commands.Invocation, cwd 
 	if err != nil {
 		return err
 	}
-	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+	present := invocation.Presentation(stdout)
+	if present.Format == terminal.FormatJSON {
 		return terminal.WriteResultJSON(stdout, promotionListResult(promotions))
 	}
-	renderPromotions(stdout, promotions)
+	renderPromotions(stdout, present, promotions)
 	return nil
 }
 
@@ -175,30 +175,42 @@ func runPromotionsPrune(ctx context.Context, invocation commands.Invocation, cwd
 	})
 }
 
-func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistoryEntry) {
+func renderPromotions(stdout io.Writer, present terminal.Presentation, promotions []*contractv1.PromotionHistoryEntry) {
 	if len(promotions) == 0 {
 		fmt.Fprintln(stdout, "No promotions yet. Run `ocel deploy` first.")
 		return
 	}
 
-	activeStatus := terminal.PaletteFor(stdout).Success("active")
-
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tTAG\tCREATED\tDEPLOYED\tSTATUS")
+	palette := present.Palette()
+	table := terminal.NewTable(
+		terminal.Column{Head: "ID"},
+		terminal.Column{Head: "TAG"},
+		terminal.Column{Head: "CREATED"},
+		terminal.Column{Head: "DEPLOYED"},
+		terminal.Column{Head: "STATUS"},
+	)
 	for _, entry := range promotions {
 		p := entry.GetPromotion()
 		tag := p.GetTag()
 		if tag == "" {
-			tag = "—"
+			tag = terminal.NoValue
+		}
+		created := terminal.EpochDateTime(p.GetTs())
+		if present.TTY {
+			created = present.EpochAge(p.GetTs())
 		}
 		status := ""
 		switch {
 		case entry.GetActive():
-			status = activeStatus
+			status = palette.Health(terminal.Healthy, "active")
 		case entry.GetUnpromoted():
-			status = "unpromoted"
+			status = palette.Health(terminal.Absent, "unpromoted")
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, terminal.EpochDateTime(p.GetTs()), deployedReleases(p.GetReleases()), status)
+		apps := deployedBuilds(palette, p.GetReleases())
+		table.Row(palette.Bold(terminal.ShortID(p.GetPromotionId())), tag, created, apps[0], status)
+		for _, app := range apps[1:] {
+			table.Row("", "", "", app)
+		}
 	}
-	_ = tw.Flush()
+	fmt.Fprint(stdout, table.Render(palette, ""))
 }

@@ -50,7 +50,7 @@ func NewRollbackCommand(invocation commands.Invocation) *cobra.Command {
 			return runRollback(cmd.Context(), invocation, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
-	cmd.Flags().StringVar(&opts.to, "to", "", "Roll back to a specific promotion id instead of the immediately previous one")
+	cmd.Flags().StringVar(&opts.to, "to", "", "Roll back to a specific promotion, named by its id or the start of it, instead of the immediately previous one")
 	cmd.Flags().StringVar(&opts.tag, "tag", "", "Roll back to the promotion with this tag (mutually exclusive with --to)")
 	commands.AddDryFlag(cmd, &opts.dry, "Print what would be rolled back and stop, rolling back nothing")
 	commands.AddYesFlag(cmd, &opts.yes)
@@ -168,22 +168,43 @@ func rolledReleases(result *progressv1.OperationResult) map[string]string {
 	return releases
 }
 
+func findPromotion(history []*contractv1.PromotionHistoryEntry, id string) (*contractv1.PromotionHistoryEntry, error) {
+	var started []*contractv1.PromotionHistoryEntry
+	for _, entry := range history {
+		switch promotion := entry.GetPromotion().GetPromotionId(); {
+		case promotion == id:
+			return entry, nil
+		case strings.HasPrefix(promotion, id):
+			started = append(started, entry)
+		}
+	}
+	switch len(started) {
+	case 0:
+		return nil, fmt.Errorf("no promotion %q in this project's production history, which contains %s: `ocel promotions ls` lists them all", id, promotionIDs(history))
+	case 1:
+		return started[0], nil
+	}
+	ids := make([]string, 0, len(started))
+	for _, entry := range started {
+		ids = append(ids, entry.GetPromotion().GetPromotionId())
+	}
+	return nil, fmt.Errorf("%q starts %d promotions (%s), so it names none of them: pass more of the id", id, len(started), strings.Join(ids, ", "))
+}
+
 func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string) (*contractv1.Promotion, error) {
 	if len(history) == 0 {
 		return nil, fmt.Errorf("this project has no promotions in its production history, so there is nothing to roll back to: run `ocel deploy` first")
 	}
 	switch {
 	case to != "":
-		for _, entry := range history {
-			if entry.GetPromotion().GetPromotionId() != to {
-				continue
-			}
-			if entry.GetUnpromoted() {
-				return nil, fmt.Errorf("promotion %s was taken back when a router could not serve it, so it never served and there is nothing of it to roll back to: `ocel promotions ls` marks it unpromoted", to)
-			}
-			return entry.GetPromotion(), nil
+		entry, err := findPromotion(history, to)
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("no promotion %q in this project's production history, which contains %s: `ocel promotions ls` lists them all", to, promotionIDs(history))
+		if entry.GetUnpromoted() {
+			return nil, fmt.Errorf("promotion %s was taken back when a router could not serve it, so it never served and there is nothing of it to roll back to: `ocel promotions ls` marks it unpromoted", entry.GetPromotion().GetPromotionId())
+		}
+		return entry.GetPromotion(), nil
 	case tag != "":
 		var matched []*contractv1.Promotion
 		for _, entry := range history {

@@ -2,15 +2,18 @@ package promotions
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func promotionHistory(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project) ([]*contractv1.PromotionHistoryEntry, error) {
@@ -51,4 +54,19 @@ func deployedReleases(releaseByApp map[string]string) string {
 		pairs = append(pairs, app+"="+releaseByApp[app])
 	}
 	return strings.Join(pairs, " ")
+}
+
+func deployedBuilds(palette terminal.Palette, releaseByApp map[string]string) []string {
+	if len(releaseByApp) == 0 {
+		return []string{terminal.NoValue}
+	}
+	cells := make([]string, 0, len(releaseByApp))
+	for _, app := range slices.Sorted(maps.Keys(releaseByApp)) {
+		build := releaseByApp[app]
+		if release, err := provider.ParseRelease(build); err == nil {
+			build = release.BuildID()
+		}
+		cells = append(cells, app+" "+palette.Muted(terminal.ShortID(build)))
+	}
+	return cells
 }
