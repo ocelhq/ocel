@@ -50,6 +50,33 @@ func TestBindDomainPublishesAFrontPerHost(t *testing.T) {
 	}
 }
 
+func TestBindDomainMovesABoundDomainOntoTheCertificateItIsHanded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	const host = "shop.example.com"
+	const rotated = "arn:aws:acm:eu-west-1:123456789012:certificate/rotated"
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: rotated}); err != nil {
+		t.Fatalf("BindDomain with the rotated certificate: %v", err)
+	}
+	w.gateway.mu.Lock()
+	serving := w.gateway.domains[host].certificate
+	w.gateway.mu.Unlock()
+	if serving != rotated {
+		t.Errorf("the domain name serves %q, want %q: until it moves off the superseded certificate, ACM refuses to delete that one", serving, rotated)
+	}
+}
+
 func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T) {
 	t.Parallel()
 
