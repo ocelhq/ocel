@@ -396,10 +396,11 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Log) error {
 		for _, id := range originCertificates {
 			revokeOriginCertificate(ctx, r.front, id, progress)
 		}
-		if err := r.releaseRecords(ctx, written, progress); err != nil {
+		released := r.releaseRecords(ctx, written, progress)
+		discarded := r.discardCertificates(ctx, certificates, progress)
+		if err := errors.Join(released, discarded); err != nil {
 			errs = append(errs, err)
-		}
-		if err := r.discardCertificates(ctx, certificates, progress); err != nil {
+		} else if err := r.forgetHosts(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -517,6 +518,14 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Log
 	}
 	if err := forgetInvalidationTarget(ctx, r.provider.KeyValues(), r.tier, r.front.Kind(), r.slug, r.state.Edge.PurgeURL); err != nil {
 		return err
+	}
+	r.state = stackrecords.EdgeState{Hosts: r.state.Hosts}
+	return r.store.write(ctx, r.state)
+}
+
+func (r *projectRemoval) forgetHosts(ctx context.Context) error {
+	if len(r.state.Hosts) == 0 {
+		return nil
 	}
 	r.state = stackrecords.EdgeState{}
 	return r.store.write(ctx, r.state)
