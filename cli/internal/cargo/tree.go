@@ -14,21 +14,14 @@ import (
 const buildDependenciesHeading = "[build-dependencies]"
 
 func ListPackagesBuildingC(ctx context.Context, dir, manifestPath, target string, environ []string) ([]string, error) {
-	forTarget, err := readTree(ctx, dir, manifestPath, target, environ, "normal,no-proc-macro", "--prefix", "none")
-	if err != nil {
-		return nil, err
-	}
-	builtForTarget := map[string]bool{}
-	for _, line := range forTarget {
-		builtForTarget[strings.TrimSuffix(line, " (*)")] = true
-	}
-	graph, err := readTree(ctx, dir, manifestPath, target, environ, "normal,build,no-proc-macro")
+	lines, err := readTree(ctx, dir, manifestPath, target, environ)
 	if err != nil {
 		return nil, err
 	}
 	var names, ancestors []string
+	var builtForTarget []bool
 	headings := map[int]string{}
-	for _, line := range graph {
+	for _, line := range lines {
 		indent := len(line) - len(strings.TrimLeft(line, " |`-"))
 		depth := indent / 4
 		entry := line[indent:]
@@ -37,23 +30,25 @@ func ListPackagesBuildingC(ctx context.Context, dir, manifestPath, target string
 			continue
 		}
 		name := strings.TrimSuffix(entry, " (*)")
-		ancestors = append(ancestors[:min(depth, len(ancestors))], name)
 		delete(headings, depth)
-		if depth == 0 {
-			continue
+		forTarget := true
+		if depth > 0 {
+			buildEdge := headings[depth-1] == buildDependenciesHeading
+			if buildEdge && builtForTarget[depth-1] && strings.HasPrefix(name, "cc v") {
+				names = append(names, strings.Fields(ancestors[depth-1])[0])
+			}
+			forTarget = builtForTarget[depth-1] && !buildEdge
 		}
-		parent := ancestors[depth-1]
-		if strings.HasPrefix(name, "cc v") && headings[depth-1] == buildDependenciesHeading && builtForTarget[parent] {
-			names = append(names, strings.Fields(parent)[0])
-		}
+		ancestors = append(ancestors[:depth], name)
+		builtForTarget = append(builtForTarget[:depth], forTarget)
 	}
 	slices.Sort(names)
 	return slices.Compact(names), nil
 }
 
-func readTree(ctx context.Context, dir, manifestPath, target string, environ []string, edges string, opts ...string) ([]string, error) {
-	args := append([]string{"tree", "--quiet", "--manifest-path", manifestPath, "--target", target, "--edges", edges, "--charset", "ascii", "--format", "{p}"}, opts...)
-	cmd := exec.Command("cargo", args...)
+func readTree(ctx context.Context, dir, manifestPath, target string, environ []string) ([]string, error) {
+	cmd := exec.Command("cargo", "tree", "--quiet", "--manifest-path", manifestPath, "--target", target,
+		"--edges", "normal,build,no-proc-macro", "--charset", "ascii", "--format", "{p}")
 	cmd.Dir = dir
 	cmd.Env = environ
 	var stdout, stderr bytes.Buffer
