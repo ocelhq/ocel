@@ -306,8 +306,9 @@ func (b *box) catting(command string) (ssh.Result, bool) {
 }
 
 func (b *box) readingPin(command string) (ssh.Result, bool) {
-	named, asked := strings.CutPrefix(command, "sudo -n ")
-	if named, asked = strings.CutPrefix(named, shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand})+" "); !asked {
+	named := strings.TrimPrefix(command, "sudo -n ")
+	named, asked := strings.CutPrefix(named, shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand})+" ")
+	if !asked {
 		return ssh.Result{}, false
 	}
 	at := boxapi.PinCertificate(boxapi.PinsDir + "/" + unquoted(named))
