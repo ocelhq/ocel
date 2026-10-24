@@ -88,8 +88,9 @@ is installed and reads them: remove those first, or the front in the same run.
 A project's values, runs and Next tag records are kept in one Firestore database the tier's projects
 share, `<namespace>-app-prod-shared` in production and `<namespace>-app-preview-shared` in previews,
 which the `app-database` part adds. Every app of the tier that keeps records may read and write it:
-a value is sealed under its project's own key, so another project's app reads no value it was not
-granted, but it may delete or rewrite another project's runs and tag records. Removing a project
+a value, and each run's payload and output, is sealed under its project's own key, so another
+project's app reads none of them and cannot hand a worker a payload of its own, but it may delete
+another project's runs or rewrite their status and its tag records. Removing a project
 from the tier deletes its records and leaves the database to the rest.
 
 Set `ownDatabase` to keep a project's records in a Firestore database of its own instead,

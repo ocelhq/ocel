@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -48,6 +49,7 @@ func projectDocument(client *firestore.Client, tier environment.Tier, slug strin
 
 type Store struct {
 	Clients *ports.Clients
+	Cipher  seal.Cipher
 	Scope   Scope
 }
 
@@ -60,8 +62,8 @@ type runDocument struct {
 	Topic       string     `firestore:"topic"`
 	Consumer    string     `firestore:"consumer"`
 	Status      string     `firestore:"status"`
-	Payload     *string    `firestore:"payload"`
-	Output      *string    `firestore:"output"`
+	Payload     []byte     `firestore:"payload"`
+	Output      []byte     `firestore:"output"`
 	Error       string     `firestore:"error"`
 	Attempts    int        `firestore:"attempts"`
 	MaxAttempts int        `firestore:"maxAttempts"`
@@ -244,7 +246,11 @@ func (s Store) CreateRun(ctx context.Context, run runs.Run) (records.Revision, e
 	if err != nil {
 		return "", err
 	}
-	_, err = doc.Create(ctx, documentOf(run, revision))
+	sealed, err := s.sealedDocumentOf(ctx, run, revision)
+	if err != nil {
+		return "", err
+	}
+	_, err = doc.Create(ctx, sealed)
 	if status.Code(err) == codes.AlreadyExists {
 		return "", records.ErrStale
 	}
@@ -266,14 +272,14 @@ func (s Store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, 
 	if err != nil {
 		return runs.Run{}, fmt.Errorf("read run %s: %w", execution, err)
 	}
-	run, err := runOf(snapshot)
+	stored, err := runOf(snapshot)
 	if err != nil {
 		return runs.Run{}, err
 	}
-	if run.Topic != topic {
+	if stored.Topic != topic {
 		return runs.Run{}, records.ErrNotFound
 	}
-	return run, nil
+	return s.opened(ctx, stored)
 }
 
 func (s Store) WriteRun(ctx context.Context, run runs.Run) (records.Revision, error) {
@@ -284,8 +290,12 @@ func (s Store) WriteRun(ctx context.Context, run runs.Run) (records.Revision, er
 	if err != nil {
 		return "", err
 	}
+	sealed, err := s.sealedDocumentOf(ctx, run, next)
+	if err != nil {
+		return "", err
+	}
 	err = s.atRevision(ctx, run, func(doc *firestore.DocumentRef, unchanged firestore.Precondition) error {
-		_, err := doc.Update(ctx, fieldsOf(documentOf(run, next)), unchanged)
+		_, err := doc.Update(ctx, fieldsOf(sealed), unchanged)
 		return err
 	})
 	if errors.Is(err, records.ErrStale) {
@@ -350,18 +360,16 @@ func fieldsOf(doc runDocument) []firestore.Update {
 	return fields
 }
 
-func runOf(snapshot *firestore.DocumentSnapshot) (runs.Run, error) {
+func runOf(snapshot *firestore.DocumentSnapshot) (storedRun, error) {
 	var doc runDocument
 	if err := snapshot.DataTo(&doc); err != nil {
-		return runs.Run{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
+		return storedRun{}, fmt.Errorf("decode run %s: %w", snapshot.Ref.ID, err)
 	}
-	return runs.Run{
+	return storedRun{payload: doc.Payload, output: doc.Output, Run: runs.Run{
 		Execution:   snapshot.Ref.ID,
 		Topic:       doc.Topic,
 		Consumer:    doc.Consumer,
 		Status:      provider.RunStatus(doc.Status),
-		Payload:     rawOf(doc.Payload),
-		Output:      rawOf(doc.Output),
 		Error:       doc.Error,
 		Attempts:    doc.Attempts,
 		MaxAttempts: doc.MaxAttempts,
@@ -380,7 +388,7 @@ func runOf(snapshot *firestore.DocumentSnapshot) (runs.Run, error) {
 		FinishedAt:  timeOf(doc.FinishedAt),
 		ExpiresAt:   timeOf(doc.ExpiresAt),
 		Revision:    records.Revision(doc.Revision),
-	}, nil
+	}}, nil
 }
 
 func documentOf(run runs.Run, revision records.Revision) runDocument {
@@ -388,8 +396,6 @@ func documentOf(run runs.Run, revision records.Revision) runDocument {
 		Topic:       run.Topic,
 		Consumer:    run.Consumer,
 		Status:      string(run.Status),
-		Payload:     textOf(run.Payload),
-		Output:      textOf(run.Output),
 		Error:       run.Error,
 		Attempts:    run.Attempts,
 		MaxAttempts: run.MaxAttempts,
@@ -462,7 +468,7 @@ type topicListing struct {
 	scanLimit int
 	tags      []string
 	scanned   int
-	head      *runs.Run
+	head      *storedRun
 	bounded   bool
 	capped    bool
 }
@@ -546,7 +552,10 @@ func (s Store) ListRuns(ctx context.Context, filter runs.RunFilter) (runs.RunPag
 			page.NextCursor = runs.CursorOf(next.head.CreatedAt, next.head.Execution)
 			return page, nil
 		}
-		run := *next.head
+		run, err := s.opened(ctx, *next.head)
+		if err != nil {
+			return runs.RunPage{}, err
+		}
 		page.Runs = append(page.Runs, run)
 		if err := next.advance(); err != nil {
 			return runs.RunPage{}, err
@@ -564,7 +573,7 @@ func newestHead(listings []*topicListing) *topicListing {
 		if listing.head == nil {
 			continue
 		}
-		if newest == nil || newerThan(*listing.head, *newest.head) {
+		if newest == nil || newerThan(listing.head.Run, newest.head.Run) {
 			newest = listing
 		}
 	}

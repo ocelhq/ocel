@@ -70,6 +70,8 @@ type Clients struct {
 	projectStores sync.Map
 	tagStores     sync.Map
 	ownDatabases  sync.Map
+	sealingKeys   sealingKeys
+	openedKeys    sync.Map
 	kms           memo[*kms.KeyManagementClient]
 	pubsub        memo[*pubsub.Service]
 	tasks         memo[*cloudtasks.Client]
