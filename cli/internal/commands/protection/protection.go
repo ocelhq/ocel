@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/cli/internal/english"
-
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 
@@ -196,7 +194,7 @@ func runStatus(ctx context.Context, invocation commands.Invocation, stdout io.Wr
 		if i > 0 {
 			fmt.Fprintln(stdout)
 		}
-		renderStatus(stdout, cfg.Slug, reading, filepath.Base(cfg.Path))
+		renderStatus(stdout, invocation.Presentation(stdout).Palette(), cfg.Slug, reading, filepath.Base(cfg.Path))
 	}
 	return nil
 }
@@ -221,7 +219,7 @@ func runBypassList(ctx context.Context, invocation commands.Invocation, t target
 		return terminal.WriteResultJSON(stdout, result)
 	}
 	if len(result.GetIds()) == 0 {
-		fmt.Fprintf(stdout, "%s has no %s bypass secrets.\n  → run `ocel protection bypass create%s` to make one\n", result.GetSlug(), t.name(), t.flag())
+		fmt.Fprintf(stdout, "%s has no %s bypass secrets.\n  → `ocel protection bypass create%s` makes one\n", result.GetSlug(), t.name(), t.flag())
 		return nil
 	}
 	for _, id := range result.GetIds() {
@@ -238,51 +236,54 @@ func edgeResults(edges []*progressv1.EdgePublication) []*resultv1.EdgeResult {
 	return results
 }
 
-func renderStatus(out io.Writer, slug string, reading tierReading, configFile string) {
+func renderStatus(out io.Writer, palette terminal.Palette, slug string, reading tierReading, configFile string) {
 	tier, result := reading.tier, reading.result
 	name := readiness.TierName(tier)
 	if !result.GetEnabled() {
-		fmt.Fprintf(out, "%s not protected: %s is off in %s.\n", statusSubject(tier, slug), configKey(tier), configFile)
+		fmt.Fprintf(out, "%s %s: %s is off in %s.\n", statusSubject(tier, slug), palette.Muted("not protected"), configKey(tier), configFile)
 		if result.GetRecorded() {
-			fmt.Fprintf(out, "  Its password and bypass secrets are kept: turning %s back on restores them.\n", configKey(tier))
+			fmt.Fprintf(out, "  Password and bypass secrets kept: turning %s back on restores them.\n", configKey(tier))
 		}
 		fmt.Fprintf(out, "  → set \"protection\": { \"%s\": true } to protect it\n", name)
 		return
 	}
-	fmt.Fprintf(out, "%s protected: %s is on in %s.\n", statusSubject(tier, slug), configKey(tier), configFile)
+	fmt.Fprintf(out, "%s %s: %s is on in %s.\n", statusSubject(tier, slug), palette.Success("protected"), configKey(tier), configFile)
 	flag := target{preview: tier == environmentv1.Tier_TIER_PREVIEW}.flag()
 	if !result.GetRecorded() {
-		fmt.Fprintf(out, "  No password exists yet: the first %s deploy creates it.\n", name)
+		fmt.Fprintf(out, "  No password yet: the first %s deploy creates it.\n", name)
 		return
 	}
 	if !reading.recordEnabled {
-		fmt.Fprintf(out, "  The last %s deploy opened it: the next %s deploy protects it again with the kept password and bypass secrets.\n", name, name)
+		fmt.Fprintf(out, "  Opened by the last %s deploy: the next one protects it again.\n", name)
 		return
 	}
-	fmt.Fprintf(out, "  Password: set  → `ocel protection password%s` shows it\n", flag)
+	fields := terminal.NewTable(terminal.Column{}, terminal.Column{})
+	field := func(label, value string) { fields.Row(palette.Muted(label), value) }
+	field("password", "set  "+palette.Commands("`ocel protection password"+flag+"` shows it"))
 	switch n := len(result.GetBypassSecretIds()); n {
 	case 0:
-		fmt.Fprintf(out, "  Bypass secrets: none  → `ocel protection bypass create%s` makes one\n", flag)
+		field("bypass secrets", "none  "+palette.Commands("`ocel protection bypass create"+flag+"` makes one"))
 	default:
-		fmt.Fprintf(out, "  Bypass secrets: %s (%s)\n", english.Count(n, "bypass secret"), strings.Join(result.GetBypassSecretIds(), ", "))
+		field("bypass secrets", fmt.Sprintf("%d %s", n, palette.Muted("("+strings.Join(result.GetBypassSecretIds(), ", ")+")")))
 	}
 	pending := false
 	for _, front := range result.GetEdges() {
 		switch {
 		case front.GetError() != "":
-			fmt.Fprintf(out, "  Edge %s: %s\n", front.GetKind(), front.GetError())
+			field("edge "+front.GetKind(), palette.Health(terminal.Failing, front.GetError()))
 		case front.GetPublished():
-			fmt.Fprintf(out, "  Edge %s: live\n", front.GetKind())
+			field("edge "+front.GetKind(), palette.Health(terminal.Healthy, "live"))
 		default:
-			fmt.Fprintf(out, "  Edge %s: pending\n", front.GetKind())
+			field("edge "+front.GetKind(), palette.Health(terminal.Pending, "pending"))
 			pending = true
 		}
 	}
 	if len(result.GetEdges()) == 0 {
-		fmt.Fprintf(out, "  Edges: none yet; a %s deploy writes the credentials to the edge that serves it\n", name)
+		field("edges", "none yet: the next "+name+" deploy publishes to them")
 	}
+	fmt.Fprint(out, fields.Render(palette, "  "))
 	if pending {
-		fmt.Fprintf(out, "  → `ocel protection sync%s` publishes the recorded credentials again\n", flag)
+		fmt.Fprintf(out, "  → %s\n", palette.Commands("`ocel protection sync"+flag+"` publishes them again"))
 	}
 }
 

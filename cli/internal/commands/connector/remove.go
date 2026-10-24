@@ -41,7 +41,7 @@ func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		return err
 	}
 	if registered == nil {
-		run.Succeed(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
+		run.Succeed(fmt.Sprintf("No connector registered for %s", fingerprint))
 		return nil
 	}
 	if err := opts.console.RemoveConnector(ctx, access, registered.GetId()); err != nil {
@@ -61,7 +61,7 @@ func forgetInConsole(ctx context.Context, run *run.Run, opts options, access, fi
 		return err
 	}
 	if registered == nil {
-		run.Succeed(fmt.Sprintf("The console has no connector registered for %s", fingerprint))
+		run.Succeed(fmt.Sprintf("No connector registered for %s", fingerprint))
 		return nil
 	}
 	if err := opts.console.RemoveConnector(ctx, access, registered.GetId()); err != nil {
