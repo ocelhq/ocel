@@ -17,6 +17,7 @@ const EMPTY_BODY_TIMEOUT_MS = 15_000;
 const EMPTY_BODY_BUDGET_MS = 5_000;
 const SSE_GAP_MS = 40_000;
 const SSE_SHORT_GAP_MS = 1_000;
+const OWN_CONNECTION: RequestInit = { keepalive: false };
 const CHUNKED_BYTES = 1024 * 1024;
 const ACCEPT_MATRIX_BYTES = 64 * 1024;
 const MULTIPART_BYTES = 1024 * 1024;
@@ -349,6 +350,7 @@ export const sseSilenceCheck: Check = {
   title: "GET /api/probes/sse survives a forty-second silence between two events",
   run: async (ctx) => {
     const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/sse?events=2&gap=${SSE_GAP_MS}`, {
+      ...OWN_CONNECTION,
       headers: { accept: "text/event-stream" },
     });
     assert.equal(res.status, 200);
@@ -445,7 +447,11 @@ export const inflateCheck: Check = {
 export const longSleepCheck: Check = {
   title: "GET /api/probes/sleep holds the request open for forty-five seconds",
   run: async (ctx) => {
-    const { res, text, body } = await json(ctx, `/api/probes/sleep?ms=${LONG_SLEEP_MS}`);
+    const { res, text, body } = await json(
+      ctx,
+      `/api/probes/sleep?ms=${LONG_SLEEP_MS}`,
+      OWN_CONNECTION,
+    );
     assert.equal(res.status, 200, describeResponse(res, text));
     assert.deepEqual(body, { slept: LONG_SLEEP_MS }, describeResponse(res, text));
   },
@@ -696,7 +702,11 @@ export const httpProbeChecks: Check[] = [
   {
     title: "GET /api/probes/sleep holds the request open for twenty-five seconds",
     run: async (ctx) => {
-      const { res, text, body } = await json(ctx, `/api/probes/sleep?ms=${SLEEP_MS}`);
+      const { res, text, body } = await json(
+        ctx,
+        `/api/probes/sleep?ms=${SLEEP_MS}`,
+        OWN_CONNECTION,
+      );
       assert.equal(res.status, 200, describeResponse(res, text));
       assert.deepEqual(body, { slept: SLEEP_MS }, describeResponse(res, text));
     },

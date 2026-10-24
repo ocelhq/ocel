@@ -16,11 +16,13 @@ async function undiciBody(init: RequestInit | undefined): Promise<RequestInit | 
   return { ...init, headers, body: new Uint8Array(await encoded.arrayBuffer()) };
 }
 
-function fetchThrough(dispatcher: Agent): Fetch {
+function fetchThrough(connect: Agent.Options["connect"]): Fetch {
+  const pooled = new Agent({ connect });
+  const unpooled = new Agent({ connect, pipelining: 0 });
   return async (input, init) =>
     (await undiciFetch(input as Parameters<typeof undiciFetch>[0], {
       ...((await undiciBody(init)) as Parameters<typeof undiciFetch>[1]),
-      dispatcher,
+      dispatcher: init?.keepalive === false ? unpooled : pooled,
     })) as unknown as Response;
 }
 
@@ -41,14 +43,11 @@ export function emulatorAddress(endpoint: string): Address {
 
 export function emulatorFetch(endpoint: string): Fetch {
   const { hostname, port } = emulatorAddress(endpoint);
-  const dispatcher = new Agent({
-    connect: (_options, callback) => {
-      const socket = net.connect(port, hostname);
-      socket.on("connect", () => callback(null, socket));
-      socket.on("error", (error) => callback(error, null));
-    },
+  return fetchThrough((_options, callback) => {
+    const socket = net.connect(port, hostname);
+    socket.on("connect", () => callback(null, socket));
+    socket.on("error", (error) => callback(error, null));
   });
-  return fetchThrough(dispatcher);
 }
 
 export type LookupAnswer = { address: string; family: number };
@@ -175,8 +174,7 @@ export function authoritativeFetch(zone: string): Fetch {
       (error) => callback(error as NodeJS.ErrnoException),
     );
   };
-  const dispatcher = new Agent({ connect: { lookup: lookup as never } });
-  return fetchThrough(dispatcher);
+  return fetchThrough({ lookup: lookup as never });
 }
 
 export class AwsDispatch {
