@@ -328,7 +328,7 @@ func ensureDomainName(ctx context.Context, c Clients, binding edge.DomainBinding
 		DomainName: aws.String(binding.Hostname),
 	})
 	if err == nil {
-		return regionalFrontOf(binding.Hostname, aws.ToString(current.RegionalDomainName))
+		return moveDomainCertificate(ctx, c, binding, current)
 	}
 	if !isNotFound(err) {
 		return "", fmt.Errorf("read the API Gateway domain name for %s: %w", binding.Hostname, err)
@@ -345,6 +345,24 @@ func ensureDomainName(ctx context.Context, c Clients, binding edge.DomainBinding
 		return "", fmt.Errorf("create the API Gateway domain name for %s: %w", binding.Hostname, err)
 	}
 	return regionalFrontOf(binding.Hostname, aws.ToString(created.RegionalDomainName))
+}
+
+func moveDomainCertificate(ctx context.Context, c Clients, binding edge.DomainBinding, current *apigateway.GetDomainNameOutput) (string, error) {
+	if binding.Certificate == "" || aws.ToString(current.RegionalCertificateArn) == binding.Certificate {
+		return regionalFrontOf(binding.Hostname, aws.ToString(current.RegionalDomainName))
+	}
+	updated, err := c.APIGateway.UpdateDomainName(ctx, &apigateway.UpdateDomainNameInput{
+		DomainName: aws.String(binding.Hostname),
+		PatchOperations: []agtypes.PatchOperation{{
+			Op:    agtypes.OpReplace,
+			Path:  aws.String("/regionalCertificateArn"),
+			Value: aws.String(binding.Certificate),
+		}},
+	})
+	if err != nil {
+		return "", fmt.Errorf("move the API Gateway domain name for %s onto certificate %s: %w", binding.Hostname, binding.Certificate, err)
+	}
+	return regionalFrontOf(binding.Hostname, aws.ToString(updated.RegionalDomainName))
 }
 
 func regionalFrontOf(hostname, regional string) (string, error) {
