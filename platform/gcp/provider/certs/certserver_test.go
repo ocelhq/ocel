@@ -18,9 +18,10 @@ type certServer struct {
 	authorizations map[string]*certmanager.DnsAuthorization
 	certificates   map[string]*certmanager.Certificate
 
-	provisioning int
-	deleted      []string
-	failure      string
+	provisioning          int
+	deleted               []string
+	failure               string
+	refusedAuthorizations int
 }
 
 func newCertServer() *certServer {
@@ -97,6 +98,18 @@ func (s *certServer) certify(w http.ResponseWriter, r *http.Request, parent stri
 }
 
 func (s *certServer) drop(w http.ResponseWriter, name string) {
+	_, authorized := s.authorizations[name]
+	_, certified := s.certificates[name]
+	if !authorized && !certified {
+		googletest.WriteNotFound(w)
+		return
+	}
+	if authorized && s.refusedAuthorizations > 0 {
+		s.refusedAuthorizations--
+		googletest.WriteBody(w, &certmanager.Operation{Name: "operations/drop", Done: true,
+			Error: &certmanager.Status{Message: "the service is unavailable"}})
+		return
+	}
 	s.deleted = append(s.deleted, name)
 	delete(s.authorizations, name)
 	delete(s.certificates, name)
@@ -134,6 +147,12 @@ func (s *certServer) readCertificate(w http.ResponseWriter, name string) {
 		return
 	}
 	googletest.WriteBody(w, certificate)
+}
+
+func (s *certServer) refuseDeletingAuthorizations(times int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refusedAuthorizations = times
 }
 
 func (s *certServer) certified() map[string]*certmanager.Certificate {

@@ -346,7 +346,7 @@ func (p Certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
 	if gcloud.Absent(err) {
-		return nil
+		return p.releaseAuthorizations(ctx, certificates, authorizationsOf(cert.ID))
 	}
 	if err != nil {
 		return fmt.Errorf("read the certificate %s: %w", cert.ID, err)
@@ -361,11 +361,24 @@ func (p Certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	if current.Managed == nil {
 		return nil
 	}
-	for _, authorization := range current.Managed.DnsAuthorizations {
-		if err := p.awaitCertificates(ctx, certificates, "release "+authorization,
+	return p.releaseAuthorizations(ctx, certificates, current.Managed.DnsAuthorizations)
+}
+
+func authorizationsOf(certificate string) []string {
+	parent, id, found := strings.Cut(certificate, "/certificates/")
+	if !found {
+		return nil
+	}
+	return []string{parent + "/dnsAuthorizations/" + naming.Join(naming.WordSeparator, id, authorizationRole)}
+}
+
+func (p Certificates) releaseAuthorizations(ctx context.Context, certificates *certmanager.Service, authorizations []string) error {
+	for _, authorization := range authorizations {
+		err := p.awaitCertificates(ctx, certificates, "release "+authorization,
 			func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 				return certificates.Projects.Locations.DnsAuthorizations.Delete(authorization).Context(ctx).Do(call...)
-			}); err != nil {
+			})
+		if err != nil && !gcloud.Absent(err) {
 			return err
 		}
 	}

@@ -222,6 +222,38 @@ func TestDiscardingACertificateTakesTheAuthorizationItWasProvedThroughWithIt(t *
 	}
 }
 
+func TestDiscardingACertificateAgainTakesTheAuthorizationAnEarlierDiscardLeft(t *testing.T) {
+	t.Parallel()
+
+	server := newCertServer()
+	cert, _ := requested(t, server, "shop.example.com")
+	server.refuseDeletingAuthorizations(1)
+	if err := server.open(t).Discard(context.Background(), cert, progress.Discard()); err == nil {
+		t.Fatalf("DiscardCertificate(%s) = nil, want the refused authorization delete reported", cert.ID)
+	}
+
+	if err := server.open(t).Discard(context.Background(), cert, progress.Discard()); err != nil {
+		t.Fatalf("DiscardCertificate(%s) again = %v", cert.ID, err)
+	}
+	if got := server.authorized(); len(got) != 0 {
+		t.Errorf("the project still has %v after the second discard, want the authorization the first one left deleted", got)
+	}
+}
+
+func TestDiscardingACertificateAlreadyGoneSucceeds(t *testing.T) {
+	t.Parallel()
+
+	server := newCertServer()
+	cert, _ := requested(t, server, "shop.example.com")
+	if err := server.open(t).Discard(context.Background(), cert, progress.Discard()); err != nil {
+		t.Fatalf("DiscardCertificate(%s) = %v", cert.ID, err)
+	}
+
+	if err := server.open(t).Discard(context.Background(), cert, progress.Discard()); err != nil {
+		t.Errorf("DiscardCertificate(%s) of a certificate and authorization already deleted = %v, want nil", cert.ID, err)
+	}
+}
+
 func TestDiscardingACertificateSaysWhichHostnameItCovered(t *testing.T) {
 	t.Parallel()
 
