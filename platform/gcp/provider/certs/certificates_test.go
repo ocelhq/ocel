@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -34,6 +36,28 @@ func requested(t *testing.T, server *certServer, hostname string) (provider.Cert
 		t.Fatalf("Certificate(%s) = %v", hostname, err)
 	}
 	return cert, proved
+}
+
+func TestAHostnameBehindTheCloudflareEdgeIsIssuedNoCertificate(t *testing.T) {
+	t.Parallel()
+
+	server := newCertServer()
+	cert, err := server.open(t).Issue(context.Background(), provider.CertificateRequest{
+		Kind:     cloudflare.Kind,
+		Router:   router.Kind(cloudflare.Kind),
+		Hostname: "shop.example.com",
+		Progress: progress.Discard(),
+		Prove: func(context.Context, provider.Certificate, []edge.Record) (provider.Certificate, error) {
+			t.Error("the owner was asked to prove a certificate the Cloudflare edge never presents")
+			return provider.Certificate{}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cert.Issued() || len(server.authorized()) != 0 || len(server.certified()) != 0 {
+		t.Errorf("Issue() = %+v, authorizing %v and certifying %v, want nothing: Cloudflare terminates TLS with a certificate of its own", cert, server.authorized(), server.certified())
+	}
 }
 
 func TestACertificateIsProvedByTheAuthorizationRecordItsOwnerIsHanded(t *testing.T) {
