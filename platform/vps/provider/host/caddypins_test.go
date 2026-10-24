@@ -386,3 +386,85 @@ func TestUnpinningAProjectWhoseOtherTierStillHoldsTheBoxKeepsItsPins(t *testing.
 		t.Errorf("after shop's production surface left the box it pins %v, want %v kept: shop's preview surface still claims a hostname on it", held, state.Pins)
 	}
 }
+
+func previewEntryShared(t *testing.T) (*claimBench, *Host, *Host) {
+	t.Helper()
+
+	rig, shop := pinning(t)
+	ctx := context.Background()
+	if err := shop.routing.InstallPreviewEntry(ctx, previewBase); err != nil {
+		t.Fatalf("InstallPreviewEntry() = %v", err)
+	}
+	blog := New(ssh.NewBox(rig.dial, nil), "blog", Keys{}, nil, front.Proxy{})
+	if err := blog.routing.ClaimHosts(ctx, []boxapi.Claim{
+		{Hostname: "pr-1." + previewBase, Owner: boxapi.Surface("blog", "preview"), Pointer: "@pr-1"},
+	}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
+	}
+	return rig, shop, blog
+}
+
+func destroyed(t *testing.T, h *Host, project string) {
+	t.Helper()
+
+	ctx := context.Background()
+	for _, owner := range []string{boxapi.Surface(project, "production"), boxapi.Surface(project, "preview")} {
+		if err := h.routing.DisclaimSurface(ctx, owner); err != nil {
+			t.Fatalf("DisclaimSurface(%s) = %v", owner, err)
+		}
+		if err := h.routing.UnrouteSurface(ctx, owner); err != nil {
+			t.Fatalf("UnrouteSurface(%s) = %v", owner, err)
+		}
+	}
+	if err := h.routing.Unpin(ctx, project); err != nil {
+		t.Fatalf("Unpin() = %v", err)
+	}
+}
+
+func TestUnpinningTheProjectThatInstalledThePreviewEntryKeepsTheWildcardWhileTheEntryAnswers(t *testing.T) {
+	t.Parallel()
+
+	rig, shop, _ := previewEntryShared(t)
+	destroyed(t, shop, "shop")
+	table, err := routing.ReadRoutingTable([]byte(rig.recorded))
+	if err != nil {
+		t.Fatalf("ReadRoutingTable() = %v", err)
+	}
+	want := []boxapi.Pin{{Project: "shop", Hostname: wildcard, Path: boxapi.PinsDir + "/wildcard"}}
+	if !slices.Equal(table.Pins, want) {
+		t.Errorf("after shop left a box still answering previews on %s it pins %v, want %v: the entry is the box's, and its probe and blog's preview fall back to acme without the pair", wildcard, table.Pins, want)
+	}
+	for _, hostname := range []string{edge.ProbeHostname(wildcard), "pr-1." + previewBase} {
+		if admittedBy(t, table)(hostname) {
+			t.Errorf("the switchboard admits %s for a certificate the proxy orders from acme, want it served off the pinned %s", hostname, wildcard)
+		}
+	}
+}
+
+func TestRemovingThePreviewEntryDropsTheWildcardPinOfAProjectThatHoldsNothingElse(t *testing.T) {
+	t.Parallel()
+
+	rig, shop, blog := previewEntryShared(t)
+	destroyed(t, shop, "shop")
+	destroyed(t, blog, "blog")
+	if err := blog.routing.RemovePreviewEntry(context.Background(), previewBase); err != nil {
+		t.Fatalf("RemovePreviewEntry() = %v", err)
+	}
+	if held := recordedPins(t, rig); len(held) != 0 {
+		t.Errorf("after the preview entry shop's pin was kept for went, the box pins %v, want none: nothing on the box is shop's any more", held)
+	}
+}
+
+func TestRemovingThePreviewEntryKeepsTheWildcardPinOfAProjectStillOnTheBox(t *testing.T) {
+	t.Parallel()
+
+	rig, _, blog := previewEntryShared(t)
+	destroyed(t, blog, "blog")
+	if err := blog.routing.RemovePreviewEntry(context.Background(), previewBase); err != nil {
+		t.Fatalf("RemovePreviewEntry() = %v", err)
+	}
+	want := []boxapi.Pin{{Project: "shop", Hostname: wildcard, Path: boxapi.PinsDir + "/wildcard"}}
+	if held := recordedPins(t, rig); !slices.Equal(held, want) {
+		t.Errorf("after blog removed the preview entry the box pins %v, want shop's %v: shop still routes on the box and its options still pin the pair", held, want)
+	}
+}
