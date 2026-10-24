@@ -38,8 +38,10 @@ var databaseKind = KindOps{
 		return b.databasePresence(ctx, target.Name)
 	},
 	Make: func(ctx context.Context, b Engine, read Survey, target Resource) error {
-		_, err := b.ensureDatabase(ctx, read, target.Name, b.Clients.InlineTierTags(read.Tier))
-		return err
+		if _, err := b.ensureDatabase(ctx, read, target.Name, b.Clients.InlineTierTags(read.Tier)); err != nil || b.Clients.Emulated() {
+			return err
+		}
+		return ports.UntilDatabaseServes(ctx, b.Clients.Workload(), target.Name)
 	},
 	mend: func(ctx context.Context, b Engine, _ Survey, target Resource) error {
 		return b.protectDatabase(ctx, target.Name)
