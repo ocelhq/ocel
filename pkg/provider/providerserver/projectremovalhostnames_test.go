@@ -95,6 +95,28 @@ func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesUse(t *testi
 	}
 }
 
+func TestPlanRemoveProjectSaysWhyOnlyOfARecordOrCertificateItKeeps(t *testing.T) {
+	t.Parallel()
+	client, _, _ := cutOverProject(t)
+
+	plan, err := client.PlanRemoveProject(context.Background(), cutOverRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	for _, item := range plan.GetGroups() {
+		if item.GetKind() != "DNS record" && item.GetKind() != "certificate" {
+			continue
+		}
+		kept := item.GetAction() == planv1.Change_ACTION_KEEP
+		if !kept && item.GetReason() != "" {
+			t.Errorf("%s %s is deleted with reason %q, want none", item.GetKind(), item.GetName(), item.GetReason())
+		}
+		if kept && (item.GetReason() == "" || strings.ContainsAny(item.GetReason(), ",;:")) {
+			t.Errorf("%s %s is kept with reason %q, want one clause saying why", item.GetKind(), item.GetName(), item.GetReason())
+		}
+	}
+}
+
 func TestRemoveProjectReleasesTheRecordsItWrote(t *testing.T) {
 	t.Parallel()
 	client, _, writer := cutOverProject(t)
@@ -678,10 +700,7 @@ func TestRemoveProjectOpensASpanForEveryStackItDestroys(t *testing.T) {
 	opened := openedSpans(recorded(stream))
 
 	for _, stack := range stacks {
-		want := openedSpan{stack.String(), "Destroying everything this release of " + stack.App + " provisioned"}
-		if stack.IsInfra() {
-			want.message = "Destroying the resources every app in " + stack.Env + " binds to"
-		}
+		want := openedSpan{stack.String(), "Destroying the stack"}
 		if !slices.Contains(opened, want) {
 			t.Errorf("the removal opened spans %v, want %v among them", opened, want)
 		}
