@@ -67,8 +67,7 @@ func grants(tier environment.Tier, arch string, fronting front.Proxy) []Grant {
 		grants = append(grants, Grant{
 			Name: "runs " + LiveBinary + " " + boxapi.PinCommand + " as root, through one line in " + line.Name,
 			Detail: "the line is\n\n      " + strings.TrimSpace(string(line.Content)) +
-				"\n\n    which takes one name directly under " + boxapi.PinsDir + " and prints the certificate blocks pinned there and whether the key beside them matches. It never prints the key, and " +
-				boxapi.PinsDir + " stays root's alone",
+				"\n\n    which takes one name directly under " + boxapi.PinsDir + " and prints the certificate blocks pinned there and whether the key beside them matches. It never prints the key",
 		})
 	}
 	if line := written(items, machine.KindFile, machine.SudoersCaddyReload); line.Name != "" {

@@ -94,7 +94,7 @@ names. Set `ssh.user` to `ocel-deploy` and deploys need no sudo beyond three roo
 | --- | --- |
 | `/etc/sudoers.d/ocel-docker` | `/usr/local/lib/ocel/live docker`. Every `docker` command goes through this check; `ocel-deploy` is in no group that reaches the docker socket. |
 | `/etc/sudoers.d/ocel-seal-<tier>` | `/usr/local/lib/ocel/live seal <tier> seal` and `… open`, which seal and open values under `/etc/ocel/<tier>/seal.key`. The login cannot read the key. |
-| `/etc/sudoers.d/ocel-pins` | `/usr/local/lib/ocel/live pin <name>`, which prints the certificate pinned at `/etc/ocel/certs/<name>.crt` and whether the key beside it matches. It never prints the key, and the directory stays root's alone. Written only with Ocel's own proxy. |
+| `/etc/sudoers.d/ocel-pins` | `/usr/local/lib/ocel/live pin <name>`, which prints the certificate pinned at `/etc/ocel/certs/<name>.crt` and whether the key beside it matches. It never prints the key. Written only with Ocel's own proxy. |
 
 The docker check refuses:
 
