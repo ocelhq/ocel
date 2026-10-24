@@ -9,9 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/dev"
-	"github.com/ocelhq/ocel/cli/internal/previewid"
-	"github.com/ocelhq/ocel/pkg/environment"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func runDeployed(cmd *cobra.Command, dependencies Dependencies, args []string, name string) error {
@@ -19,7 +16,7 @@ func runDeployed(cmd *cobra.Command, dependencies Dependencies, args []string, n
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
-	env, err := resolveDeployedEnvironment(dependencies, cwd, name)
+	env, err := commands.ResolveDeployedEnvironment(cwd, name, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 	if err != nil {
 		return err
 	}
@@ -45,15 +42,4 @@ func runDeployed(cmd *cobra.Command, dependencies Dependencies, args []string, n
 			CollectDeclarations: dependencies.CollectDeclarations,
 		})
 	})
-}
-
-func resolveDeployedEnvironment(dependencies Dependencies, cwd, name string) (*environmentv1.Environment, error) {
-	switch name {
-	case string(environment.TierProduction):
-		return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED}, nil
-	case string(environment.TierPreview):
-		return previewid.ResolveEnvironment(cwd, "", environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
-	default:
-		return nil, fmt.Errorf("--env is %q, want %s or %s", name, environment.TierProduction, environment.TierPreview)
-	}
 }

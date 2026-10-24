@@ -14,8 +14,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 var clientRecordPath = filepath.Join(buildoutput.StateDir, "output", "client-digests.json")
@@ -76,11 +78,13 @@ func inlinedKeys(app ClientApp) []string {
 }
 
 type clientRecord struct {
-	Digests map[string]map[string]string `json:"digests,omitempty"`
+	Tier        environmentv1.Tier           `json:"tier,omitempty"`
+	Environment string                       `json:"environment,omitempty"`
+	Digests     map[string]map[string]string `json:"digests,omitempty"`
 }
 
-func RecordClientValues(projectDir string, apps []ClientApp) error {
-	record := clientRecord{Digests: make(map[string]map[string]string, len(apps))}
+func RecordClientValues(projectDir string, builtFor *environmentv1.Environment, apps []ClientApp) error {
+	record := clientRecord{Tier: builtFor.GetTier(), Environment: builtFor.GetIdentity(), Digests: make(map[string]map[string]string, len(apps))}
 	for _, app := range apps {
 		record.Digests[app.Name] = clientDigests(app)
 	}
@@ -99,9 +103,12 @@ func writeClientRecord(projectDir string, record clientRecord) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func CheckClientValuesFresh(projectDir string, apps []ClientApp) error {
+func CheckClientValuesFresh(projectDir string, deployedTo *environmentv1.Environment, apps []ClientApp) error {
 	record, err := readClientRecord(projectDir)
 	if err != nil {
+		return err
+	}
+	if err := refuseOtherEnvironment(record, deployedTo); err != nil {
 		return err
 	}
 
@@ -134,7 +141,7 @@ func CheckClientValuesFresh(projectDir string, apps []ClientApp) error {
 	var causes []string
 	if len(missing) > 0 {
 		causes = append(causes, fmt.Sprintf(
-			"%s %s never inlined — either unset or not a variable the app inlines when "+buildoutput.StateDir+"/output was built, or built by `ocel build`, which resolves no values",
+			"%s %s never inlined — either unset or not a variable the app inlines when "+buildoutput.StateDir+"/output was built, or built by `ocel build` without --env, which resolves no values",
 			strings.Join(missing, ", "), were(missing),
 		))
 	}
@@ -147,6 +154,24 @@ func CheckClientValuesFresh(projectDir string, apps []ClientApp) error {
 			"Deploy without --prebuilt to build with the values this deploy resolved",
 		strings.Join(causes, ", and "),
 	)
+}
+
+func refuseOtherEnvironment(record clientRecord, deployedTo *environmentv1.Environment) error {
+	if record.Tier == environmentv1.Tier_TIER_UNSPECIFIED || record.Tier == deployedTo.GetTier() && record.Environment == deployedTo.GetIdentity() {
+		return nil
+	}
+	return fmt.Errorf(
+		"--prebuilt cannot deploy this build to %s: it was built with the values of %s, which its bundles and images may hold. "+
+			"Deploy without --prebuilt to build with the values this deploy resolved",
+		placeOf(deployedTo.GetTier(), deployedTo.GetIdentity()), placeOf(record.Tier, record.Environment),
+	)
+}
+
+func placeOf(tier environmentv1.Tier, identity string) string {
+	if tier == environmentv1.Tier_TIER_PREVIEW {
+		return "preview " + identity
+	}
+	return string(environment.TierProduction)
 }
 
 func were(keys []string) string {

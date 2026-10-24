@@ -31,7 +31,6 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type collected struct {
@@ -94,7 +93,7 @@ func (d *deployRun) collect(ctx context.Context) (collected, error) {
 		return collected{}, err
 	}
 
-	values, err := resolveVariables(ctx, declarations, cfg)
+	values, err := declarations.ResolveVariables(ctx, variables.AppsOf(cfg))
 	if err != nil {
 		return collected{}, err
 	}
@@ -122,7 +121,7 @@ func (d *deployRun) collect(ctx context.Context) (collected, error) {
 }
 
 func (d *deployRun) readPrebuilt(ctx context.Context, c collected) (build.Output, error) {
-	if err := variables.CheckClientValuesFresh(d.cfg.Dir, c.clients); err != nil {
+	if err := variables.CheckClientValuesFresh(d.cfg.Dir, d.env, c.clients); err != nil {
 		return build.Output{}, err
 	}
 	built, err := d.dependencies.ReadPrebuilt(ctx, d.cfg, d.containerArchs)
@@ -141,7 +140,7 @@ func (d *deployRun) provisionAndBuild(ctx context.Context, steps *buildSteps, c 
 	for _, warning := range findImageAppsBuiltWithoutValues(d.cfg, c.clients) {
 		d.span.Warn(warning)
 	}
-	secrets, err := revealSecrets(ctx, d.declarations, d.cfg, d.preBuild)
+	secrets, err := build.RevealSecrets(ctx, d.declarations, d.cfg, d.preBuild)
 	if err != nil {
 		return build.Output{}, err
 	}
@@ -179,7 +178,7 @@ func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, s
 		if err != nil {
 			return err
 		}
-		return variables.RecordClientValues(cfg.Dir, c.clients)
+		return variables.RecordClientValues(cfg.Dir, d.env, c.clients)
 	})
 	return built, errors.Join(err, forwards.Close())
 }
@@ -320,19 +319,6 @@ func (c *boundedCapture) annotate(err error) error {
 	return fmt.Errorf("%w\n%s", err, text)
 }
 
-func resolveVariables(ctx context.Context, declarations *variables.Declarations, cfg *project.Project) (map[string][]variables.Variable, error) {
-	definitions := declarations.Definitions()
-	values := make(map[string][]variables.Variable, len(cfg.Apps))
-	for _, app := range variables.AppsOf(cfg) {
-		resolved, err := declarations.Resolve(ctx, app.Name)
-		if err != nil {
-			return nil, err
-		}
-		values[app.Name] = appVariables(definitions, resolved)
-	}
-	return values, nil
-}
-
 func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []variables.ClientApp) []string {
 	variablesOf := make(map[string][]variables.Variable, len(clients))
 	for _, client := range clients {
@@ -353,39 +339,6 @@ func findImageAppsBuiltWithoutValues(cfg *project.Project, clients []variables.C
 		warnings = append(warnings, fmt.Sprintf("app %q builds as an image, and an image build gets none of its plaintext values yet: %s. Code that reads one while the app builds sees it unset", app.Name, strings.Join(slices.Compact(keys), ", ")))
 	}
 	return warnings
-}
-
-func revealSecrets(ctx context.Context, declarations *variables.Declarations, cfg *project.Project, preBuild *project.LifecycleCommand) (map[string]map[string]string, error) {
-	var apps []string
-	for _, app := range cfg.Apps {
-		if build.CanReadVariablesAtBuild(app) || app.RunsOn(provider.ComputeContainer) || preBuild != nil && preBuild.App == app.Name {
-			apps = append(apps, app.Name)
-		}
-	}
-	if len(apps) == 0 {
-		return nil, nil
-	}
-	return declarations.RevealSecrets(ctx, apps)
-}
-
-func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]variables.ResolvedValue) []variables.Variable {
-	values := make([]variables.Variable, 0, len(definitions))
-	for _, definition := range definitions {
-		cell, ok := resolved[definition.GetKey()]
-		if !ok {
-			continue
-		}
-		values = append(values, variables.Variable{
-			Key:         definition.GetKey(),
-			Class:       definition.GetClass(),
-			Value:       cell.Value,
-			Folder:      cell.Folder,
-			Version:     cell.Version,
-			Source:      definition.GetSource(),
-			Description: definition.GetDescription(),
-		})
-	}
-	return values
 }
 
 func checkAppPaths(cfg *project.Project, configName string) error {

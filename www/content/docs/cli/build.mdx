@@ -16,10 +16,18 @@ reaches the function: static directories, view templates and files read at run
 time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency
 tree instead.
 
+Without `--env` the build reads no tier's values, so code that reads a declared variable
+while it builds sees it unset. `--env` reads the values that tier holds now, as the last
+deploy or `ocel env sync` left them, without reading its env source, and hands them to
+the build as `ocel deploy` does: plaintext in the build's environment, sensitive and
+secret values in its live directory. The output then deploys with `--prebuilt` only to
+that environment.
+
 ## Flags
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--env` | `string` |  | Build with the values of a deployed environment: production, or preview for the current branch's preview |
 | `--no-wait` | `bool` | `false` | On Ocel Cloud, start the job, print its link and return without waiting for it to end |
 
 Every command also takes the [global flags](/docs/cli#global-flags).

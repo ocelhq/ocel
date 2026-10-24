@@ -52,6 +52,39 @@ func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Reso
 	return resolved, nil
 }
 
+func (d *Declarations) ResolveVariables(ctx context.Context, apps []App) (map[string][]Variable, error) {
+	definitions := d.Definitions()
+	values := make(map[string][]Variable, len(apps))
+	for _, app := range apps {
+		resolved, err := d.Resolve(ctx, app.Name)
+		if err != nil {
+			return nil, err
+		}
+		values[app.Name] = appVariables(definitions, resolved)
+	}
+	return values, nil
+}
+
+func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]ResolvedValue) []Variable {
+	values := make([]Variable, 0, len(definitions))
+	for _, definition := range definitions {
+		cell, ok := resolved[definition.GetKey()]
+		if !ok {
+			continue
+		}
+		values = append(values, Variable{
+			Key:         definition.GetKey(),
+			Class:       definition.GetClass(),
+			Value:       cell.Value,
+			Folder:      cell.Folder,
+			Version:     cell.Version,
+			Source:      definition.GetSource(),
+			Description: definition.GetDescription(),
+		})
+	}
+	return values
+}
+
 func (d *Declarations) RevealSecrets(ctx context.Context, apps []string) (map[string]map[string]string, error) {
 	secretsOf := make(map[string][]Cell, len(apps))
 	for _, app := range apps {

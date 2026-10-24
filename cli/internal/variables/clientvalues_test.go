@@ -109,12 +109,12 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 
 		root := t.TempDir()
 		built := []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"))}
-		if err := RecordClientValues(root, built); err != nil {
+		if err := RecordClientValues(root, nil, built); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
 		rotated := []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://rotated.example.com"))}
-		err := CheckClientValuesFresh(root, rotated)
+		err := CheckClientValuesFresh(root, nil, rotated)
 		if err == nil {
 			t.Fatal("CheckClientValuesFresh = nil for a build that predates the value, want a refusal")
 		}
@@ -132,13 +132,13 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		root := t.TempDir()
 		built := []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-live"))}
-		if err := RecordClientValues(root, built); err != nil {
+		if err := RecordClientValues(root, nil, built); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
 		rotated := []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"),
 			serverVar("STRIPE_API_KEY", "sk-rotated"))}
-		if err := CheckClientValuesFresh(root, rotated); err != nil {
+		if err := CheckClientValuesFresh(root, nil, rotated); err != nil {
 			t.Errorf("CheckClientValuesFresh = %v, want a variables-only deploy of a server value to proceed", err)
 		}
 	})
@@ -147,15 +147,15 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordClientValues(root, []ClientApp{nextApp("storefront")}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{nextApp("storefront")}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		err := CheckClientValuesFresh(root, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"))})
+		err := CheckClientValuesFresh(root, nil, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"))})
 		if err == nil {
 			t.Fatal("CheckClientValuesFresh = nil for an output that inlined no client value, want a refusal")
 		}
-		for _, want := range []string{"NEXT_PUBLIC_SITE_URL", "never inlined", "`ocel build`, which resolves no values"} {
+		for _, want := range []string{"NEXT_PUBLIC_SITE_URL", "never inlined", "`ocel build` without --env, which resolves no values"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to state %q", err, want)
 			}
@@ -169,11 +169,11 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordClientValues(root, []ClientApp{nextApp("storefront", serverVar("STRIPE_API_KEY", "sk-live"))}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{nextApp("storefront", serverVar("STRIPE_API_KEY", "sk-live"))}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		err := CheckClientValuesFresh(root, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"))})
+		err := CheckClientValuesFresh(root, nil, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"))})
 		if err == nil {
 			t.Fatal("CheckClientValuesFresh = nil for a key the build never inlined, want a refusal")
 		}
@@ -188,13 +188,13 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordClientValues(root, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
 		unset := nextApp("storefront")
 		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
-		err := CheckClientValuesFresh(root, []ClientApp{unset})
+		err := CheckClientValuesFresh(root, nil, []ClientApp{unset})
 		if err == nil {
 			t.Fatal("CheckClientValuesFresh = nil for a bundle holding a value the deploy unset, want a refusal")
 		}
@@ -207,11 +207,11 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordClientValues(root, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		err := CheckClientValuesFresh(root, []ClientApp{nextApp("storefront")})
+		err := CheckClientValuesFresh(root, nil, []ClientApp{nextApp("storefront")})
 		if err == nil {
 			t.Fatal("CheckClientValuesFresh = nil for a bundle holding a value of a key the deploy no longer declares, want a refusal")
 		}
@@ -226,11 +226,11 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		root := t.TempDir()
 		unset := nextApp("storefront")
 		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
-		if err := RecordClientValues(root, []ClientApp{unset}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{unset}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		if err := CheckClientValuesFresh(root, []ClientApp{nextApp("storefront")}); err != nil {
+		if err := CheckClientValuesFresh(root, nil, []ClientApp{nextApp("storefront")}); err != nil {
 			t.Errorf("CheckClientValuesFresh = %v, want it to proceed: the bundle never inlined a value for the key", err)
 		}
 	})
@@ -241,11 +241,11 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		root := t.TempDir()
 		unset := nextApp("storefront")
 		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
-		if err := RecordClientValues(root, []ClientApp{unset}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{unset}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		if err := CheckClientValuesFresh(root, []ClientApp{unset}); err != nil {
+		if err := CheckClientValuesFresh(root, nil, []ClientApp{unset}); err != nil {
 			t.Errorf("CheckClientValuesFresh = %v, want it to proceed: nothing was inlined and nothing is resolved", err)
 		}
 	})
@@ -256,15 +256,15 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		root := t.TempDir()
 		unset := nextApp("storefront")
 		unset.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
-		if err := RecordClientValues(root, []ClientApp{unset}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{unset}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		err := CheckClientValuesFresh(root, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))})
+		err := CheckClientValuesFresh(root, nil, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_THEME", "dark"))})
 		if err == nil {
 			t.Fatal("CheckClientValuesFresh = nil for a bundle built without the value, want a refusal")
 		}
-		for _, want := range []string{"NEXT_PUBLIC_THEME", "`ocel build`, which resolves no values"} {
+		for _, want := range []string{"NEXT_PUBLIC_THEME", "`ocel build` without --env, which resolves no values"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to state %q", err, want)
 			}
@@ -275,13 +275,13 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordClientValues(root, []ClientApp{nextApp("storefront")}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{nextApp("storefront")}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
 		declared := nextApp("storefront")
 		declared.Declared = []*resourcesv1.VariableDefinition{plainDefinition("NEXT_PUBLIC_THEME")}
-		if err := CheckClientValuesFresh(root, []ClientApp{declared}); err != nil {
+		if err := CheckClientValuesFresh(root, nil, []ClientApp{declared}); err != nil {
 			t.Errorf("CheckClientValuesFresh = %v, want it to proceed: no build or deploy ever had a value to inline", err)
 		}
 	})
@@ -290,11 +290,11 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordClientValues(root, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), publicVar("REGION", "eu-west-1"))}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), publicVar("REGION", "eu-west-1"))}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		err := CheckClientValuesFresh(root, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), publicVar("REGION", "us-east-1"))})
+		err := CheckClientValuesFresh(root, nil, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), publicVar("REGION", "us-east-1"))})
 		if err == nil {
 			t.Fatal("CheckClientValuesFresh = nil for a sveltekit build whose plain value changed, want a refusal: sveltekit inlines a static value, and which are static only sveltekit knows")
 		}
@@ -307,11 +307,11 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := RecordClientValues(root, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), serverVar("STRIPE_API_KEY", "sk-live"))}); err != nil {
+		if err := RecordClientValues(root, nil, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), serverVar("STRIPE_API_KEY", "sk-live"))}); err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}
 
-		if err := CheckClientValuesFresh(root, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), serverVar("STRIPE_API_KEY", "sk-rotated"))}); err != nil {
+		if err := CheckClientValuesFresh(root, nil, []ClientApp{kitApp("shop", publicVar("PUBLIC_API_URL", "https://api.example.com"), serverVar("STRIPE_API_KEY", "sk-rotated"))}); err != nil {
 			t.Errorf("CheckClientValuesFresh = %v, want it to proceed: a sensitive value is never static, so no bundle holds it", err)
 		}
 	})
@@ -322,7 +322,7 @@ func TestAPrebuiltOutputStaysFreshOnlyWhileTheClientValuesItInlinedStayTheSame(t
 		root := t.TempDir()
 
 		apps := []ClientApp{nextApp("storefront", serverVar("STRIPE_API_KEY", "sk-live"))}
-		if err := CheckClientValuesFresh(root, apps); err != nil {
+		if err := CheckClientValuesFresh(root, nil, apps); err != nil {
 			t.Errorf("CheckClientValuesFresh = %v, want nothing to check", err)
 		}
 	})
@@ -336,7 +336,7 @@ func TestRecord(t *testing.T) {
 
 		root := t.TempDir()
 
-		err := RecordClientValues(root, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"))})
+		err := RecordClientValues(root, nil, []ClientApp{nextApp("storefront", publicVar("NEXT_PUBLIC_SITE_URL", "https://example.com"))})
 		if err != nil {
 			t.Fatalf("RecordClientValues: %v", err)
 		}

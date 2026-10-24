@@ -82,3 +82,20 @@ func TestBuildInsideAnOcelCloudJobSpawnsTheProviderOcelFromTheProvidersDirWithNo
 		t.Fatalf("stat %s: %v, want no lock written inside a job", lockfile.Name, err)
 	}
 }
+
+func TestBuildWithAnEnvIsRefusedOnOcelCloud(t *testing.T) {
+	cloud := clitest.ServeOcelCloud(t)
+	dependencies := newTestDependencies()
+	cloud.LogIn(&dependencies.Invocation)
+	root := t.TempDir()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{"slug": "shop", "apps": [{"name": "api", "path": ".", "framework": "node", "compute": "serverless"}]}`)
+	clitest.WriteFile(t, filepath.Join(root, "index.ts"), "export {}\n")
+
+	err := runBuild(t.Context(), dependencies, root, options{env: "production"}, strings.NewReader(""))
+	if err == nil || !strings.Contains(err.Error(), "ocel build --env") {
+		t.Fatalf("err = %v, want ocel build --env refused on Ocel Cloud", err)
+	}
+	if len(cloud.Started) != 0 {
+		t.Errorf("started %v, want no job: Ocel Cloud's build job takes no tier", cloud.Started)
+	}
+}

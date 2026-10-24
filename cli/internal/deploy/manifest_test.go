@@ -305,99 +305,6 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	}
 }
 
-func definition(key string, class resourcesv1.VariableClass) *resourcesv1.VariableDefinition {
-	return &resourcesv1.VariableDefinition{Key: key, Class: class}
-}
-
-func TestAnAppsVariablesPairEachDeclarationWithItsResolvedValue(t *testing.T) {
-	t.Parallel()
-
-	t.Run("pairs each declaration with what was resolved for it", func(t *testing.T) {
-		t.Parallel()
-
-		definitions := []*resourcesv1.VariableDefinition{
-			definition("PAGE_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-			definition("WEBHOOK_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
-		}
-		resolved := map[string]variables.ResolvedValue{
-			"PAGE_ID":        {Value: "page-123"},
-			"WEBHOOK_SECRET": {},
-		}
-
-		got := appVariables(definitions, resolved)
-		if len(got) != 2 {
-			t.Fatalf("appVariables = %+v, want both declarations", got)
-		}
-		if got[0].Key != "PAGE_ID" || got[0].Value != "page-123" ||
-			got[0].Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
-			t.Errorf("PAGE_ID = %+v, want its class and its resolved value", got[0])
-		}
-		if got[1].Value != "" {
-			t.Errorf("WEBHOOK_SECRET = %+v, want no value: a secret's plaintext never enters the manifest", got[1])
-		}
-	})
-
-	t.Run("omits a key this app cannot read", func(t *testing.T) {
-		t.Parallel()
-
-		definitions := []*resourcesv1.VariableDefinition{
-			definition("CHECKOUT_ONLY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-		}
-
-		if got := appVariables(definitions, map[string]variables.ResolvedValue{}); len(got) != 0 {
-			t.Fatalf("appVariables = %+v, want nothing for a key this app resolves no cell for", got)
-		}
-	})
-
-	t.Run("keeps the version each value resolved at", func(t *testing.T) {
-		t.Parallel()
-
-		definitions := []*resourcesv1.VariableDefinition{
-			definition("PLAIN_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-			definition("LIVE_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
-		}
-		resolved := map[string]variables.ResolvedValue{
-			"PLAIN_KEY": {Value: "v", Version: 2},
-			"LIVE_KEY":  {Version: 9},
-		}
-
-		got := appVariables(definitions, resolved)
-		if len(got) != 2 {
-			t.Fatalf("appVariables = %+v, want both declarations", got)
-		}
-		if got[0].Key != "PLAIN_KEY" || got[0].Version != 2 {
-			t.Errorf("PLAIN_KEY = %+v, want the version its cell resolved at", got[0])
-		}
-		if got[1].Key != "LIVE_KEY" || got[1].Version != 9 {
-			t.Errorf("LIVE_KEY = %+v, want its cell's version included too", got[1])
-		}
-	})
-
-	t.Run("keeps the folder each key resolved from", func(t *testing.T) {
-		t.Parallel()
-
-		definitions := []*resourcesv1.VariableDefinition{
-			definition("ROOT_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
-			definition("SCOPED_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
-		}
-		resolved := map[string]variables.ResolvedValue{
-			"ROOT_KEY":   {},
-			"SCOPED_KEY": {Folder: "/admin"},
-		}
-
-		got := appVariables(definitions, resolved)
-		if len(got) != 2 {
-			t.Fatalf("appVariables = %+v, want both declarations", got)
-		}
-		if got[0].Key != "ROOT_KEY" || got[0].Folder != "" {
-			t.Errorf("ROOT_KEY = %+v, want the empty root spelling, never the store's %q sentinel", got[0], "/")
-		}
-		if got[1].Key != "SCOPED_KEY" || got[1].Folder != "/admin" {
-			t.Errorf("SCOPED_KEY = %+v, want the folder it resolved from", got[1])
-		}
-	})
-}
-
 func TestACapturedBuildOutputIsCappedAndAppendedToTheError(t *testing.T) {
 	t.Run("passes the error through untouched when nothing was captured", func(t *testing.T) {
 		c := &boundedCapture{}
@@ -686,7 +593,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		recordBuildApp(&dependencies)
 		cfg := prebuiltNextConfig(root)
 
-		if err := variables.RecordClientValues(root, []variables.ClientApp{recordedClientValue()}); err != nil {
+		if err := variables.RecordClientValues(root, nil, []variables.ClientApp{recordedClientValue()}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -710,7 +617,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		dependencies := newTestDependencies()
 		recordBuildApp(&dependencies)
 		cfg := prebuiltNextConfig(root)
-		if err := variables.RecordClientValues(root, []variables.ClientApp{{App: variables.App{Name: "api", Framework: buildoutput.FrameworkNext}}}); err != nil {
+		if err := variables.RecordClientValues(root, nil, []variables.ClientApp{{App: variables.App{Name: "api", Framework: buildoutput.FrameworkNext}}}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -719,7 +626,7 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		if err == nil {
 			t.Fatal("collectBuildAndAssemble = nil for an `ocel build` output, want a refusal")
 		}
-		for _, want := range []string{"NEXT_PUBLIC_SITE_URL", "never inlined", "`ocel build`, which resolves no values"} {
+		for _, want := range []string{"NEXT_PUBLIC_SITE_URL", "never inlined", "`ocel build` without --env, which resolves no values"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to state %q", err, want)
 			}
@@ -736,13 +643,72 @@ func TestPrebuiltSkipsTheBuildAndDeploysTheRecordedOutput(t *testing.T) {
 		recordBuildApp(&dependencies)
 		cfg := prebuiltNextConfig(root)
 
-		if err := variables.RecordClientValues(root, []variables.ClientApp{recordedClientValue()}); err != nil {
+		if err := variables.RecordClientValues(root, nil, []variables.ClientApp{recordedClientValue()}); err != nil {
 			t.Fatal(err)
 		}
 
 		s, _ := newBuildSpan(t)
 		declarations := declarationsWithClientValue(t, cfg, "https://example.com")
 		if _, _, err := (&deployRun{dependencies: dependencies, cfg: onCompute(cfg, "serverless"), declarations: declarations, prebuilt: true, phase: s, span: s}).collectBuildAndAssemble(context.Background()); err != nil {
+			t.Fatalf("collectBuildAndAssemble: %v", err)
+		}
+	})
+}
+
+func TestPrebuiltRefusesABuildMadeWithAnotherEnvironmentsValues(t *testing.T) {
+	production := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
+	preview := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}
+	staging := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "staging"}
+
+	deployPrebuilt := func(t *testing.T, builtFor, deployedTo *environmentv1.Environment) error {
+		t.Helper()
+		root := t.TempDir()
+		cfg := prebuiltConfig(root)
+		cfg.Apps[0].Compute = provider.ComputeContainer
+		if err := variables.RecordClientValues(root, builtFor, []variables.ClientApp{{App: variables.App{Name: "api"}}}); err != nil {
+			t.Fatal(err)
+		}
+		dependencies := newTestDependencies()
+		dependencies.ReadPrebuilt = func(context.Context, *project.Project, map[string]string) (build.Output, error) {
+			return build.Output{}, nil
+		}
+		s, _ := newBuildSpan(t)
+		_, _, err := (&deployRun{dependencies: dependencies, cfg: cfg, declarations: emptyDeclarations(cfg), env: deployedTo, prebuilt: true, phase: s, span: s}).collectBuildAndAssemble(context.Background())
+		return err
+	}
+
+	t.Run("a preview refuses a container app built with production's values", func(t *testing.T) {
+		err := deployPrebuilt(t, production, preview)
+		if err == nil {
+			t.Fatal("collectBuildAndAssemble = nil, want the preview refused an image whose build mounted production's secrets")
+		}
+		for _, want := range []string{"--prebuilt", "production", "preview pr-12"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to name %q", err, want)
+			}
+		}
+	})
+
+	t.Run("one preview refuses a build made for another", func(t *testing.T) {
+		if err := deployPrebuilt(t, preview, staging); err == nil {
+			t.Fatal("collectBuildAndAssemble = nil, want preview staging refused a build made with preview pr-12's values")
+		}
+	})
+
+	t.Run("production refuses a build made with a preview's values", func(t *testing.T) {
+		if err := deployPrebuilt(t, preview, production); err == nil {
+			t.Fatal("collectBuildAndAssemble = nil, want production refused a build made with preview pr-12's values")
+		}
+	})
+
+	t.Run("the environment a build was made for deploys it", func(t *testing.T) {
+		if err := deployPrebuilt(t, preview, preview); err != nil {
+			t.Fatalf("collectBuildAndAssemble: %v", err)
+		}
+	})
+
+	t.Run("a build made with no environment's values deploys anywhere", func(t *testing.T) {
+		if err := deployPrebuilt(t, nil, preview); err != nil {
 			t.Fatalf("collectBuildAndAssemble: %v", err)
 		}
 	})

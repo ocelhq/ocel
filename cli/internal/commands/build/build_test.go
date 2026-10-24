@@ -22,11 +22,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 func TestBuildBakesTheWorkersAnAppHostsIntoItsBuild(t *testing.T) {
@@ -445,5 +448,92 @@ export default {
 	}
 	if _, err := os.Stat(filepath.Join(root, buildoutput.StateDir, "dist")); err == nil {
 		t.Fatalf("the build unpacked the node bundle into %s, want it in the user cache where every project and run shares one copy", root)
+	}
+}
+
+func TestBuildWithAnEnvHandsEachAppTheValuesOfThatTierAsADeployDoes(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	root := fixture.Root
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: "serverless" }]`)
+	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
+	store := variablestore.Store{KeyValues: fixture.Provider.KeyValues(), Cipher: fixture.Provider.Cipher()}
+	production := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	for key, value := range map[string]string{"PAGE_ID": "page-123", "STRIPE_API_KEY": "sk_live_123"} {
+		if _, err := store.Set(context.Background(), production, variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, value, nil); err != nil {
+			t.Fatalf("set %s: %v", key, err)
+		}
+	}
+
+	buildWith := func(t *testing.T, opts options) build.AppVariables {
+		t.Helper()
+		dependencies := newTestDependencies()
+		dependencies.CollectDeclarations = func(ctx context.Context, _ *project.Project, declarations *variables.Declarations, _, _ io.Writer) ([]declaration.Resource, error) {
+			if err := declarations.Prefetch(ctx); err != nil {
+				return nil, err
+			}
+			_, err := declarations.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: []*resourcesv1.VariableDefinition{
+				{Key: "PAGE_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true},
+				{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true},
+			}})
+			return nil, err
+		}
+		var handed map[string]build.AppVariables
+		dependencies.BuildApps = func(_ context.Context, _ *project.Project, values map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+			handed = values
+			return build.Output{}, nil
+		}
+		var out strings.Builder
+		clitest.AttachTerminalSink(dependencies.Invocation, &out)
+		if err := runBuild(context.Background(), dependencies, root, opts, nil); err != nil {
+			t.Fatalf("runBuild: %v\n%s", err, out.String())
+		}
+		return handed["web"]
+	}
+
+	t.Run("--env production puts the plaintext in the build's env and the secret in its live dir", func(t *testing.T) {
+		web := buildWith(t, options{env: "production"})
+		if got := web.Env["PAGE_ID"]; got != "page-123" {
+			t.Errorf("web was built with PAGE_ID = %q, want production's %q", got, "page-123")
+		}
+		if got := web.Live["STRIPE_API_KEY"]; got != "sk_live_123" {
+			t.Errorf("web's live dir holds STRIPE_API_KEY = %q, want production's secret", got)
+		}
+	})
+
+	t.Run("--env production reads the tier's store and changes nothing in it", func(t *testing.T) {
+		buildWith(t, options{env: "production"})
+		reads := []string{
+			variablestorev1connect.VariableStoreServiceListValuesProcedure,
+			variablestorev1connect.VariableStoreServiceRevealValuesProcedure,
+			variablestorev1connect.VariableStoreServiceDescribeEnvSourceProcedure,
+		}
+		for _, procedure := range fixture.Requests.Procedures() {
+			if strings.HasPrefix(procedure, "/"+variablestorev1connect.VariableStoreServiceName+"/") && !slices.Contains(reads, procedure) {
+				t.Errorf("the build called %s, want only reads of the tier's store: a build changes nothing a deploy reads", procedure)
+			}
+		}
+	})
+
+	t.Run("without --env the build sees no declared value", func(t *testing.T) {
+		web := buildWith(t, options{})
+		if got, ok := web.Env["PAGE_ID"]; ok {
+			t.Errorf("web was built with PAGE_ID = %q, want it unset: no tier was named", got)
+		}
+		if len(web.Live) != 0 {
+			t.Errorf("web's live dir holds %v, want nothing: no tier was named", slices.Collect(maps.Keys(web.Live)))
+		}
+	})
+}
+
+func TestBuildRefusesAnEnvThatNamesNoTier(t *testing.T) {
+	root := clitest.SetUpProject(t).Root
+	writeBuildConfig(t, root, `[{ name: "api", path: ".", framework: "node", compute: "serverless" }]`)
+	clitest.WriteFile(t, filepath.Join(root, "index.ts"), "export {}\n")
+
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	err := runBuild(context.Background(), dependencies, root, options{env: "staging"}, nil)
+	if err == nil || !strings.Contains(err.Error(), `--env is "staging"`) {
+		t.Fatalf("runBuild = %v, want --env staging refused naming the tiers it takes", err)
 	}
 }
