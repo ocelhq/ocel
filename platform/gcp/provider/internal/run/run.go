@@ -481,7 +481,7 @@ func (p *Services) createdRevision(ctx context.Context, services *run.Service, c
 		return "", fmt.Errorf("read the revision the release of %s created: %w", s.Service, err)
 	}
 	revision := RevisionName(created.Name)
-	if created.Labels[imageLabel] != ImageLabelValue(s.Image) {
+	if !slices.Contains(imagesOf(created), s.Image) {
 		return "", refusal.Refuse(refusal.CodeBusy,
 			"the latest revision of %s, %s, runs another image than this release made it with: another release replaced it under this one, so this one routes nothing. Deploy again",
 			s.Service, revision)

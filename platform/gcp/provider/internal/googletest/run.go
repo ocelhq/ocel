@@ -370,7 +370,6 @@ func (s *Run) revisionOf(name string) *runv2.GoogleCloudRunV2Revision {
 	return &runv2.GoogleCloudRunV2Revision{
 		Name:       s.Service.Name + "/revisions/" + name,
 		Containers: []*runv2.GoogleCloudRunV2Container{{Image: s.images[name]}},
-		Labels:     s.labels[name],
 		Conditions: []*runv2.GoogleCloudRunV2Condition{{Type: run.ReadyCondition, State: run.ConditionSucceeded}},
 	}
 }
