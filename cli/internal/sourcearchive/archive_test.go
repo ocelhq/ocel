@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 )
 
@@ -57,12 +58,12 @@ func TestWalkUploadsWhatGitWouldTrackAndTheFilesABuildNeeds(t *testing.T) {
 		{
 			name: "dependency and build output never goes up",
 			files: map[string]string{
-				"index.ts":                      "x",
-				"node_modules/left-pad/a.js":    "x",
-				"apps/web/node_modules/b.js":    "x",
-				".git/HEAD":                     "x",
-				".ocel/console.json":            "{}",
-				"pkg/__pycache__/m.cpython.pyc": "x",
+				"index.ts":                             "x",
+				"node_modules/left-pad/a.js":           "x",
+				"apps/web/node_modules/b.js":           "x",
+				".git/HEAD":                            "x",
+				buildoutput.StateDir + "/console.json": "{}",
+				"pkg/__pycache__/m.cpython.pyc":        "x",
 			},
 			want: []string{"index.ts"},
 		},
