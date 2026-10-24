@@ -66,7 +66,7 @@ func (j *BuilderJob) Source() *consolev1.Source {
 
 func (j *BuilderJob) ReadGitBranch(string) (string, error) {
 	if j.Git.GetBranch() == "" {
-		return "", fmt.Errorf("job %s on Ocel Cloud was started with no git branch, so no branch names this preview: name it, as in `ocel preview up <name>`", j.ID)
+		return "", fmt.Errorf("job %s on Ocel Cloud has no git branch to name this preview: run `ocel preview up <name>`", j.ID)
 	}
 	return j.Git.GetBranch(), nil
 }
@@ -100,7 +100,7 @@ func (j *BuilderJob) loadProject(ctx context.Context, cwd, explicitPath string) 
 func (j *BuilderJob) adopt(cfg *project.Project) (*project.Project, error) {
 	if cfg.HasProvider() {
 		return nil, &clierror.Error{Code: clierror.CodeProjectInvalidConfig, Hint: "provider",
-			Cause: fmt.Errorf("this runs inside Ocel Cloud job %s, and %s names the provider %q: a project that deploys to Ocel Cloud names none", j.ID, filepath.Base(cfg.Path), cfg.Provider.ID)}
+			Cause: fmt.Errorf("this runs inside Ocel Cloud job %s, and %s names the provider %q: remove it", j.ID, filepath.Base(cfg.Path), cfg.Provider.ID)}
 	}
 	if cfg.Slug != j.Slug {
 		return nil, &clierror.Error{Code: clierror.CodeProjectInvalidConfig, Hint: "slug",

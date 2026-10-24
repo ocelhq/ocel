@@ -25,7 +25,7 @@ func (a ConsoleAccount) ListOrganizations(ctx context.Context) ([]console.Organi
 		return nil, fmt.Errorf("list your organizations in %s: %w", a.URL, err)
 	}
 	if len(orgs) == 0 {
-		return nil, fmt.Errorf("you belong to no organization in %s yet — create one there first", a.URL)
+		return nil, fmt.Errorf("you belong to no organization in %s: create one there", a.URL)
 	}
 	return orgs, nil
 }

@@ -65,7 +65,7 @@ func (i Invocation) resolveUnconfigured(ctx context.Context, cwd string, missing
 	}
 	slug := project.DeriveSlug(filepath.Base(dir))
 	if err := project.ValidateSlug(slug); err != nil {
-		return Target{}, fmt.Errorf("no slug can be named after %s: %w — run `ocel init` to write a config that names one", dir, err)
+		return Target{}, fmt.Errorf("no slug can be named after %s: %w; run `ocel init`", dir, err)
 	}
 	derived := fmt.Sprintf("No %s here, so this runs as %s, named after this directory", english.Or([]string{project.DefaultFileName, project.YAMLFileName, project.TSFileName}), slug)
 	return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: derived}, nil
@@ -102,7 +102,7 @@ func (i Invocation) RequireProvider(ctx context.Context, cfg *project.Project, c
 func NotOnCloud(command string) error {
 	return &clierror.Error{
 		Code:  clierror.CodeCloudUnsupported,
-		Cause: fmt.Errorf("`%s` does not run on Ocel Cloud yet: this project names no provider, so it deploys to Ocel Cloud through the console you are logged in to — name a provider in its config to run `%s` against your own account", command, command),
+		Cause: fmt.Errorf("`%s` does not run on Ocel Cloud yet: name a provider in this project's config", command),
 	}
 }
 
@@ -117,7 +117,7 @@ func (i Invocation) cloudTarget(ctx context.Context) (*CloudTarget, error) {
 	offer, err := i.CloudOffer(ctx, creds)
 	consoleURL := console.BaseURL(creds.APIURL)
 	if err != nil {
-		return nil, fmt.Errorf("no provider is named, and whether %s offers Ocel Cloud could not be read — run `ocel logout` to stop asking it: %w", consoleURL, err)
+		return nil, fmt.Errorf("could not read whether %s offers Ocel Cloud: name a provider, or run `ocel logout`: %w", consoleURL, err)
 	}
 	if offer == nil {
 		return nil, nil

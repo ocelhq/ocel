@@ -20,7 +20,7 @@ func RefuseEnvironmentWithoutPreview(preview bool, environment string) error {
 	if environment == "" || preview {
 		return nil
 	}
-	return errors.New("--environment addresses one preview environment's override, and production has a single environment; pass --preview, or leave --environment off to address the production value")
+	return errors.New("--environment names a preview environment: pass --preview, or drop --environment")
 }
 
 func ResolveDeployedEnvironment(cwd, name string, readGitBranch func(dir string) (string, error), discoverPRNumber func() string) (*environmentv1.Environment, error) {

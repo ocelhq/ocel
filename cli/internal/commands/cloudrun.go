@@ -121,7 +121,7 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 
 	if job.NoWait {
 		phase.End(nil)
-		running.Succeed(fmt.Sprintf("Started job %s on Ocel Cloud, and it runs without this terminal: %s", printedID, jobURL))
+		running.Succeed(fmt.Sprintf("Started job %s on Ocel Cloud: %s", printedID, jobURL))
 		return nil
 	}
 	ended, err = waitForJob(ctx, running, phase, jobs, started, jobURL, cfg.Slug, job)
@@ -165,7 +165,6 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 	running.SetCloudJob(summarizeJob(ended, jobURL))
 	switch {
 	case err != nil && ctx.Err() != nil:
-		watching.Say("Stopped watching; the job keeps running on Ocel Cloud")
 		watching.End(nil)
 		phase.End(nil)
 		running.Succeed(fmt.Sprintf("Stopped watching job %s, which keeps running on Ocel Cloud: %s", printedID, jobURL))
@@ -366,7 +365,7 @@ func pickCloudOrganization(ctx context.Context, account ConsoleAccount, projectD
 		if org := FindOrganization(orgs, func(org console.Organization) bool { return org.ID == link.OrganizationID }); org != nil {
 			return org, nil
 		}
-		return nil, fmt.Errorf("this directory is linked to %s in an organization you no longer belong to — run `ocel link` to link it again", link.ProjectName)
+		return nil, fmt.Errorf("this directory is linked to %s in an organization you left: run `ocel link`", link.ProjectName)
 	}
 	if read, err := account.Client.GetSession(ctx, account.Session); err == nil && read != nil {
 		if org := FindOrganization(orgs, func(org console.Organization) bool { return org.ID == read.Session.ActiveOrganizationID }); org != nil {
@@ -377,7 +376,7 @@ func pickCloudOrganization(ctx context.Context, account ConsoleAccount, projectD
 		return &orgs[0], nil
 	}
 	return nil, clierror.NewInputRequired(
-		fmt.Errorf("you belong to %d organizations in %s and none is active — run `ocel link --org <slug>` to pick the one this project deploys under: %s", len(orgs), account.URL, OrganizationSlugs(orgs)),
+		fmt.Errorf("none of your %d organizations in %s is active: run `ocel link --org <slug>` with one of %s", len(orgs), account.URL, OrganizationSlugs(orgs)),
 		"ocel link --org <slug>",
 	)
 }
@@ -439,5 +438,5 @@ func AddNoWaitFlag(cmd *cobra.Command, into *bool) {
 }
 
 func RefuseNoWait() error {
-	return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("--%s leaves a job running on Ocel Cloud, and this project does not run on Ocel Cloud: it runs here, with no job to leave running", noWaitFlag)}
+	return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("--%s applies only on Ocel Cloud: drop it", noWaitFlag)}
 }
