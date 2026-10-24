@@ -28,14 +28,30 @@ func pinnedBox(t *testing.T, pins []boxapi.Pin, files map[string][]byte) *Host {
 	rig := claimingBox(t, routed())
 	serves := rig.answer
 	rig.answer = func(command string) (ssh.Result, bool) {
-		for path, block := range files {
-			if strings.Contains(command, shell.Quote(path)) {
-				return ssh.Result{Stdout: string(block)}, true
-			}
+		if pinned, said := answeringPins(command, files); said {
+			return pinned, true
 		}
 		return serves(command)
 	}
 	return New(ssh.NewBox(rig.dial, nil), Keys{}, pins, front.Proxy{})
+}
+
+func pinHelper(at string) string {
+	leaf, _ := boxapi.Pinned(at)
+	return shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand, leaf})
+}
+
+func answeringPins(command string, stored map[string][]byte) (ssh.Result, bool) {
+	for at, block := range stored {
+		if strings.HasSuffix(command, pinHelper(at)) {
+			said, err := json.Marshal(boxapi.PinnedPair{Certificate: string(block), KeyMatches: true})
+			if err != nil {
+				panic(err)
+			}
+			return ssh.Result{Stdout: string(said) + "\n"}, true
+		}
+	}
+	return ssh.Result{}, false
 }
 
 func pinning(t *testing.T) (*claimBench, *Host) {
@@ -46,8 +62,8 @@ func pinning(t *testing.T) (*claimBench, *Host) {
 	rig := claimingBox(t, routed())
 	serves := rig.answer
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.Contains(command, shell.Quote(boxapi.PinCertificate(at))) {
-			return ssh.Result{Stdout: string(covering)}, true
+		if pinned, said := answeringPins(command, map[string][]byte{at: covering}); said {
+			return pinned, true
 		}
 		return serves(command)
 	}
@@ -121,7 +137,7 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 		"a pair nothing on this box renews and nobody replaced": expired,
 		"a file that is no certificate at all":                  []byte("-----BEGIN EC PRIVATE KEY-----\nMHcCAQE=\n-----END EC PRIVATE KEY-----\n"),
 	} {
-		err := claiming(t, []boxapi.Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{boxapi.PinCertificate(at): stored})
+		err := claiming(t, []boxapi.Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{at: stored})
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) {
 			t.Errorf("a claim on a box storing %s = %v, want ocel's own refusal naming %s: the pin reaches the proxy on every reshape, so an unverified one turns a typo into a caddy error on somebody else's deploy",
@@ -129,7 +145,7 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 		}
 	}
 
-	if err := claiming(t, []boxapi.Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{boxapi.PinCertificate(at): covering}); err != nil {
+	if err := claiming(t, []boxapi.Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{at: covering}); err != nil {
 		t.Errorf("a claim on a box storing a pinned pair that covers what it is pinned for = %v, want the claim taken", err)
 	}
 }
@@ -143,9 +159,9 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 	serves := rig.answer
 	reads := 0
 	rig.answer = func(command string) (ssh.Result, bool) {
-		if strings.HasPrefix(command, "cat "+shell.Quote(boxapi.PinCertificate(at))) {
+		if pinned, said := answeringPins(command, map[string][]byte{at: covering}); said {
 			reads++
-			return ssh.Result{Stdout: string(covering)}, true
+			return pinned, true
 		}
 		return serves(command)
 	}

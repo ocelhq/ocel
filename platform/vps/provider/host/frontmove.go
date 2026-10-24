@@ -128,6 +128,7 @@ func (m frontMove) listRemovals() []machine.Removal {
 			machine.Taking(machine.KindProxyConfig, ProxyConfig, ""),
 			machine.Taking(machine.KindDir, ProxyData, "certificates and acme key"),
 			machine.Taking(machine.KindDir, proxyRoot, ""),
+			machine.Taking(machine.KindFile, sudoersPins, ""),
 			machine.Sharing(boxapi.PinsDir, "only if empty: it holds your pinned certificates"),
 		}
 	}
@@ -144,7 +145,7 @@ func (m frontMove) listRemovals() []machine.Removal {
 	return removed
 }
 
-var movedNames = []string{caddy.Container, boxapi.Switchboard, proxyRoot, boxapi.PinsDir, ProxyData, ProxyConfig, machine.SudoersCaddyReload, FrontRecordPath}
+var movedNames = []string{caddy.Container, boxapi.Switchboard, proxyRoot, boxapi.PinsDir, sudoersPins, ProxyData, ProxyConfig, machine.SudoersCaddyReload, FrontRecordPath}
 
 func (m frontMove) splitOffGroup(core []provider.Change) (provider.ChangeGroup, []provider.Change) {
 	group := provider.ChangeGroup{

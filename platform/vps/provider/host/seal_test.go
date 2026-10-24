@@ -70,7 +70,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 	}
 }
 
-func TestTheDeployLoginIsWhitelistedOnTheHelperAndTheCheckedDockerAndOnNothingBeside(t *testing.T) {
+func TestTheDeployLoginIsWhitelistedOnTheSealHelperThePinHelperAndTheCheckedDockerAndOnNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
@@ -81,8 +81,8 @@ func TestTheDeployLoginIsWhitelistedOnTheHelperAndTheCheckedDockerAndOnNothingBe
 			lines = append(lines, item)
 		}
 	}
-	if len(lines) != 2 || lines[0].Name != sudoersSeal(environment.TierProduction) || lines[1].Name != sudoersDocker {
-		t.Fatalf("a bootstrap writes %v under %s, want the line the seal helper needs and the line the checked docker needs", lines, machine.SudoersRoot)
+	if len(lines) != 3 || lines[0].Name != sudoersSeal(environment.TierProduction) || lines[1].Name != sudoersDocker || lines[2].Name != sudoersPins {
+		t.Fatalf("a bootstrap writes %v under %s, want the lines the seal helper, the checked docker and the pin helper need", lines, machine.SudoersRoot)
 	}
 	if docker := strings.TrimSpace(string(lines[1].Content)); docker != deployUser+" ALL=(root) NOPASSWD: "+LiveBinary+" docker *" {
 		t.Errorf("the docker fragment reads %q, want docker reached only through the check", docker)

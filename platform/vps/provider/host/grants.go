@@ -63,6 +63,14 @@ func grants(tier environment.Tier, arch string, fronting front.Proxy) []Grant {
 		})
 	}
 	grants = append(grants, sealing(items, tier, deployer)...)
+	if line := written(items, machine.KindFile, sudoersPins); line.Name != "" {
+		grants = append(grants, Grant{
+			Name: "runs " + LiveBinary + " " + boxapi.PinCommand + " as root, through one line in " + line.Name,
+			Detail: "the line is\n\n      " + strings.TrimSpace(string(line.Content)) +
+				"\n\n    which takes one name directly under " + boxapi.PinsDir + " and prints the certificate blocks pinned there and whether the key beside them matches. It never prints the key, and " +
+				boxapi.PinsDir + " stays root's alone",
+		})
+	}
 	if line := written(items, machine.KindFile, machine.SudoersCaddyReload); line.Name != "" {
 		grants = append(grants, Grant{
 			Name: "reloads your Caddy as root, through one line in " + line.Name,
@@ -109,7 +117,7 @@ func sealing(items []machine.Item, tier environment.Tier, deployer login) []Gran
 	return []Grant{{
 		Name: "runs " + LiveBinary + " " + boxapi.SealCommand + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
-			"\n\n    one of the two lines of sudo " + deployer.name + " has. It seals and opens values under the " + string(tier) +
+			"\n\n    which seals and opens values under the " + string(tier) +
 			" key only; it creates no key, reaches no other tier, and never prints the key",
 	}, {
 		Name: "no read of " + key.Name,

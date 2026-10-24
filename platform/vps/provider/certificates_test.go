@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -103,7 +104,7 @@ func TestInspectingAPinnedCertificateNeverOpensTheKeyBesideIt(t *testing.T) {
 				command, key)
 		}
 	}
-	if machine.at(boxapi.PinCertificate(wildcardPin)) < 0 {
+	if machine.at(shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand, "wildcard"})) < 0 {
 		t.Errorf("nothing read %s, so the expiry reported for a pinned certificate came from somewhere other than the certificate", boxapi.PinCertificate(wildcardPin))
 	}
 }

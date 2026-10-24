@@ -75,7 +75,7 @@ What lands on the box:
 | Docker | When missing; pinned by sha256. Upgrading it is yours. |
 | `"live-restore": true` in `/etc/docker/daemon.json` | A daemon restart or upgrade stops no container. See [Upgrades](#upgrades). |
 | `ocel-deploy` | The deploy login. See [the deploy login](#the-deploy-login). |
-| `/etc/sudoers.d/ocel-docker`, `/etc/sudoers.d/ocel-seal-<tier>` | The two commands `ocel-deploy` runs as root. |
+| `/etc/sudoers.d/ocel-docker`, `/etc/sudoers.d/ocel-seal-<tier>`, `/etc/sudoers.d/ocel-pins` | The three commands `ocel-deploy` runs as root. |
 | `/usr/local/lib/ocel/live` | The box agent: serves app containers their secret values over `ocel-live.socket`, runs topics and tasks, checks the deploy login's `docker` commands, seals values and keeps the tier's records. |
 | `ocel-proxy` (Caddy) | Ports 80 and 443; gets each certificate on first connection. Not behind your own proxy. |
 | `ocel-switchboard`, `ocel` network | Routes each hostname to its app. Recreated by the next deploy if pruned. |
@@ -88,12 +88,13 @@ What lands on the box:
 
 Bootstrap needs root or passwordless sudo once. It creates the `ocel-deploy` login, which
 accepts the keys in the bootstrapping login's `~/.ssh/authorized_keys`, or the key `deployKey`
-names. Set `ssh.user` to `ocel-deploy` and deploys need no sudo beyond two root-owned lines:
+names. Set `ssh.user` to `ocel-deploy` and deploys need no sudo beyond three root-owned lines:
 
 | Line | Lets `ocel-deploy` run, as root |
 | --- | --- |
 | `/etc/sudoers.d/ocel-docker` | `/usr/local/lib/ocel/live docker`. Every `docker` command goes through this check; `ocel-deploy` is in no group that reaches the docker socket. |
 | `/etc/sudoers.d/ocel-seal-<tier>` | `/usr/local/lib/ocel/live seal <tier> seal` and `… open`, which seal and open values under `/etc/ocel/<tier>/seal.key`. The login cannot read the key. |
+| `/etc/sudoers.d/ocel-pins` | `/usr/local/lib/ocel/live pin <name>`, which prints the certificate pinned at `/etc/ocel/certs/<name>.crt` and whether the key beside it matches. It never prints the key, and the directory stays root's alone. Written only with Ocel's own proxy. |
 
 The docker check refuses:
 

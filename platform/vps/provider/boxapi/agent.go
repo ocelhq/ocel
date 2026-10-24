@@ -21,7 +21,13 @@ const (
 	EnvSourceSyncCommand = "envsourcesync"
 	SealCommand          = "seal"
 	RecordsCommand       = "kv"
+	PinCommand           = "pin"
 )
+
+type PinnedPair struct {
+	Certificate string `json:"certificate"`
+	KeyMatches  bool   `json:"keyMatches"`
+}
 
 const (
 	SealVerbInit = "init"

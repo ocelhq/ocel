@@ -179,7 +179,6 @@ func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 func expiring() map[string]string {
 	return map[string]string{
 		"what doctor reads a served leaf with": shell.Words([]string{boxapi.SwitchboardBinary, "leaf", "shop.example.com"}),
-		"what a pinned pair is read off":       "cat " + shell.Quote(boxapi.PinCertificate(boxapi.PinsDir+"/wildcard")),
 	}
 }
 

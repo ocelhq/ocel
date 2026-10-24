@@ -85,8 +85,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 
 	at := boxapi.PinsDir + "/live"
 	placedOnTheBox(t, vm, at, []string{caddy.Container, liveHostname}, 90*24*time.Hour)
-	pinned := vm.provider(t, withPins(map[string]string{caddy.Container: at}))
-	defer closing(t, pinned)
+	pinned := vm.deploying(t, withPins(map[string]string{caddy.Container: at}))
 	fronting(t, pinned, "pinned")
 
 	ctx := context.Background()
@@ -134,8 +133,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 
 	at := boxapi.PinsDir + "/live-pin"
 	placedOnTheBox(t, vm, at, []string{"*.preview.example.invalid"}, 11*24*time.Hour)
-	pinned := vm.provider(t, withPins(map[string]string{"*.preview.example.invalid": at}))
-	defer closing(t, pinned)
+	pinned := vm.deploying(t, withPins(map[string]string{"*.preview.example.invalid": at}))
 
 	ctx := context.Background()
 	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
