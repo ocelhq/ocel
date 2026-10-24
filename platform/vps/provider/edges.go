@@ -9,6 +9,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/edges/switchboard"
+	"github.com/ocelhq/ocel/platform/vps/provider/resources/topic"
 )
 
 type edges struct{ provider *Provider }
@@ -63,6 +64,7 @@ func (p *Provider) box() *switchboard.Edge {
 		Machine:    p.host,
 		Containers: p.containers,
 		Images:     p.images,
+		Workers:    topic.NewWorkers(p.components()),
 		Routes:     p.routing,
 		Tunnel:     p.tunnel,
 		Origins:    p.buckets().ApplyOrigins,

@@ -556,6 +556,20 @@ func TestAPreviewPromotionHeadsTheWindowOfThePreviewItServes(t *testing.T) {
 	}
 }
 
+func TestAPreviewDeploymentHostnameLeavesTheWorkersOnTheReleaseThePreviewServes(t *testing.T) {
+	t.Parallel()
+
+	m := aMachine()
+	stack := previewStack(t, m)
+	previewed(t, stack, "pr-7", "web")
+	staged(t, stack, "web", "b-deployment", slug+"-web-deployment")
+	movePointerOnto(t, stack, router.FormatDeploymentPointer("pr-7", "p-deployment"), "p-deployment", map[string]string{"web": "b-deployment"}, nil)
+
+	if want := []string{"preview shop/web in pr-7 beside " + slug + "-web-pr-7"}; !slices.Equal(m.promotedWorkers, want) {
+		t.Errorf("the workers were pointed at %v, want %v alone: a deployment hostname serves one deployment, and the preview's workers run the release its own pointer serves", m.promotedWorkers, want)
+	}
+}
+
 func TestRemovingAPreviewLeavesTheCatchAllInPlaceAndRendersItAsKeptWithAReason(t *testing.T) {
 	t.Parallel()
 

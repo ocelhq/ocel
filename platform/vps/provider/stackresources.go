@@ -26,9 +26,10 @@ func (p *Provider) ListResources(ctx context.Context, ref provider.StackRef, rec
 	listed := physicalResources{location: p.options.SSH.session().Destination()}
 	for _, app := range recorded.Containers {
 		listed.add(machine.KindContainer, app.Physical)
-	}
-	if len(recorded.Containers) > 0 {
-		workers, err := topic.NewWorkers(p.components()).ListContainers(ctx, ref)
+		if app.Physical == "" {
+			continue
+		}
+		workers, err := topic.NewWorkers(p.components()).ListContainers(ctx, ref, app.Physical)
 		if err != nil {
 			return nil, err
 		}

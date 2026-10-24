@@ -86,7 +86,7 @@ func (s *stack) serve(ctx context.Context, move router.PointerMove, ready []prom
 	if unserved := (router.Unserved{}); errors.As(err, &unserved) {
 		return s.refuse(ctx, move, nil, added, err)
 	}
-	return errors.Join(err, s.recordServed(ctx, move, claims, ready))
+	return errors.Join(err, s.recordServed(ctx, move, claims, ready, progress))
 }
 
 func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []release.AppRollout, added []boxapi.Claim, why error) error {
@@ -98,14 +98,18 @@ func (s *stack) refuse(ctx context.Context, move router.PointerMove, touched []r
 	return router.Unserved{Err: errors.Join(why, s.disclaimAdded(ctx, move, added))}
 }
 
-func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claims []boxapi.Claim, ready []promotable) error {
+func (s *stack) recordServed(ctx context.Context, move router.PointerMove, claims []boxapi.Claim, ready []promotable, progress progress.Log) error {
 	var errs []error
 	if len(claims) > 0 {
 		errs = append(errs, s.disclaimUnnamed(ctx, move.Pointer, claims))
 	}
 	env := s.resolveEnv(move.Pointer)
+	_, _, deployment := router.ParseDeploymentPointer(move.Pointer)
 	for _, promoted := range ready {
 		errs = append(errs, s.e.images.Promote(ctx, s.state.Tier, s.state.Slug, env, promoted.app, promoted.record.Image))
+		if !deployment {
+			errs = append(errs, s.e.workers.Promote(ctx, s.state.Tier, s.state.Slug, env, promoted.app, promoted.record.Physical, progress))
+		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("promotion %s serves on this box, but the box did not record all of it: %w", move.Promotion.PromotionID, err)

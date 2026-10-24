@@ -68,6 +68,8 @@ type fakeBox struct {
 	recordedGates map[string]gate.Gate
 	gates         map[string]gate.Gate
 	gateReads     []environment.Tier
+
+	promotedWorkers []string
 }
 
 func aMachine() *fakeBox {
@@ -138,6 +140,13 @@ func (m *fakeBox) Promote(_ context.Context, _ environment.Tier, project, env, a
 	m.calls = append(m.calls, "head "+project+"/"+app+" in "+env+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
 	return m.refuse("Promote")
+}
+
+type machineWorkers struct{ m *fakeBox }
+
+func (w machineWorkers) Promote(_ context.Context, tier environment.Tier, project, env, app, appContainer string, _ progress.Log) error {
+	w.m.promotedWorkers = append(w.m.promotedWorkers, string(tier)+" "+project+"/"+app+" in "+env+" beside "+appContainer)
+	return w.m.refuse("PromoteWorkers")
 }
 
 func (m *fakeBox) Serving(_ context.Context, key boxapi.RouteKey) (string, error) {
@@ -328,7 +337,7 @@ type boxEdge struct {
 }
 
 func edgeOver(m *fakeBox, store records.Store) boxEdge {
-	return boxEdge{Edge: switchboard.New(switchboard.Box{Machine: m, Containers: m, Images: m, Routes: m, Tunnel: machineTunnel{m}, Origins: m.ApplyOrigins, Scope: sshScope, Tunnels: m.findTunnelHooks, ReadGate: m.readGate}), keyValues: store}
+	return boxEdge{Edge: switchboard.New(switchboard.Box{Machine: m, Containers: m, Images: m, Workers: machineWorkers{m}, Routes: m, Tunnel: machineTunnel{m}, Origins: m.ApplyOrigins, Scope: sshScope, Tunnels: m.findTunnelHooks, ReadGate: m.readGate}), keyValues: store}
 }
 
 type boxStack struct {
@@ -551,6 +560,60 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItCutsOver(t *testing.T) {
 	}
 	if m.rollouts[0].Apps[0].HealthPath != "/healthz" {
 		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the deploy request named", m.rollouts[0].Apps[0].HealthPath)
+	}
+}
+
+func TestAPromotionPointsTheEnvironmentsWorkersAtTheReleaseItServesOnceItServes(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	for _, promotion := range []struct{ id, build string }{{"p1", "b1"}, {"p2", "b2"}, {"p3", "b1"}} {
+		if err := promoted(t, stack, promotion.id, "web", promotion.build); err != nil {
+			t.Fatalf("Promote(%s): %v", promotion.id, err)
+		}
+	}
+
+	want := []string{
+		"production shop/web in prod beside shop-web-1111",
+		"production shop/web in prod beside shop-web-2222",
+		"production shop/web in prod beside shop-web-1111",
+	}
+	if !slices.Equal(m.promotedWorkers, want) {
+		t.Errorf("the promotions pointed the workers at %v, want %v: each promotion, a rollback among them, moves the workers to the release it serves", m.promotedWorkers, want)
+	}
+}
+
+func TestAPromotionTheBoxNeverServedLeavesTheWorkersOnTheReleaseItServes(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	m.refuseOn("Release", router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
+
+	if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
+		t.Fatal("a promotion the gate refused succeeded")
+	}
+	if want := []string{"production shop/web in prod beside shop-web-1111"}; !slices.Equal(m.promotedWorkers, want) {
+		t.Errorf("the workers were pointed at %v, want %v alone: the box still serves p1", m.promotedWorkers, want)
+	}
+}
+
+func TestAPromotionWhoseWorkersCannotStartReportsTheBoxUnrecorded(t *testing.T) {
+	t.Parallel()
+
+	m, _, stack := reconciled(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	m.refuseOn("PromoteWorkers", refusal.Refuse(refusal.CodeNotReady, "shop-prod-web-worker-1111 is gone from this box"))
+
+	err := promoted(t, stack, "p1", "web", "b1")
+	if err == nil || !strings.Contains(err.Error(), "is gone from this box") {
+		t.Errorf("Promote(p1) = %v, want it refused with why the workers did not follow", err)
 	}
 }
 

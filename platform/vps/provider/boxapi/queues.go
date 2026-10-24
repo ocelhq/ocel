@@ -23,6 +23,7 @@ const (
 	queueDatabaseEntry = "database"
 	queueTopicsEntry   = "topics"
 	queueWorkersEntry  = "workers"
+	queueReleaseEntry  = "release-workers"
 )
 
 type QueueDatabase struct {
@@ -35,6 +36,7 @@ type QueueWorker struct {
 	App         string `json:"app"`
 	Stack       string `json:"stack"`
 	Container   string `json:"container"`
+	Image       string `json:"image"`
 	Concurrency int    `json:"concurrency,omitempty"`
 }
 
@@ -63,12 +65,20 @@ func QueueWorkerKey(tier environment.Tier, project, env, worker string) records.
 	return QueuePartition(tier).Key(project, env, queueWorkersEntry, worker)
 }
 
+func QueueReleaseWorkerKey(tier environment.Tier, project, env, appContainer, worker string) records.Key {
+	return QueuePartition(tier).Key(project, env, queueReleaseEntry, appContainer, worker)
+}
+
 func QueueTopicsUnder(tier environment.Tier, project, env string) (records.Partition, []string) {
 	return QueuePartition(tier), []string{project, env, queueTopicsEntry}
 }
 
 func QueueWorkersUnder(tier environment.Tier, project, env string) (records.Partition, []string) {
 	return QueuePartition(tier), []string{project, env, queueWorkersEntry}
+}
+
+func QueueReleaseWorkersUnder(tier environment.Tier, project, env, appContainer string) (records.Partition, []string) {
+	return QueuePartition(tier), []string{project, env, queueReleaseEntry, appContainer}
 }
 
 func NewQueueSecretAssociatedData(project string, tier environment.Tier, stack string) (seal.AssociatedData, error) {

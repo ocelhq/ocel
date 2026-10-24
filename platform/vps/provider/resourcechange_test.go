@@ -32,6 +32,12 @@ func (b *box) serving(command string) (ssh.Result, bool) {
 				}
 			case at+1 < len(fields) && fields[at] == "'docker'" && fields[at+1] == "'run'":
 				b.remember(fields[at:])
+			case at+2 < len(fields) && fields[at] == "docker" && (fields[at+1] == "stop" || fields[at+1] == "start"):
+				name := unquoted(fields[at+2])
+				if state, found := b.containers[name]; found {
+					_, rest, _ := strings.Cut(state, " ")
+					b.containers[name] = map[string]string{"stop": "exited", "start": "running"}[fields[at+1]] + " " + rest
+				}
 			}
 		}
 	}

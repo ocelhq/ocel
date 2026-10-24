@@ -58,6 +58,10 @@ func (p *Provider) RemovePostgres(ctx context.Context, ref provider.StackRef, bi
 	return postgres.New(p.components()).Remove(ctx, ref, binding, log)
 }
 
+func (p *Provider) PromoteWorkers(ctx context.Context, tier environment.Tier, project, env, app, appContainer string, log progress.Log) error {
+	return topic.NewWorkers(p.components()).Promote(ctx, tier, project, env, app, appContainer, log)
+}
+
 func (p *Provider) PlanKV(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
 	return kv.New(p.components()).Plan(ctx, in, recorded)
 }
