@@ -57,7 +57,7 @@ func coveringPin(t *testing.T, hostname, at string) ([]boxapi.Pin, map[string][]
 	t.Helper()
 
 	covering, _ := pinnedBlocks(t, []string{hostname}, 90*24*time.Hour)
-	return []boxapi.Pin{{Hostname: hostname, Path: at}}, map[string][]byte{boxapi.PinCertificate(at): covering}
+	return []boxapi.Pin{{Hostname: hostname, Path: at}}, map[string][]byte{at: covering}
 }
 
 func pinHelper(at string) string {
