@@ -17,7 +17,6 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -177,7 +176,6 @@ type session struct {
 	provider  provider.Provider
 	settings  provider.Settings
 	namespace provider.Namespace
-	edge      edge.Facts
 
 	bootstrapStatuses bootstrapplan.Statuses
 	previewKeys       openedPreviewKeys
@@ -220,18 +218,6 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	s.settings = settings
 	s.namespace = namespace
 	return nil
-}
-
-func (s *session) recordEdge(facts edge.Facts) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.edge = facts
-}
-
-func (s *session) edgeFacts() edge.Facts {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.edge
 }
 
 func (s *session) managedBy() string {

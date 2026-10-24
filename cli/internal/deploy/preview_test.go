@@ -121,28 +121,6 @@ func TestAPreviewBuildIsGivenTheAliasItsDeployIsServedOn(t *testing.T) {
 	}
 }
 
-func TestAPreviewServedByAnEdgeOverPlainHTTPGivesItsBuildAndItsRecordAnHTTPURL(t *testing.T) {
-	fixture := setUpPreviewProject(t)
-	addAppToFixtureConfig(t, fixture.Root)
-	for _, kind := range []edge.Kind{fake.KindRelay, fake.KindDirect} {
-		fixture.Provider.Edges().(*fake.Edges).Edge(kind).ServesPlainHTTP(true)
-	}
-	identity := previewKey(t, "feature/login")
-	dependencies := previewDependencies("feature/login", "")
-	stubBuild(&dependencies, apiFunction())
-
-	previewUp(t, fixture, dependencies, previewUpOptions{})
-	manifest := sentDeploy(t, fixture).GetManifest()
-	built := manifestVariable(t, manifest, "api", processenv.AppURLEnvVar).GetValue()
-	if !regexp.MustCompile(`^http://` + regexp.QuoteMeta(identity) + `-[a-z2-7]{24}\.preview\.acme\.com$`).MatchString(built) {
-		t.Fatalf("the build was given %q, want the preview's alias as an http:// URL", built)
-	}
-	record := readDeployReport(t, fixture.Root)
-	if len(record.GetApps()) != 1 || !slices.Contains(record.GetApps()[0].GetUrls(), built) {
-		t.Errorf("the deploy recorded %v, want it served on %s", record.GetApps(), built)
-	}
-}
-
 func TestAPreviewDeployCarriesTheAliasItsBuildWasGivenAndNotTheOneThisRunMinted(t *testing.T) {
 	fixture := setUpPreviewProject(t)
 	addAppToFixtureConfig(t, fixture.Root)

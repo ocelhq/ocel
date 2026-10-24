@@ -69,25 +69,25 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 	}
 	resp := &contractv1.ListEnvironmentsResponse{Environments: make([]*contractv1.PreviewEnvironment, 0, len(environments))}
 	for _, environment := range environments {
-		resp.Environments = append(resp.Environments, encodePreviewEnvironment(environment, h.session.edgeFacts()))
+		resp.Environments = append(resp.Environments, encodePreviewEnvironment(environment))
 	}
 	return resp, nil
 }
 
-func encodePreviewEnvironment(environment stackrecords.Environment, front edge.Facts) *contractv1.PreviewEnvironment {
+func encodePreviewEnvironment(environment stackrecords.Environment) *contractv1.PreviewEnvironment {
 	return &contractv1.PreviewEnvironment{
 		Identity:  environment.Identity,
 		Lifecycle: encodeLifecycle(environment.Lifecycle),
 		Label:     environment.Label,
 		CreatedAt: environment.CreatedAt,
-		AliasUrls: formatHostURLs(front, edge.ListPreviewHostnames(environment.Aliases)),
+		AliasUrls: formatHostURLs(edge.ListPreviewHostnames(environment.Aliases)),
 	}
 }
 
-func formatHostURLs(front edge.Facts, hostnames []string) []string {
+func formatHostURLs(hostnames []string) []string {
 	urls := make([]string, 0, len(hostnames))
 	for _, hostname := range hostnames {
-		urls = append(urls, front.FormatURL(hostname))
+		urls = append(urls, "https://"+hostname)
 	}
 	return urls
 }
@@ -126,7 +126,7 @@ func (h *handlers) GetEnvironment(ctx context.Context, req *contractv1.GetEnviro
 		Label:     meta.Label,
 		CreatedAt: meta.CreatedAt,
 		Aliases:   meta.Aliases,
-	}, h.session.edgeFacts())}, nil
+	})}, nil
 }
 
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {

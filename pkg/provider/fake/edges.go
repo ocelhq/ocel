@@ -196,8 +196,6 @@ type edgeAccount struct {
 	gates           *bool
 	gatesAtOrigin   bool
 	signedPasswords bool
-	plainHTTP       bool
-	urlPort         uint16
 	publications    []edge.GatePublication
 	publishRefusal  error
 	onReconcile     func(edge.StackSpec)
@@ -644,8 +642,6 @@ func (e *Edge) Facts() edge.Facts {
 		Gates:                 e.gates == nil || *e.gates,
 		GatesAtOrigin:         e.gatesAtOrigin,
 		ChecksSignedPasswords: e.signedPasswords,
-		ServesPlainHTTP:       e.plainHTTP,
-		URLPort:               e.urlPort,
 	}
 	if e.proxies {
 		facts.ProxiedRecordNote = "Turn the fake edge's proxy on for these records."
@@ -672,18 +668,6 @@ func (e *Edge) ChecksSignedPasswords(signed bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.signedPasswords = signed
-}
-
-func (e *Edge) ServesPlainHTTP(plain bool) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.plainHTTP = plain
-}
-
-func (e *Edge) ServesOnPort(port uint16) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.urlPort = port
 }
 
 func (e *Edge) Publications() []edge.GatePublication {

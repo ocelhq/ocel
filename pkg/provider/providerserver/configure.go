@@ -27,7 +27,6 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 	if err != nil {
 		return nil, err
 	}
-	h.session.recordEdge(front.Facts())
 	facts := factsProto(p)
 	facts.Edge = edgeFactsProto(front.Facts())
 	return &contractv1.ConfigureResponse{Facts: facts}, nil
