@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 
@@ -209,6 +210,9 @@ func (t *Table) RemovePreviewEntry(ctx context.Context, base string) error {
 				"this box still claims %s under %s\nRun `ocel preview rm` first",
 				strings.Join(claimed, ", "), edge.PreviewWildcard(base))
 		}
+		state.Pins = slices.DeleteFunc(slices.Clone(state.Pins), func(pin boxapi.Pin) bool {
+			return isPreviewEntryPin(pin, base) && !hasRowsOf(state, pin.Project)
+		})
 		state.PreviewBase, state.PreviewTunneled = "", false
 		return state, nil
 	})
@@ -278,11 +282,18 @@ func (t *Table) Reshape(ctx context.Context, change func(boxapi.RoutingTable) (b
 
 func (t *Table) Unpin(ctx context.Context, project string) error {
 	return t.recomposed(ctx, func(current boxapi.RoutingTable) (boxapi.RoutingTable, error) {
-		if !hasRowsOf(current, project) {
-			current.Pins = replacePins(current.Pins, project, nil)
+		if hasRowsOf(current, project) {
+			return current, nil
 		}
+		current.Pins = slices.DeleteFunc(slices.Clone(current.Pins), func(pin boxapi.Pin) bool {
+			return pin.Project == project && !isPreviewEntryPin(pin, current.PreviewBase)
+		})
 		return current, nil
 	})
+}
+
+func isPreviewEntryPin(pin boxapi.Pin, base string) bool {
+	return base != "" && certs.Covering([]boxapi.Pin{pin}, edge.ProbeHostname(edge.PreviewWildcard(base))) != ""
 }
 
 func replacePins(held []boxapi.Pin, project string, own []boxapi.Pin) []boxapi.Pin {
