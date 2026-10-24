@@ -17,7 +17,9 @@ type Deployment struct {
 	Delays   Delays
 }
 
-func (d Deployment) Store() Store { return Store{Clients: d.Clients, Scope: d.Names.Scope} }
+func (d Deployment) Store() Store {
+	return Store{Clients: d.Clients, Cipher: ports.Envelope{Clients: d.Clients}, Scope: d.Names.Scope}
+}
 
 func (d Deployment) Queue() Queue {
 	return Queue{Clients: d.Clients, Names: d.Names, Topics: d.Declared, Delays: d.Delays}

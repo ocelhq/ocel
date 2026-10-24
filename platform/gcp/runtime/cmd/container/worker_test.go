@@ -13,6 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/kms/apiv1/kmspb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -52,9 +56,35 @@ func pinned(t *testing.T, endpoint string) (variables.Manifest, topics.Store) {
 			PublishURL: endpoint,
 		},
 	}
-	clients := &ports.Clients{Namespace: "ocel", Project: manifest.Project, Region: manifest.Region, Endpoint: endpoint}
+	manifest.Databases = map[string]string{manifest.Slug: ports.SharedDatabase("ocel", environment.TierPreview)}
+	clients := &ports.Clients{Namespace: "ocel", Project: manifest.Project, Region: manifest.Region, Endpoint: endpoint, ProjectDatabases: manifest.Databases}
+	projectKeyMade(t, clients, environment.TierPreview, manifest.Slug)
 	scope := topics.Scope{Slug: manifest.Slug, Tier: environment.TierPreview, Environment: manifest.Tasks.Environment}
-	return manifest, topics.Store{Clients: clients, Scope: scope}
+	return manifest, topics.Store{Clients: clients, Cipher: ports.Envelope{Clients: clients}, Scope: scope}
+}
+
+func projectKeyMade(t *testing.T, clients *ports.Clients, tier environment.Tier, project string) {
+	t.Helper()
+	client, err := clients.KMS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_, err = client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
+		Parent:    "projects/" + clients.Project + "/locations/" + clients.Region,
+		KeyRingId: clients.KeyRing(),
+	})
+	if err != nil && status.Code(err) != codes.AlreadyExists {
+		t.Fatalf("make the key ring: %v", err)
+	}
+	_, err = client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
+		Parent:      clients.KeyRingPath(),
+		CryptoKeyId: ports.ProjectKey(tier, project),
+		CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
+	})
+	if err != nil && status.Code(err) != codes.AlreadyExists {
+		t.Fatalf("make the key %s seals its runs under: %v", project, err)
+	}
 }
 
 func rendered(t *testing.T, manifest variables.Manifest) string {

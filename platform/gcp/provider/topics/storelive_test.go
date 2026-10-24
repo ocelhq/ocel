@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/firestore"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/runs/runsconformance"
@@ -54,14 +55,14 @@ func runPath(scope topics.Scope, execution string) string {
 func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryRunStoreMust(t *testing.T) {
 	clients := liveClients(t)
 	runsconformance.Store(t, func(t *testing.T) runs.Store {
-		return topics.Store{Clients: clients, Scope: scopeOf(t)}
+		return topics.Store{Clients: clients, Cipher: fake.NewCipher(), Scope: scopeOf(t)}
 	})
 }
 
 func TestLiveARunIsKeptInTheDatabaseItsProjectKeepsItsRecordsInApartFromItsTiersRecords(t *testing.T) {
 	clients := liveClients(t)
 	scope := scopeOf(t)
-	store := topics.Store{Clients: clients, Scope: scope}
+	store := topics.Store{Clients: clients, Cipher: fake.NewCipher(), Scope: scope}
 	ctx := context.Background()
 	now := time.Now()
 	if _, err := store.CreateRun(ctx, runs.Run{Execution: "kept", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: now, DueAt: now}); err != nil {
@@ -89,7 +90,7 @@ func TestLiveARunIsKeptInTheDatabaseItsProjectKeepsItsRecordsInApartFromItsTiers
 func TestLiveAnUnfinishedRunIsPurgedAMonthAfterItWasDue(t *testing.T) {
 	clients := liveClients(t)
 	scope := scopeOf(t)
-	store := topics.Store{Clients: clients, Scope: scope}
+	store := topics.Store{Clients: clients, Cipher: fake.NewCipher(), Scope: scope}
 	ctx := context.Background()
 	due := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
 	if _, err := store.CreateRun(ctx, runs.Run{Execution: "pending", Topic: "resize", Consumer: "gone", Status: provider.RunDelayed, CreatedAt: time.Now(), DueAt: due}); err != nil {
@@ -110,7 +111,7 @@ func TestLiveAnUnfinishedRunIsPurgedAMonthAfterItWasDue(t *testing.T) {
 }
 
 func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *testing.T) {
-	store := topics.Store{Clients: liveClients(t), Scope: scopeOf(t)}
+	store := topics.Store{Clients: liveClients(t), Cipher: fake.NewCipher(), Scope: scopeOf(t)}
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Millisecond)
 	tagged := func(execution string, created time.Time, tags ...string) runs.Run {
@@ -156,7 +157,7 @@ func TestLiveAListingByManyTagsReadsABoundedPageAndCarriesOnFromItsCursor(t *tes
 }
 
 func TestLiveARunOfAnotherTopicUnderTheSameExecutionIsNotFound(t *testing.T) {
-	store := topics.Store{Clients: liveClients(t), Scope: scopeOf(t)}
+	store := topics.Store{Clients: liveClients(t), Cipher: fake.NewCipher(), Scope: scopeOf(t)}
 	ctx := context.Background()
 	now := time.Now()
 	if _, err := store.CreateRun(ctx, runs.Run{Execution: "shared", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: now, DueAt: now}); err != nil {
@@ -168,7 +169,7 @@ func TestLiveARunOfAnotherTopicUnderTheSameExecutionIsNotFound(t *testing.T) {
 }
 
 func TestLiveOfConcurrentEnsuresOfARecordDueSoonExactlyOneCreatesIt(t *testing.T) {
-	store := topics.Store{Clients: liveClients(t), Scope: scopeOf(t)}
+	store := topics.Store{Clients: liveClients(t), Cipher: fake.NewCipher(), Scope: scopeOf(t)}
 	const callers = 8
 	const lifetime = 500 * time.Millisecond
 	ensureAtOnce := func(round string) {

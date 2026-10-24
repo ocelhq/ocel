@@ -336,6 +336,10 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	if !published {
 		t.Errorf("topic %s has policy %+v, want the app to publish to it", topic, server.TopicPolicies[topic])
 	}
+	sealing := "roles/cloudkms.cryptoKeyEncrypterDecrypter " + member + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")
+	if !slices.Contains(keyBindingsOf(server), sealing) {
+		t.Errorf("the keys bind %q, want %q: the app seals the payload and output of each run it records under its project's key", keyBindingsOf(server), sealing)
+	}
 }
 
 func TestAnAppReachingTopicsMayNotDeleteTasksOnTheTiersDelayQueue(t *testing.T) {
