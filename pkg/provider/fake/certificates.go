@@ -52,6 +52,12 @@ func (p *Provider) RefuseDiscardingAServingCertificate(err error) {
 	p.servingDiscardRefusal = err
 }
 
+func (p *Provider) QueueDiscardFailures(outcomes ...error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.discardFailures = append(p.discardFailures, outcomes...)
+}
+
 func (p *Provider) CertificateTier(hostname string) environment.Tier {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -146,7 +152,14 @@ func (p certificates) Inspect(_ context.Context, _ edge.Kind, _ router.Kind, hos
 func (p certificates) Discard(_ context.Context, cert provider.Certificate, _ progress.Log) error {
 	p.mu.Lock()
 	refusal := p.servingDiscardRefusal
+	var failure error
+	if len(p.discardFailures) > 0 {
+		failure, p.discardFailures = p.discardFailures[0], p.discardFailures[1:]
+	}
 	p.mu.Unlock()
+	if failure != nil {
+		return failure
+	}
 	if refusal != nil && p.edges.serving(cert.ID) {
 		return refusal
 	}
