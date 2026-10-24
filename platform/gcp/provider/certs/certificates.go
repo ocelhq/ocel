@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 
@@ -66,7 +67,14 @@ func New(openClients func(context.Context) (*gcloud.Clients, error)) Certificate
 	return Certificates{openClients: openClients}
 }
 
+func terminates(kind edge.Kind, answering router.Kind) bool {
+	return kind == alb.Kind || answering == router.Kind(alb.Kind)
+}
+
 func (p Certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
+	if !terminates(req.Kind, req.Router) {
+		return provider.Certificate{}, nil
+	}
 	clients, err := p.openClients(ctx)
 	if err != nil {
 		return provider.Certificate{}, err
