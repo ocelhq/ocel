@@ -519,8 +519,25 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Log
 	if err := forgetInvalidationTarget(ctx, r.provider.KeyValues(), r.tier, r.front.Kind(), r.slug, r.state.Edge.PurgeURL); err != nil {
 		return err
 	}
-	r.state = stackrecords.EdgeState{Hosts: r.state.Hosts}
+	r.state = stackrecords.EdgeState{Hosts: withoutServing(r.state.Hosts)}
 	return r.store.write(ctx, r.state)
+}
+
+func withoutServing(hosts map[string]stackrecords.HostnameState) map[string]stackrecords.HostnameState {
+	if len(hosts) == 0 {
+		return nil
+	}
+	retiring := make(map[string]stackrecords.HostnameState, len(hosts))
+	for hostname, host := range hosts {
+		retiring[hostname] = stackrecords.HostnameState{
+			Certificate:         host.Certificate,
+			Superseded:          host.Superseded,
+			Written:             host.Written,
+			Manual:              host.Manual,
+			OriginCertificateID: host.OriginCertificateID,
+		}
+	}
+	return retiring
 }
 
 func (r *projectRemoval) forgetHosts(ctx context.Context) error {

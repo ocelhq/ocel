@@ -232,6 +232,31 @@ func TestARemovalRerunDiscardsTheCertificateAnEarlierRunFailedToDiscard(t *testi
 	}
 }
 
+func TestADeployAfterARemovalThatFailedToDiscardBindsItsHostnameAgain(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.RequireValidationRecords(edge.Record{Name: "_ocel.shop.example", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"})
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	vendor.QueueDiscardFailures(errors.New("the provider throttled the delete"))
+	removal := projectRequest()
+	removal.Edge = writtenBy("shop.example")
+	if result := removeProject(t, client, removal); result.GetSuccess() {
+		t.Fatal("RemoveProject() removed the project, want it failed on a certificate it could not discard")
+	}
+
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() after the failed removal = %q", result.GetError())
+	}
+	if bound := readStack(t, vendor, environment.TierProduction, "shop").Edge.Bound; !slices.Contains(bound, "shop.example") {
+		t.Errorf("the edge binds %v after the redeploy, want shop.example bound again: the removal unbound it and released its records", bound)
+	}
+}
+
 func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	ctx := context.Background()
 	client, vendor := deployedProject(t)
