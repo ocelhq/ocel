@@ -355,3 +355,4 @@ Each deploy checks that the bucket answers, that its CORS allows every `allowedO
 ## On AWS
 
 - Each bucket is its own S3 bucket, with CORS from `allowedOrigins`. A function beside it records browser uploads.
+- `ocel projects destroy`, or removing the bucket from code, deletes the bucket and its objects.
