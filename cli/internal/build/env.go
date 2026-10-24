@@ -1,11 +1,14 @@
 package build
 
 import (
+	"context"
 	"maps"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type AppVariables struct {
@@ -39,4 +42,17 @@ func SplitVariablesByClass(apps []variables.ClientApp, secrets map[string]map[st
 		byApp[app.Name] = values
 	}
 	return byApp
+}
+
+func RevealSecrets(ctx context.Context, declarations *variables.Declarations, cfg *project.Project, preBuild *project.LifecycleCommand) (map[string]map[string]string, error) {
+	var apps []string
+	for _, app := range cfg.Apps {
+		if CanReadVariablesAtBuild(app) || app.RunsOn(provider.ComputeContainer) || preBuild != nil && preBuild.App == app.Name {
+			apps = append(apps, app.Name)
+		}
+	}
+	if len(apps) == 0 {
+		return nil, nil
+	}
+	return declarations.RevealSecrets(ctx, apps)
 }

@@ -3,7 +3,7 @@ title: cloud.unsupported
 description: The command does not run on Ocel Cloud yet.
 ---
 
-The project names no provider and you are logged in to a console that offers Ocel Cloud, so the project deploys to Ocel Cloud. This release of the CLI cannot yet run the command there. `ocel deploy`, `ocel preview up` and `ocel build` run on Ocel Cloud as jobs, none of them with `--dry` or `--prebuilt`. `ocel logs`, `ocel rollback`, `ocel promotions`, `ocel env`, `ocel preview ls`, `ocel preview rm`, `ocel preview prune`, `ocel projects` and `ocel domain ls` run against the provider Ocel Cloud serves, for a project with no transforms. The bootstrap, connector, protection and binding commands, `ocel domain add` and `ocel domain rm`, `ocel run --env`, `ocel cost scan` and `ocel permissions` do not run there.
+The project names no provider and you are logged in to a console that offers Ocel Cloud, so the project deploys to Ocel Cloud. This release of the CLI cannot yet run the command there. `ocel deploy`, `ocel preview up` and `ocel build` run on Ocel Cloud as jobs, none of them with `--dry` or `--prebuilt`, and `ocel build` not with `--env`. `ocel logs`, `ocel rollback`, `ocel promotions`, `ocel env`, `ocel preview ls`, `ocel preview rm`, `ocel preview prune`, `ocel projects` and `ocel domain ls` run against the provider Ocel Cloud serves, for a project with no transforms. The bootstrap, connector, protection and binding commands, `ocel domain add` and `ocel domain rm`, `ocel run --env`, `ocel cost scan` and `ocel permissions` do not run there.
 
 ## Fix
 

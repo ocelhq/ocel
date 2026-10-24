@@ -282,3 +282,77 @@ func TestABuildIsHandedTheSecretValuesItsAppResolves(t *testing.T) {
 		}
 	})
 }
+
+func TestAnAppsVariablesPairEachDeclarationWithItsResolvedValue(t *testing.T) {
+	t.Parallel()
+
+	resolveVariables := func(t *testing.T, g *variables.Declarations, app variables.App) []variables.Variable {
+		t.Helper()
+		values, err := g.ResolveVariables(context.Background(), []variables.App{app})
+		if err != nil {
+			t.Fatalf("ResolveVariables: %v", err)
+		}
+		return values[app.Name]
+	}
+
+	t.Run("pairs each declaration with what was resolved for it", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("PAGE_ID", "", "page-123")
+		values.set("WEBHOOK_SECRET", "", "whsec_do_not_leak")
+		api := variables.App{Name: "api"}
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{api}})
+		declare(t, g,
+			def("PAGE_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			def("WEBHOOK_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+		)
+
+		got := resolveVariables(t, g, api)
+		if len(got) != 2 {
+			t.Fatalf("ResolveVariables = %+v, want both declarations", got)
+		}
+		if got[0].Key != "PAGE_ID" || got[0].Value != "page-123" || got[0].Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+			t.Errorf("PAGE_ID = %+v, want its class and its resolved value", got[0])
+		}
+		if got[1].Value != "" {
+			t.Errorf("WEBHOOK_SECRET = %+v, want no value: a secret's plaintext never enters the manifest", got[1])
+		}
+	})
+
+	t.Run("omits a key this app cannot read", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.set("CHECKOUT_ONLY", "/checkout", "on")
+		api := variables.App{Name: "api"}
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{api}})
+		declare(t, g, scoped("CHECKOUT_ONLY", "/checkout"))
+
+		if got := resolveVariables(t, g, api); len(got) != 0 {
+			t.Fatalf("ResolveVariables = %+v, want nothing for a key this app resolves no cell for", got)
+		}
+	})
+
+	t.Run("keeps the version and folder each value resolved at", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.setAt("ROOT_KEY", "", "v", 2)
+		values.setAt("SCOPED_KEY", "/admin", "sk_admin", 9)
+		admin := variables.App{Name: "admin", Folder: "/admin"}
+		g := prefetched(t, values, variables.Scope{Apps: []variables.App{admin}})
+		declare(t, g,
+			def("ROOT_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			def("SCOPED_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+		)
+
+		got := resolveVariables(t, g, admin)
+		if len(got) != 2 {
+			t.Fatalf("ResolveVariables = %+v, want both declarations", got)
+		}
+		if got[0].Key != "ROOT_KEY" || got[0].Version != 2 || got[0].Folder != "" {
+			t.Errorf("ROOT_KEY = %+v, want version 2 from the empty root spelling, never the store's %q sentinel", got[0], "/")
+		}
+		if got[1].Key != "SCOPED_KEY" || got[1].Version != 9 || got[1].Folder != "/admin" {
+			t.Errorf("SCOPED_KEY = %+v, want version 9 from the folder it resolved from", got[1])
+		}
+	})
+}
