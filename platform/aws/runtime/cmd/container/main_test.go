@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -86,14 +85,24 @@ func appCommand(t *testing.T) []string {
 	return []string{binary, "-test.run=^TestContainerHelper$"}
 }
 
-func exposedPort(t *testing.T) string {
+func holdExposedPort(t *testing.T) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", ":0")
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
-	return strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	t.Cleanup(func() { syscall.Close(fd) })
+	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Bind(fd, &syscall.SockaddrInet4{}); err != nil {
+		t.Fatal(err)
+	}
+	bound, err := syscall.Getsockname(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strconv.Itoa(bound.(*syscall.SockaddrInet4).Port)
 }
 
 type running struct {
@@ -103,7 +112,7 @@ type running struct {
 
 func launch(t *testing.T, role string, environ ...string) *running {
 	t.Helper()
-	port := exposedPort(t)
+	port := holdExposedPort(t)
 	command := appCommand(t)
 	environ = append([]string{containerimage.PortEnvVar + "=" + port}, environ...)
 
