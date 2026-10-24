@@ -370,7 +370,7 @@ func (c *Containers) refuseFailedGate(ctx context.Context, rollout Rollout, outc
 			evidence.WriteString("\n" + c.describeUnstarted(ctx, app.App, app.name(), state, elevation))
 			continue
 		}
-		logs := c.box.Evidence(ctx, elevation, LogCommand(app.name()))
+		logs := c.readRedactedLogs(ctx, elevation, app.name(), LogCommand(app.name()))
 		if logs == "" {
 			logs = NoLogOutput
 		}
