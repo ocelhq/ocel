@@ -24,7 +24,7 @@ type Sync struct {
 	mu        sync.Mutex
 	Services  map[string]*runv2.GoogleCloudRunV2Service
 	revisions map[string]int
-	labelled  map[string]map[string]string
+	imaged    map[string]string
 	Policies  map[string]*runv2.GoogleIamV1Policy
 	Schedules map[string]*cloudscheduler.Job
 	Patched   []string
@@ -39,7 +39,7 @@ func NewSync() *Sync {
 		IAM:       GrantedIAM(),
 		Services:  map[string]*runv2.GoogleCloudRunV2Service{},
 		revisions: map[string]int{},
-		labelled:  map[string]map[string]string{},
+		imaged:    map[string]string{},
 		Policies:  map[string]*runv2.GoogleIamV1Policy{},
 		Schedules: map[string]*cloudscheduler.Job{},
 	}
@@ -86,14 +86,14 @@ func (s *Sync) serveRun(w http.ResponseWriter, r *http.Request, path string) {
 	done := &runv2.GoogleLongrunningOperation{Name: "projects/acme-prod/locations/europe-west1/operations/op", Done: true}
 	switch {
 	case r.Method == http.MethodGet && strings.Contains(name, "/revisions/"):
-		labels, found := s.labelled[name]
+		image, found := s.imaged[name]
 		if !found {
 			notFound(w)
 			return
 		}
 		WriteBody(w, &runv2.GoogleCloudRunV2Revision{
 			Name:       name,
-			Labels:     labels,
+			Containers: []*runv2.GoogleCloudRunV2Container{{Image: image}},
 			Conditions: []*runv2.GoogleCloudRunV2Condition{{Type: run.ReadyCondition, State: run.ConditionSucceeded}},
 		})
 	case verb == "getIamPolicy":
@@ -126,7 +126,7 @@ func (s *Sync) serveRun(w http.ResponseWriter, r *http.Request, path string) {
 		s.revisions[desired.Name] = 1
 		desired.LatestReadyRevision = desired.Name + "/revisions/" + id + "-00001"
 		desired.LatestCreatedRevision = desired.LatestReadyRevision
-		s.labelled[desired.LatestCreatedRevision] = desired.Template.Labels
+		s.imaged[desired.LatestCreatedRevision] = desired.Template.Containers[0].Image
 		s.Services[desired.Name] = desired
 		WriteBody(w, done)
 	case r.Method == http.MethodPatch:
@@ -148,7 +148,7 @@ func (s *Sync) serveRun(w http.ResponseWriter, r *http.Request, path string) {
 			s.revisions[name]++
 			current.LatestReadyRevision = name + "/revisions/" + run.RevisionName(name) + "-0000" + strconv.Itoa(s.revisions[name])
 			current.LatestCreatedRevision = current.LatestReadyRevision
-			s.labelled[current.LatestCreatedRevision] = desired.Template.Labels
+			s.imaged[current.LatestCreatedRevision] = desired.Template.Containers[0].Image
 		}
 		current.Template, current.Traffic = desired.Template, desired.Traffic
 		current.Ingress, current.InvokerIamDisabled = desired.Ingress, desired.InvokerIamDisabled
