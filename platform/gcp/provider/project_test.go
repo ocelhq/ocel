@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -36,13 +36,18 @@ func withoutAnAmbientProject(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 }
 
-func withGcloudNaming(t *testing.T, project string) {
+func withGcloudNaming(t *testing.T, project string) (ran func() bool) {
 	t.Helper()
 	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "gcloud"), []byte("#!/bin/sh\necho "+project+"\n"), 0o755); err != nil {
+	marker := filepath.Join(t.TempDir(), "ran")
+	if err := os.WriteFile(filepath.Join(bin, "gcloud"), []byte("#!/bin/sh\ntouch "+marker+"\necho "+project+"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
+	return func() bool {
+		_, err := os.Stat(marker)
+		return err == nil
+	}
 }
 
 func targeted(t *testing.T, options provider.Options) string {
@@ -207,41 +212,46 @@ func configured(t *testing.T, options provider.Options) (contractv1connect.Provi
 	return client, costv1connect.NewCostServiceClient(server.Client(), server.URL)
 }
 
-func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
-	withoutAnAmbientProject(t)
-	withGcloudNaming(t, "gcloud-config-prod")
-
-	client, costs := configured(t, provider.Options{"project": "acme-prod", "region": "europe-west1"})
+func scanned(t *testing.T, options provider.Options) *costv1.ResourceSet {
+	t.Helper()
+	client, costs := configured(t, options)
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v, want the shape with no credentials and no gcloud consulted", err)
-	}
-	for _, r := range set.GetResources() {
-		if strings.Contains(r.GetName(), "gcloud-config-prod") {
-			t.Errorf("%s is named for the project gcloud's config names; a scan reads the project it was told and nothing ambient", r.GetName())
-		}
+		t.Fatalf("Shape(%v) = %v, want the shape with no credentials and no gcloud consulted", options, err)
 	}
 	if _, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {
 		t.Fatalf("Price() = %v, want an estimate with no credentials and no gcloud consulted", err)
 	}
+	return set
+}
 
-	client, costs = configured(t, provider.Options{"region": "europe-west1"})
-	_, err = client.Shape(context.Background(), &contractv1.ShapeRequest{
-		Manifest:    shopManifest(),
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-	})
-	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("Shape() with no project named = %v, want InvalidArgument: a scan runs no gcloud to find one", err)
-	}
-	for _, named := range []string{"project", "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"} {
-		if !strings.Contains(err.Error(), named) {
-			t.Errorf("Shape() refused with %q, want it to name %s among the places a scan reads a project from", err, named)
+func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
+	withoutAnAmbientProject(t)
+	ran := withGcloudNaming(t, "gcloud-config-prod")
+
+	for _, r := range scanned(t, provider.Options{"project": "acme-prod", "region": "europe-west1"}).GetResources() {
+		if strings.Contains(r.GetName(), "gcloud-config-prod") {
+			t.Errorf("%s is named for the project gcloud's config names; a scan reads the project it was told and nothing ambient", r.GetName())
 		}
 	}
-	if _, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {
-		t.Fatalf("Price() with no project named = %v, want an estimate: a rate card needs no project", err)
+	if ran() {
+		t.Errorf("the scan ran gcloud; a scan reads nothing ambient")
+	}
+}
+
+func TestAScanOfADeployWhoseProjectNothingNamesShapesWhatItShapesWithOneNamed(t *testing.T) {
+	withoutAnAmbientProject(t)
+	ran := withGcloudNaming(t, "gcloud-config-prod")
+
+	named := scanned(t, provider.Options{"project": "acme-prod", "region": "europe-west1"})
+	unnamed := scanned(t, provider.Options{"region": "europe-west1"})
+	if !proto.Equal(unnamed, named) {
+		t.Errorf("the scan with no project named shapes %v, want what it shapes with one named, %v: no name a shape holds carries the project", unnamed, named)
+	}
+	if ran() {
+		t.Errorf("the scan with no project named ran gcloud to find one; a scan reads nothing ambient")
 	}
 }
