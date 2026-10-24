@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -206,7 +207,7 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 			t.Fatalf("runEnvSync err = %v; stderr=%s", err, stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"builtin", "nothing to sync", "infisical:p-1/prod", "ocel deploy"} {
+		for _, want := range []string{"builtin", "Nothing to sync", "infisical:p-1/prod", "ocel deploy"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want %q", out, want)
 			}
@@ -306,8 +307,8 @@ func TestEnvSourceSaysWhatOcelMayWriteIntoIt(t *testing.T) {
 	project := setUpEnvSourceFixture(t)
 	source := serveInfisicalProject(t, nil)
 	for write, want := range map[envsource.WritePolicy]string{
-		envsource.WriteValues:  "create or update a value there, never delete one",
-		envsource.WriteMissing: "created there, never overwritten",
+		envsource.WriteValues:  "creates and updates values, never deletes one",
+		envsource.WriteMissing: "creates the declared keys it lacks, never overwrites one",
 		envsource.WriteNever:   "",
 	} {
 		registerEnvSource(t, project, environment.TierProduction, source.at(write))
@@ -374,7 +375,7 @@ func TestEnvSetKeepsACredentialInOcelsOwnStore(t *testing.T) {
 func TestTheSourceColumnNamesWhereEachValueComesFrom(t *testing.T) {
 	t.Parallel()
 	var stdout bytes.Buffer
-	renderValues(&stdout, []*variablestorev1.ValueMetadata{
+	renderValues(&stdout, terminal.Presentation{}, []*variablestorev1.ValueMetadata{
 		{Coordinate: &variablestorev1.Coordinate{Key: "OWN"}},
 		{Coordinate: &variablestorev1.Coordinate{Key: "COPIED"}, EnvSource: "infisical:p-1/prod"},
 		{Coordinate: &variablestorev1.Coordinate{Key: "SHARED"}, Target: &variablestorev1.Coordinate{Slug: "platform", Key: "SHARED"}},

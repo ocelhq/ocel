@@ -84,9 +84,9 @@ func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts
 				fmt.Fprintf(stdout, "  %s in %s was not copied: %s\n", refused.GetCell().GetKey(), folderOrRoot(refused.GetCell().GetFolder()), refused.GetReason())
 			}
 		} else {
-			fmt.Fprintf(stdout, "%s reads ocel's own store (%s), so there is nothing to sync.\n", tierName(opts), status.GetEnvSource())
+			fmt.Fprintf(stdout, "Nothing to sync: %s reads ocel's own store (%s).\n", tierName(opts), status.GetEnvSource())
 		}
-		renderConfiguredEnvSource(stdout, status, variables.EnvSourceDescriptor(cfg, opts.tier()), opts)
+		renderConfiguredEnvSource(stdout, dependencies.Presentation(stdout).Palette(), status, variables.EnvSourceDescriptor(cfg, opts.tier()), opts)
 		return nil
 	})
 }
@@ -103,12 +103,14 @@ func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, op
 			return err
 		}
 		configured := variables.EnvSourceDescriptor(cfg, opts.tier())
-		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		present := dependencies.Presentation(stdout)
+		if present.Format == terminal.FormatJSON {
 			return writeEnvSourceJSON(stdout, req, described.GetStatus(), configured, cfg.EnvSource.Dev.ID())
 		}
-		renderEnvSource(stdout, tierName(opts), described.GetStatus(), time.Now())
-		renderConfiguredEnvSource(stdout, described.GetStatus(), configured, opts)
-		fmt.Fprintf(stdout, "dev reads from %s, then %s on top\n", cfg.EnvSource.Dev.ID(), project.LocalDotenvFileName)
+		palette := present.Palette()
+		renderEnvSource(stdout, palette, tierName(opts), described.GetStatus(), time.Now())
+		renderConfiguredEnvSource(stdout, palette, described.GetStatus(), configured, opts)
+		fmt.Fprintf(stdout, "%s reads from %s, then %s on top\n", palette.Bold("dev"), cfg.EnvSource.Dev.ID(), project.LocalDotenvFileName)
 		return nil
 	})
 }
@@ -136,42 +138,45 @@ func writeEnvSourceJSON(stdout io.Writer, req *variablestorev1.DescribeEnvSource
 	return terminal.WriteResultJSON(stdout, result)
 }
 
-func renderEnvSource(stdout io.Writer, tier string, status *variablestorev1.EnvSourceStatus, now time.Time) {
-	fmt.Fprintf(stdout, "%s reads from %s\n", tier, status.GetEnvSource())
+func renderEnvSource(stdout io.Writer, palette terminal.Palette, tier string, status *variablestorev1.EnvSourceStatus, now time.Time) {
+	fmt.Fprintf(stdout, "%s reads from %s\n", palette.Bold(tier), status.GetEnvSource())
 	if !variables.EnvSourceOfStatus(status).OwnsValues() {
 		return
 	}
+	fields := terminal.NewTable(terminal.Column{}, terminal.Column{})
+	field := func(name, value string) { fields.Row(palette.Muted(name), value) }
 	schedule := "no schedule: read at each deploy"
 	if status.GetScheduled() {
 		schedule = "synced every minute"
 	}
-	fmt.Fprintf(stdout, "  schedule    %s\n", schedule)
-	fmt.Fprintf(stdout, "  last sync   %s%s\n", syncedAt(status.GetLastSuccessAt()), lag(now, status.GetLastSuccessAt()))
+	field("schedule", schedule)
+	field("last sync", syncedAt(status.GetLastSuccessAt())+lag(now, status.GetLastSuccessAt()))
 	if status.GetLastAttemptAt() != status.GetLastSuccessAt() {
-		fmt.Fprintf(stdout, "  last try    %s\n", syncedAt(status.GetLastAttemptAt()))
+		field("last try", syncedAt(status.GetLastAttemptAt()))
 	}
 	if lastError := status.GetLastError(); lastError != "" {
-		fmt.Fprintf(stdout, "  last error  %s\n", lastError)
+		field("last error", palette.Failure(lastError))
 	}
 	switch {
 	case status.GetCanUpdate():
-		fmt.Fprintln(stdout, "  writes      ocel env set and the variables page create or update a value there, never delete one")
+		field("writes", "creates and updates values, never deletes one")
 	case status.GetCanCreate():
-		fmt.Fprintln(stdout, "  writes      a key a declaration names and the env source lacks is created there, never overwritten")
+		field("writes", "creates the declared keys it lacks, never overwrites one")
 	}
 	for _, link := range status.GetLinks() {
-		fmt.Fprintf(stdout, "  %-10s  %s\n", folderOrRoot(link.GetFolder()), link.GetUrl())
+		field(folderOrRoot(link.GetFolder()), link.GetUrl())
 	}
 	if credentials := status.GetCredentials(); len(credentials) > 0 {
-		fmt.Fprintf(stdout, "  logs in with %s, stored in ocel's own store\n", strings.Join(credentials, " and "))
+		field("logs in with", strings.Join(credentials, " and ")+palette.Muted(", kept in ocel's store"))
 	}
+	fmt.Fprint(stdout, fields.Render(palette, "  "))
 }
 
-func renderConfiguredEnvSource(stdout io.Writer, status *variablestorev1.EnvSourceStatus, configured envsource.Descriptor, opts envOptions) {
+func renderConfiguredEnvSource(stdout io.Writer, palette terminal.Palette, status *variablestorev1.EnvSourceStatus, configured envsource.Descriptor, opts envOptions) {
 	if configured.ID() == status.GetEnvSource() {
 		return
 	}
-	fmt.Fprintf(stdout, "The config names %s for %s instead; `%s` reads from it.\n", configured.ID(), tierName(opts), deployCommand(opts))
+	fmt.Fprintf(stdout, "%s %s\n", palette.WarnMark(), palette.Commands(fmt.Sprintf("The config names %s instead; `%s` reads from it.", configured.ID(), deployCommand(opts))))
 }
 
 func syncedAt(unixSeconds int64) string {
