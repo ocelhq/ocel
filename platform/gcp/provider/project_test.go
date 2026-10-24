@@ -24,7 +24,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges"
 )
 
 func withoutAnAmbientProject(t *testing.T) {
@@ -96,6 +98,23 @@ func TestTheAmbientProjectIsReadFromGcloudWhenNothingElseNamesOne(t *testing.T) 
 
 	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "gcloud-config-prod" {
 		t.Errorf("the run targets %q, want the project gcloud's config names", got)
+	}
+}
+
+func TestTheCloudflareOriginIsTheAmbientProjectWhenTheOptionsNameNone(t *testing.T) {
+	withoutAnAmbientProject(t)
+	withGcloudNaming(t, "gcloud-config-prod")
+
+	p, err := gcp.New(context.Background(), provider.Settings{Options: provider.Options{"region": "europe-west1"}})
+	if err != nil {
+		t.Fatalf("New() = %v, want a provider", err)
+	}
+	origin, err := p.Edges().(edges.Registry).Cloudflare().Scope(context.Background())
+	if err != nil {
+		t.Fatalf("Cloudflare().Scope() = %v, want the project gcloud's config names", err)
+	}
+	if want := (cloudflare.OriginScope{Vendor: "gcp", ID: "gcloud-config-prod"}); origin != want {
+		t.Errorf("Cloudflare().Scope() = %v, want %v", origin, want)
 	}
 }
 
