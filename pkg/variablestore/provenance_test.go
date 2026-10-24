@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -21,9 +22,15 @@ func TestForgettingWhatOneEnvSourceReadCopiedLeavesNothingOfItAndKeepsAnotherRea
 	if _, err := store.SetFromEnvSource(ctx, scope, at("TOKEN"), "later", later, 0); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.SetFromEnvSource(ctx, scope, at("PURGED"), "stale", stale, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := records.Forget(ctx, store.KeyValues, variablestore.CellKey(scope, at("PURGED"))); err != nil {
+		t.Fatal(err)
+	}
 
-	for _, key := range []string{"API_KEY", "TOKEN", "NEVER_SET"} {
-		if err := store.ForgetFromEnvSource(ctx, scope, at(key), stale); err != nil {
+	for key, version := range map[string]int64{"API_KEY": 0, "TOKEN": 1, "PURGED": 1, "NEVER_SET": 0} {
+		if err := store.ForgetFromEnvSource(ctx, scope, at(key), stale, version); err != nil {
 			t.Fatalf("ForgetFromEnvSource(%s) = %v", key, err)
 		}
 	}
@@ -32,10 +39,15 @@ func TestForgettingWhatOneEnvSourceReadCopiedLeavesNothingOfItAndKeepsAnotherRea
 	if err != nil {
 		t.Fatal(err)
 	}
+	var kept []string
 	for _, entry := range left {
-		if slices.Contains(entry.Key.Path, "API_KEY") {
+		kept = append(kept, entry.Key.String())
+		if slices.Contains(entry.Key.Path, "API_KEY") || slices.Contains(entry.Key.Path, "PURGED") {
 			t.Errorf("%s left behind by forgetting the read that copied it", entry.Key)
 		}
+	}
+	if len(left) != 2 {
+		t.Errorf("left %v, want only TOKEN and its one version", kept)
 	}
 	if token, err := store.Get(ctx, scope, at("TOKEN"), true); err != nil || token.Plaintext != "later" {
 		t.Fatalf("TOKEN = %+v, %v, want the later read's copy kept", token, err)

@@ -108,7 +108,7 @@ func ForgetProject(ctx context.Context, store variablestore.Store, tier environm
 		return err
 	}
 	if err == nil && registration.Descriptor.Reading() == ReadingOnSchedule {
-		if err := recordRemoval(ctx, store.KeyValues, tier, project, time.Now()); err != nil {
+		if err := recordRemoval(ctx, store.KeyValues, tier, project); err != nil {
 			return err
 		}
 	}

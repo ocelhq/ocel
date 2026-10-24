@@ -137,10 +137,7 @@ func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded 
 		}
 		return Metadata{}, fmt.Errorf("write %s: %w", at.Key, err)
 	}
-	if err := s.remember(ctx, scope, at, next); err != nil {
-		return Metadata{}, err
-	}
-	return metadataOf(at, next), nil
+	return metadataOf(at, next), s.remember(ctx, scope, at, next)
 }
 
 func (s Store) remember(ctx context.Context, scope Scope, at Coordinate, written storedValue) error {

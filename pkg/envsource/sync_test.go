@@ -556,12 +556,12 @@ func TestASyncRacingASwitchToBuiltinKeepsWhatItCopied(t *testing.T) {
 	}
 }
 
-func TestARemovalIsForgottenOnceNoSyncThatReadBeforeItCanStillBeCopying(t *testing.T) {
+func TestARemovalIsForgottenTwoMinutesAfterASyncFirstSeesItWhateverTheRemoversClock(t *testing.T) {
 	t.Parallel()
 	sync, store, _, host, at := syncFixture(t)
 	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
 	ctx := context.Background()
-	at.advance(time.Since(at.now()))
+	at.advance(10 * 365 * 24 * time.Hour)
 	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
@@ -580,5 +580,123 @@ func TestARemovalIsForgottenOnceNoSyncThatReadBeforeItCanStillBeCopying(t *testi
 	}
 	if recorded, err := store.KeyValues.List(ctx, registrations); err != nil || len(recorded) != 0 {
 		t.Fatalf("registrations two minutes after shop's removal = %v, %v, want nothing left", recorded, err)
+	}
+}
+
+func TestAProjectDeployedAgainAfterItsRemovalKeepsWhatItsDeployCopied(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	registration := infisicalRegistration("shop", host, cloudIdentity, "")
+	register(t, store, registration)
+	ctx := context.Background()
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Purge(ctx, scopeOf("shop")); err != nil {
+		t.Fatal(err)
+	}
+
+	register(t, store, registration)
+	if _, err := sync.CopyProject(ctx, registration); err != nil {
+		t.Fatal(err)
+	}
+
+	if k := reveal(t, store, scopeOf("shop"), tierWide("", "K")); k.Plaintext != "v" {
+		t.Fatalf("shop K = %q, want the redeploy's copy kept", k.Plaintext)
+	}
+}
+
+type hookedHistory struct {
+	records.Store
+	once   sync.Once
+	before func() error
+	err    error
+}
+
+func (h *hookedHistory) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	if slices.Contains(entry.Key.Path, "history") {
+		h.once.Do(func() { h.err = h.before() })
+		if h.err != nil {
+			return "", h.err
+		}
+	}
+	return h.Store.Write(ctx, entry)
+}
+
+func TestASyncThatReadARemovedProjectAndFailedRecordingAVersionLeavesNoValueOfItBehind(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	sync.Store.KeyValues = &hookedHistory{Store: store.KeyValues, before: func() error { return errors.New("history unavailable") }}
+	ctx := context.Background()
+	held, synced := syncHeldInRead(t, sync, fake)
+
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Purge(ctx, scopeOf("shop")); err != nil {
+		t.Fatal(err)
+	}
+	close(held.released)
+	<-synced
+
+	left, err := store.KeyValues.List(ctx, variablestore.ValuesPartition(scopeOf("shop")))
+	if err != nil || len(left) != 0 {
+		t.Fatalf("values of removed shop = %v, %v, want none left by a copy cut short after writing a value", left, err)
+	}
+}
+
+func TestASyncRewritingAValueAPurgeOfItsRemovedProjectForgotLeavesNoVersionOfItBehind(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, at := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v1", version: 1})
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	ctx := context.Background()
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fake.set(func(f *fakeInfisical) { f.secrets["/"] = []fakeSecret{{id: "s1", key: "K", value: "v2", version: 2}} })
+	sync.Store.KeyValues = &hookedHistory{Store: store.KeyValues, before: func() error {
+		if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
+			return err
+		}
+		_, err := store.Purge(ctx, scopeOf("shop"))
+		return err
+	}}
+	at.advance(time.Minute)
+
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	left, err := store.KeyValues.List(ctx, variablestore.ValuesPartition(scopeOf("shop")))
+	if err != nil || len(left) != 0 {
+		t.Fatalf("values of removed shop = %v, %v, want no version left by a rewrite its purge forgot under it", left, err)
+	}
+}
+
+func TestASyncStaysInUseUntilItCanNoLongerBeCopyingIntoARemovedProject(t *testing.T) {
+	t.Parallel()
+	sync, store, _, host, at := syncFixture(t)
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+	ctx := context.Background()
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+
+	if users, err := envsource.ScheduledProjects(ctx, store.KeyValues, environment.TierProduction); err != nil || !slices.Equal(users, []string{"shop"}) {
+		t.Fatalf("ScheduledProjects() right after shop's removal = %v, %v, want shop until no sync can still copy into it", users, err)
+	}
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	at.advance(2 * time.Minute)
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if users, err := envsource.ScheduledProjects(ctx, store.KeyValues, environment.TierProduction); err != nil || len(users) != 0 {
+		t.Fatalf("ScheduledProjects() once shop's removal is forgotten = %v, %v, want none", users, err)
 	}
 }
