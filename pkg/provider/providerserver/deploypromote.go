@@ -108,7 +108,7 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind(), r.readConfiguredRouter(r.spec.Apps[slot].App)) {
 				continue
 			}
-			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, r.front.Facts().FormatURL(host))
+			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)
 		}
 	}
 	for slot, entry := range r.spec.Apps {
@@ -120,7 +120,7 @@ func (r *deployRun) result(promotion router.Promotion, propagation router.Propag
 			}
 		}
 		if host := findAppHost(r.listDeploymentHosts(), entry.App); host.Hostname != "" {
-			r.outcomes[slot].DeploymentUrl = r.front.Facts().FormatURL(host.Hostname)
+			r.outcomes[slot].DeploymentUrl = "https://" + host.Hostname
 		}
 	}
 	result.UrlNotes = r.pending
