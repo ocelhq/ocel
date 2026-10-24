@@ -81,8 +81,9 @@ type cloudFront struct {
 	options    Options
 	pacing     Rollout
 
-	mu      sync.Mutex
-	clients *Clients
+	mu            sync.Mutex
+	clients       *Clients
+	distributions *distributionCache
 }
 
 func New(ns account.Namespace, ensurePart func(ctx context.Context, tier environment.Tier, part, addedBy, addedWith string, say func(string)) ([]provider.PhysicalResource, error), open func(context.Context) (Clients, error), options Options) edge.Edge {
@@ -211,6 +212,8 @@ func (p *cloudFront) clientsFor(ctx context.Context) (Clients, error) {
 	if err != nil {
 		return Clients{}, fmt.Errorf("open the AWS clients the %q edge fronts deployments with: %w", Kind, err)
 	}
+	p.distributions = &distributionCache{CloudFrontAPI: c.CloudFront}
+	c.CloudFront = p.distributions
 	p.clients = &c
 	return c, nil
 }
@@ -352,7 +355,7 @@ func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, 
 			return owner, nil
 		}
 	}
-	summaries, err := listDistributions(ctx, c)
+	summaries, err := p.distributions.listDistributions(ctx)
 	if err != nil {
 		return "", err
 	}
