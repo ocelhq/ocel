@@ -121,10 +121,11 @@ Ocel's proxy gets a certificate the first time a client connects to a hostname, 
 To serve your own certificate, pin it by hostname:
 
 ```json
-"provider": { "vps": { "ssh": "my-box", "certificates": { "shop.example.com": "/etc/ocel/certs/shop.pem" } } }
+"provider": { "vps": { "ssh": "my-box", "certificates": { "shop.example.com": "/etc/ocel/certs/shop" } } }
 ```
 
-A pinned certificate wins for every hostname it covers.
+The path names a pair directly under `/etc/ocel/certs`: Ocel's proxy loads `shop.crt` and
+`shop.key` from there. A pinned certificate wins for every hostname it covers.
 
 ## Previews
 
