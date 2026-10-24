@@ -56,6 +56,19 @@ type fakeInfisical struct {
 	refuseList  bool
 	retryAfter  string
 	hangList    atomic.Bool
+	heldList    atomic.Pointer[listHold]
+}
+
+type listHold struct {
+	arrived  chan struct{}
+	released chan struct{}
+	once     sync.Once
+}
+
+func (f *fakeInfisical) holdList() *listHold {
+	held := &listHold{arrived: make(chan struct{}), released: make(chan struct{})}
+	f.heldList.Store(held)
+	return held
 }
 
 func newFakeInfisical(t *testing.T) (*fakeInfisical, *httptest.Server) {
@@ -105,6 +118,10 @@ func (f *fakeInfisical) set(change func(*fakeInfisical)) {
 }
 
 func (f *fakeInfisical) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if held := f.heldList.Load(); held != nil && r.URL.Path == "/api/v4/secrets" {
+		held.once.Do(func() { close(held.arrived) })
+		<-held.released
+	}
 	if f.hangList.Load() && r.URL.Path == "/api/v4/secrets" {
 		<-r.Context().Done()
 		return

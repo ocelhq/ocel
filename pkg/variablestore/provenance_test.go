@@ -3,10 +3,44 @@ package variablestore_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
+
+func TestForgettingWhatOneEnvSourceReadCopiedLeavesNothingOfItAndKeepsAnotherReadsCopy(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	stale := variablestore.Provenance{EnvSource: "infisical:p/prod", Version: "s1@1", ReadAt: time.Unix(1_800_000_000, 0)}
+	later := variablestore.Provenance{EnvSource: "infisical:p/prod", Version: "s2@1", ReadAt: stale.ReadAt.Add(time.Minute)}
+	if _, err := store.SetFromEnvSource(ctx, scope, at("API_KEY"), "stale", stale, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetFromEnvSource(ctx, scope, at("TOKEN"), "later", later, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, key := range []string{"API_KEY", "TOKEN", "NEVER_SET"} {
+		if err := store.ForgetFromEnvSource(ctx, scope, at(key), stale); err != nil {
+			t.Fatalf("ForgetFromEnvSource(%s) = %v", key, err)
+		}
+	}
+
+	left, err := store.KeyValues.List(ctx, variablestore.ValuesPartition(scope))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range left {
+		if slices.Contains(entry.Key.Path, "API_KEY") {
+			t.Errorf("%s left behind by forgetting the read that copied it", entry.Key)
+		}
+	}
+	if token, err := store.Get(ctx, scope, at("TOKEN"), true); err != nil || token.Plaintext != "later" {
+		t.Fatalf("TOKEN = %+v, %v, want the later read's copy kept", token, err)
+	}
+}
 
 func TestAValueCopiedFromAnEnvSourceNamesItUntilOcelWritesOverIt(t *testing.T) {
 	store, scope := fixture()

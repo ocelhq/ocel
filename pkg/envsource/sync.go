@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	defaultSyncInterval = 60 * time.Second
-	syncBackoffCeiling  = 15 * time.Minute
-	maxBackoffDoublings = 16
-	statusWriteTimeout  = 5 * time.Second
+	defaultSyncInterval  = 60 * time.Second
+	syncBackoffCeiling   = 15 * time.Minute
+	maxBackoffDoublings  = 16
+	statusWriteTimeout   = 5 * time.Second
+	removedCopiesTimeout = 10 * time.Second
 )
 
 type Sync struct {
@@ -76,7 +77,7 @@ func (s *Sync) budget() time.Duration {
 func (s *Sync) CopyScheduled(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, s.budget())
 	defer cancel()
-	registrations, err := Registrations(ctx, s.Store.KeyValues, s.Tier)
+	registrations, removals, err := readRegistrations(ctx, s.Store.KeyValues, s.Tier)
 	if err != nil && !isUndecodable(err) {
 		return err
 	}
@@ -84,6 +85,9 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 	groups := map[string][]Registration{}
 	var failed []error
 	if err != nil {
+		failed = append(failed, err)
+	}
+	if err := forgetRemovalsBefore(ctx, s.Store.KeyValues, removals, s.now().Add(-2*s.budget())); err != nil {
 		failed = append(failed, err)
 	}
 	for _, registration := range registrations {
@@ -223,6 +227,10 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 	results := make([]CopyResult, 0, len(group))
 	for _, registration := range group {
 		result, err := CopyValues(ctx, s.Store, s.scope(registration), digestKey, source.ID(), readAt, read, registration.Folders, registration.Credentials())
+		if len(result.Written) > 0 {
+			from := variablestore.Provenance{EnvSource: source.ID(), ReadAt: readAt}
+			err = errors.Join(err, s.forgetCopiesIntoRemoved(ctx, s.scope(registration), from, result.Written))
+		}
 		if err != nil {
 			return nil, nil, err
 		}
@@ -235,6 +243,21 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 		}
 	}
 	return results, urls, nil
+}
+
+func (s *Sync) forgetCopiesIntoRemoved(ctx context.Context, scope variablestore.Scope, from variablestore.Provenance, written []variablestore.Cell) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), removedCopiesTimeout)
+	defer cancel()
+	removed, err := isRemoved(ctx, s.Store.KeyValues, scope.Tier, scope.Project)
+	if err != nil || !removed {
+		return err
+	}
+	for _, at := range written {
+		if err := s.Store.ForgetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at}, from); err != nil {
+			return fmt.Errorf("forget what this sync copied into %s after its removal: %w", scope.Project, err)
+		}
+	}
+	return nil
 }
 
 func (s *Sync) open(ctx context.Context, key string, registration Registration) (Source, error) {
