@@ -116,6 +116,27 @@ func (c *fakeClock) awaitTimers(t *testing.T, count int) {
 	}
 }
 
+func (c *fakeClock) awaitTimerDueIn(t *testing.T, d time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c.mu.Lock()
+		due := c.now.Add(d)
+		isPending := false
+		for timer := range c.timers {
+			isPending = isPending || timer.at.Equal(due)
+		}
+		c.mu.Unlock()
+		if isPending {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no timer is due in %s", d)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 type pipeListener struct {
 	accepted chan net.Conn
 	closed   chan struct{}
@@ -580,9 +601,10 @@ func TestAPeerThatAnswersPingsStaysConnected(t *testing.T) {
 	}()
 
 	for range 5 {
+		h.clock.awaitTimerDueIn(t, 10*time.Second)
 		h.advance(10 * time.Second)
-		time.Sleep(50 * time.Millisecond)
 	}
+	h.clock.awaitTimerDueIn(t, 10*time.Second)
 	_, sent := h.serverPublish(channel, "still here")
 	if got := <-frames; got["type"] != "data" || got["event"] != sent {
 		t.Fatalf("a peer answering pings got %v, want the data frame carrying %s", got, sent)
