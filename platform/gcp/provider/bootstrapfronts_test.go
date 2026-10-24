@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type frontRegistry struct {
@@ -518,6 +519,31 @@ func TestABootstrapInstallingAFrontPlansTheEdgeBucketAndKeysTheFrontReadsAsParts
 	}
 	if none, err := b.PlanFrontedParts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil || len(none) != 0 {
 		t.Errorf("a bootstrap installing no front plans %+v, %v, want no part: the first deploy that needs one adds it", none, err)
+	}
+}
+
+type noRecordsDatabase struct{ records.Store }
+
+func (noRecordsDatabase) Read(context.Context, records.Key) (records.Entry, error) {
+	return records.Entry{}, errors.Join(refusal.Refuse(refusal.CodeNotReady, "no records database"), ports.ErrNoRecordsDatabase)
+}
+
+func TestAFirstBootstrapPlansTheFrontsPartsBeforeItsRecordsDatabaseExists(t *testing.T) {
+	t.Parallel()
+
+	b, _ := fronting(t)
+	b.Records = noRecordsDatabase{b.Records}
+	planned, err := b.PlanFrontedParts(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}})
+	if err != nil {
+		t.Fatalf("PlanFrontedParts() = %v, want the parts planned as first use: the bootstrap creates the records database", err)
+	}
+	for _, group := range planned {
+		if group.Action != provider.ActionCreate || group.Reason != bootstrap.ReasonFirstUse {
+			t.Errorf("part %s plans %s (%s), want a create on first use", group.Part, group.Action, group.Reason)
+		}
+	}
+	if len(planned) != 2 {
+		t.Errorf("planned %d parts, want the keys and the edge bucket", len(planned))
 	}
 }
 
