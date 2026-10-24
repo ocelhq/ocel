@@ -33,6 +33,7 @@ func inspecting() map[string]string {
 		"what a release reads to tell whether the tunnel it retires still runs":  tunnel.Removing(boxapi.Tunnel{Name: "ocel-203-0-113-10-0a1b2c3d", ID: "5a6b7c8d-1"}),
 		"what a port forward reads its container's address with":                 release.ContainerAddressCommand(physical),
 		"what a release reads to archive the image of the container it retires":  release.ReleaseCommand(physical),
+		"what a load reads to tell which image the tag names after it":           release.ImageIDCommand(imageRef),
 	}
 }
 
@@ -89,7 +90,7 @@ func inspectRosters() map[string][]string {
 	return map[string][]string{
 		"docker inspect":         {"ReloadCommand", "ContainerAddressCommand", "containerProbe", "Inspecting", "Removing", "ReleaseCommand", "EnvCommand", "restoredCommand", "Restoring", "Rising", "RenderLastRunLogs", "RunningCommand", "ServingCommand", "StateCommand", "RenderStartWatch"},
 		"docker network inspect": {"Command", "JoiningNetwork", "CreatingNetwork", "EnsuringNetwork", "ForgettingNetwork", "networkProbe", "NetworksPresent"},
-		"docker image inspect":   {"Pulled"},
+		"docker image inspect":   {"ImageIDCommand", "Pulled"},
 	}
 }
 

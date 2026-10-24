@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/release"
@@ -31,6 +33,12 @@ func imaged(b *bench, present bool) {
 				return ssh.Result{Stdout: imageID + "\n"}, true
 			}
 			return ssh.Result{}, true
+		case strings.Contains(command, "docker image inspect"):
+			config, err := empty.Image.ConfigName()
+			if err != nil {
+				return ssh.Result{Code: 1, Stderr: err.Error()}, true
+			}
+			return ssh.Result{Stdout: config.String() + "\n"}, true
 		case strings.Contains(command, "docker load"):
 			present = true
 			return ssh.Result{Stdout: "Loaded image: " + imageRef + "\n"}, true
@@ -94,7 +102,7 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 	rig := newBench(nil)
 	imaged(rig, false)
 
-	said, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes"))
+	said, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes"))
 	if err != nil {
 		t.Fatalf("LoadImage() = %v", err)
 	}
@@ -137,7 +145,7 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 		}
 	}
 
-	_, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes"))
+	_, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes"))
 	if err == nil {
 		t.Fatal("LoadImage() succeeded where the machine answers to no such imageRef afterwards")
 	}

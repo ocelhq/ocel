@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
@@ -42,7 +44,7 @@ func commandWith(t *testing.T, rig *bench, marker string) string {
 func TestALoginWithSudoLoadsImagesAsTheDeployLogin(t *testing.T) {
 	rig := loggedInAs("ubuntu", ssh.Facts{Sudo: true, Systemd: true})
 
-	if _, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
+	if _, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as a login with sudo = %v", err)
 	}
 	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(boxapi.ImagesLock)), "'")) {
@@ -53,7 +55,7 @@ func TestALoginWithSudoLoadsImagesAsTheDeployLogin(t *testing.T) {
 func TestARootLoginLoadsImagesAsTheDeployLogin(t *testing.T) {
 	rig := loggedInAs("root", ssh.Facts{Root: true, Systemd: true})
 
-	if _, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
+	if _, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as root = %v", err)
 	}
 	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "runuser -u "+deployUser+" -- env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(boxapi.ImagesLock)), "'")) {
@@ -65,7 +67,7 @@ func TestTheDeployLoginLoadsImagesAsItself(t *testing.T) {
 	rig := loggedInAs(deployUser, ssh.Facts{Systemd: true})
 	rig.floor = refusal.Refuse(refusal.CodeDenied, "%s can neither act as root nor run sudo without a password", deployUser)
 
-	if _, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes")); err != nil {
+	if _, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as %s = %v", deployUser, err)
 	}
 	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "flock -x "+shell.Quote(boxapi.ImagesLock)) {
@@ -88,7 +90,7 @@ func TestALoginWithoutSudoIsToldToDeployAsTheDeployLogin(t *testing.T) {
 	rig := loggedInAs("ubuntu", ssh.Facts{Systemd: true})
 	rig.floor = refusal.Refuse(refusal.CodeDenied, "ubuntu@ocelbox can neither act as root nor run sudo without a password")
 
-	_, err := rig.host().images.Load(context.Background(), imageRef, strings.NewReader("tar-bytes"))
+	_, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes"))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 		t.Fatalf("LoadImage() as a login that cannot sudo = %v, want a denial", err)

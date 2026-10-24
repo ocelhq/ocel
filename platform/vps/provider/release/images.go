@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -138,8 +140,16 @@ func pinnedTo(imageRef, digest string) (string, error) {
 	return repository + "@" + digest, nil
 }
 
-func (i *Images) Load(ctx context.Context, imageRef string, tar io.Reader) (string, error) {
-	said, err := i.box.Run(ctx, ssh.Deploy, "load "+imageRef, "flock -x "+shell.Quote(boxapi.ImagesLock)+" docker load", tar)
+func (i *Images) Load(ctx context.Context, imageRef string, built v1.Image, archive io.Reader) (string, error) {
+	config, err := built.ConfigName()
+	if err != nil {
+		return "", err
+	}
+	manifest, err := built.Digest()
+	if err != nil {
+		return "", err
+	}
+	said, err := i.box.Run(ctx, ssh.Deploy, "load "+imageRef, "flock -x "+shell.Quote(boxapi.ImagesLock)+" docker load", archive)
 	if err != nil {
 		return "", err
 	}
@@ -153,7 +163,20 @@ func (i *Images) Load(ctx context.Context, imageRef string, tar io.Reader) (stri
 			"%s loaded the image but has no %s: %s\nengine state:\n%s",
 			i.box.Named(), imageRef, strings.TrimSpace(said), i.box.Evidence(ctx, elevation, loadEvidenceCommand()))
 	}
+	id, err := i.box.Run(ctx, ssh.Docker, "ask which image "+imageRef+" names", ImageIDCommand(imageRef), nil)
+	if err != nil {
+		return "", err
+	}
+	if loaded := strings.TrimSpace(id); loaded != config.String() && loaded != manifest.String() {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"%s names %s as %s after the load, not the image this deploy sent (config %s, manifest %s)\nRun `docker image rm %s` on %s and deploy again",
+			i.box.Named(), imageRef, loaded, config, manifest, imageRef, i.box.Named())
+	}
 	return strings.TrimSpace(said), nil
+}
+
+func ImageIDCommand(imageRef string) string {
+	return "docker image inspect --format " + shell.Quote("{{.Id}}") + " " + shell.Quote(imageRef)
 }
 
 func loadEvidenceCommand() string {

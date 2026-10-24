@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +16,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -153,5 +157,70 @@ func TestAProviderBuiltForADeployTimesTheImagesItSends(t *testing.T) {
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	if p.Clock() == nil {
 		t.Fatal("NewProvider() left the clock unset, so the first image sent over ssh panics timing itself")
+	}
+}
+
+func TestAnImageTheBoxLoadsUnderAnotherIDIsRefusedByName(t *testing.T) {
+	daemonServing(t, "tar-bytes")
+	other := "sha256:" + strings.Repeat("e", 64)
+	machine := &box{reports: other}
+	push := aPush(t)
+
+	config, err := push.Built.ConfigName()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pushed := directImagesOn(t, machine).Push(context.Background(), push, progress.Discard())
+	var rejection refusal.Refusal
+	if !errors.As(pushed, &rejection) || rejection.Code != refusal.CodeInvalid {
+		t.Fatalf("Push() over a box that loaded %s = %v, want a refusal: the release would start whatever the box holds under the tag", other, pushed)
+	}
+	for _, named := range []string{push.ImageRef, other, config.String()} {
+		if !strings.Contains(pushed.Error(), named) {
+			t.Errorf("Push() = %v, want %q in it", pushed, named)
+		}
+	}
+}
+
+func TestABoxOnTheClassicImageStoreIsAcceptedWhenItReportsTheConfigDigestSent(t *testing.T) {
+	daemonServing(t, "tar-bytes")
+	machine := &box{}
+
+	if err := directImagesOn(t, machine).Push(context.Background(), aPush(t), progress.Discard()); err != nil {
+		t.Fatalf("Push() over a classic store that reports the config digest it was sent = %v", err)
+	}
+	if !slices.ContainsFunc(machine.commands(), func(command string) bool {
+		return strings.Contains(command, "docker image inspect") && strings.Contains(command, quote(loadedImageRef))
+	}) {
+		t.Errorf("nothing asked the box which image %s names after the load: %v", loadedImageRef, machine.commands())
+	}
+}
+
+func TestABoxOnTheContainerdImageStoreIsAcceptedWhenItReportsTheManifestDigestSent(t *testing.T) {
+	daemonServing(t, "tar-bytes")
+	machine := &box{containerd: true}
+
+	if err := directImagesOn(t, machine).Push(context.Background(), aPush(t), progress.Discard()); err != nil {
+		t.Fatalf("Push() over a containerd store that reports the manifest digest it was sent = %v: "+
+			"the archive's index.json names the manifest under docker's normalized image name, or containerd stores it under another", err)
+	}
+}
+
+func TestADrainedTransferIsStillCheckedAgainstTheImageSent(t *testing.T) {
+	daemonServing(t, "tar-bytes")
+	machine := &box{drains: true, containerd: true}
+	push := aPush(t)
+	push.Built = imageOf(t, 4096)
+
+	if err := directImagesOn(t, machine).Push(context.Background(), push, progress.Discard()); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	manifest, err := push.Built.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if machine.loadedID != manifest.String() {
+		t.Errorf("the box loaded %q, want the manifest %s that was sent", machine.loadedID, manifest)
 	}
 }
