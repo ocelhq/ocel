@@ -40,6 +40,11 @@ const (
 )
 
 const (
+	ReadyCondition     = "Ready"
+	ConditionSucceeded = "CONDITION_SUCCEEDED"
+)
+
+const (
 	RevisionCPU    = "1"
 	RevisionMemory = "512Mi"
 )
@@ -310,7 +315,7 @@ func (p *Services) DeployService(ctx context.Context, s Serving, progress progre
 	if err != nil {
 		return Release{}, err
 	}
-	revision, err := latestReady(s.Service)(deployed)
+	revision, err := p.createdRevision(ctx, services, deployed, s)
 	if err != nil {
 		return Release{}, err
 	}
@@ -463,16 +468,36 @@ func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2Tr
 	return TrafficTo(serving, current.Traffic)
 }
 
-func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, error) {
-	return func(current *run.GoogleCloudRunV2Service) (string, error) {
-		revision := RevisionName(current.LatestReadyRevision)
-		if revision == "" {
-			return "", refusal.Refuse(refusal.CodeNotReady,
-				"%s created no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
-				service)
-		}
-		return revision, nil
+func (p *Services) createdRevision(ctx context.Context, services *run.Service, current *run.GoogleCloudRunV2Service, s Serving) (string, error) {
+	if current.LatestCreatedRevision == "" {
+		return "", refusal.Refuse(refusal.CodeNotReady,
+			"%s created no revision, and a release routes traffic to the revision it made rather than to whatever ran last",
+			s.Service)
 	}
+	created, err := googleretry.Attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Revision, error) {
+		return services.Projects.Locations.Services.Revisions.Get(current.LatestCreatedRevision).Context(ctx).Do(call...)
+	})
+	if err != nil {
+		return "", fmt.Errorf("read the revision the release of %s created: %w", s.Service, err)
+	}
+	revision := RevisionName(created.Name)
+	if created.Labels[imageLabel] != ImageLabelValue(s.Image) {
+		return "", refusal.Refuse(refusal.CodeBusy,
+			"the latest revision of %s, %s, runs another image than this release made it with: another release replaced it under this one, so this one routes nothing. Deploy again",
+			s.Service, revision)
+	}
+	if !ready(created) {
+		return "", refusal.Refuse(refusal.CodeNotReady,
+			"revision %s of %s did not come ready, and a release routes traffic only to a revision that can serve it",
+			revision, s.Service)
+	}
+	return revision, nil
+}
+
+func ready(revision *run.GoogleCloudRunV2Revision) bool {
+	return slices.ContainsFunc(revision.Conditions, func(condition *run.GoogleCloudRunV2Condition) bool {
+		return condition.Type == ReadyCondition && condition.State == ConditionSucceeded
+	})
 }
 
 func activeNamed(ctx context.Context, revision string, stillActive router.StillActive) func(*run.GoogleCloudRunV2Service) (string, error) {

@@ -200,6 +200,7 @@ func (s *Run) patch(w http.ResponseWriter, r *http.Request) {
 		if slices.Contains(fields, "traffic") {
 			s.Service.Traffic = allocated(desired.Traffic)
 			s.Service.TrafficStatuses = taggedStatuses(s.Service)
+			s.served()
 		}
 		if slices.Contains(fields, "invoker_iam_disabled") {
 			s.Service.InvokerIamDisabled = desired.InvokerIamDisabled
@@ -232,6 +233,8 @@ func (s *Run) patch(w http.ResponseWriter, r *http.Request) {
 	s.Service.Etag = "etag-" + strconv.Itoa(s.writes)
 	if replaced {
 		s.revised()
+	} else {
+		s.served()
 	}
 	WriteBody(w, &runv2.GoogleLongrunningOperation{Name: "operations/release", Done: true})
 }
@@ -253,23 +256,42 @@ func (s *Run) untagUnderRelease(template *runv2.GoogleCloudRunV2RevisionTemplate
 func (s *Run) revised() {
 	s.Revision++
 	s.writes++
-	s.Service.LatestReadyRevision = s.Service.Name + "/revisions/" + run.RevisionName(s.Service.Name) + "-0000" + strconv.Itoa(s.Revision)
+	s.Service.LatestCreatedRevision = s.Service.Name + "/revisions/" + run.RevisionName(s.Service.Name) + "-0000" + strconv.Itoa(s.Revision)
+	created := run.RevisionName(s.Service.LatestCreatedRevision)
 	if s.UriEachRevision {
 		s.Service.Uri = "https://" + run.RevisionName(s.Service.Name) + "-" + strconv.Itoa(s.Revision) + ".run.app"
 	}
 	s.Service.Etag = "etag-" + strconv.Itoa(s.writes)
-	s.revisions = append(s.revisions, run.RevisionName(s.Service.LatestReadyRevision))
+	s.revisions = append(s.revisions, created)
 	if s.images == nil {
 		s.images = map[string]string{}
 	}
 	if s.Service.Template != nil && len(s.Service.Template.Containers) > 0 {
-		s.images[run.RevisionName(s.Service.LatestReadyRevision)] = s.Service.Template.Containers[0].Image
+		s.images[created] = s.Service.Template.Containers[0].Image
 	}
 	if s.labels == nil {
 		s.labels = map[string]map[string]string{}
 	}
 	if s.Service.Template != nil {
-		s.labels[run.RevisionName(s.Service.LatestReadyRevision)] = s.Service.Template.Labels
+		s.labels[created] = s.Service.Template.Labels
+	}
+	s.served()
+}
+
+func (s *Run) served() {
+	newest := slices.Index(s.revisions, run.RevisionName(s.Service.LatestReadyRevision))
+	for _, target := range s.Service.Traffic {
+		if target.Percent == 0 {
+			continue
+		}
+		revision := run.RevisionName(target.Revision)
+		if target.Type == run.TrafficByLatest {
+			revision = run.RevisionName(s.Service.LatestCreatedRevision)
+		}
+		newest = max(newest, slices.Index(s.revisions, revision))
+	}
+	if newest >= 0 {
+		s.Service.LatestReadyRevision = s.Service.Name + "/revisions/" + s.revisions[newest]
 	}
 }
 
@@ -348,6 +370,8 @@ func (s *Run) revisionOf(name string) *runv2.GoogleCloudRunV2Revision {
 	return &runv2.GoogleCloudRunV2Revision{
 		Name:       s.Service.Name + "/revisions/" + name,
 		Containers: []*runv2.GoogleCloudRunV2Container{{Image: s.images[name]}},
+		Labels:     s.labels[name],
+		Conditions: []*runv2.GoogleCloudRunV2Condition{{Type: run.ReadyCondition, State: run.ConditionSucceeded}},
 	}
 }
 
