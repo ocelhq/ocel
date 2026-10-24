@@ -42,6 +42,7 @@ export type Store = {
   callerAccount(): Promise<string>;
   hasBootstrap(): Promise<boolean>;
   releaseLocks(slug: string): Promise<void>;
+  listTrustStoreObjects(): Promise<string[]>;
 };
 
 export function cliAt(endpoint: string | undefined): Cli {
@@ -106,7 +107,9 @@ async function queryPartition(
 
 const STATE_BUCKET_OUTPUT = "StateBucketName";
 
-async function bootstrapTable(
+const TRUST_STORE_PREFIXES = ["trust/", "leases/trust/"];
+
+async function bootstrapOutput(
   cli: Cli,
   stack: string,
   output: string,
@@ -174,7 +177,7 @@ export function awsStore(
     },
 
     async releaseLocks(slug) {
-      const bucket = await bootstrapTable(
+      const bucket = await bootstrapOutput(
         cli,
         stack,
         STATE_BUCKET_OUTPUT,
@@ -184,6 +187,35 @@ export function awsStore(
         return;
       }
       await cli(["s3", "rm", `s3://${bucket}/${slug}/.pulumi/locks/`, "--recursive"]);
+    },
+
+    async listTrustStoreObjects() {
+      const bucket = await bootstrapOutput(
+        cli,
+        stack,
+        STATE_BUCKET_OUTPUT,
+        "what is kept for the load balancer's trust store cannot be listed",
+      );
+      if (!bucket) {
+        return [];
+      }
+      const found: string[] = [];
+      for (const prefix of TRUST_STORE_PREFIXES) {
+        const raw = await cli([
+          "s3api",
+          "list-objects-v2",
+          "--bucket",
+          bucket,
+          "--prefix",
+          prefix,
+          "--query",
+          "Contents[].Key",
+          "--output",
+          "json",
+        ]);
+        found.push(...((JSON.parse(raw || "null") as string[] | null) ?? []));
+      }
+      return found;
     },
   };
 }
@@ -248,7 +280,12 @@ export function awsBindingStore(
   const stack = bootstrapStackOf(namespace);
 
   async function bindingTableOrThrow(): Promise<string> {
-    const name = await bootstrapTable(cli, stack, VARIABLES_TABLE_OUTPUT, "no binding can be read");
+    const name = await bootstrapOutput(
+      cli,
+      stack,
+      VARIABLES_TABLE_OUTPUT,
+      "no binding can be read",
+    );
     if (!name) {
       throw new Error(
         `the ${stack} stack publishes no ${VARIABLES_TABLE_OUTPUT} output, so no binding can be read`,

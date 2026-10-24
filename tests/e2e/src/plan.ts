@@ -15,7 +15,7 @@ import {
   UNNAMED_CONCERNS,
 } from "./matrix/types";
 import { type Coverage, type Draw, sample } from "./sample";
-import { phasesOf, stepsOf, walksPreviews } from "./steps";
+import { alwaysRedeploys, phasesOf, stepsOf, walksPreviews } from "./steps";
 
 export type RunFilter = {
   concerns: Concern[];
@@ -102,7 +102,7 @@ export function cellNamed(fixtures: Fixture[], target: TargetName, name: string)
 
 function longestFirst(cells: Cell[], releaseCycle: boolean, previews: boolean): Cell[] {
   const length = (cell: Cell) =>
-    phasesOf(cell.fixture, false, releaseCycle, walksPreviews(cell, previews)).length;
+    phasesOf(cell, false, releaseCycle, walksPreviews(cell, previews)).length;
   return [...cells].sort((a, b) => length(b) - length(a));
 }
 
@@ -277,7 +277,7 @@ function checkGaps(gaps: Gap[]) {
 }
 
 function checkReleaseCycle(fixtures: Fixture[], target: TargetName, releaseCycle: boolean) {
-  const redeploying = fixtures.find((one) => one.redeploys === true);
+  const redeploying = fixtures.flatMap((one) => cellsOn(one, target)).find(alwaysRedeploys);
   if (redeploying && !releaseCycle) {
     throw new Error(
       `${redeploying.name} redeploys, and ${target} has no release cycle to redeploy it with`,
@@ -319,7 +319,7 @@ export function plan(input: {
     cellsOn(one, target).flatMap((cell) =>
       stepsOf(
         cell,
-        phasesOf(one, false, releaseCycle, walksPreviews(cell, previews)),
+        phasesOf(cell, false, releaseCycle, walksPreviews(cell, previews)),
         gatesPreviews,
       ).map((step) => ({
         cell: cell.name,
@@ -357,7 +357,7 @@ export function plan(input: {
     releaseCycle,
     previews,
   ).map((cell): PlannedCell => {
-    const phases = phasesOf(cell.fixture, filter.keep, releaseCycle, walksPreviews(cell, previews));
+    const phases = phasesOf(cell, filter.keep, releaseCycle, walksPreviews(cell, previews));
     return {
       name: cell.name,
       fixture: cell.fixture.name,

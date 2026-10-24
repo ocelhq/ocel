@@ -27,7 +27,12 @@ realtime) is provisioned, bound and usable, including at build time, from `fixtu
 asks whether an app binds to what an SST or Pulumi stack provisions beside it, from
 `fixtures/iac/`, and runs only when a run names it. A new feature or primitive extends the app
 of each framework it reaches; `fixture()` refuses any other concern or app, and what a target
-cannot do is a gap in `e2e/src/matrix/gaps.ts`. The harness starts nothing but the `ocel`
+cannot do is a gap in `e2e/src/matrix/gaps.ts`. Compute is a variant: on `aws` the
+`container` (behind CloudFront) and `cloudflare-container` variants run an app as a
+container, and walk a second release and a rollback in whatever fixture lists them. On a real
+`aws` account, each cell's `ocel projects destroy` must leave its namespace's production
+tier with no part that retires with its last user and nothing kept for a load balancer's trust store.
+The harness starts nothing but the `ocel`
 binary; bring up what the target needs first. For `dev` that is a docker daemon, which `ocel dev` runs each declared postgres, bucket and kv store, and the
 database topics and tasks run on, in, and for a go fixture such as `sdk/go` the go that
 `go.work` pins, which runs its app and its workers:

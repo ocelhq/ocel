@@ -166,6 +166,32 @@ describe("the steps a cell walks through", () => {
     ]);
   });
 
+  it("redeploys and rolls back the cell of a variant that redeploys, and no other cell of its fixture", () => {
+    const cycled = variant("cycled", { offeredOn: ["aws"], config: {}, redeploys: true });
+    const planned = planOf([one("deploy/go", { on: { aws: [defaults, cycled] } })]);
+    expect(titlesOf(planned, "deploy/go-cycled")).toEqual([
+      "deploy",
+      "ping",
+      "redeploy",
+      "redeploy · ping",
+      "rollback",
+      "rollback · ping",
+      "destroy",
+    ]);
+    expect(planned.cells.find((cell) => cell.name === "deploy/go")?.phases).toEqual([
+      "deploy",
+      "verify",
+      "destroy",
+    ]);
+  });
+
+  it("refuses a variant that redeploys on a target with no release cycle, naming its cell", () => {
+    const cycled = variant("cycled", { offeredOn: ["aws"], config: {}, redeploys: true });
+    expect(() =>
+      planOf([one("deploy/go", { on: { aws: [cycled] } })], { releaseCycle: false }),
+    ).toThrow(/deploy\/go-cycled redeploys, and aws has no release cycle to redeploy it with/);
+  });
+
   it("refuses a cell that redeploys only on the targets that cannot, not on the lane's", () => {
     const living = one("lifecycle/next", { redeploys: true, on: { vps: [defaults] } });
     expect(() => planOf([one("deploy/node"), living], { releaseCycle: false })).not.toThrow();

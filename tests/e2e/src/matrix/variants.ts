@@ -14,7 +14,13 @@ import { DEFAULT_VARIANT, TARGETS, type Variant, variant } from "./types";
 export const defaults: Variant = { name: DEFAULT_VARIANT, offeredOn: TARGETS, config: {} };
 
 export const container = variant("container", {
-  offeredOn: ["aws", "gcp"],
+  offeredOn: ["aws"],
+  config: { compute: "container" },
+  redeploys: true,
+});
+
+export const containerOnGoogleCloud = variant("container", {
+  offeredOn: ["gcp"],
   config: { compute: "container" },
 });
 
@@ -38,6 +44,7 @@ export const cloudflareInFrontOfContainers = variant("cloudflare-container", {
   offeredOn: ["aws"],
   config: { edge: "cloudflare", compute: "container" },
   checks: CLIENT_CERTIFICATE_CHECKS,
+  redeploys: true,
 });
 
 export const cloudflareInFrontOfMixedComputes = variant("cloudflare-mixed", {

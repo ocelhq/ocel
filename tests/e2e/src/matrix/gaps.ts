@@ -55,6 +55,7 @@ import {
   cloudflareTunnel,
   cloudfrontShielded,
   container,
+  containerOnGoogleCloud,
   defaults,
   dockerfile,
   registry,
@@ -447,7 +448,7 @@ export const gaps: Gap[] = [
       {
         on: ["gcp", "gcp.floci"],
         fixtures: [deploy.next],
-        variants: [container],
+        variants: [containerOnGoogleCloud],
         fails: [
           check(nextOriginCacheChecks.filter((one) => SERVED_FROM_NEXT_CACHE.test(one.title))),
         ],
@@ -462,7 +463,7 @@ export const gaps: Gap[] = [
       {
         on: ["gcp", "gcp.floci"],
         fixtures: [deploy.next],
-        variants: [container],
+        variants: [containerOnGoogleCloud],
         fails: [
           check(nextOriginCacheChecks.filter((one) => WITHHELD_FROM_CLOUD_CDN.test(one.title))),
         ],

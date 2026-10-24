@@ -1,6 +1,6 @@
 import type { Check } from "./checks/context";
 import { PREVIEW_TITLES, type PreviewCheck, previewChecks } from "./checks/previews";
-import type { Cell, Fixture, Phase } from "./matrix/types";
+import type { Cell, Phase } from "./matrix/types";
 import type { CellRun } from "./run/cellRun";
 import type { StackPoint } from "./stacks";
 import {
@@ -83,17 +83,22 @@ export function walksPreviews(
   );
 }
 
+export function alwaysRedeploys({ fixture, variant }: Pick<Cell, "fixture" | "variant">): boolean {
+  return fixture.redeploys === true || variant.redeploys === true;
+}
+
 export function phasesOf(
-  fixture: Fixture,
+  cell: Pick<Cell, "fixture" | "variant">,
   keep: boolean,
   releaseCycle = true,
   previews = false,
 ): Phase[] {
-  const redeploys = fixture.redeploys === true || (fixture.redeploys !== undefined && releaseCycle);
+  const redeploys =
+    alwaysRedeploys(cell) || (cell.fixture.redeploys === "where-releases-are-kept" && releaseCycle);
   return [
     "deploy",
     "verify",
-    ...(fixture.restarts ? (["restart"] as const) : []),
+    ...(cell.fixture.restarts ? (["restart"] as const) : []),
     ...(redeploys ? (["redeploy", "rollback"] as const) : []),
     ...(previews && !keep ? (["preview"] as const) : []),
     ...(keep ? [] : (["destroy"] as const)),

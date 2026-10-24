@@ -120,6 +120,62 @@ describe("releaseLocks", () => {
   });
 });
 
+describe("listTrustStoreObjects", () => {
+  it("lists the trust store's records and its lease in the namespace's production state bucket, and nothing else", async () => {
+    const { cli, calls } = cliOver((args) => {
+      if (describeStacks(args)) {
+        return tableAsked(args);
+      }
+      return args.includes("trust/")
+        ? JSON.stringify(["trust/client-cas.json"])
+        : JSON.stringify(["leases/trust/client-cas.lease"]);
+    });
+    assert.deepEqual(await awsStore(undefined, cli, "j-9-next").listTrustStoreObjects(), [
+      "trust/client-cas.json",
+      "leases/trust/client-cas.lease",
+    ]);
+    assert.ok(
+      calls.filter(describeStacks).every((args) => args.includes("j-9-next-prod-bootstrap")),
+    );
+    assert.deepEqual(
+      calls.filter((args) => args[0] === "s3api"),
+      ["trust/", "leases/trust/"].map((prefix) => [
+        "s3api",
+        "list-objects-v2",
+        "--bucket",
+        "ocel-statebucket",
+        "--prefix",
+        prefix,
+        "--query",
+        "Contents[].Key",
+        "--output",
+        "json",
+      ]),
+    );
+  });
+
+  it("lists none when no prefix holds an object", async () => {
+    const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : "null"));
+    assert.deepEqual(await awsStore(undefined, cli).listTrustStoreObjects(), []);
+  });
+
+  it("lists none and reads no bucket when the namespace has no bootstrap", async () => {
+    const { cli, calls } = cliOver((args) => {
+      if (describeStacks(args)) {
+        throw Object.assign(new Error("Command failed"), { stderr: "Stack does not exist" });
+      }
+      return "";
+    });
+    assert.deepEqual(await awsStore(undefined, cli).listTrustStoreObjects(), []);
+    assert.equal(calls.filter((args) => args[0] === "s3api").length, 0);
+  });
+
+  it("refuses when the bootstrap publishes no state bucket", async () => {
+    const { cli } = cliOver(() => "None");
+    await assert.rejects(awsStore(undefined, cli).listTrustStoreObjects(), /StateBucketName/);
+  });
+});
+
 const SLUG = "j-1-with-sst";
 
 function b64(value: string): string {

@@ -24,9 +24,10 @@ import type { Deployment, Exposure, ReleaseCycle, Restart, Target } from "../typ
 import { AwsBootstrap } from "./bootstrap";
 import { AwsDispatch } from "./dispatch";
 import { describeExposed, failOver, keepPersistedGroups, listTaggedGroups } from "./kv";
+import { BOOTSTRAP_STATUS_ARGS, readRetiringParts, refuseWhatDestroyLeft } from "./leftBehind";
 import { ocelEnvIn } from "./namespace";
 import { awaitServing } from "./serving";
-import { cliAt } from "./store";
+import { awsStore, cliAt } from "./store";
 import { AwsSweeper } from "./sweeper";
 import { awsWorld } from "./world";
 
@@ -192,11 +193,39 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
       if (unbound.length > 0 && (await listProjects(dir, env)).includes(cell.slug)) {
         throw new Error(unbound.join("\n"));
       }
+      if (namespace) {
+        await this.requireNothingLeftBehind(cell, dir, env, namespace);
+      }
     } finally {
       if (dir && namespace) {
         await this.bootstrap.destroyCellBootstrap(cell, dir, namespace);
       }
       await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
+    }
+  }
+
+  private async requireNothingLeftBehind(
+    cell: CellUnderTest,
+    dir: string,
+    env: NodeJS.ProcessEnv,
+    namespace: string,
+  ): Promise<void> {
+    const status = await this.run(
+      cell,
+      dir,
+      "destroy",
+      "bootstrap-status",
+      BOOTSTRAP_STATUS_ARGS,
+      env,
+    );
+    const store = awsStore(await this.world.endpoint(), undefined, namespace);
+    const left = refuseWhatDestroyLeft(
+      cell.slug,
+      readRetiringParts(status.stdout),
+      await store.listTrustStoreObjects(),
+    );
+    if (left) {
+      throw left;
     }
   }
 
