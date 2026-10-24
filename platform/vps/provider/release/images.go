@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math/rand/v2"
 	"strings"
@@ -168,9 +169,13 @@ func (i *Images) Load(ctx context.Context, imageRef string, built v1.Image, arch
 		return "", err
 	}
 	if loaded := strings.TrimSpace(id); loaded != config.String() && loaded != manifest.String() {
-		return "", refusal.Refuse(refusal.CodeInvalid,
-			"%s names %s as %s after the load, not the image this deploy sent (config %s, manifest %s)\nRun `docker image rm %s` on %s and deploy again",
-			i.box.Named(), imageRef, loaded, config, manifest, imageRef, i.box.Named())
+		mismatch := fmt.Sprintf("%s names %s as %s after the load, not the image this deploy sent (config %s, manifest %s)",
+			i.box.Named(), imageRef, loaded, config, manifest)
+		if _, err := i.box.Run(ctx, ssh.Docker, "untag "+imageRef, "docker image rm -f "+shell.Quote(imageRef), nil); err != nil {
+			return "", refusal.Refuse(refusal.CodeInvalid,
+				"%s, and the tag could not be removed: %v\nRun `docker image rm -f %s` on %s before deploying again", mismatch, err, imageRef, i.box.Named())
+		}
+		return "", refusal.Refuse(refusal.CodeInvalid, "%s\nThe tag is removed, so the next deploy sends the image again", mismatch)
 	}
 	return strings.TrimSpace(said), nil
 }

@@ -183,6 +183,50 @@ func TestAnImageTheBoxLoadsUnderAnotherIDIsRefusedByName(t *testing.T) {
 	}
 }
 
+func TestADeployRunAgainAfterARefusedLoadSendsTheImageAgainRatherThanReleasingTheRefusedOne(t *testing.T) {
+	daemonServing(t, "tar-bytes")
+	machine := &box{reports: "sha256:" + strings.Repeat("e", 64)}
+	plan := provider.ImagePushes{Store: directImagesOn(t, machine), Pushes: []provider.ImagePush{aPush(t)}}
+
+	if err := plan.PushMissing(context.Background(), progress.Discard()); err == nil {
+		t.Fatal("PushMissing() = nil over a box that loaded another image")
+	}
+	again := plan.PushMissing(context.Background(), progress.Discard())
+	if again == nil {
+		t.Fatalf("a second PushMissing() = nil: the refused image stayed under %s, so the re-run skipped the transfer and releases it", loadedImageRef)
+	}
+	loads := 0
+	for _, command := range machine.commands() {
+		if strings.Contains(command, "docker load") {
+			loads++
+		}
+	}
+	if loads != 2 {
+		t.Errorf("the box was sent the image %d times across two deploys, want 2: %v", loads, machine.commands())
+	}
+}
+
+func TestARefusedLoadWhoseTagCannotBeRemovedSaysToRemoveItByHand(t *testing.T) {
+	daemonServing(t, "tar-bytes")
+	machine := &box{reports: "sha256:" + strings.Repeat("e", 64)}
+	machine.refuses = func(command string) (ssh.Result, bool) {
+		if strings.Contains(command, "docker image rm") {
+			return ssh.Result{Code: 1, Stderr: "Error response from daemon: conflict"}, true
+		}
+		return ssh.Result{}, false
+	}
+
+	err := directImagesOn(t, machine).Push(context.Background(), aPush(t), progress.Discard())
+	if err == nil {
+		t.Fatal("Push() = nil over a box that loaded another image")
+	}
+	for _, named := range []string{"docker image rm -f " + loadedImageRef, "conflict"} {
+		if !strings.Contains(err.Error(), named) {
+			t.Errorf("Push() = %v, want %q in it: the refused image is still under the tag, and the next deploy would release it", err, named)
+		}
+	}
+}
+
 func TestABoxOnTheClassicImageStoreIsAcceptedWhenItReportsTheConfigDigestSent(t *testing.T) {
 	daemonServing(t, "tar-bytes")
 	machine := &box{}
