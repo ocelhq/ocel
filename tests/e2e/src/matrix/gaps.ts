@@ -226,20 +226,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "destroy-keeps-a-full-bucket",
-    reason:
-      "ocel projects destroy deletes an app bucket without emptying it, and S3 refuses to delete a bucket that holds an object",
-    issue: 1712,
-    where: [
-      {
-        on: ["aws.floci"],
-        fixtures: [sdk.node],
-        variants: [apiGateway],
-        fails: [step.destroy],
-      },
-    ],
-  },
-  {
     id: "gcp-postgres-is-private-to-the-runner",
     reason:
       "a gcp postgres is a Cloud SQL instance with no public address, reached over the tier's private network alone, so the journey cannot migrate it from the runner and the tables the todo and document checks write are never created",

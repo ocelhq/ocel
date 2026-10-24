@@ -56,8 +56,6 @@ func NewSessions(project, env, tableARN string) Sessions {
 type bucketArgs struct {
 	AllowedOrigins []string
 
-	ForceDestroy bool
-
 	Tags map[string]string
 
 	CORS corsRule
@@ -126,7 +124,7 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 
 	bucket, err := s3.NewBucketV2(ctx, name.Pulumi, &s3.BucketV2Args{
 		Bucket:       name.AWS,
-		ForceDestroy: pulumi.Bool(args.ForceDestroy),
+		ForceDestroy: pulumi.Bool(true),
 		Tags:         tags,
 	})
 	if err != nil {
