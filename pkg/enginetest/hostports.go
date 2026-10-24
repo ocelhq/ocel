@@ -17,11 +17,29 @@ const (
 
 func HostPorts(t *testing.T, ports ...string) {
 	t.Helper()
+	RequireDocker(t)
 	dir, err := slotDir()
 	if err != nil {
 		t.Fatalf("no directory to hold this machine's host ports in: %v", err)
 	}
 	hostPortsIn(t, dir, ports)
+	for _, port := range ports {
+		if err := removeDeadPublishers(port); err != nil {
+			t.Fatalf("take host port %s back from a run that died: %v", port, err)
+		}
+	}
+}
+
+func removeDeadPublishers(port string) error {
+	found, err := listLabelled("ps", "--filter", "publish="+port)
+	if err != nil {
+		return err
+	}
+	dead := ownedBy(found, func(of string) bool { return of == run || runProcessGone(of) })
+	if len(dead) == 0 {
+		return nil
+	}
+	return docker(append([]string{"rm", "--force", "--volumes"}, dead...)...)
 }
 
 func hostPortsIn(t *testing.T, dir string, ports []string) {
