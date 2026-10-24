@@ -11,6 +11,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -187,42 +188,45 @@ func TestAContainerAppsPreviewIsClaimedAgainWithTheWildcardsRenewedCertificateBe
 	}
 }
 
-func TestRemovingOneProjectUnderTheGlobalPreviewWildcardLeavesTheCertificateAnotherProjectsContainerPreviewsAnswerWith(t *testing.T) {
+var globalWildcardValidation = edge.Record{Name: "_acme.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "validation.fake.invalid"}
+
+func globalPreviewServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
+	t.Helper()
 	client, p := mixedServed(t)
 	previewBootstrapped(t, client)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
 	}
-	validation := edge.Record{Name: "_acme.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "validation.fake.invalid"}
-	p.RequireValidationRecords(validation)
-	previewOf := func(slug string) *contractv1.DeployRequest {
-		req := withContainerAdmin(previewDeployRequest(), adminBuildID)
-		req.Manifest.Slug = slug
-		req.Edge = edged(fake.KindRelay, "acme.com")
-		return req
+	p.RequireValidationRecords(globalWildcardValidation)
+	return client, p
+}
+
+func globalPreviewOf(slug string) *contractv1.DeployRequest {
+	req := withContainerAdmin(previewDeployRequest(), adminBuildID)
+	req.Manifest.Slug = slug
+	req.Edge = edged(fake.KindRelay, "acme.com")
+	return req
+}
+
+func removePreviewProject(t *testing.T, client contractv1connect.ProviderServiceClient, slug string) {
+	t.Helper()
+	if removed := removeProject(t, client, &contractv1.ProjectRequest{
+		Slug:        slug,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
+		Edge:        edged(fake.KindRelay, "acme.com"),
+	}); !removed.GetSuccess() {
+		t.Fatalf("RemoveProject() of %s = %q", slug, removed.GetError())
 	}
-	if result, _ := deploy(t, client, previewOf("shop")); !result.GetSuccess() {
-		t.Fatalf("shop's preview Deploy() = %q", result.GetError())
-	}
-	blogged, _ := deploy(t, client, previewOf("blog"))
-	if !blogged.GetSuccess() {
-		t.Fatalf("blog's preview Deploy() = %q", blogged.GetError())
-	}
+}
+
+func checkSharedWildcardCertificateKept(t *testing.T, p *fake.Provider, blogged *progressv1.OperationResult) {
+	t.Helper()
 	blogHost := servedAppHost(t, blogged, "admin")
 	direct := p.Edges().(*fake.Edges).Edge(fake.KindDirect)
 	shared := lastClaimOf(direct.Claims(), blogHost).Certificate
 	if shared == "" {
 		t.Fatalf("blog's %s was claimed with no certificate, want the global preview wildcard's", blogHost)
 	}
-
-	if removed := removeProject(t, client, &contractv1.ProjectRequest{
-		Slug:        "shop",
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
-		Edge:        edged(fake.KindRelay, "acme.com"),
-	}); !removed.GetSuccess() {
-		t.Fatalf("RemoveProject() of shop = %q", removed.GetError())
-	}
-
 	if slices.Contains(p.Discarded(), shared) {
 		t.Errorf("removing shop discarded %s, the certificate blog's previews still answer with", shared)
 	}
@@ -236,34 +240,57 @@ func TestRemovingOneProjectUnderTheGlobalPreviewWildcardLeavesTheCertificateAnot
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(zone.(*fake.DNSRecords).Records(), validation) {
-		t.Errorf("the zone holds %v after shop was removed, want %s kept: the shared certificate is renewed through it", zone.(*fake.DNSRecords).Records(), validation)
+	if written := zone.(*fake.DNSRecords).Records(); !slices.Contains(written, globalWildcardValidation) {
+		t.Errorf("the zone holds %v after shop was removed, want %s kept: the shared certificate is renewed through it", written, globalWildcardValidation)
 	}
 }
 
-func TestRemovingTheOnlyProjectWhoseGlobalPreviewWildcardCertificateIsStillValidatingDiscardsIt(t *testing.T) {
-	client, p := mixedServed(t)
-	previewBootstrapped(t, client)
-	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
-		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+func TestRemovingOneProjectUnderTheGlobalPreviewWildcardLeavesTheCertificateAnotherProjectsContainerPreviewsAnswerWith(t *testing.T) {
+	client, p := globalPreviewServed(t)
+	if result, _ := deploy(t, client, globalPreviewOf("shop")); !result.GetSuccess() {
+		t.Fatalf("shop's preview Deploy() = %q", result.GetError())
 	}
-	p.RequireValidationRecords(edge.Record{Name: "_acme.preview.acme.com", Type: edge.RecordTypeCNAME, Value: "validation.fake.invalid"})
+	blogged, _ := deploy(t, client, globalPreviewOf("blog"))
+	if !blogged.GetSuccess() {
+		t.Fatalf("blog's preview Deploy() = %q", blogged.GetError())
+	}
+
+	removePreviewProject(t, client, "shop")
+
+	checkSharedWildcardCertificateKept(t, p, blogged)
+}
+
+func TestRemovingAProjectWhoseRunStoppedWaitingForTheGlobalPreviewWildcardCertificateLeavesItOnceAnotherProjectAnswersWithIt(t *testing.T) {
+	client, p := globalPreviewServed(t)
 	p.StallAfterProving(provider.Resumable(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
-	req := withContainerAdmin(previewDeployRequest(), adminBuildID)
-	req.Edge = edged(fake.KindRelay, "acme.com")
-	deploy(t, client, req)
+	deploy(t, client, globalPreviewOf("shop"))
+	if pending := readStack(t, p, environment.TierPreview, "shop").Hosts["*.preview.acme.com"].Certificate; !pending.Requested {
+		t.Fatalf("shop records the wildcard's certificate as %+v, want the one it requested while it validates", pending)
+	}
+	p.StallAfterProving(nil)
+	p.RefuseDiscardingAServingCertificate(refusal.Refuse(refusal.CodeNotReady, "the certificate is in use"))
+	blogged, _ := deploy(t, client, globalPreviewOf("blog"))
+	if !blogged.GetSuccess() {
+		t.Fatalf("blog's preview Deploy() = %q", blogged.GetError())
+	}
+
+	removePreviewProject(t, client, "shop")
+
+	checkSharedWildcardCertificateKept(t, p, blogged)
+}
+
+func TestRemovingTheOnlyProjectWhoseGlobalPreviewWildcardCertificateIsStillValidatingDiscardsIt(t *testing.T) {
+	client, p := globalPreviewServed(t)
+	p.StallAfterProving(provider.Resumable(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
+	p.ReportCertificateFor("*.preview.acme.com", provider.CertificateHealth{Terminates: true, Status: "PENDING_VALIDATION"})
+	deploy(t, client, globalPreviewOf("shop"))
 	pending := readStack(t, p, environment.TierPreview, "shop").Hosts["*.preview.acme.com"].Certificate
 	if pending.ID == "" || !pending.Requested {
 		t.Fatalf("shop records the wildcard's certificate as %+v, want the one it requested while it validates", pending)
 	}
 
-	if removed := removeProject(t, client, &contractv1.ProjectRequest{
-		Slug:        "shop",
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
-		Edge:        edged(fake.KindRelay, "acme.com"),
-	}); !removed.GetSuccess() {
-		t.Fatalf("RemoveProject() of shop = %q", removed.GetError())
-	}
+	removePreviewProject(t, client, "shop")
+
 	if !slices.Contains(p.Discarded(), pending.ID) {
 		t.Errorf("removing shop discarded %v, want %s: no other project can answer with a certificate still validating", p.Discarded(), pending.ID)
 	}
