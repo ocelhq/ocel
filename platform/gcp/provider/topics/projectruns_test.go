@@ -9,8 +9,9 @@ import (
 	"testing"
 
 	"cloud.google.com/go/firestore/apiv1/firestorepb"
-	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -75,7 +76,7 @@ func (f *heldFirestore) BatchWrite(_ context.Context, req *firestorepb.BatchWrit
 	for _, write := range req.GetWrites() {
 		delete(f.held, write.GetDelete())
 		response.WriteResults = append(response.WriteResults, &firestorepb.WriteResult{UpdateTime: timestamppb.Now()})
-		response.Status = append(response.Status, &status.Status{})
+		response.Status = append(response.Status, status.New(codes.OK, "").Proto())
 	}
 	return response, nil
 }
