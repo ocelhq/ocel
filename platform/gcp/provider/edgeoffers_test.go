@@ -273,7 +273,7 @@ func TestTheWorkersAnOriginAdoptsAndWhatTheCloudflareEdgeRecordsOfTheTierNeverOv
 	listed := cloudflareZoneHoldingNoClientCertificates(t)
 	h := newOffersHarness(t)
 	ctx := t.Context()
-	origin := edges.Registry{Project: "acme-prod", KeyValues: h.records}.Cloudflare()
+	origin := edges.Registry{ReadProject: func(context.Context) (string, error) { return "acme-prod", nil }, KeyValues: h.records}.Cloudflare()
 	proxy := cloudflare.NewProxy("ocel", origin, cloudflare.Options{})
 
 	if _, err := proxy.Bootstrap(ctx, environment.TierProduction); err != nil {

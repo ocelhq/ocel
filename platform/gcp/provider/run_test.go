@@ -398,6 +398,30 @@ func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
 	}
 }
 
+func TestAReleaseOntoAPinnedServiceTagsTheRevisionItCreated(t *testing.T) {
+	server := &googletest.Run{}
+	first := serves("ocel-shop-prod-app")
+	first.Tag = "r00000001"
+	_, one := released(t, server, first)
+	if _, err := providerServing(server, t).services().Pin(context.Background(), first.Service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+
+	second := first
+	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	second.Tag = "r00000002"
+	_, two := released(t, server, second)
+
+	if two == one {
+		t.Fatalf("the second release reported revision %s, the one the service serves, want the revision it created: Cloud Run reports a revision ready only once it serves traffic", two)
+	}
+	for _, target := range server.Serving().Traffic {
+		if target.Tag == second.Tag && run.RevisionName(target.Revision) != two {
+			t.Errorf("tag %s is on %s, want %s: the edge reaches the release on its tag, and would serve what ran before", second.Tag, target.Revision, two)
+		}
+	}
+}
+
 func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t *testing.T) {
 	server := &googletest.Run{}
 	first := run.Serving{
