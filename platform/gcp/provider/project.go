@@ -55,13 +55,6 @@ func ambientProject(ctx context.Context) (string, error) {
 		"project", projectVariable, cloudSDKVariable)
 }
 
-func unnamedProject() error {
-	return refusal.Refuse(refusal.CodeInvalid,
-		"option %q names no Google Cloud project and neither %s nor %s does. "+
-			"A scan reads no credentials and runs no gcloud to find one, so name it in the options or in one of them",
-		"project", projectVariable, cloudSDKVariable)
-}
-
 func credentialProject(ctx context.Context) string {
 	found, err := google.FindDefaultCredentials(ctx, gcloud.CloudPlatformScope)
 	if err != nil {
@@ -138,13 +131,6 @@ func (p *Provider) Project(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return names.Project(), nil
-}
-
-func (p *Provider) named() (names.Names, error) {
-	if p.options.Project == "" {
-		return names.Names{}, unnamedProject()
-	}
-	return names.New(p.namespace, p.options.Project), nil
 }
 
 func (p *Provider) emulated() bool { return p.endpoint != "" }
