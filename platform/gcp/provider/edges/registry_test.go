@@ -1,6 +1,7 @@
 package edges
 
 import (
+	"context"
 	"testing"
 
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -9,7 +10,7 @@ import (
 func TestAGoogleCloudOriginIsItsProject(t *testing.T) {
 	t.Parallel()
 
-	origin, err := Registry{Project: "acme-shop"}.Cloudflare().Scope(t.Context())
+	origin, err := Registry{ReadProject: func(context.Context) (string, error) { return "acme-shop", nil }}.Cloudflare().Scope(t.Context())
 	if err != nil {
 		t.Fatalf("Cloudflare().Scope() = %v", err)
 	}

@@ -21,22 +21,23 @@ import (
 )
 
 type Registry struct {
-	Namespace provider.Namespace
-	KeyValues records.Store
-	Pins      pin.Pins
-	Gates     cloudrun.Gates
-	Stacks    alb.Stacks
-	Routes    alb.Routes
-	Entries   alb.Entries
-	WarmURL   func(ctx context.Context, url, address, cookie string) error
-	Assets    func(ctx context.Context, tier environment.Tier) (alb.AssetsBucket, error)
-	CopyFiles func(ctx context.Context, tier environment.Tier, from, to alb.StaticRoutes) error
-	ProbeGate func(ctx context.Context, hostname, address string) (bool, error)
-	Cipher    seal.Cipher
-	Images    alb.PluginImages
-	Project   string
-	Region    string
-	FrontPart *alb.FrontPart
+	Namespace   provider.Namespace
+	KeyValues   records.Store
+	Pins        pin.Pins
+	Gates       cloudrun.Gates
+	Stacks      alb.Stacks
+	Routes      alb.Routes
+	Entries     alb.Entries
+	WarmURL     func(ctx context.Context, url, address, cookie string) error
+	Assets      func(ctx context.Context, tier environment.Tier) (alb.AssetsBucket, error)
+	CopyFiles   func(ctx context.Context, tier environment.Tier, from, to alb.StaticRoutes) error
+	ProbeGate   func(ctx context.Context, hostname, address string) (bool, error)
+	Cipher      seal.Cipher
+	Images      alb.PluginImages
+	Project     string
+	ReadProject func(context.Context) (string, error)
+	Region      string
+	FrontPart   *alb.FrontPart
 }
 
 var Supported = []edge.Kind{alb.Kind, cloudflare.Kind}
@@ -59,8 +60,12 @@ func (s cloudflareRecords) Read(ctx context.Context, key records.Key) (records.E
 	return entry, err
 }
 
-func (e Registry) cloudflareScope(context.Context) (cloudflare.OriginScope, error) {
-	return cloudflare.OriginScope{Vendor: string(gcloud.Vendor), ID: e.Project}, nil
+func (e Registry) cloudflareScope(ctx context.Context) (cloudflare.OriginScope, error) {
+	project, err := e.ReadProject(ctx)
+	if err != nil {
+		return cloudflare.OriginScope{}, err
+	}
+	return cloudflare.OriginScope{Vendor: string(gcloud.Vendor), ID: project}, nil
 }
 
 func (e Registry) OpenCloudRun() *cloudrun.Edge {
