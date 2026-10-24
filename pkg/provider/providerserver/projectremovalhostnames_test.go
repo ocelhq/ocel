@@ -248,6 +248,9 @@ func TestADeployAfterARemovalThatFailedToDiscardBindsItsHostnameAgain(t *testing
 	if result := removeProject(t, client, removal); result.GetSuccess() {
 		t.Fatal("RemoveProject() removed the project, want it failed on a certificate it could not discard")
 	}
+	if kept := readStack(t, vendor, environment.TierProduction, "shop").Host("shop.example"); kept.Router == "" {
+		t.Errorf("the failed removal kept %+v, want the router that answers it kept for inspecting its certificate", kept)
+	}
 
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() after the failed removal = %q", result.GetError())
