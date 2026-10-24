@@ -81,12 +81,13 @@ func TestRetiringKeepsTheWorkersOfALiveApp(t *testing.T) {
 	}
 }
 
-func TestRetiringTakesDownTheWorkersALiveAppNoLongerHosts(t *testing.T) {
+func TestADeployThatDropsAWorkerPlansNoDeletionAndKeepsItsContainerForARollback(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{remembers: true}
 	p, store := recording(machine)
-	promotedWorkers(t, p, provisionedRelease(t, p, aStack(t, aWorkerApp())))
+	first := provisionedRelease(t, p, aStack(t, aWorkerApp()))
+	promotedWorkers(t, p, first)
 	dropped, _ := recordedWorker(t, store, "ledger")
 	live := provider.LiveApps{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.LiveApp{{App: "web", Workers: []string{"worker"}}}}
 
@@ -94,24 +95,24 @@ func TestRetiringTakesDownTheWorkersALiveAppNoLongerHosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
+	next := aWorkerApp()
+	next.Workers = next.Workers[:1]
 	before := len(machine.commands())
+	promotedWorkers(t, p, provisionedRelease(t, p, releaseOf(t, next, nextBuildID)))
 	if err := p.Hooks().Retirement.Retire(context.Background(), live, progress.Discard()); err != nil {
 		t.Fatalf("Retire() = %v", err)
 	}
 
-	var planned []string
-	for _, group := range plan.Groups {
-		for _, change := range group.Changes {
-			planned = append(planned, change.Name)
-		}
+	if len(plan.Groups) != 0 {
+		t.Errorf("the plan removes %+v, want nothing: the deploy stops ledger and keeps its container for a rollback to start again", plan.Groups)
 	}
-	if !slices.Equal(planned, []string{dropped.Container}) {
-		t.Errorf("the plan removes %v, want ledger's container %s alone", planned, dropped.Container)
-	}
-	if !slices.ContainsFunc(machine.commands()[before:], func(command string) bool {
+	if slices.ContainsFunc(machine.commands()[before:], func(command string) bool {
 		return strings.Contains(command, "docker rm --force '"+dropped.Container+"'")
 	}) {
-		t.Errorf("ledger's container %s was never taken down", dropped.Container)
+		t.Errorf("the deploy removed ledger's container %s, which the plan never named and a rollback starts again", dropped.Container)
+	}
+	if state := machine.containers[dropped.Container]; !strings.HasPrefix(state, "exited ") {
+		t.Errorf("ledger's container %s is %q, want it stopped", dropped.Container, state)
 	}
 	if _, found := recordedWorker(t, store, "ledger"); found {
 		t.Error("ledger is still recorded after the promotion that dropped it, so the engine keeps delivering to it")

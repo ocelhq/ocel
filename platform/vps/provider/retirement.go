@@ -17,18 +17,13 @@ const (
 	workersGroupKind    = "workers"
 	workerContainerKind = "worker container"
 	retiredAppTemplate  = "app %s is no longer deployed to %s"
-	droppedTemplate     = "app %s no longer hosts these workers"
 )
 
-func retiredReason(apps provider.LiveApps, name string, worker boxapi.QueueWorker) (string, bool) {
-	deployed, found := apps.Find(worker.App)
-	if !found {
-		return fmt.Sprintf(retiredAppTemplate, worker.App, apps.Env), true
-	}
-	if slices.Contains(deployed.Workers, name) {
+func retiredReason(apps provider.LiveApps, worker boxapi.QueueWorker) (string, bool) {
+	if apps.Has(worker.App) {
 		return "", false
 	}
-	return fmt.Sprintf(droppedTemplate, worker.App), true
+	return fmt.Sprintf(retiredAppTemplate, worker.App, apps.Env), true
 }
 
 func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _ progress.Log) (provider.Plan, error) {
@@ -43,7 +38,7 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 		if err := json.Unmarshal(entry.Value, &worker); err != nil {
 			continue
 		}
-		reason, retired := retiredReason(apps, entry.Key.Path[len(entry.Key.Path)-1], worker)
+		reason, retired := retiredReason(apps, worker)
 		if !retired {
 			continue
 		}
@@ -62,7 +57,7 @@ func (p *Provider) PlanRetirement(ctx context.Context, apps provider.LiveApps, _
 func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress progress.Log) error {
 	ref := provider.StackRef{Project: apps.Slug, Tier: apps.Tier, Name: naming.StackName{Env: apps.Env}}
 	return topic.NewWorkers(p.components()).Retire(ctx, ref, func(name string, worker boxapi.QueueWorker) bool {
-		reason, retired := retiredReason(apps, name, worker)
+		reason, retired := retiredReason(apps, worker)
 		if retired {
 			progress.Say(fmt.Sprintf("Taking down worker %s's container %s: %s", name, worker.Container, reason))
 		}
