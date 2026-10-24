@@ -20,6 +20,9 @@ type Databases struct {
 	DeletedTagged []string
 	TierTags      *TierTags
 	CreateDenied  bool
+
+	Layouts        []string
+	LayoutUnserved int
 }
 
 func DatabaseTagParent(id string) string {
@@ -41,7 +44,16 @@ func (s *Databases) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) 
 	defer s.Mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	id, nested := strings.CutPrefix(r.URL.Path, "/v1/projects/"+Project+"/databases/")
+	database, layout, laidOut := strings.Cut(id, "/collectionGroups/")
 	switch {
+	case nested && laidOut:
+		if s.Held[database] == nil || s.LayoutUnserved > 0 {
+			s.LayoutUnserved = max(s.LayoutUnserved-1, 0)
+			WriteNotFound(w)
+			return
+		}
+		s.Layouts = append(s.Layouts, r.Method+" "+layout)
+		writeDoneDatabaseOperation(w)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/projects/"+Project+"/databases":
 		asked := ReadBody[firestoreadmin.GoogleFirestoreAdminV1Database](w, r)
 		if asked == nil {

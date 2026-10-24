@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -18,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -27,6 +29,7 @@ const (
 	projectHashLength      = 10
 	projectField           = "project"
 	projectDatabasesRecord = "projectdatabases"
+	servedCollection       = "served"
 )
 
 var (
@@ -161,6 +164,26 @@ func (c *Clients) DatabaseFirestore(database string) (*firestore.Client, error) 
 	})
 }
 
+func UntilDatabaseServes(ctx context.Context, c *Clients, database string) error {
+	client, err := c.DatabaseFirestore(database)
+	if err != nil {
+		return err
+	}
+	err = googleretry.UntilServed(ctx, func() error {
+		documents := client.Collection(servedCollection).Limit(1).Documents(ctx)
+		defer documents.Stop()
+		_, err := documents.Next()
+		if errors.Is(err, iterator.Done) {
+			return nil
+		}
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("wait for Firestore to serve the %s database: %w", database, err)
+	}
+	return nil
+}
+
 func (c *Clients) TagRecordsFirestore(ctx context.Context, tier environment.Tier, project string) (*firestore.Client, error) {
 	database, err := c.ReadProjectDatabase(ctx, tier, project)
 	if err != nil {
@@ -187,23 +210,24 @@ func ProjectSealedFor(bound seal.AssociatedData) (string, bool) {
 type missingProjectPart struct {
 	condition error
 	refused   error
+	answer    error
 }
 
 func (m missingProjectPart) Error() string { return m.refused.Error() }
 
-func (m missingProjectPart) Unwrap() error { return m.refused }
+func (m missingProjectPart) Unwrap() []error { return []error{m.refused, m.answer} }
 
 func (m missingProjectPart) Is(target error) bool { return target == m.condition }
 
-func refuseNoProjectRecords(tier environment.Tier, project string) error {
-	return missingProjectPart{condition: ErrNoProjectRecords, refused: refusal.Refuse(refusal.CodeNotReady,
+func refuseNoProjectRecords(tier environment.Tier, project string, answer error) error {
+	return missingProjectPart{condition: ErrNoProjectRecords, answer: answer, refused: refusal.Refuse(refusal.CodeNotReady,
 		"the Firestore database project %s keeps its %s records in does not exist yet.\n"+
 			"Deploy %s to the %s tier, or set one of its values with the ocel CLI, which makes it, then try again",
 		project, tier, project, tier)}
 }
 
-func refuseNoProjectKey(tier environment.Tier, project string) error {
-	return missingProjectPart{condition: ErrNoProjectKey, refused: refusal.Refuse(refusal.CodeNotReady,
+func refuseNoProjectKey(tier environment.Tier, project string, answer error) error {
+	return missingProjectPart{condition: ErrNoProjectKey, answer: answer, refused: refusal.Refuse(refusal.CodeNotReady,
 		"project %s has no key of its own in the %s tier yet, and its values are sealed under that key alone.\n"+
 			"Deploy %s to the %s tier, or set one of its values with the ocel CLI, which makes it, then try again",
 		project, tier, project, tier)}

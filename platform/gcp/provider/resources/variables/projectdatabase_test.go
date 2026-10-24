@@ -3,8 +3,11 @@ package variables
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
+
+	firestoreadmin "google.golang.org/api/firestore/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -140,5 +143,24 @@ func TestADatabaseTheDeployCredentialMayNotCreateIsRefusedNamingTheTieredDatabas
 	want := "the deploy credential lacks " + c.DeployCredential(environment.TierProduction).Tiered(credential.DatabasesRole).String()
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("makeAppDatabase() = %v, want it to say %q: Firestore checks creating a database against the untagged project, which the tiered databases role reaches", err, want)
+	}
+}
+
+func TestADatabaseGoogleDoesNotServeYetIsLaidOutOnceItDoes(t *testing.T) {
+	t.Parallel()
+	tags := googletest.NewTieredTags(t)
+	databases := googletest.NewDatabases(t, tags)
+	databases.LayoutUnserved = 2
+	b := bootstrap.Engine{Clients: tags.Tagged(googletest.Clients(databases.URL))}
+	layout := Layout{
+		Expiring: []LayoutField{{Group: "runs", Path: "purgeAt"}},
+		Indexes:  []LayoutIndex{{Group: "runs", Index: &firestoreadmin.GoogleFirestoreAdminV1Index{QueryScope: "COLLECTION"}}},
+	}
+
+	if err := makeAppDatabase(context.Background(), b, environment.TierProduction, b.Clients.SharedDatabase(environment.TierProduction), []Layout{layout}); err != nil {
+		t.Fatalf("makeAppDatabase() = %v, want its layout made once Firestore serves the new database", err)
+	}
+	if want := []string{"PATCH runs/fields/purgeAt", "POST runs/indexes"}; !slices.Equal(databases.Layouts, want) {
+		t.Errorf("laid out %q, want %q", databases.Layouts, want)
 	}
 }

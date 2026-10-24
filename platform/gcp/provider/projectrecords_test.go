@@ -97,6 +97,8 @@ type projectKeysKMS struct {
 	planted  map[string]*kmspb.CryptoKey
 	created  []string
 	ringless bool
+
+	encryptUnserved int
 }
 
 func (k *projectKeysKMS) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
@@ -133,6 +135,10 @@ func (k *projectKeysKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (
 	if !k.keys[req.GetName()] {
 		return nil, status.Error(codes.NotFound, req.GetName())
 	}
+	if k.encryptUnserved > 0 {
+		k.encryptUnserved--
+		return nil, status.Error(codes.NotFound, req.GetName())
+	}
 	return &kmspb.EncryptResponse{Name: req.GetName(), Ciphertext: []byte("sealed")}, nil
 }
 
@@ -164,6 +170,17 @@ func TestTheFirstValueAProjectSealsMakesTheProjectsKeyAndIsSealedUnderIt(t *test
 
 	if want := []string{ports.ProjectKey(environment.TierProduction, "shop")}; !slices.Equal(kms.created, want) {
 		t.Errorf("made the keys %q, want %q once: the second seal finds the key there", kms.created, want)
+	}
+}
+
+func TestAValueSealedUnderAProjectKeyCloudKMSDoesNotServeYetIsSealedOnceItDoes(t *testing.T) {
+	t.Parallel()
+	p, kms := servingProjectKeys(t)
+	kms.encryptUnserved = 2
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
+
+	if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "STRIPE_KEY"), []byte("sk_live")); err != nil {
+		t.Fatalf("Seal() = %v, want the value sealed once Cloud KMS serves the key it just made", err)
 	}
 }
 

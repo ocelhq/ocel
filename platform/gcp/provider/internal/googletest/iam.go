@@ -37,9 +37,11 @@ type IAM struct {
 	Minted    []string
 	KeyPolicy map[string]*iampb.Policy
 	KeyRaces  int
-	Project   *cloudresourcemanager.Policy
-	Writes    int
-	Created   []*iam.CreateServiceAccountRequest
+
+	KeyUnserved int
+	Project     *cloudresourcemanager.Policy
+	Writes      int
+	Created     []*iam.CreateServiceAccountRequest
 
 	Accounts       map[string]bool
 	Unseen         int
@@ -182,10 +184,18 @@ func (s *IAM) HasKey(name string) bool {
 	return s.keys[name]
 }
 
+func (s *IAM) unservedKey() bool {
+	if s.KeyUnserved == 0 {
+		return false
+	}
+	s.KeyUnserved--
+	return true
+}
+
 func (s *IAM) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.EncryptResponse, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	if !s.keys[req.GetName()] {
+	if !s.keys[req.GetName()] || s.unservedKey() {
 		return nil, status.Error(codes.NotFound, req.GetName())
 	}
 	return &kmspb.EncryptResponse{Name: req.GetName(), Ciphertext: append([]byte("sealed:"), req.GetPlaintext()...)}, nil
@@ -234,7 +244,7 @@ func (s *IAM) serveBucketPolicy(w http.ResponseWriter, r *http.Request, bucket s
 func (s *IAM) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	if !s.keys[req.GetName()] {
+	if !s.keys[req.GetName()] || s.unservedKey() {
 		return nil, status.Error(codes.NotFound, req.GetName())
 	}
 	primary := kmspb.CryptoKeyVersion_ENABLED
@@ -266,6 +276,9 @@ func (s *IAM) UpdateCryptoKeyPrimaryVersion(_ context.Context, req *kmspb.Update
 func (s *IAM) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
+	if strings.Contains(req.GetResource(), "/cryptoKeys/") && s.unservedKey() {
+		return nil, status.Error(codes.NotFound, req.GetResource())
+	}
 	if policy := s.KeyPolicy[req.GetResource()]; policy != nil {
 		return policy, nil
 	}

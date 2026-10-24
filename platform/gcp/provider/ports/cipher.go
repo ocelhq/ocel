@@ -69,10 +69,10 @@ func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 
 func (s Cipher) keyless(tier environment.Tier, bound seal.AssociatedData, doing string, err error) error {
 	if project, owned := ProjectSealedFor(bound); owned && status.Code(err) == codes.NotFound {
-		return refuseNoProjectKey(tier, project)
+		return refuseNoProjectKey(tier, project, err)
 	}
 	if status.Code(err) == codes.NotFound {
-		return missingProjectPart{condition: ErrNoTierKey, refused: refusal.Refuse(refusal.CodeNotReady,
+		return missingProjectPart{condition: ErrNoTierKey, answer: err, refused: refusal.Refuse(refusal.CodeNotReady,
 			"this project has no %s key on the %s ring yet, and every %s value that belongs to no project is sealed under it.\n"+
 				"Deploy to the %s tier, or set a value with the ocel CLI, which adds it, then try again",
 			tier, s.Clients.KeyRing(), tier, tier)}

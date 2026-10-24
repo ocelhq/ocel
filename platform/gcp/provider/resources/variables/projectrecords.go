@@ -67,7 +67,7 @@ func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.T
 		})
 	})
 	if err == nil {
-		return nil
+		return untilKeyServed(ctx, c, client, tier, project)
 	}
 	if status.Code(err) == codes.AlreadyExists {
 		return refuseUnsealingKey(ctx, c, client, tier, project)
@@ -79,6 +79,20 @@ func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.T
 			c.KeyRing(), project, tier, project, project, tier, bootstrap.KeysPart)
 	}
 	return gcloud.ExplainMissingGrant(fmt.Errorf("create the key project %s seals its %s values under: %w", project, tier, err), c.DeployCredential(tier).ProjectPermissions().String())
+}
+
+func untilKeyServed(ctx context.Context, c *gcloud.Clients, client *kms.KeyManagementClient, tier environment.Tier, project string) error {
+	name := c.Workload().ProjectKeyPath(tier, project)
+	err := googleretry.UntilServed(ctx, func() error {
+		_, err := googleretry.Called(ctx, func() (*kmspb.CryptoKey, error) {
+			return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: name})
+		})
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("wait for Cloud KMS to serve the key project %s seals its %s values under: %w", project, tier, err)
+	}
+	return nil
 }
 
 func refuseUnsealingKey(ctx context.Context, c *gcloud.Clients, client *kms.KeyManagementClient, tier environment.Tier, project string) error {

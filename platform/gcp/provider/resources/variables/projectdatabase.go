@@ -203,7 +203,10 @@ func ensureAppDatabase(ctx context.Context, b bootstrap.Engine, tier environment
 	if b.Clients.Emulated() {
 		return nil
 	}
-	return makeAppDatabase(ctx, b, tier, database, layouts)
+	if err := makeAppDatabase(ctx, b, tier, database, layouts); err != nil {
+		return err
+	}
+	return ports.UntilDatabaseServes(ctx, b.Clients.Workload(), database)
 }
 
 func makeAppDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, database string, layouts []Layout) error {
@@ -232,7 +235,7 @@ func makeLayout(ctx context.Context, b bootstrap.Engine, database string, layout
 	}
 	path := bootstrap.DatabasePath(b.Clients, database)
 	for _, field := range layout.Expiring {
-		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(fieldPath(path, field),
+		operation, err := googleretry.AttemptedUntilServed(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(fieldPath(path, field),
 			&firestoreadmin.GoogleFirestoreAdminV1Field{TtlConfig: &firestoreadmin.GoogleFirestoreAdminV1TtlConfig{}}).
 			UpdateMask("ttlConfig").Context(ctx).Do)
 		if err != nil {
@@ -243,7 +246,7 @@ func makeLayout(ctx context.Context, b bootstrap.Engine, database string, layout
 		}
 	}
 	for _, field := range layout.Unindexed {
-		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(fieldPath(path, field),
+		operation, err := googleretry.AttemptedUntilServed(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(fieldPath(path, field),
 			&firestoreadmin.GoogleFirestoreAdminV1Field{IndexConfig: &firestoreadmin.GoogleFirestoreAdminV1IndexConfig{
 				Indexes:         []*firestoreadmin.GoogleFirestoreAdminV1Index{},
 				ForceSendFields: []string{"Indexes"},
@@ -256,7 +259,7 @@ func makeLayout(ctx context.Context, b bootstrap.Engine, database string, layout
 		}
 	}
 	for _, index := range layout.Indexes {
-		operation, err := googleretry.Attempted(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(path+"/collectionGroups/"+index.Group, index.Index).Context(ctx).Do)
+		operation, err := googleretry.AttemptedUntilServed(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(path+"/collectionGroups/"+index.Group, index.Index).Context(ctx).Do)
 		if gcloud.Taken(err) {
 			continue
 		}
