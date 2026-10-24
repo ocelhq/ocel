@@ -117,3 +117,17 @@ func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 		})
 	}
 }
+
+func TestNoAdoptedProxyAdvisesThePinsItsOptionRefuses(t *testing.T) {
+	t.Parallel()
+
+	for name, adopted := range map[string]front.Proxy{
+		"manual":            {Manual: &front.Manual{}},
+		"Coolify's Traefik": {Traefik: &front.Traefik{Preset: "coolify"}},
+		"Coolify's Caddy":   {Caddy: &front.Caddy{Preset: "coolify"}},
+	} {
+		if advice := adopted.Front().DescribeSharedPreviewCertificate("preview.example.com"); strings.Contains(advice, `"certificates"`) {
+			t.Errorf("behind %s a preview refusal would advise %q, and %q is refused beside %q", name, advice, "certificates", "proxy")
+		}
+	}
+}
