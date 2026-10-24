@@ -2,6 +2,7 @@ import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { BacklogStore } from "./purge-backlog";
 
 const RETRY_AT = "retryAt";
+const TAGS_PER_QUERY = 100;
 const FAILURES = "failures";
 const COVERED_AT = "MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0))";
 const TAG_RELEASE =
@@ -14,7 +15,8 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
        tag TEXT PRIMARY KEY,
        mode TEXT NOT NULL,
        raised_at INTEGER NOT NULL,
-       latest_at INTEGER NOT NULL
+       latest_at INTEGER NOT NULL,
+       expires_at INTEGER
      );
      CREATE INDEX IF NOT EXISTS pending_by_mode ON pending (mode, raised_at);
      CREATE TABLE IF NOT EXISTS purged (
@@ -74,19 +76,39 @@ export function newSqliteBacklogStore(storage: DurableObjectStorage): BacklogSto
         )
         .toArray()
         .map((row) => row.release),
-    addPending(mode, tag, raisedAt) {
+    addPending(mode, tag, raisedAt, expiresAt) {
       sql.exec(
-        `INSERT INTO pending (tag, mode, raised_at, latest_at) VALUES (?, ?, ?, ?)
+        `INSERT INTO pending (tag, mode, raised_at, latest_at, expires_at) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(tag) DO UPDATE SET
            mode = CASE WHEN pending.mode = 'purge' OR excluded.mode = 'purge'
                        THEN 'purge' ELSE 'invalidate' END,
            raised_at = MIN(pending.raised_at, excluded.raised_at),
-           latest_at = MAX(pending.latest_at, excluded.latest_at)`,
+           latest_at = MAX(pending.latest_at, excluded.latest_at),
+           expires_at = CASE
+             WHEN excluded.expires_at IS NULL THEN pending.expires_at
+             ELSE MAX(COALESCE(pending.expires_at, 0), excluded.expires_at)
+           END`,
         tag,
         mode,
         raisedAt,
         raisedAt,
+        expiresAt ?? null,
       );
+    },
+    readExpiresAt(tags) {
+      const expires: Record<string, number> = {};
+      for (let i = 0; i < tags.length; i += TAGS_PER_QUERY) {
+        const chunk = tags.slice(i, i + TAGS_PER_QUERY);
+        const rows = sql
+          .exec<{ tag: string; expires_at: number }>(
+            `SELECT tag, expires_at FROM pending
+             WHERE expires_at IS NOT NULL AND tag IN (${chunk.map(() => "?").join(",")})`,
+            ...chunk,
+          )
+          .toArray();
+        for (const row of rows) expires[row.tag] = row.expires_at;
+      }
+      return expires;
     },
     settleBatch(mode: PurgeMode, tags, startedAt) {
       const column = mode === "purge" ? "purged_at" : "invalidated_at";

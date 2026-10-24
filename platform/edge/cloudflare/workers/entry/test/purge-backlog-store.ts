@@ -5,6 +5,7 @@ interface Pending {
   mode: PurgeMode;
   raisedAt: number;
   latestAt: number;
+  expiresAt?: number;
 }
 
 interface Covered {
@@ -47,15 +48,24 @@ export function memoryBacklogStore(): MemoryBacklogStore {
         .slice(0, limit)
         .map(([tag]) => tag),
     readPendingReleases: () => [...new Set([...pending.keys()].map(readTagRelease))].sort(),
-    addPending(mode, tag, raisedAt) {
+    addPending(mode, tag, raisedAt, expiresAt) {
       const row = pending.get(tag);
       if (!row) {
-        pending.set(tag, { mode, raisedAt, latestAt: raisedAt });
+        pending.set(tag, { mode, raisedAt, latestAt: raisedAt, expiresAt });
         return;
       }
       row.mode = row.mode === "purge" || mode === "purge" ? "purge" : "invalidate";
       row.raisedAt = Math.min(row.raisedAt, raisedAt);
       row.latestAt = Math.max(row.latestAt, raisedAt);
+      if (expiresAt !== undefined) row.expiresAt = Math.max(row.expiresAt ?? 0, expiresAt);
+    },
+    readExpiresAt(tags) {
+      const expires: Record<string, number> = {};
+      for (const tag of tags) {
+        const expiresAt = pending.get(tag)?.expiresAt;
+        if (expiresAt !== undefined) expires[tag] = expiresAt;
+      }
+      return expires;
     },
     settleBatch(mode, tags, startedAt) {
       for (const tag of tags) {

@@ -1,7 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import type { Env } from "./env";
-import { PurgeBacklog, type PurgeOutcome, type PurgePort, type RaisedTag } from "./purge-backlog";
+import {
+  type BacklogStore,
+  PurgeBacklog,
+  type PurgeOutcome,
+  type PurgePort,
+  type RaisedTag,
+} from "./purge-backlog";
 import { openPurgeQueue, PURGE_QUEUE_NAME } from "./purge-request";
 import { newSqliteBacklogStore } from "./purge-sqlite-store";
 import {
@@ -50,6 +56,7 @@ export class PurgeQueue extends DurableObject<Env> {
   serve: PurgePort;
   recorder: TimesRecorder;
   private readonly backlog: PurgeBacklog;
+  private readonly pending: BacklogStore;
   private readonly times: TagTimesStore;
   private failedFlushes = 0;
 
@@ -61,8 +68,9 @@ export class PurgeQueue extends DurableObject<Env> {
     this.recorder = ctx.id.equals(queues.idFromName(PURGE_QUEUE_NAME))
       ? RECORDED_ON_RAISE
       : openPurgeQueue(ctx.exports);
+    this.pending = newSqliteBacklogStore(ctx.storage);
     this.backlog = new PurgeBacklog({
-      store: newSqliteBacklogStore(ctx.storage),
+      store: this.pending,
       serve: {
         purgeTags: (mode, tags) => this.purgeRecorded(mode, tags),
       },
@@ -78,10 +86,15 @@ export class PurgeQueue extends DurableObject<Env> {
 
   private async purgeRecorded(mode: PurgeMode, tags: string[]): Promise<PurgeOutcome> {
     const raisedAt = Date.now();
+    const expires = this.pending.readExpiresAt(tags);
     try {
       await this.recorder.record(
         mode,
-        tags.map((tag) => ({ tag, raisedAt })),
+        tags.map((tag) => ({
+          tag,
+          raisedAt,
+          ...(expires[tag] !== undefined && { expiresAt: expires[tag] }),
+        })),
       );
     } catch (error) {
       return {

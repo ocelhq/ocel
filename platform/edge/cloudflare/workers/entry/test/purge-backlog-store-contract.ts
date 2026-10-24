@@ -27,6 +27,16 @@ export function describeBacklogStore(
         expect(store.readOldestRaisedAt()).toBe(300);
       }));
 
+    it("keeps the latest expire each pending tag was raised with", () =>
+      withStore((store) => {
+        store.addPending("invalidate", "a", 100, 5_000);
+        store.addPending("invalidate", "a", 200, 3_000);
+        store.addPending("invalidate", "a", 300);
+        store.addPending("invalidate", "b", 100);
+
+        expect(store.readExpiresAt(["a", "b", "unseen"])).toEqual({ a: 5_000 });
+      }));
+
     it("reads a batch oldest first, one mode, up to the limit", () =>
       withStore((store) => {
         store.addPending("purge", "c", 30);

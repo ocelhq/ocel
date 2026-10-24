@@ -21,7 +21,8 @@ export interface BacklogStore {
   hasAnyPending(): boolean;
   readBatch(mode: PurgeMode, limit: number): string[];
   readPendingReleases(): string[];
-  addPending(mode: PurgeMode, tag: string, raisedAt: number): void;
+  addPending(mode: PurgeMode, tag: string, raisedAt: number, expiresAt?: number): void;
+  readExpiresAt(tags: readonly string[]): Record<string, number>;
   settleBatch(mode: PurgeMode, tags: string[], startedAt: number): void;
   settleReleases(releases: string[], startedAt: number): void;
   writeBackoff(failures: number, retryAt: number): void;
@@ -59,13 +60,13 @@ export class PurgeBacklog {
 
   raise(mode: PurgeMode, tags: readonly RaisedTag[]): void {
     const { store } = this.options;
-    for (const { tag, raisedAt } of tags) {
+    for (const { tag, raisedAt, expiresAt } of tags) {
       const coveredAt = Math.max(
         store.readCoveredAt(tag, mode) ?? Number.NEGATIVE_INFINITY,
         store.readCoveredAt(readTagRelease(tag), "purge") ?? Number.NEGATIVE_INFINITY,
       );
       if (coveredAt >= raisedAt) continue;
-      store.addPending(mode, tag, raisedAt);
+      store.addPending(mode, tag, raisedAt, expiresAt);
     }
   }
 
