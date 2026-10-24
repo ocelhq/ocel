@@ -63,14 +63,16 @@ func databaseOf(document string) string {
 	return database
 }
 
-func TestTheRunsOfTwoProjectsAreWrittenToDatabasesOfTheirOwnApartFromEveryProjectsValues(t *testing.T) {
+func TestARunIsWrittenToTheDatabaseItsProjectKeepsItsRecordsInAndNeverToItsTiersRecords(t *testing.T) {
 	t.Parallel()
 	fake := &committedFirestore{}
 	clients := committingTo(t, fake)
+	tier := environment.TierProduction
+	clients.ProjectDatabases = map[string]string{"shop": ports.OwnDatabase("ocel", tier, "shop"), "blog": ports.SharedDatabase("ocel", tier)}
 	now := time.Now()
 
 	for _, project := range []string{"shop", "blog"} {
-		store := topics.Store{Clients: clients, Scope: topics.Scope{Slug: project, Tier: environment.TierProduction, Environment: "production"}}
+		store := topics.Store{Clients: clients, Scope: topics.Scope{Slug: project, Tier: tier, Environment: "production"}}
 		if _, err := store.CreateRun(context.Background(), runs.Run{Execution: "e1", Topic: "resize", Consumer: "resize", Status: provider.RunQueued, CreatedAt: now, DueAt: now}); err != nil {
 			t.Fatalf("CreateRun(%s) = %v", project, err)
 		}
@@ -79,18 +81,12 @@ func TestTheRunsOfTwoProjectsAreWrittenToDatabasesOfTheirOwnApartFromEveryProjec
 	if len(fake.written) != 2 {
 		t.Fatalf("the stores wrote %q, want one run each", fake.written)
 	}
-	shop, blog := databaseOf(fake.written[0]), databaseOf(fake.written[1])
-	if want := "projects/acme-prod/databases/" + ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop"); shop != want {
-		t.Errorf("a run of shop is written to %s, want %s, the database shop's apps alone may write", shop, want)
-	}
-	if shop == blog {
-		t.Errorf("the runs of shop and blog are both written to %s, which an app of either may then read and rewrite", shop)
-	}
-	for project, database := range map[string]string{"shop": shop, "blog": blog} {
-		for _, kept := range []string{ports.RecordsDatabase("ocel", environment.TierProduction), ports.ProjectDatabase("ocel", environment.TierProduction, "shop"), ports.ProjectDatabase("ocel", environment.TierProduction, "blog")} {
-			if database == "projects/acme-prod/databases/"+kept {
-				t.Errorf("a run of %s is written to %s, which keeps records an app may only read", project, database)
-			}
+	for i, project := range []string{"shop", "blog"} {
+		if got, want := databaseOf(fake.written[i]), "projects/acme-prod/databases/"+clients.ProjectDatabases[project]; got != want {
+			t.Errorf("a run of %s is written to %s, want %s, where %s keeps its records", project, got, want, project)
+		}
+		if databaseOf(fake.written[i]) == "projects/acme-prod/databases/"+ports.RecordsDatabase("ocel", tier) {
+			t.Errorf("a run of %s is written to the tier's records database, which no app may write", project)
 		}
 	}
 }

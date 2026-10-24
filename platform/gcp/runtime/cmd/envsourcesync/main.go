@@ -81,6 +81,7 @@ func newSync(getenv func(string) string) (*envsource.Sync, error) {
 		Project:   named[ports.ProjectEnvVar],
 		Region:    named[ports.RegionEnvVar],
 	}
+	clients.Records = ports.KeyValues{Clients: clients}
 	return &envsource.Sync{
 		Store: variablestore.Store{
 			KeyValues: ports.KeyValues{Clients: clients},

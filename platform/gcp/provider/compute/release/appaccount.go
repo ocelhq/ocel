@@ -23,36 +23,59 @@ const (
 	appDescriptionSuffix      = " tier"
 )
 
-func (p *Release) EnsureAccount(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (string, error) {
+func (p *Release) EnsureAccount(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, declared map[string]*provider.TopicSpec) (string, map[string]string, error) {
 	ref, app := spec.Ref, spec.App.App
 	account := c.AppAccount(ref.Project, ref.Name.Env, app)
 	if err := CreateAppAccount(ctx, c, ref, app); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	email := c.AppAccountEmail(ref.Project, ref.Name.Env, app)
 	referenced, err := variables.ReferencedOwners(ctx, p.Records, p.Cipher, spec)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	want, err := AppGrants(ctx, c, p.Components, p.CacheGrants, spec, account, "serviceAccount:"+email, declared, referenced)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := grants.Reconcile(ctx, c, p.Records, ref.Tier, account, want); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return email, nil
+	databases, err := readProjectDatabases(ctx, c, ref.Tier, append([]string{ref.Project}, referenced...))
+	if err != nil {
+		return "", nil, err
+	}
+	return email, databases, nil
+}
+
+func readProjectDatabases(ctx context.Context, c *gcloud.Clients, tier environment.Tier, projects []string) (map[string]string, error) {
+	databases := make(map[string]string, len(projects))
+	for _, project := range projects {
+		database, err := c.Workload().ReadProjectDatabase(ctx, tier, project)
+		if err != nil {
+			return nil, err
+		}
+		databases[project] = database
+	}
+	return databases, nil
 }
 
 func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Registry, cacheGrants CacheGrants, spec provider.StackSpec, account, member string, declared map[string]*provider.TopicSpec, referenced []string) ([]grants.Grant, error) {
 	var granted []grants.Grant
+	read := map[string]bool{}
 	for _, project := range valueOwners(spec, referenced) {
 		if err := variables.EnsureProjectKey(ctx, c, spec.Ref.Tier, project); err != nil {
 			return nil, err
 		}
-		granted = append(granted,
-			grants.OnProject(credential.RecordsRole, member, variables.ProjectDatabaseCondition(c, spec.Ref.Tier, project)),
-			grants.On(grants.Key, c.Workload().ProjectKeyPath(spec.Ref.Tier, project), grants.OpeningRole, member))
+		database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, project)
+		if err != nil {
+			return nil, err
+		}
+		if !read[database] {
+			read[database] = true
+			granted = append(granted, grants.OnProject(credential.RecordsRole, member, variables.DatabaseCondition(c, database)))
+		}
+		granted = append(granted, grants.On(grants.Key, c.Workload().ProjectKeyPath(spec.Ref.Tier, project), grants.OpeningRole, member))
 	}
 	held, err := registry.Grants(ctx, component.App{Clients: c, Spec: spec, Account: account, Member: member, Topics: declared})
 	if err != nil {

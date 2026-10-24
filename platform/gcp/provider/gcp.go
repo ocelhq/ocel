@@ -41,7 +41,8 @@ type Provider struct {
 
 	writtenBy provider.WrittenBy
 
-	records records.Store
+	records           records.Store
+	recordedDatabases sync.Map
 
 	mu            sync.Mutex
 	resolved      *gcloud.Clients

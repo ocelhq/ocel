@@ -30,6 +30,8 @@ func deploymentOf(manifest variables.Manifest) topics.Deployment {
 			Project:   manifest.Project,
 			Region:    manifest.Region,
 			Endpoint:  manifest.Endpoint,
+
+			ProjectDatabases: manifest.Databases,
 		},
 		Names: topics.Names{
 			Namespace: provider.Namespace(manifest.Namespace),

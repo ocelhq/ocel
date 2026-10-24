@@ -60,7 +60,7 @@ func ordersSpec(consumers ...string) *provider.TopicSpec {
 func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *testing.T) {
 	p := live(t)
 	bootstrappedWith(t, p, environment.TierPreview, bootstrap.TopicsPart)
-	writableDatabaseMade(t, p, environment.TierPreview, liveSlug)
+	projectDatabaseMade(t, p, environment.TierPreview, liveSlug)
 	ctx := context.Background()
 	ref := infraRef(t)
 	names := taskNamesOf(t, ref)
@@ -121,7 +121,7 @@ func TestLiveATopicIsProvisionedAsItsPubSubTopologyAndRemovedWithItsBinding(t *t
 func TestLiveATopicWhoseOrderingChangedIsRefusedNamingTheConsumerItKeeps(t *testing.T) {
 	p := live(t)
 	bootstrappedWith(t, p, environment.TierPreview, bootstrap.TopicsPart)
-	writableDatabaseMade(t, p, environment.TierPreview, liveSlug)
+	projectDatabaseMade(t, p, environment.TierPreview, liveSlug)
 	ctx := context.Background()
 	ref := infraRef(t)
 	ordered := ordersSpec("ship", "bill")
@@ -149,7 +149,7 @@ func TestLiveATopicWhoseOrderingChangedIsRefusedNamingTheConsumerItKeeps(t *test
 func TestLiveATopicDeclaredWithNoConfigIsAPubSubTopicAlone(t *testing.T) {
 	p := live(t)
 	bootstrappedWith(t, p, environment.TierPreview, bootstrap.TopicsPart)
-	writableDatabaseMade(t, p, environment.TierPreview, liveSlug)
+	projectDatabaseMade(t, p, environment.TierPreview, liveSlug)
 	ctx := context.Background()
 	ref := infraRef(t)
 

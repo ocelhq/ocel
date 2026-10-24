@@ -136,11 +136,11 @@ func FillContainerDefaults(s run.Serving) run.Serving {
 	return s
 }
 
-func NewCache(names names.Names, buckets naming.Buckets, ref provider.StackRef, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
+func NewCache(names names.Names, buckets naming.Buckets, database, storageEndpoint, tagEndpoint, purgeSecret string) nextCache {
 	return nextCache{
 		purgeSecret:     purgeSecret,
 		buckets:         naming.Buckets{naming.StorageEdge: buckets[naming.StorageEdge], naming.StorageCache: buckets[naming.StorageCache]},
-		tagDatabase:     "projects/" + names.Project() + "/databases/" + names.ProjectWritableDatabase(ref.Tier, ref.Project),
+		tagDatabase:     "projects/" + names.Project() + "/databases/" + database,
 		storageEndpoint: storageEndpoint,
 		tagEndpoint:     tagEndpoint,
 	}

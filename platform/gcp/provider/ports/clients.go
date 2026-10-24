@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -62,10 +63,13 @@ type Clients struct {
 	Endpoint    string
 	TagEndpoint string
 
+	ProjectDatabases map[string]string
+	Records          records.Store
+
 	tierStores    sync.Map
 	projectStores sync.Map
-	runStores     sync.Map
 	tagStores     sync.Map
+	ownDatabases  sync.Map
 	kms           memo[*kms.KeyManagementClient]
 	pubsub        memo[*pubsub.Service]
 	tasks         memo[*cloudtasks.Client]

@@ -358,8 +358,12 @@ func Grants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, acc
 	if err != nil {
 		return nil, err
 	}
+	records, err := variables.ProjectDatabaseCondition(ctx, c, spec.Ref.Tier, spec.Ref.Project)
+	if err != nil {
+		return nil, err
+	}
 	granted := []grants.Grant{
-		grants.OnProject(credential.TaskRecordsRole, member, variables.ProjectWritableDatabaseCondition(c, spec.Ref.Tier, spec.Ref.Project)),
+		grants.OnProject(credential.TaskRecordsRole, member, records),
 		grants.On(grants.Queue, c.DelayQueuePath(c.Region, spec.Ref.Tier), task.QueueEnqueuerRole, member),
 		grants.On(grants.Account, account, bootstrap.RunAsRole, member),
 		grants.On(grants.Account, account, bootstrap.RunAsRole, agent),

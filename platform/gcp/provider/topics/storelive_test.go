@@ -42,7 +42,13 @@ func liveClients(t *testing.T) *ports.Clients {
 	if region == "" {
 		region = emulatedRegion
 	}
-	return &ports.Clients{Namespace: "ocel", Project: project, Region: region, Endpoint: endpoint}
+	clients := &ports.Clients{Namespace: "ocel", Project: project, Region: region, Endpoint: endpoint}
+	clients.Records = ports.KeyValues{Clients: clients}
+	return clients
+}
+
+func runPath(scope topics.Scope, execution string) string {
+	return "taskstores/" + string(scope.Tier) + "~" + scope.Slug + "/environments/" + scope.Environment + "/runs/" + execution
 }
 
 func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryRunStoreMust(t *testing.T) {
@@ -52,7 +58,7 @@ func TestLiveFirestoreStoreKeepsRunsAndRecordsAsEveryRunStoreMust(t *testing.T) 
 	})
 }
 
-func TestLiveAProjectsRunsAreKeptInItsOwnWritableDatabaseApartFromTheNamespaceRecords(t *testing.T) {
+func TestLiveARunIsKeptInTheDatabaseItsProjectKeepsItsRecordsInApartFromItsTiersRecords(t *testing.T) {
 	clients := liveClients(t)
 	scope := scopeOf(t)
 	store := topics.Store{Clients: clients, Scope: scope}
@@ -62,11 +68,11 @@ func TestLiveAProjectsRunsAreKeptInItsOwnWritableDatabaseApartFromTheNamespaceRe
 		t.Fatal(err)
 	}
 
-	path := "taskstores/" + string(scope.Tier) + "~" + scope.Slug + "~" + scope.Environment + "/runs/kept"
+	path := runPath(scope, "kept")
 	for database, want := range map[string]bool{
-		ports.ProjectWritableDatabase(clients.Namespace, scope.Tier, scope.Slug): true,
-		ports.ProjectWritableDatabase(clients.Namespace, scope.Tier, "blog"):     false,
-		clients.RecordsDatabase(scope.Tier):                                      false,
+		clients.SharedDatabase(scope.Tier):          true,
+		clients.OwnDatabase(scope.Tier, scope.Slug): false,
+		clients.RecordsDatabase(scope.Tier):         false,
 	} {
 		client, err := firestore.NewClientWithDatabase(ctx, clients.Project, database, ports.EmulatorGRPC(clients.Endpoint)...)
 		if err != nil {
@@ -89,11 +95,11 @@ func TestLiveAnUnfinishedRunIsPurgedAMonthAfterItWasDue(t *testing.T) {
 	if _, err := store.CreateRun(ctx, runs.Run{Execution: "pending", Topic: "resize", Consumer: "gone", Status: provider.RunDelayed, CreatedAt: time.Now(), DueAt: due}); err != nil {
 		t.Fatal(err)
 	}
-	client, err := clients.RunsFirestore(scope.Tier, scope.Slug)
+	client, err := clients.ProjectFirestore(ctx, scope.Tier, scope.Slug)
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := client.Doc("taskstores/" + string(scope.Tier) + "~" + scope.Slug + "~" + scope.Environment + "/runs/pending").Get(ctx)
+	snapshot, err := client.Doc(runPath(scope, "pending")).Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -483,6 +483,8 @@ export interface DNSOptions {
 }
 
 export interface GcpProviderOptions {
+  /** Keep this project's values, runs and tag records in a Firestore database of its own, which no other project's apps can reach. Left off, they are kept in the one database every project of the tier shares. Fixed by the project's first deploy or value. */
+  ownDatabase?: boolean;
   /** The Google Cloud project to deploy into. Left off, from GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT or gcloud config. */
   project?: string;
   /** The region to deploy into, such as us-central1, never a zone such as us-central1-f. */

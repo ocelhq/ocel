@@ -282,6 +282,7 @@ func (c *Clients) Workload() *ports.Clients {
 			Region:      c.Region,
 			Endpoint:    c.Endpoint,
 			TagEndpoint: c.TagEndpoint,
+			Records:     c.Records,
 		}, nil
 	})
 	return workload

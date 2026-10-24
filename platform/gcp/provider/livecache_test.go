@@ -105,8 +105,8 @@ func TestLivePruningADeploymentRemovesItsTagRecordsAndKeepsAnothers(t *testing.T
 	ctx := context.Background()
 	tier := environment.TierProduction
 	release, otherRelease, preview := liveReleases(t)
-	writableDatabaseMade(t, p, tier, release.Project)
-	store, err := workloadClients(t).TagRecordsFirestore(tier, release.Project)
+	projectDatabaseMade(t, p, tier, release.Project)
+	store, err := workloadClients(t).TagRecordsFirestore(ctx, tier, release.Project)
 	if err != nil {
 		t.Fatalf("TagRecordsFirestore() = %v", err)
 	}

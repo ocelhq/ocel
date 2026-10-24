@@ -309,20 +309,16 @@ func (n Names) PartsRolePath() string {
 	return "projects/" + n.project + "/roles/" + n.PartsRole()
 }
 
-func (n Names) ProjectDatabase(tier environment.Tier, project string) string {
-	return ports.ProjectDatabase(n.namespace, tier, project)
+func (n Names) SharedDatabase(tier environment.Tier) string {
+	return ports.SharedDatabase(n.namespace, tier)
 }
 
-func (n Names) ProjectDatabasePrefix(tier environment.Tier) string {
-	return ports.ProjectDatabasePrefix(n.namespace, tier)
+func (n Names) OwnDatabase(tier environment.Tier, project string) string {
+	return ports.OwnDatabase(n.namespace, tier, project)
 }
 
-func (n Names) ProjectWritableDatabase(tier environment.Tier, project string) string {
-	return ports.ProjectWritableDatabase(n.namespace, tier, project)
-}
-
-func (n Names) ProjectWritableDatabasePrefix(tier environment.Tier) string {
-	return ports.ProjectWritableDatabasePrefix(n.namespace, tier)
+func (n Names) OwnDatabasePrefix(tier environment.Tier) string {
+	return ports.OwnDatabasePrefix(n.namespace, tier)
 }
 
 func (n Names) AccountID(account *iam.ServiceAccount) (string, bool) {

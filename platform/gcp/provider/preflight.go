@@ -5,7 +5,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/originsecret"
@@ -13,8 +12,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
@@ -28,9 +25,9 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	writes := writesProjectDatabase(pre)
 	apis := deployAPIs(pre)
-	if !writes && len(parts) == 0 && len(apis) == 0 {
+	keeps := newDeployUse(pre).keepsProjectRecords()
+	if !keeps && len(parts) == 0 && len(apis) == 0 {
 		return provider.Plan{}, nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
@@ -41,13 +38,9 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 		return provider.Plan{}, err
 	}
 	var plan provider.Plan
-	if writes {
-		group, err := variables.PlanProjectWritableDatabase(ctx, b, pre)
-		if err != nil {
+	if keeps {
+		if plan.Groups, err = variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase); err != nil {
 			return provider.Plan{}, err
-		}
-		if group != nil {
-			plan.Groups = append(plan.Groups, *group)
 		}
 	}
 	groups, err := b.PlanParts(ctx, pre.Deploy.Tier, parts)
@@ -69,9 +62,6 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err := p.warnStaleOriginSecret(ctx, pre); err != nil {
 		return err
 	}
-	if err := p.ensureProjectWritableDatabase(ctx, pre); err != nil {
-		return err
-	}
 	if pre.Edge != alb.Kind {
 		if err := p.leaveALB(ctx, pre); err != nil {
 			return err
@@ -82,6 +72,11 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	}
 	if pre.Deploy.Slug == "" {
 		return nil
+	}
+	if newDeployUse(pre).keepsProjectRecords() {
+		if err := p.ensureProjectDatabase(ctx, pre); err != nil {
+			return err
+		}
 	}
 	slices.Sort(parts)
 	return stackrecords.RecordPartsUsed(ctx, p.KeyValues(), pre.Deploy.Tier, pre.Deploy.Slug, parts)
@@ -140,20 +135,12 @@ func (p *Provider) refuseAPIsOff(ctx context.Context, pre provider.DeployPreflig
 	return b.RefuseServicesOff(ctx, apis)
 }
 
-func writesProjectDatabase(pre provider.DeployPreflight) bool {
-	revalidates := slices.ContainsFunc(pre.Uses, func(uses buildoutput.Uses) bool { return uses.Revalidation })
-	return pre.Deploy.Slug != "" && (revalidates || topic.DeclaresTopics(pre.Resources))
-}
-
-func (p *Provider) ensureProjectWritableDatabase(ctx context.Context, pre provider.DeployPreflight) error {
-	if !writesProjectDatabase(pre) {
-		return nil
-	}
+func (p *Provider) ensureProjectDatabase(ctx context.Context, pre provider.DeployPreflight) error {
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
 	if err != nil {
 		return err
 	}
-	return variables.EnsureProjectWritableDatabase(ctx, b, pre, task.RunLayout(), tagLayout())
+	return variables.EnsureProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase, appDatabaseLayouts()...)
 }
 
 func (p *Provider) leaveALB(ctx context.Context, pre provider.DeployPreflight) error {

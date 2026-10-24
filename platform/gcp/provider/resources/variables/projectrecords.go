@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -23,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -34,19 +32,13 @@ const (
 	projectDatabasesFilter = "databases/"
 )
 
-func ProjectDatabaseCondition(c *gcloud.Clients, tier environment.Tier, project string) *policy.Condition {
-	return &policy.Condition{
-		Title:      "ocel " + project + " " + string(tier) + " records",
-		Expression: fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.ProjectDatabase(tier, project))),
-	}
-}
-
 func RecordsCondition(c *gcloud.Clients, tiers ...environment.Tier) *policy.Condition {
 	var clauses []string
 	for _, tier := range tiers {
 		clauses = append(clauses,
 			fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.RecordsDatabase(tier))),
-			fmt.Sprintf("resource.name.startsWith(%q)", bootstrap.DatabasePath(c, c.ProjectDatabasePrefix(tier))))
+			fmt.Sprintf("resource.name == %q", bootstrap.DatabasePath(c, c.SharedDatabase(tier))),
+			fmt.Sprintf("resource.name.startsWith(%q)", bootstrap.DatabasePath(c, c.OwnDatabasePrefix(tier))))
 	}
 	title := "ocel " + string(c.Namespace()) + " records"
 	if len(tiers) == 1 {
@@ -60,23 +52,6 @@ func projectKeysCondition(c *gcloud.Clients, tier environment.Tier) *policy.Cond
 		Title:      "ocel " + string(c.Namespace()) + " " + string(tier) + " project keys",
 		Expression: fmt.Sprintf("resource.name.startsWith(%q)", gcloud.KeyRingPath(c)+"/cryptoKeys/"+ports.ProjectKeyPrefix(tier)),
 	}
-}
-
-func EnsureProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environment.Tier, project string) error {
-	if c.Emulated() {
-		return nil
-	}
-	return makeProjectDatabase(ctx, c, tier, c.ProjectDatabase(tier, project))
-}
-
-func makeProjectDatabase(ctx context.Context, c *gcloud.Clients, tier environment.Tier, database string) error {
-	err := bootstrap.Engine{Clients: c}.MakeTierDatabase(ctx, tier, database)
-	if googleretry.AnsweredCode(err) == http.StatusTooManyRequests || err != nil && strings.Contains(strings.ToLower(err.Error()), databaseQuotaMessage) {
-		return refusal.Refuse(refusal.CodeNotReady,
-			"project %s has as many Firestore databases as Firestore allows, and every Ocel project keeps its values in one of its own per tier.\n"+
-				"Ask Google support to raise the limit of databases per project, or remove projects this tier no longer runs, then try again", c.Project())
-	}
-	return gcloud.ExplainMissingGrant(err, c.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 }
 
 func EnsureProjectKey(ctx context.Context, c *gcloud.Clients, tier environment.Tier, project string) error {
@@ -201,10 +176,9 @@ func TakeProjectRecords(ctx context.Context, b bootstrap.Engine, tier environmen
 	if err != nil {
 		return fmt.Errorf("list the Firestore databases of project %s: %w", b.Clients.Project(), err)
 	}
-	prefixes := []string{b.Clients.ProjectDatabasePrefix(tier), b.Clients.ProjectWritableDatabasePrefix(tier)}
 	for _, database := range listed.Databases {
 		_, id, _ := strings.Cut(database.Name, projectDatabasesFilter)
-		if !slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(id, prefix) }) {
+		if !strings.HasPrefix(id, b.Clients.OwnDatabasePrefix(tier)) {
 			continue
 		}
 		if err := b.TakeTierDatabase(ctx, tier, id); err != nil {

@@ -25,7 +25,7 @@ func TestLiveGCPProviderConformsWithItsProjectBehindIt(t *testing.T) {
 		t.Setenv(provider.NamespaceEnvVar, namesOf(t, live(t)).Namespace().String()+"-conformance")
 	}
 	bootstrappedWith(t, live(t), environment.TierProduction, bootstrap.EdgeBucketPart, bootstrap.CacheBucketPart)
-	writableDatabaseMade(t, live(t), environment.TierPreview, "conformance")
+	projectDatabaseMade(t, live(t), environment.TierPreview, "conformance")
 
 	conformance.Run(t, conformance.Suite{
 		New: func(context.Context, provider.Settings) (provider.Provider, error) {

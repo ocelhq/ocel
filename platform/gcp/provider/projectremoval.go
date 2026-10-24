@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 const reasonALBReleased = "the project stops using the tier's load balancer, which leaves with the last project behind it"
@@ -31,7 +32,9 @@ func (p *Provider) RemoveProject(ctx context.Context, tier environment.Tier, pro
 	if err := releaseALB(ctx, b, tier, project, log); err != nil {
 		return err
 	}
-	return variables.RemoveProject(ctx, b, tier, project, log)
+	return variables.RemoveProject(ctx, b, func(ctx context.Context, tier environment.Tier, project string) error {
+		return topics.RemoveProjectRuns(ctx, b.Clients.Workload(), tier, project)
+	}, tier, project, log)
 }
 
 func planProjectRemoval(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) ([]provider.ChangeGroup, error) {

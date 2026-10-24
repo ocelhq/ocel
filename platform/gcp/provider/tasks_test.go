@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 )
 
@@ -137,50 +136,6 @@ func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing
 		if strings.HasPrefix(permission, "datastore.indexes.") {
 			t.Errorf("a bootstrap or a deploy is granted %s, want datastore.schemas.*: Google's role reference lists only the schemas names", permission)
 		}
-	}
-}
-
-func plannedBy(t *testing.T, p *Provider, pre provider.DeployPreflight) []provider.ChangeGroup {
-	t.Helper()
-	plan, err := p.PlanPreflight(context.Background(), pre)
-	if err != nil {
-		t.Fatalf("PlanPreflight() = %v", err)
-	}
-	return plan.Groups
-}
-
-func plansWritableDatabase(planned []provider.ChangeGroup, database string) bool {
-	return len(planned) == 1 && planned[0].Action == provider.ActionCreate && planned[0].Reason == bootstrap.ReasonFirstUse && len(planned[0].Changes) == 1 &&
-		planned[0].Changes[0].Name == database && planned[0].Changes[0].Action == provider.ActionCreate
-}
-
-func declaringATaskOf(project string) provider.DeployPreflight {
-	pre := declaringATask()
-	pre.Deploy.Slug = project
-	return pre
-}
-
-func TestADryDeployDeclaringATaskPlansItsProjectsWritableDatabaseAndMakesNothing(t *testing.T) {
-	database := ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")
-	p := failingOnAnyCall(t)
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics, bootstrap.Keys)
-	if planned := plannedBy(t, p, declaringATaskOf("shop")); !plansWritableDatabase(planned, database) {
-		t.Errorf("a dry deploy declaring a task planned %+v, want %s created", planned, database)
-	}
-}
-
-func TestTheFirstDeployDeclaringATaskMakesItsProjectsWritableDatabaseAndAnotherProjectsIsStillPlanned(t *testing.T) {
-	p, _ := deployingNetworks(t)
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.Topics, bootstrap.Keys)
-
-	if err := p.ApplyPreflight(context.Background(), declaringATaskOf("shop")); err != nil {
-		t.Fatalf("ApplyPreflight() = %v", err)
-	}
-	if planned := plannedBy(t, p, declaringATaskOf("shop")); len(planned) != 0 {
-		t.Errorf("a dry deploy of shop after its first planned %+v, want nothing", planned)
-	}
-	if planned := plannedBy(t, p, declaringATaskOf("blog")); !plansWritableDatabase(planned, ports.ProjectWritableDatabase("ocel", environment.TierProduction, "blog")) {
-		t.Errorf("a dry deploy of blog planned %+v, want blog's own database created", planned)
 	}
 }
 

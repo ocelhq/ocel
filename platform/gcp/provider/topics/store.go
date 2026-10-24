@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	storeCollection   = "taskstores"
-	runsCollection    = "runs"
-	recordsCollection = "records"
+	storeCollection        = "taskstores"
+	environmentsCollection = "environments"
+	runsCollection         = "runs"
+	recordsCollection      = "records"
 
 	maxRunScan = 1000
 	countAlias = "n"
@@ -41,8 +42,8 @@ type Scope struct {
 	Environment string
 }
 
-func (s Scope) documentID() string {
-	return string(s.Tier) + "~" + s.Slug + "~" + s.Environment
+func projectDocument(client *firestore.Client, tier environment.Tier, slug string) *firestore.DocumentRef {
+	return client.Collection(storeCollection).Doc(string(tier) + "~" + slug)
 }
 
 type Store struct {
@@ -82,20 +83,20 @@ type runDocument struct {
 	Revision    string     `firestore:"revision"`
 }
 
-func (s Store) client() (*firestore.Client, error) {
-	return s.Clients.RunsFirestore(s.Scope.Tier, s.Scope.Slug)
+func (s Store) client(ctx context.Context) (*firestore.Client, error) {
+	return s.Clients.ProjectFirestore(ctx, s.Scope.Tier, s.Scope.Slug)
 }
 
-func (s Store) scopeDocument() (*firestore.DocumentRef, error) {
-	client, err := s.client()
+func (s Store) scopeDocument(ctx context.Context) (*firestore.DocumentRef, error) {
+	client, err := s.client(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return client.Collection(storeCollection).Doc(s.Scope.documentID()), nil
+	return projectDocument(client, s.Scope.Tier, s.Scope.Slug).Collection(environmentsCollection).Doc(s.Scope.Environment), nil
 }
 
-func (s Store) runDocument(execution string) (*firestore.DocumentRef, error) {
-	scope, err := s.scopeDocument()
+func (s Store) runDocument(ctx context.Context, execution string) (*firestore.DocumentRef, error) {
+	scope, err := s.scopeDocument(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +107,8 @@ func recordID(purpose provider.RecordPurpose, topic, key string) string {
 	return string(purpose) + "~" + topic + "~" + base64.RawURLEncoding.EncodeToString([]byte(key))
 }
 
-func (s Store) recordDocument(record provider.ExpiringRecord) (*firestore.DocumentRef, error) {
-	scope, err := s.scopeDocument()
+func (s Store) recordDocument(ctx context.Context, record provider.ExpiringRecord) (*firestore.DocumentRef, error) {
+	scope, err := s.scopeDocument(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (s Store) recordDocument(record provider.ExpiringRecord) (*firestore.Docume
 }
 
 func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord) (provider.ExpiringRecord, bool, error) {
-	doc, err := s.recordDocument(record)
+	doc, err := s.recordDocument(ctx, record)
 	if err != nil {
 		return provider.ExpiringRecord{}, false, err
 	}
@@ -159,7 +160,7 @@ func (s Store) EnsureRecord(ctx context.Context, record provider.ExpiringRecord)
 }
 
 func (s Store) ReplaceRecord(ctx context.Context, record provider.ExpiringRecord, held json.RawMessage) error {
-	doc, err := s.recordDocument(record)
+	doc, err := s.recordDocument(ctx, record)
 	if err != nil {
 		return err
 	}
@@ -192,7 +193,7 @@ func replaceRecordHeld(ctx context.Context, doc *firestore.DocumentRef, record p
 }
 
 func (s Store) DeleteRecord(ctx context.Context, record provider.ExpiringRecord) error {
-	doc, err := s.recordDocument(record)
+	doc, err := s.recordDocument(ctx, record)
 	if err != nil {
 		return err
 	}
@@ -235,7 +236,7 @@ func changedSince(err error) bool {
 func isNotFound(err error) bool { return status.Code(err) == codes.NotFound }
 
 func (s Store) CreateRun(ctx context.Context, run runs.Run) (records.Revision, error) {
-	doc, err := s.runDocument(run.Execution)
+	doc, err := s.runDocument(ctx, run.Execution)
 	if err != nil {
 		return "", err
 	}
@@ -254,7 +255,7 @@ func (s Store) CreateRun(ctx context.Context, run runs.Run) (records.Revision, e
 }
 
 func (s Store) ReadRun(ctx context.Context, topic, execution string) (runs.Run, error) {
-	doc, err := s.runDocument(execution)
+	doc, err := s.runDocument(ctx, execution)
 	if err != nil {
 		return runs.Run{}, err
 	}
@@ -314,7 +315,7 @@ func (s Store) DeleteRun(ctx context.Context, run runs.Run) error {
 }
 
 func (s Store) atRevision(ctx context.Context, run runs.Run, change func(*firestore.DocumentRef, firestore.Precondition) error) error {
-	doc, err := s.runDocument(run.Execution)
+	doc, err := s.runDocument(ctx, run.Execution)
 	if err != nil {
 		return err
 	}
@@ -429,8 +430,8 @@ func maxTime(a, b time.Time) time.Time {
 	return b
 }
 
-func (s Store) queriesOf(filter runs.RunFilter) ([]firestore.Query, error) {
-	scope, err := s.scopeDocument()
+func (s Store) queriesOf(ctx context.Context, filter runs.RunFilter) ([]firestore.Query, error) {
+	scope, err := s.scopeDocument(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -506,7 +507,7 @@ func (s Store) ListRuns(ctx context.Context, filter runs.RunFilter) (runs.RunPag
 		}
 		after = runs.Run{CreatedAt: created, Execution: execution}
 	}
-	queries, err := s.queriesOf(filter)
+	queries, err := s.queriesOf(ctx, filter)
 	if err != nil {
 		return runs.RunPage{}, err
 	}
@@ -578,7 +579,7 @@ func newerThan(a, b runs.Run) bool {
 }
 
 func (s Store) CountRuns(ctx context.Context, filter runs.RunFilter) (int64, error) {
-	queries, err := s.queriesOf(filter)
+	queries, err := s.queriesOf(ctx, filter)
 	if err != nil {
 		return 0, err
 	}

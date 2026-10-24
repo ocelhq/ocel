@@ -15,11 +15,8 @@ var IngressFor = run.IngressFor
 
 const NetworkPart = network.PartName
 
-func MakeWritableDatabase(ctx context.Context, p *Provider, tier environment.Tier, project string) error {
-	return p.ensureProjectWritableDatabase(ctx, provider.DeployPreflight{
-		Deploy:    provider.DeploySpec{Tier: tier, Slug: project},
-		Resources: []provider.Resource{{Type: provider.BindingTask}},
-	})
+func MakeProjectDatabase(ctx context.Context, p *Provider, tier environment.Tier, project string) error {
+	return p.ensureProjectDatabase(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: tier, Slug: project}})
 }
 
 func AddParts(ctx context.Context, p *Provider, tier environment.Tier, names ...string) error {

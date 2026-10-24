@@ -30,7 +30,11 @@ func cacheGrants(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec
 	if err != nil {
 		return nil, err
 	}
-	return append(granted, grants.OnProject(credential.TaskRecordsRole, member, variables.ProjectWritableDatabaseCondition(c, spec.Ref.Tier, spec.Ref.Project))), nil
+	records, err := variables.ProjectDatabaseCondition(ctx, c, spec.Ref.Tier, spec.Ref.Project)
+	if err != nil {
+		return nil, err
+	}
+	return append(granted, grants.OnProject(credential.TaskRecordsRole, member, records)), nil
 }
 
 func cachedKinds(app *provider.AppSpec) []naming.ObjectKind {

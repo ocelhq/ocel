@@ -69,6 +69,7 @@ func run(listen, config string, reporting bool) error {
 	}
 
 	bindings := &ports.Clients{Namespace: ns, Project: project, Region: region}
+	bindings.Records = ports.KeyValues{Clients: bindings}
 	return connectorserver.Serve(connectorserver.Spec{
 		Config:          trust,
 		Version:         version,

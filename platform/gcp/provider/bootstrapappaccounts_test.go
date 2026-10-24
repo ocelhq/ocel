@@ -327,7 +327,7 @@ func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) 
 	p, c := ensuringAccounts(t, server)
 	spec := appNamed("web", reachingTopics(routedNextSpec()))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	if _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 	if len(server.Created) == 0 {

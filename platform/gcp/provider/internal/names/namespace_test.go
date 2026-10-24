@@ -154,25 +154,25 @@ func TestAnOcelOwnedNameIsTheNamespaceTheTierWordAndOcelsOwnWords(t *testing.T) 
 	named := names.New("ocel", "acme-prod")
 	prod, preview := environment.TierProduction, environment.TierPreview
 	for got, want := range map[string]string{
-		named.Repository(prod):                       "ocel-prod-containers",
-		named.Network(preview):                       "ocel-preview-network",
-		named.EnvSourceSync(prod):                    "ocel-prod-env-sync",
-		named.Bastion(preview):                       "ocel-preview-bastion",
-		named.DelayQueue(prod):                       "ocel-prod-delays",
-		named.PassphraseSecret(prod):                 "ocel-prod-pulumi-passphrase",
-		named.EdgeCredentialsSecret(preview, "alb"):  "ocel-preview-alb-edge-credentials",
-		named.PurgeSeedSecret(prod, "alb"):           "ocel-prod-alb-purge-seed",
-		named.OriginSecret(prod, "cloudflare"):       "ocel-prod-cloudflare-origin-secret",
-		named.Connector():                            "ocel-connector",
-		named.RealtimeAccount(prod):                  "ocel-prod-realtime",
-		named.PushAccount(preview):                   "ocel-preview-push",
-		named.EnvSourceSyncAccount(prod):             "ocel-prod-env-sync",
-		named.BastionAccount(prod):                   "ocel-prod-bastion",
-		named.AssetReaderAccount(preview):            "ocel-preview-assets",
-		named.GateTierSecretPrefix(preview):          "ocel_gate-preview-",
-		named.RealtimeKeysSecretPrefix(prod):         "ocel_realtime-keys-prod-",
-		named.ProjectDatabasePrefix(prod):            "ocel-app-prod-v-",
-		named.ProjectWritableDatabasePrefix(preview): "ocel-app-preview-w-",
+		named.Repository(prod):                      "ocel-prod-containers",
+		named.Network(preview):                      "ocel-preview-network",
+		named.EnvSourceSync(prod):                   "ocel-prod-env-sync",
+		named.Bastion(preview):                      "ocel-preview-bastion",
+		named.DelayQueue(prod):                      "ocel-prod-delays",
+		named.PassphraseSecret(prod):                "ocel-prod-pulumi-passphrase",
+		named.EdgeCredentialsSecret(preview, "alb"): "ocel-preview-alb-edge-credentials",
+		named.PurgeSeedSecret(prod, "alb"):          "ocel-prod-alb-purge-seed",
+		named.OriginSecret(prod, "cloudflare"):      "ocel-prod-cloudflare-origin-secret",
+		named.Connector():                           "ocel-connector",
+		named.RealtimeAccount(prod):                 "ocel-prod-realtime",
+		named.PushAccount(preview):                  "ocel-preview-push",
+		named.EnvSourceSyncAccount(prod):            "ocel-prod-env-sync",
+		named.BastionAccount(prod):                  "ocel-prod-bastion",
+		named.AssetReaderAccount(preview):           "ocel-preview-assets",
+		named.GateTierSecretPrefix(preview):         "ocel_gate-preview-",
+		named.RealtimeKeysSecretPrefix(prod):        "ocel_realtime-keys-prod-",
+		named.SharedDatabase(prod):                  "ocel-app-prod-shared",
+		named.OwnDatabasePrefix(preview):            "ocel-app-preview-p-",
 	} {
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
@@ -191,16 +191,14 @@ func TestEveryServiceAccountOfALongNamespaceFitsGoogle(t *testing.T) {
 	}
 }
 
-func TestNoProjectDatabaseOfAnotherNamespaceStartsWithThisNamespacesProjectDatabasePrefixes(t *testing.T) {
+func TestNoAppDatabaseOfAnotherNamespaceIsNamedByThisNamespacesAppDatabaseNames(t *testing.T) {
 	ours := names.New("ocel", "acme-prod")
-	for _, namespace := range []provider.Namespace{"ocel-prod-v", "ocel-prod-w", "ocel-preview-v"} {
+	for _, namespace := range []provider.Namespace{"ocel-prod-p", "ocel-preview-p", "ocel-prod-shared", "ocel-app-prod"} {
 		theirs := names.New(namespace, "acme-prod")
 		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-			for _, database := range []string{theirs.ProjectDatabase(tier, "shop"), theirs.ProjectWritableDatabase(tier, "shop")} {
-				for _, prefix := range []string{ours.ProjectDatabasePrefix(tier), ours.ProjectWritableDatabasePrefix(tier)} {
-					if strings.HasPrefix(database, prefix) {
-						t.Errorf("namespace %s names its project database %q under namespace ocel's prefix %q, so ocel's deploy credential reads and writes its records", namespace, database, prefix)
-					}
+			for _, database := range []string{theirs.OwnDatabase(tier, "shop"), theirs.SharedDatabase(tier)} {
+				if strings.HasPrefix(database, ours.OwnDatabasePrefix(tier)) || database == ours.SharedDatabase(tier) {
+					t.Errorf("namespace %s names its database %q as namespace ocel names its own, so ocel's apps read and write its records", namespace, database)
 				}
 			}
 		}

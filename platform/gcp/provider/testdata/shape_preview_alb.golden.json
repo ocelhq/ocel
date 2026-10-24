@@ -118,11 +118,11 @@
       }
     },
     {
-      "id": "project:shop/shared:preview/google_firestore_database:ocel-app-preview-v-8650dee75b",
+      "id": "project:shop/shared:preview/google_firestore_database:ocel-app-preview-shared",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
       "type": "google_firestore_database",
-      "name": "ocel-app-preview-v-8650dee75b",
+      "name": "ocel-app-preview-shared",
       "region": "europe-west1",
       "properties": {}
     },

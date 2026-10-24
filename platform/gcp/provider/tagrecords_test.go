@@ -1,18 +1,12 @@
 package gcp
 
 import (
-	"context"
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
-	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func TestTheTagRecordsOfAnISRPrefixAreReadThroughOneIndexOnPrefixThenWriteTime(t *testing.T) {
@@ -59,56 +53,7 @@ func TestNoTierKeepsADatabaseOfRunsOrTagRecordsAndADeployMayMakeEachProjectsOwn(
 	}
 	for _, offered := range composed(bootstrap.Engine{}).Parts() {
 		if offered.Name == "tasks" || offered.Name == "tag-database" {
-			t.Errorf("the bootstrap offers the %s part, and runs and tag records are kept in each project's own database", offered.Name)
+			t.Errorf("the bootstrap offers the %s part, and runs and tag records are kept in the database each project keeps its records in", offered.Name)
 		}
-	}
-}
-
-func revalidating(revalidates bool) provider.DeployPreflight {
-	return provider.DeployPreflight{
-		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Slug: "shop"},
-		Uses:   []buildoutput.Uses{{ImageOptimization: true}, {Revalidation: revalidates}},
-	}
-}
-
-func TestADryDeployWhoseBuildRevalidatesPlansItsProjectsWritableDatabaseAndOneThatDoesNotPlansNothing(t *testing.T) {
-	database := ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")
-	cached := failingOnAnyCall(t)
-	recordedCurrent(t, cached, environment.TierProduction, bootstrap.CacheBucket)
-	if planned := plannedBy(t, cached, revalidating(true)); !plansWritableDatabase(planned, database) {
-		t.Errorf("a dry deploy whose build revalidates planned %+v, want %s created", planned, database)
-	}
-	p := failingOnAnyCall(t)
-	if planned := plannedBy(t, p, revalidating(false)); len(planned) != 0 {
-		t.Errorf("a dry deploy of a build that revalidates nothing planned %+v, want nothing", planned)
-	}
-}
-
-func TestTheFirstDeployThatRevalidatesMakesItsProjectsWritableDatabaseAndTheNextPlansNothing(t *testing.T) {
-	p, _ := deployingNetworks(t)
-	ctx := context.Background()
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.CacheBucket)
-
-	if err := p.ApplyPreflight(ctx, revalidating(true)); err != nil {
-		t.Fatalf("ApplyPreflight() = %v", err)
-	}
-	if planned := plannedBy(t, p, revalidating(true)); len(planned) != 0 {
-		t.Errorf("a dry deploy after the first planned %+v, want nothing: the first recorded the database it made", planned)
-	}
-}
-
-func TestRemovingAProjectFromATierForgetsTheDatabaseOfItsRunsAndTagRecords(t *testing.T) {
-	p, _ := deployingNetworks(t)
-	ctx := context.Background()
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.CacheBucket)
-	if err := p.ApplyPreflight(ctx, revalidating(true)); err != nil {
-		t.Fatalf("ApplyPreflight() = %v", err)
-	}
-
-	if err := p.RemoveProject(ctx, environment.TierProduction, "shop", progress.Discard()); err != nil {
-		t.Fatalf("RemoveProject() = %v", err)
-	}
-	if planned := plannedBy(t, p, revalidating(true)); !plansWritableDatabase(planned, ports.ProjectWritableDatabase("ocel", environment.TierProduction, "shop")) {
-		t.Errorf("a dry deploy after shop left the tier planned %+v, want its database made again", planned)
 	}
 }

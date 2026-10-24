@@ -21,7 +21,7 @@ func TestAProjectsDatabaseOfATierCarriesItsTiersTagFromItsCreation(t *testing.T)
 	t.Parallel()
 	ctx := context.Background()
 	b, databases, tags := taggedDatabases(t)
-	id := b.Clients.ProjectDatabase(environment.TierPreview, "shop")
+	id := b.Clients.OwnDatabase(environment.TierPreview, "shop")
 
 	for range 2 {
 		if err := b.MakeTierDatabase(ctx, environment.TierPreview, id); err != nil {
@@ -60,7 +60,7 @@ func TestRemovingAProjectsDatabaseRemovesItsInlineTagBeforeTheDatabase(t *testin
 	t.Parallel()
 	ctx := context.Background()
 	b, databases, _ := taggedDatabases(t)
-	id := b.Clients.ProjectWritableDatabase(environment.TierProduction, "shop")
+	id := b.Clients.OwnDatabase(environment.TierProduction, "shop")
 	if err := b.MakeTierDatabase(ctx, environment.TierProduction, id); err != nil {
 		t.Fatal(err)
 	}

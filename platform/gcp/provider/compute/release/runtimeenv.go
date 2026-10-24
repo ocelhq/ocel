@@ -13,7 +13,7 @@ import (
 	manifest "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
-func (p *Release) RuntimeEnv(names names.Names, spec provider.StackSpec, tasks *manifest.Tasks) (map[string]string, error) {
+func (p *Release) RuntimeEnv(names names.Names, spec provider.StackSpec, tasks *manifest.Tasks, databases map[string]string) (map[string]string, error) {
 	app := spec.App
 	env := map[string]string{}
 	if app.HealthCheckPath != "" {
@@ -27,6 +27,7 @@ func (p *Release) RuntimeEnv(names names.Names, spec provider.StackSpec, tasks *
 		Tier:               string(spec.Ref.Tier),
 		Environment:        variables.LiveEnvironment(spec.Ref),
 		Endpoint:           p.ContainerEndpoint,
+		Databases:          databases,
 		Keys:               liveKeys(app.Values),
 		Bindings:           liveBindings(app.Values),
 		Tasks:              tasks,

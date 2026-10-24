@@ -21,7 +21,9 @@ import (
 
 func workloadClients(t *testing.T) *ports.Clients {
 	t.Helper()
-	return &ports.Clients{Namespace: liveNames(t).Namespace(), Project: liveProject(), Region: liveRegion(), Endpoint: endpoint(), TagEndpoint: os.Getenv("OCEL_FLOCI_FIRESTORE_ENDPOINT")}
+	clients := &ports.Clients{Namespace: liveNames(t).Namespace(), Project: liveProject(), Region: liveRegion(), Endpoint: endpoint(), TagEndpoint: os.Getenv("OCEL_FLOCI_FIRESTORE_ENDPOINT")}
+	clients.Records = ports.KeyValues{Clients: clients}
+	return clients
 }
 
 func projectNumber(t *testing.T) int64 {

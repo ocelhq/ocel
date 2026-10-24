@@ -119,10 +119,10 @@ func bootstrappedWith(t *testing.T, p *gcp.Provider, tier environment.Tier, part
 	return bootstrap
 }
 
-func writableDatabaseMade(t *testing.T, p *gcp.Provider, tier environment.Tier, project string) {
+func projectDatabaseMade(t *testing.T, p *gcp.Provider, tier environment.Tier, project string) {
 	t.Helper()
-	if err := gcp.MakeWritableDatabase(context.Background(), p, tier, project); err != nil {
-		t.Fatalf("MakeWritableDatabase(%s, %s) = %v, want the database a deploy makes for its runs and tag records", tier, project, err)
+	if err := gcp.MakeProjectDatabase(context.Background(), p, tier, project); err != nil {
+		t.Fatalf("MakeProjectDatabase(%s, %s) = %v, want the database a deploy keeps its project's runs and tag records in", tier, project, err)
 	}
 }
 
@@ -507,25 +507,25 @@ func TestProjectTheDatabaseIsARowOfItsOwnProvisionedUnderDeleteProtection(t *tes
 	}
 }
 
-func TestProjectAProjectsWritableDatabaseIsProtectedIndexedAndGoneOnceTheTierIsRemoved(t *testing.T) {
+func TestProjectTheDatabaseATiersProjectsShareIsProtectedIndexedAndGoneOnceTheTierIsRemoved(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	tier := environment.TierPreview
 	bootstrap := bootstrappedWith(t, p, tier)
-	writableDatabaseMade(t, p, tier, liveSlug)
+	projectDatabaseMade(t, p, tier, liveSlug)
 
 	ctx := context.Background()
 	service, err := firestoreadmin.NewService(ctx)
 	if err != nil {
 		t.Fatalf("reach the Firestore admin API: %v", err)
 	}
-	path := "projects/" + liveProject() + "/databases/" + liveNames(t).ProjectWritableDatabase(tier, liveSlug)
+	path := "projects/" + liveProject() + "/databases/" + liveNames(t).SharedDatabase(tier)
 	database, err := service.Projects.Databases.Get(path).Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("read the database the deploy made: %v", err)
 	}
 	if database.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
-		t.Errorf("the database of %s's runs and tag records has delete protection %q, want it on", liveSlug, database.DeleteProtectionState)
+		t.Errorf("the database the %s tier's projects share has delete protection %q, want it on", tier, database.DeleteProtectionState)
 	}
 	runIndexes, err := service.Projects.Databases.CollectionGroups.Indexes.List(path + "/collectionGroups/runs").Context(ctx).Do()
 	if err != nil || len(runIndexes.Indexes) < len(task.RunIndexes()) {
@@ -547,6 +547,9 @@ func TestProjectAProjectsWritableDatabaseIsProtectedIndexedAndGoneOnceTheTierIsR
 		t.Errorf("the tag records have the indexes %+v, want a READY one on prefix then writtenAt", listed.Indexes)
 	}
 
+	if err := p.RemoveProject(ctx, tier, liveSlug, nil); err != nil {
+		t.Fatalf("RemoveProject(%s, %s) = %v", tier, liveSlug, err)
+	}
 	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}

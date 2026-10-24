@@ -31,20 +31,20 @@ type KeyValues struct {
 	Clients *Clients
 }
 
-func (s KeyValues) open(in records.Partition) (*firestore.Client, *firestore.CollectionRef, error) {
+func (s KeyValues) open(ctx context.Context, in records.Partition) (*firestore.Client, *firestore.CollectionRef, error) {
 	if err := records.RefuseMalformedPartition(in); err != nil {
 		return nil, nil, err
 	}
-	client, err := s.client(in)
+	client, err := s.client(ctx, in)
 	if err != nil {
 		return nil, nil, err
 	}
 	return client, OpenTierCollection(client, in.Tier), nil
 }
 
-func (s KeyValues) client(in records.Partition) (*firestore.Client, error) {
+func (s KeyValues) client(ctx context.Context, in records.Partition) (*firestore.Client, error) {
 	if project, owned := ProjectOfRecords(in); owned {
-		return s.Clients.ProjectFirestore(in.Tier, project)
+		return s.Clients.ProjectFirestore(ctx, in.Tier, project)
 	}
 	return s.Clients.TierFirestore(in.Tier)
 }
@@ -66,7 +66,7 @@ func (s KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, er
 	if err := records.RefuseMalformedKey(key); err != nil {
 		return records.Entry{}, err
 	}
-	_, collection, err := s.open(key.Partition)
+	_, collection, err := s.open(ctx, key.Partition)
 	if err != nil {
 		return records.Entry{}, err
 	}
@@ -87,7 +87,7 @@ func (s KeyValues) Write(ctx context.Context, entry records.Entry) (records.Revi
 	if err := records.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
-	client, collection, err := s.open(entry.Key.Partition)
+	client, collection, err := s.open(ctx, entry.Key.Partition)
 	if err != nil {
 		return "", err
 	}
@@ -110,11 +110,11 @@ func (s KeyValues) WritePair(ctx context.Context, first, second records.Entry) e
 			return err
 		}
 	}
-	client, collection, err := s.open(first.Key.Partition)
+	client, collection, err := s.open(ctx, first.Key.Partition)
 	if err != nil {
 		return err
 	}
-	_, beside, err := s.open(second.Key.Partition)
+	_, beside, err := s.open(ctx, second.Key.Partition)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records
 	if err := records.RefuseMalformedKey(key); err != nil {
 		return err
 	}
-	client, collection, err := s.open(key.Partition)
+	client, collection, err := s.open(ctx, key.Partition)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records
 }
 
 func (s KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
-	_, collection, err := s.open(in)
+	_, collection, err := s.open(ctx, in)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -23,6 +24,8 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 func declaringAStore(memory int64) provider.DeployPreflight {
@@ -270,5 +273,99 @@ func TestADeployBehindTheWorkerWarnsOfAStaleOriginSecretOnlyWhenAnAppRunsCode(t 
 				t.Errorf("the deploy said %q, want a stale origin secret warned of %v: only a release that runs code demands the secret", lines, tc.warned)
 			}
 		})
+	}
+}
+
+func plannedBy(t *testing.T, p *Provider, pre provider.DeployPreflight) []provider.ChangeGroup {
+	t.Helper()
+	plan, err := p.PlanPreflight(context.Background(), pre)
+	if err != nil {
+		t.Fatalf("PlanPreflight() = %v", err)
+	}
+	return plan.Groups
+}
+
+func deployingProject(project string) provider.DeployPreflight {
+	return provider.DeployPreflight{
+		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Slug: project},
+		Uses:   []buildoutput.Uses{{Revalidation: true}},
+	}
+}
+
+func cachingProvider(t *testing.T, p *Provider, own bool) *Provider {
+	t.Helper()
+	p.options.OwnDatabase = own
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.CacheBucket)
+	return p
+}
+
+func plansSharedDatabase(planned []provider.ChangeGroup) bool {
+	return len(planned) == 1 && planned[0].Part == variables.SharedDatabasePartName && planned[0].Action == provider.ActionCreate
+}
+
+func plansOwnDatabase(planned []provider.ChangeGroup, database string) bool {
+	return len(planned) == 1 && planned[0].Action == provider.ActionCreate && planned[0].Reason == bootstrap.ReasonFirstUse && len(planned[0].Changes) == 1 &&
+		planned[0].Changes[0].Name == database && planned[0].Changes[0].Action == provider.ActionCreate
+}
+
+func TestTheFirstDryDeployOfATierPlansTheDatabaseItsProjectsShareAndMakesNothing(t *testing.T) {
+	p := cachingProvider(t, failingOnAnyCall(t), false)
+	if planned := plannedBy(t, p, deployingProject("shop")); !plansSharedDatabase(planned) {
+		t.Errorf("a first dry deploy of shop planned %+v, want the %s part added", planned, variables.SharedDatabasePartName)
+	}
+}
+
+func TestTheFirstDryDeployOfAProjectWithOwnDatabasePlansItsOwnDatabaseAndMakesNothing(t *testing.T) {
+	p := cachingProvider(t, failingOnAnyCall(t), true)
+	if planned := plannedBy(t, p, deployingProject("shop")); !plansOwnDatabase(planned, ports.OwnDatabase("ocel", environment.TierProduction, "shop")) {
+		t.Errorf("a first dry deploy of shop with ownDatabase planned %+v, want its own database created", planned)
+	}
+}
+
+func TestAProjectsFirstDeployRecordsItsDatabaseAndTheNextPlansNone(t *testing.T) {
+	for _, own := range []bool{false, true} {
+		p, _ := deployingNetworks(t)
+		cachingProvider(t, p, own)
+		ctx := context.Background()
+
+		if err := p.ApplyPreflight(ctx, deployingProject("shop")); err != nil {
+			t.Fatalf("ApplyPreflight(ownDatabase %t) = %v", own, err)
+		}
+		if planned := plannedBy(t, p, deployingProject("shop")); len(planned) != 0 {
+			t.Errorf("with ownDatabase %t, a dry deploy after the first planned %+v, want nothing: the first recorded the database it keeps its records in", own, planned)
+		}
+		if planned := plannedBy(t, p, deployingProject("blog")); own && !plansOwnDatabase(planned, ports.OwnDatabase("ocel", environment.TierProduction, "blog")) {
+			t.Errorf("a dry deploy of blog with ownDatabase planned %+v, want blog's own database created", planned)
+		}
+	}
+}
+
+func TestADeployThatTurnsOnOwnDatabaseAfterTheProjectsFirstIsRefusedBeforeAnyChange(t *testing.T) {
+	p, _ := deployingNetworks(t)
+	cachingProvider(t, p, false)
+	ctx := context.Background()
+	if err := p.ApplyPreflight(ctx, deployingProject("shop")); err != nil {
+		t.Fatal(err)
+	}
+	p.options.OwnDatabase = true
+
+	if _, err := p.PlanPreflight(ctx, deployingProject("shop")); err == nil || !strings.Contains(err.Error(), "ownDatabase") {
+		t.Errorf("planning shop with ownDatabase after it shared its tier's database = %v, want a refusal naming ownDatabase", err)
+	}
+}
+
+func TestRemovingAProjectWithItsOwnDatabaseForgetsItSoItsNextDeployMakesItAgain(t *testing.T) {
+	p, _ := deployingNetworks(t)
+	cachingProvider(t, p, true)
+	ctx := context.Background()
+	if err := p.ApplyPreflight(ctx, deployingProject("shop")); err != nil {
+		t.Fatalf("ApplyPreflight() = %v", err)
+	}
+
+	if err := p.RemoveProject(ctx, environment.TierProduction, "shop", progress.Discard()); err != nil {
+		t.Fatalf("RemoveProject() = %v", err)
+	}
+	if planned := plannedBy(t, p, deployingProject("shop")); !plansOwnDatabase(planned, ports.OwnDatabase("ocel", environment.TierProduction, "shop")) {
+		t.Errorf("a dry deploy after shop left the tier planned %+v, want its database made again", planned)
 	}
 }
