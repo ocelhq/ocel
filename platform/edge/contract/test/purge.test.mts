@@ -331,6 +331,29 @@ describe("readPurgeEntry", () => {
     });
   });
 
+  it("reads a tag stale now and expiring only at Next's INFINITE_CACHE as an invalidate that never expires", () => {
+    expect(readPurgeEntry("home", { stale: 200, expired: 200 + 0xfffffffe * 1000 }, now)).toEqual({
+      tag: "home",
+      mode: "invalidate",
+      raisedAt: 200,
+    });
+  });
+
+  it("reads every tag the tag clock expires at Next's INFINITE_CACHE from a fractional instant as never expiring", () => {
+    const expiring = Array.from({ length: 10_000 }, (_, i) => 1_792_867_250_966.9885 + i * 0.6131)
+      .map((stale) => readPurgeEntry("home", { stale, expired: stale + 0xfffffffe * 1000 }, now))
+      .filter((entry) => entry?.expiresAt !== undefined);
+
+    expect(expiring).toEqual([]);
+  });
+
+  it("reads a tag expiring a second short of Next's INFINITE_CACHE as expiring", () => {
+    const stale = 1_792_867_250_966.9885;
+    const expired = stale + (0xfffffffe - 1) * 1000;
+
+    expect(readPurgeEntry("home", { stale, expired }, now)?.expiresAt).toBe(Math.ceil(expired));
+  });
+
   it("reads a fractional expire as the next whole millisecond", () => {
     expect(readPurgeEntry("home", { stale: 200.5, expired: 90_000.25 }, now)).toEqual({
       tag: "home",

@@ -15,6 +15,8 @@ const attemptTimeoutMs = 5_000;
 
 export type PurgeMode = "purge" | "invalidate";
 
+const nextInfiniteCacheS = 0xfffffffe;
+
 export interface TagRecord {
   stale?: number;
   expired?: number;
@@ -135,11 +137,15 @@ export function readPurgeEntry(
     return { tag, mode: "purge", raisedAt: expired };
   }
   if (stale === undefined) return undefined;
+  const expires =
+    expired !== undefined &&
+    expired > stale &&
+    Math.round((expired - stale) / 1000) < nextInfiniteCacheS;
   return {
     tag,
     mode: "invalidate",
     raisedAt: stale,
-    ...(expired !== undefined && expired > stale && { expiresAt: Math.ceil(expired) }),
+    ...(expires && { expiresAt: Math.ceil(expired) }),
   };
 }
 
