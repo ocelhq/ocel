@@ -66,11 +66,11 @@ describe("raisesOf", () => {
     ]);
   });
 
-  it("reads a tag stale now and expiring later as an invalidate, raised when it went stale", () => {
+  it("reads a tag stale now and expiring later as an invalidate, raised when it went stale and expiring when the tag does", () => {
     const raises = raisesOf([tagRecord("home", { stale: { N: "200" }, expired: { N: "60200" } })]);
 
     expect(raises.get(PREFIX)!.entries).toEqual([
-      { tag: "home", mode: "invalidate", raisedAt: 200 },
+      { tag: "home", mode: "invalidate", raisedAt: 200, expiresAt: 60_200 },
     ]);
   });
 

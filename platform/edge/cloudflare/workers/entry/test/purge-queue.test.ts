@@ -233,6 +233,29 @@ describe("the in-band queue recording the purge times", () => {
     }
   });
 
+  it("records the expire of an invalidate it purges from its backlog", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(1_800_000_000_000);
+      const tag = "rexpiring|a";
+      const expiresAt = 1_800_000_060_000;
+      const exports = { PurgeQueue: env.PURGE_QUEUE };
+      const fallback = openInBandQueue(exports) as DurableObjectStub<PurgeQueue>;
+      const durable = openPurgeQueue(exports) as DurableObjectStub<PurgeQueue>;
+      await runInDurableObject(fallback, async (instance) => {
+        instance.serve = { purgeTags: async () => ({ ok: true }) };
+      });
+
+      await fallback.raise("invalidate", [{ tag, raisedAt: Date.now(), expiresAt }]);
+      vi.setSystemTime(Date.now() + 2_000);
+      await runDurableObjectAlarm(fallback);
+
+      expect((await durable.readTimes([tag]))[tag]?.expiresAt).toBe(expiresAt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("purges nothing, and keeps the tag pending, while the time cannot be recorded", async () => {
     const tag = "runrecorded|a";
     const exports = { PurgeQueue: env.PURGE_QUEUE };

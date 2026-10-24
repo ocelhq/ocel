@@ -15,6 +15,8 @@ const attemptTimeoutMs = 5_000;
 
 export type PurgeMode = "purge" | "invalidate";
 
+const nextInfiniteCacheS = 0xfffffffe;
+
 export interface TagRecord {
   stale?: number;
   expired?: number;
@@ -24,6 +26,7 @@ export interface PurgeEntry {
   tag: string;
   mode: PurgeMode;
   raisedAt: number;
+  expiresAt?: number;
 }
 
 export class PurgeRefusedError extends Error {
@@ -48,47 +51,78 @@ export const purgeHeader = "x-ocel-purge";
 export interface PurgeGroup {
   mode: PurgeMode;
   tags: string[];
+  expiresAt?: number;
+}
+
+const expiresParam = ";expires=";
+
+function formatMode({ mode, expiresAt }: PurgeGroup): string {
+  return expiresAt === undefined ? mode : `${mode}${expiresParam}${Math.ceil(expiresAt)}`;
 }
 
 export function formatPurge(groups: readonly PurgeGroup[]): string | undefined {
   const written = groups
     .filter(({ tags }) => tags.length > 0)
-    .map(({ mode, tags }) => `${mode} ${tags.join(",")}`);
+    .map((group) => `${formatMode(group)} ${group.tags.join(",")}`);
   return written.length > 0 ? written.join(" ") : undefined;
 }
 
 export const purgeHeaderBytes = 4_096;
 
+function groupEntries(entries: readonly PurgeEntry[]): PurgeGroup[] {
+  const groups: PurgeGroup[] = [];
+  for (const mode of ["purge", "invalidate"] as PurgeMode[]) {
+    for (const { tag, mode: entryMode, expiresAt } of entries) {
+      if (entryMode !== mode) continue;
+      const expires = mode === "invalidate" ? expiresAt : undefined;
+      let group = groups.find((each) => each.mode === mode && each.expiresAt === expires);
+      if (group === undefined) {
+        group = { mode, tags: [], ...(expires !== undefined && { expiresAt: expires }) };
+        groups.push(group);
+      }
+      group.tags.push(tag);
+    }
+  }
+  return groups;
+}
+
 export function purgeHeaderFor(
   release: string,
   entries: readonly PurgeEntry[],
 ): string | undefined {
-  const groups: PurgeGroup[] = [];
-  for (const mode of ["purge", "invalidate"] as PurgeMode[]) {
-    const { tags } = storedCacheTags(
-      release,
-      entries.filter((entry) => entry.mode === mode).map(({ tag }) => tag),
-    );
-    const kept: PurgeGroup = { mode, tags: [] };
-    groups.push(kept);
+  const kept: PurgeGroup[] = [];
+  for (const group of groupEntries(entries)) {
+    const { tags } = storedCacheTags(release, group.tags);
+    const stamped: PurgeGroup = { ...group, tags: [] };
+    kept.push(stamped);
     for (const tag of tags) {
-      kept.tags.push(tag);
-      if (formatPurge(groups)!.length > purgeHeaderBytes) {
-        kept.tags.pop();
-        return formatPurge(groups);
+      stamped.tags.push(tag);
+      if (formatPurge(kept)!.length > purgeHeaderBytes) {
+        stamped.tags.pop();
+        return formatPurge(kept);
       }
     }
   }
-  return formatPurge(groups);
+  return formatPurge(kept);
+}
+
+const expiringInvalidate = new RegExp(`^invalidate${expiresParam}([0-9]+(?:\\.[0-9]+)?)$`);
+
+function readMode(word: string): Omit<PurgeGroup, "tags"> | undefined {
+  if (word === "purge" || word === "invalidate") return { mode: word };
+  const expires = expiringInvalidate.exec(word)?.[1];
+  return expires === undefined
+    ? undefined
+    : { mode: "invalidate", expiresAt: Math.ceil(Number(expires)) };
 }
 
 export function readPurge(value: string): PurgeGroup[] {
   const words = value.split(/\s+/).filter((word) => word !== "");
   const groups: PurgeGroup[] = [];
   for (let i = 0; i + 1 < words.length; i += 2) {
-    const mode = words[i];
-    if (mode !== "purge" && mode !== "invalidate") return [];
-    groups.push({ mode, tags: (words[i + 1] ?? "").split(",").filter((tag) => tag !== "") });
+    const mode = readMode(words[i]!);
+    if (mode === undefined) return [];
+    groups.push({ ...mode, tags: (words[i + 1] ?? "").split(",").filter((tag) => tag !== "") });
   }
   return words.length % 2 === 0 ? groups : [];
 }
@@ -103,7 +137,16 @@ export function readPurgeEntry(
     return { tag, mode: "purge", raisedAt: expired };
   }
   if (stale === undefined) return undefined;
-  return { tag, mode: "invalidate", raisedAt: stale };
+  const expires =
+    expired !== undefined &&
+    expired > stale &&
+    Math.round((expired - stale) / 1000) < nextInfiniteCacheS;
+  return {
+    tag,
+    mode: "invalidate",
+    raisedAt: stale,
+    ...(expires && { expiresAt: Math.ceil(expired) }),
+  };
 }
 
 export function readReleaseToken(isrPrefix: string): string | undefined {
@@ -163,7 +206,11 @@ export async function postPurge(
   for (const mode of ["purge", "invalidate"] as const) {
     const tags = entries
       .filter((entry) => entry.mode === mode)
-      .map(({ tag, raisedAt }) => ({ tag, raisedAt }));
+      .map(({ tag, raisedAt, expiresAt }) => ({
+        tag,
+        raisedAt,
+        ...(expiresAt !== undefined && { expiresAt }),
+      }));
     for (let i = 0; i < tags.length; i += tagsPerPurgeRequest) {
       const body = JSON.stringify({
         isrPrefix,

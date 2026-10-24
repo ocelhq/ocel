@@ -8,14 +8,19 @@ export interface InBandPurgePorts {
   now(): number;
 }
 
-async function purgeChunk(mode: PurgeMode, tags: string[], ports: InBandPurgePorts): Promise<void> {
+async function purgeChunk(
+  { mode, tags, expiresAt }: PurgeGroup,
+  ports: InBandPurgePorts,
+): Promise<void> {
   const raisedAt = ports.now();
+  const raised: RaisedTag[] = tags.map((tag) => ({
+    tag,
+    raisedAt,
+    ...(expiresAt !== undefined && { expiresAt }),
+  }));
   let recorded = false;
   try {
-    await ports.times.record(
-      mode,
-      tags.map((tag) => ({ tag, raisedAt })),
-    );
+    await ports.times.record(mode, raised);
     recorded = true;
   } catch (error) {
     console.error(`ocel: the purge queue kept no time for ${tags.length} tag(s)`, error);
@@ -26,10 +31,7 @@ async function purgeChunk(mode: PurgeMode, tags: string[], ports: InBandPurgePor
     } catch {}
   }
   try {
-    await ports.queue.raise(
-      mode,
-      tags.map((tag) => ({ tag, raisedAt })),
-    );
+    await ports.queue.raise(mode, raised);
   } catch (error) {
     console.error(`ocel: neither the cache nor the purge queue took ${tags.length} tag(s)`, error);
   }
@@ -39,9 +41,9 @@ export async function purgeInBand(
   groups: readonly PurgeGroup[],
   ports: InBandPurgePorts,
 ): Promise<void> {
-  for (const { mode, tags } of groups) {
-    for (let i = 0; i < tags.length; i += TAGS_PER_CALL) {
-      await purgeChunk(mode, tags.slice(i, i + TAGS_PER_CALL), ports);
+  for (const group of groups) {
+    for (let i = 0; i < group.tags.length; i += TAGS_PER_CALL) {
+      await purgeChunk({ ...group, tags: group.tags.slice(i, i + TAGS_PER_CALL) }, ports);
     }
   }
 }

@@ -26,6 +26,22 @@ describe("the times the PurgeQueue keeps for the tags raised", () => {
     });
   });
 
+  it("reads back when an invalidation expires, the latest of the invalidations", async () => {
+    const queue = freshQueue();
+    const now = Date.now();
+
+    await queue.record("invalidate", [
+      { tag: "r1|a", raisedAt: now - 500, expiresAt: now + 60_000 },
+    ]);
+    await queue.record("invalidate", [
+      { tag: "r1|a", raisedAt: now - 900, expiresAt: now + 5_000 },
+    ]);
+
+    expect(await queue.readTimes(["r1|a"])).toEqual({
+      "r1|a": { invalidatedAt: now - 500, expiresAt: now + 60_000 },
+    });
+  });
+
   it("answers for no tag it was never told about", async () => {
     expect(await freshQueue().readTimes(["r1|never"])).toEqual({});
   });
@@ -38,6 +54,33 @@ describe("the times the PurgeQueue keeps for the tags raised", () => {
       times.forgetBefore(1_000 + TAG_TIMES_RETENTION_MS + 1);
 
       expect(times.read(["r1|old"])).toEqual({});
+    });
+  });
+
+  it("forgets an invalidation that never expires a day after it was raised", async () => {
+    await runInDurableObject(freshQueue(), async (_instance, state) => {
+      const times = newSqliteTagTimes(state.storage);
+      times.record("invalidate", [{ tag: "r1|default", raisedAt: 1_000 }]);
+
+      times.forgetBefore(1_000 + TAG_TIMES_RETENTION_MS + 1);
+
+      expect(times.read(["r1|default"])).toEqual({});
+    });
+  });
+
+  it("keeps an invalidation until a day after it expires, and forgets it after", async () => {
+    const week = 7 * 86_400_000;
+    await runInDurableObject(freshQueue(), async (_instance, state) => {
+      const times = newSqliteTagTimes(state.storage);
+      times.record("invalidate", [{ tag: "r1|weekly", raisedAt: 1_000, expiresAt: 1_000 + week }]);
+
+      times.forgetBefore(1_000 + TAG_TIMES_RETENTION_MS + 3_600_000);
+      expect(times.read(["r1|weekly"])).toEqual({
+        "r1|weekly": { invalidatedAt: 1_000, expiresAt: 1_000 + week },
+      });
+
+      times.forgetBefore(1_000 + week + TAG_TIMES_RETENTION_MS + 1);
+      expect(times.read(["r1|weekly"])).toEqual({});
     });
   });
 

@@ -6,6 +6,7 @@ export const TAG_TIMES_RETENTION_MS = 86_400_000;
 export interface TagTime {
   purgedAt?: number;
   invalidatedAt?: number;
+  expiresAt?: number;
 }
 
 export type TagTimes = Record<string, TagTime>;
@@ -18,29 +19,39 @@ export interface TagTimesStore {
 
 const TAGS_PER_QUERY = 100;
 
+const LATEST_TIME =
+  "MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0), COALESCE(expires_at, 0))";
+
 export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore {
   const { sql } = storage;
   sql.exec(
     `CREATE TABLE IF NOT EXISTS tag_times (
        tag TEXT PRIMARY KEY,
        purged_at INTEGER,
-       invalidated_at INTEGER
+       invalidated_at INTEGER,
+       expires_at INTEGER
      );
      CREATE INDEX IF NOT EXISTS tag_times_by_age
-       ON tag_times (MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)));`,
+       ON tag_times (${LATEST_TIME});`,
   );
 
   return {
     record(mode, tags) {
       const column = mode === "purge" ? "purged_at" : "invalidated_at";
       storage.transactionSync(() => {
-        for (const { tag, raisedAt } of tags) {
+        for (const { tag, raisedAt, expiresAt } of tags) {
+          const expires = mode === "invalidate" ? (expiresAt ?? null) : null;
           sql.exec(
-            `INSERT INTO tag_times (tag, ${column}) VALUES (?, ?)
+            `INSERT INTO tag_times (tag, ${column}, expires_at) VALUES (?, ?, ?)
              ON CONFLICT(tag) DO UPDATE SET
-               ${column} = MAX(COALESCE(tag_times.${column}, 0), excluded.${column})`,
+               ${column} = MAX(COALESCE(tag_times.${column}, 0), excluded.${column}),
+               expires_at = CASE
+                 WHEN excluded.expires_at IS NULL THEN tag_times.expires_at
+                 ELSE MAX(COALESCE(tag_times.expires_at, 0), excluded.expires_at)
+               END`,
             tag,
             raisedAt,
+            expires,
           );
         }
       });
@@ -50,8 +61,13 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
       for (let i = 0; i < tags.length; i += TAGS_PER_QUERY) {
         const chunk = tags.slice(i, i + TAGS_PER_QUERY);
         const rows = sql
-          .exec<{ tag: string; purged_at: number | null; invalidated_at: number | null }>(
-            `SELECT tag, purged_at, invalidated_at FROM tag_times
+          .exec<{
+            tag: string;
+            purged_at: number | null;
+            invalidated_at: number | null;
+            expires_at: number | null;
+          }>(
+            `SELECT tag, purged_at, invalidated_at, expires_at FROM tag_times
              WHERE tag IN (${chunk.map(() => "?").join(",")})`,
             ...chunk,
           )
@@ -60,17 +76,14 @@ export function newSqliteTagTimes(storage: DurableObjectStorage): TagTimesStore 
           times[row.tag] = {
             ...(row.purged_at !== null && { purgedAt: row.purged_at }),
             ...(row.invalidated_at !== null && { invalidatedAt: row.invalidated_at }),
+            ...(row.expires_at !== null && { expiresAt: row.expires_at }),
           };
         }
       }
       return times;
     },
     forgetBefore(at) {
-      sql.exec(
-        `DELETE FROM tag_times
-         WHERE MAX(COALESCE(purged_at, 0), COALESCE(invalidated_at, 0)) < ?`,
-        at,
-      );
+      sql.exec(`DELETE FROM tag_times WHERE ${LATEST_TIME} < ?`, at);
     },
   };
 }

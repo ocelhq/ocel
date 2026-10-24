@@ -65,13 +65,14 @@ test("an expired tag is purged at the worker under its release's ISR prefix, sig
   );
 });
 
-test("a tag revalidated stale-while-revalidate is invalidated, raised when it went stale", async () => {
+test("a tag revalidated stale-while-revalidate is invalidated, raised when it went stale and expiring when the tag does", async () => {
   const s = stub();
+  const expiresAt = raisedAt + 31_536_000_000;
 
-  await purger(s)(new Map([["posts", { stale: raisedAt, expired: raisedAt + 31_536_000_000 }]]));
+  await purger(s)(new Map([["posts", { stale: raisedAt, expired: expiresAt }]]));
 
   expect(bodiesOf(s)).toEqual([
-    { isrPrefix, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
+    { isrPrefix, mode: "invalidate", tags: [{ tag: "posts", raisedAt, expiresAt }] },
   ]);
 });
 
@@ -87,7 +88,11 @@ test("expired and stale tags revalidated together go as a purge and an invalidat
 
   expect(bodiesOf(s)).toEqual([
     { isrPrefix, mode: "purge", tags: [{ tag: "cart", raisedAt }] },
-    { isrPrefix, mode: "invalidate", tags: [{ tag: "posts", raisedAt: raisedAt + 5 }] },
+    {
+      isrPrefix,
+      mode: "invalidate",
+      tags: [{ tag: "posts", raisedAt: raisedAt + 5, expiresAt: raisedAt + 60_000 }],
+    },
   ]);
 });
 
@@ -143,6 +148,10 @@ test("revalidateTag with the max profile reaches the worker as an invalidate", a
   await withCdnPurge(publish, purger(s))("posts", { stale: raisedAt, expired: raisedAt + 1_000 });
 
   expect(bodiesOf(s)).toEqual([
-    { isrPrefix, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
+    {
+      isrPrefix,
+      mode: "invalidate",
+      tags: [{ tag: "posts", raisedAt, expiresAt: raisedAt + 1_000 }],
+    },
   ]);
 });
