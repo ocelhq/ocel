@@ -74,6 +74,34 @@ func (p Palette) WarnMark() string { return p.Warning(warnGlyph) }
 
 func (p Palette) NeutralMark() string { return p.Faint(neutralGlyph) }
 
+type Health int
+
+const (
+	Healthy Health = iota
+	Pending
+	Failing
+	Absent
+)
+
+func (p Palette) Health(health Health, word string) string {
+	switch health {
+	case Healthy:
+		return p.Success("● " + word)
+	case Pending:
+		return p.Warning("◐ " + word)
+	case Failing:
+		return p.Failure(failGlyph + " " + word)
+	}
+	return p.Muted("○ " + word)
+}
+
+func (p Palette) Heading(title string, context ...string) string {
+	if len(context) == 0 {
+		return p.Bold(title)
+	}
+	return p.Bold(title) + "  " + p.Muted(strings.Join(context, partySep))
+}
+
 var hues = [...]color.Attribute{color.FgGreen, color.FgBlue, color.FgMagenta, color.FgCyan, color.FgHiBlue, color.FgHiMagenta}
 
 func (p Palette) Hue(key, text string) string {
