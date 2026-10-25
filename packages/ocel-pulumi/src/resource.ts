@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
+import { createUrn, dynamic, type Input, isSecret, output, type Resource } from "@pulumi/pulumi";
 import { checkTarget, runBindings, type Target } from "./cli.js";
 import { publishedCustom } from "./custom.js";
 import type { GrantInput } from "./grants.js";
@@ -24,12 +24,13 @@ export interface DescribedPostgresResource {
 }
 
 /**
- * A record only transforms read: the properties written out by hand, under a
- * name a transform names.
+ * The values a custom binding publishes, written out by hand under a name the
+ * ocel project reads: a transform as `bindings.custom.<name>.<property>`, and an
+ * app's declared variable through `"bindings": { "variables": { <KEY>: "@<name>.<property>" } }`.
  *
- * Ocel neither types nor interprets what a custom binding contains — it hands the
- * values to a transform that fills a surface field with them, so nothing is
- * delivered to an app and no grants are accepted.
+ * Ocel neither types nor interprets what a custom binding contains, so no grants
+ * are accepted. A property given as a secret output is published marked secret,
+ * and only an app's `secret` variable may take it.
  */
 export type CustomProperties = Record<string, Input<unknown>>;
 
@@ -54,6 +55,7 @@ interface PostgresInputs extends BindingInputs, DescribedPostgres {}
 
 interface CustomInputs extends BindingInputs {
   properties: Record<string, unknown>;
+  secrets: string[];
 }
 
 interface BindingState extends Target {
@@ -125,7 +127,7 @@ export const postgresProvider = bindingProvider<PostgresInputs>(
 );
 
 export const customProvider = bindingProvider<CustomInputs>(
-  (inputs) => publishedCustom(inputs.name, inputs.properties),
+  (inputs) => publishedCustom(inputs.name, inputs.properties, inputs.secrets),
   (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 
@@ -154,14 +156,27 @@ export function postgres(
  * Publishes one set of values from your own infrastructure as one ocel custom
  * binding, as a side effect of this update.
  *
- * The name is the one a transform reads — `bind.custom("network", …)` here,
- * `bindings.custom.network.subnetIds` in a transform module. `tier` defaults to
- * production, `environment` names one preview environment, and `project` is the
- * directory containing `ocel.json`, which is the directory Pulumi runs the
- * program from unless it is given.
+ * The name is the one the ocel project reads — `bind.custom("network", …)` here,
+ * `bindings.custom.network.subnetIds` in a transform module, and
+ * `"bindings": { "variables": { "SUBNET_IDS": "@network.subnetIds" } }` for an
+ * app's declared variable. A property given as a secret output, such as
+ * `config.requireSecret(…)` or `pulumi.secret(…)`, is published marked secret and
+ * reaches only a `secret` variable. `tier` defaults to production, `environment`
+ * names one preview environment, and `project` is the directory containing
+ * `ocel.json`, which is the directory Pulumi runs the program from unless it is
+ * given.
  */
 export function custom(name: string, properties: CustomProperties, opts?: BindOptions): void {
-  declare(customProvider, name, opts, { properties });
+  declare(customProvider, name, opts, { properties, secrets: secretProperties(properties) });
+}
+
+async function secretProperties(properties: CustomProperties): Promise<string[]> {
+  const marked = await Promise.all(
+    Object.entries(properties).map(async ([key, value]) =>
+      (await isSecret(output(value))) ? key : undefined,
+    ),
+  );
+  return marked.filter((key) => key !== undefined).sort();
 }
 
 const dynamicType = "pulumi-nodejs:dynamic:Resource";
@@ -191,7 +206,7 @@ function declare(
       owner: createUrn(logical, dynamicType, opts?.parent),
       ...described,
     },
-    { parent: opts?.parent },
+    { parent: opts?.parent, additionalSecretOutputs: ["digest"] },
   );
 }
 

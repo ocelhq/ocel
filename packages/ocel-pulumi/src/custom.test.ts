@@ -37,4 +37,17 @@ describe("the record a custom binding publishes as", () => {
   it("refuses a property that never resolved", () => {
     expect(() => publishedCustom("network", { vpcId: undefined })).toThrow(/vpcId as undefined/);
   });
+
+  it("marks the properties that were secret outputs beside the record", () => {
+    const record = publishedCustom("keys", { seal: "k3y", region: "eu" }, ["seal"]);
+
+    expect(record).toEqual({
+      binding: { name: "keys", custom: { seal: "k3y", region: "eu" }, source },
+      secrets: ["seal"],
+    });
+  });
+
+  it("marks nothing when no property was a secret output", () => {
+    expect(publishedCustom("keys", { region: "eu" }, [])).not.toHaveProperty("secrets");
+  });
 });

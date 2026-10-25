@@ -1200,6 +1200,7 @@ type PublishedBinding struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Binding       *v11.Binding           `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
 	Grants        []*Grant               `protobuf:"bytes,2,rep,name=grants,proto3" json:"grants,omitempty"`
+	Secrets       []string               `protobuf:"bytes,3,rep,name=secrets,proto3" json:"secrets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1244,6 +1245,13 @@ func (x *PublishedBinding) GetBinding() *v11.Binding {
 func (x *PublishedBinding) GetGrants() []*Grant {
 	if x != nil {
 		return x.Grants
+	}
+	return nil
+}
+
+func (x *PublishedBinding) GetSecrets() []string {
+	if x != nil {
+		return x.Secrets
 	}
 	return nil
 }
@@ -2762,10 +2770,11 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\venvironment\x18\x03 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
 	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\x12Q\n" +
 	"\tpublished\x18\x04 \x01(\v2+.provider.variablestore.v1.PublishedBindingB\x06\xbaH\x03\xc8\x01\x01R\tpublished\x12\x14\n" +
-	"\x05owner\x18\x05 \x01(\tR\x05owner\"\x8b\x01\n" +
+	"\x05owner\x18\x05 \x01(\tR\x05owner\"\xb5\x01\n" +
 	"\x10PublishedBinding\x12=\n" +
 	"\abinding\x18\x01 \x01(\v2\x1b.common.bindings.v1.BindingB\x06\xbaH\x03\xc8\x01\x01R\abinding\x128\n" +
-	"\x06grants\x18\x02 \x03(\v2 .provider.variablestore.v1.GrantR\x06grants\"\xa0\x01\n" +
+	"\x06grants\x18\x02 \x03(\v2 .provider.variablestore.v1.GrantR\x06grants\x12(\n" +
+	"\asecrets\x18\x03 \x03(\tB\x0e\xbaH\v\x92\x01\b\x18\x01\"\x04r\x02\x10\x01R\asecrets\"\xa0\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +

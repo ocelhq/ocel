@@ -11,6 +11,7 @@ export interface CustomBinding {
 export function publishedCustom(
   name: string,
   properties: Record<string, unknown>,
+  secrets: string[] = [],
 ): PublishedBinding<CustomBinding> {
   if (!name) {
     throw new Error(
@@ -29,5 +30,11 @@ export function publishedCustom(
       );
     }
   }
-  return { binding: { name, custom: properties, source } };
+  const published: PublishedBinding<CustomBinding> = {
+    binding: { name, custom: properties, source },
+  };
+  if (secrets.length > 0) {
+    published.secrets = secrets;
+  }
+  return published;
 }

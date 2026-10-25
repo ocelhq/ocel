@@ -22,8 +22,9 @@ export type {
  * resource ocel cannot type is not bindable by name, and nothing here refuses
  * at update what it could refuse by having no function to call.
  *
- * `custom` is the exception an app never sees: it publishes values ocel neither
- * types nor delivers, read only by a transform module through
- * `bindings.custom.<name>.<property>`.
+ * `custom` publishes values ocel does not type: a transform module reads them as
+ * `bindings.custom.<name>.<property>`, and an app's declared variable takes one
+ * through `"bindings": { "variables": { <KEY>: "@<name>.<property>" } }`, a
+ * property published from a secret output reaching only a `secret` variable.
  */
 export const bind = { postgres, custom };
