@@ -91,6 +91,25 @@ describe("reaching the ocel CLI", () => {
     });
   });
 
+  it("runs ocel.exe on Windows and passes over the .cmd shim npm installs before it on PATH", () => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "win32" });
+    try {
+      const shims = scratch();
+      writeFileSync(join(shims, "ocel.cmd"), "");
+      const binaries = scratch();
+      writeFileSync(join(binaries, "ocel.exe"), "");
+      vi.stubEnv("PATHEXT", ".COM;.EXE;.BAT;.CMD");
+      vi.stubEnv("PATH", [shims, binaries].join(delimiter));
+
+      runBindings(["ls"], target, goOnlyProject());
+
+      expect(spawned().command).toBe(join(binaries, "ocel.exe"));
+    } finally {
+      if (platform) Object.defineProperty(process, "platform", platform);
+    }
+  });
+
   it("runs the bin the project's own @ocel/cli ships when nothing else names a CLI", () => {
     const project = withCLIPackage("bin/ocel.js");
 

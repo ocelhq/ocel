@@ -82,7 +82,7 @@ function ocelCommand(project: string): [string, string[]] {
   if (named) {
     return [named, []];
   }
-  const found = onPath("ocel");
+  const found = onPath(process.platform === "win32" ? "ocel.exe" : "ocel");
   if (found) {
     return [found, []];
   }
@@ -95,16 +95,12 @@ function ocelCommand(project: string): [string, string[]] {
   );
 }
 
-function onPath(name: string): string | undefined {
-  const extensions =
-    process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD").split(";") : [""];
+function onPath(file: string): string | undefined {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!dir) continue;
-    for (const extension of extensions) {
-      const candidate = path.join(dir, name + extension);
-      if (isExecutable(candidate)) {
-        return candidate;
-      }
+    const candidate = path.join(dir, file);
+    if (isExecutable(candidate)) {
+      return candidate;
     }
   }
   return undefined;
