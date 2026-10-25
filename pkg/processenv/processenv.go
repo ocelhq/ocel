@@ -29,6 +29,8 @@ const LiveDirEnvVar = "OCEL_LIVE_DIR"
 
 const NextPublicURLEnvVar = "NEXT_PUBLIC_OCEL_URL"
 
+const NextPublicEnvVar = "NEXT_PUBLIC_OCEL_ENV"
+
 const SvelteKitPublicURLEnvVar = "PUBLIC_OCEL_URL"
 
 // TODO: this binds to Vercel's internals: Next's metadataBase fallback for social images

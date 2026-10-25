@@ -20,6 +20,7 @@ var buildSetNames = []string{
 	processenv.PhaseEnvVar,
 	processenv.LiveDirEnvVar,
 	processenv.PublicKeysEnvVar,
+	processenv.NextPublicEnvVar,
 	processenv.RuntimeAddressEnvVar,
 	localrpc.SessionTokenEnvVar,
 	"OCEL_APP_NAME",

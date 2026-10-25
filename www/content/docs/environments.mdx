@@ -97,7 +97,7 @@ Every value is encrypted in ocel's store. The class decides where it may go from
 | Can have a default | Yes | Yes | No |
 | Quoted in a parse error | Yes | No | No |
 | In build output | As is | As `[secret]` | As `[secret]` |
-| Reaches an image build | No | Yes, as a build secret | Yes, as a build secret |
+| Reaches an image build | A public one, as a build argument | Yes, as a build secret | Yes, as a build secret |
 | `ocel env get --reveal` | Prints it | Prints it | Prints it after `--yes` |
 
 ### Which class to choose

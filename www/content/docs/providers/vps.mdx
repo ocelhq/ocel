@@ -425,7 +425,8 @@ Containers log with Docker's `local` driver, at most 100 MiB each. Read them wit
 
 Nothing ocel runs on the box caches responses. A Next app runs as a plain Next server, so Next's
 own cache inside the container is the only one, and a deploy that replaces the container starts it
-over from what the build prerendered.
+over from what the build prerendered. Its build reads its public values as build arguments; see
+[Environment variables](/docs/frameworks/nextjs#environment-variables).
 
 ## Upgrades
 

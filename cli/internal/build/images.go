@@ -2,9 +2,11 @@ package build
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
 func (t tools) images(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, log Log) (refs map[string]string, err error) {
@@ -43,6 +46,9 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 		if err != nil {
 			return nil, err
 		}
+		if described.BuildArgs, err = newImageBuildArgs(app, variables[app.Name]); err != nil {
+			return nil, err
+		}
 		appLog, ended := log.App(app.Name)
 		built, err := t.image(ctx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, variables[app.Name].BindingProxyEnv, hashKey), appLog)
 		if sources, hosts := workers[app.Name]; hosts && err == nil {
@@ -61,6 +67,31 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 		refs[app.Name] = built.Ref
 	}
 	return refs, nil
+}
+
+func newImageBuildArgs(a project.App, values AppVariables) (map[string]string, error) {
+	switch a.Framework {
+	case buildoutput.FrameworkNext:
+		if _, declared := values.Env[processenv.NextPublicEnvVar]; declared {
+			return nil, fmt.Errorf("app %q declares %s, which the build sets itself; rename it where it is declared", a.Name, processenv.NextPublicEnvVar)
+		}
+		public := map[string]string{}
+		for _, key := range values.PublicKeys {
+			if value, set := values.Env[key]; set {
+				public[key] = value
+			}
+		}
+		inlined, err := json.Marshal(public)
+		if err != nil {
+			return nil, err
+		}
+		args := maps.Clone(public)
+		args[processenv.NextPublicEnvVar] = string(inlined)
+		return args, nil
+	case buildoutput.FrameworkSvelteKit:
+		return maps.Clone(values.Env), nil
+	}
+	return nil, nil
 }
 
 func (t tools) ensureLiveHashKey(apps []project.App, variables map[string]AppVariables) ([]byte, error) {

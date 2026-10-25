@@ -52,6 +52,12 @@ func writeHashed(mac io.Writer, values map[string]string) {
 	}
 }
 
+func hashBuildArgs(args map[string]string) string {
+	hash := sha256.New()
+	writeHashed(hash, args)
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
 func (l LiveValues) hasValues() bool { return len(l.Values) > 0 || len(l.Env) > 0 }
 
 func (l LiveValues) listKeys() []string { return slices.Sorted(maps.Keys(l.Values)) }
