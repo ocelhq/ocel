@@ -1,3 +1,4 @@
+import type { Need } from "ocel/config";
 import {
   bindingChecks,
   buildVariablesChecks,
@@ -36,7 +37,9 @@ import { awsWorld } from "../targets/aws/world";
 import { type Fixture, fixture } from "./types";
 import {
   alb,
+  albContainerDockerfile,
   albInFrontOfNext,
+  albInFrontOfNextContainer,
   apiGateway,
   cloudflare,
   cloudflareInFrontOfContainers,
@@ -46,6 +49,7 @@ import {
   cloudflareTunnel,
   cloudfrontShielded,
   container,
+  containerDockerfile,
   defaults,
   dockerfile,
   registry,
@@ -87,6 +91,8 @@ const BINDING_CHECKS = [
 ];
 const REALTIME_CHECKS = [...healthChecks, ...realtimeChecks];
 const WIRE_CHECKS = tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" });
+const NEXT_EDGE_NEEDS: Need[] = ["edge-runtime", "edge-cache"];
+const NEXT_WORKSPACE_EDGE_NEEDS: Need[] = ["edge-cache"];
 const SDK_GO_CHECKS = [
   ...REALTIME_CHECKS,
   ...tasksWireChecks({ task: "exact-echo", topic: "exact-orders", consumer: "exact-audit" }),
@@ -136,12 +142,20 @@ export const deploy = {
     checks: [...NODE_CHECKS, ...NEXT_ROUTING_AND_CACHE_CHECKS],
     on: {
       dev: [defaults],
-      aws: [defaults, container, cloudflare, cloudfrontShielded],
+      aws: [defaults, container, containerDockerfile, cloudflare, cloudfrontShielded],
       vps: [defaults],
-      gcp: [defaults, container, albInFrontOfNext, cloudflareOnGoogleCloud],
+      gcp: [
+        defaults,
+        container,
+        containerDockerfile,
+        albInFrontOfNext,
+        albInFrontOfNextContainer,
+        albContainerDockerfile,
+        cloudflareOnGoogleCloud,
+      ],
     },
     previews: { gcp: [albInFrontOfNext] },
-    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+    needs: { web: NEXT_EDGE_NEEDS },
   }),
   sveltekit: fixture("deploy/sveltekit", {
     apps: ["web"],
@@ -168,7 +182,7 @@ export const deploy = {
       gcp: [defaults, container],
     },
     sample: { group: "node-http", representative: true },
-    configOn: { gcp: { allowDegraded: ["edge-cache"] } },
+    needs: { next: NEXT_WORKSPACE_EDGE_NEEDS },
   }),
 };
 
@@ -188,7 +202,7 @@ export const lifecycle = {
       vps: [defaults, cloudflareOnABox, cloudflareTunnel],
       gcp: [defaults, container],
     },
-    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+    needs: { web: NEXT_EDGE_NEEDS },
   }),
 };
 
@@ -254,7 +268,7 @@ export const sdk = {
       vps: [defaults, dockerfile],
       gcp: [defaults],
     },
-    configOn: { gcp: { allowDegraded: ["edge-runtime", "edge-cache"] } },
+    needs: { web: NEXT_EDGE_NEEDS },
   }),
   sveltekit: fixture("sdk/sveltekit", {
     apps: ["web"],
@@ -276,7 +290,7 @@ export const sdk = {
       gcp: [defaults],
     },
     sample: { group: "node-http", representative: true },
-    configOn: { gcp: { allowDegraded: ["edge-cache"] } },
+    needs: { next: NEXT_WORKSPACE_EDGE_NEEDS },
   }),
 };
 

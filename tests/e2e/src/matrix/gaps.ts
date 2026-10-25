@@ -13,7 +13,6 @@ import {
   nextCacheChecks,
   nextDataCacheChecks,
   nextOriginDataCacheChecks,
-  nextPublicValueInlinedCheck,
   nodeRuntimeChecks,
   orderedKeysInParallelCheck,
   publicOriginCheck,
@@ -45,6 +44,8 @@ import { deploy, lifecycle, sdk } from "./fixtures";
 import type { Gap } from "./types";
 import {
   alb,
+  albContainerDockerfile,
+  albInFrontOfNextContainer,
   apiGateway,
   cloudflare,
   cloudflareInFrontOfContainers,
@@ -54,6 +55,7 @@ import {
   cloudflareTunnel,
   cloudfrontShielded,
   container,
+  containerDockerfile,
   defaults,
   dockerfile,
   registry,
@@ -228,21 +230,6 @@ export const gaps: Gap[] = [
     where: [{ on: ["gcp"], fixtures: [sdk.node], fails: [check(todoAndDocumentChecks)] }],
   },
   {
-    id: "cloudfront-answers-403",
-    reason: "once the hostname's route resolves, every request through cloudfront answers 403",
-    issue: 923,
-    where: [
-      {
-        on: ["aws"],
-        fixtures: DEPLOY_NEXT_BEARING,
-        variants: [defaults],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-      { on: ["aws"], variants: [container], fails: [step.deploy], skipsCell: true },
-    ],
-  },
-  {
     id: "api-gateway-keeps-the-sentinel",
     reason:
       "the api-gateway edge invokes lambda over a streaming invoke and drops neither the empty-body byte nor its marker",
@@ -275,7 +262,14 @@ export const gaps: Gap[] = [
     reason:
       "the aws provider runs a container on Fargate behind a load balancer floci has no data plane for",
     issue: 995,
-    where: [{ on: ["aws.floci"], variants: [container], fails: [step.deploy], skipsCell: true }],
+    where: [
+      {
+        on: ["aws.floci"],
+        variants: [container, containerDockerfile],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
   },
   {
     id: "floci-runs-no-event-api",
@@ -332,7 +326,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["gcp.floci"],
-        variants: [cloudflareOnGoogleCloud, alb],
+        variants: [cloudflareOnGoogleCloud, alb, albInFrontOfNextContainer, albContainerDockerfile],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -368,7 +362,7 @@ export const gaps: Gap[] = [
       },
       {
         on: ["gcp"],
-        variants: [alb],
+        variants: [alb, albInFrontOfNextContainer, albContainerDockerfile],
         whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
@@ -392,12 +386,12 @@ export const gaps: Gap[] = [
   {
     id: "google-cloud-origins-serve-no-edge-runtime",
     reason:
-      "a Google Cloud origin serves no edge runtime, so a route that declares it runs on node and stamps itself nodejs",
+      "a Google Cloud origin serves no edge runtime, so a route that declares it runs on node and stamps itself nodejs, where ocel's Next adapter built the app",
     where: [
       {
         on: ["gcp", "gcp.floci"],
         fixtures: [deploy.next, lifecycle.next, sdk.next],
-        variants: [defaults, alb, cloudflareOnGoogleCloud],
+        variants: [defaults, container, alb, albInFrontOfNextContainer, cloudflareOnGoogleCloud],
         fails: [check(runtimeStampCheck)],
       },
     ],
@@ -412,25 +406,6 @@ export const gaps: Gap[] = [
         fixtures: [sdk.next, sdk.sveltekit],
         variants: [defaults],
         fails: [check(clientEnvDeploymentUrlCheck)],
-      },
-    ],
-  },
-  {
-    id: "image-build-inlines-no-public-value",
-    reason:
-      "an app built as an image is built with none of its plaintext values, so next build, run without ocel's Next adapter, defines no OCEL_PUBLIC_ENV and inlines no NEXT_PUBLIC_ value into the browser bundle, and a SvelteKit build refuses the public value its schema requires as undefined",
-    where: [
-      {
-        on: ["vps", "vps.incus"],
-        fixtures: [sdk.next],
-        variants: [defaults, dockerfile],
-        fails: [check(nextPublicValueInlinedCheck)],
-      },
-      {
-        on: ["vps", "vps.incus"],
-        fixtures: [sdk.sveltekit],
-        fails: [step.deploy],
-        skipsCell: true,
       },
     ],
   },

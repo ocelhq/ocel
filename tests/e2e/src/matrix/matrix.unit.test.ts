@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import type { Need } from "ocel/config";
 import stripJsonComments from "strip-json-comments";
 import {
   batchCheck,
@@ -34,9 +35,33 @@ import { fixtureDir } from "../paths";
 import { NO_FILTER, plan, type RunFilter } from "../plan";
 import { filterFrom } from "../run/filter";
 import { hasPreviewGate, hasReleaseCycle, previewsOn, targetNamed } from "../targets";
-import { fixtures } from "./fixtures";
+import { deploy, fixtures, lifecycle, sdk } from "./fixtures";
 import { gaps } from "./gaps";
-import { CONCERNS, type Concern, LANES, type Lane, targetOfLane } from "./types";
+import {
+  CONCERNS,
+  type Concern,
+  type Fixture,
+  LANES,
+  type Lane,
+  type TargetName,
+  targetOfLane,
+  type Variant,
+} from "./types";
+import {
+  albContainerDockerfile,
+  albInFrontOfNext,
+  albInFrontOfNextContainer,
+  cloudflare,
+  cloudflareInFrontOfMixedComputes,
+  cloudflareOnABox,
+  cloudflareOnGoogleCloud,
+  cloudfrontShielded,
+  container,
+  containerDockerfile,
+  defaults,
+  dockerfile,
+} from "./variants";
+import { listWaivedNeeds } from "./waivers";
 
 const REGISTRY_CREDENTIALS = {
   OCEL_E2E_REGISTRY_USER: "octocat",
@@ -173,6 +198,103 @@ const ZONED_RUN = {
 const skippedBy = (planned: ReturnType<typeof planOn>, cell: string) =>
   (planned.skipped[cell] ?? []).map((gap) => gap.id).sort();
 
+describe("Next containers", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const BUILT_BY_THE_ADAPTER = {
+    aws: ["deploy/next-container", "lifecycle/next-container", "sdk/next-container"],
+    gcp: ["deploy/next-container", "lifecycle/next-container", "deploy/next-alb-container"],
+  } as const;
+  const RUN_BY_NEXT_START = {
+    vps: ["deploy/next", "lifecycle/next", "sdk/next"],
+  } as const;
+  const BUILT_FROM_A_DOCKERFILE = {
+    aws: ["deploy/next-container-dockerfile"],
+    gcp: ["deploy/next-container-dockerfile", "deploy/next-alb-container-dockerfile"],
+    vps: ["sdk/next-dockerfile"],
+  } as const;
+
+  it("deploy on every target, built by ocel's Next adapter where next start cannot serve them, by Railpack on a box nothing dispatches, and from a Dockerfile, none skipped where the run names a zone", () => {
+    for (const cells of [BUILT_BY_THE_ADAPTER, RUN_BY_NEXT_START, BUILT_FROM_A_DOCKERFILE]) {
+      for (const [lane, named] of Object.entries(cells) as [Lane, readonly string[]][]) {
+        const planned = planOn(lane, ZONED_RUN);
+        for (const cell of named) {
+          expect({ cell, planned: planned.cells.some((one) => one.name === cell) }).toEqual({
+            cell,
+            planned: true,
+          });
+        }
+      }
+    }
+  });
+
+  it("run on aws behind CloudFront, whose 403 to every request #923 fixed, and on its emulator only where a load balancer runs", () => {
+    const awsSkips = planOn("aws");
+    const SERVERLESS_BEHIND_CLOUDFRONT = ["deploy/next", "deploy/workspace"];
+    for (const cell of [
+      ...BUILT_BY_THE_ADAPTER.aws,
+      ...BUILT_FROM_A_DOCKERFILE.aws,
+      ...SERVERLESS_BEHIND_CLOUDFRONT,
+    ]) {
+      expect({ cell, skipped: skippedBy(awsSkips, cell) }).toEqual({ cell, skipped: [] });
+    }
+    const planned = planOn("aws.floci");
+    for (const cell of ["deploy/next-container", "deploy/next-container-dockerfile"]) {
+      expect(skippedBy(planned, cell)).toContain("floci-runs-no-load-balancer");
+    }
+  });
+
+  it("are held to the edge's cache behind CloudFront and the load balancer, to the Next server's own where nothing caches in front, and to neither when built from a Dockerfile behind an edge that keeps its pages by their own headers", () => {
+    const EDGE_TITLES = [...nextCacheChecks, ...nextDataCacheChecks].map((one) => one.title);
+    const ORIGIN_TITLES = [...nextOriginCacheChecks, ...nextOriginDataCacheChecks].map(
+      (one) => one.title,
+    );
+    const held = {
+      edge: {
+        aws: ["deploy/next-container", "sdk/next-container"],
+        gcp: ["deploy/next-alb-container"],
+      },
+      origin: {
+        gcp: ["deploy/next-container", "deploy/next-container-dockerfile"],
+        vps: ["deploy/next", "sdk/next-dockerfile"],
+      },
+      "app-headers": {
+        aws: ["deploy/next-container-dockerfile"],
+        gcp: ["deploy/next-alb-container-dockerfile"],
+      },
+    } as const;
+    for (const [layer, byLane] of Object.entries(held)) {
+      for (const [lane, cells] of Object.entries(byLane) as [Lane, readonly string[]][]) {
+        const planned = planOn(lane, ZONED_RUN, EVERY_CELL);
+        for (const cell of cells) {
+          const titles =
+            planned.cells.find((one) => one.name === cell)?.steps.map((one) => one.title) ?? [];
+          const heldTo = (of: string[]) =>
+            titles.some((title) => of.some((t) => title.endsWith(t)));
+          expect({ cell, edge: heldTo(EDGE_TITLES), origin: heldTo(ORIGIN_TITLES) }).toEqual({
+            cell,
+            edge: layer === "edge",
+            origin: layer === "origin",
+          });
+        }
+      }
+    }
+  });
+
+  it("inline their public values on a box, built by Railpack or from a Dockerfile declaring NEXT_PUBLIC_OCEL_ENV", () => {
+    for (const lane of ["vps", "vps.incus"] as const) {
+      const { expectedFailures } = planOn(lane);
+      for (const cell of ["sdk/next/web", "sdk/next-dockerfile/web"]) {
+        expect({
+          cell,
+          gaps: (expectedFailures[cell]?.[nextPublicValueInlinedCheck.title] ?? []).map(
+            (gap) => gap.id,
+          ),
+        }).toEqual({ cell, gaps: [] });
+      }
+    }
+  });
+});
+
 describe("the cloudflare variant on floci's aws", () => {
   it("skips every cloudflare cell, whatever framework its fixture builds", () => {
     expect(skippedBy(planOn("aws.floci"), "deploy/sveltekit-cloudflare")).toContain(
@@ -227,26 +349,46 @@ describe("Cloudflare in front of gcp", () => {
   });
 });
 
-describe("the needs a Google Cloud origin does not serve", () => {
-  const WAIVED = {
-    "deploy/next": ["edge-runtime", "edge-cache"],
-    "lifecycle/next": ["edge-runtime", "edge-cache"],
-    "sdk/next": ["edge-runtime", "edge-cache"],
-    "deploy/workspace": ["edge-cache"],
-    "sdk/workspace": ["edge-cache"],
-  };
+describe("the needs a Next cell waives", () => {
+  const WAIVED: [Fixture, TargetName, Variant, Need[]][] = [
+    [deploy.next, "aws", defaults, ["edge-runtime"]],
+    [deploy.next, "aws", container, ["edge-runtime"]],
+    [deploy.next, "aws", cloudfrontShielded, ["edge-runtime"]],
+    [deploy.next, "aws", containerDockerfile, []],
+    [deploy.next, "aws", cloudflare, []],
+    [lifecycle.next, "aws", container, ["edge-runtime"]],
+    [sdk.next, "aws", cloudflare, []],
+    [deploy.workspace, "aws", defaults, []],
+    [deploy.workspace, "aws", container, []],
+    [deploy.workspace, "aws", cloudflareInFrontOfMixedComputes, []],
+    [sdk.workspace, "aws", cloudflare, []],
+    [deploy.next, "gcp", defaults, ["edge-runtime", "edge-cache"]],
+    [deploy.next, "gcp", container, ["edge-runtime", "edge-cache"]],
+    [deploy.next, "gcp", containerDockerfile, []],
+    [deploy.next, "gcp", albInFrontOfNext, ["edge-runtime"]],
+    [deploy.next, "gcp", albInFrontOfNextContainer, ["edge-runtime"]],
+    [deploy.next, "gcp", albContainerDockerfile, []],
+    [deploy.next, "gcp", cloudflareOnGoogleCloud, []],
+    [deploy.workspace, "gcp", defaults, ["edge-cache"]],
+    [deploy.next, "vps", defaults, []],
+    [lifecycle.next, "vps", cloudflareOnABox, []],
+    [sdk.next, "vps", dockerfile, []],
+    [sdk.workspace, "vps", defaults, []],
+  ];
 
-  it("waives the needs each Next fixture deploys degraded on gcp, since the origin serves them on node", () => {
-    for (const [name, needs] of Object.entries(WAIVED)) {
-      const waived: string[] =
-        fixtures.find((one) => one.name === name)?.configOn?.gcp?.allowDegraded ?? [];
-      expect([...waived].sort()).toEqual([...needs].sort());
+  it("waives exactly the needs its front and router leave unserved, and none where a Dockerfile or Railpack builds it, whose build declares none", () => {
+    for (const [fixture, target, variant, needs] of WAIVED) {
+      const cell = `${target}:${fixture.name}-${variant.name}`;
+      expect({ cell, waived: listWaivedNeeds(fixture, target, variant) }).toEqual({
+        cell,
+        waived: needs,
+      });
     }
   });
 
-  it("expects the edge runtime's stamp green on a Next container on gcp and floci-gcp, whose Next server runs edge routes itself", () => {
+  it("expects the edge runtime's stamp green on a Next container on gcp and floci-gcp built from a Dockerfile, whose next start runs edge routes itself", () => {
     for (const lane of ["gcp", "gcp.floci"] as const) {
-      const listed = planOn(lane).expectedFailures["deploy/next-container/web"] ?? {};
+      const listed = planOn(lane).expectedFailures["deploy/next-container-dockerfile/web"] ?? {};
 
       expect(
         Object.keys(listed).filter((title) => title.includes("stamp themselves apart")),
@@ -254,18 +396,20 @@ describe("the needs a Google Cloud origin does not serve", () => {
     }
   });
 
-  it("expects the edge runtime's stamp red on every Next deploy on gcp and floci-gcp, where edge routes run on node", () => {
+  it("expects the edge runtime's stamp red on every Next deploy on gcp and floci-gcp that ocel's Next adapter built, where edge routes run on node", () => {
     for (const lane of ["gcp", "gcp.floci"] as const) {
-      const listed = planOn(lane).expectedFailures["deploy/next/web"] ?? {};
-      const stamp = Object.entries(listed).filter(([title]) =>
-        title.includes("stamp themselves apart"),
-      );
-
-      expect(stamp).not.toEqual([]);
-      for (const [, gapsListed] of stamp) {
-        expect(gapsListed.map((gap) => gap.id)).toContain(
-          "google-cloud-origins-serve-no-edge-runtime",
+      for (const cell of ["deploy/next/web", "deploy/next-container/web"]) {
+        const listed = planOn(lane).expectedFailures[cell] ?? {};
+        const stamp = Object.entries(listed).filter(([title]) =>
+          title.includes("stamp themselves apart"),
         );
+
+        expect(stamp).not.toEqual([]);
+        for (const [, gapsListed] of stamp) {
+          expect(gapsListed.map((gap) => gap.id)).toContain(
+            "google-cloud-origins-serve-no-edge-runtime",
+          );
+        }
       }
     }
   });
@@ -524,10 +668,13 @@ describe("the Next cache a cell is held to", () => {
     }
   });
 
-  it("holds a Next app in a container on aws or gcp to the Next server's own cache", () => {
+  it("holds a Next app in a container on gcp with no edge to the Next server's own cache", () => {
     const containers = {
-      aws: ["deploy/next-container", "lifecycle/next-container", "sdk/next-container"],
-      gcp: ["deploy/next-container", "lifecycle/next-container"],
+      gcp: [
+        "deploy/next-container",
+        "deploy/next-container-dockerfile",
+        "lifecycle/next-container",
+      ],
     } as const;
     for (const [lane, cells] of Object.entries(containers) as [Lane, readonly string[]][]) {
       const planned = planOn(lane, {}, EVERY_CELL);
@@ -580,9 +727,15 @@ describe("the Next cache a cell is held to", () => {
     expect(backendBucket("deploy/next")).toEqual([]);
   });
 
-  it("holds a Next app on aws to the edge's cache", () => {
+  it("holds a Next app on aws to the edge's cache, in a container ocel's adapter built too, since CloudFront stores what it serves and its revalidations purge it", () => {
     const planned = planOn("aws", {}, EVERY_CELL);
-    for (const cell of ["deploy/next", "deploy/next-cloudflare", "lifecycle/next"]) {
+    for (const cell of [
+      "deploy/next",
+      "deploy/next-cloudflare",
+      "lifecycle/next",
+      "deploy/next-container",
+      "lifecycle/next-container",
+    ]) {
       const titles = titlesOf(planned, cell);
       expect(cacheTitlesIn(titles, ORIGIN_TITLES)).toEqual([]);
       expect(cacheTitlesIn(titles, EDGE_TITLES)).not.toEqual([]);
@@ -670,28 +823,15 @@ describe("sdk/next and sdk/sveltekit", () => {
     }
   });
 
-  it("expects the public value Next inlines red on a box, where the Next app builds as an image without ocel's Next adapter", () => {
-    for (const lane of ["vps", "vps.incus"] as const) {
-      const { expectedFailures } = planOn(lane);
-      for (const cell of ["sdk/next/web", "sdk/next-dockerfile/web"]) {
-        expect(
-          expectedFailures[cell]?.[nextPublicValueInlinedCheck.title]?.map((gap) => gap.id),
-        ).toEqual(["image-build-inlines-no-public-value"]);
-      }
-    }
-  });
-
   it("expects nothing of the SvelteKit app red where the deploy writes the deployment url", () => {
     for (const lane of ["aws", "dev"] as const) {
       expect(planOn(lane).expectedFailures["sdk/sveltekit/web"] ?? {}).toEqual({});
     }
   });
 
-  it("skips the SvelteKit app on a box, whose image build gets no public value for its schema to accept", () => {
+  it("runs the SvelteKit app on a box, whose image build reads the public value its schema requires", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
-      expect(planOn(lane).skipped["sdk/sveltekit"]?.map((gap) => gap.id)).toEqual([
-        "image-build-inlines-no-public-value",
-      ]);
+      expect(planOn(lane).skipped["sdk/sveltekit"]).toBeUndefined();
     }
   });
 
