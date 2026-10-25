@@ -119,8 +119,10 @@ func DeclaredFunctions(spec provider.StackSpec, recordsWorkers bool) []string {
 		return nil
 	}
 	names := make([]string, 0, len(spec.App.Functions)+len(spec.App.Workers))
-	for _, function := range spec.App.Functions {
-		names = append(names, function.Name)
+	if !spec.App.IsBuiltFromFunction() {
+		for _, function := range spec.App.Functions {
+			names = append(names, function.Name)
+		}
 	}
 	if recordsWorkers && spec.App.Compute == provider.ComputeServerless {
 		names = append(names, declaredWorkers(spec.App)...)

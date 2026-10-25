@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -105,8 +106,8 @@ func TestANodeFunctionFindsNodeOnTheBasesPath(t *testing.T) {
 			path = value
 		}
 	}
-	if !slices.Contains(strings.Split(path, ":"), nodeBinDir) {
-		t.Errorf("the base a node function runs on has PATH=%q, and its command is `node`, which is only at %s", path, nodeBinDir)
+	if !slices.Contains(strings.Split(path, ":"), images.NodeBinDir) {
+		t.Errorf("the base a node function runs on has PATH=%q, and its command is `node`, which is only at %s", path, images.NodeBinDir)
 	}
 	if !strings.Contains(path, "/usr/bin") {
 		t.Errorf("PATH=%q, want what the base already named kept", path)
@@ -135,8 +136,8 @@ func TestANextFunctionRunsOnThePlainNodeBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FunctionBase(next) = %v", err)
 	}
-	if *asked != nodeImage {
-		t.Errorf("FunctionBase(next) read %q, want the node base %q: a Next function runs on node", *asked, nodeImage)
+	if *asked != images.NodeBase {
+		t.Errorf("FunctionBase(next) read %q, want the node base %q: a Next function runs on node", *asked, images.NodeBase)
 	}
 	if files := filesIn(t, base); len(files) != 0 {
 		t.Errorf("the Next base holds %v, want the node base alone: the Next runtime goes in a layer every function shares", files)
@@ -145,8 +146,8 @@ func TestANextFunctionRunsOnThePlainNodeBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.ContainsFunc(file.Config.Env, func(entry string) bool { return strings.HasPrefix(entry, "PATH="+nodeBinDir) }) {
-		t.Errorf("the Next base has env %v, and its command is `node`, which is only at %s", file.Config.Env, nodeBinDir)
+	if !slices.ContainsFunc(file.Config.Env, func(entry string) bool { return strings.HasPrefix(entry, "PATH="+images.NodeBinDir) }) {
+		t.Errorf("the Next base has env %v, and its command is `node`, which is only at %s", file.Config.Env, images.NodeBinDir)
 	}
 }
 

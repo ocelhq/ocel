@@ -119,6 +119,14 @@ type AppSpec struct {
 	Topics []Resource
 }
 
+func (a *AppSpec) IsBuiltFromFunction() bool {
+	return isBuiltFromFunction(a.Compute, len(a.Functions))
+}
+
+func (a *AppSpec) IsBuiltAsFunctions() bool {
+	return a.Compute == ComputeServerless || a.IsBuiltFromFunction()
+}
+
 type RoutingSpec struct {
 	RootFunction string
 	RouteTable   router.RouteTable

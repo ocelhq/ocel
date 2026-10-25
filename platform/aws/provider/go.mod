@@ -38,6 +38,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
 	github.com/aws/smithy-go v1.28.1
 	github.com/evanw/esbuild v0.28.1
+	github.com/google/go-containerregistry v0.21.7
 	github.com/mmmorris1975/ssm-session-client v0.500.1
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
@@ -116,7 +117,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v1.2.5 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
-	github.com/google/go-containerregistry v0.21.7 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect

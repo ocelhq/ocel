@@ -30,6 +30,7 @@ type AppServingInput struct {
 	Coordinate        naming.Coordinate
 	EdgeRunsCode      bool
 	EdgeSignsForwards bool
+	BuiltFromFunction bool
 }
 
 type AppServing struct {
@@ -70,7 +71,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 		}
 		_, facts.Prerenders = hosting.Needs[edge.NeedEdgeCache]
 	}
-	if q.Compute != provider.ComputeContainer {
+	if q.Compute != provider.ComputeContainer || q.BuiltFromFunction {
 		routing, err := routingFor(q, hosting, present)
 		if err != nil {
 			return AppServing{}, err

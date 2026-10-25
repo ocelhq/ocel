@@ -3,7 +3,10 @@ package gcp
 import (
 	"context"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
@@ -21,4 +24,12 @@ func (p containerRuntime) Arch(_ context.Context, app, declared string) (string,
 
 func (p containerRuntime) Binary(_ context.Context, architecture string) ([]byte, error) {
 	return payloads.ContainerRuntime(architecture)
+}
+
+func (p containerRuntime) FunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
+	return p.functionImages().ResolveBase(ctx, framework)
+}
+
+func (p containerRuntime) FunctionFiles(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
+	return p.functionImages().ReadRuntime(ctx, framework)
 }

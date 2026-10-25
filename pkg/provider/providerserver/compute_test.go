@@ -3,10 +3,13 @@ package providerserver_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -240,4 +243,146 @@ func activeRecord(t *testing.T, vendor *fake.Provider, app string) router.Releas
 		t.Fatalf("Record(%q) = %v, %v, want the record the promotion names", app, found, err)
 	}
 	return record
+}
+
+func functionContainerDeployRequest(functions ...*contractv1.ManifestFunction) *contractv1.DeployRequest {
+	req := namingARegistry(deployRequest())
+	req.Manifest.Apps[0].Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
+		HealthCheckPath: "/",
+		MinInstances:    1,
+		MaxInstances:    1,
+		Functions:       functions,
+	}}
+	return req
+}
+
+func builtServerFunction() *contractv1.ManifestFunction {
+	return &contractv1.ManifestFunction{
+		LogicalName:  "server",
+		Framework:    &contractv1.Framework{Name: "next", Arch: "x86_64"},
+		EntryFile:    "index.handler",
+		ArtifactPath: artifactPath,
+		RouteId:      "server",
+	}
+}
+
+func TestTheAppSpecOfAContainerBuiltFromAFunctionRunsTheImageBuiltFromThatFunction(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, p)
+
+	result, _ := deploy(t, client, functionContainerDeployRequest(builtServerFunction()))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	specs := p.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
+	if app.Compute != provider.ComputeContainer {
+		t.Errorf("Compute = %q, want %q", app.Compute, provider.ComputeContainer)
+	}
+	pushes := specs[len(specs)-1].Images.Pushes
+	if len(pushes) != 1 || pushes[0].Function || pushes[0].App != "web" || pushes[0].Built == nil || app.Image != pushes[0].ImageRef {
+		t.Fatalf("Image = %q with pushes %+v, want the container to run the one image built from its function", app.Image, pushes)
+	}
+	if got := regularFiles(t, pushes[0].Built); !slices.Contains(got, "ocel/runtime/next/entrypoint.mjs") || !slices.Contains(got, "ocel/app/"+builtEntrypoint) {
+		t.Errorf("the container's image holds %v, want the function's build and the runtime the provider declares for it", got)
+	}
+	if len(app.Functions) != 1 || app.Functions[0].Name != "server" || app.Functions[0].ArtifactDir == "" {
+		t.Errorf("Functions = %+v, want the one built function the container runs, with the directory it was built into", app.Functions)
+	}
+	if app.Instances != (provider.Instances{Min: 1, Max: 1}) || app.HealthCheckPath != "/" {
+		t.Errorf("Instances = %+v and HealthCheckPath = %q, want the counts and probe the manifest names", app.Instances, app.HealthCheckPath)
+	}
+}
+
+func TestTheRecordOfAContainerBuiltFromAFunctionServesThatFunctionAtTheContainersURL(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, p)
+
+	if result, _ := deploy(t, client, functionContainerDeployRequest(builtServerFunction())); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	record := activeRecord(t, p, "web")
+	if record.Origin == "" || record.FunctionURLs["server"] != record.Origin {
+		t.Errorf("FunctionURLs = %v with origin %q, want the function served at the container's URL: an edge that dispatches by route table reaches a function by its URL", record.FunctionURLs, record.Origin)
+	}
+}
+
+func TestTheUsesOfAContainerBuiltFromAFunctionReachItsProvidersPreflight(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	declaresNeed(t, "web", edge.NeedRevalidation)
+	vendor := &addingParts{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
+
+	req := functionContainerDeployRequest(builtServerFunction())
+	req.Dry = true
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if len(vendor.seen) == 0 {
+		t.Fatal("the preflight never ran")
+	}
+	if uses := vendor.seen[0].Uses; !slices.ContainsFunc(uses, func(u buildoutput.Uses) bool { return u.Revalidation }) {
+		t.Errorf("the preflight was handed uses %+v, want the container that revalidates among them: its build says so as a serverless build does", uses)
+	}
+}
+
+func TestTheWireRefusesAContainerThatIsNotOneImageOrOneFunction(t *testing.T) {
+	second := builtServerFunction()
+	second.LogicalName = "api"
+	imageAndFunction := functionContainerDeployRequest(builtServerFunction())
+	imageAndFunction.Manifest.Apps[0].GetContainer().Image = containerTestImage
+	for name, req := range map[string]*contractv1.DeployRequest{
+		"no image and no function": functionContainerDeployRequest(),
+		"two functions":            functionContainerDeployRequest(builtServerFunction(), second),
+		"an image and a function":  imageAndFunction,
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, _ := contractServed(t, "1.0.0")
+
+			_, _, err := deployStream(t, client, req)
+			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+				t.Fatalf("Deploy() with a container of %s: code = %v, want %v", name, got, connect.CodeInvalidArgument)
+			}
+		})
+	}
+}
+
+func TestAContainerBuiltFromAFunctionForAnotherArchitectureIsRefused(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	client := servedBy(t, fake.NewProvider(fake.Options{}))
+	fn := builtServerFunction()
+	fn.Framework.Arch = "arm64"
+
+	_, _, err := deployStream(t, client, functionContainerDeployRequest(fn))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "build it for linux/amd64") {
+		t.Fatalf("Deploy() = %v, want a refusal naming the architecture the target runs", err)
+	}
+}
+
+func TestAContainerBuiltFromAFunctionDispatchesItsOwnPathsWhenItsEdgeForwardsIt(t *testing.T) {
+	for name, dispatches := range map[string]bool{"a router that dispatches": true, "a router that forwards": false} {
+		t.Run(name, func(t *testing.T) {
+			stagedProject(t, "web", "admin")
+			builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "server"}, []byte(`{"routes":[]}`))
+			vendor := fake.NewProvider(fake.Options{})
+			vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).RouterDispatches(dispatches)
+			client := servedBy(t, vendor)
+			req := functionContainerDeployRequest(builtServerFunction())
+			req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+			if result, _ := deploy(t, client, req); !result.GetSuccess() {
+				t.Fatalf("Deploy() = %q", result.GetError())
+			}
+
+			specs := vendor.FakeStacks().Provisioned()
+			app := specs[len(specs)-1].App
+			if dispatched := app.Routing != nil; dispatched == dispatches || (app.EdgeRouteTable != nil) != dispatches {
+				t.Errorf("Routing = %+v and EdgeRouteTable = %+v behind %s, want the container to dispatch its own paths only where the edge does not", app.Routing, app.EdgeRouteTable, name)
+			}
+		})
+	}
 }
