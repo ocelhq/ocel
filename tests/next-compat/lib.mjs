@@ -125,8 +125,8 @@ export function selectStrandedSlugs(slugs, keepSlug) {
   return [...new Set(stranded)].sort();
 }
 
-export function strandedProjectSlugs(slugs, runSlug) {
-  return selectStrandedAppSlugs(slugs, runSlug).filter((slug) => slug !== ENTRY_SLUG);
+export function strandedProjectSlugs(slugs, keepSlug) {
+  return selectStrandedSlugs(slugs, keepSlug).filter((slug) => slug !== ENTRY_SLUG);
 }
 
 export function projectSlugs(stdout) {
@@ -151,15 +151,6 @@ export function projectSlugs(stdout) {
     }
     return project.slug;
   });
-}
-
-function cutRunSlug(runSlug) {
-  return runSlug.slice(0, MAX_SLUG_LEN - 1 - NAME_HASH_LEN).replace(/-+$/, "");
-}
-
-export function selectStrandedAppSlugs(slugs, runSlug) {
-  const own = new Set(selectRunSlugs(slugs, runSlug));
-  return selectStrandedSlugs(slugs, runSlug).filter((slug) => !own.has(slug));
 }
 
 const RETRY_BASE_MS = 1_000;
@@ -192,21 +183,6 @@ export function heldLeaseWaitMs(output, { now, deadline }) {
   }
   const wait = Math.max(LEASE_RETRY_MIN_WAIT_MS, expiry + LEASE_EXPIRY_SLACK_MS - now);
   return now + wait > deadline ? null : wait;
-}
-
-export function projectSlugForApp(appDir, target) {
-  const run = projectSlugForRun();
-  if (!isProductionTarget(target)) {
-    return run;
-  }
-  const hash = hashAppDir(normalizeAppDir(process.env.NEXT_TEST_DIR || appDir));
-  return `${cutRunSlug(run)}-${hash}`;
-}
-
-export function selectRunSlugs(slugs, runSlug) {
-  const perApp = new RegExp(`^${cutRunSlug(runSlug)}-[0-9a-f]{${NAME_HASH_LEN}}$`);
-  const mine = (slugs ?? []).filter((slug) => slug === runSlug || perApp.test(slug));
-  return [...new Set(mine)].sort();
 }
 
 function sanitizeToken(value) {
@@ -247,10 +223,6 @@ export function readCompatTarget(env = process.env) {
     throw new Error(`${GCP_REGION_ENV} is not set, and ${named} deploys into the region it names`);
   }
   return { name: named, gcp: { project, region } };
-}
-
-export function isProductionTarget(target) {
-  return target?.name === "gcp-direct";
 }
 
 const SHARED_PREVIEW_ENTRY_TARGETS = ["aws-cloudflare", "gcp-cloudflare"];
@@ -849,7 +821,7 @@ export function tail(text, maxLines) {
 
 export const PLAN_APPLY_HINT = "Run without --dry to apply.";
 
-export function deployPlanProblems(output, { resultWritten }) {
+export function planProblems(output, { resultWritten, listed, name }) {
   const problems = [];
   if (!String(output ?? "").includes(PLAN_APPLY_HINT)) {
     problems.push(`the plan never said how to apply it: no "${PLAN_APPLY_HINT}" in the output`);
@@ -857,11 +829,6 @@ export function deployPlanProblems(output, { resultWritten }) {
   if (resultWritten) {
     problems.push(`${DEPLOY_REPORT_FILE} was written by a run that was only ever supposed to plan`);
   }
-  return problems;
-}
-
-export function planProblems(output, { resultWritten, listed, name }) {
-  const problems = deployPlanProblems(output, { resultWritten });
   const readBack = String(listed ?? "").trim();
   if (!readBack) {
     problems.push(

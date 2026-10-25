@@ -56,7 +56,7 @@ prepared:
    may run `ocel bootstrap` and deploy in it. Bootstrap enables the APIs it
    uses. Cloud Run in it must accept `allUsers` as an invoker (no
    domain-restricted-sharing constraint): gcp-direct serves each test app's
-   production publicly.
+   preview publicly on its `run.app` URL.
    Trust only dispatched runs of the two workflows that drive it, with this
    attribute condition on the provider (`job_workflow_ref` names the workflow a
    job runs, which for a reusable workflow is the called one, so
@@ -68,7 +68,7 @@ prepared:
    `e2e-nc-direct` and `e2e-nc-alb`. From a scratch directory whose
    `ocel.config.ts` declares `gcpProvider({ project, region })`:
    ```bash
-   OCEL_NAMESPACE=e2e-nc-direct ocel bootstrap production
+   OCEL_NAMESPACE=e2e-nc-direct ocel bootstrap preview
    ```
    Add `edge: alb()` and `dns: cloudflareDns()` to `gcpProvider`'s options, then:
    ```bash
@@ -240,8 +240,6 @@ OCEL_COMPAT_TARGET=gcp-alb OCEL_NAMESPACE=e2e-nc-alb OCEL_GCP_PROJECT=… OCEL_G
   ADAPTER_DIR=… OCEL_E2E_SIDECAR_DIR=… \
   node tests/next-compat/project-teardown.mjs e2e-<run id>
 ```
-
-With no slug, gcp-direct takes every per-app project of the run.
 
 ## Debugging a failing suite
 
