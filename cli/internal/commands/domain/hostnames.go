@@ -212,7 +212,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "ls",
-		Short: "List this project's production hostnames, or with --preview the global domain and the projects served on it",
+		Short: "List this project's production hostnames, or the global preview domain with --preview",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -229,7 +229,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 func newAddCommand(invocation commands.Invocation) *cobra.Command {
 	return commands.DeclareRunEvents(commands.DeclareMutating(&cobra.Command{
 		Use:   "add [host]",
-		Short: "Provision the certificate, the edge surface and the DNS for this project's production hostnames",
+		Short: "Provision certificates, edge and DNS for this project's production hostnames",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -245,7 +245,7 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "rm [host]",
-		Short: "Unbind production hostnames this project no longer declares, and remove what ocel created for them",
+		Short: "Unbind the production hostnames this project no longer declares",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()

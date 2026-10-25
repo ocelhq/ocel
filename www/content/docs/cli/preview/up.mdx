@@ -7,11 +7,11 @@ description: "Deploy or refresh a preview."
 ocel preview up [name] [flags]
 ```
 
-Without a name the preview is the current branch's: deploying the same branch again replaces it, and `ocel preview rm` tears it down. A name addresses one preview from any branch. A name is a DNS label with no `--`.
+Without a name the preview is the current branch's. A name, a DNS label with no `--`, addresses one preview from any branch.
 
-A preview provisions the resources it declares in infrastructure of its own, and by default it is ephemeral: torn down without a question. `--persistent` deploys one that asks before it is torn down — a staging environment. A preview keeps the lifecycle it was created with.
+A preview has resources of its own and is ephemeral: torn down without a question. `--persistent` deploys one that asks first, such as staging. A preview keeps the lifecycle it was created with.
 
-`--dry` builds, then prints every change the preview would make to your account and stops.
+`--dry` builds, prints every change and stops.
 
 ## Arguments
 
@@ -23,7 +23,7 @@ A preview provisions the resources it declares in infrastructure of its own, and
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--dry` | `bool` | `false` | Build, then print every change this would make to your account and stop without applying any of it |
+| `--dry` | `bool` | `false` | Build, print every change this would make, and stop |
 | `--no-wait` | `bool` | `false` | On Ocel Cloud, start the job, print its link and return without waiting for it to end |
 | `--persistent` | `bool` | `false` | Deploy a persistent preview: a confirmation before it is torn down |
 | `--prebuilt` | `bool` | `false` | Deploy the existing .ocel/output instead of building first (produce it with ocel build) |

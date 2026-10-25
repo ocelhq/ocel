@@ -23,7 +23,7 @@ type domainOptions struct {
 func NewCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "domain",
-		Short: "Manage this project's production hostnames, and the domain every project's previews are served on",
+		Short: "Manage production hostnames and the global preview domain",
 		Long: "Manage this project's production hostnames, and the bootstrap-wide domain every project's previews are served on.\n\n" +
 			"`add`, `rm`, `ls` and `status` read this project's domains.production; no command edits it. " +
 			"`use` and `release` take --preview and set the wildcard every previewed project is served on, " +

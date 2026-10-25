@@ -50,8 +50,8 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 	var opts StatusOptions
 	cmd := &cobra.Command{
 		Use:   "status [production|preview]",
-		Short: "Show every part of a bootstrap: who added it, who uses it, what it costs idle and whether it is current",
-		Long: "Show every part of a bootstrap: who added it, who uses it, what it costs idle and whether it is current.\n\n" +
+		Short: "Show each part of a bootstrap: who added and uses it, its idle cost, whether it is current",
+		Long: "Show each part of a bootstrap: who added and uses it, its idle cost, whether it is current.\n\n" +
 			"Reads both environments unless one is named. --resources lists what each part holds.",
 		Example: "  $ ocel bootstrap status\n" +
 			"  $ ocel bootstrap status production --resources",

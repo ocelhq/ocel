@@ -1,15 +1,15 @@
 ---
 title: "ocel bindings generate"
-description: "Write the transform types for the bindings published to one coordinate."
+description: "Write the transform types for the published bindings."
 ---
 
 ```bash
 ocel bindings generate [flags]
 ```
 
-Reads the records published to production, or to the preview coordinate `--preview` and `--environment` name, and writes ocel-bindings.d.ts beside your ocel config. The file names each record and the properties it has, so `bindings.<type>.<name>.<property>` in a transform is checked where it is written instead of at the deploy. Check it in, and run this again when what you publish changes.
+Write the transform types for the bindings published to one coordinate.
 
-This reads the published records, so it logs in and runs the provider.
+Reads the records published to production, or to the preview coordinate `--preview` and `--environment` name, and writes ocel-bindings.d.ts beside your ocel config. The file names each record and the properties it has, so `bindings.<type>.<name>.<property>` in a transform is checked where it is written instead of at the deploy. Check it in, and run this again when what you publish changes. It runs the provider.
 
 ## Flags
 

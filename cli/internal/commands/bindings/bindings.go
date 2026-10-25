@@ -131,7 +131,7 @@ func newGenerateCommand(invocation commands.Invocation) *cobra.Command {
 	var opts bindingsOptions
 	cmd := &cobra.Command{
 		Use:   "generate",
-		Short: "Write the transform types for the bindings published to one coordinate",
+		Short: "Write the transform types for the published bindings",
 		Long: "Write the transform types for the bindings published to one coordinate.\n\n" +
 			"Reads the records published to production, or to the preview coordinate --preview and " +
 			"--environment name, and writes " + bindingTypesFileName + " beside your ocel config. The file " +

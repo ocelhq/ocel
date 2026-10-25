@@ -213,7 +213,7 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "status",
-		Short: "Show, per production hostname, its certificate, the records it needs, what last answered for it and what is still outstanding",
+		Short: "Show each production hostname's certificate, records and what is outstanding",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()

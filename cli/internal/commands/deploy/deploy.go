@@ -13,7 +13,7 @@ import (
 
 const (
 	prebuiltFlagUsage = "Deploy the existing " + buildoutput.StateDir + "/output instead of building first (produce it with ocel build)"
-	dryFlagUsage      = "Build, then print every change this would make to your account and stop without applying any of it"
+	dryFlagUsage      = "Build, print every change this would make, and stop"
 )
 
 func NewCommand(dependencies deploy.Dependencies) *cobra.Command {
@@ -24,10 +24,9 @@ func NewCommand(dependencies deploy.Dependencies) *cobra.Command {
 		Use:   "deploy",
 		Short: "Deploy this project to your own infrastructure",
 		Long: "Deploy this project to your own infrastructure.\n\n" +
-			"Provisions the resources the project declares, builds the apps, and releases the result " +
-			"into your provider account. Every deploy is kept: list them with `ocel promotions ls`, " +
-			"return to one with `ocel rollback`.\n\n" +
-			"--dry builds, then prints every change the deploy would make to your account and stops.",
+			"Provisions the declared resources, builds the apps and releases them into your provider " +
+			"account. Every deploy is kept: `ocel promotions ls` lists them, `ocel rollback` returns to one.\n\n" +
+			"--dry builds, prints every change and stops.",
 		Example: "  $ ocel deploy\n" +
 			"  $ ocel deploy --tag v1.2.0\n" +
 			"  $ ocel deploy --prebuilt\n" +
