@@ -106,17 +106,17 @@ func TestANextContainerBuiltFromItsFunctionRefusesTheImageSettingsOnlyAnImageBui
 	}
 }
 
-func TestTheAppsBuiltForTheirHostAreTheNextAppsNoDockerfileBuilds(t *testing.T) {
+func TestTheNextAppsNoDockerfileBuildsAreTheServerlessOnesAndTheContainersWithNoDockerfile(t *testing.T) {
 	docker := nextContainerApp("docker", "docker")
 	node := project.App{Name: "api", Path: "api", Compute: provider.ComputeServerless, Framework: buildoutput.FrameworkNode}
 	cfg := projectOfApps(t, nextApp("web", "web"), nextContainerApp("shop", "shop"), docker, node)
 	writeFile(t, filepath.Join(cfg.Dir, "docker", "Dockerfile"), "FROM scratch\n")
 
-	got, err := FindAppsBuiltForTheirHost(cfg)
+	got, err := FindNextAppsNoDockerfileBuilds(cfg)
 	if err != nil {
-		t.Fatalf("FindAppsBuiltForTheirHost() = %v", err)
+		t.Fatalf("FindNextAppsNoDockerfileBuilds() = %v", err)
 	}
 	if !slices.Equal(got, []string{"web", "shop"}) {
-		t.Errorf("FindAppsBuiltForTheirHost() = %v, want the serverless Next app and the Next container no Dockerfile builds", got)
+		t.Errorf("FindNextAppsNoDockerfileBuilds() = %v, want the serverless Next app and the Next container no Dockerfile builds", got)
 	}
 }

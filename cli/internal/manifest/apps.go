@@ -51,7 +51,7 @@ func appsOf(configured []project.App, usages []attribution.Usage, images map[str
 			Folder:          a.Folder,
 			Usages:          byApp[a.Name],
 			Image:           images[a.Name],
-			FromFunction:    a.IsBuiltAsFunctions() && a.RunsOn(provider.ComputeContainer),
+			FromFunction:    a.IsBuiltFromFunction(),
 			HealthCheckPath: healthPathOf(a),
 			Instances:       instancesOf(a),
 

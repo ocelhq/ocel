@@ -31,17 +31,14 @@ func ResolveNextContainerBuilds(cfg *project.Project, facts *contractv1.Provider
 	if !facts.GetBuildsNextContainersFromFunctions() {
 		return cfg, nil
 	}
+	adapted, err := FindNextAppsNoDockerfileBuilds(cfg)
+	if err != nil {
+		return nil, err
+	}
 	resolved := *cfg
 	resolved.Apps = slices.Clone(cfg.Apps)
 	for at, a := range resolved.Apps {
-		if !a.RunsOn(provider.ComputeContainer) || a.Framework != buildoutput.FrameworkNext {
-			continue
-		}
-		fromDockerfile, err := isBuiltFromDockerfile(cfg, a)
-		if err != nil {
-			return nil, err
-		}
-		if fromDockerfile {
+		if !a.RunsOn(provider.ComputeContainer) || !slices.Contains(adapted, a.Name) {
 			continue
 		}
 		if err := refuseImageSettings(a); err != nil {
@@ -57,7 +54,7 @@ func ResolveNextContainerBuilds(cfg *project.Project, facts *contractv1.Provider
 	return &resolved, nil
 }
 
-func FindAppsBuiltForTheirHost(cfg *project.Project) ([]string, error) {
+func FindNextAppsNoDockerfileBuilds(cfg *project.Project) ([]string, error) {
 	var names []string
 	for _, a := range cfg.Apps {
 		if a.Framework != buildoutput.FrameworkNext {

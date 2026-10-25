@@ -238,8 +238,8 @@ func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.
 		if err != nil {
 			return nil, build.Host{}, nil, err
 		}
-		hosted, err := build.FindAppsBuiltForTheirHost(resolved)
-		if err != nil || env == nil && len(hosted) == 0 {
+		adapted, err := build.FindNextAppsNoDockerfileBuilds(resolved)
+		if err != nil || env == nil && len(adapted) == 0 {
 			return resolved, build.Host{}, nil, err
 		}
 	}
