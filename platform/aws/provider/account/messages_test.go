@@ -27,7 +27,7 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"INFO Minted a new production origin secret",
+		"INFO Minted a new origin secret",
 		"INFO Generated a new Pulumi passphrase",
 		"INFO Minted a new edge reader access key",
 		"INFO Applied stack " + keyStack(environment.TierProduction),
@@ -37,7 +37,7 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 		}
 	}
 	for _, architecture := range runtimeArches() {
-		published := "INFO Published the " + architecture + " runtime this Ocel version ships as Lambda layer "
+		published := "INFO Published the " + architecture + " runtime layer "
 		saysPublished := func(lines []string) bool {
 			return slices.ContainsFunc(lines, func(line string) bool { return strings.HasPrefix(line, published) })
 		}
@@ -49,7 +49,7 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"DEBUG Reused the existing production origin secret",
+		"DEBUG Reused the existing origin secret",
 		"DEBUG Reused the existing Pulumi passphrase",
 		"DEBUG Reused the existing edge reader access key",
 	} {

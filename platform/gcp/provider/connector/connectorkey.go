@@ -155,6 +155,6 @@ func (p Connector) takeConnectorKey(ctx context.Context, progress progress.Log) 
 	if _, err := googleretry.Attempted(ctx, service.Projects.Secrets.Delete(gcloud.SecretPath(clients.Project(), name)).Context(ctx).Do); err != nil && !gcloud.Absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
-	gcloud.EnsureProgress(progress).Say("Deleted secret " + name + ", the connector's key")
+	gcloud.EnsureProgress(progress).Say("Deleted secret " + name)
 	return nil
 }

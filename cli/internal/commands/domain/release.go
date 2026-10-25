@@ -79,7 +79,7 @@ func newReleaseCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "release",
-		Short: "Tear down the edge's preview routing and stop serving previews on the global domain",
+		Short: "Stop serving previews on the global preview domain",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()

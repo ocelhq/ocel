@@ -102,7 +102,7 @@ func (s *ServedApps) EmbedCode(ctx context.Context, physical string, artifact pr
 	}
 	from := fn.from
 	if missing := missingEmbedClients(from); missing != "" {
-		progress.Warn("this project's provider options ask to embed the compile cache, but this deploy has no " + missing + ", so none is embedded")
+		progress.Warn("No compile cache embedded: this deploy has no " + missing)
 		return nil
 	}
 	code, err := FindArtifact(from.Buckets, artifact)

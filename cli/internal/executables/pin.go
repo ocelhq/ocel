@@ -87,7 +87,7 @@ func ensureLock(ctx context.Context, store *Store, projectDir string, pinning Pi
 		return writeReleaseLock(ctx, store, projectDir)
 	}
 	if lock.CLI != store.Version {
-		return lockfile.Lock{}, fmt.Errorf("%s pins the providers of ocel %s and this is ocel %s — run `ocel lock` to pin the providers this version runs, and commit the change", lockfile.Name, lock.CLI, store.Version)
+		return lockfile.Lock{}, fmt.Errorf("%s pins the providers of ocel %s, and this is ocel %s: run `ocel lock` and commit the change", lockfile.Name, lock.CLI, store.Version)
 	}
 	return lock, nil
 }

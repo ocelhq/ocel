@@ -37,10 +37,7 @@ func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.Previ
 		check.Say("Serving previews on the address each app's release is given")
 
 	case declared == "" && base == "":
-		return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
-			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
-			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
-			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
+		return fmt.Errorf("no preview domain: add a domains.preview wildcard to %s, or run `ocel domain use '*.preview.acme.com' --preview`",
 			configName)
 
 	case declared == "":
@@ -69,14 +66,12 @@ func previewAppNames(cfg *project.Project) []string {
 func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, configName string) error {
 	base := wildcard.GetBaseDomain()
 	if want, have := wildcard.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
-		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, but this deploy is authenticated to account %s: "+
-			"the wildcard can only be served from the account that owns it — "+
-			"re-scope this run's edge credentials to %s, or declare this project's own domains.preview in %s",
+		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, not %s: "+
+			"use credentials for %s, or declare domains.preview in %s",
 			base, want, have, want, configName)
 	}
 	if !wildcard.GetRouteInstalled() {
-		return fmt.Errorf("the global preview domain *.%s is recorded, but its wildcard route is not installed, so nothing would answer a preview hostname: "+
-			"run `ocel domain use '*.%s' --preview` to reinstall the edge's preview routing and reclaim the wildcard",
+		return fmt.Errorf("the global preview domain *.%s has no wildcard route: run `ocel domain use '*.%s' --preview`",
 			base, base)
 	}
 	return nil
@@ -172,10 +167,11 @@ func ListPreviews(ctx context.Context, dependencies Dependencies, cwd string, st
 	if err != nil {
 		return err
 	}
-	if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+	present := dependencies.Presentation(stdout)
+	if present.Format == terminal.FormatJSON {
 		return terminal.WriteResultJSON(stdout, previewListResult(previews))
 	}
-	renderEnvironments(stdout, previews)
+	renderEnvironments(stdout, present, previews)
 	return nil
 }
 
@@ -255,20 +251,24 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 	})
 }
 
-func renderEnvironments(stdout io.Writer, envs []*contractv1.PreviewEnvironment) {
+func renderEnvironments(stdout io.Writer, present terminal.Presentation, envs []*contractv1.PreviewEnvironment) {
 	if len(envs) == 0 {
 		fmt.Fprintln(stdout, "No previews.")
 		return
 	}
+	palette := present.Palette()
+	table := terminal.NewTable(
+		terminal.Column{Head: "PREVIEW"},
+		terminal.Column{Head: "KIND"},
+		terminal.Column{Head: "LABEL"},
+		terminal.Column{Head: "URL"},
+		terminal.Column{Head: "CREATED"},
+	)
 	for _, e := range envs {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\tcreated %s\n",
-			e.GetIdentity(),
-			lifecycleTag(e.GetLifecycle()),
-			formatValueOrDash(e.GetLabel()),
-			formatValueOrDash(strings.Join(e.GetAliasUrls(), " ")),
-			terminal.EpochDate(e.GetCreatedAt()),
-		)
+		urls := formatValueOrDash(strings.Join(e.GetAliasUrls(), "\n"))
+		table.Row(palette.Bold(e.GetIdentity()), lifecycleTag(e.GetLifecycle()), formatValueOrDash(e.GetLabel()), urls, present.EpochAge(e.GetCreatedAt()))
 	}
+	fmt.Fprint(stdout, table.Render(palette, ""))
 }
 
 func lifecycleTag(l environmentv1.Lifecycle) string {
@@ -278,13 +278,13 @@ func lifecycleTag(l environmentv1.Lifecycle) string {
 	case environmentv1.Lifecycle_LIFECYCLE_PERSISTENT:
 		return "persistent"
 	default:
-		return "—"
+		return terminal.NoValue
 	}
 }
 
 func formatValueOrDash(value string) string {
 	if value == "" {
-		return "—"
+		return terminal.NoValue
 	}
 	return value
 }

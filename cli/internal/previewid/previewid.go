@@ -80,7 +80,7 @@ func ValidateLabel(s string) error {
 		return fmt.Errorf("invalid preview name %q: use a DNS-label-safe name (lowercase letters, digits and hyphens)", s)
 	}
 	if strings.Contains(s, reservedHyphens) {
-		return fmt.Errorf("invalid preview name %q: %q is reserved in preview names, so a name may not contain it — use a single hyphen", s, reservedHyphens)
+		return fmt.Errorf("invalid preview name %q: %q is reserved — use a single hyphen", s, reservedHyphens)
 	}
 	if len(s) > maxKeyLen {
 		return fmt.Errorf("preview name %q is too long: the limit is %d characters, the longest a DNS label may be", s, maxKeyLen)

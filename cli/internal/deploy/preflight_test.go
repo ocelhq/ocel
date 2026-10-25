@@ -285,7 +285,7 @@ export default {
 		if slug := onlyPreflight(t, fixture).GetSlug(); slug != "test-app" {
 			t.Errorf("the preflight named slug %q, want --yes to leave the slug-scoped question on the wire untouched", slug)
 		}
-		if !strings.Contains(out, "This will create a NEW project.") {
+		if !strings.Contains(out, "is a NEW project.") {
 			t.Errorf("stdout = %q, want the drift warning still told to whoever passed --yes", out)
 		}
 		if strings.Contains(out, "[y/N]") {
@@ -306,9 +306,8 @@ func TestAnInteractiveDeployWarnsAboutTheOtherProjectsOnTheBackend(t *testing.T)
 		t.Errorf("the preflight named slug %q, want the prompting deploy to have asked with the slug", slug)
 	}
 	for _, want := range []string{
-		"No existing deployment for slug \"test-app\".",
-		"This will create a NEW project.",
-		"This backend already has: billing, my-application",
+		"\"test-app\" is a NEW project.",
+		"Already deployed: billing, my-application",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q:\n%s", want, out)
@@ -602,7 +601,7 @@ func setUpProjectLackingParts(t *testing.T) clitest.FakeProject {
 	return fixture
 }
 
-const bootstrapCommand = "Run `ocel bootstrap production` and try again"
+const bootstrapCommand = "Run `ocel bootstrap production`"
 
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
 	fixture := setUpProjectLackingParts(t)

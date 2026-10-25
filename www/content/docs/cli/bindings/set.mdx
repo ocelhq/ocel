@@ -7,13 +7,13 @@ description: "Publish one binding, read as JSON on stdin."
 ocel bindings set [flags]
 ```
 
-The record is a provider.variablestore.v1.PublishedBinding in protobuf JSON: under "binding" the common.bindings.v1.Binding an app reads, and under "grants" the permissions a deploy gives the apps bound to it, which no app ever sees. The binding includes its own name, so there is nothing to name on the command line:
+The record is a provider.variablestore.v1.PublishedBinding in protobuf JSON: under "binding" the common.bindings.v1.Binding an app reads, and under "grants" the permissions a deploy gives the apps bound to it, which no app ever sees. The binding carries its own name:
 
 ```bash
 ocel bindings set < binding.json
 ```
 
-A name belongs to whoever published it. Publishing over a name another publisher owns is refused rather than handing every app bound to that name another resource's values; pass `--owner` to publish as that publisher.
+A name belongs to whoever published it. Publishing over a name another publisher owns is refused; pass `--owner` to publish as that publisher.
 
 ## Flags
 

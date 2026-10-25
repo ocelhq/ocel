@@ -877,7 +877,7 @@ export default {
   apps: [{ name: "api", path: "services/api", compute: { container: { health: { path: "healthz" } } } }],
 };
 `,
-			wantErr: []string{`app "api"`, "health.path", "drop health.path to have the provider choose"},
+			wantErr: []string{`app "api"`, "health.path", "or drop it"},
 		},
 		{
 			name: "rejects a health.path containing a query the wire would refuse",
@@ -990,7 +990,7 @@ export default {
   bindings: { postgres: { analytics: "warehouse" } },
 };
 `,
-			wantErr: []string{"`bindings.postgres.analytics` is \"warehouse\"", "a published record is written \"@warehouse\""},
+			wantErr: []string{"`bindings.postgres.analytics` is \"warehouse\"", "write \"@warehouse\""},
 		},
 		{
 			name: "rejects an empty declared name",
@@ -1000,7 +1000,7 @@ export default {
   bindings: { postgres: { "": "@orders" } },
 };
 `,
-			wantErr: []string{"bindings.postgres", "empty name", "\"@<name>\""},
+			wantErr: []string{"bindings.postgres", "empty key"},
 		},
 		{
 			name: "rejects a published name containing the key separator",

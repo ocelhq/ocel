@@ -14,10 +14,10 @@ func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*con
 		return nil
 	}
 	if a.Image == "" {
-		return fmt.Errorf("app %q runs on container compute and names no image, so the manifest would hand a provider an app with nothing to run", a.Name)
+		return fmt.Errorf("app %q runs on container compute and names no image", a.Name)
 	}
 	if !containerimage.IsPinned(a.Image) {
-		return fmt.Errorf("app %q names image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", a.Name, a.Image)
+		return fmt.Errorf("app %q names image %q, which pins no digest", a.Name, a.Image)
 	}
 	manifestApp.Artifact = &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{
 		Image:           a.Image,

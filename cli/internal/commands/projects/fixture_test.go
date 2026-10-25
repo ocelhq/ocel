@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
@@ -79,7 +81,12 @@ func recordBlog(t *testing.T, project clitest.FakeProject, recorded stackrecords
 
 func recordWebFunction(t *testing.T, project clitest.FakeProject) {
 	t.Helper()
-	stack := naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken("b1", ""))
+	recordWebFunctionInBuild(t, project, "b1")
+}
+
+func recordWebFunctionInBuild(t *testing.T, project clitest.FakeProject, build string) {
+	t.Helper()
+	stack := naming.AppStack(stackrecords.ProductionEnv, "web", naming.NewReleaseToken(build, ""))
 	recorded := stackrecords.Stack{
 		Kind:      provider.StackApp,
 		App:       "web",
@@ -161,7 +168,7 @@ func runDestroyCommand(t *testing.T, invocation commands.Invocation, root string
 
 func rowOf(t *testing.T, out, first string) []string {
 	t.Helper()
-	for _, line := range strings.Split(out, "\n") {
+	for _, line := range strings.Split(ansi.Strip(out), "\n") {
 		if fields := strings.Fields(line); len(fields) > 0 && fields[0] == first {
 			return fields
 		}

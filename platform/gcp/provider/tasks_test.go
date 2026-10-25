@@ -149,7 +149,7 @@ func TestRemovingABootstrapPurgesItsDelayQueueAndKeepsIt(t *testing.T) {
 	queue := bootstrap.Resource{Kind: bootstrap.KindQueue, Name: b.Clients.DelayQueue(tier)}
 	read.Held = map[string]bool{queue.ID(): true}
 
-	want := "its waiting messages are deleted, since Cloud Tasks reserves a deleted queue's name for 7 days"
+	want := "purged: Cloud Tasks reserves a deleted queue's name for 7 days"
 	if taking := bootstrap.Removing(read, queue); taking.Action != provider.ActionUpdate || taking.Reason != want {
 		t.Errorf("removing the delay queue plans %s (%s), want %s (%s)", taking.Action, taking.Reason, provider.ActionUpdate, want)
 	}

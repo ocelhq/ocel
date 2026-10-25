@@ -331,8 +331,7 @@ func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, er
 			Kind:   edge.EdgeGroupKind,
 			Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
 			Action: edge.PlanKeep,
-			Reason: "the load balancer this project was balancing by is one per tier and costs " + BaselineCost + ": " +
-				"it stays while another project in the tier is served through it or a hostname is bound to it, and is taken down with the last project otherwise",
+			Reason: "costs " + BaselineCost + " while another project or hostname in the tier uses it",
 		},
 	}, nil
 }
@@ -357,8 +356,7 @@ func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
 		Action: edge.PlanKeep,
-		Reason: "previews are answered by the same load balancer production is, one per bootstrap tier at " + BaselineCost + ", " +
-			"so releasing a wildcard takes its certificate and leaves the balancer in place",
+		Reason: "shared with production",
 	}
 }
 

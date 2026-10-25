@@ -40,7 +40,7 @@ const (
 	defaultProfile = costv1.Profile_PROFILE_MODERATE
 	profilePrefix  = "PROFILE_"
 
-	unbuiltAssumption = "nothing is built, so each serverless app is priced as one function; run `ocel build` first to price the functions the build produces"
+	unbuiltAssumption = "nothing is built, so each serverless app is priced as one function; run `ocel build` first to price its functions"
 )
 
 func profiles() []costv1.Profile {
@@ -98,16 +98,18 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 		if err != nil {
 			return err
 		}
-		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		present := dependencies.Presentation(stdout)
+		if present.Format == terminal.FormatJSON {
 			return terminal.WriteResultJSON(stdout, &resultv1.CostScanResult{Resources: set, Estimate: estimates[profile], Assumptions: assumptions})
 		}
-		return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
+		render(stdout, present.Palette(), cfg.Slug, set, estimates, profile, assumptions)
+		return nil
 	})
 }
 
 func price(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
 	if !provider.Facts().GetPricesDeploys() {
-		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", provider.Name())
+		return nil, nil, nil, fmt.Errorf("%s does not price a deploy", provider.Name())
 	}
 	resolved, err := readiness.ResolveComputes(provider, cfg)
 	if err != nil {

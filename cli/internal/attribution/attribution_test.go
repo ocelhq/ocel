@@ -385,7 +385,7 @@ func TestComputeRefusesAnAppWithNoLanguageNamingTheFrameworkToSet(t *testing.T) 
 	apps[0].Language = ""
 
 	_, err := FindUsages(t.Context(), root, apps, monorepoDeclarations(root))
-	want := `attribution: app "api" has no framework, so ocel cannot read which resources its code uses: set "framework" on it`
+	want := `attribution: app "api" has no framework: set "framework" on it`
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("FindUsages err = %v, want it to contain %q", err, want)
 	}

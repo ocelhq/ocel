@@ -37,9 +37,8 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		Use:   "doctor",
 		Short: "Check that everything is good to go",
 		Long: "Check that everything is good to go.\n\n" +
-			"Reads the project, the cloud credentials it reaches with, and what production and " +
-			"preview have set up, then names the fix for anything in the way. " +
-			"Nothing is created or changed.",
+			"Reads the project, its credentials, and the production and preview setup, " +
+			"then names the fix for anything in the way. Changes nothing.",
 		Example: "  $ ocel doctor",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -228,7 +227,7 @@ func renewalCheck(s *section, hostname, renewal string, expiresAt int64, soon bo
 	}
 	text := hostname + " — " + renewalText(renewal, expiresAt)
 	if soon {
-		s.warn(text+" — EXPIRING SOON", "replace it before it expires; nothing here renews a certificate you pinned")
+		s.warn(text+" — EXPIRING SOON", "replace it before it expires: nothing renews a certificate you pinned")
 		return
 	}
 	s.pass(text)
@@ -395,7 +394,7 @@ func askAboutTier(ctx context.Context, check *run.Span, provider *providerproces
 	}
 
 	var planned *contractv1.DescribeBootstrapResponse
-	err = runStep(check, provider.Name(), progress.Reading.Title("what "+name+" has set up"), func() error {
+	err = runStep(check, provider.Name(), progress.Reading.Title("the "+name+" setup"), func() error {
 		return provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: cfg.EdgeSelection()})
 			return err
@@ -570,22 +569,21 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	}
 
 	if status.GetUnfinished() {
-		s.fail("an apply never finished, so nothing recorded is a claim about what is provisioned",
-			"run `"+readiness.BootstrapCommand(tier)+"` to plan the work that is left and finish it")
+		s.fail("an apply never finished", "run `"+readiness.BootstrapCommand(tier)+"`")
 		return s
 	}
 
 	gap := readiness.NewGap(status)
 	stale, unreadable := staleStacks(status), unreadableStacks(status)
 	if len(gap.Missing) == 0 && len(stale) == 0 && len(unreadable) == 0 {
-		s.pass("bootstrapped, current — `ocel bootstrap status " + name + "` lists its parts")
+		s.pass("bootstrapped, current")
 		return s
 	}
 	if len(gap.Missing) > 0 {
 		s.warn(listText(gap.Missing, "missing"), "run `"+gap.RepairCommand(tier)+"`")
 	}
 	if len(stale) > 0 {
-		s.warn(listText(stale, "stale"), "run `"+readiness.BootstrapCommand(tier)+"` to refresh "+english.Number(len(stale), "it", "them"))
+		s.warn(listText(stale, "stale"), "run `"+readiness.BootstrapCommand(tier)+"`")
 	}
 	if len(unreadable) > 0 {
 		s.warn(listText(unreadable, "unreadable"), "run `ocel doctor` again once the cause is cleared")
@@ -625,11 +623,7 @@ func previewDomain(s *section, hosts []string, global string) {
 }
 
 func absentText(tier environmentv1.Tier) string {
-	purpose := "set it up"
-	if tier == environmentv1.Tier_TIER_PREVIEW {
-		purpose = "add previews"
-	}
-	return "not set up — run `" + readiness.BootstrapCommand(tier) + "` to " + purpose
+	return "not set up — run `" + readiness.BootstrapCommand(tier) + "`"
 }
 
 func listText(names []string, state string) string {

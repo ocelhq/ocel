@@ -62,18 +62,18 @@ func OriginSecretOf(raw string) (OriginSecret, error) {
 func StaleOriginSecretNotice(s OriginSecret, now time.Time, tier environment.Tier) string {
 	switch {
 	case s.Rotating():
-		return fmt.Sprintf("The %s origin secret was rotated %d days ago; this deploy answers to the new one, and every other project in the tier must be re-deployed by %s, when `ocel bootstrap` retires the old one and a release still expecting it stops answering",
+		return fmt.Sprintf("The %s origin secret rotated %d days ago: re-deploy every other project in the tier by %s",
 			tier, int(now.Sub(s.RotatedAt).Hours()/24), s.RotatedAt.Add(OriginSecretGrace).UTC().Format(time.DateOnly))
 	case s.Stale(now):
-		return fmt.Sprintf("The %s origin secret every front presents to reach a release is %d days old; run `ocel bootstrap` to rotate it (secrets older than %d days are rotated there), then re-deploy each project so its releases accept the new one",
-			tier, int(now.Sub(s.CreatedAt).Hours()/24), int(OriginSecretMaxAge.Hours()/24))
+		return fmt.Sprintf("The %s origin secret is %d days old: run `ocel bootstrap` to rotate it",
+			tier, int(now.Sub(s.CreatedAt).Hours()/24))
 	}
 	return ""
 }
 
 const (
-	originSecretStale   = "it is older than %d days and is rotated; the one it replaces stays accepted for %d days"
-	originSecretRetired = "the secret it replaced %d days ago is retired; a release not re-deployed since stops answering its front"
+	originSecretStale   = "older than %d days; the old one stays accepted for %d days"
+	originSecretRetired = "retires the one replaced %d days ago: a release not re-deployed since stops answering"
 )
 
 func planOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, now time.Time) (provider.Change, error) {

@@ -15,7 +15,7 @@ Every run prints the promotion that is live and the promotion it would put in it
 | --- | --- | --- | --- |
 | `--dry` | `bool` | `false` | Print what would be rolled back and stop, rolling back nothing |
 | `--tag` | `string` |  | Roll back to the promotion with this tag (mutually exclusive with `--to`) |
-| `--to` | `string` |  | Roll back to a specific promotion id instead of the immediately previous one |
+| `--to` | `string` |  | Roll back to the promotion with this id or id prefix instead of the previous one |
 | `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
 
 Every command also takes the [global flags](/docs/cli#global-flags).

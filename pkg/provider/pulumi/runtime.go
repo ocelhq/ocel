@@ -46,7 +46,7 @@ func install(ctx context.Context, progress progress.Log) (auto.PulumiCommand, er
 		return command, nil
 	}
 	if progress != nil {
-		progress.Say(fmt.Sprintf("Downloading the Pulumi runtime %s into %s, once for this machine", PinnedVersion, root))
+		progress.Say(fmt.Sprintf("Downloading the Pulumi runtime %s, once for this machine", PinnedVersion))
 	}
 
 	staging := root + "-" + strconv.Itoa(os.Getpid())

@@ -5,14 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"slices"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -26,6 +25,7 @@ import (
 const (
 	showCommand = "ocel projects show"
 	consoleMark = " ↗"
+	blockIndent = "  "
 )
 
 type showOptions struct {
@@ -131,32 +131,38 @@ func physicalResults(resources []*contractv1.PhysicalResource) []*resultv1.Physi
 }
 
 func renderShow(out io.Writer, present terminal.Presentation, identity *contractv1.Identity, slug string, described *contractv1.DescribeProjectResponse, opts showOptions) {
+	palette := present.Palette()
 	var edge []string
 	if kind := described.GetProject().GetEdge(); kind != "" {
 		edge = append(edge, "edge "+kind)
 	}
-	fmt.Fprintln(out, identityHeader(identity, []string{slug}, edge...))
-	renderEnvironments(out, described.GetEnvironments())
+	fmt.Fprintln(out, identityHeader(palette, identity, []string{slug}, edge...))
+	renderEnvironments(out, palette, described.GetEnvironments())
 	renderResources(out, present, described.GetResources(), opts)
-	renderShared(out, slug, described.GetShared())
+	renderShared(out, palette, slug, described.GetShared())
 }
 
-func renderEnvironments(out io.Writer, environments []*contractv1.ProjectEnvironment) {
+func renderEnvironments(out io.Writer, palette terminal.Palette, environments []*contractv1.ProjectEnvironment) {
 	if len(environments) == 0 {
 		return
 	}
-	fmt.Fprintln(out)
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ENVIRONMENT\tTIER\tPROMOTION\tAPPS\tURL")
+	fmt.Fprintf(out, "\n%s\n", palette.Heading("Environments"))
+	table := terminal.NewTable(
+		terminal.Column{Head: "ENV"},
+		terminal.Column{Head: "TIER"},
+		terminal.Column{Head: "PROMOTION"},
+		terminal.Column{Head: "APPS"},
+		terminal.Column{Head: "URL"},
+	)
 	for _, env := range environments {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			environmentTitle(env.GetEnvironment().GetTier(), env.GetEnvironment().GetIdentity()),
+		table.Row(
+			palette.Bold(environmentTitle(env.GetEnvironment().GetTier(), env.GetEnvironment().GetIdentity())),
 			readiness.TierName(env.GetEnvironment().GetTier()),
-			orUnknown(env.GetPromotionId()),
-			appsCell(env.GetReleases()),
+			cmp.Or(terminal.AbbreviateID(env.GetPromotionId()), unknownCell),
+			terminal.FormatReleases(palette, env.GetReleases()),
 			firstURL(env.GetUrls()))
 	}
-	_ = tw.Flush()
+	fmt.Fprint(out, table.Render(palette, blockIndent))
 }
 
 func environmentTitle(tier environmentv1.Tier, identity string) string {
@@ -164,17 +170,6 @@ func environmentTitle(tier environmentv1.Tier, identity string) string {
 		return identity
 	}
 	return stackrecords.ProductionEnv
-}
-
-func appsCell(releases map[string]string) string {
-	if len(releases) == 0 {
-		return unknownCell
-	}
-	pairs := make([]string, 0, len(releases))
-	for _, app := range slices.Sorted(maps.Keys(releases)) {
-		pairs = append(pairs, app+" "+releases[app])
-	}
-	return strings.Join(pairs, ", ")
 }
 
 func firstURL(urls []string) string {
@@ -185,56 +180,66 @@ func firstURL(urls []string) string {
 }
 
 type resourceBlock struct {
-	title  string
-	groups []*contractv1.ResourceGroup
+	context   []string
+	resources []*contractv1.PhysicalResource
 }
 
 func groupResources(groups []*contractv1.ResourceGroup) []resourceBlock {
 	var blocks []resourceBlock
+	listed := map[string]bool{}
 	for _, group := range groups {
-		title := resourceBlockTitle(group)
-		at := slices.IndexFunc(blocks, func(block resourceBlock) bool { return block.title == title })
+		heading := resourceBlockContext(group)
+		at := slices.IndexFunc(blocks, func(block resourceBlock) bool { return slices.Equal(block.context, heading) })
 		if at < 0 {
-			blocks = append(blocks, resourceBlock{title: title})
+			blocks = append(blocks, resourceBlock{context: heading})
 			at = len(blocks) - 1
 		}
-		blocks[at].groups = append(blocks[at].groups, group)
+		for _, resource := range group.GetResources() {
+			key := strings.Join(append(slices.Clone(heading), resource.GetKind(), resource.GetId()), "\x00")
+			if listed[key] {
+				continue
+			}
+			listed[key] = true
+			blocks[at].resources = append(blocks[at].resources, resource)
+		}
 	}
 	return blocks
 }
 
-func resourceBlockTitle(group *contractv1.ResourceGroup) string {
+func resourceBlockContext(group *contractv1.ResourceGroup) []string {
 	if group.GetEnvironment() == "" {
-		return readiness.TierName(group.GetTier()) + ", project-wide"
+		return []string{readiness.TierName(group.GetTier()), "project-wide"}
 	}
-	return environmentTitle(group.GetTier(), group.GetEnvironment())
+	return []string{environmentTitle(group.GetTier(), group.GetEnvironment())}
 }
 
 func renderResources(out io.Writer, present terminal.Presentation, groups []*contractv1.ResourceGroup, opts showOptions) {
-	if len(groups) == 0 {
-		return
-	}
-	fmt.Fprintln(out, "\nRESOURCES")
+	palette := present.Palette()
 	for _, block := range groupResources(groups) {
-		fmt.Fprintf(out, "\n%s\n", block.title)
-		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintf(out, "\n%s\n", palette.Heading("Resources", block.context...))
+		columns := []terminal.Column{{Head: "KIND"}, {Head: "ID"}}
 		if opts.links {
-			fmt.Fprintln(tw, "STACK\tKIND\tID\tURL")
-		} else {
-			fmt.Fprintln(tw, "STACK\tKIND\tID")
+			columns = append(columns, terminal.Column{Head: "URL"})
 		}
-		for _, group := range block.groups {
-			for _, resource := range group.GetResources() {
-				stack := orUnknown(group.GetStack())
-				if opts.links {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", stack, resource.GetKind(), markedID(resource, resource.GetId()), orUnknown(resource.GetConsoleUrl()))
-					continue
-				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\n", stack, resource.GetKind(), markedID(resource, present.Hyperlink(resource.GetId(), resource.GetConsoleUrl())))
+		table := terminal.NewTable(columns...)
+		for _, resource := range block.resources {
+			kind := formatKind(palette, resource.GetKind())
+			if opts.links {
+				table.Row(kind, markedID(resource, resource.GetId()), cmp.Or(resource.GetConsoleUrl(), unknownCell))
+				continue
 			}
+			table.Row(kind, markedID(resource, present.Hyperlink(resource.GetId(), resource.GetConsoleUrl())))
 		}
-		_ = tw.Flush()
+		fmt.Fprint(out, table.Render(palette, blockIndent))
 	}
+}
+
+func formatKind(palette terminal.Palette, kind string) string {
+	at := strings.LastIndex(kind, ":")
+	if at < 0 {
+		return kind
+	}
+	return palette.Muted(kind[:at+1]) + kind[at+1:]
 }
 
 func markedID(resource *contractv1.PhysicalResource, id string) string {
@@ -244,29 +249,44 @@ func markedID(resource *contractv1.PhysicalResource, id string) string {
 	return id + consoleMark
 }
 
-func renderShared(out io.Writer, slug string, shared []*contractv1.SharedPart) {
-	if len(shared) == 0 {
-		return
-	}
-	fmt.Fprintln(out, "\nSHARED")
+func renderShared(out io.Writer, palette terminal.Palette, slug string, shared []*contractv1.SharedPart) {
+	var tiers []environmentv1.Tier
 	for _, each := range shared {
-		part := each.GetPart()
-		fmt.Fprintf(out, "\n%s in %s\n", sharesLine(slug, part), readiness.TierName(each.GetTier()))
-		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-		for _, resource := range part.GetResources() {
-			fmt.Fprintf(tw, "  %s\t%s\n", resource.GetKind(), resource.GetId())
+		if !slices.Contains(tiers, each.GetTier()) {
+			tiers = append(tiers, each.GetTier())
 		}
-		_ = tw.Flush()
+	}
+	for _, tier := range tiers {
+		fmt.Fprintf(out, "\n%s\n", palette.Heading("Shared", readiness.TierName(tier)))
+		table := terminal.NewTable(
+			terminal.Column{Head: "PART"},
+			terminal.Column{Head: "SHARED WITH"},
+			terminal.Column{Head: "KIND"},
+			terminal.Column{Head: "ID"},
+		)
+		for _, each := range shared {
+			if each.GetTier() != tier {
+				continue
+			}
+			part := each.GetPart()
+			name, with := palette.Bold(part.GetName()), formatSharing(slug, part)
+			if len(part.GetResources()) == 0 {
+				table.Row(name, with, palette.Muted("no resources"))
+				continue
+			}
+			for _, resource := range part.GetResources() {
+				table.Row(name, with, formatKind(palette, resource.GetKind()), resource.GetId())
+				name, with = "", ""
+			}
+		}
+		fmt.Fprint(out, table.Render(palette, blockIndent))
 	}
 }
 
-func sharesLine(slug string, part *contractv1.BootstrapPart) string {
+func formatSharing(slug string, part *contractv1.BootstrapPart) string {
 	others := len(slices.DeleteFunc(slices.Clone(part.GetUsedBy()), func(user string) bool { return user == slug }))
-	switch others {
-	case 0:
-		return fmt.Sprintf("%s alone uses %s", slug, part.GetName())
-	case 1:
-		return fmt.Sprintf("%s shares %s with 1 other project", slug, part.GetName())
+	if others == 0 {
+		return unknownCell
 	}
-	return fmt.Sprintf("%s shares %s with %d other projects", slug, part.GetName(), others)
+	return english.Count(others, "other project")
 }

@@ -864,7 +864,6 @@ func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, er
 		Kind:   "Fake::EdgeStack",
 		Name:   scope.Slug + "-" + string(scope.Tier),
 		Action: edge.PlanDelete,
-		Reason: "the " + string(e.kind) + " edge stack this project deploys through",
 	}}
 	for _, hostname := range scope.Hostnames {
 		changes = append(changes, edge.PlanChange{
@@ -890,7 +889,6 @@ func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.P
 			Kind:   "Fake::PreviewEntry",
 			Name:   wildcard,
 			Action: edge.PlanDelete,
-			Reason: "the shared entry every preview on this wildcard is served through",
 		}},
 	}, e.PlanSharedPreviewRemoval(), nil
 }

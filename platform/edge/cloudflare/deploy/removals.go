@@ -7,7 +7,6 @@ func (p *cloudflare) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGro
 		Kind:   kindWorker,
 		Name:   scope.Slug,
 		Action: edge.PlanDelete,
-		Reason: "the entry worker this project deployed, and the routes that reach it",
 	}}
 	for _, hostname := range scope.Hostnames {
 		changes = append(changes, edge.PlanChange{
@@ -20,7 +19,6 @@ func (p *cloudflare) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGro
 		Kind:   kindDurableObject,
 		Name:   scope.Slug,
 		Action: edge.PlanDelete,
-		Reason: "every deployment and pointer this project promoted",
 	})
 	return []edge.PlanGroup{{
 		Kind:    edge.EdgeGroupKind,
@@ -37,15 +35,14 @@ func (p *cloudflare) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{
 			{Kind: kindWorkerRoute, Name: wildcard, Action: edge.PlanDelete},
-			{Kind: kindWorker, Name: sharedEntryStem, Action: edge.PlanDelete,
-				Reason: "the shared entry worker this wildcard is owned by"},
+			{Kind: kindWorker, Name: sharedEntryStem, Action: edge.PlanDelete},
 		},
 	}
 	kept := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "bootstrap-scoped: `ocel bootstrap destroy preview` removes what bootstrap provisioned",
+		Reason: "bootstrap-scoped: `ocel bootstrap destroy preview` removes it",
 	}
 	return removed, kept, nil
 }
@@ -55,6 +52,6 @@ func (p *cloudflare) PlanSharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "bootstrap-scoped: the shared preview entry worker fronts every project's previews",
+		Reason: "bootstrap-scoped",
 	}
 }

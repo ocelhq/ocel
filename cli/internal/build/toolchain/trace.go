@@ -18,7 +18,7 @@ var emittedExtensions = map[string]string{
 func (t Target) TracedHandler() (string, error) {
 	rel, err := filepath.Rel(t.Source, t.Entrypoint)
 	if err != nil || !filepath.IsLocal(rel) || slices.Contains(strings.Split(rel, string(filepath.Separator)), nodeModulesDir) {
-		return "", fmt.Errorf("entrypoint %s for app %q is not one of the app's own sources under %s, and a traced app is served from the entrypoint it copies there; name an entrypoint inside the app, or unset %s to bundle it",
+		return "", fmt.Errorf("entrypoint %s for app %q is outside the app's sources under %s: name an entrypoint inside the app, or unset %s to bundle it",
 			t.Entrypoint, t.App, t.Source, PreferTracingEnv)
 	}
 	ext := filepath.Ext(rel)

@@ -63,7 +63,7 @@ func disableDeletionProtection(ctx context.Context, clusters ClustersAPI, ref pr
 			return errors.New("no RDS client configured")
 		}
 		if progress != nil {
-			progress.Say("Disabling the deletion protection of " + cluster + ", the " + name + " database")
+			progress.Say("Disabling deletion protection on postgres " + name)
 		}
 		_, err := clusters.ModifyDBCluster(ctx, &rds.ModifyDBClusterInput{
 			DBClusterIdentifier: aws.String(cluster),

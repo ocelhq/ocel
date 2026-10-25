@@ -256,7 +256,7 @@ func (r Resource) ensureQueue(ctx context.Context, ref provider.StackRef, progre
 	if r.queues.ensured[spec.Name] {
 		return nil
 	}
-	progress.Say("Provisioning the queue database for " + ref.Name.Env + "'s topics and tasks in container " + spec.Name)
+	progress.Say("Provisioning the queue database")
 	bound, err := boxapi.NewQueueSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String())
 	if err != nil {
 		return err
@@ -314,7 +314,7 @@ func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding pro
 	if err != nil {
 		return err
 	}
-	progress.Say("Removing the queue database " + spec.Name + " and its data: " + ref.Name.Env + " declares no topic or task any more")
+	progress.Say("Removing the queue database and its data")
 	if err := r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: spec.Resource, Name: spec.Name}); err != nil {
 		return err
 	}

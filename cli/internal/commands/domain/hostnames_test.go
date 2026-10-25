@@ -401,7 +401,7 @@ func TestDomainRemoveUnbindsWhatTheConfigNoLongerDeclares(t *testing.T) {
 			t.Fatalf("runDomainRemove err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
+		if !strings.Contains(out, "Not confirmed; nothing changed") {
 			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
 		}
 		if strings.Contains(out, "Unbinding") || strings.Contains(out, "Removed old.app.com") {
@@ -423,11 +423,12 @@ func TestDomainListListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
 	if err := runDomainList(context.Background(), invocation, project.Root, domainOptions{}, &stdout); err != nil {
 		t.Fatalf("runDomainList err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	out := stdout.String()
-	for _, want := range []string{"shop.app.com", "READY"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("stdout = %q, want it to name %q: `ocel domain ls` lists what this project has bound", out, want)
-		}
+	lines := strings.Split(stdout.String(), "\n")
+	if head := strings.Fields(lines[0]); !slices.Equal(head, []string{"HOSTNAME", "STATE", "SERVED", "BY"}) {
+		t.Errorf("head = %q, want the hostname table's columns", lines[0])
+	}
+	if row := strings.Fields(lines[1]); len(row) < 3 || !slices.Equal(row[:3], []string{"shop.app.com", "●", "READY"}) {
+		t.Errorf("row = %q, want shop.app.com marked ready: `ocel domain ls` lists what this project has bound", lines[1])
 	}
 }
 

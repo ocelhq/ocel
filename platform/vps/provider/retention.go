@@ -25,22 +25,22 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, a
 		default:
 			claimed, err := p.images.IsClaimed(ctx, ref.Project, app, image)
 			if err != nil {
-				log.Warn(fmt.Sprintf("Left %s in the registry it was pushed to, as whether a release claimed it again could not be read, and the next removal tries again: %v", image, err))
+				log.Warn(fmt.Sprintf("Left %s in the registry: %v", image, err))
 				continue
 			}
 			if claimed {
 				continue
 			}
 			if err := images.Remove(ctx, image); err != nil {
-				log.Warn(fmt.Sprintf("Left %s in the registry it was pushed to, and the next removal tries again: %v", image, err))
+				log.Warn(fmt.Sprintf("Left %s in the registry: %v", image, err))
 				continue
 			}
-			log.Say("Removed " + app + "'s unused image " + image + " from " + images.Destination())
+			log.Say("Removed " + app + "'s unused image " + image)
 		}
 		settled = append(settled, image)
 	}
 	if err := p.images.Settle(ctx, ref.Project, app, settled); err != nil {
-		log.Warn(fmt.Sprintf("Removed %s, and the box could not note it, so the next removal asks for it again: %v", strings.Join(settled, ", "), err))
+		log.Warn(fmt.Sprintf("Removed %s but could not record it: %v", strings.Join(settled, ", "), err))
 	}
 	return nil
 }

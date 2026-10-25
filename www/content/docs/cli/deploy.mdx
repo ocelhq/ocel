@@ -7,15 +7,15 @@ description: "Deploy this project to your own infrastructure."
 ocel deploy [flags]
 ```
 
-Provisions the resources the project declares, builds the apps, and releases the result into your provider account. Every deploy is kept: list them with `ocel promotions ls`, return to one with `ocel rollback`.
+Provisions the declared resources, builds the apps and releases them into your provider account. Every deploy is kept: `ocel promotions ls` lists them, `ocel rollback` returns to one.
 
-`--dry` builds, then prints every change the deploy would make to your account and stops.
+`--dry` builds, prints every change and stops.
 
 ## Flags
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--dry` | `bool` | `false` | Build, then print every change this would make to your account and stop without applying any of it |
+| `--dry` | `bool` | `false` | Build, print every change this would make, and stop |
 | `--no-wait` | `bool` | `false` | On Ocel Cloud, start the job, print its link and return without waiting for it to end |
 | `--prebuilt` | `bool` | `false` | Deploy the existing .ocel/output instead of building first (produce it with ocel build) |
 | `--tag` | `string` |  | Mark this deploy with an immutable label to roll back to by name (ocel rollback `--tag`) |

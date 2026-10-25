@@ -761,11 +761,12 @@ func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSi
 	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
 	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
 	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "fake:bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	forwardResource(deploy, 4, 2, "web", provider.ActionCreate, "fake:queue", "jobs", progressv1.SpanStatus_SPAN_STATUS_OK, start)
 	deploy.Forward(providerEnded(2, "web", "Deployed", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 	deploy.Forward(providerEnded(1, "web", "Deployed web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
 
 	for _, want := range []string{
-		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 1 resource created\n",
+		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 2 resources created\n",
 		"      \x1b[32m+\x1b[0m \x1b[90massets (fake:bucket) created\x1b[0m\n",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -790,6 +791,23 @@ func TestWithColourASpansProgressMessageIsGrayUnderItsHeader(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got\n%q\nwant it to contain\n%q", out.String(), want)
 		}
+	}
+}
+
+func TestABlockThatChangedOneResourceListsItWithoutCountingIt(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	destroy := run.Phase(progressv1.Phase_PHASE_DESTROY)
+	start := c.now()
+	destroy.Forward(providerStarted(1, "prod--go--r26c87f73", "Destroying the stack", start))
+	forwardResource(destroy, 2, 1, "prod--go--r26c87f73", provider.ActionDelete, "function", "fn--go--index", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	destroy.Forward(providerEnded(1, "prod--go--r26c87f73", "Destroyed the stack", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(4*time.Second)))
+
+	want := "INFO  [deploy] ✓ prod--go--r26c87f73: Destroyed the stack in 4s\n" +
+		"      – fn--go--index (function) deleted\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
 
@@ -894,6 +912,27 @@ func TestASuccessfulDeployNamesWhatProductionServesNowAndWhereEachAppIs(t *testi
 	}
 }
 
+func TestASuccessfulPromotionSaysOnOneLineWhatProductionServesByItsShortIDAndHowSoonItPropagates(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := productionRun(t)
+	forwardOutcome(run, &progressv1.OperationResult{
+		Success:     true,
+		PromotionId: "7413110502192f88de2292ab4c4dea86",
+		Propagation: &progressv1.Propagation{TypicalMs: 5000},
+	})
+	run.Succeed("Rolled acme back to 2a8b0711")
+	c.pass(54 * time.Second)
+	ended(run, nil)
+
+	want := productionHead +
+		"✓ Rolled acme back to 2a8b0711 in 54s\n" +
+		"  prod now serves promotion 74131105 · propagates in ~5s\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServesWhatItDidAndNamesTheFailedApp(t *testing.T) {
 	t.Parallel()
 
@@ -961,7 +1000,7 @@ func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
 	want := "✓ Preview pr-12 is up in 41s\n" +
 		"  web  https://pr-12.acme.example.com\n" +
 		"  web: the custom domain shop.acme.com is not attached to previews\n" +
-		"  propagates within ~5 s\n" +
+		"  propagates within 5s\n" +
 		"  Log: /var/ocel-runs/0af3.ndjson\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -1145,7 +1184,39 @@ func TestTheIdentityHeaderNamesEachAccountTheRunSignedInToAndIsSetApartByBlankLi
 	}
 }
 
-func TestTheSummaryNamesTheAccountTheRunWasSignedInTo(t *testing.T) {
+func TestTheIdentityHeaderPrintsAgainOnlyWhenWhatItNamesChanged(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	identity := func(tier environmentv1.Tier) *streamv1.IdentityEvent {
+		return &streamv1.IdentityEvent{
+			Project: "acme",
+			Tier:    tier,
+			Origin:  &streamv1.Party{Vendor: "fake", Account: "123456789012"},
+		}
+	}
+	check.Identity(identity(environmentv1.Tier_TIER_PRODUCTION))
+	check.Say("read where acme is deployed")
+	check.Identity(identity(environmentv1.Tier_TIER_PRODUCTION))
+	check.Identity(identity(environmentv1.Tier_TIER_PREVIEW))
+
+	want := "ocel  dev  acme › prod\n" +
+		"\n" +
+		"  fake  123456789012\n" +
+		"\n" +
+		"INFO  [check] read where acme is deployed\n" +
+		"\n" +
+		"ocel  dev  acme › preview\n" +
+		"\n" +
+		"  fake  123456789012\n" +
+		"\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestTheSummaryLeavesTheAccountToTheIdentityHeaderThatAlreadyNamedIt(t *testing.T) {
 	t.Parallel()
 
 	for _, success := range []bool{true, false} {
@@ -1161,8 +1232,8 @@ func TestTheSummaryNamesTheAccountTheRunWasSignedInTo(t *testing.T) {
 		}
 		run.End(&err)
 
-		if want := "\n  on fake 123456789012 · example-region · as deploy\n"; !strings.Contains(out.String(), want) {
-			t.Errorf("success=%v: got\n%s\nwant it to contain %q", success, out.String(), want)
+		if got := out.String(); strings.Count(got, "123456789012") != 1 || strings.Contains(got, "  on fake") {
+			t.Errorf("success=%v: got\n%s\nwant the account named once, by the identity header", success, got)
 		}
 	}
 }

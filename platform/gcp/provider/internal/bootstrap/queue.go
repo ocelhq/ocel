@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const ReasonQueuePurged = "its waiting messages are deleted, since Cloud Tasks reserves a deleted queue's name for 7 days"
+const ReasonQueuePurged = "purged: Cloud Tasks reserves a deleted queue's name for 7 days"
 
 var queueKind = KindOps{
 	noun:      "Cloud Tasks queue",
@@ -35,7 +35,7 @@ var queueKind = KindOps{
 	Take: func(ctx context.Context, b Engine, read Survey, _ Resource) error {
 		return b.purgeDelayQueue(ctx, read.Tier)
 	},
-	taken: func(r Removal) string { return "Purged " + r.Resource.phrase() + ": " + r.Reason },
+	taken: func(r Removal) string { return "Purged " + r.Resource.phrase() },
 }
 
 func (b Engine) DelayQueuePath(tier environment.Tier) string {

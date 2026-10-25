@@ -93,7 +93,7 @@ func (u *Unreachable) Error() string {
 	if needed == "" {
 		needed = "a declared resource"
 	}
-	return fmt.Sprintf("no docker daemon answers at %s, and %s runs in a container on this machine: start docker, or set %s to a daemon that is running\n    %v", u.Address, needed, images.DockerHostEnv, u.Err)
+	return fmt.Sprintf("no docker daemon answers at %s, and %s runs in a container: start docker, or set %s to a running daemon\n    %v", u.Address, needed, images.DockerHostEnv, u.Err)
 }
 
 func (u *Unreachable) Unwrap() error { return u.Err }
@@ -178,7 +178,7 @@ func refuseRemoteDaemon(host images.DockerHost) error {
 	if ip, err := netip.ParseAddr(name); name == "localhost" || (err == nil && ip.IsLoopback()) {
 		return nil
 	}
-	return fmt.Errorf("%s is %s, a docker daemon on another machine: dev resources take no credentials, so running them there would publish them on every interface of %s: point %s at a docker daemon on this machine, or unset it", images.DockerHostEnv, host.Address, name, images.DockerHostEnv)
+	return fmt.Errorf("%s is %s, a remote docker daemon, which would expose dev resources on %s: point %s at a local daemon, or unset it", images.DockerHostEnv, host.Address, name, images.DockerHostEnv)
 }
 
 func (d *daemon) Close() error { return d.api.Close() }

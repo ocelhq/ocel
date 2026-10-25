@@ -251,9 +251,8 @@ func TestTheFirstForwardSaysItMakesTheBastionAndLaterOnesSayNothing(t *testing.T
 
 	names := bastionNames()
 	want := []string{
-		"INFO Making the bastion " + names.Bastion(environment.TierProduction) + " that forwards ports into the production tier's network",
 		"INFO Pushing the bastion image " + h.b.imageRef(environment.TierProduction),
-		"INFO Creating Cloud Run service " + names.Bastion(environment.TierProduction) + " in europe-west1",
+		"INFO Creating Cloud Run service " + names.Bastion(environment.TierProduction),
 	}
 	if got := first.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the first forward said %q, want %q", got, want)

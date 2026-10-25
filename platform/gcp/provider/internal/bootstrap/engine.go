@@ -293,7 +293,7 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 	}
 	repaired, err := b.RepairParts(ctx, req.Tier, !req.RefuseReplacements)
 	for _, part := range repaired {
-		gcloud.EnsureProgress(progress).Say("Checked the " + part + " part against this build, mending any drift")
+		gcloud.EnsureProgress(progress).Say("Checked the " + part + " part")
 	}
 	return err
 }

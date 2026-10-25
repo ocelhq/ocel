@@ -75,7 +75,7 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 			return provider.StackResult{}, err
 		}
 		if progress != nil && attempt+1 < container.RulePlacements {
-			progress.Say(fmt.Sprintf("Placing %s's listener rule again: another deploy claimed priority %d first (attempt %d of %d)", work.App, work.Priority(), attempt+2, container.RulePlacements))
+			progress.Say(fmt.Sprintf("Placing %s's listener rule again: priority %d was taken (attempt %d of %d)", work.App, work.Priority(), attempt+2, container.RulePlacements))
 		}
 	}
 	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.App, container.RulePlacements, err)
@@ -114,16 +114,16 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 			Kind:   provider.StackGroupKind,
 			Name:   containers.StackRef(spec.Ref.Tier).Name.String(),
 			Action: provider.ActionCreate,
-			Reason: "the first container deploy in the " + string(spec.Ref.Tier) + " tier provisions the load balancer and cluster every container app in it shares",
+			Reason: "added on first use",
 			Slow:   true,
 		}
 		if present {
 			shared.Action = provider.ActionUpdate
 		}
 		if present && public {
-			shared.Reason = "the first container app in the " + string(spec.Ref.Tier) + " tier an edge forwards to raises the public load balancer every such app shares"
+			shared.Reason = "adds the public load balancer"
 		} else if present {
-			shared.Reason = "the first container app in the " + string(spec.Ref.Tier) + " tier routed through CloudFront raises the internal load balancer and VPC origin every such app shares"
+			shared.Reason = "adds the internal load balancer"
 		}
 		groups, err := r.planNetwork(ctx, spec.Ref.Tier)
 		if err != nil {

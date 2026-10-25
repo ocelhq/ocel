@@ -747,7 +747,7 @@ func TestTheReleaseThatTakesAHostnameLiveSaysWhichServiceItRoutesTo(t *testing.T
 		t.Fatalf("Promote = %v", err)
 	}
 
-	want := "INFO Routing shop.example.com to web's Cloud Run service ocel-shop-prod-web"
+	want := "INFO Routing shop.example.com to web"
 	if got := progress.Lines(); !slices.Contains(got, want) {
 		t.Errorf("the release said %q, want %q among it", got, want)
 	}

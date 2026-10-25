@@ -220,7 +220,7 @@ func (r *deployRun) restoreInlineBindings(ctx context.Context, progress progress
 	defer stop()
 	active, err := r.ledger.ActivePromotionID(ctx, r.spec.Pointer)
 	if err != nil {
-		progress.Warn(fmt.Sprintf("Could not read whether promotion %s is live, so the records its inline bindings rewrote were left as it wrote them: %v", r.spec.PromotionID, err))
+		progress.Warn(fmt.Sprintf("Left the records promotion %s's inline bindings rewrote: %v", shortPromotionID(r.spec.PromotionID), err))
 		return
 	}
 	if active == r.spec.PromotionID {
@@ -249,7 +249,7 @@ func (r *deployRun) restoreInlineBindings(ctx context.Context, progress progress
 		errs = append(errs, err)
 	}
 	if err := errors.Join(errs...); err != nil {
-		progress.Warn(fmt.Sprintf("Promotion %s did not land, and restoring the records its inline bindings rewrote failed, so the live release reads what this deploy wrote until the next deploy: %v", r.spec.PromotionID, err))
+		progress.Warn(fmt.Sprintf("Promotion %s did not land, and restoring the records its inline bindings rewrote failed; the live release reads them until the next deploy: %v", shortPromotionID(r.spec.PromotionID), err))
 	}
 }
 
@@ -265,11 +265,11 @@ func (r *deployRun) pruneInlineBindings(ctx context.Context, progress progress.L
 	}
 	removed, err := r.values.RemoveUnchangedBindings(ctx, r.scope, bindingEnvironment(r.spec), stale)
 	if err != nil {
-		progress.Warn(fmt.Sprintf("Could not remove the records %s's inline bindings no longer keep: %v. The next deploy removes them", r.scope.Project, err))
+		progress.Warn(fmt.Sprintf("Could not remove unused inline binding records; the next deploy retries: %v", err))
 		return
 	}
 	if len(removed) > 0 {
-		progress.Detail("Removed " + strings.Join(removed, ", ") + ", which no inline binding keeps any more")
+		progress.Detail("Removed unused inline binding records " + strings.Join(removed, ", "))
 	}
 }
 

@@ -412,7 +412,7 @@ func TestBindingsGenerateWritesTheShapeOfEveryPublishedRecord(t *testing.T) {
 		if !strings.Contains(written, "interface BindingsGenerated {\n    generated: true;\n  }") {
 			t.Errorf("generated file =\n%s\nwant it to mark itself generated, so an empty coordinate still closes every name", written)
 		}
-		if !strings.Contains(out, "Nothing is published") || !strings.Contains(out, "no binding name open") {
+		if !strings.Contains(out, "Nothing is published") || !strings.Contains(out, "with no records") {
 			t.Errorf("generate summary = %q, want it to say nothing was published and that no name stays open", out)
 		}
 	})

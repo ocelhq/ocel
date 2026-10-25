@@ -80,7 +80,7 @@ func load(ctx context.Context, configPath string) (*Project, error) {
 	}
 	dir := filepath.Dir(configPath)
 	if others := OtherConfigFiles(configPath); len(others) > 0 {
-		return nil, newInvalidConfigError(fmt.Errorf("%s contains %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and ")), "")
+		return nil, newInvalidConfigError(fmt.Errorf("%s contains %s: delete all but one", dir, strings.Join(append([]string{base}, others...), " and ")), "")
 	}
 
 	env, err := readEnvironment(dir)

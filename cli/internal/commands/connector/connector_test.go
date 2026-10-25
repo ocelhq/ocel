@@ -430,7 +430,7 @@ func TestRemovingATargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
 	if len(srv.deleted) != 0 {
 		t.Fatalf("deleted = %v, want nothing deleted", srv.deleted)
 	}
-	if !strings.Contains(stdout.String(), "has no connector registered") {
+	if !strings.Contains(stdout.String(), "No connector registered") {
 		t.Errorf("stdout = %q, want it to say the console has no such target registered", stdout.String())
 	}
 }

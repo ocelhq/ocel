@@ -319,14 +319,14 @@ func (r Resource) runGateway(ctx context.Context, ref provider.StackRef, gateway
 
 func (r Resource) placeGateway(ctx context.Context, ref provider.StackRef, gateway string, keys map[string]string, progress progress.Log) error {
 	if len(keys) == 0 {
-		progress.Say("Removing the realtime gateway " + gateway + ": " + ref.Name.Env + " declares no realtime any more")
+		progress.Say("Removing the realtime gateway " + gateway)
 		return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: gatewayResource, Name: gateway})
 	}
 	spec, err := NewGateway(ref, gateway, keys)
 	if err != nil {
 		return err
 	}
-	progress.Say("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", ") + " from the gateway in container " + gateway)
+	progress.Say("Serving realtime " + strings.Join(slices.Sorted(maps.Keys(keys)), ", "))
 	return r.box.Containers.Run(ctx, spec, "")
 }
 

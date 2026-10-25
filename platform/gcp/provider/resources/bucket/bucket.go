@@ -316,7 +316,7 @@ func (b appBucket) ensure(ctx context.Context, store records.Store, client *stor
 	if len(differences) == 0 {
 		return name, nil
 	}
-	gcloud.EnsureProgress(progress).Say("Updating bucket " + declared + " on Cloud Storage bucket " + name + ": " + strings.Join(differences, "; "))
+	gcloud.EnsureProgress(progress).Say("Updating bucket " + declared + ": " + strings.Join(differences, "; "))
 	if _, err := client.Bucket(name).Update(ctx, update); err != nil {
 		return "", fmt.Errorf("update the Cloud Storage bucket %s that bucket %s stores into: %w", name, declared, err)
 	}
@@ -324,7 +324,7 @@ func (b appBucket) ensure(ctx context.Context, store records.Store, client *stor
 }
 
 func (b appBucket) create(ctx context.Context, store records.Store, client *storage.Client, project, name, declared string, progress progress.Log) error {
-	gcloud.EnsureProgress(progress).Say("Creating bucket " + declared + " as Cloud Storage bucket " + name + " in " + b.attrs.Location)
+	gcloud.EnsureProgress(progress).Say("Creating bucket " + declared + " as Cloud Storage bucket " + name)
 	attrs := b.attrs
 	err := client.Bucket(name).Create(ctx, project, &attrs)
 	if err == nil {
@@ -388,7 +388,7 @@ func (p *Bucket) Remove(ctx context.Context, ref provider.StackRef, binding prov
 		return err
 	}
 	name := binding.Properties[provider.PropertyBucket]
-	gcloud.EnsureProgress(progress).Say("Removing bucket " + binding.Name + ", its Cloud Storage bucket " + name + " and every object in it")
+	gcloud.EnsureProgress(progress).Say("Removing bucket " + binding.Name + " and every object in it")
 	handle := client.Bucket(name)
 	if err := emptyBucket(ctx, handle); err != nil {
 		return fmt.Errorf("empty the Cloud Storage bucket %s that bucket %s stores into: %w", name, binding.Name, err)

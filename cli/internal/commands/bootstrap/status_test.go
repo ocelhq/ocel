@@ -81,9 +81,9 @@ func TestBootstrapStatusShowsOneRowPerPartWithWhoAddedItWhoUsesItItsIdleCostAndI
 		}
 	}
 	for part, want := range map[string]string{
-		provider.BasePart: "base ocel bootstrap · 2026-09-02 — $0 current",
-		partISR:           partISR + " — — $0 current",
-		"containers":      "containers deploy api · 2026-10-10 api $7.30/mo creating",
+		provider.BasePart: "base ocel bootstrap · 2026-09-02 — $0 ● current",
+		partISR:           partISR + " — — $0 ● current",
+		"containers":      "containers deploy api · 2026-10-10 api $7.30/mo ◐ creating",
 	} {
 		if got := strings.Join(rowOf(t, out, part), " "); got != want {
 			t.Errorf("%s row = %q, want %q", part, got, want)
@@ -156,7 +156,7 @@ func TestBootstrapStatusSaysAPartWithAnIdleCostRetiresWithTheProjectsThatUseIt(t
 
 	out := runStatus(t, invocation, project.Root, production, StatusOptions{})
 
-	if got, want := strings.Join(rowOf(t, out, "balancer"), " "), "balancer — shop — retires with shop"; got != want {
+	if got, want := strings.Join(rowOf(t, out, "balancer"), " "), "balancer — shop — ○ retires with shop"; got != want {
 		t.Errorf("balancer row = %q, want %q: the deploy or destroy that removes its last user takes it down", got, want)
 	}
 }
@@ -171,7 +171,7 @@ func TestBootstrapStatusSaysWhoWantsAPartTheBootstrapLacksAndTheCommandThatAddsI
 
 	out := runStatus(t, invocation, project.Root, production, StatusOptions{})
 
-	want := partImageOptimization + " — — — wanted by api, web, run `ocel bootstrap production`"
+	want := partImageOptimization + " — — — ◐ wanted by api, web, run `ocel bootstrap production`"
 	if got := strings.Join(rowOf(t, out, partImageOptimization), " "); got != want {
 		t.Errorf("%s row = %q, want %q", partImageOptimization, got, want)
 	}
@@ -182,8 +182,9 @@ func TestBootstrapStatusWithResourcesListsWhatEachPartHolds(t *testing.T) {
 
 	out := runStatus(t, invocation, project.Root, production, StatusOptions{Resources: true})
 
-	if !strings.Contains(out, "\ncontainers\n  Fake::Cluster  ocel-containers-production\n") {
-		t.Errorf("output = %q, want the containers part's cluster under its name", out)
+	_, resources, headed := strings.Cut(out, "Resources  production")
+	if !headed || !strings.Contains(resources, "\n  containers  Fake::Cluster  ocel-containers-production\n") {
+		t.Errorf("output = %q, want the containers part's cluster in a production resources table", out)
 	}
 }
 
@@ -196,7 +197,7 @@ func TestBootstrapStatusReadsBothTiersWhenNoneIsNamed(t *testing.T) {
 	if len(described) != 2 || !described[0].GetWithParts() || described[1].GetTier() != environmentv1.Tier_TIER_PREVIEW {
 		t.Errorf("DescribeBootstrap was asked %v, want both tiers with their parts", described)
 	}
-	if !strings.Contains(out, "\npreview · ") || !strings.Contains(out, "not bootstrapped") || !strings.Contains(out, "`ocel bootstrap preview`") {
+	if !strings.Contains(out, "\npreview  ") || !strings.Contains(out, "not bootstrapped") || !strings.Contains(out, "`ocel bootstrap preview`") {
 		t.Errorf("output = %q, want the preview tier reported absent with the command that sets it up", out)
 	}
 }

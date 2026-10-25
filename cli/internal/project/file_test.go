@@ -17,7 +17,7 @@ func TestAMissingConfigIsAPrerequisiteInitSetsUp(t *testing.T) {
 	if !errors.As(err, &missing) || missing.Missing() != prerequisite.Project {
 		t.Fatalf("error = %v, want the project reported missing", err)
 	}
-	if want := "Run `ocel init --provider <id>` and try again, where <id> is one of " + strings.Join(configdoc.ProviderIDs(), ", ") + ", or run `ocel login` to deploy through a console that offers Ocel Cloud"; !strings.HasSuffix(err.Error(), want) {
+	if want := "Run `ocel init --provider <id>`, where <id> is one of " + strings.Join(configdoc.ProviderIDs(), ", ") + ", or `ocel login` to deploy to Ocel Cloud"; !strings.HasSuffix(err.Error(), want) {
 		t.Errorf("error = %q, want it to end naming the commands that set the project up and the providers it takes", err)
 	}
 	if finding := missing.Finding(); !strings.Contains(finding, dir) || !strings.Contains(finding, DefaultFileName) {

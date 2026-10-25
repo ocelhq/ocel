@@ -294,7 +294,7 @@ func (p *Services) DeployService(ctx context.Context, s Serving, progress progre
 	}
 	err = p.writeRelease(ctx, clients, services, s, desired, progress)
 	if isImageMissing(err, s.Image) {
-		gcloud.EnsureProgress(progress).Say("Cloud Run found no image " + s.Image + ", which a prune untagged during this release: tagging it again and releasing " + s.Service + " once more")
+		gcloud.EnsureProgress(progress).Say("Tagging " + s.Image + " again: a prune untagged it mid-release")
 		if _, err := p.ensureImageTag(ctx, clients, s.Image, version); err != nil {
 			return Release{}, err
 		}
@@ -365,7 +365,7 @@ func (p *Services) writeRelease(ctx context.Context, clients *gcloud.Clients, se
 	})
 	switch {
 	case gcloud.Absent(err):
-		gcloud.EnsureProgress(progress).Say("Creating Cloud Run service " + s.Service + " in " + clients.Region)
+		gcloud.EnsureProgress(progress).Say("Creating Cloud Run service " + s.Service)
 		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.
 				Create(clients.Location(), desired).ServiceId(s.Service).Context(ctx).Do(call...)
@@ -373,7 +373,7 @@ func (p *Services) writeRelease(ctx context.Context, clients *gcloud.Clients, se
 	case err != nil:
 		return fmt.Errorf("read the Cloud Run service %s: %w", s.Service, err)
 	default:
-		gcloud.EnsureProgress(progress).Say("Releasing a new revision of Cloud Run service " + s.Service + " in " + clients.Region)
+		gcloud.EnsureProgress(progress).Say("Releasing a new revision of " + s.Service)
 		err = p.RetryWrite(ctx, "release "+s.Service+" onto Cloud Run", func() error {
 			current, err := p.Read(ctx, services, path, s.Service)
 			if err != nil {
@@ -646,9 +646,9 @@ func (p *Services) DeleteService(ctx context.Context, service string, progress p
 	path := clients.ServicePath(service)
 	images, err := p.listServiceImages(ctx, services, path)
 	if err != nil && !gcloud.Absent(err) {
-		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Leaving the images %s ran tagged, as which ones could not be read: %v", service, err))
+		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left the images of %s tagged: %v", service, err))
 	}
-	gcloud.EnsureProgress(progress).Say("Deleting Cloud Run service " + service + " in " + clients.Region)
+	gcloud.EnsureProgress(progress).Say("Deleting Cloud Run service " + service)
 	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 		return services.Projects.Locations.Services.Delete(path).Context(ctx).Do(call...)
 	})
@@ -690,7 +690,7 @@ func (p *Services) RemoveRevision(ctx context.Context, service, revision string,
 	if err := p.untagRevision(ctx, services, path, service, revision); err != nil {
 		return false, nil, err
 	}
-	gcloud.EnsureProgress(progress).Say("Deleting revision " + revision + " of Cloud Run service " + service + " in " + clients.Region)
+	gcloud.EnsureProgress(progress).Say("Deleting revision " + revision)
 	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 		return services.Projects.Locations.Services.Revisions.Delete(path + "/revisions/" + revision).Context(ctx).Do(call...)
 	})

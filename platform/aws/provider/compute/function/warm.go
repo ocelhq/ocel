@@ -111,7 +111,7 @@ func (p warmPass) run(ctx context.Context) []warmResult {
 	var results []warmResult
 	for i, target := range p.targets {
 		if skipped[i] {
-			p.progress.Warn(fmt.Sprintf("%s of app %s: the deploy stopped before its turn to warm; not warmed", target.LogicalName, target.App))
+			p.progress.Warn(fmt.Sprintf("%s of app %s: not warmed, the deploy stopped first", target.LogicalName, target.App))
 			continue
 		}
 		results = append(results, warmResult{Target: target, Reply: replies[i]})

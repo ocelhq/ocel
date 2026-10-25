@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -116,10 +117,13 @@ func TestPromotionsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.T
 		}
 
 		out := stdout.String()
-		for _, sub := range []string{"DEPLOYED", "admin=build-2", "web=build-2~fp2", "web=build-1"} {
+		for _, sub := range []string{"DEPLOYED", "admin build-2", "web build-2", "web build-1"} {
 			if !strings.Contains(out, sub) {
 				t.Errorf("stdout = %q, want it to contain %q", out, sub)
 			}
+		}
+		if strings.Contains(out, "~fp2") {
+			t.Errorf("stdout = %q, want each app named by its build, not the fingerprint of its release", out)
 		}
 
 		banner := strings.Index(out, "ocel  dev  test-app › prod\n")
@@ -129,11 +133,13 @@ func TestPromotionsListRendersPromotionsNewestFirstWithTheActiveOne(t *testing.T
 		}
 		table := out[cut:]
 		lines := strings.Split(strings.TrimRight(table, "\n"), "\n")
-		if len(lines) != 3 {
-			t.Fatalf("stdout = %q, want a header and two rows", out)
+		if len(lines) != 4 {
+			t.Fatalf("stdout = %q, want a header and a row per app of each promotion", out)
 		}
-		if a, b := runeIndex(lines[0], "DEPLOYED"), runeIndex(lines[1], "admin="); a != b {
-			t.Errorf("DEPLOYED column starts at %d in the header and %d in the row:\n%s", a, b, out)
+		for i, app := range []string{"admin ", "web ", "web "} {
+			if a, b := runeIndex(lines[0], "DEPLOYED"), runeIndex(lines[i+1], app); a != b {
+				t.Errorf("DEPLOYED column starts at %d in the header and %d in row %d:\n%s", a, b, i+1, out)
+			}
 		}
 	})
 
@@ -277,7 +283,7 @@ func TestPromotionsPruneReclaimsOldPromotionsOnceConsented(t *testing.T) {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
+		if !strings.Contains(out, "Not confirmed; nothing changed") {
 			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
 		}
 		if strings.Contains(out, "Reclaimed") {
@@ -374,7 +380,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 
 func TestThePromotionsListMarksAPromotionTakenBack(t *testing.T) {
 	var stdout bytes.Buffer
-	renderPromotions(&stdout, []*contractv1.PromotionHistoryEntry{
+	renderPromotions(&stdout, terminal.Presentation{}, []*contractv1.PromotionHistoryEntry{
 		{Promotion: &contractv1.Promotion{PromotionId: "p2"}, Unpromoted: true},
 		{Promotion: &contractv1.Promotion{PromotionId: "p1"}, Active: true},
 	})

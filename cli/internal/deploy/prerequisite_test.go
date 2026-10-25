@@ -260,7 +260,7 @@ func TestADeclinedSetupExitsZeroNamingTheCommand(t *testing.T) {
 	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 		t.Fatalf("runDeploy err = %v, want a declined setup to exit 0; stdout=%s", err, stdout.String())
 	}
-	if want := "Not set up, so this run changes nothing. When you're ready: `ocel bootstrap production"; !strings.Contains(stdout.String(), want) {
+	if want := "Not set up; nothing changed. Next: `ocel bootstrap production"; !strings.Contains(stdout.String(), want) {
 		t.Errorf("stdout = %q, want %q", stdout.String(), want)
 	}
 	if sent := sentDeploys(t, fixture); len(sent) != 0 {
@@ -324,7 +324,7 @@ func TestDecliningTheBootstrapPlanAppliesNothingAndExitsZero(t *testing.T) {
 	if applied := fixture.Provider.FakeBootstrap().Applied()[before:]; len(applied) != 0 {
 		t.Errorf("the provider applied %+v after its plan was declined, want nothing", applied)
 	}
-	if !strings.Contains(stdout.String(), "Not confirmed, so this run changes nothing") {
+	if !strings.Contains(stdout.String(), "Not confirmed; nothing changed") {
 		t.Errorf("stdout = %q, want the declined plan to say the run changes nothing", stdout.String())
 	}
 	if sent := sentDeploys(t, fixture); len(sent) != 0 {
@@ -373,7 +373,7 @@ func TestADeployAgainstABootstrapLackingAPartItNeedsAddsItAndDeploysInOneRun(t *
 	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{}, &stdout, &stderr, strings.NewReader("y\ny\n")); err != nil {
 		t.Fatalf("runDeploy err = %v, want the missing part offered before the build; stdout=%s", err, stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "does not include what this project needs: "+fake.PartCache) {
+	if !strings.Contains(stdout.String(), "is missing "+fake.PartCache) {
 		t.Errorf("stdout = %q, want the check to name the part the bootstrap lacks", stdout.String())
 	}
 	applied := fixture.Provider.FakeBootstrap().Applied()[before:]

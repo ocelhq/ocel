@@ -257,7 +257,7 @@ func Release(ctx context.Context, b bootstrap.Engine, tier environment.Tier, use
 	if err != nil {
 		return fmt.Errorf("mark the %s load balancer of tier %s as going down: %w", alb.Kind, tier, err)
 	}
-	gcloud.EnsureProgress(progress).Say("Taking down the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": " + user + " was the last user it served")
+	gcloud.EnsureProgress(progress).Say("Taking down the " + string(alb.Kind) + " load balancer")
 	if err := retireLoadBalancer(ctx, b, tier, revision, nil); err != nil {
 		settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 		defer cancel()
@@ -277,7 +277,7 @@ func restoreUser(ctx context.Context, b bootstrap.Engine, tier environment.Tier,
 }
 
 func sayKept(progress progress.Log, tier environment.Tier, bound []string) {
-	gcloud.EnsureProgress(progress).Say("Kept the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": it still serves " + strings.Join(bound, ", "))
+	gcloud.EnsureProgress(progress).Say("Kept the " + string(alb.Kind) + " load balancer: it still serves " + strings.Join(bound, ", "))
 }
 
 func retireLoadBalancer(ctx context.Context, b bootstrap.Engine, tier environment.Tier, retiring records.Revision, users []string) error {

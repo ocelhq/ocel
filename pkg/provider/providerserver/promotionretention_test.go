@@ -263,7 +263,7 @@ func TestADeployWhoseDroppedBuildCannotBeReclaimedServesAndWarnsWithTheReason(t 
 		t.Fatalf("Deploy() whose reclaim failed = %q, want it to succeed: its promotion serves", result.GetError())
 	}
 	warned := strings.Join(warnings(events), "\n")
-	for _, want := range []string{result.GetPromotionId(), "the stack is locked by another run"} {
+	for _, want := range []string{result.GetPromotionId()[:8], "the stack is locked by another run"} {
 		if !strings.Contains(warned, want) {
 			t.Errorf("the deploy warned %q, want it to name %q", warned, want)
 		}

@@ -106,7 +106,7 @@ func addAsset(built *railpackplan.BuildPlan, loc workspace.Location, asset works
 		step.Commands = append(step.Commands, railpackplan.NewFileCommand(path.Join(railpack.WorkingDir, loc.Path, asset.Name), asset.Name))
 		return nil
 	}
-	return fmt.Errorf("railpack planned %s with no %s step, and ocel writes %s, which the image starts with, in that step", loc.Root, buildStep, asset.Name)
+	return fmt.Errorf("railpack planned %s with no %s step to write %s in", loc.Root, buildStep, asset.Name)
 }
 
 func providerFor(loc workspace.Location) string {
@@ -255,8 +255,8 @@ func replaceInstall(step *railpackplan.Step, loc workspace.Location, scoped stri
 		return nil
 	}
 	return fmt.Errorf(
-		"railpack installs %s with %s, and ocel replaces that with %q to install only what app %q reaches: nothing in the install step is a command ocel knows how to scope, so the whole workspace at %s would be installed to serve one app",
-		loc.Root, quoted(ran), scoped, loc.Path, loc.Root,
+		"railpack installs %s with %s, which ocel cannot scope to %q for app %q",
+		loc.Root, quoted(ran), scoped, loc.Path,
 	)
 }
 

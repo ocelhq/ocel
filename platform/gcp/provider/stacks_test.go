@@ -59,7 +59,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if !slices.ContainsFunc(progress.Lines(), func(said string) bool {
-		return strings.HasPrefix(said, "WARN ") && strings.Contains(said, "is a preview and answers anyone")
+		return strings.HasPrefix(said, "WARN ") && strings.Contains(said, "answers anyone with its url")
 	}) {
 		t.Errorf("the release said %q, want it to warn the preview answers anyone with its url: Cloud Run has no invoker a browser could satisfy, so the reader has to know", progress.Lines())
 	}

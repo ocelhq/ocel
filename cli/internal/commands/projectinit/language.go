@@ -77,7 +77,7 @@ func detectLanguage(dir string) (sdkLanguage, bool, error) {
 		Code: clierror.CodeInitAmbiguousLanguage,
 		Hint: "--lang",
 		Cause: fmt.Errorf(
-			"this directory holds %s, and init adds the ocel SDK for one language: run %s — %w",
+			"this directory holds %s: run %s — %w",
 			english.And(held), english.Or(runs), undetected,
 		),
 	}

@@ -16,6 +16,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -61,12 +62,21 @@ func TestProjectsDestroyTakesBothTiersBehindOneTypedConfirmation(t *testing.T) {
 		t.Errorf("asked for the project name %d times, want once for both tiers:\n%s", asked, got.stdout)
 	}
 	for _, want := range []string{
+		"✓ test-app: Read where test-app is deployed in ",
+		"✓ test-app: Enumerated what to destroy in production in ",
+		"✓ test-app: Enumerated what to destroy in any preview in ",
 		`This will permanently destroy production project "test-app"`,
 		`ENTIRE preview footprint of project "test-app"`,
+		"The account-level preview bootstrap is left intact. This cannot be undone.",
 		"Destroyed project test-app",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("stdout has no %q:\n%s", want, got.stdout)
+		}
+	}
+	for _, said := range []string{"stored assets", "variable value "} {
+		if strings.Contains(got.stdout, said) {
+			t.Errorf("stdout says %q, which the plan's variable values and stored objects groups already name:\n%s", said, got.stdout)
 		}
 	}
 	_, removed := removals(t, project)
@@ -140,6 +150,26 @@ func TestProjectsDestroyOfATierTheProjectIsNotInSaysSo(t *testing.T) {
 	}
 	if planned, _ := removals(t, project); !slices.Equal(tiersOf(planned), []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION}) {
 		t.Errorf("planned %v, want production alone", tiersOf(planned))
+	}
+}
+
+func TestProjectsDestroyChecksProductionOnceThoughItFirstReadsWhereTheProjectIsDeployed(t *testing.T) {
+	project := deployedToProductionOnly(t)
+
+	got := runDestroyCommand(t, clitest.NewInvocation(), project.Root, "", "--yes")
+	if got.err != nil {
+		t.Fatalf("ocel projects destroy err = %v; stdout=%s", got.err, got.stdout)
+	}
+	for _, once := range []string{"Loaded the provider", "test-app › prod\n"} {
+		if n := strings.Count(got.stdout, once); n != 1 {
+			t.Errorf("stdout says %q %d times, want once:\n%s", once, n, got.stdout)
+		}
+	}
+	if sent := clitest.RequestsTo[*contractv1.PreflightRequest](t, project.Requests, contractv1connect.ProviderServicePreflightProcedure); len(sent) != 1 {
+		t.Errorf("sent %d preflights, want one: production's answers both what the project is deployed in and whether it can be destroyed", len(sent))
+	}
+	if _, removed := removals(t, project); len(removed) != 1 {
+		t.Errorf("removed %d tiers, want production", len(removed))
 	}
 }
 

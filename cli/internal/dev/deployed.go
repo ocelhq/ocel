@@ -49,7 +49,7 @@ func RunDeployed(ctx context.Context, opts Options, deployed Deployed) error {
 func forwardDeployed(ctx context.Context, opts Options, deployed Deployed) (*portforward.Forwards, error) {
 	cfg, check, env := opts.Project, deployed.Check, deployed.Environment
 	if !deployed.Provider.Facts().GetForwardsPorts() {
-		return nil, fmt.Errorf("the provider of %s forwards no port to a deployed environment, so a command cannot reach its resources from this machine", cfg.Slug)
+		return nil, fmt.Errorf("the provider of %s forwards no port, so a command cannot reach its deployed resources", cfg.Slug)
 	}
 	resources, err := collectResources(ctx, opts, deployed)
 	if err != nil {
@@ -66,7 +66,7 @@ func forwardDeployed(ctx context.Context, opts Options, deployed Deployed) (*por
 	}
 	uses := portforward.ListWholeProjectUses(infra)
 	if len(uses) == 0 {
-		check.Say(cfg.Slug + " declares no resource a port can reach, so the command runs without bindings")
+		check.Say(cfg.Slug + " declares no resource a port can reach; running without bindings")
 		return nil, nil
 	}
 	declared := portforward.ListDeclared(uses)

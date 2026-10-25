@@ -235,9 +235,7 @@ func (c EdgeNeedCheck) warnUnknown(reason string) {
 		cause = ": " + reason
 	}
 	c.Warn(string(kind), fmt.Sprintf(
-		"This deploy could not confirm the account may run code at the %s edge%s. "+
-			"It proceeds, and if the plan does not run code at the edge the %s edge refuses the code when it is uploaded, "+
-			"after the deploy has begun changing your infrastructure",
-		kind, cause, kind,
+		"Could not confirm the account may run code at the %s edge%s: if it cannot, the upload fails mid-deploy",
+		kind, cause,
 	))
 }

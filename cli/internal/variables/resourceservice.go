@@ -25,10 +25,10 @@ func (d *Declarations) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareE
 			return nil, fmt.Errorf("%s belongs to environment group %s, but that group is not declared", definition.GetKey(), definition.GetGroup())
 		}
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_DERIVED {
-			return nil, fmt.Errorf("%s is declared as derived, a class ocel writes for the resources an app binds and prunes on its own; declare it as plain, sensitive or secret", definition.GetKey())
+			return nil, fmt.Errorf("%s is declared as derived, which only ocel writes: declare it as plain, sensitive or secret", definition.GetKey())
 		}
 		if d.scope.IsWrittenByOcel(definition.GetKey(), definition.GetFolders()) {
-			return nil, fmt.Errorf("%s is written by ocel for the apps this declaration reaches, from the hostname this deploy serves it on, so a declared one would be overwritten before anything read it; read it from `ocel/env` as `deployment.url` instead of declaring it", definition.GetKey())
+			return nil, fmt.Errorf("%s is written by ocel: read it from `ocel/env` as `deployment.url` instead of declaring it", definition.GetKey())
 		}
 	}
 	for _, group := range req.GetGroups() {

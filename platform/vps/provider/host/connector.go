@@ -170,7 +170,7 @@ func (c *Connector) Remove(ctx context.Context, progress progress.Log) error {
 	if _, err := c.host.Run(ctx, ssh.Root, "take the connector off this host", connectorRemoval(), nil); err != nil {
 		return err
 	}
-	progress.Say("Removed the connector's systemd unit " + ConnectorUnit + ", its binary " + ConnectorBinary + " and directory " + connectorRoot)
+	progress.Say("Removed the connector")
 	return nil
 }
 

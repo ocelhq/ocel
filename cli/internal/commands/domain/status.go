@@ -37,10 +37,11 @@ func runDomainStatus(ctx context.Context, invocation commands.Invocation, cwd st
 	if err != nil {
 		return err
 	}
-	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+	present := invocation.Presentation(stdout)
+	if present.Format == terminal.FormatJSON {
 		return writeDomainStatusJSON(stdout, resp)
 	}
-	renderDomainStatus(stdout, resp, filepath.Base(cfg.Path))
+	renderDomainStatus(stdout, present.Palette(), resp, filepath.Base(cfg.Path))
 	return nil
 }
 
@@ -76,7 +77,7 @@ func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read f
 		return resp, err
 	}
 	if declaredHosts(resp) == 0 {
-		return resp, fmt.Errorf("this project declares no production hostname, so there is nothing to wait for: declare one under domains.production and run `ocel domain add`")
+		return resp, fmt.Errorf("no production hostname to wait for: declare one under domains.production, then run `ocel domain add`")
 	}
 
 	span := check.Child(slug, describeWait(declaredHosts(resp)))
@@ -129,9 +130,9 @@ func declaredHosts(resp *contractv1.GetHostnameStatusResponse) int {
 
 func describeWait(declared int) progress.Title {
 	if declared == 1 {
-		return progress.Waiting.Title("for the one declared production hostname to answer")
+		return progress.Waiting.Title("for the production hostname to answer")
 	}
-	return progress.Waiting.Title(fmt.Sprintf("for the %d declared production hostnames to answer", declared))
+	return progress.Waiting.Title(fmt.Sprintf("for %d production hostnames to answer", declared))
 }
 
 func jittered(every time.Duration) time.Duration {
@@ -212,7 +213,7 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "status",
-		Short: "Show, per production hostname, its certificate, the records it needs, what last answered for it and what is still outstanding",
+		Short: "Show each production hostname's certificate, records and what is outstanding",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()

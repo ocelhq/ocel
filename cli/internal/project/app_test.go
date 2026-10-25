@@ -178,7 +178,7 @@ func TestAnEntrypointInTheWrongFormForItsFrameworkIsRefusedAtLoad(t *testing.T) 
 		{"go", "/srv/cmd/api", "directory"},
 		{"go", "../cmd/api", "directory"},
 		{"python", "my-pkg:app", "module"},
-		{"python", "../main.py", "inside the app's directory"},
+		{"python", "../main.py", "outside the app's directory"},
 		{"python", "bin/serve", ".py"},
 	} {
 		t.Run(tt.framework+" "+tt.entrypoint, func(t *testing.T) {

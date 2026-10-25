@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -30,6 +32,7 @@ type Transcript struct {
 	wrote         bool
 	blank         bool
 	waitingOnPage bool
+	identified    *streamv1.IdentityEvent
 
 	stopHeartbeats    func()
 	stopTicks         func()
@@ -90,7 +93,7 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 		s.shownForEvent = true
 		s.resume(ev)
 	case ev.GetIdentity() != nil:
-		s.printBlock(identityLines(s.present, ev.GetIdentity()))
+		s.identify(ev.GetIdentity())
 	case ev.GetOperation().GetPlan() != nil:
 		s.printBlock(planLines(s.present, ev.GetOperation().GetPlan()))
 	case ev.GetOperation().GetDnsManualRecords() != nil:
@@ -103,6 +106,14 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 	case ev.GetOperation().GetBody() == nil && ev.GetCli() == nil && ev.GetOperation().GetMessage() != "":
 		s.within(span, s.detail(ev), s.standalone(ev))
 	}
+}
+
+func (s *Transcript) identify(identity *streamv1.IdentityEvent) {
+	if proto.Equal(identity, s.identified) {
+		return
+	}
+	s.identified = identity
+	s.printBlock(identityLines(s.present, identity))
 }
 
 func (s *Transcript) within(span string, inSpan, standalone blockLine) {
@@ -139,12 +150,16 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	partial := !failed && ev.GetOperation().GetLevel() >= progressv1.Level_LEVEL_WARN
+	grouped := s.present.GitHubActions && !failed && !partial && len(tracked.body) > 0
 	head := line{
 		level:   ev.GetOperation().GetLevel(),
 		status:  ended.GetStatus(),
 		message: ended.GetTitle(),
 		timing:  " in " + took + tally.finished(),
 		outcome: tracked.resources.summary(),
+	}
+	if tracked.resources.isSingle() && (grouped || !s.failed) {
+		head.outcome = ""
 	}
 	if failed {
 		head.message, head.timing = tracked.opened.GetOperation().GetMessage()+" failed", " after "+took+tally.finished()
@@ -156,7 +171,7 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 		head.status = progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED
 	}
 	header := tracked.header(head, s.present)
-	if s.present.GitHubActions && !failed && !partial && len(tracked.body) > 0 {
+	if grouped {
 		s.printGroup(header, tracked.body)
 		return
 	}

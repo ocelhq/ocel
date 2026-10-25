@@ -188,8 +188,7 @@ func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patc
 		return Network{}, err
 	}
 	if progress != nil {
-		progress.Say(fmt.Sprintf("Provisioning the network of the %s tier: a VPC of %s across %s, which its container apps, VPC-attached functions, databases and caches run in",
-			tier, layout.CIDR, strings.Join(zones, " and ")))
+		progress.Say(fmt.Sprintf("Provisioning the network: a VPC of %s across %s", layout.CIDR, strings.Join(zones, " and ")))
 	}
 	var raised Network
 	err = Shared.Raise(ctx, owner, tier, consumer.Project, func() ([]provider.PhysicalResource, error) {
@@ -211,7 +210,7 @@ func (s *Stacks) repatch(ctx context.Context, owner sharedstack.Owner, tier envi
 		return Network{}, err
 	}
 	if progress != nil {
-		progress.Say(fmt.Sprintf("Applying the transforms that patch the network of the %s tier: they differ from the ones it was provisioned with", tier))
+		progress.Say("Applying the changed transforms to the network")
 	}
 	return provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, current.Zones, patches), progress)
 }
@@ -230,7 +229,7 @@ func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provi
 		Name:   StackRef(tier).Name.String(),
 		Action: provider.ActionUpdate,
 		Part:   Part,
-		Reason: "the transforms that patch the network of the " + string(tier) + " tier differ from the ones it carries, so this deploy provisions it again with them, for every project in the tier",
+		Reason: "its transforms changed, for every project in the tier",
 		Slow:   true,
 	}, nil
 }
@@ -392,7 +391,7 @@ func NewChangeGroup(namespace string, tier environment.Tier) provider.ChangeGrou
 		Name:    StackRef(tier).Name.String(),
 		Action:  provider.ActionCreate,
 		Part:    Part,
-		Reason:  "the first container app, VPC-attached function, database or cache in the " + string(tier) + " tier adds the " + Part + " part: " + Summary,
+		Reason:  "added on first use",
 		Changes: createdBy(namespace, tier),
 	}
 }

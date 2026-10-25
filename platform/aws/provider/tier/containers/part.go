@@ -16,7 +16,7 @@ func NewPart(stacks *Stacks, store records.Store, namespace, region string) tier
 		RefuseInUse:   Shared.RefuseInUse,
 		Summary:       Summary,
 		Shape:         func(tier environment.Tier) []pricing.Shaped { return Shape(tier, Raised{}) },
-		RemovalReason: "this run removes it; the next container deploy adds it again",
+		RemovalReason: "the next container deploy adds it again",
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 			return ReadPart(ctx, store, namespace, region, tier)
 		},

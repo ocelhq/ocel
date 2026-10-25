@@ -149,7 +149,7 @@ func provisionCompute[T any](
 			return nil, err
 		}
 		if err := removeRevisions(ctx, f, spec.Ref, c, held.physical, retry, spec.Images.Store, progress); err != nil && progress != nil {
-			progress.Warn(fmt.Sprintf("Left revisions %v of %s in place, and the next release of it tries again: %v", retry, held.physical, err))
+			progress.Warn(fmt.Sprintf("Left revisions %v of %s; the next release retries: %v", retry, held.physical, err))
 		}
 	}
 	return provisioned, nil

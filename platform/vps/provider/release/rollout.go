@@ -63,17 +63,13 @@ func (r Rollout) apps() string { return listed(r.Apps, func(app AppRollout) stri
 func (r Rollout) names() string { return listed(r.Apps, AppRollout.name) }
 
 func (r Rollout) waiting() string {
-	them := "it"
-	if len(r.Apps) > 1 {
-		them = "them"
-	}
 	apps := make([]string, 0, len(r.Apps))
 	gates := make([]string, 0, len(r.Apps))
 	for _, app := range r.Apps {
 		apps, gates = append(apps, app.App), append(gates, app.gate())
 	}
-	return fmt.Sprintf("Waiting up to %s for %s to answer 2xx on %s, then switching the proxy to %s",
-		r.DeployTimeout, inWords(apps), inWords(gates), them)
+	return fmt.Sprintf("Waiting up to %s for %s to answer 2xx on %s",
+		r.DeployTimeout, inWords(apps), inWords(gates))
 }
 
 func inWords(names []string) string {
@@ -306,7 +302,7 @@ func tellDrain(progress progress.Log, said string, window time.Duration) {
 			progress.Warn(fmt.Sprintf("Retired container %s still had %s in flight when its %s drain window closed: %s",
 				ContainerOf(fields[1]), requests(fields[2]), window, drainCeiling))
 		case len(fields) == 2 && fields[0] == boxapi.Drained:
-			progress.Say("Drained retired container " + ContainerOf(fields[1]) + ": nothing was in flight")
+			progress.Say("Drained retired container " + ContainerOf(fields[1]))
 		}
 	}
 }

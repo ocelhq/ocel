@@ -55,7 +55,7 @@ type NoConfigError struct {
 }
 
 func (e NoConfigError) Error() string {
-	return fmt.Sprintf("no %s found in %s or any parent directory.\nRun `%s` and try again, where <id> is one of %s, or run `%s` to deploy through a console that offers Ocel Cloud",
+	return fmt.Sprintf("no %s found in %s or any parent directory.\nRun `%s`, where <id> is one of %s, or `%s` to deploy to Ocel Cloud",
 		english.Or(e.Names), e.StartDir, initWithProviderCommand, strings.Join(configdoc.ProviderIDs(), ", "), loginCommand)
 }
 

@@ -39,6 +39,6 @@ func takeConnectorSchedule(ctx context.Context, c *gcloud.Clients, progress prog
 	if err := gcloud.TakeSchedule(ctx, c, c.Connector()); err != nil {
 		return err
 	}
-	gcloud.EnsureProgress(progress).Say("Deleted Cloud Scheduler job " + c.Connector() + ", which woke the connector for its heartbeat")
+	gcloud.EnsureProgress(progress).Say("Deleted Cloud Scheduler job " + c.Connector())
 	return nil
 }

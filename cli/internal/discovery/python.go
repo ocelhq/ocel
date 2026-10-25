@@ -126,11 +126,11 @@ func pythonPackage(runRoot, dir string) (string, error) {
 		return "", fmt.Errorf("discovery: %s is not inside the project at %s", dir, runRoot)
 	}
 	if rel == "." {
-		return "", fmt.Errorf("discovery: %s holds the python project file, so no import names it: move the declarations into a package beside the project file", dir)
+		return "", fmt.Errorf("discovery: %s holds the python project file: move the declarations into a package beside it", dir)
 	}
 	segments := strings.Split(filepath.ToSlash(rel), "/")
 	if len(segments) != 1 {
-		return "", fmt.Errorf("discovery: %s is a python package %s imports as %q, and a discovery folder is a package beside the project file, not under one", dir, runRoot, strings.Join(segments, "."))
+		return "", fmt.Errorf("discovery: %s is the python package %q under %s: move it beside the project file", dir, strings.Join(segments, "."), runRoot)
 	}
 	return segments[0], nil
 }

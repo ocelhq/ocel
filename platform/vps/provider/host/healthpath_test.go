@@ -73,7 +73,7 @@ func TestTheFirstPathThatIsNotAbsentIsTheHealthPathAndTheDeploySaysHowItWasFound
 	if path != "/health" {
 		t.Errorf("FindHealthPath() = %q, want /health: a 503 means the path exists and the app is not healthy yet", path)
 	}
-	if want := "node answers its health check on /health (found by probing /up, /health)"; !slices.Contains(said, want) {
+	if want := "node answers its health check on /health"; !slices.Contains(said, want) {
 		t.Errorf("the deploy said %q, want it to say %q", said, want)
 	}
 	if len(said) == 0 || !strings.HasPrefix(said[0], "Waiting up to 1m0s for node to answer HTTP") {

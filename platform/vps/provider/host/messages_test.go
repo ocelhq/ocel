@@ -106,7 +106,7 @@ func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 	}
 	heardAll(t, progress,
 		"INFO Stopped routing "+boxapi.ConnectorPath+" to the connector",
-		"INFO Removed the connector's systemd unit ocel-connector.service, its binary /usr/local/lib/ocel/connector and directory /etc/ocel/connector",
+		"INFO Removed the connector",
 	)
 }
 

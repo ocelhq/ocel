@@ -43,8 +43,8 @@ func StaleEdgeKeyNotice(c EdgeCredentials, now time.Time, tier environment.Tier)
 	if !c.Stale(now) {
 		return ""
 	}
-	return fmt.Sprintf("The %s edge signs into this account with access key %s, minted %d days ago; run `ocel bootstrap` to rotate it (keys older than %d days are rotated there), then re-deploy each project so its worker picks the new key up",
-		tier, c.AccessKeyID, int(now.Sub(c.CreatedAt).Hours()/24), int(EdgeKeyMaxAge.Hours()/24))
+	return fmt.Sprintf("The %s edge's access key %s is %d days old: run `ocel bootstrap` to rotate it",
+		tier, c.AccessKeyID, int(now.Sub(c.CreatedAt).Hours()/24))
 }
 
 type edgeKeyOutcome struct {

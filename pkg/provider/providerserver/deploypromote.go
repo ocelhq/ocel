@@ -35,7 +35,7 @@ func (r *deployRun) promote(ctx context.Context, promotion router.Promotion) err
 			}
 			if err := r.serveDeployment(ctx, r.spec.Pointer, promotion, r.readAppRouter, progress); err != nil {
 				progress.Warn(fmt.Sprintf("Promotion %s serves on %s, but not on its own deployment hostname: %v",
-					promotion.PromotionID, joinNames(edge.ListPreviewHostnames(r.aliases)), err))
+					shortPromotionID(promotion.PromotionID), joinNames(edge.ListPreviewHostnames(r.aliases)), err))
 				r.deployment = nil
 			}
 			if err := r.checkpointPromoted(ctx); err != nil {

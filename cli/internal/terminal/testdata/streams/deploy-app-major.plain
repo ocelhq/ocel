@@ -26,14 +26,14 @@ INFO  [provision] ✓ cloudflare: Reconciled the routes for acme in production i
 
     routes pruned: 3
 
-INFO  [provision] ✓ production: Provisioned shared resource assets in 4s — 1 resource created
+INFO  [provision] ✓ production: Provisioned shared resource assets in 4s
       + assets (aws:s3/bucket:Bucket) created
-INFO  [deploy] ✓ api: Deployed the serverless app to production in 8s (1/2) — 1 resource updated
+INFO  [deploy] ✓ api: Deployed the serverless app to production in 8s (1/2)
       Uploading function api's artifact (1.2 MiB)
       Warming 1 bundle, 8 at a time
       Warmed 1/1 bundles in 1s
       ~ api (aws:lambda/function:Function) updated
-INFO  [deploy] ✓ web: Deployed the container app to production in 21s (2/2) — 1 resource updated
+INFO  [deploy] ✓ web: Deployed the container app to production in 21s (2/2)
       Sending web's image to 123456789012.dkr.ecr.us-east-1.amazonaws.com/acme-web (1 of 1)
 
     5f70bf18a086: Pushed
@@ -50,7 +50,6 @@ INFO  [provision] ✓ cloudflare: Attached production hostname acme.example.com 
 INFO  [promote] ✓ production: Switched traffic to promotion p-7f3a in 2s
 
 ✓ Deployed acme to prod in 54s
-  on aws 123456789012 · us-east-1 · as deploy
   prod now serves promotion p-7f3a
   web  https://acme.example.com
   api  https://api.acme.example.com

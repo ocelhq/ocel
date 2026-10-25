@@ -26,4 +26,3 @@ INFO  [provision] ✓ production: Updated bootstrap stacks ocel-bootstrap and oc
       Ensuring the Pulumi passphrase (SSM SecureString)
 
 ✓ Bootstrapped the production environment in 11s
-  on aws 123456789012 · us-east-1 · as deploy

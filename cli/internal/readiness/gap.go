@@ -85,11 +85,11 @@ type MissingPartsError struct {
 
 func (e MissingPartsError) Error() string {
 	if e.Unrecorded {
-		return fmt.Sprintf("the %s bootstrap does not include what this project needs: %s.\nA dry run records nothing: %s",
+		return fmt.Sprintf("the %s bootstrap is missing %s: %s",
 			TierName(e.Tier), strings.Join(e.Gap.Missing, ", "), e.Hint())
 	}
 	return fmt.Sprintf(
-		"the %s bootstrap does not include what this project needs: %s.\nRun `%s` and try again",
+		"the %s bootstrap is missing %s.\nRun `%s`",
 		TierName(e.Tier), strings.Join(e.Gap.Missing, ", "), e.Gap.RepairCommand(e.Tier),
 	)
 }
@@ -97,7 +97,7 @@ func (e MissingPartsError) Error() string {
 func (MissingPartsError) Missing() prerequisite.Kind { return prerequisite.Bootstrap }
 
 func (e MissingPartsError) Finding() string {
-	return fmt.Sprintf("The %s bootstrap does not include what this project needs: %s.", TierName(e.Tier), strings.Join(e.Gap.Missing, ", "))
+	return fmt.Sprintf("The %s bootstrap is missing %s.", TierName(e.Tier), strings.Join(e.Gap.Missing, ", "))
 }
 
 func (e MissingPartsError) Remedy() string {
@@ -109,7 +109,7 @@ func (e MissingPartsError) Remedy() string {
 
 func (e MissingPartsError) Hint() string {
 	if e.Unrecorded {
-		return "deploy without --dry, which records what this project wants, then run `" + e.Gap.RepairCommand(e.Tier) + "`"
+		return "deploy without --dry, then run `" + e.Gap.RepairCommand(e.Tier) + "`"
 	}
 	return e.Gap.RepairCommand(e.Tier)
 }
@@ -132,7 +132,7 @@ func (g Gap) RefuseIncomplete(tier environmentv1.Tier) error {
 		return nil
 	}
 	return fmt.Errorf(
-		"the %s bootstrap is behind what this build has: %s.\nRun `%s` and try again",
+		"the %s bootstrap is behind this build: %s.\nRun `%s`",
 		TierName(tier), strings.Join(g.Stale, ", "), g.RepairCommand(tier),
 	)
 }
@@ -141,7 +141,7 @@ func (g Gap) WarnUnreadable(tier environmentv1.Tier, span *run.Span) {
 	if len(g.Unreadable) == 0 {
 		return
 	}
-	span.Warn(fmt.Sprintf("Could not read part of the %s bootstrap, so whether it is current is unknown: %s.",
+	span.Warn(fmt.Sprintf("Could not tell whether the %s bootstrap is current: %s.",
 		TierName(tier), strings.Join(g.Unreadable, ", ")))
 }
 
@@ -149,6 +149,6 @@ func (g Gap) WarnStale(tier environmentv1.Tier, span *run.Span) {
 	if len(g.Stale) == 0 {
 		return
 	}
-	span.Warn(fmt.Sprintf("The %s bootstrap is behind what this build has: %s.\nRun `%s` to refresh it.",
+	span.Warn(fmt.Sprintf("The %s bootstrap is behind this build: %s.\nRun `%s`.",
 		TierName(tier), strings.Join(g.Stale, ", "), g.RepairCommand(tier)))
 }

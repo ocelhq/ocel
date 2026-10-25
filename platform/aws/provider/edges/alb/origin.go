@@ -18,7 +18,6 @@ func planProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.OriginGroupName,
 		Action: edge.PlanDelete,
-		Reason: "the rules the load balancer routes this project's hostnames by",
 	}
 	for _, hostname := range scope.Hostnames {
 		group.Changes = append(group.Changes, edge.PlanChange{Kind: kindHostRule, Name: hostname, Action: edge.PlanDelete})

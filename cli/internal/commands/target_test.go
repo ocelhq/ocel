@@ -148,7 +148,7 @@ func TestATypeScriptConfigWithoutNodeRunsOnOcelCloudOnlyAsTheConsoleProjectItIsL
 			if err != nil {
 				t.Fatal(err)
 			}
-			if target.Project.Slug != tt.wantSlug || !strings.Contains(target.Derived, "ocel.config.ts needs node") {
+			if target.Project.Slug != tt.wantSlug || !strings.Contains(target.Derived, "node is not on PATH to read ocel.config.ts") {
 				t.Fatalf("slug = %q, derived = %q, want %s and why", target.Project.Slug, target.Derived, tt.wantSlug)
 			}
 		})

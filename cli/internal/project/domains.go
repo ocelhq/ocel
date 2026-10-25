@@ -39,7 +39,7 @@ func normalizeProductionDomains(raw configdoc.StringList, preview string) ([]str
 			continue
 		}
 		if preview != "" && host == preview {
-			return nil, fmt.Errorf("production domain %q is identical to the preview wildcard %q; production and preview cannot be served on the same hostname pattern — give them different hostnames", host, preview)
+			return nil, fmt.Errorf("production domain %q is the preview wildcard %q too: give them different hostnames", host, preview)
 		}
 		if seen[host] {
 			continue

@@ -2,12 +2,11 @@ package promotions
 
 import (
 	"context"
-	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -36,19 +35,9 @@ func activePromotion(history []*contractv1.PromotionHistoryEntry) *contractv1.Pr
 	return nil
 }
 
-func deployedReleases(releaseByApp map[string]string) string {
-	if len(releaseByApp) == 0 {
-		return "—"
+func formatCreated(present terminal.Presentation, ts int64) string {
+	if present.TTY {
+		return present.EpochAge(ts)
 	}
-	apps := make([]string, 0, len(releaseByApp))
-	for app := range releaseByApp {
-		apps = append(apps, app)
-	}
-	slices.Sort(apps)
-
-	pairs := make([]string, 0, len(apps))
-	for _, app := range apps {
-		pairs = append(pairs, app+"="+releaseByApp[app])
-	}
-	return strings.Join(pairs, " ")
+	return terminal.EpochDateTime(ts)
 }

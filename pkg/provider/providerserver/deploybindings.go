@@ -173,10 +173,10 @@ func (r *deployRun) warnShadowed(progress progress.Log, resources []provider.Res
 			continue
 		}
 		progress.Warn(fmt.Sprintf(
-			"A binding named %q is already published to %s, and this deploy provisions %s beside it. "+
-				"Ocel binds neither to the other on its own: put %q in `bindings` — \"bindings\": { %q: { %q: %q } } — to consume the published record instead",
+			"A binding named %q is already published to %s, and this deploy provisions %s beside it: "+
+				"to consume the published one, set \"bindings\": { %q: { %q: %q } }",
 			resource.Declared, describeCoordinate(string(r.spec.Tier), bindingEnvironment(r.spec)), resource.Name,
-			resource.Declared, string(resource.Type), resource.Declared, "@"+resource.Declared))
+			string(resource.Type), resource.Declared, "@"+resource.Declared))
 	}
 }
 

@@ -10,8 +10,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-const reasonDatabaseRemoved = "it keeps the project's values, runs and tag records, and the project leaves the tier"
-
 type ProjectRuns func(ctx context.Context, tier environment.Tier, project string) error
 
 type projectStores struct {
@@ -36,7 +34,7 @@ func planRemoveProject(ctx context.Context, b bootstrap.Engine, tier environment
 	if err != nil || !found || recorded == b.Clients.SharedDatabase(tier) {
 		return nil, err
 	}
-	return []provider.Change{deleted(bootstrap.KindDatabase, recorded, reasonDatabaseRemoved)}, nil
+	return []provider.Change{deleted(bootstrap.KindDatabase, recorded, "")}, nil
 }
 
 func removeProject(ctx context.Context, b bootstrap.Engine, stores projectStores, tier environment.Tier, project string, log progress.Log) error {

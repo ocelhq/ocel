@@ -59,7 +59,7 @@ func (p *Provider) Retire(ctx context.Context, apps provider.LiveApps, progress 
 	return topic.NewWorkers(p.components()).Retire(ctx, ref, func(name string, worker boxapi.QueueWorker) bool {
 		reason, retired := retiredReason(apps, worker)
 		if retired {
-			progress.Say(fmt.Sprintf("Taking down worker %s's container %s: %s", name, worker.Container, reason))
+			progress.Say(fmt.Sprintf("Taking down worker %s: %s", name, reason))
 		}
 		return retired
 	})

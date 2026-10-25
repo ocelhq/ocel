@@ -139,7 +139,7 @@ func guardNewProject(ctx context.Context, policy consent.Policy, check *run.Span
 	if len(knownSlugs) == 0 {
 		return true, nil
 	}
-	finding := fmt.Sprintf("No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s",
+	finding := fmt.Sprintf("%q is a NEW project. Already deployed: %s",
 		cfg.Slug, strings.Join(knownSlugs, ", "))
 	check.Warn(finding)
 	return policy.Confirm(ctx, check, consent.Guard{
@@ -164,13 +164,12 @@ func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string) e
 	}
 	var refusals []string
 	if claimed.Len() > 0 {
-		refusals = append(refusals, "another project already serves a hostname this project declares:"+claimed.String()+
-			"\n    → a hostname belongs to one project, so deploying would take it over: remove it from this project's "+
-			configName+", or tear the owning project down (`ocel projects destroy <slug>`), then deploy again")
+		refusals = append(refusals, "another project serves a hostname this project declares:"+claimed.String()+
+			"\n    → remove it from "+configName+", or run `ocel projects destroy <slug>` on its owner")
 	}
 	if unread.Len() > 0 {
-		refusals = append(refusals, "the provider could not say whether another project serves a hostname this project declares:"+unread.String()+
-			"\n    → deploying would take the hostname over if another project owns it: deploy again once the provider can read who serves it")
+		refusals = append(refusals, "could not check who serves a hostname this project declares:"+unread.String()+
+			"\n    → deploy again")
 	}
 	if len(refusals) == 0 {
 		return nil

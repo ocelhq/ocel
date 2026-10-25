@@ -977,7 +977,7 @@ func TestAWriteWithoutTheVariablesKeyOffersTheBootstrapThatAddsIt(t *testing.T) 
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "does not include what this project needs: " + provider.VariablesKeyPart + "."; !strings.Contains(stderr.String(), want) {
+		if want := "is missing " + provider.VariablesKeyPart + "."; !strings.Contains(stderr.String(), want) {
 			t.Errorf("stream = %q, want it to name %q", stderr.String(), want)
 		}
 		if strings.Contains(err.Error(), fake.PartImages) {

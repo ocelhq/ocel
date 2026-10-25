@@ -72,7 +72,7 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 	}
 	for _, hostname := range slices.Concat(took, moved) {
 		if progress != nil && slices.Contains(took, hostname) {
-			progress.Say("Routing " + hostname + " to " + hosts[hostname].App + "'s Cloud Run service " + hosts[hostname].Service)
+			progress.Say("Routing " + hostname + " to " + hosts[hostname].App)
 		}
 		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
 			if len(took) == 0 {

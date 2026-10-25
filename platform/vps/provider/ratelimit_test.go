@@ -136,7 +136,7 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 		t.Errorf("Certificate() = %+v, want the handle the proxy obtains and renews under", cert)
 	}
 	said := strings.Join(spoken.Lines(), "\n")
-	if !strings.HasPrefix(said, "WARN Could not read the front proxy's certificate state for pr-9.preview.acme.com, so its rate limits go unchecked: ") ||
+	if !strings.HasPrefix(said, "WARN Could not check certificate rate limits for pr-9.preview.acme.com: ") ||
 		!strings.Contains(said, "Cannot connect to the Docker daemon") {
 		t.Errorf("a box whose engine answered nothing said %q: the read that never happened is reported without the engine's own words, and the two silences read as one", said)
 	}

@@ -234,7 +234,7 @@ func (d *deployRun) fill(ctx context.Context, declarations *variables.Declaratio
 
 	resume := d.span.Hold(&streamv1.WaitingEvent{Missing: refusal.Variables(), Url: editor.URL})
 	if err := d.dependencies.OpenBrowser(editor.URL); err != nil {
-		d.span.Warn("Couldn't open your browser automatically — open the link above yourself.")
+		d.span.Warn("Couldn't open your browser; open the link above.")
 	}
 
 	waiting := d.span.Trace(d.cfg.Slug, "await_human_input")

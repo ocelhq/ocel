@@ -96,7 +96,7 @@ func (d *hostnames) add(ctx context.Context, progress progress.Log) error {
 		attachedAny = attachedAny || changed
 	}
 	if !attachedAny && d.host == "" {
-		progress.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.declared(), ", ")))
+		progress.Say("Already serving " + strings.Join(d.declared(), ", "))
 	}
 	return nil
 }
@@ -186,7 +186,7 @@ func (d *hostnames) notePreviousRouter(host string, hostState *stackrecords.Host
 		switch {
 		case err != nil && movesFront:
 		case err != nil:
-			progress.Warn(fmt.Sprintf("%s was claimed on %s, which no longer pairs with %s, so that claim stays until the router's stack is removed",
+			progress.Warn(fmt.Sprintf("%s keeps its claim on %s, which no longer pairs with %s, until the router's stack is removed",
 				host, hostState.Router, describeFront(d.front.Kind())))
 		case origin != nil:
 			hostState.PreviousRouter = hostState.Router
@@ -203,7 +203,7 @@ func (d *hostnames) releasePreviousRouter(ctx context.Context, host string, host
 	}
 	if hostState.PreviousRouter != answering {
 		if err := d.disclaim(ctx, host, hostState.PreviousRouter); err != nil {
-			progress.Warn(fmt.Sprintf("%s answers through %s, but giving its claim back to %s failed, so the next deploy or `ocel domain add` tries again: %v",
+			progress.Warn(fmt.Sprintf("%s answers through %s, but releasing its claim on %s failed; the next deploy retries: %v",
 				host, answering, hostState.PreviousRouter, err))
 			d.state.SetHost(host, *hostState)
 			return d.checkpoint(ctx)
@@ -370,11 +370,11 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, previou
 	if err != nil {
 		return err
 	}
-	runProgress.Say(fmt.Sprintf("Unbinding %s from %s it moved off", host, describeFront(previous)))
+	runProgress.Say(fmt.Sprintf("Unbinding %s from %s", host, describeFront(previous)))
 	if err := progress.ReportWarning(runProgress, stack.UnbindDomain(ctx, host)); err != nil {
 		return err
 	}
-	runProgress.Say(fmt.Sprintf("%s answers on both fronts until resolvers drop the record they cached: %s",
+	runProgress.Say(fmt.Sprintf("%s answers on both fronts until cached DNS expires: %s",
 		host, describeRecordTTL(d.cutover.dns)))
 	return nil
 }

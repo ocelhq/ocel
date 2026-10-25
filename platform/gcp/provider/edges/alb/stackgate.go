@@ -128,7 +128,7 @@ func (s *stack) forgetGatedHosts(ctx context.Context, hosts []string, log progre
 		return recorded, true
 	})
 	if err != nil {
-		log.Warn("The " + string(s.state.Tier) + " gate still lists " + hosts[0] + ", which is no longer served: " + err.Error())
+		log.Warn("The gate still lists " + hosts[0] + ": " + err.Error())
 	}
 }
 

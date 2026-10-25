@@ -84,7 +84,7 @@ func AdoptOffers(
 	if err != nil {
 		return err
 	}
-	say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (Secret Manager)", kind))
+	say.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker", kind))
 	adopted := AdoptedEdge{ReleasesStore: AdoptedWorker{Endpoint: offered.Endpoint, ScriptName: offered.Name}}
 	credentials := storedCredentials
 	if offered.BootstrapCredential != "" {

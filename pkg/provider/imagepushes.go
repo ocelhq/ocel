@@ -99,14 +99,14 @@ func (p ImagePushes) PushRemoved(ctx context.Context, progress progress.Log) err
 		present, err := p.Store.Has(ctx, push)
 		if err != nil {
 			if progress != nil {
-				progress.Warn(fmt.Sprintf("Could not confirm %s still holds %s after its release provisioned, so a removal that ran meanwhile would go unnoticed: %v",
+				progress.Warn(fmt.Sprintf("Could not confirm %s still holds %s: %v",
 					p.Store.Destination(), push.ImageRef, err))
 			}
 			continue
 		}
 		if !present {
 			if progress != nil {
-				progress.Warn(fmt.Sprintf("%s left %s while its release provisioned, and is sent again so the release can still start tasks from it", push.ImageRef, p.Store.Destination()))
+				progress.Warn(fmt.Sprintf("%s left %s mid-release: sending it again", push.ImageRef, p.Store.Destination()))
 			}
 			removed = append(removed, push)
 		}

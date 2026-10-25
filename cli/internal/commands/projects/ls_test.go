@@ -25,19 +25,34 @@ func TestProjectsListsEveryProjectWithItsProductionPreviewsEdgeAndLastDeploy(t *
 	if !strings.HasPrefix(lines[0], "fake 000000000000") {
 		t.Errorf("header = %q, want the provider's identity", lines[0])
 	}
-	for _, column := range []string{"PROJECT", "PRODUCTION", "PREVIEWS", "EDGE", "LAST DEPLOY"} {
-		if !strings.Contains(lines[1], column) {
-			t.Errorf("table header = %q, want a %s column", lines[1], column)
-		}
+	if row, want := rowOf(t, got.stdout, "PROJECT"), []string{"PROJECT", "PRODUCTION", "PREVIEWS", "EDGE", "LAST", "DEPLOY"}; !slices.Equal(row, want) {
+		t.Errorf("table header = %v, want %v", row, want)
 	}
-	if row, want := rowOf(t, got.stdout, "test-app"), []string{"test-app", "live", "2", "relay", "2026-10-05"}; !slices.Equal(row, want) {
+	if row, want := rowOf(t, got.stdout, "test-app"), []string{"test-app", "●", "live", "2", "relay", "2026-10-05"}; !slices.Equal(row, want) {
 		t.Errorf("test-app row = %v, want %v", row, want)
 	}
-	if row, want := rowOf(t, got.stdout, "blog"), []string{"blog", "—", "—", "direct", "2026-09-14"}; !slices.Equal(row, want) {
+	if row, want := rowOf(t, got.stdout, "blog"), []string{"blog", "○", "none", "—", "direct", "2026-09-14"}; !slices.Equal(row, want) {
 		t.Errorf("blog row = %v, want %v", row, want)
 	}
-	if strings.Index(got.stdout, "\nblog") > strings.Index(got.stdout, "\ntest-app") {
+	if strings.Index(got.stdout, "  blog") > strings.Index(got.stdout, "  test-app") {
 		t.Errorf("output = %q, want the projects in slug order", got.stdout)
+	}
+	if last := lines[len(lines)-2]; last != "2 projects" {
+		t.Errorf("last line = %q, want the count of projects", last)
+	}
+}
+
+func TestProjectsOnATerminalColoursALiveProduction(t *testing.T) {
+	project := deployedToBothTiers(t)
+	invocation := clitest.NewInvocation()
+	onATerminal(&invocation)
+
+	got := runProjects(t, invocation, project.Root, strings.NewReader(""))
+	if got.err != nil {
+		t.Fatalf("ocel projects err = %v; run=%s", got.err, got.run)
+	}
+	if want := "\x1b[32m● live\x1b[0m"; !strings.Contains(got.stdout, want) {
+		t.Errorf("output = %q, want live production in green", got.stdout)
 	}
 }
 

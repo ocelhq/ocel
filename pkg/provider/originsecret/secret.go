@@ -20,9 +20,9 @@ const (
 )
 
 const (
-	reasonStale           = "it is older than %d days and is rotated; the one it replaces stays accepted for %d days"
-	reasonRetired         = "the secret it replaced %d days ago is retired; a release not re-deployed since stops answering its front"
-	reasonRetiredAndStale = "it is rotated and the secret it replaced %d days ago is retired; a release not re-deployed since the earlier rotation stops answering its front"
+	reasonStale           = "older than %d days; the old one stays accepted for %d days"
+	reasonRetired         = "retires the one replaced %d days ago: a release not re-deployed since stops answering"
+	reasonRetiredAndStale = "rotates, and retires the one replaced %d days ago: a release not re-deployed since stops answering"
 )
 
 type Secret struct {

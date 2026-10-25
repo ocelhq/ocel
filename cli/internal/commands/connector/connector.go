@@ -182,13 +182,26 @@ func requireProviderID(ctx context.Context, dependencies Dependencies, cfg *proj
 }
 
 func printConnector(out io.Writer, registered *consolev1.Connector, live console.Liveness) {
-	fmt.Fprintf(out, "%s\n", terminal.PaletteFor(out).Bold(registered.GetTarget()))
-	fmt.Fprintf(out, "  compute %s over %s, %s\n", formatOptional(console.ComputeNameOf(registered.GetCompute()), "unset"), reachName(registered.GetReach()), live)
-	fmt.Fprintf(out, "  url %s\n", formatOptional(registered.GetUrl(), "none"))
-	fmt.Fprintf(out, "  can %s\n", formatCapabilities(registered.GetCapabilities()))
+	palette := terminal.PaletteFor(out)
+	fmt.Fprintf(out, "%s  %s\n", palette.Bold(registered.GetTarget()), formatLiveness(palette, live))
+	fields := terminal.NewTable(terminal.Column{}, terminal.Column{})
+	fields.Row(palette.Muted("compute"), formatOptional(console.ComputeNameOf(registered.GetCompute()), "unset")+" over "+reachName(registered.GetReach()))
+	fields.Row(palette.Muted("url"), formatOptional(registered.GetUrl(), terminal.NoValue))
+	fields.Row(palette.Muted("can"), formatCapabilities(registered.GetCapabilities()))
 	if denied := registered.GetLastDenied(); denied != nil {
-		fmt.Fprintf(out, "  last refused %s at %s: %s\n", denied.GetVerb(), terminal.FormatRFC3339(timeOf(denied.GetAt())), denied.GetMessage())
+		fields.Row(palette.Muted("last refused"), palette.Failure(fmt.Sprintf("%s at %s: %s", denied.GetVerb(), terminal.FormatRFC3339(timeOf(denied.GetAt())), denied.GetMessage())))
 	}
+	fmt.Fprint(out, fields.Render(palette, "  "))
+}
+
+func formatLiveness(palette terminal.Palette, live console.Liveness) string {
+	switch live {
+	case console.Online:
+		return palette.Health(terminal.Healthy, string(live))
+	case console.Offline:
+		return palette.Health(terminal.Failing, string(live))
+	}
+	return palette.Health(terminal.Inactive, string(live))
 }
 
 func reachName(reach consolev1.ConnectorReach) string {

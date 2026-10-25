@@ -194,7 +194,7 @@ func (p *cloudFront) PlanSharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "bootstrap-scoped: every project's routes are read from the preview resolver function and its key-value store",
+		Reason: "bootstrap-scoped",
 	}
 }
 

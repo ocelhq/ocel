@@ -228,7 +228,7 @@ func (s Stack) Release(ctx context.Context, open func(context.Context, provider.
 		return false, fmt.Errorf("mark the shared %s for the %s tier as going down: %w", s.Subject, ref.Tier, err)
 	}
 	if progress != nil {
-		progress.Say("Taking down the shared " + s.Subject + " for the " + string(ref.Tier) + " tier: the last " + s.Consumer + " in it is gone")
+		progress.Say("Taking down the shared " + s.Subject + ": no " + s.Consumer + " is left")
 	}
 	return true, s.retire(ctx, owner, store, ref.Tier, progress)
 }

@@ -37,11 +37,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-var nodeLine = regexp.MustCompile(`(?m)^(  ✓ node is needed — .*) — node .* on PATH$`)
+var nodeLine = regexp.MustCompile(`(?m)^  ✓ node .* on PATH$`)
 
 func rendered(t *testing.T, out string) string {
 	t.Helper()
-	return nodeLine.ReplaceAllString(out, "$1 — node vX on PATH")
+	return nodeLine.ReplaceAllString(out, "  ✓ node vX on PATH")
 }
 
 func exitCode(t *testing.T, err error) int {
@@ -70,7 +70,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 
 	preview := section{name: "Preview"}
 	preview.warn("no preview domain", "run `ocel domain use '*.preview.example.com' --preview`")
-	preview.neutral("not set up — run `ocel bootstrap preview` to add previews")
+	preview.neutral("not set up — run `ocel bootstrap preview`")
 	found.add(preview)
 
 	var out bytes.Buffer
@@ -87,7 +87,7 @@ func TestDoctorRendersEveryVerdict(t *testing.T) {
 		"Preview",
 		"  ⚠ no preview domain",
 		"    → run `ocel domain use '*.preview.example.com' --preview`",
-		"  – not set up — run `ocel bootstrap preview` to add previews",
+		"  – not set up — run `ocel bootstrap preview`",
 		"",
 		"1 problem, 1 warning.",
 		"",
@@ -229,7 +229,7 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 
 	want := strings.Join([]string{
 		"Project  my-shop · ocel.config.ts",
-		"  ✓ node is needed — ocel.config.ts is TypeScript, an app is JavaScript, this project declares resources in JavaScript — node vX on PATH",
+		"  ✓ node vX on PATH",
 		"  ✓ config loads — 2 apps (web, api)",
 		"    web: node (set in ocel.config.ts)",
 		"    api: node (set in ocel.config.ts)",
@@ -240,10 +240,10 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 		"  ✓ credentials valid",
 		"",
 		"Production  shop.example.com",
-		"  ✓ bootstrapped, current — `ocel bootstrap status production` lists its parts",
+		"  ✓ bootstrapped, current",
 		"",
 		"Preview  *.preview.example.com",
-		"  ✓ bootstrapped, current — `ocel bootstrap status preview` lists its parts",
+		"  ✓ bootstrapped, current",
 		"",
 		"Good to go.",
 		"",
@@ -405,7 +405,7 @@ func TestRunDoctorWarnsAboutAStaleStackNoPartRequires(t *testing.T) {
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
 		"  ⚠ fake-production-cache is stale",
-		"    → run `ocel bootstrap production` to refresh it",
+		"    → run `ocel bootstrap production`",
 		"1 warning.",
 	} {
 		if !strings.Contains(out, want) {
@@ -452,8 +452,8 @@ func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"  ✗ an apply never finished, so nothing recorded is a claim about what is provisioned",
-		"    → run `ocel bootstrap production` to plan the work that is left and finish it",
+		"  ✗ an apply never finished",
+		"    → run `ocel bootstrap production`",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -477,7 +477,7 @@ func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
 		"  ⚠ fake-production is stale",
-		"    → run `ocel bootstrap production` to refresh it",
+		"    → run `ocel bootstrap production`",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -576,7 +576,7 @@ export default {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"Preview\n  ⚠ no preview domain\n    → run `ocel domain use '*.preview.example.com' --preview`\n  – not set up — run `ocel bootstrap preview` to add previews\n",
+		"Preview\n  ⚠ no preview domain\n    → run `ocel domain use '*.preview.example.com' --preview`\n  – not set up — run `ocel bootstrap preview`\n",
 		"1 warning.",
 	} {
 		if !strings.Contains(out, want) {
@@ -660,7 +660,7 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 	for _, want := range []string{
 		"EXPIRING SOON",
 		"you placed it on this box and you renew it",
-		"    → replace it before it expires; nothing here renews a certificate you pinned",
+		"    → replace it before it expires: nothing renews a certificate you pinned",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -769,11 +769,11 @@ func TestDoctorPrintsALineForEachStepOfItsCheckAsTheStepEnds(t *testing.T) {
 		"Checked your credentials",
 		"Read the production bootstrap",
 		"Checked the hosts",
-		"Read what production has set up",
+		"Read the production setup",
 		"Checked the production hostnames",
 		"Checked your credentials",
 		"Read the preview bootstrap",
-		"Read what preview has set up",
+		"Read the preview setup",
 	}
 	if !slices.Equal(steps, want) {
 		t.Errorf("steps = %q, want %q; stderr:\n%s", steps, want, stderr.String())

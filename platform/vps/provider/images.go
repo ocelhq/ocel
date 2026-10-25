@@ -85,7 +85,7 @@ func (p pulled) pushRemovedImage(ctx context.Context, push provider.ImagePush, d
 	if err != nil || present {
 		return "", pulling
 	}
-	progress.Warn(fmt.Sprintf("%s left %s between this deploy finding it there and %s pulling it, so it is pushed again", push.ImageRef, p.target.Server, p.at))
+	progress.Warn(fmt.Sprintf("%s left %s before %s pulled it: pushing it again", push.ImageRef, p.target.Server, p.at))
 	if err := p.from.Push(ctx, push, progress); err != nil {
 		return "", err
 	}

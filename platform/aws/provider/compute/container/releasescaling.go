@@ -143,7 +143,7 @@ func (s ReleaseScaling) raise(ctx context.Context, services []releaseService, ta
 		if err := s.scale(ctx, service, least, most); err != nil {
 			return raised, err
 		}
-		progress.Say(fmt.Sprintf("Scaling %s release %s back up to %d tasks before it serves", service.release.App, service.release.Release, least))
+		progress.Say(fmt.Sprintf("Scaling %s release %s up to %d tasks", service.release.App, service.release.Release, least))
 	}
 	return raised, s.waitHealthy(ctx, raised.started)
 }
@@ -197,7 +197,7 @@ func (s ReleaseScaling) ScaleDown(ctx context.Context, demoted provider.DemotedR
 			errs = append(errs, err)
 			continue
 		}
-		progress.Say(fmt.Sprintf("%s release %s keeps running until %s, so a rollback to it is instant, then scales to zero tasks", service.release.App, service.release.Release, at.Format("15:04 MST")))
+		progress.Say(fmt.Sprintf("Scaling %s release %s to zero at %s", service.release.App, service.release.Release, at.Format("15:04 MST")))
 	}
 	for _, service := range older {
 		if !runsTasks(targets, service) {

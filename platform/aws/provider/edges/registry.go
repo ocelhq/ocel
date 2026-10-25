@@ -155,7 +155,7 @@ func IgnoredPinNote(front edge.Edge, certificates certs.Certificates, hostname s
 		return ""
 	}
 	return fmt.Sprintf(
-		"The certificate pinned for %s is ignored: the %s edge terminates TLS with a certificate of its own, so ocel neither requests nor uses one here",
+		"The certificate pinned for %s is ignored: the %s edge terminates TLS itself",
 		hostname, front.Kind(),
 	)
 }

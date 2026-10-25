@@ -30,7 +30,8 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 		return err
 	}
 
-	asJSON := invocation.Presentation(stdout).Format == terminal.FormatJSON
+	present := invocation.Presentation(stdout)
+	asJSON, palette := present.Format == terminal.FormatJSON, present.Palette()
 	if !opts.preview {
 		resp, err := listProductionHostnames(ctx, invocation, target)
 		if err != nil {
@@ -39,7 +40,7 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 		if asJSON {
 			return terminal.WriteResultJSON(stdout, domainListResult(resp))
 		}
-		renderBoundHostnames(stdout, resp, filepath.Base(target.Project.Path))
+		renderBoundHostnames(stdout, palette, resp, filepath.Base(target.Project.Path))
 		return nil
 	}
 	resp, err := listGlobalPreviewDomain(ctx, invocation, target)
@@ -49,7 +50,7 @@ func runDomainList(ctx context.Context, invocation commands.Invocation, cwd stri
 	if asJSON {
 		return terminal.WriteResultJSON(stdout, previewDomainResult(resp))
 	}
-	renderGlobalDomain(stdout, resp)
+	renderGlobalDomain(stdout, palette, resp)
 	return nil
 }
 
@@ -93,7 +94,7 @@ func runDomainAdd(ctx context.Context, invocation commands.Invocation, cwd, host
 	}
 	configured := cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)
 	if len(configured) == 0 {
-		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
+		return fmt.Errorf("no domains.production in %s: declare one, then run `ocel domain add` again", filepath.Base(cfg.Path))
 	}
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,
@@ -211,7 +212,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "ls",
-		Short: "List this project's production hostnames, or with --preview the global domain and the projects served on it",
+		Short: "List this project's production hostnames, or the global preview domain with --preview",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -228,7 +229,7 @@ func newListCommand(invocation commands.Invocation) *cobra.Command {
 func newAddCommand(invocation commands.Invocation) *cobra.Command {
 	return commands.DeclareRunEvents(commands.DeclareMutating(&cobra.Command{
 		Use:   "add [host]",
-		Short: "Provision the certificate, the edge surface and the DNS for this project's production hostnames",
+		Short: "Provision certificates, edge and DNS for this project's production hostnames",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()
@@ -244,7 +245,7 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "rm [host]",
-		Short: "Unbind production hostnames this project no longer declares, and remove what ocel created for them",
+		Short: "Unbind undeclared production hostnames and remove what ocel created for them",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()

@@ -128,6 +128,6 @@ func sayIfDeclined(span *run.Span, granted bool, err error) (bool, error) {
 	if err != nil || granted {
 		return granted, err
 	}
-	span.Say("Not confirmed, so this run changes nothing")
+	span.Say("Not confirmed; nothing changed")
 	return false, nil
 }

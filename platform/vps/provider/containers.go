@@ -78,7 +78,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 			return nil, err
 		}
 	case discovered != "":
-		progress.Say(app.App + " answers its health check on " + discovered + ", found by probing on an earlier release")
+		progress.Say(app.App + " answers its health check on " + discovered)
 	}
 	if err := p.images.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, spec.Ref.Name.Env, app.App, app.Image); err != nil {
 		return nil, err

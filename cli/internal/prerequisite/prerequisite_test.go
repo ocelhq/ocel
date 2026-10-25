@@ -109,7 +109,7 @@ func TestADeclinedSetupChangesNothingAndNamesTheCommand(t *testing.T) {
 	if recorded.runs != 0 {
 		t.Errorf("the setup ran %d times after it was declined, want never", recorded.runs)
 	}
-	want := "Not set up, so this run changes nothing. When you're ready: `ocel bootstrap production`"
+	want := "Not set up; nothing changed. Next: `ocel bootstrap production`"
 	if err.Error() != want {
 		t.Errorf("decline = %q, want %q", err, want)
 	}

@@ -71,7 +71,7 @@ try {
 	}
 
 	if _, err := exec.LookPath("node"); err != nil {
-		return nil, fmt.Errorf("%s is a TypeScript config, which needs node to read, and node is not on PATH: %w — install node, or write %s or %s instead, which need none", configPath, err, DefaultFileName, YAMLFileName)
+		return nil, fmt.Errorf("%s is TypeScript, and node is not on PATH: %w — install node, or write %s or %s instead", configPath, err, DefaultFileName, YAMLFileName)
 	}
 
 	cmd := exec.Command("node", outfile)

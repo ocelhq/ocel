@@ -210,7 +210,7 @@ func (c *Backend) current() (*s3store.Service, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.service == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no bucket, so there is nowhere to upload to"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no bucket"))
 	}
 	return c.service, nil
 }

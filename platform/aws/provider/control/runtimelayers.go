@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -34,7 +33,7 @@ func RuntimeLayersPart(layers account.LayerTeardownAPI, store account.RecordStor
 				if err != nil || !reading.Deployed.Present {
 					return err
 				}
-				log.Say(fmt.Sprintf("Deleting the %s tier's runtime layers (Lambda)", at))
+				log.Say("Deleting the runtime layers")
 				return account.DeleteRuntimeLayers(ctx, layers, store(reading.Deployed.StateTable), at, log)
 			},
 		},

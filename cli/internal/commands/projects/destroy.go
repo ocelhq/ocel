@@ -153,7 +153,17 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	target, err := readRemovalTarget(ctx, invocation, check, resolved, slug)
+	account, err := openAccount(ctx, invocation, check, resolved, policy.DryRun)
+	if err != nil {
+		check.End(err)
+		return nil, err
+	}
+	defer func() {
+		if account.provider != nil {
+			account.provider.Close()
+		}
+	}()
+	target, err := readRemovalTarget(ctx, check, account.provider, cfg, slug)
 	if err != nil {
 		check.End(err)
 		return nil, err
@@ -176,12 +186,25 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 			check.Say(fmt.Sprintf("nothing of %s in %s", slug, readiness.TierName(tier)))
 			continue
 		}
+		if slug == cfg.Slug && tier == account.tier {
+			if err := readiness.RefuseUnready(account.read.Response, account.provider, cfg, readiness.Request{Tier: tier, Require: readiness.Parts, DryRun: policy.DryRun}); err != nil {
+				check.End(err)
+				return nil, err
+			}
+			removals = append(removals, &tierRemoval{tier: tier, provider: account.provider})
+			account.provider = nil
+			continue
+		}
 		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, Cloud: resolved.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}})
 		if err != nil {
 			check.End(err)
 			return nil, err
 		}
 		removals = append(removals, &tierRemoval{tier: tier, provider: provider})
+	}
+	if account.provider != nil {
+		account.provider.Close()
+		account.provider = nil
 	}
 	check.End(nil)
 	if len(removals) == 0 {
@@ -244,19 +267,24 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 	return destroyed, nil
 }
 
-func readRemovalTarget(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, slug string) (removalTarget, error) {
-	cfg := resolved.Project
+type openedAccount struct {
+	provider *providerprocess.Provider
+	read     readiness.Preflight
+	tier     environmentv1.Tier
+}
+
+func openAccount(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, dry bool) (openedAccount, error) {
 	open := accountOptions(resolved)
 	open.CloudScopes = []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, open)
-	if err != nil {
-		return removalTarget{}, err
-	}
-	defer provider.Close()
+	open.DryRun = dry
+	provider, read, err := invocation.OpenProvider(ctx, check, resolved.Project, open)
+	return openedAccount{provider: provider, read: read, tier: open.Tier}, err
+}
 
-	span := check.Child(slug, progress.Reading.Title("what "+slug+" is deployed in"))
+func readRemovalTarget(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, slug string) (removalTarget, error) {
+	span := check.Child(slug, progress.Reading.Title("where "+slug+" is deployed"))
 	var recorded *contractv1.GetProjectResponse
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		recorded, err = client.GetProject(ctx, &contractv1.GetProjectRequest{Slug: slug})
 		return err
 	})
@@ -275,8 +303,7 @@ func readRemovalTarget(ctx context.Context, invocation commands.Invocation, chec
 	}
 	target.edge = recorded.GetEdge()
 	if registry := recorded.GetRegistry(); registry.GetServer() != "" {
-		target.warning = fmt.Sprintf("The images %s pushed to %s stay there until they are deleted in the registry: "+
-			"its password is never recorded, so run `%s` from %s's directory for the removal to delete them",
+		target.warning = fmt.Sprintf("The images %s pushed to %s will stay there: run `%s` from %s's directory to delete them",
 			slug, registry.GetServer(), destroyCommand, slug)
 	}
 	return target, nil
@@ -300,7 +327,7 @@ func asRecorded(cfg *project.Project, target removalTarget) *project.Project {
 }
 
 func planRemoval(ctx context.Context, planning *run.Span, target removalTarget, tier environmentv1.Tier, provider *providerprocess.Provider) (*planv1.ChangePlan, error) {
-	span := planning.Child(target.slug, progress.Enumerating.Title(fmt.Sprintf("what %s has in %s to destroy", target.slug, placeOf(tier))))
+	span := planning.Child(target.slug, progress.Enumerating.Title("what to destroy in "+placeOf(tier)))
 	var plan *planv1.ChangePlan
 	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
@@ -339,12 +366,8 @@ func tierNames(tiers []environmentv1.Tier) string {
 func showDestroyPlan(planning *run.Span, slug string, tier environmentv1.Tier, plan *planv1.ChangePlan) *planv1.ChangePlan {
 	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return planning.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
-			&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "all stored preview assets belonging to this project"},
-			&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "every preview variable value this project has, including each preview's own overrides"},
 			&planv1.Note{Text: "The account-level preview bootstrap is left intact. This cannot be undone."})
 	}
 	return planning.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
-		&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "all stored assets belonging to this project"},
-		&planv1.Note{Action: planv1.Change_ACTION_DELETE, Text: "every production variable value this project has, and their history"},
 		&planv1.Note{Text: "This cannot be undone."})
 }

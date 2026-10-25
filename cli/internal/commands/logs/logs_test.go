@@ -1031,7 +1031,7 @@ func TestLogsRefusesForWithoutTail(t *testing.T) {
 
 	got := runWith(project, plainDependencies, opts)
 
-	if got.err == nil || got.err.Error() != "--for stops a --tail, so pass --tail with it" {
+	if got.err == nil || got.err.Error() != "--for needs --tail" {
 		t.Errorf("runLogs err = %v, want the one-line refusal naming --for and --tail", got.err)
 	}
 	if sent := clitest.RequestsTo[*contractv1.ReadLogsRequest](t, project.Requests, contractv1connect.ProviderServiceReadLogsProcedure); len(sent) != 0 {

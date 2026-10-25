@@ -129,7 +129,6 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 			Name:   vendor + "/" + stack.String(),
 			Part:   stack.App,
 			Action: planv1.Change_ACTION_DELETE,
-			Reason: "everything this release of " + stack.App + " provisioned",
 		})
 	}
 	for _, env := range r.environments() {
@@ -148,7 +147,6 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 			Name:   vendor + "/" + stack.String(),
 			Part:   stack.Env,
 			Action: planv1.Change_ACTION_DELETE,
-			Reason: "the resources every app in " + stack.Env + " binds to",
 			Slow:   true,
 		}
 		changes, err := r.planProductionTeardown(ctx, stack)
@@ -197,13 +195,11 @@ func (r *projectRemoval) plan(ctx context.Context) (*planv1.ChangePlan, error) {
 			Kind:   "variable values",
 			Name:   r.slug,
 			Action: planv1.Change_ACTION_DELETE,
-			Reason: "the values this project's apps read, and the bindings published beside them",
 		},
 		&planv1.ChangeGroup{
 			Kind:   "stored objects",
 			Name:   r.slug,
 			Action: planv1.Change_ACTION_DELETE,
-			Reason: "the artifacts, assets and cache entries every release of this project wrote",
 		})
 	if removal := r.provider.Hooks().ProjectRemoval; removal != nil && removal.Plan != nil {
 		held, err := removal.Plan(ctx, r.tier, r.slug)
@@ -241,7 +237,7 @@ func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
 			Kind:   "DNS record",
 			Name:   rec.String(),
 			Action: planv1.Change_ACTION_DELETE,
-			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
+			Reason: "only if it still holds ocel's value",
 		})
 	}
 	for _, rec := range r.state.ManualRecords() {
@@ -249,7 +245,7 @@ func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
 			Kind:   "DNS record",
 			Name:   rec.String(),
 			Action: planv1.Change_ACTION_KEEP,
-			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
+			Reason: "you created it",
 		})
 	}
 	for _, cert := range r.state.Certificates() {
@@ -264,14 +260,13 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 			Kind:   "certificate",
 			Name:   cert.ID,
 			Action: planv1.Change_ACTION_KEEP,
-			Reason: "ocel never requested it, so it is not ocel's to delete: whoever placed it is who removes it",
+			Reason: "ocel did not request it",
 		}
 	}
 	return &planv1.ChangeGroup{
 		Kind:   "certificate",
 		Name:   cert.ID,
 		Action: planv1.Change_ACTION_DELETE,
-		Reason: "ocel requested it for a hostname this project serves, and nothing is left to serve",
 	}
 }
 
@@ -501,7 +496,7 @@ func (r *projectRemoval) pointers() []string {
 }
 
 func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName) error {
-	span := RootSpan(stack.String(), stack.String(), stackDestroyTitle(stack), progressv1.Phase_PHASE_DESTROY)
+	span := RootSpan(stack.String(), stack.String(), progress.Destroying.Title("the stack"), progressv1.Phase_PHASE_DESTROY)
 	return r.spans.run(span, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			teardown := provider.StackDestroy{Ref: provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}, Images: r.images, Lease: r.lease}
@@ -511,13 +506,6 @@ func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackNam
 			return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)
 		})
 	})
-}
-
-func stackDestroyTitle(stack naming.StackName) progress.Title {
-	if stack.IsInfra() {
-		return progress.Destroying.Title("the resources every app in " + stack.Env + " binds to")
-	}
-	return progress.Destroying.Title("everything this release of " + stack.App + " provisioned")
 }
 
 func (r *projectRemoval) destroyUnrecordedHolders(ctx context.Context, progress progress.Log) error {

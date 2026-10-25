@@ -106,7 +106,7 @@ func (s *stack) purgeTags(ctx context.Context, urlMap string, tags []string, pro
 	}
 	cleared := strings.Join(tags, ", ")
 	if err := s.e.deps.Routes.InvalidateTags(ctx, urlMap, tags); err != nil {
-		progress.Warn(fmt.Sprintf("Could not clear release %s from Cloud CDN, so it serves the replaced pages until they expire: %v. "+
+		progress.Warn(fmt.Sprintf("Could not clear release %s from Cloud CDN: %v. "+
 			"Clear it with: gcloud beta compute url-maps invalidate-cdn-cache %s --tags=%s --async",
 			cleared, err, urlMap, strings.Join(tags, ",")))
 		return
@@ -127,7 +127,7 @@ func (s *stack) purgeHostnames(ctx context.Context, urlMap string, hostnames []s
 	for i, hostname := range hostnames {
 		commands[i] = fmt.Sprintf("gcloud compute url-maps invalidate-cdn-cache %s --host %s --path \"/*\" --async", urlMap, hostname)
 	}
-	progress.Warn(fmt.Sprintf("Could not clear %s from Cloud CDN, so they serve the replaced release's cached responses until they expire: %v. Clear them with: %s",
+	progress.Warn(fmt.Sprintf("Could not clear %s from Cloud CDN: %v. Clear them with: %s",
 		strings.Join(hostnames, ", "), err, strings.Join(commands, "; ")))
 }
 

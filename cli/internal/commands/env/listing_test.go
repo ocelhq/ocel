@@ -81,7 +81,7 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		renderValues(&stdout, []*variablestorev1.ValueMetadata{
+		renderValues(&stdout, terminal.Presentation{}, []*variablestorev1.ValueMetadata{
 			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
 		}, nil, nil, nil)
 
@@ -104,7 +104,7 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		const note = "orphaned"
 
 		var withOrphan bytes.Buffer
-		renderValues(&withOrphan, []*variablestorev1.ValueMetadata{
+		renderValues(&withOrphan, terminal.Presentation{}, []*variablestorev1.ValueMetadata{
 			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY"}},
 			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
 			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
@@ -124,7 +124,7 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		}
 
 		var live bytes.Buffer
-		renderValues(&live, []*variablestorev1.ValueMetadata{
+		renderValues(&live, terminal.Presentation{}, []*variablestorev1.ValueMetadata{
 			{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
 		}, []string{"staging"}, nil, nil)
 		if out := live.String(); strings.Contains(out, note) {
@@ -136,7 +136,7 @@ func TestTheListingNamesFoldersOrphansAndDescriptions(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		renderValues(&stdout, []*variablestorev1.ValueMetadata{{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY"}}}, nil,
+		renderValues(&stdout, terminal.Presentation{}, []*variablestorev1.ValueMetadata{{Coordinate: &variablestorev1.Coordinate{Key: "STRIPE_API_KEY"}}}, nil,
 			[]*resourcesv1.VariableDefinition{{Key: "STRIPE_API_KEY", Description: "Used to call Stripe"}}, nil)
 		if out := stdout.String(); !strings.Contains(out, "Used to call Stripe") {
 			t.Errorf("ls stdout = %q, want the variable description", out)

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -320,7 +321,7 @@ func (i ACM) Discard(ctx context.Context, cert Certificate, progress progress.Lo
 	}
 	err := i.delete(ctx, cert)
 	if InUse(err) {
-		progress.Say(fmt.Sprintf("Waiting up to %s for the edge to release certificate %s", releaseBudget, cert.ARN))
+		progress.Say(fmt.Sprintf("Waiting up to %s for the edge to release certificate %s", releaseBudget, path.Base(cert.ARN)))
 		err = i.awaitRelease(ctx, cert)
 	}
 	if err == nil || Gone(err) {

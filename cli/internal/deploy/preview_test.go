@@ -254,7 +254,7 @@ export default {
 			t.Fatal("runPreviewUp err = nil, want a missing-preview-domain refusal")
 		}
 		out := stdout.String()
-		for _, want := range []string{"declares no preview domain", "domains.preview", "*.preview.", "ocel domain use"} {
+		for _, want := range []string{"no preview domain", "domains.preview", "*.preview.", "ocel domain use"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -334,7 +334,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"This will create a NEW project.", "This backend already has: billing, my-application", "Not confirmed, so this run changes nothing", "Nothing deployed to preview"} {
+		for _, want := range []string{"is a NEW project.", "Already deployed: billing, my-application", "Not confirmed; nothing changed", "Nothing deployed to preview"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
@@ -976,7 +976,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		if err == nil {
 			t.Fatal("refuseMissingPreviewDomain err = nil, want a refusal")
 		}
-		for _, want := range []string{"declares no preview domain", "no global one", "domains.preview", "ocel domain use"} {
+		for _, want := range []string{"no preview domain", "domains.preview", "ocel domain use"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
@@ -1073,7 +1073,7 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		if err == nil {
 			t.Fatal("refuseMissingPreviewDomain err = nil, want a route refusal")
 		}
-		for _, want := range []string{"wildcard route is not installed", "ocel domain use '*.preview.ocel.app' --preview"} {
+		for _, want := range []string{"has no wildcard route", "ocel domain use '*.preview.ocel.app' --preview"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
@@ -1092,10 +1092,33 @@ func removePreviewNamed(t *testing.T, fixture clitest.FakeProject, dependencies 
 
 func TestPreviewListShowsADashForAPreviewWithNoLifecycle(t *testing.T) {
 	var out strings.Builder
-	renderEnvironments(&out, []*contractv1.PreviewEnvironment{{Identity: "staging"}})
+	renderEnvironments(&out, terminal.Presentation{}, []*contractv1.PreviewEnvironment{{Identity: "staging"}})
 
-	if fields := strings.Split(out.String(), "\t"); len(fields) < 2 || fields[1] != "—" {
+	if fields := strings.Fields(strings.Split(out.String(), "\n")[1]); len(fields) < 2 || fields[0] != "staging" || fields[1] != "—" {
 		t.Errorf("ocel preview ls printed %q, want a dash where the lifecycle goes: the provider named none", out.String())
+	}
+}
+
+func TestPreviewListLinesUpEachPreviewUnderItsHeads(t *testing.T) {
+	var out strings.Builder
+	renderEnvironments(&out, terminal.Presentation{}, []*contractv1.PreviewEnvironment{
+		{Identity: "staging", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT, AliasUrls: []string{"https://staging.example.com"}},
+		{Identity: "feature-login-0a1b2c", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, Label: "pr-7"},
+	})
+
+	lines := strings.Split(out.String(), "\n")
+	if fields := strings.Fields(lines[0]); !slices.Equal(fields, []string{"PREVIEW", "KIND", "LABEL", "URL", "CREATED"}) {
+		t.Fatalf("head = %q, want the columns named", lines[0])
+	}
+	kind, url := strings.Index(lines[0], "KIND"), strings.Index(lines[0], "URL")
+	for _, line := range lines[1:3] {
+		runes := []rune(line)
+		if at := string(runes[kind:]); !strings.HasPrefix(at, "persistent") && !strings.HasPrefix(at, "ephemeral") {
+			t.Errorf("row %q puts its lifecycle off KIND at %d", line, kind)
+		}
+		if at := string(runes[url:]); !strings.HasPrefix(at, "https://") && !strings.HasPrefix(at, "—") {
+			t.Errorf("row %q puts its URL off URL at %d", line, url)
+		}
 	}
 }
 

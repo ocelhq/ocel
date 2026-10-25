@@ -1,17 +1,17 @@
 package projects
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"slices"
 	"strconv"
-	"text/tabwriter"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
@@ -23,7 +23,6 @@ import (
 const (
 	listCommand = "ocel projects"
 	liveCell    = "live"
-	deployDate  = "2006-01-02"
 )
 
 func newListCommand(invocation commands.Invocation) *cobra.Command {
@@ -63,10 +62,11 @@ func runList(ctx context.Context, invocation commands.Invocation, stdout io.Writ
 	if err != nil {
 		return err
 	}
-	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
+	present := invocation.Presentation(stdout)
+	if present.Format == terminal.FormatJSON {
 		return terminal.WriteResultJSON(stdout, listResult(listed.GetProjects()))
 	}
-	renderList(stdout, identity, listed.GetProjects())
+	renderList(stdout, present, identity, listed.GetProjects())
 	return nil
 }
 
@@ -85,32 +85,38 @@ func listResult(projects []*contractv1.ProjectSummary) *resultv1.ProjectListResu
 	return result
 }
 
-func renderList(out io.Writer, identity *contractv1.Identity, projects []*contractv1.ProjectSummary) {
-	header := identityHeader(identity, nil)
+func renderList(out io.Writer, present terminal.Presentation, identity *contractv1.Identity, projects []*contractv1.ProjectSummary) {
+	palette := present.Palette()
 	if len(projects) == 0 {
-		if header == "" {
-			fmt.Fprintln(out, "This account has no projects")
+		if header := identityHeader(palette, identity, nil, "no projects"); header != "" {
+			fmt.Fprintln(out, header)
 			return
 		}
-		fmt.Fprintf(out, "%s%sno projects\n", header, cellSep)
+		fmt.Fprintln(out, "This account has no projects")
 		return
 	}
-	if header != "" {
-		fmt.Fprintln(out, header)
+	if header := identityHeader(palette, identity, nil); header != "" {
+		fmt.Fprintf(out, "%s\n\n", header)
 	}
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "PROJECT\tPRODUCTION\tPREVIEWS\tEDGE\tLAST DEPLOY")
+	table := terminal.NewTable(
+		terminal.Column{Head: "PROJECT"},
+		terminal.Column{Head: "PRODUCTION"},
+		terminal.Column{Head: "PREVIEWS", Align: terminal.AlignRight},
+		terminal.Column{Head: "EDGE"},
+		terminal.Column{Head: "LAST DEPLOY"},
+	)
 	for _, summary := range projects {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", summary.GetSlug(), productionCell(summary), previewsCell(summary), orUnknown(summary.GetEdge()), lastDeployCell(summary))
+		table.Row(palette.Bold(summary.GetSlug()), productionCell(palette, summary), previewsCell(summary), cmp.Or(summary.GetEdge(), unknownCell), present.EpochAge(summary.GetUpdatedAt()))
 	}
-	_ = tw.Flush()
+	fmt.Fprint(out, table.Render(palette, "  "))
+	fmt.Fprintf(out, "\n%s\n", palette.Muted(english.Count(len(projects), "project")))
 }
 
-func productionCell(summary *contractv1.ProjectSummary) string {
+func productionCell(palette terminal.Palette, summary *contractv1.ProjectSummary) string {
 	if summary.GetProductionPromotionId() == "" {
-		return unknownCell
+		return palette.Health(terminal.Inactive, "none")
 	}
-	return liveCell
+	return palette.Health(terminal.Healthy, liveCell)
 }
 
 func previewsCell(summary *contractv1.ProjectSummary) string {
@@ -118,11 +124,4 @@ func previewsCell(summary *contractv1.ProjectSummary) string {
 		return unknownCell
 	}
 	return strconv.Itoa(int(summary.GetPreviews()))
-}
-
-func lastDeployCell(summary *contractv1.ProjectSummary) string {
-	if summary.GetUpdatedAt() == 0 {
-		return unknownCell
-	}
-	return time.Unix(summary.GetUpdatedAt(), 0).UTC().Format(deployDate)
 }

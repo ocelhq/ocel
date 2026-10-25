@@ -287,7 +287,7 @@ func takeProjectDatabase(ctx context.Context, b bootstrap.Engine, stores project
 			return err
 		}
 	} else if !b.Clients.Emulated() {
-		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Deleting Firestore database %s, which kept the values, runs and tag records of %s in %s", recorded, project, tier))
+		gcloud.EnsureProgress(log).Say("Deleting Firestore database " + recorded)
 		if err := stores.takeDatabase(ctx, tier, recorded); err != nil {
 			return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 		}

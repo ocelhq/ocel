@@ -143,7 +143,7 @@ func TestTheStatusOfAProtectedProjectNamesThePasswordTheBypassSecretsAndTheEdges
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"protected", "password", "1 bypass secret", string(fake.KindRelay), "live"} {
+	for _, want := range []string{"protected", "password", "bypass secrets  1 (", string(fake.KindRelay), "live"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout = %q, want it to mention %q", stdout, want)
 		}

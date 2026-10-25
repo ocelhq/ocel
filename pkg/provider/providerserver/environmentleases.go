@@ -299,7 +299,7 @@ func (l *subjectLeases) sayRunOutWatch(leased map[string]stackrecords.Environmen
 	if runOut == 1 {
 		environments = "environment"
 	}
-	progress.Say(fmt.Sprintf("Waiting until %s to take over the leases interrupted runs left on %d %s, in case one still renews its lease",
+	progress.Say(fmt.Sprintf("Waiting until %s to take over the leases interrupted runs left on %d %s",
 		now.Add(l.ttl).UTC().Format("15:04 MST"), runOut, environments))
 }
 

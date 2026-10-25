@@ -165,7 +165,7 @@ func (d daemon) addressable(workers []*client.WorkerInfo) ([]*client.WorkerInfo,
 	if len(exporting) > 0 {
 		return exporting, nil
 	}
-	return nil, fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, images.DockerHostEnv)
+	return nil, fmt.Errorf("the docker daemon at %s uses the classic image store: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, images.DockerHostEnv)
 }
 
 func (d daemon) tag(ctx context.Context, image Image) error {
@@ -175,11 +175,11 @@ func (d daemon) tag(ctx context.Context, image Image) error {
 }
 
 func (d daemon) unreachable(err error) error {
-	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %w", d.Address, images.DockerHostEnv, err)
+	return fmt.Errorf("no docker daemon answers at %s: start docker, or set %s to a running daemon\n    %w", d.Address, images.DockerHostEnv, err)
 }
 
 func (d daemon) noBuilder(err error) error {
-	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %w", d.Address, images.DockerHostEnv, err)
+	return fmt.Errorf("the daemon at %s named no builder: start docker, or set %s to a running daemon\n    %w", d.Address, images.DockerHostEnv, err)
 }
 
 func RefuseUnusableDaemon(ctx context.Context, arches ...string) error {
@@ -215,9 +215,9 @@ func (d daemon) isOnAnotherMachine() bool {
 func (d daemon) explainFailedBuild(app string, live LiveValues, err error) error {
 	switch {
 	case live.hasValues() && strings.Contains(err.Error(), networkHostEntitlement):
-		return fmt.Errorf("build %s: the docker daemon at %s refuses the %s entitlement a build with bindings asks for, so its steps cannot reach the forwards on this machine: allow it (docker engine: \"builder\": {\"entitlements\": {\"network-host\": true}} in /etc/docker/daemon.json), or set %s to a daemon that does\n    %w", app, d.Address, networkHostEntitlement, images.DockerHostEnv, err)
+		return fmt.Errorf("build %s: the docker daemon at %s refuses the %s entitlement a build with bindings needs: allow it (docker engine: \"builder\": {\"entitlements\": {\"network-host\": true}} in /etc/docker/daemon.json), or set %s to a daemon that does\n    %w", app, d.Address, networkHostEntitlement, images.DockerHostEnv, err)
 	case live.hasValues() && d.isOnAnotherMachine():
-		return fmt.Errorf("build %s: the docker daemon at %s runs on another machine, and a build step reaches the bindings ocel forwards on this machine's 127.0.0.1 only from a daemon on this machine: unset %s, or point it at a daemon here\n    %w", app, d.Address, images.DockerHostEnv, err)
+		return fmt.Errorf("build %s: the docker daemon at %s is remote and cannot reach the bindings forwarded on this machine: unset %s, or point it at a local daemon\n    %w", app, d.Address, images.DockerHostEnv, err)
 	}
 	return fmt.Errorf("build %s: %w", app, err)
 }

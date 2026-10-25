@@ -3,6 +3,7 @@ package certs
 import (
 	"context"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -127,9 +128,6 @@ func (p Certificates) authorized(
 	case !gcloud.Absent(err):
 		return nil, fmt.Errorf("read the dns authorization for %s: %w", req.Hostname, err)
 	}
-	if req.Progress != nil {
-		req.Progress.Say("Asking Certificate Manager to authorize " + authorizedDomain(req.Hostname))
-	}
 	err = p.awaitCertificates(ctx, certificates, "authorize "+req.Hostname,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.DnsAuthorizations.
@@ -185,7 +183,7 @@ func (p Certificates) certified(
 		return fmt.Errorf("read the certificate for %s: %w", req.Hostname, err)
 	default:
 		if req.Progress != nil {
-			req.Progress.Say("Asking Certificate Manager for a certificate covering " + req.Hostname)
+			req.Progress.Say("Requesting a certificate for " + req.Hostname)
 		}
 		err = p.awaitCertificates(ctx, certificates, "certify "+req.Hostname,
 			func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
@@ -329,17 +327,9 @@ func (p Certificates) Entered(ctx context.Context, certificateMap string) ([]str
 
 func discarding(id string, current *certmanager.Certificate) string {
 	if current.Managed == nil || len(current.Managed.Domains) == 0 {
-		return "Discarding certificate " + id
+		return "Discarding certificate " + path.Base(id)
 	}
-	covering := "Discarding the certificate covering " + strings.Join(current.Managed.Domains, ", ")
-	switch authorizations := len(current.Managed.DnsAuthorizations); authorizations {
-	case 0:
-		return covering
-	case 1:
-		return covering + " and its DNS authorization"
-	default:
-		return covering + fmt.Sprintf(" and its %d DNS authorizations", authorizations)
-	}
+	return "Discarding the certificate for " + strings.Join(current.Managed.Domains, ", ")
 }
 
 func (p Certificates) Discard(ctx context.Context, cert provider.Certificate, progress progress.Log) error {

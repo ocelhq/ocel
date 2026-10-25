@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -118,7 +119,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"shop.app.com  READY",
+			"shop.app.com  ● READY",
 			"Certificate          ISSUED  issued-for-shop.app.com",
 			"Renewal              expires 2025-09-04T15:33:20Z",
 			"Records ocel wrote   none — nothing here writes DNS",
@@ -145,7 +146,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 			t.Fatalf("runDomainStatus --wait err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "shop.app.com  READY") {
+		if !strings.Contains(out, "shop.app.com  ● READY") {
 			t.Errorf("stdout = %q, want --wait to keep polling until the host is ready", out)
 		}
 		if strings.Contains(out, "PENDING") {
@@ -168,7 +169,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		for _, want := range []string{"shop.app.com  PENDING", "Outstanding", "does not answer through the relay edge yet", errUnreachable.Error()} {
+		for _, want := range []string{"shop.app.com  ◐ PENDING", "Outstanding", "does not answer through the relay edge yet", errUnreachable.Error()} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -187,7 +188,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "declares no domains.production") {
+		if !strings.Contains(stdout.String(), "No domains.production") {
 			t.Errorf("stdout = %q, want it to say nothing is declared", stdout.String())
 		}
 	})
@@ -205,7 +206,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus --wait err = %v, want a wait that outlasts a couple of failed checks; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "shop.app.com  READY") {
+		if !strings.Contains(stdout.String(), "shop.app.com  ● READY") {
 			t.Errorf("stdout = %q, want the wait to reach ready", stdout.String())
 		}
 	})
@@ -233,7 +234,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
 		err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout)
-		if err == nil || !strings.Contains(stderr.String(), "nothing to wait for") {
+		if err == nil || !strings.Contains(stderr.String(), "no production hostname to wait for") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to refuse at once with nothing declared", err, stderr.String())
 		}
 	})
@@ -267,7 +268,7 @@ func TestDomainStatusNamesWhoRenewsACertificateOcelDoesNotOwn(t *testing.T) {
 		},
 	} {
 		var out bytes.Buffer
-		renderDomainStatus(&out, &contractv1.GetHostnameStatusResponse{
+		renderDomainStatus(&out, terminal.Palette{}, &contractv1.GetHostnameStatusResponse{
 			Hostnames: []*contractv1.ProductionHostname{host},
 		}, "ocel.config.ts")
 		rendered := out.String()
@@ -288,7 +289,7 @@ func TestDomainStatusSaysNothingAboutExpiryForACertificateSomethingElseRenews(t 
 	t.Parallel()
 
 	var out bytes.Buffer
-	renderDomainStatus(&out, &contractv1.GetHostnameStatusResponse{
+	renderDomainStatus(&out, terminal.Palette{}, &contractv1.GetHostnameStatusResponse{
 		Hostnames: []*contractv1.ProductionHostname{{
 			Hostname:      "shop.app.com",
 			Declared:      true,

@@ -323,3 +323,40 @@ func TestAGroupIsRolledUpByTheRuleTheProviderRollsItsOwnGroupsUpBy(t *testing.T)
 		}
 	}
 }
+
+func stacksOfOneApp() *planv1.ChangePlan {
+	return &planv1.ChangePlan{
+		Headline: `This will permanently destroy production project "go"`,
+		Groups: []*planv1.ChangeGroup{
+			{Kind: "stack", Name: "gcp/prod--go--r1b42dcd1", Part: "go", Action: planv1.Change_ACTION_DELETE},
+			{Kind: "stack", Name: "gcp/prod--go--r26c87f73", Part: "go", Action: planv1.Change_ACTION_DELETE},
+			{Kind: "stack", Name: "gcp/prod--go--r48b3617b", Part: "go", Action: planv1.Change_ACTION_DELETE},
+			{Kind: "stack", Name: "gcp/prod--web--r9c0d1e2f", Part: "web", Action: planv1.Change_ACTION_DELETE},
+			{Kind: "stack", Name: "gcp/prod--infra", Part: "prod", Action: planv1.Change_ACTION_DELETE, Slow: true},
+		},
+	}
+}
+
+func TestAPlanCountsTheChildlessStacksOfOnePartInOneRowUnlessVerbose(t *testing.T) {
+	t.Parallel()
+
+	want := `
+This will permanently destroy production project "go":
+
+– 3 stacks  [go]
+– gcp/prod--web--r9c0d1e2f  [web]
+– gcp/prod--infra  [prod] (slow)
+
+5 to delete.
+`
+	if got := projectPlan(t, stacksOfOneApp()); got != want {
+		t.Errorf("projection =\n%s\nwant\n%s", got, want)
+	}
+
+	verbose := "\n" + strings.Join(planLines(Presentation{Width: defaultColumns, Verbose: true}, stacksOfOneApp()), "\n") + "\n"
+	for _, name := range []string{"gcp/prod--go--r1b42dcd1", "gcp/prod--go--r26c87f73", "gcp/prod--go--r48b3617b"} {
+		if !strings.Contains(verbose, "– "+name+"  [go]\n") {
+			t.Errorf("verbose projection =\n%s\nwant a row naming %s", verbose, name)
+		}
+	}
+}

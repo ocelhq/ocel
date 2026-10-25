@@ -64,9 +64,9 @@ func TestRemovingTheConnectorNamesTheBucketStackAndParameterItDeleted(t *testing
 		t.Fatalf("Remove() = %v", err)
 	}
 	want := []string{
-		"INFO Emptied bucket ocel-connector-code, where the connector's code was staged",
+		"INFO Emptied bucket ocel-connector-code",
 		"INFO Deleted stack " + StackName(defaultNamespace),
-		"INFO Deleted parameter " + KeyParameter(defaultNamespace) + ", the connector's key",
+		"INFO Deleted parameter " + KeyParameter(defaultNamespace),
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("Remove() said %q, want %q", got, want)

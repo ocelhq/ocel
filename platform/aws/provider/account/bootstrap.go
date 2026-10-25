@@ -271,7 +271,7 @@ func productionBootstrap(ns Namespace) spec {
 		ns:        ns,
 		tier:      environment.TierProduction,
 		stackName: name,
-		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
+		stackStep: "Ensuring the core stack",
 	}
 }
 
@@ -281,7 +281,7 @@ func previewBootstrap(ns Namespace) spec {
 		ns:        ns,
 		tier:      environment.TierPreview,
 		stackName: name,
-		stackStep: "Ensuring preview infrastructure (CloudFormation)",
+		stackStep: "Ensuring the preview stack",
 	}
 }
 
@@ -330,21 +330,21 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 		}
 	}
 
-	progress.Say("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
+	progress.Say("Ensuring the origin secret")
 	secret, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.tier, time.Now())
 	if err != nil {
 		return err
 	}
 	if secret.retired {
-		progress.Warn(fmt.Sprintf("Retired the %s origin secret a rotation replaced: a release not re-deployed since no longer answers its front", target.tier))
+		progress.Warn(fmt.Sprintf("Retired the %s origin secret's old value: a release not re-deployed since its rotation no longer answers", target.tier))
 	}
 	switch {
 	case secret.rotated:
-		progress.Warn(fmt.Sprintf("Rotated the %s origin secret, which was older than %d days: re-deploy each project in the tier so its releases accept the new one; the first bootstrap after %d days retires the old one", target.tier, int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24)))
+		progress.Warn(fmt.Sprintf("Rotated the %s origin secret: re-deploy each project in the tier within %d days", target.tier, int(OriginSecretGrace.Hours()/24)))
 	case secret.minted:
-		progress.Say(fmt.Sprintf("Minted a new %s origin secret", target.tier))
+		progress.Say("Minted a new origin secret")
 	default:
-		progress.Debug(fmt.Sprintf("Reused the existing %s origin secret", target.tier))
+		progress.Debug("Reused the existing origin secret")
 	}
 
 	alongside := PartSet{}
@@ -384,7 +384,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 		return err
 	}
 
-	progress.Say("Ensuring the Pulumi passphrase (SSM SecureString)")
+	progress.Say("Ensuring the Pulumi passphrase")
 	created, err := ensurePassphrase(ctx, apis.SSM, target.ns, target.tier)
 	if err != nil {
 		return err
@@ -400,7 +400,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	}
 
 	if len(requested) > 0 {
-		progress.Say(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(partStackNames(target.ns, requested, target.tier), ", ")))
+		progress.Say("Applying " + strings.Join(partStackNames(target.ns, requested, target.tier), ", "))
 		group, gctx := errgroup.WithContext(ctx)
 		for _, name := range requested {
 			group.Go(func() error {
@@ -446,7 +446,7 @@ func dropParts(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder []
 	if len(dropOrder) == 0 {
 		return nil
 	}
-	steps.progress.Say(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(partStackNames(steps.ns, dropOrder, steps.tier), ", ")))
+	steps.progress.Say("Removing " + strings.Join(partStackNames(steps.ns, dropOrder, steps.tier), ", "))
 	for _, name := range dropOrder {
 		f, _ := partNamed(name)
 		if f.drop == nil {
@@ -521,7 +521,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	if out.ReleasesStore == nil {
 		return nil
 	}
-	d.progress.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker (SSM SecureString)", front.Kind()))
+	d.progress.Say(fmt.Sprintf("Adopting the %s edge's releases-store worker", front.Kind()))
 	if err := adoptReleasesStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), *out.ReleasesStore); err != nil {
 		return err
 	}

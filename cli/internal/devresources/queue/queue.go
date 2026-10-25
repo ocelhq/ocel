@@ -219,7 +219,7 @@ func (b *Backend) current() (*pgmq.Engine, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.engine == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no task or topic, so there is nothing to trigger or send to"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no task or topic"))
 	}
 	return b.engine, nil
 }

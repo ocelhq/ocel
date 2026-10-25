@@ -2,7 +2,6 @@ package release
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -29,8 +28,7 @@ func (p *Release) RevisionTag(spec provider.StackSpec) string {
 	return spec.Ref.Name.Release.String()
 }
 
-const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: nothing in front of it shields it and protection.preview is off, so no gate checks its requests. " +
-	"Turn protection.preview on, front previews with an edge that shields the origin, or keep their urls to yourselves"
+const previewOpenWarning = "answers anyone with its url: turn protection.preview on"
 
 func WarnPreviewOpen(spec provider.StackSpec, service string, progress progress.Log) {
 	if spec.Ref.Tier != environment.TierPreview || run.FactsOf(spec.Edge).ShieldsOrigin || cloudrun.IsGated(spec) {
@@ -71,9 +69,9 @@ func (p *Release) DeleteUnusedAccount(ctx context.Context, c *gcloud.Clients, re
 	}
 	switch {
 	case deleted:
-		gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Deleted the %s service account: nothing runs as app %s of %s in environment %s any more", account, ref.Name.App, ref.Project, ref.Name.Env))
+		gcloud.EnsureProgress(progress).Say("Deleted service account " + account)
 	case revoked:
-		gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Revoked what app %s of %s was granted in environment %s: nothing runs as the %s service account any more", ref.Name.App, ref.Project, ref.Name.Env, account))
+		gcloud.EnsureProgress(progress).Say("Revoked the grants of service account " + account)
 	}
 	return nil
 }

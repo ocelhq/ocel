@@ -48,7 +48,7 @@ func newUseCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "use <wildcard>",
-		Short: "Install (or upgrade) the edge's preview routing and serve every project's previews on this wildcard",
+		Short: "Serve every project's previews on this wildcard",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()

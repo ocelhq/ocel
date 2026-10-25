@@ -87,6 +87,14 @@ func (t *resourceTally) count(c resourceChange) {
 	t.done[c.wording.tallyAs]++
 }
 
+func (t resourceTally) isSingle() bool {
+	changed := 0
+	for _, n := range t.done {
+		changed += n
+	}
+	return t.failed == 0 && changed == 1
+}
+
 func (t resourceTally) summary() string {
 	var parts []string
 	total := t.failed

@@ -8,58 +8,64 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func renderBoundHostnames(out io.Writer, resp *contractv1.GetHostnameStatusResponse, configName string) {
+func renderBoundHostnames(out io.Writer, palette terminal.Palette, resp *contractv1.GetHostnameStatusResponse, configName string) {
 	if len(resp.GetHostnames()) == 0 {
-		fmt.Fprintf(out, "This project declares no domains.production in %s and serves none.\n", configName)
-		fmt.Fprintln(out, "  → declare one and run `ocel domain add`; `ocel domain ls --preview` shows the domain every project's previews share")
+		fmt.Fprintf(out, "No domains.production in %s.\n", configName)
+		fmt.Fprintln(out, "  → "+palette.Commands("declare one, then run `ocel domain add`"))
 		return
 	}
+	table := terminal.NewTable(terminal.Column{Head: "HOSTNAME"}, terminal.Column{Head: "STATE"}, terminal.Column{Head: "SERVED BY"})
 	for _, host := range resp.GetHostnames() {
-		fmt.Fprintf(out, "%-8s %s", domainHostState(host), host.GetHostname())
-		if pointer := host.GetServingPointer(); pointer != "" {
-			fmt.Fprintf(out, "  → %s", pointer)
+		pointer := host.GetServingPointer()
+		if pointer == "" {
+			pointer = terminal.NoValue
 		}
-		fmt.Fprintln(out)
+		table.Row(palette.Bold(host.GetHostname()), domainHostState(palette, host), pointer)
 		if pending := host.GetPending(); pending != "" {
-			fmt.Fprintf(out, "         %s\n", pending)
+			table.Span("  " + palette.Muted(pending))
 		}
 	}
+	fmt.Fprint(out, table.Render(palette, ""))
 }
 
-func renderGlobalDomain(out io.Writer, resp *contractv1.GetPreviewWildcardResponse) {
+func renderGlobalDomain(out io.Writer, palette terminal.Palette, resp *contractv1.GetPreviewWildcardResponse) {
 	domain := resp.GetWildcard()
 	if domain.GetBaseDomain() == "" {
 		fmt.Fprintln(out, "No global preview domain is configured.")
-		fmt.Fprintln(out, "  → run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
+		fmt.Fprintln(out, "  → "+palette.Commands("run `ocel domain use '*.preview.example.com' --preview`"))
 		return
 	}
 
-	fmt.Fprintf(out, "Global preview domain  %s\n", wildcardOf(domain.GetBaseDomain()))
+	fmt.Fprintf(out, "%s  %s\n", palette.Bold("Global preview domain"), wildcardOf(domain.GetBaseDomain()))
 	if scope := domain.GetEdgeScope(); scope != "" {
-		fmt.Fprintf(out, "  Edge account         %s\n", scope)
+		field(out, palette, "Edge account", scope)
 	}
-	route := "installed"
+	route := palette.Success("installed")
 	if !domain.GetRouteInstalled() {
-		route = "MISSING — run `ocel domain use '" + wildcardOf(domain.GetBaseDomain()) + "' --preview` to reinstall it"
+		route = palette.FailureBold("MISSING") + palette.Commands(" — run `ocel domain use '"+wildcardOf(domain.GetBaseDomain())+"' --preview` to reinstall it")
 	}
-	fmt.Fprintf(out, "  Wildcard route       %s\n", route)
+	field(out, palette, "Wildcard route", route)
 	cert := domain.GetCertificate()
 	if id := cert.GetCertificateId(); id != "" {
-		fmt.Fprintf(out, "  Certificate          %s  %s\n", cert.GetCertificateStatus(), id)
-		fmt.Fprintf(out, "  Renewal              %s\n", wildcardRenewal(domain))
+		field(out, palette, "Certificate", cert.GetCertificateStatus()+"  "+palette.Muted(id))
+		field(out, palette, "Renewal", wildcardRenewal(palette, domain))
 	}
-	renderCertificateRecords(out, cert)
-	fmt.Fprintf(out, "  Last probe           %s\n", lastProbe(cert, "never — run `ocel domain use '"+wildcardOf(domain.GetBaseDomain())+"' --preview` to check the edge answers"))
-	renderGlobalDomainProjects(out, resp.GetProjects())
+	renderCertificateRecords(out, palette, cert)
+	field(out, palette, "Last probe", lastProbe(palette, cert, "never — run `ocel domain use '"+wildcardOf(domain.GetBaseDomain())+"' --preview` to check the edge answers"))
+	renderGlobalDomainProjects(out, palette, resp.GetProjects())
 }
 
-func renderDomainRecords(out io.Writer, name string, records []string, empty string) {
+func field(out io.Writer, palette terminal.Palette, name, value string) {
+	fmt.Fprintf(out, "  %s %s\n", palette.Muted(fmt.Sprintf("%-20s", name)), value)
+}
+
+func renderDomainRecords(out io.Writer, palette terminal.Palette, name string, records []string, empty string) {
 	if len(records) == 0 {
-		fmt.Fprintf(out, "  %-20s %s\n", name, empty)
+		field(out, palette, name, palette.Muted(empty))
 		return
 	}
 	for i, rec := range records {
-		fmt.Fprintf(out, "  %-20s %s\n", label(i, name), rec)
+		field(out, palette, label(i, name), rec)
 	}
 }
 
@@ -70,84 +76,84 @@ func label(i int, name string) string {
 	return ""
 }
 
-func lastProbe(cert *contractv1.CertificateState, never string) string {
+func lastProbe(palette terminal.Palette, cert *contractv1.CertificateState, never string) string {
 	if cert.GetLastProbeAt() == 0 {
-		return never
+		return palette.Commands(never)
 	}
 	at := terminal.EpochRFC3339(cert.GetLastProbeAt())
 	if !cert.GetLastProbeOk() {
-		return at + "  FAILED — nothing answered for this project"
+		return at + "  " + palette.FailureBold("FAILED") + " — nothing answered for this project"
 	}
-	return at + "  answered"
+	return at + "  " + palette.Success("answered")
 }
 
-func renderCertificateRecords(out io.Writer, cert *contractv1.CertificateState) {
-	renderDomainRecords(out, "Records ocel wrote", cert.GetRecordsWritten(), "none — nothing here writes DNS")
-	renderDomainRecords(out, "Records you own", cert.GetManualRecords(), "none outstanding")
+func renderCertificateRecords(out io.Writer, palette terminal.Palette, cert *contractv1.CertificateState) {
+	renderDomainRecords(out, palette, "Records ocel wrote", cert.GetRecordsWritten(), "none — nothing here writes DNS")
+	renderDomainRecords(out, palette, "Records you own", cert.GetManualRecords(), "none outstanding")
 }
 
-func renderGlobalDomainProjects(out io.Writer, projects []string) {
+func renderGlobalDomainProjects(out io.Writer, palette terminal.Palette, projects []string) {
 	if len(projects) == 0 {
 		fmt.Fprintln(out, "No project is bootstrapped into the preview tier yet.")
 		return
 	}
-	fmt.Fprintf(out, "Projects served (%d):\n", len(projects))
+	fmt.Fprintf(out, "\n%s\n", palette.Heading(fmt.Sprintf("Projects served (%d)", len(projects))))
 	for _, p := range projects {
 		fmt.Fprintf(out, "  • %s\n", p)
 	}
 }
 
-func renderDomainStatus(out io.Writer, resp *contractv1.GetHostnameStatusResponse, configName string) {
+func renderDomainStatus(out io.Writer, palette terminal.Palette, resp *contractv1.GetHostnameStatusResponse, configName string) {
 	if len(resp.GetHostnames()) == 0 {
-		fmt.Fprintf(out, "This project declares no domains.production in %s, so nothing is served under a hostname of its own.\n", configName)
+		fmt.Fprintf(out, "No domains.production in %s.\n", configName)
 		return
 	}
 	if len(resp.GetRecordsWritten()) > 0 || len(resp.GetManualRecords()) > 0 {
-		fmt.Fprintln(out, "Certificate validation")
-		renderDomainRecords(out, "Records ocel wrote", resp.GetRecordsWritten(), "none — nothing here writes DNS")
-		renderDomainRecords(out, "Records you own", resp.GetManualRecords(), "none outstanding")
+		fmt.Fprintln(out, palette.Bold("Certificate validation"))
+		renderDomainRecords(out, palette, "Records ocel wrote", resp.GetRecordsWritten(), "none — nothing here writes DNS")
+		renderDomainRecords(out, palette, "Records you own", resp.GetManualRecords(), "none outstanding")
 		fmt.Fprintln(out)
 	}
 	for i, host := range resp.GetHostnames() {
 		if i > 0 {
 			fmt.Fprintln(out)
 		}
-		fmt.Fprintf(out, "%s  %s\n", host.GetHostname(), domainHostState(host))
+		fmt.Fprintf(out, "%s  %s\n", palette.Bold(host.GetHostname()), domainHostState(palette, host))
 		if !host.GetDeclared() {
-			fmt.Fprintf(out, "  %-20s no — %s no longer declares it\n", "Declared", configName)
+			field(out, palette, "Declared", palette.Warning("no")+" — "+configName+" no longer declares it")
 		}
 		cert := host.GetCertificate()
 		if id := cert.GetCertificateId(); id != "" {
-			fmt.Fprintf(out, "  %-20s %s  %s\n", "Certificate", cert.GetCertificateStatus(), id)
-			fmt.Fprintf(out, "  %-20s %s\n", "Renewal", domainRenewal(host))
+			field(out, palette, "Certificate", cert.GetCertificateStatus()+"  "+palette.Muted(id))
+			field(out, palette, "Renewal", domainRenewal(palette, host))
 		}
-		renderCertificateRecords(out, cert)
-		fmt.Fprintf(out, "  %-20s %s\n", "Last probe", lastProbe(cert, "never — run `ocel domain add` to bind it and check the edge answers"))
+		renderCertificateRecords(out, palette, cert)
+		field(out, palette, "Last probe", lastProbe(palette, cert, "never — run `ocel domain add`"))
 		if pointer := host.GetServingPointer(); pointer != "" {
-			fmt.Fprintf(out, "  %-20s %s\n", "Served by", pointer)
+			field(out, palette, "Served by", pointer)
 		}
 		if pending := host.GetPending(); pending != "" {
-			fmt.Fprintf(out, "  %-20s %s\n", "Outstanding", pending)
+			field(out, palette, "Outstanding", palette.Warning(pending))
 		}
 	}
 }
 
-func domainHostState(host *contractv1.ProductionHostname) string {
+func domainHostState(palette terminal.Palette, host *contractv1.ProductionHostname) string {
 	if host.GetReady() {
-		return "READY"
+		return palette.Health(terminal.Healthy, "READY")
 	}
-	return "PENDING"
+	return palette.Health(terminal.Pending, "PENDING")
 }
 
-func wildcardRenewal(domain *contractv1.PreviewWildcard) string {
-	return renewalLine(domain.GetRenewalStatus(), domain.GetExpiresAt(), domain.GetExpiringSoon())
+func wildcardRenewal(palette terminal.Palette, domain *contractv1.PreviewWildcard) string {
+	return renewalLine(palette, domain.GetRenewalStatus(), domain.GetExpiresAt(), domain.GetExpiringSoon())
 }
 
-func domainRenewal(host *contractv1.ProductionHostname) string {
-	return renewalLine(host.GetRenewalStatus(), host.GetExpiresAt(), host.GetExpiringSoon())
+func domainRenewal(palette terminal.Palette, host *contractv1.ProductionHostname) string {
+	return renewalLine(palette, host.GetRenewalStatus(), host.GetExpiresAt(), host.GetExpiringSoon())
 }
 
-func renewalLine(status string, expiresAt int64, soon bool) string {
+func renewalLine(palette terminal.Palette, status string, expiresAt int64, soon bool) string {
 	expiry := "no expiry reported"
 	if expiresAt != 0 {
 		expiry = "expires " + terminal.EpochRFC3339(expiresAt)
@@ -156,7 +162,7 @@ func renewalLine(status string, expiresAt int64, soon bool) string {
 		status = "not reported"
 	}
 	if soon {
-		return fmt.Sprintf("%s, %s — EXPIRING SOON", expiry, status)
+		return fmt.Sprintf("%s, %s — %s", expiry, status, palette.WarningBold("EXPIRING SOON"))
 	}
 	return fmt.Sprintf("%s, %s", expiry, status)
 }

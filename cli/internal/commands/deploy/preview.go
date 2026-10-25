@@ -25,9 +25,9 @@ func NewPreviewCommand(dependencies deploy.Dependencies) *cobra.Command {
 		Use:   "preview",
 		Short: "Deploy a preview of the current branch",
 		Long: "Deploy a preview of the current branch.\n\n" +
-			"`ocel preview` on its own is `ocel preview up`: it deploys the current branch's preview. " +
-			"To address a preview by name, pass the name to a subcommand, as in `ocel preview up <name>`.\n\n" +
-			"A preview is a full deployment beside production, torn down without touching anything else.",
+			"`ocel preview` on its own is `ocel preview up`. Name a preview with a subcommand, " +
+			"as in `ocel preview up <name>`.\n\n" +
+			"A preview is a full deployment beside production.",
 		Example: "  $ ocel preview\n" +
 			"  $ ocel preview up pr-12\n" +
 			"  $ ocel preview up staging --persistent\n" +
@@ -35,7 +35,7 @@ func NewPreviewCommand(dependencies deploy.Dependencies) *cobra.Command {
 			"  $ ocel preview rm pr-12",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("`ocel preview` takes no name; to deploy the preview %q, run `ocel preview up %s`", args[0], args[0])
+				return fmt.Errorf("`ocel preview` takes no name: run `ocel preview up %s`", args[0])
 			}
 			return nil
 		},
@@ -47,13 +47,11 @@ func NewPreviewCommand(dependencies deploy.Dependencies) *cobra.Command {
 		Use:   "up [name]",
 		Short: "Deploy or refresh a preview",
 		Long: "Deploy or refresh a preview.\n\n" +
-			"Without a name the preview is the current branch's: deploying the same branch again replaces it, " +
-			"and `ocel preview rm` tears it down. A name addresses one preview from any branch. " +
-			"A name is a DNS label with no `--`.\n\n" +
-			"A preview provisions the resources it declares in infrastructure of its own, and by default it is " +
-			"ephemeral: torn down without a question. --persistent deploys one that asks before it is torn down " +
-			"— a staging environment. A preview keeps the lifecycle it was created with.\n\n" +
-			"--dry builds, then prints every change the preview would make to your account and stops.",
+			"Without a name the preview is the current branch's. A name, a DNS label with no `--`, " +
+			"addresses one preview from any branch.\n\n" +
+			"A preview has resources of its own and is ephemeral: torn down without a question. " +
+			"--persistent deploys one that asks first, such as staging. A preview keeps the lifecycle it was created with.\n\n" +
+			"--dry builds, prints every change and stops.",
 		Example: "  $ ocel preview up\n" +
 			"  $ ocel preview up pr-12\n" +
 			"  $ ocel preview up staging --persistent\n" +

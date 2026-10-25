@@ -117,7 +117,7 @@ func (h *Host) installEngine(ctx context.Context, progress progress.Log) error {
 		if try == engineInstallTries || ssh.IsSudoRefused(result) {
 			return h.Refuse("install docker, "+attempt+",", result)
 		}
-		progress.Warn(fmt.Sprintf("Docker's install on %s failed on try %d of %d and runs again",
+		progress.Warn(fmt.Sprintf("Docker's install on %s failed on try %d of %d: retrying",
 			h.Named(), try, engineInstallTries))
 		for _, line := range strings.Split(ssh.Reason(result), "\n") {
 			progress.Detail(line)

@@ -194,6 +194,6 @@ func revokeOriginCertificate(ctx context.Context, front edge.Edge, id string, ru
 		return
 	}
 	if err := certificates.Revoke(ctx, id); err != nil {
-		runProgress.Warn(fmt.Sprintf("the origin certificate %s is no longer answered with, and stays valid until it expires: revoking it failed: %v", id, err))
+		runProgress.Warn(fmt.Sprintf("Could not revoke the retired origin certificate %s, which stays valid until it expires: %v", id, err))
 	}
 }

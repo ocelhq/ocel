@@ -99,9 +99,9 @@ func parseEnvSetPairs(args []string) ([]envSetPair, error) {
 		key, value, ok := strings.Cut(arg, "=")
 		switch {
 		case !ok:
-			return nil, fmt.Errorf("argument %d has no =: `ocel env set` takes KEY=VALUE, and that argument is not repeated here in case it is a value", i+1)
+			return nil, fmt.Errorf("argument %d has no =: `ocel env set` takes KEY=VALUE", i+1)
 		case key == "":
-			return nil, fmt.Errorf("argument %d starts with =, so it names no key: `ocel env set` takes KEY=VALUE", i+1)
+			return nil, fmt.Errorf("argument %d names no key: `ocel env set` takes KEY=VALUE", i+1)
 		}
 		pairs = append(pairs, envSetPair{key: key, value: value})
 	}

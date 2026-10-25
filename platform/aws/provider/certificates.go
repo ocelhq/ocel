@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -147,6 +148,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
+	progress.Say("Discarding certificate " + path.Base(cert.ID))
 	discarded := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
 	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws, Namespace: string(p.namespace)}).Discard(ctx, discarded, progress)
 }

@@ -14,10 +14,10 @@ func RefuseImpliedInFolder(scope Scope, key, folder string) error {
 		return nil
 	}
 	if readers := scope.readers(key); len(readers) > 0 {
-		return fmt.Errorf("%s is read by %s, and a binding serves the whole project, so it reads the value at the project root and a value in %s would reach nothing: set it without --folder", key, sites(readers), folder)
+		return fmt.Errorf("%s is read by %s at the project root, so a value in %s reaches nothing: set it without --folder", key, sites(readers), folder)
 	}
 	if scope.EnvSource.isCredential(key) {
-		return fmt.Errorf("%s is what ocel logs in to %s with, and ocel reads it at the project root alone, so a value in %s would reach nothing: set it without --folder", key, scope.EnvSource.ID, folder)
+		return fmt.Errorf("%s is ocel's login to %s, read at the project root, so a value in %s reaches nothing: set it without --folder", key, scope.EnvSource.ID, folder)
 	}
 	return nil
 }
@@ -32,13 +32,13 @@ func RefuseUnwritable(definitions []*resourcesv1.VariableDefinition, key, folder
 			return nil
 		}
 		if folder == "" {
-			return fmt.Errorf("%s is scoped to %s, so it has no value at the project root — nothing would read one. Set it with --folder %s instead%s",
+			return fmt.Errorf("%s is scoped to %s: set it with --folder %s%s",
 				key, strings.Join(scope, " and "), scope[0], wording.DescriptionLine(definition.GetDescription()))
 		}
-		return fmt.Errorf("%s is scoped to %s, so %s has no value for it. Set it in one of the folders it names, or widen the scope where it is declared%s",
+		return fmt.Errorf("%s is scoped to %s, not %s: set it in one of those, or widen its scope%s",
 			key, strings.Join(scope, " and "), folder, wording.DescriptionLine(definition.GetDescription()))
 	}
-	return fmt.Errorf("no app in this project declares %s, so a value stored under it would be delivered to nothing: "+
-		"declare it in a defineEnv call — `defineEnv({ %s: { class: \"plain\" } })` — and set it again",
+	return fmt.Errorf("no app in this project declares %s: "+
+		"declare it with `defineEnv({ %s: { class: \"plain\" } })`, then set it again",
 		key, key)
 }

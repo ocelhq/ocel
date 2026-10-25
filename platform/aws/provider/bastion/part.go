@@ -2,7 +2,6 @@ package bastion
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -22,7 +21,7 @@ func NewPart(c Clients, namespace, region string, release func(context.Context, 
 		Shape: func(at environment.Tier) []pricing.Shaped { return shape(namespace, at) },
 		Removal: &tier.Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-				return planDeletion(ctx, c, namespace, tier, "this run removes it; the next port forward adds it again")
+				return planDeletion(ctx, c, namespace, tier, "the next port forward adds it again")
 			},
 			Remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 				if err := Remove(ctx, c, namespace, tier); err != nil {
@@ -33,11 +32,11 @@ func NewPart(c Clients, namespace, region string, release func(context.Context, 
 		},
 		Teardown: &tier.Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-				return planDeletion(ctx, c, namespace, tier, "the bootstrap it belongs to is being removed")
+				return planDeletion(ctx, c, namespace, tier, "")
 			},
 			Remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 				if progress != nil {
-					progress.Say(fmt.Sprintf("Removing the %s tier's bastion (ECS, IAM, EC2)", tier))
+					progress.Say("Removing the bastion")
 				}
 				if err := Remove(ctx, c, namespace, tier); err != nil {
 					return err

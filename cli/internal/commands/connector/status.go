@@ -35,12 +35,12 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		}
 		registered = slices.DeleteFunc(registered, func(row *consolev1.Connector) bool { return row.GetTarget() != fingerprint })
 		if len(registered) == 0 && !asJSON {
-			fmt.Fprintf(stdout, "The console has no connector registered for %s. Run `ocel connector add` to put one there.\n", terminal.PaletteFor(stdout).Bold(fingerprint))
+			fmt.Fprintf(stdout, "No connector registered for %s. Run `ocel connector add`.\n", terminal.PaletteFor(stdout).Bold(fingerprint))
 			return nil
 		}
 	}
 	if len(registered) == 0 && !asJSON {
-		fmt.Fprintln(stdout, "This organization has no connector. Run `ocel connector add` against a bootstrapped target to add one.")
+		fmt.Fprintln(stdout, "No connectors. Run `ocel connector add` against a bootstrapped target.")
 		return nil
 	}
 

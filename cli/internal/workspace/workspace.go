@@ -62,7 +62,7 @@ func (l Location) Rebase(context string) (Location, error) {
 	}
 	if !under(root, l.Root) {
 		return Location{}, fmt.Errorf(
-			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the build reads, so image.context may name %s — the app's own directory, the workspace it is a member of, or the directory holding its Go module and every module that module replaces — or a directory above it",
+			"%s is neither %s nor a directory above it: point image.context at %s or a directory above it",
 			root, l.Root, l.Root,
 		)
 	}
@@ -151,7 +151,7 @@ func locatedAt(dir, root string, written language.Language) (Location, error) {
 
 	if dep := workspaceDependency(app); dep != "" && located.PackageManager == Unknown {
 		return Location{}, fmt.Errorf(
-			"app %q depends on %q as %q, and %s contains no lockfile: the image installs the app's dependencies from one, and no installer resolves a workspace: range without it — install in %s so it writes a %s, %s, %s or %s, and commit what it writes",
+			"app %q depends on %q as %q, and %s contains no lockfile: install in %s so it writes a %s, %s, %s or %s, and commit it",
 			appName(app, dir), dep, workspaceRange(app, dep), located.Root, located.Root,
 			pnpmLock, npmLock, yarnLock, bunLock,
 		)

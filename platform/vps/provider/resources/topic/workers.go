@@ -83,7 +83,7 @@ func (w Workers) Run(ctx context.Context, spec provider.StackSpec, appContainer 
 		if err != nil {
 			return err
 		}
-		progress.Say("Starting worker " + worker.Name + " from " + app.App + "'s image as " + name + ", stopped until a promotion serves this release")
+		progress.Say("Starting worker " + worker.Name + ", stopped until this release is promoted")
 		if _, err := w.box.Apps.Run(ctx, release.Container{
 			Name: name, Project: ref.Project, App: app.App, Image: app.Image, Tier: ref.Tier,
 			Env: newEnv(app, worker.Name, deliverySecret), Manifest: manifest, Resolved: true,
@@ -126,7 +126,7 @@ func (w Workers) Promote(ctx context.Context, tier environment.Tier, project, en
 			return err
 		}
 		if ran == release.RunRestarted {
-			progress.Say("Started worker " + name + "'s container " + worker.Container)
+			progress.Say("Started worker " + name)
 		}
 		replaced, err := w.record(ctx, boxapi.QueueWorkerKey(tier, project, env, name), worker)
 		if err != nil {
@@ -150,9 +150,9 @@ func (w Workers) Promote(ctx context.Context, tier environment.Tier, project, en
 }
 
 func (w Workers) stop(ctx context.Context, name, container string, progress progress.Log) {
-	progress.Say("Stopping worker " + name + "'s container " + container)
+	progress.Say("Stopping worker " + name)
 	if err := w.box.Apps.Stop(ctx, container); err != nil {
-		progress.Warn(fmt.Sprintf("Worker %s's container %s is still running, and no run is delivered to it: %v", name, container, err))
+		progress.Warn(fmt.Sprintf("Worker %s is still running with no runs delivered: %v", name, err))
 	}
 }
 

@@ -37,15 +37,15 @@ var toolchainPrefixes = []string{"CARGO_", "RUSTUP_", "npm_config_"}
 func refuseReservedNames(app string, values AppVariables) error {
 	for _, key := range slices.Sorted(maps.Keys(values.Env)) {
 		if slices.Contains(buildSetNames, key) {
-			return fmt.Errorf("app %q declares %s, which the build sets itself; rename it where it is declared", app, key)
+			return fmt.Errorf("app %q declares %s, which the build sets itself; rename it", app, key)
 		}
 	}
 	for _, key := range slices.Sorted(maps.Keys(values.Live)) {
 		if slices.Contains(buildSetNames, key) {
-			return fmt.Errorf("app %q declares %s, which the build sets itself; rename it where it is declared", app, key)
+			return fmt.Errorf("app %q declares %s, which the build sets itself; rename it", app, key)
 		}
 		if isToolchainName(key) {
-			return fmt.Errorf("app %q declares %s as sensitive or secret, which keeps it out of the build's environment, and node or cargo reads %s from there; rename it where it is declared", app, key, key)
+			return fmt.Errorf("app %q declares %s as sensitive or secret, which hides it from node or cargo at build time; rename it", app, key)
 		}
 	}
 	return nil
@@ -57,7 +57,7 @@ func RefuseBindingProxyNames(app string, values AppVariables) error {
 	for _, key := range bindingProxyNames {
 		_, plain := values.Env[key]
 		if _, live := values.Live[key]; plain || live {
-			return fmt.Errorf("app %q declares %s, which the binding proxy is delivered under; rename it where it is declared", app, key)
+			return fmt.Errorf("app %q declares %s, which the binding proxy uses; rename it", app, key)
 		}
 	}
 	return nil

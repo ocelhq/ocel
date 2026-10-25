@@ -25,14 +25,14 @@ func Repository(slug, app string) (string, error) {
 	name := naming.Sanitize(app)
 	repository := images.LocalRepository(slug, name)
 	if !naming.IsRepositorySegment(project) || !naming.IsRepositorySegment(name) || len(repository) > maxRepository {
-		return "", fmt.Errorf("project %q and app %q name an image repository of %q, which docker rejects as a repository name: name them something a repository can be derived from", slug, app, repository)
+		return "", fmt.Errorf("project %q and app %q make the image repository %q, which docker rejects: rename one", slug, app, repository)
 	}
 	return repository, nil
 }
 
 func imageFor(slug, app, digest string) (Image, error) {
 	if !digestPattern.MatchString(digest) {
-		return Image{}, fmt.Errorf("the build of %q produced %q where its image's digest belongs, so the image has no coordinate to be released under", app, digest)
+		return Image{}, fmt.Errorf("the build of %q produced %q, which is not an image digest", app, digest)
 	}
 	repository, err := Repository(slug, app)
 	if err != nil {

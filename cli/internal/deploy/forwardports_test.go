@@ -290,7 +290,7 @@ func TestTheProviderDecidesWhichBindingsItForwardsAndTheBuildGoesWithoutTheRest(
 	if _, ok := built.Live[forwardedPostgresKey]; !ok {
 		t.Error("the build was not handed main, which the provider forwarded")
 	}
-	if !strings.Contains(said, "goes without the bindings of files,") || strings.Contains(said, "files--files") {
+	if !strings.Contains(said, "goes without the bindings of files:") || strings.Contains(said, "files--files") {
 		t.Errorf("the deploy said %q, want it to say the build goes without files, named as the app declares it", said)
 	}
 }

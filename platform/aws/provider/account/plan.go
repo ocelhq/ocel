@@ -176,20 +176,20 @@ func planRemoveLeftStacks(ctx context.Context, stacks cfn.API, layers LayerTeard
 
 var stranded = map[string]provider.Change{
 	"StateBucket": {
-		Reason: "the Pulumi state of every stack this bootstrap deployed; nothing can describe or remove those resources afterwards",
+		Reason: "holds the Pulumi state of every stack",
 		Slow:   true,
 	},
-	"ArtifactBucket": {Reason: "the function code and bytecode staged for this bootstrap", Slow: true},
+	"ArtifactBucket": {Slow: true},
 	"EdgeBucket": {
-		Reason: "every release's static assets, page entries, route tables and edge bundles",
+		Reason: "holds every release's assets",
 		Slow:   true,
 	},
 	"CacheBucket": {
-		Reason: "every release's fetch cache, use-cache entries and tag clock",
+		Reason: "holds every release's caches",
 		Slow:   true,
 	},
-	"VariablesTable": {Reason: "every variable value this tier stores, and their history"},
-	"VariablesKey":   {Reason: "the key those values are encrypted under"},
+	"VariablesTable": {Reason: "holds every variable value"},
+	"VariablesKey":   {Reason: "encrypts every variable value"},
 }
 
 func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {

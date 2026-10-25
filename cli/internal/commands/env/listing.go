@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -45,10 +43,11 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 				return err
 			}
 		}
-		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
+		present := dependencies.Presentation(stdout)
+		if present.Format == terminal.FormatJSON {
 			return writeEnvListJSON(stdout, req, resp.GetValues(), environments, definitions)
 		}
-		renderValues(stdout, resp.GetValues(), environments, definitions, groups)
+		renderValues(stdout, present, resp.GetValues(), environments, definitions, groups)
 		return nil
 	})
 }
@@ -80,102 +79,72 @@ func overridden(values []*variablestorev1.ValueMetadata) bool {
 	})
 }
 
-func renderValues(stdout io.Writer, values []*variablestorev1.ValueMetadata, environments []string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) {
+func renderValues(stdout io.Writer, present terminal.Presentation, values []*variablestorev1.ValueMetadata, environments []string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY>=<VALUE>`.")
 		return
 	}
+	palette := present.Palette()
 	described := descriptions(definitions)
 	belongs := membership(definitions)
 
+	table := terminal.NewTable(
+		terminal.Column{Head: "KEY"},
+		terminal.Column{Head: "DESCRIPTION"},
+		terminal.Column{Head: "FOLDER"},
+		terminal.Column{Head: "ENVIRONMENT"},
+		terminal.Column{Head: "VERSION", Align: terminal.AlignRight},
+		terminal.Column{Head: "BYTES", Align: terminal.AlignRight},
+		terminal.Column{Head: "UPDATED"},
+		terminal.Column{Head: "SOURCE"},
+	)
 	orphans := false
-	rows := []listingRow{{cells: []string{"KEY", "DESCRIPTION", "FOLDER", "ENVIRONMENT", "VERSION", "BYTES", "UPDATED", "SOURCE"}}}
 	for _, v := range values {
 		if belongs[v.GetCoordinate().GetKey()] != "" {
 			continue
 		}
-		row, orphaned := valueRow(v, "", described, environments)
-		rows = append(rows, row)
-		orphans = orphans || orphaned
+		orphans = valueRow(table, present, v, "", described, environments) || orphans
 	}
 	for _, group := range groups {
 		members := valuesIn(group.GetKey(), values, definitions)
 		if len(members) == 0 {
 			continue
 		}
-		rows = append(rows, listingRow{}, listingRow{headline: wording.GroupHeadline(group.GetKey(), group.GetDescription())})
+		table.Span("")
+		table.Span(palette.Bold(wording.GroupHeadline(group.GetKey(), group.GetDescription())))
 		for _, v := range members {
-			row, orphaned := valueRow(v, listingIndent, described, environments)
-			rows = append(rows, row)
-			orphans = orphans || orphaned
+			orphans = valueRow(table, present, v, listingIndent, described, environments) || orphans
 		}
 	}
-	writeListing(stdout, rows)
+	fmt.Fprint(stdout, table.Render(palette, ""))
 
 	if orphans {
-		fmt.Fprintln(stdout, "\nAn orphaned override belongs to an environment that no longer exists, so nothing will ever read it. Remove one with `ocel env rm <KEY> --preview --environment <ENVIRONMENT>`.")
+		fmt.Fprintf(stdout, "\n%s %s\n", palette.WarnMark(), palette.Commands("Nothing reads an orphaned override: `ocel env rm <KEY> --preview --environment <ENVIRONMENT>` removes one."))
 	}
 }
 
 const listingIndent = "  "
 
-type listingRow struct {
-	headline string
-	lead     string
-	cells    []string
-}
-
-func valueRow(v *variablestorev1.ValueMetadata, lead string, descriptions map[string]string, environments []string) (listingRow, bool) {
+func valueRow(table *terminal.Table, present terminal.Presentation, v *variablestorev1.ValueMetadata, lead string, descriptions map[string]string, environments []string) bool {
+	palette := present.Palette()
 	c := v.GetCoordinate()
 	environment := environmentOrAll(c.GetEnvironment())
 	orphaned := variables.IsOrphaned(environments, c.GetEnvironment())
 	if orphaned {
-		environment += " (orphaned)"
+		environment = palette.Warning(environment + " (orphaned)")
 	}
 	size := fmt.Sprint(v.GetSize())
 	source := envSourceOrBuiltin(v)
 	if target := v.GetTarget(); target != nil {
-		size, source = "—", describeCoordinate(target)
+		size, source = terminal.NoValue, describeCoordinate(target)
 	}
-	return listingRow{lead: lead, cells: []string{
-		c.GetKey(), descriptions[c.GetKey()], folderOrRoot(c.GetFolder()), environment,
-		fmt.Sprint(v.GetVersion()), size, terminal.EpochDate(v.GetUpdatedAt()), source,
-	}}, orphaned
-}
-
-func writeListing(stdout io.Writer, rows []listingRow) {
-	var widths []int
-	for _, row := range rows {
-		for i, cell := range row.cells {
-			width := utf8.RuneCountInString(cell)
-			if i == 0 {
-				width += utf8.RuneCountInString(row.lead)
-			}
-			for len(widths) <= i {
-				widths = append(widths, 0)
-			}
-			widths[i] = max(widths[i], width)
-		}
+	folder := c.GetFolder()
+	if folder == "" {
+		folder = palette.Muted(folderOrRoot(folder))
 	}
-	for _, row := range rows {
-		if row.cells == nil {
-			fmt.Fprintln(stdout, row.headline)
-			continue
-		}
-		line := row.lead
-		for i, cell := range row.cells {
-			if i == len(row.cells)-1 {
-				line += cell
-				break
-			}
-			width := widths[i]
-			if i == 0 {
-				width -= utf8.RuneCountInString(row.lead)
-			}
-			line += cell + strings.Repeat(" ", width-utf8.RuneCountInString(cell)+len(listingIndent))
-		}
-		fmt.Fprintln(stdout, strings.TrimRight(line, " "))
-	}
+	table.Row(lead+palette.Bold(c.GetKey()), descriptions[c.GetKey()], folder, environment,
+		fmt.Sprint(v.GetVersion()), size, present.EpochAge(v.GetUpdatedAt()), source)
+	return orphaned
 }
 
 func membership(definitions []*resourcesv1.VariableDefinition) map[string]string {
@@ -225,7 +194,7 @@ func envSourceOrBuiltin(v *variablestorev1.ValueMetadata) string {
 
 func environmentOrAll(environment string) string {
 	if environment == "" {
-		return "—"
+		return terminal.NoValue
 	}
 	return environment
 }

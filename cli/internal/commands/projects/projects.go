@@ -4,20 +4,19 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
+	"github.com/ocelhq/ocel/cli/internal/terminal"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const (
-	unknownCell = "—"
-	cellSep     = " · "
+	unknownCell = terminal.NoValue
 )
 
 func NewCommand(invocation commands.Invocation) *cobra.Command {
@@ -59,14 +58,10 @@ func accountOptions(target commands.Target) commands.OpenOptions {
 	return commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION, Cloud: target.Cloud}
 }
 
-func identityHeader(identity *contractv1.Identity, before []string, after ...string) string {
+func identityHeader(palette terminal.Palette, identity *contractv1.Identity, before []string, after ...string) string {
 	cells := append(append(before, readiness.IdentityCells(identity)...), after...)
-	return strings.Join(cells, cellSep)
-}
-
-func orUnknown(value string) string {
-	if value == "" {
-		return unknownCell
+	if len(cells) == 0 {
+		return ""
 	}
-	return value
+	return palette.Heading(cells[0], cells[1:]...)
 }

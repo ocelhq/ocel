@@ -82,6 +82,23 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployProvisioned(t *testing.T) {
 	}
 }
 
+func TestPlanRemoveProjectGivesNoReasonForWhatDestroyingTheProjectPlainlyDeletes(t *testing.T) {
+	client, _ := deployedProject(t)
+
+	plan, err := client.PlanRemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	for _, group := range plan.GetGroups() {
+		switch group.GetKind() {
+		case provider.StackGroupKind, "variable values", "stored objects":
+			if group.GetReason() != "" {
+				t.Errorf("%s %s is planned with reason %q, want none: a project's destroy deletes it for no other reason", group.GetKind(), group.GetName(), group.GetReason())
+			}
+		}
+	}
+}
+
 func TestRemovingAProjectRemovesWhatTheVendorHoldsForItOnceItsValuesArePurged(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")

@@ -283,7 +283,7 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	progress.Say("Provisioning bucket " + in.Resource.Name + " in object store " + spec.Name)
+	progress.Say("Provisioning bucket " + in.Resource.Name)
 
 	sessionsExpire, started := false, false
 	root, err := r.stores.once(spec.Name, func() (storeCredential, error) {
@@ -361,7 +361,7 @@ func (r Resource) dropBucket(ctx context.Context, ref provider.StackRef, binding
 			return err
 		}
 	}
-	progress.Say("Removing bucket " + binding.Name + " and its objects from object store " + store)
+	progress.Say("Removing bucket " + binding.Name + " and its objects")
 	return r.objects.removeBucket(ctx, storeBucketSpec(ref, store, root.secret, Spec{Bucket: bucket}))
 }
 
@@ -397,7 +397,7 @@ func (r Resource) removeStore(ctx context.Context, ref provider.StackRef, progre
 	if err != nil {
 		return err
 	}
-	progress.Say("Removing object store " + store + ": no bucket in this environment uses it any more")
+	progress.Say("Removing object store " + store)
 	if err := r.box.Routing.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
 		return err
 	}
