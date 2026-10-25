@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -210,13 +211,15 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 				w.WriteHeader(answer.status)
 			}))
 			t.Cleanup(server.Close)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			t.Cleanup(cancel)
 
 			var refused refusal.Refusal
 			_, err := gcp.Credentials{
 				Project:      gcp.Named("acme-prod"),
 				Tokens:       fixedToken{token: mintedAccessToken},
 				TokenInfoURL: server.URL,
-			}.Whoami(context.Background())
+			}.Whoami(ctx)
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 				t.Fatalf("Whoami() = %v, want a %s refusal: the credential is good, the endpoint is not", err, refusal.CodeBusy)
 			}

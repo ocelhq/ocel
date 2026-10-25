@@ -38,23 +38,52 @@ var retryableStatuses = []codes.Code{
 	codes.Aborted,
 }
 
+type clock struct {
+	now    func() time.Time
+	sleep  func(ctx context.Context, wait time.Duration) bool
+	random func(limit time.Duration) time.Duration
+}
+
+var wallClock = clock{now: time.Now, sleep: slept, random: rand.N[time.Duration]}
+
 func Asked[T any](ctx context.Context, ask func() (T, int, error)) (T, int, error) {
-	var (
-		value T
-		code  int
-		err   error
-	)
-	for attempt := range Attempts {
-		if attempt > 0 && !Waited(ctx, attempt) {
+	return asked(ctx, wallClock, ask)
+}
+
+func asked[T any](ctx context.Context, c clock, ask func() (T, int, error)) (T, int, error) {
+	started := c.now()
+	for failures, throttles := 0, 0; ; {
+		value, code, err := ask()
+		var wait time.Duration
+		switch {
+		case isThrottled(code, err):
+			wait = c.throttleWait(err, throttles)
+			throttles++
+			if c.now().Sub(started)+wait > throttleBudget {
+				return value, code, err
+			}
+		case isRetryable(code, err):
+			failures++
+			if failures >= Attempts {
+				return value, code, err
+			}
+			wait = c.backoff(failures, ceiling)
+		default:
+			return value, code, err
+		}
+		if ctx.Err() == nil && c.isPastDeadline(ctx, wait) {
+			return value, code, err
+		}
+		if !c.sleep(ctx, wait) {
 			var nothing T
 			return nothing, 0, ctx.Err()
 		}
-		value, code, err = ask()
-		if !isRetryable(code, err) {
-			return value, code, err
-		}
 	}
-	return value, code, err
+}
+
+func (c clock) isPastDeadline(ctx context.Context, wait time.Duration) bool {
+	deadline, set := ctx.Deadline()
+	return set && c.now().Add(wait).After(deadline)
 }
 
 func Called[T any](ctx context.Context, call func() (T, error)) (T, error) {
@@ -105,12 +134,20 @@ func isRetryableTransport(err error) bool {
 func Waited(ctx context.Context, attempt int) bool { return WaitedFor(ctx, attempt, ceiling) }
 
 func WaitedFor(ctx context.Context, attempt int, limit time.Duration) bool {
+	return slept(ctx, wallClock.backoff(attempt, limit))
+}
+
+func (c clock) backoff(attempt int, limit time.Duration) time.Duration {
 	wait := backoff
 	for doubled := 1; doubled < attempt && wait < limit; doubled++ {
 		wait *= 2
 	}
 	wait = min(wait, limit)
-	timer := time.NewTimer(wait/2 + rand.N(wait/2))
+	return wait/2 + c.random(wait/2)
+}
+
+func slept(ctx context.Context, wait time.Duration) bool {
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():

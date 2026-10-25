@@ -202,10 +202,9 @@ func TestATokenFailureThatWillFailAgainIsAskedOnce(t *testing.T) {
 
 func TestATokenFailureThatMayPassIsAskedAgain(t *testing.T) {
 	for name, failure := range map[string]error{
-		"timed out":                 &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}},
-		"connection reset":          &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}},
-		"token endpoint down":       &auth.Error{Response: &http.Response{StatusCode: http.StatusServiceUnavailable}},
-		"token endpoint throttling": &auth.Error{Response: &http.Response{StatusCode: http.StatusTooManyRequests}},
+		"timed out":           &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}},
+		"connection reset":    &url.Error{Op: "Post", URL: "https://oauth2.googleapis.com/token", Err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}},
+		"token endpoint down": &auth.Error{Response: &http.Response{StatusCode: http.StatusServiceUnavailable}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if calls := timesAsked(failure); calls != googleretry.Attempts {
