@@ -164,12 +164,12 @@ func serves(rec dns.RecordResponse, want edge.Record) bool {
 
 func foreignRecordWarning(want edge.Record, rec dns.RecordResponse, origin OriginScope) string {
 	if held, written := parseRecordOwner(rec.Comment); written && held.isOtherOrigin(origin) {
-		return describeOtherOrigin(fmt.Sprintf("%s already has a %s record that origin %s wrote, pointing at %s, so this deployment will not serve it", want.Name, rec.Type, held.origin, rec.Content), want.Name, held.origin)
+		return describeOtherOrigin(fmt.Sprintf("%s has a %s record origin %s wrote, pointing at %s", want.Name, rec.Type, held.origin, rec.Content), want.Name, held.origin)
 	}
 	if want.Proxied {
-		return fmt.Sprintf("%s already has a DNS record ocel did not write and it is not proxied through Cloudflare, so the worker route under it will never fire — set that record to proxied (orange cloud), or delete it and deploy again", want.Name)
+		return fmt.Sprintf("%s has an unproxied DNS record ocel did not write: set it to proxied (orange cloud), or delete it and deploy again", want.Name)
 	}
-	return fmt.Sprintf("%s already has a %s record ocel did not write pointing at %s, so this deployment will not serve it — repoint it at %s, or delete it and deploy again", want.Name, rec.Type, rec.Content, want.Value)
+	return fmt.Sprintf("%s has a %s record ocel did not write, pointing at %s: repoint it at %s, or delete it and deploy again", want.Name, rec.Type, rec.Content, want.Value)
 }
 
 func (w *dnsRecords) replace(ctx context.Context, zoneID, recordID string, want edge.Record, comment string) error {

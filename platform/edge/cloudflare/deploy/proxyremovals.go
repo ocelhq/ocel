@@ -19,10 +19,8 @@ func (x *Proxy) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, e
 	for _, hostname := range scope.Hostnames {
 		group.Changes = append(group.Changes, edge.PlanChange{
 			Kind: kindDNSRecord, Name: hostname, Action: edge.PlanDelete,
-			Reason: "the proxied record that forwards it to the origin",
 		}, edge.PlanChange{
 			Kind: kindOriginPullAssociation, Name: hostname, Action: edge.PlanDelete,
-			Reason: "the client certificate Cloudflare presents to the origin for it",
 		})
 	}
 	if len(group.Changes) == 0 {
@@ -33,7 +31,7 @@ func (x *Proxy) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, e
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind) + "/zone",
 		Action: edge.PlanKeep,
-		Reason: "the client certificate this origin presents in a zone goes with the tier's bootstrap",
+		Reason: "goes with the tier's bootstrap",
 		Changes: []edge.PlanChange{{
 			Kind: kindOriginPullCertificate, Name: "this origin's client certificate in each zone", Action: edge.PlanKeep,
 		}},
@@ -47,7 +45,6 @@ func (x *Proxy) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{{
 			Kind: kindDNSRecord, Name: wildcard, Action: edge.PlanDelete,
-			Reason: "the proxied record that would forward it to the origin",
 		}},
 	}, x.PlanSharedPreviewRemoval(), nil
 }
@@ -57,6 +54,6 @@ func (x *Proxy) PlanSharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "the proxy provisions nothing shared by previews",
+		Reason: "nothing shared",
 	}
 }
