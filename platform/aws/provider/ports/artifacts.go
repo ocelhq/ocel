@@ -166,7 +166,8 @@ func (a Artifacts) RemoveObjects(ctx context.Context, tier environment.Tier, sco
 		swept = append(swept, prefixes[i])
 	}
 	if progress != nil && len(errs) == 0 && len(swept) > 0 {
-		progress.Say(fmt.Sprintf("Removed the %s objects under %s", tier, strings.Join(swept, ", ")))
+		_, of, _ := strings.Cut(swept[0], "/")
+		progress.Say("Removed the stored objects of " + strings.TrimSuffix(of, "/"))
 	}
 	return errors.Join(errs...)
 }

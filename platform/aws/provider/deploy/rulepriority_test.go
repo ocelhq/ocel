@@ -53,7 +53,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if _, err := stacks.Provision(context.Background(), spec, &progress); err != nil {
 		t.Fatalf("Provision() = %v, want the rule placed again at the next free priority", err)
 	}
-	claimed := "INFO Placing web's listener rule again: another deploy claimed priority " + strconv.Itoa(hashed) + " first (attempt 2 of "
+	claimed := "INFO Placing web's listener rule again: priority " + strconv.Itoa(hashed) + " was taken (attempt 2 of "
 	if !slices.ContainsFunc(progress.Lines(), func(line string) bool { return strings.HasPrefix(line, claimed) }) {
 		t.Errorf("Provision() said %q, want the retry said as a sentence naming the app and the claimed priority", progress.Lines())
 	}

@@ -359,7 +359,7 @@ func TestWarmPass(t *testing.T) {
 		<-done
 
 		out := dump()
-		if got := strings.Count(out, "the deploy stopped before its turn to warm; not warmed"); got != 8-warmConcurrency {
+		if got := strings.Count(out, "not warmed, the deploy stopped first"); got != 8-warmConcurrency {
 			t.Errorf("warm log names %d queued bundles as never warmed, want %d:\n%s", got, 8-warmConcurrency, out)
 		}
 		if want := fmt.Sprintf("Warmed %d/8 bundles", warmConcurrency); !strings.Contains(out, want) {

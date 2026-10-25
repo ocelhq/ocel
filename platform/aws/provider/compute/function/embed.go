@@ -126,7 +126,7 @@ func (p embedPass) run(ctx context.Context) {
 
 	for i, target := range p.targets {
 		if skipped[i] {
-			p.progress.Warn(fmt.Sprintf("%s of app %s: the deploy stopped before its turn to embed; not embedded", target.LogicalName, target.App))
+			p.progress.Warn(fmt.Sprintf("%s of app %s: not embedded, the deploy stopped first", target.LogicalName, target.App))
 		}
 	}
 	passOutcome(p.progress, embedded, len(p.targets))(fmt.Sprintf("Embedded %d/%d compile caches in %.0fs", embedded, len(p.targets), time.Since(start).Seconds()))

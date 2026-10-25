@@ -102,12 +102,12 @@ func Release(ctx context.Context, writer edge.DNSRecords, records []edge.Record,
 	}
 	if writer == nil {
 		for _, rec := range records {
-			say(fmt.Sprintf("Leaving %s in place: nothing here writes DNS any more — delete it by hand, or declare `provider.aws.dns` and run this again", rec))
+			say(fmt.Sprintf("Leaving %s in place: nothing writes DNS here; delete it by hand", rec))
 		}
 		return nil
 	}
 	for _, rec := range records {
-		say(fmt.Sprintf("Removing %s", rec))
+		say(fmt.Sprintf("Removing %s %s", rec.Name, rec.Type))
 	}
 	return writer.Delete(ctx, records)
 }

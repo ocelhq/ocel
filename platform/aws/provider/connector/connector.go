@@ -184,12 +184,12 @@ func Install(ctx context.Context, apis APIs, ns account.Namespace, bundle Bundle
 	if err != nil {
 		return Installation{}, err
 	}
-	progress.Say(fmt.Sprintf("Staged connector %s at s3://%s/%s", bundle.Version, bucket, at.Key))
+	progress.Say("Staged connector " + bundle.Version)
 
 	if bundle.PublicKey, err = mintKey(ctx, apis.SSM, ns); err != nil {
 		return Installation{}, err
 	}
-	progress.Say(fmt.Sprintf("Stored the connector's key in parameter %s", KeyParameter(ns)))
+	progress.Say("Stored the connector's key in parameter " + KeyParameter(ns))
 
 	template, err := templateFor(ns, at, bundle, keys)
 	if err != nil {
@@ -225,7 +225,7 @@ func Remove(ctx context.Context, apis APIs, ns account.Namespace, progress progr
 		if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
 			return err
 		}
-		progress.Say(fmt.Sprintf("Emptied bucket %s, where the connector's code was staged", bucket))
+		progress.Say("Emptied bucket " + bucket)
 	}
 	if err := cfn.Delete(ctx, apis.CFN, StackName(ns)); err != nil {
 		return err
@@ -234,7 +234,7 @@ func Remove(ctx context.Context, apis APIs, ns account.Namespace, progress progr
 	if err := takeKey(ctx, apis.SSM, ns); err != nil {
 		return err
 	}
-	progress.Say(fmt.Sprintf("Deleted parameter %s, the connector's key", KeyParameter(ns)))
+	progress.Say("Deleted parameter " + KeyParameter(ns))
 	return nil
 }
 
@@ -269,7 +269,7 @@ func codeBucket(ctx context.Context, apis APIs, ns account.Namespace,
 	if err != nil {
 		return "", err
 	}
-	progress.Say(fmt.Sprintf("Creating stack %s to stage the connector's code in", StackName(ns)))
+	progress.Say("Creating stack " + StackName(ns))
 	if err := cfn.Create(ctx, apis.CFN, StackName(ns), template, nil, nil,
 		tagsFor(ns, template, writer)); err != nil {
 		return "", err

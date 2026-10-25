@@ -168,7 +168,7 @@ func (p *apiGateway) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGro
 		Kind:   typeRestAPI,
 		Name:   scope.Slug,
 		Action: edge.PlanDelete,
-		Reason: restAPIsReason(scope.Tier),
+		Reason: "API Gateway deletes one REST API every 30 seconds",
 		Slow:   true,
 	}}
 	for _, hostname := range scope.Hostnames {
@@ -186,14 +186,6 @@ func (p *apiGateway) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGro
 	}}, nil
 }
 
-func restAPIsReason(tier environment.Tier) string {
-	const paced = "; API Gateway deletes at most one REST API every 30 seconds per account, so a project with many previews takes a while"
-	if tier == environment.TierPreview {
-		return "every preview API this project is served through, and the host rules routing to them" + paced
-	}
-	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
-}
-
 func (p *apiGateway) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup, edge.PlanGroup, error) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
@@ -203,7 +195,7 @@ func (p *apiGateway) PlanPreviewWildcardRemoval(wildcard string) (edge.PlanGroup
 			Kind:   typeDomainName,
 			Name:   wildcard,
 			Action: edge.PlanDelete,
-			Reason: "every project's previews are routed through it, and the rules under it go with it",
+			Reason: "every project's previews go with it",
 		}},
 	}
 	return removed, p.PlanSharedPreviewRemoval(), nil
@@ -214,7 +206,7 @@ func (p *apiGateway) PlanSharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "bootstrap-scoped: the preview fallback API answers every preview hostname no project claims",
+		Reason: "bootstrap-scoped",
 	}
 }
 

@@ -122,8 +122,6 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, t
 	if err != nil {
 		return nil, err
 	}
-	reason := fmt.Sprintf(severedByRemove, CloudflareEdgePart, KindCloudflare)
-
 	var changes []provider.Change
 	keys, err := liveAccessKeys(ctx, apis.IAM, names.user)
 	if err != nil {
@@ -131,7 +129,7 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, t
 	}
 	if len(keys) > 0 {
 		changes = append(changes, provider.Change{
-			Kind: kindAccessKey, Name: names.user, Action: provider.ActionDelete, Reason: reason,
+			Kind: kindAccessKey, Name: names.user, Action: provider.ActionDelete,
 		})
 	}
 	present, err := paramsPresent(ctx, apis.SSM, names.edgeParams())
@@ -143,7 +141,7 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, t
 			continue
 		}
 		changes = append(changes, provider.Change{
-			Kind: kindParameter, Name: param, Action: provider.ActionDelete, Reason: reason,
+			Kind: kindParameter, Name: param, Action: provider.ActionDelete,
 		})
 	}
 	return changes, nil
@@ -158,7 +156,7 @@ func severCloudflareEdge(ctx context.Context, d stepDeps) error {
 	if err := deleteAccessKeys(ctx, d.iam, names.user); err != nil {
 		return err
 	}
-	d.progress.Say(fmt.Sprintf("Deleting the %d parameters the %s edge was reached through (SSM)", len(names.edgeParams()), KindCloudflare))
+	d.progress.Say(fmt.Sprintf("Deleting the %s edge's %d parameters", KindCloudflare, len(names.edgeParams())))
 	for _, param := range names.edgeParams() {
 		if err := deleteParam(ctx, d.ssm, param); err != nil {
 			return err
@@ -168,17 +166,17 @@ func severCloudflareEdge(ctx context.Context, d stepDeps) error {
 }
 
 func mintEdgeCredentials(ctx context.Context, d stepDeps) error {
-	d.progress.Say("Ensuring the edge reader's credentials (SSM SecureString)")
+	d.progress.Say("Ensuring the edge reader's credentials")
 	outcome, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.ns, d.tier, KindCloudflare, time.Now())
 	if err != nil {
 		return err
 	}
 	if outcome.retired != "" {
-		d.progress.Say(fmt.Sprintf("Retired the superseded edge reader access key %s, idle since every worker moved off it", outcome.retired))
+		d.progress.Say("Retired the old edge reader access key " + outcome.retired)
 	}
 	switch {
 	case outcome.rotated:
-		d.progress.Warn(fmt.Sprintf("Rotated the edge reader access key, which was older than %d days: re-deploy each project so its worker signs with the new one; the next bootstrap retires the old key once it is idle", int(EdgeKeyMaxAge.Hours()/24)))
+		d.progress.Warn("Rotated the edge reader access key: re-deploy each project so its worker signs with the new one")
 	case outcome.minted:
 		d.progress.Say("Minted a new edge reader access key")
 	default:

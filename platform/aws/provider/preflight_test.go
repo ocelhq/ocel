@@ -165,7 +165,7 @@ func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 	}
 	lines := progress.Lines()
 	if len(lines) != 2 ||
-		!strings.HasPrefix(lines[0], "WARN The production edge signs into this account with access key AKOLD") ||
+		!strings.HasPrefix(lines[0], "WARN The production edge's access key AKOLD") ||
 		!strings.HasPrefix(lines[1], "WARN The production origin secret") {
 		t.Errorf("preflight said %q, want both ageing credentials warned about, each naming its tier", lines)
 	}

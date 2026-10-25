@@ -224,11 +224,11 @@ func (s *Stacks) Ensure(ctx context.Context, ref provider.StackRef, fronts Front
 	switch {
 	case progress == nil:
 	case !present:
-		progress.Say("Provisioning the shared container infrastructure for the " + string(tier) + " tier: one load balancer and one cluster every container app in it runs behind")
+		progress.Say("Provisioning the container load balancer and cluster")
 	case fronts.Private && infra.Listener == "":
-		progress.Say("Raising the internal load balancer of the " + string(tier) + " tier: CloudFront reaches a container app routed through it there, by its VPC origin")
+		progress.Say("Raising the internal load balancer")
 	default:
-		progress.Say("Raising the public load balancer of the " + string(tier) + " tier: the edge in front of a container app forwards its hostnames there")
+		progress.Say("Raising the public load balancer")
 	}
 	var decoded Infrastructure
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {

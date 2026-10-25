@@ -182,7 +182,7 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 			return Network{}, err
 		}
 		if progress != nil {
-			progress.Say("Applying the transforms that patch the function network of the " + string(tier) + " tier: they differ from the ones it was provisioned with")
+			progress.Say("Applying the changed transforms to the function network")
 		}
 		return s.provision(ctx, owner, StackRef(tier), patches, progress)
 	}
@@ -190,7 +190,7 @@ func (s *Stacks) Claim(ctx context.Context, ref provider.StackRef, progress prog
 		return Network{}, err
 	}
 	if progress != nil {
-		progress.Say("Provisioning the shared function network for the " + string(tier) + " tier: NAT gateways the private subnets every serverless app that reaches a VPC-only resource attaches to route through; the first attach can take several minutes")
+		progress.Say("Provisioning the function network, which can take several minutes")
 	}
 	var decoded Network
 	err = Shared.Raise(ctx, owner, tier, ref.Project, func() ([]provider.PhysicalResource, error) {
@@ -367,7 +367,7 @@ func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provi
 		Name:   StackRef(tier).Name.String(),
 		Action: provider.ActionUpdate,
 		Part:   Part,
-		Reason: "the transforms that patch the NAT gateways of the " + string(tier) + " tier differ from the ones they carry, so this deploy provisions the function network again with them, for every project in the tier",
+		Reason: "its transforms changed, for every project in the tier",
 		Slow:   true,
 	}, nil
 }
@@ -378,7 +378,7 @@ func NewChangeGroup(tier environment.Tier) provider.ChangeGroup {
 		Name:   StackRef(tier).Name.String(),
 		Action: provider.ActionCreate,
 		Part:   Part,
-		Reason: "the first serverless app in the " + string(tier) + " tier that reaches a VPC-only resource adds the " + Part + " part: " + Summary,
+		Reason: "added on first use",
 		Slow:   true,
 	}
 }

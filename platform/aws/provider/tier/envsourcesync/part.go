@@ -3,7 +3,6 @@ package envsourcesync
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -38,7 +37,7 @@ func NewPart(records tier.Records, c Clients, namespace string, specFor func(con
 			},
 			Remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 				if progress != nil {
-					progress.Say(fmt.Sprintf("Removing the %s tier's env source sync (Lambda, EventBridge Scheduler, IAM)", tier))
+					progress.Say("Removing the env source sync")
 				}
 				return Remove(ctx, c, namespace, tier)
 			},

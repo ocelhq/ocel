@@ -24,13 +24,12 @@ const (
 	kindParameter = "AWS::SSM::Parameter"
 	kindAccessKey = "AWS::IAM::AccessKey"
 
-	paramCurrent    = "already current"
-	keyGone         = "the access key it records is no longer on the user"
-	keyUnrecorded   = "it records no access key"
-	keyStale        = "the access key it records is older than 90 days and is rotated"
-	severedByRemove = "removing %s takes what the %s edge was reached through with it"
+	paramCurrent  = "already current"
+	keyGone       = "the access key it records is no longer on the user"
+	keyUnrecorded = "it records no access key"
+	keyStale      = "older than 90 days"
 
-	passphraseStranded = "the only copy of the passphrase this tier's Pulumi stacks were encrypted under; no bootstrap of this tier is left to need it"
+	passphraseStranded = "the only copy of the Pulumi passphrase"
 )
 
 type ParamAPIs struct {

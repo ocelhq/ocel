@@ -98,7 +98,7 @@ func Recorded(r Records, spec RecordedSpec) Part {
 		Removal: removal,
 		Teardown: &Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-				return r.planDeletion(ctx, tier, spec.Name, "the bootstrap it belongs to is being removed")
+				return r.planDeletion(ctx, tier, spec.Name, "")
 			},
 			Remove: func(ctx context.Context, tier environment.Tier, progress progress.Log) error {
 				recorded, present, err := stackrecords.ReadBootstrapPart(ctx, r.KeyValues, tier, spec.Name)
@@ -106,7 +106,7 @@ func Recorded(r Records, spec RecordedSpec) Part {
 					return err
 				}
 				if progress != nil {
-					progress.Say(fmt.Sprintf("Removing the %s part the %s tier's deploys added", spec.Name, tier))
+					progress.Say(fmt.Sprintf("Removing the %s part", spec.Name))
 				}
 				return spec.Remove(ctx, tier, recorded.Resources)
 			},
@@ -163,7 +163,7 @@ func (r Records) Shape(resources []pricing.Shaped) *provider.PartShape {
 func (r Records) Removal(name string, remove func(ctx context.Context, tier environment.Tier, recorded []provider.PhysicalResource) error) *Removal {
 	return &Removal{
 		Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
-			return r.planDeletion(ctx, tier, name, "this run removes it; the next deploy that uses it adds it again")
+			return r.planDeletion(ctx, tier, name, "the next deploy that needs it adds it again")
 		},
 		Remove: func(ctx context.Context, tier environment.Tier, _ progress.Log) error {
 			recorded, present, err := stackrecords.ReadBootstrapPart(ctx, r.KeyValues, tier, name)
@@ -217,7 +217,7 @@ func (r Records) ensure(ctx context.Context, tier environment.Tier, spec Recorde
 		AddedWith: addedWith,
 		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
 			if say != nil {
-				say(fmt.Sprintf("Adding the %s tier's %s bootstrap part: %s", tier, spec.Name, spec.Summary))
+				say(fmt.Sprintf("Adding the %s part", spec.Name))
 			}
 			return work.Make(ctx, prior, false)
 		},
@@ -247,10 +247,10 @@ func (r Records) plan(ctx context.Context, tier environment.Tier, spec RecordedS
 		Kind:   provider.StackGroupKind,
 		Name:   "bootstrap part " + spec.Name,
 		Action: provider.ActionCreate,
-		Reason: "the first deploy in the " + string(tier) + " tier that needs it adds the " + spec.Name + " part: " + spec.Summary,
+		Reason: "added on first use",
 	}
 	if present {
-		group.Action, group.Reason = provider.ActionUpdate, "this build moves the "+string(tier)+" tier's "+spec.Name+" forward"
+		group.Action, group.Reason = provider.ActionUpdate, "this build moves it forward"
 	}
 	for _, shaped := range spec.Shape(tier) {
 		group.Changes = append(group.Changes, provider.Change{Kind: shaped.Type, Name: shaped.Name, Action: group.Action})

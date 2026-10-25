@@ -31,7 +31,7 @@ const (
 	runtimeLayerGroupKind = "layers"
 	runtimeLayerType      = "AWS::Lambda::LayerVersion"
 
-	runtimeLayerStep = "Ensuring the runtime every function boots through (Lambda layers)"
+	runtimeLayerStep = "Ensuring the runtime layers"
 
 	runtimeLayersRecord = "runtime-layers"
 
@@ -211,7 +211,7 @@ func ensureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier envi
 			if arn, err = publishRuntimeLayer(ctx, apis, tier, name, architecture, req.ArtifactBucket, payload); err != nil {
 				return nil, err
 			}
-			runProgress.Say(fmt.Sprintf("Published the %s runtime this Ocel version ships as Lambda layer %s", architecture, arn))
+			runProgress.Say(fmt.Sprintf("Published the %s runtime layer %s", architecture, arn))
 		}
 		published[architecture] = arn
 	}

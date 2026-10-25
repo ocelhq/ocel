@@ -30,7 +30,7 @@ func reclaimFailedVPCOrigins(ctx context.Context, api awsports.VPCOriginsAPI, na
 	}
 	for _, id := range failed {
 		if progress != nil {
-			progress.Say("Removing VPC origin " + id + ", which a failed deploy of the " + string(tier) + " tier left behind")
+			progress.Say("Removing VPC origin " + id + ", left by a failed deploy")
 		}
 		if err := deleteVPCOrigin(ctx, api, id); err != nil {
 			return err

@@ -111,9 +111,9 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	}
 	switch {
 	case core == nil:
-		progress.Say(fmt.Sprintf("No stack %s in this account, so only what exists beside it is removed", stackName))
+		progress.Say(fmt.Sprintf("No stack %s: removing what exists beside it", stackName))
 	case !deployed.Present:
-		progress.Warn(fmt.Sprintf("Stack %s is %s and names none of its resources, so only what exists beside it is removed", stackName, core.StackStatus))
+		progress.Warn(fmt.Sprintf("Stack %s is %s and names no resources: removing what exists beside it", stackName, core.StackStatus))
 	}
 
 	progress.Say(fmt.Sprintf("Deleting the access key of edge reader %s", userName))
@@ -127,7 +127,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	}
 	present := installed.Names()
 	if len(present) > 0 {
-		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(partStackNames(ns, present, tier), ", ")))
+		progress.Say("Deleting " + strings.Join(partStackNames(ns, present, tier), ", "))
 		if err := deletePartStacks(ctx, apis.CFN, ns, tier, present, progress); err != nil {
 			return err
 		}
@@ -140,7 +140,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	}
 
 	if deployed.AppBoundaryARN != "" {
-		progress.Say("Releasing the app boundary from every role still under it")
+		progress.Say("Releasing the app boundary")
 		if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, progress); err != nil {
 			return err
 		}
@@ -158,13 +158,13 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	}
 
 	if core != nil {
-		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
+		progress.Say("Deleting " + stackName)
 		if err := cfn.Delete(ctx, apis.CFN, stackName); err != nil {
 			return err
 		}
 	}
 
-	progress.Say(fmt.Sprintf("Deleting the %s bootstrap's stored parameters (SSM)", tier))
+	progress.Say("Deleting the bootstrap's parameters")
 	for _, name := range append(params, ns.PassphraseParamFor(tier)) {
 		if err := deleteParam(ctx, apis.SSM, name); err != nil {
 			return err
@@ -233,7 +233,7 @@ func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN
 				}
 				return fmt.Errorf("release the app boundary from role %s: %w", name, err)
 			}
-			progress.Say(fmt.Sprintf("Released the app boundary from role %s, which keeps running under its own policies alone", name))
+			progress.Say("Released the app boundary from role " + name)
 		}
 		if !out.IsTruncated {
 			return nil

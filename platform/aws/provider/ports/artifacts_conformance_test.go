@@ -186,7 +186,7 @@ func TestASweepReachesEveryBucketTheAccountKeeps(t *testing.T) {
 	if err := store.RemoveObjects(ctx, environment.TierProduction, scope, []naming.ObjectKind{naming.ObjectFunction, naming.ObjectAssets, naming.ObjectUseCache}, &progress); err != nil {
 		t.Fatalf("RemoveObjects() = %v", err)
 	}
-	if want := []string{"INFO Removed the production objects under fn/shop/prod/web/, assets/shop/prod/web/, use-cache/shop/prod/web/"}; !slices.Equal(progress.Lines(), want) {
+	if want := []string{"INFO Removed the stored objects of shop/prod/web"}; !slices.Equal(progress.Lines(), want) {
 		t.Errorf("RemoveObjects() said %q, want %q", progress.Lines(), want)
 	}
 	for _, ref := range everyBucketRef() {

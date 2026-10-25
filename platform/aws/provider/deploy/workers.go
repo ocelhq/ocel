@@ -198,7 +198,7 @@ func (r *release) destroyWorkersOfLastRelease(ctx context.Context, req provider.
 		return err
 	}
 	for _, ref := range refs {
-		say(progress, fmt.Sprintf("Removing stack %s: release %s is the last of app %s", ref.Name, app.Name.Release, app.Name.App))
+		say(progress, "Removing stack "+ref.Name.String())
 		workers := req
 		workers.Ref = ref
 		if err := r.destroyWorkersStack(ctx, workers, progress); err != nil {
