@@ -428,10 +428,26 @@ func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]prov
 		}
 		grants = append(grants, binding)
 	}
+	grants = append(grants, customBindingsOf(entry.Manifest, consumed)...)
 	slices.SortFunc(grants, func(a, b provider.Binding) int {
 		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.Resource, b.Resource))
 	})
 	return grants, nil
+}
+
+func customBindingsOf(app *contractv1.ManifestApp, published []provider.Binding) []provider.Binding {
+	var bound []provider.Binding
+	for _, name := range app.GetCustomBindings() {
+		at := slices.IndexFunc(published, func(binding provider.Binding) bool { return binding.Name == name })
+		if at >= 0 && published[at].Type == provider.BindingCustom {
+			bound = append(bound, published[at])
+		}
+	}
+	return bound
+}
+
+func deliveredBindings(grants []provider.Binding) []provider.Binding {
+	return slices.DeleteFunc(slices.Clone(grants), func(binding provider.Binding) bool { return binding.Type == provider.BindingCustom })
 }
 
 func (r *deployRun) appValues(ctx context.Context, entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
@@ -448,7 +464,7 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
 		Owners:    map[string]string{},
-		Bindings:  grants,
+		Bindings:  deliveredBindings(grants),
 		Folder:    entry.Manifest.GetFolder(),
 		Phase:     r.spec.Phase,
 	}

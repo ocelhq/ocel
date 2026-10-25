@@ -28,6 +28,7 @@ type app struct {
 	Image           string
 	HealthCheckPath string
 	Instances       provider.Instances
+	CustomBindings  []string
 
 	MinInstancesDeclared bool
 }
@@ -52,6 +53,7 @@ func appsOf(configured []project.App, usages []attribution.Usage, images map[str
 			Image:           images[a.Name],
 			HealthCheckPath: healthPathOf(a),
 			Instances:       instancesOf(a),
+			CustomBindings:  a.CustomBindings,
 
 			MinInstancesDeclared: a.Container != nil && a.Container.MinInstances != nil,
 		})
@@ -113,6 +115,8 @@ func manifestAppsOf(apps []app, functions []build.Function, functionsByApp map[s
 			Domains:   tierDomains(project.Domains{Production: a.Domains}),
 			Variables: manifestVariables(values[a.Name]),
 			Folder:    a.Folder,
+
+			CustomBindings: a.CustomBindings,
 		}
 		if err := attachArtifact(manifestApp, a, functionsByApp[a.Name]); err != nil {
 			return nil, err

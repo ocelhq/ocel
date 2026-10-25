@@ -81,6 +81,11 @@ type AppConfig struct {
 	Folder             string             `json:"folder,omitempty" doc:"The variables folder this app reads, when it does not read the project's own."`
 	Domains            *AppDomainConfig   `json:"domains,omitempty" doc:"The hostnames this app is served on."`
 	BuildWithResources *bool              `json:"buildWithResources,omitempty" doc:"Whether a Next app's build can reach its deployed resources, so prerendered pages can read them. Left off, true."`
+	Bindings           *AppBindings       `json:"bindings,omitempty" doc:"Published records this app is bound to although its code declares no resource for them."`
+}
+
+type AppBindings struct {
+	Custom []string `json:"custom,omitempty" doc:"The custom records this app is bound to, each \"@\" plus the name it is published under. The app receives each record's grants and none of its values."`
 }
 
 type ComputeDescriptor struct {

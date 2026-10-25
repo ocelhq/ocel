@@ -245,6 +245,7 @@ Each takes a `zone`. Left off, ocel picks the zone that covers the hostname.
 | `buildWithResources` | | Default `true`: a Next app's build reaches its deployed resources, so prerendered pages read them. `false` builds as if none were provisioned. |
 | `domains` | | `production`: the hostname or hostnames this app serves in production. |
 | `folder` | | The variables folder this app reads, when not the project's own. |
+| `bindings` | | `custom`: the custom records this app is bound to, each `"@<name>"`. The app receives the grants each was published with, and none of its values. See [binding a custom record](#binding-a-custom-record). |
 
 A provider that forwards no ports and serves no binding proxy builds without resources, and
 the deploy says so.
@@ -474,6 +475,23 @@ export default defineConfig({
   never receives it, and a name your code also declares is refused.
 - Before building, the deploy checks an inline postgres's major version and a bucket's
   access, CORS and policy against what the code declares.
+
+### Binding a custom record
+
+A custom record, published with `bind.custom` or `ocel bindings set`, holds values only a
+[transform](/docs/transforms) reads, and the grants its publisher gives the apps bound to it.
+No code declares one, so an app is bound to it in the app's own entry:
+
+```json title="ocel.json"
+{
+  "apps": [{ "name": "api", "path": ".", "bindings": { "custom": ["@fleet"] } }]
+}
+```
+
+Every deploy gives `api`'s identity, and the workers that join it, the grants `fleet` was
+published with. A deploy that no longer binds it takes
+them back. A record nothing has published, or one that is not custom, is refused before
+anything is built.
 
 ### A database branch per preview
 

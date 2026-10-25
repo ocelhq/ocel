@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
@@ -43,8 +44,18 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 			missing = append(missing, resource.Binding)
 		}
 	}
+	for _, app := range r.manifest.GetApps() {
+		for _, name := range app.GetCustomBindings() {
+			if _, bound := published[name]; !bound && !slices.Contains(missing, name) {
+				missing = append(missing, name)
+			}
+		}
+	}
 	if len(missing) > 0 {
 		return r.refuseUnpublished(ctx, missing, names)
+	}
+	if err := refuseCustomBindingsOfAnotherType(r.manifest.GetApps(), published); err != nil {
+		return err
 	}
 	for _, resource := range resources {
 		if resource.Binding == "" {
@@ -52,6 +63,20 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		}
 		if err := RefuseMismatchedBinding(published[resource.Binding], resource.Declared, resource.Type); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func refuseCustomBindingsOfAnotherType(apps []*contractv1.ManifestApp, published map[string]provider.Binding) error {
+	for _, app := range apps {
+		for _, name := range app.GetCustomBindings() {
+			if kind := published[name].Type; kind != provider.BindingCustom {
+				return refusal.Refuse(refusal.CodeInvalid,
+					"app %s binds %q under `bindings.custom`, and the record published under that name is a %s. "+
+						"Bind a %s under the project's `bindings.%s`, by the name the app declares it, or publish %q as a custom record",
+					app.GetName(), name, kind, kind, kind, name)
+			}
 		}
 	}
 	return nil
@@ -67,8 +92,9 @@ func RefuseMismatchedBinding(binding provider.Binding, declaredName string, decl
 		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` binds %s.%s to %q, and the record published under that name is a custom one: "+
 				"a custom binding is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
-				"Drop it from `bindings` and read it from a transform as `bindings.custom.%s.<property>`",
-			declared, declaredName, binding.Name, binding.Name)
+				"Drop it from `bindings` and read it from a transform as `bindings.custom.%s.<property>`, "+
+				"or grant an app what it publishes by naming %q in the app's own `bindings.custom`",
+			declared, declaredName, binding.Name, binding.Name, "@"+binding.Name)
 	case binding.Type != declared:
 		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` declares %s as a %s and binds it to %q, and the record published under that name is a %s. "+

@@ -38,6 +38,8 @@ type App struct {
 	serverlessRefusal error
 
 	BuildsWithResources bool
+
+	CustomBindings []string
 }
 
 type Container struct {
@@ -183,6 +185,13 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 			ProductionDomains: domains,
 
 			BuildsWithResources: a.BuildWithResources == nil || *a.BuildWithResources,
+		}
+		if a.Bindings != nil {
+			custom, err := normalizeCustomBindings(field("bindings.custom"), a.Bindings.Custom)
+			if err != nil {
+				return nil, newInvalidConfigError(fmt.Errorf("app %q: %w", a.Name, err), field("bindings.custom"))
+			}
+			app.CustomBindings = custom
 		}
 		if err := shapeApp(&app, a, filepath.Join(dir, filepath.FromSlash(a.Path)), dir, field); err != nil {
 			return nil, err

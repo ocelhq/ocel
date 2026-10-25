@@ -190,6 +190,25 @@ func normalizeBinding(key string, typ resourcesv1.ResourceType, declared string,
 	return out, nil
 }
 
+func normalizeCustomBindings(path string, spelled []string) ([]string, error) {
+	if len(spelled) == 0 {
+		return nil, nil
+	}
+	names := make([]string, 0, len(spelled))
+	for i, one := range spelled {
+		name, err := publishedName(configdoc.IndexPath(path, i), one)
+		if err != nil {
+			return nil, err
+		}
+		if slices.Contains(names, name) {
+			return nil, fmt.Errorf("`%s` names %q twice; an app is bound to a record once", path, "@"+name)
+		}
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
 func publishedName(path, spelled string) (string, error) {
 	value := strings.TrimSpace(spelled)
 	external, marked := strings.CutPrefix(value, "@")
