@@ -66,6 +66,14 @@ func TestACallThrottledUntilItsPerMinuteQuotaRefillsSucceedsOnceItHas(t *testing
 	for name, throttle := range map[string]error{
 		"http 429":                &googleapi.Error{Code: http.StatusTooManyRequests},
 		"grpc resource exhausted": status.Error(codes.ResourceExhausted, "Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute per region'"),
+		"compute 403 rateLimitExceeded": &googleapi.Error{
+			Code:   http.StatusForbidden,
+			Errors: []googleapi.ErrorItem{{Reason: "rateLimitExceeded", Message: "Quota exceeded for quota metric 'Queries' and limit 'Queries per minute' of service 'compute.googleapis.com'"}},
+		},
+		"403 RATE_LIMIT_EXCEEDED detail": &googleapi.Error{
+			Code: http.StatusForbidden,
+			Body: `{"error":{"code":403,"message":"Quota exceeded","status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"RATE_LIMIT_EXCEEDED","domain":"googleapis.com"}]}}`,
+		},
 	} {
 		for jitter, fraction := range map[string]float64{"longest waits": 1, "half waits": 0.5} {
 			t.Run(name+", "+jitter, func(t *testing.T) {
@@ -174,6 +182,29 @@ func TestAThrottledCallAnswersWithTheThrottleRatherThanWaitPastTheRunsDeadline(t
 	}
 	if f.total() > 10*time.Second {
 		t.Errorf("asked() waited %v, want no wait past the run's deadline 10s away", f.total())
+	}
+}
+
+func TestARefusalThatIsNoRateLimitIsNotWaitedOn(t *testing.T) {
+	t.Parallel()
+
+	for name, refused := range map[string]error{
+		"403 forbidden":         &googleapi.Error{Code: http.StatusForbidden, Errors: []googleapi.ErrorItem{{Reason: "forbidden"}}},
+		"403 allocation quota":  &googleapi.Error{Code: http.StatusForbidden, Errors: []googleapi.ErrorItem{{Reason: "quotaExceeded"}}},
+		"403 permission denied": &googleapi.Error{Code: http.StatusForbidden, Body: `{"error":{"code":403,"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"IAM_PERMISSION_DENIED"}]}}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newFakeClock()
+			calls := 0
+			_, _, err := asked(context.Background(), f.clock(), func() (string, int, error) {
+				calls++
+				return "", http.StatusForbidden, refused
+			})
+			if calls != 1 || !errors.Is(err, refused) {
+				t.Errorf("asked() made %d calls and returned %v, want one call: only a rate limit refills", calls, err)
+			}
+		})
 	}
 }
 
