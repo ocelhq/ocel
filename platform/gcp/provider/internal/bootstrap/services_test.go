@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/api/cloudresourcemanager/v1"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
@@ -163,6 +164,24 @@ func TestAProjectWithNoBillingAccountIsRefusedWithWhereToLinkOne(t *testing.T) {
 			"Link one at https://console.cloud.google.com/billing/linkedaccount?project=acme-prod, then try again"
 		if refused.Message != want {
 			t.Errorf("%s: refused with\n%s\nwant\n%s", name, refused.Message, want)
+		}
+	}
+}
+
+func TestEveryResourceABootstrapOrItsPartsReadsIsHostedByAServiceItChecks(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	for _, item := range Resources(googletest.Names, tier, false) {
+		if !slices.Contains(BootstrapAPIs, item.api()) {
+			t.Errorf("the base reads %s through %q, which a bootstrap never checks is on", item.ID(), item.api())
+		}
+	}
+	for _, part := range DeployedParts() {
+		for _, item := range part.Items(googletest.Names, tier) {
+			if !slices.Contains(BootstrapAPIs, item.api()) && !slices.Contains(part.APIs, item.api()) {
+				t.Errorf("the %s part reads %s through %q, which neither it nor the base checks is on", part.Name, item.ID(), item.api())
+			}
 		}
 	}
 }

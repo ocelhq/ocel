@@ -261,3 +261,19 @@ func TestABootstrapPlanBehindAnEdgeThatRunsCodeReadsNoneOfItsAssetsWhileTheirSer
 		}
 	}
 }
+
+func TestABootstrapThatSwitchedServicesOnSurveysAgainRatherThanTrustAReadDrawnWhileTheyWereOff(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	b := openingFreshProject(t, f)
+	if _, err := b.Describe(t.Context(), environment.TierProduction); err != nil {
+		t.Fatalf("Describe() = %v", err)
+	}
+
+	_ = b.Apply(t.Context(), keysBootstrap, nil)
+
+	reads := f.readsBeyondServiceUsage()
+	if len(reads) == 0 || !strings.HasPrefix(reads[0], http.MethodGet+" ") {
+		t.Errorf("after switching services on, Apply() first called %v, want it to read what is there before it makes anything", reads)
+	}
+}
