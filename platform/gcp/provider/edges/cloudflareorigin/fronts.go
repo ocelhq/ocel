@@ -25,6 +25,9 @@ var FrontParts = bootstrap.FrontParts{
 		return TakeAssetStore(ctx, b.Clients, tier)
 	},
 	PlanAssets: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
+		if b.IsOff(bootstrap.IAMAPI) || b.IsOff(bootstrap.SecretManagerAPI) {
+			return PlannedAbsentAssets(b.Clients, tier, kind, time.Now()), nil
+		}
 		assets, err := PlannedAssetStore(ctx, b.Clients, tier, kind)
 		if err != nil {
 			return nil, err

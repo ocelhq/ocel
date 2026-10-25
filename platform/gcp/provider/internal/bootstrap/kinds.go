@@ -80,14 +80,14 @@ func init() {
 }
 
 var kindAPIs = map[Kind]string{
-	KindDatabase:       firestoreAPI,
+	KindDatabase:       FirestoreAPI,
 	KindBucket:         storageAPI,
 	KindKeyRing:        kmsAPI,
 	KindKey:            kmsAPI,
-	KindSecret:         "secretmanager.googleapis.com",
+	KindSecret:         SecretManagerAPI,
 	KindRepository:     "artifactregistry.googleapis.com",
-	KindServiceAccount: iamAPI,
-	KindRole:           iamAPI,
+	KindServiceAccount: IAMAPI,
+	KindRole:           IAMAPI,
 	KindQueue:          "cloudtasks.googleapis.com",
 	KindTierTag:        resourceManagerAPI,
 	KindLogView:        "logging.googleapis.com",

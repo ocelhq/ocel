@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
@@ -210,5 +212,52 @@ func TestAPartAddedOnFirstUseSwitchesOnTheServicesItNeedsBeforeItMakesAnything(t
 
 	if got := server.EnabledIDs(); !slices.Equal(got, []string{"cloudkms.googleapis.com"}) {
 		t.Errorf("adding the keys part switched on %v, want only cloudkms.googleapis.com", got)
+	}
+}
+
+func TestTheRecordsOfAProjectWhoseFirestoreIsOffReadAsAbsentWithoutACall(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	p := pushing(t, f.serve(t))
+	p.records = nil
+	tier := environment.TierProduction
+	if _, err := (bootstrapGate{p}).Describe(t.Context(), tier); err != nil {
+		t.Fatalf("Describe() = %v", err)
+	}
+
+	_, listed := p.KeyValues().List(t.Context(), stackrecords.ProjectsPartition(tier))
+	_, read := p.KeyValues().Read(t.Context(), stackrecords.ProjectsPartition(tier).Key("shop"))
+
+	for name, err := range map[string]error{"List": listed, "Read": read} {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+			t.Errorf("%s() of a tier whose Firestore is off = %v, want the %s refusal of a tier with no records database", name, err, refusal.CodeNotReady)
+		}
+	}
+	if reads := f.readsBeyondServiceUsage(); len(reads) > 0 {
+		t.Errorf("the records read %v from a Firestore that is off", reads)
+	}
+}
+
+func TestABootstrapPlanBehindAnEdgeThatRunsCodeReadsNoneOfItsAssetsWhileTheirServicesAreOff(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	b := openingFreshProject(t, f)
+	b.Edges = &frontRegistry{front: &countingFront{runsCode: true}}
+
+	plan, err := b.Plan(t.Context(), provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{bootstrap.CloudflareOriginPart}})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+
+	if reads := f.readsBeyondServiceUsage(); len(reads) > 0 {
+		t.Errorf("Plan() read %v from services that are off", reads)
+	}
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			if change.Kind == string(bootstrap.KindSecret) && change.Name == b.Clients.OriginSecret(environment.TierProduction, cloudflare.Kind) && change.Action != provider.ActionCreate {
+				t.Errorf("the plan shows the origin secret as %s, want a create: Secret Manager is off", change.Action)
+			}
+		}
 	}
 }

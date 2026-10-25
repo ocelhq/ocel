@@ -184,7 +184,7 @@ func (b Engine) preflight(ctx context.Context, req provider.BootstrapRequest) ([
 	return switching, b.Permitted(ctx, req.Parts)
 }
 
-func (b Engine) isOff(api string) bool { return b.ServiceStates.IsOff(api) }
+func (b Engine) IsOff(api string) bool { return b.ServiceStates.IsOff(api) }
 
 func (b Engine) SwitchedOnGroup(apis []string) provider.ChangeGroup {
 	return provider.ChangeGroup{

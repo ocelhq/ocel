@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
@@ -139,6 +141,16 @@ func PlannedAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.
 		{Kind: string(bootstrap.KindServiceAccount), Name: account, Action: provider.KeepOrCreate(accountPresent)},
 		{Kind: assetStoreKeyKind, Name: c.AssetReaderAccountEmail(tier), Action: provider.KeepOrCreate(keyActive)},
 	}, nil
+}
+
+func PlannedAbsentAssets(c *gcloud.Clients, tier environment.Tier, kind edge.Kind, now time.Time) []provider.Change {
+	secret := provider.Change{Kind: string(bootstrap.KindSecret), Name: c.OriginSecret(tier, kind)}
+	secret.Action, secret.Reason = originsecret.Secret{}.PlanChange(now)
+	return []provider.Change{
+		{Kind: string(bootstrap.KindServiceAccount), Name: c.AssetReaderAccount(tier), Action: provider.ActionCreate},
+		{Kind: assetStoreKeyKind, Name: c.AssetReaderAccountEmail(tier), Action: provider.ActionCreate},
+		secret,
+	}
 }
 
 func PlannedAssetStoreRemoval(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {

@@ -14,19 +14,20 @@ import (
 const StampObject = "ocel/bootstrap.json"
 
 const (
-	firestoreAPI       = "firestore.googleapis.com"
+	FirestoreAPI       = "firestore.googleapis.com"
 	storageAPI         = "storage.googleapis.com"
 	kmsAPI             = "cloudkms.googleapis.com"
-	iamAPI             = "iam.googleapis.com"
+	IAMAPI             = "iam.googleapis.com"
+	SecretManagerAPI   = "secretmanager.googleapis.com"
 	resourceManagerAPI = "cloudresourcemanager.googleapis.com"
 )
 
 var BootstrapAPIs = []string{
-	firestoreAPI,
+	FirestoreAPI,
 	storageAPI,
-	"secretmanager.googleapis.com",
+	SecretManagerAPI,
 	"artifactregistry.googleapis.com",
-	iamAPI,
+	IAMAPI,
 	resourceManagerAPI,
 	"logging.googleapis.com",
 }

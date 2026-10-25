@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
@@ -25,6 +26,12 @@ func (s keyValues) Read(ctx context.Context, key records.Key) (records.Entry, er
 	store, err := s.open(ctx)
 	if err != nil {
 		return records.Entry{}, err
+	}
+	if firestore, ok := store.(ports.KeyValues); ok && s.p.serviceStates.IsOff(bootstrap.FirestoreAPI) {
+		if _, owned := ports.ProjectOfRecords(key.Partition); owned {
+			return records.Entry{}, records.ErrNotFound
+		}
+		return records.Entry{}, firestore.RefuseUnbootstrapped(key.Partition.Tier)
 	}
 	return store.Read(ctx, key)
 }
@@ -85,6 +92,12 @@ func (s keyValues) List(ctx context.Context, in records.Partition, under ...stri
 	store, err := s.open(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if firestore, ok := store.(ports.KeyValues); ok && s.p.serviceStates.IsOff(bootstrap.FirestoreAPI) {
+		if _, owned := ports.ProjectOfRecords(in); owned {
+			return nil, nil
+		}
+		return nil, firestore.RefuseUnbootstrapped(in.Tier)
 	}
 	return store.List(ctx, in, under...)
 }

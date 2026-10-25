@@ -222,7 +222,7 @@ func (b Engine) Permitted(ctx context.Context, parts []string) error {
 }
 
 func (b Engine) RegionServed(ctx context.Context, read Survey) error {
-	if read.Emulated || b.isOff(firestoreAPI) {
+	if read.Emulated || b.IsOff(FirestoreAPI) {
 		return nil
 	}
 	service, err := b.Clients.Databases()
