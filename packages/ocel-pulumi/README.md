@@ -81,7 +81,20 @@ bind.postgres("orders", {
 ```
 
 The grants are published beside the binding, never inside it: a deploy gives them to
-the apps bound to `orders`, and an app is handed the postgres fields alone.
+the apps bound to `orders`, and an app is handed the postgres fields alone. A grant is
+written the way the cloud the app runs in grants:
+
+| Cloud | Grant | Example |
+| --- | --- | --- |
+| AWS | `{ actions, resources }` | `{ actions: ["rds-db:connect"], resources: [dbUserArn] }` |
+| Google Cloud | `{ role, resource }` | `{ role: "roles/cloudsql.client", resource: "projects/my-project" }` |
+
+A grant over `"*"`, a whole service's actions, or every role is refused here, before
+anything is published. A deploy refuses a grant its cloud cannot hold: an AWS deploy a
+role, and a Google Cloud deploy actions, a basic role (`roles/owner`, `roles/editor`,
+`roles/viewer`) or a resource it does not grant on. See
+[Grants from a binding](https://ocel.dev/docs/providers/gcp#grants-from-a-binding) for the
+resources a Google Cloud grant names.
 
 `opts` says where the binding lands:
 
@@ -127,10 +140,38 @@ export default defineTransform(({ bindings }) => ({
 
 The properties are inserted verbatim — string, number, boolean, list or object — and
 the surface being filled is what rejects a value of the wrong shape. `opts` is the same
-as for `bind.postgres`.
+as for `bind.postgres`, plus `grants`.
 
-No app reads a custom binding, so it takes no `grants`: nothing would attach them. Naming
-one in `bindings` is refused for the same reason.
+No app reads a custom binding's values, and the project's `bindings` refuses one. An app
+that needs what the binding grants names it in its own entry instead, and every deploy
+gives that app the grants, and none of the values:
+
+```ts
+bind.custom(
+  "fleet",
+  { zone: "us-central1-a" },
+  {
+    grants: [
+      { role: "roles/compute.instanceAdmin.v1", resource: "projects/my-project" },
+      {
+        role: "roles/iam.serviceAccountUser",
+        resource: pulumi.interpolate`projects/my-project/serviceAccounts/${host.email}`,
+      },
+    ],
+  },
+);
+```
+
+```ts
+export default defineConfig({
+  slug: "cloud",
+  provider: gcpProvider({ project: "my-project", region: "us-central1" }),
+  apps: [{ name: "api", path: ".", bindings: { custom: ["@fleet"] } }],
+});
+```
+
+A custom binding that carries grants may have no properties. A deploy that no longer
+binds the app takes the grants back.
 
 ## Types
 

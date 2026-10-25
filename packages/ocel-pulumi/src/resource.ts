@@ -3,7 +3,7 @@ import path from "node:path";
 import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { checkTarget, runBindings, type Target } from "./cli.js";
 import { publishedCustom } from "./custom.js";
-import type { GrantInput } from "./grants.js";
+import type { Grant, GrantInput } from "./grants.js";
 import { type DescribedPostgres, publishedPostgres } from "./postgres.js";
 
 /**
@@ -29,7 +29,7 @@ export interface DescribedPostgresResource {
  *
  * Ocel neither types nor interprets what a custom binding contains — it hands the
  * values to a transform that fills a surface field with them, so nothing is
- * delivered to an app and no grants are accepted.
+ * delivered to an app.
  */
 export type CustomProperties = Record<string, Input<unknown>>;
 
@@ -44,6 +44,15 @@ export interface BindOptions {
   parent?: Resource;
 }
 
+/**
+ * Where a custom binding lands, and the grants a deploy gives every app whose
+ * config names it under `bindings.custom` — `"bindings": { "custom": ["@fleet"] }`
+ * in that app's entry — although the app reads none of its values.
+ */
+export interface CustomBindOptions extends BindOptions {
+  grants?: GrantInput[];
+}
+
 interface BindingInputs extends Target {
   name: string;
   owner: string;
@@ -54,6 +63,7 @@ interface PostgresInputs extends BindingInputs, DescribedPostgres {}
 
 interface CustomInputs extends BindingInputs {
   properties: Record<string, unknown>;
+  grants?: Grant[];
 }
 
 interface BindingState extends Target {
@@ -125,7 +135,7 @@ export const postgresProvider = bindingProvider<PostgresInputs>(
 );
 
 export const customProvider = bindingProvider<CustomInputs>(
-  (inputs) => publishedCustom(inputs.name, inputs.properties),
+  (inputs) => publishedCustom(inputs.name, inputs.properties, inputs.grants),
   (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 
@@ -158,10 +168,12 @@ export function postgres(
  * `bindings.custom.network.subnetIds` in a transform module. `tier` defaults to
  * production, `environment` names one preview environment, and `project` is the
  * directory containing `ocel.json`, which is the directory Pulumi runs the
- * program from unless it is given.
+ * program from unless it is given. `grants` are given to the apps bound to the
+ * name in their own `bindings.custom`; a binding that carries grants may have
+ * no properties.
  */
-export function custom(name: string, properties: CustomProperties, opts?: BindOptions): void {
-  declare(customProvider, name, opts, { properties });
+export function custom(name: string, properties: CustomProperties, opts?: CustomBindOptions): void {
+  declare(customProvider, name, opts, { properties, grants: opts?.grants });
 }
 
 const dynamicType = "pulumi-nodejs:dynamic:Resource";
