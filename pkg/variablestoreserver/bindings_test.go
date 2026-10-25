@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -84,6 +85,18 @@ func TestAGrantThatIsBothARoleAndActionsIsRefused(t *testing.T) {
 	err := variablestoreserver.VerifyGrantScope(binding)
 	if !errors.Is(err, provider.ErrUnscopedGrant) || !strings.Contains(err.Error(), "role") {
 		t.Errorf("VerifyGrantScope() = %v, want a grant naming both a role and actions refused", err)
+	}
+}
+
+func TestACustomBindingPublishedWithGrantsIsAccepted(t *testing.T) {
+	t.Parallel()
+
+	published := &variablestorev1.PublishedBinding{
+		Binding: &bindingsv1.Binding{Name: "fleet", Source: "pulumi", Properties: &bindingsv1.Binding_Custom{Custom: &structpb.Struct{}}},
+		Grants:  []*variablestorev1.Grant{{Role: "roles/iam.serviceAccountUser", Resource: "projects/ocel-cloud-prod/serviceAccounts/host@ocel-cloud-prod.iam.gserviceaccount.com"}},
+	}
+	if err := variablestoreserver.VerifyBinding(published); err != nil {
+		t.Errorf("VerifyBinding() = %v, want a custom binding's grants accepted for the apps bound to it", err)
 	}
 }
 

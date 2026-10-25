@@ -65,6 +65,8 @@ export interface OcelConfig {
 export interface AppConfig {
   /** The processor architecture the app is built for. Left off, what the provider runs the app on. */
   arch?: "x86_64" | "arm64";
+  /** Published records this app is bound to although its code declares no resource for them. */
+  bindings?: AppBindings;
   /** Whether a Next app's build can reach its deployed resources, so prerendered pages can read them. Left off, true. */
   buildWithResources?: boolean;
   /** What the app runs on, named alone or keyed with its options. Left off, the provider's first compute. */
@@ -81,6 +83,12 @@ export interface AppConfig {
   name: string;
   /** The app's directory, relative to the config. */
   path: string;
+}
+
+/** Published records this app is bound to although its code declares no resource for them. */
+export interface AppBindings {
+  /** The custom records this app is bound to, each "@" plus the name it is published under. The app receives each record's grants and none of its values. */
+  custom?: string[];
 }
 
 /** What the app runs on: serverless functions or one container image. Named alone, or keyed with its options. */

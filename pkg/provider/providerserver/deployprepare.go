@@ -388,6 +388,7 @@ func (r *deployRun) usage(resources []provider.Resource, published []provider.Bi
 				usage.Grants = append(usage.Grants, binding)
 			}
 		}
+		usage.Grants = append(usage.Grants, customBindingsOf(entry.Manifest, published)...)
 		apps = append(apps, usage)
 	}
 	return apps, nil

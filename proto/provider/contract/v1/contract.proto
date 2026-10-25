@@ -314,6 +314,8 @@ message ManifestApp {
 
     ContainerArtifact container = 10;
   }
+
+  repeated string custom_bindings = 11 [(buf.validate.field).repeated = {unique: true, items: {string: {min_len: 1}}}];
 }
 
 message ManifestVariable {

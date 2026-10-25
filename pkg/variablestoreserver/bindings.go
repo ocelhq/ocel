@@ -27,8 +27,6 @@ var (
 	ErrUnsourced = errors.New("unsourced binding")
 
 	ErrUnreadableRecord = errors.New("unreadable binding record")
-
-	ErrUnattachedGrant = errors.New("unattached grant")
 )
 
 func (h *Service) SetBinding(ctx context.Context, req *variablestorev1.SetBindingRequest) (*variablestorev1.SetBindingResponse, error) {
@@ -136,7 +134,7 @@ func bindingsError(err error) error {
 	case errors.Is(err, variablestore.ErrTornPair):
 		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, ErrUnsourced), errors.Is(err, ErrUnreadableRecord),
-		errors.Is(err, provider.ErrUnscopedGrant), errors.Is(err, ErrUnattachedGrant):
+		errors.Is(err, provider.ErrUnscopedGrant):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, variablestore.ErrNotPublished):
 		return connect.NewError(connect.CodeNotFound, err)
@@ -252,12 +250,6 @@ func VerifyBinding(published *variablestorev1.PublishedBinding) error {
 	if bindings.TypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
 		if binding.GetSource() == "" {
 			return unsourcedCustom(binding)
-		}
-		if len(published.GetGrants()) > 0 {
-			return fmt.Errorf(
-				"binding %s is a custom record with %d grants: no consumer attaches a custom binding's grants yet; a grant nobody attaches is a permission the record claims and no app has. "+
-					"Publish it without them: %w",
-				binding.GetName(), len(published.GetGrants()), ErrUnattachedGrant)
 		}
 	}
 	return VerifyGrantScope(published)

@@ -35,6 +35,21 @@
             ],
             "type": "string"
           },
+          "bindings": {
+            "additionalProperties": false,
+            "description": "Published records this app is bound to although its code declares no resource for them.",
+            "properties": {
+              "custom": {
+                "description": "The custom records this app is bound to, each \"@\" plus the name it is published under. The app receives each record's grants and none of its values.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "title": "AppBindings",
+            "type": "object"
+          },
           "buildWithResources": {
             "description": "Whether a Next app's build can reach its deployed resources, so prerendered pages can read them. Left off, true.",
             "type": "boolean"

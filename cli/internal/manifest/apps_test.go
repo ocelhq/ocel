@@ -101,3 +101,37 @@ func productionHostnamesOf(declared []*contractv1.TierDomains) []string {
 	}
 	return hosts
 }
+
+func TestAnAppsManifestNamesTheCustomRecordsItIsBoundTo(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{
+		Slug: "cloud",
+		Dir:  t.TempDir(),
+		Apps: []project.App{
+			{Name: "api", Path: "apps/api", Compute: "serverless", CustomBindings: []string{"builds", "fleet"}},
+			{Name: "web", Path: "apps/web", Compute: "serverless"},
+		},
+	}
+	deployed, err := Assemble(Input{
+		Project: cfg,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
+		Built: build.Output{Functions: []build.Function{
+			{App: "api", Route: "server", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/api/functions/server.func"},
+			{App: "web", Route: "server", Framework: buildoutput.Framework{Name: "node"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/server.func"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Assemble() error = %v", err)
+	}
+	bound := map[string][]string{}
+	for _, app := range deployed.GetApps() {
+		bound[app.GetName()] = app.GetCustomBindings()
+	}
+	if got := bound["api"]; !reflect.DeepEqual(got, []string{"builds", "fleet"}) {
+		t.Errorf("api's manifest is bound to %v, want builds and fleet", got)
+	}
+	if got := bound["web"]; len(got) != 0 {
+		t.Errorf("web's manifest is bound to %v, want nothing", got)
+	}
+}

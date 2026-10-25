@@ -1767,9 +1767,10 @@ type ManifestApp struct {
 	//
 	//	*ManifestApp_Serverless
 	//	*ManifestApp_Container
-	Artifact      isManifestApp_Artifact `protobuf_oneof:"artifact"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Artifact       isManifestApp_Artifact `protobuf_oneof:"artifact"`
+	CustomBindings []string               `protobuf:"bytes,11,rep,name=custom_bindings,json=customBindings,proto3" json:"custom_bindings,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ManifestApp) Reset() {
@@ -1865,6 +1866,13 @@ func (x *ManifestApp) GetContainer() *ContainerArtifact {
 		if x, ok := x.Artifact.(*ManifestApp_Container); ok {
 			return x.Container
 		}
+	}
+	return nil
+}
+
+func (x *ManifestApp) GetCustomBindings() []string {
+	if x != nil {
+		return x.CustomBindings
 	}
 	return nil
 }
@@ -8202,7 +8210,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\thostnames\x18\x02 \x03(\tR\thostnames\"|\n" +
 	"\tFramework\x12B\n" +
 	"\x04name\x18\x01 \x01(\tB.\xbaH+r)R\x04nodeR\x04nextR\tsveltekitR\x02goR\x06pythonR\x04rustR\x04name\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xe0\x03\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x99\x04\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12=\n" +
 	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12;\n" +
@@ -8214,7 +8222,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"serverless\x18\t \x01(\v2(.provider.contract.v1.ServerlessArtifactH\x00R\n" +
 	"serverless\x12G\n" +
 	"\tcontainer\x18\n" +
-	" \x01(\v2'.provider.contract.v1.ContainerArtifactH\x00R\tcontainerB\x11\n" +
+	" \x01(\v2'.provider.contract.v1.ContainerArtifactH\x00R\tcontainer\x127\n" +
+	"\x0fcustom_bindings\x18\v \x03(\tB\x0e\xbaH\v\x92\x01\b\x18\x01\"\x04r\x02\x10\x01R\x0ecustomBindingsB\x11\n" +
 	"\bartifact\x12\x05\xbaH\x02\b\x01\"\x95\x02\n" +
 	"\x10ManifestVariable\x12/\n" +
 	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12?\n" +
