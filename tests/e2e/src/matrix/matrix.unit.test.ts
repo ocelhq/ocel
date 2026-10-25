@@ -539,22 +539,22 @@ describe("the Next cache a cell is held to", () => {
     }
   });
 
-  it("lists every check that reads a page from the Next server's cache red under #1815 on a Next container on gcp, which nothing seeds", () => {
-    const readFromNextCache = [
-      "the Next server serves a static page from its cache, frozen, with assets immutable for a year",
-      "the Next server keeps an ISR page frozen inside its revalidate window and moves it after",
-      "revalidating a path makes the Next server move the page it names and nothing else",
-      "revalidating a tag makes the Next server move the page that carries it and nothing else",
-      "a server action calling updateTag makes the Next server move the page it revalidates",
-    ];
+  it("expects a Next container on gcp red on no Next server cache check its serverless twin passes, as both run what ocel's Next adapter builds", () => {
     for (const lane of ["gcp", "gcp.floci"] as const) {
       const planned = planOn(lane, {}, EVERY_CELL);
-      const listed = planned.expectedFailures["deploy/next-container/web"] ?? {};
-      for (const title of readFromNextCache) {
-        const key = Object.keys(listed).find((one) => one.endsWith(title));
-        expect({ title, issues: key ? listed[key]!.map((gap) => gap.issue) : [] }).toEqual({
+      const serverless = planned.expectedFailures["deploy/next/web"] ?? {};
+      const container = planned.expectedFailures["deploy/next-container/web"] ?? {};
+      const gapsOn = (listed: typeof container, title: string) =>
+        Object.entries(listed)
+          .filter(([key]) => key.endsWith(title))
+          .flatMap(([, gaps]) => gaps.map((gap) => gap.id));
+      const titles = cacheTitlesIn(titlesOf(planned, "deploy/next-container"), ORIGIN_TITLES);
+      expect(titles).not.toEqual([]);
+      for (const title of titles) {
+        expect({ lane, title, gaps: gapsOn(container, title) }).toEqual({
+          lane,
           title,
-          issues: expect.arrayContaining([1815]),
+          gaps: gapsOn(serverless, title),
         });
       }
     }

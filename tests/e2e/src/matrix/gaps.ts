@@ -12,7 +12,6 @@ import {
   missingImmutableChunkCheck,
   nextCacheChecks,
   nextDataCacheChecks,
-  nextOriginCacheChecks,
   nextOriginDataCacheChecks,
   nextPublicValueInlinedCheck,
   nodeRuntimeChecks,
@@ -66,9 +65,6 @@ const EVERY_NEXT_BEARING = [...DEPLOY_NEXT_BEARING, lifecycle.next, ...SDK_NEXT_
 const NEXT_CACHE = [...nextCacheChecks, ...nextDataCacheChecks];
 const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.rust];
 const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
-const SERVED_FROM_NEXT_CACHE =
-  /serves a static page|keeps an ISR page|revalidating a (path|tag)|calling updateTag makes/;
-const WITHHELD_FROM_CLOUD_CDN = /a prefetch|image optimizer/;
 
 export const gaps: Gap[] = [
   {
@@ -435,37 +431,6 @@ export const gaps: Gap[] = [
         fixtures: [sdk.sveltekit],
         fails: [step.deploy],
         skipsCell: true,
-      },
-    ],
-  },
-  {
-    id: "gcp-next-container-is-never-seeded",
-    reason:
-      "a Next container on Cloud Run reads its pages from the store ocel seeds, and nothing seeds it, so the first request renders a prerendered page",
-    issue: 1815,
-    where: [
-      {
-        on: ["gcp", "gcp.floci"],
-        fixtures: [deploy.next],
-        variants: [container],
-        fails: [
-          check(nextOriginCacheChecks.filter((one) => SERVED_FROM_NEXT_CACHE.test(one.title))),
-        ],
-      },
-    ],
-  },
-  {
-    id: "gcp-next-container-withholds-from-cloud-cdn",
-    reason:
-      "a Next container on Cloud Run makes every response Cloud CDN would store private, an optimized image among them, so Cloud CDN never stores a response it cannot invalidate",
-    where: [
-      {
-        on: ["gcp", "gcp.floci"],
-        fixtures: [deploy.next],
-        variants: [container],
-        fails: [
-          check(nextOriginCacheChecks.filter((one) => WITHHELD_FROM_CLOUD_CDN.test(one.title))),
-        ],
       },
     ],
   },
