@@ -197,7 +197,9 @@ Some of the route table is applied only where the edge can do it:
 - `basePath` is applied by your app when it matches patterns.
 - A container app is given no route table, and nothing in its container shapes or tags its
   responses. CloudFront and the load balancer store them as their own headers allow, untagged,
-  so a revalidation does not reach them; a Next container on Google Cloud keeps every response
-  the load balancer would store out of its cache instead. Behind Cloudflare a container app is
+  so a revalidation does not reach them; a Next container on Google Cloud built from a
+  Dockerfile keeps every response the load balancer would store out of its cache instead. A Next
+  container on Google Cloud with no Dockerfile is the exception: it is built and cached as a
+  serverless Next app is. Behind Cloudflare a container app is
   forwarded to the load balancer and runs none of the gateway, so the gateway caches nothing
   for it.

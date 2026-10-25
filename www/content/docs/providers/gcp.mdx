@@ -213,20 +213,29 @@ about a quarter lower and has no per-request fee, so it costs less only for an i
 most of its life, roughly three quarters or more, answering requests. `ocel cost` prices the services
 this way.
 
-A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
-CPU always allocated, so it is billed per instance unless its app sets `billing`, and it keeps at least one instance running
-unless `instances.min` is 0. It keeps its cache and tag records where a serverless Next app does,
-in the tier's buckets and Firestore, so a revalidated tag reaches every instance, and it refreshes stale
-pages in the background. Cloud CDN does not store its pages: ocel marks every response that
-names `s-maxage` private, so a revalidated page is never served stale; its hashed static files are
-still cached. It may build with `output: "standalone"` and set `adapterPath` in `next.config`: ocel
-installs its cache handlers before Next loads. The Next server stops as it starts when the config it
-loads names the app's own `cacheHandler`, `cacheHandlers.default` or `cacheHandlers.remote`, whether
-`next.config` sets it or `NEXT_CACHE_HANDLER_PATH`, `NEXT_DEFAULT_CACHE_HANDLER_PATH` or
-`NEXT_REMOTE_CACHE_HANDLER_PATH` does under `next start`. Other Node processes the app starts are
-left alone.
+A Next app on `compute: "container"` with no Dockerfile is built as a serverless Next app is:
+ocel's Next adapter runs `next build`, and the one function it makes runs in the image a serverless
+Next function runs in. It is routed, cached, seeded with its prerendered pages and purged as a
+serverless Next app is, and its static files go to the edge bucket the same way. What makes it a
+container is its Cloud Run service: 2 GiB of memory and its CPU always allocated, so it is billed
+per instance unless its app sets `billing`, at least one instance running unless `instances.min` is
+0, and a startup probe at its health path. `image.command` and `image.context` are refused on it,
+since the adapter reads neither: set `image.dockerfile` to build the image yourself.
 
-A serverless Next app's static files (the `public` directory, `_next/static` and the prerendered
+A Next container built from a Dockerfile, the one `image.dockerfile` names or the one beside the
+app, runs `next start` in that image instead. It keeps its cache and tag records where a serverless
+Next app does, in the tier's buckets and Firestore, so a revalidated tag reaches every instance, and
+it refreshes stale pages in the background. Nothing seeds its prerendered pages. Cloud CDN does not
+store its pages: ocel marks every response that names `s-maxage` private, so a revalidated page is
+never served stale; its hashed static files are still cached. It may build with
+`output: "standalone"` and set `adapterPath` in `next.config`: ocel installs its cache handlers
+before Next loads. The Next server stops as it starts when the config it loads names the app's own
+`cacheHandler`, `cacheHandlers.default` or `cacheHandlers.remote`, whether `next.config` sets it or
+`NEXT_CACHE_HANDLER_PATH`, `NEXT_DEFAULT_CACHE_HANDLER_PATH` or `NEXT_REMOTE_CACHE_HANDLER_PATH`
+does under `next start`. Other Node processes the app starts are left alone.
+
+The static files of a serverless Next app or a Next container with no Dockerfile (the `public`
+directory, `_next/static` and the prerendered
 fallbacks) are uploaded at deploy to the tier's edge bucket under
 `assets/<project>/<env>/<app>/<release token>/`, and its image config under
 `image-config/<project>/<env>/<app>/<release token>/`. The service reads them from there: its image
