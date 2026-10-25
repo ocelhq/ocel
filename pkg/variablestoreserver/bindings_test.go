@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -40,6 +41,49 @@ func TestAGrantNamingItsActionsAndResourcesIsInScope(t *testing.T) {
 	}}}
 	if err := variablestoreserver.VerifyGrantScope(binding); err != nil {
 		t.Errorf("VerifyGrantScope() = %v, want a grant naming its actions and resources accepted", err)
+	}
+}
+
+func TestARoleGrantNamingItsRoleAndResourceIsInScope(t *testing.T) {
+	t.Parallel()
+
+	binding := &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{Name: "fleet"}, Grants: []*variablestorev1.Grant{{
+		Role:     "roles/compute.instanceAdmin.v1",
+		Resource: "projects/ocel-cloud-prod",
+	}}}
+	if err := variablestoreserver.VerifyGrantScope(binding); err != nil {
+		t.Errorf("VerifyGrantScope() = %v, want a role on a named resource accepted", err)
+	}
+}
+
+func TestARoleGrantOverEveryResourceOrOfEveryRoleIsUnscoped(t *testing.T) {
+	t.Parallel()
+
+	for _, grant := range []*variablestorev1.Grant{
+		{Role: "roles/compute.instanceAdmin.v1"},
+		{Role: "roles/compute.instanceAdmin.v1", Resource: "*"},
+		{Role: "*", Resource: "projects/ocel-cloud-prod"},
+		{Resource: "projects/ocel-cloud-prod"},
+	} {
+		binding := &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{Name: "fleet"}, Grants: []*variablestorev1.Grant{grant}}
+		if err := variablestoreserver.VerifyGrantScope(binding); !errors.Is(err, provider.ErrUnscopedGrant) {
+			t.Errorf("VerifyGrantScope(role %q on %q) = %v, want it refused as unscoped", grant.GetRole(), grant.GetResource(), err)
+		}
+	}
+}
+
+func TestAGrantThatIsBothARoleAndActionsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	binding := &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{Name: "fleet"}, Grants: []*variablestorev1.Grant{{
+		Role:      "roles/compute.instanceAdmin.v1",
+		Resource:  "projects/ocel-cloud-prod",
+		Actions:   []string{"ec2:RunInstances"},
+		Resources: []string{"arn:aws:ec2:us-east-1:1:instance/*"},
+	}}}
+	err := variablestoreserver.VerifyGrantScope(binding)
+	if !errors.Is(err, provider.ErrUnscopedGrant) || !strings.Contains(err.Error(), "role") {
+		t.Errorf("VerifyGrantScope() = %v, want a grant naming both a role and actions refused", err)
 	}
 }
 

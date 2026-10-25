@@ -273,26 +273,59 @@ func wildcardsAService(action string) bool {
 func VerifyGrantScope(published *variablestorev1.PublishedBinding) error {
 	binding := published.GetBinding()
 	for _, g := range published.GetGrants() {
-		if len(g.GetActions()) == 0 {
-			return fmt.Errorf("binding %s has a grant over %v naming no action: a grant names what an app may do with the resource it binds: %w",
-				binding.GetName(), g.GetResources(), provider.ErrUnscopedGrant)
+		var err error
+		switch {
+		case g.GetRole() != "" && (len(g.GetActions()) > 0 || len(g.GetResources()) > 0):
+			err = fmt.Errorf("binding %s has a grant of role %s that also names actions %v: a grant is a role on one resource or actions over resources, never both: %w",
+				binding.GetName(), g.GetRole(), g.GetActions(), provider.ErrUnscopedGrant)
+		case g.GetRole() != "" || g.GetResource() != "":
+			err = verifyRoleScope(binding.GetName(), g)
+		default:
+			err = verifyActionScope(binding.GetName(), g)
 		}
-		if len(g.GetResources()) == 0 {
-			return fmt.Errorf("binding %s grants %v over no resource: an app receives permissions for the resource it binds and nothing else: %w",
-				binding.GetName(), g.GetActions(), provider.ErrUnscopedGrant)
+		if err != nil {
+			return err
 		}
-		if slices.Contains(g.GetActions(), grantWildcard) {
-			return fmt.Errorf("binding %s grants %q over %v: %q is every action any vendor has, which reaches past the resource it binds: %w",
-				binding.GetName(), grantWildcard, g.GetResources(), grantWildcard, provider.ErrUnscopedGrant)
-		}
-		if at := slices.IndexFunc(g.GetActions(), wildcardsAService); at >= 0 {
-			return fmt.Errorf("binding %s grants %q over %v: a wildcard on either side of a service's action is every action of that service, or that action on every service: %w",
-				binding.GetName(), g.GetActions()[at], g.GetResources(), provider.ErrUnscopedGrant)
-		}
-		if slices.Contains(g.GetResources(), grantWildcard) {
-			return fmt.Errorf("binding %s grants %v over %q: %q is every resource in the account, and an app receives permissions for the resource it binds and nothing else: %w",
-				binding.GetName(), g.GetActions(), grantWildcard, grantWildcard, provider.ErrUnscopedGrant)
-		}
+	}
+	return nil
+}
+
+func verifyRoleScope(name string, g *variablestorev1.Grant) error {
+	switch {
+	case g.GetRole() == "":
+		return fmt.Errorf("binding %s has a grant on %s naming no role: a grant names what an app may do with the resource it binds: %w",
+			name, g.GetResource(), provider.ErrUnscopedGrant)
+	case g.GetRole() == grantWildcard:
+		return fmt.Errorf("binding %s grants %q on %s: %q is every role, which reaches past what an app needs of the resource: %w",
+			name, grantWildcard, g.GetResource(), grantWildcard, provider.ErrUnscopedGrant)
+	case g.GetResource() == "":
+		return fmt.Errorf("binding %s grants role %s on no resource: an app receives permissions for the resource it binds and nothing else: %w",
+			name, g.GetRole(), provider.ErrUnscopedGrant)
+	case g.GetResource() == grantWildcard:
+		return fmt.Errorf("binding %s grants role %s on %q: %q is every resource in the account, and an app receives permissions for the resource it binds and nothing else: %w",
+			name, g.GetRole(), grantWildcard, grantWildcard, provider.ErrUnscopedGrant)
+	}
+	return nil
+}
+
+func verifyActionScope(name string, g *variablestorev1.Grant) error {
+	switch {
+	case len(g.GetActions()) == 0:
+		return fmt.Errorf("binding %s has a grant over %v naming no action: a grant names what an app may do with the resource it binds: %w",
+			name, g.GetResources(), provider.ErrUnscopedGrant)
+	case len(g.GetResources()) == 0:
+		return fmt.Errorf("binding %s grants %v over no resource: an app receives permissions for the resource it binds and nothing else: %w",
+			name, g.GetActions(), provider.ErrUnscopedGrant)
+	case slices.Contains(g.GetActions(), grantWildcard):
+		return fmt.Errorf("binding %s grants %q over %v: %q is every action any vendor has, which reaches past the resource it binds: %w",
+			name, grantWildcard, g.GetResources(), grantWildcard, provider.ErrUnscopedGrant)
+	case slices.ContainsFunc(g.GetActions(), wildcardsAService):
+		at := slices.IndexFunc(g.GetActions(), wildcardsAService)
+		return fmt.Errorf("binding %s grants %q over %v: a wildcard on either side of a service's action is every action of that service, or that action on every service: %w",
+			name, g.GetActions()[at], g.GetResources(), provider.ErrUnscopedGrant)
+	case slices.Contains(g.GetResources(), grantWildcard):
+		return fmt.Errorf("binding %s grants %v over %q: %q is every resource in the account, and an app receives permissions for the resource it binds and nothing else: %w",
+			name, g.GetActions(), grantWildcard, grantWildcard, provider.ErrUnscopedGrant)
 	}
 	return nil
 }

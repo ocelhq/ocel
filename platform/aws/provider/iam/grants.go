@@ -31,8 +31,25 @@ func (e *UnscopedGrantError) Error() string {
 
 func (e *UnscopedGrantError) Unwrap() error { return provider.ErrUnscopedGrant }
 
+type RoleGrantError struct {
+	Binding  string
+	Role     string
+	Resource string
+}
+
+func (e *RoleGrantError) Error() string {
+	return fmt.Sprintf(
+		"binding %s grants role %s on %s, and AWS grants an app actions over resources, never a role: "+
+			"publish the grant as the actions and the resource ARNs the app needs",
+		e.Binding, e.Role, e.Resource,
+	)
+}
+
 func VerifyGrants(binding provider.Binding) error {
 	for _, grant := range binding.Grants {
+		if grant.Role != "" || grant.Resource != "" {
+			return &RoleGrantError{Binding: binding.Name, Role: grant.Role, Resource: grant.Resource}
+		}
 		if err := scoped(binding.Name, grant.Label, grant.Actions, grant.Resources); err != nil {
 			return err
 		}
@@ -71,6 +88,9 @@ func GrantPolicy(binding string, grants []*variablestorev1.Grant) (string, error
 	}
 	statements := make([]map[string]any, 0, len(grants))
 	for _, grant := range grants {
+		if grant.GetRole() != "" || grant.GetResource() != "" {
+			return "", &RoleGrantError{Binding: binding, Role: grant.GetRole(), Resource: grant.GetResource()}
+		}
 		if err := scoped(binding, grant.GetLabel(), grant.GetActions(), grant.GetResources()); err != nil {
 			return "", err
 		}

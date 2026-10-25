@@ -1254,6 +1254,8 @@ type Grant struct {
 	Resources     []string               `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
 	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	Conditions    []*GrantCondition      `protobuf:"bytes,4,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	Role          string                 `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
+	Resource      string                 `protobuf:"bytes,6,opt,name=resource,proto3" json:"resource,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1314,6 +1316,20 @@ func (x *Grant) GetConditions() []*GrantCondition {
 		return x.Conditions
 	}
 	return nil
+}
+
+func (x *Grant) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *Grant) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
 }
 
 type GrantCondition struct {
@@ -2765,14 +2781,16 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x05owner\x18\x05 \x01(\tR\x05owner\"\x8b\x01\n" +
 	"\x10PublishedBinding\x12=\n" +
 	"\abinding\x18\x01 \x01(\v2\x1b.common.bindings.v1.BindingB\x06\xbaH\x03\xc8\x01\x01R\abinding\x128\n" +
-	"\x06grants\x18\x02 \x03(\v2 .provider.variablestore.v1.GrantR\x06grants\"\xa0\x01\n" +
+	"\x06grants\x18\x02 \x03(\v2 .provider.variablestore.v1.GrantR\x06grants\"\xd0\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12I\n" +
 	"\n" +
 	"conditions\x18\x04 \x03(\v2).provider.variablestore.v1.GrantConditionR\n" +
-	"conditions\"V\n" +
+	"conditions\x12\x12\n" +
+	"\x04role\x18\x05 \x01(\tR\x04role\x12\x1a\n" +
+	"\bresource\x18\x06 \x01(\tR\bresource\"V\n" +
 	"\x0eGrantCondition\x12\x1a\n" +
 	"\boperator\x18\x01 \x01(\tR\boperator\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +

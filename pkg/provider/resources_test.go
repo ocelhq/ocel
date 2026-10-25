@@ -49,6 +49,29 @@ func TestABindingsGrantsArePublishedBesideTheRecordAnAppReads(t *testing.T) {
 	}
 }
 
+func TestARoleGrantReadsBackAsTheRoleOnTheResourceItWasPublishedWith(t *testing.T) {
+	t.Parallel()
+
+	published, err := provider.PublishedBindingMessage(provider.Binding{
+		Type:       provider.BindingCustom,
+		Name:       "fleet",
+		Properties: map[string]string{},
+		Grants: []provider.Grant{{
+			Label:    "hosts",
+			Role:     "roles/compute.instanceAdmin.v1",
+			Resource: "projects/ocel-cloud-prod",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PublishedBindingMessage: %v", err)
+	}
+	read := provider.PublishedBindingOf(published)
+	want := provider.Grant{Label: "hosts", Role: "roles/compute.instanceAdmin.v1", Resource: "projects/ocel-cloud-prod"}
+	if len(read.Grants) != 1 || read.Grants[0].Role != want.Role || read.Grants[0].Resource != want.Resource || read.Grants[0].Label != want.Label {
+		t.Errorf("read back %+v, want %+v", read.Grants, want)
+	}
+}
+
 func TestABucketBindingIncludesThePublicAddressItWasPublishedUnder(t *testing.T) {
 	t.Parallel()
 

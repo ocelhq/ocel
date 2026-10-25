@@ -57,3 +57,13 @@ func TestAnUnscopedPublishedGrantIsRefusedBeforeAnyCloudCall(t *testing.T) {
 		t.Fatalf("VerifyGrants = %v, want an *UnscopedGrantError: a publisher may not hand an app blanket access", err)
 	}
 }
+
+func TestARoleGrantIsRefusedAsNoPolicyAWSCanRender(t *testing.T) {
+	t.Parallel()
+
+	var role *RoleGrantError
+	_, err := GrantPolicy("fleet", []*variablestorev1.Grant{{Role: "roles/compute.instanceAdmin.v1", Resource: "projects/ocel-cloud-prod"}})
+	if !errors.As(err, &role) || !strings.Contains(err.Error(), "actions") {
+		t.Fatalf("GrantPolicy(role grant) = %v, want a *RoleGrantError naming the actions-over-resources shape AWS renders", err)
+	}
+}
