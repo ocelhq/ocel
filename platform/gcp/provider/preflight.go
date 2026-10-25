@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
@@ -30,9 +31,8 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	apis := p.listAPIsToCheck(pre)
 	keeps := newDeployUse(pre).keepsProjectRecords()
-	if !keeps && len(parts) == 0 && len(apis) == 0 {
+	if !keeps && !p.readsServices(pre, parts) {
 		return provider.Plan{}, nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
@@ -42,14 +42,20 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.RefuseServicesOff(ctx, apis); err != nil {
+	switching, err := p.listServicesToSwitchOn(ctx, b, pre, parts)
+	if err != nil {
 		return provider.Plan{}, err
 	}
 	var plan provider.Plan
+	if len(switching) > 0 {
+		plan.Groups = append(plan.Groups, b.SwitchedOnGroup(switching))
+	}
 	if keeps {
-		if plan.Groups, err = variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase); err != nil {
+		groups, err := variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase)
+		if err != nil {
 			return provider.Plan{}, err
 		}
+		plan.Groups = append(plan.Groups, groups...)
 	}
 	groups, err := b.PlanParts(ctx, pre.Deploy.Tier, parts)
 	if err != nil {
@@ -73,7 +79,7 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err != nil {
 		return err
 	}
-	if err := p.refuseAPIsOff(ctx, pre); err != nil {
+	if err := p.switchOnServices(ctx, pre, parts); err != nil {
 		return err
 	}
 	if err := p.warnStaleOriginSecret(ctx, pre); err != nil {
@@ -126,11 +132,8 @@ func servesCompute(app provider.AppEntry) bool {
 	return app.Compute() == provider.ComputeContainer || len(app.Manifest.GetServerless().GetFunctions()) > 0
 }
 
-func (p *Provider) listAPIsToCheck(pre provider.DeployPreflight) []string {
-	if p.skipChecks {
-		return nil
-	}
-	return deployAPIs(pre)
+func (p *Provider) readsServices(pre provider.DeployPreflight, parts []string) bool {
+	return !p.skipChecks && (len(parts) > 0 || len(deployAPIs(pre)) > 0)
 }
 
 func deployAPIs(pre provider.DeployPreflight) []string {
@@ -144,16 +147,30 @@ func deployAPIs(pre provider.DeployPreflight) []string {
 	return apis
 }
 
-func (p *Provider) refuseAPIsOff(ctx context.Context, pre provider.DeployPreflight) error {
-	apis := p.listAPIsToCheck(pre)
-	if len(apis) == 0 {
+func usedAPIs(b bootstrap.Engine, pre provider.DeployPreflight, parts []string) []string {
+	return slices.Concat(deployAPIs(pre), b.PartAPIs(pre.Deploy.Tier, parts))
+}
+
+func (p *Provider) listServicesToSwitchOn(ctx context.Context, b bootstrap.Engine, pre provider.DeployPreflight, parts []string) ([]string, error) {
+	if !p.readsServices(pre, parts) {
+		return nil, nil
+	}
+	switching, err := b.ListServicesOff(ctx, usedAPIs(b, pre, parts))
+	if err != nil {
+		return nil, err
+	}
+	return switching, b.RefuseServicesUnswitchable(ctx, switching)
+}
+
+func (p *Provider) switchOnServices(ctx context.Context, pre provider.DeployPreflight, parts []string) error {
+	if !p.readsServices(pre, parts) {
 		return nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
 	if err != nil {
 		return err
 	}
-	return b.RefuseServicesOff(ctx, apis)
+	return b.SwitchOnServices(ctx, usedAPIs(b, pre, parts), pre.Progress)
 }
 
 func (p *Provider) ensureProjectDatabase(ctx context.Context, pre provider.DeployPreflight) error {

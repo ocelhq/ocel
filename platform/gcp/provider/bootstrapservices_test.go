@@ -49,7 +49,7 @@ func everyServiceOff() []string {
 	return b.TouchedAPIs(environment.TierProduction)
 }
 
-func openingFreshProject(t *testing.T, f *freshProject) bootstrap.Engine {
+func (f *freshProject) serve(t *testing.T) string {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -70,8 +70,13 @@ func openingFreshProject(t *testing.T, f *freshProject) bootstrap.Engine {
 		_, _ = w.Write([]byte(`{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"the fresh project serves nothing more"}}`))
 	}))
 	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func openingFreshProject(t *testing.T, f *freshProject) bootstrap.Engine {
+	t.Helper()
 	return composed(bootstrap.Engine{
-		Clients:       googletest.Clients(server.URL),
+		Clients:       googletest.Clients(f.serve(t)),
 		Records:       fake.NewKeyValues(),
 		Surveyed:      &bootstrap.Surveys{},
 		ServiceStates: &bootstrap.ServiceStates{},
@@ -190,5 +195,20 @@ func TestABootstrapWhoseCredentialMayNotSwitchServicesOnIsRefusedOnceBeforeItRea
 		if reads := f.readsBeyondServiceUsage(); len(reads) > 0 || len(f.usage.Enabled) > 0 {
 			t.Errorf("%s read %v and switched on %v before refusing, want neither", name, reads, f.usage.Enabled)
 		}
+	}
+}
+
+func TestAPartAddedOnFirstUseSwitchesOnTheServicesItNeedsBeforeItMakesAnything(t *testing.T) {
+	t.Parallel()
+	server := googletest.GrantedIAM()
+	server.ServicesOff = []string{"cloudkms.googleapis.com", "cloudscheduler.googleapis.com"}
+	b := bootstrappingOver(t, server)
+
+	if err := b.EnsurePart(t.Context(), environment.TierProduction, "shop", bootstrap.Keys.For(b, environment.TierProduction)); err != nil {
+		t.Fatalf("EnsurePart(keys) = %v", err)
+	}
+
+	if got := server.EnabledIDs(); !slices.Equal(got, []string{"cloudkms.googleapis.com"}) {
+		t.Errorf("adding the keys part switched on %v, want only cloudkms.googleapis.com", got)
 	}
 }

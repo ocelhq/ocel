@@ -129,7 +129,7 @@ func (r RemovablePart) apis(b Engine, tier environment.Tier) []string {
 	return r.APIs
 }
 
-func (b Engine) partAPIs(tier environment.Tier, named []string) []string {
+func (b Engine) PartAPIs(tier environment.Tier, named []string) []string {
 	var apis []string
 	for _, each := range b.Removable {
 		if slices.Contains(named, each.Name) {
@@ -144,7 +144,7 @@ func (b Engine) TouchedAPIs(tier environment.Tier) []string {
 	for _, each := range b.Removable {
 		named = append(named, each.Name)
 	}
-	return uniqueAPIs(slices.Concat(BootstrapAPIs, b.partAPIs(tier, named)))
+	return uniqueAPIs(slices.Concat(BootstrapAPIs, b.PartAPIs(tier, named)))
 }
 
 func (b Engine) neededAPIs(req provider.BootstrapRequest) []string {
@@ -152,7 +152,7 @@ func (b Engine) neededAPIs(req provider.BootstrapRequest) []string {
 	if len(b.fronted(req.Parts)) > 0 {
 		parts = append(parts, frontedParts...)
 	}
-	return uniqueAPIs(slices.Concat(BootstrapAPIs, b.partAPIs(req.Tier, parts)))
+	return uniqueAPIs(slices.Concat(BootstrapAPIs, b.PartAPIs(req.Tier, parts)))
 }
 
 func uniqueAPIs(apis []string) []string {
@@ -186,23 +186,21 @@ func (b Engine) preflight(ctx context.Context, req provider.BootstrapRequest) ([
 
 func (b Engine) isOff(api string) bool { return b.ServiceStates.IsOff(api) }
 
+func (b Engine) SwitchedOnGroup(apis []string) provider.ChangeGroup {
+	return provider.ChangeGroup{
+		Kind:    provider.StackGroupKind,
+		Name:    string(gcloud.Vendor) + "/" + b.Clients.Project() + "/services",
+		Action:  provider.ActionUpdate,
+		Changes: switchedOn(apis),
+	}
+}
+
 func switchedOn(apis []string) []provider.Change {
 	changes := make([]provider.Change, 0, len(apis))
 	for _, api := range apis {
 		changes = append(changes, provider.Change{Kind: string(KindServiceUsage), Name: api, Action: provider.ActionUpdate, Reason: reasonSwitchedOff})
 	}
 	return changes
-}
-
-func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
-	off, err := b.ListServicesOff(ctx, apis)
-	if err != nil || len(off) == 0 {
-		return err
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"project %s has %s switched off, and ocel provisions resources rather than switching on the services that host them.\n"+
-			"Run `gcloud services enable %s --project %s`, then try again",
-		b.Clients.Project(), strings.Join(off, ", "), strings.Join(off, " "), b.Clients.Project())
 }
 
 func (b Engine) RefuseServicesUnswitchable(ctx context.Context, off []string) error {

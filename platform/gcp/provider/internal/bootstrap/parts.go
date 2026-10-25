@@ -76,7 +76,7 @@ func (b Engine) partWork(tier environment.Tier, project string, want Part, repla
 		Digest:    want.Digest(),
 		AddedBy:   project,
 		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
-			if err := b.RefuseServicesOff(ctx, want.APIs); err != nil {
+			if err := b.SwitchOnServices(ctx, want.APIs, nil); err != nil {
 				return nil, err
 			}
 			if err := makePart(ctx); err != nil {

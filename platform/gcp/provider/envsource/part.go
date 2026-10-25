@@ -68,7 +68,7 @@ func envSourceSyncWork(b bootstrap.Engine, tier environment.Tier, project string
 		Digest:    syncDigest(b, tier),
 		AddedBy:   project,
 		Make: func(ctx context.Context) ([]provider.PhysicalResource, error) {
-			if err := b.RefuseServicesOff(ctx, SyncAPIs); err != nil {
+			if err := b.SwitchOnServices(ctx, SyncAPIs, nil); err != nil {
 				return nil, err
 			}
 			if err := mendEnvSourceSync(ctx, b, tier, project); err != nil {

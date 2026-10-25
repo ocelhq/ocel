@@ -199,7 +199,7 @@ func TestADeployBehindAnEdgeThatServesFromTheTierAddsTheEdgeBucketAndTheKeys(t *
 }
 
 func TestADryDeployOfARealtimeChannelPlansTheRealtimePartAndMakesNothing(t *testing.T) {
-	p := failingOnAnyCall(t)
+	p := pushing(t, servingOnlyEnabledAPIs(t))
 	pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction}, Resources: []provider.Resource{{Name: "chat", Type: provider.BindingRealtime}}}
 
 	plan, err := p.PlanPreflight(context.Background(), pre)
