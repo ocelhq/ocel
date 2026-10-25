@@ -54,7 +54,6 @@ func TestAFailureOfTheNetworkOrTheServiceIsAskedAgain(t *testing.T) {
 
 	for name, failure := range map[string]error{
 		"a reset connection":  &url.Error{Op: "Post", URL: "https://storage.googleapis.com", Err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}},
-		"too many requests":   &googleapi.Error{Code: http.StatusTooManyRequests},
 		"unavailable":         &googleapi.Error{Code: http.StatusServiceUnavailable},
 		"a request timed out": &googleapi.Error{Code: http.StatusRequestTimeout},
 	} {
@@ -64,5 +63,21 @@ func TestAFailureOfTheNetworkOrTheServiceIsAskedAgain(t *testing.T) {
 				t.Errorf("%s was asked %d times, want %d", name, asked, googleretry.Attempts)
 			}
 		})
+	}
+}
+
+func TestAThrottledRequestIsAskedAgainOnceTheThrottlePasses(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	_, err := asked(context.Background(), func(...googleapi.CallOption) (struct{}, error) {
+		calls++
+		if calls == 1 {
+			return struct{}{}, &googleapi.Error{Code: http.StatusTooManyRequests}
+		}
+		return struct{}{}, nil
+	})
+	if err != nil || calls != 2 {
+		t.Errorf("asked() made %d calls and returned %v, want the throttled request asked again and served", calls, err)
 	}
 }

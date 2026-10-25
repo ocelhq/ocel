@@ -54,7 +54,7 @@ func PrincipalNamed(ctx context.Context, endpoint, token string) (string, error)
 	}
 	if isThrottledOrDown(status) {
 		return "", refusal.Refuse(refusal.CodeBusy,
-			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", googleretry.Attempts)
+			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal while ocel kept asking, and this credential may well be good")
 	}
 	return "", Unauthenticated()
 }

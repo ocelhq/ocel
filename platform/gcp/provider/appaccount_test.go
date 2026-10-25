@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/api/iam/v1"
 	pubsub "google.golang.org/api/pubsub/v1"
@@ -288,8 +289,10 @@ func TestAProjectWithNoRoomForAnotherAccountIsRefusedNamingTheQuota(t *testing.T
 			server := appAccountsOnly()
 			configure(server)
 			p, c := ensuringAccounts(t, server)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			t.Cleanup(cancel)
 
-			_, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
+			_, _, err := p.release().EnsureAccount(ctx, c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
 
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, "Service Account Count") {

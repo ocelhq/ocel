@@ -41,7 +41,6 @@ func TestOnlyTheFailuresASecondCallCanCureAreTriedAgain(t *testing.T) {
 		again bool
 	}{
 		{name: "request timeout", err: answered(http.StatusRequestTimeout), again: true},
-		{name: "too many requests", err: answered(http.StatusTooManyRequests), again: true},
 		{name: "internal", err: answered(http.StatusInternalServerError), again: true},
 		{name: "bad gateway", err: answered(http.StatusBadGateway), again: true},
 		{name: "answer unavailable", err: answered(http.StatusServiceUnavailable), again: true},
@@ -51,7 +50,6 @@ func TestOnlyTheFailuresASecondCallCanCureAreTriedAgain(t *testing.T) {
 		{name: "forbidden", err: answered(http.StatusForbidden)},
 		{name: "conflict", err: answered(http.StatusConflict)},
 		{name: "busy", err: status.Error(codes.Unavailable, "busy"), again: true},
-		{name: "quota", err: status.Error(codes.ResourceExhausted, "quota"), again: true},
 		{name: "deadline", err: status.Error(codes.DeadlineExceeded, "slow"), again: true},
 		{name: "aborted", err: status.Error(codes.Aborted, "contended"), again: true},
 		{name: "refused", err: status.Error(codes.PermissionDenied, "no")},
