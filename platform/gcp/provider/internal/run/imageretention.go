@@ -64,12 +64,25 @@ func isRunByARevision(ctx context.Context, revisions *runv1.APIService, project,
 	return len(running.Items) > 0, nil
 }
 
+func listRanImages(revision *run.GoogleCloudRunV2Revision) []string {
+	if image := revision.Annotations[imageAnnotation]; image != "" {
+		return []string{image}
+	}
+	var images []string
+	for _, container := range revision.Containers {
+		if container.Image != "" && !strings.Contains(container.Image, "@") {
+			images = append(images, container.Image)
+		}
+	}
+	return images
+}
+
 func imagesOf(revisions ...*run.GoogleCloudRunV2Revision) []string {
 	var images []string
 	for _, revision := range revisions {
-		for _, container := range revision.Containers {
-			if container.Image != "" && !slices.Contains(images, container.Image) {
-				images = append(images, container.Image)
+		for _, image := range listRanImages(revision) {
+			if !slices.Contains(images, image) {
+				images = append(images, image)
 			}
 		}
 	}
@@ -108,6 +121,8 @@ func (p *Services) listServiceImages(ctx context.Context, services *run.Service,
 }
 
 const imageLabel = "ocel-image"
+
+const imageAnnotation = "ocel.dev/image"
 
 func ImageLabelValue(image string) string {
 	sum := sha256.Sum256([]byte(image))

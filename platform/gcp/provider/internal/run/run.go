@@ -174,6 +174,7 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 		MaxInstanceRequestConcurrency: int64(s.Concurrency),
 		ExecutionEnvironment:          s.Generation,
 		Labels:                        map[string]string{imageLabel: ImageLabelValue(s.Image)},
+		Annotations:                   map[string]string{imageAnnotation: s.Image},
 	}
 	if s.Egress != nil {
 		template.VpcAccess = &run.GoogleCloudRunV2VpcAccess{
@@ -479,7 +480,7 @@ func (p *Services) createdRevision(ctx context.Context, services *run.Service, c
 		return "", fmt.Errorf("read the revision the release of %s created: %w", s.Service, err)
 	}
 	revision := RevisionName(created.Name)
-	if !slices.Contains(imagesOf(created), s.Image) {
+	if !slices.Contains(listRanImages(created), s.Image) {
 		return "", refusal.Refuse(refusal.CodeBusy,
 			"the latest revision of %s, %s, runs another image than this release made it with: another release replaced it under this one, so this one routes nothing. Deploy again",
 			s.Service, revision)
