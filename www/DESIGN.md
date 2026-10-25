@@ -166,7 +166,10 @@ components:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
     rounded: "{rounded.none}"
-    padding: "6px 12px"
+    padding: "0 16px"
+  site-bar-sign-in-hover:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.paper}"
   copy-command:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
@@ -269,7 +272,7 @@ A monochrome drawing with one saturated line and one confirmation green.
 - **Index** (600, 2.5rem, 1.1, -0.035em): the docs index and comparison page titles.
 - **Small** (400, 0.9375rem, 1.6): docs table cells and the compare panes. Landing running text inside cells, tables and lists sits at 14px to 14.5px.
 - **Body** (400, 1rem, 1.6): prose in Body color. Max width follows the docs column, about 65 to 75 characters. On the docs index the prose is capped at 35rem while figures, tiles, and tabs keep the full 56rem column.
-- **Label** (500 mono, 0.6875rem, 0.14em, uppercase): sidebar separators, table of contents heading, table headers, the docs badge, keyboard keys, figure captions, title-block cell labels, the site bar's ALPHA, and content tabs. Steel in docs, Body on the landing; tabs are controls, Body at rest and Ink when active.
+- **Label** (500 mono, 0.6875rem, 0.14em, uppercase): sidebar separators, table of contents heading, table headers, the docs badge, keyboard keys, figure captions, title-block cell labels, the site bar's Engine and Cloud switch, and content tabs. Steel in docs, Body on the landing; tabs are controls, Body at rest and Ink when active.
 - **Filename** (400 mono, 0.75rem): the title bar of a code block. A path is code, so it keeps its case and its natural tracking.
 - **Code** (400 mono, 0.84375rem, 1.9): code blocks and terminals. Inline code is 0.85em of its surrounding text on Fog.
 
@@ -341,7 +344,7 @@ A command as a button. A 1.5px Ink frame on Paper, mono 13px, 10px by 12px, a Bo
 
 ### Navigation
 - **Docs sidebar:** display face at 0.875rem, separators in Label type, tabs colored per root (Deploy in Electric, CLI in Amber, SDK in Violet) through the tab icon only. Collapse control centered.
-- **Site bar** (`components/site-bar.tsx`, copied verbatim to cloud/www): sticky, 56px tall, translucent Paper at 85% with backdrop blur, 1.5px Ink rule beneath, on the 1180px container. The Electric cut-ring mark and lowercase Archivo wordmark, then the Engine and Cloud site switch (13px medium; the current site in Ink over a 1.5px Electric underline, the other in Body hovering to Ink), Docs (hidden below sm) and GitHub in Body. Right-aligned: the ALPHA Label from the medium breakpoint, and "Sign in" as a 1.5px Ink outline button (6px by 12px) hovering to Fog.
+- **Site bar** (`components/site-bar.tsx`, copied verbatim to cloud/www): a ruled strip, sticky, 56px tall, translucent Paper at 85% with backdrop blur, a 1.5px Ink rule beneath, on the 1180px container. Every item is a full-height cell, so labels share one centre line. From the left: the identity cell (the Electric cut-ring mark, the lowercase Archivo wordmark, and the ALPHA chip from the docs lockup: Warn fill, Paper mono 10px semibold at 0.14em, from sm; the wordmark drops below 360px and the mark stays). Then the Engine and Cloud switch: two cells in Label type (mono 11px medium, 0.14em, uppercase) split by a hairline and closed by hairlines from sm; the current site is Ink with a 3px Electric bar laid over the Ink rule beneath it, the other is Body and tints to Fog on hover. Pushed right: Docs (from sm) and GitHub (the GitHub glyph, with its name from md, hidden below 380px) in Space Grotesk 14px medium Body hovering to Ink; and Sign in, a cell closed by 1.5px Ink rules on both sides, 14px medium Ink with a drawn arrow from sm, that fills with Ink and turns Paper on hover. Focus draws the 2px Electric outline inset 3px inside the cell.
 - **Landing footer:** 1.5px Ink rule above, the wordmark at 15px, then 13px Body links hovering to Ink, Ocel Cloud pushed right.
 
 ### Terminal (Screen and Session)
