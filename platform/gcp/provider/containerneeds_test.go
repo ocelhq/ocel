@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -35,5 +37,19 @@ func TestANextContainerServedByCloudRunDirectlyNeedsAWaiverForTheEdgeCache(t *te
 	}
 	if _, err := conformance.CheckContainerNeeds(t, p, edge.None, nextContainerNeeds, string(edge.NeedEdgeCache)); err != nil {
 		t.Errorf("the need check with %s waived = %v, want it to pass", edge.NeedEdgeCache, err)
+	}
+}
+
+func TestTheCloudflareWorkerDispatchesANextContainerOnGoogleCloudAndNoOtherFrontRunsItsCode(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+
+	if dispatched := conformance.ListDispatchedComputes(t, p, cloudflare.Kind); !slices.Contains(dispatched, provider.ComputeContainer) {
+		t.Errorf("computes Cloudflare dispatches = %v, want %s: the Worker's router serves a container app as it serves a function", dispatched, provider.ComputeContainer)
+	}
+	for _, front := range []edge.Kind{edge.None, alb.Kind} {
+		if dispatched := conformance.ListDispatchedComputes(t, p, front); slices.Contains(dispatched, provider.ComputeContainer) {
+			t.Errorf("computes %q dispatches = %v, want no %s: it runs no code", front, dispatched, provider.ComputeContainer)
+		}
 	}
 }

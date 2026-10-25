@@ -235,6 +235,42 @@ func TestConfigureStatesTheFactsOfTheEdgeTheProjectSelects(t *testing.T) {
 	}
 }
 
+func TestConfigureStatesTheComputesWhoseAppsTheEdgesCodeDispatches(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		selection  *contractv1.EdgeSelection
+		dispatches bool
+		want       []string
+	}{
+		{"an edge that runs code in front of a router that dispatches", nil, true, []string{"serverless", "container"}},
+		{"an edge that runs code in front of a router that forwards", nil, false, nil},
+		{"an edge that runs no code", &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}, true, nil},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			vendor := fake.NewProvider(fake.Options{})
+			vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).RouterDispatches(testCase.dispatches)
+			server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+				Version: "test",
+				New: func(context.Context, provider.Settings) (provider.Provider, error) {
+					return vendor, nil
+				},
+			}))
+			t.Cleanup(server.Close)
+			client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+
+			req := configureInWorkingDir(t)
+			req.Edge = testCase.selection
+			configured, err := client.Configure(context.Background(), req)
+			if err != nil {
+				t.Fatalf("Configure() error = %v", err)
+			}
+			if got := configured.GetFacts().GetEdge().GetDispatchedComputes(); !slices.Equal(got, testCase.want) {
+				t.Errorf("Configure() dispatched computes = %v, want %v: a build compiles a compute's edge code only where the edge runs it", got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestConfigureRefusesAnEdgeTheProviderCannotOpen(t *testing.T) {
 	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
 		Version: "test",

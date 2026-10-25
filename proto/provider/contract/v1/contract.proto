@@ -138,6 +138,11 @@ message EdgeFacts {
   bool runs_code = 1;
 
   CacheTagLimits cache_tag_limits = 2;
+
+  repeated string dispatched_computes = 3 [(buf.validate.field).repeated = {
+    unique: true
+    items: {string: {in: ["serverless", "container"]}}
+  }];
 }
 
 message CacheTagLimits {
