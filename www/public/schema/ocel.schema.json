@@ -2409,6 +2409,10 @@
                           "instance"
                         ],
                         "type": "string"
+                      },
+                      "network": {
+                        "description": "Send the app's traffic to private addresses over the network named by option network, as an app bound to a postgres or kv is. Left off, only an app bound to one does.",
+                        "type": "boolean"
                       }
                     },
                     "title": "GcpAppOptions",
@@ -2416,6 +2420,31 @@
                   },
                   "description": "Cloud Run settings for each app, keyed by the app's name.",
                   "type": "object"
+                },
+                "network": {
+                  "allOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "A VPC network of the project and its subnetwork in the region.",
+                      "properties": {
+                        "network": {
+                          "description": "The name of the VPC network, which must be in the project deployed into.",
+                          "type": "string"
+                        },
+                        "subnetwork": {
+                          "description": "The name of the network's subnetwork in the region: the apps' Direct VPC egress leaves from it.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "network",
+                        "subnetwork"
+                      ],
+                      "title": "GcpNetworkOptions",
+                      "type": "object"
+                    }
+                  ],
+                  "description": "A VPC network of the project, and its subnetwork in the region, that this project's apps, kv stores and databases join instead of the tier's own network. Its owner makes the service connection policies Cloud SQL and Memorystore connect through, and ocel changes nothing on it."
                 },
                 "ownDatabase": {
                   "description": "Keep this project's values, runs and tag records in a Firestore database of its own, which no other project's apps can reach. Left off, they are kept in the one database every project of the tier shares. Fixed by the project's first deploy or value.",

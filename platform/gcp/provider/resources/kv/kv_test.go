@@ -496,3 +496,47 @@ func TestAStoreCreateAnsweredWithAnUnnamedUnfinishedOperationIsAnError(t *testin
 		t.Errorf("ProvisionKV() = %v, want an operation nothing can poll named as an error rather than taken as done", err)
 	}
 }
+
+func servingMemorystoreToTheFleet(t *testing.T, server *googletest.Memorystore, url string) *KV {
+	t.Helper()
+	clients := googletest.Clients(url)
+	clients.Names = clients.WithNetwork("fleet", "fleet-europe-west1")
+	return New(googletest.Opener(clients), gcloud.NewMemorystore(url, nil))
+}
+
+func TestAStoreOfAProjectNamingANetworkIsConnectedIntoThatNetwork(t *testing.T) {
+	server, url := googletest.StartMemorystore(t)
+	p := servingMemorystoreToTheFleet(t, server, url)
+
+	if _, err := p.Provision(context.Background(), aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20}), nil); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	want := gcloud.PSCAutoConnection{ProjectID: "acme-prod", Network: "projects/acme-prod/global/networks/fleet"}
+	sent := server.Creates()[0]
+	if len(sent.Endpoints) != 1 || len(sent.Endpoints[0].Connections) != 1 || sent.Endpoints[0].Connections[0].PSCAutoConnection == nil ||
+		*sent.Endpoints[0].Connections[0].PSCAutoConnection != want {
+		t.Errorf("created endpoints %s, want one automatic connection into the network the project names", googletest.JSON(t, sent.Endpoints))
+	}
+}
+
+func TestAStoreOnTheTiersNetworkIsRefusedOnceTheProjectNamesAnother(t *testing.T) {
+	server, url := googletest.StartMemorystore(t)
+	ours := New(googletest.Opener(googletest.Clients(url)), gcloud.NewMemorystore(url, nil))
+	store := aKVStore(t, provider.KVSpec{MemoryBytes: 256 << 20})
+	if _, err := ours.Provision(context.Background(), store, nil); err != nil {
+		t.Fatal(err)
+	}
+	fleet := servingMemorystoreToTheFleet(t, server, url)
+
+	_, _, planned := fleet.Plan(context.Background(), store, nil)
+	_, provisioned := fleet.Provision(context.Background(), store, nil)
+	for _, err := range []error{planned, provisioned} {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(refused.Message, "ocel-prod-network") || !strings.Contains(refused.Message, "fleet") {
+			t.Errorf("a store on ocel-prod-network deployed naming fleet = %v, want an %s refusal naming both networks", err, refusal.CodeInvalid)
+		}
+	}
+	if masks := server.Masks(); len(masks) != 0 {
+		t.Errorf("a refused store was updated with %v, want it left as it is", masks)
+	}
+}

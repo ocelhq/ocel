@@ -44,7 +44,7 @@ var connectionPolicies = []connectionPolicy{
 	{name: names.CloudSQLPolicy, class: CloudSQLServiceClass, service: "Cloud SQL"},
 }
 
-var networkAPIs = []string{
+var APIs = []string{
 	"compute.googleapis.com",
 	"memorystore.googleapis.com",
 	"sqladmin.googleapis.com",
@@ -75,7 +75,7 @@ func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 		Name:      PartName,
 		Summary:   Summary,
 		Content:   SubnetRange + " " + NetworkUserRole,
-		APIs:      networkAPIs,
+		APIs:      APIs,
 		Resources: resources,
 		Shape:     Shape(b.Clients.Names, tier, b.Clients.Region),
 		Make:      func(ctx context.Context) error { return Make(ctx, b, tier) },
@@ -457,4 +457,9 @@ func connectivityOutcome(operation *networkconnectivity.GoogleLongrunningOperati
 	return outcome
 }
 
-var Part = component.Part{Name: PartName, Shape: Shape}
+var Part = component.Part{Name: PartName, Shape: func(names names.Names, tier environment.Tier, region string) []pricing.Shaped {
+	if names.HasNamedNetwork() {
+		return nil
+	}
+	return Shape(names, tier, region)
+}}

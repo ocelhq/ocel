@@ -206,20 +206,24 @@ func (p *KV) Provision(ctx context.Context, in resources.ProvisionRequest, progr
 	current, err := instance.service.ReadInstance(ctx, instance.path)
 	switch {
 	case gcloud.Absent(err):
-		desired := store.instance(clients.Project(), clients.NetworkPath(in.Ref.Tier), labels)
+		desired := store.instance(clients.Project(), clients.AppNetworkPath(in.Ref.Tier), labels)
 		current, err = instance.create(ctx, clients, desired, progress)
 	case err != nil:
 		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
 	case gcloud.IsSettling(current.State):
 		if current, err = instance.service.ReadSettledInstance(ctx, instance.path, in.Resource.Name); err == nil {
 			if err = instance.refuseInactive(current, clients.Region); err == nil {
-				current, err = instance.update(ctx, store, current, progress)
+				if err = instance.refuseNetworkChange(current, clients.AppNetworkPath(in.Ref.Tier)); err == nil {
+					current, err = instance.update(ctx, store, current, progress)
+				}
 			}
 		}
 	case current.State != gcloud.InstanceActive:
 		err = instance.refuseInactive(current, clients.Region)
 	default:
-		current, err = instance.update(ctx, store, current, progress)
+		if err = instance.refuseNetworkChange(current, clients.AppNetworkPath(in.Ref.Tier)); err == nil {
+			current, err = instance.update(ctx, store, current, progress)
+		}
 	}
 	if err != nil {
 		return provider.Binding{}, err
@@ -249,6 +253,9 @@ func (p *KV) Plan(ctx context.Context, in resources.ProvisionRequest, _ *provide
 		return provider.ActionUpdate, strings.Join(append([]string{settling}, differences...), "; "), nil
 	case current.State != gcloud.InstanceActive:
 		return "", "", instance.refuseInactive(current, clients.Region)
+	}
+	if err := instance.refuseNetworkChange(current, clients.AppNetworkPath(in.Ref.Tier)); err != nil {
+		return "", "", err
 	}
 	if _, differences := store.changes(current); len(differences) > 0 {
 		return provider.ActionUpdate, strings.Join(differences, "; "), nil
@@ -317,6 +324,10 @@ func (i kvInstance) refuseInactive(current *gcloud.MemorystoreInstance, region s
 			"If it is being deleted, deploy again once it is gone. Otherwise delete it with `gcloud memorystore instances delete %s --location %s`, "+
 			"which deletes the data it holds, and deploy again to create it afresh",
 		i.storeName, i.id, current.State, gcloud.InstanceActive, gcloud.InstanceActive, i.id, region)
+}
+
+func (i kvInstance) refuseNetworkChange(current *gcloud.MemorystoreInstance, network string) error {
+	return gcloud.RefuseNetworkChange("kv "+i.storeName, "Memorystore instance "+i.id, current.Networks(), network)
 }
 
 func (i kvInstance) readBinding(ctx context.Context, current *gcloud.MemorystoreInstance, resource provider.Resource) (provider.Binding, error) {

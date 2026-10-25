@@ -335,6 +335,24 @@ func TestShapeOfADeclaredStoreIsAMemorystoreNodeWithOneReplicaOnTheTiersNetwork(
 	}
 }
 
+func TestShapeOfAStoreOnANamedNetworkHoldsNoNetworkOfTheTiers(t *testing.T) {
+	client, _ := costServedWith(t, gcp.Options{Project: "acme-prod", Region: "us-central1", Network: &gcp.NetworkOptions{Network: "fleet", Subnetwork: "fleet-us-central1"}})
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{Manifest: storeManifest("2gb"), Environment: productionEnvironment})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+
+	counts := typeCounts(set)
+	if counts["google_memorystore_instance"] != 1 {
+		t.Errorf("counts = %v, want the store shaped", counts)
+	}
+	for _, typ := range []string{"google_compute_network", "google_compute_subnetwork", "google_network_connectivity_service_connection_policy"} {
+		if counts[typ] != 0 {
+			t.Errorf("counts = %v, want no %s: the project joins the network it names, which its owner makes", counts, typ)
+		}
+	}
+}
+
 func TestShapeOfAPreviewStoreIsAMemorystoreNodeWithoutAReplica(t *testing.T) {
 	set, _ := shapeOfAStore(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"}, "256mb")
 

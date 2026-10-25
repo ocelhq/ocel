@@ -66,7 +66,7 @@ credential, and shows in its plan as added on first use:
 | `app-database` | the Firestore database the tier's projects [share](#project-records) | keeps a project's records: seals a value, declares a topic or task, ships a Next app or a build that revalidates, or sets a value with the ocel CLI |
 | `edge-bucket` | the tier's [edge bucket](#buckets-of-a-tier) | ships a Next app, or deploys behind the `alb` or Cloudflare edge |
 | `cache-bucket` | the tier's [cache bucket](#buckets-of-a-tier) | ships a Next app, or a build that revalidates |
-| `private-network` | the tier's [network](#private-network) | declares a database or kv store |
+| `private-network` | the tier's [network](#private-network) | declares a database or kv store, unless its project [names a network](#naming-a-network) |
 | `alb` | the [load balancer](#edge) of the `alb` edge | deploys behind it |
 | `realtime` | the account the tier's [realtime gateways](#realtime) run as | declares a realtime |
 | `topics` | the push account and delay queue of [topics and tasks](#topics-tasks-and-workers) | declares a topic or task |
@@ -539,7 +539,8 @@ the instance and its data.
 ## Private network
 
 KV stores and databases are reached over a network of the tier's own, which the first deploy
-declaring one adds as the tier's `private-network` part. Switch its services on first:
+declaring one adds as the tier's `private-network` part, unless their project
+[names a network](#naming-a-network) instead. Switch its services on first:
 
 ```bash
 gcloud services enable compute.googleapis.com memorystore.googleapis.com sqladmin.googleapis.com \
@@ -557,6 +558,103 @@ that subnetwork through direct VPC egress; the rest of their traffic leaves as b
 **Removing it.** `ocel bootstrap destroy` takes the network down, and is refused while any store
 or database is still on it, naming them. The bootstrap credential needs
 `roles/compute.networkAdmin` and `roles/cloudsql.viewer` for that.
+
+### Naming a network
+
+A project can join a VPC network you make yourself instead of the tier's own, such as one a Pulumi
+program makes before `ocel deploy`. Name the network and its subnetwork in the region, both in the
+project the deploy runs in, by their names:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({
+    project: "my-project",
+    region: "europe-west1",
+    network: { network: "fleet", subnetwork: "fleet-europe-west1" },
+    apps: { api: { network: true } },
+  }),
+  apps: [{ name: "api", path: "." }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "gcp": {
+      "project": "my-project",
+      "region": "europe-west1",
+      "network": { "network": "fleet", "subnetwork": "fleet-europe-west1" },
+      "apps": { "api": { "network": true } }
+    }
+  },
+  "apps": [{ "name": "api", "path": "." }]
+}
+```
+
+The project's stores and databases are then connected into that network, and its apps bound to
+one reach private addresses over the subnetwork through direct VPC egress. Set `network` to `true`
+under an app's name in `apps` to send that app's private traffic over the subnetwork too when it is
+bound to neither, such as an app that calls machines of your own on the network. Its traffic reaches
+every private range the network routes to, and the rest leaves as before.
+
+The project adds no `private-network` part, and ocel changes nothing on the network. Whoever makes
+the network also makes what the project needs on it:
+
+- a service connection policy in the region for each service the project declares, with the
+  service class `google-cloud-sql` for databases and `gcp-memorystore` for kv stores, naming the
+  subnetwork, which is where each instance's endpoint gets its address;
+- `roles/compute.networkUser` on the subnetwork for the Cloud Run service agent,
+  `service-<project number>@serverless-robot-prod.iam.gserviceaccount.com`.
+
+In a Pulumi program:
+
+```ts title="index.ts"
+import * as gcp from "@pulumi/gcp";
+import * as pulumi from "@pulumi/pulumi";
+
+const region = "europe-west1";
+const project = gcp.organizations.getProjectOutput();
+const network = new gcp.compute.Network("fleet", { name: "fleet", autoCreateSubnetworks: false });
+const subnetwork = new gcp.compute.Subnetwork("fleet", {
+  name: "fleet-europe-west1",
+  region,
+  network: network.id,
+  ipCidrRange: "10.8.0.0/20",
+});
+for (const serviceClass of ["google-cloud-sql", "gcp-memorystore"]) {
+  new gcp.networkconnectivity.ServiceConnectionPolicy(serviceClass, {
+    name: `fleet-${serviceClass}`,
+    location: region,
+    serviceClass,
+    network: network.id,
+    pscConfig: { subnetworks: [subnetwork.id] },
+  });
+}
+new gcp.compute.SubnetworkIAMMember("cloud-run-agent", {
+  region,
+  subnetwork: subnetwork.name,
+  role: "roles/compute.networkUser",
+  member: pulumi.interpolate`serviceAccount:service-${project.number}@serverless-robot-prod.iam.gserviceaccount.com`,
+});
+```
+
+A deploy that declares a store or database, or ships an app set to reach the network, checks that
+the network and the subnetwork exist and that the subnetwork is on the network, and is refused
+naming the one that is not. A database whose endpoint has no address after Cloud SQL makes it is
+refused naming the network whose Cloud SQL policy it lacks. The tier's other projects keep the
+network they name, or the tier's own.
+
+A store or database stays on the network it was made on: a deploy that would move one, onto a
+named network or back onto the tier's own, is refused naming both. Remove it and deploy, which
+deletes its data, to make it again on the other. The tier's bastion forwards ports only into the
+tier's own network, so a port forward to a store or database of a project that names a network is
+refused.
 
 ## Topics, tasks and workers
 

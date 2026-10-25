@@ -24,6 +24,19 @@ func TestTheOptionsNeedOnlyAProjectAndARegion(t *testing.T) {
 	}
 }
 
+func TestTheOptionsTakeANetworkAndASubnetworkOfTheProjectForItsAppsToJoin(t *testing.T) {
+	t.Parallel()
+
+	_, err := gcp.New(context.Background(), provider.Settings{Options: provider.Options{
+		"project": "acme-prod", "region": "europe-west1",
+		"network": map[string]any{"network": "fleet", "subnetwork": "fleet-europe-west1"},
+		"apps":    map[string]any{"api": map[string]any{"network": true}},
+	}})
+	if err != nil {
+		t.Errorf("New() = %v, want a provider joining the network fleet", err)
+	}
+}
+
 func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -45,6 +58,30 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 				"web": map[string]any{"billing": "requests"},
 			}},
 			names: `"apps.web.billing"`,
+			code:  refusal.CodeInvalid,
+		},
+		{
+			name: "a network with no subnetwork",
+			options: provider.Options{"project": "acme-prod", "region": "europe-west1", "network": map[string]any{
+				"network": "fleet",
+			}},
+			names: `"network.subnetwork"`,
+			code:  refusal.CodeInvalid,
+		},
+		{
+			name: "a network named by its path",
+			options: provider.Options{"project": "acme-prod", "region": "europe-west1", "network": map[string]any{
+				"network": "projects/acme-hosts/global/networks/fleet", "subnetwork": "fleet-europe-west1",
+			}},
+			names: `"network.network"`,
+			code:  refusal.CodeInvalid,
+		},
+		{
+			name: "an app reaching a network none names",
+			options: provider.Options{"project": "acme-prod", "region": "europe-west1", "apps": map[string]any{
+				"web": map[string]any{"network": true},
+			}},
+			names: `"apps.web.network"`,
 			code:  refusal.CodeInvalid,
 		},
 		{

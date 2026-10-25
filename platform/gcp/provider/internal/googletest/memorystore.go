@@ -118,7 +118,7 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 			stored.Name = name + "/" + r.URL.Query().Get("instanceId")
 			stored.State = gcloud.InstanceActive
 			stored.Endpoints = []gcloud.InstanceEndpoint{{Connections: []gcloud.EndpointConnection{
-				{PSCAutoConnection: &gcloud.PSCAutoConnection{IPAddress: StoreAddress, Port: 6379, ConnectionType: gcloud.PrimaryEndpoint}},
+				{PSCAutoConnection: &gcloud.PSCAutoConnection{IPAddress: StoreAddress, Port: 6379, ConnectionType: gcloud.PrimaryEndpoint, Network: requestedNetwork(created)}},
 			}}}
 			s.instances[stored.Name] = &stored
 			WriteBody(w, s.operation(false))
@@ -160,6 +160,17 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
+}
+
+func requestedNetwork(created *gcloud.MemorystoreInstance) string {
+	for _, endpoint := range created.Endpoints {
+		for _, connection := range endpoint.Connections {
+			if connection.PSCAutoConnection != nil {
+				return connection.PSCAutoConnection.Network
+			}
+		}
+	}
+	return ""
 }
 
 func (s *Memorystore) StillCreating(name string, reads int) {

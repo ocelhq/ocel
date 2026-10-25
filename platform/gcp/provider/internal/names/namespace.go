@@ -42,7 +42,17 @@ const (
 type Names struct {
 	namespace provider.Namespace
 	project   string
+
+	namedNetwork    string
+	namedSubnetwork string
 }
+
+func (n Names) WithNetwork(network, subnetwork string) Names {
+	n.namedNetwork, n.namedSubnetwork = network, subnetwork
+	return n
+}
+
+func (n Names) HasNamedNetwork() bool { return n.namedNetwork != "" }
 
 func (n Names) Namespace() provider.Namespace { return n.namespace }
 
@@ -212,6 +222,28 @@ func (n Names) Subnetwork(tier environment.Tier) string { return n.Network(tier)
 
 func (n Names) SubnetworkPath(region string, tier environment.Tier) string {
 	return "projects/" + n.project + "/regions/" + region + "/subnetworks/" + n.Subnetwork(tier)
+}
+
+func (n Names) AppNetwork(tier environment.Tier) string {
+	if n.HasNamedNetwork() {
+		return n.namedNetwork
+	}
+	return n.Network(tier)
+}
+
+func (n Names) AppNetworkPath(tier environment.Tier) string {
+	return "projects/" + n.project + "/global/networks/" + n.AppNetwork(tier)
+}
+
+func (n Names) AppSubnetwork(tier environment.Tier) string {
+	if n.HasNamedNetwork() {
+		return n.namedSubnetwork
+	}
+	return n.Subnetwork(tier)
+}
+
+func (n Names) AppSubnetworkPath(region string, tier environment.Tier) string {
+	return "projects/" + n.project + "/regions/" + region + "/subnetworks/" + n.AppSubnetwork(tier)
 }
 
 func (n Names) ConnectionPolicy(tier environment.Tier, service string) string {
