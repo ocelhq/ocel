@@ -1,10 +1,15 @@
-import { createPublicKey, verify } from "node:crypto";
+import { createPrivateKey, createPublicKey, randomBytes, sign, verify } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { type WebSocket, WebSocketServer } from "ws";
-import { RealtimeService } from "../gen/proto/app/realtime/v1/realtime_pb.js";
+import { bindingKey } from "../binding/binding.js";
+import {
+  type MintRequest,
+  Operation,
+  RealtimeService,
+} from "../gen/proto/app/realtime/v1/realtime_pb.js";
 import { readRealtimeBindingFixture } from "./realtime-vectors.js";
 
 export interface PublishedEvent {
@@ -19,13 +24,68 @@ interface GatewayPublishes {
   relay(channel: string, envelope: string): void;
 }
 
+/** What the fake ocel runtime was asked to mint, and how it answers the next Mint. */
+export interface FakeRuntime {
+  mints: MintRequest[];
+  mapChannel?: (channel: string) => string;
+  mintRefusal?: ConnectError;
+}
+
 let publishingGateway: GatewayPublishes | undefined;
+let mintingRuntime: FakeRuntime = { mints: [] };
 let runtimeProxyAddress: Promise<string> | undefined;
+
+const fixture = JSON.parse(readRealtimeBindingFixture());
+
+function signFixtureToken(claims: Record<string, unknown>): string {
+  const key = createPrivateKey({
+    key: Buffer.concat([
+      Buffer.from("302e020100300506032b657004220420", "hex"),
+      Buffer.from(fixture.realtime.signingKey, "base64"),
+    ]),
+    format: "der",
+    type: "pkcs8",
+  });
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const input = `${encode({ alg: "EdDSA", typ: "JWT" })}.${encode(claims)}`;
+  return `${input}.${sign(null, Buffer.from(input), key).toString("base64url")}`;
+}
+
+function mint(req: MintRequest) {
+  const runtime = mintingRuntime;
+  runtime.mints.push(req);
+  if (runtime.mintRefusal) throw runtime.mintRefusal;
+  const bound = process.env[bindingKey(req.realtime, "realtime")];
+  if (!bound) throw new ConnectError("no realtime binding was delivered", Code.FailedPrecondition);
+  const host: string = JSON.parse(bound).realtime.host;
+  const issuedAt = Math.floor(Date.now() / 1_000);
+  const expiresAt = issuedAt + Number(req.ttl?.seconds ?? 0n);
+  return {
+    tokens: req.grants.map((grant) => ({
+      token: signFixtureToken({
+        iss: `ocel:rt:${req.realtime}`,
+        aud: host,
+        sub: req.subject,
+        iat: issuedAt,
+        exp: expiresAt,
+        jti: randomBytes(16).toString("base64url"),
+        ocel: {
+          op: grant.operation === Operation.CONNECT ? "connect" : "subscribe",
+          ch: grant.channel,
+          ns: req.realtime,
+        },
+      }),
+      channel: runtime.mapChannel?.(grant.channel) ?? grant.channel,
+    })),
+    expiresAt: { seconds: BigInt(expiresAt), nanos: 0 },
+  };
+}
 
 function serveRuntimeProxy(): Promise<string> {
   const adapter = connectNodeAdapter({
     routes: (router) =>
       router.service(RealtimeService, {
+        mint,
         publish(req) {
           const gateway = publishingGateway;
           if (!gateway)
@@ -55,7 +115,20 @@ function serveRuntimeProxy(): Promise<string> {
   );
 }
 
+/**
+ * Points the SDK at a fake ocel runtime that mints tokens with the binding fixture's key, as
+ * ocel's own runtime does, recording each Mint it is asked for.
+ */
+export async function serveFakeRuntime(): Promise<FakeRuntime> {
+  const runtime: FakeRuntime = { mints: [] };
+  mintingRuntime = runtime;
+  process.env.OCEL_RUNTIME_ADDRESS = await (runtimeProxyAddress ??= serveRuntimeProxy());
+  process.env.OCEL_SESSION_TOKEN = "session-token";
+  return runtime;
+}
+
 export interface FakeGateway {
+  runtime: FakeRuntime;
   binding: string;
   host: string;
   url: string;
@@ -71,9 +144,10 @@ export interface FakeGateway {
 const socketPath = "/event/realtime";
 const subprotocol = "aws-appsync-event-ws";
 
-const fixture = JSON.parse(readRealtimeBindingFixture());
-
-export const appsyncBinding = readRealtimeBindingFixture();
+export const appsyncBinding = JSON.stringify({
+  name: fixture.name,
+  realtime: { url: fixture.realtime.url, host: fixture.realtime.host },
+});
 export const appsyncHost: string = fixture.realtime.host;
 export const appsyncURL: string = fixture.realtime.url;
 
@@ -188,8 +262,7 @@ export async function serveFakeGateway({
   });
   const publishes: GatewayPublishes = { published, status, relay };
   publishingGateway = publishes;
-  process.env.OCEL_RUNTIME_ADDRESS = await (runtimeProxyAddress ??= serveRuntimeProxy());
-  process.env.OCEL_SESSION_TOKEN = "session-token";
+  const runtime = await serveFakeRuntime();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   const host = `127.0.0.1:${port}`;
@@ -283,6 +356,7 @@ export async function serveFakeGateway({
     });
   });
   return {
+    runtime,
     host,
     url,
     published,
@@ -295,7 +369,7 @@ export async function serveFakeGateway({
     },
     binding: JSON.stringify({
       name: "realtime--app",
-      realtime: { ...fixture.realtime, url, host },
+      realtime: { url, host },
     }),
     close: () =>
       new Promise<void>((resolve, reject) => {

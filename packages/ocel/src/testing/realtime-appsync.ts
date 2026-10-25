@@ -2,7 +2,6 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type WebSocket, WebSocketServer } from "ws";
 import { findRefusal } from "./realtime-gateway.js";
-import { readRealtimeBindingFixture } from "./realtime-vectors.js";
 
 /** How the fake carries an event in a `data` frame: AppSync's docs show more than one form. */
 export type FakeAppSyncEventForm = "string" | "array" | "double-encoded";
@@ -38,7 +37,6 @@ export interface FakeAppSync {
 
 const socketPath = "/event/realtime";
 const subprotocol = "aws-appsync-event-ws";
-const fixture = JSON.parse(readRealtimeBindingFixture());
 
 function readHeader(protocols: string[]): FakeAppSyncAuthorization {
   const offered = protocols.find((protocol) => protocol.startsWith("header-"));
@@ -162,7 +160,7 @@ export async function serveFakeAppSync(options: FakeAppSyncOptions = {}): Promis
   return {
     binding: JSON.stringify({
       name: "realtime--app",
-      realtime: { ...fixture.realtime, url, host },
+      realtime: { url, host },
     }),
     host,
     url,
