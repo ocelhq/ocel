@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -21,6 +23,7 @@ import (
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
+	"github.com/ocelhq/ocel/platform/realtime/token"
 )
 
 const gatewayHost = "shop-production-rt-abc123-uc.a.run.app"
@@ -87,5 +90,28 @@ func TestTheRuntimePublishesARealtimeEventToTheGatewayServiceTheManifestNames(t 
 	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/status","ts":1,"kind":"live","data":{}}`
 	if _, err := client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: "/app/status", Event: event}); err != nil {
 		t.Errorf("Publish() = %v, want the gateway serving %s to take the publish", err, gatewayHost)
+	}
+}
+
+func TestTheRuntimeMintsASubscribeTokenWithTheBindingsKeyForTheChannelAsAsked(t *testing.T) {
+	t.Parallel()
+
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serveRealtimeProxy(t, key, "http://127.0.0.1:1"+gatewayenv.PublishPath)
+	minted, err := client.Mint(context.Background(), &realtimev1.MintRequest{Realtime: "app", Subject: "user-1", Ttl: durationpb.New(time.Minute), Grants: []*realtimev1.Grant{
+		{Operation: realtimev1.Operation_OPERATION_SUBSCRIBE, Channel: "/app/status"},
+	}})
+	if err != nil {
+		t.Fatalf("Mint() = %v", err)
+	}
+	got := minted.GetTokens()[0]
+	keys := func(namespace string) (ed25519.PublicKey, bool) {
+		return key.Public().(ed25519.PublicKey), namespace == "app"
+	}
+	if _, err := token.Verify(got.GetToken(), keys, time.Now(), token.Expected{Audience: gatewayHost, Namespace: "app", Operation: token.Subscribe, Channel: "/app/status"}); err != nil || got.GetChannel() != "/app/status" {
+		t.Errorf("Mint() answered %q for %q (%v), want a subscribe token for /app/status signed with the binding's key", got.GetToken(), got.GetChannel(), err)
 	}
 }

@@ -24,13 +24,13 @@ import (
 type Backend struct {
 	appOrigins func() []string
 
-	mu        sync.Mutex
-	server    *http.Server
-	gateway   *gateway.Gateway
-	publisher *proxy.Service
-	host      string
-	keys      map[string]ed25519.PrivateKey
-	records   map[string]string
+	mu      sync.Mutex
+	server  *http.Server
+	gateway *gateway.Gateway
+	service *proxy.Service
+	host    string
+	keys    map[string]ed25519.PrivateKey
+	records map[string]string
 }
 
 type readRecord func(key string) string
@@ -94,7 +94,7 @@ func (b *Backend) listen() error {
 		Keys:           b.verifyKey,
 		AllowedOrigins: b.appOrigins,
 	})
-	b.publisher = proxy.NewService(readRecord(b.readRecord), proxy.NewGatewayTransport(http.DefaultClient, "http://"+b.host+gatewayenv.PublishPath))
+	b.service = proxy.NewService(readRecord(b.readRecord), proxy.NewGatewayTransport(http.DefaultClient, "http://"+b.host+gatewayenv.PublishPath))
 	server := &http.Server{Handler: b.gateway}
 	b.server = server
 	go func() { _ = server.Serve(listener) }()
@@ -118,20 +118,36 @@ func (b *Backend) readRecord(key string) string {
 }
 
 func (b *Backend) Publish(ctx context.Context, req *realtimev1.PublishRequest) (*realtimev1.PublishResponse, error) {
-	b.mu.Lock()
-	publisher := b.publisher
-	b.mu.Unlock()
-	if publisher == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no realtime, so there is nothing to publish on"))
+	service, err := b.readService("publish on")
+	if err != nil {
+		return nil, err
 	}
-	return publisher.Publish(ctx, req)
+	return service.Publish(ctx, req)
+}
+
+func (b *Backend) Mint(ctx context.Context, req *realtimev1.MintRequest) (*realtimev1.MintResponse, error) {
+	service, err := b.readService("mint a token for")
+	if err != nil {
+		return nil, err
+	}
+	return service.Mint(ctx, req)
+}
+
+func (b *Backend) readService(access string) (*proxy.Service, error) {
+	b.mu.Lock()
+	service := b.service
+	b.mu.Unlock()
+	if service == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this app declares no realtime, so there is nothing to %s", access))
+	}
+	return service, nil
 }
 
 func (b *Backend) Close(ctx context.Context, _ bool) error {
 	b.mu.Lock()
 	b.keys, b.records = map[string]ed25519.PrivateKey{}, nil
 	server, realtimeGateway := b.server, b.gateway
-	b.server, b.gateway, b.publisher, b.host = nil, nil, nil, ""
+	b.server, b.gateway, b.service, b.host = nil, nil, nil, ""
 	b.mu.Unlock()
 	if server == nil {
 		return nil

@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -169,7 +171,7 @@ func TestATaskIsServedThroughTheProxyOnlyWithTheQueueTopologyBesideTheCode(t *te
 	}
 }
 
-func TestARealtimeBindingIsPublishedThroughTheProxy(t *testing.T) {
+func TestARealtimeBindingIsPublishedAndMintedForThroughTheProxy(t *testing.T) {
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_ACCESS_KEY_ID", "test")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
@@ -183,6 +185,12 @@ func TestARealtimeBindingIsPublishedThroughTheProxy(t *testing.T) {
 	_, err = client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "other", Channel: "/other/status", Event: `{"v":1}`})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("a publish on a resource this deployment does not bind = %v, want FailedPrecondition from the realtime service behind the proxy", err)
+	}
+	_, err = client.Mint(context.Background(), &realtimev1.MintRequest{Realtime: "other", Subject: "user-1", Ttl: durationpb.New(time.Minute), Grants: []*realtimev1.Grant{
+		{Operation: realtimev1.Operation_OPERATION_SUBSCRIBE, Channel: "/other/status"},
+	}})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("a mint for a resource this deployment does not bind = %v, want FailedPrecondition from the realtime service behind the proxy", err)
 	}
 }
 

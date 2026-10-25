@@ -2,9 +2,6 @@ package proxy
 
 import (
 	"context"
-	"crypto/ed25519"
-	cryptorand "crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -110,20 +107,16 @@ func waitToRetry(ctx context.Context, attempt int, retryAfter time.Duration) boo
 }
 
 func mintServerToken(seed []byte, audience string, req *realtimev1.PublishRequest) (string, error) {
-	if len(seed) != ed25519.SeedSize {
-		return "", errors.New("the realtime binding's signing key is no Ed25519 seed")
-	}
-	id := make([]byte, 16)
-	if _, err := cryptorand.Read(id); err != nil {
+	key, err := readSigningKey(seed)
+	if err != nil {
 		return "", err
 	}
 	issuedAt := time.Now()
-	return token.Sign(ed25519.NewKeyFromSeed(seed), token.Claims{
+	return signToken(key, token.Claims{
 		Audience:  audience,
 		IssuedAt:  issuedAt.Unix(),
 		ExpiresAt: issuedAt.Add(serverTokenTTL).Unix(),
 		Issuer:    "ocel:rt:" + req.GetRealtime(),
-		ID:        base64.RawURLEncoding.EncodeToString(id),
 		Subject:   token.ServerSubject,
 		Ocel:      token.Grant{Channel: req.GetChannel(), Namespace: req.GetRealtime(), Operation: token.Publish},
 	})
