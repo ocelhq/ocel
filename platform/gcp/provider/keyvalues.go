@@ -64,7 +64,7 @@ func (p *Provider) ensureRecordedDatabase(ctx context.Context, in records.Partit
 	if err != nil {
 		return err
 	}
-	if err := variables.EnsureProjectDatabaseRecorded(ctx, b, in.Tier, project, p.options.OwnDatabase, appDatabaseLayouts()...); err != nil {
+	if err := variables.EnsureProjectDatabaseRecorded(ctx, b, in.Tier, project, p.options.OwnDatabase, nil, appDatabaseLayouts()...); err != nil {
 		return err
 	}
 	p.recordedDatabases.Store(recorded, true)
