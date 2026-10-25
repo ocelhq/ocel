@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
       target:
-        description: "Where the harness deploys: aws-cloudflare, gcp-direct (production per test app), gcp-alb (previews behind the load balancer) or gcp-cloudflare (refused until Cloudflare runs code in front of gcp)"
+        description: "Where the harness deploys: aws-cloudflare, gcp-direct (production per test app), gcp-alb (previews behind the load balancer) or gcp-cloudflare (previews behind the Cloudflare edge)"
         default: aws-cloudflare
         type: choice
         options: [aws-cloudflare, gcp-direct, gcp-alb, gcp-cloudflare]
@@ -77,9 +77,14 @@ jobs:
         working-directory: adapter
         env:
           RECORD: ${{ inputs.recordBaseline }}
+          GCP_CLOUDFLARE_PREVIEW_DOMAIN: ${{ vars.E2E_GCP_CLOUDFLARE_PREVIEW_DOMAIN }}
         run: |
           set -euo pipefail
           node --input-type=module -e 'import { readCompatTarget } from "./tests/next-compat/lib.mjs"; readCompatTarget();'
+          if [ "$OCEL_COMPAT_TARGET" = gcp-cloudflare ] && [ -z "$GCP_CLOUDFLARE_PREVIEW_DOMAIN" ]; then
+            echo "::error::E2E_GCP_CLOUDFLARE_PREVIEW_DOMAIN is not set: set the repository variable to the wildcard gcp-cloudflare previews serve on"
+            exit 1
+          fi
           if [ "$RECORD" != true ] && [ ! -f "$ADAPTER_BASELINE" ]; then
             echo "::error::no baseline for $OCEL_COMPAT_TARGET: dispatch with recordBaseline first and commit $ADAPTER_BASELINE"
             exit 1
@@ -235,8 +240,15 @@ jobs:
 
       - name: Bootstrap the preview tier and reconcile the shared preview entry worker
         env:
-          OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_PREVIEW_DOMAIN }}
-        run: node adapter/tests/next-compat/reconcile-entry.mjs
+          AWS_PREVIEW_DOMAIN: ${{ vars.E2E_PREVIEW_DOMAIN }}
+          GCP_CLOUDFLARE_PREVIEW_DOMAIN: ${{ vars.E2E_GCP_CLOUDFLARE_PREVIEW_DOMAIN }}
+        run: |
+          set -euo pipefail
+          wildcard=$AWS_PREVIEW_DOMAIN
+          if [ "$OCEL_COMPAT_TARGET" = gcp-cloudflare ]; then
+            wildcard=$GCP_CLOUDFLARE_PREVIEW_DOMAIN
+          fi
+          node adapter/tests/next-compat/reconcile-entry.mjs "$wildcard"
 
   smoke:
     name: smoke

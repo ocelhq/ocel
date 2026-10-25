@@ -28,6 +28,7 @@ import {
   GOLDEN_REVALIDATE_SECONDS,
   GOLDEN_ROUTE,
   goldenDifferences,
+  hasSharedPreviewEntry,
   heldLeaseWaitMs,
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
@@ -72,7 +73,6 @@ import {
   TYPESCRIPT_PIN,
   tail,
   tarEntryNames,
-  UNRUNNABLE_TARGETS,
   WARM_SUMMARY_MARKER,
   warmCoverage,
   warmSummaryOutcome,
@@ -278,6 +278,12 @@ describe("strandedProjectSlugs", () => {
 
   it("names a project once however many times it is listed", () => {
     expect(strandedProjectSlugs(["e2e-1", "e2e-1"], "e2e-2")).toEqual(["e2e-1"]);
+  });
+
+  it("leaves the run's own per-app projects alone", () => {
+    expect(
+      strandedProjectSlugs(["e2e-42", "e2e-42-abcd1234", "e2e-41-abcd1234", ENTRY_SLUG], "e2e-42"),
+    ).toEqual(["e2e-41-abcd1234"]);
   });
 
   it("has nothing to do when the run's own project is the only one", () => {
@@ -1578,14 +1584,14 @@ describe("readCompatTarget", () => {
     }
   });
 
-  it("refuses gcp-cloudflare, saying Cloudflare fronts a gcp origin only as a proxy that runs no Worker", () => {
-    const refusal = UNRUNNABLE_TARGETS["gcp-cloudflare"];
-
-    expect(refusal).toContain("runs no Worker");
-    expect(() => readCompatTarget({ OCEL_COMPAT_TARGET: "gcp-cloudflare", ...gcp })).toThrow(
-      refusal,
+  it("reads gcp-cloudflare with the project and region its origin runs in", () => {
+    expect(readCompatTarget({ OCEL_COMPAT_TARGET: "gcp-cloudflare", ...gcp })).toEqual({
+      name: "gcp-cloudflare",
+      gcp: { project: "p", region: "europe-west1" },
+    });
+    expect(() => readCompatTarget({ OCEL_COMPAT_TARGET: "gcp-cloudflare" })).toThrow(
+      /OCEL_GCP_PROJECT/,
     );
-    expect(() => readCompatTarget({ OCEL_COMPAT_TARGET: "gcp-cloudflare" })).toThrow(refusal);
   });
 
   it("refuses a gcp target whose project is not named", () => {
@@ -1658,18 +1664,32 @@ describe("renderOcelConfig for a target", () => {
     expect(config).not.toContain("domains");
   });
 
-  it("renders gcp-cloudflare behind the Cloudflare edge with Cloudflare DNS", () => {
+  it("renders gcp-cloudflare behind the Cloudflare edge with Cloudflare DNS and no origin domain", () => {
     const config = renderOcelConfig({ slug: "e2e-42", target: { name: "gcp-cloudflare", gcp } });
 
     expect(config).toContain('import { cloudflare } from "ocel/edge";');
-    expect(config).toContain("edge: cloudflare(), dns: cloudflareDns() }),");
-    expect(config).toContain("gcpProvider(");
+    expect(config).toContain(
+      'provider: gcpProvider({ project: "p", region: "europe-west1", edge: cloudflare(), dns: cloudflareDns() }),',
+    );
+    expect(config).not.toContain("originDomain");
   });
 
   it("refuses a gcp target it was not given a project and region for", () => {
     expect(() => renderOcelConfig({ slug: "e2e-42", target: { name: "gcp-alb" } })).toThrow(
       /renderOcelConfig needs the gcp project and region of gcp-alb/,
     );
+  });
+});
+
+describe("hasSharedPreviewEntry", () => {
+  it("is true for the targets whose previews the Cloudflare edge serves through the shared entry worker", () => {
+    expect(hasSharedPreviewEntry({ name: "aws-cloudflare" })).toBe(true);
+    expect(hasSharedPreviewEntry({ name: "gcp-cloudflare" })).toBe(true);
+  });
+
+  it("is false for the gcp targets that run no worker", () => {
+    expect(hasSharedPreviewEntry({ name: "gcp-alb" })).toBe(false);
+    expect(hasSharedPreviewEntry({ name: "gcp-direct" })).toBe(false);
   });
 });
 

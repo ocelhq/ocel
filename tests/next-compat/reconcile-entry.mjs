@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import {
   DEFAULT_COMPAT_TARGET,
   ENTRY_SLUG,
+  hasSharedPreviewEntry,
   ocelBinary,
   readCompatTarget,
   renderOcelConfig,
@@ -29,7 +30,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 export function reconcileEntry(wildcard) {
   requireNamespace();
   const target = readCompatTarget();
-  if (target.name !== DEFAULT_COMPAT_TARGET) {
+  if (!hasSharedPreviewEntry(target)) {
     console.error(`[ocel-e2e] ${target.name} has no shared preview entry worker to reconcile`);
     return true;
   }
@@ -45,11 +46,11 @@ export function reconcileEntry(wildcard) {
   }
 
   const dir = mkdtempSync(join(tmpdir(), "ocel-e2e-entry-"));
-  writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug: ENTRY_SLUG }));
+  writeFileSync(join(dir, "ocel.config.ts"), renderOcelConfig({ slug: ENTRY_SLUG, target }));
   linkSidecar(dir, sidecarDir);
 
-  console.error(`[ocel-e2e] bootstrapping the preview tier and its variables key (from ${dir})`);
-  const bootstrapFailure = bootstrapWithVariablesKey(adapterDir, dir);
+  console.error(`[ocel-e2e] bootstrapping the ${target.name} preview tier (from ${dir})`);
+  const bootstrapFailure = bootstrapPreviewTier(adapterDir, dir, target);
   if (bootstrapFailure) {
     console.error(
       `[ocel-e2e] PREVIEW BOOTSTRAP FAILED: ${bootstrapFailure}\n` +
@@ -76,6 +77,13 @@ export function reconcileEntry(wildcard) {
   }
   console.error(`[ocel-e2e] shared preview entry reconciled on ${wildcard}`);
   return true;
+}
+
+export function bootstrapPreviewTier(adapterDir, dir, target, run = attempt) {
+  if (target.name !== DEFAULT_COMPAT_TARGET) {
+    return run(adapterDir, dir, ["bootstrap", "preview", "--yes"], BOOTSTRAP_TIMEOUT_MS).failure;
+  }
+  return bootstrapWithVariablesKey(adapterDir, dir, run);
 }
 
 export function bootstrapWithVariablesKey(adapterDir, dir, run = attempt) {

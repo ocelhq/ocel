@@ -72,8 +72,23 @@ prepared:
    Binding the wildcard adds the load balancer it is entered on. Use a wildcard
    of its own, not `E2E_PREVIEW_DOMAIN`'s: that one belongs to the AWS entry
    worker.
-3. gcp-cloudflare is offered in the dispatch and refused by the harness until
-   Cloudflare runs code in front of a gcp origin. It will run in `e2e-nc-cf`.
+
+### gcp-cloudflare
+
+The Google Cloud project and identity above, and nothing bootstrapped by hand:
+as with aws-cloudflare, every run's sweep job bootstraps the preview tier of
+`e2e-nc-cf`, adding the cloudflare-origin part the worker reaches Cloud Run
+through, then runs `ocel domain use` on `E2E_GCP_CLOUDFLARE_PREVIEW_DOMAIN`.
+
+That wildcard sits one level under a zone other than `E2E_PREVIEW_DOMAIN`'s. A
+worker route runs one origin's entry worker, and the AWS one holds
+`*.ocel.site`; universal SSL covers a single wildcard level, so
+`*.gcp.ocel.site` is not an option either.
+
+gcp-cloudflare spends the same Cloudflare token as aws-cloudflare but runs in
+the `real-gcp` concurrency group, so nothing stops the two running at once.
+Dispatch one only while the other is not running: together they pass the
+token's request limit.
 
 ### Secrets
 
@@ -94,6 +109,7 @@ prepared:
 | `E2E_OCEL_API_URL`        | Ocel API base URL                                          |
 | `E2E_AWS_REGION`          | region to deploy into                                      |
 | `E2E_PREVIEW_DOMAIN`      | the preview wildcard, e.g. `*.ocel.site`; each run reinstalls the shared entry worker on it |
+| `E2E_GCP_CLOUDFLARE_PREVIEW_DOMAIN` | gcp-cloudflare's preview wildcard, in a zone of its own; each gcp-cloudflare run reinstalls its shared entry worker on it |
 | `DOGFOOD_AWS_VARS_KEY`    | the KMS key ARN every Ocel bootstrap in the account brings for its variables, shared with the e2e suite; the preview bootstrap records it rather than minting a key of its own |
 | `E2E_GCP_PROJECT`         | the Google Cloud project the gcp targets deploy into, shared with E2E Tests (Cloud) |
 | `E2E_GCP_REGION`          | the region they deploy into                                |
