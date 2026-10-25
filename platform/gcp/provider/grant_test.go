@@ -2,17 +2,19 @@ package gcp
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
 type policyServer struct {
@@ -65,15 +67,20 @@ func TestAPolicyChangedUnderTheGrantIsReReadAndWrittenAgain(t *testing.T) {
 func TestAPolicyThatKeepsChangingUnderTheGrantIsRefusedRatherThanRetriedForever(t *testing.T) {
 	t.Parallel()
 
-	server := &policyServer{refusals: policy.EditAttempts + 1}
-	err := (composed(bootstrap.Engine{Clients: server.open(t)})).GrantRunAs(context.Background(), "ocel-production")
+	server := &policyServer{refusals: math.MaxInt64}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	err := (composed(bootstrap.Engine{Clients: server.open(t)})).GrantRunAs(ctx, "ocel-production")
 	if err == nil {
 		t.Fatal("grantRunAs() over a policy that never stops changing = nil, want the refusal that names what the grant is for")
 	}
 	if !strings.Contains(err.Error(), "ocel-production") {
 		t.Errorf("grantRunAs() = %v, want it to name the account the deploy would run apps as", err)
 	}
-	if got := server.writes.Load(); got != policy.EditAttempts {
-		t.Errorf("the grant wrote the policy %d times, want %d: a retry that never gives up keeps a bootstrap open", got, policy.EditAttempts)
+	if googleretry.AnsweredCode(err) != http.StatusConflict {
+		t.Errorf("grantRunAs() = %v, want the 409 the policy kept answering, not a wait that outlives the run", err)
+	}
+	if got := server.writes.Load(); got < 2 {
+		t.Errorf("the grant wrote the policy %d times, want the stale write rebuilt and written again", got)
 	}
 }

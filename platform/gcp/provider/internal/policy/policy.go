@@ -12,9 +12,7 @@ import (
 
 const (
 	ConditionalVersion = 3
-
-	EditAttempts = 4
-	MaxMembers   = 1500
+	MaxMembers         = 1500
 )
 
 type Condition struct {
@@ -41,30 +39,34 @@ var ErrAbsent = errors.New("the resource is not there")
 type Change func(bindings []Binding) ([]Binding, bool)
 
 func Edit(ctx context.Context, resource Resource, change Change) (bool, error) {
-	var refused error
-	for attempt := range EditAttempts {
-		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
-			return false, ctx.Err()
-		}
+	var (
+		edited bool
+		failed error
+	)
+	refused := googleretry.UntilWritten(ctx, func() error {
+		edited, failed = false, nil
 		bindings, write, err := resource.Read(ctx)
 		if err != nil {
-			return false, fmt.Errorf("read who may use %s: %w", resource.Name, err)
+			failed = fmt.Errorf("read who may use %s: %w", resource.Name, err)
+			return nil
 		}
 		changed, differs := change(bindings)
 		if !differs {
-			return false, nil
+			return nil
 		}
-		if err := refuseCrowded(resource, bindings, changed); err != nil {
-			return false, err
+		if failed = refuseCrowded(resource, bindings, changed); failed != nil {
+			return nil
 		}
-		if refused = write(ctx, changed); refused == nil {
-			return true, nil
-		}
-		if !googleretry.IsStale(refused) {
-			break
-		}
+		edited = true
+		return write(ctx, changed)
+	})
+	switch {
+	case failed != nil:
+		return false, failed
+	case refused != nil:
+		return false, fmt.Errorf("change who may use %s: %w", resource.Name, refused)
 	}
-	return false, fmt.Errorf("change who may use %s: %w", resource.Name, refused)
+	return edited, nil
 }
 
 func refuseCrowded(resource Resource, before, after []Binding) error {

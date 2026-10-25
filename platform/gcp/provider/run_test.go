@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -478,17 +479,19 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 	server := &googletest.Run{}
 	released(t, server, serves("ocel-shop-prod-app"))
 
-	server.PatchConflicts = run.ReleaseAttempts + 1
+	server.PatchConflicts = math.MaxInt
 	before := server.Tries()
-	_, err := providerServing(server, t).services().DeployService(context.Background(), serves("ocel-shop-prod-app"), nil)
-	if err == nil {
-		t.Fatal("deployService() over a service that never stops changing = nil, want the release refused")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := providerServing(server, t).services().DeployService(ctx, serves("ocel-shop-prod-app"), nil)
+	if err == nil || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("deployService() over a service that never stops changing = %v, want the release refused before the run's deadline", err)
 	}
 	if !strings.Contains(err.Error(), "ocel-shop-prod-app") {
 		t.Errorf("deployService() = %v, want the service it was releasing named", err)
 	}
-	if patched := server.Tries(); patched-before != run.ReleaseAttempts {
-		t.Errorf("the release patched %d times, want %d: a retry that never gives up keeps a deploy open", patched-before, run.ReleaseAttempts)
+	if patched := server.Tries(); patched-before < 2 {
+		t.Errorf("the release patched %d times, want the conflicting patch rebuilt and sent again", patched-before)
 	}
 }
 
@@ -812,9 +815,11 @@ func TestAPinThatKeepsConflictingUntilItGivesUpDoesNotClaimToHaveOpenedTheServic
 	server := &googletest.Run{}
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
-	server.PatchConflicts = run.ReleaseAttempts + 1
+	server.PatchConflicts = math.MaxInt
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-	opened, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, nil)
+	opened, err := providerServing(server, t).services().Pin(ctx, app.Service, one, nil)
 
 	if err == nil {
 		t.Fatal("Pin = nil, want it to give up on the conflicts")

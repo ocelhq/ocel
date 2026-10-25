@@ -44,8 +44,6 @@ const (
 	RevisionMemory = "512Mi"
 )
 
-const ReleaseAttempts = 4
-
 const MaxRequestTimeout = 3600 * time.Second
 
 type Serving struct {
@@ -553,16 +551,11 @@ func (p *Services) Read(ctx context.Context, services *run.Service, path, servic
 }
 
 func (p *Services) RetryWrite(ctx context.Context, doing string, write func() error) error {
-	var refused error
-	for attempt := range ReleaseAttempts {
-		if attempt > 0 && !googleretry.Waited(ctx, attempt) {
-			return ctx.Err()
-		}
-		if refused = write(); refused == nil || !googleretry.IsStale(refused) {
-			return refused
-		}
+	refused := googleretry.UntilWritten(ctx, write)
+	if googleretry.IsStale(refused) {
+		return fmt.Errorf("%s, and it kept changing under this release: %w", doing, refused)
 	}
-	return fmt.Errorf("%s, and it kept changing under this release: %w", doing, refused)
+	return refused
 }
 
 func ServedBy(traffic []*run.GoogleCloudRunV2TrafficTarget, revision string) bool {
