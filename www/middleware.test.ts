@@ -27,13 +27,7 @@ describe("the go vanity import", () => {
 });
 
 describe("the root", () => {
-  it("is matched", () => {
-    expect(matches("/")).toBe(true);
-  });
-
-  it("redirects to the docs for now", () => {
-    const response = middleware(new NextRequest("https://ocel.dev/"));
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("https://ocel.dev/docs");
+  it("serves the landing page rather than redirecting", () => {
+    expect(matches("/")).toBe(false);
   });
 });

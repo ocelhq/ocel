@@ -24,63 +24,43 @@
   }
 }
 
-@keyframes ocel-marquee {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(-50%, 0, 0);
-  }
-}
-
-.animate-marquee {
-  animation: ocel-marquee 22s linear infinite;
-  will-change: transform;
-  backface-visibility: hidden;
-}
-
 .animate-blink {
   animation: ocel-blink 1.1s step-end infinite;
 }
 
-@keyframes ocel-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(7px);
-  }
-}
-
-.animate-bob {
-  animation: ocel-bob 1.5s ease-in-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .animate-bob {
+  .animate-blink {
     animation: none;
   }
 }
 
-@keyframes ocel-flow {
-  to {
-    background-position: 16px 0;
-  }
+.paper-grid {
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 35%, #000 40%, transparent 100%);
 }
 
-.animate-flow {
-  background-image: repeating-linear-gradient(90deg, var(--electric) 0 9px, transparent 9px 16px);
-  background-size: 16px 100%;
-  background-repeat: repeat-x;
-  animation: ocel-flow 0.7s linear infinite;
-  will-change: background-position;
+::selection {
+  background: color-mix(in oklab, var(--electric) 22%, transparent);
+  color: var(--foreground);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .animate-flow {
-    animation: none;
-  }
+pre ::selection {
+  background: color-mix(in oklab, var(--electric) 45%, transparent);
+  color: var(--terminal-ink);
+}
+
+html {
+  scrollbar-color: var(--faint) var(--background);
+  caret-color: var(--electric);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--electric) 60%, transparent);
+  outline-offset: 2px;
 }
 
 .shiki-pane {
