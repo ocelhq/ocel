@@ -51,16 +51,9 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	}
 	if c.Endpoint != "" {
 		principal.Details = []provider.PrincipalDetail{{Label: "emulator", Value: c.Endpoint}}
-	} else {
-		token, err := c.Tokens.Token(ctx)
-		if err != nil {
-			return provider.Principal{}, gcloud.Unauthenticated()
-		}
-		name, err := c.principal(ctx, token)
-		if err != nil {
-			return provider.Principal{}, err
-		}
-		principal.Name = name
+	}
+	if principal.Name, err = c.PrincipalName(ctx); err != nil {
+		return provider.Principal{}, err
 	}
 	if c.Projects == nil {
 		return provider.Principal{}, refusal.Refuse(refusal.CodeDenied,
@@ -70,6 +63,17 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 		return provider.Principal{}, err
 	}
 	return principal, nil
+}
+
+func (c Credentials) PrincipalName(ctx context.Context) (string, error) {
+	if c.Endpoint != "" {
+		return gcloud.EmulatorPrincipal, nil
+	}
+	token, err := c.Tokens.Token(ctx)
+	if err != nil {
+		return "", gcloud.Unauthenticated()
+	}
+	return c.principal(ctx, token)
 }
 
 func (c Credentials) principal(ctx context.Context, token string) (string, error) {

@@ -15,10 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-const (
-	EnabledService              = "ENABLED"
-	testedPermissionsPerRequest = 100
-)
+const testedPermissionsPerRequest = 100
 
 var BootstrapGrants = gcloud.Grants{
 	{Role: "roles/datastore.owner", Permissions: []string{
@@ -178,16 +175,6 @@ var bootstrapRoles = []string{
 
 func BootstrapRoles() []string { return slices.Clone(bootstrapRoles) }
 
-func (b Engine) preflight(ctx context.Context, read Survey, parts []string) error {
-	if err := b.RefuseServicesOff(ctx, BootstrapAPIs); err != nil {
-		return err
-	}
-	if err := b.Permitted(ctx, parts); err != nil {
-		return err
-	}
-	return b.RegionServed(ctx, read)
-}
-
 func GrantsFor(parts []string) gcloud.Grants {
 	if slices.Contains(parts, CloudflareOriginPart) {
 		return slices.Concat(BootstrapGrants, AssetStoreGrants)
@@ -196,39 +183,6 @@ func GrantsFor(parts []string) gcloud.Grants {
 }
 
 func PermissionsFor(parts []string) []string { return GrantsFor(parts).Permissions() }
-
-func (b Engine) ListServicesOff(ctx context.Context, apis []string) ([]string, error) {
-	if len(apis) == 0 {
-		return nil, nil
-	}
-	service, err := b.Clients.Services()
-	if err != nil {
-		return nil, err
-	}
-	var off []string
-	for _, api := range apis {
-		name := "projects/" + b.Clients.Project() + "/services/" + api
-		apiService, err := googleretry.Attempted(ctx, service.Services.Get(name).Context(ctx).Do)
-		if err != nil {
-			return nil, fmt.Errorf("read whether %s is on in project %s: %w", api, b.Clients.Project(), err)
-		}
-		if apiService.State != EnabledService {
-			off = append(off, api)
-		}
-	}
-	return off, nil
-}
-
-func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
-	off, err := b.ListServicesOff(ctx, apis)
-	if err != nil || len(off) == 0 {
-		return err
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"project %s has %s switched off, and ocel provisions resources rather than switching on the services that host them.\n"+
-			"Run `gcloud services enable %s --project %s`, then try again",
-		b.Clients.Project(), strings.Join(off, ", "), strings.Join(off, " "), b.Clients.Project())
-}
 
 func (b Engine) heldPermissions(ctx context.Context, needed []string) ([]string, error) {
 	service, err := b.Clients.Projects()
@@ -268,7 +222,7 @@ func (b Engine) Permitted(ctx context.Context, parts []string) error {
 }
 
 func (b Engine) RegionServed(ctx context.Context, read Survey) error {
-	if read.Emulated {
+	if read.Emulated || b.isOff(firestoreAPI) {
 		return nil
 	}
 	service, err := b.Clients.Databases()

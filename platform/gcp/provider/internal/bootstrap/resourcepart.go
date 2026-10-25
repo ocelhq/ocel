@@ -51,7 +51,7 @@ var CacheBucket = ResourcePart{
 var Keys = ResourcePart{
 	Name:    KeysPart,
 	Summary: "the key ring both tiers' keys hang on and this tier's key, which every value the tier seals is sealed under",
-	APIs:    []string{"cloudkms.googleapis.com"},
+	APIs:    []string{kmsAPI},
 	items: func(names names.Names, tier environment.Tier) []Resource {
 		return []Resource{
 			{Kind: KindKeyRing, Name: names.KeyRing()},

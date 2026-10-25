@@ -181,7 +181,7 @@ func (b Engine) tierTagged(ctx context.Context, read Survey, target Resource) (g
 }
 
 func (b Engine) untaggedPresence(ctx context.Context, read Survey, target Resource, found Presence) (Presence, error) {
-	if !found.Present || found.Mends != "" || found.Replaces != "" {
+	if !found.Present || found.Mends != "" || found.Replaces != "" || b.isOff(resourceManagerAPI) {
 		return found, nil
 	}
 	tagged, named, err := b.tierTagged(ctx, read, target)

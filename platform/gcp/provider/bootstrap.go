@@ -35,6 +35,8 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 		Records:        g.p.KeyValues(),
 		WrittenBy:      g.p.writtenBy,
 		Surveyed:       &g.p.surveyed,
+		ServiceStates:  &g.p.serviceStates,
+		Principal:      g.p.credentials().PrincipalName,
 		SkipChecks:     g.p.skipChecks,
 		Removable:      tierParts(network.Patches{}),
 		Accounts:       tierAccounts(g.p.components()),

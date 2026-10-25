@@ -79,6 +79,24 @@ func init() {
 	}
 }
 
+var kindAPIs = map[Kind]string{
+	KindDatabase:       firestoreAPI,
+	KindBucket:         storageAPI,
+	KindKeyRing:        kmsAPI,
+	KindKey:            kmsAPI,
+	KindSecret:         "secretmanager.googleapis.com",
+	KindRepository:     "artifactregistry.googleapis.com",
+	KindServiceAccount: iamAPI,
+	KindRole:           iamAPI,
+	KindQueue:          "cloudtasks.googleapis.com",
+	KindTierTag:        resourceManagerAPI,
+	KindLogView:        "logging.googleapis.com",
+	KindService:        "run.googleapis.com",
+	KindSchedule:       "cloudscheduler.googleapis.com",
+}
+
+func (i Resource) api() string { return kindAPIs[i.Kind] }
+
 func (k KindOps) mendOrMake(ctx context.Context, b Engine, read Survey, target Resource) error {
 	if k.mend != nil {
 		return k.mend(ctx, b, read, target)

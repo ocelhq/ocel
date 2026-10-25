@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -29,7 +30,10 @@ func TestTheCommandThatEmptiesATierDestroysItsProjectsOnThatTierAlone(t *testing
 func describing(t *testing.T, skipChecks bool) (Engine, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (&googletest.ServiceUsage{}).Serve(w, r) {
+			return
+		}
 		calls.Add(1)
 		http.NotFound(w, nil)
 	}))

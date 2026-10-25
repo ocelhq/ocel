@@ -31,13 +31,15 @@ const (
 )
 
 type Engine struct {
-	Clients    *gcloud.Clients
-	Edges      provider.Edges
-	Stores     gcloud.Memorystore
-	Records    records.Store
-	WrittenBy  provider.WrittenBy
-	Surveyed   *Surveys
-	SkipChecks bool
+	Clients       *gcloud.Clients
+	Edges         provider.Edges
+	Stores        gcloud.Memorystore
+	Records       records.Store
+	WrittenBy     provider.WrittenBy
+	Surveyed      *Surveys
+	ServiceStates *ServiceStates
+	Principal     func(ctx context.Context) (string, error)
+	SkipChecks    bool
 
 	PushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	DeployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
@@ -51,6 +53,11 @@ type Engine struct {
 }
 
 func (b Engine) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
+	if !b.SkipChecks {
+		if err := b.readTouchedServices(ctx, tier); err != nil {
+			return provider.BootstrapDescription{}, err
+		}
+	}
 	read, err := b.surveyReading(ctx, tier, !b.SkipChecks)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
@@ -144,11 +151,15 @@ func (s *Surveys) forget(tier environment.Tier) {
 
 func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	named, req := b.SplitRemovals(req)
+	switching, err := b.preflight(ctx, req)
+	if err != nil {
+		return provider.Plan{}, err
+	}
 	read, err := b.surveyFor(ctx, req.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.preflight(ctx, read, req.Parts); err != nil {
+	if err := b.RegionServed(ctx, read); err != nil {
 		return provider.Plan{}, err
 	}
 	if err := b.partsFree(ctx, req.Tier, droppedParts(read.Stamp.Parts, req)); err != nil {
@@ -159,7 +170,10 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 		return provider.Plan{}, err
 	}
 	groups := bootstrapplan.ChangeGroups(current, CredentialParts(), req)
-	groups[0].Changes = Planned(read, StackResources(read.Names, read.Tier, read.Emulated))
+	groups[0].Changes = slices.Concat(switchedOn(switching), Planned(read, StackResources(read.Names, read.Tier, read.Emulated)))
+	if len(switching) > 0 && !groups[0].Action.Writes() {
+		groups[0].Action, groups[0].Reason = provider.ActionUpdate, ""
+	}
 
 	params := provider.ChangeGroup{
 		Kind:    provider.ParameterGroupKind,
@@ -223,13 +237,23 @@ func sharedWith(tier environment.Tier) string {
 
 func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	named, req := b.SplitRemovals(req)
+	switching, err := b.preflight(ctx, req)
+	if err != nil {
+		return err
+	}
+	if err := b.switchOn(ctx, switching, progress); err != nil {
+		return err
+	}
+	if len(switching) > 0 {
+		b.Surveyed.forget(req.Tier)
+	}
 	read, err := b.surveyFor(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
 	defer b.Surveyed.forget(req.Tier)
 	items := Resources(read.Names, req.Tier, read.Emulated)
-	if err := b.preflight(ctx, read, req.Parts); err != nil {
+	if err := b.RegionServed(ctx, read); err != nil {
 		return err
 	}
 	replacedParts, err := b.SurveyReplacedParts(ctx, read, named)

@@ -72,8 +72,7 @@ func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
 		at := r.URL.Path
 		name := path.Base(at)
 		switch {
-		case r.Method == http.MethodGet && strings.Contains(at, "/projects/acme-prod/services/"):
-			googletest.WriteBody(w, map[string]any{"name": at, "state": bootstrap.EnabledService})
+		case (&googletest.ServiceUsage{}).Serve(w, r):
 		case strings.Contains(at, "/instances"):
 			s.databases.Serve(w, r)
 		case strings.Contains(at, "/operations/"):

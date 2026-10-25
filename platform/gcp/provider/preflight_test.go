@@ -159,13 +159,12 @@ func TestADeployAsksWhetherTheAPIsItRunsOnAreOnOnlyWhenTheChecksAreNotSkipped(t 
 	for skipChecks, wantAsked := range map[bool]bool{false: true, true: false} {
 		var asked atomic.Int32
 		served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.Contains(r.URL.Path, "/projects/acme-prod/services/") {
+			if !(&googletest.ServiceUsage{}).Serve(w, r) {
 				t.Errorf("preflight called %s %s, want at most whether the APIs the deploy runs on are on", r.Method, r.URL.Path)
 				http.NotFound(w, r)
 				return
 			}
 			asked.Add(1)
-			googletest.WriteBody(w, map[string]any{"name": r.URL.Path, "state": bootstrap.EnabledService})
 		}))
 		t.Cleanup(served.Close)
 		p := pushing(t, served.URL)

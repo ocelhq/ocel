@@ -14,6 +14,7 @@ import (
 
 type RemovablePart struct {
 	provider.Part
+	APIs     []string
 	Deployed func(Engine, environment.Tier) Part
 	Plan     func(context.Context, Engine, environment.Tier) ([]provider.Change, error)
 	Remove   func(context.Context, Engine, environment.Tier, progress.Log) error

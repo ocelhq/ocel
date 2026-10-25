@@ -108,6 +108,9 @@ func (b Engine) surveyPresence(ctx context.Context, read Survey, items []Resourc
 	reads := make([]func(context.Context) error, len(items))
 	for i, item := range items {
 		reads[i] = func(ctx context.Context) (err error) {
+			if b.isOff(item.api()) {
+				return nil
+			}
 			found[i], err = b.PresenceOf(ctx, read, item)
 			return err
 		}
@@ -169,6 +172,9 @@ func (b Engine) surveyReading(ctx context.Context, tier environment.Tier, resour
 }
 
 func (b Engine) recordedBuckets(ctx context.Context, tier environment.Tier) (naming.Buckets, error) {
+	if b.isOff(firestoreAPI) {
+		return naming.Buckets{}, nil
+	}
 	database, err := b.databasePresence(ctx, b.Clients.RecordsDatabase(tier))
 	if err != nil || !database.Present {
 		return naming.Buckets{}, err
@@ -183,7 +189,7 @@ type stamped struct {
 }
 
 func (b Engine) stamped(ctx context.Context, bucket string) (stamped, error) {
-	if bucket == "" {
+	if bucket == "" || b.isOff(storageAPI) {
 		return stamped{}, nil
 	}
 	client, err := b.Clients.Storage()

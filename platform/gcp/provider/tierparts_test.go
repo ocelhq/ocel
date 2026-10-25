@@ -61,13 +61,10 @@ func recordedCurrent(t *testing.T, p *Provider, tier environment.Tier, parts ...
 func servingOnlyEnabledAPIs(t *testing.T) string {
 	t.Helper()
 	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/projects/acme-prod/services/") {
+		if r.Method != http.MethodGet || !(&googletest.ServiceUsage{}).Serve(w, r) {
 			t.Errorf("a plain deploy's preflight called %s %s, want only whether the APIs it runs on are on", r.Method, r.URL.Path)
 			http.NotFound(w, r)
-			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		googletest.WriteBody(w, map[string]any{"name": r.URL.Path, "state": bootstrap.EnabledService})
 	}))
 	t.Cleanup(served.Close)
 	return served.URL

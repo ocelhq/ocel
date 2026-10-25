@@ -57,6 +57,7 @@ type Provider struct {
 	resolved       *gcloud.Clients
 	clientsChecked bool
 	surveyed       bootstrap.Surveys
+	serviceStates  bootstrap.ServiceStates
 
 	images *run.Images
 
@@ -167,7 +168,9 @@ func (p *Provider) KeyValues() records.Store {
 
 func (p *Provider) Cipher() seal.Cipher { return cipher{p: p} }
 
-func (p *Provider) Credentials() provider.Credentials {
+func (p *Provider) Credentials() provider.Credentials { return p.credentials() }
+
+func (p *Provider) credentials() Credentials {
 	return Credentials{
 		Project:   p,
 		Region:    p.options.Region,
