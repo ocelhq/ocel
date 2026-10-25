@@ -267,18 +267,18 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 	return destroyed, nil
 }
 
-type accountCheck struct {
+type openedAccount struct {
 	provider *providerprocess.Provider
 	read     readiness.Preflight
 	tier     environmentv1.Tier
 }
 
-func openAccount(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, dry bool) (accountCheck, error) {
+func openAccount(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, dry bool) (openedAccount, error) {
 	open := accountOptions(resolved)
 	open.CloudScopes = []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}
 	open.DryRun = dry
 	provider, read, err := invocation.OpenProvider(ctx, check, resolved.Project, open)
-	return accountCheck{provider: provider, read: read, tier: open.Tier}, err
+	return openedAccount{provider: provider, read: read, tier: open.Tier}, err
 }
 
 func readRemovalTarget(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, slug string) (removalTarget, error) {

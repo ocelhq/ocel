@@ -87,7 +87,7 @@ func (t *resourceTally) count(c resourceChange) {
 	t.done[c.wording.tallyAs]++
 }
 
-func (t resourceTally) single() bool {
+func (t resourceTally) isSingle() bool {
 	changed := 0
 	for _, n := range t.done {
 		changed += n

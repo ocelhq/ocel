@@ -1,6 +1,7 @@
 package promotions
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -100,14 +101,14 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		}
 
 		plan := run.Phase(progressv1.Phase_PHASE_PLAN)
-		showRollbackPlan(plan, invocation.Presentation(stdout), live, target)
+		showRollbackPlan(plan, live, target)
 		if opts.dry {
 			plan.Say("Run without --dry to roll back.")
 			plan.End(nil)
 			return nil
 		}
 
-		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Roll %q back to %s?", cfg.Slug, terminal.ShortID(target.GetPromotionId())))
+		granted, err := policy.ConfirmPlan(ctx, plan, nil, fmt.Sprintf("Roll %q back to %s?", cfg.Slug, terminal.AbbreviateID(target.GetPromotionId())))
 		plan.End(err)
 		if err != nil {
 			return err
@@ -130,7 +131,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, promotion, unparsed); err != nil {
 			return err
 		}
-		run.Succeed(fmt.Sprintf("Rolled %s back to %s", cfg.Slug, terminal.ShortID(target.GetPromotionId())))
+		run.Succeed(fmt.Sprintf("Rolled %s back to %s", cfg.Slug, terminal.AbbreviateID(target.GetPromotionId())))
 		return nil
 	})
 	invocation.Console.ReportDeployment(ctx, cfg.Dir, report, stderr)
@@ -179,7 +180,7 @@ func findPromotion(history []*contractv1.PromotionHistoryEntry, id string) (*con
 	for _, entry := range started {
 		ids = append(ids, entry.GetPromotion().GetPromotionId())
 	}
-	return nil, fmt.Errorf("%q starts %d promotions (%s), so it names none of them: pass more of the id", id, len(started), strings.Join(ids, ", "))
+	return nil, fmt.Errorf("%q starts %d promotions (%s): pass more of the id", id, len(started), strings.Join(ids, ", "))
 }
 
 func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string) (*contractv1.Promotion, error) {
@@ -193,7 +194,7 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 			return nil, err
 		}
 		if entry.GetUnpromoted() {
-			return nil, fmt.Errorf("promotion %s was taken back when a router could not serve it, so it never served and there is nothing of it to roll back to: `ocel promotions ls` marks it unpromoted", entry.GetPromotion().GetPromotionId())
+			return nil, fmt.Errorf("promotion %s never served: `ocel promotions ls` marks it unpromoted", entry.GetPromotion().GetPromotionId())
 		}
 		return entry.GetPromotion(), nil
 	case tag != "":
@@ -226,7 +227,7 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 	return nil, fmt.Errorf("no promotion in this project's production history is live, so there is nothing to roll back from: pass --to with the promotion id to serve")
 }
 
-func showRollbackPlan(plan *run.Span, present terminal.Presentation, live, target *contractv1.Promotion) {
+func showRollbackPlan(plan *run.Span, live, target *contractv1.Promotion) {
 	table := terminal.NewTable(
 		terminal.Column{},
 		terminal.Column{Head: "ID"},
@@ -235,18 +236,14 @@ func showRollbackPlan(plan *run.Span, present terminal.Presentation, live, targe
 		terminal.Column{Head: "DEPLOYED"},
 	)
 	if live != nil {
-		promotionRows(table, present, "live", live)
+		promotionRows(table, "live", live)
 	}
-	promotionRows(table, present, "target", target)
+	promotionRows(table, "target", target)
 	plan.Say("Roll back production:\n" + table.Render(terminal.Palette{}, "") + "`ocel deploy` puts the current build back.")
 }
 
-func promotionRows(table *terminal.Table, present terminal.Presentation, role string, p *contractv1.Promotion) {
-	apps := deployedBuilds(terminal.Palette{}, p.GetReleases())
-	table.Row(role, terminal.ShortID(p.GetPromotionId()), promotionCreated(present, p.GetTs()), tagOrNone(p.GetTag()), apps[0])
-	for _, app := range apps[1:] {
-		table.Row("", "", "", "", app)
-	}
+func promotionRows(table *terminal.Table, role string, p *contractv1.Promotion) {
+	table.Row(role, terminal.AbbreviateID(p.GetPromotionId()), terminal.EpochDateTime(p.GetTs()), cmp.Or(p.GetTag(), terminal.NoValue), terminal.FormatReleases(terminal.Palette{}, p.GetReleases()))
 }
 
 func promotionIDs(history []*contractv1.PromotionHistoryEntry) string {

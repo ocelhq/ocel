@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"slices"
 	"strings"
 
@@ -20,7 +19,6 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -157,16 +155,12 @@ func renderEnvironments(out io.Writer, palette terminal.Palette, environments []
 		terminal.Column{Head: "URL"},
 	)
 	for _, env := range environments {
-		apps := appCells(palette, env.GetReleases())
 		table.Row(
 			palette.Bold(environmentTitle(env.GetEnvironment().GetTier(), env.GetEnvironment().GetIdentity())),
 			readiness.TierName(env.GetEnvironment().GetTier()),
-			orUnknown(terminal.ShortID(env.GetPromotionId())),
-			apps[0],
+			cmp.Or(terminal.AbbreviateID(env.GetPromotionId()), unknownCell),
+			terminal.FormatReleases(palette, env.GetReleases()),
 			firstURL(env.GetUrls()))
-		for _, app := range apps[1:] {
-			table.Row("", "", "", app)
-		}
 	}
 	fmt.Fprint(out, table.Render(palette, blockIndent))
 }
@@ -176,25 +170,6 @@ func environmentTitle(tier environmentv1.Tier, identity string) string {
 		return identity
 	}
 	return stackrecords.ProductionEnv
-}
-
-func appCells(palette terminal.Palette, releases map[string]string) []string {
-	if len(releases) == 0 {
-		return []string{unknownCell}
-	}
-	cells := make([]string, 0, len(releases))
-	for _, app := range slices.Sorted(maps.Keys(releases)) {
-		cells = append(cells, app+" "+palette.Muted(shortBuild(releases[app])))
-	}
-	return cells
-}
-
-func shortBuild(release string) string {
-	parsed, err := provider.ParseRelease(release)
-	if err != nil {
-		return terminal.ShortID(release)
-	}
-	return terminal.ShortID(parsed.BuildID())
 }
 
 func firstURL(urls []string) string {
@@ -213,14 +188,14 @@ func groupResources(groups []*contractv1.ResourceGroup) []resourceBlock {
 	var blocks []resourceBlock
 	listed := map[string]bool{}
 	for _, group := range groups {
-		context := resourceBlockContext(group)
-		at := slices.IndexFunc(blocks, func(block resourceBlock) bool { return slices.Equal(block.context, context) })
+		heading := resourceBlockContext(group)
+		at := slices.IndexFunc(blocks, func(block resourceBlock) bool { return slices.Equal(block.context, heading) })
 		if at < 0 {
-			blocks = append(blocks, resourceBlock{context: context})
+			blocks = append(blocks, resourceBlock{context: heading})
 			at = len(blocks) - 1
 		}
 		for _, resource := range group.GetResources() {
-			key := strings.Join(append(slices.Clone(context), resource.GetKind(), resource.GetId()), "\x00")
+			key := strings.Join(append(slices.Clone(heading), resource.GetKind(), resource.GetId()), "\x00")
 			if listed[key] {
 				continue
 			}
@@ -248,9 +223,9 @@ func renderResources(out io.Writer, present terminal.Presentation, groups []*con
 		}
 		table := terminal.NewTable(columns...)
 		for _, resource := range block.resources {
-			kind := kindCell(palette, resource.GetKind())
+			kind := formatKind(palette, resource.GetKind())
 			if opts.links {
-				table.Row(kind, markedID(resource, resource.GetId()), orUnknown(resource.GetConsoleUrl()))
+				table.Row(kind, markedID(resource, resource.GetId()), cmp.Or(resource.GetConsoleUrl(), unknownCell))
 				continue
 			}
 			table.Row(kind, markedID(resource, present.Hyperlink(resource.GetId(), resource.GetConsoleUrl())))
@@ -259,7 +234,7 @@ func renderResources(out io.Writer, present terminal.Presentation, groups []*con
 	}
 }
 
-func kindCell(palette terminal.Palette, kind string) string {
+func formatKind(palette terminal.Palette, kind string) string {
 	at := strings.LastIndex(kind, ":")
 	if at < 0 {
 		return kind
@@ -294,13 +269,13 @@ func renderShared(out io.Writer, palette terminal.Palette, slug string, shared [
 				continue
 			}
 			part := each.GetPart()
-			name, with := palette.Bold(part.GetName()), sharedWith(slug, part)
+			name, with := palette.Bold(part.GetName()), formatSharing(slug, part)
 			if len(part.GetResources()) == 0 {
 				table.Row(name, with, palette.Muted("no resources"))
 				continue
 			}
 			for _, resource := range part.GetResources() {
-				table.Row(name, with, kindCell(palette, resource.GetKind()), resource.GetId())
+				table.Row(name, with, formatKind(palette, resource.GetKind()), resource.GetId())
 				name, with = "", ""
 			}
 		}
@@ -308,7 +283,7 @@ func renderShared(out io.Writer, palette terminal.Palette, slug string, shared [
 	}
 }
 
-func sharedWith(slug string, part *contractv1.BootstrapPart) string {
+func formatSharing(slug string, part *contractv1.BootstrapPart) string {
 	others := len(slices.DeleteFunc(slices.Clone(part.GetUsedBy()), func(user string) bool { return user == slug }))
 	if others == 0 {
 		return unknownCell

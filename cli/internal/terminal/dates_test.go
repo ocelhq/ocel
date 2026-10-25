@@ -56,11 +56,11 @@ func TestEpochAgeIsRelativeOnATerminalAndADateOffOne(t *testing.T) {
 	}
 }
 
-func TestShortIDKeepsTheFirstEightCharactersOfALongID(t *testing.T) {
-	if got := ShortID("91532c18c75ea0563b5514d396a4ae2a"); got != "91532c18" {
-		t.Errorf("ShortID = %q, want 91532c18", got)
+func TestAbbreviateIDKeepsTheFirstEightCharactersOfALongID(t *testing.T) {
+	if got := AbbreviateID("91532c18c75ea0563b5514d396a4ae2a"); got != "91532c18" {
+		t.Errorf("AbbreviateID = %q, want 91532c18", got)
 	}
-	if got := ShortID("pr-12"); got != "pr-12" {
-		t.Errorf("ShortID of a short id = %q, want it whole", got)
+	if got := AbbreviateID("pr-12"); got != "pr-12" {
+		t.Errorf("AbbreviateID of a short id = %q, want it whole", got)
 	}
 }

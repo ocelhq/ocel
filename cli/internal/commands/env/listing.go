@@ -119,7 +119,7 @@ func renderValues(stdout io.Writer, present terminal.Presentation, values []*var
 	fmt.Fprint(stdout, table.Render(palette, ""))
 
 	if orphans {
-		fmt.Fprintf(stdout, "\n%s %s\n", palette.WarnMark(), palette.Commands("An orphaned override's environment is gone, so nothing reads it: `ocel env rm <KEY> --preview --environment <ENVIRONMENT>` removes it."))
+		fmt.Fprintf(stdout, "\n%s %s\n", palette.WarnMark(), palette.Commands("Nothing reads an orphaned override: `ocel env rm <KEY> --preview --environment <ENVIRONMENT>` removes one."))
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
@@ -264,14 +265,8 @@ func renderEnvironments(stdout io.Writer, present terminal.Presentation, envs []
 		terminal.Column{Head: "CREATED"},
 	)
 	for _, e := range envs {
-		url, more := terminal.NoValue, []string(nil)
-		if urls := e.GetAliasUrls(); len(urls) > 0 {
-			url, more = urls[0], urls[1:]
-		}
-		table.Row(palette.Bold(e.GetIdentity()), lifecycleTag(e.GetLifecycle()), formatValueOrDash(e.GetLabel()), url, present.EpochAge(e.GetCreatedAt()))
-		for _, url := range more {
-			table.Row("", "", "", url)
-		}
+		urls := formatValueOrDash(strings.Join(e.GetAliasUrls(), "\n"))
+		table.Row(palette.Bold(e.GetIdentity()), lifecycleTag(e.GetLifecycle()), formatValueOrDash(e.GetLabel()), urls, present.EpochAge(e.GetCreatedAt()))
 	}
 	fmt.Fprint(stdout, table.Render(palette, ""))
 }

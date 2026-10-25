@@ -42,7 +42,7 @@ func TestRollbackMovesProductionToTheChosenPromotionOnceConsented(t *testing.T) 
 				"      target  promo-1  1970-01-01 00:00:01 UTC  v1.0.0  web build-1\n" +
 				"      `ocel deploy` puts the current build back.\n",
 			"✓ Rolled test-app back to promo-1 in ",
-			"  prod now serves promotion " + terminal.ShortID(activePromotionID(t, project)) + " · ",
+			"  prod now serves promotion " + terminal.AbbreviateID(activePromotionID(t, project)) + " · ",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)

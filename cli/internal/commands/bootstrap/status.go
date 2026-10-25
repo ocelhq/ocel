@@ -270,7 +270,7 @@ func stateCell(palette terminal.Palette, part *contractv1.BootstrapPart, tier en
 	case part.GetState() == contractv1.BootstrapPartState_BOOTSTRAP_PART_STATE_WANTED:
 		return palette.Health(terminal.Pending, partWanted+" by "+strings.Join(part.GetWantedBy(), ", ")) + run
 	case part.GetCurrent() && part.GetRetiresWithLastUser() && len(part.GetUsedBy()) > 0:
-		return palette.Health(terminal.Absent, partRetires+" "+strings.Join(part.GetUsedBy(), ", "))
+		return palette.Health(terminal.Inactive, partRetires+" "+strings.Join(part.GetUsedBy(), ", "))
 	case part.GetCurrent():
 		return palette.Health(terminal.Healthy, partCurrent)
 	}

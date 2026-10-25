@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -105,7 +106,7 @@ func renderList(out io.Writer, present terminal.Presentation, identity *contract
 		terminal.Column{Head: "LAST DEPLOY"},
 	)
 	for _, summary := range projects {
-		table.Row(palette.Bold(summary.GetSlug()), productionCell(palette, summary), previewsCell(summary), orUnknown(summary.GetEdge()), present.EpochAge(summary.GetUpdatedAt()))
+		table.Row(palette.Bold(summary.GetSlug()), productionCell(palette, summary), previewsCell(summary), cmp.Or(summary.GetEdge(), unknownCell), present.EpochAge(summary.GetUpdatedAt()))
 	}
 	fmt.Fprint(out, table.Render(palette, "  "))
 	fmt.Fprintf(out, "\n%s\n", palette.Muted(english.Count(len(projects), "project")))
@@ -113,7 +114,7 @@ func renderList(out io.Writer, present terminal.Presentation, identity *contract
 
 func productionCell(palette terminal.Palette, summary *contractv1.ProjectSummary) string {
 	if summary.GetProductionPromotionId() == "" {
-		return unknownCell
+		return palette.Health(terminal.Inactive, "none")
 	}
 	return palette.Health(terminal.Healthy, liveCell)
 }

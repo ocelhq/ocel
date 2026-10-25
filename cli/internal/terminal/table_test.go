@@ -91,3 +91,28 @@ func TestTableWithoutAHeadPrintsOnlyItsRows(t *testing.T) {
 		t.Errorf("table =\n%s\nwant\n%s", got, want)
 	}
 }
+
+func TestTableContinuesAMultiLineCellOnRowsOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	table := NewTable(Column{Head: "ENV"}, Column{Head: "APPS"}, Column{Head: "URL"})
+	table.Row("prod", "api 1a2b3c4d\nweb 5e6f7a8b", "https://shop.example.com")
+
+	want := "" +
+		"ENV   APPS          URL\n" +
+		"prod  api 1a2b3c4d  https://shop.example.com\n" +
+		"      web 5e6f7a8b\n"
+	if got := table.Render(Palette{}, ""); got != want {
+		t.Errorf("table =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestATableWithNoColumnsRulesNothing(t *testing.T) {
+	t.Parallel()
+
+	table := NewTable()
+	table.Rule()
+	if got := table.Render(Palette{}, ""); got != "\n" {
+		t.Errorf("table = %q, want an empty rule", got)
+	}
+}

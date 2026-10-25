@@ -23,7 +23,7 @@ func planLines(present Presentation, plan *planv1.ChangePlan) []string {
 	out := []string{planHeadline(plan) + ":"}
 	shown, counts := readPlan(plan)
 	if !present.Verbose {
-		shown = countStacks(shown)
+		shown = foldStacks(shown)
 	}
 	for i, group := range shown {
 		if i == 0 || len(shown[i-1].GetChanges()) > 0 || len(group.GetChanges()) > 0 {
@@ -83,31 +83,31 @@ func readPlan(plan *planv1.ChangePlan) ([]*planv1.ChangeGroup, planCounts) {
 	return shown, counts
 }
 
-func countStacks(shown []*planv1.ChangeGroup) []*planv1.ChangeGroup {
+func foldStacks(shown []*planv1.ChangeGroup) []*planv1.ChangeGroup {
 	var out []*planv1.ChangeGroup
 	for i := 0; i < len(shown); {
-		run := i + 1
-		for run < len(shown) && countable(shown[i]) && sameStackRow(shown[i], shown[run]) {
-			run++
+		end := i + 1
+		for end < len(shown) && isChildlessStack(shown[i]) && canFold(shown[i], shown[end]) {
+			end++
 		}
-		if run-i == 1 {
+		if end-i == 1 {
 			out = append(out, shown[i])
 		} else {
-			counted := proto.CloneOf(shown[i])
-			counted.Name = fmt.Sprintf("%d stacks", run-i)
-			out = append(out, counted)
+			folded := proto.CloneOf(shown[i])
+			folded.Name = fmt.Sprintf("%d stacks", end-i)
+			out = append(out, folded)
 		}
-		i = run
+		i = end
 	}
 	return out
 }
 
-func countable(group *planv1.ChangeGroup) bool {
+func isChildlessStack(group *planv1.ChangeGroup) bool {
 	return group.GetKind() == provider.StackGroupKind && len(group.GetChanges()) == 0
 }
 
-func sameStackRow(first, next *planv1.ChangeGroup) bool {
-	return countable(next) &&
+func canFold(first, next *planv1.ChangeGroup) bool {
+	return isChildlessStack(next) &&
 		next.GetPart() == first.GetPart() &&
 		next.GetAction() == first.GetAction() &&
 		next.GetReason() == first.GetReason() &&

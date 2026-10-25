@@ -80,7 +80,7 @@ const (
 	Healthy Health = iota
 	Pending
 	Failing
-	Absent
+	Inactive
 )
 
 func (p Palette) Health(health Health, word string) string {

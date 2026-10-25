@@ -1,6 +1,7 @@
 package promotions
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -196,13 +197,9 @@ func renderPromotions(stdout io.Writer, present terminal.Presentation, promotion
 		case entry.GetActive():
 			status = palette.Health(terminal.Healthy, "active")
 		case entry.GetUnpromoted():
-			status = palette.Health(terminal.Absent, "unpromoted")
+			status = palette.Health(terminal.Inactive, "unpromoted")
 		}
-		apps := deployedBuilds(palette, p.GetReleases())
-		table.Row(palette.Bold(terminal.ShortID(p.GetPromotionId())), tagOrNone(p.GetTag()), promotionCreated(present, p.GetTs()), apps[0], status)
-		for _, app := range apps[1:] {
-			table.Row("", "", "", app)
-		}
+		table.Row(palette.Bold(terminal.AbbreviateID(p.GetPromotionId())), cmp.Or(p.GetTag(), terminal.NoValue), formatCreated(present, p.GetTs()), terminal.FormatReleases(palette, p.GetReleases()), status)
 	}
 	fmt.Fprint(stdout, table.Render(palette, ""))
 }

@@ -1,9 +1,13 @@
 package terminal
 
 import (
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
@@ -41,7 +45,21 @@ func NewTable(columns ...Column) *Table {
 }
 
 func (t *Table) Row(cells ...string) {
-	t.lines = append(t.lines, tableLine{cells: cells})
+	split := make([][]string, len(cells))
+	height := 1
+	for i, cell := range cells {
+		split[i] = strings.Split(cell, "\n")
+		height = max(height, len(split[i]))
+	}
+	for line := range height {
+		row := make([]string, len(cells))
+		for i, parts := range split {
+			if line < len(parts) {
+				row[i] = parts[line]
+			}
+		}
+		t.lines = append(t.lines, tableLine{cells: row})
+	}
 }
 
 func (t *Table) Span(text string) {
@@ -127,7 +145,25 @@ func (t *Table) line(cells []string, widths []int) string {
 	return strings.TrimRight(b.String(), " ")
 }
 
-func ShortID(id string) string {
+func AbbreviateRelease(release string) string {
+	if parsed, err := provider.ParseRelease(release); err == nil {
+		return AbbreviateID(parsed.BuildID())
+	}
+	return AbbreviateID(release)
+}
+
+func FormatReleases(p Palette, releaseByApp map[string]string) string {
+	if len(releaseByApp) == 0 {
+		return NoValue
+	}
+	lines := make([]string, 0, len(releaseByApp))
+	for _, app := range slices.Sorted(maps.Keys(releaseByApp)) {
+		lines = append(lines, app+" "+p.Muted(AbbreviateRelease(releaseByApp[app])))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func AbbreviateID(id string) string {
 	if len(id) <= shortIDLen {
 		return id
 	}
@@ -135,5 +171,8 @@ func ShortID(id string) string {
 }
 
 func tableWidth(widths []int) int {
+	if len(widths) == 0 {
+		return 0
+	}
 	return sum(widths) + len(tableGutter)*(len(widths)-1)
 }

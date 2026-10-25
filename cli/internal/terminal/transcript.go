@@ -158,7 +158,7 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 		timing:  " in " + took + tally.finished(),
 		outcome: tracked.resources.summary(),
 	}
-	if tracked.resources.single() && (grouped || !s.failed) {
+	if tracked.resources.isSingle() && (grouped || !s.failed) {
 		head.outcome = ""
 	}
 	if failed {

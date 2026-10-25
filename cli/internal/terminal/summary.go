@@ -48,7 +48,7 @@ func (s summary) succeeded(took string) []string {
 	out := []string{head}
 	propagation := PropagationNote(result.GetPropagation())
 	if place := servedPlace(result.GetTier()); place != "" && result.GetPromotionId() != "" {
-		served := blockIndent + place + " now serves promotion " + ShortID(result.GetPromotionId())
+		served := blockIndent + place + " now serves promotion " + AbbreviateID(result.GetPromotionId())
 		if propagation != "" {
 			served += s.present.Palette().Muted(partySep + propagation)
 			propagation = ""

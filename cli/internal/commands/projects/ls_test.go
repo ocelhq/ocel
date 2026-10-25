@@ -31,7 +31,7 @@ func TestProjectsListsEveryProjectWithItsProductionPreviewsEdgeAndLastDeploy(t *
 	if row, want := rowOf(t, got.stdout, "test-app"), []string{"test-app", "●", "live", "2", "relay", "2026-10-05"}; !slices.Equal(row, want) {
 		t.Errorf("test-app row = %v, want %v", row, want)
 	}
-	if row, want := rowOf(t, got.stdout, "blog"), []string{"blog", "—", "—", "direct", "2026-09-14"}; !slices.Equal(row, want) {
+	if row, want := rowOf(t, got.stdout, "blog"), []string{"blog", "○", "none", "—", "direct", "2026-09-14"}; !slices.Equal(row, want) {
 		t.Errorf("blog row = %v, want %v", row, want)
 	}
 	if strings.Index(got.stdout, "  blog") > strings.Index(got.stdout, "  test-app") {

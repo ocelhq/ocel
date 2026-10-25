@@ -65,10 +65,3 @@ func identityHeader(palette terminal.Palette, identity *contractv1.Identity, bef
 	}
 	return palette.Heading(cells[0], cells[1:]...)
 }
-
-func orUnknown(value string) string {
-	if value == "" {
-		return unknownCell
-	}
-	return value
-}
