@@ -138,6 +138,13 @@ func (d Deploy) Billing() Grant {
 	}
 }
 
+func (d Deploy) Services() Grant {
+	return Grant{
+		Permissions: []string{"serviceusage.services.enable"},
+		Why:         "it lets ocel switch on a service a deploy needs while it is off, and a credential without it deploys only where every one is on",
+	}
+}
+
 func (d Deploy) AppGrants() Grant {
 	grantable := append(slices.Clone(appGrantedRoles), d.names.CDNPurgeRolePath())
 	quoted := make([]string, len(grantable))
@@ -151,7 +158,7 @@ func (d Deploy) AppGrants() Grant {
 }
 
 func (d Deploy) Grants() []Grant {
-	grants := make([]Grant, 0, len(TieredRoles)+12)
+	grants := make([]Grant, 0, len(TieredRoles)+13)
 	for _, role := range TieredRoles {
 		grants = append(grants, d.Tiered(role))
 	}
@@ -167,5 +174,6 @@ func (d Deploy) Grants() []Grant {
 		d.Parts(),
 		d.ProjectPermissions(),
 		d.Billing(),
+		d.Services(),
 	)
 }

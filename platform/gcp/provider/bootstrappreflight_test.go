@@ -199,3 +199,16 @@ func TestABootstrapCredentialMayBillItsCallsToTheProjectItBootstraps(t *testing.
 		t.Errorf("a bootstrap credential is granted %v, want roles/serviceusage.serviceUsageConsumer: a user's credential names the project as the quota project of every call, and Google refuses each with USER_PROJECT_DENIED without serviceusage.services.use", bootstrap.BootstrapRoles())
 	}
 }
+
+func TestNeitherABootstrapNorThePartsRoleAsksForThePermissionToSwitchServicesOn(t *testing.T) {
+	t.Parallel()
+
+	for _, parts := range [][]string{nil, {bootstrap.CloudflareOriginPart}} {
+		if slices.Contains(bootstrap.PermissionsFor(parts), "serviceusage.services.enable") {
+			t.Errorf("a bootstrap with parts %v demands serviceusage.services.enable, which only a run that finds a service off needs", parts)
+		}
+	}
+	if slices.Contains(bootstrap.NewPartsRole(names.New("ocel", "acme-prod")).Permissions, "serviceusage.services.enable") {
+		t.Error("the parts role holds serviceusage.services.enable, and it lets a deploy add the parts it needs and nothing else")
+	}
+}

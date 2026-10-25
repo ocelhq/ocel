@@ -171,6 +171,7 @@ var bootstrapRoles = []string{
 	"roles/resourcemanager.tagAdmin",
 	credential.BillingRole,
 	gcloud.TierTagUserRole,
+	ServicesRole,
 }
 
 func BootstrapRoles() []string { return slices.Clone(bootstrapRoles) }
