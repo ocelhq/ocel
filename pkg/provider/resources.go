@@ -114,7 +114,7 @@ func RequiredProperties(t BindingType) []string {
 	case BindingKV:
 		return []string{PropertyHost, PropertyPort, PropertyPassword}
 	case BindingRealtime:
-		return []string{PropertyURL, PropertyHost, PropertySigningKey, PropertyVerifyKey}
+		return []string{PropertyURL, PropertyHost}
 	}
 	return nil
 }
