@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
@@ -22,6 +21,7 @@ type policyServer struct {
 	writes atomic.Int64
 
 	refusals int64
+	refused  func()
 }
 
 func (p *policyServer) open(t *testing.T) *gcloud.Clients {
@@ -35,6 +35,9 @@ func (p *policyServer) open(t *testing.T) *gcloud.Clients {
 			w.Write([]byte(`{"etag":"BwXhoLA="}`))
 		case strings.HasSuffix(r.URL.Path, ":setIamPolicy"):
 			if p.writes.Add(1) <= p.refusals {
+				if p.refused != nil {
+					p.refused()
+				}
 				w.WriteHeader(http.StatusConflict)
 				w.Write([]byte(`{"error":{"code":409,"message":"There were concurrent policy changes"}}`))
 				return
@@ -67,9 +70,8 @@ func TestAPolicyChangedUnderTheGrantIsReReadAndWrittenAgain(t *testing.T) {
 func TestAPolicyThatKeepsChangingUnderTheGrantIsRefusedRatherThanRetriedForever(t *testing.T) {
 	t.Parallel()
 
-	server := &policyServer{refusals: math.MaxInt64}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	ctx := deadlineAt(2)
+	server := &policyServer{refusals: math.MaxInt64, refused: ctx.conflicted}
 	err := (composed(bootstrap.Engine{Clients: server.open(t)})).GrantRunAs(ctx, "ocel-production")
 	if err == nil {
 		t.Fatal("grantRunAs() over a policy that never stops changing = nil, want the refusal that names what the grant is for")

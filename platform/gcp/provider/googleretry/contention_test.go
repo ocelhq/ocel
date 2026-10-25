@@ -88,6 +88,7 @@ func TestAContendedWriteStopsWhenTheRunIsCancelled(t *testing.T) {
 func TestAContendedWriteAnswersWithTheConflictRatherThanWaitPastTheRunsDeadline(t *testing.T) {
 	t.Parallel()
 	f := newFakeClock()
+	f.at = time.Now()
 	ctx, cancel := context.WithDeadline(context.Background(), f.at.Add(10*time.Second))
 	defer cancel()
 	conflict := &googleapi.Error{Code: http.StatusConflict}
