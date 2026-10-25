@@ -556,7 +556,7 @@ so Cloud Run services and functions bound to a store or database reach private a
 that subnetwork through direct VPC egress; the rest of their traffic leaves as before.
 
 **Removing it.** `ocel bootstrap destroy` takes the network down, and is refused while any store
-or database is still on it, naming them. The bootstrap credential needs
+or database is still connected to it, naming them. The bootstrap credential needs
 `roles/compute.networkAdmin` and `roles/cloudsql.viewer` for that.
 
 ### Naming a network

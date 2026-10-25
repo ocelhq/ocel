@@ -209,6 +209,15 @@ func (s *Memorystore) Holding(name string, labels map[string]string) {
 	s.instances[name] = &gcloud.MemorystoreInstance{Name: name, State: gcloud.InstanceActive, Labels: labels}
 }
 
+func (s *Memorystore) HoldingOn(name string, labels map[string]string, network string) {
+	s.Holding(name, labels)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.instances[name].Endpoints = []gcloud.InstanceEndpoint{{Connections: []gcloud.EndpointConnection{
+		{PSCAutoConnection: &gcloud.PSCAutoConnection{ProjectID: Project, Network: network, IPAddress: StoreAddress, Port: 6379, ConnectionType: gcloud.PrimaryEndpoint}},
+	}}}
+}
+
 func (s *Memorystore) Filters() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

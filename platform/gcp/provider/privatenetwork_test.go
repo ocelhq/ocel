@@ -319,3 +319,38 @@ func TestABootstrapMakesARecordedPrivateNetworkAgainWhenItWasTakenDownByHand(t *
 		t.Errorf("repairParts() = %v leaving %v and %v, want the recorded network made again", repaired, server.networks, server.policies)
 	}
 }
+
+func TestTheTiersPrivateNetworkIsNotHeldInUseByStoresAndDatabasesOnANamedNetwork(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	fleet := "projects/acme-prod/global/networks/fleet"
+	stores.HoldingOn(connectedStore, storeLabels(environment.TierProduction), fleet)
+	networks.databases.HoldingOn(connectedDatabase, map[string]string{
+		"ocel-namespace": "ocel", "ocel-tier": "production", "ocel-project": "shop", "ocel-environment": "prod", "ocel-postgres": "orders",
+	}, fleet)
+	recordingNetwork(t, &b)
+	ctx := context.Background()
+
+	if err := b.RefusePartsInUse(ctx, environment.TierProduction); err != nil {
+		t.Errorf("refusePartsInUse() with a store and a database on the network fleet = %v, want the tier's own network free to remove", err)
+	}
+	parts, err := b.ListDescribedParts(ctx, environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 1 || len(parts[0].UsedBy) != 0 {
+		t.Errorf("listDescribedParts() = %+v, want the network used by no project: shop's store and database are on fleet", parts)
+	}
+}
+
+func TestTheTiersPrivateNetworkIsHeldInUseByAStoreConnectedToIt(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	stores.HoldingOn(connectedStore, storeLabels(environment.TierProduction), "projects/acme-prod/global/networks/ocel-prod-network")
+	recordingNetwork(t, &b)
+
+	err := b.RefusePartsInUse(context.Background(), environment.TierProduction)
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid || !strings.Contains(err.Error(), "kv cache") {
+		t.Errorf("refusePartsInUse() with a store connected to the tier's network = %v, want a refusal naming it", err)
+	}
+}
