@@ -329,6 +329,56 @@ func TestAContainerAppIsBuiltWithTheBindingsAndSecretsOfItsOwnAppAlone(t *testin
 	}
 }
 
+func TestAnImageIsBuiltWithThePublicValuesItsFrameworkInlinesAndNeverASensitiveOne(t *testing.T) {
+	cfg := containerProject(t, "")
+	cfg.Apps = []project.App{
+		{Name: "web", Path: "services/web", Compute: "container", Framework: "next"},
+		{Name: "kit", Path: "services/web", Compute: "container", Framework: "sveltekit"},
+		{Name: "api", Path: "services/web", Compute: "container", Framework: "node"},
+	}
+	got := map[string]map[string]string{}
+	_, err := tools{
+		image: func(_ context.Context, app image.App, _ string, _ image.LiveValues, _ io.Writer) (image.Image, error) {
+			got[app.Name] = app.BuildArgs
+			return image.Image{Ref: "ocel/shop/" + app.Name + "@sha256:0"}, nil
+		},
+		liveHashKey: func() ([]byte, error) { return []byte("machine key"), nil },
+	}.apps(context.Background(), cfg, map[string]AppVariables{
+		"web": {
+			Env:        map[string]string{"NEXT_PUBLIC_GREETING": "journey-hello", "INTERNAL_URL": "http://internal"},
+			Live:       map[string]string{"STRIPE_API_KEY": "sk-live"},
+			PublicKeys: []string{"NEXT_PUBLIC_GREETING", processenv.NextPublicURLEnvVar},
+		},
+		"kit": {Env: map[string]string{"PUBLIC_GREETING": "journey-hello"}, Live: map[string]string{"KIT_TOKEN": "sk-kit"}},
+		"api": {Env: map[string]string{"PORT_NAME": "http"}},
+	}, nil, nil, Host{}, Log{})
+	if err != nil {
+		t.Fatalf("apps() = %v", err)
+	}
+
+	want := map[string]map[string]string{
+		"web": {"NEXT_PUBLIC_GREETING": "journey-hello", processenv.NextPublicEnvVar: `{"NEXT_PUBLIC_GREETING":"journey-hello"}`},
+		"kit": {"PUBLIC_GREETING": "journey-hello"},
+		"api": nil,
+	}
+	for app, args := range want {
+		if !maps.Equal(got[app], args) {
+			t.Errorf("%s's image is built with the build args %v, want %v: what its framework inlines under ocel's own build, and never a sensitive value, which a build arg leaves in the image's history", app, got[app], args)
+		}
+	}
+}
+
+func TestANextImageDeclaringTheKeyItsPublicValuesAreInlinedUnderIsRefused(t *testing.T) {
+	cfg := containerProject(t, "")
+	cfg.Apps[0].Framework = "next"
+	_, err := tools{}.apps(context.Background(), cfg, map[string]AppVariables{
+		"web": {Env: map[string]string{processenv.NextPublicEnvVar: "{}"}},
+	}, nil, nil, Host{}, Log{})
+	if want := `app "web" declares NEXT_PUBLIC_OCEL_ENV, which the build sets itself; rename it where it is declared`; err == nil || err.Error() != want {
+		t.Fatalf("apps() = %v, want %q", err, want)
+	}
+}
+
 func TestAContainerAppIsBuiltWithTheBindingProxyItsAppIsHandedInItsBuildEnvironment(t *testing.T) {
 	proxy := map[string]string{processenv.RuntimeAddressEnvVar: "http://127.0.0.1:41999", localrpc.SessionTokenEnvVar: "proxy-session-token"}
 	var got image.LiveValues

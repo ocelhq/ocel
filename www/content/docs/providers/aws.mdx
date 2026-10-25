@@ -310,7 +310,8 @@ traffic can starve another. A `reservedConcurrentExecutions` set in a
 
 A Next app on `compute: "container"` runs `next start` in its image as built, like any container:
 Next keeps its cache in each task, a revalidated page moves only on the task that revalidated it, and
-CloudFront stores what the response headers allow, which no revalidation clears.
+CloudFront stores what the response headers allow, which no revalidation clears. Its build reads its
+public values as build arguments; see [Environment variables](/docs/frameworks/nextjs#environment-variables).
 
 ## Container releases and rollback
 

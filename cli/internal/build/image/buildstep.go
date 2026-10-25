@@ -2,6 +2,7 @@ package image
 
 import (
 	"context"
+	"maps"
 	"path"
 	"slices"
 
@@ -12,15 +13,22 @@ import (
 
 const railpackSecretsHashMount = "/secrets-hash"
 
-type liveGateway struct {
-	client.Client
+type buildStepValues struct {
 	keys    []string
 	envKeys []string
+	env     map[string]string
 }
 
-func (g liveGateway) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
-	if req.Definition != nil && len(g.keys)+len(g.envKeys) > 0 {
-		rewritten, err := mountLiveValues(req.Definition, g.keys, g.envKeys)
+func (v buildStepValues) isEmpty() bool { return len(v.keys)+len(v.envKeys)+len(v.env) == 0 }
+
+type buildStepGateway struct {
+	client.Client
+	values buildStepValues
+}
+
+func (g buildStepGateway) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
+	if req.Definition != nil && !g.values.isEmpty() {
+		rewritten, err := giveBuildStepValues(req.Definition, g.values)
 		if err != nil {
 			return nil, err
 		}
@@ -41,12 +49,18 @@ func hasLiveSecretEnv(exec *pb.ExecOp, keys []string) bool {
 	return slices.ContainsFunc(exec.Secretenv, func(env *pb.SecretEnv) bool { return slices.Contains(keys, env.ID) })
 }
 
-func giveLiveValues(exec *pb.ExecOp, keys, envKeys []string) {
+func addBuildStepValues(exec *pb.ExecOp, values buildStepValues) {
+	for _, key := range slices.Sorted(maps.Keys(values.env)) {
+		exec.Meta.Env = append(exec.Meta.Env, key+"="+values.env[key])
+	}
+	if len(values.keys)+len(values.envKeys) == 0 {
+		return
+	}
 	exec.Network = pb.NetMode_HOST
-	if len(keys) > 0 {
+	if len(values.keys) > 0 {
 		exec.Meta.Env = append(exec.Meta.Env, liveDirEnv+"="+buildLiveDir)
 	}
-	for _, key := range keys {
+	for _, key := range values.keys {
 		exec.Mounts = append(exec.Mounts, &pb.Mount{
 			Input:     int64(pb.Empty),
 			Dest:      path.Join(buildLiveDir, key),
@@ -54,13 +68,13 @@ func giveLiveValues(exec *pb.ExecOp, keys, envKeys []string) {
 			SecretOpt: &pb.SecretOpt{ID: key, Mode: secretFileMode},
 		})
 	}
-	for _, key := range envKeys {
+	for _, key := range values.envKeys {
 		exec.Secretenv = append(exec.Secretenv, &pb.SecretEnv{ID: key, Name: key})
 	}
 }
 
-func mountLiveValues(definition *pb.Definition, keys, envKeys []string) (*pb.Definition, error) {
-	secrets := slices.Concat(keys, envKeys)
+func giveBuildStepValues(definition *pb.Definition, values buildStepValues) (*pb.Definition, error) {
+	secrets := slices.Concat(values.keys, values.envKeys)
 	renamed := map[string]string{}
 	rewritten := &pb.Definition{
 		Def:      make([][]byte, len(definition.Def)),
@@ -85,7 +99,7 @@ func mountLiveValues(definition *pb.Definition, keys, envKeys []string) (*pb.Def
 			touched = true
 		}
 		if isBuildStepCommand(&operation) {
-			giveLiveValues(operation.GetExec(), keys, envKeys)
+			addBuildStepValues(operation.GetExec(), values)
 			touched = true
 		}
 		if touched {

@@ -93,6 +93,14 @@ func (r Recipe) solve(arch string, live LiveValues) (client.SolveOpt, func(), er
 		}
 		setFrontendAttr(&opt, buildArgAttrPrefix+hashArg, live.Hash)
 	}
+	switch {
+	case !r.railpack():
+		for key, value := range r.App.BuildArgs {
+			setFrontendAttr(&opt, buildArgAttrPrefix+key, value)
+		}
+	case len(r.App.BuildArgs) > 0 && !live.hasValues():
+		setFrontendAttr(&opt, buildArgAttrPrefix+railpackSecretsHashArg, hashBuildArgs(r.App.BuildArgs))
+	}
 	if arch != "" {
 		setFrontendAttr(&opt, platformAttr, images.ContainerPlatform(arch))
 	}
@@ -130,7 +138,7 @@ func (r Recipe) unpinned() (client.SolveOpt, func(), error) {
 func (r Recipe) run(ctx context.Context, buildkit *client.Client, opt client.SolveOpt, live LiveValues, status chan *client.SolveStatus) (*client.SolveResponse, error) {
 	if r.railpack() {
 		return buildkit.Build(ctx, opt, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-			return railpack.Build(ctx, liveGateway{Client: c, keys: live.listKeys(), envKeys: live.listEnvKeys()})
+			return railpack.Build(ctx, buildStepGateway{Client: c, values: buildStepValues{keys: live.listKeys(), envKeys: live.listEnvKeys(), env: r.App.BuildArgs}})
 		}, status)
 	}
 	return buildkit.Solve(ctx, nil, opt, status)

@@ -18,6 +18,16 @@ describe("the browser entry of ocel/env/next", () => {
     expect(env.NEXT_PUBLIC_API_URL).toBe("https://api.example.com");
   });
 
+  it("reads a public variable from the values a Dockerfile's next build inlined as NEXT_PUBLIC_OCEL_ENV", () => {
+    vi.stubEnv(
+      "NEXT_PUBLIC_OCEL_ENV",
+      JSON.stringify({ NEXT_PUBLIC_API_URL: "https://api.example.com" }),
+    );
+    const env = defineEnv({ NEXT_PUBLIC_API_URL: { class: "plain" } });
+
+    expect(env.NEXT_PUBLIC_API_URL).toBe("https://api.example.com");
+  });
+
   it("parses a public variable through its schema", () => {
     inlined({ NEXT_PUBLIC_PORT: "8080" });
     const env = defineEnv({ NEXT_PUBLIC_PORT: { class: "plain", schema: z.coerce.number() } });

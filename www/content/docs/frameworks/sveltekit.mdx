@@ -92,3 +92,7 @@ and generates the `$app/env/*` types. Ocel writes nothing into your `tsconfig.js
 
 `PUBLIC_OCEL_URL`, in `$app/env/public`, is the URL the deployment is served from. An app served
 on no hostname, reached only at its provider's own address, has no value for it.
+
+A container's image build reads the app's `plain` values: Railpack's build step has them in its
+environment, and a Dockerfile receives them as build arguments, so it declares an `ARG` for each
+one `vite build` reads. `sensitive` values reach it only as build secrets.

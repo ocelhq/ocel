@@ -102,9 +102,9 @@ func TestOnlyTheBuildStepsCommandsReadTheLiveValuesAsFilesOnTheHostNetwork(t *te
 		t.Fatal("the plan has no build command to give the live values to")
 	}
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB", hyphenatedKey}, nil)
+	rewritten, err := giveBuildStepValues(original, buildStepValues{keys: []string{"OCEL_BINDING_DB", hyphenatedKey}})
 	if err != nil {
-		t.Fatalf("mountLiveValues() = %v", err)
+		t.Fatalf("giveBuildStepValues() = %v", err)
 	}
 
 	built := 0
@@ -143,9 +143,9 @@ func TestOnlyTheBuildStepsCommandsReadTheBindingProxyAndFromTheirEnvironment(t *
 	original, plan := defineRailpackBuild(t, "a live hash")
 	proxy := []string{processenv.RuntimeAddressEnvVar, localrpc.SessionTokenEnvVar}
 
-	rewritten, err := mountLiveValues(original, nil, proxy)
+	rewritten, err := giveBuildStepValues(original, buildStepValues{envKeys: proxy})
 	if err != nil {
-		t.Fatalf("mountLiveValues() = %v", err)
+		t.Fatalf("giveBuildStepValues() = %v", err)
 	}
 
 	built := 0
@@ -193,9 +193,9 @@ func TestEveryCommandRailpackPlannedRunsUnchanged(t *testing.T) {
 		}
 	}
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"}, nil)
+	rewritten, err := giveBuildStepValues(original, buildStepValues{keys: []string{"OCEL_BINDING_DB"}})
 	if err != nil {
-		t.Fatalf("mountLiveValues() = %v", err)
+		t.Fatalf("giveBuildStepValues() = %v", err)
 	}
 
 	var after []string
@@ -217,9 +217,9 @@ func TestEveryCommandRailpackPlannedRunsUnchanged(t *testing.T) {
 func TestTheRewrittenDefinitionStaysAGraphWhoseOpsPointAtOpsItHolds(t *testing.T) {
 	original, _ := defineRailpackBuild(t, "a live hash")
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"}, nil)
+	rewritten, err := giveBuildStepValues(original, buildStepValues{keys: []string{"OCEL_BINDING_DB"}})
 	if err != nil {
-		t.Fatalf("mountLiveValues() = %v", err)
+		t.Fatalf("giveBuildStepValues() = %v", err)
 	}
 
 	operations := decodeOperations(t, rewritten)
@@ -243,9 +243,9 @@ func TestTheRewrittenDefinitionStaysAGraphWhoseOpsPointAtOpsItHolds(t *testing.T
 func TestABuildWithNoLiveValuesIsHandedBackUntouched(t *testing.T) {
 	original, _ := defineRailpackBuild(t, "")
 
-	rewritten, err := mountLiveValues(original, []string{"OCEL_BINDING_DB"}, nil)
+	rewritten, err := giveBuildStepValues(original, buildStepValues{keys: []string{"OCEL_BINDING_DB"}})
 	if err != nil {
-		t.Fatalf("mountLiveValues() = %v", err)
+		t.Fatalf("giveBuildStepValues() = %v", err)
 	}
 
 	if rewritten != original {
@@ -259,9 +259,9 @@ func TestASecretTheAppsRailpackFileDeclaresUnderALiveKeyReachesNoCommandsEnviron
 		t.Fatalf("the plan names the secrets %v, want the %s the app's railpack.json declares, or this test proves nothing", plan.Secrets, hyphenatedKey)
 	}
 
-	rewritten, err := mountLiveValues(original, []string{hyphenatedKey}, nil)
+	rewritten, err := giveBuildStepValues(original, buildStepValues{keys: []string{hyphenatedKey}})
 	if err != nil {
-		t.Fatalf("mountLiveValues() = %v", err)
+		t.Fatalf("giveBuildStepValues() = %v", err)
 	}
 
 	others := 0

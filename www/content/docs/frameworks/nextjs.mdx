@@ -180,6 +180,19 @@ served from, like `OCEL_URL`. Both come from the hostname the deploy serves the 
 served on none, such as one reached only at its provider's own address, gets neither. Ocel
 writes nothing into your `tsconfig.json`.
 
+A container you build from your own Dockerfile is built without ocel's adapter, so ocel hands
+`next build` the public values as build arguments: each `NEXT_PUBLIC_` value under its own name,
+and all of them in `NEXT_PUBLIC_OCEL_ENV`, which `env` reads in the browser. Declare an `ARG` for
+each one the build reads, before the step that runs `next build`:
+
+```dockerfile title="Dockerfile"
+ARG NEXT_PUBLIC_OCEL_ENV
+RUN pnpm run build
+```
+
+A Dockerfile that declares no `ARG` builds as before, and `env` throws in the browser. Only
+`plain` values become build arguments, since Docker keeps a build argument in the image's history.
+
 ## Link previews
 
 Next.js resolves a relative `openGraph.images` or `twitter.images`, and the image an

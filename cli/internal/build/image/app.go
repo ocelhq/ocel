@@ -13,6 +13,7 @@ type App struct {
 	Name       string
 	Workspace  workspace.Location
 	Dockerfile string
+	BuildArgs  map[string]string
 }
 
 func (a App) Dir() string { return a.Workspace.Dir() }

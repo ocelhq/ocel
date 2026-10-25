@@ -195,7 +195,8 @@ CPU always allocated, so it is billed per instance unless a transform [bills it
 otherwise](#billing), and it keeps at least one instance running unless `instances.min` is 0. ocel
 runs the image as built, like any container: Next keeps its cache in each instance, a revalidated
 page moves only on the instance that revalidated it, and Cloud CDN stores what the response headers
-allow, which no revalidation clears.
+allow, which no revalidation clears. Its build reads its public values as build arguments (see
+[Environment variables](/docs/frameworks/nextjs#environment-variables)).
 
 A serverless Next app's static files (the `public` directory, `_next/static` and the prerendered
 fallbacks) are uploaded at deploy to the tier's edge bucket under

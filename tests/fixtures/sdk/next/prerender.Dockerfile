@@ -7,6 +7,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 WORKDIR /app/tests/fixtures/sdk/next
 ARG OCEL_LIVE_HASH
+ARG NEXT_PUBLIC_OCEL_ENV
 RUN --mount=type=secret,id=OCEL_RESOURCE_POSTGRES_main,target=/run/ocel-live/OCEL_RESOURCE_POSTGRES_main,required=false \
     --mount=type=secret,id=OCEL_RESOURCE_BUCKET_uploads,target=/run/ocel-live/OCEL_RESOURCE_BUCKET_uploads,required=false \
     --mount=type=secret,id=BUILD_SENSITIVE,target=/run/ocel-live/BUILD_SENSITIVE,required=false \
