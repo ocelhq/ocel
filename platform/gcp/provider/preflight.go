@@ -25,7 +25,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	apis := deployAPIs(pre)
+	apis := p.listAPIsToCheck(pre)
 	keeps := newDeployUse(pre).keepsProjectRecords()
 	if !keeps && len(parts) == 0 && len(apis) == 0 {
 		return provider.Plan{}, nil
@@ -112,6 +112,13 @@ func (p *Provider) partsUsedBy(pre provider.DeployPreflight) ([]string, error) {
 	return newDeployUse(pre).partNames(p.components())
 }
 
+func (p *Provider) listAPIsToCheck(pre provider.DeployPreflight) []string {
+	if p.skipChecks {
+		return nil
+	}
+	return deployAPIs(pre)
+}
+
 func deployAPIs(pre provider.DeployPreflight) []string {
 	var apis []string
 	if len(pre.Deploy.Apps) > 0 {
@@ -124,7 +131,7 @@ func deployAPIs(pre provider.DeployPreflight) []string {
 }
 
 func (p *Provider) refuseAPIsOff(ctx context.Context, pre provider.DeployPreflight) error {
-	apis := deployAPIs(pre)
+	apis := p.listAPIsToCheck(pre)
 	if len(apis) == 0 {
 		return nil
 	}

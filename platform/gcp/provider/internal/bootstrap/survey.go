@@ -43,10 +43,11 @@ type Survey struct {
 	Generation int64
 	Emulated   bool
 
-	Held      map[string]bool
-	Mending   map[string]string
-	Replacing map[string]string
-	Sibling   bool
+	ResourcesRead bool
+	Held          map[string]bool
+	Mending       map[string]string
+	Replacing     map[string]string
+	Sibling       bool
 
 	Buckets naming.Buckets
 }
@@ -127,7 +128,12 @@ func (b Engine) surveyPresence(ctx context.Context, read Survey, items []Resourc
 }
 
 func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, error) {
+	return b.surveyReading(ctx, tier, true)
+}
+
+func (b Engine) surveyReading(ctx context.Context, tier environment.Tier, resources bool) (Survey, error) {
 	read := b.newSurvey(tier)
+	read.ResourcesRead = resources
 	var err error
 	if read.Buckets, err = b.recordedBuckets(ctx, tier); err != nil {
 		return Survey{}, err
@@ -144,6 +150,9 @@ func (b Engine) survey(ctx context.Context, tier environment.Tier) (Survey, erro
 			return err
 		},
 		func(ctx context.Context) error {
+			if !resources {
+				return nil
+			}
 			return b.surveyPresence(ctx, read, Resources(read.Names, tier, read.Emulated))
 		},
 		func(ctx context.Context) (err error) {

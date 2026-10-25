@@ -84,7 +84,7 @@ func gcloudProject(ctx context.Context) (string, error) {
 
 func (p *Provider) openClients(ctx context.Context) (*gcloud.Clients, error) {
 	opened, err := p.resolveClients(ctx)
-	if err != nil || opened.Emulated() {
+	if err != nil || opened.Emulated() || p.skipChecks {
 		return opened, err
 	}
 	p.mu.Lock()

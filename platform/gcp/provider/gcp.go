@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -39,7 +40,8 @@ type Provider struct {
 	namespace   provider.Namespace
 	warmRoots   *x509.CertPool
 
-	writtenBy provider.WrittenBy
+	writtenBy  provider.WrittenBy
+	skipChecks bool
 
 	records           records.Store
 	recordedDatabases sync.Map
@@ -93,6 +95,7 @@ func NewProvider(options Options) (*Provider, error) {
 		tagEndpoint: tagEndpoint,
 		namespace:   namespace,
 		images:      &run.Images{Pull: run.PullBase},
+		skipChecks:  processenv.SkipChecks(),
 	}, nil
 }
 

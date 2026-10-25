@@ -17,7 +17,7 @@ func (p *Provider) edges() edges.Registry {
 		KeyValues:   p.KeyValues(),
 		Pins:        p.services(),
 		Gates:       cloudrun.GateSecrets{OpenClients: p.openClients},
-		Stacks:      alb.PulumiStacks{OpenClients: p.openClients},
+		Stacks:      alb.PulumiStacks{OpenClients: p.openClients, SkipChecks: p.skipChecks},
 		Routes:      &alb.URLMaps{OpenClients: p.openClients, Services: p.services()},
 		Entries:     certs.New(p.openClients),
 		WarmURL:     (&alb.HTTPS{Roots: p.warmRoots}).Warm,
