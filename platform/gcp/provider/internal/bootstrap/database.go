@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	firestoreadmin "google.golang.org/api/firestore/v1"
@@ -26,6 +27,8 @@ const (
 )
 
 var firestorePatience = gcloud.Patience{Attempts: 180, Ceiling: 10 * time.Second}
+
+const databaseNameFreed = 5 * time.Minute
 
 const (
 	NativeFirestore = "FIRESTORE_NATIVE"
@@ -101,8 +104,8 @@ func (b Engine) ensureDatabase(ctx context.Context, read Survey, id string, tags
 		DeleteProtectionState: protectionOn,
 		Tags:                  tags,
 	}).DatabaseId(id).Context(ctx).Do)
-	if gcloud.Taken(err) {
-		return true, b.databaseServesThisRegion(ctx, read, id)
+	if gcloud.Taken(err) || googleretry.AnsweredCode(err) >= http.StatusInternalServerError {
+		return b.adoptDatabase(ctx, read, id, err)
 	}
 	if err != nil {
 		return false, fmt.Errorf("create the %q Firestore database: %w", id, err)
@@ -110,23 +113,50 @@ func (b Engine) ensureDatabase(ctx context.Context, read Survey, id string, tags
 	return false, b.Awaited(ctx, fmt.Sprintf("creating the %q Firestore database", id), operation)
 }
 
-func (b Engine) databaseServesThisRegion(ctx context.Context, read Survey, id string) error {
+func (b Engine) adoptDatabase(ctx context.Context, read Survey, id string, refused error) (bool, error) {
 	service, err := b.Clients.Databases()
 	if err != nil {
-		return err
+		return false, err
 	}
 	database, err := googleretry.Attempted(ctx, service.Projects.Databases.Get(DatabasePath(b.Clients, id)).Context(ctx).Do)
-	if err != nil {
-		return fmt.Errorf("read the %q Firestore database that already exists: %w", id, err)
+	switch {
+	case gcloud.Absent(err):
+		return false, refuseAbsentDatabase(id, refused)
+	case err != nil:
+		return false, fmt.Errorf("create the %q Firestore database: %w, then read it: %w", id, refused, err)
+	case database.DeleteTime != "":
+		return false, refuseDeletedDatabase(id, database.DeleteTime)
 	}
-	if database.LocationId == read.Region {
+	return true, b.databaseServesThisRegion(ctx, read, id, database.LocationId)
+}
+
+func refuseAbsentDatabase(id string, refused error) error {
+	return refusal.Refuse(refusal.CodeNotReady,
+		"Firestore answered %v to creating the %q database and holds none by that name, as it does for 5 minutes after one is deleted.\n"+
+			"Run the same command again once 5 minutes have passed since the delete",
+		refused, id)
+}
+
+func refuseDeletedDatabase(id, deleted string) error {
+	freed := deleted + " plus 5 minutes"
+	if at, err := time.Parse(time.RFC3339Nano, deleted); err == nil {
+		freed = at.Add(databaseNameFreed).UTC().Format("15:04:05 UTC")
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"Firestore deleted the %q database at %s and keeps its name for 5 minutes.\n"+
+			"Run the same command again after %s",
+		id, deleted, freed)
+}
+
+func (b Engine) databaseServesThisRegion(ctx context.Context, read Survey, id, location string) error {
+	if location == read.Region {
 		return b.protectDatabase(ctx, id)
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"project %s already has the %q Firestore database in %s and Firestore never moves one, "+
 			"so the records this bootstrap writes would sit a continent away from the buckets and keys it names %s for.\n"+
 			"Bootstrap this project in %s, or deploy into a project with no %q database",
-		read.Project, id, database.LocationId, read.Region, database.LocationId, id)
+		read.Project, id, location, read.Region, location, id)
 }
 
 func (b Engine) protectDatabase(ctx context.Context, id string) error {
