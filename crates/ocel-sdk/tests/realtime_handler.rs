@@ -5,7 +5,7 @@ mod runtime;
 
 use ocel::realtime::{DenialCode, Realtime};
 use ocel::realtime::{PublishRule, Request, SubscribeContext, SubscribeRule};
-use realtime::{call, post, read_claims, read_fixture, FakeRuntime};
+use realtime::{call, fake_token, grant, post, read_fixture, FakeRuntime, MINTED_EXPIRES_AT};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -144,14 +144,10 @@ fn build_ruled(
         .expect("the realtime resource builds")
 }
 
-fn deliver_binding_with(field: &str, value: Value) -> String {
-    let mut binding = read_fixture();
-    binding["realtime"][field] = value;
-    binding.to_string()
-}
-
-async fn deliver_appsync() -> MutexGuard<'static, ()> {
-    deliver(&read_fixture().to_string()).await
+async fn serve() -> (FakeRuntime, MutexGuard<'static, ()>) {
+    let runtime = FakeRuntime::serve();
+    let env = deliver(&read_fixture().to_string()).await;
+    (runtime, env)
 }
 
 #[tokio::test]
@@ -184,8 +180,8 @@ async fn the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_
 }
 
 #[tokio::test]
-async fn the_handler_names_the_socket_and_mints_a_connect_token_when_asked() {
-    let _env = deliver_appsync().await;
+async fn the_handler_names_the_socket_and_hands_on_a_connect_token_the_runtime_mints_when_asked() {
+    let (runtime, _env) = serve().await;
     let rt = build(Arc::default());
 
     let res = post(&rt, json!({ "connect": true, "ops": [] }), &[]).await;
@@ -193,24 +189,16 @@ async fn the_handler_names_the_socket_and_mints_a_connect_token_when_asked() {
     let fixture = read_fixture();
     assert_eq!(res["url"], fixture["realtime"]["url"]);
     assert_eq!(res["host"], fixture["realtime"]["host"]);
-    let claims = read_claims(res["connect"]["token"].as_str().unwrap());
-    assert_eq!(claims["iss"], "ocel:rt:app");
-    assert_eq!(claims["aud"], fixture["realtime"]["host"]);
-    assert_eq!(claims["sub"], "anonymous");
     assert_eq!(
-        claims["ocel"],
-        json!({ "op": "connect", "ch": "/app", "ns": "app" })
+        res["connect"],
+        json!({ "token": fake_token("connect", "/app"), "expiresAt": MINTED_EXPIRES_AT })
     );
-    assert_eq!(claims["exp"], res["connect"]["expiresAt"]);
-    assert_eq!(
-        claims["exp"].as_u64().unwrap() - claims["iat"].as_u64().unwrap(),
-        30
-    );
+    runtime.assert_minted("anonymous", 30, &[grant("connect", "/app")]);
 }
 
 #[tokio::test]
 async fn the_handler_grants_a_public_subscribe_to_anyone() {
-    let _env = deliver_appsync().await;
+    let (runtime, _env) = serve().await;
     let rt = build(Arc::default());
 
     let res = post(
@@ -223,17 +211,58 @@ async fn the_handler_grants_a_public_subscribe_to_anyone() {
     assert!(res.get("connect").is_none());
     assert_eq!(res["denied"], json!([]));
     assert_eq!(res["grants"][0]["wire"], "/app/status");
-    let claims = read_claims(res["grants"][0]["token"].as_str().unwrap());
-    assert_eq!(claims["sub"], "anonymous");
     assert_eq!(
-        claims["ocel"],
-        json!({ "op": "subscribe", "ch": "/app/status", "ns": "app" })
+        res["grants"][0]["token"],
+        fake_token("subscribe", "/app/status")
+    );
+    runtime.assert_minted("anonymous", 30, &[grant("subscribe", "/app/status")]);
+}
+
+#[tokio::test]
+async fn the_handler_hands_the_browser_the_channel_the_runtime_minted_each_subscribe_for() {
+    let (runtime, _env) = serve().await;
+    runtime.map_channels(|channel| format!("/apps/h-1{}", channel.strip_prefix("/app").unwrap()));
+    let rt = build(Arc::default());
+
+    let res = post(
+        &rt,
+        json!({ "connect": true, "ops": [
+            { "op": "subscribe", "pattern": "status", "params": {} },
+            { "op": "subscribe", "pattern": "projects/:project_id/deploys/:deploy_id", "params": { "project_id": "p-1" } },
+        ] }),
+        &[("x-user", "u1")],
+    )
+    .await;
+
+    assert_eq!(res["grants"][0]["wire"], "/apps/h-1/status");
+    assert_eq!(res["grants"][1]["wire"], "/apps/h-1/projects/p-1/deploys/*");
+    assert_eq!(
+        res["grants"][0]["token"],
+        fake_token("subscribe", "/app/status")
     );
 }
 
 #[tokio::test]
+async fn the_handler_asks_the_runtime_for_no_token_when_the_batch_needs_none() {
+    let (runtime, _env) = serve().await;
+    let rt = build(Arc::default());
+
+    post(
+        &rt,
+        json!({ "ops": [
+            { "op": "subscribe", "pattern": "orders/:order_id", "params": { "order_id": "o-2" } },
+            { "op": "publish", "pattern": "rooms/:room_id", "params": { "room_id": "r1" }, "body": { "text": "hi" } },
+        ] }),
+        &[("x-user", "u1")],
+    )
+    .await;
+
+    assert!(runtime.mints().is_empty());
+}
+
+#[tokio::test]
 async fn the_handler_runs_the_subscribe_rule_with_the_auth_params_and_request() {
-    let _env = deliver_appsync().await;
+    let (runtime, _env) = serve().await;
     let seen = Arc::new(Mutex::new(Seen::default()));
     let rt = build(seen.clone());
 
@@ -256,13 +285,13 @@ async fn the_handler_runs_the_subscribe_rule_with_the_auth_params_and_request() 
         (json!(0), json!("/app/orders/o-1"))
     );
     assert_eq!(res["denied"], json!([{ "i": 1, "code": "forbidden" }]));
-    assert_eq!(
-        read_claims(res["connect"]["token"].as_str().unwrap())["sub"],
-        "u1"
-    );
-    assert_eq!(
-        read_claims(res["grants"][0]["token"].as_str().unwrap())["sub"],
-        "u1"
+    runtime.assert_minted(
+        "u1",
+        30,
+        &[
+            grant("connect", "/app"),
+            grant("subscribe", "/app/orders/o-1"),
+        ],
     );
     assert_eq!(
         seen.lock().unwrap().subscribes[0],
@@ -272,7 +301,7 @@ async fn the_handler_runs_the_subscribe_rule_with_the_auth_params_and_request() 
 
 #[tokio::test]
 async fn the_handler_denies_a_ruled_op_to_nobody_without_running_the_rule() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let seen = Arc::new(Mutex::new(Seen::default()));
     let rt = build(seen.clone());
 
@@ -292,7 +321,7 @@ async fn the_handler_denies_a_ruled_op_to_nobody_without_running_the_rule() {
 
 #[tokio::test]
 async fn the_handler_grants_a_wildcard_subscribe_as_the_prefix_and_star() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
 
     let res = post(
@@ -307,7 +336,7 @@ async fn the_handler_grants_a_wildcard_subscribe_as_the_prefix_and_star() {
 
 #[tokio::test]
 async fn the_handler_denies_each_op_it_cannot_serve_with_its_code() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
 
     let res = post(
@@ -340,7 +369,7 @@ async fn the_handler_denies_each_op_it_cannot_serve_with_its_code() {
 
 #[tokio::test]
 async fn the_handler_denies_an_op_whose_rule_fails_and_serves_the_rest() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let seen = Arc::new(Mutex::new(Seen {
         fail_next_subscribe: true,
         ..Seen::default()
@@ -363,7 +392,7 @@ async fn the_handler_denies_an_op_whose_rule_fails_and_serves_the_rest() {
 
 #[tokio::test]
 async fn the_handler_answers_uncacheable_and_sets_no_cookie() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
 
     let answered = call(&rt, "POST", &[], r#"{"connect":true,"ops":[]}"#).await;
@@ -374,7 +403,7 @@ async fn the_handler_answers_uncacheable_and_sets_no_cookie() {
 
 #[tokio::test]
 async fn the_handler_refuses_what_is_no_batch_of_json() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
 
     let get = call(&rt, "GET", &[], "").await;
@@ -405,7 +434,7 @@ async fn the_handler_refuses_what_is_no_batch_of_json() {
 
 #[tokio::test]
 async fn the_handler_serves_its_own_and_allowed_origins_and_refuses_another() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
     let body = r#"{"ops":[]}"#;
 
@@ -458,7 +487,7 @@ async fn the_handler_serves_its_own_and_allowed_origins_and_refuses_another() {
 
 #[tokio::test]
 async fn the_handler_answers_500_without_the_cause_when_authorize_fails() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = Realtime::builder("app")
         .authorize(|_| async { Err::<Option<Caller>, _>("secret detail") })
         .subscribe::<Orders>(|_| async { Ok::<_, String>(true) })
@@ -630,7 +659,7 @@ async fn publish_refuses_params_or_an_event_it_cannot_send() {
 
 #[tokio::test]
 async fn publish_outside_a_provisioned_run_says_why() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
     let event = OrderEvent {
         status: "x".to_string(),
@@ -732,8 +761,9 @@ async fn publish_refuses_a_channel_of_another_realtime_resource() {
 }
 
 #[tokio::test]
-async fn a_token_the_handler_cannot_mint_answers_500_uncacheable() {
-    let _env = deliver(&deliver_binding_with("signingKey", json!("AAAAAAA="))).await;
+async fn a_token_the_runtime_does_not_mint_answers_500_uncacheable() {
+    let (runtime, _env) = serve().await;
+    runtime.refuse_mint("no key");
     let rt = build(Arc::default());
 
     let subscribe = call(
@@ -754,7 +784,7 @@ async fn a_token_the_handler_cannot_mint_answers_500_uncacheable() {
 
 #[tokio::test]
 async fn a_rule_that_panics_denies_its_op_with_rule_error() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     async fn break_rule(_: SubscribeContext<Caller, Orders>) -> Result<bool, String> {
         panic!("the rule broke")
     }
@@ -776,7 +806,7 @@ async fn a_rule_that_panics_denies_its_op_with_rule_error() {
 
 #[tokio::test]
 async fn an_authorize_that_panics_answers_500_uncacheable() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     async fn break_authorize(_: Arc<Request>) -> Result<Option<Caller>, String> {
         panic!("the session store broke")
     }
@@ -796,20 +826,21 @@ async fn an_authorize_that_panics_answers_500_uncacheable() {
 }
 
 #[tokio::test]
-async fn a_binding_the_handler_cannot_use_answers_500_uncacheable() {
-    let unusable = deliver_binding_with("signingKey", json!("AAAAAAA="));
-    let _env = deliver(&unusable).await;
+async fn a_missing_binding_answers_500_uncacheable() {
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
-    let ops = r#"{"connect":true,"ops":[{"op":"subscribe","pattern":"status"}]}"#;
-
-    let unusable_key = call(&rt, "POST", &[], ops).await;
     std::env::remove_var("OCEL_RESOURCE_REALTIME_app");
-    let missing = call(&rt, "POST", &[], ops).await;
 
-    for answered in [unusable_key, missing] {
-        assert_eq!(answered.status, 500, "{}", answered.body);
-        assert_eq!(answered.headers["cache-control"], "no-store");
-    }
+    let answered = call(
+        &rt,
+        "POST",
+        &[],
+        r#"{"connect":true,"ops":[{"op":"subscribe","pattern":"status"}]}"#,
+    )
+    .await;
+
+    assert_eq!(answered.status, 500, "{}", answered.body);
+    assert_eq!(answered.headers["cache-control"], "no-store");
 }
 
 #[tokio::test]
@@ -845,7 +876,7 @@ async fn relayed_publishes_reach_the_runtime_in_batch_order() {
 
 #[tokio::test]
 async fn the_handler_takes_exactly_the_batch_shape_and_refuses_anything_else() {
-    let _env = deliver_appsync().await;
+    let (_runtime, _env) = serve().await;
     let rt = build(Arc::default());
 
     for body in [
