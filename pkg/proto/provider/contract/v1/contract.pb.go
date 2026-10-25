@@ -8222,13 +8222,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x128\n" +
 	"\x06folder\x18\x04 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x18\n" +
 	"\aversion\x18\x05 \x01(\x03R\aversion\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xfd\x01\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\x8b\x04\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12=\n" +
 	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12\x1d\n" +
 	"\n" +
-	"entry_file\x18\x03 \x01(\tR\tentryFile\x12#\n" +
-	"\rartifact_path\x18\x04 \x01(\tR\fartifactPath\x12\x19\n" +
+	"entry_file\x18\x03 \x01(\tR\tentryFile\x12\xb0\x02\n" +
+	"\rartifact_path\x18\x04 \x01(\tB\x8a\x02\xbaH\x86\x02\xba\x01\x82\x02\n" +
+	"\x16function.artifact_path\x12hartifact_path is a path on the machine that built the function, relative to the build root and inside it\x1a~this == '' || !(this.startsWith('/') || this.contains('\\\\') || this.matches('^[A-Za-z]:') || this.matches('(^|/)[.][.](/|$)'))R\fartifactPath\x12\x19\n" +
 	"\broute_id\x18\x06 \x01(\tR\arouteId\x12(\n" +
 	"\x10has_worker_entry\x18\a \x01(\bR\x0ehasWorkerEntry\"\xc0\x03\n" +
 	"\x10ManifestResource\x12!\n" +

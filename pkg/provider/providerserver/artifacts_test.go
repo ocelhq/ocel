@@ -9,9 +9,12 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -265,5 +268,33 @@ func TestAnAppsFunctionsAreUploadedTogether(t *testing.T) {
 	if vendor.store.peak != functions {
 		t.Errorf("at most %d of the app's %d functions were uploading at once, want them in flight together: an app of many functions waits one round trip at a time otherwise",
 			vendor.store.peak, functions)
+	}
+}
+
+func TestTheWireRefusesAFunctionWhosePathLeavesTheBuildRoot(t *testing.T) {
+	for _, path := range []string{"/srv/web/server.func", "../web/server.func", "apps/../../server.func", "C:/web/server.func", `apps\web\server.func`} {
+		t.Run(path, func(t *testing.T) {
+			client, _ := contractServed(t, "1.0.0")
+			req := deployRequest()
+			webFunctions(req).Functions[0].ArtifactPath = path
+
+			_, _, err := deployStream(t, client, req)
+			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+				t.Fatalf("Deploy() with artifact_path %q: code = %v, want %v", path, got, connect.CodeInvalidArgument)
+			}
+		})
+	}
+}
+
+func TestADeployRefusesAFunctionWhoseBuildIsNotWhereItsPathSays(t *testing.T) {
+	builtProject(t)
+	client, _ := contractServed(t, "1.0.0")
+	bootstrappedOverRPC(t, client)
+	req := deployRequest()
+	webFunctions(req).Functions[0].ArtifactPath = "apps/web/functions/missing.func"
+
+	_, _, err := deployStream(t, client, req)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "run `ocel build`") {
+		t.Fatalf("Deploy() = %v, want a refusal naming the build that makes the function", err)
 	}
 }

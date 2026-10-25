@@ -1,11 +1,13 @@
 package providerserver
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func functionSpecOf(fn *contractv1.ManifestFunction) provider.FunctionSpec {
@@ -18,11 +20,21 @@ func functionSpecOf(fn *contractv1.ManifestFunction) provider.FunctionSpec {
 	}
 }
 
-func artifactDir(root string, fn *contractv1.ManifestFunction) string {
-	if fn.GetArtifactPath() == "" {
-		return ""
+func artifactDir(root string, fn *contractv1.ManifestFunction) (string, error) {
+	rel := filepath.FromSlash(fn.GetArtifactPath())
+	if rel == "" {
+		return "", nil
 	}
-	return filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath()))
+	if !filepath.IsLocal(rel) {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"function %s's build path %q leaves the build root: run `ocel build` again", fn.GetLogicalName(), fn.GetArtifactPath())
+	}
+	dir := filepath.Join(root, rel)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", refusal.Refuse(refusal.CodeInvalid,
+			"function %s has no build at %s: run `ocel build` again", fn.GetLogicalName(), dir)
+	}
+	return dir, nil
 }
 
 func overlayFor(fn *contractv1.ManifestFunction, routing *provider.RoutingSpec) map[string][]byte {
