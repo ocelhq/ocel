@@ -127,7 +127,7 @@ func TestATierWithNoInfrastructureIsABootstrapToSetUpNamingItsCommand(t *testing
 	if missing.Missing() != prerequisite.Bootstrap {
 		t.Errorf("missing = %v, want the bootstrap", missing.Missing())
 	}
-	if want := "Run `ocel bootstrap production` and try again"; !strings.HasSuffix(missing.Error(), want) {
+	if want := "Run `ocel bootstrap production`"; !strings.HasSuffix(missing.Error(), want) {
 		t.Errorf("error = %q, want it to end %q: the first bootstrap includes what the project needs", missing.Error(), want)
 	}
 	if !strings.Contains(missing.Finding(), "203.0.113.7") {
@@ -155,7 +155,7 @@ func TestAnotherTiersInfrastructureIsABootstrapToSetUpForThisOne(t *testing.T) {
 	} {
 		missing := refusedFor(t, infrastructureIn(c.infra), &project.Project{}, Request{Tier: c.required, Require: Infrastructure})
 		msg := missing.Error()
-		if !strings.Contains(msg, c.names+" infrastructure") || !strings.HasSuffix(msg, "Run `ocel bootstrap "+c.names+"` and try again") {
+		if !strings.Contains(msg, c.names+" infrastructure") || !strings.HasSuffix(msg, "Run `ocel bootstrap "+c.names+"`") {
 			t.Errorf("error = %q, want it to name %s infrastructure and the bootstrap that sets it up", msg, c.names)
 		}
 		if strings.Contains(msg, "ocel deploy can only") || strings.Contains(msg, "ocel preview can only") {
@@ -198,7 +198,7 @@ func TestADryRunLackingAPartSaysToRunWithoutDryBeforeTheBootstrap(t *testing.T) 
 	)
 	missing := refusedFor(t, resp, &project.Project{}, Request{Tier: environmentv1.Tier_TIER_PRODUCTION, Require: Parts, RecordWants: true, DryRun: true})
 
-	want := "deploy without --dry, which records what this project wants, then run `ocel bootstrap production`"
+	want := "deploy without --dry, then run `ocel bootstrap production`"
 	if missing.Hint() != want || !strings.Contains(missing.Error(), want) || !strings.Contains(missing.Remedy(), want) {
 		t.Errorf("missing = %q, hint %q, remedy %q, want each to say %q: a dry run recorded nothing for the bootstrap to add",
 			missing.Error(), missing.Hint(), missing.Remedy(), want)
@@ -294,7 +294,7 @@ func TestABootstrapLackingAPartReportsBootstrapPartsMissingHintingTheRepair(t *t
 	if !errors.As(err, &lacking) {
 		t.Errorf("err = %T, want the typed error still found through the code", err)
 	}
-	if !strings.HasPrefix(err.Error(), "the production bootstrap does not include what this project needs: isr.") {
+	if !strings.HasPrefix(err.Error(), "the production bootstrap is missing isr.") {
 		t.Errorf("error = %q, want the unchanged human text", err.Error())
 	}
 }

@@ -36,7 +36,7 @@ type Setups map[Kind]Setup
 type SetupDeclinedError struct{ Missing MissingError }
 
 func (e SetupDeclinedError) Error() string {
-	return "Not set up, so this run changes nothing. When you're ready: " + e.Missing.Remedy()
+	return "Not set up; nothing changed. Next: " + e.Missing.Remedy()
 }
 
 func IsDeclined(err error) bool {

@@ -601,7 +601,7 @@ func setUpProjectLackingParts(t *testing.T) clitest.FakeProject {
 	return fixture
 }
 
-const bootstrapCommand = "Run `ocel bootstrap production` and try again"
+const bootstrapCommand = "Run `ocel bootstrap production`"
 
 func TestDeployYesNeverStopsToAsk(t *testing.T) {
 	fixture := setUpProjectLackingParts(t)

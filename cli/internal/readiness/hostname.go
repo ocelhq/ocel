@@ -14,7 +14,7 @@ type NoHostnameError struct {
 }
 
 func (e NoHostnameError) Error() string {
-	return fmt.Sprintf("%s declares no production hostname, and this deploy has nowhere to serve without one.\nAdd one under \"domains\" in %s and try again",
+	return fmt.Sprintf("%s declares no production hostname.\nAdd one under \"domains\" in %s",
 		e.Slug, e.configName())
 }
 
@@ -25,7 +25,7 @@ func (e NoHostnameError) Finding() string {
 	if vendor == "" {
 		vendor = "This provider"
 	}
-	return fmt.Sprintf("%s serves apps on a hostname you own, and %s declares none.", vendor, e.Slug)
+	return fmt.Sprintf("%s needs a hostname you own, and %s declares none.", vendor, e.Slug)
 }
 
 func (e NoHostnameError) Remedy() string {

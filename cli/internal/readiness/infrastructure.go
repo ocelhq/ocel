@@ -25,10 +25,10 @@ type NoInfrastructureError struct {
 
 func (e NoInfrastructureError) Error() string {
 	if e.PresentTier != environmentv1.Tier_TIER_UNSPECIFIED {
-		return fmt.Sprintf("this command needs %s infrastructure, but the account points at %s.\nRun `%s` and try again",
+		return fmt.Sprintf("this command needs %s infrastructure, and the account has %s.\nRun `%s`",
 			TierName(e.Tier), infraLabel(e.PresentTier), e.command())
 	}
-	return fmt.Sprintf("no %s infrastructure is set up yet.\nRun `%s` and try again", TierName(e.Tier), e.command())
+	return fmt.Sprintf("no %s infrastructure is set up yet.\nRun `%s`", TierName(e.Tier), e.command())
 }
 
 func (NoInfrastructureError) Missing() prerequisite.Kind { return prerequisite.Bootstrap }
@@ -38,7 +38,7 @@ func (e NoInfrastructureError) Finding() string {
 	if account == "" {
 		account = "This account"
 	}
-	return fmt.Sprintf("%s has no Ocel %s infrastructure yet. Setting it up is a one-time step.", account, TierName(e.Tier))
+	return fmt.Sprintf("%s has no Ocel %s infrastructure yet.", account, TierName(e.Tier))
 }
 
 func (e NoInfrastructureError) Remedy() string { return "`" + e.Hint() + "`" }

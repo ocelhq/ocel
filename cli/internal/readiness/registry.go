@@ -16,9 +16,8 @@ func ProjectRegistry(cfg *project.Project) (*contractv1.ImageRegistry, error) {
 		return nil, err
 	}
 	if password == "" {
-		return nil, fmt.Errorf("the registry %s is pushed to authenticates with the environment variable %s, which is unset here: "+
-			"export it or set it in the project's .env before deploying, or drop `registry` from the config to push nowhere",
-			cfg.Registry.Server, cfg.Registry.Password)
+		return nil, fmt.Errorf("%s, the password of registry %s, is unset: set it in the environment or .env, or drop `registry` from the config",
+			cfg.Registry.Password, cfg.Registry.Server)
 	}
 	return imageRegistry(cfg.Registry, password), nil
 }
@@ -29,13 +28,11 @@ func RemovalRegistry(cfg *project.Project) (registry *contractv1.ImageRegistry, 
 	}
 	password, err := projectRegistryPassword(cfg)
 	if err != nil {
-		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: %v",
+		return nil, fmt.Sprintf("The images pushed to %s will stay there: %v",
 			cfg.Registry.Server, err)
 	}
 	if password == "" {
-		return nil, fmt.Sprintf("The images this project pushed to %s stay there until they are deleted in the registry: "+
-			"it authenticates with the environment variable %s, which is unset here; "+
-			"export it or set it in the project's .env before removing for the removal to delete them",
+		return nil, fmt.Sprintf("The images pushed to %s will stay there: set %s before removing to delete them",
 			cfg.Registry.Server, cfg.Registry.Password)
 	}
 	return imageRegistry(cfg.Registry, password), ""

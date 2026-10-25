@@ -189,7 +189,7 @@ func TestWithProviderEndsADeclinedSetupAsARunThatChangedNothing(t *testing.T) {
 	if runs != 0 || worked {
 		t.Errorf("setup ran %d times and the work ran: %t, want neither", runs, worked)
 	}
-	if want := "Not set up, so this run changes nothing. When you're ready: `ocel bootstrap preview`"; !strings.Contains(rendered.String(), want) {
+	if want := "Not set up; nothing changed. Next: `ocel bootstrap preview`"; !strings.Contains(rendered.String(), want) {
 		t.Errorf("rendered %q, want %q", rendered.String(), want)
 	}
 }

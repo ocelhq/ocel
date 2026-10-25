@@ -247,7 +247,7 @@ func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
 	}
-	if want := "deploy without --dry, which records what this project wants, then run `ocel bootstrap production`"; !strings.Contains(stdout.String(), want) {
+	if want := "deploy without --dry, then run `ocel bootstrap production`"; !strings.Contains(stdout.String(), want) {
 		t.Errorf("stdout = %q, want it to say %q: a dry run records nothing for the bootstrap to add", stdout.String(), want)
 	}
 	if strings.Contains(stdout.String(), "now?") {
