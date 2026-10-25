@@ -482,15 +482,25 @@ A custom record, published with `bind.custom` or `ocel bindings set`, holds valu
 [transform](/docs/transforms) reads, and the grants its publisher gives the apps bound to it.
 No code declares one, so an app is bound to it in the app's own entry:
 
-```json title="ocel.json"
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  apps: [{ name: "api", path: ".", bindings: { custom: ["@fleet"] } }],
+});
+```
+
+```json tab="JSON" title="ocel.json"
 {
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
   "apps": [{ "name": "api", "path": ".", "bindings": { "custom": ["@fleet"] } }]
 }
 ```
 
 Every deploy gives `api`'s identity, and the workers that join it, the grants `fleet` was
-published with. A deploy that no longer binds it takes
-them back. A record nothing has published, or one that is not custom, is refused before
+published with. A deploy that no longer binds it takes them back. A record nothing has published, or one that is not custom, is refused before
 anything is built.
 
 ### A database branch per preview
