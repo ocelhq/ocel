@@ -313,7 +313,7 @@ func (p *Services) DeployService(ctx context.Context, s Serving, progress progre
 	if err != nil {
 		return Release{}, err
 	}
-	revision, err := p.createdRevision(ctx, services, deployed, s)
+	revision, err := p.createdRevision(ctx, services, deployed, s, imageDigest(s.Image, version))
 	if err != nil {
 		return Release{}, err
 	}
@@ -466,7 +466,7 @@ func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2Tr
 	return TrafficTo(serving, current.Traffic)
 }
 
-func (p *Services) createdRevision(ctx context.Context, services *run.Service, current *run.GoogleCloudRunV2Service, s Serving) (string, error) {
+func (p *Services) createdRevision(ctx context.Context, services *run.Service, current *run.GoogleCloudRunV2Service, s Serving, digest string) (string, error) {
 	if current.LatestCreatedRevision == "" {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"%s created no revision, and a release routes traffic to the revision it made rather than to whatever ran last",
@@ -479,7 +479,7 @@ func (p *Services) createdRevision(ctx context.Context, services *run.Service, c
 		return "", fmt.Errorf("read the revision the release of %s created: %w", s.Service, err)
 	}
 	revision := RevisionName(created.Name)
-	if !slices.Contains(imagesOf(created), s.Image) {
+	if !runsImage(created, s.Image, digest) {
 		return "", refusal.Refuse(refusal.CodeBusy,
 			"the latest revision of %s, %s, runs another image than this release made it with: another release replaced it under this one, so this one routes nothing. Deploy again",
 			s.Service, revision)

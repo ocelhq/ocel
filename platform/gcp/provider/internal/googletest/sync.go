@@ -57,6 +57,10 @@ func (s *Sync) Open(t *testing.T) *gcloud.Clients {
 			s.serveRun(w, r, strings.TrimPrefix(path, "/v2/"))
 		case strings.HasPrefix(path, "/v2/") && strings.Contains(path, "/operations/"):
 			WriteBody(w, &runv2.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
+		case r.Method == http.MethodGet && strings.Contains(path, "/packages/") && strings.Contains(path, "/tags/"):
+			name := strings.TrimPrefix(path, "/v1/")
+			at := strings.LastIndex(name, "/tags/")
+			WriteBody(w, map[string]any{"name": name, "version": name[:at] + "/versions/sha256:" + name[at+len("/tags/"):]})
 		case strings.HasPrefix(path, "/v1/") && strings.Contains(path, "/jobs"):
 			s.serveScheduler(w, r, strings.TrimPrefix(path, "/v1/"))
 		default:

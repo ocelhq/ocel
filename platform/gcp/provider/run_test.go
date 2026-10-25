@@ -202,6 +202,35 @@ func TestAReleaseReportsTheRevisionItCreatedSoAPromotionCanPinIt(t *testing.T) {
 	}
 }
 
+func TestAReleaseWhoseRevisionCloudRunReportsByDigestIsTheRevisionItMade(t *testing.T) {
+	server := &googletest.Run{ReportsDigests: true}
+	tagged := serves("ocel-shop-prod-app")
+	tagged.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-one-ocel-abc"
+	tag := "projects/acme/locations/europe-west1/repositories/ocel/packages/app/tags/sha256-one-ocel-abc"
+	server.Versions = map[string]string{tag: "projects/acme/locations/europe-west1/repositories/ocel/packages/app/versions/sha256:one"}
+
+	if _, revision := released(t, server, tagged); revision == "" {
+		t.Error("the release reports no revision, want the one it created: Cloud Run names the image a revision runs by its digest, not the tag the release pushed")
+	}
+}
+
+func TestARevisionRunningAnotherDigestThanTheReleasesTagIsRefused(t *testing.T) {
+	server := &googletest.Run{ReportsDigests: true}
+	tagged := serves("ocel-shop-prod-app")
+	tagged.Image = "europe-west1-docker.pkg.dev/acme/ocel/app:sha256-one-ocel-abc"
+	tag := "projects/acme/locations/europe-west1/repositories/ocel/packages/app/tags/sha256-one-ocel-abc"
+	server.Versions = map[string]string{tag: "projects/acme/locations/europe-west1/repositories/ocel/packages/app/versions/sha256:one"}
+	server.OnCreate = func() {
+		server.Versions[tag] = "projects/acme/locations/europe-west1/repositories/ocel/packages/app/versions/sha256:other"
+	}
+
+	_, err := providerServing(server, t).services().DeployService(context.Background(), tagged, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Errorf("DeployService() whose revision runs another digest = %v, want a %s refusal: another release replaced the revision under this one", err, refusal.CodeBusy)
+	}
+}
+
 func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *testing.T) {
 	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")

@@ -60,6 +60,8 @@ type Run struct {
 	UntagAtRelease    string
 	UntagEveryRelease bool
 
+	ReportsDigests bool
+
 	Tagged map[string][]string
 }
 
@@ -321,12 +323,25 @@ func (s *Run) getTag(w http.ResponseWriter, name string) {
 		_, _ = w.Write([]byte(`{"error":{"code":404,"message":"tag not found"}}`))
 		return
 	}
-	version := s.Versions[unescaped]
-	if version == "" {
-		at := strings.LastIndex(unescaped, "/tags/")
-		version = unescaped[:at] + "/versions/sha256:" + strings.TrimPrefix(unescaped[at+len("/tags/"):], "sha256-")
+	WriteBody(w, map[string]any{"name": unescaped, "version": s.versionOf(unescaped)})
+}
+
+func (s *Run) versionOf(tag string) string {
+	if version := s.Versions[tag]; version != "" {
+		return version
 	}
-	WriteBody(w, map[string]any{"name": unescaped, "version": version})
+	at := strings.LastIndex(tag, "/tags/")
+	return tag[:at] + "/versions/sha256:" + strings.TrimPrefix(tag[at+len("/tags/"):], "sha256-")
+}
+
+func (s *Run) reportedImage(image string) string {
+	name, tagged := run.ArtifactTag(image)
+	if !s.ReportsDigests || !tagged {
+		return image
+	}
+	unescaped, _ := url.PathUnescape(name)
+	_, digest, _ := strings.Cut(s.versionOf(unescaped), "/versions/")
+	return image[:strings.LastIndex(image, ":")] + "@" + digest
 }
 
 func (s *Run) listTags(w http.ResponseWriter, parent string) {
@@ -369,7 +384,7 @@ func (s *Run) Retags() []string {
 func (s *Run) revisionOf(name string) *runv2.GoogleCloudRunV2Revision {
 	return &runv2.GoogleCloudRunV2Revision{
 		Name:       s.Service.Name + "/revisions/" + name,
-		Containers: []*runv2.GoogleCloudRunV2Container{{Image: s.images[name]}},
+		Containers: []*runv2.GoogleCloudRunV2Container{{Image: s.reportedImage(s.images[name])}},
 		Conditions: []*runv2.GoogleCloudRunV2Condition{{Type: run.ReadyCondition, State: run.ConditionSucceeded}},
 	}
 }

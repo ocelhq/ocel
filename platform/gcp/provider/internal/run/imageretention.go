@@ -205,6 +205,20 @@ const digestTagPrefix = "sha256-"
 
 const imageRetaggedLabel = "ocel-image-retagged"
 
+func imageDigest(image, version string) string {
+	if _, digest, pinned := strings.Cut(image, "@"); pinned {
+		return digest
+	}
+	_, digest, _ := strings.Cut(version, "/versions/")
+	return digest
+}
+
+func runsImage(revision *run.GoogleCloudRunV2Revision, image, digest string) bool {
+	return slices.ContainsFunc(imagesOf(revision), func(ran string) bool {
+		return ran == image || digest != "" && imageDigest(ran, "") == digest
+	})
+}
+
 func isImageMissing(err error, image string) bool {
 	return err != nil && strings.Contains(err.Error(), "Image '"+image+"' not found")
 }
@@ -216,10 +230,6 @@ func (p *Services) ensureImageTag(ctx context.Context, c *gcloud.Clients, image,
 	}
 	at := strings.LastIndex(name, "/tags/")
 	packageName, tag := name[:at], name[at+len("/tags/"):]
-	digest, isDigestTag := strings.CutPrefix(tag, digestTagPrefix)
-	if !isDigestTag {
-		return "", nil
-	}
 	repositories, err := c.Repositories()
 	if err != nil {
 		return "", err
@@ -232,6 +242,10 @@ func (p *Services) ensureImageTag(ctx context.Context, c *gcloud.Clients, image,
 	}
 	if !gcloud.Absent(err) {
 		return "", err
+	}
+	digest, isDigestTag := strings.CutPrefix(tag, digestTagPrefix)
+	if !isDigestTag {
+		return "", nil
 	}
 	if version == "" {
 		if strings.Contains(digest, naming.WordSeparator) {
