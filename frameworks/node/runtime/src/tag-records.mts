@@ -1,4 +1,6 @@
-import type { PurgeEntry } from "@platform/edge-contract/purge";
+import type { PurgeEntry, TagRecord } from "@platform/edge-contract/purge";
+
+export type PurgeTags = (tags: ReadonlyMap<string, TagRecord>) => Promise<void>;
 
 export type TagRecordWriter = (entries: readonly PurgeEntry[]) => Promise<void>;
 

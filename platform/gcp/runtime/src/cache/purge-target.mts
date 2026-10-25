@@ -1,7 +1,8 @@
+import { newEdgePurge } from "@framework/node-runtime/edge-purge";
+import type { PurgeTags } from "@framework/node-runtime/tag-records";
 import { readStorageCoordinate } from "@platform/edge-contract/runtime-env";
-import { newCdnPurge, type PurgeTags } from "./cdn-purge.mjs";
+import { newCdnPurge } from "./cdn-purge.mjs";
 import { cloudCdnRelease } from "./cloud-cdn-tags.mjs";
-import { newCloudflarePurge } from "./cloudflare-purge.mjs";
 
 export function openPurgeFor(env: NodeJS.ProcessEnv): PurgeTags | undefined {
   const urlMap = env.OCEL_CDN_URL_MAP;
@@ -21,5 +22,5 @@ export function openPurgeFor(env: NodeJS.ProcessEnv): PurgeTags | undefined {
       "ocel: OCEL_PURGE_URL names where to purge, and this service is told no release its responses are tagged with or no OCEL_PURGE_SECRET to sign the purge with",
     );
   }
-  return newCloudflarePurge({ url, coordinate, secret });
+  return newEdgePurge({ url, coordinate, secret });
 }
