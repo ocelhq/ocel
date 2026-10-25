@@ -141,7 +141,22 @@ func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log, und
 	if err := r.ensureProject(ctx); err != nil {
 		return err
 	}
+	if err := r.preflightInfra(ctx, progress); err != nil {
+		return err
+	}
 	return r.ensurePreviewRecorded(ctx)
+}
+
+func (r *deployRun) preflightInfra(ctx context.Context, progress progress.Log) error {
+	store := r.provider.KeyValues()
+	used, err := stackrecords.ReadPartsUsed(ctx, store, r.spec.Tier, r.spec.Slug)
+	if err != nil {
+		return err
+	}
+	if err := r.preflight(ctx, progress); err != nil {
+		return err
+	}
+	return stackrecords.AddPartsUsed(ctx, store, r.spec.Tier, r.spec.Slug, used)
 }
 
 func (r *deployRun) ensureProject(ctx context.Context) error {

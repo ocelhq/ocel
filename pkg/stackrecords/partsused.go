@@ -3,6 +3,7 @@ package stackrecords
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -26,6 +27,47 @@ func RecordPartsUsed(ctx context.Context, store records.Store, tier environment.
 			return nil, false, nil
 		}
 		value, err := json.Marshal(partsUsed{Parts: parts})
+		return value, true, err
+	})
+}
+
+func ReadPartsUsed(ctx context.Context, store records.Store, tier environment.Tier, project string) ([]string, error) {
+	recorded, err := store.Read(ctx, PartsUsedKey(tier, project))
+	if errors.Is(err, records.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the parts %s uses: %w", project, err)
+	}
+	var used partsUsed
+	if err := json.Unmarshal(recorded.Value, &used); err != nil {
+		return nil, fmt.Errorf("read the parts %s uses: %w", project, err)
+	}
+	return used.Parts, nil
+}
+
+func AddPartsUsed(ctx context.Context, store records.Store, tier environment.Tier, project string, parts []string) error {
+	if len(parts) == 0 {
+		return nil
+	}
+	return records.Change(ctx, store, PartsUsedKey(tier, project), func(recorded records.Entry) ([]byte, bool, error) {
+		var prior partsUsed
+		if len(recorded.Value) > 0 {
+			if err := json.Unmarshal(recorded.Value, &prior); err != nil {
+				return nil, false, fmt.Errorf("read the parts %s uses: %w", project, err)
+			}
+		}
+		added := slices.Clone(prior.Parts)
+		for _, part := range parts {
+			if !slices.Contains(added, part) {
+				added = append(added, part)
+			}
+		}
+		if len(added) == len(prior.Parts) && len(recorded.Value) > 0 {
+			return nil, false, nil
+		}
+		slices.Sort(added)
+		value, err := json.Marshal(partsUsed{Parts: added})
 		return value, true, err
 	})
 }

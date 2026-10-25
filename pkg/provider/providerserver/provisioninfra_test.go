@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -656,5 +657,66 @@ func TestProvisionInfraRecordsAPersistentPreviewWithTheAliasItsBuildWasGiven(t *
 	if meta.Lifecycle != stackrecords.LifecyclePersistent || meta.AliasToken != "abcdefghijklmnop" {
 		t.Errorf("after ProvisionInfra() pr-7 records lifecycle %q and alias token %q, want persistent and abcdefghijklmnop: a preview whose build fails still has infra to reclaim",
 			meta.Lifecycle, meta.AliasToken)
+	}
+}
+
+type partsPreflight struct {
+	*fake.Provider
+
+	mu                sync.Mutex
+	provisionedBefore []int
+	infraParts        []string
+}
+
+func (p *partsPreflight) Hooks() provider.Hooks {
+	hooks := p.Provider.Hooks()
+	hooks.Preflight = &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: func(ctx context.Context, pre provider.DeployPreflight) error {
+		p.mu.Lock()
+		p.provisionedBefore = append(p.provisionedBefore, len(p.FakeStacks().Provisioned()))
+		p.mu.Unlock()
+		if err := stackrecords.RecordPartsUsed(ctx, p.KeyValues(), pre.Deploy.Tier, pre.Deploy.Slug, p.infraParts); err != nil {
+			return err
+		}
+		return p.ApplyPreflight(ctx, pre)
+	}}
+	return hooks
+}
+
+func TestProvisionInfraAddsWhatItsResourcesNeedBeforeItProvisionsThem(t *testing.T) {
+	builtProject(t)
+	vendor := &partsPreflight{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
+
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	preflighted := vendor.Preflighted()
+	if len(preflighted) != 1 {
+		t.Fatalf("ProvisionInfra() ran %d preflights, want one: a database needs the tier's network before the infra stack makes it", len(preflighted))
+	}
+	if resources := preflighted[0].Resources; len(resources) != 1 || resources[0].Name != "orders" {
+		t.Errorf("preflight saw resources %+v, want the one the manifest declares", resources)
+	}
+	if !slices.Equal(vendor.provisionedBefore, []int{0}) {
+		t.Errorf("preflight ran after %v stacks were provisioned, want before any", vendor.provisionedBefore)
+	}
+}
+
+func TestProvisionInfraKeepsThePartsTheProjectsAppsUse(t *testing.T) {
+	builtProject(t)
+	vendor := &partsPreflight{Provider: fake.NewProvider(fake.Options{}), infraParts: []string{"network"}}
+	client := servedBy(t, vendor)
+	ctx := context.Background()
+	if err := stackrecords.RecordPartsUsed(ctx, vendor.KeyValues(), environment.TierProduction, "shop", []string{"edge-bucket", "network"}); err != nil {
+		t.Fatal(err)
+	}
+
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	users, err := stackrecords.ListPartUsers(ctx, vendor.KeyValues(), environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(users["edge-bucket"], "shop") || !slices.Contains(users["network"], "shop") {
+		t.Errorf("after ProvisionInfra the parts' users are %v, want shop still using edge-bucket: an infra run knows no app, so it cannot know shop's apps stopped using it", users)
 	}
 }
