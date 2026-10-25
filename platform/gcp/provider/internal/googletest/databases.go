@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,14 +14,15 @@ import (
 )
 
 type Databases struct {
-	Mu            sync.Mutex
-	URL           string
-	Held          map[string]*firestoreadmin.GoogleFirestoreAdminV1Database
-	InlineTags    map[string]map[string]string
-	Deleted       []string
-	DeletedTagged []string
-	TierTags      *TierTags
-	CreateDenied  bool
+	Mu               sync.Mutex
+	URL              string
+	Held             map[string]*firestoreadmin.GoogleFirestoreAdminV1Database
+	InlineTags       map[string]map[string]string
+	Deleted          []string
+	DeletedTagged    []string
+	TierTags         *TierTags
+	CreateDenied     bool
+	CreateUntaggable bool
 
 	Layouts                         []string
 	LayoutUnserved                  int
@@ -83,6 +85,11 @@ func (s *Databases) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) 
 		if s.CreateDenied {
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"The caller does not have permission"}}`))
+			return
+		}
+		if s.CreateUntaggable && (s.Held[id] != nil || slices.Contains(s.Deleted, id)) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"code":500,"status":"INTERNAL","message":"Unable to perform tagging operation on the resource."}}`))
 			return
 		}
 		if s.Held[id] != nil {
