@@ -4,10 +4,17 @@ import (
 	"context"
 	"slices"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 const RuntimeBinary = "the fake container runtime"
+
+const FunctionEntrypoint = "export const fakeRuntime = true"
 
 func (p *Provider) WrappingContainers(architecture string, binary []byte) *Provider {
 	p.mu.Lock()
@@ -39,4 +46,18 @@ func (p *Provider) WrappedFor() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return slices.Clone(p.wrappedFor)
+}
+
+func (r containerRuntime) FunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
+	if source := r.stacks.imageSource(); source != nil {
+		return source.Base(ctx, framework)
+	}
+	return empty.Image, nil
+}
+
+func (r containerRuntime) FunctionFiles(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
+	if source := r.stacks.imageSource(); source != nil {
+		return source.Runtime(ctx, framework)
+	}
+	return map[string][]byte{images.RuntimeEntrypointFile: []byte(FunctionEntrypoint)}, nil
 }

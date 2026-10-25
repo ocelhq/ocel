@@ -23,10 +23,14 @@ func (p *Provider) RunningFunctionsAsImages(
 	return p
 }
 
-func (r *Stacks) withFunctionImages(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, bool, error) {
+func (r *Stacks) imageSource() *functioncode.ImageSource {
 	r.mu.Lock()
-	source := r.images
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	return r.images
+}
+
+func (r *Stacks) withFunctionImages(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, bool, error) {
+	source := r.imageSource()
 	if source == nil || spec.App == nil || spec.App.Compute != provider.ComputeServerless {
 		return spec, false, nil
 	}

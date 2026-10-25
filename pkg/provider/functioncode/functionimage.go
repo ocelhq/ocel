@@ -37,10 +37,15 @@ func FunctionImages(ctx context.Context, spec provider.StackSpec, source ImageSo
 		if FunctionImageRef(spec.Images, fn.Name) != "" {
 			continue
 		}
-		push, err := functionImage(ctx, spec, fn, source)
+		image, err := functionImage(ctx, fn, source)
 		if err != nil {
 			return nil, err
 		}
+		push, err := newImagePush(spec.Ref.Project, functionRepository(spec.App.App, fn.Name), spec.Images.Registry, image)
+		if err != nil {
+			return nil, fmt.Errorf("build %s's image: %w", fn.Name, err)
+		}
+		push.App, push.Function = fn.Name, true
 		pushes = append(pushes, push)
 	}
 	return pushes, nil
@@ -55,42 +60,52 @@ func FunctionImageRef(images provider.ImagePushes, function string) string {
 	return ""
 }
 
-func functionImage(ctx context.Context, spec provider.StackSpec, fn provider.FunctionSpec, source ImageSource) (provider.ImagePush, error) {
-	dir, err := functionDir(fn)
+func ContainerImage(ctx context.Context, project, app string, registry provider.RegistryTarget, fn provider.FunctionSpec, source ImageSource) (provider.ImagePush, error) {
+	image, err := functionImage(ctx, fn, source)
 	if err != nil {
 		return provider.ImagePush{}, err
+	}
+	push, err := newImagePush(project, app, registry, image)
+	if err != nil {
+		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", app, err)
+	}
+	push.App = app
+	return push, nil
+}
+
+func newImagePush(project, repository string, registry provider.RegistryTarget, image v1.Image) (provider.ImagePush, error) {
+	digest, err := image.Digest()
+	if err != nil {
+		return provider.ImagePush{}, err
+	}
+	return provider.ImagePush{
+		ImageRef: images.FormatRef(project, repository, naming.DigestTag(digest.String()), registry),
+		Digest:   digest.String(),
+		Built:    image,
+	}, nil
+}
+
+func functionImage(ctx context.Context, fn provider.FunctionSpec, source ImageSource) (v1.Image, error) {
+	dir, err := functionDir(fn)
+	if err != nil {
+		return nil, err
 	}
 	base, err := source.Base(ctx, fn.Framework)
 	if err != nil {
-		return provider.ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", fn.Name, fn.Framework.Name, err)
+		return nil, fmt.Errorf("read the base image %s's %s function is built on: %w", fn.Name, fn.Framework.Name, err)
 	}
 	runtime, err := readRuntime(ctx, source, fn.Framework, fn.Name)
 	if err != nil {
-		return provider.ImagePush{}, err
+		return nil, err
 	}
 	image, err := images.FunctionImage(base, fn.Framework, dir, images.FunctionImageOptions{
 		Overlay: fn.Overlay,
 		Runtime: runtime,
 	})
 	if err != nil {
-		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", fn.Name, err)
+		return nil, fmt.Errorf("build %s's image: %w", fn.Name, err)
 	}
-	image, err = wrapFunction(ctx, source, fn.Name, fn.Framework, image)
-	if err != nil {
-		return provider.ImagePush{}, err
-	}
-	digest, err := image.Digest()
-	if err != nil {
-		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", fn.Name, err)
-	}
-	repository := functionRepository(spec.App.App, fn.Name)
-	return provider.ImagePush{
-		App:      fn.Name,
-		ImageRef: images.FormatRef(spec.Ref.Project, repository, naming.DigestTag(digest.String()), spec.Images.Registry),
-		Digest:   digest.String(),
-		Function: true,
-		Built:    image,
-	}, nil
+	return wrapFunction(ctx, source, fn.Name, fn.Framework, image)
 }
 
 func wrapFunction(ctx context.Context, source ImageSource, name string, framework buildoutput.Framework, image v1.Image) (v1.Image, error) {

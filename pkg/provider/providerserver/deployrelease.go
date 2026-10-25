@@ -40,7 +40,7 @@ func findOwnContainer(containers []provider.AppContainer, app string) (provider.
 
 func findOwnFunction(entry provider.AppEntry, facts AppServing, functions []provider.Function) provider.Function {
 	named := rootFunctionLogicalName(entry.Manifest, facts.RootFunction)
-	if declared := entry.Manifest.GetServerless().GetFunctions(); named == "" && len(declared) == 1 {
+	if declared := provider.ListFunctions(entry.Manifest); named == "" && len(declared) == 1 {
 		named = declared[0].GetLogicalName()
 	}
 	for _, fn := range functions {
@@ -55,7 +55,7 @@ func rootFunctionLogicalName(app *contractv1.ManifestApp, rootFunction string) s
 	if rootFunction == "" {
 		return ""
 	}
-	for _, fn := range app.GetServerless().GetFunctions() {
+	for _, fn := range provider.ListFunctions(app) {
 		if resolveRouteID(fn) == rootFunction {
 			return fn.GetLogicalName()
 		}
@@ -92,9 +92,15 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, release appStack, r
 		urlByLogical[fn.Name] = fn.URL
 		physicalByLogical[fn.Name] = fn.Physical
 	}
+	if entry.IsBuiltFromFunction() {
+		for _, fn := range provider.ListFunctions(entry.Manifest) {
+			urlByLogical[fn.GetLogicalName()] = originOf(result.Containers, entry.App)
+			physicalByLogical[fn.GetLogicalName()] = physicalOf(result.Containers, entry.App)
+		}
+	}
 	urls := make(map[string]string, len(result.Functions))
 	var logical []string
-	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
+	for _, fn := range provider.ListFunctions(entry.Manifest) {
 		logical = append(logical, fn.GetLogicalName())
 		if url := urlByLogical[fn.GetLogicalName()]; url != "" {
 			urls[resolveRouteID(fn)] = url

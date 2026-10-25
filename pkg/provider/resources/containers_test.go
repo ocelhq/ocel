@@ -239,6 +239,37 @@ func TestThePlanShowsAHeldContainerUpdatedWhenTheReleaseRunsAnotherImageAndKeptW
 	}
 }
 
+func TestThePlanShowsAContainerBuiltFromItsFunctionAsOneContainerAndNoFunction(t *testing.T) {
+	t.Parallel()
+
+	ref := appRef()
+	store := fake.NewKeyValues()
+	running := provider.AppContainer{Name: "web", Physical: ref.Name.String() + "-web", Image: testImage}
+	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name,
+		stackrecords.Stack{Kind: provider.StackApp, Containers: []provider.AppContainer{running}}); err != nil {
+		t.Fatal(err)
+	}
+	app := containerApp("web")
+	app.Functions = []provider.FunctionSpec{{Name: "server"}}
+	spec := provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: app,
+		Images: provider.ImagePushes{Store: fake.NewImages(), Pushes: []provider.ImagePush{{App: "web", ImageRef: testImage}}}}
+
+	shown, err := resources.NewHookStacks(store, (&withContainers{buckets: &buckets{}}).hooks()).Plan(context.Background(), spec, nil)
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	for _, group := range shown.Groups {
+		for _, change := range group.Changes {
+			if change.Name == "server" && change.Kind != provider.ImageKind {
+				t.Errorf("Plan() shows %s %s, want no function: the container runs the image built from it", change.Kind, change.Name)
+			}
+		}
+	}
+	if rows := rowsOf(shown); rows["web"] != provider.ActionKeep {
+		t.Errorf("Plan() shows web %q, want %q: the container already runs the image its function builds", rows["web"], provider.ActionKeep)
+	}
+}
+
 func TestAProviderProvisioningNoContainersRefusesToOrphanTheOnesItRecorded(t *testing.T) {
 	t.Parallel()
 

@@ -8,10 +8,12 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -121,12 +123,33 @@ func (r *deployRun) registryTarget(ctx context.Context, project *contractv1.Imag
 	return own, nil
 }
 
-func (r *deployRun) containerPush(ctx context.Context, entry provider.AppEntry) (provider.ImagePush, error) {
+func (r *deployRun) containerPush(ctx context.Context, entry provider.AppEntry, functions []provider.FunctionSpec) (provider.ImagePush, error) {
+	if entry.IsBuiltFromFunction() {
+		return r.functionContainerPush(ctx, entry, functions[0])
+	}
 	return r.wrappedPush(ctx, entry)
 }
 
-func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry) (provider.ImagePushes, error) {
-	if entry.Compute() != provider.ComputeContainer || entry.Image == "" {
+func (r *deployRun) functionContainerPush(ctx context.Context, entry provider.AppEntry, fn provider.FunctionSpec) (provider.ImagePush, error) {
+	runtimePort := r.provider.Runtime()
+	runs, err := runtimePort.Arch(ctx, entry.App, entry.Arch)
+	if err != nil {
+		return provider.ImagePush{}, fmt.Errorf("read the architecture %s's container runs on: %w", entry.App, err)
+	}
+	if built, _ := arch.GoArch(fn.Framework.Arch); built != runs {
+		return provider.ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
+			"app %s's function is built for %s and the target runs %s: build it for %s",
+			entry.App, images.ContainerPlatform(built), images.ContainerPlatform(runs), images.ContainerPlatform(runs))
+	}
+	return functioncode.ContainerImage(ctx, r.spec.Slug, entry.App, r.registry, fn, functioncode.ImageSource{
+		Base:    runtimePort.FunctionBase,
+		Runtime: runtimePort.FunctionFiles,
+		Binary:  runtimePort.Binary,
+	})
+}
+
+func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, functions []provider.FunctionSpec) (provider.ImagePushes, error) {
+	if entry.Compute() != provider.ComputeContainer || entry.Image == "" && !entry.IsBuiltFromFunction() {
 		return provider.ImagePushes{Store: r.images, Registry: r.registry}, nil
 	}
 	if r.images == nil {
@@ -136,7 +159,7 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry) (p
 				"    → name a `registry` in the project config, with `password` set to the name of the environment variable that contains the token",
 			entry.App)
 	}
-	push, err := r.containerPush(ctx, entry)
+	push, err := r.containerPush(ctx, entry, functions)
 	if err != nil {
 		return provider.ImagePushes{}, err
 	}

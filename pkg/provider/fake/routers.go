@@ -281,6 +281,10 @@ func (e *Edge) routerFacts() router.Facts {
 	if e.routerServes != nil {
 		supported = slices.Clone(*e.routerServes)
 	}
+	dispatches := e.kind == KindRelay
+	if e.routerDispatches != nil {
+		dispatches = *e.routerDispatches
+	}
 	return router.Facts{
 		Supported:                   supported,
 		Propagation:                 router.Propagation{Typical: 30 * time.Second, Published: true},
@@ -288,7 +292,7 @@ func (e *Edge) routerFacts() router.Facts {
 		AddressesItself:             e.addressesItself,
 		ReachesFunctions:            true,
 		ReachesContainers:           true,
-		Dispatches:                  e.kind == KindRelay,
+		Dispatches:                  dispatches,
 		AnswersHostnames:            true,
 		StopsServingRemovedPointers: true,
 		ServesPreviewDeployments:    true,

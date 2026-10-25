@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
@@ -18,15 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
-const (
-	nodeImage = "gcr.io/distroless/nodejs24-debian12@sha256:61f4f4341db81820c24ce771b83d202eb6452076f58628cd536cc7d94a10978b"
-
-	pythonImage = "gcr.io/distroless/python3-debian13@sha256:f2b206661cee3edb44f132d7f054a9ced96f671d8a973de0db750895c9acb2fb"
-)
-
-const nodeBinDir = "/nodejs/bin"
-
-const pathVariable = "PATH"
+const pythonImage = "gcr.io/distroless/python3-debian13@sha256:f2b206661cee3edb44f132d7f054a9ced96f671d8a973de0db750895c9acb2fb"
 
 type Images struct {
 	based func(ctx context.Context, ref string) (v1.Image, error)
@@ -44,9 +35,9 @@ type base struct {
 
 func functionBases() map[string]base {
 	return map[string]base{
-		buildoutput.FrameworkNode:      {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkNext:      {ref: nodeImage, bins: []string{nodeBinDir}},
-		buildoutput.FrameworkSvelteKit: {ref: nodeImage, bins: []string{nodeBinDir}},
+		buildoutput.FrameworkNode:      {ref: images.NodeBase, bins: []string{images.NodeBinDir}},
+		buildoutput.FrameworkNext:      {ref: images.NodeBase, bins: []string{images.NodeBinDir}},
+		buildoutput.FrameworkSvelteKit: {ref: images.NodeBase, bins: []string{images.NodeBinDir}},
 		buildoutput.FrameworkGo:        {ref: run.StaticImage},
 		buildoutput.FrameworkPython:    {ref: pythonImage},
 		buildoutput.FrameworkRust:      {ref: run.StaticImage},
@@ -67,35 +58,7 @@ func (p Images) ResolveBase(ctx context.Context, framework buildoutput.Framework
 	if err != nil {
 		return nil, err
 	}
-	return commandable(image, on.bins)
-}
-
-func commandable(image v1.Image, bins []string) (v1.Image, error) {
-	file, err := image.ConfigFile()
-	if err != nil {
-		return nil, err
-	}
-	config := file.Config
-	config.Entrypoint = nil
-	config.Env = onPath(config.Env, bins)
-	return mutate.Config(image, config)
-}
-
-func onPath(env []string, bins []string) []string {
-	if len(bins) == 0 {
-		return env
-	}
-	kept := make([]string, 0, len(env)+1)
-	searchPath := strings.Join(bins, ":")
-	for _, entry := range env {
-		named, value, _ := strings.Cut(entry, "=")
-		if named != pathVariable {
-			kept = append(kept, entry)
-			continue
-		}
-		searchPath = strings.Join(append(slices.Clone(bins), value), ":")
-	}
-	return append(kept, pathVariable+"="+searchPath)
+	return images.NewCommandImage(image, on.bins)
 }
 
 func (p Images) ReadRuntime(_ context.Context, framework buildoutput.Framework) (map[string][]byte, error) {

@@ -206,6 +206,31 @@ func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) 
 	}
 }
 
+func TestAContainerBuiltFromAFunctionIsRoutedAsAServerlessAppIs(t *testing.T) {
+	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, []byte(`{"routes":[]}`))
+	for name, runsCode := range map[string]bool{"an edge that runs code": true, "an edge that runs none": false} {
+		t.Run(name, func(t *testing.T) {
+			serverless := servingQuery(root, "web", buildoutput.FrameworkNext)
+			serverless.EdgeRunsCode = runsCode
+			container := serverless
+			container.Compute = provider.ComputeContainer
+			container.BuiltFromFunction = true
+
+			want, err := providerserver.AppServingFor(serverless)
+			if err != nil {
+				t.Fatalf("AppServingFor() = %v", err)
+			}
+			got, err := providerserver.AppServingFor(container)
+			if err != nil {
+				t.Fatalf("AppServingFor() = %v", err)
+			}
+			if (got.OriginDispatch == nil) != (want.OriginDispatch == nil) || (got.EdgeRouteTable == nil) != (want.EdgeRouteTable == nil) || got.RootFunction != want.RootFunction {
+				t.Errorf("OriginDispatch = %+v and EdgeRouteTable = %+v, want %+v and %+v as a serverless app has: the container runs the function its build made", got.OriginDispatch, got.EdgeRouteTable, want.OriginDispatch, want.EdgeRouteTable)
+			}
+		})
+	}
+}
+
 func TestAContainerAppIsNotRefusedForARoutingManifestItNeverUses(t *testing.T) {
 	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, nil)
 	query := servingQuery(root, "web", buildoutput.FrameworkNext)

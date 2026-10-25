@@ -44,3 +44,7 @@ type Instances struct {
 }
 
 func (e AppEntry) Compute() Compute { return ComputeOf(e.Manifest) }
+
+func (e AppEntry) IsBuiltFromFunction() bool {
+	return isBuiltFromFunction(e.Compute(), len(ListFunctions(e.Manifest)))
+}

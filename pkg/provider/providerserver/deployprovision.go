@@ -246,7 +246,7 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 	if err != nil {
 		return appStack{}, err
 	}
-	images, err := r.imagePushes(ctx, entry)
+	images, err := r.imagePushes(ctx, entry, functions)
 	if err != nil {
 		return appStack{}, err
 	}
@@ -342,6 +342,7 @@ func (r *deployRun) isRecorded(ctx context.Context, stack naming.StackName) (boo
 }
 
 func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
+	paired := r.readPairedRouter(entry.App).Facts()
 	facts, err := AppServingFor(AppServingInput{
 		Root:              r.artifactRoot,
 		Project:           naming.Sanitize(r.spec.Slug),
@@ -350,8 +351,9 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Compute:           entry.Compute(),
 		Stack:             entry.Stack,
 		Coordinate:        appCoordinate(r.spec, entry.App, entry.Release.Token()),
-		EdgeRunsCode:      r.front.Facts().RunsCode,
-		EdgeSignsForwards: r.readPairedRouter(entry.App).Facts().SignsOriginForwards,
+		EdgeRunsCode:      r.front.Facts().RunsCode && paired.Dispatches,
+		EdgeSignsForwards: paired.SignsOriginForwards,
+		BuiltFromFunction: entry.IsBuiltFromFunction(),
 	})
 	if err != nil {
 		return AppServing{}, err
@@ -476,7 +478,7 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 
 func (r *deployRun) functionSpecs(entry provider.AppEntry, routing *provider.RoutingSpec) ([]provider.FunctionSpec, error) {
 	var specs []provider.FunctionSpec
-	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
+	for _, fn := range provider.ListFunctions(entry.Manifest) {
 		dir, err := artifactDir(r.artifactRoot, fn)
 		if err != nil {
 			return nil, err

@@ -201,12 +201,14 @@ type edgeAccount struct {
 	onReconcile     func(edge.StackSpec)
 
 	routerServes *[]edge.Need
-	refusal      error
-	unbound      error
-	bindSays     string
-	warns        string
-	purgeURL     string
-	verify       func(context.Context) (edge.CredentialIdentity, error)
+
+	routerDispatches *bool
+	refusal          error
+	unbound          error
+	bindSays         string
+	warns            string
+	purgeURL         string
+	verify           func(context.Context) (edge.CredentialIdentity, error)
 
 	unreadable  error
 	entitlement *edge.CodeEntitlement
@@ -747,6 +749,12 @@ func (e *Edge) Serves(needs []edge.Need) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.serves = &needs
+}
+
+func (e *Edge) RouterDispatches(dispatches bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.routerDispatches = &dispatches
 }
 
 func (e *Edge) RouterServes(needs []edge.Need) {
