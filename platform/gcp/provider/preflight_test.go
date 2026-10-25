@@ -236,6 +236,21 @@ func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *te
 	}
 }
 
+func TestADryDeployWithTheChecksSkippedStillPlansThePartsItAdds(t *testing.T) {
+	p, _ := deployingNetworks(t)
+	p.skipChecks = true
+
+	plan, err := p.PlanPreflight(context.Background(), declaringADatabase("17"))
+	if err != nil {
+		t.Fatalf("PlanPreflight() = %v", err)
+	}
+
+	planned := plan.Groups
+	if len(planned) != 2 || planned[0].Part != bootstrap.KeysPart || planned[1].Part != network.PartName {
+		t.Errorf("a dry deploy with the checks skipped planned %+v, want the keys and the %s part: skipping the checks skips reading the services, not the parts", planned, network.PartName)
+	}
+}
+
 var (
 	containerApp = &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
 	functionApp  = &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{

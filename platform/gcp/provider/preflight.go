@@ -32,7 +32,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 		return provider.Plan{}, err
 	}
 	keeps := newDeployUse(pre).keepsProjectRecords()
-	if !keeps && !p.readsServices(pre, parts) {
+	if !keeps && len(parts) == 0 && !p.readsServices(pre, parts) {
 		return provider.Plan{}, nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
