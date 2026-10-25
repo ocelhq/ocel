@@ -64,7 +64,7 @@ func LintEdgeSecrets(definitions []*resourcesv1.VariableDefinition, apps []App, 
 	}
 	for _, app := range edgeApps {
 		if _, known := folder[app]; !known {
-			return nil, fmt.Errorf("%s ships edge entries but is not one of this project's apps (%s), so there is no folder to read its variables from",
+			return nil, fmt.Errorf("%s ships edge entries but is not one of this project's apps (%s)",
 				app, strings.Join(names(apps), " and "))
 		}
 	}

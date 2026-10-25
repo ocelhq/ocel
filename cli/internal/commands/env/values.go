@@ -30,7 +30,7 @@ func staleCell(err error, key string, opts envOptions) error {
 	if !errors.Is(err, variables.ErrStaleValue) {
 		return err
 	}
-	return fmt.Errorf("%s moved between this command reading it and writing it, so nothing was written — somebody else edited it at the same time. Read it again with `ocel env get %s` and run this command again",
+	return fmt.Errorf("%s changed while this ran, so nothing was written: check it with `ocel env get %s`, then run this again",
 		describeCell(key, opts), key)
 }
 
@@ -111,7 +111,7 @@ func setInEnvSource(ctx context.Context, values variables.Store, id string, at v
 		where += " in " + at.Cell.Folder
 	}
 	if awaiting {
-		fmt.Fprintf(stdout, "Sent %s to %s, where it waits for approval; ocel copies it once it is approved.\n", where, id)
+		fmt.Fprintf(stdout, "Sent %s to %s for approval; ocel copies it once approved.\n", where, id)
 		return nil
 	}
 	fmt.Fprintf(stdout, "Set %s in %s, and copied it back.\n", where, id)
@@ -156,7 +156,7 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 		}
 		if target := m.GetTarget(); target != nil {
 			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), terminal.EpochDate(m.GetUpdatedAt()))
-			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
+			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads.")
 			return nil
 		}
 		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), terminal.EpochDate(m.GetUpdatedAt()))
@@ -179,10 +179,10 @@ func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, 
 		return nil
 	}
 	if !opts.yes {
-		return fmt.Errorf("%s is declared a secret, and --reveal alone will not print one: the plaintext would land in this terminal's scrollback and in whatever shell history, CI log or screen recording is watching. Pass --yes as well to print it anyway",
+		return fmt.Errorf("%s is a secret, and printing it leaves the plaintext in scrollback and logs: pass --yes with --reveal to print it anyway",
 			describeCell(key, opts))
 	}
-	warn(describeCell(key, opts) + " is a secret and its plaintext is now on stdout, in this terminal's scrollback, and in anything capturing either.")
+	warn(describeCell(key, opts) + " is a secret, and its plaintext is now on stdout.")
 	return nil
 }
 

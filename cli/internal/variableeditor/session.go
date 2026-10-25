@@ -248,7 +248,7 @@ func (s *Session) settableInEnvSource(at variables.Coordinate) error {
 		return fmt.Errorf("a value for %s alone is stored by ocel, never by the env source: save it as an override for %s instead", at.Environment, at.Environment)
 	}
 	if slices.Contains(s.opts.Declarations.Scope().EnvSource.Credentials, at.Cell.Key) {
-		return fmt.Errorf("%s is what ocel logs in to the env source with, so ocel stores it itself: save it here instead", at.Cell.Key)
+		return fmt.Errorf("%s is ocel's login to the env source: save it here instead", at.Cell.Key)
 	}
 	return s.writable(at)
 }
@@ -298,7 +298,7 @@ func (s *Session) writable(at variables.Coordinate) error {
 	if at.Environment == "" || slices.Contains(s.opts.Environments, at.Environment) {
 		return nil
 	}
-	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", at.Environment)
+	return fmt.Errorf("no environment named %q exists", at.Environment)
 }
 
 func (s *Session) clearProblems(at variables.Coordinate) {
@@ -336,7 +336,7 @@ func (s *Session) handleReveal(w http.ResponseWriter, r *http.Request) {
 	rows := make([]variables.Coordinate, 0, len(req.Cells))
 	for _, cell := range req.Cells {
 		if secrets[cell.Key] {
-			fail(w, http.StatusBadRequest, fmt.Errorf("%s is a secret, and a secret's value never reaches a browser; overwrite it here or read it with ocel env get --reveal", cell.Key))
+			fail(w, http.StatusBadRequest, fmt.Errorf("%s is a secret and never reaches a browser: overwrite it here, or read it with `ocel env get --reveal`", cell.Key))
 			return
 		}
 		rows = append(rows, cell.coordinate())

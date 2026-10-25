@@ -77,7 +77,7 @@ func serveAndOpenEditor(
 		return editor, nil
 	}
 	if err := dependencies.OpenBrowser(editor.URL); err != nil {
-		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
+		fmt.Fprintln(stdout, "Couldn't open your browser; open the link above.")
 	}
 	return editor, nil
 }
