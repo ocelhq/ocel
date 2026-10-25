@@ -15,6 +15,17 @@ type partsUsed struct {
 }
 
 func RecordPartsUsed(ctx context.Context, store records.Store, tier environment.Tier, project string, parts []string) error {
+	return changePartsUsed(ctx, store, tier, project, func([]string) []string { return parts })
+}
+
+func AddPartsUsed(ctx context.Context, store records.Store, tier environment.Tier, project string, parts []string) error {
+	if len(parts) == 0 {
+		return nil
+	}
+	return changePartsUsed(ctx, store, tier, project, func(prior []string) []string { return slices.Concat(prior, parts) })
+}
+
+func changePartsUsed(ctx context.Context, store records.Store, tier environment.Tier, project string, next func(prior []string) []string) error {
 	return records.Change(ctx, store, PartsUsedKey(tier, project), func(recorded records.Entry) ([]byte, bool, error) {
 		var prior partsUsed
 		if len(recorded.Value) > 0 {
@@ -22,7 +33,8 @@ func RecordPartsUsed(ctx context.Context, store records.Store, tier environment.
 				return nil, false, fmt.Errorf("read the parts %s uses: %w", project, err)
 			}
 		}
-		if slices.Equal(prior.Parts, parts) && len(recorded.Value) > 0 {
+		parts := slices.Compact(slices.Sorted(slices.Values(next(prior.Parts))))
+		if len(recorded.Value) > 0 && slices.Equal(prior.Parts, parts) {
 			return nil, false, nil
 		}
 		value, err := json.Marshal(partsUsed{Parts: parts})

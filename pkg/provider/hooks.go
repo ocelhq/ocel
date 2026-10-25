@@ -13,6 +13,7 @@ import (
 
 type Hooks struct {
 	Preflight            *PreflightHooks
+	InfraPreflight       *PreflightHooks
 	CheckBucket          func(ctx context.Context, record *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error)
 	ProgramEdge          func(ctx context.Context, req EdgeProgramRequest) (edge.Program, error)
 	EnsureImageRegistry  func(ctx context.Context, tier environment.Tier) (RegistryTarget, error)

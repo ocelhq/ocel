@@ -141,6 +141,9 @@ func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log, und
 	if err := r.ensureProject(ctx); err != nil {
 		return err
 	}
+	if err := r.preflight(ctx, r.provider.Hooks().InfraPreflight, progress); err != nil {
+		return err
+	}
 	return r.ensurePreviewRecorded(ctx)
 }
 

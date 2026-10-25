@@ -64,6 +64,9 @@ func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 			t.Errorf("the aws provider's hooks leave %s nil, so the deploy skips a step this provider implements", name)
 		}
 	}
+	if hooks.InfraPreflight != nil {
+		t.Error("the aws provider's hooks set InfraPreflight, and no tier part it adds is one an infra stack needs: the deploy's preflight adds them, nags and ensures the runtime layers once")
+	}
 }
 
 const prebuiltProviderEnv = "OCEL_AWS_PROVIDER_BINARY"

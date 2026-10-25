@@ -153,3 +153,40 @@ func TestADeployWhoseConsentedPlanLacksAPartItsPreflightAddsIsRefusedBeforeThePr
 		t.Errorf("the refused deploy applied its preflight %d times, want none", vendor.applied)
 	}
 }
+
+type addingInfraParts struct {
+	*fake.Provider
+	applied int
+}
+
+func (p *addingInfraParts) Hooks() provider.Hooks {
+	hooks := p.Provider.Hooks()
+	hooks.InfraPreflight = &provider.PreflightHooks{
+		Plan: func(context.Context, provider.DeployPreflight) (provider.Plan, error) {
+			return provider.Plan{Groups: []provider.ChangeGroup{{Kind: provider.StackGroupKind, Name: "fake/network", Part: "network", Action: provider.ActionCreate}}}, nil
+		},
+		Apply: func(context.Context, provider.DeployPreflight) error {
+			p.applied++
+			return nil
+		},
+	}
+	return hooks
+}
+
+func TestProvisionInfraWhoseConsentedPlanLacksAPartItsInfraPreflightAddsIsRefusedBeforeItApplies(t *testing.T) {
+	builtProject(t)
+	vendor := &addingInfraParts{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
+
+	req := infraRequest(deployRequest())
+	req.Consented = consentedPlan(t, client, deployRequest()).GetConsented()
+	if refused := infraRefusal(t, client, req); !strings.Contains(refused, "fake/network") || !strings.Contains(refused, "nobody consented to") {
+		t.Fatalf("ProvisionInfra() = %q, want a refusal naming the part nobody consented to", refused)
+	}
+	if vendor.applied != 0 {
+		t.Errorf("the refused ProvisionInfra applied its infra preflight %d times, want none", vendor.applied)
+	}
+	if provisioned := vendor.FakeStacks().Provisioned(); len(provisioned) != 0 {
+		t.Errorf("the refused ProvisionInfra provisioned %d stacks, want none", len(provisioned))
+	}
+}
