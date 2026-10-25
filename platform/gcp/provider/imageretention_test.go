@@ -15,6 +15,14 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
+func TestImageRetentionReadsTheRecordsTheProviderKeepsInFirestore(t *testing.T) {
+	p := &Provider{}
+
+	if got, want := p.services().Records, p.KeyValues(); got != want {
+		t.Errorf("the Cloud Run services read their records from %v, want the provider's own store %v: image retention lists the images other stacks record there", got, want)
+	}
+}
+
 func TestAnImageTagIsNamedInTheRepositoryItWasPushedTo(t *testing.T) {
 	for image, want := range map[string]string{
 		"europe-west1-docker.pkg.dev/acme/ocel-preview/web:sha256-one": "projects/acme/locations/europe-west1/repositories/ocel-preview/packages/web/tags/sha256-one",
