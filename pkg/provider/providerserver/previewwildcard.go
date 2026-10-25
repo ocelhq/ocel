@@ -521,7 +521,6 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 			Kind:   "DNS record",
 			Name:   rec.String(),
 			Action: planv1.Change_ACTION_DELETE,
-			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
 	for _, rec := range w.recorded.Host.ManualRecords() {
@@ -529,7 +528,7 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 			Kind:   "DNS record",
 			Name:   rec.String(),
 			Action: planv1.Change_ACTION_KEEP,
-			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
+			Reason: "you created it",
 		})
 	}
 	keptGroup, err := edgeGroupProto(kept)
@@ -588,7 +587,6 @@ func (w *wildcards) release(ctx context.Context, progress progress.Log) error {
 		if !cert.Requested {
 			continue
 		}
-		progress.Say("Discarding certificate " + cert.ID)
 		if err := discardCertificate(ctx, w.provider, cert, progress); err != nil {
 			return err
 		}

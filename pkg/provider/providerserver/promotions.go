@@ -78,7 +78,7 @@ func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv
 	}
 	var promoted router.Promotion
 	root := RootSpan(SpanPromotion, req.GetSlug(),
-		progress.Switching.Title("production traffic back to promotion "+target.PromotionID), progressv1.Phase_PHASE_PROMOTE)
+		progress.Switching.Title("production traffic back to promotion "+shortPromotionID(target.PromotionID)), progressv1.Phase_PHASE_PROMOTE)
 	if err := inSpan(sender, root, func(_ *eventStream, log progress.Log) error {
 		propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
 		if err != nil {
@@ -267,6 +267,13 @@ func propagationProto(propagation *router.Propagation) *progressv1.Propagation {
 		return nil
 	}
 	return &progressv1.Propagation{TypicalMs: propagation.Typical.Milliseconds(), Published: propagation.Published}
+}
+
+func shortPromotionID(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8]
 }
 
 func newPromotionID() (string, error) {

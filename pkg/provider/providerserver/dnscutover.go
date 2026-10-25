@@ -208,7 +208,7 @@ func (s dnsCutover) release(ctx context.Context, written []edge.Record, say func
 		return nil
 	}
 	for _, rec := range written {
-		say("Removing " + rec.String())
+		say("Removing " + rec.Name + " " + string(rec.Type))
 	}
 	return s.dns.Delete(ctx, written)
 }

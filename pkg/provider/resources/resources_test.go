@@ -297,7 +297,7 @@ func TestHookStacksRemoveAResourceTheyProvisionedOnceOcelJSONBindsItToAPublished
 
 func saysRemoving(t *testing.T, progress *fake.Log, what string) {
 	t.Helper()
-	saysRemovingBecause(t, progress, what, "this release no longer declares it")
+	saysRemovingBecause(t, progress, what, "no longer declared")
 }
 
 func saysRemovingBecause(t *testing.T, progress *fake.Log, what, because string) {

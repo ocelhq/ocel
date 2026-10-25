@@ -78,8 +78,9 @@ func (a *Artifacts) RemoveObjects(_ context.Context, tier environment.Tier, scop
 			delete(a.objects, ref)
 		}
 	}
-	if progress != nil {
-		progress.Say("Removed the " + string(tier) + " objects under " + strings.Join(prefixes, ", "))
+	if progress != nil && len(prefixes) > 0 {
+		_, of, _ := strings.Cut(prefixes[0], "/")
+		progress.Say("Removed the stored objects of " + strings.TrimSuffix(of, "/"))
 	}
 	return nil
 }

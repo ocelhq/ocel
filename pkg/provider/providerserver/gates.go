@@ -38,8 +38,7 @@ func (r *deployRun) enforceProtection(ctx context.Context, progress progress.Log
 	record, recorded := records[r.spec.Slug]
 	if !r.protect {
 		if recorded && record.Enabled {
-			progress.Warn(protectionKey(tier) + " is off for " + r.spec.Slug + ", so this deploy opens " + describeProtected(tier, r.spec.Slug) + " to anyone who has their URLs. " +
-				"The password and bypass secrets are kept: turn " + protectionKey(tier) + " back on and deploy again to protect them with the same credentials")
+			progress.Warn(protectionKey(tier) + " is off, so this deploy opens " + describeProtected(tier, r.spec.Slug) + " to anyone with their URLs; its credentials are kept for when it is back on")
 		}
 		return nil
 	}

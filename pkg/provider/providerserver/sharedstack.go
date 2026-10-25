@@ -244,7 +244,7 @@ func (s *sharedStack) purgePromotedHostnames(ctx context.Context, pointer string
 		return
 	}
 	if err := purge(ctx, bound); err != nil {
-		progress.Warn(fmt.Sprintf("%s may keep answering %s from what it cached of the release this promote replaced until that cache expires: purging it failed: %v",
+		progress.Warn(fmt.Sprintf("%s may serve the replaced release on %s until its cache expires: purging failed: %v",
 			describeFront(s.front.Kind()), strings.Join(bound, ", "), err))
 	}
 }

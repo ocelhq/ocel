@@ -43,7 +43,7 @@ func scaleDownUnserved(ctx context.Context, hooks *provider.ContainerReleaseHook
 		err = hooks.ScaleDown(ctx, provider.DemotedReleases{Slug: l.slug, Tier: l.tier, Env: envFor(l.tier, req.pointer), Previous: unserved}, progress)
 	}
 	if err != nil {
-		progress.Warn(fmt.Sprintf("Promotion %s does not serve, but scaling back down the releases it scaled up failed, and they keep running until the next promotion retries: %v", req.promotion.PromotionID, err))
+		progress.Warn(fmt.Sprintf("Promotion %s does not serve, and the releases it scaled up keep running; the next promotion retries: %v", shortPromotionID(req.promotion.PromotionID), err))
 	}
 }
 
@@ -56,7 +56,7 @@ func scaleDownDemoted(ctx context.Context, hooks *provider.ContainerReleaseHooks
 		err = hooks.ScaleDown(ctx, demoted, progress)
 	}
 	if err != nil {
-		progress.Warn(fmt.Sprintf("Promotion %s serves, but scaling down the releases it demoted failed, and they keep running until the next promotion retries: %v", req.promotion.PromotionID, err))
+		progress.Warn(fmt.Sprintf("Promotion %s serves, and the releases it demoted keep running; the next promotion retries: %v", shortPromotionID(req.promotion.PromotionID), err))
 	}
 }
 

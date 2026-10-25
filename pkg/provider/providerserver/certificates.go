@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -25,9 +26,6 @@ func discardCertificate(ctx context.Context, p provider.Provider, cert provider.
 func discardCertificateAndRecords(ctx context.Context, p provider.Provider, cutover dnsCutover, cert, active provider.Certificate, progress progress.Log) error {
 	if !cert.Issued() || cert.ID == active.ID {
 		return nil
-	}
-	if cert.Requested {
-		progress.Say("Discarding certificate " + cert.ID)
 	}
 	if err := discardCertificate(ctx, p, cert, progress); err != nil {
 		return err
@@ -91,7 +89,7 @@ func (c hostCertificates) discardSuperseded(ctx context.Context, progress progre
 		}
 		kept = append(kept, cert)
 		if code, _ := provider.RefusedCode(err); code == refusal.CodeNotReady {
-			progress.Warn(fmt.Sprintf("Keeping certificate %s on record for the next run to discard: %v", cert.ID, err))
+			progress.Warn(fmt.Sprintf("Keeping certificate %s for the next run to discard: %v", path.Base(cert.ID), err))
 			continue
 		}
 		errs = append(errs, err)

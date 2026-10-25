@@ -541,7 +541,7 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress pro
 	}
 
 	if progress != nil {
-		progress.Say("Destroying every resource in stack " + setup.Stack + ", which can take several minutes")
+		progress.Say("Destroying stack " + setup.Stack + ", which can take several minutes")
 	}
 	err = runReportingResourceOperations(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
 		opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel), optdestroy.EventStreams(engineEvents)}

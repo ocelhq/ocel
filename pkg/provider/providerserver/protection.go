@@ -283,7 +283,7 @@ func (h *handlers) publishProtection(ctx context.Context, p provider.Provider, t
 	}
 	record, recorded := records[slug]
 	if !recorded {
-		log.Say("No " + string(tier) + " gate is recorded for " + slug + ", so there is nothing to publish")
+		log.Say("Nothing to publish: no " + string(tier) + " gate is recorded for " + slug)
 		return nil
 	}
 	if !record.Enabled {
@@ -291,7 +291,7 @@ func (h *handlers) publishProtection(ctx context.Context, p provider.Provider, t
 	}
 	recordedGate := &record.Gate
 	if front == nil {
-		log.Say("No " + string(tier) + " deploy of " + slug + " has run yet, so no edge holds a gate: the first one writes the recorded gate")
+		log.Say("No " + string(tier) + " deploy of " + slug + " has run yet: the first one writes the gate")
 		return nil
 	}
 	published := &progressv1.EdgePublication{Kind: string(front.Kind())}

@@ -366,7 +366,7 @@ func RemovePushedImages(ctx context.Context, images provider.ImageStore, app str
 			kept, err := recorded(ctx)
 			if err != nil {
 				if progress != nil {
-					progress.Warn(fmt.Sprintf("Left %s in the registry it was pushed to, as the images the project's stacks record could not be read again: %v", image, err))
+					progress.Warn(fmt.Sprintf("Left %s in the registry: %v", image, err))
 				}
 				continue
 			}
@@ -376,12 +376,12 @@ func RemovePushedImages(ctx context.Context, images provider.ImageStore, app str
 		}
 		if err := images.Remove(ctx, image); err != nil {
 			if progress != nil {
-				progress.Warn(fmt.Sprintf("Left %s in the registry it was pushed to: %v", image, err))
+				progress.Warn(fmt.Sprintf("Left %s in the registry: %v", image, err))
 			}
 			continue
 		}
 		if progress != nil {
-			progress.Say("Removed " + app + "'s unused image " + image + " from " + images.Destination())
+			progress.Say("Removed " + app + "'s unused image " + image)
 		}
 	}
 }

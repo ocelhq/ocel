@@ -40,7 +40,7 @@ func TestEverySpanAProductionDeployOpensNamesWhichThingItWorksOnAndWhatItDoes(t 
 		{"prod", "Provisioning shared resource orders"},
 		{"web", "Deploying the serverless app to prod"},
 		{"relay", "Attaching production hostname shop.example"},
-		{"prod", "Switching traffic to promotion " + result.GetPromotionId()},
+		{"prod", "Switching traffic to promotion " + result.GetPromotionId()[:8]},
 	}
 	if got := openedSpans(events); !slices.Equal(got, want) {
 		t.Errorf("the deploy opened spans\n%v\nwant\n%v", got, want)
@@ -82,7 +82,7 @@ func TestAPreviewDeploysSpansNameThePreviewTheyDeployTo(t *testing.T) {
 		{"relay", "Reconciling the routes for shop in preview pr-7"},
 		{"pr-7", "Provisioning shared resource orders"},
 		{"web", "Deploying the serverless app to preview pr-7"},
-		{"pr-7", "Switching traffic to promotion " + result.GetPromotionId()},
+		{"pr-7", "Switching traffic to promotion " + result.GetPromotionId()[:8]},
 	}
 	if got := openedSpans(events); !slices.Equal(got, want) {
 		t.Errorf("the preview deploy opened spans\n%v\nwant\n%v", got, want)

@@ -33,7 +33,7 @@ func (r *deployRun) newSpans() deploySpans {
 		Hostnames: RootSpan(SpanHostnames, kind,
 			progress.Attaching.Title(namedList("production hostname", "production hostnames", r.hostnames())), progressv1.Phase_PHASE_PROVISION),
 		Promotion: RootSpan(SpanPromotion, env,
-			progress.Switching.Title("traffic to promotion "+r.spec.PromotionID), progressv1.Phase_PHASE_PROMOTE),
+			progress.Switching.Title("traffic to promotion "+shortPromotionID(r.spec.PromotionID)), progressv1.Phase_PHASE_PROMOTE),
 		Apps: make(map[string]Span, len(r.spec.Apps)),
 	}
 	for _, entry := range r.spec.Apps {

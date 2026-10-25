@@ -158,12 +158,12 @@ func TestAPlanSaysWhatABootstrapDoesToTheSecret(t *testing.T) {
 		{"absent is created", originsecret.Secret{}, mintedAt, provider.ActionCreate, ""},
 		{"young is kept", originsecret.Secret{Current: "s1", CreatedAt: mintedAt}, mintedAt.Add(time.Hour), provider.ActionKeep, provider.ReasonCurrent},
 		{"old is rotated", originsecret.Secret{Current: "s1", CreatedAt: mintedAt}, rotatedAt, provider.ActionUpdate,
-			"it is older than 90 days and is rotated; the one it replaces stays accepted for 7 days"},
+			"older than 90 days; the old one stays accepted for 7 days"},
 		{"in grace is kept", originsecret.Secret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(time.Hour), provider.ActionKeep, provider.ReasonCurrent},
 		{"past grace retires", originsecret.Secret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(originsecret.Grace), provider.ActionUpdate,
-			"the secret it replaced 7 days ago is retired; a release not re-deployed since stops answering its front"},
+			"retires the one replaced 7 days ago: a release not re-deployed since stops answering"},
 		{"past grace and old retires and rotates", originsecret.Secret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(originsecret.MaxAge), provider.ActionUpdate,
-			"it is rotated and the secret it replaced 90 days ago is retired; a release not re-deployed since the earlier rotation stops answering its front"},
+			"rotates, and retires the one replaced 90 days ago: a release not re-deployed since stops answering"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

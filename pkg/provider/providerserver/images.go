@@ -120,7 +120,7 @@ func removalImages(ctx context.Context, p provider.Provider, project *contractv1
 	}
 	store, err := imageStoreFor(ctx, p, registryTargetOf(project))
 	if err != nil {
-		log.Warn(fmt.Sprintf("Left the images this project pushed to %s in place, as the registry could not be opened: %v", project.GetServer(), err))
+		log.Warn(fmt.Sprintf("Left this project's images on %s: %v", project.GetServer(), err))
 		return nil
 	}
 	return store

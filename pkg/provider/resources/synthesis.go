@@ -12,7 +12,7 @@ const (
 	functionKind  = "function"
 	containerKind = "app container"
 
-	reasonUndeclared = "this release no longer declares it"
+	reasonUndeclared = "no longer declared"
 	reasonBound      = "ocel.json binds it to a published record"
 )
 

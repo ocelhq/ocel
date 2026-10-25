@@ -197,7 +197,7 @@ func TestTheDeployPointerMoveSpeaksThroughThePromotionSpansOwnProgress(t *testin
 	if spoke == "" {
 		t.Fatal("nothing the pointer move said reached the stream, so the pointer move reports through a reporter the run does not have")
 	}
-	promotion := "Switching traffic to promotion " + result.GetPromotionId()
+	promotion := "Switching traffic to promotion " + result.GetPromotionId()[:8]
 	if titles[spoke] != promotion || parents[spoke] != "" {
 		t.Errorf("the pointer move spoke on span %q, want the span %q", titles[spoke], promotion)
 	}

@@ -529,7 +529,7 @@ func TestRemovingEveryPreviewSaysUntilWhenItWaitsOutTheLeasesInterruptedRunsLeft
 
 	var wants []string
 	for _, at := range []time.Time{began, time.Now().UTC()} {
-		wants = append(wants, "Waiting until "+at.Add(5*time.Minute).Format("15:04 MST")+" to take over the leases interrupted runs left on 2 environments, in case one still renews its lease")
+		wants = append(wants, "Waiting until "+at.Add(5*time.Minute).Format("15:04 MST")+" to take over the leases interrupted runs left on 2 environments")
 	}
 	if !slices.ContainsFunc(said, func(line string) bool { return slices.Contains(wants, line) }) {
 		t.Errorf("the removal said %q, want %q among it", said, wants[0])

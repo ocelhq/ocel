@@ -181,7 +181,7 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing
 		"INFO Destroyed stack " + stack,
 		"INFO Applied the production bootstrap",
 		"INFO Removed the production bootstrap",
-		"INFO Removed the production objects under fn/shop/, assets/shop/",
+		"INFO Removed the stored objects of shop",
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the reference provider said %q, want %q", got, want)

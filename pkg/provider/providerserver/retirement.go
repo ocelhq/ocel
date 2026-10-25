@@ -42,5 +42,5 @@ func noAppLive(slug string, tier environment.Tier, env string, lease provider.Le
 }
 
 func unretiredWarning(promotionID string, err error) string {
-	return fmt.Sprintf("Promotion %s serves, but retiring what the apps it no longer deploys left running failed, and the next deploy retries it: %v", promotionID, err)
+	return fmt.Sprintf("Promotion %s serves, but retiring the apps it no longer deploys failed; the next deploy retries: %v", shortPromotionID(promotionID), err)
 }
