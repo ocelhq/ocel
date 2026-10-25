@@ -1,6 +1,4 @@
-import { installNextHost } from "@framework/next-runtime/host";
+import { serveNextContainer } from "@framework/next-runtime/container-entry";
 import { newGcpNextHost } from "./next-host.mjs";
 
-installNextHost(newGcpNextHost(process.env));
-
-await import("@framework/next-runtime/entrypoint");
+await serveNextContainer(newGcpNextHost(process.env));
