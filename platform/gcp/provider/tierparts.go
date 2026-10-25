@@ -104,8 +104,10 @@ func (u deployUse) seals() bool {
 func (u deployUse) sealsProjectValues() bool {
 	return len(u.resources) > 0 ||
 		slices.ContainsFunc(u.deploy.Apps, opensSecrets) ||
-		slices.ContainsFunc(u.usages, func(usage provider.AppUsage) bool { return len(usage.Grants) > 0 })
+		slices.ContainsFunc(u.usages, func(usage provider.AppUsage) bool { return slices.ContainsFunc(usage.Grants, isDelivered) })
 }
+
+func isDelivered(binding provider.Binding) bool { return binding.Type != provider.BindingCustom }
 
 func (u deployUse) keepsProjectRecords() bool {
 	revalidates := slices.ContainsFunc(u.uses, func(uses buildoutput.Uses) bool { return uses.Revalidation })

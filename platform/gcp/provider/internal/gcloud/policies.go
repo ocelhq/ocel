@@ -7,6 +7,7 @@ import (
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
@@ -42,12 +43,16 @@ func AbsentWhenNotFound(err error) error {
 }
 
 func ProjectPolicy(c *Clients) policy.Resource {
-	return policy.Resource{Name: "project " + c.Project(), Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
+	return ProjectPolicyOf(c, c.Project())
+}
+
+func ProjectPolicyOf(c *Clients, project string) policy.Resource {
+	return policy.Resource{Name: "project " + project, Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
 		service, err := c.Projects()
 		if err != nil {
 			return nil, nil, err
 		}
-		held, err := googleretry.Attempted(ctx, service.Projects.GetIamPolicy(c.Project(),
+		held, err := googleretry.Attempted(ctx, service.Projects.GetIamPolicy(project,
 			&cloudresourcemanager.GetIamPolicyRequest{
 				Options: &cloudresourcemanager.GetPolicyOptions{RequestedPolicyVersion: policy.ConditionalVersion},
 			}).Context(ctx).Do)
@@ -60,7 +65,7 @@ func ProjectPolicy(c *Clients) policy.Resource {
 				held.Bindings = append(held.Bindings, &cloudresourcemanager.Binding{Role: binding.Role, Members: binding.Members, Condition: projectExpr(binding.Condition)})
 			}
 			held.Version = policy.ConditionalVersion
-			_, err := googleretry.Attempted(ctx, service.Projects.SetIamPolicy(c.Project(),
+			_, err := googleretry.Attempted(ctx, service.Projects.SetIamPolicy(project,
 				&cloudresourcemanager.SetIamPolicyRequest{Policy: held}).Context(ctx).Do)
 			return err
 		}
@@ -87,8 +92,15 @@ func projectExpr(condition *policy.Condition) *cloudresourcemanager.Expr {
 }
 
 func AccountPolicy(c *Clients, account string) policy.Resource {
-	path := AccountPath(c, account)
-	return policy.Resource{Name: "the " + account + " service account", Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
+	return accountPolicyAt(c, AccountPath(c, account), "the "+account+" service account")
+}
+
+func AccountPolicyAt(c *Clients, path string) policy.Resource {
+	return accountPolicyAt(c, path, "the service account "+path)
+}
+
+func accountPolicyAt(c *Clients, path, named string) policy.Resource {
+	return policy.Resource{Name: named, Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
 		service, err := c.Accounts()
 		if err != nil {
 			return nil, nil, err
@@ -217,6 +229,49 @@ func runExpr(condition *policy.Condition) *run.GoogleTypeExpr {
 		return nil
 	}
 	return &run.GoogleTypeExpr{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
+}
+
+func RepositoryPolicy(c *Clients, path string) policy.Resource {
+	return policy.Resource{Name: "the Artifact Registry repository " + path, Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
+		service, err := c.Repositories()
+		if err != nil {
+			return nil, nil, err
+		}
+		held, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.GetIamPolicy(path).
+			OptionsRequestedPolicyVersion(policy.ConditionalVersion).Context(ctx).Do)
+		if err != nil {
+			return nil, nil, absentWhenAnswered(err)
+		}
+		write := func(ctx context.Context, bindings []policy.Binding) error {
+			held.Bindings = make([]*artifactregistry.Binding, 0, len(bindings))
+			for _, binding := range bindings {
+				held.Bindings = append(held.Bindings, &artifactregistry.Binding{Role: binding.Role, Members: binding.Members, Condition: repositoryExpr(binding.Condition)})
+			}
+			held.Version = conditionalVersion(bindings, held.Version)
+			_, err := googleretry.Attempted(ctx, service.Projects.Locations.Repositories.SetIamPolicy(path,
+				&artifactregistry.SetIamPolicyRequest{Policy: held}).Context(ctx).Do)
+			return err
+		}
+		bindings := make([]policy.Binding, 0, len(held.Bindings))
+		for _, binding := range held.Bindings {
+			bindings = append(bindings, policy.Binding{Role: binding.Role, Members: binding.Members, Condition: repositoryCondition(binding.Condition)})
+		}
+		return bindings, write, nil
+	}}
+}
+
+func repositoryCondition(condition *artifactregistry.Expr) *policy.Condition {
+	if condition == nil {
+		return nil
+	}
+	return &policy.Condition{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
+}
+
+func repositoryExpr(condition *policy.Condition) *artifactregistry.Expr {
+	if condition == nil {
+		return nil
+	}
+	return &artifactregistry.Expr{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
 }
 
 func FromProtoBindings(held []*iampb.Binding) []policy.Binding {

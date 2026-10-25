@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
@@ -22,6 +23,9 @@ const (
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
 	if err := p.options.refuseUnknownApps(pre.Deploy.Apps); err != nil {
+		return provider.Plan{}, err
+	}
+	if err := grants.RefuseUnusable(pre.Apps); err != nil {
 		return provider.Plan{}, err
 	}
 	parts, err := p.partsUsedBy(pre)
@@ -56,6 +60,9 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 
 func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPreflight) error {
 	if err := p.options.refuseUnknownApps(pre.Deploy.Apps); err != nil {
+		return err
+	}
+	if err := grants.RefuseUnusable(pre.Apps); err != nil {
 		return err
 	}
 	parts, err := p.partsUsedBy(pre)

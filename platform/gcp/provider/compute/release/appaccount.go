@@ -97,7 +97,12 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 	if err != nil {
 		return nil, err
 	}
-	return append(granted, gated...), nil
+	granted = append(granted, gated...)
+	bound, err := grants.OnBindings(c.Project(), spec.App.Grants, member)
+	if err != nil {
+		return nil, err
+	}
+	return append(granted, bound...), nil
 }
 
 func valueOwners(spec provider.StackSpec, referenced []string) []string {

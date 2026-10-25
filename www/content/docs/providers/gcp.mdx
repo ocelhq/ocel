@@ -608,6 +608,50 @@ subscribe to its environment's topic, and holds `roles/pubsub.editor` on the pro
 condition, to make, pull and delete subscriptions. Its instances make their subscriptions untagged;
 see [sharing one project between tiers](#sharing-one-project-between-tiers).
 
+## Grants from a binding
+
+A binding your own infrastructure publishes may carry grants: a role on a resource, which every
+deploy gives the service account of each app bound to it, and the workers that run as that app.
+An app is bound to a binding through a resource its code declares, or, for a custom record, by
+naming it in the app's `bindings.custom`
+([binding a custom record](/docs/configuration#binding-a-custom-record)). With
+[`@ocel/pulumi`](https://www.npmjs.com/package/@ocel/pulumi):
+
+```ts
+bind.custom("fleet", { zone: "us-central1-a" }, {
+  grants: [
+    { role: "roles/compute.instanceAdmin.v1", resource: "projects/my-project" },
+    { role: "roles/iam.serviceAccountUser", resource: pulumi.interpolate`projects/my-project/serviceAccounts/${host.email}` },
+  ],
+});
+```
+
+A grant names its resource one of these ways:
+
+| Resource | Written |
+| --- | --- |
+| A project | `projects/<id>` |
+| A service account | `projects/<project>/serviceAccounts/<email>` |
+| A bucket | `projects/_/buckets/<name>` |
+| An Artifact Registry repository | `projects/<project>/locations/<location>/repositories/<name>` |
+| A Pub/Sub topic | `projects/<project>/topics/<name>` |
+
+A role is `roles/<role>`, or `projects/<project>/roles/<role>` for a custom one. The deploy
+refuses, before it changes anything, a basic role (`roles/owner`, `roles/editor`,
+`roles/viewer`), a resource written any other way, a grant with conditions, and a grant written
+as actions over resources, which is how AWS grants.
+
+The deploy adds the app's account as a member of the role on the resource and leaves every other
+member of every role there as it was. It records what it granted before it grants it, gives
+the app's account its grants before the app's new revision is deployed, and changes nothing on a
+deploy that grants the same again. A deploy that no longer binds the app to the binding, or a
+binding that no longer carries the grant, takes it back; removing the app's last release in an
+environment takes back all of them. The deploy credential must be able to set the IAM policy of
+each resource a grant names, which `ocel permissions deploy` does not include: give it
+`roles/resourcemanager.projectIamAdmin` on a project, `roles/iam.serviceAccountAdmin` on a
+service account, or the admin role of the repository, bucket or topic, for instance in the program that makes
+the resource. A deploy it is refused on names the binding, the resource and the permission.
+
 ## Logs
 
 Cloud Run services and workers log to Cloud Logging in your project, which keeps them for as
