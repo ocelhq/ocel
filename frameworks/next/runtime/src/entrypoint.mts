@@ -56,7 +56,7 @@ async function boot(): Promise<void> {
   if (refused) throw refused;
 
   installCompileCacheFlush();
-  const CacheHandler = installCacheHandlers();
+  const CacheHandler = getNextHost().newCacheStore ? installCacheHandlers() : undefined;
 
   const handlerPath = process.env.OCEL_HANDLER!;
   const href = isAbsolute(handlerPath) ? pathToFileURL(handlerPath).href : handlerPath;
@@ -77,13 +77,10 @@ async function boot(): Promise<void> {
 
   installCompileCacheWarm(mod?.warm);
 
-  mirrorTagsInto(loadTagsManifest(dirname(handlerPath)));
+  if (CacheHandler) mirrorTagsInto(loadTagsManifest(dirname(handlerPath)));
 
-  const newIncrementalCache = newIncrementalCacheFactory(
-    nextConfig,
-    dirname(handlerPath),
-    CacheHandler,
-  );
+  const newIncrementalCache =
+    CacheHandler && newIncrementalCacheFactory(nextConfig, dirname(handlerPath), CacheHandler);
   const routes = revalidatingRoutes(nextConfig);
   const shaping = originShaping(routes, process.env, getNextHost().cacheTagsPerObject);
   const freshOnly = servesOnlyFresh(process.env);
@@ -102,7 +99,7 @@ async function boot(): Promise<void> {
         noteUncachedRender(req.headers as RequestHeaders);
       }
     }
-    (globalThis as any).__incrementalCache = newIncrementalCache(req);
+    if (newIncrementalCache) (globalThis as any).__incrementalCache = newIncrementalCache(req);
     return runWithWaitUntil(ocel.waitUntil, () =>
       handler(req, res, {
         waitUntil: ocel.waitUntil,

@@ -8,6 +8,7 @@
   "exports": {
     "./config": "./src/config.mts",
     "./errors": "./src/errors.mts",
+    "./in-process-origin": "./src/in-process-origin.mts",
     "./optimize": "./src/optimize.mts",
     "./stage-sharp": "./scripts/stage-sharp.mjs",
     "./store": "./src/store.mts",

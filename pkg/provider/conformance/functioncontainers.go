@@ -1,16 +1,21 @@
 package conformance
 
 import (
+	"archive/tar"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -50,18 +55,76 @@ func findFunctionContainerFaults(ctx context.Context, runtime provider.Runtime, 
 			continue
 		}
 		fn := provider.FunctionSpec{Name: "server", Framework: framework, ArtifactDir: staged}
-		if _, err := functioncode.ContainerImage(ctx, "shop", "web", provider.RegistryTarget{}, fn, functioncode.ImageSource{
-			Base:    func(context.Context, buildoutput.Framework) (v1.Image, error) { return empty.Image, nil },
+		push, err := functioncode.ContainerImage(ctx, "shop", "web", "", provider.RegistryTarget{}, fn, functioncode.ImageSource{
+			Base:    runtime.FunctionBase,
 			Runtime: runtime.FunctionFiles,
 			Binary:  runtime.Binary,
-		}); err != nil {
+		})
+		if err != nil {
 			found = append(found, fmt.Sprintf("a container built from a Next function on %s is refused: %v", declared, err))
+			continue
+		}
+		if fault := findUnrunnableCommand(push.Built); fault != "" {
+			found = append(found, fmt.Sprintf("a container built from a Next function on %s, on the base FunctionBase declares, %s", declared, fault))
 		}
 	}
 	if built == 0 {
 		found = append(found, "Runtime().Binary ships a container runtime for no architecture, so no container built from a function boots")
 	}
 	return found
+}
+
+func findUnrunnableCommand(image v1.Image) string {
+	file, err := image.ConfigFile()
+	if err != nil {
+		return fmt.Sprintf("has no readable config: %v", err)
+	}
+	command := file.Config.Cmd
+	if len(command) == 0 {
+		return "names no command"
+	}
+	held, err := listImageFiles(image)
+	if err != nil {
+		return fmt.Sprintf("has no readable filesystem: %v", err)
+	}
+	program := command[0]
+	if path.IsAbs(program) {
+		if !held[strings.TrimPrefix(program, "/")] {
+			return fmt.Sprintf("runs %s, which the image does not hold", program)
+		}
+		return ""
+	}
+	searchPath := ""
+	for _, entry := range file.Config.Env {
+		if named, value, _ := strings.Cut(entry, "="); named == "PATH" {
+			searchPath = value
+		}
+	}
+	for _, dir := range strings.Split(searchPath, ":") {
+		if dir != "" && held[strings.TrimPrefix(path.Join(dir, program), "/")] {
+			return ""
+		}
+	}
+	return fmt.Sprintf("runs %s, which no directory on its PATH (%q) holds", program, searchPath)
+}
+
+func listImageFiles(image v1.Image) (map[string]bool, error) {
+	flattened := mutate.Extract(image)
+	defer flattened.Close()
+	held := map[string]bool{}
+	archive := tar.NewReader(flattened)
+	for {
+		header, err := archive.Next()
+		if errors.Is(err, io.EOF) {
+			return held, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if header.Typeflag == tar.TypeReg || header.Typeflag == tar.TypeSymlink {
+			held[strings.TrimPrefix(path.Clean(header.Name), "/")] = true
+		}
+	}
 }
 
 func stagedNextFunction(t *testing.T) string {

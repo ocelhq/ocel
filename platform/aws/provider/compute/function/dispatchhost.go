@@ -77,17 +77,11 @@ func NewDispatchHost(app *provider.AppSpec, edgeBucket, imageOptimizerURL string
 		EdgeBucket:        edgeBucket,
 		StorageCoordinate: app.StorageCoordinate,
 		ImageOptimizerURL: imageOptimizerURL,
-		Env: map[string]string{
-			processenv.RouteTableEnvVar: routeTableInTask,
-			processenv.BuildIDEnvVar:    app.BuildID,
-		},
+		Env:               provider.NewRouteTableEnv(app, routeTableInTask),
 	}
 	maps.Copy(host.Env, processenv.StorageEnv(app.StorageCoordinate, naming.Buckets{naming.StorageEdge: edgeBucket}))
 	if imageOptimizerURL != "" {
 		host.Env[edge.ImageOptimizerURLVar] = imageOptimizerURL
-	}
-	if rules := app.Static.Variable(); rules != "" {
-		host.Env[edge.StaticRulesVar] = rules
 	}
 	return host
 }

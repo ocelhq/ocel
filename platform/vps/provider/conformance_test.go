@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -197,6 +198,13 @@ func TestTheTopicsTasksAndWorkersABoxRunsAreOnesTheBuildCanPlace(t *testing.T) {
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	conformance.RunWorkers(t, p.Facts())
+}
+
+func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
+	t.Parallel()
+
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).PullingImagesWith(fake.PullStandInImage)
+	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
 }
 
 func TestKVStoresPassTheConformanceSuite(t *testing.T) {

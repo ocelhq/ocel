@@ -1,3 +1,4 @@
+import { newInProcessImageOrigin } from "@framework/next-image-optimizer/in-process-origin";
 import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import {
   type DispatchHost,
@@ -12,7 +13,6 @@ import { readAssetStorage } from "./asset-storage.mjs";
 import { newCloudCdnDispatchInvoke } from "./cloud-cdn.mjs";
 import { isCloudRunThrottle } from "./cloud-run-throttle.mjs";
 import { newCloudStorageAssetBucket, newCloudStorageObjectStore } from "./cloud-storage-assets.mjs";
-import { newInProcessImageOrigin } from "./image-origin.mjs";
 
 function listFunctionIds(manifest: NextRouteTable): string[] {
   const ids = new Set<string>([manifest.rootFunction]);

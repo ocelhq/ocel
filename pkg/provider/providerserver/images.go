@@ -9,6 +9,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -138,13 +139,14 @@ func (r *deployRun) functionContainerPush(ctx context.Context, entry provider.Ap
 	}
 	if built, _ := arch.GoArch(fn.Framework.Arch); built != runs {
 		return provider.ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
-			"app %s's function is built for %s and the target runs %s: build it for %s",
-			entry.App, images.ContainerPlatform(built), images.ContainerPlatform(runs), images.ContainerPlatform(runs))
+			"app %s's function is built for %s: build it for %s",
+			entry.App, images.ContainerPlatform(built), images.ContainerPlatform(runs))
 	}
-	return functioncode.ContainerImage(ctx, r.spec.Slug, entry.App, r.registry, fn, functioncode.ImageSource{
-		Base:    runtimePort.FunctionBase,
-		Runtime: runtimePort.FunctionFiles,
-		Binary:  runtimePort.Binary,
+	return functioncode.ContainerImage(ctx, r.spec.Slug, entry.App, buildoutput.AppRoot(r.artifactRoot, entry.App), r.registry, fn, functioncode.ImageSource{
+		Base:       runtimePort.FunctionBase,
+		Runtime:    runtimePort.FunctionFiles,
+		Binary:     runtimePort.Binary,
+		BuildPaths: runtimePort.FunctionBuildPaths,
 	})
 }
 

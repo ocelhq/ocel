@@ -34,7 +34,10 @@ const (
 	RuntimePath = "/ocel/bin/runtime"
 	RuntimeRoot = "/ocel/runtime"
 	LivePath    = "/ocel/live"
+	BuildDir    = "/ocel/build"
 )
+
+const BuildDirEnvVar = "OCEL_BUILD_DIR"
 
 func FrameworkRuntimeDir(framework string) string {
 	return path.Join(RuntimeRoot, framework)

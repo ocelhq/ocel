@@ -3,6 +3,8 @@ package gcp
 import (
 	"context"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/functions"
@@ -26,3 +28,8 @@ func AddParts(ctx context.Context, p *Provider, tier environment.Tier, names ...
 func (p *Provider) TopicHooks() *topic.Topic { return p.topicHooks() }
 
 func (p *Provider) FunctionImages() functions.Images { return p.functionImages() }
+
+func (p *Provider) PullingImagesWith(pull func(ctx context.Context, ref string) (v1.Image, error)) *Provider {
+	p.images = &run.Images{Pull: pull}
+	return p
+}

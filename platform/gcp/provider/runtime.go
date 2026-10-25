@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
@@ -27,9 +28,17 @@ func (p containerRuntime) Binary(_ context.Context, architecture string) ([]byte
 }
 
 func (p containerRuntime) FunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
+	if err := functioncode.RefuseContainerFramework(framework); err != nil {
+		return nil, err
+	}
 	return p.functionImages().ResolveBase(ctx, framework)
 }
 
 func (p containerRuntime) FunctionFiles(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
+	if err := functioncode.RefuseContainerFramework(framework); err != nil {
+		return nil, err
+	}
 	return p.functionImages().ReadRuntime(ctx, framework)
 }
+
+func (p containerRuntime) FunctionBuildPaths(buildoutput.Framework) []string { return nil }

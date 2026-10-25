@@ -10,10 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/router"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -77,7 +80,9 @@ func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 }
 
 func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).PullingImagesWith(func(ctx context.Context, ref string) (v1.Image, error) {
+		return fake.PullStandInImage(ctx, ref, "amd64")
+	})
 	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
 }
 

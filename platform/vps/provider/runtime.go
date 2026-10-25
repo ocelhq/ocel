@@ -5,7 +5,12 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -25,10 +30,40 @@ func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error)
 	return host.ContainerRuntime(arch)
 }
 
-func (p containerRuntime) FunctionBase(_ context.Context, framework buildoutput.Framework) (v1.Image, error) {
-	return nil, refusal.Refuse(refusal.CodeNotReady, "this provider ships no base a container built from a %s function runs on", framework.Name)
+func (p containerRuntime) FunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
+	goarch, err := readFunctionArch(framework)
+	if err != nil {
+		return nil, err
+	}
+	return images.PullNodeBase(ctx, p.readImagePull(), goarch)
 }
 
 func (p containerRuntime) FunctionFiles(_ context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
-	return nil, refusal.Refuse(refusal.CodeNotReady, "this provider ships no runtime a container built from a %s function boots through", framework.Name)
+	goarch, err := readFunctionArch(framework)
+	if err != nil {
+		return nil, err
+	}
+	return host.NextContainerRuntime(goarch)
+}
+
+func (p containerRuntime) FunctionBuildPaths(buildoutput.Framework) []string {
+	return []string{edge.StaticAssetDir, naming.ImageConfigFile}
+}
+
+func readFunctionArch(framework buildoutput.Framework) (string, error) {
+	if err := functioncode.RefuseContainerFramework(framework); err != nil {
+		return "", err
+	}
+	goarch, known := arch.GoArch(framework.Arch)
+	if !known {
+		return "", refusal.Refuse(refusal.CodeInvalid, "this function is built for %s: build it for %s or %s", framework.Arch, arch.X8664, arch.ARM64)
+	}
+	return goarch, nil
+}
+
+func (p containerRuntime) readImagePull() images.ImagePull {
+	if p.pullImage != nil {
+		return p.pullImage
+	}
+	return images.PullRemoteImage
 }

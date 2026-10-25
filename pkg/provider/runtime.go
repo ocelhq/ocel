@@ -13,6 +13,7 @@ type Runtime interface {
 	Binary(ctx context.Context, arch string) ([]byte, error)
 	FunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error)
 	FunctionFiles(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error)
+	FunctionBuildPaths(framework buildoutput.Framework) []string
 }
 
 type Wrapped func(ctx context.Context) (v1.Image, func(), error)

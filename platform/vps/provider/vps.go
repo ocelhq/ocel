@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -43,6 +44,7 @@ type Provider struct {
 	routing    *routing.Table
 	tunnel     *tunnel.Container
 	pins       *certs.Pins
+	pullImage  images.ImagePull
 	containers *release.Containers
 	images     *release.Images
 	ssh        *ssh.Box

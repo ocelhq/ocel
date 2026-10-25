@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -42,6 +43,7 @@ type Provider struct {
 	writtenBy  provider.WrittenBy
 	aws        aws.Config
 	namespace  account.Namespace
+	pullImage  images.ImagePull
 
 	deployed  memo[environment.Tier, account.Reading]
 	params    memo[tierEdge, account.TierParams]
