@@ -189,7 +189,7 @@ func (s *edgeSession) reclaimDropped(ctx context.Context, teardown provider.Stac
 }
 
 func unreclaimedWarning(promotionID string, err error) string {
-	return fmt.Sprintf("Promotion %s serves, but reclaiming the releases it dropped failed: %v", shortPromotionID(promotionID), err)
+	return fmt.Sprintf("Promotion %s serves, but reclaiming the releases it dropped failed; they stay until this environment is destroyed: %v", shortPromotionID(promotionID), err)
 }
 
 func reclaimUnnamed(ctx context.Context, p provider.Provider, teardown provider.StackDestroy, l projectLedger, pointer string, unnamed router.PruneResult, progress progress.Log) error {
@@ -254,7 +254,7 @@ func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 	_ = r.spanEvents.run(span, func(*spanRun) error {
 		progress := newSpanLog(r.sender, span)
 		if err := r.reclaimProvisioned(ctx, progress); err != nil {
-			progress.Warn(fmt.Sprintf("Promotion %s did not land, and reclaiming what it provisioned failed: %v",
+			progress.Warn(fmt.Sprintf("Promotion %s did not land, and reclaiming what it provisioned failed; it stays until this environment is destroyed: %v",
 				shortPromotionID(r.spec.PromotionID), err))
 		}
 		return nil

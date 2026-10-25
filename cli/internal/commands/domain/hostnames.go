@@ -245,7 +245,7 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 	var opts domainOptions
 	cmd := &cobra.Command{
 		Use:   "rm [host]",
-		Short: "Unbind the production hostnames this project no longer declares",
+		Short: "Unbind undeclared production hostnames and remove what ocel created for them",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := os.Getwd()

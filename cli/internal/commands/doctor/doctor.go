@@ -227,7 +227,7 @@ func renewalCheck(s *section, hostname, renewal string, expiresAt int64, soon bo
 	}
 	text := hostname + " — " + renewalText(renewal, expiresAt)
 	if soon {
-		s.warn(text+" — EXPIRING SOON", "replace it before it expires")
+		s.warn(text+" — EXPIRING SOON", "replace it before it expires: nothing renews a certificate you pinned")
 		return
 	}
 	s.pass(text)

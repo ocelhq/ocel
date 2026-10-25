@@ -237,6 +237,7 @@ func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
 			Kind:   "DNS record",
 			Name:   rec.String(),
 			Action: planv1.Change_ACTION_DELETE,
+			Reason: "only if it still holds ocel's value",
 		})
 	}
 	for _, rec := range r.state.ManualRecords() {

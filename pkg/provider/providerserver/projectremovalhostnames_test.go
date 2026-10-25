@@ -108,8 +108,11 @@ func TestPlanRemoveProjectSaysWhyOnlyOfARecordOrCertificateItKeeps(t *testing.T)
 			continue
 		}
 		kept := item.GetAction() == planv1.Change_ACTION_KEEP
-		if !kept && item.GetReason() != "" {
+		if !kept && item.GetKind() == "certificate" && item.GetReason() != "" {
 			t.Errorf("%s %s is deleted with reason %q, want none", item.GetKind(), item.GetName(), item.GetReason())
+		}
+		if !kept && item.GetKind() == "DNS record" && item.GetReason() != "only if it still holds ocel's value" {
+			t.Errorf("%s %s is deleted with reason %q, want the condition the removal checks", item.GetKind(), item.GetName(), item.GetReason())
 		}
 		if kept && (item.GetReason() == "" || strings.ContainsAny(item.GetReason(), ",;:")) {
 			t.Errorf("%s %s is kept with reason %q, want one clause saying why", item.GetKind(), item.GetName(), item.GetReason())

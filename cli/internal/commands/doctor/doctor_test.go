@@ -660,7 +660,7 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 	for _, want := range []string{
 		"EXPIRING SOON",
 		"you placed it on this box and you renew it",
-		"    → replace it before it expires",
+		"    → replace it before it expires: nothing renews a certificate you pinned",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
