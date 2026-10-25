@@ -237,6 +237,39 @@ func TestDefineDeclaresTheClassTheTagNames(t *testing.T) {
 	}
 }
 
+func TestADoubledCommaInADescriptionIsOneCommaOfTheDescription(t *testing.T) {
+	seen := discover(t, nil)
+
+	env.MustDefine[struct {
+		Key  string `ocel:"API_KEY,sensitive,description=Signs requests,, rotated monthly"`
+		Mode *struct {
+			Region string `ocel:"REGION"`
+		} `ocel:"MODE,description=Turns on the EU,, US or APAC mode"`
+	}]()
+
+	declared := byPath(*seen, "/DeclareEnv")
+	definition := declared["definitions"].([]any)[0].(map[string]any)
+	if got := definition["description"]; got != "Signs requests, rotated monthly" {
+		t.Errorf("description = %q, want %q", got, "Signs requests, rotated monthly")
+	}
+	if got := definition["class"]; got != "VARIABLE_CLASS_SENSITIVE" {
+		t.Errorf("class = %q, want the sensitive option before the description kept", got)
+	}
+	if got := declared["groups"].([]any)[0].(map[string]any)["description"]; got != "Turns on the EU, US or APAC mode" {
+		t.Errorf("group description = %q, want %q", got, "Turns on the EU, US or APAC mode")
+	}
+}
+
+func TestADoubledCommaInADefaultIsOneCommaOfTheDefault(t *testing.T) {
+	got := env.MustDefine[struct {
+		Origins string `ocel:"ALLOWED_ORIGINS_UNSET,default=https://a.example,,https://b.example,description=Origins"`
+	}]()
+
+	if got.Origins != "https://a.example,https://b.example" {
+		t.Errorf("Origins = %q, want %q", got.Origins, "https://a.example,https://b.example")
+	}
+}
+
 func TestDefineRejectsAnUnknownTagOption(t *testing.T) {
 	type vars struct {
 		Key string `ocel:"KEY,required"`
@@ -978,6 +1011,20 @@ func TestDefineRefusesAnUnexportedGroup(t *testing.T) {
 	})
 	if !strings.Contains(err.Error(), "unexported") {
 		t.Errorf("error = %q", err)
+	}
+}
+
+func TestDefineRefusesAGroupNameWithADoubledComma(t *testing.T) {
+	type mode struct {
+		Region string `ocel:"REGION"`
+	}
+	err := definitionError(t, func() {
+		env.MustDefine[struct {
+			Mode *mode `ocel:"MODE,,EU"`
+		}]()
+	})
+	if !strings.Contains(err.Error(), "unusable group name") {
+		t.Errorf("error = %q, want the group name refused: a doubled comma is a comma only inside a description or default", err)
 	}
 }
 

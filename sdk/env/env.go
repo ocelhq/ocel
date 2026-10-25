@@ -191,6 +191,10 @@ func className(class resourcesv1.VariableClass) string {
 //	ocel:"FEATURE_FLAG,folders=/apps/web"    one value per folder, ';' separated
 //	ocel:"API_KEY,description=The API key"   an optional, one-line description
 //
+// Commas separate the options, so a comma inside a default or a description
+// is written twice: ocel:"ORIGINS,default=https://a.example,,https://b.example"
+// defaults to "https://a.example,https://b.example".
+//
 // A field of type [Secret] declares the secret class: encrypted at rest,
 // delivered live, and read through [Secret.Value] on each use rather than
 // copied into the struct, since the value can rotate underneath the process.
@@ -313,9 +317,9 @@ func groupDefinition(field reflect.StructField) (group, error) {
 	if !field.IsExported() {
 		return group{}, &DefinitionError{Detail: fmt.Sprintf("field %s is unexported, so nothing outside the package could read it. Export it.", field.Name)}
 	}
-	parts := strings.Split(tag, ",")
+	parts := splitTag(tag)
 	g := group{key: parts[0], required: field.Type.Kind() != reflect.Pointer, index: field.Index}
-	if g.key == "" || strings.ContainsAny(g.key, "#\n\r") {
+	if g.key == "" || strings.ContainsAny(g.key, ",#\n\r") {
 		return group{}, &DefinitionError{Detail: fmt.Sprintf("field %s has an unusable group name.", field.Name)}
 	}
 	for _, option := range parts[1:] {
@@ -386,7 +390,7 @@ func definition(field reflect.StructField, index []int) (variable, error) {
 		return variable{}, &DefinitionError{Detail: fmt.Sprintf("field %s is unexported, so nothing outside the package could read it. Export it.", field.Name)}
 	}
 
-	parts := strings.Split(tag, ",")
+	parts := splitTag(tag)
 	v := variable{key: parts[0], class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, field: field, index: index}
 	if !keyPattern.MatchString(v.key) {
 		return variable{}, &DefinitionError{Key: v.key, Detail: "is not a usable variable name: use upper-case letters, digits and underscores, starting with a letter or underscore."}
@@ -447,6 +451,24 @@ func definition(field reflect.StructField, index []int) (variable, error) {
 		}
 	}
 	return v, nil
+}
+
+func splitTag(tag string) []string {
+	var parts []string
+	var part strings.Builder
+	for i := 0; i < len(tag); i++ {
+		switch {
+		case tag[i] != ',':
+			part.WriteByte(tag[i])
+		case i+1 < len(tag) && tag[i+1] == ',':
+			part.WriteByte(',')
+			i++
+		default:
+			parts = append(parts, part.String())
+			part.Reset()
+		}
+	}
+	return append(parts, part.String())
 }
 
 func descriptionProblem(description string) string {
