@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
@@ -25,7 +24,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	if err := p.options.refuseUnknownApps(req.Deploy.Apps); err != nil {
 		return nil, err
 	}
-	names := names.New(p.namespace, p.options.Project)
+	names := p.options.names(p.namespace, p.options.Project)
 	tree := &pricing.Tree{}
 	region := p.options.Region
 	project := tree.Scope("", pricing.ScopeProject, req.Deploy.Slug)

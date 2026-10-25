@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
@@ -22,6 +23,9 @@ const (
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
 	if err := p.options.refuseUnknownApps(pre.Deploy.Apps); err != nil {
+		return provider.Plan{}, err
+	}
+	if err := p.refuseNamedNetworkMissing(ctx, pre); err != nil {
 		return provider.Plan{}, err
 	}
 	parts, err := p.partsUsedBy(pre)
@@ -56,6 +60,9 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 
 func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPreflight) error {
 	if err := p.options.refuseUnknownApps(pre.Deploy.Apps); err != nil {
+		return err
+	}
+	if err := p.refuseNamedNetworkMissing(ctx, pre); err != nil {
 		return err
 	}
 	parts, err := p.partsUsedBy(pre)
@@ -115,7 +122,37 @@ func servesCompute(app provider.AppEntry) bool {
 }
 
 func (p *Provider) partsUsedBy(pre provider.DeployPreflight) ([]string, error) {
-	return newDeployUse(pre).partNames(p.components())
+	parts, err := newDeployUse(pre).partNames(p.components())
+	if err != nil || p.options.Network == nil {
+		return parts, err
+	}
+	return slices.DeleteFunc(parts, func(part string) bool { return part == network.PartName }), nil
+}
+
+func (p *Provider) joinsNamedNetwork(pre provider.DeployPreflight) (bool, error) {
+	if p.options.Network == nil {
+		return false, nil
+	}
+	if slices.ContainsFunc(pre.Deploy.Apps, func(app provider.AppEntry) bool { return p.options.reachesNetwork(app.App) }) {
+		return true, nil
+	}
+	parts, err := newDeployUse(pre).partNames(p.components())
+	return slices.Contains(parts, network.PartName), err
+}
+
+func (p *Provider) refuseNamedNetworkMissing(ctx context.Context, pre provider.DeployPreflight) error {
+	joins, err := p.joinsNamedNetwork(pre)
+	if err != nil || !joins || p.skipChecks {
+		return err
+	}
+	b, err := bootstrapGate{p}.openBootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	if err := b.RefuseServicesOff(ctx, network.APIs); err != nil {
+		return err
+	}
+	return network.RefuseNamedNetworkMissing(ctx, b.Clients, pre.Deploy.Tier)
 }
 
 func (p *Provider) listAPIsToCheck(pre provider.DeployPreflight) []string {

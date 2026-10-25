@@ -137,8 +137,8 @@ func (p *Release) RemoveRevisions(ctx context.Context, ref provider.StackRef, go
 }
 
 func (p *Release) EgressFor(names names.Names, spec provider.StackSpec) *run.PrivateEgress {
-	if !p.Components.Egress(spec.App.Values.Bindings) {
+	if !p.Components.Egress(spec.App.Values.Bindings) && !p.ReachesNetwork(spec.App.App) {
 		return nil
 	}
-	return &run.PrivateEgress{Network: names.NetworkPath(spec.Ref.Tier), Subnetwork: names.SubnetworkPath(p.Region, spec.Ref.Tier)}
+	return &run.PrivateEgress{Network: names.AppNetworkPath(spec.Ref.Tier), Subnetwork: names.AppSubnetworkPath(p.Region, spec.Ref.Tier)}
 }

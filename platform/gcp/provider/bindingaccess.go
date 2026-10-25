@@ -19,6 +19,11 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if len(req.Bindings) == 0 {
 		return nil, nil
 	}
+	if named := p.options.Network; named != nil {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"this project's stores and databases are on the %s network it names, and the bastion forwards ports only into the tier's own network: reach them from a machine on %s",
+			named.Network, named.Network)
+	}
 	targets := make([]string, 0, len(req.Bindings))
 	for _, binding := range req.Bindings {
 		host, port := binding.Properties[provider.PropertyHost], binding.Properties[provider.PropertyPort]

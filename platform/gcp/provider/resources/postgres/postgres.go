@@ -222,6 +222,9 @@ func (i postgresInstances) plan(ctx context.Context, database string, spec postg
 	if err := refuseVersionChange(database, spec, current); err != nil {
 		return "", "", err
 	}
+	if err := i.refuseNetworkChange(database, current); err != nil {
+		return "", "", err
+	}
 	differences := cloudSQLSizeOf(i.ref.Tier).listDifferences(current)
 	held, err := i.hasDatabase(ctx, current.Name)
 	if err != nil {
@@ -254,6 +257,10 @@ func refuseVersionChange(database string, spec postgresSpec, current *sqladmin.D
 		"postgres %s asks for %s, and its Cloud SQL instance %s runs %s: a major version changes by an upgrade ocel does not run.\n"+
 			"Declare %s again, or upgrade it with `gcloud sql instances patch %s --database-version=%s` and deploy again",
 		database, spec.version, current.Name, current.DatabaseVersion, current.DatabaseVersion, current.Name, spec.version)
+}
+
+func (i postgresInstances) refuseNetworkChange(database string, current *sqladmin.DatabaseInstance) error {
+	return gcloud.RefuseNetworkChange("postgres "+database, "Cloud SQL instance "+current.Name, gcloud.SQLNetworks(current), i.clients.AppNetworkPath(i.ref.Tier))
 }
 
 func (p *Postgres) Remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress progress.Log) error {
@@ -360,6 +367,9 @@ func (i postgresInstances) ensureInstance(ctx context.Context, database string, 
 	if err := refuseVersionChange(database, spec, current); err != nil {
 		return nil, err
 	}
+	if err := i.refuseNetworkChange(database, current); err != nil {
+		return nil, err
+	}
 	return current, i.clients.EnsureTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name))
 }
 
@@ -391,7 +401,7 @@ func (i postgresInstances) desiredInstance(name string, spec postgresSpec, datab
 					PscEnabled:              true,
 					AllowedConsumerProjects: []string{project},
 					PscAutoConnections: []*sqladmin.PscAutoConnectionConfig{
-						{ConsumerNetwork: i.clients.NetworkPath(i.ref.Tier), ConsumerProject: project},
+						{ConsumerNetwork: i.clients.AppNetworkPath(i.ref.Tier), ConsumerProject: project},
 					},
 				},
 				ForceSendFields: []string{"Ipv4Enabled"},
@@ -504,21 +514,21 @@ func addressOf(instance *sqladmin.DatabaseInstance, network string, emulated boo
 }
 
 func (i postgresInstances) addressOf(instance *sqladmin.DatabaseInstance) string {
-	return addressOf(instance, i.clients.NetworkPath(i.ref.Tier), i.clients.Emulated())
+	return addressOf(instance, i.clients.AppNetworkPath(i.ref.Tier), i.clients.Emulated())
 }
 
 func (i postgresInstances) awaitAddress(ctx context.Context, database string, current *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
 	if i.addressOf(current) != "" {
 		return current, nil
 	}
-	reached, err := gcloud.Until(ctx, "postgres "+database+" to be given an address on "+i.clients.Network(i.ref.Tier),
+	reached, err := gcloud.Until(ctx, "postgres "+database+" to be given an address on "+i.clients.AppNetwork(i.ref.Tier),
 		func() (*sqladmin.DatabaseInstance, error) { return i.readInstance(ctx, database, current.Name) },
 		func(instance *sqladmin.DatabaseInstance) bool { return i.addressOf(instance) != "" })
 	if err != nil {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"the Cloud SQL instance postgres %s runs on, %s, has no address on the %s network yet, so nothing names where an app reaches it: %v\n"+
-				"Check that the tier's private network has its Cloud SQL connection policy, then deploy again",
-			database, current.Name, i.clients.Network(i.ref.Tier), err)
+				"Check that the network has a Cloud SQL service connection policy in %s, then deploy again",
+			database, current.Name, i.clients.AppNetwork(i.ref.Tier), err, i.clients.Region)
 	}
 	return reached, nil
 }

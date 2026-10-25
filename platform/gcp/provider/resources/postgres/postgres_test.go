@@ -464,3 +464,41 @@ func TestADatabaseAskingForAnotherMajorVersionThanItRunsIsRefusedAtPlan(t *testi
 		t.Errorf("plan() of version 17 over an instance running 16 = %v, want the %s refusal the provision would give", err, refusal.CodeInvalid)
 	}
 }
+
+func (h *postgresHarness) joiningTheFleet() {
+	h.instances.clients.Names = h.instances.clients.WithNetwork("fleet", "fleet-europe-west1")
+}
+
+func TestADatabaseOfAProjectNamingANetworkIsGivenItsEndpointOnThatNetwork(t *testing.T) {
+	h := servingPostgres(t)
+	h.joiningTheFleet()
+
+	binding := h.provision(t, "17")
+
+	psc := h.server.Created[0].Settings.IpConfiguration.PscConfig
+	if len(psc.PscAutoConnections) != 1 || psc.PscAutoConnections[0].ConsumerNetwork != "projects/acme-prod/global/networks/fleet" {
+		t.Errorf("created private service connect %s, want an endpoint made in the network the project names", googletest.JSON(t, psc))
+	}
+	if binding.Properties[provider.PropertyHost] != googletest.DatabaseAddress {
+		t.Errorf("the binding's host is %q, want the endpoint's address on the named network", binding.Properties[provider.PropertyHost])
+	}
+}
+
+func TestADatabaseOnTheTiersNetworkIsRefusedOnceTheProjectNamesAnother(t *testing.T) {
+	h := servingPostgres(t)
+	h.provision(t, "17")
+	h.joiningTheFleet()
+
+	spec, err := readPostgres(aDatabase("17").Resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, planned := h.plan(t, "17")
+	_, provisioned := h.instances.provision(context.Background(), aDatabase("17").Resource, spec, nil)
+	for _, err := range []error{planned, provisioned} {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(refused.Message, "ocel-prod-network") || !strings.Contains(refused.Message, "fleet") {
+			t.Errorf("a database on ocel-prod-network deployed naming fleet = %v, want an %s refusal naming both networks", err, refusal.CodeInvalid)
+		}
+	}
+}

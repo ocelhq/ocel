@@ -32,6 +32,7 @@ type Release struct {
 	Region            string
 	ContainerEndpoint string
 	ResolveBilling    func(app string, compute provider.Compute, servesNext bool) run.Billing
+	ReachesNetwork    func(app string) bool
 
 	ContainerTagEndpoint string
 	GateInEnv            bool

@@ -77,6 +77,9 @@ func NewProvider(options Options) (*Provider, error) {
 	if err := options.refuseUnknownBilling(); err != nil {
 		return nil, err
 	}
+	if err := options.refuseUnusableNetwork(); err != nil {
+		return nil, err
+	}
 	endpoint, err := emulatorEndpoint()
 	if err != nil {
 		return nil, err

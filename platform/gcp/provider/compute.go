@@ -22,6 +22,7 @@ func (p *Provider) release() *release.Release {
 		Region:            p.options.Region,
 		ContainerEndpoint: p.containerEndpoint(),
 		ResolveBilling:    p.options.resolveBilling,
+		ReachesNetwork:    p.options.reachesNetwork,
 
 		ContainerTagEndpoint: p.containerTagEndpoint(),
 		GateInEnv:            p.gateInEnv,
