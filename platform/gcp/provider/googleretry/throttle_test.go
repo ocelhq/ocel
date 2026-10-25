@@ -22,7 +22,7 @@ type fakeClock struct {
 }
 
 func newFakeClock() *fakeClock {
-	return &fakeClock{at: time.Date(2026, 10, 25, 12, 0, 15, 0, time.UTC), fraction: 1}
+	return &fakeClock{at: time.Now().UTC().Truncate(time.Minute).Add(time.Minute + 15*time.Second), fraction: 1}
 }
 
 func (f *fakeClock) clock() clock {
