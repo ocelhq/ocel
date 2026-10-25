@@ -8,6 +8,7 @@ import (
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
@@ -47,5 +48,16 @@ func TestANextContainerForwardedPastCloudflareNeedsAWaiverForTheEdgeCache(t *tes
 	}
 	if _, err := conformance.CheckContainerNeeds(t, p, "cloudflare", nextContainerNeeds, string(edge.NeedEdgeCache)); err != nil {
 		t.Errorf("the need check with %s waived = %v, want it to pass", edge.NeedEdgeCache, err)
+	}
+}
+
+func TestNoFrontOnAWSDispatchesANextContainer(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+
+	for _, front := range []edge.Kind{"cloudflare", cloudfront.Kind} {
+		if dispatched := conformance.ListDispatchedComputes(t, p, front); slices.Contains(dispatched, provider.ComputeContainer) {
+			t.Errorf("computes %q dispatches = %v, want no %s: a container's requests are forwarded to its load balancer", front, dispatched, provider.ComputeContainer)
+		}
 	}
 }

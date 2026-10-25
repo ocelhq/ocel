@@ -29,6 +29,11 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 	}
 	facts := factsProto(p)
 	facts.Edge = edgeFactsProto(front.Facts())
+	dispatched, err := ListDispatchedComputes(p, front)
+	if err != nil {
+		return nil, err
+	}
+	facts.Edge.DispatchedComputes = provider.ComputeNames(dispatched)
 	return &contractv1.ConfigureResponse{Facts: facts}, nil
 }
 
@@ -53,4 +58,25 @@ func edgeFactsProto(facts edge.Facts) *contractv1.EdgeFacts {
 			HeaderBytes: int64(limits.HeaderBytes),
 		},
 	}
+}
+
+func ListDispatchedComputes(p provider.Provider, front edge.Edge) ([]provider.Compute, error) {
+	if !front.Facts().RunsCode {
+		return nil, nil
+	}
+	var dispatched []provider.Compute
+	for _, compute := range p.Facts().Computes {
+		kind, paired := p.Facts().PairedRouter(front.Kind(), compute)
+		if !paired {
+			continue
+		}
+		opened, err := p.Routers().Open(kind)
+		if err != nil {
+			return nil, err
+		}
+		if opened.Facts().Dispatches {
+			dispatched = append(dispatched, compute)
+		}
+	}
+	return dispatched, nil
 }
