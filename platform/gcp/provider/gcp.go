@@ -116,6 +116,8 @@ func (p *Provider) Facts() provider.Facts {
 
 		RunsGates:             true,
 		RunsFunctionsAsImages: true,
+
+		BuildsNextContainersFromFunctions: true,
 	}
 }
 

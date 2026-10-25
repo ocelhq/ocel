@@ -7,10 +7,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/functions"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
@@ -25,9 +28,15 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	if app == nil {
 		return nil, nil
 	}
-	if strings.TrimSpace(app.Image) == "" {
+	image := imageToRun(spec)
+	if strings.TrimSpace(image) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a Cloud Run service runs what a registry coordinate names and nothing else", app.App)
+	}
+	if isBuiltFromFunction(app) {
+		if err := next.RefuseGuardWithoutShieldingEdge(spec); err != nil {
+			return nil, err
+		}
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
 		probed := *app
@@ -80,7 +89,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	served := run.Serving{
 		Service:   service,
 		Tier:      spec.Ref.Tier,
-		Image:     app.Image,
+		Image:     image,
 		Env:       values,
 		Account:   account,
 		Compute:   provider.ComputeContainer,
@@ -95,21 +104,17 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 
 		OpensOnPromotion: !run.FactsOf(spec.Edge).RunsCode,
 	}
-	if next.Serves(app) {
+	if isBuiltFromFunction(app) {
+		built := functions.Functions{Release: p.Release}
+		if err := built.UploadBuildFiles(ctx, spec, progress); err != nil {
+			return nil, err
+		}
 		served = next.FillContainerDefaults(served)
-		buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
-		if err != nil {
-			return nil, err
-		}
-		database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, spec.Ref.Project)
-		if err != nil {
-			return nil, err
-		}
-		if served.Env, err = run.MergeValues(app.App, release.NextValues, served.Env, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
-			return nil, err
-		}
+		served.Env, err = built.ServiceEnv(ctx, c, spec, app.Functions[0], served, own, facts)
+	} else {
+		served, err = p.withImageEnv(ctx, c, spec, served, facts)
 	}
-	if served.Env, err = run.MergeValues(app.App, release.OriginGuardValues, served.Env, release.NewOriginGuardEnv(facts.OriginSecret)); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	if err := cloudrun.ApplyGate(gated, app.App, &served); err != nil {
@@ -128,13 +133,45 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		return nil, err
 	}
 	deployed := []provider.AppContainer{{
-		Name: app.App, Physical: service, URL: address, Image: app.Image, Revision: ran.Revision,
+		Name: app.App, Physical: service, URL: address, Image: image, Revision: ran.Revision,
 	}}
-	workers, err := p.ProvisionWorkers(ctx, c, spec, app.Image, account, values, declared, provider.Instances{Max: budget.Ceiling()}, progress)
+	workers, err := p.ProvisionWorkers(ctx, c, spec, image, account, values, declared, provider.Instances{Max: budget.Ceiling()}, progress)
 	if err != nil {
 		return nil, err
 	}
-	return append(deployed, release.WorkerContainers(workers, app.Image)...), nil
+	return append(deployed, release.WorkerContainers(workers, image)...), nil
+}
+
+func (p Containers) withImageEnv(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, served run.Serving, facts release.EdgeFacts) (run.Serving, error) {
+	app := spec.App
+	var err error
+	if next.Serves(app) {
+		served = next.FillContainerDefaults(served)
+		buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
+		if err != nil {
+			return run.Serving{}, err
+		}
+		database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, spec.Ref.Project)
+		if err != nil {
+			return run.Serving{}, err
+		}
+		if served.Env, err = run.MergeValues(app.App, release.NextValues, served.Env, next.NewContainerEnv(spec, served.Memory, next.NewCache(c.Names, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
+			return run.Serving{}, err
+		}
+	}
+	served.Env, err = run.MergeValues(app.App, release.OriginGuardValues, served.Env, release.NewOriginGuardEnv(facts.OriginSecret))
+	return served, err
+}
+
+func isBuiltFromFunction(app *provider.AppSpec) bool {
+	return next.Serves(app) && len(app.Functions) == 1
+}
+
+func imageToRun(spec provider.StackSpec) string {
+	if !isBuiltFromFunction(spec.App) {
+		return spec.App.Image
+	}
+	return functioncode.FunctionImageRef(spec.Images, spec.App.Functions[0].Name)
 }
 
 func (p Containers) Remove(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) error {
@@ -172,8 +209,9 @@ func (p Containers) Name(ctx context.Context, spec provider.StackSpec) ([]provid
 	if err != nil {
 		return nil, err
 	}
-	workers := release.WorkerContainers(named, spec.App.Image)
-	return append([]provider.AppContainer{{Name: spec.App.App, Physical: service, Image: spec.App.Image}}, workers...), nil
+	image := imageToRun(spec)
+	workers := release.WorkerContainers(named, image)
+	return append([]provider.AppContainer{{Name: spec.App.App, Physical: service, Image: image}}, workers...), nil
 }
 
 func (p Containers) RemoveRevisions(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) ([]provider.AppContainer, error) {

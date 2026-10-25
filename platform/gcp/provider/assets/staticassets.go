@@ -28,7 +28,7 @@ type staticFile struct {
 }
 
 func servesStaticFiles(spec provider.StackSpec) bool {
-	return spec.App != nil && spec.App.Framework == buildoutput.FrameworkNext && spec.App.Compute != provider.ComputeContainer && spec.App.Routing != nil
+	return spec.App != nil && spec.App.Framework == buildoutput.FrameworkNext && len(spec.App.Functions) > 0 && spec.App.Routing != nil
 }
 
 func (p *Store) UploadStaticFiles(ctx context.Context, spec provider.StackSpec, runProgress progress.Log) error {

@@ -170,3 +170,17 @@ func TestANextServiceIsToldTheBucketItsStaticFilesLiveIn(t *testing.T) {
 		t.Errorf("the Next service reads OCEL_EDGE_BUCKET=%q, want its tier's edge bucket %q", got, want)
 	}
 }
+
+func TestANextContainerBuiltFromItsFunctionUploadsItsStaticFiles(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	root := plantStatic(t, map[string]string{"static/_next/static/app.js": "chunk"})
+
+	if _, err := p.ProvisionContainers(context.Background(), builtAt(builtFromItsFunction(staticSpec()), root), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	if names := uploadNames(server.Stored()); !slices.Equal(names, []string{"assets/shop/prod/web/r1a2b3c4d/_next/static/app.js"}) {
+		t.Errorf("the deploy uploaded %v, want the static file its build left out of its function", names)
+	}
+}

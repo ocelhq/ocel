@@ -198,3 +198,23 @@ func TestANextContainerBehindTheALBIsGrantedNeitherTheCachePurgeNorItsStaticFile
 		t.Errorf("the container's account holds %q, and a container serves its static files from its own image", got)
 	}
 }
+
+func TestANextContainerBuiltFromItsFunctionBehindTheALBIsToldTheURLMapAndGrantedItsPurge(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+
+	if _, err := p.ProvisionContainers(context.Background(), builtFromItsFunction(behindTheALB(t, p)), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
+	if got, want := env["OCEL_CDN_URL_MAP"], "projects/acme-prod/global/urlMaps/ocel-prod-alb-routes"; got != want {
+		t.Errorf("the container reads OCEL_CDN_URL_MAP=%q, want %q: it revalidates the pages Cloud CDN stores", got, want)
+	}
+	if got := purgeBindingsOf(server.Identities()); len(got) == 0 {
+		t.Error("the container's account holds no cache purge, and it clears the pages Cloud CDN stores")
+	}
+	if got := assetBindingsOf(server.Identities()); len(got) == 0 {
+		t.Error("the container's account holds nothing on its static files, which its build left out of its image")
+	}
+}

@@ -117,3 +117,20 @@ func builtAt(spec provider.StackSpec, root string) provider.StackSpec {
 	spec.App.OutputRoot = root
 	return spec
 }
+
+func TestANextContainerBuiltFromItsFunctionSeedsItsPagesBeforeItsServiceIsCreated(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	root := plantPrerenders(t, map[string]string{"cache/index.cache.json": "{}"})
+
+	if _, err := p.ProvisionContainers(context.Background(), builtAt(builtFromItsFunction(routedNextSpec()), root), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	if names := uploadNames(server.Stored()); !slices.Equal(names, []string{"pages/shop/prod/web/r1a2b3c4d/index.cache.json"}) {
+		t.Errorf("the deploy uploaded %v, want the page its build prerendered", names)
+	}
+	if events := server.Happened(); len(events) == 0 || events[len(events)-1] != "create" {
+		t.Errorf("the deploy did %v, want every upload before the service is created", events)
+	}
+}

@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -147,6 +149,64 @@ func TestANextFunctionRunsOnThePlainNodeBase(t *testing.T) {
 	}
 	if !slices.ContainsFunc(file.Config.Env, func(entry string) bool { return strings.HasPrefix(entry, "PATH="+nodeBinDir) }) {
 		t.Errorf("the Next base has env %v, and its command is `node`, which is only at %s", file.Config.Env, nodeBinDir)
+	}
+}
+
+type unreadStore struct{ provider.ImageStore }
+
+func containerSpec(t *testing.T, functions ...provider.FunctionSpec) provider.StackSpec {
+	t.Helper()
+	return provider.StackSpec{
+		Ref:    provider.StackRef{Project: "shop"},
+		Images: provider.ImagePushes{Store: unreadStore{}},
+		App: &provider.AppSpec{
+			App:       "web",
+			Framework: buildoutput.FrameworkNext,
+			Compute:   provider.ComputeContainer,
+			Functions: functions,
+		},
+	}
+}
+
+func builtFunction(t *testing.T) provider.FunctionSpec {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.mjs"), []byte("export {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, buildoutput.FunctionConfigFile), []byte(`{"entryFile":"index.mjs"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return provider.FunctionSpec{
+		Name:        "web",
+		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkNext, Arch: string(arch.X8664)},
+		ArtifactDir: dir,
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionIsHandedThatFunctionsImage(t *testing.T) {
+	p, _ := basedOn(t, v1.Config{})
+
+	imaged, err := p.WithImages(context.Background(), containerSpec(t, builtFunction(t)))
+	if err != nil {
+		t.Fatalf("WithImages() = %v", err)
+	}
+	if pushes := imaged.Images.Pushes; len(pushes) != 1 || !pushes[0].Function || pushes[0].App != "web" || pushes[0].Built == nil {
+		t.Errorf("WithImages() pushes %+v, want the one image built from the container's function", pushes)
+	}
+}
+
+func TestAContainerRunFromAnImageIsHandedNoFunctionImage(t *testing.T) {
+	p, _ := basedOn(t, v1.Config{})
+	spec := containerSpec(t)
+	spec.App.Image = "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc"
+
+	imaged, err := p.WithImages(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("WithImages() = %v", err)
+	}
+	if len(imaged.Images.Pushes) != 0 {
+		t.Errorf("WithImages() pushes %+v, want none: the container runs the image it names", imaged.Images.Pushes)
 	}
 }
 
