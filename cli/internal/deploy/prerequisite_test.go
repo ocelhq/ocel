@@ -324,7 +324,7 @@ func TestDecliningTheBootstrapPlanAppliesNothingAndExitsZero(t *testing.T) {
 	if applied := fixture.Provider.FakeBootstrap().Applied()[before:]; len(applied) != 0 {
 		t.Errorf("the provider applied %+v after its plan was declined, want nothing", applied)
 	}
-	if !strings.Contains(stdout.String(), "Not confirmed, so this run changes nothing") {
+	if !strings.Contains(stdout.String(), "Not confirmed; nothing changed") {
 		t.Errorf("stdout = %q, want the declined plan to say the run changes nothing", stdout.String())
 	}
 	if sent := sentDeploys(t, fixture); len(sent) != 0 {

@@ -283,7 +283,7 @@ func TestPromotionsPruneReclaimsOldPromotionsOnceConsented(t *testing.T) {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
+		if !strings.Contains(out, "Not confirmed; nothing changed") {
 			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
 		}
 		if strings.Contains(out, "Reclaimed") {

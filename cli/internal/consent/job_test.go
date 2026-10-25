@@ -59,7 +59,7 @@ func TestInsideAJobAConfirmationIsPutToOcelCloudRatherThanAssumed(t *testing.T) 
 			if assumed := summaryOf(t, term, span).GetAssumed(); len(assumed) != 0 {
 				t.Errorf("assumed = %v, want nothing assumed: somebody was asked", assumed)
 			}
-			if !confirmed && !strings.Contains(strings.Join(shape(term.received()), "\n"), "Not confirmed, so this run changes nothing") {
+			if !confirmed && !strings.Contains(strings.Join(shape(term.received()), "\n"), "Not confirmed; nothing changed") {
 				t.Errorf("stream = %q, want a declined confirmation to say this run changes nothing", shape(term.received()))
 			}
 		})

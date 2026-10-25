@@ -334,7 +334,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"is a NEW project.", "Already deployed: billing, my-application", "Not confirmed, so this run changes nothing", "Nothing deployed to preview"} {
+		for _, want := range []string{"is a NEW project.", "Already deployed: billing, my-application", "Not confirmed; nothing changed", "Nothing deployed to preview"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}

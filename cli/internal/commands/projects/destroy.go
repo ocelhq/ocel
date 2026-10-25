@@ -303,8 +303,7 @@ func readRemovalTarget(ctx context.Context, check *run.Span, provider *providerp
 	}
 	target.edge = recorded.GetEdge()
 	if registry := recorded.GetRegistry(); registry.GetServer() != "" {
-		target.warning = fmt.Sprintf("The images %s pushed to %s stay there until they are deleted in the registry: "+
-			"its password is never recorded, so run `%s` from %s's directory for the removal to delete them",
+		target.warning = fmt.Sprintf("The images %s pushed to %s will stay there: run `%s` from %s's directory to delete them",
 			slug, registry.GetServer(), destroyCommand, slug)
 	}
 	return target, nil

@@ -749,7 +749,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			"Removing isr from the production bootstrap tears down what it installed.",
-			"Not confirmed, so this run changes nothing",
+			"Not confirmed; nothing changed",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
