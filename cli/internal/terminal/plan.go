@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/run"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -20,6 +22,9 @@ const (
 func planLines(present Presentation, plan *planv1.ChangePlan) []string {
 	out := []string{planHeadline(plan) + ":"}
 	shown, counts := readPlan(plan)
+	if !present.Verbose {
+		shown = countStacks(shown)
+	}
 	for i, group := range shown {
 		if i == 0 || len(shown[i-1].GetChanges()) > 0 || len(group.GetChanges()) > 0 {
 			out = append(out, "")
@@ -76,6 +81,37 @@ func readPlan(plan *planv1.ChangePlan) ([]*planv1.ChangeGroup, planCounts) {
 		}
 	}
 	return shown, counts
+}
+
+func countStacks(shown []*planv1.ChangeGroup) []*planv1.ChangeGroup {
+	var out []*planv1.ChangeGroup
+	for i := 0; i < len(shown); {
+		run := i + 1
+		for run < len(shown) && countable(shown[i]) && sameStackRow(shown[i], shown[run]) {
+			run++
+		}
+		if run-i == 1 {
+			out = append(out, shown[i])
+		} else {
+			counted := proto.CloneOf(shown[i])
+			counted.Name = fmt.Sprintf("%d stacks", run-i)
+			out = append(out, counted)
+		}
+		i = run
+	}
+	return out
+}
+
+func countable(group *planv1.ChangeGroup) bool {
+	return group.GetKind() == provider.StackGroupKind && len(group.GetChanges()) == 0
+}
+
+func sameStackRow(first, next *planv1.ChangeGroup) bool {
+	return countable(next) &&
+		next.GetPart() == first.GetPart() &&
+		next.GetAction() == first.GetAction() &&
+		next.GetReason() == first.GetReason() &&
+		next.GetSlow() == first.GetSlow()
 }
 
 func acted(group *planv1.ChangeGroup, acting []*planv1.Change) *planv1.ChangeGroup {
