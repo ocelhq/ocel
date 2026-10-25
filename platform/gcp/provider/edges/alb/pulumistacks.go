@@ -24,6 +24,7 @@ const cloudStorageScheme = "gs"
 
 type PulumiStacks struct {
 	OpenClients func(context.Context) (*gcloud.Clients, error)
+	SkipChecks  bool
 }
 
 func (s PulumiStacks) Up(
@@ -110,7 +111,7 @@ func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target
 		Program: func(ctx *sdk.Context, program Program) error { return program(ctx, clients.Project()) },
 	}
 	if target.Slug == "" {
-		config.Refresh = refreshesTheFront
+		config.Refresh = s.refreshesTheFront
 	}
 	return config, provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(target.Name())}
 }
@@ -122,7 +123,9 @@ func ListTierProjects(tier environment.Tier) []string {
 	}
 }
 
-func refreshesTheFront(provider.StackRef, pulumi.Operation) bool { return true }
+func (s PulumiStacks) refreshesTheFront(_ provider.StackRef, op pulumi.Operation) bool {
+	return op != pulumi.OperationDestroy || !s.SkipChecks
+}
 
 func (s PulumiStacks) passphrase(ctx context.Context, clients *gcloud.Clients, tier environment.Tier) (string, error) {
 	secrets, err := clients.Secrets()

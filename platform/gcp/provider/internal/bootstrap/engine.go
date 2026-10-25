@@ -31,12 +31,13 @@ const (
 )
 
 type Engine struct {
-	Clients   *gcloud.Clients
-	Edges     provider.Edges
-	Stores    gcloud.Memorystore
-	Records   records.Store
-	WrittenBy provider.WrittenBy
-	Surveyed  *Surveys
+	Clients    *gcloud.Clients
+	Edges      provider.Edges
+	Stores     gcloud.Memorystore
+	Records    records.Store
+	WrittenBy  provider.WrittenBy
+	Surveyed   *Surveys
+	SkipChecks bool
 
 	PushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	DeployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
@@ -50,7 +51,7 @@ type Engine struct {
 }
 
 func (b Engine) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
-	read, err := b.survey(ctx, tier)
+	read, err := b.surveyReading(ctx, tier, !b.SkipChecks)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
@@ -71,7 +72,7 @@ func (b Engine) Described(ctx context.Context, read Survey) (provider.BootstrapD
 	stacks := []provider.BootstrapStack{{
 		Name:          read.Project + "/" + string(read.Tier),
 		Present:       read.Present,
-		DigestCurrent: read.Stamp.Digest == DigestOf(read.Names.Namespace(), items) && read.current(items),
+		DigestCurrent: read.Stamp.Digest == DigestOf(read.Names.Namespace(), items) && (!read.ResourcesRead || read.current(items)),
 		WrittenBy:     read.Stamp.Writer,
 	}}
 	for _, part := range read.Stamp.Parts {
@@ -87,7 +88,9 @@ func (b Engine) Described(ctx context.Context, read Survey) (provider.BootstrapD
 			WrittenBy:     read.Stamp.Writer,
 		})
 	}
-	b.Surveyed.Remember(read)
+	if read.ResourcesRead {
+		b.Surveyed.Remember(read)
+	}
 	return provider.BootstrapDescription{
 		Tier:       read.Tier,
 		Present:    read.Present,

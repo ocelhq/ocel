@@ -58,6 +58,22 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	}
 }
 
+func TestTheFrontIsRefreshedBeforeItIsDestroyedOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
+	t.Parallel()
+
+	for skipChecks, wantRefreshed := range map[bool]bool{false: true, true: false} {
+		stacks := stacking(t)
+		stacks.SkipChecks = skipChecks
+		front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction}, "secret")
+		if refreshed := front.Refresh(ref, pulumi.OperationDestroy); refreshed != wantRefreshed {
+			t.Errorf("refresh before the front's destroy with the checks skipped %t = %t, want %t: the harness skips them to trade the drift check for speed", skipChecks, refreshed, wantRefreshed)
+		}
+		if !front.Refresh(ref, pulumi.OperationProvision) {
+			t.Errorf("refresh before the front is raised with the checks skipped %t = false, want true: it keeps the routes binds wrote beside it", skipChecks)
+		}
+	}
+}
+
 func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing.T) {
 	t.Parallel()
 

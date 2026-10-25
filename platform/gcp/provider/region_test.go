@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -139,5 +140,21 @@ func TestACredentialThatMayNotListTheRegionsCloudRunServesIsRefusedNamingThePerm
 		"Granting roles/run.admin covers it, but the permission is what is checked"
 	if refused.Message != want {
 		t.Errorf("refused with\n%s\nwant\n%s", refused.Message, want)
+	}
+}
+
+func TestARunChecksItsRegionAgainstCloudRunOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(t.TempDir(), "no-such-key.json"))
+	for skipChecks, wantChecked := range map[bool]bool{false: true, true: false} {
+		p := &Provider{
+			options:    Options{Project: "acme-prod", Region: "europe-west1"},
+			resolved:   &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1"},
+			skipChecks: skipChecks,
+		}
+
+		_, err := p.openClients(context.Background())
+		if checked := err != nil; checked != wantChecked {
+			t.Errorf("openClients() with the checks skipped %t = %v, want the region checked %t: with no credential, only the check reaches for one", skipChecks, err, wantChecked)
+		}
 	}
 }

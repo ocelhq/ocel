@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
@@ -149,6 +151,35 @@ func TestANextAppIsAdmittedWithoutReadingWhatTheTierHasInstalled(t *testing.T) {
 			if err := p.ApplyPreflight(context.Background(), pre); err != nil {
 				t.Errorf("ApplyPreflight() of a Next app (container %v) behind %q = %v, want it admitted without reading the stamp: the edge refreshes a stale page", container, front, err)
 			}
+		}
+	}
+}
+
+func TestADeployAsksWhetherTheAPIsItRunsOnAreOnOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
+	for skipChecks, wantAsked := range map[bool]bool{false: true, true: false} {
+		var asked atomic.Int32
+		served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.Contains(r.URL.Path, "/projects/acme-prod/services/") {
+				t.Errorf("preflight called %s %s, want at most whether the APIs the deploy runs on are on", r.Method, r.URL.Path)
+				http.NotFound(w, r)
+				return
+			}
+			asked.Add(1)
+			googletest.WriteBody(w, map[string]any{"name": r.URL.Path, "state": bootstrap.EnabledService})
+		}))
+		t.Cleanup(served.Close)
+		p := pushing(t, served.URL)
+		p.skipChecks = skipChecks
+		recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys, bootstrap.EdgeBucket, bootstrap.CacheBucket)
+
+		if _, err := p.PlanPreflight(context.Background(), shippingNext(false)); err != nil {
+			t.Fatalf("PlanPreflight() with the checks skipped %t = %v", skipChecks, err)
+		}
+		if err := p.ApplyPreflight(context.Background(), shippingNext(false)); err != nil {
+			t.Fatalf("ApplyPreflight() with the checks skipped %t = %v", skipChecks, err)
+		}
+		if got := asked.Load() > 0; got != wantAsked {
+			t.Errorf("preflight with the checks skipped %t asked about %d APIs, want asked %t: the harness that skips them deploys into a project it has already deployed into", skipChecks, asked.Load(), wantAsked)
 		}
 	}
 }
