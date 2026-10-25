@@ -3,6 +3,7 @@ package googleretry
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -18,11 +19,29 @@ const (
 	throttleCeiling = time.Minute
 )
 
+const (
+	rateLimitReason       = "rateLimitExceeded"
+	rateLimitDetailReason = "RATE_LIMIT_EXCEEDED"
+)
+
 func isThrottled(code int, err error) bool {
-	if code != 0 {
-		return code == http.StatusTooManyRequests
+	switch code {
+	case 0:
+		return status.Code(err) == codes.ResourceExhausted
+	case http.StatusTooManyRequests:
+		return true
+	case http.StatusForbidden:
+		return isRateLimited(err)
 	}
-	return status.Code(err) == codes.ResourceExhausted
+	return false
+}
+
+func isRateLimited(err error) bool {
+	var answered *googleapi.Error
+	if errors.As(err, &answered) && slices.ContainsFunc(answered.Errors, func(item googleapi.ErrorItem) bool { return item.Reason == rateLimitReason }) {
+		return true
+	}
+	return errorDetails(err).ErrorInfo.GetReason() == rateLimitDetailReason
 }
 
 func (c clock) throttleWait(err error, throttles int) time.Duration {
