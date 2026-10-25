@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
@@ -23,6 +24,8 @@ const (
 	reasonEmulated    = "emulator serves one implicit database"
 	reasonUnprotected = "its delete protection is off"
 )
+
+var firestorePatience = gcloud.Patience{Attempts: 180, Ceiling: 10 * time.Second}
 
 const (
 	NativeFirestore = "FIRESTORE_NATIVE"
@@ -148,7 +151,7 @@ func (b Engine) Awaited(ctx context.Context, doing string, operation *firestorea
 	if err != nil {
 		return err
 	}
-	finished, err := gcloud.Until(ctx, doing, func() (*firestoreadmin.GoogleLongrunningOperation, error) {
+	finished, err := gcloud.Waiting(ctx, firestorePatience, doing, func() (*firestoreadmin.GoogleLongrunningOperation, error) {
 		return googleretry.Attempted(ctx, service.Projects.Databases.Operations.Get(operation.Name).Context(ctx).Do)
 	}, func(polled *firestoreadmin.GoogleLongrunningOperation) bool { return polled.Done })
 	if err != nil {

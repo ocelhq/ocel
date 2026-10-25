@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	firestoreadmin "google.golang.org/api/firestore/v1"
+	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -64,12 +65,12 @@ func SharedDatabasePart(layouts ...Layout) bootstrap.RemovablePart {
 	return bootstrap.RemovablePart{
 		Part: provider.Part{Name: SharedDatabasePartName, Summary: sharedDatabaseSummary},
 		Deployed: func(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
-			return sharedDatabasePart(b, tier, layouts)
+			return sharedDatabasePart(b, tier, layouts, nil)
 		},
 	}
 }
 
-func sharedDatabasePart(b bootstrap.Engine, tier environment.Tier, layouts []Layout) bootstrap.Part {
+func sharedDatabasePart(b bootstrap.Engine, tier environment.Tier, layouts []Layout, log progress.Log) bootstrap.Part {
 	database := b.Clients.SharedDatabase(tier)
 	content, _ := json.Marshal(layouts)
 	part := bootstrap.Part{
@@ -77,7 +78,7 @@ func sharedDatabasePart(b bootstrap.Engine, tier environment.Tier, layouts []Lay
 		Summary:   sharedDatabaseSummary,
 		Content:   string(content),
 		Resources: []provider.PhysicalResource{{Kind: string(bootstrap.KindDatabase), ID: database}},
-		Make:      func(ctx context.Context) error { return ensureAppDatabase(ctx, b, tier, database, layouts) },
+		Make:      func(ctx context.Context) error { return ensureAppDatabase(ctx, b, tier, database, layouts, log) },
 		Remove: func(ctx context.Context) error {
 			if b.Clients.Emulated() {
 				return nil
@@ -138,7 +139,7 @@ func PlanProjectDatabase(ctx context.Context, b bootstrap.Engine, tier environme
 	}}, nil
 }
 
-func EnsureProjectDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, own bool, layouts ...Layout) error {
+func EnsureProjectDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, own bool, log progress.Log, layouts ...Layout) error {
 	recorded, found, err := ports.ReadProjectDatabaseRecord(ctx, b.Records, tier, project)
 	if err != nil {
 		return err
@@ -146,25 +147,25 @@ func EnsureProjectDatabase(ctx context.Context, b bootstrap.Engine, tier environ
 	if found {
 		return refuseMovedDatabase(b.Clients, tier, project, recorded, own)
 	}
-	return recordProjectDatabase(ctx, b, tier, project, own, layouts)
+	return recordProjectDatabase(ctx, b, tier, project, own, layouts, log)
 }
 
-func EnsureProjectDatabaseRecorded(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, own bool, layouts ...Layout) error {
+func EnsureProjectDatabaseRecorded(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, own bool, log progress.Log, layouts ...Layout) error {
 	_, found, err := ports.ReadProjectDatabaseRecord(ctx, b.Records, tier, project)
 	if err != nil || found {
 		return err
 	}
-	return recordProjectDatabase(ctx, b, tier, project, own, layouts)
+	return recordProjectDatabase(ctx, b, tier, project, own, layouts, log)
 }
 
-func recordProjectDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, own bool, layouts []Layout) error {
+func recordProjectDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string, own bool, layouts []Layout, log progress.Log) error {
 	database := b.Clients.SharedDatabase(tier)
 	if own {
 		database = b.Clients.OwnDatabase(tier, project)
-		if err := ensureAppDatabase(ctx, b, tier, database, layouts); err != nil {
+		if err := ensureAppDatabase(ctx, b, tier, database, layouts, log); err != nil {
 			return err
 		}
-	} else if err := b.EnsurePart(ctx, tier, project, sharedDatabasePart(b, tier, layouts)); err != nil {
+	} else if err := b.EnsurePart(ctx, tier, project, sharedDatabasePart(b, tier, layouts, log)); err != nil {
 		return err
 	}
 	value, err := ports.ProjectDatabaseRecord(database)
@@ -199,17 +200,17 @@ func refuseMovedDatabase(c *gcloud.Clients, tier environment.Tier, project, reco
 	return nil
 }
 
-func ensureAppDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, database string, layouts []Layout) error {
+func ensureAppDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, database string, layouts []Layout, log progress.Log) error {
 	if b.Clients.Emulated() {
 		return nil
 	}
-	if err := makeAppDatabase(ctx, b, tier, database, layouts); err != nil {
+	if err := makeAppDatabase(ctx, b, tier, database, layouts, log); err != nil {
 		return err
 	}
 	return ports.UntilDatabaseServes(ctx, b.Clients.Workload(), database)
 }
 
-func makeAppDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, database string, layouts []Layout) error {
+func makeAppDatabase(ctx context.Context, b bootstrap.Engine, tier environment.Tier, database string, layouts []Layout, log progress.Log) error {
 	err := b.MakeTierDatabase(ctx, tier, database)
 	if googleretry.AnsweredCode(err) == http.StatusTooManyRequests || err != nil && strings.Contains(strings.ToLower(err.Error()), databaseQuotaMessage) {
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -220,57 +221,106 @@ func makeAppDatabase(ctx context.Context, b bootstrap.Engine, tier environment.T
 	if err != nil {
 		return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
 	}
-	for _, layout := range layouts {
-		if err := makeLayout(ctx, b, database, layout); err != nil {
-			return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
+	if err := layOut(ctx, b, database, layouts, log); err != nil {
+		return gcloud.ExplainMissingGrant(err, b.Clients.DeployCredential(tier).Tiered(credential.DatabasesRole).String())
+	}
+	return nil
+}
+
+type layoutChange struct {
+	asked        string
+	doing        string
+	createsIndex bool
+	call         func(...googleapi.CallOption) (*firestoreadmin.GoogleLongrunningOperation, error)
+}
+
+type startedChange struct {
+	doing     string
+	operation *firestoreadmin.GoogleLongrunningOperation
+}
+
+func layOut(ctx context.Context, b bootstrap.Engine, database string, layouts []Layout, log progress.Log) error {
+	service, err := b.Clients.Databases()
+	if err != nil {
+		return err
+	}
+	var started []startedChange
+	unfinished := 0
+	for _, change := range layoutChanges(ctx, service, bootstrap.DatabasePath(b.Clients, database), database, layouts) {
+		operation, err := startLayoutChange(ctx, change)
+		if change.createsIndex && gcloud.Taken(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("%s: %w", change.asked, err)
+		}
+		if operation != nil && !operation.Done {
+			unfinished++
+		}
+		started = append(started, startedChange{doing: change.doing, operation: operation})
+	}
+	if unfinished > 0 {
+		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Waiting on Firestore to make %d indexes and field settings of database %s, which takes minutes on a new database", unfinished, database))
+	}
+	for _, change := range started {
+		if err := b.Awaited(ctx, change.doing, change.operation); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func makeLayout(ctx context.Context, b bootstrap.Engine, database string, layout Layout) error {
-	service, err := b.Clients.Databases()
-	if err != nil {
+func startLayoutChange(ctx context.Context, change layoutChange) (*firestoreadmin.GoogleLongrunningOperation, error) {
+	var operation *firestoreadmin.GoogleLongrunningOperation
+	err := googleretry.UntilUncontended(ctx, isContended, func() error {
+		var err error
+		operation, err = googleretry.AttemptedUntilServed(ctx, change.call)
 		return err
+	})
+	return operation, err
+}
+
+func isContended(err error) bool {
+	if !gcloud.Taken(err) {
+		return false
 	}
-	path := bootstrap.DatabasePath(b.Clients, database)
-	for _, field := range layout.Expiring {
-		operation, err := googleretry.AttemptedUntilServed(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(fieldPath(path, field),
-			&firestoreadmin.GoogleFirestoreAdminV1Field{TtlConfig: &firestoreadmin.GoogleFirestoreAdminV1TtlConfig{}}).
-			UpdateMask("ttlConfig").Context(ctx).Do)
-		if err != nil {
-			return fmt.Errorf("let Firestore delete %s once %s passes: %w", field.Group, field.Path, err)
+	message := err.Error()
+	return strings.Contains(message, "underlying data changed") || strings.Contains(message, "cross-transaction contention")
+}
+
+func layoutChanges(ctx context.Context, service *firestoreadmin.Service, path, database string, layouts []Layout) []layoutChange {
+	fields := service.Projects.Databases.CollectionGroups.Fields
+	var changes []layoutChange
+	for _, layout := range layouts {
+		for _, field := range layout.Expiring {
+			changes = append(changes, layoutChange{
+				asked: fmt.Sprintf("let Firestore delete %s once %s passes", field.Group, field.Path),
+				doing: fmt.Sprintf("setting the time to live of %s on %s", field.Group, field.Path),
+				call: fields.Patch(fieldPath(path, field), &firestoreadmin.GoogleFirestoreAdminV1Field{
+					TtlConfig: &firestoreadmin.GoogleFirestoreAdminV1TtlConfig{},
+				}).UpdateMask("ttlConfig").Context(ctx).Do,
+			})
 		}
-		if err := b.Awaited(ctx, fmt.Sprintf("setting the time to live of %s on %s", field.Group, field.Path), operation); err != nil {
-			return err
+		for _, field := range layout.Unindexed {
+			changes = append(changes, layoutChange{
+				asked: fmt.Sprintf("leave %s of %s unindexed", field.Path, field.Group),
+				doing: "leaving " + field.Path + " of " + field.Group + " unindexed",
+				call: fields.Patch(fieldPath(path, field), &firestoreadmin.GoogleFirestoreAdminV1Field{IndexConfig: &firestoreadmin.GoogleFirestoreAdminV1IndexConfig{
+					Indexes:         []*firestoreadmin.GoogleFirestoreAdminV1Index{},
+					ForceSendFields: []string{"Indexes"},
+				}}).UpdateMask("indexConfig").Context(ctx).Do,
+			})
+		}
+		for _, index := range layout.Indexes {
+			changes = append(changes, layoutChange{
+				asked:        fmt.Sprintf("index the %s of %s", index.Group, database),
+				doing:        "building an index on the " + index.Group + " of " + database,
+				createsIndex: true,
+				call:         service.Projects.Databases.CollectionGroups.Indexes.Create(path+"/collectionGroups/"+index.Group, index.Index).Context(ctx).Do,
+			})
 		}
 	}
-	for _, field := range layout.Unindexed {
-		operation, err := googleretry.AttemptedUntilServed(ctx, service.Projects.Databases.CollectionGroups.Fields.Patch(fieldPath(path, field),
-			&firestoreadmin.GoogleFirestoreAdminV1Field{IndexConfig: &firestoreadmin.GoogleFirestoreAdminV1IndexConfig{
-				Indexes:         []*firestoreadmin.GoogleFirestoreAdminV1Index{},
-				ForceSendFields: []string{"Indexes"},
-			}}).UpdateMask("indexConfig").Context(ctx).Do)
-		if err != nil {
-			return fmt.Errorf("leave %s of %s unindexed: %w", field.Path, field.Group, err)
-		}
-		if err := b.Awaited(ctx, "leaving "+field.Path+" of "+field.Group+" unindexed", operation); err != nil {
-			return err
-		}
-	}
-	for _, index := range layout.Indexes {
-		operation, err := googleretry.AttemptedUntilServed(ctx, service.Projects.Databases.CollectionGroups.Indexes.Create(path+"/collectionGroups/"+index.Group, index.Index).Context(ctx).Do)
-		if gcloud.Taken(err) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("index the %s of %s: %w", index.Group, database, err)
-		}
-		if err := b.Awaited(ctx, "building an index on the "+index.Group+" of "+database, operation); err != nil {
-			return err
-		}
-	}
-	return nil
+	return changes
 }
 
 func fieldPath(database string, field LayoutField) string {

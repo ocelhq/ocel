@@ -153,7 +153,7 @@ func (p *Provider) ensureProjectDatabase(ctx context.Context, pre provider.Deplo
 	if err != nil {
 		return err
 	}
-	return variables.EnsureProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase, appDatabaseLayouts()...)
+	return variables.EnsureProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase, pre.Progress, appDatabaseLayouts()...)
 }
 
 func (p *Provider) leaveALB(ctx context.Context, pre provider.DeployPreflight) error {
