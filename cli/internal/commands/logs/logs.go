@@ -188,12 +188,12 @@ func (o logsOptions) resolve(dependencies Dependencies, cwd string) (logsQuery, 
 			return logsQuery{}, outputMode{}, err
 		}
 		if !o.tail {
-			return logsQuery{}, outputMode{}, errors.New("--for stops a --tail, so pass --tail with it")
+			return logsQuery{}, outputMode{}, errors.New("--for needs --tail")
 		}
 		query.stopAfter = stopAfter
 	}
 	if o.tail && o.until != "" {
-		return logsQuery{}, outputMode{}, errors.New("--until ends a window, which a --tail never has, so drop one of them")
+		return logsQuery{}, outputMode{}, errors.New("--until and --tail cannot be used together: drop one")
 	}
 	if o.lines < 1 || o.lines > maxLines {
 		return logsQuery{}, outputMode{}, fmt.Errorf("--lines %d is outside 1 to %d", o.lines, maxLines)
@@ -230,7 +230,7 @@ func (o logsOptions) resolve(dependencies Dependencies, cwd string) (logsQuery, 
 func parseMoment(now time.Time, flag, value string) (time.Time, error) {
 	if elapsed, err := time.ParseDuration(value); err == nil {
 		if elapsed < 0 {
-			return time.Time{}, fmt.Errorf("%s %q counts back from now, so it cannot be negative", flag, value)
+			return time.Time{}, fmt.Errorf("%s %q cannot be negative", flag, value)
 		}
 		return now.Add(-elapsed), nil
 	}
@@ -243,7 +243,7 @@ func parseMoment(now time.Time, flag, value string) (time.Time, error) {
 func (o logsOptions) resolveEnvironment(dependencies Dependencies, cwd string) (*environmentv1.Environment, error) {
 	if !o.preview {
 		if o.environment != "" {
-			return nil, errors.New("--environment names a preview environment, so pass --preview with it")
+			return nil, errors.New("--environment needs --preview")
 		}
 		return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, nil
 	}

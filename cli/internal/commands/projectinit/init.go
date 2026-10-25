@@ -66,7 +66,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 			"and adds the ocel SDK with your language's own package manager.\n\n" +
 			"Adds .ocel/, where ocel keeps build output, run logs and local state, to .gitignore\n" +
 			"unless git already ignores it.\n\n" +
-			"Runs entirely offline: it neither signs you in nor contacts the Ocel console.\n\n" +
+			"Runs offline.\n\n" +
 			"The slug is the project's deployment identity — every stack and resource\n" +
 			"ocel creates in your own provider account is keyed on it, so changing it later\n" +
 			"forks a new project. It defaults to this directory's name.\n\n" +
@@ -114,7 +114,7 @@ func runInitCommand(ctx context.Context, dependencies Dependencies, cwd, slug st
 			return err
 		}
 		if !answered {
-			return &exitcode.ExitError{Code: exitcode.Interrupt, Err: errors.New("init was cancelled before every option was given, and wrote nothing")}
+			return &exitcode.ExitError{Code: exitcode.Interrupt, Err: errors.New("init cancelled; nothing written")}
 		}
 	}
 	result, err := initProject(ctx, dependencies, resolved)
@@ -197,7 +197,7 @@ func resolveInit(cwd, slug string, opts initOptions) (resolvedInit, error) {
 		return resolvedInit{}, fmt.Errorf("check for existing %s: %w", name, err)
 	}
 	if others := project.OtherConfigFiles(configPath); len(others) > 0 {
-		return resolvedInit{}, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
+		return resolvedInit{}, &clierror.Error{Code: clierror.CodeInitConfigExists, Cause: fmt.Errorf("%s already contains %s: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)}
 	}
 	return resolvedInit{
 		configPath: configPath,
@@ -269,7 +269,7 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 
 	switch wrote, err := ensureStateDirIgnored(projectDir); {
 	case err != nil:
-		build.Warn(fmt.Sprintf("Could not add %s to %s (%v) — add it yourself: ocel keeps build output, run logs and local state there.", stateDirPattern, gitignoreName, err))
+		build.Warn(fmt.Sprintf("Could not add %s to %s (%v) — add it yourself.", stateDirPattern, gitignoreName, err))
 	case wrote:
 		build.Say(fmt.Sprintf("Added %s to %s", stateDirPattern, gitignoreName))
 	}
@@ -279,7 +279,7 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 	} else {
 		build.Warn(fmt.Sprintf("No %s here — add the ocel SDK once this directory contains one.", strings.Join(language.ManifestNames(), ", ")))
 	}
-	build.Say("Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
+	build.Say("Next: `ocel dev` or `ocel deploy`.")
 	return added, nil
 }
 
