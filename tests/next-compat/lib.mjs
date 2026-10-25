@@ -125,8 +125,8 @@ export function selectStrandedSlugs(slugs, keepSlug) {
   return [...new Set(stranded)].sort();
 }
 
-export function strandedProjectSlugs(slugs, keepSlug) {
-  return selectStrandedSlugs(slugs, keepSlug).filter((slug) => slug !== ENTRY_SLUG);
+export function strandedProjectSlugs(slugs, runSlug) {
+  return selectStrandedAppSlugs(slugs, runSlug).filter((slug) => slug !== ENTRY_SLUG);
 }
 
 export function projectSlugs(stdout) {
@@ -226,21 +226,12 @@ export const GCP_PROJECT_ENV = "OCEL_GCP_PROJECT";
 
 export const GCP_REGION_ENV = "OCEL_GCP_REGION";
 
-export const UNRUNNABLE_TARGETS = Object.freeze({
-  // TODO: drop this entry once a cloudflare edge runs code in front of a gcp origin; renderOcelConfig then passes it the origin domain it needs and reconcile-entry reconciles its entry
-  "gcp-cloudflare":
-    "gcp-cloudflare is not runnable yet: ocel fronts a gcp origin with Cloudflare only as a forwarding proxy that runs no Worker, so a run would measure the load balancer behind Cloudflare's proxy rather than the code-running edge aws-cloudflare measures. Dispatch gcp-direct or gcp-alb",
-});
-
 export function readCompatTarget(env = process.env) {
   const named = env[COMPAT_TARGET_ENV]?.trim() || DEFAULT_COMPAT_TARGET;
   if (!COMPAT_TARGETS.includes(named)) {
     throw new Error(
       `${COMPAT_TARGET_ENV} names ${named}, and the harness deploys to one of ${COMPAT_TARGETS.join(", ")}`,
     );
-  }
-  if (UNRUNNABLE_TARGETS[named]) {
-    throw new Error(UNRUNNABLE_TARGETS[named]);
   }
   if (named === DEFAULT_COMPAT_TARGET) {
     return { name: named };
@@ -260,6 +251,12 @@ export function readCompatTarget(env = process.env) {
 
 export function isProductionTarget(target) {
   return target?.name === "gcp-direct";
+}
+
+const SHARED_PREVIEW_ENTRY_TARGETS = ["aws-cloudflare", "gcp-cloudflare"];
+
+export function hasSharedPreviewEntry(target) {
+  return SHARED_PREVIEW_ENTRY_TARGETS.includes(target?.name);
 }
 
 const GCP_TARGET_EDGES = Object.freeze({

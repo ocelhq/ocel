@@ -8,7 +8,6 @@ import {
   readCompatTarget,
   requireNamespace,
   retryDelayMs,
-  selectStrandedAppSlugs,
   strandedProjectSlugs,
 } from "./lib.mjs";
 import { destroyProject, listProjects } from "./project-teardown.mjs";
@@ -46,10 +45,7 @@ async function listHeldProjects() {
 
 const keep = projectSlugForRun();
 const held = await listHeldProjects();
-const stranded =
-  target.name === "aws-cloudflare"
-    ? strandedProjectSlugs(held, keep)
-    : selectStrandedAppSlugs(held, keep);
+const stranded = strandedProjectSlugs(held, keep);
 
 if (stranded.length === 0) {
   console.error(`[ocel-e2e] no stranded e2e projects; ${keep} is the only one`);
