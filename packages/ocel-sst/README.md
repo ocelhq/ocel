@@ -9,8 +9,16 @@ them by name.
 pnpm add @ocel/sst
 ```
 
-`ocel` is a peer dependency, and it is resolved from the ocel project — the
-directory containing `ocel.config.ts` or `ocel.json` — not from the SST app.
+Each binding is published by running the ocel CLI in the ocel project, the directory
+containing `ocel.config.ts` or `ocel.json`, so the CLI that deploys the project is the one
+that publishes to it. The first of these is run:
+
+1. `$OCEL_CLI`, the path to an `ocel` binary.
+2. `ocel` on `PATH`, as `curl -fsSL https://ocel.dev/install.sh | sh` or a CI setup step puts it.
+3. The `ocel` bin of `@ocel/cli` resolved from the ocel project, when the project installs it
+   with npm.
+
+With none of the three, `sst deploy` fails naming them.
 
 ## Use
 
