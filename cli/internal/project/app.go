@@ -45,6 +45,8 @@ type Container struct {
 	Health       *Health
 	MinInstances *int
 	MaxInstances *int
+
+	FromFunction bool
 }
 
 func (c *Container) Instances() provider.Instances {
@@ -70,6 +72,14 @@ type Health struct {
 }
 
 func (a App) RunsOn(compute provider.Compute) bool { return a.Compute == compute }
+
+func (a App) IsBuiltAsImage() bool {
+	return a.RunsOn(provider.ComputeContainer) && (a.Container == nil || !a.Container.FromFunction)
+}
+
+func (a App) IsBuiltAsFunctions() bool {
+	return a.RunsOn(provider.ComputeServerless) || a.RunsOn(provider.ComputeContainer) && a.Container != nil && a.Container.FromFunction
+}
 
 func (a App) Architecture() string { return arch.Architecture(a.Arch) }
 

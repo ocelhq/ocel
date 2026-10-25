@@ -282,6 +282,32 @@ func TestBuildAsksTheProviderWhichComputeAnAppNamingNoneRunsOn(t *testing.T) {
 	}
 }
 
+func TestBuildOfANextContainerNoDockerfileBuildsAsksItsProviderHowToBuildIt(t *testing.T) {
+	for name, builds := range map[string]bool{"a provider that builds it from its function": true, "a provider that builds its image alone": false} {
+		t.Run(name, func(t *testing.T) {
+			fixture := clitest.SetUpProject(t)
+			fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.BuildsNextContainersFromFunctions = builds })
+			root := fixture.Root
+			writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: "container" }]`)
+			clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
+
+			dependencies := newTestDependencies()
+			var built *project.Project
+			dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+				built = cfg
+				return build.Output{}, nil
+			}
+
+			if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
+				t.Fatalf("runBuild: %v", err)
+			}
+			if built == nil || built.Apps[0].IsBuiltAsFunctions() != builds {
+				t.Errorf("web is built as its function = %v on a provider that builds Next containers from functions = %v, want them equal", built != nil && built.Apps[0].IsBuiltAsFunctions(), builds)
+			}
+		})
+	}
+}
+
 func TestBuildBakesEachAppsPlaintextClientValuesAsADeployDoes(t *testing.T) {
 	root := clitest.SetUpProject(t).Root
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

@@ -208,6 +208,33 @@ func TestAContainerAppIsServedByItsImageAloneWhateverFunctionsTheBuildLeftForIt(
 	}
 }
 
+func TestANextContainerBuiltFromItsFunctionCarriesThatFunctionAndNoImage(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{Slug: "proj-1", Dir: t.TempDir(), Apps: []project.App{
+		{Name: "web", Path: "web", Framework: buildoutput.FrameworkNext, Compute: "container", Container: &project.Container{FromFunction: true, MinInstances: new(2)}},
+	}}
+	manifest, err := Assemble(Input{
+		Project: cfg,
+		Built: build.Output{
+			Functions: []build.Function{{App: "web", Route: "index", RouteID: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	container := containerOf(t, manifest, "web")
+	if container.GetImage() != "" {
+		t.Errorf("image = %q, want none: the provider builds the image from the function", container.GetImage())
+	}
+	if functions := container.GetFunctions(); len(functions) != 1 || functions[0].GetArtifactPath() != "apps/web/functions/index.func" {
+		t.Errorf("functions = %v, want the one function its build made", functions)
+	}
+	if container.GetMinInstances() != 2 {
+		t.Errorf("min instances = %d, want the 2 its app asks for", container.GetMinInstances())
+	}
+}
+
 func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 	t.Parallel()
 

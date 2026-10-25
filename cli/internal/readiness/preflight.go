@@ -3,6 +3,7 @@ package readiness
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -27,7 +28,11 @@ func Read(ctx context.Context, provider *providerprocess.Provider, cfg *project.
 }
 
 func ResolveComputes(provider *providerprocess.Provider, cfg *project.Project) (*project.Project, error) {
-	return cfg.ResolveComputes(provider.Facts().GetComputes(), provider.Name())
+	resolved, err := cfg.ResolveComputes(provider.Facts().GetComputes(), provider.Name())
+	if err != nil {
+		return nil, err
+	}
+	return build.ResolveNextContainerBuilds(resolved, provider.Facts())
 }
 
 func preflight(ctx context.Context, provider *providerprocess.Provider, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {

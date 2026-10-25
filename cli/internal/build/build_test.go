@@ -94,6 +94,27 @@ func nextContainerApp(name, path string) project.App {
 	return project.App{Name: name, Path: path, Compute: provider.ComputeContainer, Framework: buildoutput.FrameworkNext, Container: &project.Container{}}
 }
 
+func TestANextContainerBuiltFromItsFunctionIsHandedToTheNodeBuildWithItsValues(t *testing.T) {
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	web := nextContainerApp("web", "apps/web")
+	web.Container.FromFunction = true
+	cfg := &project.Project{Dir: root, Apps: []project.App{web}}
+
+	var got nodeBuildRequest
+	builder := nodeOnly{node: requestOf(&got)}
+	if err := builder.Build(context.Background(), cfg, map[string]AppVariables{"web": {Env: map[string]string{"NEXT_PUBLIC_API": "https://api"}}}, Log{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if len(got.Apps) != 1 || got.Apps[0].Name != "web" || got.Apps[0].Framework != buildoutput.FrameworkNext {
+		t.Fatalf("request = %+v, want web built by ocel's Next adapter", got.Apps)
+	}
+	if got.Apps[0].Env["NEXT_PUBLIC_API"] != "https://api" {
+		t.Errorf("the build reads NEXT_PUBLIC_API=%q, want the value the app resolves, which next build inlines", got.Apps[0].Env["NEXT_PUBLIC_API"])
+	}
+}
+
 func requestOf(got *nodeBuildRequest) nodeRun {
 	return func(_ context.Context, _ string, request []byte, _ Log) error {
 		return json.Unmarshal(request, got)

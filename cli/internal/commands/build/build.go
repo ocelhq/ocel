@@ -233,10 +233,13 @@ func resolveValues(ctx context.Context, declarations *variables.Declarations, cf
 }
 
 func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.Run, declared *project.Project, env *environmentv1.Environment) (resolved *project.Project, host build.Host, provider *providerprocess.Provider, err error) {
-	unresolved := len(declared.UnresolvedApps()) > 0
-	if !unresolved {
+	if len(declared.UnresolvedApps()) == 0 {
 		resolved, err = declared.ResolveDeclaredComputes()
-		if err != nil || env == nil && len(build.FindNextFunctionApps(resolved.Apps)) == 0 {
+		if err != nil {
+			return nil, build.Host{}, nil, err
+		}
+		hosted, err := build.FindAppsBuiltForTheirHost(resolved)
+		if err != nil || env == nil && len(hosted) == 0 {
 			return resolved, build.Host{}, nil, err
 		}
 	}
@@ -246,12 +249,10 @@ func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.
 	if err != nil {
 		return nil, build.Host{}, nil, err
 	}
-	if unresolved {
-		resolved, err = readiness.ResolveComputes(provider, declared)
-		if err != nil {
-			provider.Close()
-			return nil, build.Host{}, nil, err
-		}
+	resolved, err = readiness.ResolveComputes(provider, declared)
+	if err != nil {
+		provider.Close()
+		return nil, build.Host{}, nil, err
 	}
 	return resolved, build.ReadHost(provider.Facts()), provider, nil
 }
