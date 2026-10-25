@@ -40,6 +40,8 @@ func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 		WorkerCeilings:   provider.WorkerCeilingMessages(facts.WorkerCeilings),
 		MaxFunctionBytes: facts.MaxFunctionBytes,
 		ForwardsPorts:    p.Hooks().BindingAccess != nil,
+
+		BuildsNextContainersFromFunctions: facts.BuildsNextContainersFromFunctions,
 	}
 }
 

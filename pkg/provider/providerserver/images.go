@@ -165,3 +165,23 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry) (p
 	}
 	return provider.ImagePushes{Store: r.images, Registry: r.registry, Pushes: []provider.ImagePush{push}}, nil
 }
+
+func isBuiltFromFunction(entry provider.AppEntry) bool {
+	return entry.Compute() == provider.ComputeContainer && len(provider.FunctionsOf(entry.Manifest)) > 0
+}
+
+func refuseContainersBuiltFromFunctions(facts provider.Facts, apps []provider.AppEntry) error {
+	for _, entry := range apps {
+		if !isBuiltFromFunction(entry) {
+			continue
+		}
+		if facts.BuildsNextContainersFromFunctions && entry.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext {
+			continue
+		}
+		return refusal.Refuse(refusal.CodeInvalid,
+			"app %s runs in a container built from its %s function, and this provider runs a container from an image alone: "+
+				"run `ocel build` against this provider, or set `image.dockerfile` on %s so its Dockerfile builds the image",
+			entry.App, entry.Manifest.GetFramework().GetName(), entry.App)
+	}
+	return nil
+}

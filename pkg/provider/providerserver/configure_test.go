@@ -171,6 +171,29 @@ func TestConfigureSaysTheProviderForwardsPortsWhenItsHookIsSet(t *testing.T) {
 	}
 }
 
+func TestConfigureSaysTheProviderBuildsNextContainersFromFunctionsWhenItSaysSo(t *testing.T) {
+	for _, builds := range []bool{true, false} {
+		server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+			Version: "test",
+			New: func(context.Context, provider.Settings) (provider.Provider, error) {
+				return fake.NewProvider(fake.Options{}).WithFacts(func(facts *provider.Facts) {
+					facts.BuildsNextContainersFromFunctions = builds
+				}), nil
+			},
+		}))
+		t.Cleanup(server.Close)
+		client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+
+		configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
+		if err != nil {
+			t.Fatalf("Configure() error = %v", err)
+		}
+		if got := configured.GetFacts().GetBuildsNextContainersFromFunctions(); got != builds {
+			t.Errorf("Configure() facts say the provider builds Next containers from functions = %v, want %v", got, builds)
+		}
+	}
+}
+
 func TestConfigureRefusesAProjectDirectoryThatIsNotAbsolute(t *testing.T) {
 	for name, dir := range map[string]string{"none": "", "relative": "shop"} {
 		t.Run(name, func(t *testing.T) {

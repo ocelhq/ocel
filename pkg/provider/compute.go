@@ -38,3 +38,13 @@ func ComputeOf(app *contractv1.ManifestApp) Compute {
 	}
 	return ""
 }
+
+func FunctionsOf(app *contractv1.ManifestApp) []*contractv1.ManifestFunction {
+	switch artifact := app.GetArtifact().(type) {
+	case *contractv1.ManifestApp_Serverless:
+		return artifact.Serverless.GetFunctions()
+	case *contractv1.ManifestApp_Container:
+		return artifact.Container.GetFunctions()
+	}
+	return nil
+}

@@ -50,6 +50,9 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 		r.state.Apps = map[string]router.Kind{}
 	}
 	maps.Copy(r.state.Apps, appRouters)
+	if err := refuseContainersBuiltFromFunctions(r.provider.Facts(), r.spec.Apps); err != nil {
+		return err
+	}
 	if err := r.checkNeeds(ctx); err != nil {
 		return err
 	}

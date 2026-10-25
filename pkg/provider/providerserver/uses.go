@@ -16,7 +16,7 @@ import (
 func usesOf(root string, manifest *contractv1.Manifest) ([]buildoutput.Uses, error) {
 	var apps []buildoutput.Uses
 	for _, app := range manifest.GetApps() {
-		if app.GetContainer() != nil {
+		if app.GetContainer().GetImage() != "" {
 			continue
 		}
 		if root == "" {

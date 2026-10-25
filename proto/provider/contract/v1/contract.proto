@@ -132,6 +132,8 @@ message ProviderFacts {
   bool forwards_ports = 8;
 
   EdgeFacts edge = 9;
+
+  bool builds_next_containers_from_functions = 10;
 }
 
 message EdgeFacts {
@@ -266,8 +268,13 @@ message ContainerArtifact {
     message: "a container runs at least min_instances and at most max_instances, so min_instances may not exceed max_instances"
     expression: "this.min_instances <= this.max_instances"
   };
+  option (buf.validate.message).cel = {
+    id: "container.artifact"
+    message: "a container runs the image it names, or the one function it is built from when it names none"
+    expression: "this.image != '' ? size(this.functions) == 0 : size(this.functions) == 1"
+  };
 
-  string image = 1 [(buf.validate.field).string.pattern = "^([^/@: \\t\\n\\v\\f\\r]+(:[0-9]+)?/)?[^/@: \\t\\n\\v\\f\\r]+(/[^/@: \\t\\n\\v\\f\\r]+)*@sha256:[0-9a-f]{64}$"];
+  string image = 1 [(buf.validate.field).string.pattern = "^([^/@: \\t\\n\\v\\f\\r]+(:[0-9]+)?/)?[^/@: \\t\\n\\v\\f\\r]+(/[^/@: \\t\\n\\v\\f\\r]+)*@sha256:[0-9a-f]{64}$", (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
   string health_check_path = 2 [(buf.validate.field).string.pattern = "^/[^#? \\t\\n\\v\\f\\r\\x00-\\x1f\\x7f]*$", (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
@@ -276,6 +283,8 @@ message ContainerArtifact {
   uint32 min_instances = 4;
 
   uint32 max_instances = 5 [(buf.validate.field).uint32.gte = 1];
+
+  repeated ManifestFunction functions = 6;
 }
 
 message ManifestUsage {

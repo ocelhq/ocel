@@ -414,7 +414,7 @@ func (r *Stacks) deliveredEdgeBundle(spec provider.StackSpec) string {
 }
 
 func ProvisionedFunctions(spec provider.StackSpec) []provider.Function {
-	if spec.App == nil {
+	if spec.App == nil || spec.App.Compute == provider.ComputeContainer {
 		return nil
 	}
 	functions := make([]provider.Function, 0, len(spec.App.Functions))

@@ -46,6 +46,8 @@ type Facts struct {
 	RunsGates                bool
 	RunsFunctionsAsImages    bool
 	MaxFunctionBytes         int64
+
+	BuildsNextContainersFromFunctions bool
 }
 
 type EdgeProgramRequest struct {
