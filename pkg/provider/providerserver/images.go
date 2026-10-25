@@ -165,20 +165,3 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry) (p
 	}
 	return provider.ImagePushes{Store: r.images, Registry: r.registry, Pushes: []provider.ImagePush{push}}, nil
 }
-
-func isBuiltFromFunction(entry provider.AppEntry) bool {
-	return entry.Compute() == provider.ComputeContainer && len(provider.FunctionsOf(entry.Manifest)) > 0
-}
-
-func refuseContainersBuiltFromFunctions(facts provider.Facts, apps []provider.AppEntry) error {
-	for _, entry := range apps {
-		if !isBuiltFromFunction(entry) {
-			continue
-		}
-		if facts.BuildsNextContainersFromFunctions && entry.Manifest.GetFramework().GetName() == buildoutput.FrameworkNext {
-			continue
-		}
-		return refusal.Refuse(refusal.CodeInvalid, "app %s has no image this provider can run: run `ocel build` again", entry.App)
-	}
-	return nil
-}

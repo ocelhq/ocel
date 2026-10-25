@@ -44,3 +44,7 @@ type Instances struct {
 }
 
 func (e AppEntry) Compute() Compute { return ComputeOf(e.Manifest) }
+
+func (e AppEntry) IsBuiltFromFunction() bool {
+	return e.Compute() == ComputeContainer && len(ListFunctions(e.Manifest)) > 0
+}

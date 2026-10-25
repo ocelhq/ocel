@@ -110,7 +110,7 @@ func (p Images) ReadRuntime(_ context.Context, framework buildoutput.Framework) 
 }
 
 func (p Images) WithImages(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, error) {
-	if spec.App == nil || len(spec.App.Functions) == 0 {
+	if spec.App == nil || !spec.App.IsBuiltAsFunctions() {
 		return spec, nil
 	}
 	pushes, err := functioncode.FunctionImages(ctx, spec, functioncode.ImageSource{

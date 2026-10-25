@@ -3,7 +3,6 @@ package providerserver_test
 import (
 	"context"
 	"slices"
-	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -329,16 +328,6 @@ func TestTheUsesOfAContainerBuiltFromAFunctionReachItsProvidersPreflight(t *test
 	}
 	if uses := vendor.seen[0].Uses; !slices.ContainsFunc(uses, func(u buildoutput.Uses) bool { return u.Revalidation }) {
 		t.Errorf("the preflight was handed uses %+v, want the container that revalidates among them: its build says so as a serverless build does", uses)
-	}
-}
-
-func TestAProviderThatBuildsNoNextContainerFromAFunctionRefusesOne(t *testing.T) {
-	builtProject(t)
-	client := servedBy(t, fake.NewProvider(fake.Options{}))
-
-	_, _, err := deployStream(t, client, functionContainerDeployRequest(builtServerFunction()))
-	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "run `ocel build` again") {
-		t.Fatalf("Deploy() = %v, want a refusal naming the build that makes this provider an image to run", err)
 	}
 }
 

@@ -348,7 +348,7 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Coordinate:        appCoordinate(r.spec, entry.App, entry.Release.Token()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
 		EdgeSignsForwards: r.readPairedRouter(entry.App).Facts().SignsOriginForwards,
-		BuiltFromFunction: isBuiltFromFunction(entry),
+		BuiltFromFunction: entry.IsBuiltFromFunction(),
 	})
 	if err != nil {
 		return AppServing{}, err
@@ -473,7 +473,7 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 
 func (r *deployRun) functionSpecs(entry provider.AppEntry, routing *provider.RoutingSpec) []provider.FunctionSpec {
 	var specs []provider.FunctionSpec
-	for _, fn := range provider.FunctionsOf(entry.Manifest) {
+	for _, fn := range provider.ListFunctions(entry.Manifest) {
 		spec := functionSpecOf(fn)
 		spec.ArtifactDir = artifactDir(r.artifactRoot, fn)
 		spec.Overlay = overlayFor(fn, routing)

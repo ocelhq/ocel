@@ -76,7 +76,7 @@ func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
 func shapedFunctions(manifest *contractv1.Manifest) map[string][]provider.FunctionSpec {
 	specs := make(map[string][]provider.FunctionSpec, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
-		for _, fn := range provider.FunctionsOf(app) {
+		for _, fn := range provider.ListFunctions(app) {
 			specs[app.GetName()] = append(specs[app.GetName()], functionSpecOf(fn))
 		}
 	}

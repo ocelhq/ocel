@@ -69,7 +69,7 @@ type nextCache struct {
 
 func SignsEdgePurges(spec provider.StackSpec) bool {
 	return spec.App != nil && spec.App.ISR != nil &&
-		(spec.App.Compute == provider.ComputeServerless || len(spec.App.Functions) > 0) && run.FactsOf(spec.Edge).RunsCode
+		spec.App.IsBuiltAsFunctions() && run.FactsOf(spec.Edge).RunsCode
 }
 
 func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, cache nextCache) map[string]string {

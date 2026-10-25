@@ -46,8 +46,8 @@ func FunctionImages(ctx context.Context, spec provider.StackSpec, source ImageSo
 	return pushes, nil
 }
 
-func ContainerImageRef(spec provider.StackSpec) string {
-	if len(spec.App.Functions) == 0 {
+func FindContainerImageRef(spec provider.StackSpec) string {
+	if !spec.App.IsBuiltFromFunction() {
 		return spec.App.Image
 	}
 	return FunctionImageRef(spec.Images, spec.App.Functions[0].Name)
