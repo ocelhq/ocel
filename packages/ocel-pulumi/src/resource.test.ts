@@ -366,6 +366,40 @@ describe("declaring a custom binding", () => {
     });
   });
 
+  it("publishes the grants beside the record, each resource resolved from a pulumi output", async () => {
+    const host =
+      "projects/ocel-cloud-prod/serviceAccounts/host@ocel-cloud-prod.iam.gserviceaccount.com";
+    custom("network", network, {
+      project: root,
+      grants: [{ role: "roles/iam.serviceAccountUser", resource: output(host) }],
+    });
+
+    await customProvider.create(await inputs(latest()));
+
+    expect(JSON.parse(String(argv().options?.input))).toEqual({
+      binding: { name: "network", custom: network, source: "pulumi" },
+      grants: [{ role: "roles/iam.serviceAccountUser", resource: host }],
+    });
+  });
+
+  it("publishes a record that is its grants alone", async () => {
+    custom(
+      "fleet",
+      {},
+      {
+        project: root,
+        grants: [{ role: "roles/compute.instanceAdmin.v1", resource: "projects/ocel-cloud-prod" }],
+      },
+    );
+
+    await customProvider.create(await inputs(latest()));
+
+    expect(JSON.parse(String(argv().options?.input))).toEqual({
+      binding: { name: "fleet", custom: {}, source: "pulumi" },
+      grants: [{ role: "roles/compute.instanceAdmin.v1", resource: "projects/ocel-cloud-prod" }],
+    });
+  });
+
   it("runs ocel bindings rm for the name it published", async () => {
     const created = await customProvider.create(await inputs(declareCustom()));
     run.mockClear();

@@ -1,11 +1,19 @@
 import { custom, postgres } from "./resource.js";
 
 export type { CustomBinding } from "./custom.js";
-export type { Grant, GrantInput } from "./grants.js";
+export type {
+  ActionGrant,
+  ActionGrantInput,
+  Grant,
+  GrantInput,
+  RoleGrant,
+  RoleGrantInput,
+} from "./grants.js";
 export type { PostgresBinding, PostgresProperties } from "./postgres.js";
 export type { PublishedBinding } from "./published.js";
 export type {
   BindOptions,
+  CustomBindOptions,
   CustomProperties,
   DescribedPostgresResource,
 } from "./resource.js";
@@ -24,6 +32,7 @@ export type {
  *
  * `custom` is the exception an app never sees: it publishes values ocel neither
  * types nor delivers, read only by a transform module through
- * `bindings.custom.<name>.<property>`.
+ * `bindings.custom.<name>.<property>`, and grants a deploy gives each app whose
+ * entry names it under `bindings.custom`.
  */
 export const bind = { postgres, custom };

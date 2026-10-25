@@ -30,8 +30,25 @@ describe("the record a custom binding publishes as", () => {
     expect(() => publishedCustom("", { vpcId: "vpc-1" })).toThrow(/published under no name/);
   });
 
-  it("refuses a record with nothing to read", () => {
-    expect(() => publishedCustom("network", {})).toThrow(/has no properties/);
+  it("refuses a record with nothing to read and nothing to grant", () => {
+    expect(() => publishedCustom("network", {})).toThrow(/has no properties and no grants/);
+  });
+
+  it("publishes the grants beside a record with no properties", () => {
+    const grants = [
+      { role: "roles/compute.instanceAdmin.v1", resource: "projects/ocel-cloud-prod" },
+    ];
+
+    expect(publishedCustom("fleet", {}, grants)).toEqual({
+      binding: { name: "fleet", custom: {}, source },
+      grants,
+    });
+  });
+
+  it("refuses a grant over every resource", () => {
+    expect(() =>
+      publishedCustom("fleet", {}, [{ role: "roles/compute.instanceAdmin.v1", resource: "*" }]),
+    ).toThrow(/resource it binds and nothing else/);
   });
 
   it("refuses a property that never resolved", () => {
