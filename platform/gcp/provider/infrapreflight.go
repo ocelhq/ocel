@@ -19,18 +19,13 @@ func (p *Provider) PlanInfraPreflight(ctx context.Context, pre provider.DeployPr
 	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
 		return provider.Plan{}, err
 	}
+	switching, err := p.listServicesToSwitchOn(ctx, b, pre.Deploy.Tier, parts, nil)
+	if err != nil {
+		return provider.Plan{}, err
+	}
 	var plan provider.Plan
-	if !p.skipChecks {
-		switching, err := b.ListServicesOff(ctx, b.PartAPIs(pre.Deploy.Tier, parts))
-		if err != nil {
-			return provider.Plan{}, err
-		}
-		if err := b.RefuseSwitchOnDenied(ctx, switching); err != nil {
-			return provider.Plan{}, err
-		}
-		if len(switching) > 0 {
-			plan.Groups = append(plan.Groups, b.SwitchOnGroup(switching))
-		}
+	if len(switching) > 0 {
+		plan.Groups = append(plan.Groups, b.SwitchOnGroup(switching))
 	}
 	groups, err := b.PlanParts(ctx, pre.Deploy.Tier, parts)
 	if err != nil {
@@ -45,24 +40,13 @@ func (p *Provider) ApplyInfraPreflight(ctx context.Context, pre provider.DeployP
 	if err != nil || len(parts) == 0 {
 		return err
 	}
-	if err := p.switchOnPartServices(ctx, pre, parts); err != nil {
+	if err := p.switchOnServices(ctx, pre, parts, nil); err != nil {
 		return err
 	}
 	if err := p.addParts(ctx, pre, parts); err != nil {
 		return err
 	}
 	return stackrecords.AddPartsUsed(ctx, p.KeyValues(), pre.Deploy.Tier, pre.Deploy.Slug, parts)
-}
-
-func (p *Provider) switchOnPartServices(ctx context.Context, pre provider.DeployPreflight, parts []string) error {
-	if p.skipChecks {
-		return nil
-	}
-	b, err := bootstrapGate{p}.openBootstrap(ctx)
-	if err != nil {
-		return err
-	}
-	return b.SwitchOnServices(ctx, b.PartAPIs(pre.Deploy.Tier, parts), pre.Progress)
 }
 
 func (p *Provider) listPartsResourcesNeed(ctx context.Context, pre provider.DeployPreflight) ([]string, error) {

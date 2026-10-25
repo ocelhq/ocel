@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -32,7 +33,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 		return provider.Plan{}, err
 	}
 	keeps := newDeployUse(pre).keepsProjectRecords()
-	if !keeps && len(parts) == 0 && !p.readsServices(pre, parts) {
+	if !keeps && len(parts) == 0 && !p.readsServices(parts, deployAPIs(pre)) {
 		return provider.Plan{}, nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
@@ -42,7 +43,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
 		return provider.Plan{}, err
 	}
-	switching, err := p.listServicesToSwitchOn(ctx, b, pre, parts)
+	switching, err := p.listServicesToSwitchOn(ctx, b, pre.Deploy.Tier, parts, deployAPIs(pre))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -79,7 +80,7 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err != nil {
 		return err
 	}
-	if err := p.switchOnServices(ctx, pre, parts); err != nil {
+	if err := p.switchOnServices(ctx, pre, parts, deployAPIs(pre)); err != nil {
 		return err
 	}
 	if err := p.warnStaleOriginSecret(ctx, pre); err != nil {
@@ -132,8 +133,8 @@ func servesCompute(app provider.AppEntry) bool {
 	return app.Compute() == provider.ComputeContainer || len(app.Manifest.GetServerless().GetFunctions()) > 0
 }
 
-func (p *Provider) readsServices(pre provider.DeployPreflight, parts []string) bool {
-	return !p.skipChecks && (len(parts) > 0 || len(deployAPIs(pre)) > 0)
+func (p *Provider) readsServices(parts, apis []string) bool {
+	return !p.skipChecks && (len(parts) > 0 || len(apis) > 0)
 }
 
 func deployAPIs(pre provider.DeployPreflight) []string {
@@ -147,30 +148,30 @@ func deployAPIs(pre provider.DeployPreflight) []string {
 	return apis
 }
 
-func usedAPIs(b bootstrap.Engine, pre provider.DeployPreflight, parts []string) []string {
-	return slices.Concat(deployAPIs(pre), b.PartAPIs(pre.Deploy.Tier, parts))
+func usedAPIs(b bootstrap.Engine, tier environment.Tier, parts, apis []string) []string {
+	return slices.Concat(apis, b.PartAPIs(tier, parts))
 }
 
-func (p *Provider) listServicesToSwitchOn(ctx context.Context, b bootstrap.Engine, pre provider.DeployPreflight, parts []string) ([]string, error) {
-	if !p.readsServices(pre, parts) {
+func (p *Provider) listServicesToSwitchOn(ctx context.Context, b bootstrap.Engine, tier environment.Tier, parts, apis []string) ([]string, error) {
+	if !p.readsServices(parts, apis) {
 		return nil, nil
 	}
-	switching, err := b.ListServicesOff(ctx, usedAPIs(b, pre, parts))
+	switching, err := b.ListServicesOff(ctx, usedAPIs(b, tier, parts, apis))
 	if err != nil {
 		return nil, err
 	}
 	return switching, b.RefuseSwitchOnDenied(ctx, switching)
 }
 
-func (p *Provider) switchOnServices(ctx context.Context, pre provider.DeployPreflight, parts []string) error {
-	if !p.readsServices(pre, parts) {
+func (p *Provider) switchOnServices(ctx context.Context, pre provider.DeployPreflight, parts, apis []string) error {
+	if !p.readsServices(parts, apis) {
 		return nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
 	if err != nil {
 		return err
 	}
-	return b.SwitchOnServices(ctx, usedAPIs(b, pre, parts), pre.Progress)
+	return b.SwitchOnServices(ctx, usedAPIs(b, pre.Deploy.Tier, parts, apis), pre.Progress)
 }
 
 func (p *Provider) ensureProjectDatabase(ctx context.Context, pre provider.DeployPreflight) error {

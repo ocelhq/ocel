@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -196,5 +197,39 @@ func TestAnInfraRunWhoseCredentialMayNotSwitchServicesOnIsRefusedBeforeItAddsAny
 	}
 	if len(f.usage.Enabled) > 0 {
 		t.Errorf("switched on %v, want nothing", f.usage.Enabled)
+	}
+}
+
+func TestAnInfraRunAsksWhetherTheServicesOfThePartsItAddsAreOnOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
+	pre := provider.DeployPreflight{
+		Deploy:    provider.DeploySpec{Tier: environment.TierProduction, Slug: "shop"},
+		Resources: []provider.Resource{{Name: "topic-orders", Declared: "orders", Type: provider.BindingTopic, Topic: &provider.TopicSpec{}}},
+	}
+	for skipChecks, wantAsked := range map[bool]bool{false: true, true: false} {
+		for name, run := range map[string]func(*Provider) error{
+			"PlanInfraPreflight()":  func(p *Provider) error { _, err := p.PlanInfraPreflight(t.Context(), pre); return err },
+			"ApplyInfraPreflight()": func(p *Provider) error { return p.ApplyInfraPreflight(t.Context(), pre) },
+		} {
+			var asked atomic.Int32
+			served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !(&googletest.ServiceUsage{}).Serve(w, r) {
+					t.Errorf("%s called %s %s, want at most whether the services of the parts it adds are on", name, r.Method, r.URL.Path)
+					http.NotFound(w, r)
+					return
+				}
+				asked.Add(1)
+			}))
+			t.Cleanup(served.Close)
+			p := pushing(t, served.URL)
+			p.skipChecks = skipChecks
+			recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys, bootstrap.Topics)
+
+			if err := run(p); err != nil {
+				t.Fatalf("%s with the checks skipped %t = %v", name, skipChecks, err)
+			}
+			if got := asked.Load() > 0; got != wantAsked {
+				t.Errorf("%s with the checks skipped %t made %d Service Usage requests, want asked %t: the harness that skips them runs in a project it has already deployed into", name, skipChecks, asked.Load(), wantAsked)
+			}
+		}
 	}
 }
