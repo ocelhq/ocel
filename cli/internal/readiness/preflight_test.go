@@ -103,3 +103,15 @@ func TestAnAppNamingNoComputeOrFrameworkThatResolvesToAContainerIsPreflightedAsA
 		t.Errorf("preflight names containers %v, want api, so its architecture is read in the one call", named)
 	}
 }
+
+func TestANextContainerBuiltFromItsFunctionIsPreflightedAsAContainer(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Framework: "next", Compute: "container", Arch: "arm64", Container: &project.Container{FromFunction: true}},
+	}}
+	named := newPreflightRequest(cfg, Request{Tier: environmentv1.Tier_TIER_PRODUCTION}).GetContainers()
+	if len(named) != 1 || named[0].GetApp() != "web" || named[0].GetArch() != "arm64" {
+		t.Errorf("preflight names containers %v, want web as it declares itself, so its function is built for the architecture its image would be", named)
+	}
+}

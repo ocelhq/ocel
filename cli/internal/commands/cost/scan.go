@@ -30,7 +30,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
@@ -251,7 +250,7 @@ func scanManifest(ctx context.Context, dependencies Dependencies, cfg *project.P
 func scannedOutput(dependencies Dependencies, cfg *project.Project) (build.Output, []string, error) {
 	images := make(map[string]string, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		if a.RunsOn(provider.ComputeContainer) {
+		if a.IsBuiltAsImage() {
 			images[a.Name] = cfg.Slug + "/" + a.Name + "@sha256:" + unbuiltDigest
 		}
 	}

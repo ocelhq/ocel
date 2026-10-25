@@ -36,7 +36,8 @@ type nodeAppBuild struct {
 	EdgeRunsCode       bool                `json:"edgeRunsCode,omitempty"`
 	EdgeCacheTagLimits *nodeCacheTagLimits `json:"edgeCacheTagLimits,omitempty"`
 
-	MaxFunctionBytes int64 `json:"maxFunctionBytes,omitempty"`
+	MaxFunctionBytes int64  `json:"maxFunctionBytes,omitempty"`
+	Arch             string `json:"arch,omitempty"`
 }
 
 type nodeCacheTagLimits struct {

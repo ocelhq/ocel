@@ -132,6 +132,7 @@ describe("buildNext", () => {
     "OCEL_EDGE_TAG_LIMITS",
     "OCEL_ALLOW_DEGRADED",
     "OCEL_MAX_FUNCTION_BYTES",
+    "OCEL_FUNCTION_ARCH",
     "OCEL_PUBLIC_KEYS",
   ]) {
     it(`refuses a variable declared as ${owned} before anything runs`, async () => {
@@ -187,6 +188,14 @@ describe("buildNext", () => {
 
   it("sets no size budget when the host declares none", async () => {
     expect((await envOf(app())).OCEL_MAX_FUNCTION_BYTES).toBe("");
+  });
+
+  it("passes the architecture the functions are built for into the build", async () => {
+    expect((await envOf(app({ arch: "arm64" }))).OCEL_FUNCTION_ARCH).toBe("arm64");
+  });
+
+  it("names no architecture when the request states none", async () => {
+    expect((await envOf(app())).OCEL_FUNCTION_ARCH).toBe("");
   });
 
   it("builds for production whatever NODE_ENV the shell sets", async () => {

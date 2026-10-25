@@ -123,7 +123,7 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 	if unresolved := cfg.UnresolvedApps(); len(unresolved) > 0 {
 		return Output{}, fmt.Errorf("the build reached %s with no compute resolved, and an app is built for the compute it runs on", english.And(english.Quoted(unresolved)))
 	}
-	if err := t.functions(ctx, cfg, variables, host, log); err != nil {
+	if err := t.functions(ctx, cfg, variables, archs, host, log); err != nil {
 		return Output{}, err
 	}
 	images, err := t.images(ctx, cfg, variables, archs, workers, log)
@@ -143,7 +143,7 @@ func (t tools) apps(ctx context.Context, cfg *project.Project, variables map[str
 	return Output{Functions: functions, Images: images, BuildIDs: buildIDs}, nil
 }
 
-func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, host Host, log Log) (err error) {
+func (t tools) functions(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, host Host, log Log) (err error) {
 	var reading []project.App
 	for _, a := range cfg.Apps {
 		if !CanReadVariablesAtBuild(a) {
@@ -222,6 +222,11 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			if err != nil {
 				return err
 			}
+			appHost := newAppHost(host, a)
+			var functionArch string
+			if a.IsBuiltFromFunction() {
+				functionArch = readFunctionArchitecture(a, archs)
+			}
 			req.Apps = append(req.Apps, nodeAppBuild{
 				Unset:         env.unset,
 				Framework:     buildoutput.FrameworkNext,
@@ -234,10 +239,11 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				AllowDegraded: edge.NeedNames(cfg.AllowDegraded),
 				PublicKeys:    variables[a.Name].PublicKeys,
 
-				EdgeRunsCode:       host.EdgeRunsCode,
-				EdgeCacheTagLimits: newNodeCacheTagLimits(host.EdgeCacheTagLimits),
+				EdgeRunsCode:       appHost.EdgeRunsCode,
+				EdgeCacheTagLimits: newNodeCacheTagLimits(appHost.EdgeCacheTagLimits),
 
-				MaxFunctionBytes: host.MaxFunctionBytes,
+				MaxFunctionBytes: appHost.MaxFunctionBytes,
+				Arch:             functionArch,
 			})
 		case name == buildoutput.FrameworkSvelteKit:
 			scriptBuilt = append(scriptBuilt, a)
@@ -313,17 +319,18 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 		}
 	}
 	for _, a := range scriptBuilt {
-		if err := addWorkerEntryToFunction(ctx, cfg, a, outputDir); err != nil {
+		architecture := readFunctionArchitecture(a, archs)
+		if err := addWorkerEntryToFunction(ctx, cfg, a, outputDir, architecture); err != nil {
 			return err
 		}
-		if err := installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, host.MaxFunctionBytes); err != nil {
+		if err := installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, architecture, newAppHost(host, a).MaxFunctionBytes); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a project.App, outputDir string) error {
+func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a project.App, outputDir, architecture string) error {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return err
@@ -345,7 +352,7 @@ func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a proje
 	hosting := functions[0]
 	return toolchain.BundleWorker(ctx, toolchain.Target{
 		App:              a.Name,
-		Framework:        buildoutput.Framework{Name: a.Framework, Arch: a.Architecture()},
+		Framework:        buildoutput.Framework{Name: a.Framework, Arch: architecture},
 		Source:           filepath.Join(cfg.Dir, a.Path),
 		FunctionDir:      filepath.Join(outputDir, filepath.FromSlash(hosting.ArtifactPath)),
 		WorkerSource:     workerSource,
@@ -353,13 +360,13 @@ func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a proje
 	})
 }
 
-func installTracedPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir string, maxFunctionBytes int64) error {
+func installTracedPlatformVariants(ctx context.Context, variants *toolchain.PlatformVariantCache, cfg *project.Project, a project.App, outputDir, architecture string, maxFunctionBytes int64) error {
 	functionDirs, err := filepath.Glob(filepath.Join(buildoutput.AppRoot(outputDir, a.Name), buildoutput.FunctionsDir, "*"+buildoutput.FunctionDirSuffix))
 	if err != nil {
 		return err
 	}
 	for _, functionDir := range functionDirs {
-		if err := variants.InstallTraced(ctx, a.Name, filepath.Join(cfg.Dir, a.Path), functionDir, a.Architecture()); err != nil {
+		if err := variants.InstallTraced(ctx, a.Name, filepath.Join(cfg.Dir, a.Path), functionDir, architecture); err != nil {
 			return err
 		}
 		if maxFunctionBytes > 0 {

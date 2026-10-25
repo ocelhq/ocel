@@ -22,6 +22,16 @@ func GoArch(declared string) (string, bool) {
 	return "", false
 }
 
+func FromGoArch(goarch string) (string, bool) {
+	switch goarch {
+	case "amd64":
+		return X8664, true
+	case "arm64":
+		return ARM64, true
+	}
+	return "", false
+}
+
 const (
 	NodePackageOS   = "linux"
 	NodePackageLibc = "glibc"

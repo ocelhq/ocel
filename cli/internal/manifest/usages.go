@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type usage struct {
@@ -64,7 +63,7 @@ func attributionApps(cfg *project.Project) ([]attribution.App, error) {
 		if !a.HasLanguageManifest() {
 			continue
 		}
-		inAnImage := a.RunsOn(provider.ComputeContainer)
+		inAnImage := a.IsBuiltAsImage()
 		appDir := filepath.Join(cfg.Dir, a.Path)
 		out = append(out, attribution.App{
 			Name:       a.Name,

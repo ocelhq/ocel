@@ -29,6 +29,24 @@ import (
 
 const apiFunction = "environment:prod/app:api/fake_function:fn--api--api"
 
+func TestAScanPricesANextContainerBuiltFromItsFunctionByNoImage(t *testing.T) {
+	cfg := &project.Project{Slug: "shop", Dir: t.TempDir(), Apps: []project.App{
+		{Name: "web", Framework: buildoutput.FrameworkNext, Compute: provider.ComputeContainer, Container: &project.Container{FromFunction: true}},
+	}}
+	dependencies := Dependencies{ReadFunctions: func(string) ([]build.Function, error) { return nil, build.ErrNoBuildOutput }}
+
+	scanned, _, err := scannedOutput(dependencies, cfg)
+	if err != nil {
+		t.Fatalf("scannedOutput() = %v", err)
+	}
+	if len(scanned.Images) != 0 {
+		t.Errorf("Images = %v, want none: the container's image is built from its function", scanned.Images)
+	}
+	if len(scanned.Functions) != 1 || scanned.Functions[0].App != "web" {
+		t.Errorf("Functions = %+v, want the one function web is built from", scanned.Functions)
+	}
+}
+
 func scanFixture(t *testing.T) (string, *fake.Provider, Dependencies) {
 	t.Helper()
 	project := clitest.SetUpProject(t)

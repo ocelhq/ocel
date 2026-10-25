@@ -27,6 +27,23 @@ func TestAnAppIsAttributedInTheLanguageItsProjectResolved(t *testing.T) {
 	}
 }
 
+func TestANextContainerIsAttributedInAnImageOnlyWhenItIsBuiltAsOne(t *testing.T) {
+	for fromFunction, inAnImage := range map[bool]bool{true: false, false: true} {
+		cfg := &project.Project{
+			Dir: t.TempDir(),
+			Apps: []project.App{{Name: "web", Path: ".", Framework: "next", Language: language.JS,
+				Compute: "container", Container: &project.Container{FromFunction: fromFunction}}},
+		}
+		apps, err := attributionApps(cfg)
+		if err != nil {
+			t.Fatalf("attributionApps: %v", err)
+		}
+		if apps[0].Container != inAnImage {
+			t.Errorf("a Next container built from its function = %v is attributed in an image = %v, want %v", fromFunction, apps[0].Container, inAnImage)
+		}
+	}
+}
+
 func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", "..", "testdata", "python"))
 	if err != nil {

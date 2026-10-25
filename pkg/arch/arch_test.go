@@ -40,3 +40,17 @@ func TestEveryArchitectureNamesTheWheelsPythonDependenciesAreVendoredFor(t *test
 		t.Errorf("PythonPlatformTag(\"riscv\") = %q, want no tag: an architecture nothing runs vendors nothing", tag)
 	}
 }
+
+func TestEveryGoArchitectureNamesTheArchitectureTheConfigDeclaresForIt(t *testing.T) {
+	t.Parallel()
+
+	for goarch, want := range map[string]string{"amd64": arch.X8664, "arm64": arch.ARM64} {
+		declared, known := arch.FromGoArch(goarch)
+		if !known || declared != want {
+			t.Errorf("FromGoArch(%q) = %q, %v, want %q, the value `arch` takes for it", goarch, declared, known, want)
+		}
+	}
+	if declared, known := arch.FromGoArch("riscv64"); known {
+		t.Errorf("FromGoArch(\"riscv64\") = %q, want none: the config declares no such architecture", declared)
+	}
+}

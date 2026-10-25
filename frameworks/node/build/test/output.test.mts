@@ -95,6 +95,22 @@ describe("BuildOutput", () => {
     });
   });
 
+  it("states the architecture the CLI builds the functions for", () => {
+    vi.stubEnv("OCEL_OUTPUT_DIR", scratch());
+    vi.stubEnv("OCEL_APP_NAME", "web");
+    vi.stubEnv("OCEL_FUNCTION_ARCH", "arm64");
+    const output = BuildOutput.fromEnv({ dir: "build", app: "fallback" });
+    mkdirSync(output.functionDir(ROOT_FUNCTION), { recursive: true });
+
+    output.writeFunctionConfig(ROOT_FUNCTION, "next", "index.handler");
+
+    expect(
+      JSON.parse(
+        readFileSync(path.join(output.functionDir(ROOT_FUNCTION), "function-config.json"), "utf8"),
+      ).framework,
+    ).toEqual({ name: "next", arch: "arm64" });
+  });
+
   it("stamps hosting with the version this release reads", () => {
     const output = new BuildOutput(scratch(), "web");
 

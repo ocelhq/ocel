@@ -7,6 +7,7 @@ import type { Hosting } from "@platform/edge-contract/hosting";
 export const OUTPUT_DIR_ENV = "OCEL_OUTPUT_DIR";
 export const APP_NAME_ENV = "OCEL_APP_NAME";
 export const APP_FOLDER_ENV = "OCEL_APP_FOLDER";
+export const FUNCTION_ARCH_ENV = "OCEL_FUNCTION_ARCH";
 
 export const HOSTING_FILE = "hosting.json";
 export const HOSTING_VERSION = 1;
@@ -18,7 +19,7 @@ export const ROOT_FUNCTION = "/";
 export const ROOT_FUNCTION_DIR = `index${FUNCTION_DIR_SUFFIX}`;
 
 export interface FunctionConfig {
-  framework: { name: string };
+  framework: { name: string; arch?: string };
   entryFile: string;
   id: string;
   app: string;
@@ -27,16 +28,19 @@ export interface FunctionConfig {
 export class BuildOutput {
   readonly dir: string;
   readonly app: string;
+  readonly arch: string | undefined;
 
-  constructor(dir: string, app: string) {
+  constructor(dir: string, app: string, arch?: string) {
     this.dir = dir;
     this.app = app;
+    this.arch = arch;
   }
 
   static fromEnv(defaults: { dir: string; app: string }): BuildOutput {
     return new BuildOutput(
       path.resolve(process.env[OUTPUT_DIR_ENV] || defaults.dir),
       process.env[APP_NAME_ENV] || defaults.app,
+      process.env[FUNCTION_ARCH_ENV] || undefined,
     );
   }
 
@@ -66,7 +70,12 @@ export class BuildOutput {
   }
 
   writeFunctionConfig(id: string, framework: string, entryFile: string): void {
-    const config: FunctionConfig = { framework: { name: framework }, entryFile, id, app: this.app };
+    const config: FunctionConfig = {
+      framework: { name: framework, ...(this.arch && { arch: this.arch }) },
+      entryFile,
+      id,
+      app: this.app,
+    };
     writeFileSync(path.join(this.functionDir(id), FUNCTION_CONFIG_FILE), JSON.stringify(config));
   }
 
