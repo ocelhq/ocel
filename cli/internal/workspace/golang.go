@@ -29,7 +29,7 @@ func findGoContext(module gomodule.Module) (string, error) {
 		}
 		if !under(repository, root) || filepath.Dir(root) == root {
 			return "", fmt.Errorf(
-				"the %s at %s replaces a module with %s, and the only directory holding both is %s, outside %s: an image is built from one directory holding the module and every directory it replaces a module with, and never from above the repository the app is checked out in or from the filesystem root — move %s inside %s, or require a published version of the module it holds",
+				"the %s at %s replaces a module with %s, and the only directory holding both is %s, outside %s: move %s inside %s, or require a published version of its module",
 				gomodule.File, module.Dir, replaced, root, repository, replaced, repository,
 			)
 		}

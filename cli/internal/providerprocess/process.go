@@ -89,7 +89,7 @@ func (e *VersionMismatchError) Error() string {
 	if e.Name != "" {
 		named = "provider " + e.Name
 	}
-	return fmt.Sprintf("%s is version %s and this CLI is version %s; a provider ships with the CLI it runs under", named, e.Announced, e.Expected)
+	return fmt.Sprintf("%s is version %s and this CLI is version %s", named, e.Announced, e.Expected)
 }
 
 type OperationFailedError struct {

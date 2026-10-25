@@ -213,7 +213,7 @@ func (l Location) Commands() (Commands, error) {
 		start := l.start()
 		if start == "" {
 			return Commands{}, fmt.Errorf(
-				"app %q declares no start script, no main and no entry file beside its %s, and it is a member of the workspace at %s: the image would be left starting the workspace root's own start script, which serves something else — give %s a %q script",
+				"app %q declares no start script, no main and no entry file beside its %s in the workspace at %s: give %s a %q script",
 				l.name(), manifestName, l.Root, filepath.ToSlash(filepath.Join(l.Path, manifestName)), "start",
 			)
 		}
