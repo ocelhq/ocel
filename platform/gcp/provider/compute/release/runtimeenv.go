@@ -3,9 +3,7 @@ package release
 import (
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime"
@@ -28,8 +26,8 @@ func (p *Release) RuntimeEnv(names names.Names, spec provider.StackSpec, tasks *
 		Environment:        variables.LiveEnvironment(spec.Ref),
 		Endpoint:           p.ContainerEndpoint,
 		Databases:          databases,
-		Keys:               liveKeys(app.Values),
-		Bindings:           liveBindings(app.Values),
+		Keys:               app.Values.LiveKeys(),
+		Bindings:           app.Values.LiveBindings(),
 		Tasks:              tasks,
 		RealtimePublishURL: realtime.FindPublishURL(app.Values.Bindings),
 	})
@@ -40,32 +38,6 @@ func (p *Release) RuntimeEnv(names names.Names, spec provider.StackSpec, tasks *
 		env[manifest.EnvVar] = string(rendered)
 	}
 	return env, nil
-}
-
-func liveKeys(values provider.AppValues) []live.Key {
-	keys := make([]live.Key, 0, len(values.Secrets))
-	for _, secret := range values.Secrets {
-		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
-	}
-	return keys
-}
-
-func liveBindings(values provider.AppValues) []live.Binding {
-	declared := make([]live.Binding, 0, len(values.Bindings))
-	for _, binding := range values.Bindings {
-		kind := provider.ProtoBindingType(binding.Type)
-		resource := binding.Resource
-		if resource == "" {
-			resource = binding.Name
-		}
-		declared = append(declared, live.Binding{
-			Name:    binding.Name,
-			Key:     bindings.ResourceEnvName(kind, resource),
-			Type:    kind,
-			Granted: binding.Version,
-		})
-	}
-	return declared
 }
 
 const (

@@ -54,6 +54,9 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 			return err
 		}
 		for _, pair := range pairs {
+			if err := variables.RefuseBound(variables.ScopeOf(cfg, opts.tier(), ""), pair.key); err != nil {
+				return err
+			}
 			if err := variables.RefuseImpliedInFolder(variables.ScopeOf(cfg, opts.tier(), ""), pair.key, opts.folder); err != nil {
 				return err
 			}

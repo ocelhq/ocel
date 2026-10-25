@@ -116,3 +116,9 @@ Every value is encrypted in ocel's store. The class decides where it may go from
 `{ "$env": "NAME" }` in [your config](/docs/configuration#bindings) is a variable too, set the
 same way. It is how a password, connection string or key reaches a binding, and the app never
 receives it.
+
+### Variables from your infrastructure
+
+A declared variable can take its value from a record your infrastructure published instead of
+from `ocel env set`: `"bindings": { "variables": { "ORIGIN_CERT": "@origin.certificate" } }`.
+See [A variable from a published record](/docs/configuration#a-variable-from-a-published-record).

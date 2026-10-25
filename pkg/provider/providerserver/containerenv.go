@@ -49,7 +49,7 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 		if !runsFromImage(r.provider, entry.Compute()) {
 			continue
 		}
-		values, err := r.manifestValues(entry, nil)
+		values, err := r.manifestValues(ctx, entry, nil)
 		if err != nil {
 			return err
 		}
@@ -65,7 +65,7 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 			}
 		}
 		for _, secret := range values.Secrets {
-			if !stored[variablestore.Cell{Folder: secret.Folder, Key: secret.Key}] {
+			if secret.Binding == "" && !stored[variablestore.Cell{Folder: secret.Folder, Key: secret.Key}] {
 				return r.refuseUnsetSecret(entry.App, secret.Key)
 			}
 		}

@@ -1901,6 +1901,8 @@ type ManifestVariable struct {
 	Folder        string                 `protobuf:"bytes,4,opt,name=folder,proto3" json:"folder,omitempty"`
 	Version       int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
 	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	Binding       string                 `protobuf:"bytes,7,opt,name=binding,proto3" json:"binding,omitempty"`
+	Property      string                 `protobuf:"bytes,8,opt,name=property,proto3" json:"property,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1973,6 +1975,20 @@ func (x *ManifestVariable) GetVersion() int64 {
 func (x *ManifestVariable) GetDescription() string {
 	if x != nil {
 		return x.Description
+	}
+	return ""
+}
+
+func (x *ManifestVariable) GetBinding() string {
+	if x != nil {
+		return x.Binding
+	}
+	return ""
+}
+
+func (x *ManifestVariable) GetProperty() string {
+	if x != nil {
+		return x.Property
 	}
 	return ""
 }
@@ -8224,14 +8240,17 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tcontainer\x18\n" +
 	" \x01(\v2'.provider.contract.v1.ContainerArtifactH\x00R\tcontainer\x127\n" +
 	"\x0fcustom_bindings\x18\v \x03(\tB\x0e\xbaH\v\x92\x01\b\x18\x01\"\x04r\x02\x10\x01R\x0ecustomBindingsB\x11\n" +
-	"\bartifact\x12\x05\xbaH\x02\b\x01\"\x95\x02\n" +
+	"\bartifact\x12\x05\xbaH\x02\b\x01\"\xbf\x04\n" +
 	"\x10ManifestVariable\x12/\n" +
 	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x19\n" +
 	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x128\n" +
 	"\x06folder\x18\x04 \x01(\tB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$R\x06folder\x12\x18\n" +
 	"\aversion\x18\x05 \x01(\x03R\aversion\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xfd\x01\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x18\n" +
+	"\abinding\x18\a \x01(\tR\abinding\x12\x1a\n" +
+	"\bproperty\x18\b \x01(\tR\bproperty:\xf1\x01\xbaH\xed\x01\x1a\xea\x01\n" +
+	"\x19manifest.variable.binding\x12ra variable bound to a published record names the record and one of its properties, and carries no value of its own\x1aY(this.binding == '') == (this.property == '') && (this.binding == '' || this.value == '')\"\xfd\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12=\n" +
 	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12\x1d\n" +

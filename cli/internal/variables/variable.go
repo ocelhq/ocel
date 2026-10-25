@@ -10,4 +10,6 @@ type Variable struct {
 	Version     int64
 	Source      string
 	Description string
+	Binding     string
+	Property    string
 }

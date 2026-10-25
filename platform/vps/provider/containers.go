@@ -6,13 +6,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/bindings"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/release"
@@ -42,8 +40,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		Slug:               spec.Ref.Project,
 		Tier:               string(spec.Ref.Tier),
 		Environment:        liveEnvironment(spec.Ref),
-		Keys:               liveKeys(app.Values),
-		Bindings:           liveBindings(app.Values),
+		Keys:               app.Values.LiveKeys(),
+		Bindings:           app.Values.LiveBindings(),
 		Store:              store,
 		RealtimePublishURL: realtime.FindPublishURL(app.Values.Bindings),
 	}
@@ -125,30 +123,4 @@ func liveEnvironment(ref provider.StackRef) string {
 		return ""
 	}
 	return ref.Name.Env
-}
-
-func liveKeys(values provider.AppValues) []live.Key {
-	keys := make([]live.Key, 0, len(values.Secrets))
-	for _, secret := range values.Secrets {
-		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
-	}
-	return keys
-}
-
-func liveBindings(values provider.AppValues) []live.Binding {
-	declared := make([]live.Binding, 0, len(values.Bindings))
-	for _, binding := range values.Bindings {
-		kind := provider.ProtoBindingType(binding.Type)
-		resource := binding.Resource
-		if resource == "" {
-			resource = binding.Name
-		}
-		declared = append(declared, live.Binding{
-			Name:    binding.Name,
-			Key:     bindings.ResourceEnvName(kind, resource),
-			Type:    kind,
-			Granted: binding.Version,
-		})
-	}
-	return declared
 }

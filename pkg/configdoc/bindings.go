@@ -89,6 +89,12 @@ const (
 	TierPreview    = "preview"
 )
 
+const VariablesKey = "variables"
+
+const variableKeyPattern = `^[A-Z_][A-Z0-9_]*$`
+
+const boundVariablePattern = `^@\S+\.[^.\s]+$`
+
 var tiers = []string{TierProduction, TierPreview}
 
 type inlineForm struct {
@@ -174,6 +180,9 @@ func decodeBinding(kind string, raw json.RawMessage) (Binding, error) {
 		err := json.Unmarshal(trimmed, &published)
 		return Binding{Published: published}, err
 	}
+	if kind == VariablesKey {
+		return Binding{}, fmt.Errorf("a variable is bound to a published record's property, written \"@<name>.<property>\"")
+	}
 	form, ok := inlineForms[kind]
 	if !ok {
 		return Binding{}, fmt.Errorf("a %s binding is written \"@<name>\"", kind)
@@ -220,10 +229,16 @@ func (Bindings) checkShape(path string, value any) error {
 	if !ok {
 		return typeError(path, "an object")
 	}
-	known := BindableTypes()
+	known := append(BindableTypes(), VariablesKey)
 	for _, key := range keysOf(object) {
 		if !slices.Contains(known, key) {
 			return unknownKeyError(path, key, known)
+		}
+		if key == VariablesKey {
+			if err := checkBoundVariables(JoinPath(path, key), object[key]); err != nil {
+				return err
+			}
+			continue
 		}
 		named, ok := object[key].(map[string]any)
 		if !ok {
@@ -233,6 +248,19 @@ func (Bindings) checkShape(path string, value any) error {
 			if err := checkBinding(JoinPath(JoinPath(path, key), declared), key, named[declared]); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func checkBoundVariables(path string, value any) error {
+	named, ok := value.(map[string]any)
+	if !ok {
+		return typeError(path, "an object of variable name to \"@<name>.<property>\"")
+	}
+	for _, key := range keysOf(named) {
+		if _, spelled := named[key].(string); !spelled {
+			return typeError(JoinPath(path, key), "\"@\" followed by a published record's name, a dot and one of its properties")
 		}
 	}
 	return nil
@@ -386,6 +414,12 @@ func (Bindings) jsonSchema() object {
 				"The %s resources this project binds, keyed by name. Each value is \"@\" plus a record name, or the record itself.",
 				name),
 		}
+	}
+	properties[VariablesKey] = object{
+		"type":                 "object",
+		"propertyNames":        object{"pattern": variableKeyPattern},
+		"additionalProperties": object{"type": "string", "pattern": boundVariablePattern},
+		"description":          "The variables this project binds to a property of a published custom record, keyed by the name the app declares. Each value is \"@\" plus the record's name, a dot and the property, such as \"@origin.certificate\".",
 	}
 	return object{"type": "object", "properties": properties, "additionalProperties": false}
 }

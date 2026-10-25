@@ -32,6 +32,10 @@ app.get("/api/binding", (_req, res) => {
   });
 });
 
+app.get("/api/variables", (_req, res) => {
+  res.json({ channel: env.RELEASE_CHANNEL, hasToken: env.RELEASE_TOKEN.startsWith("token-") });
+});
+
 app.get("/api/binding/query", async (_req, res) => {
   await orders.query("select 1");
   res.json({ ok: true });

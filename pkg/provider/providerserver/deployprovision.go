@@ -451,7 +451,7 @@ func deliveredBindings(grants []provider.Binding) []provider.Binding {
 }
 
 func (r *deployRun) appValues(ctx context.Context, entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
-	values, err := r.manifestValues(entry, grants)
+	values, err := r.manifestValues(ctx, entry, grants)
 	if err != nil {
 		return provider.AppValues{}, err
 	}
@@ -459,7 +459,7 @@ func (r *deployRun) appValues(ctx context.Context, entry provider.AppEntry, gran
 	return values, nil
 }
 
-func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
+func (r *deployRun) manifestValues(ctx context.Context, entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
 	values := provider.AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
@@ -469,13 +469,26 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 		Phase:     r.spec.Phase,
 	}
 	for _, variable := range entry.Manifest.GetVariables() {
+		value := variable.GetValue()
+		if variable.GetBinding() != "" && variable.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+			text, err := r.boundText(ctx, boundVariable{app: entry.App, variable: variable})
+			if err != nil {
+				return provider.AppValues{}, err
+			}
+			value = text
+		}
 		switch variable.GetClass() {
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
-			values.Secrets = append(values.Secrets, provider.SecretRef{Key: variable.GetKey(), Folder: variable.GetFolder()})
+			values.Secrets = append(values.Secrets, provider.SecretRef{
+				Key:      variable.GetKey(),
+				Folder:   variable.GetFolder(),
+				Binding:  variable.GetBinding(),
+				Property: variable.GetProperty(),
+			})
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
-			values.Sensitive[variable.GetKey()] = variable.GetValue()
+			values.Sensitive[variable.GetKey()] = value
 		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
-			values.Plain[variable.GetKey()] = variable.GetValue()
+			values.Plain[variable.GetKey()] = value
 		default:
 			return provider.AppValues{}, refusal.Refuse(refusal.CodeInvalid,
 				"%s declares %s with class %s, which this deploy cannot deliver to a function; declare it as `plain`, `sensitive` or `secret`",

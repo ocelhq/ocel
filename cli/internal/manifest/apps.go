@@ -158,7 +158,7 @@ func manifestVariables(values []variables.Variable) []*contractv1.ManifestVariab
 	}
 	out := make([]*contractv1.ManifestVariable, 0, len(values))
 	for _, v := range values {
-		out = append(out, &contractv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version, Description: v.Description})
+		out = append(out, &contractv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version, Description: v.Description, Binding: v.Binding, Property: v.Property})
 	}
 	slices.SortFunc(out, func(a, b *contractv1.ManifestVariable) int { return strings.Compare(a.GetKey(), b.GetKey()) })
 	return out

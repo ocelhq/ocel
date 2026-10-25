@@ -2,6 +2,8 @@ package configdoc
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -30,7 +32,7 @@ func bindingsSchema(t *testing.T) map[string]any {
 	return shape
 }
 
-func TestBindingsSchemaKeysAreExactlyTheBindableTypes(t *testing.T) {
+func TestBindingsSchemaKeysAreExactlyTheBindableTypesAndVariables(t *testing.T) {
 	shape := bindingsSchema(t)
 
 	if shape["additionalProperties"] != false {
@@ -47,7 +49,9 @@ func TestBindingsSchemaKeysAreExactlyTheBindableTypes(t *testing.T) {
 	}
 	slices.Sort(got)
 
-	if want := BindableTypes(); !slices.Equal(got, want) {
+	want := append(BindableTypes(), VariablesKey)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
 		t.Errorf("bindings keys = %v, want %v — the schema must not contain a second list of bindable types", got, want)
 	}
 }
@@ -57,6 +61,9 @@ func TestBindingsSchemaMapsADeclaredNameToAnExternalName(t *testing.T) {
 	properties := shape["properties"].(map[string]any)
 
 	for key, raw := range properties {
+		if key == VariablesKey {
+			continue
+		}
 		entry, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("bindings.%s = %v, want an object schema", key, raw)
@@ -148,5 +155,61 @@ func TestARealtimeResourceIsNotBoundInConfig(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("Check = nil, want bindings.realtime refused")
+	}
+}
+
+func TestBindingsVariablesSchemaMapsAVariableToAPropertyOfAPublishedRecord(t *testing.T) {
+	variables, ok := bindingsSchema(t)["properties"].(map[string]any)[VariablesKey].(map[string]any)
+	if !ok {
+		t.Fatal("the bindings schema has no variables key")
+	}
+	values, _ := variables["additionalProperties"].(map[string]any)
+	pattern, err := regexp.Compile(fmt.Sprint(values["pattern"]))
+	if err != nil {
+		t.Fatalf("bindings.variables value pattern %v: %v", values["pattern"], err)
+	}
+	for spelled, want := range map[string]bool{
+		"@origin.certificate": true,
+		"@cloud.keys.seal":    true,
+		"@origin":             false,
+		"origin.certificate":  false,
+		"@origin.":            false,
+		"@ origin.key":        false,
+	} {
+		if got := pattern.MatchString(spelled); got != want {
+			t.Errorf("bindings.variables pattern matches %q = %v, want %v", spelled, got, want)
+		}
+	}
+	names, _ := variables["propertyNames"].(map[string]any)
+	if names["pattern"] != `^[A-Z_][A-Z0-9_]*$` {
+		t.Errorf("bindings.variables key pattern = %v, want a variable's own name", names["pattern"])
+	}
+}
+
+func TestCheckAdmitsAVariableBoundToAPublishedRecordsProperty(t *testing.T) {
+	document := map[string]any{"slug": "shop", "bindings": map[string]any{
+		VariablesKey: map[string]any{"CLOUD_SEAL_KEY": "@keys.seal"},
+	}}
+	if err := Check("", Document{}, document); err != nil {
+		t.Fatalf("Check = %v, want bindings.variables admitted", err)
+	}
+}
+
+func TestCheckRefusesAVariableWrittenAsAnything(t *testing.T) {
+	document := map[string]any{"slug": "shop", "bindings": map[string]any{
+		VariablesKey: map[string]any{"CLOUD_SEAL_KEY": map[string]any{"$env": "SEAL"}},
+	}}
+	if err := Check("", Document{}, document); err == nil || !strings.Contains(err.Error(), "CLOUD_SEAL_KEY") {
+		t.Errorf("Check = %v, want the variable's object value refused by name", err)
+	}
+}
+
+func TestABoundVariableDecodesAsThePublishedRecordItNames(t *testing.T) {
+	var bindings Bindings
+	if err := json.Unmarshal([]byte(`{"variables":{"CLOUD_SEAL_KEY":"@keys.seal"}}`), &bindings); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got := bindings[VariablesKey]["CLOUD_SEAL_KEY"].Published; got != "@keys.seal" {
+		t.Errorf("bindings.variables.CLOUD_SEAL_KEY = %q, want @keys.seal", got)
 	}
 }

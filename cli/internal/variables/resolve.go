@@ -12,9 +12,11 @@ import (
 )
 
 type ResolvedValue struct {
-	Folder  string
-	Value   string
-	Version int64
+	Folder   string
+	Value    string
+	Version  int64
+	Binding  string
+	Property string
 }
 
 type resolvedCell struct {
@@ -49,6 +51,9 @@ func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Reso
 		}
 		resolved[c.cell.Key] = from
 	}
+	for _, bound := range d.boundFor(app) {
+		resolved[bound.Key] = ResolvedValue{Binding: bound.Binding, Property: bound.Property}
+	}
 	return resolved, nil
 }
 
@@ -80,6 +85,8 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			Version:     cell.Version,
 			Source:      definition.GetSource(),
 			Description: definition.GetDescription(),
+			Binding:     cell.Binding,
+			Property:    cell.Property,
 		})
 	}
 	return values
@@ -146,6 +153,9 @@ func (d *Declarations) cellsOf(app string) ([]resolvedCell, presentCells, error)
 
 	cells := make([]resolvedCell, 0, len(definitions))
 	for _, definition := range definitions {
+		if _, bound := d.scope.boundTo(definition.GetKey()); bound {
+			continue
+		}
 		cell, ok := resolveCell(definition, binding, present)
 		if !ok {
 			continue

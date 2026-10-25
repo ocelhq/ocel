@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -21,10 +22,11 @@ type Key struct {
 }
 
 type Binding struct {
-	Name    string                 `json:"name"`
-	Key     string                 `json:"key"`
-	Type    bindingsv1.BindingType `json:"type"`
-	Granted int64                  `json:"granted,omitempty"`
+	Name     string                 `json:"name"`
+	Key      string                 `json:"key"`
+	Type     bindingsv1.BindingType `json:"type"`
+	Granted  int64                  `json:"granted,omitempty"`
+	Property string                 `json:"property,omitempty"`
 }
 
 func (l Binding) MarshalJSON() ([]byte, error) {
@@ -58,6 +60,9 @@ var ErrDrift = errors.New("binding record drift")
 func Conform(bindings []Binding, values map[string]string) error {
 	for _, l := range bindings {
 		raw, ok := values[l.Key]
+		if !ok && l.Property != "" {
+			return fmt.Errorf("%w: binding %s publishes no property %s, which this deployment reads as %s", ErrDrift, l.Name, l.Property, l.Key)
+		}
 		if !ok {
 			return fmt.Errorf("%w: binding %s published no record under %s, which this deployment reads as a %s", ErrDrift, l.Name, l.Key, l.Type)
 		}
@@ -69,6 +74,9 @@ func Conform(bindings []Binding, values map[string]string) error {
 }
 
 func (l Binding) conform(raw string) error {
+	if l.Property != "" {
+		return nil
+	}
 	binding := &bindingsv1.Binding{}
 	if err := protojson.Unmarshal([]byte(raw), binding); err != nil {
 		return fmt.Errorf("%w: binding %s published something under %s that is not a binding record at all, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
@@ -87,7 +95,14 @@ func merge(resolved map[string]string, bindings []Binding, records []variablesto
 	out := make(map[string]string, len(resolved)+len(bindings))
 	maps.Copy(out, resolved)
 	for i, record := range records {
-		out[bindings[i].Key] = delivered(record.Value)
+		l := bindings[i]
+		if l.Property == "" {
+			out[l.Key] = delivered(record.Value)
+			continue
+		}
+		if text, ok := deliveredProperty(record.Value, l.Property); ok {
+			out[l.Key] = text
+		}
 	}
 	return out
 }
@@ -114,6 +129,14 @@ func delivered(value []byte) string {
 		return ""
 	}
 	return string(encoded)
+}
+
+func deliveredProperty(value []byte, property string) (string, bool) {
+	published := &variablestorev1.PublishedBinding{}
+	if err := protojson.Unmarshal(value, published); err != nil {
+		return "", false
+	}
+	return bindings.VariableText(published.GetBinding(), property)
 }
 
 func Keys(keys []Key, bindings []Binding) []string {
@@ -170,7 +193,9 @@ func Fetch(ctx context.Context, reader Reader, cells []variablestore.Cell, bindi
 	}
 	names := make([]string, 0, len(bindings))
 	for _, l := range bindings {
-		names = append(names, l.Name)
+		if !slices.Contains(names, l.Name) {
+			names = append(names, l.Name)
+		}
 	}
 	records, err := reader.Bindings(ctx, names)
 	if err != nil {

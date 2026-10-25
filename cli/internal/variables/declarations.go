@@ -144,7 +144,7 @@ func (d *Declarations) RefuseIncomplete() error {
 	d.mu.Unlock()
 
 	bound := d.scope.bindingDefinitions()
-	problems = append(problems, unresolved(definitions, groups, apps, present, problems)...)
+	problems = append(problems, unresolved(d.scope.unbound(definitions), groups, apps, present, problems)...)
 	problems = append(problems, unsetBindingVariables(bound, present)...)
 	if len(problems) == 0 {
 		return nil

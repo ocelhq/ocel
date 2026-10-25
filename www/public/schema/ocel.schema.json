@@ -1388,6 +1388,17 @@
           },
           "description": "The postgres resources this project binds, keyed by name. Each value is \"@\" plus a record name, or the record itself.",
           "type": "object"
+        },
+        "variables": {
+          "additionalProperties": {
+            "pattern": "^@\\S+\\.[^.\\s]+$",
+            "type": "string"
+          },
+          "description": "The variables this project binds to a property of a published custom record, keyed by the name the app declares. Each value is \"@\" plus the record's name, a dot and the property, such as \"@origin.certificate\".",
+          "propertyNames": {
+            "pattern": "^[A-Z_][A-Z0-9_]*$"
+          },
+          "type": "object"
         }
       },
       "type": "object"
