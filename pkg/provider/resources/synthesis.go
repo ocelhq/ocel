@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 )
 
 const (
@@ -57,7 +58,7 @@ func synthesizedPlan(ctx context.Context, spec provider.StackSpec, deployed prov
 		changes = append(changes, provider.Change{
 			Kind:   containerKind,
 			Name:   container,
-			Action: planContainerChange(deployed.Containers, container, spec.App.Image),
+			Action: planContainerChange(deployed.Containers, container, functioncode.ContainerImageRef(spec)),
 		})
 	}
 	for _, binding := range deployed.Bindings {
@@ -119,8 +120,10 @@ func DeclaredFunctions(spec provider.StackSpec, recordsWorkers bool) []string {
 		return nil
 	}
 	names := make([]string, 0, len(spec.App.Functions)+len(spec.App.Workers))
-	for _, function := range spec.App.Functions {
-		names = append(names, function.Name)
+	if spec.App.Compute != provider.ComputeContainer {
+		for _, function := range spec.App.Functions {
+			names = append(names, function.Name)
+		}
 	}
 	if recordsWorkers && spec.App.Compute == provider.ComputeServerless {
 		names = append(names, declaredWorkers(spec.App)...)

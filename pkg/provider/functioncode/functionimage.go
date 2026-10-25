@@ -46,6 +46,13 @@ func FunctionImages(ctx context.Context, spec provider.StackSpec, source ImageSo
 	return pushes, nil
 }
 
+func ContainerImageRef(spec provider.StackSpec) string {
+	if len(spec.App.Functions) == 0 {
+		return spec.App.Image
+	}
+	return FunctionImageRef(spec.Images, spec.App.Functions[0].Name)
+}
+
 func FunctionImageRef(images provider.ImagePushes, function string) string {
 	for _, push := range images.Pushes {
 		if push.Function && push.App == function {
