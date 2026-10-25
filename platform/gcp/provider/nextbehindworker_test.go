@@ -200,3 +200,16 @@ func TestOnlyANextServiceBehindTheWorkerIsToldToAnswerImageRequestsOnItsOriginPa
 		t.Errorf("OCEL_IMAGE_ENDPOINT = %q behind the load balancer, want none: nothing posts images there, and the path would answer anyone", got)
 	}
 }
+
+func TestANextContainerBuiltFromItsFunctionBehindTheWorkerIsToldThePurgeSecretItSignsWith(t *testing.T) {
+	w := behindTheWorkerWithItsSeed(t)
+
+	if _, err := w.p.ProvisionContainers(context.Background(), builtFromItsFunction(w.spec), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+
+	env := googletest.EnvOf(w.server.Created[0].Template.Containers[0])
+	if want := edge.DerivePurgeSecret(w.seed, "shop/prod/web/r1a2b3c4d"); env["OCEL_PURGE_SECRET"] != want {
+		t.Errorf("OCEL_PURGE_SECRET = %q, want the deployment's derived secret", env["OCEL_PURGE_SECRET"])
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -508,5 +509,84 @@ func TestANextServiceThatRoutesItsOwnRequestsIsToldTheStaticRulesItsBuildStates(
 
 	if got, want := env[edge.StaticRulesVar], `{"immutablePrefixes":["/docs/_next/static/"]}`; got != want {
 		t.Errorf("the Next service reads %s=%q, want %q", edge.StaticRulesVar, got, want)
+	}
+}
+
+func builtFromItsFunction(spec provider.StackSpec) provider.StackSpec {
+	spec.App.Compute = provider.ComputeContainer
+	spec.App.Image = functioncode.FunctionImageRef(spec.Images, spec.App.Functions[0].Name)
+	spec.App.HealthCheckPath = "/"
+	spec.App.Instances = provider.Instances{Min: 1, Max: 1}
+	return spec
+}
+
+func TestANextContainerBuiltFromItsFunctionIsToldWhatAServerlessNextServiceIsTold(t *testing.T) {
+	serverless := googletest.EnvOf(releasedNext(t, routedNextSpec()))
+	service, _ := releasedNextContainer(t, builtFromItsFunction(routedNextSpec()))
+	container := googletest.EnvOf(service.Template.Containers[0])
+
+	for _, name := range []string{
+		processenv.RouteTableEnvVar, processenv.RouterKindEnvVar, processenv.BuildIDEnvVar,
+		edge.OriginDispatchVar, edge.OriginSignedVar,
+		"OCEL_ISR", "OCEL_ISR_TAG_NAMESPACE", "OCEL_TAG_DATABASE", "OCEL_STORAGE_COORDINATE", "OCEL_EDGE_BUCKET", "OCEL_CACHE_BUCKET", next.MemoryEnvVar,
+	} {
+		if serverless[name] == "" {
+			t.Fatalf("a serverless Next service is told no %s, so it proves nothing here", name)
+		}
+		if container[name] != serverless[name] {
+			t.Errorf("the container reads %s=%q, want %q as a serverless Next service does: it runs the same runtime over the same build", name, container[name], serverless[name])
+		}
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionKeepsItsCPUItsInstancesAndItsProbe(t *testing.T) {
+	spec := builtFromItsFunction(routedNextSpec())
+	spec.App.Instances = provider.Instances{Min: 2, Max: 3}
+	service, _ := releasedNextContainer(t, spec)
+
+	container := service.Template.Containers[0]
+	if container.Resources.CpuIdle {
+		t.Error("the container releases its CPU between requests, and Next revalidates stale pages in the background after the response")
+	}
+	if got := service.Template.Scaling.MinInstanceCount; got != 2 {
+		t.Errorf("the container keeps %d instances running, want the 2 its app asks for", got)
+	}
+	if container.StartupProbe == nil || container.StartupProbe.HttpGet == nil || container.StartupProbe.HttpGet.Path != "/" {
+		t.Errorf("the container is probed with %+v, want a startup probe at the path its app names", container.StartupProbe)
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T) {
+	server := &googletest.Run{}
+	p := providerServing(server, t)
+	spec := builtFromItsFunction(routedNextSpec())
+	spec.Edge = codeRunningFront{kind: cloudflareKind}
+	spec.App.Guard = &provider.OriginGuard{RootFunction: "bundle-0"}
+
+	_, err := p.ProvisionContainers(context.Background(), spec, nil)
+	if err == nil || !strings.Contains(err.Error(), "shields its origin") {
+		t.Fatalf("ProvisionContainers() = %v, want the refusal a serverless Next service behind that edge gets", err)
+	}
+	if len(server.Created) != 0 {
+		t.Errorf("released %d services before refusing, want none", len(server.Created))
+	}
+}
+
+func TestAWorkerOfANextContainerBuiltFromItsFunctionRunsThatFunctionsImage(t *testing.T) {
+	spec := builtFromItsFunction(routedNextSpec())
+	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
+	_, server := releasedNextContainer(t, spec)
+
+	workers := slices.Concat(server.Created[1:], server.Releases())
+	if len(workers) == 0 {
+		t.Fatal("the app's worker was never released")
+	}
+	for _, worker := range workers {
+		if worker.Template == nil {
+			continue
+		}
+		if got := worker.Template.Containers[0].Image; got != spec.App.Image {
+			t.Errorf("a worker runs %q, want %q: the function's image carries its worker entry", got, spec.App.Image)
+		}
 	}
 }

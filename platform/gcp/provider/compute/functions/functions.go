@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
@@ -77,12 +76,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 	if err != nil {
 		return nil, err
 	}
-	if next.Serves(app) && app.ISR != nil {
-		if err := next.SeedPrerenders(ctx, p.Objects, spec, progress); err != nil {
-			return nil, err
-		}
-	}
-	if err := p.Objects.UploadStaticFiles(ctx, spec, progress); err != nil {
+	if err := p.UploadBuildFiles(ctx, spec, progress); err != nil {
 		return nil, err
 	}
 	deployed := make([]provider.Function, 0, len(app.Functions)+len(app.Workers))
@@ -97,19 +91,6 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		}
 		service, err := release.NameService(named, spec, app, fn.Name)
 		if err != nil {
-			return nil, err
-		}
-		values, err := run.MergeValues(fn.Name, release.SpecValues, app.Values.ContainerEnv, fn.Env)
-		if err != nil {
-			return nil, err
-		}
-		if values, err = run.MergeValues(fn.Name, release.RuntimeValues, values, own); err != nil {
-			return nil, err
-		}
-		if values, err = run.MergeValues(fn.Name, release.CachingEdgeValues, values, newCachingEdgeEnv(spec)); err != nil {
-			return nil, err
-		}
-		if values, err = run.MergeValues(fn.Name, release.OcelRouteTableValues, values, newOcelRouteTableEnv(spec)); err != nil {
 			return nil, err
 		}
 		served := run.Serving{
@@ -131,31 +112,10 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		}
 		if next.Serves(app) {
 			served = next.FillServingDefaults(served)
-			if served.Memory, err = release.ReadMemory(served); err != nil {
-				return nil, err
-			}
-			buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
-			if err != nil {
-				return nil, err
-			}
-			database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, spec.Ref.Project)
-			if err != nil {
-				return nil, err
-			}
-			if values, err = run.MergeValues(fn.Name, release.NextValues, values, next.NewEnv(spec, fn, served, next.NewCache(named, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, facts.PurgeSecret))); err != nil {
-				return nil, err
-			}
 		}
-		if values, err = run.MergeValues(fn.Name, release.CDNPurgeValues, values, next.NewCDNPurgeEnv(named, spec)); err != nil {
+		if served.Env, err = p.NewFunctionEnv(ctx, c, spec, fn, served, own, facts); err != nil {
 			return nil, err
 		}
-		if values, err = run.MergeValues(fn.Name, release.NodePurgeValues, values, next.NewNodePurgeEnv(spec, facts.PurgeSecret)); err != nil {
-			return nil, err
-		}
-		if values, err = run.MergeValues(fn.Name, release.OriginGuardValues, values, release.NewOriginGuardEnv(facts.OriginSecret)); err != nil {
-			return nil, err
-		}
-		served.Env = values
 		gateIgnored := cloudrun.IgnoresGate(spec, fn)
 		if !gateIgnored {
 			if err := cloudrun.ApplyGate(gated, fn.Name, &served); err != nil {

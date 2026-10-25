@@ -11,7 +11,7 @@ import (
 const cdnURLMapEnvVar = "OCEL_CDN_URL_MAP"
 
 func purgesCloudCDN(spec provider.StackSpec) bool {
-	return spec.App != nil && spec.App.ISR != nil && spec.App.Compute != provider.ComputeContainer && spec.Edge != nil && spec.Edge.Kind() == alb.Kind
+	return spec.App != nil && spec.App.ISR != nil && (spec.App.Compute != provider.ComputeContainer || spec.App.IsBuiltFromFunction()) && spec.Edge != nil && spec.Edge.Kind() == alb.Kind
 }
 
 func NewCDNPurgeEnv(names names.Names, spec provider.StackSpec) map[string]string {
