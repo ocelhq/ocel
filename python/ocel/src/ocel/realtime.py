@@ -18,7 +18,6 @@ from ocel._callables import call_function
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._error import OcelError
 from ocel._payload import Codec
-from ocel._realtime_token import MintedToken, TokenOperation, mint_token
 from ocel._realtime_wire import (
     CHANNEL_SEGMENT,
     SEGMENT_RULE,
@@ -31,7 +30,13 @@ from ocel.gen.app.realtime.v1.realtime_connect import (
     RealtimeServiceClient,
     RealtimeServiceClientSync,
 )
-from ocel.gen.app.realtime.v1.realtime_pb import PublishRequest
+from ocel.gen.app.realtime.v1.realtime_pb import (
+    Grant,
+    MintRequest,
+    MintResponse,
+    Operation,
+    PublishRequest,
+)
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     RealtimeChannel,
@@ -426,22 +431,22 @@ class Realtime[A]:
             raise refuse_unprovisioned(f'realtime("{self.name}")', access)
         return read_realtime_binding(self.name)
 
-    def _mint_token(
-        self,
-        properties: RealtimeProperties,
-        subject: str,
-        operation: TokenOperation,
-        channel: str,
-    ) -> MintedToken:
-        return mint_token(
-            properties.signing_key,
-            namespace=self.name,
-            audience=properties.host,
+    async def _mint_tokens_async(self, subject: str, grants: list[Grant]) -> MintResponse:
+        request = MintRequest(
+            realtime=self.name,
             subject=subject,
-            operation=operation,
-            channel=channel,
-            ttl_seconds=self._ttl_seconds,
+            ttl=Duration.from_seconds(self._ttl_seconds),
+            grants=grants,
         )
+        minted: MintResponse = await self._runtime.call_async(
+            "handler", lambda client: client.mint(request)
+        )
+        if len(minted.tokens) != len(grants):
+            raise RuntimeError(
+                f'realtime "{self.name}": the runtime minted {len(minted.tokens)} tokens '
+                f"for {len(grants)} grants"
+            )
+        return minted
 
     def _build_request(self, channel: str, envelope: bytes) -> PublishRequest:
         return PublishRequest(realtime=self.name, channel=channel, event=envelope.decode())
@@ -456,7 +461,6 @@ class Realtime[A]:
 
     async def _serve_op(
         self,
-        properties: RealtimeProperties,
         request: RealtimeRequest,
         auth: A | None,
         op: object,
@@ -484,13 +488,12 @@ class Realtime[A]:
             return _deny("invalid-params")
         params = cast(dict[str, str], asked)
         if operation == "subscribe" or rule is None:
-            return await self._serve_subscribe(properties, request, auth, channel, params)
+            return await self._serve_subscribe(request, auth, channel, params)
         body = fields.get("body", _MISSING_BODY)
         return await self._serve_publish(request, auth, channel, rule, params, body)
 
     async def _serve_subscribe(
         self,
-        properties: RealtimeProperties,
         request: RealtimeRequest,
         auth: A | None,
         channel: Channel[A],
@@ -506,8 +509,7 @@ class Realtime[A]:
             denied = await _run_rule(channel._subscribe, RuleContext(auth, dict(params), request))
             if denied is not None:
                 return _deny(denied)
-        token = self._mint_token(properties, _read_subject(auth), "subscribe", wire)["token"]
-        return {"wire": wire, "token": token}
+        return {"wire": wire, "token": None}
 
     async def _serve_publish(
         self,
@@ -544,7 +546,7 @@ class Realtime[A]:
             auth = await call_function(self._authorize, request)
 
         async def serve(i: int, op: object) -> tuple[int, dict[str, object]]:
-            return i, await self._serve_op(properties, request, auth, op)
+            return i, await self._serve_op(request, auth, op)
 
         publishes = [(i, op) for i, op in enumerate(ops) if _is_publish(op)]
         published = {i for i, _ in publishes}
@@ -565,13 +567,35 @@ class Realtime[A]:
             "url": _resolve_socket_url(properties.url, request),
             "host": properties.host,
         }
-        if connect:
-            answer["connect"] = self._mint_token(
-                properties, _read_subject(auth), "connect", f"/{self.name}"
-            )
+        await self._mint_answer_tokens(answer, _read_subject(auth), connect, outcomes)
         answer["grants"] = [{"i": i, **outcome} for i, outcome in outcomes if "wire" in outcome]
         answer["denied"] = [{"i": i, **outcome} for i, outcome in outcomes if "code" in outcome]
         return answer
+
+    async def _mint_answer_tokens(
+        self,
+        answer: dict[str, object],
+        subject: str,
+        connect: bool,
+        outcomes: list[tuple[int, dict[str, object]]],
+    ) -> None:
+        grants: list[Grant] = []
+        if connect:
+            grants.append(Grant(operation=Operation.CONNECT, channel=f"/{self.name}"))
+        subscribes = [outcome for _, outcome in outcomes if "token" in outcome]
+        grants.extend(
+            Grant(operation=Operation.SUBSCRIBE, channel=cast(str, outcome["wire"]))
+            for outcome in subscribes
+        )
+        if not grants:
+            return
+        minted = await self._mint_tokens_async(subject, grants)
+        tokens = list(minted.tokens)
+        if connect:
+            expires_at = minted.expires_at.seconds if minted.expires_at is not None else 0
+            answer["connect"] = {"token": tokens.pop(0).token, "expiresAt": expires_at}
+        for outcome, token in zip(subscribes, tokens, strict=True):
+            outcome["wire"], outcome["token"] = token.channel, token.token
 
     async def _serve(self, request: RealtimeRequest, allowed_origins: Iterable[str]) -> _Response:
         allowed = list(allowed_origins)
@@ -622,10 +646,11 @@ class Realtime[A]:
         """An ASGI application serving the resource to browsers, mounted at any path: one
         batched POST of ``{ connect?, ops: [{ op, pattern, params?, body? }] }``, at most 50
         ops, answered with the socket url and the host its authorization names, a connect token
-        when asked, a grant with a
-        token for each op its rule allows and a denial with a code for each it does not. It
-        takes POST with application/json alone, serves its own origin and those in
-        ``allowed_origins`` (the only ones it sends CORS headers to), answers
+        when asked, a grant with a token for each op its rule allows and a denial with a code
+        for each it does not. The runtime the app runs on mints every token, in one call per
+        request, and names the channel each subscribe grant is for, which the browser
+        subscribes to as given. It takes POST with application/json alone, serves its own
+        origin and those in ``allowed_origins`` (the only ones it sends CORS headers to), answers
         ``Cache-Control: no-store``, and never sets a cookie."""
         origins = tuple(allowed_origins)
 
@@ -759,9 +784,7 @@ def realtime[A](
     or async, and returns ``None`` for nobody; its result is ``ctx.auth`` in every rule, and
     its ``id`` key or attribute, when a string or integer, is the ``sub`` of every token
     minted for the caller. A resource with a subscribe or publish rule needs ``authorize``.
-    ``token_ttl`` is how long each token lives, 10 to 300 seconds.
-
-    Minting tokens needs the ``ocel[realtime]`` extra."""
+    ``token_ttl`` is how long each token lives, 10 to 300 seconds."""
     seconds = token_ttl.total_seconds() if isinstance(token_ttl, timedelta) else token_ttl
     if not CHANNEL_SEGMENT.fullmatch(name):
         raise ValueError(

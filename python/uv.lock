@@ -10,6 +10,7 @@ members = [
 [manifest.dependency-groups]
 dev = [
     { name = "asyncpg-stubs", specifier = ">=0.32.0" },
+    { name = "cryptography", specifier = ">=43" },
     { name = "fakeredis", specifier = ">=2.26" },
     { name = "pydantic", specifier = ">=2.7,<3" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.407" },
@@ -339,21 +340,17 @@ postgres = [
 pydantic = [
     { name = "pydantic" },
 ]
-realtime = [
-    { name = "cryptography" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.30" },
     { name = "connectrpc", specifier = ">=0.12.1,<0.13" },
-    { name = "cryptography", marker = "extra == 'realtime'", specifier = ">=43" },
     { name = "protobuf-py", specifier = ">=0.4,<0.5" },
     { name = "pydantic", marker = "extra == 'pydantic'", specifier = ">=2.7,<3" },
     { name = "pyqwest", specifier = ">=0.10,<0.11" },
     { name = "redis", marker = "extra == 'kv'", specifier = ">=5.0.1" },
 ]
-provides-extras = ["postgres", "pydantic", "kv", "realtime"]
+provides-extras = ["postgres", "pydantic", "kv"]
 
 [[package]]
 name = "opentelemetry-api"

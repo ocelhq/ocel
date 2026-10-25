@@ -1,44 +1,37 @@
-import base64
 import io
 import json
 import threading
-from pathlib import Path
+from collections.abc import Callable
 from wsgiref.simple_server import make_server
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fakebucket import _body, _Quiet, _Threading
+from protobuf.wkt import Timestamp
 
 from ocel.gen.app.realtime.v1.realtime_connect import RealtimeServiceWSGIApplication
-from ocel.gen.app.realtime.v1.realtime_pb import PublishResponse
-
-FIXTURE = json.loads(
-    (
-        Path(__file__).parents[3]
-        / "proto"
-        / "common"
-        / "bindings"
-        / "v1"
-        / "fixtures"
-        / "realtime.json"
-    ).read_text()
+from ocel.gen.app.realtime.v1.realtime_pb import (
+    MintedToken,
+    MintRequest,
+    MintResponse,
+    Operation,
+    PublishResponse,
 )
-VERIFY_KEY = base64.b64decode(FIXTURE["realtime"]["verifyKey"])
+
+MINTED_EXPIRES_AT = 1790000030
 
 
-def read_claims(token: str) -> dict:
-    header, payload, signature = token.split(".")
-    Ed25519PublicKey.from_public_bytes(VERIFY_KEY).verify(
-        base64.urlsafe_b64decode(signature + "=="), f"{header}.{payload}".encode()
-    )
-    return json.loads(base64.urlsafe_b64decode(payload + "=="))
+def fake_token(operation: Operation, channel: str) -> str:
+    return f"token {operation.name} {channel}"
 
 
 class FakeRealtimeRuntime:
     def __init__(self):
         self.refusal: str | None = None
+        self.mint_refusal: str | None = None
+        self.map_channel: Callable[[str], str] = lambda channel: channel
         self.published: list[dict] = []
+        self.mints: list[MintRequest] = []
         self.authorizations: list[str | None] = []
         self.server = make_server(
             "127.0.0.1",
@@ -54,11 +47,25 @@ class FakeRealtimeRuntime:
 
     def binding(self) -> str:
         realtime = {
-            **FIXTURE["realtime"],
             "url": "wss://realtime.shop.example/event/realtime",
             "host": "realtime.shop.example",
         }
         return json.dumps({"name": "realtime--app", "realtime": realtime})
+
+    def mint(self, request, ctx):
+        self.mints.append(request)
+        if self.mint_refusal is not None:
+            raise ConnectError(Code.FAILED_PRECONDITION, self.mint_refusal)
+        return MintResponse(
+            tokens=[
+                MintedToken(
+                    token=fake_token(grant.operation, grant.channel),
+                    channel=self.map_channel(grant.channel),
+                )
+                for grant in request.grants
+            ],
+            expires_at=Timestamp(seconds=MINTED_EXPIRES_AT),
+        )
 
     def publish(self, request, ctx):
         self.authorizations.append(ctx.request_headers.get("Authorization"))
