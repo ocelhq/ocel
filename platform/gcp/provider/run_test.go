@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,25 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
+
+type deadlineAtConflict struct {
+	context.Context
+	at        int64
+	conflicts atomic.Int64
+}
+
+func deadlineAt(conflict int64) *deadlineAtConflict {
+	return &deadlineAtConflict{Context: context.Background(), at: conflict}
+}
+
+func (d *deadlineAtConflict) conflicted() { d.conflicts.Add(1) }
+
+func (d *deadlineAtConflict) Deadline() (time.Time, bool) {
+	if d.conflicts.Load() < d.at {
+		return time.Time{}, false
+	}
+	return time.Unix(0, 0), true
+}
 
 func desiredOf(t *testing.T, s run.Serving) *runv2.GoogleCloudRunV2Service {
 	t.Helper()
@@ -504,9 +524,9 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 	released(t, server, serves("ocel-shop-prod-app"))
 
 	server.PatchConflicts = math.MaxInt
+	ctx := deadlineAt(2)
+	server.OnConflict = func(*runv2.GoogleCloudRunV2Service) { ctx.conflicted() }
 	before := server.Tries()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
 	_, err := providerServing(server, t).services().DeployService(ctx, serves("ocel-shop-prod-app"), nil)
 	if err == nil || errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("deployService() over a service that never stops changing = %v, want the release refused before the run's deadline", err)
@@ -840,8 +860,8 @@ func TestAPinThatKeepsConflictingUntilItGivesUpDoesNotClaimToHaveOpenedTheServic
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	server.PatchConflicts = math.MaxInt
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	ctx := deadlineAt(1)
+	server.OnConflict = func(*runv2.GoogleCloudRunV2Service) { ctx.conflicted() }
 
 	opened, err := providerServing(server, t).services().Pin(ctx, app.Service, one, nil)
 

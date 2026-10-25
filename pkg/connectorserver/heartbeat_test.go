@@ -323,11 +323,16 @@ func TestHeartbeatKeepsGoingUntilAnUnreachableConsoleAnswers(t *testing.T) {
 }
 
 func TestHeartbeatSaysOnceThatTheConsoleRefusedIt(t *testing.T) {
-	server, _ := console(t, refused(connect.CodeUnauthenticated))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server, _ := console(t, func(seen int) error {
+		if seen > 2 {
+			cancel()
+		}
+		return connect.NewError(connect.CodeUnauthenticated, errors.New("refused"))
+	})
 
 	heartbeat, _, _, said := beatingInto(t, server.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
-	defer cancel()
 	heartbeat.run(ctx, make(chan struct{}))
 
 	if got := strings.Count(said.String(), "was refused"); got != 1 {

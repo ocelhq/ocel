@@ -170,6 +170,7 @@ func TestAThrottledCallStopsWaitingWhenTheRunIsCancelled(t *testing.T) {
 func TestAThrottledCallAnswersWithTheThrottleRatherThanWaitPastTheRunsDeadline(t *testing.T) {
 	t.Parallel()
 	f := newFakeClock()
+	f.at = time.Now()
 	ctx, cancel := context.WithDeadline(context.Background(), f.at.Add(10*time.Second))
 	defer cancel()
 	throttle := &googleapi.Error{Code: http.StatusTooManyRequests}
