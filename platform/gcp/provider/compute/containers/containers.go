@@ -28,6 +28,11 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a Cloud Run service runs what a registry coordinate names and nothing else", app.App)
 	}
+	if app.IsBuiltFromFunction() {
+		if err := next.RefuseGuardWithoutShieldingEdge(spec); err != nil {
+			return nil, err
+		}
+	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
 		probed := *app
 		probed.HealthCheckPath = rootHealthPath
@@ -105,7 +110,15 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	if next.Serves(app) {
 		served = next.FillContainerDefaults(served)
 	}
-	if served.Env, err = run.MergeValues(app.App, release.OriginGuardValues, served.Env, release.NewOriginGuardEnv(facts.OriginSecret)); err != nil {
+	if app.IsBuiltFromFunction() {
+		if err := p.UploadBuildFiles(ctx, spec, progress); err != nil {
+			return nil, err
+		}
+		served.Env, err = p.NewFunctionEnv(ctx, c, spec, app.Functions[0], served, own, facts)
+	} else {
+		served.Env, err = run.MergeValues(app.App, release.OriginGuardValues, served.Env, release.NewOriginGuardEnv(facts.OriginSecret))
+	}
+	if err != nil {
 		return nil, err
 	}
 	if err := cloudrun.ApplyGate(gated, app.App, &served); err != nil {

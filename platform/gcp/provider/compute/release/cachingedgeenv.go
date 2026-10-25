@@ -1,4 +1,4 @@
-package functions
+package release
 
 import (
 	"github.com/ocelhq/ocel/pkg/edge"

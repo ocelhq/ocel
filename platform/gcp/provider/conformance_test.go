@@ -76,6 +76,11 @@ func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
 }
 
+func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
+}
+
 func TestAProjectWithNoEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 	registry := p.Edges()
