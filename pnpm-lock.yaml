@@ -740,9 +740,6 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      ocel:
-        specifier: workspace:^
-        version: link:../ocel
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

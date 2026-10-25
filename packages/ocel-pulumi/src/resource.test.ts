@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
 import { output, type Resource, secret } from "@pulumi/pulumi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { custom, customProvider, postgres, postgresProvider } from "./resource.js";
@@ -35,16 +34,9 @@ vi.mock("node:child_process", () => {
   return { spawnSync, default: { spawnSync } };
 });
 
-const manifest = "/repo/app/node_modules/ocel/package.json";
-
-vi.mock("node:module", () => {
-  const createRequire = () => ({ resolve: () => manifest });
-  return { createRequire, default: { createRequire } };
-});
-
 const run = vi.mocked(spawnSync);
 
-const entry = join("/repo/app/node_modules/ocel", "bin", "run.js");
+const ocelCLI = "/usr/local/bin/ocel";
 
 const root = "/repo/app";
 
@@ -61,11 +53,13 @@ const properties = {
 beforeEach(() => {
   built.length = 0;
   run.mockReturnValue({ status: 0, stderr: "" } as never);
+  vi.stubEnv("OCEL_CLI", ocelCLI);
 });
 
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 function unwrap(value: unknown): Promise<unknown> {
@@ -155,8 +149,8 @@ describe("publishing a postgres binding", () => {
     const created = await postgresProvider.create(await inputs(declare()));
 
     const { command, args, options } = argv();
-    expect(command).toBe(process.execPath);
-    expect(args).toEqual([entry, "bindings", "set", "--owner", ownerUrn]);
+    expect(command).toBe(ocelCLI);
+    expect(args).toEqual(["bindings", "set", "--owner", ownerUrn]);
     expect(options).toMatchObject({ cwd: root });
     expect(JSON.parse(String(options?.input))).toEqual({
       binding: { name: "orders", postgres: properties, source: "pulumi" },
@@ -288,7 +282,7 @@ describe("removing a postgres binding", () => {
 
     await postgresProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "bindings", "rm", "orders"]);
+    expect(argv().args).toEqual(["bindings", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
 
@@ -336,7 +330,7 @@ describe("declaring a custom binding", () => {
     const created = await customProvider.create(await inputs(declareCustom()));
 
     const { args, options } = argv();
-    expect(args).toEqual([entry, "bindings", "set", "--owner", customOwner]);
+    expect(args).toEqual(["bindings", "set", "--owner", customOwner]);
     expect(JSON.parse(String(options?.input))).toEqual({
       binding: { name: "network", custom: network, source: "pulumi" },
     });
@@ -406,7 +400,7 @@ describe("declaring a custom binding", () => {
 
     await customProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "bindings", "rm", "network"]);
+    expect(argv().args).toEqual(["bindings", "rm", "network"]);
   });
 
   it("marks a property published from a secret output as secret", async () => {
