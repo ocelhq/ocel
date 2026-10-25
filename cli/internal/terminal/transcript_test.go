@@ -1166,6 +1166,38 @@ func TestTheIdentityHeaderNamesEachAccountTheRunSignedInToAndIsSetApartByBlankLi
 	}
 }
 
+func TestTheIdentityHeaderPrintsAgainOnlyWhenWhatItNamesChanged(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	identity := func(tier environmentv1.Tier) *streamv1.IdentityEvent {
+		return &streamv1.IdentityEvent{
+			Project: "acme",
+			Tier:    tier,
+			Origin:  &streamv1.Party{Vendor: "fake", Account: "123456789012"},
+		}
+	}
+	check.Identity(identity(environmentv1.Tier_TIER_PRODUCTION))
+	check.Say("read where acme is deployed")
+	check.Identity(identity(environmentv1.Tier_TIER_PRODUCTION))
+	check.Identity(identity(environmentv1.Tier_TIER_PREVIEW))
+
+	want := "ocel  dev  acme › prod\n" +
+		"\n" +
+		"  fake  123456789012\n" +
+		"\n" +
+		"INFO  [check] read where acme is deployed\n" +
+		"\n" +
+		"ocel  dev  acme › preview\n" +
+		"\n" +
+		"  fake  123456789012\n" +
+		"\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestTheSummaryLeavesTheAccountToTheIdentityHeaderThatAlreadyNamedIt(t *testing.T) {
 	t.Parallel()
 
