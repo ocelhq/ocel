@@ -94,7 +94,7 @@ func runDomainAdd(ctx context.Context, invocation commands.Invocation, cwd, host
 	}
 	configured := cfg.HostnameNames(environmentv1.Tier_TIER_PRODUCTION)
 	if len(configured) == 0 {
-		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
+		return fmt.Errorf("no domains.production in %s: declare one, then run `ocel domain add` again", filepath.Base(cfg.Path))
 	}
 	req := &contractv1.HostnameRequest{
 		Slug:       cfg.Slug,

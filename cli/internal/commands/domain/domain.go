@@ -25,10 +25,10 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		Use:   "domain",
 		Short: "Manage this project's production hostnames, and the domain every project's previews are served on",
 		Long: "Manage this project's production hostnames, and the bootstrap-wide domain every project's previews are served on.\n\n" +
-			"`add`, `rm`, `ls` and `status` are project-scoped and read domains.production, which is the declaration: " +
-			"no command edits it. `use` and `release` take --preview and act on the bootstrap, where " +
-			"the edge serves every project bootstrapped into the preview tier on one wildcard, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
-			"domains.preview keeps it and ignores this one.",
+			"`add`, `rm`, `ls` and `status` read this project's domains.production; no command edits it. " +
+			"`use` and `release` take --preview and set the wildcard every previewed project is served on, " +
+			"at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
+			"domains.preview keeps it.",
 		Args: cobra.NoArgs,
 	}
 	cmd.AddCommand(
@@ -53,7 +53,7 @@ func requirePreviewTier(command string, preview bool) error {
 	if preview {
 		return nil
 	}
-	return fmt.Errorf("`%s` needs --preview: a global domain is preview-only — a production hostname belongs to one project and is declared in that project's config, so there is no global production domain to manage",
+	return fmt.Errorf("`%s` needs --preview: the global domain is preview-only",
 		command)
 }
 

@@ -188,7 +188,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 		if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "declares no domains.production") {
+		if !strings.Contains(stdout.String(), "No domains.production") {
 			t.Errorf("stdout = %q, want it to say nothing is declared", stdout.String())
 		}
 	})
@@ -234,7 +234,7 @@ func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstandi
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stderr)
 		err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{wait: true}, quickDomainWait, &stdout)
-		if err == nil || !strings.Contains(stderr.String(), "nothing to wait for") {
+		if err == nil || !strings.Contains(stderr.String(), "no production hostname to wait for") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to refuse at once with nothing declared", err, stderr.String())
 		}
 	})

@@ -620,7 +620,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "Nothing in the production bootstrap's infrastructure changes: applying only refreshes its seals and records") {
+		if !strings.Contains(out, "No infrastructure in the production bootstrap changes; applying only refreshes its records") {
 			t.Errorf("stdout = %q, want it to say what applying an all-keep plan is still for", out)
 		}
 		if got := applies(t, project); len(got) != 1 {
@@ -637,7 +637,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "Nothing in the production bootstrap's infrastructure changes: applying only refreshes its seals and records") {
+		if !strings.Contains(stdout.String(), "No infrastructure in the production bootstrap changes; applying only refreshes its records") {
 			t.Errorf("stdout = %q, want the confirm never to float over a void", stdout.String())
 		}
 		if got := applies(t, project); len(got) != 1 {
@@ -670,7 +670,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: partImageOptimization}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "image-optimization is not in the production bootstrap, so there is nothing to remove.") {
+		if !strings.Contains(stdout.String(), "image-optimization is not in the production bootstrap; nothing to remove.") {
 			t.Errorf("stdout = %q, want it to say the named part was never there", stdout.String())
 		}
 		if got := applies(t, project); len(got) != 0 {
@@ -864,7 +864,7 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 			name:      "removing a part that is not there",
 			installed: []string{partISR},
 			opts:      Options{Yes: true, Remove: partImageOptimization},
-			wants:     []string{"image-optimization is not in the production bootstrap, so there is nothing to remove."},
+			wants:     []string{"image-optimization is not in the production bootstrap; nothing to remove."},
 		},
 		{
 			name:      "content going backwards",
@@ -874,7 +874,7 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 				project.Provider.FakeBootstrap().PlansWith(keepPlan())
 			},
 			opts:  Options{Yes: true, Dry: true},
-			wants: []string{"the same shape, older content"},
+			wants: []string{"applying reverts it to older content"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -950,7 +950,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "the same shape, older content") {
+		if !strings.Contains(stdout.String(), "applying reverts it to older content") {
 			t.Errorf("stdout = %q, want --dry to warn about the downgrade it already knows about", stdout.String())
 		}
 	})

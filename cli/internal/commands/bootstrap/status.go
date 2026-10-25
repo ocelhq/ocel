@@ -96,7 +96,7 @@ func RunStatus(ctx context.Context, invocation commands.Invocation, cwd string, 
 	opened := commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tiers[0]}
 	err = invocation.WithProvider(ctx, cfg, statusCommand, opened, func(ctx context.Context, p commands.ProviderRun) error {
 		for _, tier := range tiers {
-			span := p.Check.Child(readiness.TierName(tier), progress.Reading.Title("the "+readiness.TierName(tier)+" bootstrap"))
+			span := p.Check.Child(readiness.TierName(tier), progress.Reading.Title("the bootstrap"))
 			var described *contractv1.DescribeBootstrapResponse
 			err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 				described, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
@@ -175,7 +175,7 @@ func renderTierStatus(out io.Writer, palette terminal.Palette, status tierStatus
 	identity := readiness.IdentityCells(status.identity)
 	if !status.described.GetBootstrap().GetPresent() {
 		fmt.Fprintln(out, palette.Heading(name, append(identity, "not bootstrapped")...))
-		fmt.Fprintf(out, "%s→ %s\n", blockIndent, palette.Commands("run `"+readiness.BootstrapCommand(status.tier)+"` to set it up"))
+		fmt.Fprintf(out, "%s→ %s\n", blockIndent, palette.Commands("run `"+readiness.BootstrapCommand(status.tier)+"`"))
 		return
 	}
 	fmt.Fprintf(out, "%s\n\n", palette.Heading(name, identity...))

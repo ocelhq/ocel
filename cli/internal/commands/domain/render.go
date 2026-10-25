@@ -10,8 +10,8 @@ import (
 
 func renderBoundHostnames(out io.Writer, palette terminal.Palette, resp *contractv1.GetHostnameStatusResponse, configName string) {
 	if len(resp.GetHostnames()) == 0 {
-		fmt.Fprintf(out, "This project declares no domains.production in %s and serves none.\n", configName)
-		fmt.Fprintln(out, "  → "+palette.Commands("declare one and run `ocel domain add`; `ocel domain ls --preview` shows the domain every project's previews share"))
+		fmt.Fprintf(out, "No domains.production in %s.\n", configName)
+		fmt.Fprintln(out, "  → "+palette.Commands("declare one, then run `ocel domain add`"))
 		return
 	}
 	table := terminal.NewTable(terminal.Column{Head: "HOSTNAME"}, terminal.Column{Head: "STATE"}, terminal.Column{Head: "SERVED BY"})
@@ -32,7 +32,7 @@ func renderGlobalDomain(out io.Writer, palette terminal.Palette, resp *contractv
 	domain := resp.GetWildcard()
 	if domain.GetBaseDomain() == "" {
 		fmt.Fprintln(out, "No global preview domain is configured.")
-		fmt.Fprintln(out, "  → "+palette.Commands("run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard"))
+		fmt.Fprintln(out, "  → "+palette.Commands("run `ocel domain use '*.preview.example.com' --preview`"))
 		return
 	}
 
@@ -105,7 +105,7 @@ func renderGlobalDomainProjects(out io.Writer, palette terminal.Palette, project
 
 func renderDomainStatus(out io.Writer, palette terminal.Palette, resp *contractv1.GetHostnameStatusResponse, configName string) {
 	if len(resp.GetHostnames()) == 0 {
-		fmt.Fprintf(out, "This project declares no domains.production in %s, so nothing is served under a hostname of its own.\n", configName)
+		fmt.Fprintf(out, "No domains.production in %s.\n", configName)
 		return
 	}
 	if len(resp.GetRecordsWritten()) > 0 || len(resp.GetManualRecords()) > 0 {
@@ -128,7 +128,7 @@ func renderDomainStatus(out io.Writer, palette terminal.Palette, resp *contractv
 			field(out, palette, "Renewal", domainRenewal(palette, host))
 		}
 		renderCertificateRecords(out, palette, cert)
-		field(out, palette, "Last probe", lastProbe(palette, cert, "never — run `ocel domain add` to bind it and check the edge answers"))
+		field(out, palette, "Last probe", lastProbe(palette, cert, "never — run `ocel domain add`"))
 		if pointer := host.GetServingPointer(); pointer != "" {
 			field(out, palette, "Served by", pointer)
 		}

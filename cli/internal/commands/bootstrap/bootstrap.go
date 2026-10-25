@@ -250,7 +250,7 @@ func drawPlan(ctx context.Context, planning *run.Span, provider *providerprocess
 	tier := readiness.TierName(req.GetTier())
 	dry := proto.CloneOf(req)
 	dry.Dry = true
-	span := planning.Child(tier, progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", tier)))
+	span := planning.Child(tier, progress.Planning.Title("the bootstrap changes"))
 	plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
 	span.End(err)
 	if err != nil {
@@ -275,7 +275,7 @@ func refuseUnofferedParts(ctx context.Context, provider *providerprocess.Provide
 
 func sayNothingToRemove(planning *run.Span, tier environmentv1.Tier, absent []string) {
 	if len(absent) > 0 {
-		planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
+		planning.Say(fmt.Sprintf("%s is not in the %s bootstrap; nothing to remove.", strings.Join(absent, ", "), readiness.TierName(tier)))
 	}
 }
 
@@ -323,11 +323,11 @@ func downgradeWarning(tier environmentv1.Tier, status *contractv1.BootstrapStatu
 		}
 	}
 	return fmt.Sprintf(
-		"The %s bootstrap was last written by %s and this one is %s: the same shape, older content.\nEvery stack it writes goes back to what this build has.",
+		"The %s bootstrap was written by %s, and this is %s: applying reverts it to older content.",
 		readiness.TierName(tier), wroteIt, status.GetWriter(),
 	)
 }
 
 func unchanged(tier environmentv1.Tier) string {
-	return fmt.Sprintf("Nothing in the %s bootstrap's infrastructure changes: applying only refreshes its seals and records", readiness.TierName(tier))
+	return fmt.Sprintf("No infrastructure in the %s bootstrap changes; applying only refreshes its records", readiness.TierName(tier))
 }

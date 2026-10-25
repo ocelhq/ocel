@@ -77,7 +77,7 @@ func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read f
 		return resp, err
 	}
 	if declaredHosts(resp) == 0 {
-		return resp, fmt.Errorf("this project declares no production hostname, so there is nothing to wait for: declare one under domains.production and run `ocel domain add`")
+		return resp, fmt.Errorf("no production hostname to wait for: declare one under domains.production, then run `ocel domain add`")
 	}
 
 	span := check.Child(slug, describeWait(declaredHosts(resp)))
@@ -130,9 +130,9 @@ func declaredHosts(resp *contractv1.GetHostnameStatusResponse) int {
 
 func describeWait(declared int) progress.Title {
 	if declared == 1 {
-		return progress.Waiting.Title("for the one declared production hostname to answer")
+		return progress.Waiting.Title("for the production hostname to answer")
 	}
-	return progress.Waiting.Title(fmt.Sprintf("for the %d declared production hostnames to answer", declared))
+	return progress.Waiting.Title(fmt.Sprintf("for %d production hostnames to answer", declared))
 }
 
 func jittered(every time.Duration) time.Duration {
