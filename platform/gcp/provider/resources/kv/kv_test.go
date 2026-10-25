@@ -30,7 +30,7 @@ func aKVStore(t *testing.T, spec provider.KVSpec) resources.ProvisionRequest {
 func servingMemorystore(t *testing.T) (*KV, *googletest.Memorystore) {
 	t.Helper()
 	server, url := googletest.StartMemorystore(t)
-	return New(googletest.Opener(googletest.Clients(url)), gcloud.NewMemorystore(url, nil)), server
+	return New(googletest.Opener(googletest.Clients(url))), server
 }
 
 func storeInstance(t *testing.T) string {

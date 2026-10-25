@@ -3,7 +3,6 @@ package gcp
 import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
@@ -15,7 +14,7 @@ func (p *Provider) components() component.Registry {
 	return component.Registry{
 		postgres.New(p.openClients, p.KeyValues(), p.Cipher()).Component(),
 		bucket.New(p.openClients, p.KeyValues()).Component(),
-		kv.New(p.openClients, gcloud.NewMemorystore(p.endpoint, p.tokens)).Component(),
+		kv.New(p.openClients).Component(),
 		p.topicHooks().Component(),
 		p.realtimeHooks().Component(),
 	}

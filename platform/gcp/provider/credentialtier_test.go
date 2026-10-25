@@ -413,3 +413,14 @@ func TestADeployCredentialMayMakeOcelsKeyRingInItsLocation(t *testing.T) {
 		}
 	}
 }
+
+func TestADeployCredentialMayBillItsCallsToTheProjectItDeploysTo(t *testing.T) {
+	t.Parallel()
+
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		held := grantedOver(t, deployOf(tier), checkedResource{name: "projects/acme-prod"})
+		if _, holds := held["serviceusage.services.use"]; !holds {
+			t.Errorf("the %s deploy credential lacks serviceusage.services.use on its project: a user's credential names the project as the quota project of every call, and Google refuses each with USER_PROJECT_DENIED", tier)
+		}
+	}
+}

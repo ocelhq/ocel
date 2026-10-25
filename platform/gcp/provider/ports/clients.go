@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/api/cloudscheduler/v1"
 	"google.golang.org/api/option"
 	pubsub "google.golang.org/api/pubsub/v1"
+	htransport "google.golang.org/api/transport/http"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -76,6 +78,7 @@ type Clients struct {
 	pubsub        memo[*pubsub.Service]
 	tasks         memo[*cloudtasks.Client]
 	scheduler     memo[*cloudscheduler.Service]
+	quotaProject  memo[string]
 }
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }
@@ -123,7 +126,7 @@ func (c *Clients) TierFirestore(tier environment.Tier) (*firestore.Client, error
 	database := c.RecordsDatabase(tier)
 	held, _ := c.tierStores.LoadOrStore(database, &memo[*firestore.Client]{})
 	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, EmulatorGRPC(c.Endpoint)...)
+		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
@@ -136,38 +139,43 @@ func (c *Clients) tagEndpoint() string {
 
 func (c *Clients) KMS() (*kms.KeyManagementClient, error) {
 	return Opened(c, &c.kms, "Cloud KMS", func() (*kms.KeyManagementClient, error) {
-		return kms.NewKeyManagementClient(context.Background(), EmulatorGRPC(c.Endpoint)...)
+		return kms.NewKeyManagementClient(context.Background(), NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) PubSub() (*pubsub.Service, error) {
 	return Opened(c, &c.pubsub, "Pub/Sub", func() (*pubsub.Service, error) {
-		return pubsub.NewService(context.Background(), EmulatorREST(c.Endpoint)...)
+		return pubsub.NewService(context.Background(), NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) CloudTasks() (*cloudtasks.Client, error) {
 	return Opened(c, &c.tasks, "Cloud Tasks", func() (*cloudtasks.Client, error) {
-		return cloudtasks.NewClient(context.Background(), EmulatorGRPC(c.Endpoint)...)
+		return cloudtasks.NewClient(context.Background(), NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Scheduler() (*cloudscheduler.Service, error) {
 	return Opened(c, &c.scheduler, "Cloud Scheduler", func() (*cloudscheduler.Service, error) {
-		return cloudscheduler.NewService(context.Background(), EmulatorREST(c.Endpoint)...)
+		return cloudscheduler.NewService(context.Background(), NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
-func EmulatorREST(endpoint string) []option.ClientOption {
+func NewHTTPClient(ctx context.Context, quotaProject string) (*http.Client, error) {
+	client, _, err := htransport.NewClient(ctx, append(newQuotaProjectOptions(quotaProject), option.WithScopes(CloudPlatformScope))...)
+	return client, err
+}
+
+func NewRESTOptions(endpoint, quotaProject string) []option.ClientOption {
 	if endpoint == "" {
-		return nil
+		return newQuotaProjectOptions(quotaProject)
 	}
 	return []option.ClientOption{option.WithEndpoint(endpoint), option.WithoutAuthentication()}
 }
 
-func EmulatorGRPC(endpoint string) []option.ClientOption {
+func NewGRPCOptions(endpoint, quotaProject string) []option.ClientOption {
 	if endpoint == "" {
-		return nil
+		return newQuotaProjectOptions(quotaProject)
 	}
 	return []option.ClientOption{
 		option.WithEndpoint(HostPort(endpoint)),
@@ -204,14 +212,21 @@ func IsLoopback(endpoint string) bool {
 	return address != nil && address.IsLoopback()
 }
 
-func EmulatorStorage(endpoint string) []option.ClientOption {
+func NewStorageOptions(endpoint, quotaProject string) []option.ClientOption {
 	if endpoint == "" {
-		return nil
+		return newQuotaProjectOptions(quotaProject)
 	}
 	return []option.ClientOption{
 		option.WithEndpoint(endpoint + "/storage/v1/"),
 		option.WithoutAuthentication(),
 	}
+}
+
+func newQuotaProjectOptions(quotaProject string) []option.ClientOption {
+	if quotaProject == "" {
+		return nil
+	}
+	return []option.ClientOption{option.WithQuotaProject(quotaProject)}
 }
 
 func HostPort(endpoint string) string {

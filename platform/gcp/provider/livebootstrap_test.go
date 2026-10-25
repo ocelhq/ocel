@@ -66,7 +66,7 @@ func servicesEnabled(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	service, err := serviceusage.NewService(ctx, ports.EmulatorREST(endpoint())...)
+	service, err := serviceusage.NewService(ctx, ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -306,7 +306,7 @@ func servicesDisabled(t *testing.T, api string) {
 	}
 
 	ctx := context.Background()
-	service, err := serviceusage.NewService(ctx, ports.EmulatorREST(endpoint())...)
+	service, err := serviceusage.NewService(ctx, ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -363,7 +363,7 @@ func interrupt(t *testing.T, p *gcp.Provider, tier environment.Tier) {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestLiveAStateBucketStoringAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
@@ -461,7 +461,7 @@ func storedPassphrase(t *testing.T, tier environment.Tier) []byte {
 	t.Helper()
 
 	ctx := context.Background()
-	service, err := secretmanager.NewService(ctx, ports.EmulatorREST(endpoint())...)
+	service, err := secretmanager.NewService(ctx, ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -594,12 +594,12 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
 	defer client.Close()
-	secrets, err := secretmanager.NewService(ctx, ports.EmulatorREST(endpoint())...)
+	secrets, err := secretmanager.NewService(ctx, ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -695,7 +695,7 @@ func stamped(t *testing.T, tier environment.Tier, body string) {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
@@ -716,7 +716,7 @@ func TestLiveASecretWithNoVersionInItIsNotPresentAndAReApplyMintsOne(t *testing.
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	service, err := secretmanager.NewService(ctx, ports.EmulatorREST(endpoint())...)
+	service, err := secretmanager.NewService(ctx, ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -901,7 +901,7 @@ func TestLiveASharedRowNamesTheSiblingTierInEveryPlanItAppearsIn(t *testing.T) {
 
 func accounts(t *testing.T) *iam.Service {
 	t.Helper()
-	service, err := iam.NewService(context.Background(), ports.EmulatorREST(endpoint())...)
+	service, err := iam.NewService(context.Background(), ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the IAM API: %v", err)
 	}

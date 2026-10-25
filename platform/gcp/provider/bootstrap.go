@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
@@ -23,10 +22,14 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 	if err != nil {
 		return bootstrap.Engine{}, err
 	}
+	stores, err := opened.Memorystore()
+	if err != nil {
+		return bootstrap.Engine{}, err
+	}
 	return bootstrap.Engine{
 		Clients:        opened,
 		Edges:          g.p.Edges(),
-		Stores:         gcloud.NewMemorystore(g.p.endpoint, g.p.tokens),
+		Stores:         stores,
 		Records:        g.p.KeyValues(),
 		WrittenBy:      g.p.writtenBy,
 		Surveyed:       &g.p.surveyed,

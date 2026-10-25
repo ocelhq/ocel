@@ -28,6 +28,8 @@ const (
 	QueueRole            = "roles/cloudtasks.queueAdmin"
 	TagUserRole          = "roles/resourcemanager.tagUser"
 	ProjectGrantsRole    = "roles/resourcemanager.projectIamAdmin"
+	BillingRole          = "roles/serviceusage.serviceUsageConsumer"
+	BillingPermission    = "serviceusage.services.use"
 	modifiedGrantsByRole = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])"
 )
 
@@ -129,6 +131,13 @@ func (d Deploy) Parts() Grant {
 	}
 }
 
+func (d Deploy) Billing() Grant {
+	return Grant{
+		Permissions: []string{BillingPermission},
+		Why:         "a user's credential names the project as the quota project its calls are billed to",
+	}
+}
+
 func (d Deploy) AppGrants() Grant {
 	grantable := append(slices.Clone(appGrantedRoles), d.names.CDNPurgeRolePath())
 	quoted := make([]string, len(grantable))
@@ -142,7 +151,7 @@ func (d Deploy) AppGrants() Grant {
 }
 
 func (d Deploy) Grants() []Grant {
-	grants := make([]Grant, 0, len(TieredRoles)+11)
+	grants := make([]Grant, 0, len(TieredRoles)+12)
 	for _, role := range TieredRoles {
 		grants = append(grants, d.Tiered(role))
 	}
@@ -157,5 +166,6 @@ func (d Deploy) Grants() []Grant {
 		d.AppGrants(),
 		d.Parts(),
 		d.ProjectPermissions(),
+		d.Billing(),
 	)
 }

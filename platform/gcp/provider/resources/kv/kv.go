@@ -187,7 +187,11 @@ func (p *KV) openKVInstance(ctx context.Context, ref provider.StackRef, store st
 	if err != nil {
 		return nil, kvInstance{}, err
 	}
-	return clients, kvInstance{id: id, path: clients.Location() + "/instances/" + id, storeName: store, service: p.stores}, nil
+	service, err := clients.Memorystore()
+	if err != nil {
+		return nil, kvInstance{}, err
+	}
+	return clients, kvInstance{id: id, path: clients.Location() + "/instances/" + id, storeName: store, service: service}, nil
 }
 
 func (p *KV) Provision(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -421,11 +425,10 @@ func (p *KV) Remove(ctx context.Context, ref provider.StackRef, binding provider
 
 type KV struct {
 	openClients func(ctx context.Context) (*gcloud.Clients, error)
-	stores      gcloud.Memorystore
 }
 
-func New(openClients func(ctx context.Context) (*gcloud.Clients, error), stores gcloud.Memorystore) *KV {
-	return &KV{openClients: openClients, stores: stores}
+func New(openClients func(ctx context.Context) (*gcloud.Clients, error)) *KV {
+	return &KV{openClients: openClients}
 }
 
 func (p *KV) Component() component.Component {

@@ -146,7 +146,7 @@ func (c *Clients) ProjectFirestore(ctx context.Context, tier environment.Tier, p
 func (c *Clients) DatabaseFirestore(database string) (*firestore.Client, error) {
 	held, _ := c.projectStores.LoadOrStore(database, &memo[*firestore.Client]{})
 	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, EmulatorGRPC(c.Endpoint)...)
+		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
@@ -179,7 +179,8 @@ func (c *Clients) TagRecordsFirestore(ctx context.Context, tier environment.Tier
 	}
 	held, _ := c.tagStores.LoadOrStore(database, &memo[*firestore.Client]{})
 	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, append(EmulatorGRPC(c.tagEndpoint()), EmulatorAdmin(c.TagEndpoint)...)...)
+		options := append(NewGRPCOptions(c.tagEndpoint(), c.QuotaProject()), EmulatorAdmin(c.TagEndpoint)...)
+		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, options...)
 	})
 }
 

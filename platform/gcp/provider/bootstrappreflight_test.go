@@ -191,3 +191,11 @@ func TestEveryRoleAPlainBootstrapRefusalCanNameIsOneItsCredentialIsGranted(t *te
 		}
 	}
 }
+
+func TestABootstrapCredentialMayBillItsCallsToTheProjectItBootstraps(t *testing.T) {
+	t.Parallel()
+
+	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/serviceusage.serviceUsageConsumer") {
+		t.Errorf("a bootstrap credential is granted %v, want roles/serviceusage.serviceUsageConsumer: a user's credential names the project as the quota project of every call, and Google refuses each with USER_PROJECT_DENIED without serviceusage.services.use", bootstrap.BootstrapRoles())
+	}
+}

@@ -28,7 +28,7 @@ func workloadClients(t *testing.T) *ports.Clients {
 
 func projectNumber(t *testing.T) int64 {
 	t.Helper()
-	service, err := cloudresourcemanager.NewService(context.Background(), ports.EmulatorREST(endpoint())...)
+	service, err := cloudresourcemanager.NewService(context.Background(), ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func agentOf(t *testing.T, domain string) string {
 
 func accountGrants(t *testing.T, email, role, member string) bool {
 	t.Helper()
-	service, err := iam.NewService(context.Background(), ports.EmulatorREST(endpoint())...)
+	service, err := iam.NewService(context.Background(), ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatal(err)
 	}

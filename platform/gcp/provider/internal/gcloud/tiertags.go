@@ -65,11 +65,11 @@ func (c *Clients) tagServiceOf(target TaggedResource) (*crm.Service, error) {
 }
 
 func (c *Clients) openTagService(cache *Memo[*crm.Service], endpoint string) (*crm.Service, error) {
-	options := ports.EmulatorREST(c.TierTagEndpoint)
-	if !c.Emulated() {
-		options = []option.ClientOption{option.WithEndpoint(endpoint)}
-	}
 	return opened(c, cache, "Resource Manager tags", func() (*crm.Service, error) {
+		options := ports.NewRESTOptions(c.TierTagEndpoint, c.QuotaProject())
+		if !c.Emulated() {
+			options = append(options, option.WithEndpoint(endpoint))
+		}
 		return crm.NewService(context.Background(), options...)
 	})
 }

@@ -46,10 +46,10 @@ type Provider struct {
 	records           records.Store
 	recordedDatabases sync.Map
 
-	mu            sync.Mutex
-	resolved      *gcloud.Clients
-	regionChecked bool
-	surveyed      bootstrap.Surveys
+	mu             sync.Mutex
+	resolved       *gcloud.Clients
+	clientsChecked bool
+	surveyed       bootstrap.Surveys
 
 	images *run.Images
 
