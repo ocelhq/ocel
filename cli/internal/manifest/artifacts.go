@@ -14,6 +14,9 @@ func attachArtifact(manifestApp *contractv1.ManifestApp, a app, functions []*con
 		return nil
 	}
 	if a.FromFunction {
+		if len(functions) != 1 {
+			return fmt.Errorf("app %q has no single function built for its container: run `ocel build` again", a.Name)
+		}
 		manifestApp.Artifact = &contractv1.ManifestApp_Container{Container: containerArtifact(a, functions)}
 		return nil
 	}

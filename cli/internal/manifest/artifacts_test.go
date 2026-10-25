@@ -235,6 +235,31 @@ func TestANextContainerBuiltFromItsFunctionCarriesThatFunctionAndNoImage(t *test
 	}
 }
 
+func TestANextContainerBuiltFromItsFunctionRefusesABuildThatLeftItNoneOrMany(t *testing.T) {
+	t.Parallel()
+
+	index := build.Function{App: "web", Route: "index", RouteID: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func"}
+	api := build.Function{App: "web", Route: "api", RouteID: "api", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api.func"}
+	for name, functions := range map[string][]build.Function{"none": nil, "many": {index, api}} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &project.Project{Slug: "proj-1", Dir: t.TempDir(), Apps: []project.App{
+				{Name: "web", Path: "web", Framework: buildoutput.FrameworkNext, Compute: "container", Container: &project.Container{FromFunction: true}},
+			}}
+			_, err := Assemble(Input{Project: cfg, Built: build.Output{Functions: functions}})
+			if err == nil {
+				t.Fatal("Assemble() sent a container built from its function with no single function to run")
+			}
+			for _, want := range []string{`"web"`, "run `ocel build` again"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("Assemble() error = %q, want it to name %s", err, want)
+				}
+			}
+		})
+	}
+}
+
 func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 	t.Parallel()
 
