@@ -125,6 +125,7 @@ func (p *Provider) Facts() provider.Facts {
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
 		Preflight:            &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight},
+		InfraPreflight:       &provider.PreflightHooks{Plan: p.PlanInfraPreflight, Apply: p.ApplyInfraPreflight},
 		ProgramEdge:          p.ProgramEdge,
 		EnsureImageRegistry:  p.EnsureImageRegistry,
 		OpenDirectImages:     p.OpenDirectImages,

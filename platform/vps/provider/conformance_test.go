@@ -147,6 +147,9 @@ func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	if hooks.Preflight == nil {
 		t.Error("the box's hooks leave Preflight nil, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
 	}
+	if hooks.InfraPreflight != nil {
+		t.Error("the box's hooks set InfraPreflight, and a box's infra stack needs nothing added before it: the deploy's preflight checks the box once")
+	}
 }
 
 func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T) {

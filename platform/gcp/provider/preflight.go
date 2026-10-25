@@ -84,7 +84,6 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 			return err
 		}
 	}
-	slices.Sort(parts)
 	return stackrecords.RecordPartsUsed(ctx, p.KeyValues(), pre.Deploy.Tier, pre.Deploy.Slug, parts)
 }
 

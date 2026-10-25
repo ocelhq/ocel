@@ -71,7 +71,7 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Log) error {
 	if err := r.mode.recordProject(ctx, r); err != nil {
 		return err
 	}
-	if err := r.preflight(ctx, progress); err != nil {
+	if err := r.preflight(ctx, r.provider.Hooks().Preflight, progress); err != nil {
 		return err
 	}
 	return r.mode.recordLifecycle(ctx, r)
@@ -298,8 +298,7 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error {
-	hooks := r.provider.Hooks().Preflight
+func (r *deployRun) preflight(ctx context.Context, hooks *provider.PreflightHooks, progress progress.Log) error {
 	if hooks == nil {
 		return nil
 	}
@@ -310,8 +309,7 @@ func (r *deployRun) preflight(ctx context.Context, progress progress.Log) error 
 	return r.mode.preflight(ctx, hooks, pre)
 }
 
-func (r *deployRun) planPreflight(ctx context.Context) (provider.Plan, error) {
-	hooks := r.provider.Hooks().Preflight
+func (r *deployRun) planPreflight(ctx context.Context, hooks *provider.PreflightHooks) (provider.Plan, error) {
 	if hooks == nil {
 		return provider.Plan{}, nil
 	}

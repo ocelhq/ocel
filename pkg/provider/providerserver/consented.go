@@ -48,18 +48,9 @@ func (a applied) refuseUnconsentedStack(ctx context.Context, r *deployRun, stack
 
 func (r *deployRun) refuseUnconsentedDeploy(ctx context.Context) error {
 	return r.mode.refuseUnconsented(func() (provider.Plan, error) {
-		var fresh provider.Plan
-		preflight, err := r.planPreflight(ctx)
+		fresh, err := r.planPreflightAndInfra(ctx, r.provider.Hooks().Preflight, nil)
 		if err != nil {
 			return provider.Plan{}, err
-		}
-		fresh.Groups = append(fresh.Groups, preflight.Groups...)
-		if !r.infraCurrent {
-			infra, err := r.planInfra(ctx, nil)
-			if err != nil {
-				return provider.Plan{}, err
-			}
-			fresh.Groups = append(fresh.Groups, infra.Groups...)
 		}
 		fresh.Groups = append(fresh.Groups, r.planEdgeGroup())
 		retired, err := planRetirement(ctx, r.provider, r.liveApps(), progress.Discard())
@@ -72,12 +63,25 @@ func (r *deployRun) refuseUnconsentedDeploy(ctx context.Context) error {
 }
 
 func (r *deployRun) refuseUnconsentedInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
-	if r.infraCurrent {
-		return nil
-	}
 	return r.mode.refuseUnconsented(func() (provider.Plan, error) {
-		return r.planInfra(ctx, undeclared)
+		return r.planPreflightAndInfra(ctx, r.provider.Hooks().InfraPreflight, undeclared)
 	})
+}
+
+func (r *deployRun) planPreflightAndInfra(ctx context.Context, hooks *provider.PreflightHooks, undeclared []*contractv1.ManifestResource) (provider.Plan, error) {
+	fresh, err := r.planPreflight(ctx, hooks)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	if r.infraCurrent {
+		return fresh, nil
+	}
+	infra, err := r.planInfra(ctx, undeclared)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	fresh.Groups = append(fresh.Groups, infra.Groups...)
+	return fresh, nil
 }
 
 func (r *deployRun) planInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) (provider.Plan, error) {
