@@ -15,11 +15,19 @@ func UntilWritten(ctx context.Context, write func() error) error {
 	return untilWritten(ctx, wallClock, write)
 }
 
+func UntilUncontended(ctx context.Context, contended func(error) bool, write func() error) error {
+	return untilUncontended(ctx, wallClock, contended, write)
+}
+
 func untilWritten(ctx context.Context, c clock, write func() error) error {
+	return untilUncontended(ctx, c, IsStale, write)
+}
+
+func untilUncontended(ctx context.Context, c clock, contended func(error) bool, write func() error) error {
 	started := c.now()
 	for conflicts := 0; ; conflicts++ {
 		err := write()
-		if !IsStale(err) {
+		if !contended(err) {
 			return err
 		}
 		wait := c.random(doubled(contentionBackoff, conflicts, contentionCeiling))
