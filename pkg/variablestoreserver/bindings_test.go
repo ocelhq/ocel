@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -166,5 +167,66 @@ func TestTheSealedValueCarriesTheGrantsAndTheRecordOnlyItsShape(t *testing.T) {
 	}
 	if record.GetBinding().GetPostgres() == nil || record.GetBinding().GetSource() != "pulumi" || !proto.Equal(record.GetGrants()[0], published.GetGrants()[0]) {
 		t.Errorf("record has postgres %t, source %q, grants %v, want its type, source and grants kept for a listing", record.GetBinding().GetPostgres() != nil, record.GetBinding().GetSource(), record.GetGrants())
+	}
+}
+
+func customRecord(t *testing.T, properties map[string]any, secrets ...string) *variablestorev1.PublishedBinding {
+	t.Helper()
+	custom, err := structpb.NewStruct(properties)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &variablestorev1.PublishedBinding{
+		Binding: &bindingsv1.Binding{Name: "origin", Source: "pulumi", Properties: &bindingsv1.Binding_Custom{Custom: custom}},
+		Secrets: secrets,
+	}
+}
+
+func TestACustomRecordMarksTheSecretPropertiesItPublishes(t *testing.T) {
+	t.Parallel()
+
+	record := customRecord(t, map[string]any{"certificate": "pem", "key": "private"}, "key")
+	if err := variablestoreserver.VerifyBinding(record); err != nil {
+		t.Errorf("VerifyBinding() = %v, want a custom record marking one of its properties secret accepted", err)
+	}
+}
+
+func TestACustomRecordMarkingAPropertyItDoesNotPublishIsRefused(t *testing.T) {
+	t.Parallel()
+
+	record := customRecord(t, map[string]any{"certificate": "pem"}, "key")
+	if err := variablestoreserver.VerifyBinding(record); !errors.Is(err, variablestoreserver.ErrUnreadableRecord) {
+		t.Errorf("VerifyBinding() = %v, want it refused: a secret mark names a property the record publishes", err)
+	}
+}
+
+func TestATypedRecordMarkingASecretIsRefused(t *testing.T) {
+	t.Parallel()
+
+	record := &variablestorev1.PublishedBinding{
+		Binding: &bindingsv1.Binding{Name: "orders", Source: "pulumi", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db", Password: "pw"}}},
+		Secrets: []string{"password"},
+	}
+	if err := variablestoreserver.VerifyBinding(record); !errors.Is(err, variablestoreserver.ErrUnreadableRecord) {
+		t.Errorf("VerifyBinding() = %v, want it refused: a typed record's secret fields are fixed by its type", err)
+	}
+}
+
+func TestTheRecordStoredUnsealedKeepsWhichPropertiesAreSecretAndNotTheirValues(t *testing.T) {
+	t.Parallel()
+
+	pair, err := variablestoreserver.BindingPair("pulumi", customRecord(t, map[string]any{"key": "private"}, "key"))
+	if err != nil {
+		t.Fatalf("BindingPair: %v", err)
+	}
+	if strings.Contains(string(pair.Record), "private") || strings.Contains(string(pair.Shapes), "private") {
+		t.Errorf("record %s, shapes %s, want the secret's value only in the sealed value", pair.Record, pair.Shapes)
+	}
+	record, err := variablestoreserver.DecodePublishedBinding(pair.Record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(record.GetSecrets(), []string{"key"}) {
+		t.Errorf("record marks %v secret, want [key]", record.GetSecrets())
 	}
 }

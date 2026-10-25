@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { output, type Resource } from "@pulumi/pulumi";
+import { output, type Resource, secret } from "@pulumi/pulumi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { custom, customProvider, postgres, postgresProvider } from "./resource.js";
 
@@ -407,5 +407,36 @@ describe("declaring a custom binding", () => {
     await customProvider.delete("id", created.outs);
 
     expect(argv().args).toEqual([entry, "bindings", "rm", "network"]);
+  });
+
+  it("marks a property published from a secret output as secret", async () => {
+    custom(
+      "keys",
+      { seal: secret("k3y"), wrapped: [secret("nested")], region: output("eu") },
+      { project: root },
+    );
+
+    await customProvider.create(await inputs(latest()));
+
+    expect(JSON.parse(String(argv().options?.input))).toEqual({
+      binding: {
+        name: "keys",
+        custom: { seal: "k3y", wrapped: ["nested"], region: "eu" },
+        source: "pulumi",
+      },
+      secrets: ["seal", "wrapped"],
+    });
+  });
+
+  it("marks nothing secret when no property is a secret output", async () => {
+    await customProvider.create(await inputs(declareCustom()));
+
+    expect(JSON.parse(String(argv().options?.input))).not.toHaveProperty("secrets");
+  });
+
+  it("keeps its digest secret, since a digest of a secret is a guess at it", () => {
+    custom("keys", { seal: secret("k3y") }, { project: root });
+
+    expect(latest().opts).toMatchObject({ additionalSecretOutputs: ["digest"] });
   });
 });

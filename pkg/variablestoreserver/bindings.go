@@ -252,7 +252,30 @@ func VerifyBinding(published *variablestorev1.PublishedBinding) error {
 			return unsourcedCustom(binding)
 		}
 	}
+	if err := verifySecrets(published); err != nil {
+		return err
+	}
 	return VerifyGrantScope(published)
+}
+
+func verifySecrets(published *variablestorev1.PublishedBinding) error {
+	binding := published.GetBinding()
+	if len(published.GetSecrets()) == 0 {
+		return nil
+	}
+	if bindings.TypeOf(binding) != bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
+		return fmt.Errorf(
+			"binding %s is a %s record and marks %s secret: only a custom record's properties are marked, since a typed record's type already says which of its fields are secret. Publish it without secrets: %w",
+			binding.GetName(), strings.ToLower(bindings.EnvFragment(bindings.TypeOf(binding))), strings.Join(published.GetSecrets(), ", "), ErrUnreadableRecord)
+	}
+	for _, property := range published.GetSecrets() {
+		if _, ok := binding.GetCustom().GetFields()[property]; !ok {
+			return fmt.Errorf(
+				"binding %s marks %s secret and publishes no property of that name: it publishes %s. Mark only the properties it publishes: %w",
+				binding.GetName(), property, strings.Join(bindings.PropertyNames(binding), ", "), ErrUnreadableRecord)
+		}
+	}
+	return nil
 }
 
 const grantWildcard = "*"

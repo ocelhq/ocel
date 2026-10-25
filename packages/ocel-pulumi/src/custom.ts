@@ -13,6 +13,7 @@ export function publishedCustom(
   name: string,
   properties: Record<string, unknown>,
   grants?: Grant[],
+  secrets: string[] = [],
 ): PublishedBinding<CustomBinding> {
   if (!name) {
     throw new Error(
@@ -37,6 +38,9 @@ export function publishedCustom(
   };
   if (granted) {
     published.grants = granted;
+  }
+  if (secrets.length > 0) {
+    published.secrets = secrets;
   }
   return published;
 }
