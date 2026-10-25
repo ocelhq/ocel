@@ -453,12 +453,9 @@ export default defineConfig({
 A `cloudflare-origin` bootstrap credential also holds `roles/storage.hmacKeyAdmin` for the HMAC
 key the worker reads the `edge-bucket` part with.
 
-The `alb` edge's load balancer needs two more services on:
-
-```bash
-gcloud services enable compute.googleapis.com certificatemanager.googleapis.com \
-  --project my-project
-```
+The `alb` edge's load balancer uses `compute.googleapis.com`, `certificatemanager.googleapis.com`
+and `networkservices.googleapis.com`, which the deploy that adds it switches on
+([What to grant](#what-to-grant)).
 
 ## Buckets
 
@@ -523,18 +520,14 @@ deletes the instance and its data.
 ## Private network
 
 KV stores and databases are reached over a network of the tier's own, which the first deploy
-declaring one adds as the tier's `private-network` part. Switch its services on first:
-
-```bash
-gcloud services enable compute.googleapis.com memorystore.googleapis.com sqladmin.googleapis.com \
-  networkconnectivity.googleapis.com serviceconsumermanagement.googleapis.com \
-  servicenetworking.googleapis.com --project my-project
-```
+declaring one adds as the tier's `private-network` part. It uses `compute.googleapis.com`,
+`memorystore.googleapis.com`, `sqladmin.googleapis.com`, `networkconnectivity.googleapis.com`,
+`serviceconsumermanagement.googleapis.com` and `servicenetworking.googleapis.com`, which that
+deploy switches on ([What to grant](#what-to-grant)).
 
 That is one VPC network with one subnetwork, `10.240.0.0/20`, in the bootstrap's region, and
 the service connection policies Memorystore and Cloud SQL connect each instance through. None of
-it bills. A deploy that finds a service switched off is refused, naming the command that switches
-it on. The part grants the Cloud Run service agent `roles/compute.networkUser` on the subnetwork,
+it bills. The part grants the Cloud Run service agent `roles/compute.networkUser` on the subnetwork,
 so Cloud Run services and functions bound to a store or database reach private addresses over
 that subnetwork through direct VPC egress; the rest of their traffic leaves as before.
 
@@ -629,20 +622,21 @@ with each field named as `@pulumi/gcp` names it.
 
 ## What to grant
 
-Turn on the services the bootstrap checks, and Cloud Run, which every deploy runs on:
-
-```bash
-gcloud services enable firestore.googleapis.com storage.googleapis.com \
-  secretmanager.googleapis.com artifactregistry.googleapis.com iam.googleapis.com \
-  cloudresourcemanager.googleapis.com logging.googleapis.com run.googleapis.com \
-  --project my-project
-```
-
-Each part checks its own when a deploy adds it: `cloudkms.googleapis.com` for `keys`,
-`pubsub.googleapis.com` for `realtime`, `pubsub.googleapis.com` and `cloudtasks.googleapis.com`
-for `topics`, `cloudscheduler.googleapis.com` for `env-source-sync`, and those
-[the private network](#private-network) names. A deploy declaring a bucket checks
+A bootstrap or deploy reads whether each service it uses is on, and switches on those that are
+off: its plan lists them, applying it switches them on, and ocel never switches one off. A
+bootstrap uses `firestore.googleapis.com`, `storage.googleapis.com`,
+`secretmanager.googleapis.com`, `artifactregistry.googleapis.com`, `iam.googleapis.com`,
+`cloudresourcemanager.googleapis.com` and `logging.googleapis.com`, and every deploy
+`run.googleapis.com`. Each part uses its own when a deploy adds it: `cloudkms.googleapis.com` for
+`keys`, `pubsub.googleapis.com` for `realtime`, `pubsub.googleapis.com` and
+`cloudtasks.googleapis.com` for `topics`, `cloudscheduler.googleapis.com` for `env-source-sync`,
+and those [the private network](#private-network) names. A deploy declaring a bucket uses
 `iamcredentials.googleapis.com`, which apps sign their buckets' urls through.
+
+Switching a service on takes `serviceusage.services.enable`, which
+`roles/serviceusage.serviceUsageAdmin` holds, and only where a service is off. A credential without
+it is refused before anything changes, naming the `gcloud services enable` command for someone who
+may to run. A project with no billing account linked is refused with the page to link one on.
 
 ### The tier tag
 
@@ -667,7 +661,8 @@ A bootstrap needs `roles/datastore.owner`, `roles/storage.admin`, `roles/cloudkm
 `roles/logging.viewAccessor`, `roles/logging.configWriter`, `roles/resourcemanager.tagAdmin` and
 `roles/resourcemanager.tagUser`, and,
 to take down the parts deploys added, `roles/compute.networkAdmin`, `roles/cloudsql.viewer` and
-`roles/cloudtasks.admin`. Anything missing is named back to you before anything is created.
+`roles/cloudtasks.admin`, and `roles/serviceusage.serviceUsageAdmin` where a service it uses is
+off. Anything missing is named back to you before anything is created.
 `roles/logging.viewAccessor` is held on the project, so `ocel logs` run with the bootstrap
 credential reads through both tiers' log views.
 
@@ -706,6 +701,8 @@ each tier's credential for your project and namespace. For the preview tier they
   reach. It checks making a ring against the location, whose name holds no ring.
   `roles/cloudkms.admin` on the ring would hand over the ring's policy, which every key in it
   inherits.
+- A custom role you make, holding `serviceusage.services.enable`, unconditioned, where a service a deploy
+  uses is off.
 
 A transform that attaches a Cloud Armor policy to the `alb` edge also needs the credential to hold
 `compute.securityPolicies.use` in the policy's project. `ocel permissions deploy` does not print
