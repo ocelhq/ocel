@@ -46,8 +46,7 @@ type Run struct {
 	Iam     *IAM
 	Secrets *Secrets
 
-	images    map[string]string
-	labels    map[string]map[string]string
+	templates map[string]*runv2.GoogleCloudRunV2RevisionTemplate
 	Elsewhere map[string]string
 	untagged  []string
 	regional  int
@@ -59,6 +58,10 @@ type Run struct {
 
 	UntagAtRelease    string
 	UntagEveryRelease bool
+
+	ReportsDigests         bool
+	StripsRevisionMetadata bool
+	ReleasedUnder          *runv2.GoogleCloudRunV2RevisionTemplate
 
 	Tagged map[string][]string
 }
@@ -263,19 +266,18 @@ func (s *Run) revised() {
 	}
 	s.Service.Etag = "etag-" + strconv.Itoa(s.writes)
 	s.revisions = append(s.revisions, created)
-	if s.images == nil {
-		s.images = map[string]string{}
-	}
-	if s.Service.Template != nil && len(s.Service.Template.Containers) > 0 {
-		s.images[created] = s.Service.Template.Containers[0].Image
-	}
-	if s.labels == nil {
-		s.labels = map[string]map[string]string{}
+	if s.templates == nil {
+		s.templates = map[string]*runv2.GoogleCloudRunV2RevisionTemplate{}
 	}
 	if s.Service.Template != nil {
-		s.labels[created] = s.Service.Template.Labels
+		s.templates[created] = s.Service.Template
 	}
 	s.served()
+	if under := s.ReleasedUnder; under != nil {
+		s.ReleasedUnder = nil
+		s.Service.Template = under
+		s.revised()
+	}
 }
 
 func (s *Run) served() {
@@ -301,7 +303,7 @@ func (s *Run) listLabelled(w http.ResponseWriter, selector string) {
 	listed := &runv1.ListRevisionsResponse{}
 	if s.Service != nil {
 		for _, name := range s.revisions {
-			if s.labels[name][key] == value {
+			if s.templates[name] != nil && s.templates[name].Labels[key] == value {
 				listed.Items = append(listed.Items, &runv1.Revision{Metadata: &runv1.ObjectMeta{Name: name}})
 			}
 		}
@@ -321,12 +323,28 @@ func (s *Run) getTag(w http.ResponseWriter, name string) {
 		_, _ = w.Write([]byte(`{"error":{"code":404,"message":"tag not found"}}`))
 		return
 	}
-	version := s.Versions[unescaped]
-	if version == "" {
-		at := strings.LastIndex(unescaped, "/tags/")
-		version = unescaped[:at] + "/versions/sha256:" + strings.TrimPrefix(unescaped[at+len("/tags/"):], "sha256-")
+	WriteBody(w, map[string]any{"name": unescaped, "version": s.versionOf(unescaped)})
+}
+
+func (s *Run) versionOf(tag string) string {
+	if version := s.Versions[tag]; version != "" {
+		return version
 	}
-	WriteBody(w, map[string]any{"name": unescaped, "version": version})
+	at := strings.LastIndex(tag, "/tags/")
+	return tag[:at] + "/versions/sha256:" + strings.TrimPrefix(tag[at+len("/tags/"):], "sha256-")
+}
+
+func (s *Run) reportedImage(image string) string {
+	at := strings.LastIndex(image, ":")
+	if !s.ReportsDigests || strings.Contains(image, "@") || at < strings.LastIndex(image, "/") {
+		return image
+	}
+	digest := "sha256:" + strings.TrimPrefix(image[at+1:], "sha256-")
+	if name, tagged := run.ArtifactTag(image); tagged {
+		unescaped, _ := url.PathUnescape(name)
+		_, digest, _ = strings.Cut(s.versionOf(unescaped), "/versions/")
+	}
+	return image[:at] + "@" + digest
 }
 
 func (s *Run) listTags(w http.ResponseWriter, parent string) {
@@ -367,11 +385,29 @@ func (s *Run) Retags() []string {
 }
 
 func (s *Run) revisionOf(name string) *runv2.GoogleCloudRunV2Revision {
-	return &runv2.GoogleCloudRunV2Revision{
-		Name:       s.Service.Name + "/revisions/" + name,
-		Containers: []*runv2.GoogleCloudRunV2Container{{Image: s.images[name]}},
+	revision := revisionFrom(s.Service.Name+"/revisions/"+name, s.templates[name])
+	if s.StripsRevisionMetadata {
+		revision.Labels, revision.Annotations = nil, nil
+	}
+	for _, container := range revision.Containers {
+		container.Image = s.reportedImage(container.Image)
+	}
+	return revision
+}
+
+func revisionFrom(name string, template *runv2.GoogleCloudRunV2RevisionTemplate) *runv2.GoogleCloudRunV2Revision {
+	revision := &runv2.GoogleCloudRunV2Revision{
+		Name:       name,
 		Conditions: []*runv2.GoogleCloudRunV2Condition{{Type: run.ReadyCondition, State: run.ConditionSucceeded}},
 	}
+	if template == nil {
+		return revision
+	}
+	revision.Labels, revision.Annotations = template.Labels, template.Annotations
+	for _, container := range template.Containers {
+		revision.Containers = append(revision.Containers, &runv2.GoogleCloudRunV2Container{Image: container.Image})
+	}
+	return revision
 }
 
 func (s *Run) getRevision(w http.ResponseWriter, name string) {
