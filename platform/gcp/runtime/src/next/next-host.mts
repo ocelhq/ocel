@@ -1,6 +1,5 @@
 import type { NextHost } from "@framework/next-runtime/host";
 import { instanceCacheBytes, newInstanceCache } from "@framework/next-runtime/instance-cache";
-import { readPortBind } from "@framework/node-runtime/host";
 import { bucketVars, readStorageCoordinate } from "@platform/edge-contract/runtime-env";
 import { openPurgeFor } from "../cache/purge-target.mjs";
 import { newGcpCacheStore } from "./cache-store.mjs";
@@ -46,7 +45,6 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
   const newCacheStore = async () =>
     shared ? newGcpCacheStore(shared.storage, shared.coordinate) : newInstanceCacheStore(cache);
   return {
-    bind: readPortBind(env),
     cacheTagsPerObject: cloudCdnShapedTagsPerObject,
     instanceCache: cache,
     newCacheStore,

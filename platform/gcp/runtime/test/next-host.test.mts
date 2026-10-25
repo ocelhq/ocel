@@ -3,14 +3,6 @@ import { installNextHost, refuseIncompleteHost } from "@framework/next-runtime/h
 import { expect, test, vi } from "vitest";
 import { newGcpNextHost } from "../src/next/next-host.mjs";
 
-test("the GCP host binds every network on the port Cloud Run names", () => {
-  expect(newGcpNextHost({ PORT: "8080" }).bind).toEqual({ host: "0.0.0.0", port: 8080 });
-});
-
-test("the GCP host refuses to start where nothing names a port", () => {
-  expect(() => newGcpNextHost({})).toThrow(/PORT/);
-});
-
 test("the GCP host shapes at most forty-nine tags, leaving room for the release tag", () => {
   expect(newGcpNextHost({ PORT: "8080" }).cacheTagsPerObject).toBe(49);
 });

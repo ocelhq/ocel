@@ -9,6 +9,7 @@
     "./cache-handler": "./src/cache-handler.mts",
     "./cache-shaping": "./src/cache-shaping.mts",
     "./cache-store": "./src/cache-store.mts",
+    "./container-entry": "./src/container-entry.mts",
     "./dispatch-host": "./src/dispatch-host.mts",
     "./entrypoint": "./src/entrypoint.mts",
     "./host": "./src/host.mts",
