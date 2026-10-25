@@ -141,7 +141,7 @@ func TestAMissingErrorIsOneLinePerCell(t *testing.T) {
 				"",
 				"  ✗ STRIPE_KEY  /web  no value",
 				"",
-				"  Fill them in: run `ocel deploy` again and enter them on its job page in the console when Ocel Cloud asks",
+				"  Fill them in: run `ocel deploy` again and enter them on its job page in the console",
 			}, "\n"),
 		},
 		{
@@ -153,7 +153,7 @@ func TestAMissingErrorIsOneLinePerCell(t *testing.T) {
 				"",
 				"  ✗ STRIPE_KEY  root  no value",
 				"",
-				"  Fill them in: run `ocel preview up staging` again and enter them on its job page in the console when Ocel Cloud asks",
+				"  Fill them in: run `ocel preview up staging` again and enter them on its job page in the console",
 			}, "\n"),
 		},
 	} {

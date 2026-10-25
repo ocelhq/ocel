@@ -96,7 +96,7 @@ func (r *MissingError) remedy() string {
 		if r.Scope.isPreview() {
 			rerun = strings.TrimSpace("ocel preview up " + r.Scope.Environment)
 		}
-		return fmt.Sprintf("run `%s` again and enter them on its job page in the console when Ocel Cloud asks", rerun)
+		return fmt.Sprintf("run `%s` again and enter them on its job page in the console", rerun)
 	}
 	if r.Scope.Browser {
 		return withPreview("ocel env ui", r.Scope)
