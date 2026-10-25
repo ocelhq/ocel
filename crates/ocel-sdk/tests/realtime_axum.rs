@@ -4,7 +4,7 @@ mod realtime;
 mod runtime;
 
 use ocel::realtime::Realtime;
-use realtime::{read_claims, read_fixture};
+use realtime::{fake_token, FakeRuntime};
 use tower::ServiceExt;
 
 #[allow(dead_code)]
@@ -20,8 +20,8 @@ struct StatusChannel;
 
 #[tokio::test]
 async fn the_axum_router_serves_the_handler_on_the_path_it_is_mounted_at() {
-    std::env::remove_var("OCEL_PHASE");
-    std::env::set_var("OCEL_RESOURCE_REALTIME_app", read_fixture().to_string());
+    let runtime = FakeRuntime::serve();
+    std::env::set_var("OCEL_RESOURCE_REALTIME_app", runtime.binding());
     let rt = Realtime::builder("app")
         .build()
         .expect("the realtime resource builds");
@@ -48,15 +48,15 @@ async fn the_axum_router_serves_the_handler_on_the_path_it_is_mounted_at() {
     let answer: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(answer["grants"][0]["wire"], "/app/status");
     assert_eq!(
-        read_claims(answer["grants"][0]["token"].as_str().unwrap())["ocel"]["ch"],
-        "/app/status"
+        answer["grants"][0]["token"],
+        fake_token("subscribe", "/app/status")
     );
 }
 
 #[tokio::test]
 async fn the_axum_router_refuses_a_body_over_1_mib_as_the_handler_refuses_any_request() {
-    std::env::remove_var("OCEL_PHASE");
-    std::env::set_var("OCEL_RESOURCE_REALTIME_app", read_fixture().to_string());
+    let runtime = FakeRuntime::serve();
+    std::env::set_var("OCEL_RESOURCE_REALTIME_app", runtime.binding());
     let rt = Realtime::builder("app")
         .build()
         .expect("the realtime resource builds");

@@ -1,7 +1,7 @@
-use super::token::{mint_token, MintedToken, Operation};
+use super::token::{mint_tokens, MintedToken, Operation};
 use super::wire::encode_wire_channel;
 use super::{generate_envelope_id, DenialCode, ErasedAuth, Realtime, Request, ServedChannel};
-use crate::proto::common::bindings::v1::RealtimeProperties;
+use crate::proto::app::realtime::v1::{Grant as TokenGrant, Operation as TokenOperation};
 use bytes::Bytes;
 use futures_util::future::{join, join_all};
 use futures_util::FutureExt;
@@ -74,7 +74,7 @@ struct Caller {
 
 struct ServedOperation {
     wire: String,
-    token: Option<String>,
+    is_subscribe: bool,
 }
 
 fn respond(status: u16, body: Option<Value>, headers: &[(&str, String)]) -> http::Response<Bytes> {
@@ -270,7 +270,6 @@ async fn decide(
 
 async fn serve_operation(
     rt: &Realtime,
-    properties: &RealtimeProperties,
     request: &Arc<Request>,
     caller: &Caller,
     operation: ReadOperation<'_>,
@@ -284,11 +283,9 @@ async fn serve_operation(
             if let Some(rule) = &channel.subscribe {
                 decide(rule, caller, params, None, request).await?;
             }
-            let token = mint_token(rt, properties, &caller.subject, Operation::Subscribe, &wire)
-                .map_err(|_| OperationFailure::Failed("minting a token failed"))?;
             Ok(ServedOperation {
                 wire,
-                token: Some(token.token),
+                is_subscribe: true,
             })
         }
         ReadOperation::Publish {
@@ -306,7 +303,10 @@ async fn serve_operation(
             rt.publish_event(&wire, envelope)
                 .await
                 .map_err(|_| DenialCode::PublishFailed)?;
-            Ok(ServedOperation { wire, token: None })
+            Ok(ServedOperation {
+                wire,
+                is_subscribe: false,
+            })
         }
     }
 }
@@ -337,20 +337,6 @@ async fn serve_batch(
             subject: "anonymous".to_string(),
         },
     };
-    let connect = match connect {
-        true => Some(
-            mint_token(
-                rt,
-                &properties,
-                &caller.subject,
-                Operation::Connect,
-                &format!("/{}", rt.inner.name),
-            )
-            .map_err(|_| "minting a token failed")?,
-        ),
-        false => None,
-    };
-
     let mut outcomes: Vec<Option<Result<ServedOperation, OperationFailure>>> =
         Vec::with_capacity(ops.len());
     let (mut subscribes, mut publishes) = (Vec::new(), Vec::new());
@@ -367,13 +353,8 @@ async fn serve_batch(
         }
     }
     let serve = |(i, operation)| {
-        let (request, caller, properties) = (&request, &caller, &properties);
-        async move {
-            (
-                i,
-                serve_operation(rt, properties, request, caller, operation).await,
-            )
-        }
+        let (request, caller) = (&request, &caller);
+        async move { (i, serve_operation(rt, request, caller, operation).await) }
     };
     let in_order = async {
         let mut served = Vec::with_capacity(publishes.len());
@@ -390,18 +371,76 @@ async fn serve_batch(
     let mut answer = Answer {
         url: resolve_socket_url(&properties.url, &request),
         host: properties.host.clone(),
-        connect,
+        connect: None,
         grants: Vec::new(),
         denied: Vec::new(),
     };
+    let mut subscribes = Vec::new();
     for (i, outcome) in outcomes.into_iter().enumerate() {
         match outcome.expect("every op was read or served") {
-            Ok(ServedOperation { wire, token }) => answer.grants.push(Grant { i, wire, token }),
+            Ok(ServedOperation { wire, is_subscribe }) => {
+                if is_subscribe {
+                    subscribes.push(answer.grants.len());
+                }
+                answer.grants.push(Grant {
+                    i,
+                    wire,
+                    token: None,
+                });
+            }
             Err(OperationFailure::Denied(code)) => answer.denied.push(DeniedOperation { i, code }),
             Err(OperationFailure::Failed(message)) => return Err(message),
         }
     }
+    mint_answer_tokens(rt, &caller.subject, connect, &subscribes, &mut answer).await?;
     Ok(answer)
+}
+
+async fn mint_answer_tokens(
+    rt: &Realtime,
+    subject: &str,
+    connect: bool,
+    subscribes: &[usize],
+    answer: &mut Answer,
+) -> Result<(), &'static str> {
+    let token_grant = |operation: TokenOperation, channel: String| TokenGrant {
+        operation: operation.into(),
+        channel,
+        ..Default::default()
+    };
+    let mut grants = Vec::with_capacity(subscribes.len() + 1);
+    if connect {
+        grants.push(token_grant(
+            TokenOperation::OPERATION_CONNECT,
+            format!("/{}", rt.inner.name),
+        ));
+    }
+    for &index in subscribes {
+        grants.push(token_grant(
+            TokenOperation::OPERATION_SUBSCRIBE,
+            answer.grants[index].wire.clone(),
+        ));
+    }
+    if grants.is_empty() {
+        return Ok(());
+    }
+    let minted = mint_tokens(rt, subject, grants)
+        .await
+        .map_err(|_| "minting a token failed")?;
+    let mut tokens = minted.tokens.into_iter();
+    if connect {
+        let (token, _) = tokens.next().expect("a token for each grant");
+        answer.connect = Some(MintedToken {
+            token,
+            expires_at: minted.expires_at,
+        });
+    }
+    for (&index, (token, channel)) in subscribes.iter().zip(tokens) {
+        let grant = &mut answer.grants[index];
+        grant.wire = channel;
+        grant.token = Some(token);
+    }
+    Ok(())
 }
 
 pub(crate) async fn handle(

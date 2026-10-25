@@ -427,14 +427,7 @@ impl Realtime {
             code,
             said: format!("publish on {wire}: {said}"),
         };
-        let runtime = match self.inner.runtime.get() {
-            Some(runtime) => runtime,
-            None => {
-                let client =
-                    RealtimeServiceClient::new(HttpClient::plaintext(), read_client_config()?);
-                self.inner.runtime.get_or_init(|| client)
-            }
-        };
+        let runtime = self.connect_runtime()?;
         let event = String::from_utf8(envelope.to_vec())
             .map_err(|err| failed(Code::Internal, err.to_string()))?;
         runtime
@@ -449,10 +442,20 @@ impl Realtime {
         Ok(())
     }
 
+    pub(crate) fn connect_runtime(&self) -> Result<&RealtimeServiceClient<HttpClient>, Error> {
+        if let Some(runtime) = self.inner.runtime.get() {
+            return Ok(runtime);
+        }
+        let client = RealtimeServiceClient::new(HttpClient::plaintext(), read_client_config()?);
+        Ok(self.inner.runtime.get_or_init(|| client))
+    }
+
     /// Serve one request to the realtime handler: a batched `POST` of `{ connect?, ops }`,
     /// at most 50 ops, answered with the socket url and the host its authorization names, a
     /// connect token when asked, a grant with a token for each op its rule allows and a denial with a [`DenialCode`]
-    /// for each it does not. A browser publish runs the channel's publish rule and is
+    /// for each it does not. The ocel runtime mints every token, in one call per request,
+    /// and names the channel each subscribe grant is for, which the browser subscribes to as
+    /// given. A browser publish runs the channel's publish rule and is
     /// published from the server, in the order of the batch. It takes `POST` with
     /// `application/json` alone, serves its own origin and those the builder allowed (the
     /// only ones it sends CORS headers to), answers `Cache-Control: no-store`, and never
@@ -466,7 +469,7 @@ impl RealtimeBuilder<()> {
     /// Identify the caller of the realtime handler from its request, with whatever auth the
     /// app already uses, answering `None` for nobody; an error or a panic fails the whole
     /// request with 500. Its answer is the `auth` of every rule, and its `id` as JSON, when
-    /// a string or a number, is the `sub` of every token minted for the caller. Call it
+    /// a string or a number, is the `sub` of every token the handler hands the caller. Call it
     /// before any rule; a resource with any rule needs it.
     pub fn authorize<A, F, Fut, E>(self, authorize: F) -> RealtimeBuilder<A>
     where
