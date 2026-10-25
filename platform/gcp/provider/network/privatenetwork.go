@@ -300,12 +300,17 @@ func listStoresOn(ctx context.Context, b bootstrap.Engine, tier environment.Tier
 	if err != nil {
 		return nil, err
 	}
-	connected, next, err := b.Stores.ListInstances(ctx, b.Clients.Location(), filter, resourcesNamedOnNetwork, "")
+	own := b.Clients.NetworkPath(tier)
+	listOn := func(token string) ([]gcloud.MemorystoreInstance, string, error) {
+		listed, next, err := b.Stores.ListInstances(ctx, b.Clients.Location(), filter, resourcesNamedOnNetwork, token)
+		return slices.DeleteFunc(listed, func(instance gcloud.MemorystoreInstance) bool { return !gcloud.IsOnNetwork(instance.Networks(), own) }), next, err
+	}
+	connected, next, err := listOn("")
 	for page := 1; err == nil && len(connected) == 0 && next != ""; page++ {
 		if page == StorePagesRead {
-			return nil, fmt.Errorf("read which kv stores are on the %s network: Memorystore answered %d pages with no store and named another, so nothing says the network is free", b.Clients.Network(tier), StorePagesRead)
+			return nil, fmt.Errorf("read which kv stores are on the %s network: Memorystore answered %d pages with no store on it and named another, so nothing says the network is free", b.Clients.Network(tier), StorePagesRead)
 		}
-		connected, next, err = b.Stores.ListInstances(ctx, b.Clients.Location(), filter, resourcesNamedOnNetwork, next)
+		connected, next, err = listOn(next)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read which kv stores are on the %s network: %w", b.Clients.Network(tier), err)
@@ -340,6 +345,9 @@ func listDatabasesOn(ctx context.Context, b bootstrap.Engine, tier environment.T
 	}
 	named := make([]connectedResource, 0, len(listed.Items)+1)
 	for _, instance := range listed.Items {
+		if !gcloud.IsOnNetwork(gcloud.SQLNetworks(instance), b.Clients.NetworkPath(tier)) {
+			continue
+		}
 		labels := map[string]string{}
 		if instance.Settings != nil {
 			labels = instance.Settings.UserLabels
