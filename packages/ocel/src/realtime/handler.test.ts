@@ -1,13 +1,17 @@
+import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
+import { Operation } from "../gen/proto/app/realtime/v1/realtime_pb.js";
 import {
   appsyncBinding,
   appsyncHost,
   appsyncURL,
   type FakeGateway,
+  type FakeRuntime,
   readClaims,
   serveFakeGateway,
+  serveFakeRuntime,
 } from "../testing/realtime-gateway.js";
 
 vi.mock("../runtime/rpc", () => ({
@@ -72,8 +76,27 @@ async function answer(response: Response): Promise<Answer> {
   return (await response.json()) as Answer;
 }
 
+function expectMinted(
+  runtime: FakeRuntime,
+  subject: string,
+  grants: { operation: Operation; channel: string }[],
+) {
+  expect(runtime.mints).toHaveLength(1);
+  expect(runtime.mints[0]).toMatchObject({
+    realtime: "app",
+    subject,
+    ttl: { seconds: 30n, nanos: 0 },
+    grants,
+  });
+}
+
+const connectGrant = { operation: Operation.CONNECT, channel: "/app" };
+
 describe("the realtime handler on AppSync Events", () => {
-  beforeEach(() => {
+  let runtime: FakeRuntime;
+
+  beforeEach(async () => {
+    runtime = await serveFakeRuntime();
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
     subscribeRule.mockClear();
@@ -84,19 +107,14 @@ describe("the realtime handler on AppSync Events", () => {
     vi.unstubAllEnvs();
   });
 
-  it("names the socket url and host, and mints a connect token when asked", async () => {
+  it("names the socket url and host, and hands on the connect token the runtime mints when asked", async () => {
     const res = await answer(await POST(post({ connect: true, ops: [] })));
 
     expect(res).toMatchObject({ url: appsyncURL, host: appsyncHost });
+    expectMinted(runtime, "anonymous", [connectGrant]);
     const claims = readClaims(res.connect?.token ?? "");
-    expect(claims).toMatchObject({
-      iss: "ocel:rt:app",
-      aud: appsyncHost,
-      sub: "anonymous",
-      ocel: { op: "connect", ch: "/app", ns: "app" },
-    });
+    expect(claims).toMatchObject({ aud: appsyncHost, ocel: { op: "connect", ch: "/app" } });
     expect(claims.exp).toBe(res.connect?.expiresAt);
-    expect(Number(claims.exp) - Number(claims.iat)).toBe(30);
   });
 
   it("grants a public subscribe to anyone, with a token for its wire channel", async () => {
@@ -107,10 +125,54 @@ describe("the realtime handler on AppSync Events", () => {
     expect(res.connect).toBeUndefined();
     expect(res.denied).toEqual([]);
     expect(res.grants).toEqual([{ i: 0, wire: "/app/status", token: expect.any(String) }]);
+    expectMinted(runtime, "anonymous", [
+      { operation: Operation.SUBSCRIBE, channel: "/app/status" },
+    ]);
     expect(readClaims(res.grants[0]?.token ?? "")).toMatchObject({
-      sub: "anonymous",
-      ocel: { op: "subscribe", ch: "/app/status", ns: "app" },
+      ocel: { op: "subscribe", ch: "/app/status" },
     });
+  });
+
+  it("hands the browser the channel the runtime minted each subscribe for", async () => {
+    runtime.mapChannel = (channel) => `/apps/h-1${channel.slice("/app".length)}`;
+
+    const res = await answer(
+      await POST(
+        post(
+          {
+            connect: true,
+            ops: [
+              { op: "subscribe", pattern: "status", params: {} },
+              {
+                op: "subscribe",
+                pattern: "projects/:projectId/deploys/:deployId",
+                params: { projectId: "p-1" },
+              },
+            ],
+          },
+          { "x-user": "u1" },
+        ),
+      ),
+    );
+
+    expect(res.grants).toEqual([
+      { i: 0, wire: "/apps/h-1/status", token: expect.any(String) },
+      { i: 1, wire: "/apps/h-1/projects/p-1/deploys/*", token: expect.any(String) },
+    ]);
+    expect(readClaims(res.grants[0]?.token ?? "").ocel.ch).toBe("/app/status");
+  });
+
+  it("asks the runtime for no token when the batch needs none", async () => {
+    await answer(
+      await POST(
+        post(
+          { ops: [{ op: "subscribe", pattern: "orders/:orderId", params: { orderId: "o-2" } }] },
+          { "x-user": "u1" },
+        ),
+      ),
+    );
+
+    expect(runtime.mints).toEqual([]);
   });
 
   it("runs the subscribe rule with the auth, params and request, granting or denying each op", async () => {
@@ -131,8 +193,10 @@ describe("the realtime handler on AppSync Events", () => {
 
     expect(res.grants).toEqual([{ i: 0, wire: "/app/orders/o-1", token: expect.any(String) }]);
     expect(res.denied).toEqual([{ i: 1, code: "forbidden" }]);
-    expect(readClaims(res.connect?.token ?? "").sub).toBe("u1");
-    expect(readClaims(res.grants[0]?.token ?? "").sub).toBe("u1");
+    expectMinted(runtime, "u1", [
+      connectGrant,
+      { operation: Operation.SUBSCRIBE, channel: "/app/orders/o-1" },
+    ]);
     const [context] = subscribeRule.mock.calls[0] ?? [];
     expect(context).toMatchObject({ auth: { id: "u1" }, params: { orderId: "o-1" } });
     expect((context as unknown as { request: Request }).request.headers.get("x-user")).toBe("u1");
@@ -267,7 +331,10 @@ describe("the realtime handler on AppSync Events", () => {
 });
 
 describe("the realtime handler's defaults", () => {
-  beforeEach(() => {
+  let runtime: FakeRuntime;
+
+  beforeEach(async () => {
+    runtime = await serveFakeRuntime();
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
   });
@@ -476,14 +543,8 @@ describe("the realtime handler's defaults", () => {
   it.each([
     ["a connect token", { connect: true, ops: [] }],
     ["a subscribe token", { ops: [{ op: "subscribe", pattern: "status" }] }],
-  ])("answers 500 no-store when %s cannot be minted", async (_, batch) => {
-    vi.stubEnv(
-      bindingKey("app", "realtime"),
-      JSON.stringify({
-        name: "realtime--app",
-        realtime: { ...JSON.parse(appsyncBinding).realtime, signingKey: "AAAA" },
-      }),
-    );
+  ])("answers 500 no-store when the runtime mints no %s", async (_, batch) => {
+    runtime.mintRefusal = new ConnectError("no signing key", Code.FailedPrecondition);
 
     const res = await POST(post(batch));
 

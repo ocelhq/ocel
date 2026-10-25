@@ -4,14 +4,14 @@ import { getConfig, lazyBinding } from "../binding/binding.js";
 import { isDiscovering, unprovisioned } from "../binding/unprovisioned.js";
 import { declarationSite } from "../declaration/callsite.js";
 import { declare } from "../declaration/declare.js";
-import { type Duration, encodeDuration, parseDurationMilliseconds } from "../delivery/duration.js";
+import { type Duration, encodeDuration } from "../delivery/duration.js";
 import { encodeJsonSchema, validatePayload } from "../delivery/schema.js";
-import { RealtimeService } from "../gen/proto/app/realtime/v1/realtime_pb.js";
+import { Operation, RealtimeService } from "../gen/proto/app/realtime/v1/realtime_pb.js";
 import { RealtimePublish, RealtimeSubscribe } from "../gen/proto/app/resources/v1/resources_pb.js";
 import type { RealtimeProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import type { PatternParameters } from "../kv/pattern.js";
 import { createRuntimeClient } from "../runtime/transport.js";
-import type { TokenIssuer } from "./token.js";
+import type { MintedTokens, TokenGrant } from "./token.js";
 import {
   type ChannelPattern,
   encodeWireChannel,
@@ -94,7 +94,7 @@ export interface RealtimeOptions<TAuth, TChannels extends Record<string, Channel
    * its `id`, when a string or number, is the `sub` of every token minted for the caller.
    */
   authorize?: (request: Request) => MaybePromise<TAuth | null | undefined>;
-  /** How long each minted token lives, from 10 to 300 seconds; without it, 60 seconds. */
+  /** How long each token the handler hands out lives, from 10 to 300 seconds; without it, 60 seconds. */
   tokenTtl?: Duration;
   /**
    * The channel patterns, each at most 4 `/`-separated segments that are each a literal
@@ -124,12 +124,15 @@ export interface DeclaredChannel {
 }
 
 /** What the realtime handler and publish read of a declared resource. */
-export interface RealtimeRuntime extends TokenIssuer {
+export interface RealtimeRuntime {
+  name: string;
   channels: Map<string, DeclaredChannel>;
   authorize?: (request: Request) => MaybePromise<unknown>;
   properties(access: string): RealtimeProperties;
   /** Hands the ocel runtime `envelope` to publish on the wire `channel`. */
   publish(access: string, channel: string, envelope: string): Promise<void>;
+  /** Asks the ocel runtime for a token for each of `grants`, minted for `subject`. */
+  mint(access: string, subject: string, grants: TokenGrant[]): Promise<MintedTokens>;
 }
 
 /**
@@ -184,7 +187,6 @@ export class Realtime<
     this.name = name;
     const what = `realtime("${name}")`;
     const ttl = options.tokenTtl ?? defaultTtl;
-    const ttlSeconds = parseDurationMilliseconds(ttl) / 1_000;
     const channels = new Map<string, DeclaredChannel>();
     for (const [written, declared] of Object.entries(
       options.channels as Record<string, ChannelShape>,
@@ -242,7 +244,6 @@ export class Realtime<
     );
     runtimes.set(this, {
       name,
-      ttlSeconds,
       channels,
       authorize: options.authorize,
       properties: (access) => {
@@ -256,6 +257,32 @@ export class Realtime<
         } catch (cause) {
           throw new Error(`${what}: publish on ${channel}: ${(cause as Error).message}`, { cause });
         }
+      },
+      mint: async (access, subject, grants) => {
+        const client = openClient(access);
+        let minted: Awaited<ReturnType<typeof client.mint>>;
+        try {
+          minted = await client.mint({
+            realtime: name,
+            subject,
+            ttl: encodeDuration(ttl),
+            grants: grants.map(({ operation, channel }) => ({
+              operation: operation === "connect" ? Operation.CONNECT : Operation.SUBSCRIBE,
+              channel,
+            })),
+          });
+        } catch (cause) {
+          throw new Error(`${what}: mint tokens: ${(cause as Error).message}`, { cause });
+        }
+        if (minted.tokens.length !== grants.length) {
+          throw new Error(
+            `${what}: the runtime minted ${minted.tokens.length} tokens for ${grants.length} grants`,
+          );
+        }
+        return {
+          tokens: minted.tokens.map(({ token, channel }) => ({ token, channel })),
+          expiresAt: Number(minted.expiresAt?.seconds ?? 0n),
+        };
       },
     });
   }
