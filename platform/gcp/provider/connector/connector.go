@@ -349,12 +349,6 @@ func (p Connector) bindConnectorKeys(ctx context.Context, wanted []string, progr
 		if err != nil && len(wanted) > 0 {
 			return err
 		}
-		projectChanged, projectErr := variables.BindProjectKeyRoles(ctx, clients, tier, member, connectorKeyRoles, wanted)
-		if projectErr != nil && len(wanted) > 0 {
-			return projectErr
-		}
-		changed = changed || projectChanged
-		err = errors.Join(err, projectErr)
 		if changed && len(wanted) > 0 {
 			gcloud.EnsureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(tier) + " KMS key")
 		}

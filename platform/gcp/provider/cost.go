@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -45,9 +44,6 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			database = names.OwnDatabase(req.Deploy.Tier, req.Deploy.Slug)
 		}
 		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: database})
-	}
-	if use.sealsProjectValues() {
-		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindKey, Name: ports.ProjectKey(req.Deploy.Tier, req.Deploy.Slug)})
 	}
 	for _, owned := range owned {
 		shaped, _ := owned.Shape(region)

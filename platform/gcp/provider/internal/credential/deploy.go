@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -38,7 +37,6 @@ var projectPermissions = []string{
 	"cloudkms.keyRings.create",
 	"cloudkms.keyRings.get",
 	"cloudkms.cryptoKeys.create",
-	"cloudkms.cryptoKeys.list",
 }
 
 const (
@@ -90,24 +88,19 @@ func (d Deploy) keyRingPath() string {
 	return "projects/" + d.names.Project() + "/locations/" + d.region + "/keyRings/" + d.names.KeyRing()
 }
 
-func (d Deploy) projectKeysPrefix() string {
-	return d.keyRingPath() + "/cryptoKeys/" + ports.ProjectKeyPrefix(d.tier)
-}
-
 func (d Deploy) keysCondition(title string) *policy.Condition {
-	tierKey := d.keyRingPath() + "/cryptoKeys/" + string(d.tier)
 	return &policy.Condition{
 		Title:      title,
-		Expression: fmt.Sprintf("resource.name == %q || resource.name.startsWith(%q)", tierKey, d.projectKeysPrefix()),
+		Expression: fmt.Sprintf("resource.name == %q", d.keyRingPath()+"/cryptoKeys/"+string(d.tier)),
 	}
 }
 
 func (d Deploy) Sealing() Grant {
-	return Grant{Role: SealingRole, Condition: d.keysCondition("ocel " + string(d.tier) + " keys")}
+	return Grant{Role: SealingRole, Condition: d.keysCondition("ocel " + string(d.tier) + " key")}
 }
 
 func (d Deploy) Keys() Grant {
-	return Grant{Role: KeysRole, Condition: d.keysCondition("ocel " + string(d.tier) + " keys to administer")}
+	return Grant{Role: KeysRole, Condition: d.keysCondition("ocel " + string(d.tier) + " key to administer")}
 }
 
 func (d Deploy) Queue() Grant {

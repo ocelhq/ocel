@@ -111,6 +111,9 @@ func TestAPlainDeployOfOneHTTPAppAddsNoPartAndPlansNothing(t *testing.T) {
 	if err := p.ApplyPreflight(context.Background(), pre); err != nil {
 		t.Errorf("ApplyPreflight() of one HTTP app = %v", err)
 	}
+	if _, present, err := stackrecords.ReadBootstrapPart(context.Background(), p.KeyValues(), environment.TierProduction, bootstrap.KeysPart); err != nil || present {
+		t.Errorf("the keys part is recorded %t, %v, want it absent: one HTTP app seals nothing", present, err)
+	}
 }
 
 func TestADeployAddsThePartsWhatItDeclaresAndShipsNeedOnFirstUse(t *testing.T) {

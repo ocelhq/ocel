@@ -35,20 +35,20 @@ func TestTheFirstScheduledEnvSourceAddsTheSyncWithTheAccountItRunsAsAndNoBootstr
 	}
 }
 
-func TestTheFirstScheduledEnvSourceMakesTheKeysTheSyncSealsUnderAndLetsTheSyncSealForItsProject(t *testing.T) {
+func TestTheFirstScheduledEnvSourceMakesTheTierKeyTheSyncSealsUnderAndLetsTheSyncSealUnderIt(t *testing.T) {
 	t.Parallel()
 	server := googletest.NewSync()
 	b := syncOpened(server, t)
 	b.Records = fake.NewKeyValues()
 	ctx := context.Background()
 	tier := environment.TierPreview
-	key := b.Clients.Workload().ProjectKeyPath(tier, "shop")
+	key := gcloud.KeyPath(b.Clients, string(tier))
 
 	if err := Ensure(ctx, b, tier, "shop"); err != nil {
 		t.Fatalf("Ensure() = %v", err)
 	}
 
-	if !server.HasKey(gcloud.KeyPath(b.Clients, string(tier))) {
+	if !server.HasKey(key) {
 		t.Errorf("the first scheduled env source of %s left no %s key, and the sync seals under it", tier, tier)
 	}
 	if _, present, err := stackrecords.ReadBootstrapPart(ctx, b.Records, tier, bootstrap.KeysPart); err != nil || !present {
@@ -57,7 +57,7 @@ func TestTheFirstScheduledEnvSourceMakesTheKeysTheSyncSealsUnderAndLetsTheSyncSe
 	member := "serviceAccount:" + b.Clients.EnvSourceSyncAccountEmail(tier)
 	for _, role := range SyncKeyRoles {
 		if !slices.Contains(server.KeyMembers(key, role), member) {
-			t.Errorf("project shop's key binds %v to %s, want %s: the sync seals what it reads for shop under shop's key", server.KeyMembers(key, role), role, member)
+			t.Errorf("the %s key binds %v to %s, want %s: the sync seals what it reads for shop under the tier key", tier, server.KeyMembers(key, role), role, member)
 		}
 	}
 }

@@ -63,10 +63,8 @@ func readProjectDatabases(ctx context.Context, c *gcloud.Clients, tier environme
 func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Registry, cacheGrants CacheGrants, spec provider.StackSpec, account, member string, declared map[string]*provider.TopicSpec, referenced []string) ([]grants.Grant, error) {
 	var granted []grants.Grant
 	read := map[string]bool{}
-	for _, project := range valueOwners(spec, referenced) {
-		if err := variables.EnsureProjectKey(ctx, c, spec.Ref.Tier, project); err != nil {
-			return nil, err
-		}
+	owners := valueOwners(spec, referenced)
+	for _, project := range owners {
 		database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, project)
 		if err != nil {
 			return nil, err
@@ -75,7 +73,9 @@ func AppGrants(ctx context.Context, c *gcloud.Clients, registry component.Regist
 			read[database] = true
 			granted = append(granted, grants.OnProject(credential.RecordsRole, member, variables.DatabaseCondition(c, database)))
 		}
-		granted = append(granted, grants.On(grants.Key, c.Workload().ProjectKeyPath(spec.Ref.Tier, project), grants.OpeningRole, member))
+	}
+	if len(owners) > 0 {
+		granted = append(granted, grants.On(grants.Key, c.Workload().KeyPath(string(spec.Ref.Tier)), grants.OpeningRole, member))
 	}
 	held, err := registry.Grants(ctx, component.App{Clients: c, Spec: spec, Account: account, Member: member, Topics: declared})
 	if err != nil {

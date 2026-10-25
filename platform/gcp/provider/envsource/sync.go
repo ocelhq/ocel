@@ -109,22 +109,6 @@ func syncWritesGranted(ctx context.Context, b bootstrap.Engine, tier environment
 	return gcloud.KeyRolesGranted(ctx, b.Clients, tier, member, SyncKeyRoles)
 }
 
-func letSyncSealFor(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) error {
-	if err := variables.EnsureProjectKey(ctx, b.Clients, tier, project); err != nil {
-		return err
-	}
-	key := b.Clients.Workload().ProjectKeyPath(tier, project)
-	member := syncMember(b.Clients, tier)
-	changes := make([]policy.Change, 0, len(SyncKeyRoles))
-	for _, role := range SyncKeyRoles {
-		changes = append(changes, policy.Grant(role, member, nil))
-	}
-	if _, err := policy.Edit(ctx, gcloud.KeyPolicy(b.Clients, key, "project "+project+"'s "+string(tier)), policy.Each(changes...)); err != nil {
-		return fmt.Errorf("let %s seal and open project %s's %s values: %w", member, project, tier, err)
-	}
-	return nil
-}
-
 func SyncServing(b bootstrap.Engine, tier environment.Tier) run.Serving {
 	return run.Serving{
 		Service:     b.Clients.EnvSourceSync(tier),

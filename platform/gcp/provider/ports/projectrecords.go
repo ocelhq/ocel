@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
@@ -25,16 +24,13 @@ import (
 const (
 	sharedDatabaseWord     = "shared"
 	ownDatabaseInfix       = "-p-"
-	projectKeyInfix        = "-p-"
 	projectHashLength      = 10
-	projectField           = "project"
 	projectDatabasesRecord = "projectdatabases"
 	servedCollection       = "served"
 )
 
 var (
 	ErrNoProjectRecords = errors.New("the project's records database does not exist yet")
-	ErrNoProjectKey     = errors.New("the project has no key in this tier")
 	ErrNoTierKey        = errors.New("the tier has no key")
 )
 
@@ -53,12 +49,6 @@ func OwnDatabasePrefix(namespace provider.Namespace, tier environment.Tier) stri
 
 func OwnDatabase(namespace provider.Namespace, tier environment.Tier, project string) string {
 	return OwnDatabasePrefix(namespace, tier) + projectHash(tier, project)
-}
-
-func ProjectKeyPrefix(tier environment.Tier) string { return naming.TierWord(tier) + projectKeyInfix }
-
-func ProjectKey(tier environment.Tier, project string) string {
-	return ProjectKeyPrefix(tier) + projectHash(tier, project)
 }
 
 func ProjectDatabaseKey(tier environment.Tier, project string) records.Key {
@@ -145,10 +135,6 @@ func (c *Clients) ReadProjectDatabase(ctx context.Context, tier environment.Tier
 	return database, nil
 }
 
-func (c *Clients) ProjectKeyPath(tier environment.Tier, project string) string {
-	return c.KeyPath(ProjectKey(tier, project))
-}
-
 func (c *Clients) ProjectFirestore(ctx context.Context, tier environment.Tier, project string) (*firestore.Client, error) {
 	database, err := c.ReadProjectDatabase(ctx, tier, project)
 	if err != nil {
@@ -202,11 +188,6 @@ func ProjectOfRecords(in records.Partition) (string, bool) {
 	return in.Path[0], true
 }
 
-func ProjectSealedFor(bound seal.AssociatedData) (string, bool) {
-	project, owned := bound.Project()
-	return project, owned && naming.Validate(projectField, project) == nil
-}
-
 type missingProjectPart struct {
 	condition error
 	refused   error
@@ -222,13 +203,6 @@ func (m missingProjectPart) Is(target error) bool { return target == m.condition
 func refuseNoProjectRecords(tier environment.Tier, project string, answer error) error {
 	return missingProjectPart{condition: ErrNoProjectRecords, answer: answer, refused: refusal.Refuse(refusal.CodeNotReady,
 		"the Firestore database project %s keeps its %s records in does not exist yet.\n"+
-			"Deploy %s to the %s tier, or set one of its values with the ocel CLI, which makes it, then try again",
-		project, tier, project, tier)}
-}
-
-func refuseNoProjectKey(tier environment.Tier, project string, answer error) error {
-	return missingProjectPart{condition: ErrNoProjectKey, answer: answer, refused: refusal.Refuse(refusal.CodeNotReady,
-		"project %s has no key of its own in the %s tier yet, and its values are sealed under that key alone.\n"+
 			"Deploy %s to the %s tier, or set one of its values with the ocel CLI, which makes it, then try again",
 		project, tier, project, tier)}
 }

@@ -62,7 +62,7 @@ credential, and shows in its plan as added on first use:
 
 | Part | Holds | Added by the first deploy that |
 | --- | --- | --- |
-| `keys` | the key ring and the tier's KMS key | seals a value: a preview, a secret, a granted binding, any declared resource, whose binding is sealed when it is published, or a deploy behind the `alb` or Cloudflare edge |
+| `keys` | the key ring and the tier's KMS key, which every value of the tier is sealed under | seals a value: a preview, a secret, a granted binding, any declared resource, whose binding is sealed when it is published, or a deploy behind the `alb` or Cloudflare edge |
 | `app-database` | the Firestore database the tier's projects [share](#project-records) | keeps a project's records: seals a value, declares a topic or task, ships a Next app or a build that revalidates, or sets a value with the ocel CLI |
 | `edge-bucket` | the tier's [edge bucket](#buckets-of-a-tier) | ships a Next app, or deploys behind the `alb` or Cloudflare edge |
 | `cache-bucket` | the tier's [cache bucket](#buckets-of-a-tier) | ships a Next app, or a build that revalidates |
@@ -87,16 +87,18 @@ is installed and reads them: remove those first, or the front in the same run.
 
 A project's values, runs and Next tag records are kept in one Firestore database the tier's projects
 share, `<namespace>-app-prod-shared` in production and `<namespace>-app-preview-shared` in previews,
-which the `app-database` part adds. Every app of the tier that keeps records may read and write it:
-a value, and each run's payload and output, is sealed under its project's own key, so another
-project's app reads none of them and cannot hand a worker a payload of its own, but an app that
-writes runs or tag records may delete another project's values and runs, or rewrite a run's status
-and its tag records. Removing a project
-from the tier deletes its records and leaves the database to the rest.
+which the `app-database` part adds. Every value of the tier, and each run's payload and output, is
+sealed under the tier's one key and bound to its project, so it opens only as that project's. Every
+app of the tier that keeps records may read and write the shared database, and every app that opens a
+value may open under the tier's key, so the tier's projects on the shared database are not isolated
+from each other: an app of one may read and open another's values, hand its workers a payload, delete
+its values and runs, or rewrite a run's status and its tag records. Removing a project from the tier
+deletes its records and leaves the database to the rest.
 
 Set `ownDatabase` to keep a project's records in a Firestore database of its own instead,
 `<namespace>-app-prod-p-<hash>` in production and `<namespace>-app-preview-p-<hash>` in previews,
-which only that project's apps may read and write:
+which only that project's apps may read and write. This is how a project keeps its values from the
+tier's other projects: they are sealed under the same key, but no other project's app can read them:
 
 ```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
 import { defineConfig } from "ocel/config";
@@ -451,7 +453,7 @@ not changed in place, so a deploy asking for another one is refused.
 The instance has no public address. It is reached at a private address on the tier's
 [private network](#private-network), made for it by a Private Service Connect endpoint that
 bills about $7.30 a month of its own, and refuses any connection that is not encrypted. Apps connect as the `ocel` user to the `ocel` database with a
-password ocel generates, keeps sealed under the project's key, and hands each app in its binding.
+password ocel generates, keeps sealed under the tier's key, and hands each app in its binding.
 
 Creating an instance takes several minutes. `ocel projects destroy`, or dropping the database from the
 code, deletes the instance and its data; a database created again afterwards is
@@ -626,8 +628,8 @@ each tier's credential for your project and namespace. For the preview tier they
   reach). A resource carrying `production` is out of these roles' reach. The project carries no
   `ocel-tier` value, so these roles also hold what Google checks against the project: creating
   each kind of resource a deploy makes, listing them, and reading the project.
-- `roles/cloudkms.cryptoKeyEncrypterDecrypter` and `roles/cloudkms.admin` on the tier's key and
-  its projects' keys, by name: KMS keys take no tag.
+- `roles/cloudkms.cryptoKeyEncrypterDecrypter` and `roles/cloudkms.admin` on the tier's key alone,
+  by name: KMS keys take no tag.
 - `roles/memorystore.admin` and `roles/cloudscheduler.admin` on the project, since Memorystore
   instances and Cloud Scheduler jobs take no tag.
 - `roles/logging.viewAccessor` on the tier's log view alone.
@@ -639,10 +641,10 @@ each tier's credential for your project and namespace. For the preview tier they
 - The `<namespace with _ for ->_parts` role `ocel bootstrap` makes, unconditioned: it creates the
   tier's network, subnetwork and service connection policies, which carry no tag, and grants
   Cloud Run's agent on the subnetwork.
-- A custom role you make, holding `cloudkms.keyRings.create`, `cloudkms.keyRings.get`,
-  `cloudkms.cryptoKeys.create` and `cloudkms.cryptoKeys.list`, on a condition admitting Ocel's key
-  ring by name or a location: Cloud KMS checks reading the ring, and making and listing its keys,
-  against the ring, which both tiers share, so another key ring in the project is out of its
+- A custom role you make, holding `cloudkms.keyRings.create`, `cloudkms.keyRings.get` and
+  `cloudkms.cryptoKeys.create`, on a condition admitting Ocel's key ring by name or a location:
+  Cloud KMS checks reading the ring, and making the tier's key on it, against the ring, which both
+  tiers share, so another key ring in the project is out of its
   reach. It checks making a ring against the location, whose name holds no ring.
   `roles/cloudkms.admin` on the ring would hand over the ring's policy, which every key in it
   inherits.
@@ -661,7 +663,7 @@ gcloud projects add-iam-policy-binding my-project \
 
 Each app runs as a service account of its own in each environment, which a deploy creates the first
 time the app ships to that environment and grants only what the app's runtime reads. Its key and
-storage grants are on the resource: decrypt on its project's key and any key its values reference,
+storage grants are on the resource: decrypt on the tier's key when it opens a value,
 its cache and static files on the tier's buckets, publishing on its topics, enqueuing on the delay
 queue. Firestore databases take no IAM policy of their own, so access to the database its project
 keeps its records in, and read access to the database of any project its values reference, are
@@ -686,7 +688,7 @@ someone who holds a tier's credential and sets out to misuse it. These are accep
 
 - **Firestore.** Firestore has no per-database IAM, so a deploy credential may grant itself
   `roles/datastore.user` on the project and read or write the other tier's records and project
-  databases. Values stay sealed under KMS keys, which are held apart by name.
+  databases. Values stay sealed under their tier's KMS key, and the two tiers' keys are held apart by name.
 - **Realtime subscriptions.** Gateway instances make their subscriptions at runtime, untagged, and
   the tier's realtime account holds `roles/pubsub.editor` on the project on its tier's condition,
   so a preview deploy can run code as the preview realtime account and pull or delete

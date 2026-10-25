@@ -27,8 +27,6 @@ const (
 	tierKey    = ringPath + "/cryptoKeys/production"
 )
 
-var sealedKey = ringPath + "/cryptoKeys/" + ProjectKey(environment.TierProduction, "shop")
-
 type recordingKMS struct {
 	kmspb.UnimplementedKeyManagementServiceServer
 
@@ -44,7 +42,7 @@ func (k *recordingKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*k
 }
 
 func (k *recordingKMS) Decrypt(_ context.Context, req *kmspb.DecryptRequest) (*kmspb.DecryptResponse, error) {
-	if req.GetName() != sealedKey || string(req.GetAdditionalAuthenticatedData()) != boundBytes || string(req.GetCiphertext()) != "sealed" {
+	if req.GetName() != tierKey || string(req.GetAdditionalAuthenticatedData()) != boundBytes || string(req.GetCiphertext()) != "sealed" {
 		return nil, status.Error(codes.InvalidArgument, "Decryption failed: the ciphertext is invalid")
 	}
 	return &kmspb.DecryptResponse{Plaintext: []byte("sk_live_secret")}, nil
@@ -55,6 +53,17 @@ type aeadKMS struct {
 
 	mu   sync.Mutex
 	keys map[string]cipher.AEAD
+}
+
+func (k *aeadKMS) keyNames() []string {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	names := make([]string, 0, len(k.keys))
+	for name := range k.keys {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (k *aeadKMS) ensureKey(name string) (cipher.AEAD, error) {
@@ -133,7 +142,7 @@ func TestTheCipherSealsAsEveryCipherMust(t *testing.T) {
 
 var bound = seal.BindToProject("shop", "variable", "production", "staging", "/web", "STRIPE_API_KEY")
 
-func TestAProjectsValueIsSealedUnderItsProjectsKeyAndBoundToItsAssociatedDataBytes(t *testing.T) {
+func TestAProjectsValueIsSealedUnderTheTierKeyAndBoundToItsAssociatedDataBytes(t *testing.T) {
 	clients, fake := serveRecordingKMS(t)
 
 	if _, err := (Cipher{Clients: clients}).Seal(context.Background(), environment.TierProduction, bound, []byte("sk_live_secret")); err != nil {
@@ -142,20 +151,41 @@ func TestAProjectsValueIsSealedUnderItsProjectsKeyAndBoundToItsAssociatedDataByt
 	if len(fake.encrypted) != 1 {
 		t.Fatalf("KMS was asked to encrypt %d times, want once", len(fake.encrypted))
 	}
-	if got := fake.encrypted[0].GetName(); got != sealedKey {
-		t.Errorf("sealed under %q, want %q", got, sealedKey)
+	if got := fake.encrypted[0].GetName(); got != tierKey {
+		t.Errorf("sealed under %q, want the tier key %q", got, tierKey)
 	}
 	if got := string(fake.encrypted[0].GetAdditionalAuthenticatedData()); got != boundBytes {
 		t.Errorf("bound to %q, want %q: every value already stored is bound to those bytes", got, boundBytes)
 	}
 }
 
-func TestAProjectsValueSealedUnderItsProjectsKeyAndAssociatedDataBytesOpens(t *testing.T) {
+func TestAProjectsValueSealedUnderTheTierKeyAndAssociatedDataBytesOpens(t *testing.T) {
 	clients, _ := serveRecordingKMS(t)
 
 	opened, err := (Cipher{Clients: clients}).Open(context.Background(), environment.TierProduction, bound, []byte("sealed"))
 	if err != nil || string(opened) != "sk_live_secret" {
-		t.Fatalf("Open() = %q, %v, want the value sealed under %s at %q to open", opened, err, sealedKey, boundBytes)
+		t.Fatalf("Open() = %q, %v, want the value sealed under %s at %q to open", opened, err, tierKey, boundBytes)
+	}
+}
+
+func TestAProjectsValueSealedUnderTheTierKeyOpensAsThatProjectAndNoOther(t *testing.T) {
+	ctx := context.Background()
+	kms := &aeadKMS{keys: map[string]cipher.AEAD{}}
+	sealer := Cipher{Clients: serveKMS(t, kms)}
+	blog := seal.BindToProject("blog", "variable", "production", "staging", "/web", "STRIPE_API_KEY")
+
+	sealed, err := sealer.Seal(ctx, environment.TierProduction, bound, []byte("sk_live_secret"))
+	if err != nil {
+		t.Fatalf("Seal() = %v", err)
+	}
+	if opened, err := sealer.Open(ctx, environment.TierProduction, bound, sealed); err != nil || string(opened) != "sk_live_secret" {
+		t.Errorf("Open() as shop = %q, %v, want shop's value", opened, err)
+	}
+	if opened, err := sealer.Open(ctx, environment.TierProduction, blog, sealed); err == nil {
+		t.Errorf("Open() as blog = %q, want it refused: shop's value is bound to shop in its associated data", opened)
+	}
+	if got := kms.keyNames(); !slices.Equal(got, []string{tierKey}) {
+		t.Errorf("sealed and opened under %q, want the tier key %s alone", got, tierKey)
 	}
 }
 
@@ -178,21 +208,6 @@ func TestACellAndABindingAreSealedUnderTheAssociatedDataBytesEveryStoredValueIsB
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("bound to %q, want %q: every cell and binding already stored is bound to those bytes", got, want)
-	}
-}
-
-func TestTwoProjectsOfATierSealUnderKeysOfTheirOwn(t *testing.T) {
-	clients, kms := serveRecordingKMS(t)
-	blog := seal.BindToProject("blog", "variable", "production", "staging", "/web", "STRIPE_API_KEY")
-
-	for _, each := range []seal.AssociatedData{bound, blog} {
-		if _, err := (Cipher{Clients: clients}).Seal(context.Background(), environment.TierProduction, each, []byte("v")); err != nil {
-			t.Fatalf("Seal() = %v", err)
-		}
-	}
-
-	if shop, other := kms.encrypted[0].GetName(), kms.encrypted[1].GetName(); shop == other || shop == tierKey || other == tierKey {
-		t.Errorf("shop sealed under %s and blog under %s, want a key of each project's own so an app of one cannot open the other's", shop, other)
 	}
 }
 

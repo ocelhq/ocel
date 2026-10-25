@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"errors"
 	"net"
 	"slices"
 	"strings"
@@ -17,15 +16,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
-func TestAnAppIsGrantedNoRecordsOrKeyOfTheNamespaceOrTheTier(t *testing.T) {
+func TestAnAppThatOpensNoValueIsGrantedNoRecordsOrKeyOfTheNamespaceOrTheTier(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
@@ -73,40 +71,40 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 	}
 
 	var reached []string
-	for _, bound := range slices.Concat(projectBindingsOf(server), keyBindingsOf(server)) {
+	for _, bound := range projectBindingsOf(server) {
 		if !strings.Contains(bound, email) {
 			continue
 		}
 		for project, database := range databases {
-			if strings.Contains(bound, "/databases/"+database+`"`) || strings.Contains(bound, ports.ProjectKey(tier, project)) {
+			if strings.Contains(bound, "/databases/"+database+`"`) {
 				reached = append(reached, project)
 			}
 		}
 	}
 	slices.Sort(reached)
-	if want := []string{"billing", "billing", "shop", "shop"}; !slices.Equal(reached, want) {
-		t.Errorf("the app's grants reach the records and keys of %q, want shop's and billing's, whose value shop's STRIPE_KEY references, and never blog's", reached)
+	if want := []string{"billing", "shop"}; !slices.Equal(reached, want) {
+		t.Errorf("the app's grants reach the records of %q, want shop's and billing's, whose value shop's STRIPE_KEY references, and never blog's", reached)
+	}
+	opening := []string{"roles/cloudkms.cryptoKeyDecrypter serviceAccount:" + email + " on " + gcloud.KeyPath(c, string(tier))}
+	if got := keyBindingsOf(server); !slices.Equal(got, opening) {
+		t.Errorf("the keys bind %q, want exactly %q: shop's and billing's values are both sealed under the tier key", got, opening)
 	}
 }
 
-type projectKeysKMS struct {
+type keysKMS struct {
 	kmspb.UnimplementedKeyManagementServiceServer
 
-	mu       sync.Mutex
-	keys     map[string]bool
-	planted  map[string]*kmspb.CryptoKey
-	created  []string
-	ringless bool
+	mu          sync.Mutex
+	keys        map[string]bool
+	created     []string
+	sealedUnder []string
 
 	encryptUnserved int
 }
 
-func (k *projectKeysKMS) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
+func (k *keysKMS) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if planted := k.planted[req.GetName()]; planted != nil {
-		return planted, nil
-	}
 	if !k.keys[req.GetName()] {
 		return nil, status.Error(codes.NotFound, req.GetName())
 	}
@@ -114,12 +112,9 @@ func (k *projectKeysKMS) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKey
 		Primary: &kmspb.CryptoKeyVersion{Name: req.GetName() + "/cryptoKeyVersions/1", State: kmspb.CryptoKeyVersion_ENABLED}}, nil
 }
 
-func (k *projectKeysKMS) CreateCryptoKey(_ context.Context, req *kmspb.CreateCryptoKeyRequest) (*kmspb.CryptoKey, error) {
+func (k *keysKMS) CreateCryptoKey(_ context.Context, req *kmspb.CreateCryptoKeyRequest) (*kmspb.CryptoKey, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if k.ringless {
-		return nil, status.Error(codes.NotFound, "KeyRing not found: "+req.GetParent())
-	}
 	name := req.GetParent() + "/cryptoKeys/" + req.GetCryptoKeyId()
 	if k.keys[name] {
 		return nil, status.Error(codes.AlreadyExists, name)
@@ -129,7 +124,7 @@ func (k *projectKeysKMS) CreateCryptoKey(_ context.Context, req *kmspb.CreateCry
 	return &kmspb.CryptoKey{Name: name}, nil
 }
 
-func (k *projectKeysKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.EncryptResponse, error) {
+func (k *keysKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.EncryptResponse, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if !k.keys[req.GetName()] {
@@ -139,16 +134,19 @@ func (k *projectKeysKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (
 		k.encryptUnserved--
 		return nil, status.Error(codes.NotFound, req.GetName())
 	}
+	k.sealedUnder = append(k.sealedUnder, req.GetName())
 	return &kmspb.EncryptResponse{Name: req.GetName(), Ciphertext: []byte("sealed")}, nil
 }
 
-func servingProjectKeys(t *testing.T) (*Provider, *projectKeysKMS) {
+const productionKey = "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
+
+func servingTheTierKey(t *testing.T) (*Provider, *keysKMS) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	kms := &projectKeysKMS{keys: map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production": true}}
+	kms := &keysKMS{keys: map[string]bool{productionKey: true}}
 	server := grpc.NewServer()
 	kmspb.RegisterKeyManagementServiceServer(server, kms)
 	go func() { _ = server.Serve(listener) }()
@@ -156,88 +154,36 @@ func servingProjectKeys(t *testing.T) (*Provider, *projectKeysKMS) {
 	return pushing(t, "http://"+listener.Addr().String()), kms
 }
 
-func TestTheFirstValueAProjectSealsMakesTheProjectsKeyAndIsSealedUnderIt(t *testing.T) {
+func TestEveryValueOfATierIsSealedUnderTheTierKeyAndMakesNoKey(t *testing.T) {
 	t.Parallel()
-	p, kms := servingProjectKeys(t)
+	p, kms := servingTheTierKey(t)
 	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
-	bound := seal.BindToProject("shop", "variable", "STRIPE_KEY")
 
-	for range 2 {
-		if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, bound, []byte("sk_live")); err != nil {
-			t.Fatalf("Seal() = %v, want the project's key made and the value sealed under it", err)
+	for _, bound := range []seal.AssociatedData{
+		seal.BindToProject("shop", "variable", "STRIPE_KEY"),
+		seal.BindToProject("blog", "variable", "STRIPE_KEY"),
+		seal.Bind("gates"),
+	} {
+		if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, bound, []byte("v")); err != nil {
+			t.Fatalf("Seal() = %v", err)
 		}
 	}
 
-	if want := []string{ports.ProjectKey(environment.TierProduction, "shop")}; !slices.Equal(kms.created, want) {
-		t.Errorf("made the keys %q, want %q once: the second seal finds the key there", kms.created, want)
+	if len(kms.created) != 0 {
+		t.Errorf("made the keys %q, want none: every value of the tier is sealed under the tier key", kms.created)
+	}
+	if want := []string{productionKey, productionKey, productionKey}; !slices.Equal(kms.sealedUnder, want) {
+		t.Errorf("sealed under %q, want the tier key each time", kms.sealedUnder)
 	}
 }
 
-func TestAValueSealedUnderAProjectKeyCloudKMSDoesNotServeYetIsSealedOnceItDoes(t *testing.T) {
+func TestAValueSealedUnderATierKeyCloudKMSDoesNotServeYetIsSealedOnceItDoes(t *testing.T) {
 	t.Parallel()
-	p, kms := servingProjectKeys(t)
+	p, kms := servingTheTierKey(t)
 	kms.encryptUnserved = 2
 	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
 
 	if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "STRIPE_KEY"), []byte("sk_live")); err != nil {
-		t.Fatalf("Seal() = %v, want the value sealed once Cloud KMS serves the key it just made", err)
-	}
-}
-
-func TestAProjectKeyThatCannotBeMadeWhereNoKeyRingExistsIsRefusedNamingThePartThatHoldsIt(t *testing.T) {
-	t.Parallel()
-	p, kms := servingProjectKeys(t)
-	kms.ringless = true
-
-	err := variables.EnsureProjectKey(context.Background(), p.resolved, environment.TierProduction, "shop")
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, bootstrap.KeysPart) {
-		t.Fatalf("EnsureProjectKey() where no key ring exists = %v, want a %s refusal naming the %s part that holds the ring", err, refusal.CodeNotReady, bootstrap.KeysPart)
-	}
-}
-
-func TestAValueOfEveryProjectIsSealedUnderTheTierKeyAndMakesNoKey(t *testing.T) {
-	t.Parallel()
-	p, kms := servingProjectKeys(t)
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
-
-	if _, err := p.Cipher().Seal(context.Background(), environment.TierProduction, seal.Bind("gates"), []byte("v")); err != nil {
-		t.Fatalf("Seal() = %v", err)
-	}
-
-	if len(kms.created) != 0 {
-		t.Errorf("made the keys %q, want none: a value no one project owns is sealed under the tier key", kms.created)
-	}
-}
-
-func TestAProjectKeyFoundMadeWithNoVersionToSealUnderIsRefused(t *testing.T) {
-	t.Parallel()
-	p, kms := servingProjectKeys(t)
-	name := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")
-	for label, planted := range map[string]*kmspb.CryptoKey{
-		"no primary version":           {Name: name, Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
-		"a disabled primary":           {Name: name, Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT, Primary: &kmspb.CryptoKeyVersion{Name: name + "/cryptoKeyVersions/1", State: kmspb.CryptoKeyVersion_DISABLED}},
-		"another purpose than sealing": {Name: name, Purpose: kmspb.CryptoKey_ASYMMETRIC_SIGN},
-	} {
-		kms.mu.Lock()
-		kms.keys[name], kms.planted = true, map[string]*kmspb.CryptoKey{name: planted}
-		kms.mu.Unlock()
-
-		err := variables.EnsureProjectKey(context.Background(), p.resolved, environment.TierProduction, "shop")
-
-		var refused refusal.Refusal
-		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid || !strings.Contains(refused.Message, name) {
-			t.Errorf("EnsureProjectKey() over a key with %s = %v, want a %s refusal naming %s: no value of shop can be sealed under it", label, err, refusal.CodeInvalid, name)
-		}
-	}
-}
-
-func TestAProjectKeyFoundMadeWithAnEnabledPrimaryVersionIsKept(t *testing.T) {
-	t.Parallel()
-	p, kms := servingProjectKeys(t)
-	kms.keys["projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/"+ports.ProjectKey(environment.TierProduction, "shop")] = true
-
-	if err := variables.EnsureProjectKey(context.Background(), p.resolved, environment.TierProduction, "shop"); err != nil {
-		t.Errorf("EnsureProjectKey() over a key that seals = %v, want it kept", err)
+		t.Fatalf("Seal() = %v, want the value sealed once Cloud KMS serves the tier key", err)
 	}
 }

@@ -2,8 +2,11 @@ package variables
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -19,13 +22,11 @@ import (
 
 type heldStores struct {
 	databases map[string]bool
-	keys      map[string]bool
 	taken     []string
 }
 
 func (h *heldStores) stores() projectStores {
 	return projectStores{
-		keyExists: func(_ context.Context, name string) (bool, error) { return h.keys[name], nil },
 		takeDatabase: func(_ context.Context, _ environment.Tier, id string) error {
 			delete(h.databases, id)
 			h.taken = append(h.taken, "database "+id)
@@ -33,11 +34,6 @@ func (h *heldStores) stores() projectStores {
 		},
 		takeRuns: func(_ context.Context, tier environment.Tier, project string) error {
 			h.taken = append(h.taken, "runs "+string(tier)+"/"+project)
-			return nil
-		},
-		takeKey: func(_ context.Context, name string) error {
-			delete(h.keys, name)
-			h.taken = append(h.taken, "key "+name)
 			return nil
 		},
 	}
@@ -57,16 +53,13 @@ func removing(t *testing.T, project, database string) (bootstrap.Engine, *heldSt
 	if _, err := engine.Records.Write(context.Background(), records.Entry{Key: ports.ProjectDatabaseKey(tier, project), Value: value}); err != nil {
 		t.Fatal(err)
 	}
-	held := &heldStores{
-		databases: map[string]bool{database: true},
-		keys:      map[string]bool{ports.ProjectKey(tier, project): true},
-	}
+	held := &heldStores{databases: map[string]bool{database: true}}
 	return engine, held
 }
 
-func plannedRemovals(t *testing.T, engine bootstrap.Engine, held *heldStores, project string) []string {
+func plannedRemovals(t *testing.T, engine bootstrap.Engine, project string) []string {
 	t.Helper()
-	changes, err := planRemoveProject(context.Background(), engine, held.stores(), environment.TierProduction, project)
+	changes, err := planRemoveProject(context.Background(), engine, environment.TierProduction, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,29 +73,24 @@ func plannedRemovals(t *testing.T, engine bootstrap.Engine, held *heldStores, pr
 	return planned
 }
 
-func TestRemovingAProjectWithADatabaseOfItsOwnPlansThatDatabaseAndItsKey(t *testing.T) {
+func TestRemovingAProjectWithADatabaseOfItsOwnPlansThatDatabaseAlone(t *testing.T) {
 	t.Parallel()
 	tier := environment.TierProduction
 	own := ports.OwnDatabase("ocel", tier, "shop")
-	engine, held := removing(t, "shop", own)
+	engine, _ := removing(t, "shop", own)
 
-	want := []string{
-		string(bootstrap.KindDatabase) + " " + own,
-		string(bootstrap.KindKey) + " " + ports.ProjectKey(tier, "shop"),
-	}
-	if planned := plannedRemovals(t, engine, held, "shop"); !slices.Equal(planned, want) {
-		t.Errorf("removing shop plans %v, want %v", planned, want)
+	want := []string{string(bootstrap.KindDatabase) + " " + own}
+	if planned := plannedRemovals(t, engine, "shop"); !slices.Equal(planned, want) {
+		t.Errorf("removing shop plans %v, want %v: its values were sealed under the tier key, which the tier's other projects still seal under", planned, want)
 	}
 }
 
-func TestRemovingAProjectThatSharesItsTiersDatabasePlansOnlyItsKey(t *testing.T) {
+func TestRemovingAProjectThatSharesItsTiersDatabasePlansNothing(t *testing.T) {
 	t.Parallel()
-	tier := environment.TierProduction
-	engine, held := removing(t, "shop", ports.SharedDatabase("ocel", tier))
+	engine, _ := removing(t, "shop", ports.SharedDatabase("ocel", environment.TierProduction))
 
-	want := []string{string(bootstrap.KindKey) + " " + ports.ProjectKey(tier, "shop")}
-	if planned := plannedRemovals(t, engine, held, "shop"); !slices.Equal(planned, want) {
-		t.Errorf("removing shop plans %v, want %v: the shared database stays for the tier's other projects", planned, want)
+	if planned := plannedRemovals(t, engine, "shop"); len(planned) != 0 {
+		t.Errorf("removing shop plans %v, want nothing: the shared database and the tier key stay for the tier's other projects", planned)
 	}
 }
 
@@ -124,8 +112,8 @@ func TestRemovingAProjectLeavesNothingOfItsRecordsBehind(t *testing.T) {
 			if name == "shared" {
 				wantTaken = "runs " + string(tier) + "/shop"
 			}
-			if !slices.Contains(held.taken, wantTaken) || held.keys[ports.ProjectKey(tier, "shop")] {
-				t.Errorf("removing shop took %v, want %q and its key", held.taken, wantTaken)
+			if !slices.Equal(held.taken, []string{wantTaken}) {
+				t.Errorf("removing shop took %v, want %q alone", held.taken, wantTaken)
 			}
 			if name == "shared" && slices.ContainsFunc(held.taken, func(taken string) bool { return strings.HasPrefix(taken, "database ") }) {
 				t.Errorf("removing shop took %v, which deletes the database the tier's other projects share", held.taken)
@@ -133,30 +121,45 @@ func TestRemovingAProjectLeavesNothingOfItsRecordsBehind(t *testing.T) {
 			if _, found, err := ports.ReadProjectDatabaseRecord(context.Background(), engine.Records, tier, "shop"); err != nil || found {
 				t.Errorf("the database of shop is still on record: %t, %v", found, err)
 			}
-			if changes, err := planRemoveProject(context.Background(), engine, held.stores(), tier, "shop"); err != nil || len(changes) != 0 {
+			if changes, err := planRemoveProject(context.Background(), engine, tier, "shop"); err != nil || len(changes) != 0 {
 				t.Errorf("removing shop again plans %v, %v, want nothing left to take", changes, err)
 			}
 		})
 	}
 }
 
-func TestRemovingAProjectOrItsTierWithCloudKMSOffAsksForNoKey(t *testing.T) {
+func TestRemovingAProjectAsksGoogleForNoKey(t *testing.T) {
 	t.Parallel()
-	server := googletest.GrantedIAM()
-	server.ServicesOff = []string{"cloudkms.googleapis.com"}
-	b := bootstrap.Engine{Clients: server.Open(t)}
 	ctx := context.Background()
 	tier := environment.TierProduction
-	key := ports.ProjectKey(tier, "shop")
-	stores := storesOf(b, nil)
+	var mu sync.Mutex
+	var asked []string
+	google := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked = append(asked, r.Method+" "+r.URL.Path)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(google.Close)
+	b := bootstrap.Engine{Clients: googletest.Clients(google.URL), Records: fake.NewKeyValues()}
+	value, err := ports.ProjectDatabaseRecord(ports.SharedDatabase("ocel", tier))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Records.Write(ctx, records.Entry{Key: ports.ProjectDatabaseKey(tier, "shop"), Value: value}); err != nil {
+		t.Fatal(err)
+	}
 
-	if held, err := stores.keyExists(ctx, key); err != nil || held {
-		t.Errorf("keyExists(%s) with Cloud KMS off = %t, %v, want no key: none can be made while it is off", key, held, err)
+	if changes, err := PlanRemoveProject(ctx, b, tier, "shop"); err != nil || len(changes) != 0 {
+		t.Errorf("PlanRemoveProject() = %+v, %v, want nothing planned: shop's values were sealed under the tier key, which stays", changes, err)
 	}
-	if err := stores.takeKey(ctx, key); err != nil {
-		t.Errorf("takeKey(%s) with Cloud KMS off = %v, want the project removed", key, err)
+	noRuns := func(context.Context, environment.Tier, string) error { return nil }
+	if err := RemoveProject(ctx, b, noRuns, tier, "shop", nil); err != nil {
+		t.Errorf("RemoveProject() = %v", err)
 	}
-	if err := takeProjectKeys(ctx, b, tier); err != nil {
-		t.Errorf("takeProjectKeys() with Cloud KMS off = %v, want the tier removed", err)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) != 0 {
+		t.Errorf("removing shop asked Google %q, want nothing: no key of shop's is read or scheduled for destruction", asked)
 	}
 }
