@@ -84,7 +84,20 @@ func TestOnlyTheFailuresASecondCallCanCureAreTriedAgain(t *testing.T) {
 			if calls != want || !errors.Is(err, tried.err) {
 				t.Errorf("Called() made %d calls and returned %v, want %d calls and %v", calls, err, want, tried.err)
 			}
+			if got := googleretry.IsRetried(tried.err); got != tried.again {
+				t.Errorf("IsRetried(%v) = %t, want %t", tried.err, got, tried.again)
+			}
 		})
+	}
+}
+
+func TestAThrottledAnswerIsOneACallIsTriedAgainOn(t *testing.T) {
+	t.Parallel()
+
+	for _, throttled := range []error{answered(http.StatusTooManyRequests), status.Error(codes.ResourceExhausted, "quota")} {
+		if !googleretry.IsRetried(throttled) {
+			t.Errorf("IsRetried(%v) = false, want true", throttled)
+		}
 	}
 }
 

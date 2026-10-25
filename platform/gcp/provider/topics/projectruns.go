@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -43,7 +44,7 @@ func RemoveProjectRuns(ctx context.Context, clients *ports.Clients, tier environ
 }
 
 func queueDeletes(ctx context.Context, writer *firestore.BulkWriter, collection *firestore.CollectionRef) ([]*firestore.BulkWriterJob, error) {
-	documents := collection.Select().Documents(ctx)
+	documents := googleretry.QueryDocuments(ctx, collection.Select())
 	defer documents.Stop()
 	var jobs []*firestore.BulkWriterJob
 	for {

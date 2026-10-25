@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -53,11 +53,15 @@ func OpenTierCollection(client *firestore.Client, tier environment.Tier) *firest
 	return client.Collection(tierCollectionPrefix + string(tier))
 }
 
-func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firestore.CollectionRef, tier environment.Tier) error {
-	documents := collection.Select().Limit(1).Documents(ctx)
+func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firestore.CollectionRef, key records.Key) error {
+	documents := googleretry.QueryDocuments(ctx, collection.Select().Limit(1))
 	defer documents.Stop()
-	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
-		return s.refuseUnbootstrapped(tier)
+	_, err := documents.Next()
+	switch {
+	case status.Code(err) == codes.NotFound:
+		return s.refuseUnbootstrapped(key.Partition.Tier)
+	case googleretry.IsRetried(err):
+		return fmt.Errorf("read %s: %w", key, err)
 	}
 	return records.ErrNotFound
 }
@@ -75,7 +79,7 @@ func (s KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, er
 		return records.Entry{}, records.ErrNotFound
 	}
 	if status.Code(err) == codes.NotFound {
-		return records.Entry{}, s.refuseAbsentDocument(ctx, collection, key.Partition.Tier)
+		return records.Entry{}, s.refuseAbsentDocument(ctx, collection, key)
 	}
 	if err != nil {
 		return records.Entry{}, fmt.Errorf("read %s: %w", key, err)
@@ -192,27 +196,25 @@ func (s KeyValues) List(ctx context.Context, in records.Partition, under ...stri
 		ceiling = at + segmentCeiling
 	}
 
-	var found []records.Entry
-	documents := collection.
-		OrderBy(firestore.DocumentID, firestore.Asc).
-		StartAt(at).
-		EndBefore(ceiling).
-		Documents(ctx)
-	defer documents.Stop()
-	for {
-		snapshot, err := documents.Next()
-		if errors.Is(err, iterator.Done) {
-			return found, nil
-		}
-		if err != nil {
-			if _, owned := ProjectOfRecords(in); owned && status.Code(err) == codes.NotFound {
-				return nil, nil
-			}
-			if status.Code(err) == codes.NotFound {
-				return nil, s.refuseUnbootstrapped(in.Tier)
-			}
-			return nil, fmt.Errorf("read everything in %s: %w", in, err)
-		}
+	found, err := googleretry.Called(ctx, func() ([]*firestore.DocumentSnapshot, error) {
+		return collection.
+			OrderBy(firestore.DocumentID, firestore.Asc).
+			StartAt(at).
+			EndBefore(ceiling).
+			Documents(ctx).
+			GetAll()
+	})
+	if _, owned := ProjectOfRecords(in); owned && status.Code(err) == codes.NotFound {
+		return nil, nil
+	}
+	if status.Code(err) == codes.NotFound {
+		return nil, s.refuseUnbootstrapped(in.Tier)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read everything in %s: %w", in, err)
+	}
+	var entries []records.Entry
+	for _, snapshot := range found {
 		id := snapshot.Ref.ID
 		if id != at && !strings.HasPrefix(id, beneath) {
 			continue
@@ -229,8 +231,9 @@ func (s KeyValues) List(ctx context.Context, in records.Partition, under ...stri
 		if err != nil {
 			return nil, err
 		}
-		found = append(found, entry)
+		entries = append(entries, entry)
 	}
+	return entries, nil
 }
 
 func compareAndSet(tx *firestore.Transaction, collection *firestore.CollectionRef, entry records.Entry, next records.Revision) error {

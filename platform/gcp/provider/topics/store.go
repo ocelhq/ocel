@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -464,7 +465,7 @@ func (s Store) queriesOf(ctx context.Context, filter runs.RunFilter) ([]firestor
 }
 
 type topicListing struct {
-	documents *firestore.DocumentIterator
+	documents *googleretry.Documents
 	scanLimit int
 	tags      []string
 	scanned   int
@@ -532,7 +533,7 @@ func (s Store) ListRuns(ctx context.Context, filter runs.RunFilter) (runs.RunPag
 		if filter.Cursor != "" {
 			query = query.StartAfter(after.CreatedAt, after.Execution)
 		}
-		listing := &topicListing{documents: query.Limit(scanLimit).Documents(ctx), scanLimit: scanLimit, tags: filter.Tags}
+		listing := &topicListing{documents: googleretry.QueryDocuments(ctx, query.Limit(scanLimit)), scanLimit: scanLimit, tags: filter.Tags}
 		listings = append(listings, listing)
 		if err := listing.advance(); err != nil {
 			return runs.RunPage{}, err
@@ -605,7 +606,9 @@ func (s Store) CountRuns(ctx context.Context, filter runs.RunFilter) (int64, err
 
 func countOf(ctx context.Context, query firestore.Query, tags []string) (int64, error) {
 	if len(tags) <= 1 {
-		result, err := query.NewAggregationQuery().WithCount(countAlias).Get(ctx)
+		result, err := googleretry.Called(ctx, func() (firestore.AggregationResult, error) {
+			return query.NewAggregationQuery().WithCount(countAlias).Get(ctx)
+		})
 		if err != nil {
 			return 0, err
 		}
@@ -617,7 +620,7 @@ func countOf(ctx context.Context, query firestore.Query, tags []string) (int64, 
 		}
 		return counted.N, nil
 	}
-	documents := query.Select("tags").Documents(ctx)
+	documents := googleretry.QueryDocuments(ctx, query.Select("tags"))
 	defer documents.Stop()
 	var counted int64
 	for {

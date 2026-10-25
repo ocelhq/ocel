@@ -232,7 +232,7 @@ func (b Engine) takeKeyValues(ctx context.Context, tier environment.Tier) error 
 	if err != nil {
 		return err
 	}
-	documents := ports.OpenTierCollection(client, tier).Select().Documents(ctx)
+	documents := googleretry.QueryDocuments(ctx, ports.OpenTierCollection(client, tier).Select())
 	defer documents.Stop()
 	for {
 		kept, err := documents.Next()

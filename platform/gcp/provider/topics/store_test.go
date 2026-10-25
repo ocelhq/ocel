@@ -7,11 +7,14 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/firestore/apiv1/firestorepb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -88,5 +91,47 @@ func TestARunIsWrittenToTheDatabaseItsProjectKeepsItsRecordsInAndNeverToItsTiers
 		if databaseOf(fake.written[i]) == "projects/acme-prod/databases/"+ports.RecordsDatabase("ocel", tier) {
 			t.Errorf("a run of %s is written to the tier's records database, which no app may write", project)
 		}
+	}
+}
+
+type droppedCountFirestore struct {
+	firestorepb.UnimplementedFirestoreServer
+
+	dropped atomic.Int32
+	asked   atomic.Int32
+}
+
+func (f *droppedCountFirestore) RunAggregationQuery(_ *firestorepb.RunAggregationQueryRequest, stream firestorepb.Firestore_RunAggregationQueryServer) error {
+	f.asked.Add(1)
+	if f.dropped.Add(-1) >= 0 {
+		return status.Error(codes.Unavailable, "read tcp 10.0.0.2:50122->142.250.0.95:443: read: connection timed out")
+	}
+	counted := &firestorepb.AggregationResult{AggregateFields: map[string]*firestorepb.Value{"n": {ValueType: &firestorepb.Value_IntegerValue{IntegerValue: 3}}}}
+	return stream.Send(&firestorepb.RunAggregationQueryResponse{Result: counted, ReadTime: timestamppb.Now()})
+}
+
+func TestACountWhoseConnectionDropsIsCountedAgain(t *testing.T) {
+	t.Parallel()
+	fake := &droppedCountFirestore{}
+	fake.dropped.Store(1)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := grpc.NewServer()
+	firestorepb.RegisterFirestoreServer(server, fake)
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: "http://" + listener.Addr().String()}
+	clients.ProjectDatabases = map[string]string{"shop": ports.SharedDatabase("ocel", environment.TierPreview)}
+	store := topics.Store{Clients: clients, Scope: scopeOf(t)}
+
+	counted, err := store.CountRuns(context.Background(), runs.RunFilter{Topics: []string{"resize"}})
+
+	if err != nil || counted != 3 {
+		t.Errorf("CountRuns() = %d, %v, want 3 once the dropped connection is reopened", counted, err)
+	}
+	if got := fake.asked.Load(); got != 2 {
+		t.Errorf("the runs were counted %d times, want 2: once on the dropped connection and once after", got)
 	}
 }
