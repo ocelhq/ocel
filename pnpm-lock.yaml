@@ -933,6 +933,9 @@ importers:
       '@platform/edge-contract':
         specifier: workspace:*
         version: link:../../edge/contract
+      '@platform/s3-runtime':
+        specifier: workspace:*
+        version: link:../../s3/runtime
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
@@ -1080,6 +1083,31 @@ importers:
       sharp:
         specifier: ^0.35.3
         version: 0.35.4(@types/node@24.13.2)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
+
+  platform/s3/runtime:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1083.0
+        version: 3.1083.0
+      '@framework/next-cache':
+        specifier: workspace:*
+        version: link:../../../frameworks/next/cache
+      '@framework/next-runtime':
+        specifier: workspace:*
+        version: link:../../../frameworks/next/runtime
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../edge/contract
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

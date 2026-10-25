@@ -10,8 +10,9 @@ import {
 } from "@framework/next-cache";
 import { bucketVars } from "@platform/edge-contract/runtime-env";
 import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
+import { isNotFound } from "@platform/s3-runtime/object-store";
 import { newS3Client } from "../cache/sdk-clients.mjs";
-import { isNotFound, requireEnv, requireStorageCoordinate } from "./object-store.mjs";
+import { requireEnv, requireStorageCoordinate } from "./required-env.mjs";
 
 export interface S3Like {
   send(command: any): Promise<any>;

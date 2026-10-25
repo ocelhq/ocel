@@ -13,7 +13,7 @@ const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
 const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
-const bundledInternals = ["dispatch-assets", "dispatch-signing", "object-store"];
+const bundledInternals = ["dispatch-assets", "dispatch-signing", "required-env"];
 
 const bundledCacheModules = ["sdk-clients", "tag-index"];
 
