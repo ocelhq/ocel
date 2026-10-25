@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
       target:
-        description: "Where the harness deploys: aws-cloudflare, gcp-direct (production per test app), gcp-alb (previews behind the load balancer) or gcp-cloudflare (previews behind the Cloudflare edge)"
+        description: "Where the harness deploys: aws-cloudflare, gcp-direct (previews on their Cloud Run URLs), gcp-alb (previews behind the load balancer) or gcp-cloudflare (previews behind the Cloudflare edge)"
         default: aws-cloudflare
         type: choice
         options: [aws-cloudflare, gcp-direct, gcp-alb, gcp-cloudflare]

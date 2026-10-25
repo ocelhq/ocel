@@ -19,7 +19,6 @@ import {
   COMPAT_TARGETS,
   DEFAULT_NAMESPACE,
   DNS_LABEL,
-  deployPlanProblems,
   deployURL,
   ENTRY_SLUG,
   embeddedArtifactPairs,
@@ -32,7 +31,6 @@ import {
   heldLeaseWaitMs,
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
-  isProductionTarget,
   isrToken,
   LEASE_EXPIRY_SLACK_MS,
   LEASE_RETRY_MIN_WAIT_MS,
@@ -51,7 +49,6 @@ import {
   previewName,
   previewNameForApp,
   projectSlug,
-  projectSlugForApp,
   projectSlugForRun,
   projectSlugs,
   readCompatTarget,
@@ -60,8 +57,6 @@ import {
   retryDelayMs,
   SKIP_CHECKS_ENV,
   SLUG_PREFIX,
-  selectRunSlugs,
-  selectStrandedAppSlugs,
   selectStrandedSlugs,
   storageCoordinate,
   strandedProjectSlugs,
@@ -278,12 +273,6 @@ describe("strandedProjectSlugs", () => {
 
   it("names a project once however many times it is listed", () => {
     expect(strandedProjectSlugs(["e2e-1", "e2e-1"], "e2e-2")).toEqual(["e2e-1"]);
-  });
-
-  it("leaves the run's own per-app projects alone", () => {
-    expect(
-      strandedProjectSlugs(["e2e-42", "e2e-42-abcd1234", "e2e-41-abcd1234", ENTRY_SLUG], "e2e-42"),
-    ).toEqual(["e2e-41-abcd1234"]);
   });
 
   it("has nothing to do when the run's own project is the only one", () => {
@@ -1642,10 +1631,7 @@ describe("renderOcelConfig for a target", () => {
   });
 
   it("renders gcp-direct with its project and region as literals and no edge", () => {
-    const config = renderOcelConfig({
-      slug: "e2e-42-abcd1234",
-      target: { name: "gcp-direct", gcp },
-    });
+    const config = renderOcelConfig({ slug: "e2e-42", target: { name: "gcp-direct", gcp } });
 
     expect(config).toContain('import gcpProvider from "ocel/providers/gcp";');
     expect(config).toContain('provider: gcpProvider({ project: "p", region: "europe-west1" }),');
@@ -1693,104 +1679,11 @@ describe("hasSharedPreviewEntry", () => {
   });
 });
 
-describe("isProductionTarget", () => {
-  it("deploys production only for gcp-direct", () => {
-    expect(isProductionTarget({ name: "gcp-direct" })).toBe(true);
-    for (const name of ["aws-cloudflare", "gcp-alb", "gcp-cloudflare"]) {
-      expect(isProductionTarget({ name })).toBe(false);
-    }
-  });
-});
-
-describe("projectSlugForApp", () => {
-  const direct = { name: "gcp-direct" };
-
-  it("gives each test app of a gcp-direct run a project of its own, a DNS label within the slug limit", () => {
-    vi.stubEnv("GITHUB_RUN_ID", "42");
-    vi.stubEnv("NEXT_TEST_DIR", "");
-    const first = projectSlugForApp("/tmp/next-test-1", direct);
-    const second = projectSlugForApp("/tmp/next-test-2", direct);
-
-    expect(first).not.toBe(second);
-    for (const slug of [first, second]) {
-      expect(slug).toMatch(DNS_LABEL);
-      expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
-      expect(slug.startsWith(projectSlugForRun())).toBe(true);
-    }
-    expect(first).toMatch(/^e2e-42-[0-9a-f]{8}$/);
-  });
-
-  it("stays within the slug limit for an absurdly long run id", () => {
-    vi.stubEnv("GITHUB_RUN_ID", "9".repeat(200));
-    vi.stubEnv("NEXT_TEST_DIR", "");
-    const slug = projectSlugForApp("/tmp/next-test-1", direct);
-
-    expect(slug).toMatch(DNS_LABEL);
-    expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
-  });
-
-  it("gives every test app of a preview target the run's one project", () => {
-    vi.stubEnv("GITHUB_RUN_ID", "42");
-    for (const name of ["aws-cloudflare", "gcp-alb"]) {
-      expect(projectSlugForApp("/tmp/a", { name })).toBe(projectSlugForRun());
-      expect(projectSlugForApp("/tmp/b", { name })).toBe(projectSlugForRun());
-    }
-  });
-
-  it("derives the same slug from NEXT_TEST_DIR as from the app directory it names, so cleanup agrees with deploy", () => {
-    vi.stubEnv("GITHUB_RUN_ID", "42");
-    vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
-
-    expect(projectSlugForApp("/somewhere/else", direct)).toBe(
-      projectSlugForApp("/tmp/harness-app", direct),
-    );
-  });
-});
-
-describe("selectRunSlugs", () => {
-  it("names every per-app project of the run and no other run's", () => {
-    const listed = [
-      "e2e-42-abcd1234",
-      "e2e-420-abcd1234",
-      "e2e-4",
-      "acme",
-      "e2e-42",
-      "e2e-42-abcd1234",
-    ];
-
-    expect(selectRunSlugs(listed, "e2e-42")).toEqual(["e2e-42", "e2e-42-abcd1234"]);
-  });
-});
-
 describe("selectStrandedSlugs", () => {
   it("reclaims every e2e slug but the run's own and leaves other projects alone", () => {
     const listed = ["e2e-1", "e2e-2", "e2e-3", "acme", "e2e-2", "e2e-2-abcd1234"];
 
     expect(selectStrandedSlugs(listed, "e2e-2")).toEqual(["e2e-1", "e2e-2-abcd1234", "e2e-3"]);
-  });
-});
-
-describe("deployPlanProblems", () => {
-  it("accepts a production plan that said how to apply and wrote no result", () => {
-    expect(deployPlanProblems(`+ stack\n${PLAN_APPLY_HINT}\n`, { resultWritten: false })).toEqual(
-      [],
-    );
-  });
-
-  it("reports a production plan that wrote a deploy result", () => {
-    expect(deployPlanProblems(PLAN_APPLY_HINT, { resultWritten: true })).toHaveLength(1);
-    expect(deployPlanProblems("deploying", { resultWritten: false })).toHaveLength(1);
-  });
-});
-
-describe("selectStrandedAppSlugs", () => {
-  it("leaves the run's own per-app projects alone and reclaims every other e2e project", () => {
-    const listed = ["e2e-42", "e2e-42-abcd1234", "e2e-41-abcd1234", "e2e-420-abcd1234", "acme"];
-
-    expect(selectStrandedAppSlugs(listed, "e2e-42")).toEqual([
-      "e2e-41-abcd1234",
-      "e2e-420-abcd1234",
-    ]);
   });
 });
 

@@ -10,7 +10,6 @@ import { pathToFileURL } from "node:url";
 import {
   heldLeaseExpiry,
   heldLeaseWaitMs,
-  isProductionTarget,
   LEASE_TTL_MS,
   ocelBinary,
   projectSlugForRun,
@@ -18,7 +17,6 @@ import {
   readCompatTarget,
   renderOcelConfig,
   requireNamespace,
-  selectRunSlugs,
   withoutSkipChecks,
 } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
@@ -34,25 +32,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 async function main(named) {
   requireNamespace();
   const target = readCompatTarget();
-  if (named) {
-    return (await destroyProject(named, target)) ? 0 : 1;
-  }
-  if (!isProductionTarget(target)) {
-    return (await destroyProject(projectSlugForRun(), target)) ? 0 : 1;
-  }
-  const run = projectSlugForRun();
-  const slugs = selectRunSlugs(listProjects(target), run);
-  if (slugs.length === 0) {
-    console.error(`[ocel-e2e] nothing of ${run} is left`);
-    return 0;
-  }
-  const failed = [];
-  for (const slug of slugs) {
-    if (!(await destroyProject(slug, target))) {
-      failed.push(slug);
-    }
-  }
-  return failed.length === 0 ? 0 : 1;
+  return (await destroyProject(named || projectSlugForRun(), target)) ? 0 : 1;
 }
 
 function configuredFor(slug, target) {
@@ -87,11 +67,10 @@ export async function destroyProject(slug, target = readCompatTarget()) {
   requireNamespace();
   const { adapterDir, dir } = configuredFor(slug, target);
 
-  const tier = isProductionTarget(target) ? "production" : "preview";
   let deadline;
   for (;;) {
-    console.error(`[ocel-e2e] destroying the ${tier} footprint of project ${slug} (from ${dir})`);
-    const res = await runDestroy(adapterDir, tier, dir);
+    console.error(`[ocel-e2e] destroying the preview footprint of project ${slug} (from ${dir})`);
+    const res = await runDestroy(adapterDir, dir);
     if (!res.error && !res.signal && res.status === 0) {
       console.error(`[ocel-e2e] project ${slug} destroyed`);
       return true;
@@ -109,11 +88,11 @@ export async function destroyProject(slug, target = readCompatTarget()) {
   }
 }
 
-function runDestroy(adapterDir, tier, dir) {
+function runDestroy(adapterDir, dir) {
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      [ocelBinary(adapterDir), "projects", "destroy", "--tier", tier, "--yes"],
+      [ocelBinary(adapterDir), "projects", "destroy", "--tier", "preview", "--yes"],
       {
         cwd: dir,
         stdio: ["ignore", "pipe", "pipe"],
