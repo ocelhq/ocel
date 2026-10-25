@@ -226,7 +226,7 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesItsBuckets(t *testing.T) {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 
-	if err := p.release().RevokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+	if err := p.release().DeleteUnusedAccount(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestRevokingAnAppsBucketsToleratesABucketAlreadyDeleted(t *testing.T) {
 	delete(buckets.policies, uploads)
 	buckets.mu.Unlock()
 
-	if err := p.release().RevokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+	if err := p.release().DeleteUnusedAccount(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
 		t.Errorf("revokeAfterRemoval() with its bucket already deleted = %v, want nothing to revoke", err)
 	}
 }

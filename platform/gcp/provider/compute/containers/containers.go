@@ -144,7 +144,7 @@ func (p Containers) Remove(ctx context.Context, ref provider.StackRef, container
 	if err != nil {
 		return err
 	}
-	return p.RevokeAfterRemoval(ctx, c, ref, nil, containerNames(containers), progress)
+	return p.DeleteUnusedAccount(ctx, c, ref, nil, containerNames(containers), progress)
 }
 
 func containerNames(containers []provider.AppContainer) []string {

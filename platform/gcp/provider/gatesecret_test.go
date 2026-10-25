@@ -243,7 +243,7 @@ func TestRevokingAGatedProductionAppTakesItsReadOfTheProductionGateSecretAway(t 
 		t.Fatal(err)
 	}
 
-	if err := p.release().RevokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+	if err := p.release().DeleteUnusedAccount(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 
@@ -470,7 +470,7 @@ func TestRevokingAGatedPreviewAppTakesItsReadOfTheGateSecretAway(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := p.release().RevokeAfterRemoval(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+	if err := p.release().DeleteUnusedAccount(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval() = %v", err)
 	}
 

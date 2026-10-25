@@ -200,7 +200,7 @@ func (p Functions) Remove(ctx context.Context, ref provider.StackRef, functions 
 	if err != nil {
 		return err
 	}
-	return p.RevokeAfterRemoval(ctx, c, ref, functionNames(functions), nil, progress)
+	return p.DeleteUnusedAccount(ctx, c, ref, functionNames(functions), nil, progress)
 }
 
 func (p Functions) Name(ctx context.Context, spec provider.StackSpec) ([]provider.Function, error) {
