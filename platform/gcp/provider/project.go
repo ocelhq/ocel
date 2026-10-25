@@ -138,5 +138,5 @@ func (p *Provider) emulated() bool { return p.endpoint != "" }
 func (p *Provider) Region() string { return p.options.Region }
 
 func (p *Provider) services() *run.Services {
-	return &run.Services{OpenClients: p.openClients, Records: p.records}
+	return &run.Services{OpenClients: p.openClients, Records: p.KeyValues()}
 }
