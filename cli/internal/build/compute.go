@@ -103,6 +103,5 @@ func refuseImageSettings(a project.App) error {
 	if len(set) == 0 {
 		return nil
 	}
-	return fmt.Errorf("app %q runs Next in a container its provider builds from ocel's Next adapter, which runs `next build` itself and reads no %s: drop %s, or set image.dockerfile to build the image from a Dockerfile",
-		a.Name, english.And(set), english.Number(len(set), "it", "them"))
+	return fmt.Errorf("app %q is built by ocel's Next adapter, which reads no %s: drop %s", a.Name, english.And(set), english.Number(len(set), "it", "them"))
 }

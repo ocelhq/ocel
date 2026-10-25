@@ -99,8 +99,8 @@ func TestANextContainerBuiltFromItsFunctionRefusesTheImageSettingsOnlyAnImageBui
 			app.Container = &project.Container{Build: build}
 
 			_, err := ResolveNextContainerBuilds(projectOfApps(t, app), buildingNextContainersFromFunctions)
-			if err == nil || !strings.Contains(err.Error(), setting) || !strings.Contains(err.Error(), "image.dockerfile") {
-				t.Fatalf("ResolveNextContainerBuilds() = %v, want %s refused, naming the Dockerfile that would read it", err, setting)
+			if err == nil || !strings.Contains(err.Error(), setting) || !strings.Contains(err.Error(), "drop it") {
+				t.Fatalf("ResolveNextContainerBuilds() = %v, want %s refused, naming the one fix: drop it", err, setting)
 			}
 		})
 	}

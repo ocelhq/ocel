@@ -337,8 +337,8 @@ func TestAProviderThatBuildsNoNextContainerFromAFunctionRefusesOne(t *testing.T)
 	client := servedBy(t, fake.NewProvider(fake.Options{}))
 
 	_, _, err := deployStream(t, client, functionContainerDeployRequest(builtServerFunction()))
-	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "image.dockerfile") {
-		t.Fatalf("Deploy() = %v, want a refusal naming the Dockerfile that builds this provider an image to run", err)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "run `ocel build` again") {
+		t.Fatalf("Deploy() = %v, want a refusal naming the build that makes this provider an image to run", err)
 	}
 }
 
