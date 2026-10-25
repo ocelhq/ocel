@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/task"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
@@ -70,10 +71,10 @@ func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, 
 	if err != nil {
 		return err
 	}
-	records := store.Collection(tagCollection).
+	records := googleretry.QueryDocuments(ctx, store.Collection(tagCollection).
 		Where(tagPrefixField, ">=", prefix).
 		Where(tagPrefixField, "<", prefix+"\uf8ff").
-		Select().Documents(ctx)
+		Select())
 	defer records.Stop()
 
 	writer := store.BulkWriter(ctx)

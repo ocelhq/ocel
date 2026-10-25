@@ -111,6 +111,11 @@ func AnsweredCode(err error) int {
 	return 0
 }
 
+func IsRetried(err error) bool {
+	code := AnsweredCode(err)
+	return isThrottled(code, err) || isRetryable(code, err)
+}
+
 func isRetryable(code int, err error) bool {
 	if code != 0 {
 		return IsRetryableAnswer(code)

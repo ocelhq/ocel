@@ -2,10 +2,12 @@ package topics_test
 
 import (
 	"context"
+	"maps"
 	"net"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"cloud.google.com/go/firestore/apiv1/firestorepb"
@@ -26,6 +28,7 @@ type heldFirestore struct {
 	held    map[string]bool
 	listed  []string
 	queried []string
+	dropped atomic.Int32
 }
 
 func (f *heldFirestore) ListDocuments(_ context.Context, req *firestorepb.ListDocumentsRequest) (*firestorepb.ListDocumentsResponse, error) {
@@ -50,6 +53,9 @@ func (f *heldFirestore) ListDocuments(_ context.Context, req *firestorepb.ListDo
 }
 
 func (f *heldFirestore) RunQuery(req *firestorepb.RunQueryRequest, stream firestorepb.Firestore_RunQueryServer) error {
+	if f.dropped.Add(-1) >= 0 {
+		return status.Error(codes.Unavailable, "read tcp 10.0.0.2:50122->142.250.0.95:443: read: connection timed out")
+	}
 	f.mu.Lock()
 	collection := req.GetParent() + "/" + req.GetStructuredQuery().GetFrom()[0].GetCollectionId() + "/"
 	f.queried = append(f.queried, collection)
@@ -92,6 +98,25 @@ func holding(t *testing.T, fake *heldFirestore) *ports.Clients {
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	return &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: "http://" + listener.Addr().String()}
+}
+
+func TestRemovingAProjectsRunsWhoseListingDropsListsThemAgainAndDeletesThem(t *testing.T) {
+	t.Parallel()
+	tier := environment.TierProduction
+	database := ports.SharedDatabase("ocel", tier)
+	root := "projects/acme-prod/databases/" + database + "/documents/taskstores/"
+	fake := &heldFirestore{held: map[string]bool{root + "production~shop/environments/production/runs/e1": true}}
+	fake.dropped.Store(1)
+	clients := holding(t, fake)
+	clients.ProjectDatabases = map[string]string{"shop": database}
+
+	if err := topics.RemoveProjectRuns(context.Background(), clients, tier, "shop"); err != nil {
+		t.Fatalf("RemoveProjectRuns() = %v, want the runs listed again once the dropped connection is reopened", err)
+	}
+
+	if len(fake.held) != 0 {
+		t.Errorf("after removing shop's runs %v are left, want none", slices.Collect(maps.Keys(fake.held)))
+	}
 }
 
 func TestRemovingAProjectsRunsDeletesEveryRunAndRecordOfItsEnvironmentsAndNoOtherProjects(t *testing.T) {
