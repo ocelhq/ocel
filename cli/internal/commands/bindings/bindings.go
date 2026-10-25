@@ -60,7 +60,7 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 		Long: "Manage the bindings this project's apps resolve.\n\n" +
 			"A binding is one resource an app reaches — its address, its credentials and the " +
 			"permissions that go with it — published under a name apps bind to. Records live in " +
-			"your own provider account and are reached through the provider, never by the CLI directly.",
+			"your own provider account.",
 	}
 	cmd.AddCommand(newSetCommand(invocation), newRemoveCommand(invocation), newListCommand(invocation), newGenerateCommand(invocation))
 	return commands.DeclareReadOnly(commands.ReserveStdout(cmd))
@@ -79,12 +79,10 @@ func newSetCommand(invocation commands.Invocation) *cobra.Command {
 		Long: "Publish one binding, read as JSON on stdin.\n\n" +
 			"The record is a provider.variablestore.v1.PublishedBinding in protobuf JSON: under \"binding\" the " +
 			"common.bindings.v1.Binding an app reads, and under \"grants\" the permissions a deploy gives the apps " +
-			"bound to it, which no app ever sees. The binding includes its own name, so there is nothing to name " +
-			"on the command line:\n\n" +
+			"bound to it, which no app ever sees. The binding carries its own name:\n\n" +
 			"  ocel bindings set < binding.json\n\n" +
 			"A name belongs to whoever published it. Publishing over a name another publisher " +
-			"owns is refused rather than handing every app bound to that name another " +
-			"resource's values; pass --owner to publish as that publisher.",
+			"owns is refused; pass --owner to publish as that publisher.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
@@ -139,8 +137,7 @@ func newGenerateCommand(invocation commands.Invocation) *cobra.Command {
 			"--environment name, and writes " + bindingTypesFileName + " beside your ocel config. The file " +
 			"names each record and the properties it has, so `bindings.<type>.<name>.<property>` in a transform " +
 			"is checked where it is written instead of at the deploy. Check it in, and run this again when " +
-			"what you publish changes.\n\n" +
-			"This reads the published records, so it logs in and runs the provider.",
+			"what you publish changes. It runs the provider.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
@@ -187,7 +184,7 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 	binding := published.GetBinding()
 	owner := opts.ownerOrDefault()
 	if owner == bindings.InlineRecordOwner {
-		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
+		return fmt.Errorf("publisher %q is reserved for bindings written in the config: pass another --owner", owner)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := provider.VariableStore()
@@ -218,7 +215,7 @@ func decodePublishedBinding(stdin io.Reader) (*variablestorev1.PublishedBinding,
 		return nil, fmt.Errorf("read the binding on stdin: %w", err)
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
-		return nil, errors.New("nothing came in on stdin; `ocel bindings set` reads one published binding as protobuf JSON, so pipe it in: `ocel bindings set < binding.json`")
+		return nil, errors.New("nothing came in on stdin: run `ocel bindings set < binding.json`")
 	}
 	var shape any
 	if err := json.Unmarshal(raw, &shape); err != nil {
@@ -231,9 +228,9 @@ func decodePublishedBinding(stdin io.Reader) (*variablestorev1.PublishedBinding,
 	published := &variablestorev1.PublishedBinding{}
 	if err := protojson.Unmarshal(raw, published); err != nil {
 		if at := mismatchedField(published.ProtoReflect().Descriptor(), shape, ""); at != "" {
-			return nil, fmt.Errorf("the binding on stdin does not have the shape of a published binding: %s", at)
+			return nil, fmt.Errorf("the binding on stdin is not a published binding: %s", at)
 		}
-		return nil, errors.New("the binding on stdin does not have the shape of a published binding")
+		return nil, errors.New("the binding on stdin is not a published binding")
 	}
 	if published.GetBinding() == nil {
 		return nil, errors.New(`the published binding on stdin names no "binding": it is {"binding": <the record an app reads>, "grants": [<what a deploy grants the apps bound to it>]}`)
@@ -309,7 +306,7 @@ func mismatchedValue(field protoreflect.FieldDescriptor, value any, at string) s
 
 func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd, name string, opts bindingsOptions, stdout io.Writer) error {
 	if bindings.IsInlineRecord(name) {
-		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
+		return fmt.Errorf("%s is the record of a binding written in the config's `bindings`: remove it there, and the next deploy removes the record", name)
 	}
 	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := provider.VariableStore()
@@ -381,7 +378,7 @@ func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cw
 
 		headline := fmt.Sprintf("Wrote %s from the %d bindings published to %s", path, len(resp.GetBindings()), describeBindingCoordinate(opts))
 		if len(resp.GetBindings()) == 0 {
-			headline = fmt.Sprintf("Nothing is published to %s; wrote %s, which names no record and so leaves no binding name open", describeBindingCoordinate(opts), path)
+			headline = fmt.Sprintf("Nothing is published to %s; wrote %s with no records", describeBindingCoordinate(opts), path)
 		}
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {
 			return headline, terminal.WriteResultJSON(stdout, &resultv1.BindingGenerateResult{Path: path, Bindings: bindingSummaries(resp.GetBindings())})
