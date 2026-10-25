@@ -121,8 +121,10 @@ The properties are inserted verbatim — string, number, boolean, list or object
 and the surface being filled is what rejects a value of the wrong shape. `opts`
 is the same as for `bind.postgres`.
 
-No app reads a custom binding, so it takes no `grants`: nothing would attach them.
-Naming one in `bindings` is refused for the same reason.
+No app reads a custom binding's values, and the project's `bindings` refuses one.
+`bind.custom` here publishes no grants; an app receives the grants a record is
+published with elsewhere, such as with `@ocel/pulumi`, by naming it in its own
+`bindings.custom`.
 
 ## Types
 
