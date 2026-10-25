@@ -54,29 +54,29 @@ const ReleaseAttempts = 4
 const MaxRequestTimeout = 3600 * time.Second
 
 type Serving struct {
-	Service        string
-	Tier           environment.Tier
-	Shared         bool
-	Image          string
-	Env            map[string]string
-	Account        string
-	Compute        provider.Compute
-	Health         string
-	ProbeToken     string
-	Public         bool
-	CPU            string
-	Memory         int
-	Concurrency    int
-	Generation     string
-	Instances      provider.Instances
-	Timeout        time.Duration
-	Ingress        string
-	Mounts         []SecretMount
-	Egress         *PrivateEgress
-	Tag            string
-	InstanceBilled bool
-	Labels         map[string]string
-	Audiences      []string
+	Service     string
+	Tier        environment.Tier
+	Shared      bool
+	Image       string
+	Env         map[string]string
+	Account     string
+	Compute     provider.Compute
+	Health      string
+	ProbeToken  string
+	Public      bool
+	CPU         string
+	Memory      int
+	Concurrency int
+	Generation  string
+	Instances   provider.Instances
+	Timeout     time.Duration
+	Ingress     string
+	Mounts      []SecretMount
+	Egress      *PrivateEgress
+	Tag         string
+	Billing     Billing
+	Labels      map[string]string
+	Audiences   []string
 
 	OpensOnPromotion bool
 }
@@ -720,7 +720,7 @@ func isLatestOrRouted(service *run.GoogleCloudRunV2Service, revision string) boo
 }
 
 func (s Serving) billsPerRequest() bool {
-	return s.Compute == provider.ComputeServerless && !s.InstanceBilled
+	return ResolveBilling(s.Billing, s.Compute) == BillingRequest
 }
 
 type Services struct {

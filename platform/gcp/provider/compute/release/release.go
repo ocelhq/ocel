@@ -31,6 +31,7 @@ type Release struct {
 	Offers            cloudflareorigin.Offers
 	Region            string
 	ContainerEndpoint string
+	ResolveBilling    func(app string, compute provider.Compute, servesNext bool) run.Billing
 
 	ContainerTagEndpoint string
 	GateInEnv            bool

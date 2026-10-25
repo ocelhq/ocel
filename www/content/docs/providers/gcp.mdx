@@ -143,11 +143,65 @@ name is recorded in it before the bucket is made, and a deploy reads the names f
 nothing lists the project's buckets. An app's bucket is found the same way, from the name its first deploy recorded for its
 project, environment and bucket.
 
+## Billing
+
+Cloud Run bills a service per request or per instance. Billed per request, a service is
+charged only while it answers, and Cloud Run takes its CPU away once a response ends: work the app
+runs after the response, such as `after()`, `waitUntil`, refreshing a stale page in the background
+or writing a tag purge, may stall until the next request reaches that instance, or never run. Billed
+per instance, a service keeps its CPU, so that work finishes, and is charged for each instance's
+whole life: up to 15 minutes idle after its last request, and an idle `instances.min` instance in full.
+
+A serverless Next app and every container are billed per instance, and every other serverless app
+per request. Set `billing` to `request` or `instance` under an app's name in `apps` to choose:
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: gcpProvider({
+    project: "my-project",
+    region: "europe-west1",
+    apps: { web: { billing: "request" }, jobs: { billing: "instance" } },
+  }),
+  apps: [
+    { name: "web", path: "web" },
+    { name: "jobs", path: "jobs" },
+  ],
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "gcp": {
+      "project": "my-project",
+      "region": "europe-west1",
+      "apps": { "web": { "billing": "request" }, "jobs": { "billing": "instance" } }
+    }
+  },
+  "apps": [
+    { "name": "web", "path": "web" },
+    { "name": "jobs", "path": "jobs" }
+  ]
+}
+```
+
+The choice holds whatever the app is built with: a Next app set to `request` gets no exception for
+the work it runs after a response. It covers the services that serve the app; its
+[workers](#topics-tasks-and-workers) stay billed per request. A deploy whose `apps` names an app
+the project does not have is refused. `ocel cost` prices each service by the billing it runs with.
+
 ## Next.js
 
-A serverless Next app runs as Cloud Run services billed per instance, each with 1 vCPU and 2 GiB
-of memory. An instance keeps its CPU after it answers, so the work Next runs after the response
-(`after()`, refreshing a stale page, writing the cache) finishes rather than stalling until the next request.
+A serverless Next app runs as Cloud Run services billed per instance unless its app sets
+[`billing`](#billing), each with 1 vCPU and 2 GiB of memory. An instance keeps its CPU after it
+answers, so the work Next runs after the response (`after()`, refreshing a stale page, writing the
+cache) finishes rather than stalling until the next request.
 
 The catch is the bill. Cloud Run charges an instance for its whole life, idle time included, and
 keeps an idle instance for up to 15 minutes after its last request. At list prices one instance costs
@@ -158,7 +212,7 @@ most of its life, roughly three quarters or more, answering requests. `ocel cost
 this way.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
-CPU always allocated, so it is billed per instance, and it keeps at least one instance running
+CPU always allocated, so it is billed per instance unless its app sets `billing`, and it keeps at least one instance running
 unless `instances.min` is 0. It keeps its cache and tag records where a serverless Next app does,
 in the tier's buckets and Firestore, so a revalidated tag reaches every instance, and it refreshes stale
 pages in the background. Cloud CDN does not store its pages: ocel marks every response that

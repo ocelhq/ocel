@@ -112,7 +112,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			Account:          account,
 			Compute:          provider.ComputeServerless,
 			Public:           true,
-			InstanceBilled:   next.Serves(app),
+			Billing:          p.ResolveBilling(app.App, provider.ComputeServerless, next.Serves(app)),
 			Ingress:          run.IngressFor(run.FactsOf(spec.Edge)),
 			Memory:           fn.Memory,
 			Instances:        instances,

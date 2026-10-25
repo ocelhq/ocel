@@ -21,6 +21,7 @@ func (p *Provider) release() *release.Release {
 		Offers:            p.offers(),
 		Region:            p.options.Region,
 		ContainerEndpoint: p.containerEndpoint(),
+		ResolveBilling:    p.options.resolveBilling,
 
 		ContainerTagEndpoint: p.containerTagEndpoint(),
 		GateInEnv:            p.gateInEnv,
