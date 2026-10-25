@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -29,16 +29,28 @@ const token = "cloud-token"
 type fakeCloud struct {
 	cloudv1connect.UnimplementedUploadServiceHandler
 
-	mu         sync.Mutex
-	stored     map[string][]byte
-	asked      [][]string
-	committed  *cloudv1.SourceManifest
-	bearers    []string
-	refuse     map[string][]int
-	retryAfter string
-	refused    error
-	inFlight   atomic.Int32
-	peak       atomic.Int32
+	method     string
+	uploadBase string
+	storageURL string
+
+	mu             sync.Mutex
+	stored         map[string][]byte
+	asked          [][]string
+	committed      *cloudv1.SourceManifest
+	bearers        []string
+	storageBearers []string
+	posted         []postedForm
+	refuse         map[string][]int
+	retryAfter     string
+	refused        error
+	inFlight       atomic.Int32
+	peak           atomic.Int32
+}
+
+type postedForm struct {
+	fields        []string
+	fileLast      bool
+	contentLength int64
 }
 
 func serve(t *testing.T, fake *fakeCloud) *httptest.Server {
@@ -46,9 +58,30 @@ func serve(t *testing.T, fake *fakeCloud) *httptest.Server {
 	if fake.stored == nil {
 		fake.stored = map[string][]byte{}
 	}
+	storageMux := http.NewServeMux()
+	storageMux.HandleFunc("PUT /blobs/{digest}", fake.put)
+	storageMux.HandleFunc("POST /blobs", fake.post)
+	storage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fake.mu.Lock()
+		fake.storageBearers = append(fake.storageBearers, r.Header.Get("Authorization"))
+		fake.mu.Unlock()
+		now := fake.inFlight.Add(1)
+		defer fake.inFlight.Add(-1)
+		for {
+			peak := fake.peak.Load()
+			if now <= peak || fake.peak.CompareAndSwap(peak, now) {
+				break
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+		storageMux.ServeHTTP(w, r)
+	}))
+	t.Cleanup(storage.Close)
+	fake.storageURL = storage.URL
+	fake.uploadBase = storage.URL
+
 	mux := http.NewServeMux()
 	mux.Handle(cloudv1connect.NewUploadServiceHandler(fake, connect.WithInterceptors(connectvalidate.NewInterceptor())))
-	mux.HandleFunc("PUT /v1/blobs/{digest}", fake.put)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fake.bearer(r.Header)
 		mux.ServeHTTP(w, r)
@@ -63,6 +96,27 @@ func (f *fakeCloud) bearer(header http.Header) {
 	f.bearers = append(f.bearers, header.Get("Authorization"))
 }
 
+func signatureOf(digest string) string {
+	return sum("signed " + digest)
+}
+
+func (f *fakeCloud) target(digest string) *cloudv1.Upload {
+	if f.method == http.MethodPost {
+		return &cloudv1.Upload{
+			Digest: digest,
+			Url:    f.uploadBase + "/blobs",
+			Method: http.MethodPost,
+			Fields: map[string]string{"key": digest, "policy": "e30=", "signature": signatureOf(digest)},
+		}
+	}
+	return &cloudv1.Upload{
+		Digest:  digest,
+		Url:     f.uploadBase + "/blobs/" + digest + "?signature=" + signatureOf(digest),
+		Method:  http.MethodPut,
+		Headers: map[string]string{"Upload-Checksum-Sha256": digest},
+	}
+}
+
 func (f *fakeCloud) Missing(_ context.Context, req *cloudv1.MissingRequest) (*cloudv1.MissingResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -70,13 +124,13 @@ func (f *fakeCloud) Missing(_ context.Context, req *cloudv1.MissingRequest) (*cl
 	if f.refused != nil {
 		return nil, f.refused
 	}
-	var missing []string
+	missing := &cloudv1.MissingResponse{}
 	for _, digest := range req.GetDigests() {
 		if _, ok := f.stored[digest]; !ok {
-			missing = append(missing, digest)
+			missing.Uploads = append(missing.Uploads, f.target(digest))
 		}
 	}
-	return &cloudv1.MissingResponse{Digests: missing}, nil
+	return missing, nil
 }
 
 func (f *fakeCloud) CommitSource(_ context.Context, req *cloudv1.CommitSourceRequest) (*cloudv1.CommitSourceResponse, error) {
@@ -95,21 +149,67 @@ func (f *fakeCloud) CommitSource(_ context.Context, req *cloudv1.CommitSourceReq
 }
 
 func (f *fakeCloud) put(w http.ResponseWriter, r *http.Request) {
-	now := f.inFlight.Add(1)
-	defer f.inFlight.Add(-1)
-	for {
-		peak := f.peak.Load()
-		if now <= peak || f.peak.CompareAndSwap(peak, now) {
-			break
-		}
-	}
-	time.Sleep(5 * time.Millisecond)
 	digest := r.PathValue("digest")
+	if r.URL.Query().Get("signature") != signatureOf(digest) {
+		http.Error(w, "the signature does not match", http.StatusForbidden)
+		return
+	}
+	if r.Header.Get("Upload-Checksum-Sha256") != digest {
+		http.Error(w, "the upload names no checksum", http.StatusBadRequest)
+		return
+	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	f.store(w, digest, body)
+}
+
+func (f *fakeCloud) post(w http.ResponseWriter, r *http.Request) {
+	form, err := r.MultipartReader()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fields := map[string]string{}
+	posted := postedForm{contentLength: r.ContentLength}
+	var body []byte
+	for {
+		part, err := form.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		read, err := io.ReadAll(part)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if part.FormName() == "file" {
+			body = read
+			_, err := form.NextPart()
+			posted.fileLast = errors.Is(err, io.EOF)
+			break
+		}
+		fields[part.FormName()] = string(read)
+		posted.fields = append(posted.fields, part.FormName())
+	}
+	f.mu.Lock()
+	f.posted = append(f.posted, posted)
+	f.mu.Unlock()
+	digest := fields["key"]
+	if fields["signature"] != signatureOf(digest) {
+		http.Error(w, "the policy signature does not match", http.StatusForbidden)
+		return
+	}
+	f.store(w, digest, body)
+}
+
+func (f *fakeCloud) store(w http.ResponseWriter, digest string, body []byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if codes := f.refuse[digest]; len(codes) > 0 {
@@ -240,6 +340,84 @@ func TestUploadSendsOnlyTheBlobsOcelCloudLacksThenCommitsTheManifest(t *testing.
 	}
 }
 
+func TestUploadSendsEachBlobAsTheBodyOfThePutItsTargetNames(t *testing.T) {
+	source := memorySource{"a.ts": "alpha", "b.ts": "bravo"}
+	fake := &fakeCloud{method: http.MethodPut}
+	c, _ := newTestClient(serve(t, fake), &staticTokens{})
+
+	if _, _, _, err := upload(t, c, source); err != nil {
+		t.Fatalf("upload through PUT targets = %v, want both blobs stored under the target's signature and headers", err)
+	}
+	for _, body := range []string{"alpha", "bravo"} {
+		if string(fake.stored[sum(body)]) != body {
+			t.Fatalf("the PUT target never received %q", body)
+		}
+	}
+}
+
+func TestUploadSendsEachBlobAsTheFileFieldOfThePostPolicyItsTargetNames(t *testing.T) {
+	source := memorySource{"a.ts": "alpha", "b.ts": "bravo"}
+	fake := &fakeCloud{method: http.MethodPost}
+	c, _ := newTestClient(serve(t, fake), &staticTokens{})
+
+	if _, _, seen, err := upload(t, c, source); err != nil {
+		t.Fatalf("upload through POST policy targets = %v, want both blobs stored", err)
+	} else if last := seen[len(seen)-1]; last.SentBytes != uint64(len("alpha")+len("bravo")) {
+		t.Fatalf("progress ended at %+v, want only the files' bytes counted", last)
+	}
+	for _, body := range []string{"alpha", "bravo"} {
+		if string(fake.stored[sum(body)]) != body {
+			t.Fatalf("the POST policy target never received %q", body)
+		}
+	}
+	if len(fake.posted) != 2 {
+		t.Fatalf("posted %d forms, want one per blob", len(fake.posted))
+	}
+	for _, form := range fake.posted {
+		slices.Sort(form.fields)
+		if !slices.Equal(form.fields, []string{"key", "policy", "signature"}) || !form.fileLast {
+			t.Fatalf("posted fields %v then a file last = %v, want every policy field before the file, and the file last", form.fields, form.fileLast)
+		}
+		if form.contentLength <= 0 {
+			t.Fatalf("a form was posted with content length %d, want its length known, as a POST policy requires", form.contentLength)
+		}
+	}
+}
+
+func TestUploadNeverSendsTheOcelCloudTokenToAnUploadTarget(t *testing.T) {
+	for _, method := range []string{http.MethodPut, http.MethodPost} {
+		t.Run(method, func(t *testing.T) {
+			fake := &fakeCloud{method: method}
+			c, _ := newTestClient(serve(t, fake), &staticTokens{})
+			if _, _, _, err := upload(t, c, memorySource{"a.ts": "alpha"}); err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.storageBearers) == 0 {
+				t.Fatal("the upload target was never reached")
+			}
+			for _, bearer := range fake.storageBearers {
+				if bearer != "" {
+					t.Fatalf("the upload target was sent %q, want no token: the target's own signature is its credential", bearer)
+				}
+			}
+		})
+	}
+}
+
+func TestCommitIsRefusedWhileABlobItsManifestNamesWasNeverUploaded(t *testing.T) {
+	source := memorySource{"a.ts": "alpha"}
+	c, _ := newTestClient(serve(t, &fakeCloud{}), &staticTokens{})
+	planned, err := c.Plan(t.Context(), source)
+	if err != nil || len(planned.Missing) != 1 {
+		t.Fatalf("Plan() = %+v, %v, want alpha missing", planned, err)
+	}
+
+	_, err = c.Commit(t.Context(), source.manifest())
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("err = %v, want the failed precondition Ocel Cloud answered", err)
+	}
+}
+
 func TestUploadAsksForMissingBlobsInBatches(t *testing.T) {
 	source := memorySource{}
 	for i := range MaxDigestsPerCall + 5 {
@@ -280,8 +458,8 @@ func TestUploadSendsAtMostEightBlobsAtOnce(t *testing.T) {
 	if _, _, _, err := upload(t, c, source); err != nil {
 		t.Fatal(err)
 	}
-	if peak := fake.peak.Load(); peak > putConcurrency || peak < 2 {
-		t.Fatalf("at most %d uploads ran at once, want between 2 and %d", peak, putConcurrency)
+	if peak := fake.peak.Load(); peak > uploadConcurrency || peak < 2 {
+		t.Fatalf("at most %d uploads ran at once, want between 2 and %d", peak, uploadConcurrency)
 	}
 }
 
@@ -329,23 +507,55 @@ func TestUploadGivesUpOnABlobAfterItsAttempts(t *testing.T) {
 	}
 }
 
-func TestUploadDoesNotRetryABlobOcelCloudRefused(t *testing.T) {
-	source := memorySource{"a.ts": "alpha"}
-	fake := &fakeCloud{refuse: map[string][]int{sum("alpha"): {http.StatusForbidden}}}
-	c, slept := newTestClient(serve(t, fake), &staticTokens{})
-	_, _, _, err := upload(t, c, source)
-	if err == nil || !strings.Contains(err.Error(), "403") {
-		t.Fatalf("err = %v, want the refusal", err)
-	}
-	if len(*slept) != 0 {
-		t.Fatalf("slept %v, want no retry", *slept)
+func TestUploadDoesNotRetryABlobItsTargetRefusedAndSaysWhatTheTargetAnswered(t *testing.T) {
+	for _, method := range []string{http.MethodPut, http.MethodPost} {
+		t.Run(method, func(t *testing.T) {
+			source := memorySource{"a.ts": "alpha"}
+			fake := &fakeCloud{method: method, refuse: map[string][]int{sum("alpha"): {http.StatusForbidden}}}
+			c, slept := newTestClient(serve(t, fake), &staticTokens{})
+			_, _, _, err := upload(t, c, source)
+			if err == nil || !strings.Contains(err.Error(), "403") || !strings.Contains(err.Error(), "not now") {
+				t.Fatalf("err = %v, want the status and what the target said", err)
+			}
+			if strings.Contains(err.Error(), signatureOf(sum("alpha"))) {
+				t.Fatalf("err = %v names the target's signature, a credential", err)
+			}
+			if len(*slept) != 0 {
+				t.Fatalf("slept %v, want no retry", *slept)
+			}
+		})
 	}
 }
 
-func TestUploadRetriesWhenOcelCloudIsUnreachable(t *testing.T) {
+func TestUploadNamesNoSignatureOfATargetItCouldNotReach(t *testing.T) {
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close()
+	source := memorySource{"a.ts": "alpha"}
+	fake := &fakeCloud{}
+	c, _ := newTestClient(serve(t, fake), &staticTokens{})
+	fake.uploadBase = gone.URL
+	planned, err := c.Plan(t.Context(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = c.Send(t.Context(), source, planned, nil)
+	if err == nil {
+		t.Fatal("Send() to a target nothing listens on = nil")
+	}
+	if strings.Contains(err.Error(), signatureOf(sum("alpha"))) {
+		t.Fatalf("err = %v names the target's signature, a credential", err)
+	}
+	if host := strings.TrimPrefix(gone.URL, "http://"); !strings.Contains(err.Error(), host) {
+		t.Fatalf("err = %v, want the host it could not reach, %s", err, host)
+	}
+}
+
+func TestUploadRetriesWhenItsTargetIsUnreachable(t *testing.T) {
 	var calls atomic.Int32
-	fake := &fakeCloud{stored: map[string][]byte{}}
-	inner := serve(t, fake)
+	fake := &fakeCloud{}
+	api := serve(t, fake)
+	storage := fake.storageURL
 	flaky := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if calls.Add(1) == 1 {
 			hijacked, _, err := w.(http.Hijacker).Hijack()
@@ -354,7 +564,7 @@ func TestUploadRetriesWhenOcelCloudIsUnreachable(t *testing.T) {
 			}
 			return
 		}
-		proxied, err := http.NewRequestWithContext(r.Context(), r.Method, inner.URL+r.URL.Path, r.Body)
+		proxied, err := http.NewRequestWithContext(r.Context(), r.Method, storage+r.URL.RequestURI(), r.Body)
 		if err != nil {
 			t.Error(err)
 			return
@@ -374,9 +584,14 @@ func TestUploadRetriesWhenOcelCloudIsUnreachable(t *testing.T) {
 		_, _ = io.Copy(w, resp.Body)
 	}))
 	t.Cleanup(flaky.Close)
-	c, slept := newTestClient(flaky, &staticTokens{})
-	planned := Planned{Missing: memorySource{"a.ts": "alpha"}.Blobs(), TotalBytes: 5}
-	if err := c.Send(t.Context(), memorySource{"a.ts": "alpha"}, planned, nil); err != nil {
+	fake.uploadBase = flaky.URL
+	c, slept := newTestClient(api, &staticTokens{})
+	source := memorySource{"a.ts": "alpha"}
+	planned, err := c.Plan(t.Context(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Send(t.Context(), source, planned, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(*slept) != 1 || fake.stored[sum("alpha")] == nil {
@@ -384,12 +599,24 @@ func TestUploadRetriesWhenOcelCloudIsUnreachable(t *testing.T) {
 	}
 }
 
-func TestCommitSurfacesWhatOcelCloudRefused(t *testing.T) {
-	source := memorySource{"a.ts": "alpha"}
-	c, _ := newTestClient(serve(t, &fakeCloud{}), &staticTokens{})
-	_, err := c.Commit(t.Context(), source.manifest())
-	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Fatalf("err = %v, want the failed precondition Ocel Cloud answered", err)
+func TestPlanRefusesATargetForABlobItNeverAskedAbout(t *testing.T) {
+	fake := &fakeCloud{}
+	api := serve(t, fake)
+	stranger := sum("never asked")
+	c, _ := newTestClient(api, &staticTokens{})
+	c.upload = cloudv1connect.NewUploadServiceClient(http.DefaultClient, api.URL, connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			res, err := next(ctx, req)
+			if missing, ok := res.Any().(*cloudv1.MissingResponse); ok {
+				missing.Uploads = append(missing.Uploads, fake.target(stranger))
+			}
+			return res, err
+		}
+	})))
+
+	_, err := c.Plan(t.Context(), memorySource{"a.ts": "alpha"})
+	if err == nil || !strings.Contains(err.Error(), stranger) {
+		t.Fatalf("Plan() = %v, want the target for %s refused", err, stranger)
 	}
 }
 
@@ -410,33 +637,6 @@ func TestRetryAfterReadsSecondsAndDates(t *testing.T) {
 		ceiling := min(firstBackoff<<(attempt-1), maxBackoff)
 		if got := backoff(attempt, 0); got < ceiling/2 || got >= ceiling {
 			t.Fatalf("attempt %d waits %v, want within [%v, %v)", attempt, got, ceiling/2, ceiling)
-		}
-	}
-}
-
-func TestUploadNeverSendsTheTokenToAnotherHostABlobIsRedirectedTo(t *testing.T) {
-	elsewhere := &fakeCloud{}
-	moved, err := url.Parse(serve(t, elsewhere).URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	moved.Host = "localhost:" + moved.Port()
-	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, moved.String()+r.URL.Path, http.StatusFound)
-	}))
-	t.Cleanup(redirecting.Close)
-	source := memorySource{"a.ts": "alpha"}
-	c, _ := newTestClient(redirecting, &staticTokens{})
-
-	_ = c.Send(t.Context(), source, Planned{Missing: source.Blobs()}, nil)
-	elsewhere.mu.Lock()
-	defer elsewhere.mu.Unlock()
-	if len(elsewhere.bearers) == 0 {
-		t.Fatal("the redirect was never followed")
-	}
-	for _, bearer := range elsewhere.bearers {
-		if bearer != "" {
-			t.Fatalf("the other host was sent %q, want no token", bearer)
 		}
 	}
 }

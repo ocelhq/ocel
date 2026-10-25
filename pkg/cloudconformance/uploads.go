@@ -30,14 +30,29 @@ func runUploads(t *testing.T, c cloud) {
 		}
 	})
 
-	t.Run("a blob whose bytes do not hash to its digest is refused and stays missing", func(t *testing.T) {
+	t.Run("a blob whose bytes do not hash to its digest is refused or stays missing, and no source is committed from it", func(t *testing.T) {
 		claimed := digestOf(freshContent())
 
-		if status := c.cli.put(t, claimed, freshContent()); status/100 == 2 {
-			t.Errorf("PUT /v1/blobs/%s of other bytes answered %d, want it refused", claimed, status)
+		if status := send(t, c.cli.target(t, claimed), freshContent()); status/100 == 2 {
+			if got := c.cli.missing(t, claimed); !slices.Equal(got, []string{claimed}) {
+				t.Errorf("Missing() after its target took other bytes = %v, want %s still missing", got, claimed)
+			}
 		}
-		if got := c.cli.missing(t, claimed); !slices.Equal(got, []string{claimed}) {
-			t.Errorf("Missing() after a refused PUT = %v, want %s still missing", got, claimed)
+		_, err := c.cli.uploads.CommitSource(t.Context(), &cloudv1.CommitSourceRequest{Manifest: &cloudv1.SourceManifest{Files: []*cloudv1.SourceFile{{Path: "claimed.ts", Digest: claimed, Size: 1}}}})
+		if !refusedWith(err, connect.CodeFailedPrecondition) {
+			t.Errorf("CommitSource() naming a blob whose bytes hash elsewhere error = %v, want %s", err, connect.CodeFailedPrecondition)
+		}
+	})
+
+	t.Run("an upload target takes the blob from a caller bearing no token", func(t *testing.T) {
+		body := freshContent()
+		digest := digestOf(body)
+
+		if status := send(t, c.cli.target(t, digest), body); status/100 != 2 {
+			t.Fatalf("the upload target for %s answered %d to a caller bearing no token, want the blob kept: the target is its own credential", digest, status)
+		}
+		if got := c.cli.missing(t, digest); len(got) != 0 {
+			t.Errorf("Missing() after its target took the blob = %v, want it held", got)
 		}
 	})
 

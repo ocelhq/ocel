@@ -66,16 +66,92 @@ func (x *MissingRequest) GetDigests() []string {
 	return nil
 }
 
+type Upload struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Digest        string                 `protobuf:"bytes,1,opt,name=digest,proto3" json:"digest,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Method        string                 `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Fields        map[string]string      `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Upload) Reset() {
+	*x = Upload{}
+	mi := &file_cloud_v1_upload_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Upload) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Upload) ProtoMessage() {}
+
+func (x *Upload) ProtoReflect() protoreflect.Message {
+	mi := &file_cloud_v1_upload_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Upload.ProtoReflect.Descriptor instead.
+func (*Upload) Descriptor() ([]byte, []int) {
+	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Upload) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *Upload) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *Upload) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *Upload) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *Upload) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
 type MissingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Digests       []string               `protobuf:"bytes,1,rep,name=digests,proto3" json:"digests,omitempty"`
+	Uploads       []*Upload              `protobuf:"bytes,1,rep,name=uploads,proto3" json:"uploads,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MissingResponse) Reset() {
 	*x = MissingResponse{}
-	mi := &file_cloud_v1_upload_proto_msgTypes[1]
+	mi := &file_cloud_v1_upload_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -87,7 +163,7 @@ func (x *MissingResponse) String() string {
 func (*MissingResponse) ProtoMessage() {}
 
 func (x *MissingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_upload_proto_msgTypes[1]
+	mi := &file_cloud_v1_upload_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -100,12 +176,12 @@ func (x *MissingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MissingResponse.ProtoReflect.Descriptor instead.
 func (*MissingResponse) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{1}
+	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *MissingResponse) GetDigests() []string {
+func (x *MissingResponse) GetUploads() []*Upload {
 	if x != nil {
-		return x.Digests
+		return x.Uploads
 	}
 	return nil
 }
@@ -123,7 +199,7 @@ type SourceFile struct {
 
 func (x *SourceFile) Reset() {
 	*x = SourceFile{}
-	mi := &file_cloud_v1_upload_proto_msgTypes[2]
+	mi := &file_cloud_v1_upload_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -135,7 +211,7 @@ func (x *SourceFile) String() string {
 func (*SourceFile) ProtoMessage() {}
 
 func (x *SourceFile) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_upload_proto_msgTypes[2]
+	mi := &file_cloud_v1_upload_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -148,7 +224,7 @@ func (x *SourceFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceFile.ProtoReflect.Descriptor instead.
 func (*SourceFile) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{2}
+	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SourceFile) GetPath() string {
@@ -195,7 +271,7 @@ type SourceManifest struct {
 
 func (x *SourceManifest) Reset() {
 	*x = SourceManifest{}
-	mi := &file_cloud_v1_upload_proto_msgTypes[3]
+	mi := &file_cloud_v1_upload_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -207,7 +283,7 @@ func (x *SourceManifest) String() string {
 func (*SourceManifest) ProtoMessage() {}
 
 func (x *SourceManifest) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_upload_proto_msgTypes[3]
+	mi := &file_cloud_v1_upload_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +296,7 @@ func (x *SourceManifest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceManifest.ProtoReflect.Descriptor instead.
 func (*SourceManifest) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{3}
+	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SourceManifest) GetFiles() []*SourceFile {
@@ -239,7 +315,7 @@ type CommitSourceRequest struct {
 
 func (x *CommitSourceRequest) Reset() {
 	*x = CommitSourceRequest{}
-	mi := &file_cloud_v1_upload_proto_msgTypes[4]
+	mi := &file_cloud_v1_upload_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -251,7 +327,7 @@ func (x *CommitSourceRequest) String() string {
 func (*CommitSourceRequest) ProtoMessage() {}
 
 func (x *CommitSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_upload_proto_msgTypes[4]
+	mi := &file_cloud_v1_upload_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -264,7 +340,7 @@ func (x *CommitSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitSourceRequest.ProtoReflect.Descriptor instead.
 func (*CommitSourceRequest) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{4}
+	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CommitSourceRequest) GetManifest() *SourceManifest {
@@ -283,7 +359,7 @@ type CommitSourceResponse struct {
 
 func (x *CommitSourceResponse) Reset() {
 	*x = CommitSourceResponse{}
-	mi := &file_cloud_v1_upload_proto_msgTypes[5]
+	mi := &file_cloud_v1_upload_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -295,7 +371,7 @@ func (x *CommitSourceResponse) String() string {
 func (*CommitSourceResponse) ProtoMessage() {}
 
 func (x *CommitSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_cloud_v1_upload_proto_msgTypes[5]
+	mi := &file_cloud_v1_upload_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -308,7 +384,7 @@ func (x *CommitSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitSourceResponse.ProtoReflect.Descriptor instead.
 func (*CommitSourceResponse) Descriptor() ([]byte, []int) {
-	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{5}
+	return file_cloud_v1_upload_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CommitSourceResponse) GetSourceId() string {
@@ -324,9 +400,25 @@ const file_cloud_v1_upload_proto_rawDesc = "" +
 	"\n" +
 	"\x15cloud/v1/upload.proto\x12\bcloud.v1\x1a\x1bbuf/validate/validate.proto\"L\n" +
 	"\x0eMissingRequest\x12:\n" +
-	"\adigests\x18\x01 \x03(\tB \xbaH\x1d\x92\x01\x1a\x10\xa0\x9c\x01\x18\x01\"\x12r\x102\x0e^[0-9a-f]{64}$R\adigests\"+\n" +
-	"\x0fMissingResponse\x12\x18\n" +
-	"\adigests\x18\x01 \x03(\tR\adigests\"\xa5\b\n" +
+	"\adigests\x18\x01 \x03(\tB \xbaH\x1d\x92\x01\x1a\x10\xa0\x9c\x01\x18\x01\"\x12r\x102\x0e^[0-9a-f]{64}$R\adigests\"\xe0\x04\n" +
+	"\x06Upload\x12-\n" +
+	"\x06digest\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x06digest\x12\x9c\x01\n" +
+	"\x03url\x18\x02 \x01(\tB\x89\x01\xbaH\x85\x01\xba\x01x\n" +
+	"\x11upload.url_scheme\x12(an upload target is an https or http URL\x1a9this.startsWith('https://') || this.startsWith('http://')r\b\x10\x01\x18\x80@\x88\x01\x01R\x03url\x12(\n" +
+	"\x06method\x18\x03 \x01(\tB\x10\xbaH\rr\vR\x03PUTR\x04POSTR\x06method\x127\n" +
+	"\aheaders\x18\x04 \x03(\v2\x1d.cloud.v1.Upload.HeadersEntryR\aheaders\x124\n" +
+	"\x06fields\x18\x05 \x03(\v2\x1c.cloud.v1.Upload.FieldsEntryR\x06fields\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:x\xbaHu\x1as\n" +
+	"\x1bupload.fields_only_for_post\x12\"only a POST policy has form fields\x1a0this.method == 'POST' || this.fields.size() == 0\"\xb4\x01\n" +
+	"\x0fMissingResponse\x126\n" +
+	"\auploads\x18\x01 \x03(\v2\x10.cloud.v1.UploadB\n" +
+	"\xbaH\a\x92\x01\x04\x10\xa0\x9c\x01R\auploads:i\xbaHf\x1ad\n" +
+	"\x1fmissing_response.unique_digests\x12\x19each digest is named once\x1a&this.uploads.map(u, u.digest).unique()\"\xa5\b\n" +
 	"\n" +
 	"SourceFile\x12\xeb\x02\n" +
 	"\x04path\x18\x01 \x01(\tB\xd6\x02\xbaH\xd2\x02\xba\x01\xc7\x02\n" +
@@ -363,27 +455,33 @@ func file_cloud_v1_upload_proto_rawDescGZIP() []byte {
 	return file_cloud_v1_upload_proto_rawDescData
 }
 
-var file_cloud_v1_upload_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_cloud_v1_upload_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_cloud_v1_upload_proto_goTypes = []any{
 	(*MissingRequest)(nil),       // 0: cloud.v1.MissingRequest
-	(*MissingResponse)(nil),      // 1: cloud.v1.MissingResponse
-	(*SourceFile)(nil),           // 2: cloud.v1.SourceFile
-	(*SourceManifest)(nil),       // 3: cloud.v1.SourceManifest
-	(*CommitSourceRequest)(nil),  // 4: cloud.v1.CommitSourceRequest
-	(*CommitSourceResponse)(nil), // 5: cloud.v1.CommitSourceResponse
+	(*Upload)(nil),               // 1: cloud.v1.Upload
+	(*MissingResponse)(nil),      // 2: cloud.v1.MissingResponse
+	(*SourceFile)(nil),           // 3: cloud.v1.SourceFile
+	(*SourceManifest)(nil),       // 4: cloud.v1.SourceManifest
+	(*CommitSourceRequest)(nil),  // 5: cloud.v1.CommitSourceRequest
+	(*CommitSourceResponse)(nil), // 6: cloud.v1.CommitSourceResponse
+	nil,                          // 7: cloud.v1.Upload.HeadersEntry
+	nil,                          // 8: cloud.v1.Upload.FieldsEntry
 }
 var file_cloud_v1_upload_proto_depIdxs = []int32{
-	2, // 0: cloud.v1.SourceManifest.files:type_name -> cloud.v1.SourceFile
-	3, // 1: cloud.v1.CommitSourceRequest.manifest:type_name -> cloud.v1.SourceManifest
-	0, // 2: cloud.v1.UploadService.Missing:input_type -> cloud.v1.MissingRequest
-	4, // 3: cloud.v1.UploadService.CommitSource:input_type -> cloud.v1.CommitSourceRequest
-	1, // 4: cloud.v1.UploadService.Missing:output_type -> cloud.v1.MissingResponse
-	5, // 5: cloud.v1.UploadService.CommitSource:output_type -> cloud.v1.CommitSourceResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	7, // 0: cloud.v1.Upload.headers:type_name -> cloud.v1.Upload.HeadersEntry
+	8, // 1: cloud.v1.Upload.fields:type_name -> cloud.v1.Upload.FieldsEntry
+	1, // 2: cloud.v1.MissingResponse.uploads:type_name -> cloud.v1.Upload
+	3, // 3: cloud.v1.SourceManifest.files:type_name -> cloud.v1.SourceFile
+	4, // 4: cloud.v1.CommitSourceRequest.manifest:type_name -> cloud.v1.SourceManifest
+	0, // 5: cloud.v1.UploadService.Missing:input_type -> cloud.v1.MissingRequest
+	5, // 6: cloud.v1.UploadService.CommitSource:input_type -> cloud.v1.CommitSourceRequest
+	2, // 7: cloud.v1.UploadService.Missing:output_type -> cloud.v1.MissingResponse
+	6, // 8: cloud.v1.UploadService.CommitSource:output_type -> cloud.v1.CommitSourceResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_cloud_v1_upload_proto_init() }
@@ -397,7 +495,7 @@ func file_cloud_v1_upload_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cloud_v1_upload_proto_rawDesc), len(file_cloud_v1_upload_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

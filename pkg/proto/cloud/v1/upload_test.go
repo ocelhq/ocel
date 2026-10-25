@@ -151,3 +151,51 @@ func TestProtovalidateRefusesACommitThatBreaksAManifestRule(t *testing.T) {
 		},
 	})
 }
+
+func validMissingResponse() *cloudv1.MissingResponse {
+	return &cloudv1.MissingResponse{Uploads: []*cloudv1.Upload{
+		{Digest: digest, Url: "https://storage.example/bucket/" + digest + "?signature=abc", Method: "PUT", Headers: map[string]string{"Content-Type": "application/octet-stream"}},
+		{Digest: strings.Repeat("cd", 32), Url: "https://storage.example/bucket", Method: "POST", Fields: map[string]string{"key": "org/" + digest, "policy": "e30="}},
+	}}
+}
+
+func TestProtovalidateAcceptsEveryUploadTargetOcelCloudCanHandOut(t *testing.T) {
+	requireAccepted(t, "nothing missing", &cloudv1.MissingResponse{})
+	requireAccepted(t, "a PUT and a POST policy", validMissingResponse())
+	requireAccepted(t, "a target served over http", &cloudv1.MissingResponse{Uploads: []*cloudv1.Upload{{Digest: digest, Url: "http://127.0.0.1:9000/" + digest, Method: "PUT"}}})
+
+	full := &cloudv1.MissingResponse{}
+	for i := range 20000 {
+		full.Uploads = append(full.Uploads, &cloudv1.Upload{Digest: fmt.Sprintf("%064x", i), Url: "https://storage.example/b", Method: "PUT"})
+	}
+	requireAccepted(t, "20000 targets", full)
+}
+
+func TestProtovalidateRefusesAnUploadTargetThatBreaksAnUploadRule(t *testing.T) {
+	requireRefusals(t, validMissingResponse, []refusal[*cloudv1.MissingResponse]{
+		{name: "a digest is 64 characters", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Digest = "abcd" }},
+		{name: "a digest is lowercase hex", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Digest = strings.ToUpper(digest) }},
+		{
+			name:   "each digest is named once",
+			mutate: func(r *cloudv1.MissingResponse) { r.Uploads[1].Digest = digest },
+			rule:   "missing_response.unique_digests",
+		},
+		{name: "a url is required", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Url = "" }},
+		{name: "a url is absolute", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Url = "/bucket/" + digest }},
+		{name: "a url is https or http", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Url = "file:///etc/passwd" }, rule: "upload.url_scheme"},
+		{name: "a method is required", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Method = "" }},
+		{name: "a method is PUT or POST", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Method = "PATCH" }},
+		{name: "a method is uppercase", mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Method = "put" }},
+		{
+			name:   "only a POST policy has fields",
+			mutate: func(r *cloudv1.MissingResponse) { r.Uploads[0].Fields = map[string]string{"key": "x"} },
+			rule:   "upload.fields_only_for_post",
+		},
+		{name: "at most 20000 targets", mutate: func(r *cloudv1.MissingResponse) {
+			r.Uploads = nil
+			for i := range 20001 {
+				r.Uploads = append(r.Uploads, &cloudv1.Upload{Digest: fmt.Sprintf("%064x", i), Url: "https://storage.example/b", Method: "PUT"})
+			}
+		}},
+	})
+}

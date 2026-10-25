@@ -1,12 +1,17 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand/v2"
+	"mime/multipart"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +29,7 @@ import (
 
 const (
 	MaxDigestsPerCall = 20000
-	putConcurrency    = 8
+	uploadConcurrency = 8
 	attempts          = 5
 	firstBackoff      = 500 * time.Millisecond
 	maxBackoff        = 30 * time.Second
@@ -68,8 +73,13 @@ type Source interface {
 	Open(digest string) (io.ReadCloser, error)
 }
 
+type Upload struct {
+	Blob   sourcearchive.Blob
+	Target *cloudv1.Upload
+}
+
 type Planned struct {
-	Missing    []sourcearchive.Blob
+	Missing    []Upload
 	TotalBytes uint64
 }
 
@@ -95,12 +105,15 @@ func (c *Client) Plan(ctx context.Context, source Source) (Planned, error) {
 		if err != nil {
 			return Planned{}, fmt.Errorf("ask Ocel Cloud at %s which source files it lacks: %w", c.apiURL, err)
 		}
-		for _, digest := range missing.GetDigests() {
-			blob, asked := bySum[digest]
+		for _, target := range missing.GetUploads() {
+			blob, asked := bySum[target.GetDigest()]
 			if !asked {
-				return Planned{}, fmt.Errorf("%s named %s missing, which this upload never asked about", c.apiURL, digest)
+				return Planned{}, fmt.Errorf("%s named %s missing, which this upload never asked about", c.apiURL, target.GetDigest())
 			}
-			planned.Missing = append(planned.Missing, blob)
+			if method := target.GetMethod(); method != http.MethodPut && method != http.MethodPost {
+				return Planned{}, fmt.Errorf("%s handed out a %q upload for %s, which is neither PUT nor POST", c.apiURL, method, target.GetDigest())
+			}
+			planned.Missing = append(planned.Missing, Upload{Blob: blob, Target: target})
 			planned.TotalBytes += blob.Size
 		}
 	}
@@ -111,10 +124,10 @@ func (c *Client) Send(ctx context.Context, source Source, planned Planned, progr
 	tally := &tally{report: progress, at: Progress{TotalBytes: planned.TotalBytes, TotalFiles: len(planned.Missing)}}
 	tally.publish()
 	group, ctx := errgroup.WithContext(ctx)
-	group.SetLimit(putConcurrency)
-	for _, blob := range planned.Missing {
+	group.SetLimit(uploadConcurrency)
+	for _, upload := range planned.Missing {
 		group.Go(func() error {
-			if err := c.put(ctx, source, blob, tally); err != nil {
+			if err := c.send(ctx, source, upload, tally); err != nil {
 				return err
 			}
 			tally.finish()
@@ -139,8 +152,14 @@ func (c *Client) Commit(ctx context.Context, manifest *cloudv1.SourceManifest) (
 	return committed.GetSourceId(), nil
 }
 
-func (c *Client) put(ctx context.Context, source Source, blob sourcearchive.Blob, tally *tally) error {
-	err := c.retry(ctx, func(ctx context.Context) (asked time.Duration, err error) {
+func (c *Client) send(ctx context.Context, source Source, upload Upload, tally *tally) error {
+	blob := upload.Blob
+	target, err := url.Parse(upload.Target.GetUrl())
+	if err != nil {
+		return fmt.Errorf("upload the source file %s to Ocel Cloud: its target is no URL", blob.Digest)
+	}
+	where := upload.Target.GetMethod() + " " + target.Host
+	err = c.retry(ctx, func(ctx context.Context) (asked time.Duration, err error) {
 		ctx, cancel := context.WithTimeout(ctx, callTimeout+time.Duration(blob.Size/slowestUpload)*time.Second)
 		defer cancel()
 		body, err := source.Open(blob.Digest)
@@ -154,18 +173,16 @@ func (c *Client) put(ctx context.Context, source Source, blob sourcearchive.Blob
 				tally.unsend(counted.n)
 			}
 		}()
-		req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.apiURL+"/v1/blobs/"+blob.Digest, counted)
+		req, err := newUploadRequest(ctx, upload, counted)
 		if err != nil {
 			return 0, err
 		}
-		req.ContentLength = int64(blob.Size)
-		if err := c.headers.set(ctx, req.Header); err != nil {
-			return 0, err
-		}
-		req.Header.Set("Content-Type", "application/octet-stream")
 		resp, err := c.http.Do(req)
 		if err != nil {
-			return 0, retryable{err}
+			if transfer, ok := errors.AsType[*url.Error](err); ok {
+				err = transfer.Err
+			}
+			return 0, retryable{fmt.Errorf("%s: %w", where, err)}
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -173,7 +190,7 @@ func (c *Client) put(ctx context.Context, source Source, blob sourcearchive.Blob
 			return 0, nil
 		}
 		said, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
-		err = fmt.Errorf("%s answered %s: %s", c.apiURL, resp.Status, strings.TrimSpace(string(said)))
+		err = fmt.Errorf("%s answered %s: %s", where, resp.Status, strings.TrimSpace(string(said)))
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			return retryAfter(resp.Header.Get("Retry-After")), retryable{err}
 		}
@@ -183,6 +200,48 @@ func (c *Client) put(ctx context.Context, source Source, blob sourcearchive.Blob
 		return fmt.Errorf("upload the source file %s to Ocel Cloud: %w", blob.Digest, err)
 	}
 	return nil
+}
+
+func newUploadRequest(ctx context.Context, upload Upload, file io.Reader) (*http.Request, error) {
+	target := upload.Target
+	if target.GetMethod() == http.MethodPut {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, target.GetUrl(), file)
+		if err != nil {
+			return nil, err
+		}
+		req.ContentLength = int64(upload.Blob.Size)
+		setUploadHeaders(req.Header, target.GetHeaders())
+		return req, nil
+	}
+	var framing bytes.Buffer
+	form := multipart.NewWriter(&framing)
+	for _, name := range slices.Sorted(maps.Keys(target.GetFields())) {
+		if err := form.WriteField(name, target.GetFields()[name]); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := form.CreateFormFile("file", upload.Blob.Digest); err != nil {
+		return nil, err
+	}
+	head := framing.Len()
+	if err := form.Close(); err != nil {
+		return nil, err
+	}
+	prefix, suffix := framing.Bytes()[:head], framing.Bytes()[head:]
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.GetUrl(), io.MultiReader(bytes.NewReader(prefix), file, bytes.NewReader(suffix)))
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = int64(len(prefix)) + int64(upload.Blob.Size) + int64(len(suffix))
+	setUploadHeaders(req.Header, target.GetHeaders())
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	return req, nil
+}
+
+func setUploadHeaders(header http.Header, headers map[string]string) {
+	for name, value := range headers {
+		header.Set(name, value)
+	}
 }
 
 type retryable struct{ error }

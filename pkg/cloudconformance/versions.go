@@ -1,7 +1,6 @@
 package cloudconformance
 
 import (
-	"net/http"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -64,8 +63,5 @@ func refusesACallBearingNoToken(t *testing.T, c cloud) {
 	_, err = anonymous.jobs.GetJob(t.Context(), &cloudv1.GetJobRequest{JobId: "job_never_started"})
 	if !refusedWith(err, connect.CodeUnauthenticated) {
 		t.Errorf("GetJob() bearing no token error = %v, want %s", err, connect.CodeUnauthenticated)
-	}
-	if status := anonymous.put(t, digestOf("body"), "body"); status != http.StatusUnauthorized {
-		t.Errorf("PUT /v1/blobs bearing no token answered %d, want %d", status, http.StatusUnauthorized)
 	}
 }
