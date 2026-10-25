@@ -16,6 +16,7 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const memorystoreHost = "https://memorystore.googleapis.com"
@@ -228,6 +229,9 @@ func (m Memorystore) send(ctx context.Context, method, target string, body []byt
 			return nil, 0, Unauthenticated()
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		if project := ports.QuotaProjectOf(strings.TrimPrefix(target, m.Base+"/v1/")); project != "" {
+			req.Header.Set(ports.QuotaProjectHeader, project)
+		}
 	}
 	resp, err := m.Client.Do(req)
 	if err != nil {

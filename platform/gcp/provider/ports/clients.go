@@ -80,6 +80,20 @@ type Clients struct {
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }
 
+func (c *Clients) rest() []option.ClientOption {
+	if c.Emulated() {
+		return EmulatorREST(c.Endpoint)
+	}
+	return QuotaProject(c.Project)
+}
+
+func (c *Clients) grpc() []option.ClientOption {
+	if c.Emulated() {
+		return EmulatorGRPC(c.Endpoint)
+	}
+	return QuotaProject(c.Project)
+}
+
 func (c *Clients) RecordsDatabase(tier environment.Tier) string {
 	return RecordsDatabase(c.Namespace, tier)
 }
@@ -123,7 +137,7 @@ func (c *Clients) TierFirestore(tier environment.Tier) (*firestore.Client, error
 	database := c.RecordsDatabase(tier)
 	held, _ := c.tierStores.LoadOrStore(database, &memo[*firestore.Client]{})
 	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, EmulatorGRPC(c.Endpoint)...)
+		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, c.grpc()...)
 	})
 }
 
@@ -136,25 +150,25 @@ func (c *Clients) tagEndpoint() string {
 
 func (c *Clients) KMS() (*kms.KeyManagementClient, error) {
 	return Opened(c, &c.kms, "Cloud KMS", func() (*kms.KeyManagementClient, error) {
-		return kms.NewKeyManagementClient(context.Background(), EmulatorGRPC(c.Endpoint)...)
+		return kms.NewKeyManagementClient(context.Background(), c.grpc()...)
 	})
 }
 
 func (c *Clients) PubSub() (*pubsub.Service, error) {
 	return Opened(c, &c.pubsub, "Pub/Sub", func() (*pubsub.Service, error) {
-		return pubsub.NewService(context.Background(), EmulatorREST(c.Endpoint)...)
+		return pubsub.NewService(context.Background(), c.rest()...)
 	})
 }
 
 func (c *Clients) CloudTasks() (*cloudtasks.Client, error) {
 	return Opened(c, &c.tasks, "Cloud Tasks", func() (*cloudtasks.Client, error) {
-		return cloudtasks.NewClient(context.Background(), EmulatorGRPC(c.Endpoint)...)
+		return cloudtasks.NewClient(context.Background(), c.grpc()...)
 	})
 }
 
 func (c *Clients) Scheduler() (*cloudscheduler.Service, error) {
 	return Opened(c, &c.scheduler, "Cloud Scheduler", func() (*cloudscheduler.Service, error) {
-		return cloudscheduler.NewService(context.Background(), EmulatorREST(c.Endpoint)...)
+		return cloudscheduler.NewService(context.Background(), c.rest()...)
 	})
 }
 
