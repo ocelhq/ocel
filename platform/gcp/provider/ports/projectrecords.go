@@ -156,13 +156,15 @@ func UntilDatabaseServes(ctx context.Context, c *Clients, database string) error
 		return err
 	}
 	err = googleretry.UntilServed(ctx, func() error {
-		documents := client.Collection(servedCollection).Limit(1).Documents(ctx)
-		defer documents.Stop()
-		_, err := documents.Next()
-		if errors.Is(err, iterator.Done) {
-			return nil
-		}
-		return err
+		return client.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
+			documents := tx.Documents(client.Collection(servedCollection).Limit(1))
+			defer documents.Stop()
+			_, err := documents.Next()
+			if errors.Is(err, iterator.Done) {
+				return nil
+			}
+			return err
+		})
 	})
 	if err != nil {
 		return fmt.Errorf("wait for Firestore to serve the %s database: %w", database, err)
